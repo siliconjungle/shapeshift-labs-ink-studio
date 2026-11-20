@@ -22,7 +22,7 @@
       : record(value)
         ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, json(v)]))
         : value;
-  const common = ['type', 'origin', 'axis', 'right', 'scale', 'segments'];
+  const common = ['type', 'origin', 'axis', 'right', 'scale', 'segments', 'adaptive'];
   const compiled = new WeakSet();
   function frame(options) {
     const { origin = [0, 0, 0], axis = [0, 1, 0], right, scale = 1 } = options;
@@ -102,6 +102,7 @@
     });
     return {
       closed: false,
+      breaks: [0, ...sections.map(s => (s.start + s.length) / length)],
       minSegments: 8,
       defaultSegments: Math.max(96, Math.ceil(turnBudget * 16)),
       point(t) {
@@ -254,8 +255,21 @@
     }
     throw new TypeError('Curve: unknown family ' + def.type);
   }
+  const isPath = input =>
+    compiled.has(input) ||
+    (input &&
+      Object.isFrozen(input) &&
+      Object.isFrozen(input.points) &&
+      Array.isArray(input.points) &&
+      input.points.length >= 2 &&
+      input.points.length <= 4097 &&
+      typeof input.closed === 'boolean' &&
+      Number.isFinite(input.length) &&
+      input.length > 0 &&
+      typeof input.at === 'function' &&
+      typeof input.frame === 'function');
   function path(input, options = {}) {
-    if (compiled.has(input))
+    if (isPath(input))
       return Object.keys(options).length ? path(input.points, { closed: input.closed, ...options }) : input;
     check(fields(options, ['closed', 'up']), 'invalid path options');
     check(
@@ -279,7 +293,7 @@
     for (let i = 1; i < points.length; i++) lengths.push(lengths.at(-1) + V.dist(points[i], points[i - 1]));
     const length = lengths.at(-1);
     check(Number.isFinite(length) && length > 1e-12, 'path must have positive finite length');
-    let frames;
+    let frames, rotations;
     const locate = distance => {
       check(Number.isFinite(distance), 'distance must be finite');
       const d = closed ? ((distance % length) + length) % length : clamp(distance, 0, length);
@@ -299,12 +313,14 @@
     const frameAt = distance => {
       frames ??= C.frames(points, up);
       const { lo, hi, t, d } = locate(distance),
-        p = V.lerp(points[lo], points[hi], t),
-        T = V.norm(V.lerp(frames[lo].T, frames[hi].T, t), frames[lo].T);
-      let N = V.lerp(frames[lo].N, frames[hi].N, t);
-      N = V.norm(V.sub(N, V.mul(T, V.dot(N, T))), V.perp(T));
-      const B = V.cross(T, N);
-      return { p, T, N, B, t: d / length, matrix: M.cols(T, N, B) };
+        p = V.lerp(points[lo], points[hi], t);
+      rotations ??= frames.map(f => K.Q.fromMatrix(M.cols(f.T, f.N, f.B)));
+      const rotation = K.Q.slerp(rotations[lo], rotations[hi], t),
+        matrix = K.Q.toMatrix(rotation),
+        T = [matrix[0], matrix[3], matrix[6]],
+        N = [matrix[1], matrix[4], matrix[7]],
+        B = [matrix[2], matrix[5], matrix[8]];
+      return { p, T, N, B, rotation, t: d / length, matrix };
     };
     const api = freeze({
       points,
@@ -312,6 +328,12 @@
       length,
       at,
       frame: frameAt,
+      closest(point) {
+        return C.closest(api, point);
+      },
+      curvature(distance, options) {
+        return C.curvature(api, distance, options);
+      },
       sample(u) {
         check(Number.isFinite(u), 'sample coordinate must be finite');
         return at(clamp(u) * length).p;
@@ -322,7 +344,7 @@
     return api;
   }
   function create(definition) {
-    if (compiled.has(definition)) return definition;
+    if (isPath(definition)) return definition;
     check(record(definition), 'expected a curve family definition');
     const def = clone(json(definition)),
       m = model(def),
@@ -332,13 +354,47 @@
       Number.isSafeInteger(segments) && segments >= m.minSegments && segments <= 4096,
       'segments must be ' + m.minSegments + '–4096 for this family'
     );
-    const points = Array.from({ length: segments + 1 }, (_, i) => transform(m.point(i / segments)));
-    if (m.closed) points[segments] = points[0].slice();
+    const evaluate = u => transform(m.point(m.closed && u === 1 ? 0 : u));
+    if (def.adaptive !== undefined)
+      check(
+        fields(def.adaptive, ['tolerance', 'angle', 'minSegments', 'maxSegments', 'maxDepth', 'maxSegmentLength']),
+        'invalid adaptive family settings'
+      );
+    if (def.adaptive?.minSegments !== undefined)
+      check(def.adaptive.minSegments >= m.minSegments, 'adaptive minimum is below family frequency floor');
+    const sampled =
+      def.adaptive === undefined
+        ? null
+        : C.adaptive(
+            { evaluate, closed: m.closed, breaks: m.breaks ?? [0, 1] },
+            { ...def.adaptive, minSegments: def.adaptive.minSegments ?? m.minSegments }
+          );
+    const points = sampled
+      ? sampled.points.map(p => p.slice())
+      : Array.from({ length: segments + 1 }, (_, i) => evaluate(i / segments));
+    if (m.closed) points[points.length - 1] = points[0].slice();
     check(points.every(xyz), 'curve coordinates exceed the finite world range');
-    const rail = path(points, { closed: m.closed });
+    const rail = path(points, { closed: m.closed }),
+      parameters = [];
+    let previous;
+    for (let i = 0; i < points.length; i++)
+      if (!previous || V.dist(points[i], previous) > 1e-12) {
+        parameters.push(sampled?.parameters[i] ?? i / (points.length - 1));
+        previous = points[i];
+      }
+    check(parameters.length === rail.points.length, 'sampling parameters must match retained points');
     const api = freeze({
       ...rail,
       type: def.type,
+      parameters,
+      breaks: m.breaks ?? [0, 1],
+      sampling: sampled?.sampling ?? { mode: 'uniform', segments: rail.points.length - 1, limited: false },
+      closest(point) {
+        return C.closest(api, point);
+      },
+      curvature(distance, options) {
+        return C.curvature(api, distance, options);
+      },
       properties: m.properties
         ? {
             ...m.properties,

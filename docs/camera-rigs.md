@@ -23,3 +23,5 @@ The unified timeline can key `/camera/fov`, `/camera/projection`, and the existi
 - Programmatic hosts can call `KIT.cameraRig.compile(definition)` and sample it with a base camera, a `resolveTarget` callback returning `{ point, rotation? }`, and a collision query. `clearance(point, { radius, exclude })` returns signed distance. `occlusion({ origin, direction, maxDistance, radius, exclude })` returns the first hit distance or `undefined`.
 
 Family rails can use `{family: {type: "torusKnot", p: 2, q: 3, ...}}` in place of a point rail. They retain the shared curve sampling and accept no other rail fields. See [curve families](curve-families.md).
+
+Interpolated rails accept `{interpolated:{points,options}}`, where the contents are a `K.curve.interpolate()` snapshot. This retains shared adaptive sampling and periodic interpolation without a second spline pass. See [curve analysis](curve-analysis.md).

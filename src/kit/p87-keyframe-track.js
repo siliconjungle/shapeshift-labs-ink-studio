@@ -1,6 +1,6 @@
 /* Validated, renderer-independent keyframe tracks on a seconds-based clock. */
 (function (K) {
-  const modes = ['number', 'vector', 'radians', 'positive', 'orientation'];
+  const modes = ['number', 'vector', 'radians', 'positive', 'orientation', 'quaternion'];
   const eases = Object.freeze(['linear', 'smooth', 'step', 'in-sine', 'out-sine', 'in-out-sine']);
   const turn = 2 * Math.PI;
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -24,6 +24,7 @@
       if (!eases.includes(ease)) throw Error('Unknown keyframe easing');
       const pairs = entries.map(([name, mode]) => {
         const value = Object.hasOwn(key.value, name) ? key.value[name] : undefined;
+        if (mode === 'quaternion') return [name, Object.freeze(K.Q.normalize(value))];
         if (mode === 'vector' || mode === 'orientation') {
           if (mode === 'orientation' && !orientation(value)) throw Error('Invalid orientation channel: ' + name);
           if (!Array.isArray(value) || !value.length || !Array.from(value).every(Number.isFinite) ||
@@ -69,6 +70,7 @@
       const u = t === a.time ? 0 : t === b.time ? 1 : K.anim.ease((t - a.time) / (b.time - a.time), a.ease);
       return Object.fromEntries(columns.map(({ name, mode, values }) => {
         const start = values[low], end = values[high];
+        if (mode === 'quaternion') return [name, K.Q.slerp(start, end, u)];
         if (mode === 'vector') return [name, start.map((v, i) => blend(v, end[i], u))];
         if (mode === 'orientation') {
           if (u === 0 || u === 1) return [name, (u === 0 ? start : end).slice()];

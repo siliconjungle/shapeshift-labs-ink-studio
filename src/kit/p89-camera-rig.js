@@ -37,6 +37,10 @@
   }
 
   function rail(row, id) {
+    if (row?.interpolated !== undefined) {
+      check(keys(row, ['interpolated']) && keys(row.interpolated, ['points', 'options']), 'invalid interpolated rail: ' + id);
+      return K.curve.interpolate(row.interpolated.points, row.interpolated.options ?? {});
+    }
     if (row?.family !== undefined) {
       check(keys(row, ['family']), 'family rails accept only their family definition: ' + id);
       return K.curve.create(row.family);

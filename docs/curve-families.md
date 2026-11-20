@@ -88,3 +88,5 @@ node cli/ink-studio.js curve examples/curve-family.json --distance 2 --text INK 
 ```
 
 The report contains definition, closure, sampled length, properties, points, and optional distance sample / mapped lettering. The module runs in Node and the plain browser bundle with no runtime dependencies.
+
+For cached closest-point queries, curvature estimates, adaptive sampling, periodic interpolation and quaternion frame rotations, see [curve analysis](curve-analysis.md) and [Path observatory](../examples/curve-analysis.html).
