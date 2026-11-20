@@ -141,6 +141,9 @@ test('geographic coordinates project to a local Y-up frame while retaining featu
     coordinates: { crs: 'EPSG:3857', origin: [0,0], columns: ['a','b'] },
     data: [{ a: 111.319490793, b: 0 }] };
   near(prepare(table).sample({ row: 0, column: '$position' }).value[0], 111.31949, .001);
+  const edge = prepare({ ...table, coordinates: { ...table.coordinates, origin: [180,0] },
+    data: [{ a: Math.PI * 6378137, b: 0 }] });
+  assert.deepEqual(edge.features[0].geometry.coordinates, [0,0,0]);
   table.coordinates.crs = 'EPSG:4326';
   table.columns.a.units = table.columns.b.units = 'deg';
   table.data[0].a = .001;

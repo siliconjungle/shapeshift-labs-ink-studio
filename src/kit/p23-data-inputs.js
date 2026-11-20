@@ -171,9 +171,10 @@
       project = values => {
         let [x, y, height = origin[2] ?? 0] = values;
         if (mercator) {
-          check(Math.abs(x) <= Math.PI * semiMajor + 1e-6 && Math.abs(y) <= Math.PI * semiMajor + 1e-6,
+          const edge = Math.PI * semiMajor;
+          check(Math.abs(x) <= edge + 1e-6 && Math.abs(y) <= edge + 1e-6,
             'Web Mercator coordinate is outside the supported tile extent');
-          x = x / semiMajor / d2r;
+          x = Math.max(-1, Math.min(1, x / edge)) * 180;
           y = Math.atan(Math.sinh(y / semiMajor)) / d2r;
         } else if (latFirst) [x,y] = [y,x];
         check(geographic([x,y,height]), 'Longitude or latitude is out of range');
