@@ -45,6 +45,9 @@ staffed recipes, and construction, repair, or recruitment effects.
 [Groups and formations](group-formations.md) give agents shared
 destinations, per-member slots, and rally points beyond narrow passages.
 
+[Faction perception](faction-perception.md) batches sight, hearing, and
+proximity queries and saves each faction's dated observations with the world.
+
 [First-divergence debugging](first-divergence.md) compares timelines
 tick by tick and reports actual inputs and changed state paths.
 

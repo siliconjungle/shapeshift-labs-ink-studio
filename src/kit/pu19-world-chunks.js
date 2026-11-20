@@ -92,7 +92,7 @@
           return freeze({...clock,tuning});
         });
         owner.set(system,{rates,models,chunk:name,maxEvery:Math.max(...rates.map(clock=>clock.every)),
-          schedules:Boolean(provider.step||provider.requestTransfers||provider.output)});
+          schedules:Boolean(provider.step||provider.afterStep||provider.requestTransfers||provider.output)});
       }
     }
     function validFocus(row){

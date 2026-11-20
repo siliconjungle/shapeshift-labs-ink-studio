@@ -166,6 +166,8 @@
       dependencies:{reads:[system+'/layout'],writes:['layout','bodies','support','clearance'].map(key=>system+'/'+key)},
       *poseEntities(state){for(const body of Object.values(bodiesOf(state)))yield body.entity;},
       pose(state,entity){return Object.values(bodiesOf(state)).find(body=>body.entity===entity)??null;},
+      traces:{ray:{role:'occlusion-ray',qualified:true,run:({state,target,args})=>
+        W.mechanics.raycast(bodiesOf(state),target,args)}},
       fields:{
         layout:{type:'record',read:({state})=>state?Q.ok(state.layout):Q.missing('construction state required')},
         fit:{type:'record',read:({state,args})=>{

@@ -17,7 +17,7 @@
       check(Number.isSafeInteger(every) && every>=1 && every<=3600 && Number.isSafeInteger(substeps) &&
         substeps>=1 && substeps<=maxSubdivision && (every===1 || substeps===1),
         'A schedule needs every 1–3600 ticks or 1–64 substeps for '+name);
-      check(every===1 && substeps===1 || system.step || system.output || chunks?.managed.has(name)&&system.requestTransfers,
+      check(every===1 && substeps===1 || system.step || system.afterStep || system.output || chunks?.managed.has(name)&&system.requestTransfers,
         'Scheduled system has no solver or output: '+name);
       rates[name] = {every,substeps};
       for(const timing of chunks?.rates(name)??[rates[name]])

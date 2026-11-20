@@ -308,6 +308,7 @@
     const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy} = plan;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
+    const observers=names.filter(name=>systems[name].afterStep);
     const partitioned=workerPool&&new Set(names.filter(name=>{
       const {kind}=world.systems[name];
       return systems[name].partitionStep===true&&(own(installed,kind)?
@@ -815,6 +816,26 @@
       const nextDelays = Object.fromEntries([...incoming.values()].filter(edge => edge.delay).map(edge =>
         [edge.to,[...delays[edge.to].slice(1),delayedSamples?.[edge.to] ?? nextOutputs[edge.from]]]));
       publishedSignals = freeze(publishedSignals);
+      if(observers.length){
+        freeze(events);
+        const snapshot=freeze(nextStates), completed=Q.create(
+          view(nextWorld,snapshot,publishedSignals,at,receipts,causalState,nextChunkState),systems,projection);
+        nextStates={...snapshot};
+        for(const name of observers){
+          const managed=chunks?.managed.has(name);
+          const sample=managed?chunkStep.due.has(name):at%(nextWorld.systems[name].schedule?.every??1)===0;
+          const start=profile?clock():0;
+          nextStates[name]=rootedState(systems[name].afterStep(snapshot[name],{
+            id:name,tick:at,time:at*nextWorld.dt,dt:nextWorld.dt,query:completed,events,sample
+          }));
+          if(profile){
+            const elapsed=clock()-start, cost=metrics.get(name)??{calls:0,ms:0,maxMs:0};
+            cost.ms+=elapsed;
+            cost.maxMs=Math.max(cost.maxMs,elapsed);
+            metrics.set(name,cost);
+          }
+        }
+      }
       const memory = historyWith(events,nextWorld.history);
       const dependencyReport = trace && trace.report();
       const nextCausal = causal?.finish();

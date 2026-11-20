@@ -68,6 +68,27 @@
     }
     return areas;
   }
+  function raycast(bodies,target,args,broad){
+    const {direction,distance:limit=100}=args;
+    check(target.point&&vector(direction)&&V.len(direction)>1e-8&&Number.isFinite(limit)&&limit>=0&&limit<=1e5,
+      'Mechanical ray needs a start, direction and bounded distance');
+    const axis=V.norm(direction), exclusions=new Set(args.exclude===undefined?[]:Array.isArray(args.exclude)?args.exclude:[args.exclude]);
+    let best=null, rank=Infinity;
+    function visit(body,index){
+      if(exclusions.has(body.id)||exclusions.has(body.entity))return;
+      const hit=W.colliders.ray(body,target.point,axis,best?.distance??limit)[0];
+      if(hit&&(!best||hit.distance<best.distance||hit.distance===best.distance&&index<rank)){
+        best=hit;rank=index;
+      }
+    }
+    if(broad){
+      const end=V.mad(target.point,axis,limit);
+      const padding=Math.max(1,...target.point.map(Math.abs),limit)*1e-12;
+      broad.overlap(target.point.map((n,i)=>Math.min(n,end[i])-padding),
+        target.point.map((n,i)=>Math.max(n,end[i])+padding),row=>visit(row.value,row.rank));
+    }else Object.values(bodies).forEach(visit);
+    return best?Q.ok(best):Q.missing('no surface along ray','empty');
+  }
   function mechanics(config,{catalog,world}) {
     const materialContacts=config.contactEvents==='material';
     check(config.contactEvents===undefined || typeof config.contactEvents==='boolean'||materialContacts,
@@ -1126,19 +1147,8 @@
           Q.missing('point required')}}),
       support:{type:'records',units:'world',read:support}
     },
-    traces:{ray:{run({state,target,args}){
-      const {direction,distance:limit=100}=args;
-      check(target.point&&vector(direction)&&V.len(direction)>1e-8&&Number.isFinite(limit)&&limit>=0&&limit<=1e5,
-        'Mechanical ray needs a start, direction and bounded distance');
-      const axis=V.norm(direction);
-      let best=null;
-      for(const body of Object.values(state.bodies)){
-        if(body.id===args.exclude||body.entity===args.exclude)continue;
-        const hit=W.colliders.ray(body,target.point,axis,best?.distance??limit)[0];
-        if(hit&&(!best||hit.distance<best.distance))best=hit;
-      }
-      return best?Q.ok(best):Q.missing('no surface along ray','empty');
-    }},support:{run(context){
+    traces:{ray:{role:'occlusion-ray',run:({state,target,args})=>raycast(state.bodies,target,args,colliderIndex(state.bodies))
+    },support:{run(context){
       const first=support(context);
       if(first.status!=='ok'||!first.value.length)return first;
       let body=first.value[0].id;
@@ -1168,5 +1178,5 @@
     }};
   }
   W.runtime.register('mechanics',mechanics);
-  W.mechanics=Object.freeze({distance,column,changedBounds});
+  W.mechanics=Object.freeze({distance,column,changedBounds,raycast});
 })(KIT);
