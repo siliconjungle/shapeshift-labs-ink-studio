@@ -1,7 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { execFileSync } = require('node:child_process');
 const studio = require('..');
-const runWebGL = require('../cli/look-webgl.js');
 const { KIT: K } = studio.load();
 
 const source = {
@@ -121,42 +125,82 @@ test('series timestamps and spatial geometry keep their original record identity
   assert.equal(point.selected,true);
 });
 
-test('the library entry point exposes linked-view primitives', async () => {
-  assert.equal(typeof K.linkedViews.create,'function');
-  const exports=await import('../webgl.mjs');
-  assert.equal(Object.hasOwn(exports,'mountLinkedViews'),false);
-});
-
-test('a native WebGL pick updates linked projections and filtering hides its splats', {skip:!process.env.INK_TEST_CHROME}, () => {
-  function build({KIT},spec) {
-    const dataset=KIT.dataInputs.prepare(spec.dataInputs).get('stations');
-    return {
-      session:KIT.linkedViews.create(dataset,{timeColumn:'t',window:{past:2,future:2}}),
-      display:KIT.linkedViews.diorama(spec)
-    };
+test('browser controls link table, chart, map and WebGL scene picks', {skip:!process.env.INK_TEST_CHROME}, () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-linked-'));
+  try {
+    fs.writeFileSync(path.join(dir,'kit.js'),studio.bundle()+'\nwindow.KIT=KIT;');
+    const moduleURL=pathToFileURL(path.join(__dirname,'../webgl.mjs')).href;
+    const page=path.join(dir,'index.html');
+    fs.writeFileSync(page,`<!doctype html><style>body{margin:0}</style><div id="host"></div><pre id="result"></pre>
+<script src="./kit.js"></script>
+<script type="module">
+import { mountLinkedViews } from ${JSON.stringify(moduleURL)};
+try {
+  const spec=${JSON.stringify(spec)};
+  const prepared=KIT.dataInputs.prepare(spec.dataInputs).get('stations');
+  const session=KIT.linkedViews.create(prepared,{timeColumn:'t',window:{past:2,future:2}});
+  const display=KIT.linkedViews.diorama(spec), times=[];
+  const ui=mountLinkedViews(host,{toolkit:{KIT,PixelLook,PALETTES},session,filterBy:'sector',chart:{x:'$time',y:'reading'},
+    table:{columns:['station','reading']},scene:{world:s=>{times.push(s.time);return display(s);}}});
+  const root=host.shadowRoot, at=query=>root.querySelector(query), record=()=>session.snapshot().selection[0]?.key;
+  const fired=[];
+  function location(canvas,x,y){const b=canvas.getBoundingClientRect();return {clientX:b.left+x,clientY:b.top+y,button:0};}
+  ui.render();
+  at('[data-row="0"]').click();
+  ui.render();
+  fired.push(record());
+  const scene=at('[data-view="scene"]');
+  scene.onclick(location(scene,scene.clientWidth/2,scene.clientHeight/2));
+  ui.render();
+  fired.push(record(),at('[data-row="1"]').getAttribute('aria-pressed'));
+  const map=at('[data-view="map"]');
+  map.onclick(location(map,map.clientWidth-24,map.clientHeight/2));
+  ui.render();
+  fired.push(record());
+  const chart=at('[data-view="chart"]');
+  chart.setPointerCapture=()=>{};
+  const topLeft=location(chart,50,18), topRight=location(chart,chart.clientWidth-12,chart.clientHeight-37);
+  chart.onpointerdown(topLeft);
+  chart.onpointermove(topRight);
+  chart.onpointerup(topRight);
+  ui.render();
+  fired.push(session.snapshot().selection.map(r=>r.key).join(''));
+  const filter=at('select'), slider=at('input');
+  filter.value='1';filter.dispatchEvent(new Event('change'));
+  slider.value='2';slider.dispatchEvent(new Event('input'));
+  ui.render();
+  fired.push(at('.clock output').textContent,at('tbody').innerText.trim(),times.at(-1));
+  filter.value='';filter.dispatchEvent(new Event('change'));
+  ui.render();
+  fired.push(at('[data-row="2"]').getAttribute('aria-pressed'));
+  at('.clear').click();
+  ui.render();
+  fired.push(session.snapshot().selection.length);
+  ui.destroy();
+  fired.push(root.childElementCount);
+  const themed=mountLinkedViews(host,{session,panels:['table','chart'],chart:{x:'$time',y:'reading'},
+    controls:{filter:false,time:false,clear:false},labels:{chart:'Readings'},
+    defaultStyles:false,stylesheet:
+      ':host{display:block} [hidden]{display:none} [part=panels]{display:grid} canvas{width:300px;height:150px;--ink-linked-plot-background:#f2e1d0}'});
+  themed.render();
+  const ctx=at('[data-view="chart"]').getContext('2d');
+  fired.push(Array.from(root.querySelectorAll('[data-panel]'),node=>node.dataset.panel).join(','),
+    root.querySelectorAll('style').length,at('[data-label="chart"]').textContent,at('[part=toolbar]').hidden,
+    Array.from(ctx.getImageData(0,0,1,1).data).join(','));
+  themed.destroy();
+  result.textContent=JSON.stringify(fired);
+} catch(error) {result.textContent=error.stack;}
+</script>`);
+    const output=execFileSync(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
+      '--allow-file-access-from-files','--enable-unsafe-swiftshader','--use-angle=swiftshader','--window-size=1280,960',
+      '--user-data-dir='+path.join(dir,'profile'),'--dump-dom',pathToFileURL(page).href],
+      {encoding:'utf8',timeout:45_000,maxBuffer:4*1024*1024,stdio:['ignore','pipe','pipe']});
+    const result=output.match(/<pre id="result">([^<]*)<\/pre>/)?.[1];
+    const decoded=result?.replaceAll('&gt;','>').replaceAll('&lt;','<').replaceAll('&amp;','&');
+    assert(decoded?.startsWith('['),decoded||'Browser did not report linked view results');
+    assert.deepEqual(JSON.parse(decoded),['A','B','true','C','ABC','2 s','B\t50',2,'true',0,0,
+      'table,chart',1,'Readings',true,'242,225,208,255']);
+  } finally {
+    fs.rmSync(dir,{recursive:true,force:true});
   }
-  function exercise(kit,build,backend,{spec,ray}) {
-    const { session,display }=build(kit,spec), frame=backend(120,90,{raw:true});
-    try {
-      const original=display(session.snapshot());
-      frame.draw(original);
-      const initial=frame.image();
-      const hit=frame.pick(original,ray).dominant;
-      const accepted=session.pick(hit);
-      const chosen=rows=>rows.filter(row=>row.selected).map(row=>row.ref.key);
-      const projections=[chosen(session.chart({x:'$time',y:'reading'})),chosen(session.map()),chosen(session.table().rows)];
-      frame.draw(session.scene(original));
-      const tinted=initial!==frame.image();
-      const snapshot=session.update({time:2,filter:{path:['sector'],value:'Inner'}});
-      const filtered=session.scene(display(snapshot));
-      frame.draw(filtered);
-      return { accepted,projections,tinted,hidden:frame.pick(filtered,ray).dominant===null,
-        retained:snapshot.selection.map(ref=>ref.key),time:snapshot.time };
-    } finally { frame.close(); }
-  }
-  const result=runWebGL({},build,exercise,{spec,ray:centerRay});
-  const {browser,...checks}=result;
-  assert.deepEqual(checks,{
-    accepted:true,projections:[['B'],['B'],['B']],tinted:true,hidden:true,retained:['B'],time:2
-  });
 });

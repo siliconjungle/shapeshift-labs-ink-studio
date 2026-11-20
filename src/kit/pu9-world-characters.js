@@ -372,10 +372,13 @@
               if (target && target.center[1] >= p[1] + dy - 0.008 && target.center[1] <= p[1] + 0.008 &&
                   stepToSeat(world, p, target, trace)) {
                 p = target.center;
-                if (current.mode !== 'ground' || !floor) events.push({ type: 'land', position: p });
                 const on = profile(world, target.seat), platform = velocityAt(target.seat);
                 const flow = on.drift === zero ? zero : tangent(on.drift, target.seat.normal);
-                const rebound = launch(velocity, flow === zero ? platform : V.add(platform, flow), target.seat, on.launch);
+                const surfaceVelocity = flow === zero ? platform : V.add(platform, flow);
+                if (current.mode !== 'ground' || !floor) events.push({ type: 'land', position: p,
+                  point: target.seat.foot, normal: target.seat.normal, support: target.seat.support,
+                  speed: Math.max(0, -V.dot(V.sub(velocity, surfaceVelocity), target.seat.normal)) });
+                const rebound = launch(velocity, surfaceVelocity, target.seat, on.launch);
                 if (rebound) {
                   velocity = rebound.velocity;
                   momentum = rebound.momentum;

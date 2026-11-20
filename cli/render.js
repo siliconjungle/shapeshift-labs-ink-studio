@@ -21,6 +21,7 @@ const RenderGraph = require('../src/render-graph.js');
 const runGraph = require('./render-graph.js');
 const FrameComposite = require('../src/frame-composite.js');
 const SplatOrder = require('../src/splat-order.js');
+const Cutaway = require('../src/cutaway.js');
 const { blendLayers } = require('./translucent-layers.js');
 const OpticalMaterials = require('../src/optical-materials.js');
 const SplatRelighting = require('../src/splat-relighting.js');
@@ -220,6 +221,7 @@ function renderFrame(world, o, preparedPalettes) {
   const lensScale = o.lensScale ?? 1;
   if (!Number.isFinite(lensScale) || lensScale <= 0) throw new RangeError('Lens scale must be finite and positive');
   const look = world.look || {};
+  const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
   const direction = ArtDirection.prepare(look.artDirection,o.artDirection);
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
@@ -520,10 +522,14 @@ function renderFrame(world, o, preparedPalettes) {
   const cloudShadow = clouds?.shadow;
   const spriteAtlases=AtlasSprites.placements(world.spriteAtlases,o.spriteAtlases);
   const planeClip = reflectionPlane && (p=>SceneOptics.planeDistance(reflectionPlane,...p)>reflectionPlane.bias);
-  const surfaceFragments=o.spriteSurfaces===false?[]:SurfaceRaster.rasterize(world.spriteSurfaces,{V,W,H,focal,ortho,near,clip:planeClip});
-  const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:planeClip}) : null;
+  const cutoffDepth = eyeD-dist;
+  const sectionAt = cutaway && (p => Cutaway.margin(cutaway,...p,
+    -(V[2]*p[0]+V[6]*p[1]+V[10]*p[2]+V[14])-cutoffDepth));
+  const geometryClip = sectionAt ? (p => (!planeClip || planeClip(p)) && sectionAt(p)>=0) : planeClip;
+  const surfaceFragments=o.spriteSurfaces===false?[]:SurfaceRaster.rasterize(world.spriteSurfaces,{V,W,H,focal,ortho,near,clip:geometryClip});
+  const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
-  const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!reflectionPlane, clip:planeClip });
+  const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!reflectionPlane, clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
   const surfaceDepth=surfaceFragments.length?new Float32Array(W*H).fill(Infinity):null;
   for(const sample of surfaceFragments)surfaceDepth[sample.p]=Math.min(surfaceDepth[sample.p],sample.z);
@@ -532,7 +538,7 @@ function renderFrame(world, o, preparedPalettes) {
     objectDither: anchoring && stable.anchorSpaces.has('object'),
     subject: protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
-    clip:reflectionPlane && (position=>SceneOptics.planeDistance(reflectionPlane,...position)>reflectionPlane.bias)
+    clip:geometryClip
   });
   for(const sample of surfaceFragments)if(!sample.sdf)sprites.push(sample);
   sprites.sort((a,b)=>b.z-a.z);
@@ -980,7 +986,7 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const foregroundDepth = z => z - (eyeD-dist);
   function composite(p, i, z, dn, a, pr, pg, pb, wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, mark,
-    opticalDepth = z, sprite, haze = 0, rule, reflected, filteredEdge = false, refraction = 1) {
+    opticalDepth = z, sprite, haze = 0, rule, reflected, filteredEdge = false, refraction = 1, sectionEdge = false) {
     if (surfaceDepth && (!sprite?.surface || sdf) && opticalDepth > surfaceDepth[p]+1e-5) return;
     const p3 = p * 3, ia = 1 - a;
     if (counters) {
@@ -1007,7 +1013,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (hazeCoverage) hazeCoverage[p] = haze*a + hazeCoverage[p]*ia;
     if (art) art.fragment(p, i, a, wd, z, emits, pr, pg, pb, sprite);
     if (lookPass) {
-      const redraw = PIX?.[i * 8] && wd && a > .5 && !surface?.reveals(i);
+      const redraw = !sectionEdge && PIX?.[i * 8] && wd && a > .5 && !surface?.reveals(i);
       lookPass.fragment(p, a, redraw ? undefined : mark);
     }
     if (surfaceGlint && a > 0.5) surfaceGlint[p] = highlight > 0.22 || detailParticle;
@@ -1032,7 +1038,7 @@ function renderFrame(world, o, preparedPalettes) {
       gls[p] *= ia;
       if (a > 0.5) {
         if (pixelBudgets) pixelBudgets[p] = (cleanupFlags[i] ?? 0) | DetailBudgets.OWNED;
-        if (win) win[p] = surface?.reveals(i) ? -1 : i;
+        if (win) win[p] = sectionEdge || surface?.reveals(i) ? -1 : i;
         if (axialDepth) axialDepth[p] = opticalDepth;
         if (fogScales || silhouetteMask) subjectPixel(p,rule);
       }
@@ -1075,8 +1081,13 @@ function renderFrame(world, o, preparedPalettes) {
       }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample);
     }
-    const rgb=color.map((value,c)=>value+(fog[c]-value)*fogMix);
-    return [i,z,dn,alpha,...rgb,alpha>=.5,false,highlight,paletteId,false,false,alpha<.5,false,undefined,z,sprite,fogMix,rule,reflected];
+    const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
+    const rgb=color.map((value,c)=>{
+      const shaded=value+(fog[c]-value)*fogMix;
+      return ink ? shaded+(cutaway.edge.color[c]-shaded)*ink : shaded;
+    });
+    return [i,z,dn,alpha,...rgb,alpha>=.5,false,highlight,paletteId,false,false,alpha<.5,false,undefined,z,sprite,fogMix,
+      rule,reflected,false,1,ink>0];
   }
   function playSprites(through,queued) {
     while (spriteIndex<sprites.length && sprites[spriteIndex].z>=through) {
@@ -1245,6 +1256,17 @@ function renderFrame(world, o, preparedPalettes) {
       k2 = A / det,
       ex = Math.min(3 * Math.sqrt(A) + footprintMargin, 2048),
       ey = Math.min(3 * Math.sqrt(C) + footprintMargin, 2048);
+    let cutDx, cutDy, cutReach;
+    if (cutaway) {
+      // Condition the splat's axial depth on its screen position before testing the world-space boundary.
+      const bx=V[2], by=V[6], bz=V[10], ga=-(bx*u0+by*u1+bz*u2), gb=-(bx*w0+by*w1+bz*w2);
+      const pure=projectedA*projectedC-Bq*Bq;
+      const [q0,q1,q2]=pure>1e-8*Math.max(1,projectedA*projectedC) ?
+        [projectedC/pure,-Bq/pure,projectedA/pure] : [k0,k1,k2];
+      cutDx=q0*ga+q1*gb;
+      cutDy=q1*ga+q2*gb;
+      cutReach=3*Math.sqrt(Math.max(0,bx*(c00*bx+c01*by+c02*bz)+by*(c01*bx+c11*by+c12*bz)+bz*(c02*bx+c12*by+c22*bz)));
+    }
     let sx = ortho ? ((cx / (oh * asp)) * 0.5 + 0.5) * W : ((((tp / asp) * cx) / -cz) * 0.5 + 0.5) * W,
       sy = ortho ? ((cy / oh) * 0.5 + 0.5) * H : (((tp * cy) / -cz) * 0.5 + 0.5) * H;
     if (kind === 1) {
@@ -1283,8 +1305,9 @@ function renderFrame(world, o, preparedPalettes) {
     const fogMix = !(flags & 2) && world.fog.max > 0 && world.fog.start < 1
       ? targetFog(sstep(world.fog.start,1,dn)*world.fog.max*(exposure?.fog?.(x,y,z)??1),rule) : 0;
     const reflectInRaster = (planar || reflectedSky) && !pixelSurface;
+    const finishBeforeFog = reflectInRaster || !pixelSurface && surface?.finishBeforeFog(i);
     const normal = fragmentSurface ? surface.surfaceNormal(i) : null;
-    const centerFog = !opticalActive && !reflectInRaster && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
+    const centerFog = !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
     if (fogMix && centerFog) {
       r += (fog[0] - r) * fogMix;
       g += (fog[1] - g) * fogMix;
@@ -1369,6 +1392,22 @@ function renderFrame(world, o, preparedPalettes) {
         const preciseDepth = sdfHit || emitterHits?.[p];
         const exact = sdfRow && sdf.fragment(sdfRow,p,rayAt(ix+.5,iy+.5),-cz);
         if (exact === false || exact && pixelSurface && PIX[exact.row.i*8]) continue;
+        let sectionZ, sectionTint = 0;
+        if (cutaway) {
+          sectionZ = exact?.z ?? -cz+clamp(cutDx*dx+cutDy*dy,-cutReach,cutReach);
+          if (sectionZ < near) continue;
+          let margin;
+          if (exact) margin = Cutaway.margin(cutaway,...exact.position,sectionZ-cutoffDepth);
+          else {
+            const { origin, direction, axial } = rayAt(ix+.5,iy+.5);
+            const reach = sectionZ/axial;
+            margin=Cutaway.margin(cutaway,
+              origin[0]+reach*direction[0],origin[1]+reach*direction[1],origin[2]+reach*direction[2],
+              sectionZ-cutoffDepth);
+          }
+          if (margin < 0) continue;
+          sectionTint = Cutaway.edgeWeight(cutaway.edge,margin);
+        }
         lookPass?.begin(centerMark);
         let pr = r,
           pg = g,
@@ -1380,7 +1419,7 @@ function renderFrame(world, o, preparedPalettes) {
           const shade = shadeFraction > MaterialPixelStyle.thresholds(shadeMode,
             Math.floor(ix / artScale), Math.floor(iy / artScale)) ? highStyle : lowStyle;
           if (shade !== pk) {
-            const visibility = reflectInRaster || staged?.lit || splatFlash || relit || coverGain < 1 ? 1 : 1 - fogMix;
+            const visibility = finishBeforeFog || staged?.lit || splatFlash || relit || coverGain < 1 ? 1 : 1 - fogMix;
             const gain = visibility / 255;
             pr += ((shade & 255) - (pk & 255)) * gain;
             pg += ((shade >> 8 & 255) - (pk >> 8 & 255)) * gain;
@@ -1393,7 +1432,7 @@ function renderFrame(world, o, preparedPalettes) {
             c = FPAL[Math.floor(FN[fi + v] / (u === 0 ? 1 : u === 1 ? 64 : u === 2 ? 4096 : 262144)) % 64];
           if (c) {
             const tile = staged?.material ? stagedMaterial(i, staged.material, c, materialSample) : c;
-            const tileFog = !reflectInRaster && !staged?.lit && !splatFlash && !relit && coverGain === 1 ? fogMix : 0;
+            const tileFog = !finishBeforeFog && !staged?.lit && !splatFlash && !relit && coverGain === 1 ? fogMix : 0;
             pr = (tile[0] + (fog[0] - tile[0]) * tileFog) * fineWeight + pr * (1 - fineWeight);
             pg = (tile[1] + (fog[1] - tile[1]) * tileFog) * fineWeight + pg * (1 - fineWeight);
             pb = (tile[2] + (fog[2] - tile[2]) * tileFog) * fineWeight + pb * (1 - fineWeight);
@@ -1481,15 +1520,21 @@ function renderFrame(world, o, preparedPalettes) {
           pg = Lightning.shade(pg, splatFlash[1]);
           pb = Lightning.shade(pb, splatFlash[2]);
         }
-        if (opticalActive || staged?.lit || (fragmentSurface && reflectInRaster) || liveNormal || splatFlash || relit || coverGain < 1) {
+        if (opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
           pr += (fog[0] - pr) * fogMix;
           pg += (fog[1] - pg) * fogMix;
           pb += (fog[2] - pb) * fogMix;
         }
+        if (sectionTint) {
+          const [rr,gg,bb]=cutaway.edge.color;
+          pr+=(rr-pr)*sectionTint;
+          pg+=(gg-pg)*sectionTint;
+          pb+=(bb-pb)*sectionTint;
+        }
         a *= alpha;
         if (a < 0.004) continue;
         const wd = writesDepth && alpha === 1 && !exact;
-        const surfaceZ = exact?.z ?? (wantsDepth ?
+        const surfaceZ = sectionZ ?? exact?.z ?? (wantsDepth ?
           sampledDepth(rayAt(ix + .5, iy + .5), probeNormal, probeCenter, -cz, probeReach) : -cz);
         if (preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) continue;
         if (probe) probe(p, i, -cz, surfaceZ, pr, pg, pb, a);
@@ -1497,19 +1542,20 @@ function renderFrame(world, o, preparedPalettes) {
           playFragments(false,-cz);
           orderFallback = true;
         }
-        const opticalDepth = blendDepth || aerial || cloudView || preciseDepth ? surfaceZ : undefined;
+        const opticalDepth = cutaway || blendDepth || aerial || cloudView || preciseDepth ? surfaceZ : undefined;
         if (deferred && (sortedSurfaces || preciseDepth)) {
           const entry = { sort: (flags & 4 || blendDepth && backRows?.has(i)) ? Infinity : surfaceZ, index: n, center: exact?.z ?? -cz,
             transparent: !wd && !exact && !(flags & 4) && !(blendDepth && backRows?.has(i)), opacity: a,
             pane: blendDepth && glass && bend ? renderMeta?.objectIds?.[i] || -pk - 1 : 0,
             sample: [i, surfaceZ, normalizedDepth(surfaceZ), a, pr, pg, pb,
               wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, lookPass && { ...lookPass.mark },
-              opticalDepth, undefined, fogMix, rule, reflected?.slice(), filteredEdge] };
+              opticalDepth, undefined, fogMix, rule, reflected?.slice(), filteredEdge, 1, sectionTint>0] };
           countDeferred();
           if (!deferred.has(p)) deferred.set(p, []);
           deferred.get(p).push(entry);
-        } else composite(p, i, exact?.z ?? -cz, exact ? normalizedDepth(exact.z) : dn, a, pr, pg, pb, wd, emits, highlight,
-          paletteId, detailParticle, projected, coat, glass, lookPass?.mark, opticalDepth, undefined, fogMix, rule, reflected, filteredEdge);
+        } else composite(p, i, sectionZ ?? exact?.z ?? -cz, sectionZ !== undefined || exact ? normalizedDepth(surfaceZ) : dn,
+          a, pr, pg, pb, wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, lookPass?.mark, opticalDepth,
+          undefined, fogMix, rule, reflected, filteredEdge, 1, sectionTint>0);
       }
     }
   }
@@ -1570,6 +1616,11 @@ function renderFrame(world, o, preparedPalettes) {
             const X2 = x + dx,
               Y2 = y + dy;
             if (X2 < 0 || Y2 < 0 || X2 >= W || Y2 >= H) continue;
+            if (cutaway) {
+              const {origin,direction,axial}=rayAt(X2+.5,Y2+.5), reach=-cz/axial;
+              if (Cutaway.margin(cutaway,origin[0]+reach*direction[0],origin[1]+reach*direction[1],
+                origin[2]+reach*direction[2],-cz-cutoffDepth)<0) continue;
+            }
             const q = Y2 * W + X2,
               j = win[q];
             if (j < 0 || PIX[j * 8] !== PIX[i * 8]) continue;
@@ -1725,6 +1776,11 @@ function renderFrame(world, o, preparedPalettes) {
               const X2 = x + dx,
                 Y2 = y + dy;
               if (X2 < 0 || Y2 < 0 || X2 >= W || Y2 >= H) continue;
+            if (cutaway) {
+              const {origin,direction,axial}=rayAt(X2+.5,Y2+.5), reach=-cz/axial;
+              if (Cutaway.margin(cutaway,origin[0]+reach*direction[0],origin[1]+reach*direction[1],
+                origin[2]+reach*direction[2],-cz-cutoffDepth)<0) continue;
+            }
               const q = Y2 * W + X2,
                 dd = dep[q] - dep[p];
               if (dd <= olEps) continue;
@@ -1744,6 +1800,11 @@ function renderFrame(world, o, preparedPalettes) {
                 const X2 = x + dx,
                   Y2 = y + dy;
                 if (X2 < 0 || Y2 < 0 || X2 >= W || Y2 >= H) continue;
+            if (cutaway) {
+              const {origin,direction,axial}=rayAt(X2+.5,Y2+.5), reach=-cz/axial;
+              if (Cutaway.margin(cutaway,origin[0]+reach*direction[0],origin[1]+reach*direction[1],
+                origin[2]+reach*direction[2],-cz-cutoffDepth)<0) continue;
+            }
                 const q = Y2 * W + X2,
                   j = win[q];
                 if (j < 0 || PIX[j * 8] !== rid || Math.abs(dep[q] - dep[p]) > olGap) continue;
@@ -1936,6 +1997,11 @@ function renderFrame(world, o, preparedPalettes) {
               X2 = px1 + odx * ou + tdx * al,
               Y2 = py1 + ody * ou + tdy * al;
             if (X2 < 0 || Y2 < 0 || X2 >= W || Y2 >= H) continue;
+            if (cutaway) {
+              const {origin,direction,axial}=rayAt(X2+.5,Y2+.5), reach=-cz/axial;
+              if (Cutaway.margin(cutaway,origin[0]+reach*direction[0],origin[1]+reach*direction[1],
+                origin[2]+reach*direction[2],-cz-cutoffDepth)<0) continue;
+            }
             const q = Y2 * W + X2,
               dp = dep[q];
             if (dA >= sprD[q]) continue;

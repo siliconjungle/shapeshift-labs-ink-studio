@@ -3,8 +3,8 @@
   const W=K.world, Q=W.query, {V,M}=K, {record,check,vector,id,own}=W.data;
   const zero=[0,0,0];
   function characters(config){
-    const {gravity,clearance,support,medium,supportPadding,surfaceBodies,surfaces,traversalLinks}=config, authored=config.characters;
-    check(typeof gravity==='string'&&typeof clearance==='string'&&
+    const {gravity,clearance,support,medium,supportPadding,surfaceBodies,surfaces,traversalLinks,landingContacts=false}=config, authored=config.characters;
+    check(typeof gravity==='string'&&typeof clearance==='string'&&typeof landingContacts==='boolean'&&
       [support,medium,surfaceBodies].every(name=>name===undefined||typeof name==='string')&&
       (surfaces===undefined||record(surfaces))&&(surfaceBodies===undefined||typeof support==='string')&&
       (supportPadding===undefined||Number.isFinite(supportPadding)&&supportPadding>=0&&supportPadding<=2)&&
@@ -39,13 +39,16 @@
       return W.characters.fromQuery(query,{gravity,clearance,support,medium,supportPadding,exclude:row.entity,
         surfaceBodies,surfaceResponse});
     }
-    return {initial:()=>initial,inputs,
+    const actors = state => landingContacts ? state?.actors : state;
+    const pack = (actors, landings = []) => landingContacts ? { actors, landings } : actors;
+    return {initial:()=>pack(initial),inputs,
+      ...(landingContacts && {outputs:{landings:'event'},output:state=>({landings:state.landings})}),
       settleInitial(state,{query}){
-        return Object.fromEntries(Object.entries(state).map(([key,actor])=>{
+        return pack(Object.fromEntries(Object.entries(actors(state)).map(([key,actor])=>{
           const axis=environment(query,specs[key]).gravityAt(actor.position).up;
           const heading=V.norm(W.gravity.tangent(actor.forward,axis),V.perp(axis));
           return [key,{...actor,up:axis,forward:heading,gravityForward:heading}];
-        }));
+        })));
       },checkFields(query){
         W.gravity.checkField(query,gravity);
         const collision=query.field(clearance);
@@ -60,28 +63,41 @@
       },
       dependencies:{reads:[gravity,clearance,medium,surfaceBodies].filter(Boolean)},
       step(state,ctx){
-        return Object.fromEntries(Object.entries(state).map(([key,actor])=>{
+        const landings = [];
+        const next = Object.fromEntries(Object.entries(actors(state)).map(([key,actor])=>{
           const spec=specs[key], move=ctx.input['move.'+key]??zero;
           const command=ctx.input['traversal.'+key]??{}, env=environment(ctx.query,spec);
           const input={...(spec.worldMove?{moveWorld:move}:{move:[move[0],move[2]]}),
             vertical:ctx.input['vertical.'+key],jump:ctx.input['jump.'+key],climb:ctx.input['climb.'+key]};
           const result=spec.traversal?spec.traversal.step(actor,{...input,traverse:command.link,detach:command.detach},
             ctx.dt,env,{time:ctx.time-ctx.dt,enabled:id=>ctx.input['enable.'+id]}):spec.controller.step(actor,input,ctx.dt,env);
-          for(const {type,...detail} of result.events)ctx.emit('character-'+type,{entity:spec.entity,...detail});
+          for(const {type,...detail} of result.events){
+            ctx.emit('character-'+type,{entity:spec.entity,...detail});
+            if(landingContacts&&type==='land'&&id(detail.support)&&detail.support!==spec.entity){
+              check(landings.length<1024,'Character landing contacts exceed their budget');
+              landings.push({kind:'landing',source:spec.entity,target:detail.support,point:detail.point,
+                normal:detail.normal,speed:detail.speed});
+            }
+          }
           return [key,result.actor];
         }));
-      },validateState(state){
+        return pack(next,landings);
+      },validateState(saved){
+        const state = actors(saved);
+        check(!landingContacts||Array.isArray(saved.landings)&&saved.landings.length<=1024&&saved.landings.every(row=>
+          record(row)&&row.kind==='landing'&&id(row.source)&&id(row.target)&&vector(row.point)&&vector(row.normal)&&
+          Number.isFinite(row.speed)&&row.speed>=0),'Invalid saved landing contacts');
         check(record(state)&&Object.keys(state).length===Object.keys(specs).length&&Object.entries(state).every(([key,actor])=>
           own(specs,key)&&record(actor)&&vector(actor.gravityForward)&&vector(actor.up)&&V.len(actor.up)>1e-8),
         'Invalid saved local characters');
         for(const [key,actor] of Object.entries(state))(specs[key].traversal??specs[key].controller).state(actor);
       },*poseEntities(){for(const row of Object.values(specs))yield row.entity;},
       pose(state,entity){
-        const key=Object.keys(specs).find(key=>specs[key].entity===entity), actor=key===undefined?null:state?.[key];
+        const key=Object.keys(specs).find(key=>specs[key].entity===entity), actor=key===undefined?null:actors(state)?.[key];
         return actor?{position:actor.position,rotation:W.gravity.basis(actor.up,actor.forward)}:null;
       },
       fields:{actors:{type:'record',role:'character-actors',read:({state})=>Q.ok(
-        Object.fromEntries(Object.entries(state).map(([key,actor])=>[key,view(actor,key)])))}}};
+        Object.fromEntries(Object.entries(actors(state)).map(([key,actor])=>[key,view(actor,key)])))}}};
   }
   W.runtime.register('characters',characters);
 })(KIT);

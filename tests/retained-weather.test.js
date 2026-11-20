@@ -112,3 +112,45 @@ test('the retained-weather render toggle keeps profile rain and independently re
   const noBasins = ink.render(world,{ ...later, weatherBinding:{ surface:{ standingWater:{ capacity:0 } } } });
   assert.deepEqual(noBasins.rgb,off.rgb);
 });
+
+test('a data-authored wet finish stays damp after a shower and reflects only in retaining seams', () => {
+  const finish = {
+    cam:{ target:[0,0,0], dist:4.7, yaw:0, pitch:.81, ortho:true, sway:0 },
+    skyEnvironment:{
+      defaults:{ zenith:'#91b5df', horizon:'#9fd6ef', ground:'#2b3751', sunStrength:0, humidity:.96 },
+      profiles:{ rain:{ rain:.6 }, clear:{ rain:0 } },
+      sequences:{ weather:{ duration:4, loop:false, keys:[
+        { at:0, profile:'rain', ease:'hold' }, { at:1, profile:'clear' }
+      ] } }, tracks:[{ id:'shower', sequence:'weather' }]
+    },
+    weatherBinding:{ surface:{ ...grid, width:16, height:8, cell:.25, origin:[-2,-1], step:.05,
+      evaporation:.01, standingWater:{ capacity:.27, drainage:.025 }
+    } }
+  };
+  const spec = {
+    id:'retained-material-response', finish,
+    solids:[{ kind:'box', at:[0,0,0], half:[1.75,.09,.85], mat:{ role:'pale', surface:{
+      signals:{ film:{ type:'weather', channel:'wetness', range:[.03,.24] },
+        pool:{ type:'weather', channel:'standingWater', range:[.01,.1] } },
+      layers:{
+        tint:{ type:'tint', color:[.48,.48,.48], blend:'multiply', strength:0, drive:{ strength:{ signal:'film', to:1 } } },
+        pool:{ type:'reflection', source:'scene', strength:0, f0:1, mask:{ type:'axis', axis:'x', range:[.25,.55] },
+          drive:{ strength:{ signal:'pool', to:1 } } }
+      }
+    } } }]
+  };
+  const world = K.diorama.build(spec);
+  const options = { w:118, h:88, px:1, raw:true };
+  const before = ink.render(world, { ...options, t:0 });
+  const damp = ink.render(world, { ...options, t:.25 });
+  const pooled = ink.render(world, { ...options, t:1.4 });
+  const reset = ink.render(world, { ...options, t:1.4, retainedWeather:false });
+  const pixel = (im, x) => Array.from(im.rgb.slice(((im.h >> 1) * im.w + x) * 3, ((im.h >> 1) * im.w + x) * 3 + 3));
+  const left = 41, right = 77;
+  assert.deepEqual(before.rgb, reset.rgb);
+  assert(pixel(damp,left)[0] < pixel(before,left)[0] - 14);
+  assert(pixel(pooled,left)[0] < pixel(damp,left)[0] - 10);
+  assert(pixel(pooled,right)[2] > pixel(damp,right)[2] + 40);
+  ink.render(world, options);
+  assert.deepEqual(ink.render(world, { ...options, t:1.4 }).rgb, pooled.rgb);
+});

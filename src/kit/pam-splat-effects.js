@@ -178,7 +178,7 @@
       if (lit && lastTime !== time) {
         const direction = world.surfaceLight && SurfaceLook.prepareLightTrack(world.surfaceLight)(time);
         prepared = world.surfaces.map(({ settings, light }) =>
-          SurfaceLook.prepare(settings, world.pal, direction || light, world.surfaceEffects));
+          SurfaceLook.prepare(settings, world.pal, direction || light, world.surfaceEffects, { paletteRoles: world.paletteRoles }));
         lastTime = time;
       }
       for (let tryIndex = 0; tryIndex < attempts; tryIndex++) {

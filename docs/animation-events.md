@@ -30,3 +30,5 @@ The `eventBindings` record maps each event name to an ordered list of responses.
 Use `machine.bind({ world, puppet, contacts, sockets, onEvent, onSound })` to run a graph from a puppet's existing animation update. Give each contact ID an authored point, socket, or captured surface target. The binding applies active contacts after blending and sends presentation to the normal renderers. Use the returned binding's `frame()` to inspect the contact solve and `reset()` to start playback again from zero. Hosts can also step the machine directly and consume its event records independently of a renderer. [Native contact format](authored-contacts.md)
 
 Use `ink-studio animation-graph <graph.json> --at SECONDS` to inspect a portable graph. Supply `--inputs FILE` for an ordered list of rows with a `time` and optional `set` record or `fire` list. Motion advances to each timestamp before its input changes are applied. Use `--out FILE` to save the event trace, final pose, and active blend weights.
+
+Named events can also start action recipes, open contact windows, and advance recovery phases. [Action windows](action-windows.md)

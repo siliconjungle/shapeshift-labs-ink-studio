@@ -44,6 +44,7 @@ For per-pixel rendering set `S.pixel = true` before baking and set `look: { pixe
 | Layer type | Controls |
 | --- | --- |
 | `diffuse` | Map the direct-light response through a material lighting ramp. |
+| `tint` | Apply a constant `color` using `blend: 'mix'`, `'add'`, or `'multiply'`. |
 | `bevel` | Highlight sculpted ridges and creases within a configurable art-pixel reach. |
 | `specular` | Set `roughness` to one value or to `[along, across]` to shape the reflected highlight. Set `color` for a tinted highlight. |
 | `fiber` | Set `roughness`, `shift` and optionally `figure`, `axis` and `scale` for tilted fibres with a moving band. |
@@ -147,6 +148,56 @@ rendered with the finishes enabled or disabled at the same resolution.
 node cli/ink-studio.js render examples/material-bevel-highlights.js --w 338 --h 132 --px 1
 node cli/ink-studio.js render examples/material-bevel-highlights.js --w 338 --h 132 --px 1 --surface off
 ```
+
+## Drive finish properties
+
+Name a source in `surface.signals` and bind it to one or more layer
+properties with `drive`. A signal maps to zero to one. Each binding
+interpolates from the layer's authored property to the supplied `to` value.
+A layer with a zero base strength can fade in when its signal rises.
+
+```js
+const glazedCeramic = K.surface.material(clay, {
+  signals: {
+    heat: { type: 'weather', channel: 'temperature', range: [5, 28] },
+    edge: { type: 'axis', axis: 'y', range: [0.1, 0.5] }
+  },
+  layers: {
+    pigment: {
+      type: 'tint', color: '#4b637d', strength: 0.35,
+      drive: { color: { signal: 'heat', to: '#c96340' } }
+    },
+    glaze: {
+      type: 'specular', roughness: 0.42, strength: 0.1,
+      drive: {
+        roughness: { signal: 'heat', to: 0.13 },
+        strength: { signal: 'edge', to: 0.6 }
+      }
+    }
+  }
+});
+```
+
+- Drive `strength` on any finish layer. Drive `roughness` on specular,
+  fiber, diffraction, and glint layers with a number or an along/across
+  pair. Drive `f0` on sky and planar reflections. Drive `color` on tint,
+  specular, fiber, sheen, glint, bevel, and planar reflection layers
+  using a normal surface color.
+- A `weather` source reads `wetness`, `standingWater`, `snow`, `frost`,
+  `temperature`, or `exposure` at the world position. A `time` source uses
+  scene seconds. Set `range: [low, high]` and optionally choose `linear`,
+  `smooth` (the default), or `step` interpolation. In a custom host pass
+  the weather frame's `surface` function as `sample.weather(x, z)`.
+- Use the existing `axis`, `query`, `field`, and `texture` mask sources
+  as signals with the same settings. JavaScript materials can also
+  supply a function that takes the surface sample and returns a value
+  in zero to one. Missing values keep the authored property.
+- Signals are shared across layer bindings at each sample. Independent
+  layer masks, finish order, and the export palette still apply.
+
+The [retained weather example](retained-weather.md#put-it-on-a-material)
+uses the same film signal for stone color and highlight width. Standing
+water from that grid controls the seam reflection.
 
 ## Presets
 

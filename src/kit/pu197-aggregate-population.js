@@ -7,7 +7,7 @@
     for(const page of roster.pages)for(const row of page.details)counts[row.species]++;
     return {total:W.agentStorage.count(roster),counts};
   }
-  function cohorts(settings,{profiles,fit,bounds,contacts,validateState,occupants,blockedCoarse}){
+  function cohorts(settings,{profiles,fit,bounds,contacts,validateState,occupants,blockedCoarse,formationActive}){
     const S=W.agentStorage, aliases=new WeakMap();
     const {clamp}=W.fields;
     const {model,cell=12,goalCell=cell}=settings;
@@ -19,7 +19,7 @@
       const collections=new Map();
       for(const slot of S.order(roster)){
         const row=S.read(roster,slot);
-        const holdsOrder=W.agentOrders.holding(row.orders);
+        const holdsOrder=W.agentOrders.holding(row.orders)||row.formationDriven||formationActive?.(state.formations,row);
         const goal=holdsOrder?row.position:row.goal;
         const key=[row.species,holdsOrder?'orders':'motion',...row.position.map(n=>Math.floor(n/cell)),...goal.map(n=>Math.floor(n/goalCell))].join('/');
         if(!collections.has(key))collections.set(key,{species:row.species,members:[],sum:[0,0,0],destination:[0,0,0]});
@@ -34,7 +34,7 @@
         groups.push({species,members,origin,position:origin,goal:V.mul(destination,1/members.length),distance:0});
       }
       return freeze({roster,...(decisions&&{decisions}),...(state.routeWork&&{routeWork:state.routeWork}),
-        ...(state.crowd&&{crowd:state.crowd}),groups,memberGroup});
+        ...(state.crowd&&{crowd:state.crowd}),...(state.formations&&{formations:state.formations}),groups,memberGroup});
     }
     function memberPosition(group,position){
       return group.distance?position.map((n,i)=>clamp(n+group.position[i]-group.origin[i],bounds.min[i],bounds.max[i])):position;
@@ -55,7 +55,8 @@
         draft.update(slot,row,individual(state,row));
       }
       return freeze({roster:draft.finish(),contacts:[],...(state.decisions&&{decisions:state.decisions}),
-        ...(state.routeWork&&{routeWork:state.routeWork}),...(state.crowd&&{crowd:state.crowd})});
+        ...(state.routeWork&&{routeWork:state.routeWork}),...(state.crowd&&{crowd:state.crowd}),
+        ...(state.formations&&{formations:state.formations})});
     }
     function totals(state,isAggregate){
       if(!isAggregate)return population(S.get(state),species);

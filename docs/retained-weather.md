@@ -26,6 +26,45 @@ Use `precipitationExposure` to keep a roofed area dry. Use `shelter` to reduce i
 
 ## Put it on a material
 
+Use [surface signals](surface-materials.md#drive-finish-properties) to
+give several finish layers the same wet-film response. The tint darkens
+the paving's diffuse color. The specular lobe becomes stronger and narrower
+as that film builds. A separate signal from the same retained grid reveals
+the reflected sky where water collects in the seams.
+
+```js
+const paving = K.surface.material(stone, {
+  signals: {
+    film: { type: 'weather', channel: 'wetness', range: [0.02, 0.25] },
+    pools: { type: 'weather', channel: 'standingWater', range: [0.01, 0.095] }
+  },
+  layers: {
+    absorption: {
+      type: 'tint', blend: 'multiply', color: [0.55, 0.64, 0.72], strength: 0,
+      drive: { strength: { signal: 'film', to: 1 } }
+    },
+    polish: {
+      type: 'specular', color: '#cbdde1', roughness: [0.52, 0.36], strength: 0.14,
+      drive: {
+        roughness: { signal: 'film', to: [0.12, 0.18] },
+        strength: { signal: 'film', to: 0.66 }
+      }
+    },
+    seams: {
+      type: 'reflection', source: 'scene', f0: 0.88, strength: 0,
+      mask: { type: 'axis', axis: 'y', range: [-0.04, 0.02], invert: true },
+      drive: { strength: { signal: 'pools', to: 0.94 } }
+    }
+  }
+});
+```
+
+Use the basin capacity to retain water in low areas. The reflection
+can live on the seam material itself or use a mask for height or layout.
+A `planarReflection` layer with a named plane can reflect scene geometry.
+
+## Individual weather masks
+
 Use weather masks with `wetness`, `standingWater`, `snow`, or `frost`. A puddle can use a stronger reflection finish than the surrounding damp stone. Set increasing `low` and `high` values to map the local depth or amount to a smooth blend.
 
 ```js
@@ -40,8 +79,10 @@ Puddles appear as finish layers on the authored surface in the CPU renderer. The
 ## Compare a render
 
 ```sh
+ink-studio sheet examples/wet-stone-finish.js --t 0,0.4,1.6 --w 272 --h 154 --px 1 --out wet-stone.png
 ink-studio sheet examples/weather-traces.js --t 2.95,5.62,7.5,9.85 --raw --out traces.png
 ink-studio render examples/weather-traces.js --t 2.95 --raw --retained-weather off --out before.png
 ```
 
-In [the terrace example](../examples/weather-traces.js), rain fills the basins, colder air freezes the paving and adds snow, and sunlight thaws the exposed stones first. Set `--retained-weather on|off` or pass the boolean `retainedWeather` to the renderer to compare at the same time. This toggle controls the retained grid, so the profile continues to drive airborne weather. Use a `--weather-binding file.json` override to change the storage controls for a render.
+In [Lantern Court](../examples/wet-stone-finish.js), the same light shows
+dry paving, a damp film, and pooled seams after rain stops. In [the terrace example](../examples/weather-traces.js), rain fills the basins, colder air freezes the paving and adds snow, and sunlight thaws the exposed stones first. Set `--retained-weather on|off` or pass the boolean `retainedWeather` to the renderer to compare at the same time. This toggle controls the retained grid, so the profile continues to drive airborne weather. Use a `--weather-binding file.json` override to change the storage controls for a render.

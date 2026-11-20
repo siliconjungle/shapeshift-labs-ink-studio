@@ -42,6 +42,9 @@ single-use work across agent rosters.
 [Physical work and production](physical-work.md) connect located stocks,
 staffed recipes, and construction, repair, or recruitment effects.
 
+[Groups and formations](group-formations.md) give agents shared
+destinations, per-member slots, and rally points beyond narrow passages.
+
 [First-divergence debugging](first-divergence.md) compares timelines
 tick by tick and reports actual inputs and changed state paths.
 
@@ -716,6 +719,7 @@ reaches the feeder.
 | `construction` | Constraint-fitted points, sockets, blocks, spans, and passage clearance with live refits and conflict reports. |
 | `control` | Typed arithmetic, thresholds, selection, binary logic, pulses, latches, timers and hysteresis. |
 | [`puzzle`](puzzles.md) | Ordered switches, timed windows, reusable recipes, blocker traces and bounded solution witnesses. |
+| [`action-windows`](action-windows.md) | Assignable action phases, swept contact outcomes, phase guards, and switches or fractures driven by landing contacts. |
 | `store` | Bounded numeric, integer, or vector accounts with named resources and units. |
 | `exchange` | Enabled links that request a fixed amount per tick or a rate per second. |
 | `logistics` | Resource stocks, atomic recipes, scheduled shipments, conservative accounting, and upstream shortage traces. |

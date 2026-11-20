@@ -30,6 +30,9 @@ replanning after a local obstruction across multiple ticks.
 Use [crowds and bottlenecks](crowds-and-bottlenecks.md) for local walker
 separation and directional capacity at crossings.
 
+Use [formations](group-formations.md) to plan shared destinations
+and regroup squads or crews after narrow passages.
+
 ## Trace a changing crossing
 
 The [ford example](../examples/world-tiled-ford.json) transfers water into

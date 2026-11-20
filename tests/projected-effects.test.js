@@ -236,3 +236,77 @@ test('the browser script bundle exposes the same surface shader and field sample
   `);
   assert.equal(value, '[0,1,0,1,0]');
 });
+
+test('indexed rasters step independent groups, preserve fixed slots and seek in either direction', () => {
+  const palette = [0x000000, 0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x00ffff, 0xff00ff, 0xff0000];
+  const layer = {
+    type: 'projected', pattern: 'indexed',
+    raster: { width: 5, height: 1, slots: [1, 4, 7, 0, null], size: [5, 1], wrap: true },
+    cycles: {
+      forward: { role: 'primary', period: 3 },
+      reverse: { slots: [4, 5, 6], period: 6, direction: 'reverse', phase: .5 }
+    }
+  };
+  const settings = { layers: { paint: layer } };
+  const options = { paletteRoles: { primary: [1, 2, 3] } };
+  const prepared = SurfaceLook.prepare(settings, palette, undefined, undefined, options);
+  const base = [.25, .25, .25];
+  const sample = (x, time) => SurfaceLook.shade(prepared,
+    { position: [x, 0, .5], normal: [0, 1, 0], view: [0, 1, 0], time }, base);
+  assert.deepEqual(sample(.5, .99).slice(0, 3), [1, 0, 0]);
+  assert.deepEqual(sample(.5, 1).slice(0, 3), [0, 1, 0]);
+  assert.deepEqual(sample(.5, -1).slice(0, 3), [0, 0, 1]);
+  assert.deepEqual(sample(1.5, 0).slice(0, 3), [1, 0, 1]);
+  assert.deepEqual(sample(1.5, 1).slice(0, 3), [0, 1, 1]);
+  assert.deepEqual(sample(2.5, 1).slice(0, 3), [1, 0, 0]);
+  assert.deepEqual(sample(3.5, 1).slice(0, 3), [0, 0, 0]);
+  assert.deepEqual(sample(4.5, 1).slice(0, 3), base);
+  assert.deepEqual(sample(-Number.EPSILON, 1).slice(0, 3), base);
+  assert.deepEqual(sample(5.5, 7), sample(.5, 1));
+  assert.deepEqual(sample(1.5, 7), sample(1.5, 1));
+
+  const compile = paint => SurfaceLook.prepare({ layers: { paint } }, palette, undefined, undefined, options);
+  const shortCycle = compile({ ...layer, cycles: { fast: { slots: [1, 2, 3], period: .1 } } });
+  assert.deepEqual(SurfaceLook.shade(shortCycle,
+    { position: [.5, 0, .5], normal: [0, 1, 0], view: [0, 1, 0], time: .3 }, base).slice(0, 3), [1, 0, 0]);
+  assert.throws(() => compile({ ...layer, raster: { ...layer.raster, slots: [1, 4, 7, 99, null] } }), /outside the palette/);
+  assert.throws(() => compile({ ...layer, cycles: { bad: { role: 'missing', period: 2 } } }), /Palette cycle bad/);
+  assert.throws(() => compile({ ...layer, cycles: { bad: { slots: [1, 2], period: 0 } } }), /positive period/);
+  assert.throws(() => compile({ ...layer, cycles: { ...layer.cycles, bad: { slots: [2, 7], period: 3 } } }), /cannot share/);
+});
+
+test('JSON palette cycling survives native and filtered exports and leaves the same swatch static outside its mask', () => {
+  const red = 0xba524e, green = 0x46bf93, blue = 0x476fbe;
+  const spec = {
+    id: 'indexed-surface',
+    palette: [0x161923, red, green, blue, ...Array(26).fill(0x161923)],
+    roles: { paint: [1, 2, 3] },
+    camera: { target: [0, 0, 0], dist: 5, yaw: 0, pitch: 0, projection: 'orthographic', sway: 0 },
+    solids: [{ kind: 'box', at: [0, 0, 0], half: [1.5, .62, .095], res: .07, mat: {
+      ramp: [1], surface: { layers: {
+        fixed: { type: 'projected', pattern: 'indexed', raster: { width: 1, height: 1, slots: [1], wrap: true } },
+        pattern: {
+          type: 'projected', pattern: 'indexed', raster: { width: 1, height: 1, slots: [1], wrap: true },
+          mask: { type: 'axis', axis: 'x', range: [.07, .25] },
+          cycles: { pulse: { role: 'paint', period: 3 } }
+        }
+      } }
+    } }]
+  };
+  assert.deepEqual(K.diorama.check(spec).filter(p => p.level === 'error'), []);
+  const world = K.diorama.build(spec), view = { w: 96, h: 64, px: 1, dither: 1 };
+  const pixel = (image, x) => {
+    const at = ((image.h >> 1) * image.w + x) * 3;
+    return (image.rgb[at] << 16) | (image.rgb[at + 1] << 8) | image.rgb[at + 2];
+  };
+  for (const mode of [{}, { colored: true }, { tone: 'stipple' }]) {
+    const snapshot = t => render(world, { ...view, ...mode, t });
+    const [start, middle, end, loop] = [0, 1, 2, 3].map(snapshot);
+    assert.deepEqual(start.rgb, loop.rgb);
+    assert.deepEqual(middle.rgb, snapshot(1).rgb);
+    const xs = Array.from({ length: start.w }, (_, x) => x);
+    const animated = xs.find(x => pixel(start, x) === red && pixel(middle, x) === green && pixel(end, x) === blue);
+    assert.notEqual(animated, undefined);
+    assert(xs.some(x => [start, middle, end].every(image => pixel(image, x) === red)));
+  }
+});

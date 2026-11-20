@@ -194,6 +194,7 @@ function surfaceShading(world, options, camera) {
   return {
     has, normalAt, surfaceNormal, planar, environment, shade, palettes, constraints,
     projected, bevel,
+    finishBeforeFog: i => materials[surfaceData[i * STRIDE] - 1]?.finishBeforeFog,
     reveals: i => materials[surfaceData[i * STRIDE] - 1]?.reveals
   };
 }

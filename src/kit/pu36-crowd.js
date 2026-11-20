@@ -128,7 +128,7 @@
       check(record(state)&&statuses.includes(state.status)&&
         (state.bottleneck===undefined||Object.hasOwn(bottlenecks,state.bottleneck)),'Invalid saved crowd status');
     }
-    return {initial:gates.initial,inputs:gates.inputs,begin,validate:gates.validate,validateAgent,report:gates.report,
+    return {initial:gates.initial,spacing,inputs:gates.inputs,begin,validate:gates.validate,validateAgent,report:gates.report,
       blockedCoarse:hasGates?gates.blocks:null};
   }
   W.crowd=Object.freeze({create,clear});

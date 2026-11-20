@@ -252,6 +252,9 @@
       starting.add(initial[key]);
     }
     const initialRoster=starting.finish();
+    const formations=config.formations===undefined?null:W.formations.create(config.formations,profiles,
+      crowd?.spacing??0);
+    const initialFormations=formations?.initial(name=>S.select(initialRoster,name));
     const policy = config.decisions === undefined ? null : W.agentDecisions.create(config.decisions, initial);
     const species=Object.keys(profiles).sort();
     const staticFit=!config.bed&&!config.support&&!config.water&&!config.clearance&&!config.habitat;
@@ -321,7 +324,7 @@
       if(profile.mode!=='walk')return spatialPlan(ctx,config,from,goal,profile);
       return navigation?ctx.query.navigation(navigation).route(from,goal,profile):groundPlan(ctx,config,from,goal,profile);
     }
-    function one(agent,ctx,contacts,dirty,directed=false,routes,group,arrival){
+    function one(agent,ctx,contacts,dirty,directed=false,routes,group,arrival,speedLimit){
       const profile=profileFor(agent);
       let crowdStatus=W.crowd.clear;
       function finish(row,status,reason){
@@ -383,7 +386,8 @@
         return finish({...previous,position,mode:status==='waiting'||status==='limited'?'waiting':'blocked',route,cursor,retry},
           status,reason??previous.routing?.reason);
       }
-      const aim=V.sub(route[cursor],position), distance=V.len(aim), step=Math.min(distance,(profile.speed??1)*ctx.dt);
+      const travelLimit=Math.min(profile.speed??1,speedLimit??Infinity)*ctx.dt;
+      const aim=V.sub(route[cursor],position), distance=V.len(aim), step=Math.min(distance,travelLimit);
       const desired=distance>1e-8?V.mad(position,aim,step/distance):position;
       let moved, lastSupports=[], held=false, steered=false, exited=false;
       if(profile.mode==='walk'){
@@ -398,7 +402,7 @@
           clearance:point=>clearance(ctx,config,point,profile.entity)});
         const walk=(point,delta)=>body.move(point,delta,{trace:true});
         const result=group?group.move(agent,position,desired,route,cursor,walk,
-          Math.min((profile.speed??1)*ctx.dt,body.maxDistance*(1-1e-12)),directed==='exit'):
+          Math.min(travelLimit,body.maxDistance*(1-1e-12)),directed==='exit'):
           walk(position,[desired[0]-position[0],desired[2]-position[2]]);
         moved=result.foot;
         lastSupports=result.contacts;
@@ -455,6 +459,8 @@
         agent.route.every(p=>vector(p)),'Invalid agent checkpoint');
       check(orders||!own(agent,'orders'),'Unexpected saved agent orders');
       orders?.validate(agent.orders);
+      check(agent.formationDriven===undefined||formations&&agent.formationDriven===true,'Invalid saved formation movement');
+      check(agent.formationAfter===undefined||agent.formationDriven&&vector(agent.formationAfter),'Invalid saved exit destination');
       if(routeQueue&&profiles[agent.species].mode==='walk')routeQueue.validateAgent(agent);
       if(crowd&&profiles[agent.species].mode==='walk')crowd.validateAgent(agent.crowd);
     }
@@ -473,6 +479,7 @@
       policy?.validate(state.decisions,names);
       routeQueue?.validateWork(state.routeWork);
       crowd?.validate(state.crowd);
+      if(formations)formations.validate(state.formations,name=>S.select(S.get(state),name));
     }
     function requireAgent(roster,{agent,generation}){
       const slot=S.find(roster,agent);
@@ -481,8 +488,8 @@
       check(generation===undefined||generation===row.generation,'Stale agent generation for '+agent);
       return {slot,row};
     }
-    function packed(roster,contacts,decisions,routeWork=RQ.initial,crossings=crowd?.initial){
-      return freeze({roster,contacts,...(policy&&{decisions}),...(routeQueue&&{routeWork}),...(crowd&&{crowd:crossings})});
+    function packed(roster,contacts,decisions,routeWork=RQ.initial,crossings=crowd?.initial,formationState=initialFormations){
+      return freeze({roster,contacts,...(policy&&{decisions}),...(routeQueue&&{routeWork}),...(crowd&&{crowd:crossings}),...(formations&&{formations:formationState})});
     }
     function* pendingRows(roster){
       for(const [p,page] of roster.pages.entries())for(let i=0;i<page.ids.length;i++){
@@ -493,11 +500,12 @@
     function replace(state,args,update,decisions=state.decisions){
       const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
       draft.update(slot,row,update(row));
-      return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd);
+      return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd,state.formations);
     }
     function changeOrders(row,orders){
       const switched=orders.active!==(row.orders?.active??null);
-      return {...row,orders,...(switched&&{route:emptyList,cursor:0,retry:0,
+      const {formationAfter,...controlled}=row;
+      return {...(switched?controlled:row),orders,...(switched&&{route:emptyList,cursor:0,retry:0,
         ...(row.routing&&{routing:RQ.idle})})};
     }
     function* pendingTransfers(roster){
@@ -551,7 +559,7 @@
         const row=makeAgent(agent,args), draft=S.edit(roster), generation=draft.add(row);
         ctx.emit('agent-spawned',{agent,entity:row.entity,generation,at:row.position});
         const decisions=policy?.managed(agent)?{...state.decisions,[agent]:policy.initial[agent]}:state.decisions;
-        return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd);
+        return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd,state.formations);
       }
     function checkRecruit(args){
       check(record(args)&&Object.keys(args).every(key=>['prefix','species','at','name','task','metadata'].includes(key))&&
@@ -582,7 +590,7 @@
     },
     simulationAggregate(settings){
       return W.aggregatePopulation.cohorts(settings,
-        {profiles,fit,bounds:config.bounds,contacts:config.contactEvents,validateState,occupants,blockedCoarse:crowd?.blockedCoarse});
+        {profiles,fit,bounds:config.bounds,contacts:config.contactEvents,validateState,occupants,blockedCoarse:crowd?.blockedCoarse,formationActive:formations?.active});
     },
     ...(config.contactEvents&&{outputs:{contacts:'event'},output:state=>({contacts:state.contacts})}),
     ...(orders&&{orderWork:{check:orders.checkWork,*rows(state,ctx){
@@ -624,7 +632,7 @@
           if(!pending.size)break;
         }
         check(!pending.size,'Transfer receipts could not be matched to active orders');
-        return packed(draft.finish(),state.contacts,state.decisions,state.routeWork,state.crowd);
+        return packed(draft.finish(),state.contacts,state.decisions,state.routeWork,state.crowd,state.formations);
       }
     }),
     ...((config.surface!==undefined||policy||orders)&&{checkFields(query){
@@ -632,6 +640,7 @@
       policy?.checkFields(query);
       orders?.checkFields(query);
     }}),validateState,checkAction(type,args){
+      if(formations&&W.formations.actions.includes(type))return formations.checkAction(type,args);
       if(type==='spawn'){
         checkAgent(args.agent,args);
         check(args.generation===undefined,'Agent generations are assigned at spawn');
@@ -651,6 +660,11 @@
         check(!policy?.managed(args.agent),'The activity policy owns this creature task');
       }
     },actions:{
+      ...(formations&&Object.fromEntries(W.formations.actions.map(type=>[type,(state,args,ctx)=>{
+        const roster=S.get(state);
+        const result=formations.edit(state.formations,type,args,name=>S.select(roster,name),ctx);
+        return packed(roster,state.contacts,state.decisions,state.routeWork,state.crowd,result);
+      }]))),
       ...(orders&&{
         'issue-order'(state,args,ctx){
           const decisions=policy?.managed(args.agent)?{...state.decisions,[args.agent]:policy.initial[args.agent]}:state.decisions;
@@ -671,13 +685,19 @@
         if(O.runnable(row.orders))orders.cancel(row.orders,undefined,row,ctx,'despawned');
         draft.remove(slot);
         ctx.emit('agent-despawned',{agent:row.id,entity:row.entity,generation:row.generation,at:row.position});
-        return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd);
+        const formationState=formations?.discard(state.formations,row,ctx);
+        return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd,formationState);
       },
       seek(state,args,ctx){
         return replace(state,args,row=>{
           check(!O.holding(row.orders),'Pending orders own this creature destination');
+          check(!formations?.active(state.formations,row),'Detach from the active formation before using seek');
           ctx.emit('destination',{entity:row.entity,at:args.to});
-          return {...row,goal:args.to,route:[],cursor:0,retry:0,
+          const {formationDriven,formationAfter,...individual}=row;
+          const crossing=formationDriven&&Object.values(state.crowd??{}).some(gate=>gate.holders.some(holder=>
+            holder.agent===row.id&&holder.generation===row.generation&&holder.entered));
+          return {...individual,goal:args.to,route:[],cursor:0,retry:0,
+            ...(crossing&&{formationDriven:true,formationAfter:args.to}),
           ...(row.routing&&{routing:RQ.idle,routePriority:args.priority??row.routePriority})};
         });
       },
@@ -692,6 +712,11 @@
       const contacts=[], decisions=policy?{}:null, dirty=ctx.spatial?.changes().length>0;
       const skipRest=staticFit&&settled.has(roster);
       const group=crowd?.begin(state.crowd,walkers(roster),ctx);
+      const formation=formations?.begin(state.formations,ctx,{
+        read:name=>S.select(roster,name),profile:profileFor,
+        fit:(profile,point)=>fit(ctx,profile,point),
+        route:(profile,from,goal)=>plan(ctx,profile,from,goal),passage:crowd?.blockedCoarse
+      });
       const schedule=routeQueue?.begin(pendingRows(roster),ctx.tick,state.routeWork,({slot},job)=>{
         const agent=S.read(roster,slot);
         const profile=profileFor(agent), from=fit(ctx,profile,agent.position);
@@ -706,17 +731,18 @@
       }
       for(const slot of S.order(roster)){
         const key=slot.id, managed=policy?.managed(key);
-        const book=orders&&roster.pages[slot.p].details[slot.i].orders;
-        if(!managed&&!O.holding(book)&&skipRest&&S.atRest(roster,slot))continue;
+        const detail=roster.pages[slot.p].details[slot.i], book=orders&&detail.orders;
+        const guide=formation?.guides.get(key);
+        if(!managed&&!O.holding(book)&&!guide&&!detail.formationDriven&&skipRest&&S.atRest(roster,slot))continue;
         const agent=S.read(roster,slot);
-        if(O.holding(book)){
+        if(O.holding(book)||guide||agent.formationDriven){
           const profile=profileFor(agent), exit=group?.exitGoal(agent);
-          function drive(row,goal,task,priority,direction,arrival){
-            const nextPriority=row.routing?(priority??book.priorPriority??row.routePriority):undefined;
+          function drive(row,goal,task,priority,direction,arrival,pace){
+            const nextPriority=row.routing?(priority??book?.priorPriority??row.routePriority):undefined;
             const changed=!S.sameVector(goal,row.goal)||row.routePriority!==nextPriority;
             const directed=changed?{...row,goal,route:emptyList,cursor:0,retry:0,
               ...(row.routing&&{routing:RQ.idle,routePriority:nextPriority})}:row;
-            const next=one(directed,ctx,contacts,dirty,direction,directed.routing&&schedule?.session(directed),group,arrival);
+            const next=one(directed,ctx,contacts,dirty,direction,directed.routing&&schedule?.session(directed),group,arrival,pace);
             return next.task===task?next:{...next,task};
           }
           function hold(row,task,priority){
@@ -725,6 +751,33 @@
             if(idle&&row.mode==='rest'&&S.sameVector(row.position,row.goal)&&!row.route.length&&row.task===task)return {agent:row};
             return {agent:{...row,goal:row.position,route:emptyList,cursor:0,retry:0,mode:'rest',task,
               ...(row.routing&&{routing:RQ.idle,routePriority:priority??row.routePriority}),...(row.crowd&&{crowd:W.crowd.clear})}};
+          }
+          if(!O.holding(book)){
+            let moved;
+            if(guide?.point){
+              const goal=fit(ctx,profile,guide.point);
+              const safeExit=exit&&(!goal||V.dot(V.sub(goal,exit),V.sub(exit,agent.position))<0);
+              moved=safeExit?drive(agent,exit,agent.task,undefined,'exit'):
+                goal?drive(agent,goal,agent.task,undefined,'formation',undefined,guide.pace):hold(agent,agent.task).agent;
+            }else if(!guide&&!exit&&agent.formationAfter){
+              const {formationDriven,formationAfter,...individual}=agent;
+              const directed={...individual,goal:formationAfter,route:emptyList,cursor:0,retry:0,
+                ...(agent.routing&&{routing:RQ.idle})};
+              moved=one(directed,ctx,contacts,dirty,false,directed.routing&&schedule?.session(directed),group);
+            }else moved=hold(agent,agent.task).agent;
+            if(guide||exit){
+              if(guide&&moved.formationAfter){
+                const {formationAfter,...controlled}=moved;
+                moved=controlled;
+              }
+              if(!moved.formationDriven)moved={...moved,formationDriven:true};
+            }else{
+              const {formationDriven,formationAfter,...individual}=moved;
+              moved=individual;
+            }
+            store(slot,agent,moved);
+            if(managed)decisions[key]=policy.initial[key];
+            continue;
           }
           const execution=orders.advance(book,agent,ctx,{hold,move(row,point,order,range){
             if(exit)return {phase:'moving',reason:'crossing',agent:drive(row,exit,order.task,order.priority,'exit')};
@@ -783,7 +836,7 @@
       }
       const next=draft.finish();
       if(staticFit)settled.add(next);
-      return packed(next,contacts,decisions,schedule?.work,group?.finish());
+      return packed(next,contacts,decisions,schedule?.work,group?.finish(),formation?.state);
     },*poseEntities(state){
       if(state)for(const page of S.get(state).pages)for(const row of page.details)yield row.entity;
     },pose(state,entity){
@@ -798,6 +851,12 @@
         orders:agentField('record',row=>row.orders??O.blank),
         'order-tasks':{type:'record',qualified:true,read:()=>Q.ok(orders.tasks)}
       }),
+      ...(formations&&{formations:{type:'record',qualified:true,selector:true,read({state,args}){
+        const roster=S.get(state), report=row=>formations.describe(row,name=>S.select(roster,name));
+        if(args.group===undefined)return Q.ok(Object.fromEntries(Object.entries(state.formations).map(([name,row])=>
+          [name,report(row)])));
+        return own(state.formations,args.group)?Q.ok(report(state.formations[args.group])):Q.missing('unknown formation','missing');
+      }}}),
       ...(crowd&&{
         'crowd-status':agentField('record',row=>row.crowd??W.crowd.clear),
         bottlenecks:{type:'record',qualified:true,read:({state,signals,system})=>Q.ok(Object.fromEntries(

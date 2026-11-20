@@ -290,3 +290,73 @@ test('authored bevels affect sculpt corners at export size and preserve flat fac
   const off = KIT.diorama.build(spec);
   assert(off.surfaces.every(binding => !binding.bevelDistance));
 });
+
+test('shared surface signals darken the diffuse color, narrow a highlight and gate reflections', () => {
+  const shader = prepare({
+    signals: {
+      film: { type: 'weather', channel: 'wetness' },
+      pools: { type: 'weather', channel: 'standingWater', range: [0, 0.2] }
+    },
+    layers: {
+      absorption: { type: 'tint', color: [0.45, 0.6, 0.75], blend: 'multiply', strength: 0,
+        drive: { strength: { signal: 'film', to: 1 } } },
+      polish: { type: 'specular', roughness: 0.5, strength: 0.22,
+        drive: { roughness: { signal: 'film', to: [0.08, 0.12] }, strength: { signal: 'film', to: 0.8 } } },
+      pool: { type: 'reflection', source: 'scene', f0: 1, strength: 0, mask: (x, y) => y < 0.4 ? 1 : 0,
+        drive: { strength: { signal: 'pools', to: 0.9 } } }
+    }
+  });
+  const weatherAt = (wetness, standingWater = 0) => (x, z) => {
+    assert.deepEqual([x, z], [4, 8]);
+    samples++;
+    return { wetness, standingWater };
+  };
+  const view = [0.51, 0, Math.sqrt(1 - 0.51 ** 2)];
+  const sample = { ...front, worldPosition: [4, 2, 8], sky: (ray, color) => {
+    color[0] = 0.2; color[1] = 0.4; color[2] = 1;
+  } };
+  let samples = 0;
+  const dark = Surface.shade(shader, { ...sample, visibility: 0, weather: weatherAt(1) }, base);
+  const expected = base.map((value, i) => value * [0.45, 0.6, 0.75][i]);
+  assert(dark.slice(0, 3).every((value, i) => Math.abs(value - expected[i]) < 1e-10));
+  assert.equal(samples, 1);
+  const dry = Surface.shade(shader, { ...sample, view, weather: weatherAt(0) }, base);
+  const damp = Surface.shade(shader, { ...sample, view, weather: weatherAt(1) }, base);
+  assert(damp[0] < dry[0]);
+  assert.equal(samples, 3);
+  const peak = Surface.shade(shader, { ...sample, weather: weatherAt(1) }, base);
+  assert(peak[0] > damp[0] + 0.6);
+  const reflected = [0, 0, 0];
+  const pool = Surface.shade(shader, { ...sample, view, weather: weatherAt(1, 0.2), position: [0.5, 0.3, 0.5] },
+    base, undefined, undefined, undefined, undefined, reflected);
+  assert(pool[2] > damp[2] + 0.7);
+  assert(reflected[2] > 0.85);
+  assert.deepEqual(Surface.shade(shader, { ...sample, view, weather: weatherAt(1, 0.2) }, base), damp);
+  assert.deepEqual(Surface.shade(shader, { ...sample, view }, base), dry);
+});
+
+test('finish properties can be driven by temperature, time and a spatial field', () => {
+  const settings = {
+    signals: {
+      heat: { type: 'weather', channel: 'temperature', range: [-10, 10], interpolation: 'linear' },
+      beat: { type: 'time', range: [1, 3], interpolation: 'step' },
+      region: { type: 'axis', axis: 'x', range: [0, 1], space: 'world' }
+    },
+    layers: {
+      clay: { type: 'tint', color: '#0000ff',
+        drive: { color: { signal: 'heat', to: '#ff0000' }, strength: { signal: 'region', to: 0 } } },
+      flash: { type: 'planarReflection', plane: 'seam', strength: 1, f0: 0,
+        drive: { f0: { signal: 'beat', to: 1 } } }
+    }
+  };
+  const shader = prepare(settings);
+  const sample = { ...front, worldPosition: [0, 0, 0], weather: () => ({ temperature: 0 }),
+    reflection: layer => ({ rgb: [0.2, 0.8, 0.6], coverage: Number(layer.plane === 'seam') }) };
+  assert.deepEqual(Surface.shade(shader, { ...sample, time: 2 }, base).slice(0, 3), [0.5, 0, 0.5]);
+  assert.deepEqual(Surface.shade(shader, { ...sample, time: 0, worldPosition: [1, 0, 0] }, base).slice(0, 3), base);
+  assert(Surface.shade(shader, { ...sample, time: 3 }, base)[1] > 0.75);
+  const bad = drive => prepare({ ...settings, layers: { clay: { ...settings.layers.clay, drive } } });
+  assert.throws(() => bad({ color: { signal: 'missing', to: '#ffffff' } }), /named signal/);
+  assert.throws(() => bad({ strength: { signal: 'heat', to: 3 } }), /target must be in/);
+  assert.throws(() => bad({ roughness: { signal: 'heat', to: 3 } }), /cannot control/);
+});

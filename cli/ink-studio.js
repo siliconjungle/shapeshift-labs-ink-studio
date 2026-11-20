@@ -281,7 +281,7 @@ function skyTransitionsOption() {
   if (typeof value !== 'string') die('--sky-transitions needs a JSON array file or off');
   return skyTransitionsOverride ??= JSON.parse(fs.readFileSync(path.resolve(value),'utf8'));
 }
-let inspectionOverride, shadowArtOverride, compositeOverride, renderGraphOverride, afterimagesOverride, reconstructionOverride;
+let inspectionOverride, shadowArtOverride, compositeOverride, cutawayOverride, renderGraphOverride, afterimagesOverride, reconstructionOverride;
 function shadowArtOption() {
   const value = opt['shadow-art'];
   if (value === undefined) return;
@@ -581,6 +581,13 @@ function edgeFilterOption() {
   return edgeFilterOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
 }
 
+function cutawayOption() {
+  if (opt.cutaway === 'off') return false;
+  if (opt.cutaway === undefined) return undefined;
+  if (typeof opt.cutaway !== 'string') die('--cutaway needs a JSON file or off');
+  return cutawayOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt.cutaway), 'utf8'));
+}
+
 function compositeOption() {
   if (opt.composite === 'off') return false;
   if (opt.composite === undefined) return undefined;
@@ -659,6 +666,7 @@ const view = extra =>
         (inspectionOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt.inspection), 'utf8'))),
       inspectionFocus: opt['inspection-focus'],
       composite: compositeOption(),
+      cutaway: cutawayOption(),
       renderGraph: opt['render-graph'] === 'off' ? false : opt['render-graph'] === undefined ? undefined :
         (renderGraphOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt['render-graph']), 'utf8'))),
       reconstruction: opt.reconstruction === 'off' ? false : opt.reconstruction === undefined ? undefined :
@@ -789,6 +797,8 @@ const CMD = {
         '    sim dependencies <scene|run|driver.js> [--ticks N] [--actions file] [--out report.json]   report spatial rebuilds',
         '    sim sweep <world|run> <cases.json>   use look cases to compare one fixed simulation snapshot',
         '  compare <scene|run> --looks cases.json [--out sheet.png]   compare look variants on the same view',
+        '    --comparison side-by-side|swipe|difference   compose exactly two look cases into one image',
+        '    --divider 0.5 --swipe-axis x|y --difference-channel luminance|red|green|blue --difference-gain 3',
         '  look inspect <scene|run|look-file> [--renderer headless|webgl]   list bindings, dependencies and targets',
         '  look sample <look-file> [--look pack/look] [--colors JSON | --chart] [--out file.json|chart.png]',
         '  look bake <look-file> [--format auto|palette|lut] [--swatches file] [--size N] [--out bundle.json]',
@@ -896,7 +906,7 @@ const CMD = {
         'layered horizon: --horizon-bands on|off|file.json',
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'effect palette options: --effect-palettes on|off|file.json',
-        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
+        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
   },
@@ -2382,6 +2392,12 @@ const CMD = {
       if (typeof opt.report === 'string' && (path.resolve(id) === path.resolve(opt.report) ||
         opt.out && path.resolve(opt.out) === path.resolve(opt.report))) die('--report needs a separate path');
       const cases = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const comparison = opt.comparison === undefined ? null : lib().KIT.comparison.settings({
+        mode: opt.comparison,divider:num('divider',.5),axis:opt['swipe-axis']??'x',
+        difference:{channel:opt['difference-channel']??'luminance',gain:num('difference-gain',3)}
+      });
+      if (comparison && (!opt.out || !Array.isArray(cases) || cases.length!==2))
+        die('--comparison needs two look cases and --out');
       const Preview = require('./look-preview.js');
       let world = worldCLI().lookSnapshot(id);
       if (!world) {
@@ -2394,7 +2410,8 @@ const CMD = {
       if (opt.out) {
         const up = num('up', 1), cols = num('cols', Math.min(4, frames.length));
         if (![up, cols].every(n => Number.isSafeInteger(n) && n > 0)) die('--up and --cols need positive integers');
-        const sheet = R.grid(frames.map(frame => R.upscale(frame, up)), cols, report.results.map(row => String(row.id)));
+        const sheet = comparison ? R.upscale(lib().KIT.comparison.compose(...frames,comparison),up) :
+          R.grid(frames.map(frame => R.upscale(frame, up)), cols, report.results.map(row => String(row.id)));
         fs.mkdirSync(path.dirname(path.resolve(opt.out)), { recursive: true });
         PNG.write(opt.out, sheet.w, sheet.h, sheet.rgb);
       }

@@ -73,6 +73,21 @@
     check(config.contactEvents===undefined || typeof config.contactEvents==='boolean'||materialContacts,
       'contactEvents must be boolean or material');
     const start=config.bodies??{}, jointSpecs=config.joints??{}, forceSpecs=config.forces??{};
+    const impactEvents=config.impactEvents??false, fractureOn=config.fractureOn??{};
+    check(typeof impactEvents==='boolean'&&record(fractureOn)&&Object.entries(fractureOn).every(([key,rule])=>
+      own(start,key)&&!start[key]?.collider&&record(rule)&&[0,1,2].includes(rule.axis??0)&&
+      (rule.parts===undefined||Number.isSafeInteger(rule.parts)&&rule.parts>=2&&rule.parts<=32)&&
+      (rule.omit===undefined||rule.parts!==undefined&&Array.isArray(rule.omit)&&
+        rule.omit.every(i=>Number.isSafeInteger(i)&&i>=0&&i<rule.parts))&&
+      vector(rule.impulse??zero)&&Number.isFinite(rule.minSpeed??0)&&(rule.minSpeed??0)>=0&&
+      Number.isFinite(rule.impactMass??1)&&(rule.impactMass??1)>0),'Invalid mechanical impact ports');
+    const fractureTargets=new Map(Object.keys(fractureOn).map(key=>[key,key]));
+    for(const key of Object.keys(fractureOn)){
+      const entity=start[key].entity??key;
+      check(!fractureTargets.has(entity)||fractureTargets.get(entity)===key,'Ambiguous fracture receiver '+entity);
+      fractureTargets.set(entity,key);
+    }
+    const canFracture=fractureTargets.size>0;
     const fabricFields=config.deformables??[];
     const routeFields=config.routedLoads??[];
     check(Array.isArray(fabricFields)&&fabricFields.length<=16&&fabricFields.every(field=>typeof field==='string')&&
@@ -84,15 +99,18 @@
     const richer=fabricFields.length>0||Object.values(start).some(item=>item?.collider!==undefined||item?.structure!==undefined);
     const local=config.gravityField!==undefined;
     check(!local||typeof config.gravityField==='string','Invalid mechanics gravity field');
-    const continuous=config.continuous??(richer||local), advanced=richer||continuous||local, baseIterations=config.contactIterations??10;
+    const continuous=config.continuous??(richer||local||impactEvents), advanced=richer||continuous||local, baseIterations=config.contactIterations??10;
     const validIterations=n=>Number.isSafeInteger(n)&&n>=1&&n<=32;
-    check((config.continuous===undefined||typeof config.continuous==='boolean')&&validIterations(baseIterations),
+    check((config.continuous===undefined||typeof config.continuous==='boolean')&&validIterations(baseIterations)&&
+      (!impactEvents||continuous),
       'Invalid mechanical contact controls');
     const initialBodies={}, initials={}, inputs={}, outputs={}, claimed=new Map(), driveOrder=[], mountOrder=[];
     const surface=W.surfaceState, surfaceChannels=K.procedural.surfaceState.channels(config.surfaceChannels);
     const durability=W.durability, structures={}, wearSpecs={};
     const initialCharts={};
     if (config.contactEvents) outputs.contacts='event';
+    if(impactEvents)outputs.impacts='event';
+    if(canFracture)inputs['fracture-contacts']='event';
     if(fabricFields.length)outputs['deformable-loads']='event';
     const index = W.spatial.create(), indexed = new Map(), poseCache = new WeakMap();
     let indexedBodies = null, unbounded = 0, enoughBodies = false;
@@ -388,6 +406,25 @@
       }
     }
     function step(state,ctx) {
+      const strikes=ctx.input['fracture-contacts']??[];
+      check(strikes.length<=1024,'Mechanical fracture contacts exceed their budget');
+      for(const row of strikes){
+        check(record(row)&&id(row.target)&&Number.isFinite(row.speed??0)&&(row.speed??0)>=0&&
+          (row.energy===undefined||Number.isFinite(row.energy)&&row.energy>=0),'Invalid mechanical fracture contact');
+        const key=fractureTargets.get(row.target), body=state.bodies[key];
+        if(!key||!body)continue;
+        const rule=fractureOn[key], speed=row.speed??0;
+        if(speed<(rule.minSpeed??0))continue;
+        const energy=row.energy??.5*(rule.impactMass??1)*speed*speed;
+        check(Number.isFinite(energy),'Fracture energy exceeds its numeric range');
+        const updated=fracture(state,{...rule,body:key,energy},ctx);
+        if(updated!==state&&ctx.spatial){
+          const {min,max,bounded}=boundsOf(body);
+          if(bounded)for(const field of ['bodies','support','clearance'])
+            ctx.spatial.write(field,{min,max},'fracture-contact');
+        }
+        state=updated;
+      }
       const iterations=ctx.simulationLOD?.tuning.contactIterations??baseIterations;
       const fabric=fabricFields.flatMap(field=>{
         const read=ctx.query.probe(field);
@@ -951,9 +988,9 @@
       check(Object.keys(tuning).every(key=>key==='contactIterations')&&
         (tuning.contactIterations===undefined||validIterations(tuning.contactIterations)),
         'Invalid mechanics simulation detail tuning');
-    },...((config.surface!==undefined||fabricFields.length||routeFields.length||structural||local)&&
+    },...((config.surface!==undefined||fabricFields.length||routeFields.length||structural||local||canFracture)&&
       {dependencies:{reads:[config.surface,config.gravityField,...fabricFields,...routeFields].filter(Boolean),
-        ...(structural&&{writes:['bodies','support','clearance']})}}),
+        ...((structural||canFracture)&&{writes:['bodies','support','clearance']})}}),
     ...((sails.length||config.surface!==undefined||fabricFields.length||routeFields.length||local) && {checkFields(query) {
       for (const sail of sails) windSampler(query,sail);
       if(local)W.gravity.checkField(query,config.gravityField);
@@ -1064,6 +1101,12 @@
         }
       }
       if (config.contactEvents) out.contacts=state.contacts;
+      if(impactEvents)out.impacts=(state.impacts??[]).flatMap(hit=>{
+        const source=state.bodies[hit.a]?.entity, target=hit.b===null?'ground':state.bodies[hit.b]?.entity;
+        if(!source||!target||source===target)return [];
+        const row={kind:'impact',source,target,at:hit.at,speed:Math.max(0,hit.speed),normal:hit.normal};
+        return hit.b===null?[row]:[row,{...row,source:target,target:source,normal:V.mul(hit.normal,-1)}];
+      });
       if(fabricFields.length)out['deformable-loads']=state.fabricLoads;
       return out;
     },

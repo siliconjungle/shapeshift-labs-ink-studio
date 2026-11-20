@@ -22,7 +22,7 @@ const SurfaceLook = (() => {
   const specularLayers = new Set(['specular','fiber','sheen','film','diffraction','glints','reflection','planarReflection']);
   const rampLayers = new Set(['diffuse', 'specular', 'fiber', 'sheen', 'glints', 'bevel']);
   const hasBevel = settings => Object.values(settings.layers ?? {}).some(layer =>
-    layer?.type === 'bevel' && layer.strength !== 0);
+    layer?.type === 'bevel' && (layer.strength !== 0 || layer.drive?.strength !== undefined));
   const clamp = n => Math.min(1, Math.max(0, n));
   const mix = (a, b, t) => a + (b - a) * t;
   const unit = (v, fallback = AXES.y) => {
@@ -185,13 +185,63 @@ const SurfaceLook = (() => {
     if (!['wetness', 'standingWater', 'snow', 'frost'].includes(channel) || !Number.isFinite(low) || !Number.isFinite(high) ||
         low < 0 || high <= low || typeof invert !== 'boolean')
       throw new RangeError('Weather masks need wetness, standingWater, snow or frost and increasing nonnegative bounds');
-    return sample => {
-      const [x,,z] = sample.worldPosition ?? sample.position;
-      const value = sample.weather?.(x, z)?.[channel];
+    return weather => {
+      const value = weather?.[channel];
       if (!Number.isFinite(value)) return 0;
       const coverage = smooth(low, high, value);
       return invert ? 1 - coverage : coverage;
     };
+  }
+
+  function prepareSignals(definition, context, validateOnly) {
+    if (definition !== undefined && !isRecord(definition)) throw new TypeError('Surface signals must be named in an object');
+    return new Map(Object.entries(definition ?? {}).map(([id, source]) => {
+      if (typeof source === 'function') return [id, { read: source }];
+      if (!isRecord(source)) throw new TypeError('Surface signal ' + id + ' needs a source');
+      const { type, channel, range = [0, 1], interpolation = 'smooth' } = source;
+      if (type === 'weather' || type === 'time') {
+        if (type === 'weather' && !['wetness', 'standingWater', 'snow', 'frost', 'temperature', 'exposure'].includes(channel))
+          throw new RangeError('Unknown weather channel on surface signal ' + id);
+        if (Object.keys(source).some(key => !['type', 'range', 'interpolation', ...(type === 'weather' ? ['channel'] : [])].includes(key)) ||
+            !Array.isArray(range) || range.length !== 2)
+          throw new TypeError('Surface signal ' + id + ' needs a valid range');
+        const transfer = curves.scalar({ stops: [[range[0], 0], [range[1], 1]], interpolation });
+        const read = (sample, weather) => {
+          const value = type === 'weather' ? weather?.[channel] : sample.time ?? 0;
+          return Number.isFinite(value) ? transfer(value) : 0;
+        };
+        return [id, { read, weather: type === 'weather' }];
+      }
+      const read = effects.prepareMask(source, context, { validateOnly });
+      return [id, { read }];
+    }));
+  }
+
+  const roughnessPair = value => Array.isArray(value) ? Array.from(value) : [value, value];
+  function prepareDrive(definition, layer, signals, palette) {
+    if (definition === undefined) return null;
+    if (!isRecord(definition)) throw new TypeError(layer.id + '.drive must name finish properties');
+    const drive = Object.entries(definition).map(([key, setting]) => {
+      if (!isRecord(setting) || Object.keys(setting).some(name => !['signal', 'to'].includes(name)) ||
+          !signals.has(setting.signal) || setting.to === undefined)
+        throw new TypeError(layer.id + '.drive.' + key + ' needs a named signal and a target value');
+      const signal = signals.get(setting.signal);
+      let from = layer[key], to = setting.to;
+      if (key === 'strength' || key === 'f0' && ['reflection', 'planarReflection'].includes(layer.type)) {
+        if (!Number.isFinite(to) || to < 0 || to > 1)
+          throw new RangeError(layer.id + '.drive.' + key + ' target must be in [0, 1]');
+        from ??= 0.04;
+      } else if (key === 'roughness' && ['specular', 'fiber', 'diffraction', 'glints'].includes(layer.type)) {
+        to = roughnessPair(to);
+        if (to.length !== 2 || !to.every(value => Number.isFinite(value) && value > 0))
+          throw new RangeError(layer.id + '.drive.roughness needs a positive value or along/across pair');
+        to = to.map(value => positive(value));
+      } else if (key === 'color' && ['tint', 'specular', 'fiber', 'sheen', 'glints', 'bevel', 'planarReflection'].includes(layer.type)) {
+        to = color(to, palette);
+      } else throw new RangeError(layer.id + '.drive cannot control ' + key + ' on ' + layer.type);
+      return { key, signal, from, to };
+    });
+    return drive.length ? drive : null;
   }
 
   function rainMask(mask) {
@@ -446,12 +496,13 @@ const SurfaceLook = (() => {
         };
       }
     }
+    const signals = prepareSignals(settings.signals, context, validateOnly);
     const layers = Object.entries(settings.layers || {})
-      .filter(([, layer]) => layer && layer.strength !== 0 &&
+      .filter(([, layer]) => layer && (layer.strength !== 0 || layer.drive?.strength !== undefined) &&
         (colorCurves || layer.type !== 'colorCurve') && (colorLut || layer.type !== 'colorLut') &&
         (colorStack || layer.type !== 'colorStack'))
       .map(([id, layer]) => {
-        const colorLayer = ['projected', 'colorCurve', 'colorLut', 'colorStack'].includes(layer.type);
+        const colorLayer = ['tint', 'projected', 'colorCurve', 'colorLut', 'colorStack'].includes(layer.type);
         if (!colorLayer && !Object.hasOwn(models, layer.type))
           throw new RangeError('Unknown surface layer: ' + layer.type);
         const lightingRamp = layer.lightingRamp === undefined || layer.lightingRamp === false ? null :
@@ -504,11 +555,11 @@ const SurfaceLook = (() => {
             throw new RangeError(id + ' needs nonnegative blur and distortion');
         }
         const fieldMask = layer.mask?.type === 'field' ? effects.fieldMask(layer.mask, context) : null;
-        const spatialMask = layer.mask?.type === 'weather' ? weatherMask(layer.mask) :
-          layer.mask?.type === 'rainImpact' ? rainMask(layer.mask) :
+        const retainedMask = layer.mask?.type === 'weather' ? weatherMask(layer.mask) : null;
+        const spatialMask = layer.mask?.type === 'rainImpact' ? rainMask(layer.mask) :
           ['axis', 'texture', 'query'].includes(layer.mask?.type)
           ? effects.prepareMask(layer.mask, context, { validateOnly }) : fieldMask;
-        if (layer.mask && typeof layer.mask !== 'function' && !spatialMask) {
+        if (layer.mask && typeof layer.mask !== 'function' && !spatialMask && !retainedMask) {
           if (!isRecord(layer.mask)) throw new TypeError(id + '.mask must be an object');
           if (!['noise', 'stripes', 'checker'].includes(layer.mask.type))
             throw new RangeError('Unknown surface mask: ' + layer.mask.type);
@@ -519,9 +570,19 @@ const SurfaceLook = (() => {
           if (!['mix', 'add', 'multiply'].includes(blend)) throw new RangeError('Unknown surface color blend: ' + blend);
           const resolveColor = value => color(value, palette);
           let effect;
-          if (layer.type === 'colorLut' || layer.type === 'colorStack') effect = effects[layer.type](layer, resolveColor);
-          else effect = (layer.type === 'projected' ? effects.layer : effects.colorCurve)(layer, context, resolveColor);
-          return { ...layer, id, blend, strength: clamp(layer.strength ?? 1), effect, spatialMask };
+          if (layer.type === 'tint') {
+            const result = [0, 0, 0, 1, 1, 0];
+            effect = { sample(sample, output, tint) {
+              for (let i = 0; i < 3; i++) result[i] = tint.color[i];
+              return result;
+            } };
+          }
+          else if (layer.type === 'colorLut' || layer.type === 'colorStack') effect = effects[layer.type](layer, resolveColor);
+          else if (layer.type === 'projected') effect = effects.layer(layer, context, resolveColor, paletteRoles);
+          else effect = effects.colorCurve(layer, context, resolveColor);
+          const compiled = { ...layer, id, blend, strength: clamp(layer.strength ?? 1), effect, spatialMask, retainedMask };
+          if (layer.type === 'tint') compiled.color = resolveColor(layer.color);
+          return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, palette) };
         }
         if (layer.colors !== undefined && !Array.isArray(layer.colors))
           throw new TypeError(id + '.colors must be a list');
@@ -540,12 +601,13 @@ const SurfaceLook = (() => {
             throw new RangeError(id + ' bevel needs width in 0.25–8 art pixels, positive minBend, softness and power, and a valid edge');
           bevel = { width, minBend, softness, edge, power };
         }
-        const roughness = Array.isArray(layer.roughness) ? layer.roughness : [layer.roughness, layer.roughness];
-        return {
+        const roughness = roughnessPair(layer.roughness);
+        const compiled = {
           ...layer,
           id,
           ...bevel,
           spatialMask,
+          retainedMask,
           model: models[layer.type],
           lightingRamp,
           strength: clamp(layer.strength ?? 1),
@@ -561,13 +623,17 @@ const SurfaceLook = (() => {
           cosine: Math.cos(layer.rotation || 0),
           sine: Math.sin(layer.rotation || 0)
         };
+        return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, palette) };
       });
+    const driven = layers.some(layer => layer.drive);
+    const weather = layers.some(layer => layer.retainedMask || layer.drive?.some(entry => entry.signal.weather));
     return {
-      settings, normal, layers, sun: unit(vector(lightDirection, AXES.y)),
+      settings, normal, layers, driven, weather,
+      finishBeforeFog: driven || layers.some(layer => layer.type === 'tint'), sun: unit(vector(lightDirection, AXES.y)),
       paletteConstraint: paletteConstraints && settings.paletteConstraint !== undefined
         ? pixelLook.prepareLookPolicy(settings.paletteConstraint, { palette, roles: paletteRoles, blueNoise, context, validateOnly, onPaletteClip,
           skipMaskedStacks: !colorStack }) : null,
-      projected: Boolean(settings.rainRipple) || layers.some(layer => layer.effect || layer.spatialMask),
+      projected: Boolean(settings.rainRipple) || driven || weather || layers.some(layer => layer.effect || layer.spatialMask),
       depth: layers.some(layer => layer.effect?.depth),
       reveals: layers.some(layer => layer.effect?.reveals)
     };
@@ -631,13 +697,28 @@ const SurfaceLook = (() => {
     output[4] = 0;
     if (prepared.projected || output.length > 5) output[5] = undefined;
     const detailScale = sample.detailFootprint ?? sample.footprint ?? 0, stableDetail = sample.stableDetail;
+    const weatherPosition = sample.worldPosition ?? position;
+    const weather = prepared.weather && sample.weather?.(weatherPosition[0], weatherPosition[2]);
+    const signals = prepared.driven ? new Map() : null;
     let maskFrame;
-    for (const layer of layers) {
+    for (let layer of layers) {
       if (typeof layer.mask === 'function' && !maskFrame) maskFrame = {
         normal: geometricNormal, tangent: geometricTangent, bitangent: cross(geometricNormal, geometricTangent),
         footprint: sample.footprint || 0, time: sample.time || 0
       };
-      const maskWeight = layer.spatialMask ? layer.spatialMask(sample) : maskAt(layer.mask, p, seed, position, maskFrame);
+      const maskWeight = layer.retainedMask ? layer.retainedMask(weather) :
+        layer.spatialMask ? layer.spatialMask(sample) : maskAt(layer.mask, p, seed, position, maskFrame);
+      if (maskWeight && layer.drive) {
+        layer = { ...layer };
+        for (const { key, signal, from, to } of layer.drive) {
+          if (!signals.has(signal)) {
+            const value = signal.read(sample, weather);
+            signals.set(signal, Number.isFinite(value) ? clamp(value) : 0);
+          }
+          const amount = signals.get(signal);
+          layer[key] = Array.isArray(from) ? from.map((value, i) => mix(value, to[i], amount)) : mix(from, to, amount);
+        }
+      }
       const strength = layer.strength * maskWeight;
       const step = trace && layer.effect && { layer: layer.id, type: layer.type,
         ...(layer.stack?.name && { stack: layer.stack.name }), maskWeight, input: output.slice(0, 3) };
@@ -647,7 +728,7 @@ const SurfaceLook = (() => {
         continue;
       }
       if (layer.effect) {
-        const result = layer.effect.sample(sample, output);
+        const result = layer.effect.sample(sample, output, layer);
         const size = layer.detailSize ?? layer.effect.detailSize;
         const detailGain = stableDetail?.texture && size && detailScale ?
           detail.weight(stableDetail.texture,size/detailScale) : 1;
