@@ -115,7 +115,7 @@
   }
 
   const lookFields = ['output', 'provenance', 'sample'].map(key => ({name:'look/'+key,type:'record',selector:true}));
-  function create(view, systems = {}, projected, visual, sceneData) {
+  function create(view, systems = {}, projected, visual, sceneInputs) {
     const {world, states:visible = {}, signals = {}, tick = 0, history = [], dropped = 0} = view;
     const states=view[W.simulationAggregate.rawStates]??visible;
     const fields = new Map(), traces = new Map();
@@ -126,7 +126,7 @@
     const transfers = () => W.transfers.bind(systems);
     const look = () => appearance ??= W.lookQuery(scene,base.time);
     const physical = () => W.materials.catalog(world);
-    let dataInputs = sceneData;
+    let dataInputs = sceneInputs?.dataInputs;
 
     function location(id) {
       if (locations.has(id)) return locations.get(id);
@@ -222,6 +222,15 @@
         dataInputs ??= K.dataInputs.prepare(world.dataInputs);
         const options = target.point && args.at === undefined ? { ...args, at: target.point } : args;
         return dataInputs.sample(options, time);
+      } } }),
+      ...((world.visual?.dataMarks !== undefined || sceneInputs?.dataMarks) && { 'data-mark': { type: 'record', read({args}) {
+        const marks = sceneInputs?.dataMarks ?? scene().dataMarks;
+        if (args.id !== undefined) {
+          check(typeof args.id === 'string', 'Expected a data mark ID');
+          const mark = marks?.get(args.id);
+          return mark ? ok(mark) : missing('unknown data mark','missing');
+        }
+        return ok(marks?.list(args) ?? { total: 0, marks: [] });
       } } }),
       position:{type:'vec3',units:'world',read:({target:site}) => site.point ? ok(site.point) : missing('point or entity required')},
       'spatial-batch':{type:'record',selector:true,qualified:true,read:({args})=>ok(spatialBatch(args))},
@@ -463,7 +472,7 @@
         return value?ok(value):missing('point is outside the material grid','outside');
       }}}};
     }
-    return create({world:W.manifest({id:W.data.id(w.id)?w.id:'world',systems:configs}),tick:Math.round(time*60),time},descriptors,undefined,()=>w,w.dataInputs);
+    return create({world:W.manifest({id:W.data.id(w.id)?w.id:'world',systems:configs}),tick:Math.round(time*60),time},descriptors,undefined,()=>w,{ dataInputs: w.dataInputs, dataMarks: w.dataMarks });
   }
   function keyedChanges(a,b,{limit=Infinity}={}) {
     const operations = [];

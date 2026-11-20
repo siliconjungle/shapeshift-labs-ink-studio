@@ -300,6 +300,8 @@ Named framing targets, rails, occlusion avoidance, and shot blends work across t
 
 Tables, spatial features, and time series can drive shared parameters and simulation queries with declared types, units, coordinate systems, and missing-value policies. [Typed data inputs](docs/typed-data-inputs.md)
 
+Map rows and simulation fields to native marks with position, size, color, opacity, shape, and motion. Inspect the source record through a pick or query. [Data-bound visual marks](docs/data-bound-marks.md)
+
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
 
 Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.puppet` for hierarchical parts with deformation. `K.anim` provides clips, easing, layers, state machines, constraints, facial controls and presentation cues. `K.acts` provides ready-made action and reaction clips.

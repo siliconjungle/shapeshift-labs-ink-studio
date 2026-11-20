@@ -386,7 +386,10 @@
       if (value === null) return { status: 'missing', reason: 'missing data value', row };
       return { status: 'ok', value: convert(value), row, ...(meta.units !== undefined && { units: units ?? meta.units }) };
     }
-    return Object.freeze({ description, rows, ...(features && { features }), sample });
+    return Object.freeze({ description, rows, ...(features && { features }), ...(clock && { interval(time) {
+      check(finite(time), 'Expected finite scene seconds for time-series sampling');
+      return clock.locate(time);
+    } }), sample });
   }
 
   function entries(definition) {
@@ -431,5 +434,9 @@
     return result;
   }
 
-  K.dataInputs = Object.freeze({ prepare, embed, sampleOptions: input => sampleOptions(input, true) });
+  K.dataInputs = Object.freeze({ prepare, embed, sampleOptions: input => sampleOptions(input, true),
+    convert(value, from, to) {
+      check(finite(value) || vector(value, 2) || vector(value, 3), 'Unit conversion needs a numeric value');
+      return converter(from, to)(value);
+    } });
 })(KIT);

@@ -42,7 +42,7 @@
     const timeline = K.timeline.compile(world.timeline, { channel(path) {
       const [root, field] = path;
       if (root === 'camera' && path.length === 2) return K.cameraRig.channel(field, rig?.shots);
-      if (root !== 'visual' || path.length < 2 || ['camera', 'cameraRig', 'parameterBindings'].includes(field)) return null;
+      if (root !== 'visual' || path.length < 2 || ['camera', 'cameraRig', 'dataMarks', 'parameterBindings'].includes(field)) return null;
       const value = read(world, path);
       if (Number.isFinite(value)) return { validate: Number.isFinite };
       if (typeof value === 'boolean' || typeof value === 'string')
@@ -420,6 +420,8 @@
         B.describeSplats?.(start,B.count(),{object:row.entity,material:'contact-spray',target:{surface:'contact-spray'}});
       }
     }
+    const marks = K.dataMarks.prepare(config.dataMarks, { dataInputs })?.sample(time, { query });
+    if (marks) K.dataMarks.stamp(B, marks);
     const baked=B.finish({lookSnapshot: { time, tick: view.tick, query }, cam,
       ...(timeline && { timeline }),
       ...(values && { parameterValues: values }),
@@ -433,15 +435,17 @@
       ...(airborne?.length && {shapedAtmosphere:[...(config.shapedAtmosphere || []),...airborne]}),
       ...(config.reflections && { reflections: config.reflections }), ...(surfaceEffects&&{surfaceEffects})});
     const result=volume?SplatProvenance.join([...volume.parts,baked],baked):baked;
+    if (marks) K.dataMarks.bind(result, marks);
     return rig ? K.cameraRig.bind(result, rig, { query }) : result;
   }
   W.visual = visual;
   W.sceneTimeline = sceneTimeline;
   W.visualEnvironment = visualEnvironment;
   W.validateLooks = (world, catalog) => {
-    const { world: presentation } = visualParameters(world);
+    const { world: presentation, dataInputs } = visualParameters(world);
     visualLooks(presentation, catalog).validate();
     sceneCameraRig(presentation);
+    K.dataMarks.prepare(presentation.visual?.dataMarks, { dataInputs });
     return presentation.visual;
   };
 })(KIT);

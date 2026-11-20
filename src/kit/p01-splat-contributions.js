@@ -91,7 +91,7 @@
   function picker(world,{time=world.lookSnapshot?.time??0,sampleWithdrawal=world.sampleWithdrawal??0,
     splatCoverage=world.look?.splatCoverage}={}){
     const coverageMode=R.coverageMode(splatCoverage);
-    const {count,renderMetadata,opticalSplats}=world;
+    const {count,renderMetadata,opticalSplats}=world, marks=world.dataMarks?.snapshot();
     if(!(world.data instanceof Float32Array)||!Number.isSafeInteger(count)||count<0||world.data.length<count*16||!Number.isFinite(time))
       throw new TypeError('Picking needs a baked splat world and finite time');
     const opticalFrames=opticalSplats&&SplatFrames.create(world,time,K.M);
@@ -140,8 +140,9 @@
           const target=(provenance??=TargetSelectors.index(world)).row(i);
           const at=Math.abs(f)>1e-7?V.dot(normal,delta)/f:t;
           const distance=at>0&&at<=maxDistance&&Math.abs(at-t)<=3*Math.sqrt(cov[0]+cov[3]+cov[5])?at:t;
+          const dataMark = target.mark === undefined ? undefined : marks?.get(target.mark);
           const hit={kind:raw&256?'glass':'splat',index:i,...(world.splatIds?.[i]&&{id:world.splatIds[i]}),
-            target,distance,point:V.mad(origin,d,distance),alpha,solid:!optical&&!softCoverage&&density>=1&&alpha>=.5&&!(raw&(16|256))};
+            target,...(dataMark && { dataMark }),distance,point:V.mad(origin,d,distance),alpha,solid:!optical&&!softCoverage&&density>=1&&alpha>=.5&&!(raw&(16|256))};
           if(!accept||accept(hit))hits.push(hit);
         }
       }

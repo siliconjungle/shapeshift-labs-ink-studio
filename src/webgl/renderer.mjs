@@ -1225,18 +1225,19 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       const withdrawal = frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0;
       const splatCoverage = frame.splatCoverage ?? world.look?.splatCoverage;
       const materialStyles = world.materialPixelStyles;
+      const marks = world.dataMarks?.snapshot();
       const definition = frame.reconstruction ?? world.look?.reconstruction;
       const reconstruction = definition === undefined || definition === false ? undefined : JSON.stringify(definition);
       if (picking?.world !== world || picking.data !== world.data || picking.count !== world.count || picking.opticalSplats !== world.opticalSplats ||
           picking.group !== group || picking.revision !== revision || picking.withdrawal !== withdrawal ||
-          picking.splatCoverage !== splatCoverage || picking.materialStyles !== materialStyles ||
+          picking.splatCoverage !== splatCoverage || picking.materialStyles !== materialStyles || picking.marks !== marks ||
           picking.reconstruction !== reconstruction || picking.time !== time &&
             (reconstruction !== undefined || world.moving?.length || world.grow || world.anim?.bones)) {
         let posed = group ? pickInstances(world, group, frame.changedRows).world : world;
         if (reconstruction !== undefined) posed = reconstruct(toolkit, posed, frame, definition);
         const picker = create(posed, { time, sampleWithdrawal: withdrawal, splatCoverage });
         picking = { world, data: world.data, count: world.count, opticalSplats: world.opticalSplats,
-          group, revision, time, withdrawal, reconstruction, splatCoverage, materialStyles, picker };
+          group, revision, time, withdrawal, reconstruction, splatCoverage, materialStyles, marks, picker };
       }
       return picking.picker.ray({ water:frame.water !== false,...ray });
     },

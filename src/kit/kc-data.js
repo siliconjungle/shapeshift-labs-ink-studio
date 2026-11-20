@@ -228,6 +228,7 @@
     camera: 'obj',
     cameraRig: 'obj',
     dataInputs: 'obj',
+    dataMarks: 'obj',
     light: 'obj',
     finish: 'obj',
     groups: 'obj',
@@ -318,7 +319,8 @@
   }
   const parameterRoots = ['solids', 'roles', 'palette', 'motion', 'light', 'effects', 'finish', 'tap'];
   function resolveParameters(source, env) {
-    const { spec: expanded } = K.authoring.scenePrefabs.expand(source, env);
+    let { spec: expanded } = K.authoring.scenePrefabs.expand(source, env);
+    if (expanded?.dataMarks !== undefined && expanded.solids === undefined) expanded = { ...expanded, solids: [] };
     let dataInputs;
     if (expanded?.dataInputs !== undefined) {
       try {
@@ -351,9 +353,9 @@
     } catch (error) {
       return error.problems ?? [{ level: 'error', path: 'prefabs', problem: error.message, hint: '' }];
     }
-    return checkResolved(resolved.spec, env);
+    return checkResolved(resolved.spec, env, {}, resolved.dataInputs);
   };
-  function checkResolved(spec, env, presentation = {}) {
+  function checkResolved(spec, env, presentation, dataInputs) {
     const out = [],
       bad = (path, problem, hint) => out.push({ level: 'error', path, problem, hint: hint || '' }),
       warn = (path, problem, hint) => out.push({ level: 'warning', path, problem, hint: hint || '' });
@@ -1023,6 +1025,13 @@
     };
     listOf('motion', MOTION);
     listOf('effects', EFFECT);
+    if (spec.dataMarks !== undefined) {
+      try {
+        presentation.dataMarks = K.dataMarks.prepare(spec.dataMarks, { dataInputs, fixed: true });
+      } catch (error) {
+        bad('dataMarks', error.message);
+      }
+    }
     if (spec.cameraRig !== undefined) {
       try {
         presentation.cameraRig = K.cameraRig.compile(spec.cameraRig, { parts });
@@ -1216,7 +1225,7 @@
     let problems;
     try {
       resolved = resolveParameters(source, env);
-      problems = checkResolved(resolved.spec, env, presentation);
+      problems = checkResolved(resolved.spec, env, presentation, resolved.dataInputs);
     } catch (error) {
       if (!error.problems) throw error;
       problems = error.problems;
@@ -1236,18 +1245,31 @@
       e.problems = problems;
       throw e;
     }
-    const { spec, dataInputs } = resolved, { timeline, cameraRig } = presentation, dynamics = boundRuntime(source, env, resolved);
+    const { spec, dataInputs } = resolved, { timeline, cameraRig, dataMarks } = presentation, dynamics = boundRuntime(source, env, resolved);
     const st0 = styleOf(spec), catalog = lookCatalog(spec),
       seed = spec.seed === undefined ? 1 : spec.seed,
       effects = spec.effects || [],
       motion = spec.motion || [],
       lamps = effects.filter(e => e.do === 'lamp'),
       loose = effects.some(e => ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
+    function marksQuery() {
+      const query = resolved.inputs?.query ?? env.parameterInputs?.query;
+      return typeof query === 'function' ? query() : query;
+    }
+    const marks = !modelOptions && dataMarks?.sample(env.parameterInputs?.time ?? 0, { query: marksQuery });
     if (spec.brushRegion != null) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
-      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, ...geometry } = spec;
-      const world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
+      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks, ...geometry } = spec;
+      let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
+      let marksSystem;
+      if (marks) {
+        const builder = makeBuilder(seed, world.pal);
+        K.dataMarks.stamp(builder, marks, { reserve: dataMarks.dynamic });
+        const first = world.count;
+        if (builder.count()) world = SplatProvenance.join([world, builder.finish({ paint: [] })], world);
+        marksSystem = K.dataMarks.bind(world, marks, dataMarks, { first, query: marksQuery });
+      }
       world.spec = source;
       if (dataInputs) world.dataInputs = dataInputs;
       if (cameraRig) K.cameraRig.bind(world, cameraRig);
@@ -1260,6 +1282,11 @@
             apply(timelineFrame(timeline, t + stage.t0, effects));
           } });
         }
+      }
+      if (marksSystem) {
+        const stage = world.anim ?? K.stage(world);
+        if (!stage.systems.length) stage.stateful = false;
+        stage.add(marksSystem);
       }
       return world;
     }
@@ -1544,6 +1571,7 @@
       for (const s of moving) placeSolid(s);
       S.bake();
     }
+    const firstMark = marks && K.dataMarks.stamp(B, marks, { reserve: dataMarks.dynamic });
     const pool = loose ? K.pool(B, spec.spare || 600) : null,
       lo = [1e9, 1e9, 1e9],
       hi = [-1e9, -1e9, -1e9];
@@ -1554,10 +1582,18 @@
         hi[a] = Math.max(hi[a], b.max[a]);
       }
     }
+    if (marks) for (const mark of marks) if (mark.status === 'visible') {
+      const { position, size } = mark.channels;
+      for (let axis = 0; axis < 3; axis++) {
+        lo[axis] = Math.min(lo[axis], position[axis]-size);
+        hi[axis] = Math.max(hi[axis], position[axis]+size);
+      }
+    }
+    const markRadius = marks?.some(mark => mark.status === 'visible') ? V.dist(lo, hi)*.5 : 0;
     const cam = Object.assign(
       {
         target: lo[0] > 1e8 ? [0, 1.5, 0] : [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2 + 0.5, (lo[2] + hi[2]) / 2],
-        dist: 16,
+        dist: Math.max(16, markRadius*3.5),
         pitch: 0.16,
         yaw: 0.4,
         sway: 0.3
@@ -1566,13 +1602,14 @@
     );
     const W = B.finish(
       Object.assign(
-        { cam, detail: 14, palName: typeof spec.style === 'string' ? spec.style : 'Data', dither: 0.25, radius: 9 },
+        { cam, detail: 14, palName: typeof spec.style === 'string' ? spec.style : 'Data', dither: 0.25, radius: Math.max(9, markRadius) },
         st0.finish,
         { made, spec: source, paletteRoles: st0.roles, ...(dynamics && { parameters: dynamics.api }),
           ...(dataInputs && { dataInputs }),
           ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
+    const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });
     if (cameraRig) K.cameraRig.bind(W, cameraRig, {
       resolvePart(part, point) {
         if (!rig?.at || !rig.has(part)) return;
@@ -1585,8 +1622,11 @@
     const liveLamps = dynamics?.lamps || timeline?.targets.some(([root, index]) =>
       root === 'effects' && effects[index].do === 'lamp');
     if (timelineActive) applyCamera(timelineFrame(timeline, 0, effects));
-    if (!moving.length && !effects.length && !spec.tap && !timelineActive) return W;
+    const authoredStage = moving.length || effects.length || spec.tap || timelineActive;
+    if (!authoredStage && !marksSystem) return W;
     const st = K.stage(W);
+    if (!authoredStage) st.stateful = false;
+    if (marksSystem) st.add(marksSystem);
     rig.bind(st);
     let tracks = motion, activeEffects = effects, poses;
     if (dynamics?.active || timelineActive) st.add({ update(dt, t, stage) {

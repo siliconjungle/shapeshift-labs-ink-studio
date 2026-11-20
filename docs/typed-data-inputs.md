@@ -43,3 +43,5 @@ Use `$position` as the sample column to read a point in world coordinates. Sampl
 - In a parameter binding, a value with `source: "data"` accepts the same dataset and sample fields plus a typed `fallback`. A missing or outside sample uses the fallback. Live bindings use the scene clock. Baked bindings use the selected parameter bake time. [Shared parameter bindings](parameter-bindings.md)
 - Use `query.probe('world/data', site, args)` in simulations and on baked dioramas. Put the dataset, column, and sample options in `args`. A site point or entity socket can supply the position for spatial sampling. Simulation checkpoints retain the resolved source content so playback can sample it independently of the original files.
 - Use `ink-studio data-inputs <scene-or-catalog> [dataset]` to inspect the schema. Add `--rows` to export the typed rows and projected features, or use `--sample <JSON>` and `--t <seconds>` to inspect a sample.
+
+Map dataset columns and simulation fields onto native splats while retaining the source record. [Data-bound visual marks](data-bound-marks.md)
