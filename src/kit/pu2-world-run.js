@@ -154,7 +154,6 @@
         check(field?.type==='number'&&field.units==='world','Visual ice needs a numeric thickness field in world units');
       }
     }
-    const systemDependencies = Object.entries(systems).filter(([,system])=>system.dependencies !== undefined);
     const coupledFields=Object.values(systems).filter(system=>system.spatialCouplings);
     let fieldQuery;
     const relays=coupledFields.length?W.fieldCoupling.relays(coupledFields,fieldQuery=Q.create({world},systems)):[];
@@ -163,11 +162,25 @@
       const field = typeof name === 'string' && !name.includes('/') ? (writer ? writer+'/'+name : (fieldQuery ??= Q.create({world},systems)).field(name)?.name ?? name) : name;
       return typeof entry === 'string' ? field : {...entry,field};
     }
+    const navigationSources=new Map();
+    const navigationWrites=new Map();
+    for (const system of Object.values(systems)) for (const field of system.navigationReads??[]) {
+      const canonicalName=(fieldQuery??=Q.create({world},systems)).field(field)?.name;
+      if (!canonicalName||navigationSources.has(canonicalName)) continue;
+      const [writer]=endpoint(canonicalName);
+      if (!systems[writer].navigationSource) continue;
+      navigationSources.set(canonicalName,writer);
+      if (!navigationWrites.has(writer)) navigationWrites.set(writer,[]);
+      navigationWrites.get(writer).push(canonicalName);
+    }
+    const systemDependencies=Object.entries(systems).filter(([name,system])=>system.dependencies!==undefined||navigationWrites.has(name));
     const dependencies = P.spatialDependencies.create(Object.fromEntries(systemDependencies.map(([name,system])=>{
-      const spec = system.dependencies;
+      const spec = system.dependencies??{};
       check(record(spec) && Array.isArray(spec.reads ?? []) && Array.isArray(spec.writes ?? []),
         'Invalid spatial dependencies for '+name);
-      return [name,{reads:(spec.reads ?? []).map(entry=>canonical(entry)),writes:(spec.writes ?? []).map(entry=>canonical(entry,name))}];
+      const writes=(spec.writes??[]).map(entry=>canonical(entry,name));
+      for (const field of navigationWrites.get(name)??[]) if (!writes.includes(field)) writes.push(field);
+      return [name,{reads:(spec.reads ?? []).map(entry=>canonical(entry)),writes}];
     })),{relays});
     const transfers = W.transfers.bind(systems);
     for (const name of transfers.producers) systems[name].checkTransfers?.(transfers.validate);
@@ -216,7 +229,7 @@
     const influence = W.influenceRuntime.bind({systems,transfers,chunks});
     const population = W.populationRuntime.bind({systems,transfers,chunks});
     const plan = {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges};
+      interactions,influence,population,causePolicy,contracts,phaseEdges,navigationSources};
     if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
       dt: world.dt, validateAction: command => actionCheck(command, plan),
       validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
@@ -332,7 +345,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,navigationSources} = plan;
     let composition;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -629,6 +642,19 @@
       const commanded=chunks&&new Set();
       let trace = pendingWrites.length ? dependencies.begin(pendingWrites) : null;
       const nextWrites = [], activeTrace = () => trace ??= dependencies.begin();
+      function navigationChanges(before,after) {
+        const changed=[];
+        for (const [field,writer] of navigationSources) {
+          const old=before.navigationSource(field,true), source=after.navigationSource(field,true);
+          if ((!old&&!source)||old&&source&&old.key===source.key) continue;
+          const areas=old&&source?.changes?.(old.key);
+          const notices=(areas??[null]).map(bounds=>({writer,field,bounds,reason:'navigation-source-changed'}));
+          // Keep pending change records bounded even when a large grid changes in many places.
+          const compact=notices.length>16?W.simulationChunks.mergeWrites([],notices):notices;
+          for (const notice of compact) changed.push({...notice,reason:'navigation-source-changed'});
+        }
+        return changed;
+      }
       function spatial(name, stepping) {
         if (!systems[name].dependencies) return undefined;
         return Object.freeze({
@@ -830,6 +856,11 @@
         });
       }
       freeze(receipts);
+      const committed = freeze(drafts);
+      const navigationBefore=navigationSources.size&&Q.create(
+        view(nextWorld,committed,lastSignals,tick,receipts,causalState,nextChunkState),systems,projection);
+      if (navigationBefore) for (const notice of navigationChanges(query(),navigationBefore))
+        activeTrace().change(notice.writer,notice.field,notice.bounds,notice.reason);
       let nextSpatial = spatialSampling;
       if (slowReaders.size && (trace || Object.keys(spatialSampling).length)) {
         nextSpatial = {...spatialSampling};
@@ -844,15 +875,19 @@
             if (current.length) {
               if(managed)nextSpatial[name]=W.simulationChunks.mergeWrites(waiting,current);
               else{
-                check(waiting.length+current.length<=P.spatialDependencies.limit,'Spatial sampling buffer exceeds its budget');
-                nextSpatial[name]=waiting.concat(current.map(({writer,field,bounds,reason})=>({writer,field,bounds,reason})));
+                const tracked=row=>row.reason==='navigation-source-changed';
+                const ordinary=waiting.filter(row=>!tracked(row)).concat(current.filter(row=>!tracked(row))
+                  .map(({writer,field,bounds,reason})=>({writer,field,bounds,reason})));
+                const navigation=W.simulationChunks.mergeWrites(waiting.filter(tracked),current.filter(tracked))
+                  .map(row=>({...row,reason:'navigation-source-changed'}));
+                check(ordinary.length+navigation.length<=P.spatialDependencies.limit,'Spatial sampling buffer exceeds its budget');
+                nextSpatial[name]=ordinary.concat(navigation);
               }
             }
           }
         }
         nextSpatial=freeze(nextSpatial);
       }
-      const committed = freeze(drafts);
       const spent = {};
       let workerResults=null, workerBatches=0, workersThisTick=0;
       const offloaded=partitioned?.size?new Map():null;
@@ -989,6 +1024,10 @@
       const dependencyReport = trace && trace.report();
       const nextCausal = causal?.finish();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory};
+      if (navigationBefore) for (const notice of navigationChanges(navigationBefore,Q.create(nextView,systems,projection))) {
+        check(nextWrites.length<P.spatialDependencies.limit,'Spatial write budget exceeded');
+        nextWrites.push(dependencies.write(notice.writer,notice.field,notice.bounds,notice.reason));
+      }
       const nextScenario = evaluateScenario(nextView,events);
       const nextWeather = weather?.step(weatherTrackState,{time:nextView.time,view:nextView,events,
         query:Q.create(nextView,systems,projection)});

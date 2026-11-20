@@ -72,6 +72,28 @@ test('flooded crossing queues replacements and walkers continue verified prefixe
   assert.strictEqual(actor(run,'distant').route,distant.route);
 });
 
+test('a reopened shortcut queues a cheaper route while the existing detour stays usable',()=>{
+  const scene=world({walker:walk(1,1.5)},{nav:{water:'ford/water'},crew:{replanTicks:250}});
+  const account=(origin,initial)=>({kind:'water',config:{width:1,height:1,origin,
+    accounts:{site:origin.map(n=>n+.5)},
+    initial:[{bounds:{min:origin,max:origin.map(n=>n+1)},value:initial}]}});
+  scene.systems.ford=account([6,1],.6);
+  scene.systems.tank=account([20,1],0);
+  const run=W.runtime.create(scene);
+  run.advance(2);
+  const detour=actor(run,'walker');
+  assert(detour.route.some(point=>point[2]!==1.5));
+  run.schedule([command(3,'world/transfer',{from:'ford/site',to:'tank/site',amount:.6})]);
+  run.step();
+  const waiting=actor(run,'walker');
+  assert.equal(status(run,'walker').status,'safe-segment');
+  assert.strictEqual(waiting.route,detour.route);
+  assert(waiting.position[0]>detour.position[0]);
+  run.step();
+  assert.equal(status(run,'walker').status,'ready');
+  assert(actor(run,'walker').route.slice(1).every(point=>point[2]===1.5));
+});
+
 test('seek, despawn and generation reuse supersede older requests',()=>{
   const run=W.runtime.create(world({one:walk(1,1),two:walk(1,2),three:walk(1,3)}));
   run.step();

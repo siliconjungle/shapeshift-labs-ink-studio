@@ -3,9 +3,10 @@
   const W=K.world, Q=W.query, {V,M}=K, {record,check,vector,id,own}=W.data;
   const zero=[0,0,0];
   function characters(config){
-    const {gravity,clearance,support,medium,supportPadding,surfaceBodies,surfaces,traversalLinks,landingContacts=false}=config, authored=config.characters;
+    const {gravity,clearance,support,medium,climbField,controllers,supportPadding,surfaceBodies,surfaces,traversalLinks,
+      landingContacts=false}=config, authored=config.characters;
     check(typeof gravity==='string'&&typeof clearance==='string'&&typeof landingContacts==='boolean'&&
-      [support,medium,surfaceBodies].every(name=>name===undefined||typeof name==='string')&&
+      [support,medium,climbField,surfaceBodies].every(name=>name===undefined||typeof name==='string')&&
       (surfaces===undefined||record(surfaces))&&(surfaceBodies===undefined||typeof support==='string')&&
       (supportPadding===undefined||Number.isFinite(supportPadding)&&supportPadding>=0&&supportPadding<=2)&&
       record(authored)&&Object.keys(authored).length>0&&Object.keys(authored).length<=128,'Invalid local character configuration');
@@ -22,12 +23,13 @@
         (row.look===undefined||Array.isArray(row.look)&&row.look.length>0&&row.look.length<=32&&
           row.look.every(n=>Number.isSafeInteger(n)&&n>=0&&n<=255)),'Invalid local character '+key);
       const {position,forward,up,worldMove=false,look,velocity}=row, entity=row.entity??key;
-      const controller=W.characters.create({tuning:row.tuning});
+      const controller=W.characters.create({tuning:row.tuning,controllers,defaultController:row.controller});
       initial[key]=controller.state({position,...(forward!==undefined&&{forward}),...(up!==undefined&&{up}),
         ...(velocity!==undefined&&{velocity})});
       const traversal=traversalCatalog?.withController(controller);
       specs[key]={entity,controller,traversal,worldMove,look};
       if(traversal)inputs['traversal.'+key]='record';
+      if(controller.controllers)inputs['controller.'+key]='record';
       inputs['move.'+key]='vec3';inputs['vertical.'+key]='number';
       inputs['jump.'+key]='bool';inputs['climb.'+key]={type:'bool',default:true};
     }
@@ -37,7 +39,7 @@
       height:specs[key].controller.tuning.height,...(specs[key].look&&{look:specs[key].look})});
     function environment(query,row){
       return W.characters.fromQuery(query,{gravity,clearance,support,medium,supportPadding,exclude:row.entity,
-        surfaceBodies,surfaceResponse});
+        climb:climbField,surfaceBodies,surfaceResponse});
     }
     const actors = state => landingContacts ? state?.actors : state;
     const pack = (actors, landings = []) => landingContacts ? { actors, landings } : actors;
@@ -58,17 +60,24 @@
           const field=query.field(medium);
           check(field?.type==='record'||field?.type==='number'&&field.units==='world','Local character medium needs a water record or world depth');
         }
+        if(climbField)check(['number','bool','record'].includes(query.field(climbField)?.type),
+          'Local character climb field needs a numeric, Boolean or record value');
         if(support)check(query.inspect().traces.some(trace=>trace.name===support||trace.name.endsWith('/'+support)),
           'Unknown local character support trace '+support);
       },
-      dependencies:{reads:[gravity,clearance,medium,surfaceBodies].filter(Boolean)},
+      dependencies:{reads:[gravity,clearance,medium,climbField,surfaceBodies].filter(Boolean)},
       step(state,ctx){
         const landings = [];
         const next = Object.fromEntries(Object.entries(actors(state)).map(([key,actor])=>{
           const spec=specs[key], move=ctx.input['move.'+key]??zero;
           const command=ctx.input['traversal.'+key]??{}, env=environment(ctx.query,spec);
+          const controls=ctx.input['controller.'+key]??{};
+          check(Object.keys(controls).every(key=>['name','throttle','steer'].includes(key)),
+            'Invalid local character controller input');
+          const {name,throttle,steer}=controls;
           const input={...(spec.worldMove?{moveWorld:move}:{move:[move[0],move[2]]}),
-            vertical:ctx.input['vertical.'+key],jump:ctx.input['jump.'+key],climb:ctx.input['climb.'+key]};
+            vertical:ctx.input['vertical.'+key],jump:ctx.input['jump.'+key],climb:ctx.input['climb.'+key],
+            ...(name!==undefined&&{controller:name}),...(throttle!==undefined&&{throttle}),...(steer!==undefined&&{steer})};
           const result=spec.traversal?spec.traversal.step(actor,{...input,traverse:command.link,detach:command.detach},
             ctx.dt,env,{time:ctx.time-ctx.dt,enabled:id=>ctx.input['enable.'+id]}):spec.controller.step(actor,input,ctx.dt,env);
           for(const {type,...detail} of result.events){

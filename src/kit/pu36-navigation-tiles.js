@@ -59,6 +59,7 @@
         ...(flow&&{flow:(from,to,spec)=>flowSample(query,from,to,spec)}),
         valid:(from,points,cursor,goal,spec)=>valid(query,from,points,cursor,goal,spec),
         safeEnd:(from,points,cursor,spec)=>safeEnd(query,from,points,cursor,spec),
+        remainingCost:(from,points,cursor,spec)=>remainingCost(query,from,points,cursor,spec),
         report:()=>{
           bind(query);
           return {tileCells:size,cached:[...profiles.values()].reduce((n,row)=>n+row.tiles.size,0),invalidated,
@@ -154,6 +155,16 @@
       if(!Number.isFinite(map.sampler.pin(a)))return end;
       while(end<points.length&&segment(map,a,points[end]))a=points[end++];
       return end;
+    }
+    function remainingCost(query,from,points,cursor,spec){
+      const map=access(query,spec);
+      let a=map.pin(from), total=0;
+      for(let i=cursor;i<points.length;i++){
+        const b=points[i], start=map.lattice(a), end=map.lattice(b);
+        total+=start&&end?map.edge(start,end):map.sampler.edge(a,b);
+        a=b;
+      }
+      return total;
     }
     function valid(query,from,points,cursor,goal,spec){
       if(!points[cursor]||horizontal(points.at(-1),goal)>eps||!inDomain(from))return false;

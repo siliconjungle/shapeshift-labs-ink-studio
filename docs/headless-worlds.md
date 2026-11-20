@@ -1498,6 +1498,8 @@ the transported frame. Set `worldMove` to use a world XYZ direction
 projected onto the tangent plane instead. Use `vertical.<id>`,
 `jump.<id>`, and `climb.<id>` for the remaining controls. Probe
 `actors` or render that field with `visual.fields.characters`.
+Use [named movement controllers](#configurable-movement-controllers)
+to switch profiles from typed inputs.
 
 In JavaScript, pass `W.characters.fromQuery(query, bindings)` to
 `controller.step`, or supply a world adapter with `gravityAt(point)`,
@@ -1885,3 +1887,44 @@ the rig at the named anchor.
 The [headless canal example](../examples/canal-traversal.js) follows a
 traveler from a dry bank into the water, out over a ledge, and through a
 rotated doorway.
+
+### Configurable movement controllers
+
+Pass a keyed `controllers` table to `characters.create`. Each entry
+has a `kind` and optional settings for that kind. Use `defaultController`
+to choose a starting profile, and pass `controller: name` in step input
+to switch. The chosen profile stays in `actor.controller` until the next
+selection. Use `auto` for the usual ground, air, and water transitions
+or your existing `selectMode` callback.
+
+| Kind | Settings | Behavior |
+| --- | --- | --- |
+| `walk` | `speed`, `acceleration`, `airAcceleration`, `jumpSpeed` | Uses terrain support, steps, jumps, and falls. |
+| `climb` | `speed`, `verticalSpeed`, `acceleration` | Uses vertical input on a sampled climb surface. A supplied normal constrains horizontal movement along the face. Set `climb: false` to release. |
+| `swim` | `speed`, `verticalSpeed`, `acceleration`, `currentScale`, `buoyancy` | Uses water entry and exit thresholds, currents, and ledge climb-out. Dry movement uses the default ground or air response. |
+| `fly` | `speed`, `verticalSpeed`, `acceleration` | Moves along the gravity-local horizontal plane and ascends or descends with vertical input. Stops under neutral input and slides along blocked axes. |
+| `vehicle` | `speed`, `reverseSpeed`, `acceleration`, `braking`, `turnRate` | Drives forward or in reverse, steers at speed, and brakes under neutral throttle. It uses the same capsule, ground supports, and gravity during falls. |
+
+Speeds are in world units per second. Accelerations and braking are
+in world units per second squared, and vehicle turn rate is in radians
+per second. Supply `throttle` and `steer` in `[-1, 1]` for vehicles.
+The default mapping uses the negative Z component of `move` for throttle
+and X for steering. The capsule dimensions and common collision and
+substep settings stay in `tuning`.
+
+Supply `climbAt(point)` on the world adapter, or pass it to
+`characters.fromBiome`. Return true for a climbable point or
+`{normal}` for a particular surface orientation. In headless worlds,
+set `config.climbField` to a query field that returns a positive number,
+true, or a record with `enabled: true` or a `normal`. A missing sample
+releases the character to the usual movement for that location.
+
+The `characters` system shares the profile table from `config.controllers`.
+Each character can select its starting `controller`. Its
+`controller.<actor>` record input accepts `{name, throttle?, steer?}`.
+Omit `name` to update analog controls while keeping the current profile.
+The `actors` field reports both the profile and the current physical
+`mode`, and `character-controller` events mark profile switches. The
+profile selection travels with the actor and survives checkpoints.
+Keep the profile IDs available in the destination controller when
+handing off a traveler.

@@ -656,6 +656,8 @@ Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/wei
 
 [Wallpaper and frieze groups](docs/wallpaper-frieze.md) repeat a vector motif as seamless pigment, etched relief, or tiles.
 
+[Quasiperiodic tilings](docs/quasiperiodic-tilings.md) generate Penrose and Ammann–Beenker pavement with stable tile addresses.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```
@@ -745,6 +747,8 @@ verify scene revisions, command order, solver timing, and observations on replay
 preserves a group's identity, attachments, and state through unloading, travel, and restoration.
 [Reusable interaction components](docs/interaction-components.md)
 combine triggers, handles, pickups, sockets, checkpoint markers, and timed switches in one saved state.
+[Configurable movement controllers](docs/headless-worlds.md#configurable-movement-controllers)
+switch one character between walking, climbing, swimming, flying, and vehicle steering.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.

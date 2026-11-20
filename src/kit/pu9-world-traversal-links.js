@@ -212,7 +212,8 @@
             emit('wait', rule, at);
           } else place(rule, at, rule.start, rule.end);
         }
-        const idle = { ...movement, move: [0, 0], moveWorld: zero, jump: false, vertical: 0, climb: false };
+        const idle = { ...movement, move: [0, 0], moveWorld: zero, jump: false, vertical: 0, climb: false,
+          ...(controller.controllers&&{throttle:0,steer:0}) };
         function walk(duration, controls = movement) {
           const result = controller.step(current, controls, duration, world);
           current = result.actor;
