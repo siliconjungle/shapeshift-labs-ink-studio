@@ -3,7 +3,8 @@
 `KIT.cellular.continuous` evolves floating-point state channels on a 2D chart.
 Each rule can read one or more weighted neighborhoods from any state channel
 and write one or more new states. Use the same chart as projected material
-pigment, a contour source, or positions and intensity for emission splats.
+pigment, a contour source, or positions and intensity for emission splats. For growth learned from
+artwork, use [neural cellular rules](learned-cellular-growth.md).
 
 ```js
 const C = K.cellular.continuous;

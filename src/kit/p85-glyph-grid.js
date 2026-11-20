@@ -354,6 +354,6 @@
   }
 
   const rules = Object.freeze({ life, ...CellularRules.rules });
-  K.cellular = Object.freeze({ create, rules, continuous: ContinuousCellular, graph: GraphCellular, sandpile: SandpileCellular });
+  K.cellular = Object.freeze({ create, rules, continuous: ContinuousCellular, graph: GraphCellular, sandpile: SandpileCellular, learned: LearnedCellular });
   K.glyphGrid = Object.freeze({ create, paint, rules });
 })(KIT);
