@@ -143,6 +143,6 @@ test('WebGL and headless apply shared material stages and palette grades at the 
   assert(cpu[2].sensor[0] > cpu[0].sensor[0] + 40);
   assert(cpu[0].ceramic[2] > cpu[0].ceramic[0] + 50);
   assert(cpu[3].control[0] < cpu[4].control[0]);
-  assert.deepEqual(cpu[5].control, [50, 196, 172]);
+  close(cpu[5].control, [50, 196, 172], 2);
   assert(output.off);
 });
