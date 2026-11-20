@@ -93,7 +93,8 @@ function embedPage(document, settings) {
   <figure><img width="${width}" height="${height}" alt="${escapeHTML(alt)}" draggable="false" src="data:image/png;base64,${frames[0]}"></figure>
   ${player}
 </main>
-<script id="ink-scene-recording" type="application/json">${safeJSON({ fps, frames })}</script>
+<script id="ink-scene-recording" type="application/json">${safeJSON({ fps, frames, ...(document.simulationInputs !== undefined && {
+  scene: document.scene, seed: document.seed, simulationInputs: document.simulationInputs }) })}</script>
 <script>
 window.inkScene = (${mount})(document.getElementById('ink-scene'),
   JSON.parse(document.getElementById('ink-scene-recording').textContent), ${safeJSON({ autoplay, loop })}, ${frameIndex});

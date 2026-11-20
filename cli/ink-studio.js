@@ -198,13 +198,25 @@ function build(id, seedOverride, { paint = true, parameterInputs, controls: supp
   const t0 = Date.now();
   const controls = suppliedControls ?? (opt.params ? JSON.parse(String(opt.params)) : undefined);
   const snapshot = opt.authoring ? JSON.parse(fs.readFileSync(path.resolve(opt.authoring), 'utf8')) : undefined;
+  const importedInputs = snapshot?.format === 'ink-studio/scene-simulation-inputs' ||
+    snapshot?.format === 'ink-studio/scene-replay' && snapshot.simulationInputs !== undefined;
+  if (importedInputs && (snapshot.scene !== s.id || snapshot.version !== 1 || !Number.isSafeInteger(snapshot.seed)))
+    die('Simulation inputs need the original scene and a valid seed');
+  const inputs = importedInputs ? lib().KIT.simulationInputs.tracks(snapshot.simulationInputs) : undefined;
   const seed = seedOverride ?? (opt.seed === undefined ? snapshot?.seed ?? s.seed : +opt.seed);
   shot?.seed(seed);
   const assemble = () => {
-    const built = s.build(seed, { controls, snapshot, ...(parameterInputs && { parameterInputs }) });
+    const built = s.build(seed, { controls, snapshot, ...(inputs && { simulationInputs: inputs }),
+      ...(parameterInputs && { parameterInputs }) });
     return (s.animate && s.animate(built, seed)) || built;
   };
   const w = liveSunOption() ? require('./look-preview.js').withAlbedo(assemble) : assemble();
+  if (inputs) {
+    const actual = w.simulationInputs && lib().KIT.simulationInputs.tracks(w.simulationInputs);
+    if (!actual || Object.entries(inputs).some(([id, track]) => JSON.stringify(actual[id]) !== JSON.stringify(track)))
+      die('The scene did not restore the supplied simulation input tracks');
+  }
+  if (w.simulationInputs) w.simulationInputSeed = seed;
   if (w.sandbox && !w.anim) lib().KIT.sandbox.attach(w); // and one whose stuff is a sandbox gets its grid going
   if (w.pix && lib().KIT.pixel)
     ((w.pixTex = lib().KIT.pixel.evaluators(w)),
@@ -2206,6 +2218,8 @@ const CMD = {
       const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
       return {
         scene: world.id, title: world.name,
+        ...(world.simulationInputs && { seed: world.simulationInputSeed,
+          simulationInputs: lib().KIT.simulationInputs.tracks(world.simulationInputs) }),
         duration: Math.max(world.timeline?.duration ?? 0, world.cameraRig?.duration ?? 0),
         sample(time, lastTime) {
           function draw(t, resetRenderHistory) {

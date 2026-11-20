@@ -33,10 +33,22 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
     return prefix + '/' + name;
   }
   const manifest = { format: 'ink-studio/scene-export', version: 1 };
+  let inputs, captured = false;
   function capture(dimensions, moving) {
     const result = createCapture({ ...dimensions, moving, from });
     manifest.scene ??= result.scene;
     manifest.title ??= result.title ?? result.scene ?? 'Ink Studio scene';
+    let document;
+    if (result.simulationInputs !== undefined) {
+      if (typeof result.scene !== 'string' || !Number.isSafeInteger(result.seed))
+        throw new TypeError('Seeded scene tracks need a scene ID and integer seed');
+      document = { format: 'ink-studio/scene-simulation-inputs', version: 1, scene: result.scene,
+        seed: result.seed, simulationInputs: result.simulationInputs };
+    }
+    if (captured && JSON.stringify(document) !== JSON.stringify(inputs))
+      throw new RangeError('Scene simulation inputs differed between captures');
+    inputs = document;
+    captured = true;
     return result;
   }
   try {
@@ -49,7 +61,8 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
         throw new RangeError('Scene export exceeds the sequence budget. Shorten the range or lower the resolution or frame rate.');
       const packed = [], frames = [], files = [];
       const lastTime = from + (count - 1) / fps;
-      let encodedLength = 0;
+      const extra = inputs ? Buffer.byteLength(JSON.stringify(inputs)) : 0;
+      let encodedLength = extra;
       for (let index = 0; index < count; index++) {
         const time = from + index / fps;
         const frame = PNG.packFrame(resize(source.sample(time, lastTime), width, height));
@@ -72,7 +85,8 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
       }
       if (keepRecording) {
         const document = { format: Replay.format, version: 1, scene: manifest.scene, title: manifest.title,
-          width, height, start: from, fps, frames };
+          width, height, start: from, fps, frames,
+          ...(inputs && { seed: inputs.seed, simulationInputs: inputs.simulationInputs }) };
         if (selected.has('replay')) manifest.replay = save('scene.replay.json', JSON.stringify(document) + '\n');
         if (selected.has('embed')) manifest.embed = save('embed.html', Replay.embedPage(document, Replay.embedSettings(embed, document.title)));
       }
@@ -83,6 +97,7 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
       manifest.still = { file: save('still.png', PNG.encodeFrame(PNG.packFrame(frame))), time: stillTime,
         width: stillWidth, height: stillHeight };
     }
+    if (inputs) manifest.simulationInputs = save('simulation-inputs.json', JSON.stringify(inputs, null, 2) + '\n');
     const file = path.join(directory, 'export.json');
     json(file, manifest);
     return { file, manifest };

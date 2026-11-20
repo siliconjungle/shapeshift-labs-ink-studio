@@ -225,6 +225,7 @@ const CellularDomains = (() => {
           return cell ? view.get(cell.id,age) : null;
         },
         isLocked: at => view.isLocked(resolve(at)),
+        isBlocked: at => view.isBlocked(resolve(at)),
         data(channel) {
           if (names && channel === undefined) return domain.cells.map(cell => view.get(cell.id));
           if (names) {

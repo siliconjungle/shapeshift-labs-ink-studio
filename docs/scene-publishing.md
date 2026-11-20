@@ -2,6 +2,8 @@
 
 `ink-studio export-scene <scene> --out <directory>` publishes from the same authored scene, seed, and look. Each output is identified by a relative path in `export.json`. Keep the referenced take directory when relocating an export.
 
+Scenes that register [editable simulation inputs](editable-simulation-inputs.md) include a JSON sidecar in the manifest and carry their seed and marks in scene replay and embed data. Open the sidecar or replay with the original scene and `--authoring` to rerender the simulation.
+
 | Product | Contents |
 | --- | --- |
 | `still` | A PNG rendered at the requested still time. The renderer receives the sequence dimensions multiplied by `--still-scale`, which defaults to 2. |

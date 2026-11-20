@@ -105,15 +105,16 @@ const GraphCellular = (() => {
       ? [states, seed, nodes, edges, domain.kind, domain.units, domain.dt, domain.timeUnit, channels, domain.cells]
       : [states, seed, nodes, edges]));
     const ring = () => { const entries = new Array(historySize); entries[0] = start; return entries; };
-    let history = ring(), locked = pins, tick = 0, revision = 0, busy = false, previous;
+    const open = domain && new Uint8Array(nodes.length);
+    let history = ring(), locked = pins, blocked = open, tick = 0, revision = 0, busy = false, previous;
     const available = () => check(!busy, 'cannot edit the graph during a rule');
     const lookup = id => {
       check(indices.has(id), 'unknown node ' + String(id));
       return indices.get(id);
     };
     const read = (entries, i, at) => at < 0 ? zero : entries[at % historySize][i];
-    function commit(entries, at, locks = locked) {
-      history = entries; tick = at; locked = locks; revision++; previous = undefined;
+    function commit(entries, at, locks = locked, obstacles = blocked) {
+      history = entries; tick = at; locked = locks; blocked = obstacles; revision++; previous = undefined;
     }
 
     function step(count = 1, update = rule) {
@@ -122,16 +123,17 @@ const GraphCellular = (() => {
       check(integer(count, 1, 10000) && count * work * (channels?.length ?? 1) <= maxWork &&
         tick + count <= Number.MAX_SAFE_INTEGER && (!domain || Number.isFinite((tick + count) * dt)),
         'step exceeds the work or tick budget');
-      const draft = history.slice();
+      const draft = history.slice(), obstacles = blocked?.includes(1) ? blocked : null;
       busy = true;
       try {
         for (let j = 1; j <= count; j++) {
           const time = tick + j, before = draft[(time - 1) % historySize], next = before.slice();
           const scope = hash('cellular-graph/rule/' + time, seed);
           for (let i = 0; i < nodes.length; i++) {
-            if (locked[i]) continue;
+            if (locked[i] || obstacles?.[i]) continue;
             const node = nodes[i];
-            const inputs = incoming[i].map(({ index, node, edge, cell }) => {
+            const links = obstacles ? incoming[i].filter(link => !obstacles[link.index]) : incoming[i];
+            const inputs = links.map(({ index, node, edge, cell }) => {
               const sampledTick = time - edge.delay;
               return { id: node.id, node, edge, sampledTick, state: read(draft, index, sampledTick), ...(domain && { cell }) };
             });
@@ -151,31 +153,46 @@ const GraphCellular = (() => {
     function edit(changes) {
       available();
       check(Array.isArray(changes) && changes.length <= maxNodes, 'expected a bounded edit list');
+      const fields = domain ? ['id', 'state', 'locked', 'blocked'] : ['id', 'state', 'locked'];
       const plan = Array.from(changes, item => {
-        check(record(item) && Object.keys(item).every(key => ['id', 'state', 'locked'].includes(key)) &&
-          (item.state !== undefined || item.locked !== undefined) && (item.state === undefined || stateOK(item.state)) &&
-          (item.locked === undefined || typeof item.locked === 'boolean'), 'edits need a node ID and valid state or lock');
-        return { i: lookup(item.id), state: item.state, lock: item.locked };
+        check(record(item) && Object.keys(item).every(key => fields.includes(key)) &&
+          (item.state !== undefined || item.locked !== undefined || item.blocked !== undefined) &&
+          (item.state === undefined || stateOK(item.state)) && (item.locked === undefined || typeof item.locked === 'boolean') &&
+          (item.blocked === undefined || typeof item.blocked === 'boolean'), 'edits need a node ID and valid state, lock or obstacle');
+        return { i: lookup(item.id), state: item.state, lock: item.locked, block: item.blocked };
       });
       if (!plan.length) return;
       const next = history[tick % historySize].slice(), locks = locked.slice(), draft = history.slice();
-      for (const { i, state, lock } of plan) {
-        if (state !== undefined) next[i] = encode(state);
+      const obstacles = blocked?.slice(), cleared = new Set(), current = tick % historySize;
+      for (const { i, state, lock, block } of plan) {
+        if (block !== undefined) {
+          obstacles[i] = Number(block);
+          if (block) { next[i] = zero; cleared.add(i); }
+        }
+        if (state !== undefined && !obstacles?.[i]) next[i] = encode(state);
         if (lock !== undefined) locks[i] = Number(lock);
       }
-      draft[tick % historySize] = next;
-      commit(draft, tick, locks);
+      // A closed cell drops signals still waiting in its delay history.
+      if (cleared.size) for (let slot = 0; slot < historySize; slot++) {
+        if (slot === current || !draft[slot]) continue;
+        const previous = draft[slot].slice();
+        for (const i of cleared) previous[i] = zero;
+        draft[slot] = previous;
+      }
+      draft[current] = next;
+      commit(draft, tick, locks, obstacles);
     }
 
     function frame() {
       if (previous) return previous;
-      const entries = history, at = tick, locks = locked;
+      const entries = history, at = tick, locks = locked, obstacles = blocked;
       previous = Object.freeze({ tick: at, nodes, states, historySize,
         get(id, age = 0) {
           check(integer(age, 0, historySize - 1), 'requested age exceeds retained edge history');
           return read(entries, lookup(id), at - age);
         },
-        isLocked: id => Boolean(locks[lookup(id)]), data: () => entries[at % historySize].slice()
+        isLocked: id => Boolean(locks[lookup(id)]),
+        ...(domain && { isBlocked: id => Boolean(obstacles[lookup(id)]) }), data: () => entries[at % historySize].slice()
       });
       return previous;
     }
@@ -183,6 +200,7 @@ const GraphCellular = (() => {
     function checkpoint() {
       const first = Math.max(0, tick - historySize + 1);
       return { format, version: 1, signature, tick, locked: Array.from(locked),
+        ...(blocked?.includes(1) && { blocked: Array.from(blocked) }),
         history: Array.from({ length: tick - first + 1 }, (_, i) => Array.from(history[(first + i) % historySize])) };
     }
     function restore(saved) {
@@ -198,17 +216,25 @@ const GraphCellular = (() => {
           return convert(value);
         });
       }
-      const locks = pack(saved.locked, n => n === 0 || n === 1), entries = new Array(historySize);
-      const first = saved.tick - saved.history.length + 1;
-      for (let i = 0; i < saved.history.length; i++) entries[(first + i) % historySize] = pack(saved.history[i], stateOK, plane, encode);
-      commit(entries, saved.tick, locks);
+      const bit = n => n === 0 || n === 1;
+      check(domain || saved.blocked === undefined, 'checkpoint obstacles need a shared domain');
+      const locks = pack(saved.locked, bit), obstacles = saved.blocked === undefined ? open : pack(saved.blocked, bit);
+      const entries = new Array(historySize), first = saved.tick - saved.history.length + 1;
+      const isZero = fieldMode ? value => channels.every(name => value[name] === 0) : value => value === 0;
+      for (let i = 0; i < saved.history.length; i++) {
+        const row = pack(saved.history[i], stateOK, plane, encode);
+        check(saved.blocked === undefined || row.every((value, j) => !obstacles[j] || isZero(value)),
+          'checkpoint has state in a blocked cell');
+        entries[(first + i) % historySize] = row;
+      }
+      commit(entries, saved.tick, locks, obstacles);
       return tick;
     }
 
     return Object.freeze({ nodes, edges, states, historySize, step, edit, frame, checkpoint, restore,
       get(id) { return read(history, lookup(id), tick); },
       get tick() { return tick; }, get revision() { return revision; },
-      reset() { available(); commit(ring(), 0, pins); }
+      reset() { available(); commit(ring(), 0, pins, open); }
     });
   }
   const api = Object.freeze({ create: options => create(options), rules: Object.freeze({ pulse }) });

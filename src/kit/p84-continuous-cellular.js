@@ -137,10 +137,17 @@ const ContinuousCellular = (() => {
     }
     const initialMask = plane(mask);
     const initialState = clearVoid(planesFrom(name => plane(Object.hasOwn(initial, name) ? initial[name] : 0)), initialMask);
-    let tick = 0, revision = 0, state = initialState, coverage = initialMask, previous, busy = false;
+    const emptyFlags = new Uint8Array(size);
+    let tick = 0, revision = 0, state = initialState, coverage = initialMask,
+      locked = emptyFlags, blocked = emptyFlags, previous, busy = false;
+    function index(x, y) {
+      check(integer(x, 0, width - 1) && integer(y, 0, height - 1), 'cell coordinates are out of bounds');
+      return y * width + x;
+    }
     const available = () => check(!busy, 'cannot edit the grid during a rule or mask callback');
-    function commit(next, nextTick, nextMask = coverage) {
-      state = next; tick = nextTick; coverage = nextMask; revision++; previous = undefined;
+    function commit(next, nextTick, nextMask = coverage, pins = locked, obstacles = blocked) {
+      state = next; tick = nextTick; coverage = nextMask; locked = pins; blocked = obstacles;
+      revision++; previous = undefined;
     }
 
     function step(count = 1) {
@@ -155,7 +162,11 @@ const ContinuousCellular = (() => {
           const filtered = filters.evaluate(current), next = planesFrom(() => new Float32Array(size));
           const time = (tick + j) * dt;
           for (let i = 0; i < size; i++) {
-            if (!coverage[i]) continue;
+            if (!coverage[i] || blocked[i]) continue;
+            if (locked[i]) {
+              for (const name of names) next[name][i] = current[name][i];
+              continue;
+            }
             const values = readCell(current, names, i), fields = readCell(filtered, fieldNames, i);
             const result = rule({ state: values, fields, x: i % width, y: Math.floor(i / width), tick: tick + j, time, dt });
             check(record(result) && Object.keys(result).every(name => names.includes(name)), 'rule must return named state values');
@@ -187,6 +198,31 @@ const ContinuousCellular = (() => {
       } finally { busy = false; }
     }
 
+    function edit(changes) {
+      available();
+      check(Array.isArray(changes) && changes.length <= size, 'expected a bounded edit list');
+      const plan = Array.from(changes, item => {
+        const { x, y, values, locked, blocked } = item ?? {};
+        check(record(item) && Object.keys(item).every(key => ['x', 'y', 'values', 'locked', 'blocked'].includes(key)) &&
+          (values !== undefined || locked !== undefined || blocked !== undefined) &&
+          (locked === undefined || typeof locked === 'boolean') && (blocked === undefined || typeof blocked === 'boolean') &&
+          (values === undefined || record(values) && Object.keys(values).length > 0 &&
+            Object.entries(values).every(([name, value]) => names.includes(name) && unit(value))),
+        'each edit needs a valid lock, obstacle or channel values in [0, 1]');
+        return { i: index(x, y), values, locked, blocked };
+      });
+      if (!plan.length) return;
+      const next = planesFrom(name => state[name].slice()), pins = locked.slice(), obstacles = blocked.slice();
+      for (const row of plan) {
+        const { i } = row;
+        if (row.locked !== undefined) pins[i] = Number(row.locked);
+        if (row.blocked !== undefined) obstacles[i] = Number(row.blocked);
+        if (obstacles[i]) for (const name of names) next[name][i] = 0;
+        else if (row.values && coverage[i]) for (const [name, value] of Object.entries(row.values)) next[name][i] = value;
+      }
+      commit(next, tick, coverage, pins, obstacles);
+    }
+
     function inject({ at, radius, values, mode = 'add', falloff = 'smooth' } = {}) {
       available();
       check(tuple(at, 2, finite) && Math.abs(at[0]) <= 1e6 && Math.abs(at[1]) <= 1e6 &&
@@ -203,7 +239,7 @@ const ContinuousCellular = (() => {
         if (dy > radius) continue;
         for (let x = 0; x < width; x++) {
           const d = Math.hypot(dy, distance(x - at[0], width)) / radius, i = y * width + x;
-          if (d > 1 || !coverage[i]) continue;
+          if (d > 1 || !coverage[i] || blocked[i]) continue;
           const amount = coverage[i] * (falloff === 'flat' ? 1 : (1 - d) ** 2 * (1 + 2 * d));
           for (const [name, value] of writes) {
             const before = state[name][i];
@@ -216,7 +252,7 @@ const ContinuousCellular = (() => {
 
     function frame() {
       if (previous) return previous;
-      const captured = state, frameTick = tick;
+      const captured = state, frameTick = tick, pins = locked, obstacles = blocked, mask = coverage;
       let filtered;
       const buffer = name => Object.hasOwn(captured, name) ? captured[name] :
         outputs.includes(name) ? (filtered ??= filters.evaluate(captured))[name] : undefined;
@@ -239,13 +275,19 @@ const ContinuousCellular = (() => {
         } });
       }
       previous = Object.freeze({ tick: frameTick, time: frameTick * dt, bounds: box, counts, sample, source,
+        get: (x, y) => readCell(captured, names, index(x, y)),
+        isLocked: (x, y) => Boolean(pins[index(x, y)]),
+        isBlocked(x, y) { const i = index(x, y); return Boolean(obstacles[i] || !mask[i]); },
+        coverage: (x, y) => mask[index(x, y)],
         data: name => buffer(name)?.slice() });
       return previous;
     }
 
     function checkpoint() {
       return { format, version: 1, width, height, dt, boundary, bounds: { min: box.min.slice(), max: box.max.slice() },
-        channels: names.slice(), tick, mask: Array.from(coverage), state: Object.fromEntries(names.map(name => [name, Array.from(state[name])])) };
+        channels: names.slice(), tick, mask: Array.from(coverage), state: Object.fromEntries(names.map(name => [name, Array.from(state[name])])),
+        ...(locked.includes(1) && { locked: Array.from(locked) }),
+        ...(blocked.includes(1) && { blocked: Array.from(blocked) }) };
     }
 
     function restore(saved) {
@@ -258,16 +300,25 @@ const ContinuousCellular = (() => {
         Object.keys(saved.state).length === names.length && names.every(name => Object.hasOwn(saved.state, name) && sequence(saved.state[name])),
       'checkpoint is malformed or incompatible');
       const nextMask = plane(saved.mask), next = planesFrom(name => plane(saved.state[name]));
+      function flags(values) {
+        if (values === undefined) return emptyFlags;
+        check(sequence(values) && values.length === size, 'invalid checkpoint flags');
+        return Uint8Array.from(values, value => {
+          check(value === 0 || value === 1, 'invalid checkpoint flags');
+          return value;
+        });
+      }
+      const pins = flags(saved.locked), obstacles = flags(saved.blocked);
       for (const data of Object.values(next)) for (let i = 0; i < size; i++)
-        check(nextMask[i] || !data[i], 'checkpoint has activity in a masked-out cell');
-      commit(next, saved.tick, nextMask);
+        check(nextMask[i] && !obstacles[i] || !data[i], 'checkpoint has activity in a masked-out or blocked cell');
+      commit(next, saved.tick, nextMask, pins, obstacles);
       return tick;
     }
 
     return Object.freeze({ width, height, counts, bounds: box, dimensions: 2, channels: outputs, stateChannels: names,
-      dt, boundary, center, frame, step, inject, setMask, checkpoint, restore,
+      dt, boundary, center, frame, step, edit, inject, setMask, checkpoint, restore,
       get tick() { return tick; }, get revision() { return revision; },
-      reset() { available(); commit(initialState, 0, initialMask); }
+      reset() { available(); commit(initialState, 0, initialMask, emptyFlags, emptyFlags); }
     });
   }
 

@@ -99,7 +99,8 @@
       start = new Uint8Array(size).fill(initial);
     }
 
-    let cells = start.slice(), locked = new Uint8Array(size), memories = [], tick = 0, revision = 0, busy = false;
+    let cells = start.slice(), locked = new Uint8Array(size), blocked = new Uint8Array(size),
+      memories = [], tick = 0, revision = 0, busy = false;
     const available = () => check(!busy, 'cannot edit the grid during a rule or recall');
     function remember(items) {
       check(Array.isArray(items) && items.length <= 32 && items.length * size <= (1 << 20),
@@ -123,13 +124,17 @@
       check(Array.isArray(changes) && changes.length <= maxCells, 'expected a bounded edit list');
       const edits = Array.from(changes, item => {
         check(record(item) && at(item.x, item.y, item.z ?? 0) && Object.keys(item).every(key =>
-          (['x', 'y', 'state', 'locked'].includes(key) || volume && key === 'z')) && (item.state !== undefined || item.locked !== undefined) &&
-          (item.state === undefined || state(item.state)) && (item.locked === undefined || typeof item.locked === 'boolean'),
-        'each edit needs valid coordinates and a state or lock');
+          (['x', 'y', 'state', 'locked', 'blocked'].includes(key) || volume && key === 'z')) &&
+          (item.state !== undefined || item.locked !== undefined || item.blocked !== undefined) &&
+          (item.state === undefined || state(item.state)) && (item.locked === undefined || typeof item.locked === 'boolean') &&
+          (item.blocked === undefined || typeof item.blocked === 'boolean'),
+        'each edit needs valid coordinates and a state, lock or obstacle');
         return { ...item, i: index(item.x, item.y, item.z ?? 0) };
       });
       for (const change of edits) {
-        if (change.state !== undefined) cells[change.i] = change.state;
+        if (change.blocked !== undefined) blocked[change.i] = Number(change.blocked);
+        if (blocked[change.i]) cells[change.i] = 0;
+        else if (change.state !== undefined) cells[change.i] = change.state;
         if (change.locked !== undefined) locked[change.i] = Number(change.locked);
       }
       if (edits.length) revision++;
@@ -174,7 +179,7 @@
       for (let y = start; y < height + start; y += 2) for (let x = start; x < width + start; x += 2) {
         const corners = [neighborIndex(x, y, 0), neighborIndex(x + 1, y, 0),
           neighborIndex(x + 1, y + 1, 0), neighborIndex(x, y + 1, 0)];
-        if (corners.some(i => i < 0 || locked[i])) continue;
+        if (corners.some(i => i < 0 || locked[i] || blocked[i])) continue;
         const bits = corners.reduce((n, i, bit) => n | current[i] << bit, 0), value = table[bits];
         corners.forEach((i, bit) => { next[i] = value >> bit & 1; });
       }
@@ -188,7 +193,7 @@
         lookup ??= links();
         const next = current.slice(), scope = hash('glyph-grid/rule/' + tick, seed);
         for (let i = 0; i < size; i++) {
-          if (locked[i]) continue;
+          if (locked[i] || blocked[i]) continue;
           const offset = i * offsets.length, neighbors = offsets.map((_, j) => current[lookup[offset + j]] ?? 0);
           const value = update({ ...context(...coords(i)), state: current[i], tick, random: randomAt(scope, i), neighbors });
           check(state(value), 'a rule must return a valid cell state');
@@ -211,11 +216,12 @@
       return advance(steps, size * (memories.length + 1) + Math.ceil(size * fraction) * (states + memories.length),
         (current, tick) => {
           const random = K.grow.dice(hash('glyph-grid/recall/' + tick, seed));
-          const order = shuffle(Array.from({ length: size }, (_, i) => i).filter(i => !locked[i]), random);
-          const overlaps = memories.map(pattern => current.reduce((sum, value, i) => sum + Number(value === pattern.cells[i]), 0));
+          const active = Array.from({ length: size }, (_, i) => i).filter(i => !blocked[i]);
+          const order = shuffle(active.filter(i => !locked[i]), random);
+          const overlaps = memories.map(pattern => active.reduce((sum, i) => sum + Number(current[i] === pattern.cells[i]), 0));
           const scores = new Float64Array(states);
-          const count = Math.ceil(order.length * fraction), baseline = (size - 1) / states;
-          const divisor = Math.max(1, (size - 1) * memories.length);
+          const count = Math.ceil(order.length * fraction), baseline = (active.length - 1) / states;
+          const divisor = Math.max(1, (active.length - 1) * memories.length);
           for (let n = 0; n < count; n++) {
             const i = order[n], previous = current[i];
             scores.fill(0);
@@ -238,8 +244,11 @@
         });
     }
 
-    const frame = (from, to, extra = {}) => Object.freeze({ width, height, states, tick,
-      cells: cells.slice(from, to), locked: locked.slice(from, to), ...extra });
+    function frame(from, to, extra = {}) {
+      const obstacles = blocked.subarray(from, to);
+      return Object.freeze({ width, height, states, tick, cells: cells.slice(from, to), locked: locked.slice(from, to),
+        ...(obstacles.includes(1) && { blocked: obstacles.slice() }), ...extra });
+    }
     return Object.freeze({
       width, height, depth, lattice, states, edit, learn, step, back, recall,
       get tick() { return tick; },
@@ -263,8 +272,11 @@
           (snapshot.lattice ?? 'square') === lattice && (snapshot.depth ?? 1) === depth &&
           integer(snapshot.tick, 0, Number.MAX_SAFE_INTEGER), 'snapshot is incompatible');
         const next = packed(snapshot.cells, size, states), pins = packed(snapshot.locked, size, 2);
+        const obstacles = snapshot.blocked === undefined ? new Uint8Array(size) : packed(snapshot.blocked, size, 2);
+        check(next.every((value, i) => !obstacles[i] || value === 0), 'snapshot has state in a blocked cell');
         cells = next;
         locked = pins;
+        blocked = obstacles;
         tick = snapshot.tick;
         revision++;
       },
@@ -272,6 +284,7 @@
         available();
         cells = start.slice();
         locked = new Uint8Array(size);
+        blocked = new Uint8Array(size);
         tick = 0;
         revision++;
       }
