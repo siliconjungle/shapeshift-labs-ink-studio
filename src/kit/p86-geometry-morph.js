@@ -55,7 +55,7 @@ const SplatGeometryMorph = (() => {
       ]);
     }
 
-    const tracks = points.map(raw => {
+    const tracks = Array.from(points, raw => {
       const key = named(raw?.id), member = pair(raw.from, raw.to);
       const path = track({ position: member.start }, { position: member.end }, raw.keys ?? [], false);
       return { key, path, pairs: [member] };
@@ -64,7 +64,7 @@ const SplatGeometryMorph = (() => {
       const key = named(raw?.id), from = pose(raw.from), to = pose(raw.to);
       check(Array.isArray(raw.pairs) && raw.pairs.length, 'a feature needs at least one explicit pair');
       const sourceInverse = M.tr(Q.toMatrix(from.rotation)), targetRotation = Q.toMatrix(to.rotation);
-      const pairs = raw.pairs.map(link => {
+      const pairs = Array.from(raw.pairs, link => {
         check(Array.isArray(link) && link.length === 2, 'a feature pair needs a source and target ID');
         const member = pair(...link);
         const local = M.app(sourceInverse, V.sub(member.start, from.position));

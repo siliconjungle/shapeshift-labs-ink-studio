@@ -127,6 +127,9 @@ test('invalid pairs and impossible feature poses fail before hiding a target', (
   geometry.features[0].pairs.push([2,4]);
   assert.throws(()=>K.morph(B,stage,from,to,options),/unused points/);
   geometry.features[0].pairs.pop();
+  geometry.features[0].pairs.length++;
+  assert.throws(()=>K.morph(B,stage,from,to,options),/source and target ID/);
+  geometry.features[0].pairs.pop();
   geometry.features[0].to.position[0]+=1;
   assert.throws(()=>K.morph(B,stage,from,to,options),/rigid pose tolerance/);
   assert.deepEqual(world.data,original);
