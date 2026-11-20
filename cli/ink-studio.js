@@ -821,6 +821,16 @@ function buildPreview(id = pos[0]) {
 const previewPasses = () => require('./look-preview.js').preview(opt);
 const reviewSidecars = diagnostics => [...(diagnostics?.suffixes ?? []), ...(opt.text ? ['.txt'] : [])];
 const textSidecar = file => file.replace(/\.(?:a?png)$/i, '') + '.txt';
+function sequenceHistory() {
+  const K = lib().KIT;
+  return {
+    artHistory: require('../src/art-effects.js').history({ frames: 24 }),
+    afterimageHistory: K.afterimages.history(),
+    renderHistory: K.renderGraph.history(),
+    volumeHistory: K.atmosphere.history(),
+    transparencyHistory: K.stableTransparency.history()
+  };
+}
 function feedbackReplay(world, start, frame) {
   const api = lib().KIT.renderGraph;
   const graph = frame.renderGraph ?? world.look?.renderGraph;
@@ -984,6 +994,7 @@ const CMD = {
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
         '  passes <id> [--channels coverage,depth,normal,objectId,materialId,emission]  save art-pixel render pass previews',
+        '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--out directory]   export aligned RGBA, depth, normals, IDs and material mattes',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -1740,6 +1751,21 @@ const CMD = {
     require('./pass-preview.js').writePasses(directory, im, opt.px1 ? 1 : im.px);
     console.log('wrote', directory);
   },
+  'export-layers'() {
+    if (pos.length !== 1 || opt.out === true)
+      die('Use export-layers <scene> [--t seconds,... | --from seconds --to seconds --n count] [--out directory]');
+    if (opt.t !== undefined && (typeof opt.t !== 'string' || opt.t.split(',').some(time => !time.trim())))
+      die('--t needs one or more comma-separated times');
+    if (['from', 'to', 'n'].some(key => opt[key] === true) || !Number.isSafeInteger(num('n', 1)) || num('n', 1) < 1)
+      die('Layered exports need numeric range endpoints and a positive frame count');
+    const world = buildPreview(), ts = ['t', 'from', 'to', 'n'].some(key => opt[key] !== undefined) ? times() : [0];
+    const frame = view(ts.length > 1 ? sequenceHistory() : {});
+    const out = opt.out ?? path.join(OUT, world.id + '-layers');
+    const { file, manifest } = require('./export-layers.js').exportLayers(world, {
+      out, view: frame, times: ts, native: !!opt.px1, pose, replay: feedbackReplay(world, ts[0], frame)
+    });
+    console.log('wrote', file, manifest.frames.length, 'frame(s)');
+  },
   /* the ramps a diorama is shaded on, most used first, and what kind each is: one hue darker and lighter, or turning as it darkens.
      For a one-hue ramp a turning one made from the same palette is offered (the diorama is not changed). */
   ramps() {
@@ -1860,16 +1886,11 @@ const CMD = {
     if (!opt.quiet) save(w.id + '-values.png', R.grid([R.upscale(im, im.px), R.upscale(out, im.px)], 2));
   },
   sheet() {
-    const artHistory = require('../src/art-effects.js').history({ frames: 24 });
-    const afterimageHistory = lib().KIT.afterimages.history();
-    const renderHistory = lib().KIT.renderGraph.history();
-    const volumeHistory = lib().KIT.atmosphere.history();
-    const transparencyHistory = lib().KIT.stableTransparency.history();
     const w = buildPreview(), diagnostics = previewPasses(),
       ts = times(),
       cols = num('cols', Math.min(4, ts.length)),
       imgs = [];
-    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+    const frame = { ...sequenceHistory(),
       w: num('w', 600), h: num('h', 420), ...diagnostics?.settings };
     const replay = feedbackReplay(w, Math.min(...ts), view(frame));
     function draw(t, resetRenderHistory) {
@@ -2048,11 +2069,6 @@ const CMD = {
     save(w.id + '-turn.png', R.grid(imgs, num('cols', 4), labs));
   },
   clip() {
-    const artHistory = require('../src/art-effects.js').history({ frames: 24 });
-    const afterimageHistory = lib().KIT.afterimages.history();
-    const renderHistory = lib().KIT.renderGraph.history();
-    const volumeHistory = lib().KIT.atmosphere.history();
-    const transparencyHistory = lib().KIT.stableTransparency.history();
     const w = buildPreview(), diagnostics = previewPasses(),
       fps = num('fps', 12),
       from = num('from', 0),
@@ -2063,7 +2079,7 @@ const CMD = {
       f = outputFile(w.id+'-clip.png');
     const suffixes = reviewSidecars(diagnostics);
     shot?.destination(f,suffixes);
-    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+    const frame = { ...sequenceHistory(),
       w: num('w', 600), h: num('h', 420) };
     const replay = feedbackReplay(w, from, view(frame));
     function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1)))) {

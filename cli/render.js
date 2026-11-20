@@ -2668,4 +2668,4 @@ function grid(imgs, cols, labels) {
   });
   return out;
 }
-module.exports = { render, upscale, grid, label, viewMatrix, FOV };
+module.exports = { render, upscale, grid, label, viewMatrix, FOV, cameraCapture };
