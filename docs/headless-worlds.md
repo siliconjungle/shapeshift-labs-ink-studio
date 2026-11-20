@@ -156,6 +156,11 @@ units, and query status. Each setting also reports the available count
 and numeric minimum, maximum, and mean at each scheduled tick. Missing
 samples keep their query status, and mixed units suppress numeric summaries.
 
+Add `visual` to the plan to publish still and synchronized clip contact
+sheets from the same runs. The sweep report links the images to their
+seed and settings. Pin a tile to replay it or sweep nearby values.
+[Visual parameter sweeps](visual-sweeps.md)
+
 `--assert checks.json` accepts an array of field checks with `field`, optional
 `at`, optional `args`, optional expected `status` (default `ok`), and a
 `when` condition. Use `tick` to check one earlier frame or `byTick` to allow

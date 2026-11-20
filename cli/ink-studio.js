@@ -168,7 +168,7 @@ function scene(id) {
 }
 const paintDirectory = id => path.resolve(CWD, opt.dir || path.join(cfg.paint || 'studio/paint', id));
 const readPaint = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-function build(id, seedOverride, { paint = true, parameterInputs } = {}) {
+function build(id, seedOverride, { paint = true, parameterInputs, controls: suppliedControls } = {}) {
   if (opt.focus) {
     const f = list('focus'); // uneven detail: x,y,z then near, far, coarse
     globalThis.INK_FOCUS = { p: [f[0] || 0, f[1] || 0, f[2] || 0], near: f[3], far: f[4], coarse: f[5] };
@@ -196,7 +196,7 @@ function build(id, seedOverride, { paint = true, parameterInputs } = {}) {
   globalThis.INK_DECAL_NEXT = savedPaint?.layers !== undefined || Array.isArray(savedPaint) ?
     savedPaint : savedPaint?.decals ?? null;
   const t0 = Date.now();
-  const controls = opt.params ? JSON.parse(String(opt.params)) : undefined;
+  const controls = suppliedControls ?? (opt.params ? JSON.parse(String(opt.params)) : undefined);
   const snapshot = opt.authoring ? JSON.parse(fs.readFileSync(path.resolve(opt.authoring), 'utf8')) : undefined;
   const seed = seedOverride ?? (opt.seed === undefined ? snapshot?.seed ?? s.seed : +opt.seed);
   shot?.seed(seed);
@@ -870,7 +870,7 @@ function die(m) {
   console.error(m);
   process.exit(1);
 }
-const worldCLI = () => require('./world.js')({kit:lib(),build,pose,dataScene,opt,renderOptions:view,inkOption,atmosphereEmittersOption,depthBandsOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,
+const worldCLI = () => require('./world.js')({kit:lib(),build,pose,dataScene,opt,renderOptions:view,sequenceHistory,inkOption,atmosphereEmittersOption,depthBandsOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,
   weatherTracksOption:() => onOffOption('weather-tracks'),skyOptions,cameraOptions,compositeOption,shot,shotReplay,shotRender});
 const worldCommands = new Set(['inspect','probe','trace','field','data-inputs','scene','sim']);
 const CMD = {
@@ -996,6 +996,10 @@ const CMD = {
         '    layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
+        '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
+        '  sweep pin <report-or-directory> <run-id-or-tile> --out pin.json   save one exact case',
+        '  sweep replay <pin.json> --out directory   render the saved case',
+        '  sweep nearby <pin.json> <offsets.json> --out directory   vary numeric settings around the saved case',
         '  variants <id> --seeds 3,7,12 [--group silhouette|openness|wear --motion]  render a ranked seed contact sheet',
         '  atlas <id> [--directions 8 --pitches 0,0.7 --w 96 --h 96 --fps 12 --maps depth,normal,emission,silhouette]  export a transparent sprite atlas',
         '  camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96   export-sized frames and framing checks',
@@ -1778,6 +1782,60 @@ const CMD = {
     const output = save(w.id + '.png', R.upscale(im, opt.px1 ? 1 : im.px));
     diagnostics?.write(output, { times: [t] });
     shot?.finish(output,{suffixes});
+  },
+  sweep() {
+    const sweeps = require('./visual-sweep.js');
+    const directory = sweeps.outputPath(opt);
+    if (pos[0] === 'pin') {
+      if (pos.length !== 3) die('Use sweep pin <report-or-directory> <run-id-or-tile> --out pin.json');
+      const input = path.resolve(pos[1]);
+      const report = fs.statSync(input).isDirectory() ? path.join(input, 'report.json') : input;
+      if (report === directory) die('Choose a separate filename for the pin');
+      require('./asset-files.js').json(directory, sweeps.pin(sweeps.read(report),pos[2]));
+      console.log('wrote', directory);
+      return;
+    }
+    let source, plan, anchor;
+    if (pos[0] === 'replay' || pos[0] === 'nearby') {
+      if (pos.length !== (pos[0] === 'replay' ? 2 : 3))
+        die('Use sweep replay <pin.json> or sweep nearby <pin.json> <offsets.json> with --out');
+      const pin = sweeps.loadPin(pos[1], pos[2]);
+      ({ source, plan } = pin.recipe);
+      anchor = pin.anchor;
+      if (pin.recipe.mode === 'sim') {
+        const result = worldCLI().visualSweep(source, plan, directory, pin.recipe.runtime, anchor);
+        console.log('wrote', result.report, '(' + result.cases + ' cases)');
+        return;
+      }
+    } else {
+      if (pos.length !== 2) die('Use sweep <scene> <plan.json> --out directory');
+      source = sweeps.sourcePath(pos[0]);
+      plan = sweeps.read(pos[1]);
+    }
+    const result = sweeps.runScene({ kit: lib().KIT, source, plan, directory, anchor, loadScene: scene,
+      renderCase(id, { seed, controls }, settings) {
+        const { width: w, height: h, pixelSize: px, at, times } = settings;
+        const assemble = () => build(id, seed, { controls });
+        const frames = new Map();
+        if (times.length) {
+          const world = assemble(), options = view({ w, h, px, ...sequenceHistory(), transparent: false });
+          const replay = feedbackReplay(world, times[0], options);
+          function draw(t, resetRenderHistory) {
+            pose(world, t);
+            return R.render(world, { ...options, t, resetRenderHistory });
+          }
+          for (const t of times)
+            frames.set(t, R.upscale(replay ? replay.sample(t, draw) : draw(t), px));
+        }
+        if (!frames.has(at)) {
+          const world = assemble();
+          pose(world, at);
+          frames.set(at, R.upscale(R.render(world, view({ w, h, px, t: at, transparent: false })), px));
+        }
+        return frames;
+      }
+    });
+    console.log('wrote', result.report, '(' + result.cases + ' cases)');
   },
   variants() {
     const seeds = list('seeds', [3, 7, 12, 19, 22, 27]), group = opt.group || 'silhouette';

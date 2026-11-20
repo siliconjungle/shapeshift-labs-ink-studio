@@ -38,7 +38,7 @@ function target(opt) {
   return {};
 }
 
-module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,inkOption,atmosphereEmittersOption,depthBandsOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,weatherTracksOption,skyOptions,cameraOptions,compositeOption,shot,shotReplay,shotRender}) {
+module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,sequenceHistory,inkOption,atmosphereEmittersOption,depthBandsOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,weatherTracksOption,skyOptions,cameraOptions,compositeOption,shot,shotReplay,shotRender}) {
   const W = kit.KIT.world, R = W.runtime;
   let workerPool;
   const args = () => opt.args ? parse(opt.args) : {};
@@ -164,6 +164,26 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
   function environmentSnapshot(file) {
     const input=load(file);
     return input.world ? visualSnapshot(input) : null;
+  }
+  function visualSweep(file, plan, directory, overrides = {}, anchor, loaded) {
+    const input = loaded ?? load(file);
+    ensure(input.world, 'A simulation sweep needs a world, checkpoint or recording');
+    const current = sourceWorld(input);
+    const world = input.checkpoint ?? { ...current, ...overrides };
+    let previous, history;
+    const render = require('./render.js');
+    return require('./visual-sweep.js').runSimulation({
+      kit: kit.KIT, source: file, plan, directory, input: world, workerPool, runtime: overrides, anchor,
+      renderFrame(snapshot, query, { width: w, height: h, pixelSize: px, times }, id, tick, t) {
+        if (previous !== id) {
+          previous = id;
+          history = times.length ? sequenceHistory() : undefined;
+        }
+        const world = W.visual(kit, snapshot, query);
+        const temporal = times.includes(tick) ? history : undefined;
+        return render.upscale(render.render(world, { ...temporal, w, h, px, t, transparent: false }), px);
+      }
+    });
   }
   function lookSnapshot(file) {
     const input = load(file, { lookPreview: true });
@@ -510,6 +530,21 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       }
       case 'sweep': {
         const spec=read(other);
+        if (W.data.record(spec) && spec.visual !== undefined) {
+          const sweeps = require('./visual-sweep.js');
+          const directory = sweeps.outputPath(opt, ['workers', 'seed', 'dt', 'actions']);
+          const source = path.resolve(file), input = load(source);
+          const actions = opt.actions === undefined ? [] : read(opt.actions);
+          ensure(Array.isArray(actions) && Array.isArray(spec.actions ?? []), 'Sweep actions need a command list');
+          const recipe = { ...spec, actions: [...actions, ...(spec.actions ?? [])] };
+          const overrides = {
+            ...(opt.dt !== undefined && { dt: Number(opt.dt) }),
+            ...(opt.seed !== undefined && { seed: Number(opt.seed) })
+          };
+          const result = visualSweep(source, recipe, directory, overrides, undefined, input);
+          console.log('wrote', result.report, '(' + result.cases + ' cases)');
+          return;
+        }
         if (W.data.record(spec)) {
           ensure(opt.ticks===undefined&&opt.steps===undefined&&opt.t===undefined,
             'The observation plan sets the sweep sample ticks');
@@ -820,5 +855,5 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     respond({valid:true,format:raw.format});
     return true;
   }
-  return {execute,validate,inspectLook,lookSnapshot,environmentSnapshot,inspectTimeline,inspectCameraRig};
+  return {execute,validate,inspectLook,lookSnapshot,environmentSnapshot,inspectTimeline,inspectCameraRig,visualSweep};
 };

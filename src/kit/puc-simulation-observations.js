@@ -49,30 +49,32 @@
     return {observations,slots,reader};
   }
 
-  function prepare(input) {
-    check(shape(input,['ticks','observations','seeds','parameters','cases','actions']),'Invalid observation sweep plan');
-    const spec=copy(input), {observations,slots,reader}=measurements(spec);
-    const {seeds,parameters:bindings={},cases=[{id:'base'}],actions=[]}=spec;
+  function matrix(input,{scene=false,limit=maxRuns}={}) {
+    const {seeds,parameters:bindings={},cases=[{id:'base'}]}=copy(input);
+    check(Number.isSafeInteger(limit)&&limit>0&&limit<=maxRuns,'Invalid sweep run limit');
     check(seeds===undefined||Array.isArray(seeds)&&seeds.length>0&&seeds.length<=maxRuns&&
       seeds.every(Number.isSafeInteger)&&new Set(seeds).size===seeds.length,'Sweep seeds need distinct safe integers');
-    check(Array.isArray(actions),'Sweep actions need a command list');
 
     check(record(bindings)&&Object.keys(bindings).length<=16,'Invalid sweep parameter bindings');
     const parameters=Object.entries(bindings).map(([name,item])=>{
-      check(id(name)&&shape(item,['path','port','tick','values'])&&
-        (item.path===undefined)!==(item.port===undefined)&&
-        Array.isArray(item.values)&&item.values.length>0&&item.values.length<=maxRuns&&
-        (item.tick===undefined||item.port!==undefined&&tickOK(item.tick)&&item.tick>0),'Invalid sweep parameter '+name);
+      const binding=scene?shape(item,['path','values']):
+        shape(item,['path','port','tick','values'])&&(item.path===undefined)!==(item.port===undefined)&&
+        (item.tick===undefined||item.port!==undefined&&tickOK(item.tick)&&item.tick>0);
+      check(id(name)&&binding&&Array.isArray(item.values)&&item.values.length>0&&item.values.length<=maxRuns,
+        'Invalid sweep parameter '+name);
       if(item.port!==undefined)endpoint(item.port);
-      return {name,...item,...(item.path!==undefined&&{path:selector(item.path).map(String)})};
+      const path=item.path===undefined&&scene?[name]:item.path;
+      return {name,...item,...(path!==undefined&&{path:selector(path).map(String)})};
     });
     check(new Set(parameters.map(item=>item.port??JSON.stringify(item.path))).size===parameters.length,
       'Sweep parameters need distinct paths or ports');
+    const caseShape=scene?['id','controls']:['id','edits','actions'];
     check(Array.isArray(cases)&&cases.length>0&&cases.length<=maxRuns&&cases.every(row=>
-      shape(row,['id','edits','actions'])&&id(row.id)&&Array.isArray(row.edits??[])&&Array.isArray(row.actions??[]))&&
-      new Set(cases.map(row=>row.id)).size===cases.length,'Sweep cases need distinct IDs and optional edits and actions');
+      shape(row,caseShape)&&id(row.id)&&(scene?record(row.controls??{}):
+        Array.isArray(row.edits??[])&&Array.isArray(row.actions??[])))&&
+      new Set(cases.map(row=>row.id)).size===cases.length,'Sweep cases need distinct IDs and valid case settings');
     const runCount=parameters.reduce((n,item)=>n*item.values.length,cases.length*(seeds?.length??1));
-    check(runCount<=maxRuns&&runCount*slots.length<=maxSamples,'Observation sweep exceeds the run or sample budget');
+    check(runCount<=limit,'Sweep exceeds the run budget');
 
     let combinations=[[]];
     for(const parameter of parameters)combinations=combinations.flatMap(items=>parameter.values.map(value=>
@@ -81,10 +83,22 @@
       id:parameters.length?row.id+':'+(index+1):row.id, case:row.id,
       parameters:Object.fromEntries(entries.map(({name,value})=>[name,value])),
       edits:[...(row.edits??[]),...entries.filter(entry=>entry.path).map(({path,value})=>({op:'set',path,value}))],
-      actions:row.actions??[], ports:entries.filter(entry=>entry.port!==undefined)
+      actions:row.actions??[], ports:entries.filter(entry=>entry.port!==undefined),
+      ...(scene&&{controls:row.controls??{}})
     })));
+    return {seeds,groups,runCount};
+  }
+
+  function prepare(input,{visual=false,limit=maxRuns}={}) {
+    check(shape(input,['ticks','observations','seeds','parameters','cases','actions']),'Invalid observation sweep plan');
+    const spec=copy(input), {actions=[]}=spec;
+    const {observations,slots,reader}=visual&&spec.observations===undefined
+      ? {observations:[],slots:[],reader:null}:measurements(spec);
+    check(Array.isArray(actions),'Sweep actions need a command list');
+    const {seeds,groups,runCount}=matrix(spec,{limit});
+    check(runCount*slots.length<=maxSamples,'Observation sweep exceeds the sample budget');
     const definitions=freeze(observations);
-    return Object.freeze({observations:definitions,run(source,options){
+    return Object.freeze({observations:definitions,runCount,run(source,options){
       return execute(source,{seeds,actions,slots,groups,observations:definitions,reader},options);
     }});
   }
@@ -114,13 +128,24 @@
     });
   }
 
-  function execute(source,plan,{runtime={},actions=[]}={}) {
-    check(record(runtime)&&Array.isArray(actions),'Invalid observation runtime or actions');
+  function execute(source,plan,{runtime={},actions=[],capture}={}) {
+    check(record(runtime)&&Array.isArray(actions)&&
+      (capture===undefined||typeof capture?.frame==='function'),'Invalid observation runtime, actions or frames');
+    const captureTicks=new Set(capture===undefined?[]:schedule(capture.ticks));
+    const slots=new Map();
+    for(const slot of plan.slots){
+      if(!slots.has(slot.tick))slots.set(slot.tick,[]);
+      slots.get(slot.tick).push(slot);
+    }
+    const ticks=[...new Set([...slots.keys(),...captureTicks])].sort((a,b)=>a-b);
+    check(ticks.length,'A sweep needs observations or captured frames');
+    check(plan.groups.length*(plan.seeds?.length??1)*(plan.slots.length+captureTicks.size)<=maxSamples,
+      'Sweep exceeds the combined observation and capture budget');
     const checkpoint=source?.format===R.runFormat?source.end:source?.format===R.checkpointFormat?source:undefined;
     check(source?.format!==R.runFormat||source.version===1&&checkpoint?.format===R.checkpointFormat,
       'Invalid recording endpoint for observation sweep');
     const world=checkpoint?.world??W.manifest(source), fromTick=checkpoint?.tick??0;
-    check(plan.slots[0].tick>=fromTick,'Observation tick precedes the starting checkpoint');
+    check(ticks[0]>=fromTick,'Observation tick precedes the starting checkpoint');
     if(checkpoint)check(plan.groups.every(row=>!row.edits.length)&&
       (plan.seeds===undefined||plan.seeds.length===1&&plan.seeds[0]===world.seed),
     'Checkpoint observations can vary scheduled inputs and actions only');
@@ -136,14 +161,17 @@
             ({tick:tick??fromTick+1,action:'world/input',args:{port,value}}))]);
           const measurements=[], {dt}=run.view().world;
           let currentTick=fromTick, query=run.query();
-          const readObservation=plan.reader(query);
-          for(const {tick,observation} of plan.slots){
+          const readObservation=plan.reader?.(query);
+          for(const tick of ticks){
             if(currentTick!==tick){
               run.advance(tick);
               query=run.query();
               currentTick=tick;
             }
-            measurements.push(readObservation(query,{tick,observation},dt));
+            for(const slot of slots.get(tick)??[])measurements.push(readObservation(query,slot,dt));
+            if(captureTicks.has(tick))capture.frame(run.view(),query,{
+              id,case:group.case,parameters:copy(group.parameters),seed,tick,dt
+            });
           }
           const result={id,group:group.id,seed,fromTick,toTick:currentTick,dt,samples:measurements};
           runs.push(result);
@@ -156,5 +184,5 @@
     return freeze({format,version:1,world:world.id,observations:plan.observations,runs,groups});
   }
 
-  W.observations=Object.freeze({format,prepare,measurements,run:(source,spec,options)=>prepare(spec).run(source,options)});
+  W.observations=Object.freeze({format,prepare,measurements,matrix,schedule,run:(source,spec,options)=>prepare(spec).run(source,options)});
 })(KIT);
