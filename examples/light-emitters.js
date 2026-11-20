@@ -60,7 +60,7 @@ function prismCourt(kit) {
     const loops = K.typography.outline(letters.font, glyph.char).map(l => l.map(p => p.map(n => n * glyph.scale)));
     S.extrude(loops, [glyph.x, 1.12, -0.2], 0.35, ivory, { res: 0.04 });
   }
-  for (const x of [-1.85, 1.85]) {
+  for (const x of [-2.35, 2.35]) {
     S.box([x, 0.35, 0.6], [0.34, 0.3, 0.34], stone, { res: 0.09, rd: 0.04 });
     S.lathe([x, 0.65, 0.6], 1.3, [0.2, 0.12], ivory, { res: 0.065 });
     S.ball([x, 2.1, 0.6], [0.36, 0.36, 0.36], ivory, { res: 0.055 });
@@ -116,16 +116,16 @@ function prismCourt(kit) {
       pixelsPerEm: 8,
       color
     });
-  label('01 / COLORED PANEL', [-3.5, 0.35, -1.8], 0.18);
-  label('02 / DISC EMITTER', [3.5, 0.65, -1.8], 0.18);
-  label('THE PRISM COURT', [0, 0.16, 3.58], 0.22, palette[8]);
+  label('01 / PANEL', [-3, 0.28, 3.15], 0.16);
+  label('02 / DISC', [3, 0.28, 3.15], 0.16);
+  label('THE PRISM COURT', [0, -0.27, 3.58], 0.22, palette[8]);
   label('LINE / 7.5m', [0, 3.7, -0.04], 0.16, palette[8]);
   const corner = atlas.reserve(32, 32, (x, y) =>
     x === 0 || y === 0 || x === 31 || y === 31 ? palette[11] : (x + y) % 11 === 0 ? palette[2] : palette[1]
   );
   atlas.faceRegion([-0.82, 0.59, 0.3], [1.64, 0, 0], [0, 0, -1.64], corner);
   const world = B.finish({ spriteSurfaces: atlas.finish() });
-  world.cam = { target: [0, 1.65, 0], dist: 14.6, yaw: 0.23, pitch: 0.23, focalLength: 34 };
+  world.cam = { target: [0, 1.65, 0], dist: 15.1, yaw: 0.23, pitch: 0.23, focalLength: 34 };
   world.radius = 20;
   world.look = { pixelSize: 2, clean: 1 };
   world.fog = { c: 0, start: 1, max: 0 };
