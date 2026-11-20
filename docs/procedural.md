@@ -138,6 +138,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `attractors.trace(options)` | [Lorenz, Rössler, Clifford, and de Jong orbits](orbit-attractors.md) as time-sampled paths, speeds, and bounded visit density |
 | `ifs.compile(recipe)`, `ifs.preset(name)` | Seeded [iterated function systems and fractal flames](iterated-function-systems.md) for packed points and colored density grids |
 | `complexPlane.compile(options)` | [Mandelbrot, Julia, and Newton fields](complex-plane-fields.md) with independent escape, basin, orbit-trap, and domain coloring outputs |
+| `fields.spectral` | [Spectral and standing-wave fields](spectral-fields.md) with Fourier terms, membrane modes, nodal paths, and PCM analysis |
 | `fields.simplex(options)`, `fields.periodic(options)`, `fields.compile(expression, options)` | Seeded analytic noise and serializable field composition for SDFs, materials and placement |
 | `grammar.expand(scope, rules, options)`, `grammar.children(layout)` | Bounded shape grammar with named partitions, fitted repeats, pinned spans, sockets and retained child specs |
 | `grammar.rewriteGrid(rows, rules)`, `grammar.rewriteGraph(graph, rules)` | Seeded weighted pattern replacement on scalar grids and directed graphs |
