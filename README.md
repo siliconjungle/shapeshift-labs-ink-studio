@@ -310,6 +310,8 @@ Synchronize records, filters, and time across charts, maps, tables, and WebGL sc
 
 Render scalar slices, contours, and isosurfaces alongside vector streamlines and glyphs. [Field and volume visualization](docs/field-visualization.md)
 
+Accumulate moving deposits on surface charts or in world volumes, then render their decay and diffusion as color, contours, and splats. [Persistent spatial fields](docs/persistent-spatial-fields.md)
+
 Move section planes, depth ranges, and spatial masks across a native render. [Interactive cutaways and clipping](docs/cutaways.md)
 
 Compare synchronized scenes with side-by-side playback, a swipe divider, and signed overlays. [Comparison views](docs/comparison-views.md)

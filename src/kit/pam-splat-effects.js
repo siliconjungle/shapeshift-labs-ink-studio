@@ -139,6 +139,15 @@
     });
   }
 
+  function prepareField(value) {
+    if (typeof value?.frame === 'function') return value;
+    if (value?.type === 'deposition') {
+      const { type, ...settings } = value;
+      return K.deposition.create(settings);
+    }
+    return field(value);
+  }
+
   function context({ fields = {}, shaders = {}, query } = {}) {
     if (!record(fields) || !record(shaders) || Object.keys(fields).length > 24 ||
         !Object.values(shaders).every(shader => typeof shader === 'function') ||
@@ -146,7 +155,7 @@
       throw new TypeError('Surface effects need named fields and shader functions');
     return {
       fields: Object.fromEntries(Object.entries(fields).map(([name, value]) =>
-        [name, typeof value?.frame === 'function' ? value : field(value)])),
+        [name, prepareField(value)])),
       shaders,
       ...(query && { query })
     };
