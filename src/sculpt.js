@@ -1776,7 +1776,8 @@ function makeSculpt(B, rest) {
     const original = solid.res;
     solid.res = spacing;
     try {
-      solid.sample(visit);
+      if (S.sampleCandidates) S.sampleCandidates(solid, spacing, callback => solid.sample(callback), visit);
+      else solid.sample(visit);
     } finally {
       solid.res = original;
     }

@@ -18,7 +18,7 @@ for (const stroke of lettering.strokes) {
 
 ## Definitions
 
-All angles are radians. All families accept `origin` (default `[0,0,0]`), `axis` (default `[0,1,0]`), optional in-plane `right`, positive uniform `scale` (default `1`) and integer `segments`. Local coordinates map to right, `cross(axis,right)`, and axis. Planar curves lie in XZ by default; use `axis: [0,0,1]` for XY. The new families use this explicit frame; older positional curve constructors retain their existing orientation.
+All angles are radians. All families accept `origin` (default `[0,0,0]`), `axis` (default `[0,1,0]`), optional in-plane `right`, positive uniform `scale` (default `1`). The parametric families below also accept integer `segments`. Local coordinates map to right, `cross(axis,right)`, and axis. Planar curves lie in XZ by default; use `axis: [0,0,1]` for XY. The new families use this explicit frame; older positional curve constructors retain their existing orientation.
 
 | `type` / point-array helper | Options and defaults | Closure |
 | --- | --- | --- |
@@ -35,6 +35,8 @@ All angles are radians. All families accept `origin` (default `[0,0,0]`), `axis`
 | `flower` | `petals:7`, `radius:1.5`, `depth:.38`, `height:.22`, `phase:0` | Closed |
 
 `K.curve.flower(options)` and the other named helpers return ordinary point arrays for existing `K.sweep`, `K.curve.place`, resampling, or other point consumers. `K.curve.create({type,...})` returns the compiled path. Typed numeric vectors are accepted. A closed array repeats its first point exactly at its end.
+
+Koch, dragon, Hilbert, and Peano use the same frame and path interface with a `generation` control. [Recursive curves and unfolding](recursive-curves.md) describes edge addresses and interpolated generations.
 
 Clothoids integrate `heading(s) = heading0 + curvature0*s + rate*s²/2` using original five-point Gauss–Legendre quadrature with bounded phase subdivisions. No Fresnel package or external data is needed. Sections inherit the preceding endpoint, heading and curvature; `curvature` is the section's ending curvature. Sections replace `length` and `endCurvature`. This joins straight, transition and constant-curvature track pieces without a mathematical curvature jump:
 

@@ -1,10 +1,12 @@
 /* Camera-independent sky profiles and their directional radiance sampler. */
 const SkyEnvironment = (() => {
-  let color;
+  let color, paletteFields;
   try {
     color = ColorSpace;
+    paletteFields = PaletteFields;
   } catch {
     color = require('./color-space.js');
+    paletteFields = require('./palette-fields.js');
   }
   const decode = color.prepare('srgb', 'srgb-linear'), encode = color.prepare('srgb-linear', 'srgb');
   const TAU = Math.PI * 2, transitionLimit = 2048;
@@ -176,10 +178,24 @@ const SkyEnvironment = (() => {
       const size = vector(raw.size, 2, 'Layer size');
       return size.map(n => bounded(n, 1e-5, limit, 'Layer size'));
     }
+    function skyRamp(value) {
+      if (value === undefined || value === false) return;
+      if (Object.keys(record(value, 'Sky palette ramp')).some(key => !['ramp','axis','domain','strength','gain'].includes(key)))
+        throw new TypeError('Sky palette ramps need ramp, axis, domain, strength and gain controls');
+      const { ramp, axis = 'elevation', strength = 1, gain } = value;
+      if (axis !== 'elevation' && axis !== 'azimuth') throw new RangeError('Sky ramp axis must be elevation or azimuth');
+      const limit = axis === 'elevation' ? Math.PI/2 : TAU;
+      const [start, end] = vector(value.domain ?? [0,limit], 2, 'Sky ramp domain');
+      bounded(start, axis === 'elevation' ? 0 : -1e6, axis === 'elevation' ? limit : 1e6, 'Sky ramp start');
+      if (end <= start || (axis === 'elevation' ? end > limit : end > start + limit))
+        throw new RangeError('Sky ramp domain must increase within one ' + axis + ' range');
+      return { sample: paletteFields.ramp(ramp).sample, axis, start, span: end-start,
+        strength: bounded(strength, 0, 1, 'Sky ramp strength'), gain: gainBinding(gain) };
+    }
     let backdrop = null;
     if (sky !== false) {
-      const { orthoFov = base.orthoFov, splats = [] } = record(sky, 'Sky');
-      backdrop = { orthoFov: bounded(orthoFov, 1, 160, 'Orthographic sky FOV'),
+      const { orthoFov = base.orthoFov, splats = [], paletteRamp } = record(sky, 'Sky');
+      backdrop = { orthoFov: bounded(orthoFov, 1, 160, 'Orthographic sky FOV'), paletteRamp: skyRamp(paletteRamp),
         splats: list(splats, 4096, 'Angular splats').map(raw => {
           record(raw, 'Angular splat');
           const [az, el] = vector(raw.at, 2, 'Splat azimuth and elevation');
@@ -324,12 +340,15 @@ const SkyEnvironment = (() => {
       const overcast = p.overcast ?? 0, veil = p.overcastColor ?? rgb('#788897');
       const sunStrength = (p.sunStrength ?? base.sunStrength) * (1 - overcast);
       const backdropColor = (key, weight) => (p[key] ?? rgb(base[key])).map((c, i) => mix(c, veil[i], overcast * weight));
+      const ramp = backdrop?.paletteRamp;
+      const rampStrength = ramp && clamp(ramp.strength * (ramp.gain === undefined ? 1 : p[ramp.gain] ?? 0) * (1-overcast));
       const sky = backdrop && {
         orthoFov: backdrop.orthoFov * Math.PI / 180, sun,
         zenith: backdropColor('zenith', .82), horizon: backdropColor('horizon', .68), ground: backdropColor('ground', .35),
         sunColor: p.sunColor ?? rgb(base.sunColor), sunStrength,
         sunEdge: Math.cos(p.sunSize ?? base.sunSize), sunCore: Math.cos(.86 * (p.sunSize ?? base.sunSize)),
-        splats: backdrop.splats.map(style).filter(layer => layer.opacity > 0)
+        splats: backdrop.splats.map(style).filter(layer => layer.opacity > 0),
+        ...(rampStrength > 0 && { paletteRamp: { ...ramp, strength: rampStrength } })
       };
       return { parameters: p, sky };
     }
@@ -382,7 +401,16 @@ const SkyEnvironment = (() => {
     const disk = diskVisible && !sky.celestial?.replacesSun && height >= 0 ? .92 * clamp((angle - sky.sunEdge) / (sky.sunCore - sky.sunEdge)) : 0;
     const glow = angle > 0 && height >= 0 ? .22 * Math.exp(-19 * (1 - angle)) : 0;
     const sunlight = clamp((disk + glow) * sky.sunStrength);
-    for (let c = 0; c < 3; c++) output[c] = mix(mix(sky.horizon[c], horizon[c], fade), sky.sunColor[c], sunlight);
+    const ramp = height >= 0 ? sky.paletteRamp : undefined;
+    if (ramp) {
+      const distance = ramp.axis === 'elevation' ? Math.asin(clamp(height)) - ramp.start :
+        mod(Math.atan2(ray[0],ray[2]) - ramp.start,TAU);
+      ramp.sample(distance/ramp.span,output);
+    }
+    for (let c = 0; c < 3; c++) {
+      const base = mix(sky.horizon[c], horizon[c], fade);
+      output[c] = mix(ramp ? mix(base,output[c],ramp.strength) : base, sky.sunColor[c], sunlight);
+    }
     return output;
   }
 

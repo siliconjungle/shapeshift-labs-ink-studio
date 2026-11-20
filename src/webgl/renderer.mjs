@@ -7,7 +7,7 @@ import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
 import { createSplatPipeline } from './pipeline.mjs';
 import { pixelShaderSources } from './shaders.mjs';
-import { createDepthSorter, makeCamera, cameraPose, withCameraPose } from './view.mjs';
+import { createDepthSorter, makeCamera, cameraPose, withCameraPose, captureStreamingCamera } from './view.mjs';
 import { waterBackgroundShader } from './water-optics.mjs';
 import { createEnvironment } from './environment.mjs';
 import { environmentBackgroundShader } from './environment-shaders.mjs';
@@ -835,7 +835,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const pal = palette(world.pal);
       const palCount = Math.min(world.pal.length, 64);
       const fog = world.fog ?? {};
-      const dirty = isNew ? undefined : frame.changedRows;
+      // An editor may provide a row diff against the exact bake currently on the GPU.
+      const incremental = frame.previousWorld && frame.previousWorld === lastWorld &&
+        lastWorld.data === lastData && world.count === lastCount && !group && !lastInstances &&
+        !paint && !lastWorld.paintCorrections && !world.anim && !lastWorld.anim;
+      const dirty = !isNew || incremental ? frame.changedRows : undefined;
       const geometryDirty = dirty && paint ?
         [...new Set([...dirty, ...paint.dirtyRows.filter(row => row * 512 < world.count)])] : dirty;
       let plan;
@@ -845,7 +849,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       } else data.upload(geometryData, world.count * 16, geometryDirty);
       if (materialStyles) bindMaterialStyles(world, group, plan, dirty);
       if (hasFine && (isNew || fineValues !== fineTiles)) {
-        fine.upload(fineTiles, world.count * 12);
+        const fineDirty = incremental && !detail && fineValues === lastWorld.fine ? frame.changedFineRows : undefined;
+        fine.upload(fineTiles, world.count * 12, fineDirty);
         fineValues = fineTiles;
       } else fine.bind();
       uploadBones(world.anim?.bones);
@@ -853,7 +858,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if (patterned) {
         if (isNew || materials?.world !== world || materials.values !== world.pix ||
             materials.ramps !== world.ramps || materials.rampOff !== world.rampOff || materials.patterns !== world.pats) {
-          pattern.upload(world.pix, world.count * 8);
+          const patternDirty = incremental && materials?.world === lastWorld &&
+            materials.values === lastWorld.pix ? frame.changedPatternRows : undefined;
+          pattern.upload(world.pix, world.count * 8, patternDirty);
           const gpu = materialData(pixel, world);
           updateSprites(world, pixel);
           materials = { world, values: world.pix, ramps: world.ramps, rampOff: world.rampOff, patterns: world.pats, gpu };
@@ -1212,7 +1219,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
     try { controls=createViewerInput(canvas,{...input,toolkit}); }
     catch(error){ backend.dispose();throw error; }
   }
-  let disposed = false, picking;
+  let disposed = false, picking, streamAssemblies = new WeakMap();
   const pickInstances = createExpandedInstances();
   const lose = event => {
     event.preventDefault();
@@ -1239,18 +1246,48 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         (!(frame.order instanceof Int32Array) || frame.order.length !== logicalCount ||
          frame.order.some(index => index < 0 || index >= logicalCount)))
       throw new TypeError('Draw order must contain valid Int32 splat indices');
-    if (frame.changedRows !== undefined &&
-        (!Array.isArray(frame.changedRows) || frame.changedRows.some(row =>
-          !Number.isInteger(row) || row < 0 || row >= Math.max(1, Math.ceil(world.count / 512)))))
-      throw new RangeError('changedRows must contain valid 512-splat row indices');
+    for (const [key, perRow] of [['changedRows', 512], ['changedFineRows', 512], ['changedPatternRows', 1024]]) {
+      const rows = frame[key];
+      if (rows !== undefined && (!Array.isArray(rows) || rows.some(row =>
+        !Number.isInteger(row) || row < 0 || row >= Math.max(1, Math.ceil(world.count / perRow)))))
+        throw new RangeError(key + ' must contain valid ' + perRow + '-splat row indices');
+    }
     if (![frame.time ?? 0, frame.bornAt ?? 0, frame.scale ?? 1, frame.dither ?? 0.35].every(Number.isFinite))
       throw new RangeError('Ink Studio frame parameters must be finite');
   }
-  return {
+  const api = {
     ...(controls&&{input:controls}),
     cameraPose(world, frame = {}) {
       return cameraPose(makeCamera(world, frame, frame.width ?? frame.target?.width ?? canvas.width,
         frame.height ?? frame.target?.height ?? canvas.height));
+    },
+    renderStream(stream, cameraWorld, { place, portals = [], selected, assemble, ...frame } = {}) {
+      if (disposed) throw new Error('The Ink Studio renderer has been disposed');
+      if (typeof stream?.advance !== 'function' || typeof assemble !== 'function')
+        throw new TypeError('Stream rendering needs a scene stream and a world assembler');
+      const width = frame.width ?? frame.target?.width ?? canvas.width;
+      const height = frame.height ?? frame.target?.height ?? canvas.height;
+      const { snapshot, camera } = captureStreamingCamera(cameraWorld, frame, width, height);
+      const scene = stream.advance({ place, camera, portals, selected, portalLimit: 1 });
+      const previous = streamAssemblies.get(stream), current = new Map();
+      function worldFor({ id, place, entries }) {
+        const saved = previous?.assemble === assemble && previous.worlds.get(id);
+        const same = saved?.place === place && entries.length === saved.entries.length &&
+          entries.every((row, i) => {
+            const old = saved.entries[i];
+            return old.key === row.key && old.revision === row.revision && old.value === row.value;
+          });
+        const world = same ? saved.world : assemble(place, entries);
+        if (world?.count > entries.reduce((sum, row) => sum + row.splats, 0))
+          throw new RangeError('Assembled scene exceeds its packed splat budget');
+        current.set(id, { place, entries, world });
+        return world;
+      }
+      const world = worldFor(scene.views[0]), next = scene.views[1];
+      const portal = next?.entries.length ? { opening: next.opening, destination: worldFor(next) } : undefined;
+      api.render(world, { ...frame, cameraSnapshot: snapshot, portal });
+      streamAssemblies.set(stream, { assemble, worlds: current });
+      return { world, portal, scene };
     },
     render(world, frame = {}) {
       if (disposed) throw new Error('The Ink Studio renderer has been disposed');
@@ -1312,6 +1349,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
     dispose() {
       if (disposed) return;
       disposed = true;
+      streamAssemblies = new WeakMap();
       try { controls?.dispose(); }
       finally {
         backend?.dispose();
@@ -1319,4 +1357,5 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       }
     }
   };
+  return api;
 }

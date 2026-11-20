@@ -99,6 +99,6 @@ const ColorCurves = (() => {
     return spaces.wrap(transfer, contract);
   }
 
-  return Object.freeze({ color, scalar, ramp, prepare, segmentIndex, weight, modes: Object.freeze(modes) });
+  return Object.freeze({ color, scalar, ramp, prepare, luminance, segmentIndex, weight, modes: Object.freeze(modes) });
 })();
 if (typeof module !== 'undefined') module.exports = ColorCurves;

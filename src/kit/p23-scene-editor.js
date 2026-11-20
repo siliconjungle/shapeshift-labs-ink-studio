@@ -95,7 +95,7 @@
     const baked = source?.data instanceof Float32Array;
     if (baked && !source.spec) throw new TypeError('This splat bake has no retained diorama source');
     const scene = clone(baked ? source.spec : typeof source === 'string' ? JSON.parse(source) : source);
-    const buildEnv = { ...env, brushSession: A.brushRegions.create() };
+    const buildEnv = { ...env, brushSession: A.brushRegions.create(), bakeCache: env?.bakeCache ?? A.bakeCache.create() };
     function validate(candidate, bindings = buildEnv) {
       const problems = DIO.check(candidate, bindings);
       if (problems.some(problem => problem.level === 'error')) {
@@ -346,6 +346,11 @@
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),
       build,
+      buildIncremental(previousWorld, inputs) {
+        const world = build(inputs);
+        return { world, frame: A.bakeCache.frameDiff(previousWorld, world) };
+      },
+      cacheStats: () => buildEnv.bakeCache.stats(),
       begin: label => { document.begin(label); },
       preview() { document.preview(); return snapshot(); },
       commit: () => document.commit(),

@@ -292,6 +292,8 @@ console.log(world.count);
 
 Use the [headless scene editor](docs/scene-editor.md) to select solids, edit transforms and materials, and save the resulting diorama JSON.
 
+Reuse unchanged bake inputs in the editor and pass `--asset-cache DIR` to retain diorama bake results across CLI runs. [Incremental baking](docs/scene-editor.md#incremental-baking)
+
 Apply a [versioned complete look](docs/environment-packs.md#complete-looks) to a diorama with `--asset-pack` and `--environment-preset`. The Copperwind example compares three styles with the same camera, geometry, and animation.
 
 The larger [lab/data-shrine.json](lab/data-shrine.json) demonstrates joins, folded and warped geometry, parented parts, lights, particles and tap effects.
@@ -741,6 +743,8 @@ links selected objects and regions to recorded actions, transfers, and prior sta
 reuse measurements across seeds and settings and report aligned results.
 [Persistent simulation places](docs/portals.md#persistent-simulation-places)
 keep terrain, surface, and object edits across saves, travel, and resumed region streams.
+
+[Scene-aware streaming](docs/procedural.md#scene-aware-streaming) prioritizes nearby detail, selected subjects, and visible portal destinations within memory and frame budgets.
 [Editable water boundaries](docs/headless-worlds.md#editable-water-boundaries)
 define regional sources, sinks, barriers, open edges, and exchange with spatial head fields.
 [Simulation workers](docs/simulation-workers.md) run custom and built-in

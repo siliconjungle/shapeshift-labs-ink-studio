@@ -239,3 +239,68 @@ ink-studio palette field examples/palette-coverage-field.json --view boundary --
 ```
 
 Use `"type": "coverage"` in a CLI field JSON file. The [spectrum chapel](../examples/palette-coverage.js) uses the same OKLab slice as [projected leaded glass](projected-effects.md#palette-coverage-fields).
+
+## Spectrum and primary ramps
+
+`K.palette.ramp(definition)` compiles either ramp into a normalized `sample(t)` and a horizontal `raster(width, height)`. Samples outside `[0,1]` use the nearest endpoint. The RGB result is normalized sRGB.
+
+- A `spectrum` ramp sweeps between two hue values in turns. Use `hue: [0, 1]` for a full wheel or choose a shorter, reversed, or seam-crossing sweep. `saturation` and `brightness` hold their values across the strip and each default to 1.
+- A `primary` ramp interpolates through its required `accent` in OKLab. `shadow` and `highlight` default to black and white. `accentAt` places the accent along the strip and defaults to `0.5`.
+- Either ramp can use `steps` from 2 through 48 for equal-width bands. Primary ramps with at least three bands keep a band for the accent. An optional `palette` maps each result to the nearest swatch using Ink’s RGB weights.
+
+```sh
+ink-studio palette field examples/spectrum-ramp.json --out spectrum.png
+ink-studio palette field examples/primary-ramp.json --out primary.png
+ink-studio render examples/spectrum-ramps.js --w 288 --h 152 --px 1 --raw --out signal-station.png
+```
+
+Use the same ramp definitions in [projected materials](projected-effects.md#palette-ramps), or set `skyEnvironment.sky.paletteRamp` for a directional sky. The [signal station example](../examples/spectrum-ramps.js) uses a short spectrum sweep for dusk and a stepped primary ramp on the painted sign.
+
+```json
+{
+  "sky": {
+    "paletteRamp": {
+      "axis": "elevation",
+      "domain": [0, 0.45],
+      "strength": 0.7,
+      "ramp": {"type": "spectrum", "hue": [0.09, -0.32], "saturation": 0.57, "steps": 14}
+    }
+  }
+}
+```
+
+Sky axes use radians. Elevation starts at the horizon and defaults to the full upper hemisphere. Azimuth starts at world +Z, increases toward +X, and defaults to one turn. The sky blends the ramp above the horizon before drawing the sun. Overcast reduces the blend, and an optional `gain` can bind `strength` to a nonnegative numeric profile channel. Scene reflections that sample the sky see the same ramp.
+
+## Grayscale and brightness matches
+
+Compile `K.palette.ramp({type: 'grayscale', palette, metric, range})` to map a neutral gray strip to exact palette swatches. Supply 1–48 hex colours or normalized RGB triples. The gray target rises left to right in sRGB and covers `[0, 1]` by default. Use a narrower `range`, such as `[0.2, 0.85]`, to target a particular part of the tonal scale.
+
+- `nearest` (default) compares the neutral target and swatches using Ink’s weighted RGB distance. Swatches closer to neutral can win over saturated ones.
+- `lightness` compares only OKLab lightness. Saturated swatches can fill dark, middle, or light bands according to their perceived lightness. Both metrics use palette order to break ties.
+
+Use `index(t)` for the original swatch index, `sample(t)` for its RGB value, or `measure(t)` for the gray target, swatch, their OKLab lightness values, and the selected metric's error. The `report(width)` method lists each swatch's pixel count and the bands in the exported strip. Band starts are inclusive and ends are exclusive. Match the report width to the texture width to align the readings pixel for pixel. Swatches with zero pixels are unused at that resolution.
+
+```sh
+ink-studio palette field examples/grayscale-ramp.json --w 192 --h 32 --out gray-match.png
+ink-studio palette field examples/grayscale-ramp.json --w 192 --format data --out gray-match.json
+ink-studio render examples/grayscale-ramp-reliefs.js --w 312 --h 124 --px 1 --raw --out nautilus-press.png
+```
+
+Export the strip as a lookup texture for shaded print, halftones, or light-level bands. Use the same definition in a [projected ramp or material colour curve](projected-effects.md#palette-ramps). The [Nautilus press](../examples/grayscale-ramp-reliefs.js) applies both matching methods to the same lit sculpt.
+
+## Complementary and desaturation fields
+
+Compile either field with `K.palette.chromaField(definition)`. Sample it with `sample(u, v)` or export it with `raster(width, height)`. Horizontal position follows the colour path. Vertical position blends that path toward an independent shadow colour. Coordinates range from 0 to 1, with `v = 1` at the top of the texture.
+
+- Set `type: 'complementary'` and a source `color`. By default the other end is the hue opposite in OKLab, at the same lightness and with chroma reduced where needed to fit sRGB. Set `opposite` to use a chosen colour. The default `route: 'neutral'` passes through gray halfway across. Set `neutralLightness` to choose its OKLab lightness, or use `route: 'increasing'` or `'decreasing'` to travel around the OKLCh hue wheel.
+- Set `type: 'desaturation'` to move from `color` to gray at the same OKLab lightness. Use `neutralLightness` to end at a lighter ash or darker neutral.
+- Set `shade: [bottom, top]` to control the OKLab mix toward `shadow`. The default is `[0.68, 0]` toward black. Set `[0, 0]` for a flat strip or use a tinted shadow for glazes and patinas.
+- Set `steps: [columns, rows]` for discrete bands. Each axis accepts 2–48 steps. An odd column count keeps the exact midpoint on a neutral route. Add an optional `palette` of 1–48 swatches for exact palette output. With a palette, `index(u,v)` and `raster(width, height).indices` give the chosen swatch indices.
+
+```sh
+ink-studio palette field examples/complementary-field.json --out copper-to-teal.png
+ink-studio palette field examples/desaturation-field.json --out green-to-ash.png
+ink-studio render examples/chroma-glazes.js --w 312 --h 152 --px 1 --raw --out glaze-trials.png
+```
+
+The [glaze firing trials](../examples/chroma-glazes.js) project both definitions directly onto sculpted ceramics. Use the same approach for oxidation on metal, dyes on cloth, or two-colour decals. [Material setup](projected-effects.md#projected-chroma-fields)

@@ -76,7 +76,7 @@ export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, 
     const skyFocal = camera.ortho ? Math.tan((sky?.orthoFov ?? Math.PI/3)*.5) : camera.tangent;
     const skyView = [skyFocal*camera.aspect,skyFocal];
     const horizon = Math.max(camera.distance+2*camera.radius,card ? cloudView.horizon(pose.eye) : 0);
-    const useBackdrop = !!(sky?.celestial || horizonArt || flatCloud);
+    const useBackdrop = !!(sky?.celestial || sky?.paletteRamp || horizonArt || flatCloud);
     const splats = useBackdrop ? [] : sky?.splats ?? [];
     const rows = new Float32Array(16*(fog.length+splats.length));
     for (let i=0;i<fog.length;i++) packVolume(fog[i],rows,i*16);

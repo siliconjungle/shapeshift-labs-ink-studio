@@ -273,11 +273,22 @@
     const span=mode==='mirror'?2*size:size, q=((i%span)+span)%span;
     return q>=size?span-1-q:q;
   }
-  const compiled=new WeakMap();
+  const compiled=new WeakMap(), decodedImages=new Map(), decodedImageLimit=64;
+  function decodedImage({width,height,rgb,alpha}) {
+    const key=width+'/'+height+'/'+rgb+'/'+(alpha??'');
+    let image=decodedImages.get(key);
+    if(image) decodedImages.delete(key);
+    else {
+      image={width,height,data:unpack(rgb),alpha:alpha&&unpack(alpha)};
+      if(decodedImages.size===decodedImageLimit) decodedImages.delete(decodedImages.keys().next().value);
+    }
+    decodedImages.set(key,image);
+    return image;
+  }
   function sampler(recipe) {
     if(compiled.has(recipe)) return compiled.get(recipe);
     const {texture,positions,triangles,colors,faceColors}=recipe, {V}=K;
-    const images=texture?.images.map(({width,height,rgb,alpha})=>({width,height,data:unpack(rgb),alpha:alpha&&unpack(alpha)}));
+    const images=texture?.images.map(decodedImage);
     const normalLayer=texture?.layers?.normal;
     const normals=normalLayer?.normals&&unpack(normalLayer.normals),
       tangents=normalLayer?.tangents&&unpack(normalLayer.tangents), tints=texture?.tints&&unpack(texture.tints),

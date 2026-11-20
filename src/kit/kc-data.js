@@ -1373,9 +1373,11 @@
     }
     st0.finish = K.authoring.environments.apply(st0.finish,spec.environmentPreset,catalog,st0.palette);
     st0.finish.look = K.authoring.looks.scene(st0.finish.look, catalog);
+    const cache = !env.makeBuilder && !env.makeSculpt && env.bakeCache, cacheAPI = K.authoring.bakeCache;
     let pal = st0.palette;
     const meshLooks = new Map();
-    for (const s of DIO.solids(spec, { activeOnly: true }))
+    const activeSolids = [...DIO.solids(spec, { activeOnly: true })];
+    for (const s of activeSolids)
       if (s.kind === 'mesh' && s.mat === undefined) {
         const mesh = K.mesh.fit(env.assets[s.asset], { size: s.size || 4, at: s.at, turn: s.spin, up: s.up });
         meshLooks.set(s, { mesh, look: K.mesh.look(mesh, { hues: s.hues || 5, pal }) });
@@ -1524,7 +1526,19 @@
             mesh: K.mesh.fit(env.assets[s.asset], { size: s.size || 4, at: s.at, turn: s.spin, up: s.up })
           };
           const mat = s.mat !== undefined ? m : locate ? charts.bind(ml.look, locate, B.P) : ml.look;
-          p = S.mesh(ml.mesh, mat, Object.assign({ cells: s.cells, thick: s.thick }, baseOptions));
+          const options = { cells: s.cells, thick: s.thick };
+          if (cache) {
+            const key = cacheAPI.signature([ml.mesh.pos, ml.mesh.tri, options]);
+            const data = cache.read('meshFields', key, value => value?.D instanceof Float32Array &&
+              value.near instanceof Int32Array && value.D.length === value.near.length &&
+              value.n?.length === 3 && value.n.reduce((a, b) => a * b, 1) === value.D.length);
+            if (data) options.field = K.mesh.fieldFromData(data);
+            else {
+              const { sd, tri, ...grid } = options.field = K.mesh.field(ml.mesh, options);
+              cache.write('meshFields', key, grid);
+            }
+          }
+          p = S.mesh(ml.mesh, mat, Object.assign(options, baseOptions));
         } else if (k === 'join') p = S.join(s.how, sub(s.a), sub(s.b), Object.assign({ r: s.size, n: s.steps }, baseOptions));
         else if (unaryKinds.includes(k)) p = deform(sub(s.of), s, baseOptions);
         else if (builtKinds.includes(k)) {
@@ -1639,9 +1653,38 @@
       }) : [];
       return { meshes, joints, animations };
     }
-    const authoredBounds = new Map();
+    const moving = spec.solids.filter(s => s.part), authoredBounds = new Map();
+    const staticBake = cache && !moving.length && !effects.length && !spec.tap && !marks &&
+      !presentation.breakables && !S.keepRenderSdf && !st0.finish.paint && !globalThis.INK_DECAL_NEXT &&
+      !globalThis.INK_RETAIN_RENDER_SDF && !globalThis.INK_RAMPS;
+    const bakeKey = staticBake ? cacheAPI.sceneKey(spec, st0,
+      activeSolids.filter(s => s.kind === 'mesh').map(s => env.assets[s.asset])) : undefined;
+    const baked = staticBake && cache.read('splats', bakeKey, cacheAPI.isPacked);
+    const candidateKeys = staticBake && !baked ? new WeakMap() : null;
+    if (candidateKeys) S.sampleCandidates = (solid, spacing, sample, visit) => {
+      const key = candidateKeys.get(solid);
+      if (key === undefined) return sample(visit);
+      const input = cacheAPI.signature([key, spacing]);
+      const points = cache.read('candidatePoints', input, value => value instanceof Float64Array && value.length % 3 === 0);
+      if (points) {
+        for (let i = 0; i < points.length; i += 3) visit(points[i], points[i + 1], points[i + 2]);
+      } else {
+        const buffer = [];
+        const limit = 250000 * 3;
+        sample((x, y, z) => {
+          if (buffer.length <= limit) buffer.push(x, y, z);
+          visit(x, y, z);
+        });
+        if (buffer.length <= limit) cache.write('candidatePoints', input, Float64Array.from(buffer));
+      }
+    };
     function placeSolid(s) {
       const p = make(s);
+      if (candidateKeys && ['ball', 'box', 'ground', 'mesh'].includes(s.kind) && !s.transform && !activeModifiers(s).length) {
+        const { kind, at, r, half, turn, rad, stretch, asset, size, spin, up } = s;
+        candidateKeys.set(p, cacheAPI.signature([seed, kind, at, r, half, turn, rad, stretch,
+          kind === 'mesh' ? [env.assets[asset].pos, env.assets[asset].tri, size, spin, up] : null]));
+      }
       if (p.geometryBounds && (K.drawing.kind(s) || s.transform)) authoredBounds.set(s, p.geometryBounds);
       else if ((s.transform || activeModifiers(s).length) && s.kind !== 'ground') {
         const at = p.bc ?? (s.at && V.add(s.at, s.transform?.translation ?? [0, 0, 0]));
@@ -1649,8 +1692,10 @@
       }
     }
     for (const s of spec.solids) if (!s.part) placeSolid(s);
-    S.bake();
-    const moving = spec.solids.filter(s => s.part);
+    if (!baked) {
+      S.bake();
+      if (candidateKeys) S.sampleCandidates = undefined;
+    }
     if (moving.length) {
       for (const s of moving) placeSolid(s);
       S.bake();
@@ -1688,11 +1733,13 @@
       Object.assign(
         { cam, detail: 14, palName: typeof spec.style === 'string' ? spec.style : 'Data', dither: 0.25, radius: Math.max(9, markRadius) },
         st0.finish,
+        baked || {},
         { made, spec: source, paletteRoles: st0.roles, ...(dynamics && { parameters: dynamics.api }),
           ...(dataInputs && { dataInputs }),
           ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
+    if (staticBake && !baked) cache.write('splats', bakeKey, cacheAPI.pack(W));
     bindBreakables(W);
     const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });
     if (cameraRig) K.cameraRig.bind(W, cameraRig, {

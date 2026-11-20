@@ -126,12 +126,15 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `styles.catalog(definitions)`, `styles.compose(...layers)` | Caller-defined profiles, named inheritance, and deep composition. `styles.material(profile, role)` resolves aliases and normalized colors |
 | `chunks.create({preview, refine})` | Cache realized chunks by key and revision, retain unrelated payloads, send bounded replacement patches, and cancel obsolete work |
 | `chunks.createScheduler({budgetBytes, describe, load})` and `chunks.grid(options)` | Prioritize independent streaming requests and keep a bounded set of chunks from procedural grids |
+| `chunks.createSceneStream({budgetBytes, maxSplats, query, load})` | Allocate visible levels of detail for cameras, selected subjects, and portal destinations |
 | `contacts.index(mesh, options)`, `contacts.intersections(a, b, options)`, `contacts.clipCurve(points, solids)` | Index named triangle groups, trace noncoplanar contacts, and trim contact or authored curves against closed indexed solids |
 | `contacts.index(mesh).raycast(origin, direction, max)` | Find the nearest triangle hit and report its point, normal, distance, owner and named surface. Reach is measured in world units. |
 | `contacts.traceSdf(chart, sd, options)`, `contacts.expose(curves, occluder, options)`, `contacts.field(curves)`, `contacts.runoff(curves, project, options)` | Trace SDF contacts, expose visible runs, derive distance masks and follow downhill paths |
 | `tiles.compile(definitions)`, `tiles.solve(model, options)`, `tiles.learn(swatch)`, `tiles.overlap(bank, options)`, `tiles.wang(model, options)`, `tiles.refine(coarse, model, options)` | Weighted matched sockets, example-based synthesis, world-stable patterns and coarse-to-fine layouts |
 | `tiles.quasiperiodic(options)` | [Penrose and Ammann–Beenker substitutions](quasiperiodic-tilings.md) with clipped tile polygons and stable address lineage |
 | `tiles.hyperbolic(options)`, `packing.apollonian(options)` | [Poincaré tilings and tangent circle packings](hyperbolic-mosaics.md) with bounded detail and stable addresses |
+| `coordinateTransforms` | [Möbius maps, inversion, and Droste recursion](recursive-coordinate-transforms.md) for world geometry, UVs, and rasters |
+| `KIT.curve.recursive(definition)` | [Koch, dragon, Hilbert, and Peano paths](recursive-curves.md) with stable lineage and continuous unfolding |
 | `attractors.trace(options)` | [Lorenz, Rössler, Clifford, and de Jong orbits](orbit-attractors.md) as time-sampled paths, speeds, and bounded visit density |
 | `ifs.compile(recipe)`, `ifs.preset(name)` | Seeded [iterated function systems and fractal flames](iterated-function-systems.md) for packed points and colored density grids |
 | `complexPlane.compile(options)` | [Mandelbrot, Julia, and Newton fields](complex-plane-fields.md) with independent escape, basin, orbit-trap, and domain coloring outputs |
@@ -2946,6 +2949,19 @@ procedural places without a UI. The player and camera have separate
 interests. A doorway starts with a small destination window. On crossing,
 the same interests gain priority and expand around the arrival, keeping
 overlapping chunks by reference as the outgoing place releases its interests.
+
+### Scene-aware streaming
+
+`P.chunks.createSceneStream({ budgetBytes, maxSplats, startsPerFrame, concurrency, maxPortals, maxCandidates, query, load, sizeOf, splatsOf, release })`
+uses the chunk scheduler to maintain visible draw payloads. `query(view)` returns a bounded array of chunks for `view.place` and can use the camera and normalized `view.window` to narrow a spatial query. A chunk declares an `id`, world-space `bounds: { min, max }`, optional `subjects`, and `levels` from coarse to fine. A level declares its `id`, `revision`, conservative `bytes` and `splats` reservations, optional `maxDistance` for detail, and caller-owned `input`. Update a level's revision when its immutable payload changes. Include splat footprints and any motion in its bounds.
+
+Each frame, `stream.advance({ place, camera, selected, portals })` plans the main view and visible doorways. Supply selected subject or chunk IDs to favor their detail. The planner gives each live view a base chunk when the budgets allow, upgrades selected chunks, fills visible coverage, and allocates the remaining detail to nearer chunks. A portal is a link with `id`, `to.place`, and an oriented `opening` from `KIT.world.portals.doorway`. A place session's `previewLinks(actor)` lists its currently allowed walk-through portals without starting a travel preparation. The stream projects each opening, prioritizes larger visible apertures, and limits destination candidates to the mapped window. Its default is one portal. The planner can support additional views through `maxPortals`.
+
+For WebGL, call `renderer.renderStream(stream, cameraWorld, { place, portals, selected, assemble, ...frame })`. The renderer uses the camera of `cameraWorld` to plan and draw the same frame, then uses the native compositor for one live destination. Supply a synchronous `assemble(place, entries)` that returns a world from the resident payloads, including a valid empty world while they load. The renderer reuses the assembled world while its entries and assembler stay the same. For headless use, pass `advance` an orthonormal camera basis `{ eye, right, up, back, ortho, tangent, aspect, near, far }` and assemble the returned view entries for the desired backend. `tangent` is the vertical half-FOV tangent in perspective and the vertical half-height in orthographic projection. An optional `observer` sets the point used for detail distance.
+
+`stream.snapshot()` exposes available entries and planned and drawable splat reservations per frame. A chunk shared by two views uses one byte reservation and counts toward the splat budget in both passes. `load(descriptor, { signal })` can complete asynchronously. Use `sizeOf` and `splatsOf` to measure custom payloads, and `release` to free resources on eviction. The scheduler holds cancelled jobs' reservations until they settle. A resident coarse level can stay visible while a more detailed version loads if both fit. `stream.ready()` waits for planned levels as frames continue to grant load starts. Inspect scheduler memory through `stats()` and call `dispose()` when done.
+
+The byte budget covers resident payloads and in-flight reservations. The frame budgets bound submitted packed splats and load starts, with two starts per frame by default. Assembled world copies, GPU textures, and renderer passes have their own costs. Use a worker-backed loader when individual builds need to run outside the rendering thread.
 
 Contact curves follow the input mesh resolution. `contacts.index` can restrict
 the index to named surface groups and exposes bounds queries and segment

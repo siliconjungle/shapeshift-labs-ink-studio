@@ -4,7 +4,7 @@
     clamp = n => Math.max(0, Math.min(1, n)),
     lerp = (a,b,t) => a + (b - a) * t,
     lab = ColorSpace.toOKLab,
-    encoded = n => n <= 0.0031308 ? 12.92 * n : 1.055 * n ** (1 / 2.4) - 0.055;
+    gamut = ColorSpace.fromOKLab;
 
   function parse(input) {
     if (Array.isArray(input) && input.length === 3 && input.every(v => Number.isFinite(v) && v >= 0 && v <= 1))
@@ -13,31 +13,6 @@
     if (!Number.isSafeInteger(number) || number < 0 || number > 0xffffff)
       throw new Error('Palette ramp anchors need normalized RGB or six-digit hex colors');
     return [number >> 16,(number >> 8) & 255,number & 255].map(v => v / 255);
-  }
-  function rgb([L,A,B], chroma = 1) {
-    const a = A * chroma, b = B * chroma,
-      l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3,
-      m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
-      s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-    return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-      -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
-  }
-  const inside = input => input.every(v => v >= -1e-8 && v <= 1 + 1e-8);
-  function gamut(p) {
-    let result = rgb(p);
-    if (!inside(result)) {
-      let low = 0, high = 1;
-      result = rgb(p, low);
-      for (let i = 0; i < 19; i++) {
-        const middle = (low + high) * 0.5, candidate = rgb(p,middle);
-        if (inside(candidate)) {
-          low = middle;
-          result = candidate;
-        } else high = middle;
-      }
-    }
-    return result.map(v => clamp(encoded(v)));
   }
   const toHex = ([r,g,b]) => (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
   function angle(a, b, mode) {

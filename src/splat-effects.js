@@ -330,14 +330,18 @@ const SplatEffects = (() => {
     return queried(source, context);
   }
 
-  function colorCurve({ ramp, channels, color, source = 'luminance', outputPalette }, context, resolveColor) {
-    if (ramp === undefined && source !== 'luminance')
+  function colorCurve({ ramp, paletteRamp, channels, color, source = 'luminance', outputPalette }, context, resolveColor) {
+    if (paletteRamp !== undefined && (ramp !== undefined || channels !== undefined || color !== undefined))
+      throw new TypeError('A palette ramp uses its own color and ramp controls');
+    const paletteTransfer = paletteRamp === undefined ? null : paletteFields.ramp(paletteRamp,resolveColor);
+    if (ramp === undefined && !paletteTransfer && source !== 'luminance')
       throw new TypeError('A color curve source requires a ramp');
-    const transfer = curves.prepare({ ramp, channels, color }, resolveColor);
-    const lookup = ramp === undefined ? null : curveSource(source, context);
+    const transfer = paletteTransfer ? (base,out,value = curves.luminance(base)) => paletteTransfer.sample(value,out) :
+      curves.prepare({ ramp, channels, color }, resolveColor);
+    const lookup = ramp === undefined && !paletteTransfer ? null : curveSource(source, context);
     const result = [0, 0, 0, 0, 1, 0];
     return {
-      palette: outputColors(outputPalette, resolveColor),
+      palette: outputColors(outputPalette, resolveColor) ?? paletteTransfer?.outputPalette,
       depth: source === 'depth',
       sample(sample, base) {
         const value = lookup?.(sample, base);
@@ -371,6 +375,11 @@ const SplatEffects = (() => {
     if (!value || Object.getPrototypeOf(value) !== Object.prototype)
       throw new TypeError('Projected palette field needs a ' + label + ' definition');
     const { size = [1, 1], wrap = false, ...definition } = value;
+    const isRamp = label === 'ramp', axis = isRamp ? definition.axis ?? 'along' : undefined;
+    if (isRamp) {
+      if (!['along','across'].includes(axis)) throw new RangeError('Projected ramp axis must be along or across');
+      delete definition.axis;
+    }
     if (!vector(size, 2) || size.some(n => n <= 0) || typeof wrap !== 'boolean')
       throw new RangeError('Projected palette fields need a positive size and optional wrap');
     const field = paletteFields[label](definition, resolveColor);
@@ -386,6 +395,7 @@ const SplatEffects = (() => {
         v /= spanV;
         if (!Number.isFinite(u) || !Number.isFinite(v) || (!wrap && (u < 0 || v < 0 || u > 1 || v > 1))) return 0;
         const x = wrap ? fract(u) : u, y = wrap ? fract(v) : v;
+        if (isRamp) { field.sample(axis === 'across' ? y : x,out); return 1; }
         return Number(Boolean(polar ? field.sample(.5 + (x - .5) * fitU, .5 + (y - .5) * fitV, out) : field.sample(x, y, out)));
       }
     };
@@ -409,7 +419,9 @@ const SplatEffects = (() => {
     const indexed = pattern === 'indexed' ? indexedRaster(definition.raster, definition.cycles, resolveColor, roles) : null;
     const paletteField = pattern === 'hue-brightness' ? paletteFieldLayer(definition.hueBrightness, resolveColor, 'hueBrightness') :
       pattern === 'polar-colour' ? paletteFieldLayer(definition.polar, resolveColor, 'polar') :
-      pattern === 'palette-coverage' ? paletteFieldLayer(definition.coverage, resolveColor, 'coverage') : null;
+      pattern === 'chroma-field' ? paletteFieldLayer(definition.chromaField, resolveColor, 'chromaField') :
+      pattern === 'palette-coverage' ? paletteFieldLayer(definition.coverage, resolveColor, 'coverage') :
+      pattern === 'palette-ramp' ? paletteFieldLayer(definition.paletteRamp, resolveColor, 'ramp') : null;
     const pixels = indexed?.sample ?? paletteField?.sample ?? (pattern === 'raster' ? raster(definition.raster) : null);
     const custom = typeof pattern === 'function' ? pattern :
       Object.hasOwn(context?.shaders || {}, pattern) ? context.shaders[pattern] : null;
