@@ -5,7 +5,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
   if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
     !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
     !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
-  const fragments=new Array(W*H);
+  const fragments=new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
   const transform=(v)=>({p:v.slice(0,3),uv:v.slice(3),x:V[0]*v[0]+V[4]*v[1]+V[8]*v[2]+V[12],
     y:V[1]*v[0]+V[5]*v[1]+V[9]*v[2]+V[13],z:-(V[2]*v[0]+V[6]*v[1]+V[10]*v[2]+V[14])});
   const interpolate=(a,b,t)=>({p:a.p.map((n,k)=>n+(b.p[k]-n)*t),uv:a.uv.map((n,k)=>n+(b.uv[k]-n)*t),
@@ -27,6 +27,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
       const loY=Math.max(0,Math.ceil(Math.min(a.sy,b.sy,c.sy)-.5)),hiY=Math.min(H-1,Math.floor(Math.max(a.sy,b.sy,c.sy)-.5));
       const u=b.p.map((n,k)=>n-a.p[k]),v=c.p.map((n,k)=>n-a.p[k]);
       const normal=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],len=Math.hypot(...normal)||1;
+      if(normal.reduce((sum,n,k)=>sum+n*(eye[k]-a.p[k]),0)<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
       for(let y=loY;y<=hiY;y++)for(let x=loX;x<=hiX;x++){
         const weights=[edge(b,c,x+.5,y+.5)/area,edge(c,a,x+.5,y+.5)/area,edge(a,b,x+.5,y+.5)/area];
         if(weights.some(n=>n < -1e-7))continue;

@@ -1,7 +1,7 @@
 // Shared draw and resolve shaders extracted from Inkwell Rebirth's WebGL renderer.
 // Hosts provide the ASCII shader hooks and Ink Studio's shared PixelLook GLSL.
 import { waterGLSL } from './water-optics.mjs';
-import { environmentMediaGLSL } from './environment-shaders.mjs';
+import { environmentMediaGLSL,environmentMediaSource } from './environment-shaders.mjs';
 import { coverageSource, policyUniforms, maskUniforms, maskVaryings, maskFragment, maskVertex, ownerMaskWrite } from './contribution-shaders.mjs';
 
 // Reconstruct the sample on its pixel ray from a camera-space axial distance.
@@ -28,7 +28,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, relighting = false, optical = false, stableDetail, cutaway, airflow
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow
 } = {}) {
   const coverageStride = coverageRules?.coverageStride ?? 4;
   const continuousMode = coverageRules?.continuousCoverage ?? 1, softMode = coverageRules?.softCoverage ?? 2;
@@ -383,7 +383,7 @@ float glassDepth(vec4 sampleDepth) {
   return dot(floor(sampleDepth.rgb*255.0+0.5),vec3(1.0,256.0,65536.0)) / 16777215.0;
 }` : ''}
 ${water || portal || environment || cutaway ? 'uniform vec2 u_viewport;' : ''}
-${environment ? environmentMediaGLSL + 'flat in float v_envAxial;' : ''}
+${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
 ${coverageSource(coverageRules)}
 ${contributions || masked ? `${policyUniforms}flat in int v_policySlot;` : ''}
@@ -616,7 +616,7 @@ bool constrainPalette(ivec2 p, vec3 inputColor, out vec3 color) {
 
 export function pixelShaderSources(PixelLook, { water = false, airPockets = false, layered = false, atlas = false,
   paletteConstraints = false, masked = false, contributions = false, layeredGlass = false, materialStyles = false,
-  environment = false, relighting = false, packedTone = false, cutaway } = {}) {
+  environment = false, emitterFog=false, relighting = false, packedTone = false, cutaway } = {}) {
   const waterPixelGLSL = `
 uniform highp sampler2D u_waterMask;
 ivec2 waterPixel(ivec2 p) {
@@ -635,7 +635,7 @@ void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position
 precision highp float;
 ${paletteConstraints || materialStyles || relighting ? 'precision highp int;' : ''}
 uniform sampler2D u_scene, u_depth, u_crispScene, u_crispDepth;
-${environment ? environmentMediaGLSL : ''}
+${environment ? environmentMediaSource(emitterFog) : ''}
 uniform bool u_paintOn;
 ${relighting ? relightTable + 'uniform vec3 u_relightFog; uniform vec2 u_relightFogRange;' : ''}
 uniform vec3 u_line;
@@ -1285,7 +1285,7 @@ layout(location=1) out vec4 cover;
 ${axialPosition}
 ${cutaway ?? ''}
 ${water ? waterGLSL(airPockets, layered, atlas) : ''}
-${environment ? environmentMediaGLSL : ''}
+${environment ? environmentMediaSource(emitterFog) : ''}
 ${water || environment || relighting ? `
 uniform vec3 u_waterSpritePalette[64];
 uniform vec4 u_rmp4[128], u_rmpN4[16];

@@ -38,7 +38,7 @@ export function createResources(gl) {
 
       const u = Object.create(null), setters = Object.create(null);
       const methods = {
-        [gl.FLOAT]: 'uniform1f', [gl.INT]: 'uniform1i', [gl.SAMPLER_2D]: 'uniform1i', [gl.SAMPLER_3D]: 'uniform1i',
+        [gl.FLOAT]: 'uniform1f', [gl.INT]: 'uniform1i', [gl.SAMPLER_2D]: 'uniform1i', [gl.SAMPLER_3D]: 'uniform1i', [gl.SAMPLER_2D_ARRAY]: 'uniform1i',
         [gl.INT_SAMPLER_2D]: 'uniform1i', [gl.UNSIGNED_INT_SAMPLER_2D]: 'uniform1i',
         [gl.FLOAT_VEC2]: 'uniform2fv', [gl.FLOAT_VEC3]: 'uniform3fv', [gl.FLOAT_VEC4]: 'uniform4fv',
         [gl.BOOL]: 'uniform1i', [gl.BOOL_VEC2]: 'uniform2iv', [gl.BOOL_VEC3]: 'uniform3iv',

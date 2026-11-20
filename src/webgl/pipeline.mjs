@@ -48,14 +48,14 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
           const instances = Boolean(features.instances);
           const contributions = Boolean(features.contributions), masked = Boolean(features.masked), textured = Boolean(features.textured);
           const layeredGlass = Boolean(features.layeredGlass), materialStyles = Boolean(features.materialStyles);
-          const environment = Boolean(features.environment);
+          const environment = Boolean(features.environment),emitterFog=Boolean(features.emitterFog);
           const relighting = Boolean(features.relighting), optical = Boolean(features.optical);
           const key = +airPockets + 2 * layered + 4 * atlas + 8 * water + 16 * portal + 32 * instances +
             64 * contributions + 128 * masked + 256 * textured + 512 * layeredGlass + 1024 * materialStyles +
-            2048 * environment + 4096 * relighting + 8192 * optical + 16384 * Boolean(features.cutaway);
+            2048 * environment + 4096 * relighting + 8192 * optical + 16384 * Boolean(features.cutaway)+32768*emitterFog;
           if (!variants.has(key)) {
             const shader = splatShaderSources(ascii, sampleCoverage, { water, airPockets, layered, atlas, portal, instances,
-              contributions, masked, textured, layeredGlass, coverageRules, materialStyles, environment, relighting, optical, stableDetail, airflow, cutaway:features.cutaway ? cutaway : undefined });
+              contributions, masked, textured, layeredGlass, coverageRules, materialStyles, environment,emitterFog, relighting, optical, stableDetail, airflow, cutaway:features.cutaway ? cutaway : undefined });
             variants.set(key, resources.program(shader.vertex, shader.fragment));
           }
           return variants.get(key);

@@ -1,3 +1,4 @@
+const AreaLights=require('../src/area-lights.js'),Cookies=require('../src/light-cookies.js');
 const ColorSpace = require('../src/color-space.js');
 const { spotWeight } = require('../src/volume-light.js');
 const { slab } = require('../src/scene-optics.js');
@@ -24,8 +25,9 @@ function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
       const point = origin.map((n,k)=>n+distance*direction[k]);
       const delta = point.map((n,k)=>n-light.at[k]);
       const u = dot(delta, light.u)/light.half[0], v = dot(delta, light.v)/light.half[1];
-      if ((light.shape === 'disk' ? u*u+v*v>1 : Math.max(Math.abs(u),Math.abs(v))>1) || clip && !clip(point)) continue;
-      const color = light.rgb.map(n=>n*Math.min(1,light.intensity));
+      if ((light.shape === 'disk' ? u*u+v*v>1 : light.shape==='line'? Math.hypot(Math.max(0,Math.abs(u)*light.half[0]-Math.max(0,light.half[0]-light.half[1])),v*light.half[1])>light.half[1] : Math.max(Math.abs(u),Math.abs(v))>1) || clip && !clip(point)) continue;
+      const transmission=light.cookie?Cookies.sample(light.cookie.image,(u+1)/2,(1-v)/2):[1,1,1];
+      const color = light.rgb.map((n,k)=>n*Math.min(1,light.intensity)*transmission[k]);
       hits[p] = { p,z,position:point,objectPosition:point,normal:light.normal,alpha:1,
         surface:true,emission:color,color };
       nearest = z;
@@ -35,42 +37,7 @@ function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
   return any ? hits : null;
 }
 
-function staticSources(world, data, alpha) {
-  const sources = [], boned = new Set(world.anim?.boned ?? []), backdrop = new Set(world.back ?? []);
-  const owned = world.anim?.geometryOwned;
-  for (const source of world.renderSdfs ?? []) {
-    if (!(source.rows instanceof Map) || !source.rows.size || !source.bounds || typeof source.distance !== 'function') continue;
-    let current = true;
-    for (const ranges of source.rows.values()) for (const [start,end,points] of ranges) {
-      if (end>world.count) current = false;
-      for (let i=start;i<end && current;i++) {
-        const q=i*16, k=(i-start)*3;
-        current = !owned?.[i] && data[q]===points[k] && data[q+1]===points[k+1] && data[q+2]===points[k+2] && alpha[i]>=1 && !backdrop.has(i) &&
-          !(Math.round(data[q+11]) & (15 | 512 | 32768)) && !boned.has(i) && !world.anim?.rig?.bid?.[i];
-      }
-    }
-    if (current) sources.push(source);
-  }
-  return sources;
-}
-
-function occludes(sources, origin, direction, stop) {
-  for (const source of sources) {
-    const { min,max } = source.bounds, interval = [0,stop];
-    if (!slab(interval,origin[0],direction[0],min[0],max[0]) ||
-        !slab(interval,origin[1],direction[1],min[1],max[1]) ||
-        !slab(interval,origin[2],direction[2],min[2],max[2])) continue;
-    let depth = interval[0];
-    for (let step=0;step<96 && depth<interval[1];step++) {
-      const x=origin[0]+depth*direction[0], y=origin[1]+depth*direction[1], z=origin[2]+depth*direction[2];
-      const d=source.distance(x,y,z);
-      if (!Number.isFinite(d)) break;
-      if (d<.0015 && (!source.accepts || source.accepts(x,y,z))) return true;
-      depth += Math.max(.004, d*.8);
-    }
-  }
-  return false;
-}
+const {staticSources,occludes}=AreaLights;
 
 function createLighting(lights, world, data, alpha, { spots = [], shadow } = {}) {
   const active = lights.filter(light=>light.intensity>0).map(light=>({
@@ -84,30 +51,7 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow } = {})
 
   function evaluate(point, normal) {
     const rgb=[0,0,0];
-    for (const light of active) {
-      if (Math.hypot(point[0]-light.at[0],point[1]-light.at[1],point[2]-light.at[2]) >= light.radius+light.extent) continue;
-      const origin = point.map((n,k)=>n+normal[k]*light.bias);
-      let total=0, lit=0;
-      for (const sample of light.points) {
-        const offset = sample.map((n,k)=>n-point[k]), distance=Math.hypot(...offset);
-        if (!(distance>light.bias && distance<light.radius)) continue;
-        const direction = offset.map(n=>n/distance);
-        const facing = -dot(direction,light.normal), receive = dot(normal,direction);
-        const amount = Math.max(0,receive)*Math.max(0,light.twoSided ? Math.abs(facing) : facing)*(1-distance/light.radius)**2;
-        if (!amount) continue;
-        total += amount;
-        if (light.shadows && sources.length) {
-          const delta = sample.map((n,k)=>n-origin[k]), range = Math.hypot(...delta);
-          if (range > light.bias && occludes(sources,origin,delta.map(n=>n/range),range-light.bias)) continue;
-        }
-        lit += amount;
-      }
-      if (!total) continue;
-      const steps = light.shadowSteps && light.shadowSteps-1;
-      const visibility = steps ? Math.round(steps*lit/total)/steps : lit/total;
-      const level = total*visibility*light.intensity/light.points.length;
-      for (let c=0;c<3;c++) rgb[c]+=light.tint[c]*level;
-    }
+    AreaLights.evaluate(active,point,normal,rgb,{shadow:sources.length?(o,d,s)=>occludes(sources,o,d,s):null});
     for (const light of projectors) {
       const offset = light.at.map((value,k) => value-point[k]), distance = Math.hypot(...offset);
       if (distance <= spotBias || distance >= light.radius) continue;
@@ -125,7 +69,8 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow } = {})
         }
       }
       const level = light.surfaceIntensity*weight*receive*(1-distance/light.radius)**2;
-      for (let c=0;c<3;c++) rgb[c]+=light.tint[c]*level;
+      const projected=light.cookie?.rgb?light.cookie.rgb(direction):[1,1,1];
+      for (let c=0;c<3;c++) rgb[c]+=light.tint[c]*level*projected[c];
     }
     return rgb;
   }

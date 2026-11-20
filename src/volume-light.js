@@ -1,5 +1,7 @@
 /* Front-to-back integration for a bounded density with optional single scattering. */
 const VolumeLight = (() => {
+  const cookies=typeof LightCookies==='undefined'?require('./light-cookies.js'):LightCookies;
+  const areas=typeof AreaLights==='undefined'?require('./area-lights.js'):AreaLights;
   const clouds = typeof CloudField === 'undefined' ? require('./cloud-field.js') : CloudField;
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -21,41 +23,16 @@ const VolumeLight = (() => {
     return direction.map(v => v / length);
   }
 
-  function cookieRaster(raw, direction, outer, atTime) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TypeError('Spot cookie needs a raster');
-    const { width, height, mask, roll = 0, filter = 'nearest',
-      up = Math.abs(direction[1]) > .95 ? [0,0,1] : [0,1,0] } = raw;
-    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 ||
-        width * height > 2 ** 20 || !(Array.isArray(mask) || ArrayBuffer.isView(mask)) ||
-        mask.length !== width * height || !['nearest','linear'].includes(filter))
-      throw new TypeError('Spot cookie needs bounded dimensions, a byte mask, and a valid filter');
-    const pixels = Uint8Array.from(mask, value => {
-      if (!Number.isInteger(value) || value < 0 || value > 255) throw new RangeError('Spot cookie mask needs bytes');
-      return value;
-    });
-    const right = unit(cross(direction, unit(up, 'Spot cookie up')), 'Spot cookie right');
-    const vertical = cross(right, direction);
-    const rotation = atTime(roll);
-    if (!Number.isFinite(rotation)) throw new RangeError('Spot cookie roll needs finite degrees');
-    const s = Math.sin(rotation * radians), c = Math.cos(rotation * radians);
-    const scale = .5 / Math.tan(number(raw.angle ?? Math.min(outer,89.9), .01, 89.9, 'Spot cookie angle') * radians);
-    const u = right.map((value,i) => (value * c + vertical[i] * s) * scale * height / width);
-    const v = vertical.map((value,i) => (right[i] * s - value * c) * scale);
-    const at = (x,y) => pixels[clamp(y,0,height-1)*width + clamp(x,0,width-1)];
-    return (toLight, forward) => {
-      if (forward <= 0) return 0;
-      const x = .5 - dot(toLight,u)/forward, y = .5 - dot(toLight,v)/forward;
-      if (x < 0 || x >= 1 || y < 0 || y >= 1) return 0;
-      if (filter === 'nearest') return pixels[Math.floor(y*height)*width + Math.floor(x*width)] / 255;
-      const px = x*width-.5, py = y*height-.5, ix = Math.floor(px), iy = Math.floor(py);
-      const dx = px-ix, dy = py-iy;
-      const top = at(ix,iy)*(1-dx) + at(ix+1,iy)*dx;
-      const bottom = at(ix,iy+1)*(1-dx) + at(ix+1,iy+1)*dx;
-      return (top*(1-dy) + bottom*dy) / 255;
-    };
+  function cookieRaster(raw,direction,outer,atTime) {
+    if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new TypeError('Spot cookie needs a raster');
+    if(raw.mask!==undefined){if(!raw.mask||raw.mask.length!==raw.width*raw.height)throw new TypeError('Spot cookie needs a bounded byte mask');for(const v of raw.mask)if(!Number.isInteger(v)||v<0||v>255)throw new RangeError('Spot cookie mask needs bytes');}
+    const projected=cookies.projection(raw,direction,outer,0,atTime),rgb=[0,0,0];
+    const scalar=(toLight,forward=-dot(toLight,direction))=>Math.max(...projected.sample(toLight,forward,rgb));
+    scalar.rgb=(toLight,forward=-dot(toLight,direction))=>{const out=projected.sample(toLight,forward),max=Math.max(...out);return max?out.map(v=>v/max):out;};
+    scalar.projection=projected;return scalar;
   }
 
-  function lighting(settings, color, palette, { time = 0, localLights = true, localShadows = true, celestialSun } = {}) {
+  function lighting(settings, color, palette, { time = 0, localLights = true, localShadows = true, celestialSun, areaLights = [] } = {}) {
     const { ambient = .35, sun, point, points = [], spots = [], shadow } = settings || {};
     if (shadow !== undefined && typeof shadow !== 'function') throw new TypeError('Atmosphere shadow must be a ray query');
     if (!Array.isArray(points) || !Array.isArray(spots)) throw new TypeError('Volume points and spots must be arrays');
@@ -100,7 +77,7 @@ const VolumeLight = (() => {
     const locals = localLights ? [...pointLights, ...preparedSpots] : [];
     return { ambient: number(ambient, 0, 64, 'Ambient light'), sun: directional, point: single,
       locals, surfaceSpots: preparedSpots.filter(light => light.surfaceIntensity), shadow, localShadows,
-      animatedLocals: Boolean(localLights && animatedLocals) };
+      areas:localLights?areaLights:[], animatedLocals: Boolean(localLights && animatedLocals) };
   }
 
   function occluder(field, { bias = .025, step = .035, steps = 24, safety = .75 } = {}) {
@@ -118,6 +95,7 @@ const VolumeLight = (() => {
     }
     const hit = (x,y,z,direction,stop) => hitDistance(x,y,z,direction,stop) !== Infinity;
     hit.hitDistance = hitDistance;
+    hit.field=field;
     return hit;
   }
 
@@ -147,11 +125,13 @@ const VolumeLight = (() => {
     if (shadow && light.castsShadow !== false && shadow(x, y, z, toLight, range)) return;
     const scatter = anisotropy ? phase(anisotropy, dot(direction, toLight)) : 1;
     const amount = light.intensity * weight * (1 - range / light.radius) ** 2 * scatter;
-    for (let i = 0; i < 3; i++) output[i] += light.rgb[i] * amount;
+    const transmission=light.cookie?.rgb?light.cookie.rgb(toLight):[1,1,1];
+    for (let i = 0; i < 3; i++) output[i] += light.rgb[i] * amount*transmission[i];
   }
 
   function addLocal(media, x, y, z, output, direction, anisotropy = 0) {
     const { point, locals, localShadows, shadow } = media;
+    if(media.areas?.length){const rgb=areas.evaluate(media.areas,[x,y,z],[0,0,0],[0,0,0],{volume:true,direction,anisotropy,shadow:localShadows===false||!shadow?null:(o,d,s)=>shadow(...o,d,s)});for(let k=0;k<3;k++)output[k]+=rgb[k];}
     const localShadow = localShadows === false ? null : shadow;
     if (point) illuminateLocal(point, output, x, y, z, direction, anisotropy, localShadow);
     if (locals) for (const light of locals)
@@ -189,13 +169,13 @@ const VolumeLight = (() => {
     const exposureLength=exposure?.fogDistance && ((a,b)=>exposure.fogDistance(origin,direction,a,b));
     const effectiveLength = cutRay ? (a,b) => cutRay.distance(a,b,exposureLength) : exposureLength;
     const rateFloor = (exit - entry) / maxSteps;
-    const hasField = segments.some(([, volume]) => volume.type === 'field' || volume.densityField || volume.depthBand?.sample);
+    const hasField = segments.some(([, volume]) => volume.type === 'field' || volume.lit || volume.densityField || volume.depthBand?.sample);
     for (const [end, volume, sign] of segments) {
       if (hasField && result[3] < .001) break;
       if (active.size && end > last) {
         let minStep = flash ? flash.step * stepScale : Infinity;
         for (const v of active) {
-          if (v.type === 'field') minStep = Math.min(minStep, v.step * stepScale);
+          if (v.type === 'field'||v.lit) minStep = Math.min(minStep, v.step * stepScale);
           if (v.densityField) minStep = Math.min(minStep, v.densityField.step * stepScale);
           if (v.depthBand?.sample) minStep = Math.min(minStep, v.depthBand.step * stepScale);
         }
@@ -260,7 +240,8 @@ const VolumeLight = (() => {
               const localDensity = v.density * (v.densityField?.sample(x,z) ?? 1) * (v.depthBand?.sample?.(x,y,z,options) ?? 1) * mist;
               if (v.type !== 'field') {
                 density += localDensity;
-                for (let k = 0; k < 3; k++) rgb[k] += localDensity * (v.rgb[k] * gain + .45 * (strike?.[k] ?? 0));
+                if(v.lit&&media)illuminate(v,light,x,y,z,direction,media,visibility);else light.fill(gain);
+                for (let k = 0; k < 3; k++) rgb[k] += localDensity * (v.rgb[k] * light[k] + .45 * (strike?.[k] ?? 0));
                 continue;
               }
               if (counters) counters.densitySamples++;

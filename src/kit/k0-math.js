@@ -5,6 +5,8 @@ KIT.detailBudgets = DetailBudgets;
 KIT.shadowArt = ShadowArt;
 KIT.splatFrames = SplatFrames;
 KIT.splatRelighting = SplatRelighting;
+KIT.areaLights = AreaLights;
+KIT.lightCookies = LightCookies;
 (function (K) {
   const V = (K.V = {
     add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],

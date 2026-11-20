@@ -55,13 +55,14 @@ const SceneOptics = (() => {
     return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
   }
 
-  const common = ({ density = 0.2, color = '#99b1c4', near = 0, far, id, tags, mediumKind, optical } = {}) => {
+  const common = ({ density = 0.2, color = '#99b1c4', near = 0, far, id, tags, mediumKind, optical,lit,step=.2,anisotropy=0 } = {}) => {
+    if(lit!==undefined&&(typeof lit!=='boolean'||!Number.isFinite(step)||step<=0||!Number.isFinite(anisotropy)||Math.abs(anisotropy)>=1))throw new RangeError('Invalid lit volume settings');
     nonnegative(near, 'Volume near distance');
     if (far !== undefined && (!Number.isFinite(far) || far <= near))
       throw new RangeError('Volume far distance must exceed near');
     return { density: nonnegative(density, 'Volume density'), color, near, far, ...(id !== undefined && { id }),
       ...(tags !== undefined && { tags }), ...(mediumKind !== undefined && { mediumKind }),
-      ...(optical !== undefined && { optical: opticalMaterials.material(optical) }) };
+      ...(optical !== undefined && { optical: opticalMaterials.material(optical) }),...(lit!==undefined&&{lit,step,anisotropy}) };
   };
   function fog(options = {}) {
     const { bottom, top, depthBand } = options;

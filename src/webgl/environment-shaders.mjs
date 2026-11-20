@@ -19,7 +19,7 @@ vec4 envRow(int index) {
 }
 `;
 
-export const environmentMediaGLSL = rays + data + `
+export function environmentMediaSource(lighting=false){ return rays + data + (lighting?`uniform highp sampler3D u_eFogField;uniform vec3 u_eFogMin,u_eFogExtent,u_eFogSize;vec3 eFogLight(vec3 p){vec3 uv=(clamp((p-u_eFogMin)/u_eFogExtent,vec3(0),vec3(1))*(u_eFogSize-1.0)+.5)/u_eFogSize;return texture(u_eFogField,uv).rgb;}`:'') + `
 uniform int u_envFogCount, u_envCardSize;
 uniform highp sampler2D u_envCard, u_envCloudLight;
 uniform float u_envBands, u_envCloudHardness;
@@ -79,17 +79,25 @@ vec4 envFog(vec3 origin, vec3 ray, float stop) {
     events[j] = value;
   }
   vec4 result = vec4(0,0,0,1), medium = vec4(0);
+  ${lighting?'vec3 luminous=vec3(0);':''}
   float last = 0.0;
   for (int i=0; i<budget; i++) {
     if (i >= n) break;
     vec2 event = events[i];
     if (medium.a > 1e-10 && event.x > last) {
+      ${lighting?`if(dot(luminous,vec3(1))>0.0){
+        float ds=(event.x-last)/4.0,alpha=1.0-exp(-medium.a*ds);
+        for(int j=0;j<4;j++){vec3 p=origin+ray*(last+(float(j)+.5)*ds);vec3 light=eFogLight(p);
+          result.rgb+=result.a*alpha*(medium.rgb-luminous+luminous*light)/medium.a;result.a*=1.0-alpha;}
+      }else{`:''}
       float alpha = 1.0-exp(-medium.a*(event.x-last));
       result.rgb += result.a * alpha * medium.rgb / medium.a;
       result.a *= 1.0-alpha;
+      ${lighting?'}':''}
     }
     vec4 volume = envRow(4*(int(abs(event.y))-1)+2);
     medium += sign(event.y)*vec4(volume.rgb*volume.a,volume.a);
+    ${lighting?'if(envRow(4*(int(abs(event.y))-1)+3).w>.5)luminous+=sign(event.y)*volume.rgb*volume.a;':''}
     last = event.x;
   }
   if (u_envBands > 1.0 && result.a < 1.0) {
@@ -167,7 +175,9 @@ vec3 envMedia(vec3 color, vec2 pixel, vec2 size, float axialDepth) {
   }
   return color;
 }
-`;
+`;}
+export const environmentMediaGLSL=environmentMediaSource();
+
 
 const sky = `
 uniform int u_envHasSky, u_envSkySplats, u_envSkyStart, u_envBackdropSampled;
@@ -201,9 +211,10 @@ vec3 envBackdrop(vec2 pixel, vec2 size) {
 `;
 
 export const environmentBackgroundGLSL = environmentMediaGLSL + sky;
-export const environmentBackgroundShader = layeredGlass => `#version 300 es
+export const environmentBackgroundSource=(lighting=false)=>environmentMediaSource(lighting)+sky;
+export const environmentBackgroundShader = (layeredGlass,lighting=false) => `#version 300 es
 precision highp float; precision highp int;
-${environmentBackgroundGLSL}
+${environmentMediaSource(lighting)+sky}
 uniform vec2 u_envViewport;
 layout(location=0) out vec4 scene;
 layout(location=1) out vec4 depth;

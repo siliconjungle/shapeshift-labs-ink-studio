@@ -56,3 +56,5 @@ settings array also requests caster retention when building a JSON diorama. The
 Node renderer and CLI use area sampling for direct light and actual emitter
 geometry for reflections. For the analytical polygonal-light technique that
 informed the feature, see [Real-Time Polygonal-Light Shading](https://eheitzresearch.wordpress.com/415-2/).
+
+See [additional light emitters](light-emitters.md) for line lights, colored cookies, animated settings and native browser rendering.

@@ -12,7 +12,7 @@ function packVolume(volume, out, offset) {
   const first = volume.min ?? volume.at ?? volume.from ?? [0,volume.bottom ?? -1e20,0];
   const second = volume.max ?? volume.axis ?? [0,volume.top ?? 1e20,0];
   out.set([...first,type,...second,volume.height ?? 0,...volume.rgb,volume.density,
-    volume.near,volume.far ?? 1e20,volume.radius ?? 0,0],offset);
+    volume.near,volume.far ?? 1e20,volume.radius ?? 0,+(!!volume.lit)],offset);
 }
 
 export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, toolkit) {
@@ -129,7 +129,7 @@ export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, 
       }
     } else tableData.bind(cloudLightUnit);
     return {
-      media:!!(card || fog.length),
+      media:!!(card || fog.length),lit:fog.some(v=>v.lit),
       uniforms:{
         u_envData:dataUnit,u_envCard:cardUnit,u_envCloudLight:cloudLightUnit,u_envBackdrop:backdropUnit,
         u_envEye:pose.eye,u_envRight:pose.right,u_envUp:pose.up,u_envBack:pose.back,

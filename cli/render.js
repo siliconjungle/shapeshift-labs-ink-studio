@@ -293,7 +293,7 @@ function renderFrame(world, o, preparedPalettes) {
   const contactSettings = ContactShadows.prepare(o.contactShadows ?? look.contactShadows);
   const orderMode = o.splatOrder ?? look.splatOrder ?? 'center';
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
-  const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights);
+  const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
   const probeView = o[probeCamera];
   const useSdf = sdfSettings && world.renderSdfs?.length && !o.reflectionPlane?.select && !probeView?.allow;
   const transparency = SplatOrder.transparency(o.stableTransparency ?? look.stableTransparency);
@@ -669,10 +669,12 @@ function renderFrame(world, o, preparedPalettes) {
     throw new RangeError('Sky reflections source must be scene or material');
   const horizon = Math.max(eyeD + 2 * R, cloudView?.horizon(eye) ?? 0,
     ...depthBands.filter(band=>band.density>0).map(band=>band.depth[1]+depthOffset));
-  const volumeLighting = o.volumeLighting ?? world.volumeLighting;
+  const volumeLighting = o.volumeLighting ?? world.volumeLighting ?? (areaLights.length?{}:undefined);
   let localLighting;
-  const prepareVolumeLight = () => volumeLighting ? (localLighting ??= SceneOptics.lighting(volumeLighting, world.pal,
-    { time: t, localLights: o.volumeLocalLights, localShadows: o.volumeLocalShadows, celestialSun: celestial?.sun })) : undefined;
+  const lightCasters=areaLights.some(l=>l.shadows)?AreaLights.staticSources(world,d):[];
+  const volumeSource=volumeLighting&&!volumeLighting.shadow&&lightCasters.length?{...volumeLighting,shadow:(x,y,z,direction,distance)=>AreaLights.occludes(lightCasters,[x,y,z],direction,distance)}:volumeLighting;
+  const prepareVolumeLight = () => volumeSource ? (localLighting ??= SceneOptics.lighting(volumeSource, world.pal,
+    { time: t, localLights: o.volumeLocalLights, localShadows: o.volumeLocalShadows, celestialSun: celestial?.sun,areaLights })) : undefined;
   const daylight = o.lightDaylight ?? o.environment?.daylight ?? an.daylight ?? 1;
   const dusk = LightSchedule.gain(daylight);
   const lampEye = eye;
@@ -694,7 +696,7 @@ function renderFrame(world, o, preparedPalettes) {
     const quality = atmosphereQuality({ ...world.volumeQuality, ...o.volumeQuality });
     quality.wind = volumeWind ?? wind.velocity;
     if (volumeFlow) quality.windOffset = volumeFlow.windOffset;
-    const media = volumes.some(volume => volume.type === 'field') ? prepareVolumeLight() : undefined;
+    const media = volumes.some(volume => volume.type === 'field'||volume.lit) ? prepareVolumeLight() : undefined;
     return { ...quality, time: t, waterTime: motion.water, waterWind, cloudShadow, flash, media, exposure, cutouts, cloud:cloudView, effectCoverage: trackMedia,
       cloudStart:cloudView && eyeD-dist, fogTransmittance:!!fogPass, bands:direction?.bands, counters:counters?.volume };
   };
@@ -1210,6 +1212,7 @@ function renderFrame(world, o, preparedPalettes) {
       }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample);
     }
+    if(i<0&&sprite.surface&&!sprite.emission&&directLight&&sprite.normal)color=directLight(sprite.p,position,sprite.normal,color);
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
       const shaded=value+(fog[c]-value)*fogMix;

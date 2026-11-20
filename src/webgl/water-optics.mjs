@@ -1,4 +1,4 @@
-import { environmentBackgroundGLSL } from './environment-shaders.mjs';
+import { environmentBackgroundGLSL,environmentBackgroundSource } from './environment-shaders.mjs';
 
 // Exact ray intervals through the published water columns. Distance is in
 // world units, independently of perspective, ortho, and the scene depth ramp.
@@ -408,12 +408,12 @@ vec3 waterPaint(vec3 color, vec2 pixel, vec2 size, float axial, out vec3 mark) {
 }
 `;
 
-export const waterBackgroundShader = (airPockets, layered, atlas, environment, layeredGlass) => `#version 300 es
+export const waterBackgroundShader = (airPockets, layered, atlas, environment, layeredGlass,emitterFog=false) => `#version 300 es
 precision highp float;
 ${waterGLSL(airPockets, layered, atlas)}
 uniform vec2 u_waterViewport;
 uniform vec3 u_waterBackground;
-${environment ? environmentBackgroundGLSL : ''}
+${environment ? environmentBackgroundSource(emitterFog) : ''}
 layout(location=0) out vec4 scene;
 layout(location=1) out vec4 depth;
 layout(location=2) out vec4 mask;

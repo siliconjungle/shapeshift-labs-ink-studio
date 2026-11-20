@@ -101,3 +101,5 @@ ink-studio render examples/lighthouse-mist.js --t 2.8 --raw --volume-local-light
 ```
 
 In the [lighthouse scene](../examples/lighthouse-mist.js), the pilot hut cuts through the rotating beam and three warm lanterns light the low mist over the pier. Both CLI options accept `on` or `off`. In `ink.render`, use `volumeLocalLights` and `volumeLocalShadows` as booleans. The toggles leave directional lighting and its shadow query available.
+
+See [additional light emitters](light-emitters.md) for RGB/procedural cookies and shared lighting of native analytic fog volumes.
