@@ -1,6 +1,28 @@
 const defaultFov = 38 * Math.PI / 180;
+const snapshots = new WeakMap();
+
+export function captureCamera(world, frame, width, height) {
+  if (!Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1)
+    throw new RangeError('Camera capture requires positive integer dimensions');
+  const camera = makeCamera(world, frame, width, height);
+  const pose = Object.freeze(Object.fromEntries(Object.entries(cameraPose(camera))
+    .map(([key, value]) => [key, Object.freeze(value)])));
+  const snapshot = Object.freeze({ pose, ortho:camera.ortho,
+    yaw:Math.atan2(pose.back[0],pose.back[2]), pitch:Math.asin(Math.max(-1,Math.min(1,pose.back[1]))) });
+  snapshots.set(snapshot,{camera,height});
+  return snapshot;
+}
 
 export function makeCamera(world, frame, width, height) {
+  if (frame.cameraSnapshot !== undefined) {
+    const locked = snapshots.get(frame.cameraSnapshot);
+    if (!locked) throw new TypeError('Use a camera snapshot from captureCamera');
+    const {camera} = locked, aspect = width/height, scale = locked.height/height;
+    if (aspect === camera.aspect && scale === 1) return camera;
+    const projection = camera.projection.slice();
+    projection[0] *= camera.aspect/aspect;
+    return { ...camera,aspect,projection,footprint:camera.footprint*scale,shadowFootprint:camera.shadowFootprint*scale };
+  }
   const authored = world.cameraRig?.sample(frame.time ?? world.lookSnapshot?.time ?? 0, { shot: frame.cameraShot }).camera;
   const camera = { target: [0, 0, 0], dist: 12, yaw: 0, pitch: 0, ...world.cam, ...authored, ...frame.camera };
   const { yaw, pitch, dist, target, fov = defaultFov } = camera;

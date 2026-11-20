@@ -796,6 +796,8 @@ const CMD = {
         '    sim dependencies <scene|run|driver.js> [--ticks N] [--actions file] [--out report.json]   report spatial rebuilds',
         '    sim sweep <world|run> <cases.json>   use look cases to compare one fixed simulation snapshot',
         '  compare <scene|run> --looks cases.json [--out sheet.png]   compare look variants on the same view',
+        '    --comparison side-by-side|swipe|difference   compose exactly two look cases into one image',
+        '    --divider 0.5 --swipe-axis x|y --difference-channel luminance|red|green|blue --difference-gain 3',
         '  look inspect <scene|run|look-file> [--renderer headless|webgl]   list bindings, dependencies and targets',
         '  look sample <look-file> [--look pack/look] [--colors JSON | --chart] [--out file.json|chart.png]',
         '  look bake <look-file> [--format auto|palette|lut] [--swatches file] [--size N] [--out bundle.json]',
@@ -2388,6 +2390,12 @@ const CMD = {
       if (typeof opt.report === 'string' && (path.resolve(id) === path.resolve(opt.report) ||
         opt.out && path.resolve(opt.out) === path.resolve(opt.report))) die('--report needs a separate path');
       const cases = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const comparison = opt.comparison === undefined ? null : lib().KIT.comparison.settings({
+        mode: opt.comparison,divider:num('divider',.5),axis:opt['swipe-axis']??'x',
+        difference:{channel:opt['difference-channel']??'luminance',gain:num('difference-gain',3)}
+      });
+      if (comparison && (!opt.out || !Array.isArray(cases) || cases.length!==2))
+        die('--comparison needs two look cases and --out');
       const Preview = require('./look-preview.js');
       let world = worldCLI().lookSnapshot(id);
       if (!world) {
@@ -2400,7 +2408,8 @@ const CMD = {
       if (opt.out) {
         const up = num('up', 1), cols = num('cols', Math.min(4, frames.length));
         if (![up, cols].every(n => Number.isSafeInteger(n) && n > 0)) die('--up and --cols need positive integers');
-        const sheet = R.grid(frames.map(frame => R.upscale(frame, up)), cols, report.results.map(row => String(row.id)));
+        const sheet = comparison ? R.upscale(lib().KIT.comparison.compose(...frames,comparison),up) :
+          R.grid(frames.map(frame => R.upscale(frame, up)), cols, report.results.map(row => String(row.id)));
         fs.mkdirSync(path.dirname(path.resolve(opt.out)), { recursive: true });
         PNG.write(opt.out, sheet.w, sheet.h, sheet.rgb);
       }

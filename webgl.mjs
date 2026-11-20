@@ -10,3 +10,6 @@ export { createSplatInstances } from './src/webgl/instances.mjs';
 export { createSurfacePipeline } from './src/webgl/surfaces.mjs';
 export { createDrawingInput } from './src/webgl/drawing-input.mjs';
 export { mountLinkedViews } from './src/webgl/linked-views.mjs';
+export { createComparisonRenderer } from './src/webgl/comparison-renderer.mjs';
+export { captureCamera } from './src/webgl/view.mjs';
+export { mountComparisonView } from './src/webgl/comparison-view.mjs';
