@@ -47,68 +47,45 @@
         preparedDirection = ArtDirection.prepare(source);
         previousDirection = source;
       }
-      return Object.hasOwn(st, "motionDirection")
-        ? st.motionDirection
-        : preparedDirection;
+      return Object.hasOwn(st, 'motionDirection') ? st.motionDirection : preparedDirection;
     };
     st.sceneWind = () => {
       const options = st.motionEnvironment ?? {};
-      const sampled = EnvironmentFrame.timeline(
-        W,
-        options,
-        0,
-        null,
-        K.weather.tracks,
-      );
-      const weather = EnvironmentFrame.opticalWeather(
-        W,
-        options,
-        sampled,
-        options.weatherFronts !== false,
-      );
-      const exposure = SceneExposure.settings(
-        W.sceneExposure,
-        options.sceneExposure,
-      );
+      const sampled = EnvironmentFrame.timeline(W, options, 0, null, K.weather.tracks);
+      const weather = EnvironmentFrame.opticalWeather(W, options, sampled, options.weatherFronts !== false);
+      const exposure = SceneExposure.settings(W.sceneExposure, options.sceneExposure);
       const field = EnvironmentFrame.wind(W, options, {
         ...sampled,
         weather,
-        exposure,
+        exposure
       });
       return (x, y, z, t) => {
-        const [vx, vz] = field.airAt(
-          x,
-          y,
-          z,
-          options.skyTime ?? t + (st.t0 ?? 0),
-        ).velocity;
+        const [vx, vz] = field.airAt(x, y, z, options.skyTime ?? t + (st.t0 ?? 0)).velocity;
         return [vx, 0, vz];
       };
     };
     const rgba = [0, 0, 0, 0];
-    st.touch = (i) => {
+    st.touch = i => {
       rows[i >> 9] = 1;
     };
-    st.repaint = (i) => {
+    st.repaint = i => {
       if (!flag[i]) {
         flag[i] = 1;
         queue[qn++] = i;
       }
     };
-    st.repaintAll = (ids) => {
+    st.repaintAll = ids => {
       for (let k = 0; k < ids.length; k++) st.repaint(ids[k]);
     };
     const clothSystems = [];
     st.useTimeDomains = (clocks, { advance = true } = {}) => {
-      if (!clocks?.read || typeof advance !== "boolean")
-        throw new TypeError("Expected shared time domains");
+      if (!clocks?.read || typeof advance !== 'boolean') throw new TypeError('Expected shared time domains');
       for (const sys of st.systems) {
-        const route = routed.get(sys);
-        if (route && !clocks.has(route.domain))
-          throw new Error("Unknown clock " + route.domain);
+        const route = routed.get(sys) ?? clothRoutes.get(sys);
+        if (route && !clocks.has(route.domain)) throw new Error('Unknown clock ' + route.domain);
       }
       for (const sys of st.systems) {
-        const route = routed.get(sys);
+        const route = routed.get(sys) ?? clothRoutes.get(sys);
         if (route) {
           route.epoch = -1;
           route.time = null;
@@ -121,25 +98,22 @@
       W.timeDomains = clocks;
       return st;
     };
-    st.clockFor = (sys) => domains?.read(routed.get(sys)?.domain ?? "animation");
+    st.clockFor = sys => domains?.read(routed.get(sys)?.domain ?? 'animation');
     st.setTimeDomain = (sys, domain) => {
-      if (!st.systems.includes(sys))
-        throw new Error("System must be installed on this stage");
-      if (domain === null) routed.delete(sys);
-      else {
-        if (typeof domain !== "string" || (domains && !domains.has(domain)))
-          throw new Error("Unknown system clock");
+      if (!st.systems.includes(sys)) throw new Error('System must be installed on this stage');
+      if (domain === null) {
+        routed.delete(sys);
+        clothRoutes.delete(sys);
+      } else {
+        if (typeof domain !== 'string' || (domains && !domains.has(domain))) throw new Error('Unknown system clock');
         routed.set(sys, { domain, epoch: -1, time: null });
       }
       return sys;
     };
     st.add = (sys, options = {}) => {
       if (options.domain !== undefined) {
-        if (
-          typeof options.domain !== "string" ||
-          (domains && !domains.has(options.domain))
-        )
-          throw new Error("Unknown system clock");
+        if (typeof options.domain !== 'string' || (domains && !domains.has(options.domain)))
+          throw new Error('Unknown system clock');
         routed.set(sys, { domain: options.domain, epoch: -1, time: null });
       }
       st.systems.push(sys);
@@ -172,12 +146,7 @@
           r.time = c.time;
         }
       } else if (r.time === null || c.time !== r.time) {
-        sys.update(
-          r.time === null ? c.clock.sampleDt : Math.max(0, c.time - r.time),
-          c.time,
-          st,
-          c.clock,
-        );
+        sys.update(r.time === null ? c.clock.sampleDt : Math.max(0, c.time - r.time), c.time, st, c.clock);
         r.time = c.time;
       }
     }
@@ -191,7 +160,7 @@
         }
         let route = routed.get(system) ?? clothRoutes.get(system);
         if (!route) {
-          route = { domain: "animation", epoch: -1, time: null };
+          route = { domain: 'animation', epoch: -1, time: null };
           clothRoutes.set(system, route);
         }
         const clock = domains.read(route.domain);
@@ -199,7 +168,7 @@
           route,
           clock,
           dt: clock.sampleDt,
-          time: clock.sampleTime,
+          time: clock.sampleTime
         });
       }
     };
@@ -207,12 +176,9 @@
       const sceneTime = t;
       if (domains) {
         if (advanceDomains) domains.advance(dt);
-        const clock = domains.read("animation");
+        const clock = domains.read('animation');
         t = clock.sampleTime;
-        dt =
-          domainFrame === domains.frameId && domainEpoch === domains.epoch
-            ? 0
-            : clock.sampleDt;
+        dt = domainFrame === domains.frameId && domainEpoch === domains.epoch ? 0 : clock.sampleDt;
       } else {
         if (st.t0 === undefined) st.t0 = t;
         t -= st.t0;
@@ -220,20 +186,14 @@
       }
       st.time = t;
       st.dt = dt;
-      const context = (sys) => {
-        const route =
-            routed.get(sys) ??
-            (domains && sys.independentCloth ? clothRoutes.get(sys) : undefined),
-          clock = domains && domains.read(route?.domain ?? "animation");
+      const context = sys => {
+        const route = routed.get(sys) ?? (domains && sys.independentCloth ? clothRoutes.get(sys) : undefined),
+          clock = domains && domains.read(route?.domain ?? 'animation');
         return {
           route,
           clock,
-          dt: clock
-            ? domainFrame === domains.frameId && domainEpoch === domains.epoch
-              ? 0
-              : clock.sampleDt
-            : dt,
-          time: clock?.sampleTime ?? t,
+          dt: clock ? (domainFrame === domains.frameId && domainEpoch === domains.epoch ? 0 : clock.sampleDt) : dt,
+          time: clock?.sampleTime ?? t
         };
       };
       for (let k = st.systems.length - 1; k >= 0; k--) {
@@ -241,8 +201,7 @@
           c = context(sys);
         if (sys.pre) sys.pre(c.dt, c.time, st, c.clock);
       }
-      for (const sys of st.systems)
-        if (!(separateCloth && sys.independentCloth)) runSystem(sys, context(sys));
+      for (const sys of st.systems) if (!(separateCloth && sys.independentCloth)) runSystem(sys, context(sys));
       for (let k = 0; k < qn; k++) {
         const i = queue[k],
           o = i * 16,
@@ -266,10 +225,7 @@
           const c = context(system);
           system.post(c.dt, c.time, st, c.clock);
         }
-      atmosphereHistory?.capture(
-        domains ? domains.read("animation").sampleTime : sceneTime,
-        socketPose,
-      );
+      atmosphereHistory?.capture(domains ? domains.read('animation').sampleTime : sceneTime, socketPose);
       if (domains) {
         domainFrame = domains.frameId;
         domainEpoch = domains.epoch;

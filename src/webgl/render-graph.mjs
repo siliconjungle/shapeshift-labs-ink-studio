@@ -210,7 +210,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         const feedback = node.type === 'feedback';
         const memory = feedback || node.type === 'history' ? openHistory(node) : null;
         const mask = outputs.get(node.mask), table = node.type === 'grade' && api.cube(node);
-        const layer = node.layer && (!feedback || memory.capture) && api.layer(node, w, h, world, time, camera, gl);
+        const layer = node.layer && (!feedback || memory.capture) && api.layer(node, w, h, world, time, camera, gl, frame.time);
         const scanlines = api.rowTable(node.rows, w, h, time);
         const select = node.enabled && ownership && node.select && JSON.stringify(node.select);
         const opacity = node.opacity * (node.layer && !feedback ? layer?.opacity ?? 0 : 1);

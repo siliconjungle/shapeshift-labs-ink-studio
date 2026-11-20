@@ -1,7 +1,8 @@
 (function (K) {
   const bindings = new WeakMap(),
     fonts = new WeakMap();
-  function anchor(spec, { world, time }) {
+  function anchor(spec, { world, time, sceneTime }) {
+    const poseTime = sceneTime ?? world.timeDomains?.read('animation').sampleTime ?? time;
     if(spec.node!==undefined){
       const graph=world.sceneGraph;
       if(!graph?.has(spec.node)||spec.socket&&!graph.node(spec.node).sockets.includes(spec.socket))return null;
@@ -13,7 +14,7 @@
     }
     if (Number.isSafeInteger(spec.splat)) {
       if (spec.splat < 0 || spec.splat >= world.count) return null;
-      return { at: K.splatFrames.create(world, time, K.M)(spec.splat).position() };
+      return { at: K.splatFrames.create(world, poseTime, K.M)(spec.splat).position() };
     }
     if (Number.isSafeInteger(spec.part) || Number.isSafeInteger(spec.bone)) {
       const index = spec.part ?? spec.bone,
@@ -41,7 +42,7 @@
         bindings.set(spec, binding);
       }
       if (!binding.ids.length) return null;
-      const sample = K.splatFrames.create(world, time, K.M),
+      const sample = K.splatFrames.create(world, poseTime, K.M),
         lo = [Infinity, Infinity, Infinity],
         hi = [-Infinity, -Infinity, -Infinity];
       for (const id of binding.ids) {

@@ -1148,7 +1148,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const time = frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0;
       let camera;
       const drawFrame = plan.needsCamera ? { ...frame, ...captureFrameCamera(frame, view => { camera = view; }) } : frame;
-      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl) : api.layers(plan, world, time, undefined, gl);
+      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl, frame.time) : api.layers(plan, world, time, undefined, gl, frame.time);
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
       composite(world, drawFrame, plan, layers, output, present);
     }
@@ -1173,7 +1173,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     }
     let inspection;
     function presentFrame(world, frame, width, height, output) {
-      frame=toolkit.KIT?.timeDomains?.frame(world,frame)??frame;
+      frame = toolkit.KIT?.timeDomains?.frame(world, frame) ?? frame;
       const source = frame.renderHistoryKey ?? world;
       ({ world, frame } = reconstructFrame(world, frame, reconstructionInstances));
       if (source !== world) frame = { ...frame, renderHistoryKey: source };

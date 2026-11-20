@@ -100,7 +100,7 @@
     const defaults = { simulation: { step: 1 / 60 }, animation: {}, camera: {}, interface: {} };
     const defs = { ...defaults };
     for (const [id, raw] of Object.entries(definition.domains ?? {})) {
-      check(record(raw), 'invalid clock definition');
+      check(name(id) && record(raw), 'invalid clock definition');
       defs[id] = { ...(defaults[id] ?? {}), ...raw };
     }
     check(record(definition.domains ?? {}) && Object.keys(defs).length <= 256, 'expected at most 256 domains');

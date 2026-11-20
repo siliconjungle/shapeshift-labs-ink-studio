@@ -109,6 +109,7 @@ export function createInspection(
     const plan = api.plan(settings, {
       world,
       time: frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0,
+      sceneTime: frame.time ?? world.lookSnapshot?.time ?? 0,
       width: w,
       height: h,
       camera: capture.camera,
