@@ -270,9 +270,12 @@ const Randomness = (() => {
           if (typeof c.name !== 'string' || !c.name.length || c.name.length > 256 || seen.has(c.name))
             throw new TypeError('Randomness: channel names must be distinct nonempty strings');
           seen.add(c.name);
-          const compiled = distribution(c.distribution);
-          if (compiled.spec.type === 'correlated')
+          if (
+            c.distribution?.type === 'correlated' ||
+            (prepared.has(c.distribution) && c.distribution.spec.type === 'correlated')
+          )
             throw new TypeError('Randomness: nested correlated channels are unsupported');
+          const compiled = distribution(c.distribution);
           return { name: c.name, compiled };
         });
       const n = items.length,

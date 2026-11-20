@@ -324,6 +324,9 @@ test('work budgets and invalid authoring controls fail before consuming a draw',
   assert.throws(() => s.fork(''));
   assert.throws(() => s.order(['a', 'a']), /unique/);
   assert.throws(() => K.random.spatial(s, { octaves: 99 }));
+  const recursive = { type: 'correlated', channels: [] };
+  recursive.channels.push({ name: 'bad', distribution: recursive });
+  assert.throws(() => R.distribution(recursive), /nested/);
 });
 
 test('the versioned counter generator keeps its numeric replay fixtures', () => {
