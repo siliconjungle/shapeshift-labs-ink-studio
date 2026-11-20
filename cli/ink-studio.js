@@ -608,7 +608,7 @@ function cameraOptions() {
   if (opt['focal-length'] === true || opt['sensor-height'] === true) die('Lens options need a value in millimeters');
   const composition=opt.composition===undefined?undefined:String(opt.composition).split(',').map(Number);
   if(composition!==undefined) {try{lib().CameraLens.composition(composition);}catch(error){die('--composition needs two normalized numbers, e.g. 0.33,0.5');}}
-  return { fov:num('fov'), focusDistance:num('focus-distance'), composition, cameraShot, ortho: onOffOption('ortho'), cameraStaging, cameraGuides: onOffOption('camera-guides'),
+  return { cameraImpulseTime:num('camera-impulse-time'), fov:num('fov'), focusDistance:num('focus-distance'), composition, cameraShot, ortho: onOffOption('ortho'), cameraStaging, cameraGuides: onOffOption('camera-guides'),
     focalLength: num('focal-length'), sensorHeight: num('sensor-height'), depthOfField: onOffOption('depth-of-field') };
 }
 
@@ -949,6 +949,7 @@ const CMD = {
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
         '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
+        '  camera-impulses <motion.json> [--at seconds --eye x,y,z --yaw radians --pitch radians --out report.json]  inspect camera motion',
         '  camera-rig <scene or world> [--at seconds --camera-shot ID --out report.json]  sample a shot and its clearance',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',
@@ -1542,6 +1543,9 @@ const CMD = {
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
+  },
+  'camera-impulses'() {
+    return require('./camera-impulses.js')(pos,opt,lib());
   },
   'camera-rig'() {
     return worldCLI().inspectCameraRig(pos[0]);

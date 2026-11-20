@@ -22,6 +22,8 @@ const RenderGraph = require('../src/render-graph.js');
 const runGraph = require('./render-graph.js');
 const FrameComposite = require('../src/frame-composite.js');
 const CameraStaging = require('../src/camera-staging.js');
+const CameraLens = require('../src/camera-lens.js');
+const CameraImpulses = require('../src/camera-impulses.js');
 const SplatOrder = require('../src/splat-order.js');
 const Cutaway = require('../src/cutaway.js');
 const { blendLayers } = require('./translucent-layers.js');
@@ -280,7 +282,7 @@ function renderFrame(world, o, preparedPalettes) {
     ch = o.h || 620,
     T0 = CameraStaging.frameTarget({target:o.target || c.target,yaw,pitch,dist,fov:2*Math.atan(tangent),composition:o.composition ?? c.composition},cw/ch),
     T = cameraMotion.kick ? [T0[0] + cameraMotion.kick[0], T0[1] + cameraMotion.kick[1], T0[2] + cameraMotion.kick[2]] : T0;
-  const depthOffset = ortho && !authored ? 2 * world.radius + 4 : 0;
+  const depthOffset = ortho && !authored && !c.pose ? 2 * world.radius + 4 : 0;
   const audit = o.lookAudit === true ? createAudit() : o.lookAudit;
   const onPaletteClip = audit && ((scope, i, r, g, b) => audit.palette(scope, world.pal[i], r, g, b));
   const transparent = !!o.transparent && !o.captureCoverage;
@@ -491,7 +493,9 @@ function renderFrame(world, o, preparedPalettes) {
     eyeD = dist + depthOffset,
     reflectionPlane = o.reflectionPlane,
     focal = ortho ? H / 2 / oh : H / 2 / tangent,
-    cameraView = probeView?.matrix ?? viewMatrix(yaw, pitch, eyeD, T),
+    baseView = probeView?.matrix ?? (c.pose ? CameraLens.matrix(c.pose) : viewMatrix(yaw,pitch,eyeD,T)),
+    cameraImpulse = !probeView && CameraImpulses.frame(world,o,CameraLens.listenerPose(CameraLens.fromView(baseView),depthOffset)),
+    cameraView = cameraImpulse && (cameraImpulse.translation.some(Boolean)||cameraImpulse.rotation.some(Boolean)) ? CameraLens.matrix(CameraLens.applyMotion(CameraLens.fromView(baseView),cameraImpulse,{setback:depthOffset})) : baseView,
     view = ortho && stable?.snap ? ArtStability.snapView(cameraView, focal / (o.artGridScale || 1), stable.anchor) : cameraView,
     V = reflectionPlane ? SceneOptics.reflectedView(view, reflectionPlane) : view,
     near = probeView?.near ?? Math.max(0.4, 0.15 * dist),
@@ -499,6 +503,7 @@ function renderFrame(world, o, preparedPalettes) {
     asp = W / H,
     baseCount = world.count,
     R = world.radius;
+  if(!o.reflectionPlane&&!probeView)o.cameraFrame?.({time:o.cameraTime??sceneTime,pose:CameraLens.fromView(V),motion:cameraImpulse||null});
   if (!o.reflectionPlane && !probeView) o[captureCamera]?.({view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
     clipNear: near, clipFar: 400, distance: eyeD, setback: eyeD - dist, depthRange: [eyeD - R, eyeD + R],
     eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]});
@@ -670,11 +675,7 @@ function renderFrame(world, o, preparedPalettes) {
     { time: t, localLights: o.volumeLocalLights, localShadows: o.volumeLocalShadows, celestialSun: celestial?.sun })) : undefined;
   const daylight = o.lightDaylight ?? o.environment?.daylight ?? an.daylight ?? 1;
   const dusk = LightSchedule.gain(daylight);
-  const lampEye = probeView ? eye : [
-    T[0]+eyeD*Math.cos(pitch)*Math.sin(yaw),
-    T[1]+eyeD*Math.sin(pitch),
-    T[2]+eyeD*Math.cos(pitch)*Math.cos(yaw)
-  ];
+  const lampEye = eye;
   const lamps = LightSchedule.select(world.lights || [], lampEye, { daylight, duskOnly: true });
   const rainConfig = RainImpacts.settings(world.rainImpacts, o.rainImpacts);
   const rainWeather = motion.rain === skyTime ? weather : climate.binding?.frame(motion.rain, undefined, { retained: false });

@@ -1,4 +1,5 @@
 import { cameraLens } from './camera-lens.mjs';
+import { cameraImpulses } from './camera-impulses.mjs';
 const defaultFov = 38 * Math.PI / 180;
 const snapshots = new WeakMap();
 
@@ -35,16 +36,16 @@ export function makeCamera(world, frame, width, height) {
     throw new RangeError('The camera needs a finite orbit, positive distance, and field of view in (0, π)');
   const radius = world.radius ?? 14;
   const tanFov = Math.tan(fov / 2), aspect = width / height;
-  const zoomedDistance = dist / (world.anim?.zoom || 1);
+  const zoomedDistance = dist / (frame.lockCamera ? 1 : world.anim?.zoom || 1);
   const viewHeight = zoomedDistance * tanFov;
   const target = cameraLens.target({...camera,dist:zoomedDistance},aspect);
-  const distance = ortho && !authored ? zoomedDistance + 2 * radius + 4 : zoomedDistance;
+  const distance = ortho && !authored && !camera.pose ? zoomedDistance + 2 * radius + 4 : zoomedDistance;
   const xs = Math.sin(yaw), cs = Math.cos(yaw), cy = Math.cos(pitch);
   const zx = cy * xs, zy = Math.sin(pitch), zz = cy * cs;
   const xl = Math.hypot(zz, zx);
   const xx = xl ? zz / xl : cs, xz = xl ? -zx / xl : -xs;
   const yx = zy * xz, yy = zz * xx - zx * xz, yz = -zy * xx;
-  const kick = world.anim?.kick;
+  const kick = frame.lockCamera ? null : world.anim?.kick;
   const eye = [
     (target[0] + (kick?.[0] ?? 0)) + distance * zx,
     (target[1] + (kick?.[1] ?? 0)) + distance * zy,
@@ -71,7 +72,10 @@ export function makeCamera(world, frame, width, height) {
     clipFar: far,
     depthRange: [depthCenter - radius, depthCenter + radius]
   };
-  return camera.pose ? withCameraPose(result, camera.pose) : result;
+  let resolved = camera.pose ? withCameraPose(result,camera.pose) : result;
+  const motion = cameraImpulses.frame(world,frame,cameraLens.listenerPose(cameraPose(resolved),resolved.setback));
+  if(motion){if(motion.translation.some(Boolean)||motion.rotation.some(Boolean))resolved=withCameraPose(resolved,cameraLens.applyMotion(cameraPose(resolved),motion,{setback:resolved.setback}));resolved={...resolved,cameraImpulse:motion};}
+  return resolved;
 }
 
 export function cameraPose({ eye, view }) {
@@ -79,19 +83,9 @@ export function cameraPose({ eye, view }) {
     up: [view[1], view[5], view[9]], back: [view[2], view[6], view[10]] };
 }
 
-export function withCameraPose(camera, { eye, right, up, back }) {
-  const axes = [right, up, back];
-  const valid = v => Array.isArray(v) && v.length === 3 && Array.from(v).every(Number.isFinite);
-  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  if (!valid(eye) || !axes.every(valid) || axes.some(axis => Math.abs(dot(axis, axis) - 1) > 1e-4) ||
-      Math.abs(dot(right, up)) > 1e-4 || Math.abs(dot(right, back)) > 1e-4 || Math.abs(dot(up, back)) > 1e-4 ||
-      dot([right[1] * up[2] - right[2] * up[1], right[2] * up[0] - right[0] * up[2],
-        right[0] * up[1] - right[1] * up[0]], back) < 0.9999)
-    throw new RangeError('Camera pose needs a finite eye and a right-handed orthonormal basis');
-  return { ...camera, eye: eye.slice(), view: new Float32Array([
-    right[0], up[0], back[0], 0, right[1], up[1], back[1], 0, right[2], up[2], back[2], 0,
-    -dot(right, eye), -dot(up, eye), -dot(back, eye), 1
-  ]) };
+export function withCameraPose(camera, pose) {
+  const checked=cameraLens.pose(pose);
+  return {...camera,eye:checked.eye,view:new Float32Array(cameraLens.matrix(checked))};
 }
 
 function placedDepth(row, i, project) {

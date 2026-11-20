@@ -150,3 +150,5 @@ ink-studio render examples/cinematic-camera.js --camera-shot dolly --t 8 \
   --w 1080 --h 760 --out dolly-end.png
 ink-studio camera-rig scene.json --at 4
 ```
+
+Directional position/rotation impulses, source falloff, propagation delay and seeded handheld layers can compose after authored or free camera control. They use the resolved physical camera pose and an optional independent impulse clock. See [directional camera impulses](camera-impulses.md) and [Midnight midway](../examples/directional-camera-impulses.html).

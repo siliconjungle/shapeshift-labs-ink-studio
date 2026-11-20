@@ -93,6 +93,91 @@ const CameraLens = (() => {
       y = (v - 0.5) * 2 * h;
     return camera.target.map((n, i) => n + right[i] * x + up[i] * y);
   }
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  function pose(value) {
+    const valid = v => Array.isArray(v) && v.length === 3 && v.every(finite);
+    check(
+      value && [value.eye, value.right, value.up, value.back].every(valid),
+      'pose requires a finite eye and camera axes'
+    );
+    const axes = [value.right, value.up, value.back];
+    check(
+      axes.every(axis => Math.abs(dot(axis, axis) - 1) < 1e-4) &&
+        Math.abs(dot(axes[0], axes[1])) < 1e-4 &&
+        Math.abs(dot(axes[0], axes[2])) < 1e-4 &&
+        Math.abs(dot(axes[1], axes[2])) < 1e-4 &&
+        dot(cross(axes[0], axes[1]), axes[2]) > 0.9999,
+      'pose axes must be right-handed and orthonormal'
+    );
+    return Object.fromEntries(['eye', 'right', 'up', 'back'].map(key => [key, value[key].slice()]));
+  }
+  function fromView(v) {
+    check(v && v.length === 16 && Array.from(v).every(finite), 'view matrix must be finite');
+    return pose({
+      eye: [
+        -(v[0] * v[12] + v[1] * v[13] + v[2] * v[14]),
+        -(v[4] * v[12] + v[5] * v[13] + v[6] * v[14]),
+        -(v[8] * v[12] + v[9] * v[13] + v[10] * v[14])
+      ],
+      right: [v[0], v[4], v[8]],
+      up: [v[1], v[5], v[9]],
+      back: [v[2], v[6], v[10]]
+    });
+  }
+  function matrix(value) {
+    const { eye, right, up, back } = pose(value);
+    return [
+      right[0],
+      up[0],
+      back[0],
+      0,
+      right[1],
+      up[1],
+      back[1],
+      0,
+      right[2],
+      up[2],
+      back[2],
+      0,
+      -dot(right, eye),
+      -dot(up, eye),
+      -dot(back, eye),
+      1
+    ];
+  }
+  function listenerPose(value, setback = 0) {
+    check(finite(setback), 'camera setback must be finite');
+    const out = pose(value);
+    out.eye = out.eye.map((n, i) => n - out.back[i] * setback);
+    return out;
+  }
+  function applyMotion(value, motion, { setback = 0 } = {}) {
+    const original = listenerPose(value, setback),
+      translation = motion.translation ?? [0, 0, 0],
+      rotation = motion.rotation ?? [0, 0, 0];
+    check(
+      [translation, rotation].every(v => Array.isArray(v) && v.length === 3 && v.every(finite)),
+      'camera motion requires finite world translation and rotation vectors'
+    );
+    const radians = Math.hypot(...rotation);
+    check(finite(radians), 'rotation magnitude must be finite');
+    const axis = radians ? rotation.map(v => v / radians) : [0, 0, 1],
+      c = Math.cos(radians),
+      s = Math.sin(radians);
+    function turn(v) {
+      const sideways = cross(axis, v),
+        parallel = dot(axis, v) * (1 - c);
+      return v.map((n, i) => n * c + sideways[i] * s + axis[i] * parallel);
+    }
+    const back = turn(original.back);
+    return {
+      eye: original.eye.map((n, i) => n + translation[i] + back[i] * setback),
+      right: turn(original.right),
+      up: turn(original.up),
+      back
+    };
+  }
   return Object.freeze({
     defaultFov,
     defaultSensorHeight,
@@ -101,7 +186,12 @@ const CameraLens = (() => {
     resolve,
     view,
     composition,
-    target
+    target,
+    pose,
+    fromView,
+    matrix,
+    listenerPose,
+    applyMotion
   });
 })();
 if (typeof module !== 'undefined') module.exports = CameraLens;

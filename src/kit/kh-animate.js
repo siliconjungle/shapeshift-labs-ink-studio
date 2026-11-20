@@ -715,6 +715,7 @@
     return anim;
   };
   /* camera shake: impulses that die away, the noise read from the shake's own clock (so a frozen frame holds still) */
+  K.cameraImpulses = CameraImpulses;
   A.camera = def => {
     const d = Object.assign(
       {
@@ -733,12 +734,14 @@
       amplitude: 0,
       offset: [0, 0, 0],
       impulse(amount, mode) {
+        if(amount&&typeof amount==='object'){cam.effects.emit({...amount,time:amount.time??cam.clock});return cam;}
         cam.amplitude =
           mode === 'add' ? cam.amplitude + amount : mode === 'max' ? Math.max(cam.amplitude, amount) : amount;
         return cam;
       },
       advance(dt) {
         cam.clock += dt;
+        if(Number.isFinite(cam.clock))cam.effects.seek(Math.max(0,cam.clock));
         cam.amplitude *= Math.exp(-dt * d.decay);
         const tick = Math.floor(cam.clock * d.rate);
         cam.offset = d.channels.map(c => Math.sin(tick * c.frequency + c.phase) * cam.amplitude);
@@ -756,11 +759,17 @@
         }
         cam.amplitude *= Math.exp(-Math.max(0, time - prev) * d.decay);
         cam.clock = time;
+        if(Number.isFinite(time))cam.effects.seek(Math.max(0,time));
         const tick = Math.floor(time * d.rate);
         cam.offset = d.channels.map(c => Math.sin(tick * c.frequency + c.phase) * cam.amplitude);
         return cam.offset;
       }
     };
+    Object.defineProperty(cam,'time',{get:()=>cam.clock});
+    cam.effects=CameraImpulses.create(def?.effects??{});
+    cam.emit=event=>cam.effects.emit({...event,time:event.time??cam.clock});
+    cam.sample=(time=cam.clock,context)=>cam.effects.sample(time,context);
+    cam.bind=world=>cam.effects.bind(world);
     return cam;
   };
 

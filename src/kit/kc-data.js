@@ -624,6 +624,12 @@
       bad('finish.look.cameraStaging', error.message);
     }
     try {
+      const motion=look?.cameraImpulses;
+      if(motion!==undefined&&motion!==false){if(typeof motion?.sample==='function')CameraImpulses.prepare(motion);else CameraImpulses.create(motion);}
+    } catch(error) {
+      bad('finish.look.cameraImpulses',error.message);
+    }
+    try {
       ArtInk.prepare(look?.ink, st.palette);
     } catch (error) {
       bad('finish.look.ink', error.message);
