@@ -656,6 +656,8 @@ Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/wei
 
 [Wallpaper and frieze groups](docs/wallpaper-frieze.md) repeat a vector motif as seamless pigment, etched relief, or tiles.
 
+[Quasiperiodic tilings](docs/quasiperiodic-tilings.md) generate Penrose and Ammann–Beenker pavement with stable tile addresses.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```
