@@ -132,6 +132,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `tiles.compile(definitions)`, `tiles.solve(model, options)`, `tiles.learn(swatch)`, `tiles.overlap(bank, options)`, `tiles.wang(model, options)`, `tiles.refine(coarse, model, options)` | Weighted matched sockets, example-based synthesis, world-stable patterns and coarse-to-fine layouts |
 | `tiles.quasiperiodic(options)` | [Penrose and Ammann–Beenker substitutions](quasiperiodic-tilings.md) with clipped tile polygons and stable address lineage |
 | `tiles.hyperbolic(options)`, `packing.apollonian(options)` | [Poincaré tilings and tangent circle packings](hyperbolic-mosaics.md) with bounded detail and stable addresses |
+| `coordinateTransforms` | [Möbius maps, inversion, and Droste recursion](recursive-coordinate-transforms.md) for world geometry, UVs, and rasters |
 | `KIT.curve.recursive(definition)` | [Koch, dragon, Hilbert, and Peano paths](recursive-curves.md) with stable lineage and continuous unfolding |
 | `attractors.trace(options)` | [Lorenz, Rössler, Clifford, and de Jong orbits](orbit-attractors.md) as time-sampled paths, speeds, and bounded visit density |
 | `ifs.compile(recipe)`, `ifs.preset(name)` | Seeded [iterated function systems and fractal flames](iterated-function-systems.md) for packed points and colored density grids |
