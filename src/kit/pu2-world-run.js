@@ -317,9 +317,10 @@
   const validate=(source,{implementations,workerPool}={})=>
     prepare(source,{implementations:implementationsFor(implementations,workerPool)}).world;
   function create(source, {checkpoint,implementations,profile = false,validated = false,workerPool,regionRevisions,traceSteps,
-    recordRun,playback,skipInitialSubmission=false} = {}, token) {
+    recordRun,playback,skipInitialSubmission=false,validateEntities} = {}, token) {
     check(workerPool===undefined||typeof workerPool?.solve==='function'&&
       (workerPool.async===undefined||typeof workerPool.async==='boolean'),'Invalid simulation worker pool');
+    check(validateEntities===undefined||typeof validateEntities==='function','Invalid entity validation callback');
     const modules=workerPool?.implementations;
     const installed=implementationsFor(implementations,workerPool);
     let result=validated?{world:source,plan:compile(source,installed)}:prepare(source,{implementations:installed});
@@ -584,6 +585,13 @@
     function query() {
       return currentQuery ?? (currentQuery = Q.create(view(),systems,projection));
     }
+    function projectEntities(overlay){
+      if(!overlay||!Object.keys(overlay.entities).length)return Object.freeze({view:view(),query:query()});
+      W.entityLifecycle.assertAvailable(Object.keys(overlay.entities),world.entities);
+      const frame=Object.freeze({...view(),world:W.manifest({...world,entities:{...world.entities,...overlay.entities}}),
+        [W.entityLifecycle.projection]:overlay});
+      return Object.freeze({view:frame,query:Q.create(frame,systems)});
+    }
     function evaluateScenario(nextView, events) {
       const rules = nextView.world.scenario;
       if (!rules || scenario.status !== 'running') return scenario;
@@ -671,6 +679,7 @@
           }
           if (key === 'patch') {
             const result = W.apply(nextWorld,item.args.edits);
+            if(result.world.entities!==nextWorld.entities)validateEntities?.(result.world.entities);
             for(const edge of nextWorld.connections)
               check(portOf(nextWorld,edge.from)===portOf(result.world,edge.from)&&
                 portOf(nextWorld,edge.to)===portOf(result.world,edge.to),'Live patch rebinds a connected port');
@@ -1081,7 +1090,7 @@
       return freeze({format:runFormat,version:1,origin,commands:added.slice(),end,...(trace&&{trace}),
         ...(evidence&&{evidence:evidence.document(end)})});
     }
-    return Object.freeze({view,query,step,advance,stepAsync,advanceAsync,...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
+    return Object.freeze({view,query,projectEntities,step,advance,stepAsync,advanceAsync,...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
       ...(debug&&{stepFrame:debug.latest,stepAttempt:debug.attempt}),
       get scenario(){return scenario;}, get history(){return history;}, get events(){return lastEvents;},
       schedule:commands => enqueue(commands,true),checkpoint:save,recording,
@@ -1101,7 +1110,7 @@
       reset:() => branch(origin)});
     function branch(checkpoint,remaining){
       return create(checkpoint.world,{checkpoint,implementations,profile,validated:true,workerPool,traceSteps,
-        recordRun:evidence?.plan,playback:remaining,skipInitialSubmission:true},
+        recordRun:evidence?.plan,playback:remaining,skipInitialSubmission:true,validateEntities},
         checkpoint.world===plan.world?branchToken:undefined);
     }
   }

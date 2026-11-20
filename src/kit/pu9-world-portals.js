@@ -67,9 +67,10 @@
     return result;
   }
 
-  function create({ places, links = [], templates = [], saved = {}, carry } = {}) {
+  function create({ places, links = [], templates = [], saved = {}, carry, lifecycle: manageEntities = false } = {}) {
     if (carry !== undefined && !['mapActor', 'planTravel', 'checkpoint', 'planRestore'].every(key =>
       typeof carry?.[key] === 'function')) throw new TypeError('Expected a carry registry');
+    if (typeof manageEntities !== 'boolean') throw new TypeError('Place lifecycle must be true or false');
     const catalog = unique(places, 'Places'), graph = unique(links, 'Links');
     const recipes = unique(templates, 'Place templates');
     const exits = new Map(), away = new Map(), observers = new Set();
@@ -78,6 +79,24 @@
     let memory = savedStates(saved), clocks = new Map();
     let active = null, pending = null, restoring = null, stepping = false, handoff = false;
     let walking = false, fading = null, disposed = false;
+    function authored(asset) {
+      const rows = synchronous(asset?.authoredEntities?.(), 'Authored entity readers') ?? {};
+      if (!W.data.record(rows)) throw new TypeError('Authored entities need a keyed record');
+      return rows;
+    }
+    const entities = manageEntities && W.entityLifecycle.create({
+      guard, known: id => catalog.has(id),
+      authored: id => authored(active?.id === id ? active.asset : away.get(id) ??
+        (pending?.place.id === id ? pending.asset : null))
+    });
+    function lifecycleContext(id, staged) {
+      const view = () => staged?.() ?? entities.view;
+      return Object.freeze({
+        scene: () => view().scene(id),
+        get(key) { const group = view().get(key); return group?.place === id ? group : null; },
+        assert: rows => view().assertPlace(id, rows)
+      });
+    }
     function savedStates(value) {
       if (!W.data.record(value)) throw new TypeError('Saved place state needs a JSON record keyed by place ID');
       return new Map(Object.entries(freeze(clone(value))));
@@ -248,7 +267,7 @@
     function validateAsset(asset) {
       if (!asset || typeof asset !== 'object')
         throw new TypeError('Place preparation must return a payload');
-      for (const method of ['step', 'checkpoint', 'prepareArrival', 'canArrive', 'dispose']) {
+      for (const method of ['step', 'checkpoint', 'prepareArrival', 'canArrive', 'dispose', 'authoredEntities']) {
         if (asset[method] !== undefined && typeof asset[method] !== 'function')
           throw new TypeError('Place payload ' + method + ' must be a callback');
       }
@@ -263,7 +282,8 @@
         const previous = from?.id === place.id ? from.asset : away.get(place.id);
         job.borrowed = previous;
         const context = { id: place.id, anchor: at, state: memory.get(place.id), previous: previous ?? null,
-          time: timeOf(place.id), signal: controller.signal, reason, link };
+          time: timeOf(place.id), signal: controller.signal, reason, link,
+          ...(entities && { lifecycle: lifecycleContext(place.id) }) };
         if (previous && place.tickPolicy === 'continue') {
           if (previous.prepareArrival) {
             context.state = stateOf(place.id, previous);
@@ -278,7 +298,11 @@
           if (asset !== job.borrowed) release(asset);
           return null;
         }
-        try { job.asset = validateAsset(asset); }
+        try {
+          validateAsset(asset);
+          if (entities) entities.view.assertPlace(place.id, authored(asset));
+          job.asset = asset;
+        }
         catch (error) { release(asset); throw error; }
         return asset;
       }).catch(error => {
@@ -311,7 +335,8 @@
         ...(actor.velocity ? { velocity: opening ? opening.direction(actor.velocity) : drop ? point(actor.velocity) : [0, 0, 0] } : {}),
         ...(actor.forward && opening ? { forward: opening.direction(actor.forward) } : {}),
         ...(actor.up && opening ? { up: opening.direction(actor.up) } : {}),
-        ...carry?.mapActor(link.from.place, actor, opening)
+        ...carry?.mapActor(link.from.place, actor, opening),
+        ...entities?.mapActor?.(actor, opening)
       });
       let mappedCamera = opening?.camera(camera) ?? null;
       if (drop && camera) mappedCamera = shiftCamera(camera, V.sub(arrival.position, actor.position));
@@ -325,7 +350,14 @@
       }
       const clear = !job.asset.canArrive || synchronous(job.asset.canArrive(arrival, link), 'Arrival clearance');
       const result = { status: clear ? 'ready' : 'blocked', link, actor: arrival, camera: mappedCamera, crossing };
-      if (!clear || !carry) return result;
+      if (!clear) return result;
+      if (entities && actor.entityHandle !== undefined) {
+        const plan = entities.planTravel({ actor, arrival, link, authored: authored(job.asset) });
+        if (plan.status !== 'ready') return { ...result, status: 'blocked', entityBlocker: plan };
+        result.entity = plan.entity;
+        result.commitEntity = plan.commit;
+      }
+      if (!carry) return result;
       const plan = carry.planTravel({ actor, arrival, link, crossing, previous, destination: job.asset });
       return plan.status === 'ready' ? { ...result, cargo: plan.cargo, commitCarry: plan.commit }
         : { ...result, status: 'blocked', cargoBlocker: plan };
@@ -338,7 +370,7 @@
         const contact = options === undefined ? null : encounter(link, options);
         const status = contact?.status ?? (job?.asset ? 'prepared' : job ? 'loading' : 'unprepared');
         if (!contact || status !== 'prepared') return Object.freeze({ status, link });
-        const { commitCarry, ...result } = evaluateArrival(job, freeze(clone(options.actor)),
+        const { commitCarry, commitEntity, ...result } = evaluateArrival(job, freeze(clone(options.actor)),
           options.camera == null ? null : clone(options.camera), contact.crossing, options.previous);
         return Object.freeze(result);
       } finally {
@@ -351,17 +383,19 @@
       try {
         const link = job.link;
         let arrival = { link, actor: null, camera: null, crossing: null };
-        let commit;
+        let moveCargo, moveEntity;
         if (link) {
           if (!permits(link, actor)) return null;
-          const { status, commitCarry, ...candidate } = evaluateArrival(job, actor, camera, crossing, previous);
+          const { status, commitCarry, commitEntity, ...candidate } = evaluateArrival(job, actor, camera, crossing, previous);
           if (status !== 'ready') return null;
-          commit = commitCarry;
+          moveCargo = commitCarry;
+          moveEntity = commitEntity;
           arrival = candidate;
         }
         const source = active, state = source?.asset.checkpoint?.();
         const savedSource = state === undefined ? undefined : freeze(clone(state));
-        commit?.();
+        moveCargo?.();
+        moveEntity?.();
         if (state !== undefined) memory.set(source.id, savedSource);
         away.delete(job.place.id);
         if (source && source.id !== job.place.id && catalog.get(source.id).tickPolicy === 'continue')
@@ -545,6 +579,7 @@
       }
       return freeze({ place: active?.id ?? null, saved: clone(Object.fromEntries(states)),
         ...(carry && { carry: carry.checkpoint() }),
+        ...(entities && { lifecycle: entities.api.checkpoint() }),
         ...(clocks.size ? { clocks: Object.fromEntries(clocks) } : {}),
         ...(away.size ? { away: [...away.keys()].sort() } : {}),
         ...(instances.size ? { portable: { version: 1, instances: [...instances.values()],
@@ -574,6 +609,8 @@
       const { places: restoredPlaces, known, entries, returns } = restorePortable(data.portable);
       if (data.carry !== undefined && !carry) throw new TypeError('This checkpoint needs a carry registry');
       const restoreCarry = data.carry === undefined ? null : carry.planRestore(data.carry, id => restoredPlaces.has(id));
+      if (data.lifecycle !== undefined && !entities) throw new TypeError('This checkpoint needs entity lifecycle enabled');
+      const restoreEntities = data.lifecycle === undefined ? null : entities.planRestore(data.lifecycle, id => restoredPlaces.has(id));
       if (data.place !== null && !restoredPlaces.has(data.place) || data.place === null && entries.size)
         throw new TypeError('Checkpoint needs a declared active place or null');
       const states = savedStates(data.saved);
@@ -593,12 +630,15 @@
       try {
         for (const id of ids) {
           const asset = await restoredPlaces.get(id).prepare({ id, anchor: null, state: states.get(id), previous: null,
-            time: nextClocks.get(id) ?? 0, signal: controller.signal, reason: 'restore', link: null });
+            time: nextClocks.get(id) ?? 0, signal: controller.signal, reason: 'restore', link: null,
+            ...(entities && { lifecycle: lifecycleContext(id, () => restoring === controller ? restoreEntities?.view : null) }) });
           assets.set(id, asset);
           if (controller.signal.aborted) return null;
           validateAsset(asset);
+          if (entities) (restoreEntities?.view ?? entities.view).assertPlace(id, authored(asset));
         }
         restoreCarry?.();
+        restoreEntities?.commit();
         memory = states;
         clocks = nextClocks;
         for (const [id, definition] of restoredPlaces) catalog.set(id, definition);
@@ -619,6 +659,7 @@
       }
     }
     return Object.freeze({ current: () => active, place, linksFrom: id => exits.get(id) ?? noLinks,
+      ...(entities && { lifecycle: entities.api }),
       registerInstance, openEntrance, closeEntrance,
       enter, approach, prepare, checkArrival, cancelPreparation, view, cross, fade, onCross, step, checkpoint, restore,
       dispose() {

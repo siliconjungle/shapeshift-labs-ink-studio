@@ -15,7 +15,7 @@
     'Invalid simulation place definition');
     const resident=new WeakMap();
     async function prepare(context) {
-      const {id:place,state,previous,time=0,signal}=context;
+      const {id:place,state,previous,time=0,signal,lifecycle}=context;
       if(signal?.aborted)return null;
       check(id(place)&&timeOK(time),'Invalid simulation place identity or clock');
       if(previous&&resident.get(previous)===place)return previous;
@@ -33,16 +33,31 @@
       check(input?.format!==R.runFormat||input.version===1&&checkpoint?.format===R.checkpointFormat,
         'Invalid recording for simulation place '+place);
       const stream=regionRevisions===undefined?undefined:{...regionRevisions,stream:regionRevisions.stream??place};
-      const run=R.create(checkpoint?.world??input,{...runtime,checkpoint,regionRevisions:stream});
+      const run=R.create(checkpoint?.world??input,{...runtime,checkpoint,regionRevisions:stream,
+        ...(lifecycle&&{validateEntities:rows=>{
+          runtime.validateEntities?.(rows);
+          lifecycle.assert(rows);
+        }})});
       const initial=run.view(), {dt}=initial.world;
       const clock=freeze({time:savedPlace?.clock.time??time,tick:savedPlace?.clock.tick??initial.tick});
-      let rendered, renderedQuery, saved;
+      let rendered, renderedQuery, saved, baseQuery, layers, frame;
+      function scene(){
+        const base=run.query(), overlay=lifecycle.scene();
+        if(baseQuery!==base||layers!==overlay){
+          frame=run.projectEntities(overlay);
+          baseQuery=base;
+          layers=overlay;
+        }
+        return frame;
+      }
+      const queryAt=lifecycle?()=>scene().query:run.query;
+      const viewAt=lifecycle?()=>scene().view:run.view;
       const payload=Object.freeze({
         get world(){
           if(visual===false)return undefined;
-          const query=run.query();
+          const query=queryAt();
           if(query!==renderedQuery){
-            const next=visual(run.view(),query);
+            const next=visual(viewAt(),query);
             if(typeof next?.then==='function'){
               Promise.resolve(next).catch(()=>{});
               throw Error('Simulation place visual callbacks must be synchronous');
@@ -52,8 +67,9 @@
           }
           return rendered;
         },
-        view:run.view,query:run.query,schedule:run.schedule,
-        ...(canArrive&&{canArrive:(actor,link)=>canArrive(actor,link,run.query())}),
+        view:viewAt,query:queryAt,schedule:run.schedule,
+        ...(lifecycle&&{authoredEntities:()=>run.view().world.entities}),
+        ...(canArrive&&{canArrive:(actor,link)=>canArrive(actor,link,queryAt())}),
         ...(run.regions&&{regions:run.regions}),
         step({time}){
           check(timeOK(time)&&time>=clock.time,'Invalid elapsed simulation place time');

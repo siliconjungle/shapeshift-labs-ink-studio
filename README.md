@@ -739,6 +739,8 @@ define regional sources, sinks, barriers, open edges, and exchange with spatial 
 solvers at independent rates on Node or browser worker threads.
 [Reproducible run records](docs/simulation-checkpoints.md#reproducible-run-records)
 verify scene revisions, command order, solver timing, and observations on replay.
+[Modular scene and entity lifecycle](docs/portals.md#modular-scene-and-entity-lifecycle)
+preserves a group's identity, attachments, and state through unloading, travel, and restoration.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
