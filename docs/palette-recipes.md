@@ -162,3 +162,58 @@ node cli/ink-studio.js palette animation.json --t 3.25 --out frame-palette.json
 ```
 
 The command accepts a recipe, path or palette-animation JSON definition and exports sampled colors. Recipes and animation also export named role indices and ramps. `--t` selects animation seconds; path definitions export their configured preview samples. Output can be written to a file or printed as JSON. Use the exported `palette` and `roles` when authoring a diorama.
+
+
+## Hue–brightness fields
+
+Use `KIT.palette.hueBrightness({ palette, saturation, hue, brightness })` to sample a rectangular field or export an indexed chart. A palette contains 1–48 hex colours or normalized RGB swatches. Hue runs horizontally across one turn by default, with red at both ends. Write a range such as `[0.8, 1.2]` to span part of the wheel across red. Brightness is HSV value and rises from bottom to top. Set the `brightness` range to `[0.05, 0.56]` for a dark field. Saturation runs from 0 for gray input targets to 1 for fully saturated targets. The selected colours always come from the supplied palette using Ink's weighted RGB palette match. An equal match uses the earliest swatch.
+
+- `index(u, v)` returns a swatch slot for normalized coordinates.
+- `sample(u, v, out?)` writes the chosen normalized RGB.
+- `raster(width, height)` returns top-down RGB bytes, one index per pixel, and the ordered palette. It samples pixel centres.
+
+```sh
+ink-studio palette field examples/hue-brightness-field.json --w 192 --h 96 \
+  --saturation 0.32 --out muted-field.png
+ink-studio render examples/hue-brightness.js --w 232 --h 132 --px 1 --out prism-workshop.png
+```
+
+The [Prism Workshop](../examples/hue-brightness.js) projects three variants of one palette onto its windows. See [hue–brightness material projection](projected-effects.md#huebrightness-fields) for the layer definition.
+
+
+## Polar colour fields
+
+`KIT.palette.polar({ palette, radial, range, rotation, saturation, brightness })` makes a circular field from the same nearest-swatch match as the [rectangular hue–brightness field](#huebrightness-fields). Hue increases counterclockwise from the right edge. `rotation` adds to that edge's hue in turns. Coordinates for `index(u, v)` and `sample(u, v)` run across the unit square around the disk, with `[0.5, 0.5]` at its centre and Y rising. The exact centre uses the starting hue.
+
+- With `radial: 'brightness'`, the default, set a fixed `saturation`.
+- With `radial: 'saturation'`, set a fixed `brightness` (HSV value).
+- The fixed control defaults to 1. `range` gives the radial values at centre and rim and defaults to `[0, 1]`. Use `[1, 0]` to reverse the gradient.
+- Outside the circle, `index` returns `-1` and `sample` returns `null`. `raster(w, h)` fits a circle to the shorter side, with RGB, alpha, and swatch indices. Transparent pixels have index `-1`.
+
+For the CLI, set `"type": "polar"` in the field JSON. The default chart size is 128 × 128. Its PNG has a transparent background for reuse as a texture.
+
+```sh
+ink-studio palette field examples/polar-colour-field.json --w 192 --h 192 --out polar-colour.png
+ink-studio render examples/polar-colour.js --w 248 --h 146 --px 1 --out observatory.png
+```
+
+The [chromatic observatory](../examples/polar-colour.js) uses both radial modes as [projected material fields](projected-effects.md#polar-colour-fields).
+
+## RGB and OKLab plots
+
+Use `KIT.palette.plot({ palette, space, size, radius, frame })` with 1–256 swatches. Accepts six-digit hex strings, packed RGB integers and normalized RGB triples. RGB uses X=R, Y=G, Z=B. OKLab uses X=a, Y=L, Z=b with a common world scale on all three axes, so spatial distance is proportional to OKLab distance. The RGB frame spans the unit cube. OKLab axes span L in `[0, 1]` and a and b in `[-0.35, 0.35]`.
+
+- `space` defaults to `'rgb'`. `frame` takes `'box'`, `'axes'` or `'off'`. It defaults to a box for RGB and axes for OKLab.
+- `size` is world units per colour-space unit and defaults to 4. `radius` is each swatch splat's radius as a fraction of size and defaults to 0.023.
+- `points` gives input order, hex swatches, native coordinates (RGB or `[L,a,b]`), and 3D positions. `axes` gives labels, ranges, colours and endpoints.
+- `plot.emit(builder, { origin, scale, id, frameColor })` places the plot as actual splat geometry. It returns world anchors for optional axis labels. Use the plot swatches in the scene palette or render raw to retain the source colours. The [colour archive example](../examples/palette-space-plots.js) mounts two plots in one scene and attaches labels with the existing annotation layer.
+
+```sh
+ink-studio palette plot examples/palette-space-plot.json --space rgb --out rgb-cube.png
+ink-studio palette plot examples/palette-space-plot.json --space oklab \
+  --orbit 360 --duration 4 --fps 18 --out oklab-orbit.png
+ink-studio palette plot examples/palette-space-plot.json --space oklab \
+  --format data --out oklab-points.json
+```
+
+The still render defaults to an isometric camera. Adjust `--yaw` and `--pitch` in radians, use `--ortho off` for perspective, and use `--labels off` to hide axis labels. `--orbit` is in degrees and writes an animated PNG. Full turns omit the duplicate end frame. Image output fits the plot to the viewport. JSON and embedded geometry keep the specified world scale.

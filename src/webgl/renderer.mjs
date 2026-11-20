@@ -15,6 +15,7 @@ import { portalComposite } from './portal-composite.mjs';
 import { createExpandedInstances, createInstanceDraw, groupVisibility } from './instance-draw.mjs';
 import { instancePlan, validateSize } from './instances.mjs';
 import { prepareMaskRows } from './contribution-plan.mjs';
+import { createViewerInput } from './viewer-input.mjs';
 
 const zero = new Float32Array(4);
 const empty = new Float32Array(0);
@@ -1196,7 +1197,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
   }
 }
 
-export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder = true, contextAttributes } = {}) {
+export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder = true, contextAttributes, input } = {}) {
   if (typeof canvas?.getContext !== 'function')
     throw new TypeError('Ink Studio needs a canvas or OffscreenCanvas');
   if (typeof toolkit?.PixelLook?.glsl !== 'string')
@@ -1206,6 +1207,11 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
   });
   if (!gl) throw new Error('Ink Studio GPU rendering requires WebGL 2');
   let backend = createBackend(gl, toolkit, specialize, reuseOrder);
+  let controls;
+  if(input!==undefined&&input!==false) {
+    try { controls=createViewerInput(canvas,{...input,toolkit}); }
+    catch(error){ backend.dispose();throw error; }
+  }
   let disposed = false, picking;
   const pickInstances = createExpandedInstances();
   const lose = event => {
@@ -1241,6 +1247,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       throw new RangeError('Ink Studio frame parameters must be finite');
   }
   return {
+    ...(controls&&{input:controls}),
     cameraPose(world, frame = {}) {
       return cameraPose(makeCamera(world, frame, frame.width ?? frame.target?.width ?? canvas.width,
         frame.height ?? frame.target?.height ?? canvas.height));
@@ -1305,8 +1312,11 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
     dispose() {
       if (disposed) return;
       disposed = true;
-      backend?.dispose();
-      canvas.removeEventListener?.('webglcontextlost', lose);
+      try { controls?.dispose(); }
+      finally {
+        backend?.dispose();
+        canvas.removeEventListener?.('webglcontextlost', lose);
+      }
     }
   };
 }

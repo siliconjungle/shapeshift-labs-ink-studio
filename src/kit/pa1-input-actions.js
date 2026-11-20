@@ -56,7 +56,9 @@
       }
       return Object.freeze(Object.fromEntries(values));
     }
-    return Object.freeze({ resolve, sample, bindings:(context,action)=>get(context).byAction.get(action) });
+    const profile=Object.freeze(Object.fromEntries([...maps].map(([context,{byAction}])=>
+      [context,Object.freeze(Object.fromEntries(byAction))])));
+    return Object.freeze({ resolve, sample, profile, bindings:(context,action)=>get(context).byAction.get(action) });
   }
 
   function radial(x,y,deadZone=0) {

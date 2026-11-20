@@ -784,10 +784,10 @@ const view = extra =>
     extra,
     shotRender
   );
-const save = (name, img) => {
+const save = (name, img, alpha) => {
   const f = outputFile(name);
   fs.mkdirSync(path.dirname(f), { recursive: true });
-  PNG.write(f, img.w, img.h, img.rgb);
+  PNG.write(f, img.w, img.h, img.rgb, alpha);
   console.log('wrote', f, img.w + 'x' + img.h);
   return f;
 };
@@ -847,6 +847,8 @@ const CMD = {
         '  hierarchy <graph.json> [--node id] [--parent id|world] [--out file.json]   inspect or reparent live scene nodes',
         '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
         '  ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern',
+        '  palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D',
+        '  palette field <field.json> [--saturation 0–1] [--w 192 --h 96]   render a rectangular or polar palette field',
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
         '  environment inspect <scene|run> --at x,y,z [--t seconds] [--out report.json]   explain sky and local weather',
@@ -1012,6 +1014,21 @@ const CMD = {
     return require('./ornament.js')(pos, opt, lib(), outputFile);
   },
   palette() {
+    if (pos[0] === 'plot') return require('./palette-plot.js')(pos.slice(1), opt, lib(), outputFile);
+    if (pos[0] === 'field') {
+      if (pos.length !== 2 || ['w', 'h', 'saturation', 'out'].some(key => opt[key] === true))
+        die('Use palette field <field.json> [--saturation 0–1] [--w width --h height --out field.png]');
+      const input = JSON.parse(fs.readFileSync(path.resolve(pos[1]), 'utf8'));
+      if (!input || Array.isArray(input) || typeof input !== 'object') die('A palette field needs a JSON object');
+      const { type = 'hue-brightness', ...definition } = input;
+      if (!['hue-brightness', 'polar'].includes(type)) die('Palette field type must be hue-brightness or polar');
+      if (opt.saturation !== undefined) definition.saturation = num('saturation');
+      const polar = type === 'polar', api = lib().KIT.palette;
+      const field = polar ? api.polar(definition) : api.hueBrightness(definition);
+      const image = field.raster(num('w', polar ? 128 : 192), num('h', polar ? 128 : 96));
+      save(polar ? 'polar-colour.png' : 'hue-brightness.png', image, image.alpha);
+      return;
+    }
     if (!pos[0]) die('palette needs a recipe, path or animation JSON file');
     const definition = JSON.parse(fs.readFileSync(path.resolve(pos[0]), 'utf8'));
     const api = lib().KIT.palette, time = num('t', 0);

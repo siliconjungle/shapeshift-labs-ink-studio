@@ -61,6 +61,35 @@ reservations, queues, open inputs, and completed counts. Queues and
 reservations survive checkpoints and forks. Coarse cohorts hold at
 passages and resume admission when detailed movement returns.
 
+## Shared paths and rides
+
+An `agents` system can define named `paths` with a `points` list and an
+optional `closed` flag. Send `follow-path` with `agent`, `path`, and optional
+`reverse`. Walkers visit the waypoints in order using live navigation,
+route request budgets, and configured crowd rules. Closed paths repeat.
+
+Define named `rides` with an `entity` and optional `socket`, or with a
+named `path`, route follower `motion` settings, and a time `phase` in seconds.
+`seats` are local foot positions and define capacity. The default is one
+seat at the carrier origin. Each named dock has an `at` position, a
+`reach` (default 1 world unit), optional `queue` holding positions, and
+an `open` flag (default true). The front of the queue approaches `at`.
+Other walkers use the holding positions in order or hold where they are.
+
+Send `board-ride` with `agent`, `ride`, `from`, and `to`. Requests keep their
+order by tick, initial distance to the boarding point, then agent ID.
+Dock proximity and the Boolean input `dock.<ride>.<dock>` control boarding
+and exit. Connect an alignment or dwell signal to the input when timing
+matters. Passengers follow the carrier pose until the requested landing
+is clear. Their seats and queue positions survive checkpoints and forks.
+Coarse cohorts keep passengers attached and resume dock transfers when
+detailed movement returns.
+
+`cancel-travel` clears a walking path or pending boarding request.
+`travel-status` reports a walker's waypoint, queue request, or occupied
+seat. `rides` returns carrier frames, seat assignments, and dock queues.
+The runtime emits path completion, boarding, and exit events.
+
 ## Run opposing queues
 
 In the [bridge example](../examples/world-crowd-bridge.json) two groups of

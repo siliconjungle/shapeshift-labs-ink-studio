@@ -114,6 +114,11 @@
         ...(provider.waterFrame&&{waterFrame:state=>provider.waterFrame(fine(state))}),
         ...(provider.volumeFrame&&{volumeFrame:state=>provider.volumeFrame(fine(state))}),
         ...(provider.navigationSource&&{navigationSource:(field,state,query)=>provider.navigationSource(field,fine(state),query)}),
+        ...(provider.afterStep&&{afterStep(state,ctx){
+          const adapter=using(state);
+          if(!adapter)return provider.afterStep(state,ctx);
+          return adapter.afterStep?wrapped(state,adapter.afterStep(state.data,ctx)):state;
+        }}),
         step(state,ctx){
           const adapter=using(state);
           return adapter?advance(adapter,state,ctx):provider.step(state,ctx);

@@ -11,6 +11,7 @@ const SplatEffects = (() => {
     stacks = require('./color-stack.js');
   }
   const contribution = typeof ContributionRules === 'undefined' ? require('./contribution-rules.js') : ContributionRules;
+  const paletteFields = typeof PaletteFields === 'undefined' ? require('./palette-fields.js') : PaletteFields;
   const fieldBands = typeof FieldBands === 'undefined' ? require('./field-bands.js') : FieldBands;
   const clamp = x => Math.min(1, Math.max(0, x));
   const fract = x => x - Math.floor(x);
@@ -364,6 +365,31 @@ const SplatEffects = (() => {
     return rgbEffect(plan.sample, outputPalette, resolveColor);
   }
 
+  function paletteFieldLayer(value, resolveColor, polar) {
+    const label = polar ? 'polar' : 'hueBrightness';
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype)
+      throw new TypeError('Projected palette field needs a ' + label + ' definition');
+    const { size = [1, 1], wrap = false, ...definition } = value;
+    if (!vector(size, 2) || size.some(n => n <= 0) || typeof wrap !== 'boolean')
+      throw new RangeError('Projected palette fields need a positive size and optional wrap');
+    const field = paletteFields[label](definition, resolveColor);
+    const [spanU, spanV] = size;
+    const diameter = Math.min(spanU, spanV);
+    const fitU = spanU / diameter, fitV = spanV / diameter;
+    if (polar && (!Number.isFinite(fitU) || !Number.isFinite(fitV)))
+      throw new RangeError('Projected polar field aspect ratio must be finite');
+    return {
+      palette: field.palette,
+      sample(u, v, _time, out) {
+        u /= spanU;
+        v /= spanV;
+        if (!Number.isFinite(u) || !Number.isFinite(v) || (!wrap && (u < 0 || v < 0 || u > 1 || v > 1))) return 0;
+        const x = wrap ? fract(u) : u, y = wrap ? fract(v) : v;
+        return Number(Boolean(polar ? field.sample(.5 + (x - .5) * fitU, .5 + (y - .5) * fitV, out) : field.sample(x, y, out)));
+      }
+    };
+  }
+
   function layer(definition, context, resolveColor, roles = {}) {
     const { projection = {}, space = 'rest', field, maskChannel, revealChannel, contourChannel,
       warpChannels, warp = 1, range = [0, 1], scroll = [0, 0], scale = 1, width = 0.16,
@@ -380,7 +406,9 @@ const SplatEffects = (() => {
     const lookup = coordinates({ projection, space, field }, channels, context);
     if (pattern === 'contour' && !contourChannel) throw new TypeError('Contours need a contourChannel');
     const indexed = pattern === 'indexed' ? indexedRaster(definition.raster, definition.cycles, resolveColor, roles) : null;
-    const pixels = indexed?.sample ?? (pattern === 'raster' ? raster(definition.raster) : null);
+    const paletteField = pattern === 'hue-brightness' ? paletteFieldLayer(definition.hueBrightness, resolveColor, false) :
+      pattern === 'polar-colour' ? paletteFieldLayer(definition.polar, resolveColor, true) : null;
+    const pixels = indexed?.sample ?? paletteField?.sample ?? (pattern === 'raster' ? raster(definition.raster) : null);
     const custom = typeof pattern === 'function' ? pattern :
       Object.hasOwn(context?.shaders || {}, pattern) ? context.shaders[pattern] : null;
     if (custom !== null && typeof custom !== 'function') throw new TypeError('A projected shader must be a function');
@@ -388,7 +416,7 @@ const SplatEffects = (() => {
       throw new RangeError('Unknown projected pattern: ' + pattern);
     if (colors !== undefined && (!Array.isArray(colors) || colors.length < 2 || !Array.from(colors).every(value => value !== undefined)))
       throw new TypeError('Projected color ramps need at least two colors');
-    const palette = outputColors(outputPalette, resolveColor) ?? indexed?.palette ?? stepped?.palette;
+    const palette = outputColors(outputPalette, resolveColor) ?? indexed?.palette ?? stepped?.palette ?? paletteField?.palette;
     const ramp = colors?.map(resolveColor);
     const tint = resolveColor(color);
     const result = new Float64Array(6); // RGB, amount, coverage, glint

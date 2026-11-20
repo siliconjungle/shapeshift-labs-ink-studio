@@ -7,7 +7,7 @@
     for(const page of roster.pages)for(const row of page.details)counts[row.species]++;
     return {total:W.agentStorage.count(roster),counts};
   }
-  function cohorts(settings,{profiles,fit,bounds,contacts,validateState,occupants,blockedCoarse,formationActive}){
+  function cohorts(settings,{profiles,fit,bounds,contacts,validateState,occupants,blockedCoarse,formationActive,syncRiders}){
     const S=W.agentStorage, aliases=new WeakMap();
     const {clamp}=W.fields;
     const {model,cell=12,goalCell=cell}=settings;
@@ -19,7 +19,7 @@
       const collections=new Map();
       for(const slot of S.order(roster)){
         const row=S.read(roster,slot);
-        const holdsOrder=W.agentOrders.holding(row.orders)||row.formationDriven||formationActive?.(state.formations,row);
+        const holdsOrder=W.agentOrders.holding(row.orders)||row.travelPlan||row.formationDriven||formationActive?.(state.formations,row);
         const goal=holdsOrder?row.position:row.goal;
         const key=[row.species,holdsOrder?'orders':'motion',...row.position.map(n=>Math.floor(n/cell)),...goal.map(n=>Math.floor(n/goalCell))].join('/');
         if(!collections.has(key))collections.set(key,{species:row.species,members:[],sum:[0,0,0],destination:[0,0,0]});
@@ -112,6 +112,7 @@
         });
         return groups.some((row,i)=>row!==state.groups[i])?freeze({...state,groups}):state;
       },
+      ...(syncRiders&&{afterStep:syncRiders}),
       output:()=>contacts?{contacts:[]}:undefined,
       fields:{population:({state})=>Q.ok(totals(state,true)),
         contacts:()=>Q.ok([]),decisions:({state})=>Q.ok(state.decisions)},
