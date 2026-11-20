@@ -305,6 +305,44 @@ channel's bounds at the same invalidation boundary. Sampling follows
 the existing phase snapshot rules. Solvers that require conservative
 resource exchange can use the transfer accounts below.
 
+### Editable water boundaries
+
+Add a named `boundaries` table to a detailed `water` system. Use
+`boundaries: {}` to start with a closed grid and author rules during the run.
+Each rule has a `kind`, inclusive XZ `bounds` with `min` and `max`, and
+an optional `enabled` flag that defaults to true. Cell rules match cell
+centers. Wall and open rules match face centers, so their bounds can be
+a zero-width line on the grid.
+
+| Kind | Settings | Effect |
+| --- | --- | --- |
+| `source` | `rate` in depth per second | Adds liquid at rest, up to the cell capacity. |
+| `sink` | `rate` in depth per second | Removes up to the liquid available in the cell. |
+| `wall` | `axis` of `x` or `z`, normal to the wall | Blocks matching interior faces. Thermal water also blocks lateral heat and vapor diffusion at those faces. |
+| `open` | `side` of `x-min`, `x-max`, `z-min`, or `z-max`, plus optional `opening` from 0 to 1 | Allows water to discharge against a dry exterior, carrying liquid heat and suspended sediment. The default opening is 1. |
+| `exchange` | `field` alias, `rate` in inverse seconds, optional `direction` of `in`, `out`, or `both` | Adds or removes liquid according to the difference between the external head and the local surface. The default direction is `both`. |
+
+Define `boundaryFields` on the same water system to map exchange aliases to
+numeric world-space spatial fields in `world` units. Each covered cell samples
+head at its XZ center and local floor. A missing sample leaves that rule idle
+at the cell. An exchange treats the head as a prescribed external reservoir.
+Use [transfer accounts](#conservative-transfers-between-systems) for exchanges
+that debit and credit two finite stores.
+
+Water processes overlapping cell rules in ID order. When multiple rules
+open one face, the widest opening applies and ties go to the first ID.
+Water remains closed at unmarked edges. Sources, sinks, and exchange use
+the same heat and drainage accounting as rain and drain.
+
+Schedule `<water>/boundary` with `{id, rule}` to add or replace a rule.
+Set `rule` to `null` to remove it. The runtime records edits at the
+scheduled tick and carries them through checkpoints and replay.
+Probe `<water>/boundaries` for rule settings, matched cell or face
+counts, and `added` and `drained` volumes in cubic world units from
+the latest solver step. Pass `{id}` to inspect a single rule. The
+water system's `mass` probe includes boundary flows in its cumulative
+ledger. These rules require the detailed grid solver.
+
 ## Conservative transfers between systems
 
 Systems can expose named accounts. A transfer debits one account and
@@ -847,7 +885,7 @@ are visible during checkpoint and replay review.
 | `store` | Bounded numeric, integer, or vector accounts with named resources and units. |
 | `exchange` | Enabled links that request a fixed amount per tick or a rate per second. |
 | `logistics` | Resource stocks, atomic recipes, scheduled shipments, conservative accounting, and upstream shortage traces. |
-| `water` | Bounded XZ shallow water with live bed edits, fractional face openings, conservative pump transfer, and optional sediment transport, deposition and gate silting. An `obstacle` field may supply signed solid clearance. |
+| `water` | Bounded XZ shallow water with live bed edits, editable boundaries, fractional face openings, conservative pump transfer, and optional sediment transport, deposition and gate silting. An `obstacle` field may supply signed solid clearance. |
 | `mechanics` | Boxes, capsules and convex compounds with swept contact and shared clearance and support queries. Fixed and powered mounts, transmission ratios and stall reports, physical separation, configurable box fracture, wheel traction, buoyancy, thrust and sail forces. |
 | `deformables` | Checkpointed XPBD cloth and rope with scene attachments, terrain and solid contact, loads, tears, support queries and rain collection. |
 | `routed-links` | Socket-to-socket cables, hoses and belt loops with guide points, slack, tension, break limits, typed signals, torque transmission and conservative transfers. |

@@ -73,11 +73,12 @@
       bed=changed;
       sharedBed=undefined;
     }
-    function step(duration,{rain,drain,friction=0.13,opening,transfers=[],transport,bedOffset,
+    function step(duration,{rain,drain,friction=0.13,opening,boundary,transfers=[],transport,bedOffset,
       cfl:stepCFL=cfl,maxDt:stepLimit=maxDt}={}){
 
       if(!number(duration,0,120)||!number(friction,0,1e6)||!number(stepCFL,.05,.49)||!number(stepLimit,1e-6,2)||
         (opening!==undefined&&typeof opening!=='function')||!Array.isArray(transfers)||transfers.length>4096||
+        (boundary!==undefined&&!['edge','export','cell','apply'].every(key=>typeof boundary?.[key]==='function'))||
         (transport!==undefined&&!['begin','face','advect','drain','pump','settle'].every(key=>typeof transport?.[key]==='function'))||
         (bedOffset!==undefined&&(!Array.isArray(bedOffset)||bedOffset.length!==size||!bedOffset.every(v=>number(v,0,1e7))))||
         transfers.some(p=>!p||!integer(p.from,0,size-1)||!integer(p.to,0,size-1)||p.from===p.to||
@@ -88,11 +89,11 @@
       const depth=layer.depth.slice(),mx=layer.x.slice(),mz=layer.z.slice(),
         dh=new Float64Array(size),du=new Float64Array(size),dv=new Float64Array(size),heightmap=transport?bed.slice():bed;
       const floor=i=>heightmap[i]+(bedOffset?.[i]??0);
-      let elapsed=0,substeps=0,totalRain=0,totalDrain=0,totalMoved=0;
-      function faceFlux(left,right,axis,fraction){
+      let elapsed=0,substeps=0,totalRain=0,totalDrain=0,totalMoved=0,dt;
+      function faceFlux(left,right,axis,fraction,edge){
         if(!fraction||left<0&&right<0)return;
         const li=left<0?right:left,ri=right<0?left:right,
-          a=depth[li],b=depth[ri],az=floor(li),bz=floor(ri),
+          a=edge!==undefined&&left<0?0:depth[li],b=edge!==undefined&&right<0?0:depth[ri],az=floor(li),bz=floor(ri),
           surface=Math.max(az,bz),al=Math.max(0,a+az-surface),br=Math.max(0,b+bz-surface);
         if(a<=0&&b<=0)return;
         let ax=a>dry?mx[li]/a:0,ay=a>dry?mz[li]/a:0,bx=b>dry?mx[ri]/b:0,by=b>dry?mz[ri]/b:0;
@@ -106,7 +107,13 @@
           fluxV=0.5*(alU*av+brU*bv-speed*(brV-alV)),
           correctedL=fluxU+g0*(a*a-al*al),correctedR=fluxU+g0*(b*b-br*br),
           measure=fraction/(axis===0?dx:dz);
-        if(transport&&left>=0&&right>=0&&fluxH)transport.face(left,right,measure*fluxH);
+        if(edge!==undefined&&fluxH){
+          const cell=left<0?right:left, loss=Math.abs(measure*fluxH);
+          transport?.exit?.(cell,loss);
+          const volume=loss*dt*cellArea;
+          boundary.export(cell,edge,volume);
+          totalDrain+=volume;
+        }else if(transport&&left>=0&&right>=0&&fluxH)transport.face(left,right,measure*fluxH);
         if(left>=0){
           dh[left]-=measure*fluxH;
           du[left]-=measure*(axis===0?correctedL:fluxV);
@@ -118,7 +125,14 @@
           dv[right]+=measure*(axis===0?fluxV:correctedR);
         }
       }
-      function interfaceFlux(left,right,axis){
+      function interfaceFlux(left,right,axis,edge){
+        if(boundary&&edge!==undefined&&(left>=0||right>=0)){
+          const fraction=boundary.edge(Math.max(left,right),edge);
+          if(!number(fraction,0,1))throw new Error('Water edge opening must be in [0, 1]');
+          faceFlux(left,right,axis,fraction,edge);
+          faceFlux(left,right,axis,1-fraction);
+          return;
+        }
         if(!opening||left<0||right<0){faceFlux(left,right,axis,1);return;}
         const [x,z]=center(left).map((v,i)=>(v+center(right)[i])*.5);
         const a=floor(left), b=floor(right);
@@ -140,16 +154,17 @@
           waveX=Math.max(waveX,wave+(d>dry?Math.abs(mx[i]/d):0));
           waveZ=Math.max(waveZ,wave+(d>dry?Math.abs(mz[i]/d):0));
         }
-        const speed=waveX/dx+waveZ/dz,dt=Math.min(duration-elapsed,stepLimit,speed?stepCFL/speed:Infinity);
+        const speed=waveX/dx+waveZ/dz;
+        dt=Math.min(duration-elapsed,stepLimit,speed?stepCFL/speed:Infinity);
         dh.fill(0);du.fill(0);dv.fill(0);
         transport?.begin(dt);
         for(let z=0;z<height;z++)for(let x=0;x<=width;x++){
           const j=z*width+x,left=x>0&&open[j-1]?j-1:-1,right=x<width&&open[j]?j:-1;
-          interfaceFlux(left,right,0);
+          interfaceFlux(left,right,0,boundary?(x===0?0:x===width?1:undefined):undefined);
         }
         for(let z=0;z<=height;z++)for(let x=0;x<width;x++){
           const j=z*width+x,left=z>0&&open[j-width]?j-width:-1,right=z<height&&open[j]?j:-1;
-          interfaceFlux(left,right,1);
+          interfaceFlux(left,right,1,boundary?(z===0?2:z===height?3:undefined):undefined);
         }
         transport?.advect(depth);
         const t=time+elapsed,drag=Math.exp(-friction*dt);
@@ -179,6 +194,21 @@
           mz[i]=v*retain*lim;
           totalRain+=inFlow*cellArea;
           totalDrain+=outFlow*cellArea;
+          if(boundary?.cell(i))boundary.apply(i,dt,floor(i),next,amount=>{
+            if(!Number.isFinite(amount))throw new Error('Water boundary exchange needs a finite depth');
+            const before=depth[i], after=Math.min(maxDepth,Math.max(0,before+amount)), applied=after-before;
+            if(applied>0){
+              transport?.rain?.(i,applied);
+              totalRain+=applied*cellArea;
+            }else if(applied<0){
+              transport?.drain(i,-applied,before);
+              totalDrain-=applied*cellArea;
+              mx[i]*=after/before;
+              mz[i]*=after/before;
+            }
+            depth[i]=after;
+            return applied;
+          });
         }
         for(const {from,to,rate} of transfers){
           const take=Math.min(depth[from],maxDepth-depth[to],rate*dt/cellArea);

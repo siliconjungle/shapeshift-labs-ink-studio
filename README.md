@@ -729,6 +729,8 @@ links selected objects and regions to recorded actions, transfers, and prior sta
 reuse measurements across seeds and settings and report aligned results.
 [Persistent simulation places](docs/portals.md#persistent-simulation-places)
 keep terrain, surface, and object edits across saves, travel, and resumed region streams.
+[Editable water boundaries](docs/headless-worlds.md#editable-water-boundaries)
+define regional sources, sinks, barriers, open edges, and exchange with spatial head fields.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.

@@ -63,7 +63,7 @@
       const suspended=Float64Array.from(state.suspended), {bedrock}=state, totals={...state.totals};
       const out=new Float64Array(size), delta=new Float64Array(size), share=new Float64Array(size);
       const src=new Uint32Array(size*2), dst=new Uint32Array(size*2), flux=new Float64Array(size*2);
-      let count=0, dt, minX=width,minZ=height,maxX=-1,maxZ=-1;
+      let count=0, dt, lost, minX=width,minZ=height,maxX=-1,maxZ=-1;
       function changed(i){
         const x=i%width,z=Math.floor(i/width);
         minX=Math.min(minX,x);maxX=Math.max(maxX,x);minZ=Math.min(minZ,z);maxZ=Math.max(maxZ,z);
@@ -74,11 +74,16 @@
         return old-suspended[i];
       }
       return {begin(seconds){
-        dt=seconds;count=0;out.fill(0);
+        dt=seconds;count=0;out.fill(0);lost?.fill(0);
       },face(left,right,rate){
         const source=rate>0?left:right, destination=rate>0?right:left, volume=Math.abs(rate)*dt;
         src[count]=source;dst[count]=destination;flux[count++]=volume;
         out[source]+=volume;
+      },exit(source,rate){
+        lost??=new Float64Array(size);
+        const amount=rate*dt;
+        lost[source]+=amount;
+        out[source]+=amount;
       },advect(depth){
         delta.fill(0);
         for(let i=0;i<size;i++)share[i]=out[i]>0?suspended[i]/Math.max(out[i],depth[i]):0;
@@ -86,6 +91,11 @@
           const moved=flux[k]*share[src[k]];
           delta[src[k]]-=moved;delta[dst[k]]+=moved;
           totals.advected+=moved*cellArea;
+        }
+        if(lost)for(let i=0;i<size;i++)if(lost[i]){
+          const exported=lost[i]*share[i];
+          delta[i]-=exported;
+          totals.exported+=exported*cellArea;
         }
         for(let i=0;i<size;i++)suspended[i]=Math.max(0,suspended[i]+delta[i]);
       },drain(i,amount,available){

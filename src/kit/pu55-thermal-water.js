@@ -35,8 +35,8 @@
     });
     const links=[];
     for(let i=0;i<size;i++){
-      if(i%width+1<width)links.push([i,i+1,dx*dx]);
-      if(i+width<size)links.push([i,i+width,dz*dz]);
+      if(i%width+1<width)links.push([i,i+1,dx*dx,0]);
+      if(i+width<size)links.push([i,i+width,dz*dz,1]);
     }
     const sensibleCapacity=(i,water)=>cells[i].capacity+waterHeatCapacity*water;
     function decode(e,water,i){
@@ -96,19 +96,30 @@
     function transport(state){
       const energy=state.energy.slice(), out=new Float64Array(size), shares=new Float64Array(size),
         sources=new Uint32Array(2*size), targets=new Uint32Array(2*size), amounts=new Float64Array(2*size);
-      let elapsed=0,n=0, sourceEnergy=state.sourceEnergy, exportedEnergy=state.exportedEnergy;
+      let elapsed=0,n=0,lost, sourceEnergy=state.sourceEnergy, exportedEnergy=state.exportedEnergy;
       const specific=(i,depth)=>liquidEnergy(decode(energy[i],depth+state.ice[i],i).temperature);
       return {
-        begin(dt){elapsed=dt;n=0;out.fill(0);},
+        begin(dt){elapsed=dt;n=0;out.fill(0);lost?.fill(0);},
         face(left,right,rate){
           const source=rate>0?left:right, amount=Math.abs(rate)*elapsed;
           sources[n]=source;targets[n]=rate>0?right:left;amounts[n++]=amount;out[source]+=amount;
+        },
+        exit(source,rate){
+          lost??=new Float64Array(size);
+          const amount=rate*elapsed;
+          lost[source]+=amount;
+          out[source]+=amount;
         },
         advect(depth){
           for(let i=0;i<size;i++)if(out[i])shares[i]=specific(i,depth[i])*depth[i]/Math.max(depth[i],out[i]);
           for(let j=0;j<n;j++){
             const q=amounts[j]*shares[sources[j]];
             energy[sources[j]]-=q;energy[targets[j]]+=q;
+          }
+          if(lost)for(let i=0;i<size;i++)if(lost[i]){
+            const q=lost[i]*shares[i];
+            energy[i]-=q;
+            exportedEnergy+=q*area;
           }
         },
         rain(i,amount){energy[i]+=amount*incoming;sourceEnergy+=amount*incoming*area;},
@@ -124,12 +135,13 @@
         capture:()=>({...state,energy,sourceEnergy,exportedEnergy})
       };
     }
-    function phase(state,fluid,ctx){
+    function phase(state,fluid,ctx,wall){
       const {ice,energy,vapor}=state, depth=fluid.depth, dt=ctx.dt, nextIce=ice.slice(), nextVapor=vapor.slice();
       let ambientEnergy=state.ambientEnergy, evaporated=state.evaporated, condensed=state.condensed;
       const total=depth.map((liquid,i)=>liquid+ice[i]);
       const capacity=total.map((water,i)=>sensibleCapacity(i,water));
-      for(const [a,b,distance] of links){
+      for(const [a,b,distance,axis] of links){
+        if(wall?.(a,axis))continue;
         if(conductivity){
           const ka=capacity[a],kb=capacity[b], effective=ka*kb/(ka+kb);
           const difference=decode(energy[a],total[a],a).temperature-decode(energy[b],total[b],b).temperature;

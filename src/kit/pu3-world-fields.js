@@ -184,6 +184,11 @@
       return ix>=0 && ix<width && iz>=0 && iz<height ? iz*width+ix : -1;
     };
     const point = i => [origin[0]+(i%width+.5)*dx,origin[1]+(Math.floor(i/width)+.5)*dz];
+    const {boundaries:boundaryRules,boundaryFields}=config;
+    const boundaryModel=boundaryRules!==undefined||boundaryFields!==undefined?
+      W.waterBoundaries.create(boundaryRules===undefined?{}:boundaryRules,boundaryFields===undefined?{}:boundaryFields,
+        {width,height,origin,dx,dz,point}):null;
+    const boundaryReads=Object.values(boundaryFields??{});
     const sedimentModel=config.sediment===undefined?null:W.sediment.create(config.sediment,{width,height,cellArea,point});
     const thermalModel=config.thermal===undefined?null:W.thermalWater.create(config.thermal,{width,height,dx,dz,point,maxDepth,catalog});
     const bed = patchList(config.bed ?? [],2), seed = patchList(config.initial ?? [],2);
@@ -374,12 +379,13 @@
     const legacyErosion=surface!==undefined&&!sedimentModel;
     const dependencyBounds = {axes:'xz',min:origin,max:[origin[0]+width*dx,origin[1]+height*dz]};
     const phaseFields=['temperature','ice','vapor','humidity','phase','phase-state','water','depth','flow','surface-height'];
+    const liquidFields=['water','depth','flow','surface-height'];
     return {inputs,outputs,navigationSource,...(exchanging && {accounts}),shareCheckpoint:true,
-      partitionStep:terrainQuery===undefined&&surface===undefined&&thermalModel?.ambientField===undefined,
+      partitionStep:terrainQuery===undefined&&surface===undefined&&thermalModel?.ambientField===undefined&&!boundaryReads.length,
       simulationAggregate(settings){
-        check(!sedimentModel&&!thermalModel&&!legacyErosion&&!exchanging&&!terrainQuery&&
+        check(!sedimentModel&&!thermalModel&&!legacyErosion&&!exchanging&&!terrainQuery&&!boundaryModel&&
           !Object.keys(gates).length&&!Object.keys(pumps).length,
-        'Water blocks require a closed grid without gates, pumps, exchanges, sediments, thermal or obstacle coupling');
+        'Water blocks require a closed grid without editable boundaries, gates, pumps, exchanges, sediments, thermal or obstacle coupling');
         return W.aggregateWater(settings,{width,height,dx,dz,origin,index,maxDepth,system,sensors,
           rain:config.rain,drain:config.drain,friction:config.friction});
       },
@@ -389,15 +395,16 @@
           Number.isFinite(maxDt)&&maxDt>=1e-6&&maxDt<=2&&every*dt<=120,'Invalid water simulation detail tuning or cadence');
       },
       dependencies:{reads:[{field:system+'/bed',bounds:dependencyBounds},
-        ...[terrainQuery,surface,thermalModel?.ambientField].filter(Boolean).map(field=>({field,bounds:dependencyBounds}))],
-        writes:[system+'/bed',...(thermalModel?phaseFields.map(key=>system+'/'+key):[])]},
-      ...((surface!==undefined||thermalModel)&&{checkFields(query){
-        W.materials.checkSurface(query,surface);thermalModel?.checkFields(query);
+        ...[terrainQuery,surface,thermalModel?.ambientField,...boundaryReads].filter(Boolean).map(field=>({field,bounds:dependencyBounds}))],
+        writes:[system+'/bed',...(thermalModel?phaseFields:boundaryModel?liquidFields:[]).map(key=>system+'/'+key)]},
+      ...((surface!==undefined||thermalModel||boundaryModel)&&{checkFields(query){
+        W.materials.checkSurface(query,surface);thermalModel?.checkFields(query);boundaryModel?.checkFields(query);
       }}),
       initial() {
         const fluid=makeSolver(true).checkpoint({shareBed:true});
         const thermal=thermalModel?.boot(fluid);
         const state={fluid,gate:gateInit,pump:pumpInit,terrain:[],manual:{},...(legacyErosion&&{eroded:0}),
+          ...(boundaryModel&&{boundaries:boundaryModel.initial()}),
           ...(sedimentModel&&{sediment:sedimentModel.boot(fluid.bed),silted:Object.fromEntries(siltKeys.map(key=>[key,false]))}),
           ...(thermal&&{thermal}),...(exchanging&&{exchange:{sent:0,received:0}})};
         if(thermal){
@@ -408,6 +415,7 @@
       },
       validateState(state) {
         getSolver().restore(state.fluid);
+        boundaryModel?.validate(state.boundaries);
         for(const [table,schema,limit] of [[state.gate,gates,1],[state.pump,pumps,Infinity]])
           check(record(table)&&Object.keys(table).length===Object.keys(schema).length&&
             Object.keys(schema).every(key=>Number.isFinite(table[key])&&table[key]>=0&&table[key]<=limit),
@@ -439,6 +447,7 @@
         }
         if(type==='gate')check(own(gates,args.gate)&&Number.isFinite(args.opening)&&args.opening>=0&&args.opening<=1,'Invalid gate command');
         if(type==='pump')check(own(pumps,args.pump)&&Number.isFinite(args.rate)&&args.rate>=0&&args.rate<=1e9,'Invalid pump command');
+        if(type==='boundary')boundaryModel.checkAction(args);
         if(type==='release')check(own(inputs,args.port),'Unknown water control');
         if(type==='heat')check(thermalModel&&bounds(args.bounds,2)&&Number.isFinite(args.energy)&&Math.abs(args.energy)<=1e15,
           'Heat edit needs thermal water, XZ bounds and signed energy');
@@ -482,6 +491,10 @@
           const rows=gateMetrics(state);
           return args.gate===undefined?Q.ok(rows):own(rows,args.gate)?Q.ok(rows[args.gate]):Q.missing('Unknown silt-sensitive gate','missing');
         }}}),
+        ...(boundaryModel&&{boundaries:{type:'record',read:({state,args})=>{
+          const rows=boundaryModel.report(state.boundaries);
+          return args.id===undefined?Q.ok(rows):own(rows,args.id)?Q.ok(rows[args.id]):Q.missing('Unknown water boundary');
+        }}}),
         mass:{type:'record',units:'world^3',read:metric}
       },
       traces:{flow:{run:({state,target,args})=>{
@@ -504,6 +517,9 @@
         return Q.ok({points,status:'budget'});
       }}},
       actions:{
+        ...(boundaryModel&&{boundary(state,args,ctx){
+          return P.data.freeze({...state,boundaries:boundaryModel.set(state.boundaries,args,ctx)});
+        }}),
         bed(state,{bounds:area,height:value},ctx) {
           check(state.terrain.length<4096,'Water terrain edit budget exceeded');
           ctx.emit('bed-edit',{bounds:area,height:value});
@@ -563,8 +579,10 @@
         const gate={}, pump={};
         for (const key of Object.keys(gates)) gate[key]=clamp(state.manual['gate.'+key]??ctx.input['gate.'+key],0,1);
         for (const key of Object.keys(pumps)) pump[key]=clamp(state.manual['pump.'+key]??ctx.input['pump.'+key],0,1e9);
+        const boundary=boundaryModel?.start(state.boundaries,ctx);
         const obstruction=new Map();
         const opening=(x,z,axis,left,right,{bed,terrain=bed,level:levels})=>{
+          if(boundary?.wall(left,axis))return 0;
           let value=1;
           for (const key of matchFaces(x,z,axis,left)){
             const {siltClearance,iceClearance}=gates[key];
@@ -595,11 +613,12 @@
         const drain=material?(x,z)=>Math.min(1e4,(config.drain??0)+(atCell(index(x,z))?.permeability??0)):config.drain;
         const solidTransport=sedimentModel?.coupling(sediment,material?atCell:null), heatTransport=thermalModel?.transport(state.thermal);
         const transport=solidTransport&&heatTransport?{...heatTransport,...Object.fromEntries(
-          ['begin','face','advect','drain','pump','settle'].map(key=>[key,(...args)=>{
+          ['begin','face','exit','advect','drain','pump','settle'].map(key=>[key,(...args)=>{
             solidTransport[key](...args);heatTransport[key](...args);
           }]))}:solidTransport??heatTransport;
         solver.step(ctx.dt,{rain:config.rain,drain,friction:config.friction,...ctx.simulationLOD?.tuning,
-          ...(Object.keys(gates).length||terrainQuery?{opening}:{}),
+          ...(Object.keys(gates).length||terrainQuery||boundary?.walls?{opening}:{}),
+          ...(boundary?.solver&&{boundary:boundary.solver}),
           ...(transport&&{transport}),...(heatTransport&&{bedOffset:state.thermal.ice}),
           transfers:Object.entries(pumps).map(([key,spec])=>({from:index(...spec.from),to:index(...spec.to),rate:pump[key]}))});
         const fluid=solver.checkpoint({shareBed:!legacyErosion});
@@ -620,6 +639,7 @@
         if (eroded>0) ctx.spatial?.write('bed',{axes:'xz',min:[origin[0]+minX*dx,origin[1]+minZ*dz],
           max:[origin[0]+(maxX+1)*dx,origin[1]+(maxZ+1)*dz]},'surface-erosion');
         const next={...state,gate,pump,fluid,terrain:[],...(legacyErosion&&{eroded:state.eroded+eroded})};
+        if(boundary)next.boundaries={rules:state.boundaries.rules,flows:boundary.flows};
         if(solidTransport){
           next.sediment=solidTransport.checkpoint();
           const dirty=solidTransport.dirty();
@@ -628,19 +648,22 @@
           next.silted={};
         }
         if(heatTransport){
-          next.thermal=thermalModel.phase(heatTransport.capture(),fluid,ctx);
+          next.thermal=thermalModel.phase(heatTransport.capture(),fluid,ctx,boundary?.walls?boundary.wall:undefined);
           next.frozen={};
+        }
+        if(heatTransport||boundary){
           let x0=width,x1=-1,z0=height,z1=-1;
           for(let i=0;i<fluid.depth.length;i++){
-            if(next.thermal.ice[i]===state.thermal.ice[i]&&next.thermal.energy[i]===state.thermal.energy[i]&&
-              next.thermal.vapor[i]===state.thermal.vapor[i]&&fluid.depth[i]===state.fluid.depth[i]&&
+            const phaseChanged=heatTransport&&(next.thermal.ice[i]!==state.thermal.ice[i]||
+              next.thermal.energy[i]!==state.thermal.energy[i]||next.thermal.vapor[i]!==state.thermal.vapor[i]);
+            if(!phaseChanged&&fluid.depth[i]===state.fluid.depth[i]&&
               fluid.mx[i]===state.fluid.mx[i]&&fluid.mz[i]===state.fluid.mz[i])continue;
             const x=i%width,z=Math.floor(i/width);
             x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);
           }
-          if(x1>=0)for(const field of phaseFields)ctx.spatial?.write(field,{
+          if(x1>=0)for(const field of heatTransport?phaseFields:liquidFields)ctx.spatial?.write(field,{
             axes:'xz',min:[origin[0]+x0*dx,origin[1]+z0*dz],max:[origin[0]+(x1+1)*dx,origin[1]+(z1+1)*dz]
-          },'thermal-water-phase');
+          },heatTransport?'thermal-water-phase':'water-boundary-flow');
         }
         if(trackedFaces.size){
           for(const [key,result] of Object.entries(gateMetrics(next))){
