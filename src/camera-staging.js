@@ -2,7 +2,8 @@
 const CameraStaging = (() => {
   const targets = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
   const composite = typeof FrameComposite === 'undefined' ? require('./frame-composite.js') : FrameComposite;
-  const defaultSensorHeight = 24, turn = 2 * Math.PI, halfTurn = Math.PI / 2;
+  const lens = typeof CameraLens === 'undefined' ? require('./camera-lens.js') : CameraLens;
+  const defaultSensorHeight = lens.defaultSensorHeight, turn = 2 * Math.PI, halfTurn = Math.PI / 2;
   const finite = Number.isFinite;
   const between = (n, low, high) => finite(n) && low <= n && n <= high;
   const clamp = (n, low, high) => Math.min(high, Math.max(low, n));
@@ -14,13 +15,7 @@ const CameraStaging = (() => {
   const flag = value => value === undefined || typeof value === 'boolean';
   const integer = (value, min, max) => Number.isSafeInteger(value) && between(value, min, max);
 
-  function fieldOfView(focalLength, sensorHeight = defaultSensorHeight) {
-    check(finite(focalLength) && focalLength > 0 && finite(sensorHeight) && sensorHeight > 0,
-      'focal length and sensor height must be positive millimeters');
-    const fov = 2 * Math.atan((sensorHeight / 2) / focalLength);
-    check(fov > 0 && fov < Math.PI, 'lens must have a representable vertical field of view');
-    return fov;
-  }
+  const fieldOfView = lens.fieldOfView;
 
   function orbit(value, minimumDistance = 0) {
     if (value === undefined) return null;
@@ -196,6 +191,6 @@ const CameraStaging = (() => {
     return { ...frame, rgb: output, focusPixels: blurredPixels };
   }
 
-  return Object.freeze({ defaultSensorHeight, fieldOfView, orbit, constrain, prepare, inspect, guideCommands, overlay, focus });
+  return Object.freeze({ defaultSensorHeight, fieldOfView, focalLength: lens.focalLength, lens: lens.resolve, view: lens.view, composition: lens.composition, frameTarget: lens.target, orbit, constrain, prepare, inspect, guideCommands, overlay, focus });
 })();
 if (typeof module !== 'undefined') module.exports = CameraStaging;

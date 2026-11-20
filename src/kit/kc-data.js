@@ -1105,11 +1105,15 @@
       matOk(spec.tap.colours, 'tap.colours');
     }
     if (spec.camera) {
-      keys(spec.camera, 'camera', { target: 1, dist: 1, pitch: 1, yaw: 1, sway: 1, fov: 1, projection: 1 });
+      keys(spec.camera, 'camera', { target: 1, dist: 1, pitch: 1, yaw: 1, sway: 1, fov: 1, focalLength:1, sensorHeight:1, focusDistance:1, composition:1, projection: 1 });
       if (spec.camera.target !== undefined && !isVec(spec.camera.target, 3))
         bad('camera.target', 'three numbers [x, y, z]');
       if (spec.camera.fov !== undefined && !K.cameraRig.fovOK(spec.camera.fov))
         bad('camera.fov', 'vertical radians between zero and pi');
+      try {
+        if(spec.camera.fov!==undefined&&spec.camera.focalLength!==undefined)throw new Error('choose field of view or focal length');
+        CameraLens.view(spec.camera);
+      } catch(error){bad('camera',error.message);}
       if (spec.camera.projection !== undefined && !K.cameraRig.projectionOK(spec.camera.projection))
         bad('camera.projection', 'expected perspective or orthographic');
     }
@@ -1221,8 +1225,9 @@
     if (world.cameraRig) return () => {};
     const names = timeline.targets.filter(path => path[0] === 'camera').map(path => path[1]);
     const base = Object.fromEntries(names.map(name => [name, world.cam[name]]));
+    const cameraBase = {...world.cam};
     if (names.length) world.cam = { ...world.cam };
-    return frame => Object.assign(world.cam, base, frame.camera);
+    return frame => Object.assign(world.cam, base, frame.camera, CameraLens.resolve(cameraBase,frame.camera));
   }
   function boundRuntime(source, env, resolved) {
     const { spec, program, inputs } = resolved;

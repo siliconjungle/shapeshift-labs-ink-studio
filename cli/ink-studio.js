@@ -606,7 +606,9 @@ function cameraOptions() {
   const cameraStaging = staging === 'off' ? false : staging === 'on' ? true : staging === undefined ? undefined :
     (stagingOverride ??= JSON.parse(fs.readFileSync(path.resolve(staging), 'utf8')));
   if (opt['focal-length'] === true || opt['sensor-height'] === true) die('Lens options need a value in millimeters');
-  return { cameraShot, ortho: onOffOption('ortho'), cameraStaging, cameraGuides: onOffOption('camera-guides'),
+  const composition=opt.composition===undefined?undefined:String(opt.composition).split(',').map(Number);
+  if(composition!==undefined) {try{lib().CameraLens.composition(composition);}catch(error){die('--composition needs two normalized numbers, e.g. 0.33,0.5');}}
+  return { fov:num('fov'), focusDistance:num('focus-distance'), composition, cameraShot, ortho: onOffOption('ortho'), cameraStaging, cameraGuides: onOffOption('camera-guides'),
     focalLength: num('focal-length'), sensorHeight: num('sensor-height'), depthOfField: onOffOption('depth-of-field') };
 }
 
