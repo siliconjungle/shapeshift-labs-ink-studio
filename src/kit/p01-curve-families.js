@@ -198,7 +198,7 @@
       return {
         closed: false,
         minSegments: Math.max(8, Math.ceil(Math.abs(turns) * 8)),
-        defaultSegments: Math.ceil(Math.abs(turns) * 64),
+        defaultSegments: Math.max(8, Math.ceil(Math.abs(turns) * 64)),
         point(t) {
           const r = Math.exp(Math.log(a) + (Math.log(b) - Math.log(a)) * t),
             theta = phase + TAU * turns * t;
@@ -271,8 +271,9 @@
       check(points.length >= 3, 'closed paths need three distinct samples');
       points.push(points[0].slice());
     }
+    check(points.length <= 4097, 'closed path exceeds 4096 segments');
     check(points.length >= 2, 'curve sampling collapsed; increase segments or change parameters');
-    const up = options.up ?? [0, 1, 0];
+    const up = options.up === undefined ? [0, 1, 0] : Array.from(options.up ?? []);
     check(xyz(up) && V.len(up) > 1e-9, 'invalid frame up vector');
     const lengths = [0];
     for (let i = 1; i < points.length; i++) lengths.push(lengths.at(-1) + V.dist(points[i], points[i - 1]));
@@ -297,13 +298,13 @@
     };
     const frameAt = distance => {
       frames ??= C.frames(points, up);
-      const { lo, hi, t } = locate(distance),
+      const { lo, hi, t, d } = locate(distance),
         p = V.lerp(points[lo], points[hi], t),
         T = V.norm(V.lerp(frames[lo].T, frames[hi].T, t), frames[lo].T);
       let N = V.lerp(frames[lo].N, frames[hi].N, t);
       N = V.norm(V.sub(N, V.mul(T, V.dot(N, T))), V.perp(T));
       const B = V.cross(T, N);
-      return { p, T, N, B, t: locate(distance).d / length, matrix: M.cols(T, N, B) };
+      return { p, T, N, B, t: d / length, matrix: M.cols(T, N, B) };
     };
     const api = freeze({
       points,
@@ -315,7 +316,7 @@
         check(Number.isFinite(u), 'sample coordinate must be finite');
         return at(clamp(u) * length).p;
       },
-      snapshot: () => ({ points: points.map(p => p.slice()), closed })
+      snapshot: () => ({ points: points.map(p => p.slice()), closed, up: up.slice() })
     });
     compiled.add(api);
     return api;

@@ -59,7 +59,7 @@ The smooth mathematical curve is sampled into straight segments. More segments i
 - `properties`: clothoid analytic arc length, local start/end heading, and world-scaled start/end curvature.
 - `snapshot()`: fresh JSON family definition; pass it to `create()` again.
 
-`K.curve.path(points, {closed,up})` adapts arbitrary polylines to the same contract. Its snapshot contains points and closure; restore with `K.curve.path(snapshot.points, {closed:snapshot.closed})`. The original generators remain backward compatible. Family definitions and compiled paths are distinct from raw point arrays.
+`K.curve.path(points, {closed,up})` adapts arbitrary polylines to the same contract. Its snapshot contains points, closure and frame up; restore with `K.curve.path(snapshot.points, {closed:snapshot.closed,up:snapshot.up})`. The original generators remain backward compatible. Family definitions and compiled paths are distinct from raw point arrays.
 
 ## Cameras and drawings
 

@@ -64,3 +64,8 @@ test('curve CLI exports reusable definitions, distance samples and mapped letter
  const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cp=require('node:child_process'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-curves-'));
  try{const out=path.join(dir,'curve.json');cp.execFileSync(process.execPath,['cli/ink-studio.js','curve','examples/curve-family.json','--distance','2','--text','INK','--out',out],{cwd:path.resolve(__dirname,'..')});const report=JSON.parse(fs.readFileSync(out,'utf8'));assert.equal(report.definition.type,'clothoid');assert.equal(report.closed,false);vector(report.sample.p,[2,0,0]);assert(report.drawing.strokes.length>0);assert(report.points.length===161);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('short spiral defaults and custom path frames remain stable after author edits',()=>{
+ const short=C.create({type:'logSpiral',turns:.01});assert.equal(short.points.length,9);
+ const points=[[0,0,0],[1,0,0],[2,1,0]],up=[0,0,1],rail=C.path(points,{up});up[2]=0;points[0][0]=99;vector(rail.frame(0).N,[0,0,1]);const snapshot=rail.snapshot(),restored=C.path(snapshot.points,{up:snapshot.up,closed:snapshot.closed});vector(restored.frame(.5).N,rail.frame(.5).N);
+});
