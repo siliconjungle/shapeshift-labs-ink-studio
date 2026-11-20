@@ -1,6 +1,7 @@
 /* Fixed-grid, palette-aware resolve using coverage and cluster voting.
    No per-frame palette fitting, camera movement or black ink. */
 const PixelLook = (() => {
+  const stability = typeof ArtStability === 'undefined' ? require('./art-stability.js') : ArtStability;
   const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
   let curves, luts, stacks, spaces;
   try {
@@ -293,11 +294,15 @@ const PixelLook = (() => {
     const swatches = packed.map(unpack), exact = new Map(reserved.map((color, index) => [color, candidates.length + index]));
     const lab = matchId ? swatches.map(labPoint) : undefined;
     const dither = definition.dither ?? {};
-    if (!record(dither) || Object.keys(dither).some(key => !['pattern', 'strength', 'seed', 'pairs'].includes(key)))
-      throw new TypeError('Palette dither accepts pattern, strength, seed and pairs settings');
+    if (!record(dither) || Object.keys(dither).some(key => !['pattern', 'strength', 'seed', 'pairs', 'space', 'spacing', 'origin'].includes(key)))
+      throw new TypeError('Palette dither accepts pattern, strength, seed, pairs, space, spacing and origin settings');
     const { pattern = 'bayer', strength = 0, seed = 0 } = dither;
     if (!['none', 'checker', 'bayer', 'blue-noise'].includes(pattern) || !fraction(strength) || !Number.isSafeInteger(seed))
       throw new RangeError('Palette dither requires a valid pattern, strength in [0, 1] and integer seed');
+    if (dither.space === undefined && (dither.spacing !== undefined || dither.origin !== undefined))
+      throw new TypeError('Set a dither space to use spacing or origin');
+    const anchor = dither.space === undefined ? undefined :
+      stability.pattern({ dither: dither.space, spacing: dither.spacing, origin: dither.origin });
     let pairs, partners;
     if (dither.pairs !== undefined) {
       if (!Array.isArray(dither.pairs) || dither.pairs.length > 256)
@@ -396,7 +401,7 @@ const PixelLook = (() => {
       }
       return projection >= threshold * length ? second : best;
     }
-    return { packed, swatches, count, width, height, ranks, amount, source, match, matchId, lab, pairs, reservedIndex, index };
+    return { packed, swatches, count, width, height, ranks, amount, source, match, matchId, lab, pairs, anchor, reservedIndex, index };
   }
 
   function prepareLookPolicy(definition, options = {}) {
@@ -508,7 +513,7 @@ const PixelLook = (() => {
     const shade = body.map(v => v * 0.64), luma = shade.reduce((n, v, k) => n + v * weights[k], 0);
     return shade.map(v => Math.min(1, v * Math.max(1, 0.12 / Math.max(luma, 0.001))));
   }
-  function resolve({ color, depth, w, h, palette, grade, interiorColor, dither = 0, local, contour = true, ditherAt }) {
+  function resolve({ color, depth, w, h, palette, grade, interiorColor, dither = 0, local, contour = true, ditherAt, localDitherAt }) {
     const width = w / 2, height = h / 2, rgb = new Uint8Array(width * height * 3), use = new Uint32Array(local?.output.packed.length ?? palette.length);
     const mapped = i => grade ? grade.slice(i * 3, i * 3 + 3) : palette[i];
     const at = (x, y) => Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x));
@@ -522,7 +527,8 @@ const PixelLook = (() => {
       const anchor = ditherAt?.(x, y);
       const localId = local?.at[y * width + x];
       if (localId) {
-        const [dx, dy] = anchor ?? [x, height - 1 - y];
+        const rule = local.constraints?.[localId - 1]?.anchor;
+        const [dx, dy] = (rule ? localDitherAt?.(rule, x, y) : anchor) ?? [x, height - 1 - y];
         const index = localIndex(local, localId, native, dx, dy);
         const tone = local.output.packed[index], q = ((height - 1 - y) * width + x) * 3;
         rgb[q] = tone >> 16;

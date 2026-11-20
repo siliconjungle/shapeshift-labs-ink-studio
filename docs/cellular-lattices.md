@@ -32,6 +32,7 @@ connected by authored edges, use [graph automata](graph-automata.md).
 | `rule30()`, `rule90()`, `rule110()`, `elementary(number)` | Binary line rules. The next state is bit `4 * left + 2 * state + right` of the rule number (0–255). Record successive rows to build a space-time image. |
 | `cyclic({ states = 8, threshold = 1 })` | Advance to `(state + 1) % states` once at least `threshold` neighbors already have that successor. |
 | `briansBrain({ birth = 2 })` | Off cells (`0`) fire when exactly `birth` neighbors are firing. Firing (`1`) becomes refractory (`2`), then off. |
+| `excitable({ threshold, gain, leak, refractory, recovery })` | [Charge, firing, and recovery](sandpiles-excitable.md) on lattice and graph neighborhoods |
 | `life({ birth, survive })` | Existing Life-like rule with configurable neighbor counts. |
 | `margolus(table)` | Author a reversible binary 2×2 rule as a permutation of the integers 0–15. |
 | `blockRotate(turns = 1)` | Rotate each block clockwise by one to three quarter turns. |

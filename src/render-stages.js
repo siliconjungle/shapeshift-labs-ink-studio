@@ -1,5 +1,6 @@
 /* Color operations ordered by their place in the render pipeline. */
 const RenderStages = (() => {
+  const stability = typeof ArtStability === 'undefined' ? require('./art-stability.js') : ArtStability;
   let stacks, space, pixels, targets, effects, inputs;
   try {
     stacks = ColorStack;
@@ -141,9 +142,11 @@ const RenderStages = (() => {
     }
     const post = rule => !rule.disabled && (rule.name === 'frame' || rule.name === 'palette');
     const postMask = all.some(rule => post(rule) && rule.mask);
+    const anchorSpaces = new Set(all.filter(post).map(rule => rule.palette?.anchor?.dither)
+      .filter(Boolean));
     const owner = postMask || scene.some(rule => post(rule) && rule.select) || surfaces.some(rules => rules.some(post));
     return {
-      at, post: all.some(post), postMask, owner,
+      at, post: all.some(post), postMask, owner, anchorSpaces,
       palettes: [...new Set(all.flatMap(rule => rule.palette?.packed ?? []))],
       outputPalettes: [...new Set(all.filter(post).flatMap(rule => rule.palette?.packed ?? []))],
       surfaceMask: all.some(rule => !post(rule) && rule.mask)
@@ -163,7 +166,7 @@ const RenderStages = (() => {
     };
   }
 
-  function evaluate(rules, rgb, sample, x, y, contributions, visit) {
+  function evaluate(rules, rgb, sample, x, y, contributions, visit, anchorAt) {
     if (!rules) return rgb;
     let result = rgb;
     for (const rule of rules) {
@@ -174,7 +177,10 @@ const RenderStages = (() => {
       let transformed;
       if (applied && rule.palette) {
         const dither = x !== undefined && (rule.name === 'frame' || rule.name === 'palette');
-        transformed = result = rule.palette.swatches[rule.palette.index(input, x, y, dither)];
+        const anchor = dither && rule.palette.anchor;
+        const [dx, dy] = anchor ? anchorAt ? anchorAt(anchor) :
+          stability.sampleCoordinates(anchor, sample, x, y) : [x, y];
+        transformed = result = rule.palette.swatches[rule.palette.index(input, dx, dy, dither)];
       } else if (applied) {
         transformed = rule.stack.sample(input);
         result = amount === 1 ? transformed : transformed.map((n, i) => input[i] + (n - input[i]) * amount);
@@ -245,8 +251,9 @@ const RenderStages = (() => {
       const x = p % w, y = Math.floor(p / w);
       const palette = rules.palette || rules.frame?.some(rule => rule.palette);
       const [dx,dy] = palette && ditherAt ? ditherAt(x,y) : [x,y];
-      const graded = evaluate(rules.frame,original,sample,dx,dy,undefined,visit);
-      const color = evaluate(rules.palette, graded, sample, dx, dy, undefined, visit);
+      const anchorAt = plan.anchorSpaces?.size ? anchor => stability.ditherCoordinates(null, passes, p, x, y, anchor) : undefined;
+      const graded = evaluate(rules.frame, original, sample, dx, dy, undefined, visit, anchorAt);
+      const color = evaluate(rules.palette, graded, sample, dx, dy, undefined, visit, anchorAt);
       if (audit) audit.pixel('frame', p, color[0], color[1], color[2]);
       const index = swatches.get(pack(color));
       if (index !== undefined) use[index]++;

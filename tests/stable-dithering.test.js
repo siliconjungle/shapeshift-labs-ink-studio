@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const ink = require('..');
-const { KIT:K, ArtStability, makeBuilder, makeSculpt }=ink.load();
+const { KIT:K, ArtStability, PixelLook, makeBuilder, makeSculpt }=ink.load();
 const { FOV }=require('../cli/render.js');
 const camera={target:[0,0,0],dist:5,yaw:0,pitch:0};
 const view={w:64,h:48,px:1,ortho:true};
@@ -126,4 +126,81 @@ test('fog ramp dithering uses the same world coordinates on a visible surface', 
   assert(anchored[0].effectPaletteMask.some(n=>n===1));
   assert(changes(...screen,-1)>30);
   assert(changes(...anchored,-1)<4);
+});
+
+const anchorPolicy = space => ({
+  ...candidates,
+  dither: { ...candidates.dither, space, spacing: step, origin: on.origin,
+    pairs: [{ colors: candidates.palette }] }
+});
+
+test('a palette anchor overrides global placement in native, contour, coverage and cluster resolves', () => {
+  const stable = { ...on, targets: [{ object: 'probe', dither: 'world' }] };
+  for (const options of [{}, { colored: true }, { coverageAware: true },
+    { stable: { ...stable, resolve: 'coverage' } }, { stable: { ...stable, resolve: 'clusters' } }]) {
+    const target = space => plate({ stable, paletteConstraints: {
+      targets: [{ object: 'probe', ...anchorPolicy(space) }]
+    } });
+    const world = pan(target('world'), options), screen = pan(target('screen'), options);
+    assert(changes(...world, -1) < 4, JSON.stringify(options));
+    assert(changes(...screen, -1) > 30, JSON.stringify(options));
+  }
+});
+
+test('a spatial palette works with a final-stage mask and a surface palette mask', () => {
+  const mask = { type: 'axis', axis: 'x', range: [-3, -2], space: 'world' };
+  const staged = space => plate({ renderStages: [{ stage: 'palette', select: { object: 'probe' },
+    palette: anchorPolicy(space), mask }] });
+  const surface = space => {
+    const B = makeBuilder(7, [black, mid]), S = K.sculpt(makeSculpt(B));
+    S.amb = 1; S.sunK = 0; S.sky = 0;
+    const paint = K.surface.material({ r: [1], materialId: 'plate' },
+      { paletteConstraint: { ...anchorPolicy(space), mask } });
+    S.box([0, 0, -.07], [1.15, .8, .08], paint, { res: .072, objectId: 'probe' });
+    S.bake();
+    return B.finish({ cam: camera, dither: 1 });
+  };
+  for (const build of [staged, surface]) {
+    for (const options of [{ stable: false }, { stable: false, coverageAware: true }]) {
+      assert(changes(...pan(build('screen'), options), -1) > 30);
+      assert(changes(...pan(build('world'), options), -1) < 4);
+    }
+  }
+});
+
+test('the palette object anchor sticks in rig rest space even with scene stability off', () => {
+  const B = makeBuilder(1, [black, mid]), S = K.sculpt(makeSculpt(B)), rig = K.rig(B, S);
+  S.amb = 1; S.sunK = 0; S.sky = 0;
+  S.box([0, 0, -.07], [1.15, .8, .08], { r: [1], materialId: 'cloth' }, { tag: 'cloth', res: .072 });
+  S.bake();
+  const world = B.finish({ cam: camera });
+  const stage = K.stage(world);
+  rig.bind(stage);
+  const turn = .48;
+  stage.add({ update(_dt, t) {
+    rig.set('cloth', K.M.rot([0, 1, 0], t * turn), [0, 0, 0], [0, 0, 0]);
+    rig.apply();
+  } });
+  const series = (space, coverageAware) => [0, 1].map(t => {
+    stage.update(0, t);
+    return ink.render(world, { ...view, stable: false, t, yaw: t * turn, coverageAware,
+      paletteConstraints: { targets: [{ material: 'cloth', ...anchorPolicy(space) }] } });
+  });
+  for (const coverageAware of [false, true]) {
+    assert(changes(...series('world', coverageAware)) > 30);
+    assert(changes(...series('object', coverageAware)) < 4);
+  }
+});
+
+test('palette anchor validation and compatibility use the same policy in native look data', () => {
+  const pack = { format: 'ink-studio/asset-pack', id: 'dither', title: 'Dither', version: 1, revision: 1,
+    looks: [{ id: 'dither/weave', label: 'Weave', palette: anchorPolicy('object') }] };
+  const catalog = K.authoring.assetPacks.create({ packs: [pack] });
+  const { palette } = K.authoring.looks.bind('dither/weave', catalog);
+  assert.deepEqual(PixelLook.preparePalette(palette).anchor, { ...on, dither: 'object' });
+  assert.deepEqual(K.world.lookReport.standalone({ palette }, undefined, 'headless').issues, []);
+  assert.match(K.world.lookReport.standalone({ palette }, undefined, 'webgl').issues[0].message, /screen space/);
+  for (const dither of [{ space: 'camera' }, { space: 'world', spacing: 0 }, { space: 'object', origin: [0, 0] }])
+    assert.throws(() => PixelLook.preparePalette({ ...candidates, dither }), /Invalid dither space/);
+  assert.throws(() => PixelLook.preparePalette({ ...candidates, dither: { spacing: .2 } }), /Set a dither space/);
 });

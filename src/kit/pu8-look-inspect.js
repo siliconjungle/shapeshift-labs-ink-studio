@@ -98,6 +98,8 @@
         if (renderer === 'webgl') {
           if (explicit) unsupported(path, 'does not evaluate explicit ' + stage + ' stages');
           else if (mode === 'surface') unsupported(path, 'does not evaluate surface look layers');
+          else if (['world', 'object'].includes(definition.palette?.dither?.space))
+            unsupported(path, 'uses screen space for palette dither');
           else if (definition.mask && !ContributionRules.supportsMask(definition.mask))
             unsupported(path, 'evaluates axis masks and planar raster masks');
           else if (matched.some(row => (mode === 'optics' || row.target.kind === 'medium') && !waterGroup(row)))
@@ -216,6 +218,8 @@
       issues.push({ code: 'unsupported-renderer', message: 'webgl does not evaluate explicit ' + stage + ' stages' });
     else if (mask && renderer === 'webgl')
       issues.push({ code: 'unsupported-renderer', message: 'webgl does not evaluate spatial look masks' });
+    else if (renderer === 'webgl' && ['world', 'object'].includes(palette?.dither?.space))
+      issues.push({ code: 'unsupported-renderer', message: 'webgl uses screen space for palette dither' });
     return { ...definitionInfo(definition, params), stage: stage ?? null, issues };
   }
   W.lookReport = Object.freeze({ scene, standalone });

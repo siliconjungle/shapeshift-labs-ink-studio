@@ -64,11 +64,16 @@ const ArtStability = (() => {
     return [ix + 3 * iy + 2 * iz, 2 * ix + iy + 3 * iz];
   }
 
-  function ditherCoordinates(settings, passes, p, x, y) {
-    if (!settings?.anchorSpaces.size || !passes || !(passes.depth ? Number.isFinite(passes.depth[p]) : passes.splatId?.[p]))
-      return [x, y];
+  function sampleCoordinates(rule, sample, x, y) {
+    const point = rule?.dither === 'object' ? sample?.position : sample?.worldPosition;
+    return rule ? coordinates(rule, point, x, y) : [x, y];
+  }
+
+  function ditherCoordinates(settings, passes, p, x, y, explicit) {
+    if (!(explicit || settings?.anchorSpaces.size) || !passes ||
+        !(passes.depth ? Number.isFinite(passes.depth[p]) : passes.splatId?.[p])) return [x, y];
     const object = passes.objects?.[passes.objectId?.[p]], material = passes.materials?.[passes.materialId?.[p]];
-    const rule = matching(settings, object, material);
+    const rule = explicit ?? matching(settings, object, material);
     if (rule.dither === 'screen') return [x, y];
     const buffer = rule.dither === 'object' ? passes.objectPosition : passes.position;
     const point = (rule.dither === 'object' && passes.ditherRest?.get(p)) || buffer?.subarray(p * 3, p * 3 + 3);
@@ -102,7 +107,9 @@ const ArtStability = (() => {
       const localId = local?.at[(h - 1 - y) * w + x];
       if (localId && (detail[p] || coverage[p] >= settings.threshold)) {
         const nativeShade = [color[c] / 255, color[c + 1] / 255, color[c + 2] / 255];
-        const index = pixelLook.localIndex(local, localId, nativeShade, dx, dy, !detail[p]);
+        const anchor = local.constraints?.[localId - 1]?.anchor;
+        const [lx, ly] = anchor ? ditherCoordinates(null, passes, p, x, y, anchor) : [dx, dy];
+        const index = pixelLook.localIndex(local, localId, nativeShade, lx, ly, !detail[p]);
         use[index]++;
         const packed = local.output.packed[index];
         rgb[q] = packed >> 16; rgb[q + 1] = (packed >> 8) & 255; rgb[q + 2] = packed & 255;
@@ -146,6 +153,6 @@ const ArtStability = (() => {
     return { w, h, rgb, use, detail, ...((local || tone) && { palette: local?.output.packed || tone.palette }) };
   }
 
-  return Object.freeze({ prepare, snapView, modulo, ditherCoordinates, coordinates, matching, protectedPixel, resolve });
+  return Object.freeze({ prepare, pattern, snapView, modulo, ditherCoordinates, sampleCoordinates, coordinates, matching, protectedPixel, resolve });
 })();
 if (typeof module !== 'undefined') module.exports = ArtStability;

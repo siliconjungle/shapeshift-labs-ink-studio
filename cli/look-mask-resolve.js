@@ -1,4 +1,5 @@
 const PixelLook = require('../src/pixel-look.js');
+const ArtStability = require('../src/art-stability.js');
 const { sampleFrames } = require('./art-passes.js');
 const { surfacePoint } = require('./scene-optics.js');
 
@@ -17,12 +18,14 @@ function createMaskResolve(world, grid, overlay, policies, grade, visit) {
     const point = frame.normal ? surfacePoint(rayAt(px + .5, py + .5), frame.normal, cx, cy, cz, -depth[i], span) : [cx, cy, cz];
     const offset = frame.localOffset(point[0] - cx, point[1] - cy, point[2] - cz);
     const position = [frame.rest[0] + offset[0], frame.rest[1] + offset[1], frame.rest[2] + offset[2]];
-    const amount = policy.mask({ position, worldPosition: point, normal: frame.normal, time });
+    const site = { position, worldPosition: point, normal: frame.normal, time };
+    const amount = policy.mask(site);
     if (!amount) return;
     if (visit) visit(pixel, policy, amount);
     const out = (h - 1 - py) * w + px;
     weights[out] = amount;
-    colors[out] = policy.packed[PixelLook.paletteIndex(policy, [r, g, b], dx, dy, { grade, scene })];
+    const [ax, ay] = policy.anchor ? ArtStability.sampleCoordinates(policy.anchor, site, px, h - 1 - py) : [dx, dy];
+    colors[out] = policy.packed[PixelLook.paletteIndex(policy, [r, g, b], ax, ay, { grade, scene })];
   }
   return { record, output: { colors, weights } };
 }

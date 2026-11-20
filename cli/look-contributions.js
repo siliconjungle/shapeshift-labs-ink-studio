@@ -1,8 +1,15 @@
 const PixelLook = require('../src/pixel-look.js');
+const ArtStability = require('../src/art-stability.js');
 
 function contributionLook(palettes, policies, targets, targetOffset, fallback, scene, grade) {
   const slot = (i, layer) => targets?.[i] ? targetOffset + targets[i] : layer || fallback;
-  function shade(i, layer, rgb, x, y, sample, dither, visit) {
+  const underSlot = layer => [layer, fallback].find(id => id && !policies?.[id - 1]?.mask);
+  const spatial = anchor => anchor && anchor.dither !== 'screen';
+  function needsSample(i, layer, anchor) {
+    const policy = policies?.[slot(i, layer) - 1], explicit = policy?.anchor;
+    return Boolean(policy && (policy.mask || spatial(explicit ?? anchor)));
+  }
+  function shade(i, layer, rgb, x, y, sample, dither, visit, inherited) {
     const id = slot(i, layer);
     if (!id) return rgb;
     const policy = policies?.[id - 1];
@@ -10,11 +17,14 @@ function contributionLook(palettes, policies, targets, targetOffset, fallback, s
     const amount = policy.mask ? sample ? policy.mask(sample) : 0 : 1;
     if (amount && visit) visit(policy, policy.mask ? amount : null, amount);
     const options = { scene, grade, useDither: dither };
-    const index = plan => PixelLook.paletteIndex(plan, rgb, x, y, options);
+    const index = plan => {
+      const [dx, dy] = ArtStability.sampleCoordinates(plan.anchor ?? inherited, sample, x, y);
+      return PixelLook.paletteIndex(plan, rgb, dx, dy, options);
+    };
     if (amount === 1) return policy.swatches[index(policy)];
 
     // A soft mask reveals the underlying material or default look in the same fragment.
-    const under = [layer, fallback].find(id => id && !policies?.[id - 1]?.mask);
+    const under = underSlot(layer);
     const underlying = policies?.[under - 1];
     if (!amount && underlying && visit) visit(underlying, null, 1);
     const base = underlying ? underlying.swatches[index(underlying)] : under ?
@@ -22,7 +32,7 @@ function contributionLook(palettes, policies, targets, targetOffset, fallback, s
     if (!amount) return base;
     return policy.swatches[index(policy)].map((value, channel) => base[channel] + (value - base[channel]) * amount);
   }
-  return { shade, applies: slot, masked: (i, layer) => Boolean(policies?.[slot(i, layer) - 1]?.mask) };
+  return { shade, applies: slot, needsSample };
 }
 
 function contributionLayers(col, alpha, w, h, patterned, bend) {

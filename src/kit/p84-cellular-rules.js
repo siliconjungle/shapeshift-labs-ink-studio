@@ -34,6 +34,34 @@ const CellularRules = (() => {
     }, { states: 3 });
   }
 
+  function excitable({ threshold = 1, gain = 1, leak = 1, refractory = 8, recovery = 0 } = {}) {
+    if (![threshold, gain].every(n => integer(n, 1, 254)) || ![leak, refractory, recovery].every(n => integer(n, 0, 254)) ||
+        threshold + refractory + recovery >= 256) throw new RangeError('Excitable rules need bounded integer charge and cooldown stages');
+    const states = threshold + refractory + recovery + 1;
+    const firing = threshold, recovered = firing + refractory + 1;
+    const weight = ({ neighbors, inputs }) => inputs === undefined
+      ? neighbors.reduce((sum, state) => sum + Number(state === firing), 0)
+      : inputs.reduce((sum, input) => sum + (input.state === firing ? input.edge.weight : 0), 0);
+    function required(state) {
+      return threshold + Math.ceil(threshold * (states - state) / (recovery + 1));
+    }
+    const rule = context => {
+      const { state } = context;
+      const next = (state + 1) % states;
+      if (state >= firing && state < recovered) return next;
+      const drive = Math.floor(gain * weight(context));
+      if (state < firing) return drive ? Math.min(firing, state + drive) : Math.max(0, state - leak);
+      return drive >= required(state) ? firing : next;
+    };
+    return local(Object.assign(rule, { firing, states, describe(state) {
+      if (!integer(state, 0, states - 1)) throw new RangeError('State is outside the excitable alphabet');
+      if (state < firing) return { phase: state ? 'charging' : 'rest', charge: state, required: threshold, remaining: 0 };
+      if (state === firing) return { phase: 'firing', charge: 0, required: null, remaining: 1 };
+      if (state < recovered) return { phase: 'refractory', charge: 0, required: null, remaining: recovered - state };
+      return { phase: 'recovering', charge: 0, required: required(state), remaining: states - state };
+    } }), { states });
+  }
+
   function margolus(table) {
     if (!(Array.isArray(table) || ArrayBuffer.isView(table)) || table.length !== 16 ||
         !Array.from(table).every(n => integer(n, 0, 15)) || new Set(table).size !== 16)
@@ -60,6 +88,6 @@ const CellularRules = (() => {
   }
 
   const rules = { elementary, rule30: () => elementary(30), rule90: () => elementary(90),
-    rule110: () => elementary(110), cyclic, briansBrain, margolus, blockRotate, blockGas };
+    rule110: () => elementary(110), cyclic, briansBrain, excitable, margolus, blockRotate, blockGas };
   return Object.freeze({ rules: Object.freeze(rules), info: rule => metadata.get(rule) });
 })();

@@ -279,6 +279,10 @@ function renderFrame(world, o, preparedPalettes) {
   const stable = ArtStability.prepare(look.stable, o.stable);
   const specializedResolve = legacyLook && stable && stable.resolve !== 'native';
   const anchoring = !o.raw && !o.captureCoverage && !!stable?.anchorSpaces.size;
+  const paletteRules = legacyLook || coverageAware ? PixelLook.preparePaletteConstraints(o.paletteConstraints ?? look.paletteConstraints, {
+    palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
+    context: world.surfaceEffects, skipMasks: o.lookMasks === false, skipMaskedStacks: o.colorStack === false, onPaletteClip
+  }) : preparedPalettes;
   const requestedPasses = ArtPasses.select(o.passes);
   const passSelection = new Set(requestedPasses);
   let lookPass;
@@ -298,12 +302,23 @@ function renderFrame(world, o, preparedPalettes) {
     if (effectPaletteSettings.objects.size) passSelection.add('objectId');
     if (effectPaletteSettings.materials.size) passSelection.add('materialId');
   }
-  if (anchoring) {
+  const anchorSpaces = new Set(anchoring ? stable.anchorSpaces : []);
+  function addAnchorSpace(space) {
+    if (space === 'world' || space === 'object') anchorSpaces.add(space);
+  }
+  if (!o.raw && !o.captureCoverage) {
+    if (styled) for (const space of stages?.anchorSpaces ?? []) addAnchorSpace(space);
+    for (const policy of paletteRules?.palettes ?? []) addAnchorSpace(policy.anchor?.dither);
+    if (o.surface !== false && o.paletteConstraints !== false && (!stages || coverageAware)) {
+      for (const { settings } of world.surfaces ?? []) addAnchorSpace(settings.paletteConstraint?.dither?.space);
+    }
+  }
+  if (anchorSpaces.size) {
     passSelection.add('depth');
-    if (stable.anchorSpaces.has('world')) passSelection.add('position');
-    if (stable.anchorSpaces.has('object')) passSelection.add('objectPosition');
-    if (stable.rules.some(rule => rule.object !== undefined)) passSelection.add('objectId');
-    if (stable.rules.some(rule => rule.material !== undefined)) passSelection.add('materialId');
+    if (anchorSpaces.has('world')) passSelection.add('position');
+    if (anchorSpaces.has('object')) passSelection.add('objectPosition');
+    if (anchoring && stable.rules.some(rule => rule.object !== undefined)) passSelection.add('objectId');
+    if (anchoring && stable.rules.some(rule => rule.material !== undefined)) passSelection.add('materialId');
   }
   if (specializedResolve || (legacyLook && stable?.protect.size)) {
     for (const channel of ['objectId', 'materialId', 'emission', 'protected']) passSelection.add(channel);
@@ -341,10 +356,6 @@ function renderFrame(world, o, preparedPalettes) {
   if (look.pixelSize !== undefined && (!Number.isSafeInteger(look.pixelSize) || look.pixelSize < 1))
     throw new RangeError('look.pixelSize must be a positive integer');
   const tone = legacyLook ? PixelLook.prepareTone(o.tone ?? look.tone, settings => blueNoise(world, settings)) : null;
-  const paletteRules = legacyLook || coverageAware ? PixelLook.preparePaletteConstraints(o.paletteConstraints ?? look.paletteConstraints, {
-    palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
-    context: world.surfaceEffects, skipMasks: o.lookMasks === false, skipMaskedStacks: o.colorStack === false, onPaletteClip
-  }) : preparedPalettes;
   const { colorGrade, grade } = RenderContract.palette(world, o, { grading: (legacyLook || coverageAware) && !tone, tone: false,
     onClip: onPaletteClip && ((i, r, g, b) => onPaletteClip({
       assetId: o.colorStack === undefined ? look.colorStackAssetId : undefined, stack: (o.colorStack ?? look.colorStack)?.name
@@ -419,7 +430,8 @@ function renderFrame(world, o, preparedPalettes) {
       { local, tone, grade: !tone && grade }) :
       PixelLook.resolve(Object.assign(samples, {
         palette, local, contour: !ink, grade, interiorColor: native.color, dither: amount,
-        ditherAt: anchoring ? (x, y) => ArtStability.ditherCoordinates(stable, native.passes, (H - 1 - y) * W + x, x, y) : null
+        ditherAt: anchoring ? (x, y) => ArtStability.ditherCoordinates(stable, native.passes, (H - 1 - y) * W + x, x, y) : null,
+        localDitherAt: (rule, x, y) => ArtStability.ditherCoordinates(null, native.passes, (H - 1 - y) * W + x, x, H - 1 - y, rule)
       }));
     native.cleanDetail?.(img.rgb, !!(o.clean || (look.clean && !tone?.preserveDots)));
     applyMasks(img.rgb, native.masked);
@@ -568,7 +580,7 @@ function renderFrame(world, o, preparedPalettes) {
   for(const sample of surfaceFragments)surfaceDepth[sample.p]=Math.min(surfaceDepth[sample.p],sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,override:o.spriteAtlasMode,sun,
-    objectDither: anchoring && stable.anchorSpaces.has('object'),
+    objectDither: anchorSpaces.has('object'),
     subject: protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
     clip:geometryClip
@@ -1024,7 +1036,9 @@ function renderFrame(world, o, preparedPalettes) {
   const edgePatterns = !retainLayers && edgeStrengthAt && PIX ? contributionLayers(col, captured, W, H, true, 0) : null;
   const edgePixels = !o.raw && edgeStrengthAt ? new Float32Array(W * H) : null;
   const stageMasks = stages?.surfaceMask || contribution && localConstraints?.some(policy => policy?.mask);
-  const stagedFrames = stageMasks || anchoring && contribution ? sampleFrames(world, t) : null;
+  const anchoredContributions = contribution && (anchoring ||
+    localConstraints?.some(policy => policy?.anchor && policy.anchor.dither !== 'screen'));
+  const stagedFrames = stageMasks || anchoredContributions ? sampleFrames(world, t) : null;
   const maskFrames = stagedFrames && new Map();
   function stageFrame(i) {
     if (i >= baseCount) return { normal: null };
@@ -1176,6 +1190,12 @@ function renderFrame(world, o, preparedPalettes) {
       if (receiver) {
         const gain = contact.sample(receiver, sprite.p, position, sprite.normal);
         color = color.map(value => value*gain);
+      }
+      if (contribution?.applies(i, paletteId)) {
+        const anchor = fragmentRule(i);
+        const site = sample ?? (contribution.needsSample(i, paletteId, anchor) ? stageSample(i, position) : undefined);
+        color = contribution.shade(i, paletteId, color, sprite.p % W, H - 1 - Math.floor(sprite.p / W),
+          site, highlight <= .22, undefined, anchor);
       }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample);
     }
@@ -1596,7 +1616,7 @@ function renderFrame(world, o, preparedPalettes) {
         }
         if (staged?.lit || scoped || glassLook) {
           let sample;
-          if (litMask || (scoped && (ditherRule || contribution.masked(i, paletteId)))) {
+          if (litMask || (scoped && contribution.needsSample(i, paletteId, ditherRule))) {
             const sampleNormal = litNormal ?? stageFrame(i).normal;
             const point = hit ?? (sampleNormal ?
               surfacePoint(rayAt(ix + .5, iy + .5), sampleNormal, x, y, z, -cz, R) : [x, y, z]);
@@ -1604,9 +1624,8 @@ function renderFrame(world, o, preparedPalettes) {
           }
           let rgb = [pr, pg, pb];
           if (scoped) {
-            const [dx,dy] = ditherRule ? ArtStability.coordinates(ditherRule,
-              ditherRule.dither === 'object' ? sample.position : sample.worldPosition, ix, H-1-iy) : [ix,H-1-iy];
-            rgb = contribution.shade(i, paletteId, rgb, dx, dy, sample, highlight <= .22, lookPass?.palette);
+            rgb = contribution.shade(i, paletteId, rgb, ix, H - 1 - iy, sample, highlight <= .22,
+              lookPass?.palette, ditherRule);
           }
           if (staged?.lit) rgb = RenderStages.apply(staged.lit, rgb, sample, lookPass?.stage);
           [pr, pg, pb] = glassLook ? glassLook(rgb, lookPass?.optics) : rgb;
@@ -1966,10 +1985,9 @@ function renderFrame(world, o, preparedPalettes) {
         }
         if (contribution?.applies(i, c[5])) {
           const rule = fragmentRule(i);
-          const site = sample ?? (rule || contribution.masked(i, c[5]) ? stageSample(i, [HX[p], HY[p], HZ[p]]) : undefined);
-          const [dx,dy] = rule ? ArtStability.coordinates(rule, rule.dither === 'object' ? site.position : site.worldPosition, x, H-1-y) :
-            [x,H-1-y];
-          rgb = contribution.shade(i, c[5], rgb, dx, dy, site, !(c[4] > .22), lookPass?.palette);
+          const site = sample ?? (contribution.needsSample(i, c[5], rule) ?
+            stageSample(i, [HX[p], HY[p], HZ[p]]) : undefined);
+          rgb = contribution.shade(i, c[5], rgb, x, H - 1 - y, site, !(c[4] > .22), lookPass?.palette, rule);
         }
         let lit = staged?.lit ? RenderStages.apply(staged.lit, rgb, sample, lookPass?.stage) : rgb;
         if (cloudShadow && !live?.normal(i) && !(Math.round(d[i * 16 + 11]) & (32 | 64))) {
@@ -2400,8 +2418,10 @@ function renderFrame(world, o, preparedPalettes) {
       if (lookPass && localId && localConstraints?.[localId - 1]) lookPass.local(p, localConstraints[localId - 1]);
       if (masks && !outlined) masks.record(p, r, g, b, ditherX, ditherY);
       if (tone || localId) {
-        const index = localId ? PixelLook.localIndex(local, localId, [r, g, b], ditherX, ditherY, !surfaceGlint?.[p]) :
-          PixelLook.toneIndex(tone, r, g, b, ditherX, ditherY);
+        const anchor = localId && localConstraints?.[localId - 1]?.anchor;
+        const [dx, dy] = anchor ? ArtStability.ditherCoordinates(null, passes, yo * W + x, x, yo, anchor) : [ditherX, ditherY];
+        const index = localId ? PixelLook.localIndex(local, localId, [r, g, b], dx, dy, !surfaceGlint?.[p]) :
+          PixelLook.toneIndex(tone, r, g, b, dx, dy);
         const color = (localOutput?.packed || tone.palette)[index];
         use[index]++;
         out[q] = color >> 16;
@@ -2595,6 +2615,25 @@ function renderFrame(world, o, preparedPalettes) {
     ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
   }, passes, atmosphere?.fog, effectSignals, effectColor);
 }
+function pixelIndex(w, h, sourceW, sourceH) {
+  if (w === sourceW && h === sourceH) return (x, y) => y * w + x;
+  const columns = Int32Array.from({ length: w }, (_, x) => Math.floor((x + .5) * sourceW / w));
+  const rows = Int32Array.from({ length: h }, (_, y) => Math.floor((y + .5) * sourceH / h) * sourceW);
+  return (x, y) => rows[y] + columns[x];
+}
+
+function resize(img, w, h) {
+  if (img.w === w && img.h === h) return img;
+  const rgb = new Uint8Array(w * h * 3), alpha = img.alpha && new Uint8Array(w * h);
+  const source = pixelIndex(w, h, img.w, img.h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const pixel = y * w + x, sample = source(x, y);
+    for (let channel = 0; channel < 3; channel++) rgb[pixel * 3 + channel] = img.rgb[sample * 3 + channel];
+    if (alpha) alpha[pixel] = img.alpha[sample];
+  }
+  return { w, h, rgb, ...(alpha && { alpha }) };
+}
+
 // make every art pixel k screen pixels wide, the way the page shows it
 function upscale(img, k) {
   const W = img.w * k,
@@ -2671,4 +2710,4 @@ function grid(imgs, cols, labels) {
   });
   return out;
 }
-module.exports = { render, upscale, grid, label, viewMatrix, FOV, cameraCapture };
+module.exports = { render, resize, pixelIndex, upscale, grid, label, viewMatrix, FOV, cameraCapture };

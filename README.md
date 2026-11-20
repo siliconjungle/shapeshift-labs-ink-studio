@@ -788,6 +788,8 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96` | Check subject framing across a shot at the native export crop. |
 | `passes <scene>` | Save art-pixel coverage, depth, normals, IDs and emission previews. |
 | `export-layers <scene>` | Export transparent color, depth, normals, object IDs, and material mattes on one grid. |
+| `export-scene <scene> --out directory` | Publish a high-resolution still, loop and PNG sequence, replay recording, and web embed. |
+| `scene-replay <recording> --out frame.png` | Sample a recording or regenerate its web embed with `--embed`. |
 | `atlas <scene> --directions 8` | Export an RGBA atlas with registered pivots and optional relighting maps. |
 | `pose-review <scene> --directions 8` | Render named poses and breakdowns as color and silhouette tiles at sprite resolution. |
 | `motion-review <scene> [--finding kind-or-id]` | Report motion findings, focus ranges, and evidence from a scene that exposes Motion Review. |
@@ -914,6 +916,8 @@ shows the core APIs and a runnable pool scene. The [depth import guide](docs/dep
 `K.sdf.toMesh`, `K.sdf.solid` and `K.sdf.toSplats`.
 
 ## Embedding and custom scene collections
+
+Use [scene publishing](docs/scene-publishing.md) to export a self-contained web player for rendered scene frames.
 
 The browser-facing toolkit sources are plain scripts concatenated in dependency order. Generate a bundle from Node:
 

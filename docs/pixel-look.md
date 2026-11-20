@@ -383,6 +383,9 @@ node cli/ink-studio.js render examples/palette-constraints.js --ortho --out cons
 Use `--palette-constraints rules.json` to override the authored rules
 in `render` or `sim render`. `off` bypasses the target policies.
 
+To place the dither pattern per palette policy, set
+[`dither.space` and optional grid settings](stable-dithering.md#choose-the-space-per-palette-policy).
+
 ### Authorize dither pairs
 
 Set `dither.pairs` on a palette policy to choose which swatches can
