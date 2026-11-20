@@ -132,6 +132,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `tiles.compile(definitions)`, `tiles.solve(model, options)`, `tiles.learn(swatch)`, `tiles.overlap(bank, options)`, `tiles.wang(model, options)`, `tiles.refine(coarse, model, options)` | Weighted matched sockets, example-based synthesis, world-stable patterns and coarse-to-fine layouts |
 | `tiles.quasiperiodic(options)` | [Penrose and Ammann–Beenker substitutions](quasiperiodic-tilings.md) with clipped tile polygons and stable address lineage |
 | `tiles.hyperbolic(options)`, `packing.apollonian(options)` | [Poincaré tilings and tangent circle packings](hyperbolic-mosaics.md) with bounded detail and stable addresses |
+| `attractors.trace(options)` | [Lorenz, Rössler, Clifford, and de Jong orbits](orbit-attractors.md) as time-sampled paths, speeds, and bounded visit density |
 | `ifs.compile(recipe)`, `ifs.preset(name)` | Seeded [iterated function systems and fractal flames](iterated-function-systems.md) for packed points and colored density grids |
 | `complexPlane.compile(options)` | [Mandelbrot, Julia, and Newton fields](complex-plane-fields.md) with independent escape, basin, orbit-trap, and domain coloring outputs |
 | `fields.simplex(options)`, `fields.periodic(options)`, `fields.compile(expression, options)` | Seeded analytic noise and serializable field composition for SDFs, materials and placement |
