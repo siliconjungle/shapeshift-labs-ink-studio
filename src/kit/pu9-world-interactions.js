@@ -106,14 +106,16 @@
       }
       if (!record(result) || !own(result, 'state') ||
           result.timers !== undefined && !record(result.timers) ||
+          result.point != null && !W.data.vector(result.point) ||
           result.cue !== undefined && !safeKey(result.cue))
-        throw new TypeError('A successful action needs state and can supply timers, a cue and JSON detail');
+        throw new TypeError('A successful action needs state and can supply timers, a cue, an XYZ point and JSON detail');
       const sequence = save.sequence + 1;
       if (!integer(sequence)) throw new RangeError('Interaction sequence overflow');
       const nextState = checkedState(result.state, definition.validate);
       const timers = timerChanges(save.timers, result.timers, target, tick, due);
       const next = freeze({ ...save, sequence, tick, timers, states: { ...save.states, [target]: nextState } });
-      const event = freeze({ world: id, sequence, tick, target, action, point: definition.point,
+      const event = freeze({ world: id, sequence, tick, target, action,
+        point: result.point === undefined ? definition.point : json(result.point),
         actor, timer: due?.id ?? null, cue: result.cue ?? null, detail: json(result.detail ?? null) });
       const revision = await realize(Object.freeze({ ...next, event }), before);
       const snapshot = publish(next, revision), errors = [];
@@ -193,5 +195,5 @@
       }
     };
   }
-  W.interactions = Object.freeze({ create, breakable, latch });
+  W.interactions = Object.freeze({ create, breakable, latch, components: W.interactionComponents });
 })(KIT);

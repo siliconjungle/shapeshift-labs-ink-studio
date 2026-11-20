@@ -1724,7 +1724,9 @@ See [live world scaling](world-scaling.md) for the benchmark commands and result
 
 `KIT.world.interactions.create({id, interactables, realize})` owns a
 place's durable interaction state and timers alongside its published
-world revision. Define stable interactable IDs with JSON initial state
+world revision. [Reusable interaction components](interaction-components.md)
+compose several controls and their effects at the same publication boundary.
+Define stable interactable IDs with JSON initial state
 and named actions. `breakable({id, point, integrity})` provides `hit` and
 reports the remaining integrity. `latch({id, point, ticks})` provides
 `press`. A positive duration activates the latch and schedules a reset.
