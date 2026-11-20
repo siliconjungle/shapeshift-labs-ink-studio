@@ -153,6 +153,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `growth.aggregate(options)`, `growth.grayScottGrid(options)`, `growth.grayScottSurface(points, links, options)`, `growth.dispersal(options)`, `growth.succession(options)` | Grid and surface patterns, seed dispersal and habitat competition |
 | `growth.grayScott.create(options)` | [Live Gray–Scott brushing](reaction-diffusion-brushing.md) with painted rates, linked UV seams, and flow advection |
 | `growth.differential.curve(options)`, `growth.differential.shell(options)` | [Differential growth](differential-growth.md) with varying rest lengths, fixed pins, and local separation |
+| `growth.competitive(options)` | [Competing growth fronts](competitive-growth.md) with directional rates, masked propagation, and timed material seams |
 | `forms.superquadric(spec)`, `forms.loft(sections)`, `forms.skeleton(nodes)`, `forms.periodic(spec)`, `forms.shell(host, options)` | Bounded analytic forms and locally variable shells for the sculptor |
 | `measureSculptBounds(build)` | Measure a finite rest-pose recipe without generating splats |
 | `forms.fractal(spec)` | [Bounded quaternion Julia, Mandelbulb, and Menger fold forms](fractal-forms.md) for implicit geometry and adaptive splat bakes |
