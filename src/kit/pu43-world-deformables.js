@@ -252,7 +252,7 @@
           const point=worldPoint(ctx.query,anchor);
           if(!point){
             delete anchors[name];
-            ctx.emit('deformable-detach',{shape:key,entity:spec.entity,attachment:name,node:anchor.node,reason:'target-lost'});
+            ctx.emit('deformable-detach',{shape:key,entity:spec.entity,attachment:name,node:anchor.node,point:surface.points[anchor.node],reason:'target-lost'});
             continue;
           }
           const start=surface.points[anchor.node];
@@ -337,10 +337,10 @@
         ctx.emit('deformable-attach',{shape:key,entity:spec.entity,attachment:name,node:anchor.node});
         return update(state,key,{attachments:{...anchors,[name]:anchor}});
       },detach(state,{shape:key,attachment:name},ctx){
-        const anchors={...state.shapes[key].attachments}, anchor=anchors[name];
+        const shape=state.shapes[key], anchors={...shape.attachments}, anchor=anchors[name];
         check(own(anchors,name),'Unknown deformable attachment '+name);
         delete anchors[name];
-        ctx.emit('deformable-detach',{shape:key,entity:specs[key].entity,attachment:name,node:anchor.node,reason:'command'});
+        ctx.emit('deformable-detach',{shape:key,entity:specs[key].entity,attachment:name,node:anchor.node,point:vec(shape.positions,anchor.node),reason:'command'});
         return update(state,key,{attachments:anchors});
       },load(state,{shape:key,node,impulse}){
         const pending=state.shapes[key].pending;

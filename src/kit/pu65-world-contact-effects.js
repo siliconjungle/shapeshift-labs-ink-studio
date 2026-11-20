@@ -92,8 +92,8 @@
       const cooldowns=new Map();
       for(const row of state.cooldowns)if(row.until>ctx.time)cooldowns.set(row.key,row);
       let dropped=0, serial=0, seen;
-      for(const stream of streams){
-        const rows=ctx.input[stream], accepted=Math.min(rows.length,maxContacts-serial);
+      for(const [stream,rows] of [['scripted-impact',state.pending??[]],...streams.map(name=>[name,ctx.input[name]])]){
+        const accepted=Math.min(rows.length,maxContacts-serial);
         dropped+=rows.length-accepted;
         for(let i=0;i<accepted;i++){
           const raw=rows[i];
@@ -167,12 +167,24 @@
       return P.data.freeze({contacts,ruts,sounds,bursts,shakes,
         cooldowns:[...cooldowns.values()],dropped});
     }
+    function impact(contact) {
+      const row = { ...contact, interaction: 'impact' };
+      check(record(contact) && validContact(row), 'A scripted impact needs a valid material contact');
+      return row;
+    }
     return {inputs,initial:()=>initial,step,outputs:{ruts:'event'},output:state=>({ruts:state.ruts}),
+      checkAction(type, args) { impact(args); },
+      actions:{impact(state, args) {
+        const pending = state.pending ?? [];
+        check(pending.length < maxContacts, 'Scripted impact budget exceeded');
+        return { ...state, pending: [...pending, impact(args)] };
+      }},
       validateState(state) {
         const list=(key,max,valid)=>Array.isArray(state?.[key])&&state[key].length<=max&&state[key].every(valid);
         const active=row=>record(row)&&token(row.id)&&vector(row.point)&&
           (row.entity===null||id(row.entity))&&bounded(row.start,0,1e7)&&bounded(row.life,.02,3);
-        check(list('contacts',maxContacts,row=>validContact(row)&&token(row.id)&&unit(row.appliedTick,1,1e7)&&
+        check((state?.pending===undefined || list('pending',maxContacts,row=>validContact(row)&&row.interaction==='impact')) &&
+          list('contacts',maxContacts,row=>validContact(row)&&token(row.id)&&unit(row.appliedTick,1,1e7)&&
           bounded(row.strength,0,1)&&record(row.reaction))&&
           list('ruts',maxContacts,row=>record(row)&&token(row.contact)&&vector(row.point)&&bounded(row.weight,0,64e12))&&
           list('sounds',maxContacts,row=>record(row)&&token(row.contact)&&cue(row.cue)&&vector(row.at)&&

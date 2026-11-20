@@ -214,8 +214,14 @@
     const rates = schedule.active ? W.rates.bind(schedule,systems,ports,incoming,order) : null;
     const interactions = W.interactionRuntime.bind({world,systems,chunks,transfers,ports,incoming,portValue});
     const influence = W.influenceRuntime.bind({systems,transfers,chunks});
-    return {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
+    const plan = {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
       interactions,influence,causePolicy,contracts,phaseEdges};
+    if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
+      dt: world.dt, validateAction: command => actionCheck(command, plan),
+      validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
+        'Unknown event action source ' + system)
+    });
+    return plan;
   }
   function actionCheck(raw, plan, min = 1) {
     check(record(raw) && tickOK(raw.tick) && raw.tick >= min && record(raw.args ?? {}) &&
@@ -319,7 +325,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,causePolicy,contracts,phaseEdges} = plan;
+      interactions,influence,causePolicy,contracts,phaseEdges,eventActions} = plan;
     let composition;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -351,7 +357,7 @@
     let pendingWrites = [], lastDependencies = null, sampling = rates?.initial, spatialSampling = {};
     let causalState, weatherTrackState, chunkState;
     let currentQuery, lastTransfers = [], lastSignals = {...rootInputs,...rootOutputs};
-    let lastCheckpoint;
+    let lastCheckpoint, eventActionCounts = freeze({});
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -447,6 +453,7 @@
       if(lastCheckpoint)return lastCheckpoint;
       lastCheckpoint=freeze({format:checkpointFormat,version:1,tick,world,states,outputs,manual,delays,history,dropped,
         signals:lastSignals,events:lastEvents,pending:packCommands(),scenario,
+        ...(eventActions && {eventActionCounts}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -457,6 +464,7 @@
     }
     function install(payload) {
       ({tick,states,outputs,manual,delays,history,dropped,scenario,signals:lastSignals,events:lastEvents}=payload);
+      eventActionCounts = payload.eventActionCounts ?? freeze({});
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -495,6 +503,8 @@
         rates.validate(payload.sampling,portValue,payload.tick,payload.simulationChunks);
       }
       for (const name of names) systems[name].validateState?.(payload.states[name]);
+      if (eventActions) eventActions.validate(payload.eventActionCounts);
+      else check(!own(payload, 'eventActionCounts'), 'Unexpected event action checkpoint data');
       transfers.validateBalances(payload.states);
       reservations?.validate(payload.states,payload.tick);
       if (own(payload,'transfers')) transfers.validateReceipts(payload.transfers,payload.tick);
@@ -916,6 +926,12 @@
       const nextDelays = Object.fromEntries([...incoming.values()].filter(edge => edge.delay).map(edge =>
         [edge.to,[...delays[edge.to].slice(1),delayedSamples?.[edge.to] ?? nextOutputs[edge.from]]]));
       publishedSignals = freeze(publishedSignals);
+      const routed = eventActions?.route(eventActionCounts, events, at);
+      if (routed?.commands.length) {
+        check(routed.commands.length + packCommands().length - commands.length <= 100000, 'Pending command budget exceeded');
+        const emit = makeEmit('world');
+        for (const row of routed.scheduled) emit('event-action-scheduled', row);
+      }
       if(observers.length){
         freeze(events);
         const snapshot=freeze(nextStates), completed=Q.create(
@@ -963,6 +979,10 @@
       scenario = nextScenario;
       weatherTrackState = nextWeather;
       scheduled.delete(at);
+      if (routed) {
+        eventActionCounts = routed.counts;
+        queue(routed.commands, false);
+      }
       currentQuery = undefined;
       lastCheckpoint=undefined;
       for (const [name,{calls,ms}] of Object.entries(spent)) {

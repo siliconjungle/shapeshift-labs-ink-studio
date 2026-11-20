@@ -70,3 +70,8 @@ ink-studio probe examples/world-contact-effects.json --field tracks/rutDepth --a
 ink-studio sim render examples/world-contact-effects.json --ticks 22 --out contact-effects.png
 node scripts/benchmark-contact-effects.js
 ```
+
+Use a `system/impact` action to submit a scripted impact with a point, speed,
+and optional material contact fields. It uses the same effects as measured
+impacts and can be bound to a confirmed release with
+[event actions](event-actions.md).

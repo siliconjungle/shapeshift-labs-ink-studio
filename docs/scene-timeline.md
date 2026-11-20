@@ -57,6 +57,10 @@ reuses the sequence. Use `ink-studio timeline examples/signal-observatory.json
 --at 3.25` to inspect the sampled tracks and audio, or use `clip` to render
 the history across frames.
 
+Use [event actions](event-actions.md) to route timeline cues and measured
+simulation events into deferred system commands. Save and scrub the run
+to review the resulting deformation, releases, and effects at a frame.
+
 ## Hosts and CLI
 
 Diorama builds, simulation runs, and visual snapshots expose the compiled program as `world.timeline` or `run.timeline`. A host can also compile standalone tracks with `KIT.timeline.compile(definition)`.

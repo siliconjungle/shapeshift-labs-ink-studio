@@ -798,6 +798,10 @@ condition to its value. Run with `--scenario` to stop at an outcome. The quarry
 example awards points when the sheep crosses an opening and ends when it
 reaches the feeder.
 
+[Event actions](event-actions.md) turn timeline cues and committed simulation
+events into scheduled commands. Event bindings, limits, and pending reactions
+are visible during checkpoint and replay review.
+
 ## Built-in systems
 
 | Kind | State, queries and actions |
