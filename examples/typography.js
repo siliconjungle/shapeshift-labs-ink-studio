@@ -153,8 +153,19 @@ function typographySpecimen(kit) {
       // During write-on this is the actual partial contour, including separate counters.
       if (t - state.writeStart > 2) continue;
       for (const stroke of f.strokes)
-        for (let i = 1; i < stroke.length; i++)
-          draw.streak(stroke[i - 1], stroke[i], { width: 0.012, color: 10, density: 3, depth: true });
+        for (let i = 1; i < stroke.length; i++) {
+          const a = stroke[i - 1],
+            b = stroke[i],
+            segments = Math.max(1, Math.ceil(V.dist(a, b) / 0.06));
+          // Bound Gaussian support along straight contour edges as well as curves.
+          for (let j = 0; j < segments; j++)
+            draw.streak(V.lerp(a, b, j / segments), V.lerp(a, b, (j + 1) / segments), {
+              width: 0.012,
+              color: 10,
+              density: 3,
+              depth: true
+            });
+        }
     }
     for (let i = 0; i < 9; i++) {
       const f = rail.frame(((i + 0.5) * rail.length) / 9);
