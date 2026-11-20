@@ -406,3 +406,11 @@ test('hierarchy-bound emitters transform normals correctly under shear while siz
   near(K.V.dot(light.normal, K.M.app(matrix, [0, 1, 0])), 0);
   vec(light.half, [0.5, 0.3]);
 });
+
+test('optional emitter support preserves an existing relight result in older toolkit hosts', async () => {
+  const { createLightEmitters } = await import('../src/webgl/light-emitters.mjs');
+  const optional = createLightEmitters(null, null, {}, 0, { KIT: {} });
+  assert.equal(optional.prepare(), null);
+  assert.equal(optional.compose(null, null, 0, null, true), true);
+  assert.equal(optional.compose(null, null, 0, null, false), false);
+});

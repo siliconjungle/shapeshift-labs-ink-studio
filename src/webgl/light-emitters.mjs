@@ -75,7 +75,7 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
   const K = toolkit.KIT,
     A = toolkit.AreaLights ?? K?.areaLights,
     C = toolkit.LightCookies ?? K?.lightCookies;
-  if (!A || !C) return { prepare: () => null, compose: () => false, fog: () => {} };
+  if (!A || !C) return { prepare: () => null, compose: (state, world, time, rows, active) => active, fog: () => {} };
   const lightTable = table(352, 26, maxSize),
     receivers = table(1024, 28, maxSize);
   const blankBase = resources.texture();
