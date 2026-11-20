@@ -173,7 +173,8 @@ function render(world, o, preparedPalettes) {
     const base = render(world, { ...o, renderGraph: false, passes,
       ...(graph.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
     const time = o?.t ?? world.lookSnapshot?.time ?? 0;
-    const frame = { ...base, ...runGraph(graph, base, world, time, require('../index.js').load().KIT.poly2.text, camera) };
+    const kit = require('../index.js').load().KIT;
+    const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera, kit.annotations.anchor) };
     if (base.passes && graph.needsOwner) {
       if (requested.length) frame.passes = ArtPasses.subset(base.passes, requested);
       else delete frame.passes;
@@ -426,7 +427,7 @@ function renderFrame(world, o, preparedPalettes) {
     baseCount = world.count,
     R = world.radius;
   if (!o.reflectionPlane) o[captureCamera]?.({view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
-    clipNear: near, clipFar: 400, depthRange: [eyeD - R, eyeD + R],
+    clipNear: near, clipFar: 400, distance: eyeD, setback: eyeD - dist, depthRange: [eyeD - R, eyeD + R],
     eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]});
   const hex = i => {
       const h = world.pal[i];

@@ -319,6 +319,6 @@ const DrawingPrimitives = (() => {
     return result;
   }
 
-  return Object.freeze({ color, command, geometry });
+  return Object.freeze({ color, command, geometry, projector });
 })();
 if (typeof module !== 'undefined') module.exports = DrawingPrimitives;

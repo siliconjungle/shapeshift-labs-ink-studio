@@ -4,6 +4,6 @@
     prepare: RenderGraph.prepare,
     cube: RenderGraph.cube,
     selection: RenderGraph.selection,
-    layer: (node, w, h, world, time, camera) => RenderGraph.layer(node, w, h, world, time, K.poly2.text, camera)
+    layer: (node, w, h, world, time, camera) => RenderGraph.layer(node, w, h, world, time, K.poly2.text, camera, K.annotations.anchor)
   });
 })(KIT);

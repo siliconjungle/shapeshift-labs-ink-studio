@@ -1,7 +1,7 @@
 const FrameComposite = require('../src/frame-composite.js');
 const { cube, selection, layer } = require('../src/render-graph.js');
 
-function runGraph(plan, frame, world, time, text, camera) {
+function runGraph(plan, frame, world, time, text, camera, resolve) {
   const { w, h, passes } = frame;
   const outputs = new Map([['scene', FrameComposite.pixels(frame).data]]);
   const selectors = new Map();
@@ -24,7 +24,7 @@ function runGraph(plan, frame, world, time, text, camera) {
     else {
       const rows = selected(node.select), mask = outputs.get(node.mask), source = outputs.get(node.source);
       const table = node.type === 'grade' && cube(node);
-      const raster = node.layer && layer(node, w, h, world, time, text, camera);
+      const raster = node.layer && layer(node, w, h, world, time, text, camera, resolve);
       output = maskPass ? new Uint8Array(w * h) : input.slice();
       const { rect, feather, opacity } = node;
       const line = node.line ?? (node.axis === 'x' ? w : h) * .5;

@@ -1,6 +1,7 @@
 /* Output-space layers with independent sample grids. All images use top-down rows. */
 const FrameComposite = (() => {
   const primitives = typeof DrawingPrimitives === 'undefined' ? require('./drawing-primitives.js') : DrawingPrimitives;
+  const annotations = typeof ViewAnnotations === 'undefined' ? require('./view-annotations.js') : ViewAnnotations;
   const byte = data => data instanceof Uint8Array || data instanceof Uint8ClampedArray;
   const positive = n => Number.isSafeInteger(n) && n > 0;
   const tuple = (value, length) => Array.isArray(value) && value.length === length && Array.from(value).every(Number.isFinite);
@@ -63,18 +64,20 @@ const FrameComposite = (() => {
     record(world, ['resolution', 'filter'], 'world composite');
     if (!Array.isArray(layers)) throw new TypeError('Composite layers must be an ordered list');
     const prepared = Array.from(layers, layer => {
-      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source'], 'composite layer');
+      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations'], 'composite layer');
       const { opacity = 1, blend = 'over', draw, source } = layer;
       if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new RangeError('Layer opacity must be in [0, 1]');
       if (blend !== 'over' && blend !== 'add') throw new TypeError('Layer blend must be over or add');
-      if ((draw === undefined) === (source === undefined) || draw !== undefined && !Array.isArray(draw))
-        throw new TypeError('A layer needs either drawing commands or a raster source');
+      const layout = annotations.prepare(layer.annotations);
+      const hasDrawing = draw !== undefined || layout !== null;
+      if (hasDrawing === (source !== undefined) || draw !== undefined && !Array.isArray(draw))
+        throw new TypeError('A layer needs drawing commands, annotations or a raster source');
       if (source !== undefined && typeof source !== 'function') image(source);
-      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source,
+      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout,
         draw: draw && Array.from(draw, command) };
     });
     return { world: { resolution: resolution(world.resolution), filter: filter(world.filter) }, layers: prepared,
-      needsCamera: prepared.some(layer => layer.opacity > 0 && layer.draw?.some(draw => draw.needsCamera)) };
+      needsCamera: prepared.some(layer => layer.opacity > 0 && (layer.layout?.needsCamera || layer.draw?.some(draw => draw.needsCamera))) };
   }
 
   function size(value, w, h) {
@@ -109,7 +112,7 @@ const FrameComposite = (() => {
     return { w, h, data: output };
   }
 
-  function drawLayer(layer, w, h, text, camera) {
+  function drawLayer(layer, w, h, text, camera, drawn) {
     const data = new Uint8Array(layer.w * layer.h * 4);
     const mask = new Float32Array(layer.w * layer.h);
     const sx = w / layer.w, sy = h / layer.h, aa = Math.max(sx, sy);
@@ -191,7 +194,7 @@ const FrameComposite = (() => {
       }
       dirty = undefined;
     }
-    for (const draw of layer.draw) {
+    for (const draw of drawn) {
       if (draw.type === 'text') {
         lettering(draw);
         paint(draw.color);
@@ -210,10 +213,13 @@ const FrameComposite = (() => {
     return { w: layer.w, h: layer.h, data };
   }
 
-  function layers(plan, world, time, text, camera) {
+  function layers(plan, world, time, text, camera, resolve) {
     return plan.layers.filter(layer => layer.opacity > 0).map(layer => {
       const { w, h } = layer;
-      const result = layer.draw ? drawLayer(layer, plan.w, plan.h, text, camera) : pixels(
+      const layout = layer.layout && annotations.layout(layer.layout,
+        { width: plan.w, height: plan.h, camera, world, time, glyphs: text, resolve });
+      const draw = layout ? [...(layer.draw ?? []), ...layout.draw.map(command)] : layer.draw;
+      const result = draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw) : pixels(
         typeof layer.source === 'function' ? layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time }) : layer.source);
       if (result.w !== w || result.h !== h) throw new RangeError('Composite raster dimensions must match the layer resolution');
       return { ...result, filter: layer.filter, blend: layer.blend, opacity: layer.opacity };

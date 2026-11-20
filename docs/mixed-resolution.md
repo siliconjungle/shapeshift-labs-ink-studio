@@ -8,7 +8,7 @@ The output dimensions come from `w` and `h` in Node and the CLI, or `width` and 
 | --- | --- |
 | `world.resolution` | A positive integer for output pixels per world pixel, or a fixed `[width, height]` raster size. Defaults to the scene's `look.pixelSize` or 1. The CPU also accepts its existing `px` option as a fallback. |
 | `world.filter` | `nearest` preserves the world pixel edges. `linear` interpolates. The default is `nearest`. |
-| `layers` | An ordered list. Each layer supplies either `draw` commands or a raster `source`. |
+| `layers` | An ordered list. A layer supplies drawing commands, annotations, or a raster `source`. |
 | Layer `resolution` | Uses the same units as the world. It defaults to a supplied raster's native dimensions or to one sample per output pixel for commands and generated sources. |
 | Layer `filter` | `nearest` or `linear`. Filtering takes alpha into account. Defaults to `nearest`. |
 | Layer `opacity` and `blend` | Opacity ranges from 0 to 1. `over` composites in list order and `add` adds the visible color of a layer. |
@@ -26,6 +26,8 @@ A `draw` list renders at the layer's native resolution. Command sizes and positi
 | `rect` | `rect` as `[x, y, width, height]` and `color`. |
 
 World paths and additional commands support projected arrows, polygon fills, grids, axes, and calibrated scale bars. [Precise drawing primitives](drawing-primitives.md)
+
+Fixed legends and world-anchored labels can share a layer with drawing commands. [View-adaptive legends and labels](view-annotations.md)
 
 ## Rasters and screen effects
 

@@ -196,9 +196,9 @@ const RenderGraph = (() => {
     return data;
   }
 
-  function layer(node, w, h, world, time, text, camera) {
+  function layer(node, w, h, world, time, text, camera, resolve) {
     const plan = compositor.prepare({ layers: [node.layer] }, w, h);
-    return compositor.layers(plan, world, time, text, camera)[0];
+    return compositor.layers(plan, world, time, text, camera, resolve)[0];
   }
 
   return Object.freeze({ prepare, create, cube, selection, layer });
