@@ -2578,6 +2578,8 @@ The alternate seed highlights the transition edges.
 
 ### Preview reduction
 
+[Scale-aware previews](scale-aware-previews.md) select procedural detail lazily from world-space limits and the current camera’s native art-pixel footprint.
+
 `geometry.simplifyQEM({points, triangles}, {ratio, target, groups,
 locked, maxError})` reduces indexed triangles by quadric error. A
 collapse must preserve the local mesh link and avoid reversed or

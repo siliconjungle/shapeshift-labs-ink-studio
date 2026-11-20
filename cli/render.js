@@ -681,7 +681,18 @@ function renderFrame(world, o, preparedPalettes) {
   const sectionAt = cutaway && (p => Cutaway.margin(cutaway,...p,
     -(V[2]*p[0]+V[6]*p[1]+V[10]*p[2]+V[14])-cutoffDepth));
   const geometryClip = sectionAt ? (p => (!planeClip || planeClip(p)) && sectionAt(p)>=0) : planeClip;
-  const surfaceFragments=o.spriteSurfaces===false?[]:SurfaceRaster.rasterize(world.spriteSurfaces,{V,W,H,focal,ortho,near,clip:geometryClip});
+  let spriteSurfaces = world.spriteSurfaces;
+  if (world.scalePreviews && o.scalePreviews !== false && o.spriteSurfaces !== false) {
+    const grid = o.artGridScale || 1;
+    const api = require('../index.js').load().KIT.procedural.lod.preview;
+    const report = !reflectionPlane && !probeView && (!o.samples || o.worked) ? o.scalePreviewFrame : undefined;
+    const active = api.surfaces(world.scalePreviews, {
+      view: V, width: W / grid, height: H / grid, focal: focal / grid, ortho: Boolean(ortho), near, far: camera.clipFar
+    }, report).filter(Boolean);
+    if (active.length) spriteSurfaces = [spriteSurfaces, ...active];
+  }
+  const surfaceFragments = o.spriteSurfaces === false ? [] :
+    SurfaceRaster.rasterize(spriteSurfaces, { V, W, H, focal, ortho, near, clip: geometryClip });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });

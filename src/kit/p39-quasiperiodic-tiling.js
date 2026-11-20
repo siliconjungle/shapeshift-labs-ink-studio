@@ -162,5 +162,29 @@
           polygon: ccw(node.points.map(transform)) });
       } });
   }
+  function levels({ family = 'penrose', depth = 4, radius = 1 } = {}) {
+    check(typeof family === 'string' && Object.hasOwn(families, family) && count(depth, 0, 12) &&
+      Number.isFinite(radius) && radius >= 1e-4 && radius <= 1e6, 'invalid family, depth or radius');
+    const { factor, seed, deflate } = families[family], children = new Map();
+    let population = new Map(), visited = 0;
+    for (const { type } of seed()) population.set(type, (population.get(type) ?? 0) + 1);
+    const thin = family === 'penrose' ? Math.sin(Math.PI / 5) : Math.SQRT1_2 / (2 * c);
+    const result = [];
+    for (let level = 0; level <= depth; level++) {
+      const pieces = [...population.values()].reduce((sum, n) => sum + n, 0);
+      visited += pieces;
+      result.push({ depth: level, pieces, visited, feature: radius * thin / factor ** level });
+      if (level === depth) break;
+      const next = new Map();
+      for (const [type, size] of population) {
+        if (!children.has(type))
+          children.set(type, deflate(piece(type, [0, 0], [1, 0], [1, 1])).map(row => row.type));
+        for (const child of children.get(type)) next.set(child, (next.get(child) ?? 0) + size);
+      }
+      population = next;
+    }
+    return P.data.freeze(result);
+  }
+  quasiperiodic.levels = levels;
   P.tiles.quasiperiodic = quasiperiodic;
 })(KIT.procedural);

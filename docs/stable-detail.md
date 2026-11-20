@@ -24,6 +24,8 @@ const finish = {
 
 Use a layer's `detailSize` for custom small features such as a projected raster grain overlay. This lets larger painted shapes, broad specular highlights, and reflections keep their authored response. Keep silhouette-defining parts on the ordinary opaque geometry path.
 
+Use [scale-aware previews](scale-aware-previews.md) when the camera should choose which generator level to build before applying these render-time fades.
+
 ## Review a camera move
 
 ```sh

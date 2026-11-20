@@ -802,6 +802,7 @@ const view = extra =>
       splatFields: splatFieldsOption(),
       atmosphereEmitters: atmosphereEmittersOption(),
       spriteAtlases: spriteAtlasOption(),
+      scalePreviews: onOffOption('scale-previews'),
       spriteAtlasMode: opt['sprite-atlas-mode'],
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),

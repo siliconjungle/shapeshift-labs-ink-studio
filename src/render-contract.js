@@ -59,7 +59,8 @@ const RenderContract = (() => {
     if (rules.some(rule => rule.stage === 'frame' || rule.stage === 'palette')) issues.push('post-stage');
     if (rules.some(rule => rule.mask || rule.driver?.inputs?.mask)) issues.push('spatial-stage-mask');
     if (world.pix || world.fine || world.materialPixelStyles) issues.push('textured-splat-color');
-    if (world.spriteAtlases?.length || world.spriteSurfaces || world.surfaces?.some(({ settings }) => Object.keys(settings.layers ?? {}).length))
+    if (world.spriteAtlases?.length || world.spriteSurfaces ||
+        (frame.scalePreviews !== false && world.scalePreviews?.length) || world.surfaces?.some(({ settings }) => Object.keys(settings.layers ?? {}).length))
       issues.push('surface-finish');
     if (world.opticalSplats || frame.water !== false && world.water?.count ||
         frame.paintCorrections !== false && world.paintCorrections || (frame.coverageAware ?? look.coverageAware) ||
