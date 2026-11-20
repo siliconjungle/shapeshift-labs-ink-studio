@@ -122,6 +122,7 @@
     const base = {world, states:visible, signals, tick, time:view.time ?? tick * world.dt};
     const locations = new Map(), active = new Set();
     let spatialIndex, spatialBatchRead, aliases, appearance, picker, renderScene;
+    const navigationSources=new Map();
     const scene = () => renderScene ??= (visual ? visual() : W.visual({makeBuilder,makeSculpt},view,api));
     const transfers = () => W.transfers.bind(systems);
     const look = () => appearance ??= W.lookQuery(scene,base.time);
@@ -345,10 +346,15 @@
       const descriptor = resolve(fields,name);
       if (descriptor) return {name:descriptor.system+'/'+descriptor.key,...descriptor.description};
     }
-    function navigationSource(name) {
+    function navigationSource(name, trackedOnly = false) {
       const descriptor=resolve(fields,name);
       const provider=descriptor&&systems[descriptor.system];
-      return provider?.navigationSource?.(descriptor.key,states[descriptor.system])??{key:api};
+      if (!navigationSources.has(descriptor)) {
+        navigationSources.set(descriptor,undefined);
+        const source=provider?.navigationSource?.(descriptor.key,states[descriptor.system],api);
+        navigationSources.set(descriptor,source);
+      }
+      return navigationSources.get(descriptor)??(trackedOnly?undefined:{key:api});
     }
     function navigation(name) {
       return own(systems,name)?systems[name].navigationTiles?.bind(api):undefined;

@@ -16,10 +16,14 @@ by the navigation system.
 
 Walking agents can set `config.navigation` to the navigation system ID.
 They inherit its bounds and world fields, and use their own physical
-radius, slope limit, and wading depth for routing. Walkers validate the
-remaining route against the live crossings and reuse valid routes beyond
-their normal retry interval. Agents with a blocked route retry after a
-short interval. Flight and swimming use their existing spatial planner.
+radius, slope limit, and wading depth for routing. Walkers check the
+remaining route against live crossings before moving. A nearby change to
+the bed, support, clearance, or water can trigger a search before the
+normal retry, even if the walker is already following a valid detour.
+The walker keeps a valid route unless the new search finds a cheaper
+one. A blocked walker can retry as soon as a nearby crossing changes.
+Queued searches still respect the route request budget. Flight and
+swimming use their existing spatial planner.
 
 Use [shared destination fields](navigation-flow.md) when several walkers
 head for the same destination.
@@ -50,10 +54,15 @@ work for the search. `nav/tiles` reports the cached tile count and the
 latest invalidated tiles. Cache diagnostics reflect which searches have
 run. Routes and simulation checkpoints replay from the world data.
 
-Editable volumes, shallow water, construction layouts, mechanics bodies,
-world-space field regions, and traffic wear can report regional changes.
-A voluntary `navigationSource(field, state)` hook lets another solver
+Editable volumes, shallow and enclosed water, construction layouts,
+mechanics bodies, world-space field regions, and traffic wear can report
+regional changes. A voluntary `navigationSource(field, state, query)` hook lets another solver
 return a source `key` and `changes(previousKey)`. Return finite world
 bounds with coordinate axes for the changed area, or `null` when the
 affected region is unknown. Sources without regional information refresh
 the affected navigation cache from the current snapshot.
+
+Bind moving doors as clearance geometry and platforms as support
+geometry. Routes refresh when the new geometry becomes visible in the
+agent's simulation phase. A platform provides a crossing while it is in
+position and its surface meets the route's slope and clearance limits.

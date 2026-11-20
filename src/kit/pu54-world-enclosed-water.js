@@ -261,6 +261,11 @@
       return Q.ok({geometry:acousticGeometry,fractions:state.opening,levels:rooms.map((_,i)=>level(state,i))});
     }
     return {initial:()=>initial,checkFields,validateState,inputs,outputs,accounts,waterFrame,
+      navigationSource(field,state){
+        if(!state||field!=='water')return;
+        const key=state.water;
+        return {key,changes:old=>rooms.flatMap((row,i)=>old[i]===key[i]?[]:[{...row.bounds,axes:'xyz'}])};
+      },
       partitionStep:doors.every(row=>!row.gate),
       ...(boundaries.length>0&&{requestTransfers,checkTransfers(validate){for(const row of boundaries)validate(order(row),true);}}),
       dependencies:{writes:['medium','water','depth','phase','head','pressure'],

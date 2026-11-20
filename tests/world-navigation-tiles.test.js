@@ -56,12 +56,66 @@ test('flooding reroutes a ford crossing and preserves a distant active route bey
   run.schedule([command(3,'world/transfer',{from:'ford/well',to:'tank/well',amount:.6})]);
   run.step();
   assert.deepEqual(trace(run.query(),from,to,routeArgs).points,old.points);
+  assert(runsAt(run.query(),'local').route.slice(1).every(p=>p[2]===1.5));
+  assert.strictEqual(runsAt(run.query(),'remote').route,oldRemote.route);
   const saved=json(run.checkpoint());
   const resumed=W.runtime.create(saved.world,{checkpoint:saved});
   resumed.advance(8);
   run.advance(8);
   assert.deepEqual(resumed.checkpoint(),run.checkpoint());
   assert.deepEqual(W.runtime.replay(json(run.recording())).checkpoint(),run.checkpoint());
+});
+
+test('a moving door restores a shortcut and blocks it again without changing the destination',()=>{
+  const from=[1,0,2], to=[12,0,2], closed=[6,.6,2], open=[6,.6,4];
+  const run=W.runtime.create({dt:.05,entities:{door:{position:closed}},systems:{
+    nav:nav({clearance:'rig/clearance'}),
+    rig:{kind:'mechanics',config:{gravity:[0,0,0],bodies:{door:{entity:'door',fixed:true,follow:true,half:[.3,.75,.25]}}}},
+    crew:{kind:'agents',config:{navigation:'nav',replanTicks:250,
+      species:{worker:{mode:'walk',speed:.5}},agents:{local:{species:'worker',position:from,goal:to}}}}
+  }});
+  const move=(tick,value)=>command(tick,'world/patch',{edits:[{op:'set',path:'/entities/door/position',value}]});
+  run.schedule([move(2,open),move(4,closed)]);
+  run.step();
+  const detour=runsAt(run.query(),'local').route;
+  assert(detour.some(p=>p[2]!==from[2]));
+  run.step();
+  const saved=json(run.checkpoint()), restored=W.runtime.create(saved.world,{checkpoint:saved});
+  for(const current of [run,restored]){
+    current.step();
+    const direct=runsAt(current.query(),'local');
+    assert(direct.route.slice(1).every(p=>p[2]===from[2]));
+    current.advance(5);
+    const rerouted=runsAt(current.query(),'local');
+    assert(rerouted.route.some(p=>p[2]!==from[2]));
+    assert.deepEqual(rerouted.goal,to);
+  }
+  assert.deepEqual(restored.checkpoint(),run.checkpoint());
+});
+
+test('a moving platform reopens an unreachable route ahead of the retry, including slower agents',()=>{
+  const from=[1,.2,1.5],to=[12,.2,1.5], narrow={min:[0,-1,1.3],max:[14,2,1.7]};
+  const run=W.runtime.create({dt:.05,entities:{platform:{position:[6.5,.1,4]}},systems:{
+    nav:nav({bounds:narrow,water:'ford/water',support:'rig/support',clearance:'rig/clearance'}),
+    ford:water([6,1],.24),
+    rig:{kind:'mechanics',config:{gravity:[0,0,0],bodies:{
+      west:{fixed:true,position:[2.5,.1,1.5],half:[3.5,.1,.5]},
+      east:{fixed:true,position:[11,.1,1.5],half:[4,.1,.5]},
+      platform:{entity:'platform',fixed:true,follow:true,half:[.5,.1,.5]}
+    }}},
+    crew:{kind:'agents',schedule:{every:2},config:{navigation:'nav',replanTicks:250,
+      species:{worker:{mode:'walk',speed:.5}},agents:{local:{species:'worker',position:from,goal:to}}}}
+  }});
+  run.schedule([command(3,'world/patch',{edits:[{op:'set',path:'/entities/platform/position',value:[6.5,.1,1.5]}]})]);
+  run.advance(2);
+  const blocked=runsAt(run.query(),'local');
+  assert.equal(blocked.mode,'blocked');
+  assert.equal(blocked.retry,8);
+  run.advance(4);
+  const walking=runsAt(run.query(),'local');
+  assert.equal(walking.mode,'walk');
+  assert(walking.route.some(p=>p[0]>6&&p[0]<7&&p[1]>.19));
+  assert(walking.position[0]>from[0]);
 });
 
 test('reshaping and fracturing a wall changes seam connectivity in its own tiles',()=>{
@@ -107,12 +161,17 @@ test('construction refits and live solid cuts reopen local passages',()=>{
     rock:{kind:'volume',config:{
       bounds:{min:[4,-1,0],max:[8,2,2]},cell:.5,materials:{stone:[1,2,3,4]},
       initial:[{op:'fill',material:'stone',shape:{kind:'box',at:[6,0,1],half:[.5,1,1.1]}}]
-    }}
+    }},
+    crew:{kind:'agents',config:{navigation:'nav',
+      species:{worker:{mode:'walk',speed:.5}},agents:{local:{species:'worker',position:from,goal:to}}}}
   }});
   assert.equal(trace(cut.query(),from,to).status,'unreachable');
-  cut.schedule([command(1,'rock/cut',{shape:{kind:'box',at:[6,0,1],half:[.8,.75,.6]}})]);
+  cut.step();
+  assert.equal(runsAt(cut.query(),'local').mode,'blocked');
+  cut.schedule([command(2,'rock/cut',{shape:{kind:'box',at:[6,0,1],half:[.8,.75,.6]}})]);
   cut.step();
   const entrance=trace(cut.query(),from,to);
   assert.equal(entrance.status,'ok');
   assert(entrance.crossings.length>0);
+  assert.equal(runsAt(cut.query(),'local').mode,'walk');
 });

@@ -112,6 +112,10 @@
     return {reads:['bed','support','clearance','water','wear','surface'].flatMap(key=>
       typeof config[key] === 'string' ? [{field:config[key],bounds:area}] : [])};
   }
+  function routeArea(points,padding){
+    const {min,max}=P.spatial.boxOf(points);
+    return {axes:'xz',min:[min[0]-padding,min[2]-padding],max:[max[0]+padding,max[2]+padding]};
+  }
   function navigation(config) {
     bounds(config.bounds);
     check(Number.isFinite(config.cell??.25)&&(config.cell??.25)>0&&Number.isFinite(config.wearWeight??.8)&&
@@ -205,6 +209,7 @@
       config={...shared,...config};
     }
     const RQ=W.routeRequests, O=W.agentOrders;
+    const navigationReads=navigation&&['bed','support','clearance','water'].map(key=>config[key]).filter(Boolean);
     const orders=config.orders===undefined?null:O.create(config.orders);
     const routeQueue=config.routeQueue===undefined?null:RQ.create(config.routeQueue);
     check(!routeQueue||navigation,'Route queues need a tiled navigation system');
@@ -359,6 +364,15 @@
       let corridor;
       const tiles=navigation&&profile.mode==='walk'&&ctx.query.navigation(navigation);
       const invalid=tiles&&route[cursor]&&!tiles.valid(position,route,cursor,goal,profile);
+      let remainingCost;
+      if(tiles&&dirty?.size&&!invalid){
+        const area=routeArea([position,goal,...route.slice(cursor)],profile.radius+(config.cell??.25));
+        if(ctx.spatial.changes(area).some(row=>dirty.has(row.field))){
+          remainingCost=route[cursor]?tiles.remainingCost(position,route,cursor,profile):Infinity;
+          // A valid route at the straight-line lower bound cannot be improved.
+          if(remainingCost>Math.hypot(goal[0]-position[0],goal[2]-position[2])+1e-8) corridor=area;
+        }
+      }
       if (invalid||!tiles&&dirty&&route.length) {
         const envelope = P.spatial.boxOf([position,...route.slice(cursor)]);
         envelope.min[1] = Math.min(0,envelope.min[1]-(profile.drop??.5));
@@ -374,6 +388,9 @@
           const end=tiles.safeEnd(position,route,cursor,profile);
           if(end<route.length)route=route.slice(0,end);
           status='waiting';
+        }else if(tiles&&route[cursor]&&!invalid&&
+          (result.status!=='ok'||result.cost+1e-8>=(remainingCost??tiles.remainingCost(position,route,cursor,profile)))){
+          if(corridor)ctx.spatial.rebuilt('agent-route',{entity:agent.entity,status:'retained'},corridor);
         }else{
           route=result.points??[];
           cursor=route.length>1?1:0;
@@ -596,6 +613,7 @@
     }
     return {initial:()=>packed(initialRoster,[],policy?.initial),
     shareCheckpoint:true,viewState:S.view,legacyCheckpoint:S.legacyState,dependencies:routeDependencies(config),
+    ...(navigation&&{navigationReads}),
     populationActor:{
       check(name){check(own(profiles,name),'Unknown population actor species '+name);},
       read(state,name,generation){
@@ -789,7 +807,9 @@
       }
     },step(state,ctx){
       const roster=S.get(state), draft=S.edit(roster);
-      const contacts=[], decisions=policy?{}:null, dirty=ctx.spatial?.changes().length>0;
+      const contacts=[], decisions=policy?{}:null;
+      const changes=ctx.spatial?.changes();
+      const dirty=changes?.length&&(navigationReads?new Set(navigationReads.map(field=>ctx.query.field(field)?.name)):true);
       const skipRest=staticFit&&settled.has(roster);
       const group=crowd?.begin(state.crowd,walkers(roster),ctx);
       const formation=formations?.begin(state.formations,ctx,{

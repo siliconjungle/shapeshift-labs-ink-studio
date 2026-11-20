@@ -1000,11 +1000,21 @@
       ctx.emit('body-repaired',{body,entity:prior.entity,at:prior.position});
       return {state:{...state,bodies,beams:{...state.beams,[body]:durability.beamInitial(structures[body])}}};
     }
-    return {...(serviceable&&{workEffects:{repair:{check:checkRepair,run:repair}}}),navigationSource(field,state){
-      if(state&&(field==='clearance'||field==='support'&&!config.terrain)){
+    return {...(serviceable&&{workEffects:{repair:{check:checkRepair,run:repair}}}),navigationSource(field,state,query){
+      if(!state||!['clearance','support','ground-clearance'].includes(field))return;
+      if(field==='clearance'||field==='support'&&!config.terrain){
         const key=state.bodies;
         return {key,changes:old=>changedBounds(old,key)};
       }
+      if(!config.terrain)return {key:config};
+      const terrain=query.navigationSource(config.terrain);
+      if(field==='ground-clearance')return terrain;
+      const key={bodies:state.bodies,terrain:terrain.key};
+      return {key,changes:old=>{
+        const floor=old.terrain===key.terrain?[]:terrain.changes?.(old.terrain);
+        const bodies=old.bodies===key.bodies?[]:changedBounds(old.bodies,key.bodies);
+        return floor&&bodies?[...floor,...bodies]:null;
+      }};
     },checkSimulationLOD(tuning){
       check(Object.keys(tuning).every(key=>key==='contactIterations')&&
         (tuning.contactIterations===undefined||validIterations(tuning.contactIterations)),
