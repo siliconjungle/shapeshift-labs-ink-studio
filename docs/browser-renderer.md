@@ -18,7 +18,8 @@ The factory needs a canvas or `OffscreenCanvas`, a toolkit that exports
 `PixelLook`, and an available WebGL 2 context. Include `KIT` to use
 per-pixel materials and blue-noise tone generation. The renderer manages
 the canvas context and can rebuild GPU resources after context restoration.
-Call `renderer.dispose()` when the canvas is removed.
+Call `renderer.dispose()` when the canvas is removed. For device actions,
+attach [remappable viewer input](viewer-input.md) to the canvas.
 
 ## Frames
 

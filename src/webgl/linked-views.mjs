@@ -1,6 +1,7 @@
 import { createRenderer } from './renderer.mjs';
 import { makeCamera, cameraPose } from './view.mjs';
 import { linkedPaint, linkedSymbol } from './linked-encoding-paint.mjs';
+import { createViewerInput } from './viewer-input.mjs';
 
 const theme = `
   :host{display:block;color:var(--ink);font:var(--ink-linked-font,14px system-ui,sans-serif);
@@ -63,6 +64,14 @@ const finite = Number.isFinite;
 const print = value => value == null ? '—' : Array.isArray(value) ? value.map(print).join(', ') :
   typeof value === 'number' ? Number(value.toFixed(2)).toString() : String(value);
 const pickMode = event => event.shiftKey || event.metaKey || event.ctrlKey ? 'toggle' : 'replace';
+const canvasKeys={previous:'ArrowLeft',next:'ArrowRight',start:'Home',end:'End',select:'Enter',clear:'Escape'};
+const modified=controls=>controls.flatMap(input=>[input,...['Shift','Control','Meta'].map(modifier=>({input,modifiers:[modifier]}))]);
+const linkedBindings={records:{
+  previous:['key:ArrowLeft','key:ArrowUp','pad:DPadLeft','pad:DPadUp'],
+  next:['key:ArrowRight','key:ArrowDown','pad:DPadRight','pad:DPadDown'],
+  start:['key:Home'],end:['key:End'],select:[...modified(['key:Enter','key:Space']),'pad:South'],
+  clear:['key:Escape','pad:East'],point:modified(['mouse:Left','pen:Tip','touch:Contact'])
+}};
 const element = (doc, name, value) => {
   const el = doc.createElement(name);
   if (value !== undefined) el.textContent = value;
@@ -250,7 +259,7 @@ function ray(world, frame, canvas, [x,y]) {
 /** Mount linked chart, scene, map, and table controls on one session. */
 export function mountLinkedViews(host, { toolkit, session, chart, map={}, table={}, scene, title='Linked views',
   filterBy, timeRange=session?.timeRange, timeStep=.01, color, panels=allPanels, labels={}, controls={},
-  stylesheet='', defaultStyles=true, encoding }={}) {
+  stylesheet='', defaultStyles=true, encoding,input={} }={}) {
   if(!Array.isArray(panels)||!panels.length||new Set(panels).size!==panels.length||
     !Array.from(panels).every(name=>allPanels.includes(name))||typeof stylesheet!=='string'||typeof defaultStyles!=='boolean')
     throw new TypeError('Invalid linked panel layout or stylesheet');
@@ -268,7 +277,7 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
   if(has('chart'))session.chart(chart);
   if(has('map'))session.map(map);
   if(has('table'))session.table({columns:fieldNames,limit:1});
-  const doc=host.ownerDocument, root=roots.get(host)??host.attachShadow({mode:'open'});
+  const doc=host.ownerDocument, win=doc.defaultView, root=roots.get(host)??host.attachShadow({mode:'open'});
   if(root.childElementCount)throw new Error('This host already has mounted linked views');
   roots.set(host,root);
   root.innerHTML=`<div class="shell" part="shell">
@@ -393,7 +402,8 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
     }
     $('thead').append(head);
   }
-  let page=0, pending=0, stopped=false, drawn, source, linkedWorld, view, points=[], findMap=()=>undefined, brush, cursor;
+  let page=0,pending=0,inputFrame=0,stopped=false,drawn,source,linkedWorld,view,points=[],findMap=()=>undefined,brush,cursor;
+  const panelInput={};
   function showRecord(ref) {
     cursor=ref.row;
     if(body)page=Math.floor(session.snapshot().visible.findIndex(row=>row.ref.row===cursor)/rowsPerPage);
@@ -405,7 +415,7 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
     schedule();
   };
   const position=(event,canvas)=>{const box=canvas.getBoundingClientRect();return [event.clientX-box.left,event.clientY-box.top];};
-  const schedule=()=>{if(!pending&&!stopped)pending=requestAnimationFrame(render);};
+  const schedule=()=>{if(!pending&&!stopped)pending=win.requestAnimationFrame(render);};
   function candidateRefs(kind,snapshot) {
     if(kind==='chart')return session.chart(chart,snapshot).map(row=>row.ref);
     if(kind==='map')return session.map(map,snapshot).map(row=>row.ref);
@@ -425,11 +435,11 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
       selected?'Selected':'Unselected'].filter(Boolean).join('. ');
     schedule();
   }
-  function navigate(event,kind) {
+  function navigate(event,kind,key=event.key) {
     const delta={ArrowLeft:-1,ArrowUp:-1,ArrowRight:1,ArrowDown:1};
-    if(!Object.hasOwn(delta,event.key)&&!['Home','End','Enter',' ','Escape'].includes(event.key))return;
+    if(!Object.hasOwn(delta,key)&&!['Home','End','Enter',' ','Escape'].includes(key))return;
     const refs=candidateRefs(kind,session.snapshot());
-    if(event.key==='Escape'){
+    if(key==='Escape'){
       event.preventDefault();
       session.update({selection:[]});
       if(!refs.length)announce.textContent='No matching records in this view';
@@ -438,17 +448,17 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
     event.preventDefault();
     const current=refs.findIndex(ref=>ref.row===cursor);
     let index;
-    if(Object.hasOwn(delta,event.key))index=current<0?0:Math.max(0,Math.min(refs.length-1,current+delta[event.key]));
-    else index=event.key==='Home'?0:event.key==='End'?refs.length-1:Math.max(0,current);
+    if(Object.hasOwn(delta,key))index=current<0?0:Math.max(0,Math.min(refs.length-1,current+delta[key]));
+    else index=key==='Home'?0:key==='End'?refs.length-1:Math.max(0,current);
     const ref=refs[index];
-    if(event.key==='Enter'||event.key===' ')select(ref,event);
+    if(key==='Enter'||key===' ')select(ref,event);
     focusRecord(ref,refs);
   }
   if(keyboard)for(const item of [chartCanvas,mapCanvas,sceneCanvas])if(item){
     const kind=item.dataset.view;
     item.tabIndex=0;
     item.setAttribute('aria-describedby',['keyboard-help',...((kind==='chart'||kind==='map')&&controls.scales!==false?[kind+'-scale']:[])].join(' '));
-    item.onkeydown=event=>navigate(event,kind);
+    if(!input?.[kind])item.onkeydown=event=>navigate(event,kind);
     item.onfocus=()=>{
       const refs=candidateRefs(kind,session.snapshot());
       const ref=refs.find(row=>row.row===cursor)??refs[0];
@@ -552,14 +562,10 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
     $('.prev').onclick=()=>{page--;schedule();};
     $('.next').onclick=()=>{page++;schedule();};
   }
-  if(chartCanvas){
-    chartCanvas.onpointerdown=event=>{
-      if(event.button!==0)return;
-      const start=position(event,chartCanvas);brush=[start,start];chartCanvas.setPointerCapture(event.pointerId);
-    };
-    chartCanvas.onpointermove=event=>{if(brush){brush[1]=position(event,chartCanvas);schedule();}};
-    chartCanvas.onpointercancel=()=>{brush=undefined;schedule();};
-    chartCanvas.onpointerup=event=>{
+  function beginBrush(at){brush=[at,at];}
+  function updateBrush(at){if(brush){brush[1]=at;schedule();}}
+  function cancelBrush(){brush=undefined;schedule();}
+  function finishBrush(event){
       if(!brush)return;
       const [a]=brush,b=position(event,chartCanvas);brush=undefined;
       if(Math.hypot(a[0]-b[0],a[1]-b[1])>5){
@@ -574,23 +580,84 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
         select(ref,event);
       }
       schedule();
-    };
   }
-  if(mapCanvas)mapCanvas.onclick=event=>select(findMap(position(event,mapCanvas)),event);
-  if(sceneCanvas)sceneCanvas.onclick=event=>{
+  if(chartCanvas&&!input?.chart){
+    chartCanvas.onpointerdown=event=>{
+      if(event.button!==0)return;
+      beginBrush(position(event,chartCanvas));
+      chartCanvas.setPointerCapture(event.pointerId);
+    };
+    chartCanvas.onpointermove=event=>updateBrush(position(event,chartCanvas));
+    chartCanvas.onpointercancel=cancelBrush;
+    chartCanvas.onpointerup=finishBrush;
+  }
+  const pickMap=event=>select(findMap(position(event,mapCanvas)),event);
+  const pickScene=event=>{
     if(linkedWorld&&view)session.pick(renderer.pick(linkedWorld,ray(linkedWorld,view,sceneCanvas,position(event,sceneCanvas)),view).dominant,
       {mode:pickMode(event)});
   };
+  if(mapCanvas&&!input?.map)mapCanvas.onclick=pickMap;
+  if(sceneCanvas&&!input?.scene)sceneCanvas.onclick=pickScene;
+  function watchInput(){
+    if(!inputFrame&&!stopped)inputFrame=win.requestAnimationFrame(()=>{
+      inputFrame=0;
+      let focused=false;
+      for(const controller of Object.values(panelInput))focused=controller.poll().focused||focused;
+      if(focused)watchInput();
+    });
+  }
+  try {
+    for(const [kind,surface] of Object.entries({chart:chartCanvas,map:mapCanvas,scene:sceneCanvas})){
+      const options=input?.[kind];
+      if(!surface||!options)continue;
+      let gesture;
+      panelInput[kind]=createViewerInput(surface,{contexts:linkedBindings,...options,toolkit,
+        onFocus(focused){if(focused)watchInput();options.onFocus?.(focused);},
+        onAction(row){
+          const key=Object.hasOwn(canvasKeys,row.action)&&canvasKeys[row.action];
+          if(key&&(row.phase==='press'||row.phase==='repeat')){
+            const {shiftKey,ctrlKey,metaKey}=row.event??{};
+            navigate({shiftKey,ctrlKey,metaKey,preventDefault(){}},kind,key);
+          }
+          options.onAction?.(row);
+        },
+        onPointer(row){
+          if(row.action==='point'){
+            if(row.phase==='start'&&gesture===undefined){
+              gesture=row.id;
+              if(kind==='chart')beginBrush(row.point);
+            }else if(gesture===row.id){
+              if(row.phase==='move'&&kind==='chart')updateBrush(row.point);
+              if(row.phase==='cancel'||row.phase==='end'){
+                gesture=undefined;
+                if(kind==='chart')row.phase==='end'?finishBrush(row.event):cancelBrush();
+                else if(row.phase==='end')(kind==='map'?pickMap:pickScene)(row.event);
+              }
+            }
+          }
+          options.onPointer?.(row);
+        }
+      });
+    }
+  } catch(error) {
+    stopped=true;
+    for(const controller of Object.values(panelInput))controller.dispose();
+    win.cancelAnimationFrame(inputFrame);win.cancelAnimationFrame(pending);
+    renderer?.dispose();root.replaceChildren();throw error;
+  }
   const stop=session.subscribe(schedule);
-  const resize=new ResizeObserver(schedule);
+  const resize=new win.ResizeObserver(schedule);
   resize.observe(host);
   for(const item of [chartCanvas,mapCanvas,sceneCanvas])if(item)resize.observe(item);
-  return Object.freeze({render(){
-    cancelAnimationFrame(pending);
+  return Object.freeze({input:Object.freeze(panelInput),render(){
+    win.cancelAnimationFrame(pending);
     drawn=undefined;
     render();
   },destroy(){
     if(stopped)return;
-    stopped=true;stop();resize.disconnect();cancelAnimationFrame(pending);renderer?.dispose();root.replaceChildren();
+    stopped=true;stop();resize.disconnect();
+    win.cancelAnimationFrame(pending);win.cancelAnimationFrame(inputFrame);
+    for(const controller of Object.values(panelInput))controller.dispose();
+    renderer?.dispose();root.replaceChildren();
   }});
 }

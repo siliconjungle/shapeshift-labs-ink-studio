@@ -148,7 +148,13 @@ try {
   ui.render();
   named('mode').value='swipe';named('mode').dispatchEvent(new Event('change'));
   ui.render();
-  named('divider').onkeydown({key:'ArrowRight',preventDefault(){}});
+  const handle=named('divider');
+  handle.focus();
+  handle.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',key:'ArrowRight',bubbles:true,cancelable:true}));
+  handle.dispatchEvent(new KeyboardEvent('keyup',{code:'ArrowRight',key:'ArrowRight',bubbles:true}));
+  ui.input.divider.setBindings('divider','next',['key:KeyD']);
+  handle.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true,cancelable:true}));
+  handle.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD',bubbles:true,cancelable:true}));
   named('playback').click();
   session.advance(.5);
   const input=named('scrubber');
@@ -172,7 +178,7 @@ try {
   assert(r.warm[0]>r.warm[2] && r.cool[2]>r.cool[0],JSON.stringify([r.warm,r.cool]));
   assert.deepEqual(r.gutter,[23,31,41]);
   assert.deepEqual(r.calls,[['left',1],['right',1],['left',2],['right',2],['left',2.5],['right',2.5]]);
-  assert.deepEqual(r.chosen,['Custom comparison',1,true,.51,1.5,'51']);
+  assert.deepEqual(r.chosen,['Custom comparison',1,true,.52,1.5,'52']);
   assert.equal(r.reference,0);
   assert(Math.abs(r.other-.9)<1e-6);
   assert.equal(r.disposed,0);

@@ -1,4 +1,5 @@
 import { createComparisonRenderer } from './comparison-renderer.mjs';
+import { createViewerInput } from './viewer-input.mjs';
 
 const themes = `
   :host{display:block;color:var(--ink-compare-text,#edf2f7);background:var(--ink-compare-background,#111925);
@@ -17,6 +18,7 @@ const themes = `
   .stage{position:relative;isolation:isolate;overflow:hidden;border:1px solid var(--ink-compare-border,#52657e);border-radius:7px}
   canvas{display:block;width:100%;height:var(--ink-compare-height,440px)}
   canvas[data-orbit]{cursor:grab;touch-action:none}
+  canvas:focus-visible{outline:3px solid var(--ink-compare-accent,#ffc27e);outline-offset:-3px}
   .source{position:absolute;inset-block-start:11px;padding:5px 8px;border-radius:3px;pointer-events:none;
     color:var(--ink-compare-source-text,#f6f9ff);background:var(--ink-compare-source,#172232e8)}
   .left{inset-inline-start:11px}.right{inset-inline-end:11px}
@@ -41,10 +43,23 @@ const roots = new WeakMap(), labelsDefault = {
   x:'Horizontal',y:'Vertical',negative:'Decrease',positive:'Increase',divider:'Swipe divider'
 };
 const clamp = (n,min,max)=>Math.min(max,Math.max(min,n));
+const drag=['mouse:Left','pen:Tip','touch:Contact'];
+const signed=(input,scale)=>({input,scale});
+const cameraBindings={camera:{
+  orbit:drag,
+  yaw:[signed('key:ArrowLeft',-1),'key:ArrowRight',{input:'pad:RightX',deadZone:.2}],
+  pitch:['key:ArrowUp',signed('key:ArrowDown',-1),{input:'pad:RightY',deadZone:.2,scale:-1}]
+}};
+const shift=inputs=>inputs.map(input=>({input,modifiers:['Shift']}));
+const previous=['key:ArrowLeft','key:ArrowUp'], next=['key:ArrowRight','key:ArrowDown'];
+const dividerBindings={divider:{
+  drag,previous:[...previous,'pad:DPadLeft','pad:DPadUp'],next:[...next,'pad:DPadRight','pad:DPadDown'],
+  'previous-fast':shift(previous),'next-fast':shift(next),start:['key:Home'],end:['key:End']
+}};
 
 /** Opt-in controls for a comparison session and a pair of native scenes. */
 export function mountComparisonView(host,{
-  toolkit,session,left,right,labels={},controls={},stylesheet='',defaultStyles=true
+  toolkit,session,left,right,labels={},controls={},stylesheet='',defaultStyles=true,input={}
 }={}) {
   const api=toolkit?.KIT?.comparison;
   if(!api||!session?.subscribe||!left?.world||!right?.world||typeof stylesheet!=='string'||typeof defaultStyles!=='boolean')
@@ -95,9 +110,13 @@ export function mountComparisonView(host,{
   try { renderer=createComparisonRenderer(canvas,{toolkit}); }
   catch(error){root.replaceChildren();throw error;}
 
-  let capture, camera, pending=0, destroyed=false, lost=false, lastTick, orbit;
-  function schedule() {
+  let capture,camera,pending=0,destroyed=false,lost=false,lastTick,lastInput,orbit,canvasInput,dividerInput,dirty=true;
+  function requestFrame() {
     if(!pending&&!destroyed&&!lost)pending=win.requestAnimationFrame(tick);
+  }
+  function schedule() {
+    dirty=true;
+    requestFrame();
   }
   function paint(snapshot) {
     if(destroyed||lost)return;
@@ -136,11 +155,17 @@ export function mountComparisonView(host,{
   function tick(now) {
     pending=0;
     if(destroyed||lost)return;
+    const active=canvasInput?.poll(), slider=dividerInput?.poll(), focus=active?.focused||slider?.focused;
+    const dt=lastInput===undefined?0:clamp((now-lastInput)/1000,0,.05);
+    lastInput=focus?now:undefined;
+    if(active?.focused&&camera&&dt&&(active.values.yaw||active.values.pitch)){
+      moveCamera(camera.yaw+(active.values.yaw??0)*dt*1.8,camera.pitch+(active.values.pitch??0)*dt*1.8);
+    }
     let snapshot=session.snapshot();
     if(snapshot.playing&&lastTick!==undefined)snapshot=session.advance(Math.max(0,now-lastTick)/1000);
     lastTick=snapshot.playing?now:undefined;
-    paint(snapshot);
-    if(snapshot.playing)schedule();
+    if(dirty||snapshot.playing){dirty=false;paint(snapshot);}
+    if(snapshot.playing||focus)requestFrame();
   }
 
   play.onclick=()=>session.snapshot().playing?session.pause():session.play();
@@ -153,36 +178,46 @@ export function mountComparisonView(host,{
     const at=snapshot.axis==='x'?(event.clientX-box.left)/box.width:(event.clientY-box.top)/box.height;
     session.update({divider:clamp(at,0,1)});
   }
-  divider.onpointerdown=event=>{
-    if(event.button!==0)return;
-    divider.setPointerCapture(event.pointerId);
-    swipe(event);
-  };
-  divider.onpointermove=event=>{if(divider.hasPointerCapture(event.pointerId))swipe(event);};
-  divider.onkeydown=event=>{
-    const { divider:at }=session.snapshot(), step=event.shiftKey ? .1 : .01;
-    const next={Home:0,End:1,ArrowLeft:at-step,ArrowUp:at-step,ArrowRight:at+step,ArrowDown:at+step}[event.key];
-    if(next===undefined)return;
-    event.preventDefault();
-    session.update({divider:clamp(next,0,1)});
-  };
-
-  if(controls.camera!==false) {
-    canvas.onpointerdown=event=>{
-      if(event.button!==0||!camera)return;
-      orbit={id:event.pointerId,x:event.clientX,y:event.clientY,yaw:camera.yaw,pitch:camera.pitch};
-      canvas.setPointerCapture(event.pointerId);
-    };
-    canvas.onpointermove=event=>{
-      if(orbit?.id!==event.pointerId)return;
-      const yaw=orbit.yaw-(event.clientX-orbit.x)*.008;
-      const pitch=clamp(orbit.pitch+(event.clientY-orbit.y)*.008,-1.55,1.55);
-      session.update({camera:{...session.snapshot().camera,yaw,pitch,pose:null}});
-    };
-    canvas.onlostpointercapture=()=>{orbit=undefined;};
+  function moveCamera(yaw,pitch) {
+    session.update({camera:{...session.snapshot().camera,yaw,pitch:clamp(pitch,-1.55,1.55),pose:null}});
+  }
+  function bind(surface,defaults,options,action,pointer) {
+    return createViewerInput(surface,{contexts:defaults,...options,toolkit,
+      onFocus(focused){schedule();options?.onFocus?.(focused);},
+      onAction(row){action?.(row);options?.onAction?.(row);},
+      onPointer(row){pointer?.(row);options?.onPointer?.(row);}
+    });
+  }
+  try {
+    if(input!==false&&input?.divider!==false&&controls.divider!==false)dividerInput=bind(
+      divider,dividerBindings,input?.divider,row=>{
+        if(divider.hidden||!['press','repeat'].includes(row.phase))return;
+        const {divider:at}=session.snapshot();
+        const target={start:0,end:1,previous:at-.01,next:at+.01,'previous-fast':at-.1,'next-fast':at+.1}[row.action];
+        if(Number.isFinite(target))session.update({divider:clamp(target,0,1)});
+      },row=>{
+        if(!divider.hidden&&row.action==='drag'&&row.phase!=='cancel')swipe(row.event);
+      });
+    else divider.tabIndex=-1;
+    if(input!==false&&input?.canvas!==false&&controls.camera!==false)canvasInput=bind(
+      canvas,cameraBindings,input?.canvas,undefined,row=>{
+        if(row.action!=='orbit')return;
+        if(row.phase==='start'&&camera&&!orbit)orbit={id:row.id,point:row.point,yaw:camera.yaw,pitch:camera.pitch};
+        if(orbit?.id!==row.id)return;
+        if(row.phase==='move')moveCamera(orbit.yaw-(row.point[0]-orbit.point[0])*.008,
+          orbit.pitch+(row.point[1]-orbit.point[1])*.008);
+        else if(row.phase==='end'||row.phase==='cancel')orbit=undefined;
+      });
+  } catch(error) {
+    dividerInput?.dispose();
+    canvasInput?.dispose();
+    renderer.dispose();
+    root.replaceChildren();
+    win.cancelAnimationFrame(pending);
+    throw error;
   }
 
-  const lose=()=>{lost=true;lastTick=undefined;capture=undefined;win.cancelAnimationFrame(pending);pending=0;};
+  const lose=()=>{lost=true;lastTick=lastInput=undefined;capture=undefined;win.cancelAnimationFrame(pending);pending=0;};
   const restore=()=>{lost=false;schedule();};
   canvas.addEventListener('webglcontextlost',lose);
   canvas.addEventListener('webglcontextrestored',restore);
@@ -190,18 +225,21 @@ export function mountComparisonView(host,{
   resize.observe(canvas);
   const unsubscribe=session.subscribe(schedule);
   return Object.freeze({
+    input:Object.freeze({canvas:canvasInput,divider:dividerInput}),
     render(){
       win.cancelAnimationFrame(pending);
       pending=0;capture=undefined;
       const snapshot=session.snapshot();
       paint(snapshot);
-      if(snapshot.playing)schedule();
+      if(snapshot.playing||canvasInput?.focused||dividerInput?.focused)requestFrame();
     },
     destroy(){
       if(destroyed)return;
       destroyed=true;
       unsubscribe();
       resize.disconnect();
+      canvasInput?.dispose();
+      dividerInput?.dispose();
       win.cancelAnimationFrame(pending);
       canvas.removeEventListener('webglcontextlost',lose);
       canvas.removeEventListener('webglcontextrestored',restore);

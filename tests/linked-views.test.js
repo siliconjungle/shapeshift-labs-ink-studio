@@ -160,7 +160,7 @@ try {
   const prepared=KIT.dataInputs.prepare(spec.dataInputs).get('stations');
   const session=KIT.linkedViews.create(prepared,{timeColumn:'t',window:{past:2,future:2}});
   const display=KIT.linkedViews.diorama(spec), times=[];
-  const ui=mountLinkedViews(host,{toolkit:{KIT,PixelLook,PALETTES},session,filterBy:'sector',chart:{x:'$time',y:'reading'},
+  const ui=mountLinkedViews(host,{toolkit:{KIT,PixelLook,PALETTES},session,filterBy:'sector',chart:{x:'$time',y:'reading'},input:{map:true},
     table:{columns:['station','reading']},scene:{world:s=>{times.push(s.time);return display(s);}}});
   const root=host.shadowRoot, at=query=>root.querySelector(query), record=()=>session.snapshot().selection[0]?.key;
   const fired=[];
@@ -174,7 +174,8 @@ try {
   ui.render();
   fired.push(record(),at('[data-row="1"]').getAttribute('aria-pressed'));
   const map=at('[data-view="map"]');
-  map.onclick(location(map,map.clientWidth-24,map.clientHeight/2));
+  for(const type of ['pointerdown','pointerup'])map.dispatchEvent(new PointerEvent(type,{
+    ...location(map,map.clientWidth-24,map.clientHeight/2),pointerType:'touch',pointerId:21,bubbles:true,cancelable:true}));
   ui.render();
   fired.push(record());
   const chart=at('[data-view="chart"]');
@@ -209,11 +210,14 @@ try {
     Array.from(ctx.getImageData(0,0,1,1).data).join(','));
   themed.destroy();
 
-  const accessible=mountLinkedViews(host,{session,panels:['chart','map','table'],chart:{x:'$time',y:'reading',
+  const accessible=mountLinkedViews(host,{toolkit:{KIT},session,panels:['chart','map','table'],input:{chart:true},chart:{x:'$time',y:'reading',
     scaleLabels:{x:{min:'Opening',max:'Closing'}}},table:{columns:['station','reading'],pageSize:1,caption:'Survey readings'},
     encoding:{category:'sector',label:'station',monochrome:true,
       categories:[{value:'Inner',label:'Inner reach'},{value:'Outer',label:'Outer reach'}]}});
-  const press=(node,key,shiftKey=false)=>node.dispatchEvent(new KeyboardEvent('keydown',{key,shiftKey,bubbles:true,cancelable:true}));
+  const press=(node,key,shiftKey=false)=>{
+    for(const type of ['keydown','keyup'])node.dispatchEvent(new KeyboardEvent(type,{
+      key,code:key===' '?'Space':key,shiftKey,bubbles:true,cancelable:true}));
+  };
   const keys=()=>session.snapshot().selection.map(r=>r.key).join('');
   accessible.render();
   const graph=at('[data-view="chart"]'), plan=at('[data-view="map"]');

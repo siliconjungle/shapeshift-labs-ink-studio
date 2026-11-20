@@ -665,8 +665,9 @@ or `null` for an unbound control. `sample(context, sources)` accepts one
 input-to-value object per source for unmodified polling, keeping the strongest
 absolute value per action. The first source wins ties. Unpressed actions are zero.
 `bindings(context, action)` provides the same binding information for
-tooltips or settings. The caller owns polling, key edges, focus, and
-persisted overrides. A caller can recompile a changed profile and keep the
+tooltips or settings. `profile` contains the immutable compiled bindings.
+Use [the browser adapter](viewer-input.md) for polling, key edges, and focus.
+A caller can recompile a changed profile and keep the
 previous one if the update contains conflicting bindings.
 
 `inputActions.permutation(controls, overrides = {})` maps each configured
