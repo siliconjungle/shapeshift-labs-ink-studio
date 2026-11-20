@@ -166,6 +166,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `ornament.compile(spec)` | [Wallpaper and frieze groups](wallpaper-frieze.md) for repeated motifs, seamless pigment, etched relief, and physical tiles |
 | `fracture.power(spec)`, `fracture.separate(graph, options)`, `fracture.crack(options)` | Anisotropic power cells, cumulative bond failure and stress-guided crack paths |
 | `grammar.assemble(route, modules, options)`, `construct.loadPaths(sockets, spans, options)`, `construct.supportGraph(parts)`, `construct.damage(parts, options)` | Dimensioned, socket-connected assemblies, stylized supports, support propagation and seeded part damage |
+| `fabrication.shell(options)`, `fabrication.stack(options)` | [Field-driven fabrication](field-fabrication.md) for variable wall thickness, perforation, contour ribs, and solid layers |
 | `construct.profile(rings)`, `construct.offset(profile, distance)`, `construct.extrude(profile, options)`, `construct.weightedRoof(rings, options)` | Signed footprints, planar offsets, extrusions and roof wavefronts with per-edge pitches |
 | `geometry.distanceTransform(mask, options)`, `materials.outline(mask, options)` | Exact Euclidean distances over pixel or voxel centers, including anisotropic spacing and inside/outside masks |
 | `materials.triplanar(sample, options)`, `materials.tangent(sample, options)`, `materials.threshold(field, options)`, `materials.ramp(colors, options)` | Surface-aligned patterns, pixel-footprint filtering and perceptual palettes |
