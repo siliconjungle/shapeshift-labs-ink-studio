@@ -114,7 +114,14 @@ function viewMatrix(yaw, pitch, dist, T) {
 const edgeCoverageThreshold = .03;
 const afterimageRows = Symbol('afterimage rows');
 const reconstructionSource = Symbol('reconstruction source');
-const inspectionCamera = Symbol('inspection camera');
+const captureCamera = Symbol('rendered camera');
+
+function cameraCapture(options, receive) {
+  return { [captureCamera](camera) {
+    receive(camera);
+    options?.[captureCamera]?.(camera);
+  } };
+}
 
 function render(world, o, preparedPalettes) {
   const reconstruction = o?.reconstruction ?? world.look?.reconstruction;
@@ -141,7 +148,7 @@ function render(world, o, preparedPalettes) {
     const api = require('../index.js').load().KIT.inspection, settings = api.prepare(inspection);
     const requested = ArtPasses.select(o?.passes); let camera;
     const base = render(world, { ...o, inspection: false, passes: [...new Set([...requested, 'depth'])],
-      [inspectionCamera]: view => { camera = view; } }, preparedPalettes);
+      ...cameraCapture(o, view => { camera = view; }) }, preparedPalettes);
     const plan = api.plan(settings, { world, time: o?.t ?? world.lookSnapshot?.time ?? 0,
       width: base.w, height: base.h, camera, focus: o?.inspectionFocus });
     const passes = base.passes, range = camera.depthRange;
@@ -160,9 +167,11 @@ function render(world, o, preparedPalettes) {
     const start = o?.renderStats ? performance.now() : 0;
     const requested = ArtPasses.select(o?.passes);
     const passes = graph.needsOwner ? [...new Set([...requested, 'splatId'])] : o?.passes;
-    const base = render(world, { ...o, renderGraph: false, passes }, preparedPalettes);
+    let camera;
+    const base = render(world, { ...o, renderGraph: false, passes,
+      ...(graph.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
     const time = o?.t ?? world.lookSnapshot?.time ?? 0;
-    const frame = { ...base, ...runGraph(graph, base, world, time, require('../index.js').load().KIT.poly2.text) };
+    const frame = { ...base, ...runGraph(graph, base, world, time, require('../index.js').load().KIT.poly2.text, camera) };
     if (base.passes && graph.needsOwner) {
       if (requested.length) frame.passes = ArtPasses.subset(base.passes, requested);
       else delete frame.passes;
@@ -174,8 +183,13 @@ function render(world, o, preparedPalettes) {
   if (definition !== undefined && definition !== false && !o?.samples && !o?.captureCoverage) {
     const start = o?.renderStats ? performance.now() : 0;
     const plan = FrameComposite.prepare(definition, o?.w || 900, o?.h || 620, o?.px ?? world.look?.pixelSize ?? 1);
-    const layers = require('../index.js').load().KIT.frameComposite.layers(plan, world, o?.t ?? world.lookSnapshot?.time ?? 0);
-    const base = render(world, { ...o, composite: false, w: plan.world.w, h: plan.world.h, px: 1 }, preparedPalettes);
+    let camera;
+    const api = require('../index.js').load().KIT.frameComposite;
+    const time = o?.t ?? world.lookSnapshot?.time ?? 0;
+    let layers = !plan.needsCamera && api.layers(plan, world, time);
+    const base = render(world, { ...o, composite: false, w: plan.world.w, h: plan.world.h, px: 1,
+      ...(plan.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
+    layers ||= api.layers(plan, world, time, camera);
     const frame = { ...base, ...FrameComposite.compose(base, layers, plan.w, plan.h, plan.world.filter),
       px: 1, worldSize: [base.w, base.h] };
     if (frame.renderStats) frame.renderStats.frameMs = performance.now() - start;
@@ -408,7 +422,7 @@ function renderFrame(world, o, preparedPalettes) {
     asp = W / H,
     baseCount = world.count,
     R = world.radius;
-  if (!o.reflectionPlane) o[inspectionCamera]?.({view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
+  if (!o.reflectionPlane) o[captureCamera]?.({view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
     clipNear: near, clipFar: 400, depthRange: [eyeD - R, eyeD + R],
     eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]});
   const hex = i => {

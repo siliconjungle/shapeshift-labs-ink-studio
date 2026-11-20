@@ -1,4 +1,4 @@
-import { layerSamplingGLSL } from './frame-composite.mjs';
+import { layerSamplingGLSL, captureFrameCamera } from './frame-composite.mjs';
 
 export const graphOwner = Symbol('render graph owner capture');
 
@@ -77,8 +77,9 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
 
   return function execute(world, frame, plan, w, h, destination, present) {
     scene.resize(w, h);
-    let ownership;
-    present(world, { ...frame, [graphOwner]: plan.needsOwner ? (world, texture) => { ownership = { world, texture }; } : undefined },
+    let ownership, camera;
+    present(world, { ...frame, ...(plan.needsCamera && captureFrameCamera(frame, view => { camera = view; })),
+      [graphOwner]: plan.needsOwner ? (world, texture) => { ownership = { world, texture }; } : undefined },
       w, h, scene.framebuffer);
     if (!destination) {
       if (gl.canvas.width !== w) gl.canvas.width = w;
@@ -99,7 +100,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         if (!pool.includes(out)) pool.push(out);
         out.resize(w, h);
         const mask = outputs.get(node.mask), table = node.type === 'grade' && api.cube(node);
-        const layer = node.layer && api.layer(node, w, h, world, time);
+        const layer = node.layer && api.layer(node, w, h, world, time, camera);
         const select = node.enabled && ownership && node.select && JSON.stringify(node.select);
         const opacity = node.opacity * (node.layer ? layer?.opacity ?? 0 : 1);
         if (layer) {

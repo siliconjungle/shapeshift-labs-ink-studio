@@ -1,3 +1,12 @@
+export const frameCamera = Symbol('rendered camera');
+
+export function captureFrameCamera(frame, receive) {
+  return { [frameCamera](camera) {
+    receive(camera);
+    frame[frameCamera]?.(camera);
+  } };
+}
+
 export const layerSamplingGLSL = `
 vec4 layerTexel(sampler2D image, ivec2 pos, ivec2 size, bool topDown) {
   if (!topDown) pos.y = size.y - 1 - pos.y;
@@ -42,6 +51,7 @@ export function createFrameComposite(gl, { program, resources, target, textureUn
     const { w, h } = plan;
     base.resize(plan.world.w, plan.world.h);
     present(world, frame, plan.world.w, plan.world.h, base.framebuffer);
+    const overlays = typeof layers === 'function' ? layers() : layers;
     if (!output) {
       if (gl.canvas.width !== w) gl.canvas.width = w;
       if (gl.canvas.height !== h) gl.canvas.height = h;
@@ -56,10 +66,10 @@ export function createFrameComposite(gl, { program, resources, target, textureUn
     fullscreen(shader, output, w, h, { u_layer: 0, u_outputSize: [w, h], u_topDown: false,
       u_opaque: true, u_linear: plan.world.filter === 'linear', u_opacity: 1 });
 
-    if (layers.length) {
+    if (overlays.length) {
       gl.enable(gl.BLEND);
       gl.blendEquation(gl.FUNC_ADD);
-      for (const layer of layers) {
+      for (const layer of overlays) {
         textureUnit(0, uploaded);
         if (layerWidth !== layer.w || layerHeight !== layer.h) {
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, layer.w, layer.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, layer.data);

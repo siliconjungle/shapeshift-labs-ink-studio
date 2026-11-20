@@ -1,6 +1,6 @@
 # Mixed-resolution compositing
 
-Set `look.composite` on a world, or pass `composite` to the CPU or WebGL renderer for a frame override. Use `false` to bypass the authored setting. The compositor draws the world at its own resolution and fits it to the output frame before drawing screen layers in list order. Coordinates for screen drawing use final output pixels, with the origin at the top left.
+Set `look.composite` on a world, or pass `composite` to the CPU or WebGL renderer for a frame override. Use `false` to bypass the authored setting. The compositor draws the world at its own resolution and fits it to the output frame before drawing layers in list order. Coordinates for screen drawing use final output pixels, with the origin at the top left.
 
 The output dimensions come from `w` and `h` in Node and the CLI, or `width` and `height` in WebGL. A WebGL framebuffer target can also supply those dimensions.
 
@@ -24,6 +24,8 @@ A `draw` list renders at the layer's native resolution. Command sizes and positi
 | `text` | `text`, center `at` as `[x, y]`, cap height `size`, optional stroke `width`, and `color`. Uses Ink Studio's single-stroke alphabet, numerals and punctuation. |
 | `path` | `points` as XY pairs, stroke `width`, optional `closed`, and `color`. |
 | `rect` | `rect` as `[x, y, width, height]` and `color`. |
+
+World paths and additional commands support projected arrows, polygon fills, grids, axes, and calibrated scale bars. [Precise drawing primitives](drawing-primitives.md)
 
 ## Rasters and screen effects
 

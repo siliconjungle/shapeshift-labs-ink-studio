@@ -12,7 +12,7 @@ const commands = new Map([
 const validSidecar = suffix => /^(?:\.(?:json|txt)|-passes\.json|-[a-zA-Z][a-zA-Z0-9]*\.png)$/.test(suffix);
 const fileOptions = new Set([
   'actions','adaptive-sampling','art-direction','asset-pack','atmosphere-emitters','authoring','celestial-tracks','cloud-field',
-  'color-stack','edge-filter','effect-palettes','horizon-bands','lightning','look','lut','palette-constraints','plan','precipitation',
+  'color-stack','composite','edge-filter','effect-palettes','horizon-bands','lightning','look','lut','palette-constraints','plan','precipitation',
   'rain-impacts','relighting','scene-exposure','sdf-assist','shadow-art','shaped-atmosphere','silhouette-protection','sky-environment','sky-transitions',
   'splat-fields','sprite-atlas','stable','stable-detail','volume-cutouts','weather-binding','wind-field'
 ]);

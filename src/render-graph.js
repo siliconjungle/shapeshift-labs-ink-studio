@@ -97,7 +97,7 @@ const RenderGraph = (() => {
             throw new TypeError('A composite pass needs a previous image source or one mixed-resolution layer');
           if (pass.layer !== undefined) {
             if (pass.blend !== undefined) throw new TypeError('Set layer blending on the layer');
-            compositor.settings({ layers: [pass.layer] });
+            node.needsCamera = compositor.settings({ layers: [pass.layer] }).needsCamera;
             node.layer = pass.layer;
           } else {
             const { blend = 'over' } = pass;
@@ -117,7 +117,8 @@ const RenderGraph = (() => {
       for (const dependency of nodes[i].dependencies) live.add(dependency);
     const passes = nodes.filter(node => live.has(node.id)), lastUse = new Map();
     passes.forEach((node, i) => node.dependencies.forEach(id => lastUse.set(id, i)));
-    const plan = { passes, output, lastUse, needsOwner: passes.some(node => node.enabled && node.select) };
+    const plan = { passes, output, lastUse, needsOwner: passes.some(node => node.enabled && node.select),
+      needsCamera: passes.some(node => node.enabled && node.needsCamera) };
     if (readSnapshot) compiled.set(value, plan);
     return plan;
   }
@@ -195,9 +196,9 @@ const RenderGraph = (() => {
     return data;
   }
 
-  function layer(node, w, h, world, time, text) {
+  function layer(node, w, h, world, time, text, camera) {
     const plan = compositor.prepare({ layers: [node.layer] }, w, h);
-    return compositor.layers(plan, world, time, text)[0];
+    return compositor.layers(plan, world, time, text, camera)[0];
   }
 
   return Object.freeze({ prepare, create, cube, selection, layer });

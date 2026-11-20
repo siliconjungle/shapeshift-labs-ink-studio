@@ -579,6 +579,13 @@ function edgeFilterOption() {
   return edgeFilterOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
 }
 
+function compositeOption() {
+  if (opt.composite === 'off') return false;
+  if (opt.composite === undefined) return undefined;
+  if (typeof opt.composite !== 'string') die('--composite needs a JSON file or off');
+  return compositeOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt.composite), 'utf8'));
+}
+
 const view = extra =>
   Object.assign(
     {
@@ -620,8 +627,7 @@ const view = extra =>
       inspection: opt.inspection === 'off' ? false : opt.inspection === undefined ? undefined :
         (inspectionOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt.inspection), 'utf8'))),
       inspectionFocus: opt['inspection-focus'],
-      composite: opt.composite === 'off' ? false : opt.composite === undefined ? undefined :
-        (compositeOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt.composite), 'utf8'))),
+      composite: compositeOption(),
       renderGraph: opt['render-graph'] === 'off' ? false : opt['render-graph'] === undefined ? undefined :
         (renderGraphOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt['render-graph']), 'utf8'))),
       reconstruction: opt.reconstruction === 'off' ? false : opt.reconstruction === undefined ? undefined :
@@ -709,7 +715,7 @@ function die(m) {
   process.exit(1);
 }
 const worldCLI = () => require('./world.js')({kit:lib(),build,pose,dataScene,opt,renderOptions:view,atmosphereEmittersOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,
-  weatherTracksOption:() => onOffOption('weather-tracks'),skyOptions,cameraOptions,shot,shotReplay,shotRender});
+  weatherTracksOption:() => onOffOption('weather-tracks'),skyOptions,cameraOptions,compositeOption,shot,shotReplay,shotRender});
 const worldCommands = new Set(['inspect','probe','trace','field','data-inputs','scene','sim']);
 const CMD = {
   help() {

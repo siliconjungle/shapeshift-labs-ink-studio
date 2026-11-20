@@ -38,7 +38,7 @@ function target(opt) {
   return {};
 }
 
-module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,atmosphereEmittersOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,weatherTracksOption,skyOptions,cameraOptions,shot,shotReplay,shotRender}) {
+module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,atmosphereEmittersOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,weatherTracksOption,skyOptions,cameraOptions,compositeOption,shot,shotReplay,shotRender}) {
   const W = kit.KIT.world, R = W.runtime;
   let workerPool;
   const args = () => opt.args ? parse(opt.args) : {};
@@ -547,7 +547,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           paletteConstraints:require('./palette-constraints.js').override(opt['palette-constraints']),
           water:opt.water==='off'?false:undefined, effectPalettes:effectPalettesOption?.(), stable:stabilityOption?.(), artDirection:artDirectionOption?.(), silhouetteProtection:silhouetteOption?.(),
           horizonBands:horizonOption?.(), skyTransitions:skyTransitionsOption?.(), weatherTracks:weatherTracksOption?.(),
-          ...skyOptions?.(), ...cameraOptions?.(),
+          ...skyOptions?.(), ...cameraOptions?.(), composite:compositeOption?.(),
           atmosphere:opt.atmosphere==='off'?false:undefined, atmosphereEmitters:atmosphereEmittersOption?.(),
           coverageAware:opt['coverage-aware']===undefined?undefined:opt['coverage-aware']!=='off',
           lookMasks:opt['look-masks']==='off'?false:undefined,

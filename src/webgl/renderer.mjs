@@ -1,7 +1,7 @@
 import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { createRenderGraph, graphOwner } from './render-graph.mjs';
-import { createFrameComposite } from './frame-composite.mjs';
+import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
 import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
@@ -1046,7 +1046,10 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       lastDetail = detail;
       lastWater = waterScene;
       lastWaterTime = frame.time;
-      if (!reflectionCapture) frame[inspectionDepth]?.(world, geometry.textures[1], camera);
+      if (!reflectionCapture) {
+        frame[frameCamera]?.(camera);
+        frame[inspectionDepth]?.(world, geometry.textures[1], camera);
+      }
       return spriteCover;
     }
 
@@ -1105,9 +1108,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if ([plan, plan.world].some(({ w, h }) => w > Math.min(maxSize, viewportLimit[0]) ||
           h > Math.min(maxSize, viewportLimit[1])) || plan.layers.some(({ w, h }) => w > maxSize || h > maxSize))
         throw new RangeError('Composite frame exceeds the WebGL viewport or texture size limit');
-      const layers = api.layers(plan, world, frame.time ?? world.lookSnapshot?.time ?? 0);
+      const time = frame.time ?? world.lookSnapshot?.time ?? 0;
+      let camera;
+      const drawFrame = plan.needsCamera ? { ...frame, ...captureFrameCamera(frame, view => { camera = view; }) } : frame;
+      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera) : api.layers(plan, world, time);
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
-      composite(world, frame, plan, layers, output, present);
+      composite(world, drawFrame, plan, layers, output, present);
     }
     let renderGraph;
     function presentGraph(world, frame, width, height, output) {
