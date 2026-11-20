@@ -271,6 +271,7 @@
           }
           return previous;
         }
+        if (previous) context.state = stateOf(place.id, previous);
         return place.prepare(context);
       }).then(asset => {
         if (pending !== job) {

@@ -178,7 +178,7 @@
     return {publish,api:Object.freeze({catalog,select,pull,status})};
   }
 
-  function receiver(){
+  function receiver({snapshot:initial}={}){
     let current, state;
     function validateState(value,revision){
       check(allowed(value,['regions'])&&record(value.regions)&&
@@ -214,6 +214,10 @@
       return {status:'applied',cursor:current,actions,actionsComplete:update.actionsComplete};
     }
     const snapshot=()=>current&&freeze({format,version:1,type:'snapshot',cursor:current,state,actions:[],actionsComplete:false});
+    if(initial!==undefined){
+      check(initial?.type==='snapshot','A region receiver needs a saved snapshot');
+      apply(initial);
+    }
     return Object.freeze({apply,snapshot});
   }
   W.regionRevisions=Object.freeze({capture,receiver,format,globalRegion});
