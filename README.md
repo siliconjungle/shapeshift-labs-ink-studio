@@ -318,6 +318,8 @@ Move section planes, depth ranges, and spatial masks across a native render. [In
 
 Compare synchronized scenes with side-by-side playback, a swipe divider, and signed overlays. [Comparison views](docs/comparison-views.md)
 
+Capture independent cameras under a shared budget and compose their feeds into overlays and textured world panels. [Multi-camera render atlases](docs/camera-atlas.md)
+
 Encode categories with patterns and shapes, label scale endpoints, and navigate linked records with a keyboard. [Accessible data encodings](docs/linked-views.md#accessible-encodings)
 
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
@@ -793,7 +795,7 @@ Common rendering controls:
 | `--w`, `--h`, `--out` | Output viewport size and destination. The renderer resolves a lower-resolution pixel grid derived from the scene's detail settings. |
 | `--px 2` | Use two screen pixels per art pixel. In `compare` and `review`, `--px` specifies the scale of the reference. |
 | `--tone stipple\|off` | Enable the stipple preset or turn off the scene's tone settings. |
-| `--ink off`, `--effects off` | Disable authored selective ink or art-pixel effects. |
+| `--ink on\|off\|file.json`, `--effects off` | Choose a [selective ink profile](docs/art-passes.md#selective-ink-and-stable-pixels) or disable art-pixel effects. |
 | `--emissive-finishes off` | Disable authored emissive cores, shaped spill, and size-aware glow. |
 | `--snap`, `--dither-space screen\|world\|object`, `--resolve native\|coverage\|clusters` | Configure camera snapping, dither coordinates, and pixel resolve. Use `--stable off` to disable the scene's stability profile. |
 | `--splat-order center\|surface` | Choose global center ordering or local ordering using the sampled surface plane. |

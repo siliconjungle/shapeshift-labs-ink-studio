@@ -80,8 +80,9 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
             output[q + c] = Math.round(input[q + c] * (1 - weight) + graded[c] * alpha * weight);
         } else if (node.type === 'composite') {
           if (node.layer && !raster) continue;
-          if (raster) FrameComposite.sample(raster, x * raster.w / w, y * raster.h / h, color);
-          else for (let c = 0; c < 4; c++) color[c] = source[q + c];
+          if (raster) {
+            if (!FrameComposite.samplePlaced(raster, x, y, color)) continue;
+          } else for (let c = 0; c < 4; c++) color[c] = source[q + c];
           FrameComposite.blend(output, q, color, weight * (raster?.opacity ?? 1), (raster?.blend ?? node.blend) === 'add');
         } else {
           let X = x, Y = y;

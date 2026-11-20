@@ -3,6 +3,8 @@ const VolumeLight = (() => {
   const clouds = typeof CloudField === 'undefined' ? require('./cloud-field.js') : CloudField;
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = ([a, b, c], [x, y, z]) => [b * z - c * y, c * x - a * z, a * y - b * x];
+  const radians = Math.PI / 180;
   const vector = (value, name) => {
     if (!Array.isArray(value) || value.length !== 3 || !Array.from(value).every(Number.isFinite))
       throw new RangeError(name + ' expects a finite XYZ vector');
@@ -17,6 +19,40 @@ const VolumeLight = (() => {
     const direction = vector(value, name), length = Math.hypot(...direction);
     if (!length || !Number.isFinite(length)) throw new RangeError(name + ' must be nonzero with finite length');
     return direction.map(v => v / length);
+  }
+
+  function cookieRaster(raw, direction, outer, atTime) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TypeError('Spot cookie needs a raster');
+    const { width, height, mask, roll = 0, filter = 'nearest',
+      up = Math.abs(direction[1]) > .95 ? [0,0,1] : [0,1,0] } = raw;
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 ||
+        width * height > 2 ** 20 || !(Array.isArray(mask) || ArrayBuffer.isView(mask)) ||
+        mask.length !== width * height || !['nearest','linear'].includes(filter))
+      throw new TypeError('Spot cookie needs bounded dimensions, a byte mask, and a valid filter');
+    const pixels = Uint8Array.from(mask, value => {
+      if (!Number.isInteger(value) || value < 0 || value > 255) throw new RangeError('Spot cookie mask needs bytes');
+      return value;
+    });
+    const right = unit(cross(direction, unit(up, 'Spot cookie up')), 'Spot cookie right');
+    const vertical = cross(right, direction);
+    const rotation = atTime(roll);
+    if (!Number.isFinite(rotation)) throw new RangeError('Spot cookie roll needs finite degrees');
+    const s = Math.sin(rotation * radians), c = Math.cos(rotation * radians);
+    const scale = .5 / Math.tan(number(raw.angle ?? Math.min(outer,89.9), .01, 89.9, 'Spot cookie angle') * radians);
+    const u = right.map((value,i) => (value * c + vertical[i] * s) * scale * height / width);
+    const v = vertical.map((value,i) => (right[i] * s - value * c) * scale);
+    const at = (x,y) => pixels[clamp(y,0,height-1)*width + clamp(x,0,width-1)];
+    return (toLight, forward) => {
+      if (forward <= 0) return 0;
+      const x = .5 - dot(toLight,u)/forward, y = .5 - dot(toLight,v)/forward;
+      if (x < 0 || x >= 1 || y < 0 || y >= 1) return 0;
+      if (filter === 'nearest') return pixels[Math.floor(y*height)*width + Math.floor(x*width)] / 255;
+      const px = x*width-.5, py = y*height-.5, ix = Math.floor(px), iy = Math.floor(py);
+      const dx = px-ix, dy = py-iy;
+      const top = at(ix,iy)*(1-dx) + at(ix+1,iy)*dx;
+      const bottom = at(ix,iy+1)*(1-dx) + at(ix+1,iy+1)*dx;
+      return (top*(1-dy) + bottom*dy) / 255;
+    };
   }
 
   function lighting(settings, color, palette, { time = 0, localLights = true, localShadows = true, celestialSun } = {}) {
@@ -51,14 +87,20 @@ const VolumeLight = (() => {
       const source = local(light, 'Spot light');
       const outer = number(light.outerAngle ?? 24, .01, 90, 'Spot outer angle');
       const inner = number(light.innerAngle ?? outer * .65, 0, outer, 'Spot inner angle');
-      const radians = Math.PI / 180;
-      return { ...source, direction: unit(atTime(light.direction), 'Spot direction'),
-        innerCos: Math.cos(inner * radians), outerCos: Math.cos(outer * radians) };
+      const direction = unit(atTime(light.direction), 'Spot direction');
+      return { ...source, direction, innerCos: Math.cos(inner * radians), outerCos: Math.cos(outer * radians),
+        surfaceIntensity: number(atTime(light.surfaceIntensity ?? 0), 0, 64, 'Spot surface intensity'),
+        cookie: light.cookie === undefined || light.cookie === false ? undefined :
+          cookieRaster(light.cookie, direction, outer, atTime) };
     }
     const single = localLights && point ? local(point, 'Point light') : null;
-    const locals = localLights ? [...Array.from(points, light => local(light, 'Point light')), ...Array.from(spots, spot)] : [];
+    const pointLights = localLights ? Array.from(points, light => local(light, 'Point light')) : [];
+    const preparedSpots = localLights ? Array.from(spots, spot) :
+      spots.filter(light => light?.surfaceIntensity !== undefined).map(spot);
+    const locals = localLights ? [...pointLights, ...preparedSpots] : [];
     return { ambient: number(ambient, 0, 64, 'Ambient light'), sun: directional, point: single,
-      locals, shadow, localShadows, animatedLocals };
+      locals, surfaceSpots: preparedSpots.filter(light => light.surfaceIntensity), shadow, localShadows,
+      animatedLocals: Boolean(localLights && animatedLocals) };
   }
 
   function occluder(field, { bias = .025, step = .035, steps = 24, safety = .75 } = {}) {
@@ -86,21 +128,21 @@ const VolumeLight = (() => {
   }
 
   const phase = (g, cosine) => (1 - g * g) / Math.pow(1 + g * g - 2 * g * cosine, 1.5);
+  function spotWeight(light, toLight) {
+    if (!light.direction) return 1;
+    const cosine = -dot(toLight, light.direction);
+    if (cosine < light.outerCos) return 0;
+    const u = cosine < light.innerCos ? (cosine - light.outerCos) / (light.innerCos - light.outerCos) : 1;
+    return u * u * (3 - 2 * u) * (light.cookie ? light.cookie(toLight,cosine) : 1);
+  }
+
   function illuminateLocal(light, output, x, y, z, direction, anisotropy, shadow) {
     if (!light.intensity) return;
     const dx = light.at[0] - x, dy = light.at[1] - y, dz = light.at[2] - z;
     const range = Math.hypot(dx, dy, dz);
     if (range >= light.radius || range <= 1e-6) return;
     const toLight = [dx / range, dy / range, dz / range];
-    let weight = 1;
-    if (light.direction) {
-      const cosine = -dot(toLight, light.direction);
-      if (cosine < light.outerCos) return;
-      if (cosine < light.innerCos) {
-        const u = (cosine - light.outerCos) / (light.innerCos - light.outerCos);
-        weight = u * u * (3 - 2 * u);
-      }
-    }
+    const weight = spotWeight(light, toLight);
     if (!weight) return;
     if (shadow && light.castsShadow !== false && shadow(x, y, z, toLight, range)) return;
     const scatter = anisotropy ? phase(anisotropy, dot(direction, toLight)) : 1;
@@ -268,6 +310,6 @@ const VolumeLight = (() => {
     };
   }
 
-  return Object.freeze({ lighting, addLocal, occluder, integrate, history });
+  return Object.freeze({ lighting, spotWeight, addLocal, occluder, integrate, history });
 })();
 if (typeof module !== 'undefined') module.exports = VolumeLight;

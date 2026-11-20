@@ -1,9 +1,11 @@
 const ColorSpace = require('../src/color-space.js');
+const { spotWeight } = require('../src/volume-light.js');
 const { slab } = require('../src/scene-optics.js');
 const linear = ColorSpace.prepare('srgb','srgb-linear');
 const srgb = ColorSpace.prepare('srgb-linear','srgb');
 const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const clamp = n => Math.max(0,Math.min(1,n));
+const spotBias = .025;
 
 function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
   const visible = lights.filter(light => light.intensity && (capture ? light.reflection : light.visible));
@@ -70,12 +72,14 @@ function occludes(sources, origin, direction, stop) {
   return false;
 }
 
-function createLighting(lights, world, data, alpha) {
+function createLighting(lights, world, data, alpha, { spots = [], shadow } = {}) {
   const active = lights.filter(light=>light.intensity>0).map(light=>({
     ...light, extent:Math.hypot(...light.half), tint:linear(light.rgb)
   }));
-  if (!active.length) return null;
-  const sources = active.some(light=>light.shadows) ? staticSources(world,data,alpha) : [];
+  const projectors = spots.map(light => ({ ...light, tint:linear(light.rgb) }));
+  if (!active.length && !projectors.length) return null;
+  const sources = active.some(light=>light.shadows) || (!shadow && spots.some(light=>light.castsShadow))
+    ? staticSources(world,data,alpha) : [];
   const cache = [];
 
   function evaluate(point, normal) {
@@ -102,6 +106,25 @@ function createLighting(lights, world, data, alpha) {
       const steps = light.shadowSteps && light.shadowSteps-1;
       const visibility = steps ? Math.round(steps*lit/total)/steps : lit/total;
       const level = total*visibility*light.intensity/light.points.length;
+      for (let c=0;c<3;c++) rgb[c]+=light.tint[c]*level;
+    }
+    for (const light of projectors) {
+      const offset = light.at.map((value,k) => value-point[k]), distance = Math.hypot(...offset);
+      if (distance <= spotBias || distance >= light.radius) continue;
+      const direction = offset.map(value => value/distance);
+      const receive = dot(normal,direction);
+      if (receive <= 0) continue;
+      const weight = spotWeight(light,direction);
+      if (!weight) continue;
+      if (light.castsShadow && (shadow || sources.length)) {
+        const origin = point.map((value,k) => value+normal[k]*spotBias);
+        const ray = light.at.map((value,k) => value-origin[k]), stop = Math.hypot(...ray);
+        if (stop > spotBias) {
+          const toLight = ray.map(value => value/stop);
+          if (shadow ? shadow(...origin,toLight,stop) : occludes(sources,origin,toLight,stop-spotBias)) continue;
+        }
+      }
+      const level = light.surfaceIntensity*weight*receive*(1-distance/light.radius)**2;
       for (let c=0;c<3;c++) rgb[c]+=light.tint[c]*level;
     }
     return rgb;

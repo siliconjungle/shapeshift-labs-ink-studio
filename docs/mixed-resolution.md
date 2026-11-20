@@ -12,6 +12,7 @@ The output dimensions come from `w` and `h` in Node and the CLI, or `width` and 
 | Layer `resolution` | Uses the same units as the world. It defaults to a supplied raster's native dimensions or to one sample per output pixel for commands and generated sources. |
 | Layer `filter` | `nearest` or `linear`. Filtering takes alpha into account. Defaults to `nearest`. |
 | Layer `opacity` and `blend` | Opacity ranges from 0 to 1. `over` composites in list order and `add` adds the visible color of a layer. |
+| Raster layer `rect` | Optional `[left, top, width, height]` in output pixels. The source scales into this rectangle and clips at the frame edge. |
 
 A positive integer resolution rounds the native width and height up independently. Fixed resolutions fit the full frame, so choose a matching aspect ratio to preserve proportions.
 

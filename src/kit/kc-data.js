@@ -423,6 +423,13 @@
     } catch (error) {
       bad('finish.areaLights', error.message);
     }
+    if (st.finish.volumeLighting) {
+      try {
+        SceneOptics.lighting(st.finish.volumeLighting, st.palette);
+      } catch (error) {
+        bad('finish.volumeLighting', error.message);
+      }
+    }
     try {
       ReflectionProbes.prepare(st.finish.reflectionProbes);
     } catch (error) {
@@ -1356,7 +1363,8 @@
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
       undefined : { detailBudgets, shadowArt });
     const keepLightCasters = AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
-      EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity);
+      EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity) ||
+      st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
     let S, grp;
     function startSculpt() {
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));

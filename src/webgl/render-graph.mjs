@@ -13,7 +13,9 @@ uniform int u_operation;
 uniform bool u_hasMask, u_hasSelect, u_hasRect, u_invert, u_layer, u_linear, u_add, u_enabled;
 uniform float u_opacity, u_feather, u_line, u_frequency, u_phase, u_cubeSize;
 uniform bool u_reflectX;
-uniform vec4 u_rect;
+uniform vec4 u_rect, u_layerDest;
+uniform ivec4 u_layerRegion;
+uniform bool u_layerTopDown;
 uniform vec3 u_volumeAt, u_extent, u_eye;
 uniform vec2 u_depthRange, u_projectionScale;
 uniform mat4 u_view;
@@ -82,7 +84,7 @@ void main() {
     vec3 lookup = (clamp(inputColor.rgb / inputColor.a, 0.0, 1.0) * (u_cubeSize - 1.0) + 0.5) / u_cubeSize;
     color.rgb = mix(inputColor.rgb, texture(u_cube, lookup).rgb * inputColor.a, weight);
   } else if (u_operation == 5) {
-    vec4 over = u_layer ? layerAt(u_source, pixel, u_size, true, u_linear) : texelFetch(u_source, pos, 0);
+    vec4 over = u_layer ? placedLayerAt(u_source, pixel, u_layerDest, u_layerRegion, u_layerTopDown, u_linear) : texelFetch(u_source, pos, 0);
     over *= weight;
     color.a = over.a + inputColor.a * (1.0 - over.a);
     color.rgb = min(vec3(color.a), over.rgb + inputColor.rgb * (u_add ? 1.0 : 1.0 - over.a));
@@ -142,10 +144,11 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         if (!pool.includes(out)) pool.push(out);
         out.resize(w, h);
         const mask = outputs.get(node.mask), table = node.type === 'grade' && api.cube(node);
-        const layer = node.layer && api.layer(node, w, h, world, time, camera);
+        const layer = node.layer && api.layer(node, w, h, world, time, camera, gl);
         const select = node.enabled && ownership && node.select && JSON.stringify(node.select);
         const opacity = node.opacity * (node.layer ? layer?.opacity ?? 0 : 1);
-        if (layer) {
+        if (layer?.gpu) textureUnit(1, layer.gpu.texture);
+        else if (layer) {
           if (layer.w > maxSize || layer.h > maxSize) throw new RangeError('Render graph layer exceeds the WebGL texture size limit');
           textureUnit(1, raster);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, layer.w, layer.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, layer.data);
@@ -183,7 +186,8 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             u_volumeFeather: node.volume.feather, u_eye: camera.eye, u_view: camera.view,
             u_depthRange: camera.depthRange, u_projectionScale: [camera.tangent * camera.aspect, camera.tangent],
             u_ortho: camera.ortho }),
-          u_layer: Boolean(layer), u_linear: layer?.filter === 'linear', u_add: (layer?.blend ?? node.blend) === 'add',
+          u_layer: Boolean(layer), ...(layer && { u_layerDest: layer.dest, u_layerTopDown: !layer.gpu,
+            u_layerRegion: layer.gpu?.region ?? [0, 0, layer.w, layer.h] }), u_linear: layer?.filter === 'linear', u_add: (layer?.blend ?? node.blend) === 'add',
           u_reflectX: node.axis === 'x', u_line: node.line ?? (node.axis === 'x' ? w : h) * .5,
           ...(node.offset && { u_offset: node.offset, u_amplitude: node.amplitude, u_frequency: 2 * Math.PI / node.period,
             u_phase: 2 * Math.PI * ((node.phase + time * node.rate) % 1) })

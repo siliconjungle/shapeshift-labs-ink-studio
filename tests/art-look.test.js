@@ -38,6 +38,50 @@ test('ink distinguishes silhouettes, creases, boundaries and protected palettes'
   assert.equal(frame.use.reduce((a, b) => a + b), size);
 });
 
+test('occlusion silhouettes can replace a boundary at the near side of a depth break', () => {
+  const palette = [0, 0x505050], w = 5, h = 5, size = w*h, center = 12;
+  const depth = new Float32Array(size).fill(9), objectId = new Uint32Array(size).fill(2);
+  depth[center] = 5;
+  objectId[center] = 1;
+  const passes = { depth, objectId, materialId: objectId, materials: [null,'cloth','stone'],
+    normal: new Float32Array(size*3), emission: new Float32Array(size*3), splatId: Uint32Array.from(depth, (_,i)=>i+1) };
+  const render = occlusionSilhouettes => ArtInk.apply({ w,h,rgb:new Uint8Array(size*3).fill(80) },passes,
+    ArtInk.prepare({ occlusionSilhouettes, silhouette:{color:'#d29292'}, boundary:{color:'#49586b'} },palette),palette);
+  assert.equal(render(false).inkMask[center],3);
+  assert.equal(render(true).inkMask[center],1);
+  assert.equal(render(true).inkMask[center+1],0);
+});
+
+test('scoped ink fades in camera depth without changing the subject or coverage in either projection', () => {
+  const palette = [0x172234, 0x7e9298], b = makeBuilder(1,palette);
+  for (const [x,z,label] of [[-2,1,'courier'],[0,-1,'middle'],[2,-4,'far']]) {
+    const first = b.count();
+    b.disc(x,0,z,[0,0,1],.6,.025,b.P[1],2);
+    b.describeSplats(first,b.count(),{ object:label, material:'slate', target:{tags:['shared']} });
+  }
+  const ink = { silhouette:{color:'#101010'}, boundary:false, crease:false, materials:{slate:{silhouette:{color:'#7890a4'}}},
+    targets:[{select:{tag:'shared'},distance:{near:7,far:11}},
+      {select:{object:'courier'},silhouette:{color:'#d76f89',distance:false}},
+      {select:{object:'middle'},silhouette:{color:'#d76f89'}}] };
+  const world = b.finish({ cam:{target:[0,0,0],yaw:0,pitch:0,dist:8}, radius:6, dither:0, look:{ink} });
+  for (const ortho of [false,true]) for (const colored of [false,true]) {
+    const options = { w:110,h:70,px:1,ortho,colored,passes:['splatId','coverage'] };
+    const result = studio.render(world,options), plain = studio.render(world,{...options,ink:{silhouette:false,crease:false,boundary:false}});
+    assert.deepEqual(result.passes.coverage,plain.passes.coverage);
+    const edge = id => result.passes.splatId.findIndex((owner,p)=>owner===id && result.inkMask[p]===1);
+    const courier = edge(1), middle = edge(2);
+    assert(courier>=0 && middle>=0 && result.passes.splatId.includes(3));
+    assert.deepEqual(Array.from(result.rgb.slice(courier*3,courier*3+3)),[215,111,137]);
+    for (let lane=0; lane<3; lane++) {
+      const at=middle*3+lane, source=plain.rgb[at], target=[215,111,137][lane];
+      assert.equal(result.rgb[at],Math.round((source+target)/2));
+    }
+    assert.equal(edge(3),-1);
+  }
+  assert.throws(()=>ArtInk.prepare({distance:{near:8,far:7}},palette),/0 <= near <= far/);
+  assert.throws(()=>ArtInk.prepare({targets:[{select:{name:'courier'}}]},palette),/Invalid target selector/);
+});
+
 test('orthographic snap is optional and anchored positions follow analytic motion', () => {
   const b = makeBuilder(1, [0, 0x445566, 0x8e9fa4]);
   b.disc(0, 0, 0, [0, 0, 1], .18, .04, b.P[1], 3, { k: 6, rg: .45, sp: 1 });

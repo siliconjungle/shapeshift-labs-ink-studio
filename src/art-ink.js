@@ -1,5 +1,6 @@
 /* Art-pixel line classification and palettes. The inputs are top-down render passes. */
 const ArtInk = (() => {
+  const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
   const defaults = Object.freeze({
     silhouette: { steps: 1, litSteps: 0 },
     crease: { steps: 1, litSteps: 0 },
@@ -8,6 +9,7 @@ const ArtInk = (() => {
   const kinds = Object.keys(defaults);
   const luma = (r, g, b) => .30 * r + .55 * g + .15 * b;
   const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
+  const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
 
   function packed(value, palette) {
     if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return Number.parseInt(value.slice(1), 16);
@@ -21,21 +23,48 @@ const ArtInk = (() => {
     return values.map(value => packed(value, palette));
   }
 
-  function lineRule(rule, inherited, palette) {
+  function depthRange(value) {
+    if (value === undefined || value === false) return value;
+    if (!record(value) || Object.keys(value).some(key => key !== 'near' && key !== 'far') ||
+        !Number.isFinite(value.near) || !Number.isFinite(value.far) || value.near < 0 || value.far < value.near)
+      throw new RangeError('Ink distance needs finite scene units with 0 <= near <= far');
+    return { near:value.near, far:value.far };
+  }
+
+  function lineRule(rule, palette) {
     if (rule === false) return null;
-    if (rule === undefined) return inherited;
-    if (rule !== true && (!rule || typeof rule !== 'object' || Array.isArray(rule)))
+    if (rule === true) return {};
+    if (!record(rule))
       throw new TypeError('Ink line rules must be true, false, or an object');
-    const { color, highlight, shadow, steps = inherited?.steps ?? 1, litSteps = inherited?.litSteps ?? 0 } =
-      rule === true ? {} : rule;
-    if (![steps, litSteps].every(Number.isSafeInteger) || Math.abs(steps) > 64 || Math.abs(litSteps) > 64)
+    const { color, highlight, shadow, steps, litSteps, distance } = rule;
+    if (![steps, litSteps].every(value => value === undefined || Number.isSafeInteger(value) && Math.abs(value) <= 64))
       throw new RangeError('Ink steps must be integers between -64 and 64');
     return {
-      steps, litSteps,
-      color: color === undefined ? inherited?.color : packed(color, palette),
-      highlight: highlight === undefined ? inherited?.highlight : packed(highlight, palette),
-      shadow: shadow === undefined ? inherited?.shadow : packed(shadow, palette)
+      ...(steps !== undefined && { steps }), ...(litSteps !== undefined && { litSteps }),
+      ...(color !== undefined && { color:packed(color, palette) }),
+      ...(highlight !== undefined && { highlight:packed(highlight, palette) }),
+      ...(shadow !== undefined && { shadow:packed(shadow, palette) }),
+      ...(distance !== undefined && { distance:depthRange(distance) })
     };
+  }
+
+  function stylePatch(style, palette, ramps) {
+    if (!record(style)) throw new TypeError('Ink styles must be objects');
+    const patch = {};
+    for (const kind of kinds) if (style[kind] !== undefined) patch[kind] = lineRule(style[kind],palette);
+    if (style.distance !== undefined) patch.distance = depthRange(style.distance);
+    if (style.ramp !== undefined) patch.ramp = colors(style.ramp,palette);
+    if (style.palette !== undefined) {
+      if (!ramps.has(style.palette)) throw new RangeError('Unknown reserved palette ' + style.palette);
+      patch.palette = style.palette;
+    }
+    return patch;
+  }
+
+  function applyStyle(base, patch) {
+    const result = { ...base, ...patch };
+    for (const kind of kinds) if (patch[kind]) result[kind] = { ...defaults[kind], ...base[kind], ...patch[kind] };
+    return result;
   }
 
   function prepare(definition, palette) {
@@ -44,26 +73,50 @@ const ArtInk = (() => {
     if (typeof settings !== 'object' || Array.isArray(settings)) throw new TypeError('Expected an ink settings object');
     const {
       depthGap = .09, creaseCosine = .72, litAt = .38, suppressSameMaterial = true,
-      light = [-.5, .8, .45], emissionThreshold = .25, fogThreshold = .25, materials = {}, reserved = {}
+      light = [-.5, .8, .45], emissionThreshold = .25, fogThreshold = .25, materials = {}, reserved = {},
+      occlusionSilhouettes = false, targets = []
     } = settings;
     if (!Number.isFinite(depthGap) || depthGap <= 0 ||
         ![creaseCosine, litAt].every(value => Number.isFinite(value) && Math.abs(value) <= 1) ||
         ![emissionThreshold, fogThreshold].every(v => Number.isFinite(v) && v >= 0 && v <= 1) ||
         !Array.isArray(light) || light.length !== 3 || !light.every(Number.isFinite) || !Math.hypot(...light) ||
-        typeof suppressSameMaterial !== 'boolean')
+        typeof suppressSameMaterial !== 'boolean' || typeof occlusionSilhouettes !== 'boolean')
       throw new RangeError('Invalid selective ink thresholds or light direction');
+    if (!Array.isArray(targets) || targets.length > 128) throw new TypeError('Use an array of up to 128 ink targets');
     const length = Math.hypot(...light);
     const ramps = new Map(Object.entries(reserved).map(([key, value]) => [key, colors(value, palette)]));
-    const base = Object.fromEntries(kinds.map(kind => [kind, lineRule(settings[kind], defaults[kind], palette)]));
-    const styles = new Map(Object.entries(materials).map(([name, style]) => {
-      if (!style || typeof style !== 'object' || Array.isArray(style))
-        throw new TypeError('Material ink style must be an object');
-      if (style.palette !== undefined && !ramps.has(style.palette)) throw new RangeError('Unknown reserved palette ' + style.palette);
-      const rules = Object.fromEntries(kinds.map(kind => [kind, lineRule(style[kind], base[kind], palette)]));
-      return [name, { ...rules, ramp: style.ramp === undefined ? null : colors(style.ramp, palette), palette: style.palette }];
-    }));
-    return { base, styles, ramps, depthGap, creaseCosine, litAt, suppressSameMaterial,
+    const base = applyStyle(defaults, stylePatch(settings,palette,ramps));
+    const styles = new Map(Object.entries(materials).map(([name, style]) => [name, applyStyle(base,stylePatch(style,palette,ramps))]));
+    const scoped = Array.from(targets, target => {
+      if (!record(target) || Object.keys(target).some(key => !['select','distance','ramp','palette',...kinds].includes(key)))
+        throw new TypeError('Ink targets need a selector and line settings');
+      return { select:selectors.prepare(target.select), patch:stylePatch(target,palette,ramps) };
+    });
+    return { base, styles, scoped, ramps, depthGap, creaseCosine, litAt, suppressSameMaterial, occlusionSilhouettes,
       light: light.map(value => value / length), emissionThreshold, fogThreshold };
+  }
+
+  function bind(settings, world) {
+    if (!world || !settings.scoped.length) return null;
+    const { row } = selectors.index(world), cache = new WeakMap();
+    return (i, base) => {
+      if (i < 0 || i >= world.count) return base;
+      const target = row(i);
+      if (!cache.has(target)) {
+        let style = base;
+        for (const { select, patch } of settings.scoped) if (selectors.matches(select,target)) style = applyStyle(style,patch);
+        cache.set(target,style);
+      }
+      return cache.get(target);
+    };
+  }
+
+  function opacity(rule, shared, depth) {
+    if (!rule) return 0;
+    const range = rule.distance ?? shared;
+    if (!range) return 1;
+    if (depth >= range.far) return 0;
+    return depth <= range.near ? 1 : (range.far-depth)/(range.far-range.near);
   }
 
   function closest(ramp, r, g, b) {
@@ -79,11 +132,12 @@ const ArtInk = (() => {
     return best;
   }
 
-  function apply(frame, passes, settings, palette, signals) {
+  function apply(frame, passes, settings, palette, signals, { world, depthOffset = 0 } = {}) {
     const { w, h, rgb } = frame;
     const { depth, normal, objectId, materialId, materials, emission, splatId } = passes;
     const mask = new Uint8Array(w * h);
-    const { base, styles, ramps, depthGap, creaseCosine, litAt, light, suppressSameMaterial } = settings;
+    const { base, styles, ramps, depthGap, creaseCosine, litAt, light, suppressSameMaterial, occlusionSilhouettes } = settings;
+    const scopedStyle = bind(settings,world);
     const byId = materials.map((label, id) => styles.get(String(label ?? id)) || base);
     const source = rgb.slice();
     const outputPalette = Array.from(frame.palette || palette);
@@ -93,7 +147,8 @@ const ArtInk = (() => {
 
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const p = y * w + x, q = p * 3;
-      const id = objectId[p], material = materialId[p], style = byId[material] || base;
+      const id = objectId[p], material = materialId[p], materialStyle = byId[material] || base;
+      const style = scopedStyle ? scopedStyle(splatId[p]-1,materialStyle) : materialStyle;
       let hasSilhouette = false, hasBoundary = false, hasCrease = false;
       if (Number.isFinite(depth[p])) {
         for (let i = 0; i < 4; i++) {
@@ -104,7 +159,12 @@ const ArtInk = (() => {
             continue;
           }
           const dz = depth[z] - depth[p], sameMaterial = material > 0 && materialId[z] === material;
-          const split = (id !== objectId[z] && (id || objectId[z])) || (material !== materialId[z] && (material || materialId[z]));
+          const differentObject = id !== objectId[z] && (id || objectId[z]);
+          if (occlusionSilhouettes && differentObject && dz > depthGap) {
+            hasSilhouette = true;
+            continue;
+          }
+          const split = differentObject || (material !== materialId[z] && (material || materialId[z]));
           if (split) {
             if ((!suppressSameMaterial || !sameMaterial) &&
                 (dz > depthGap || (dz >= -depthGap && p < z))) hasBoundary = true;
@@ -128,8 +188,11 @@ const ArtInk = (() => {
         color = reserved[closest(reserved, r, g, b)];
         mask[p] = 4;
       } else {
-        const type = style.silhouette && hasSilhouette ? 'silhouette' :
-          style.boundary && hasBoundary ? 'boundary' : style.crease && hasCrease ? 'crease' : null;
+        const distance = depth[p]-depthOffset;
+        const silhouette = hasSilhouette && opacity(style.silhouette,style.distance,distance);
+        const boundary = !silhouette && hasBoundary && opacity(style.boundary,style.distance,distance);
+        const crease = !silhouette && !boundary && hasCrease && opacity(style.crease,style.distance,distance);
+        const type = silhouette ? 'silhouette' : boundary ? 'boundary' : crease ? 'crease' : null;
         if (type) {
           const rule = style[type];
           const lit = (normal[q] || normal[q + 1] || normal[q + 2]) ?
@@ -145,6 +208,9 @@ const ArtInk = (() => {
               color = palette[closest(palette, r * gain, g * gain, b * gain)];
             }
           }
+          const weight = silhouette || boundary || crease;
+          if (weight < 1) color = Math.round(r+((color>>16)-r)*weight)*65536 +
+            Math.round(g+((color>>8&255)-g)*weight)*256 + Math.round(b+((color&255)-b)*weight);
           if (color !== ((r << 16) | (g << 8) | b)) mask[p] = type === 'silhouette' ? 1 : type === 'crease' ? 2 : 3;
         }
       }
