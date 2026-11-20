@@ -24,8 +24,4 @@ The projection methods accept an optional session snapshot as their second argum
 
 Use the same typed dataset ID and keys in the session and the scene's data mark layers. When a mark interpolates two records, its pick uses the current interval's source record. `KIT.linkedViews.diorama(spec, env)` returns a scene provider that samples an authored diorama at the session's nonnegative time. A caller can also supply a provider for its own renderer, camera, or simulation.
 
-## Browser controls
-
-Import `mountLinkedViews` from `webgl.mjs` and supply a host element, the Ink Studio toolkit, a session, a `chart` axis configuration, and `scene: { world }`. The world can be a baked scene or a function receiving the current snapshot. Use `map` and `table` for projection settings, `filterBy` for a categorical dropdown, and `timeRange` and `timeStep` to control the time slider. Set the optional `color(ref)` to style chart points and map features. The scene accepts renderer settings through `scene.frame` and an RGB integer through `scene.highlight`.
-
-Click a record, chart point, map feature, or scene mark to select it everywhere. Drag across the chart to select an area. Shift, Control, and Command toggle records in the existing selection. The returned handle offers `render()` to refresh immediately and `destroy()` to release the renderer and subscriptions.
+Pass the result of `session.scene(world)` to the existing renderer. A contribution hit from that renderer can go back into `session.pick` to select the corresponding record in the chart, map, and table projections.
