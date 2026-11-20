@@ -261,7 +261,22 @@ test(
         kit.KIT.material.update(world, binding, { transmission: 0.4, ior: 2 });
         b.draw(world);
         const thick = b.image();
-        return { on, repeat, off, clear, thick, unchanged: world.data.every((v, i) => v === before[i]) };
+        const layer = world.surfaces[binding - 1].settings.layers['control-specular'];
+        layer.mask = { type: 'checker', scale: 0.1 };
+        world.materialRevision++;
+        let rejected = 0;
+        for (let i = 0; i < 2; i++)
+          try {
+            b.draw(world);
+          } catch (error) {
+            if (error.message.includes('Native material-control slots')) rejected++;
+            else throw error;
+          }
+        delete layer.mask;
+        world.materialRevision++;
+        b.draw(world);
+        b.image();
+        return { on, repeat, off, clear, thick, rejected, unchanged: world.data.every((v, i) => v === before[i]) };
       } finally {
         b.close();
       }
@@ -270,5 +285,6 @@ test(
     assert.notEqual(result.on, result.off);
     assert.notEqual(result.clear, result.thick);
     assert(result.unchanged);
+    assert.equal(result.rejected, 2);
   }
 );

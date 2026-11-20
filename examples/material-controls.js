@@ -77,9 +77,9 @@ function materialAtelier({ KIT: K, makeBuilder, makeSculpt, SpriteSurface }) {
       pixelsPerEm: 8
     });
   }
-  label('PORCELAIN', [-3.25, 0.34, 1.1], 0.28);
-  label('BRONZE', [0, 0.34, 1.1], 0.28, colors[18]);
-  label('GLASS', [3.25, 0.34, 1.1], 0.28);
+  label('PORCELAIN', [-3.25, 2.72, -0.18], 0.28);
+  label('BRONZE', [0, 2.72, -0.18], 0.28, colors[18]);
+  label('GLASS', [3.25, 2.72, -0.18], 0.28);
   ['MATTE', 'POLISHED', 'METAL', 'GRAIN', 'COATED', 'CLEAR'].forEach((s, i) =>
     label(s, [-4.6 + i * 1.84, 0.19, 2.54], 0.23)
   );

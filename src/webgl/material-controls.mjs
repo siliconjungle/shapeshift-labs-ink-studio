@@ -163,19 +163,31 @@ export function createMaterialControls(gl, resources, targets, maxSize, kit) {
     }
     if (changed || world.anim?.rig || frame.changedRows?.length !== 0) {
       const rig = world.anim?.rig,
+        rest = world.rest ?? world.anim?.base ?? world.data,
         matrices = new Map();
       for (const i of active) {
         const q = i * 8,
           slot = metadata[q] - 1,
           setting = definitions[slot].settings;
+        const position = [0, 1, 2].map(a => (rest[i * 16 + a] - (setting.origin?.[a] ?? 0)) / (setting.scale ?? 1));
         let n = Array.from(metadata.subarray(q + 1, q + 4)),
-          t = setting.direction ?? [1, 0, 0];
+          t =
+            metadata[q + 5] || metadata[q + 6] || metadata[q + 7]
+              ? Array.from(metadata.subarray(q + 5, q + 8))
+              : (setting.direction ?? [1, 0, 0]);
         const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
         if (typeof t === 'string') t = axes[t] ?? axes.x;
-        else if (typeof t === 'function') t = t(Array.from(world.data.subarray(i * 16, i * 16 + 3)), n);
-        else if (t.type === 'circular')
-          t = K.V.cross(axes[t.axis] ?? axes.y, Array.from(world.data.subarray(i * 16, i * 16 + 3)));
-        else if (!Array.isArray(t)) t = axes.x;
+        else if (typeof t === 'function') t = t(position, n);
+        else if (t.type === 'circular') t = K.V.cross(axes[t.axis] ?? axes.y, position);
+        else if (t.type === 'weave') {
+          const along = axes[t.along] ?? (Array.isArray(t.along) ? t.along : axes.x),
+            across = axes[t.across] ?? (Array.isArray(t.across) ? t.across : axes.y),
+            scale = t.scale ?? 0.2;
+          t =
+            (Math.floor(K.V.dot(along, position) / scale) + Math.floor(K.V.dot(across, position) / scale)) & 1
+              ? along
+              : across;
+        } else if (!Array.isArray(t)) t = axes.x;
         if (!Array.isArray(t) || t.length !== 3 || !t.every(Number.isFinite))
           throw new TypeError('Material direction must produce finite XYZ');
         const part = rig?.free?.[i] ? 0 : rig?.bid?.[i];
@@ -198,7 +210,12 @@ export function createMaterialControls(gl, resources, targets, maxSize, kit) {
     if (frame.materialControls === false || !world.count || !has(world)) return baseActive;
     if (!program && !gl.getExtension('EXT_color_buffer_float'))
       throw new Error('Native material controls require EXT_color_buffer_float');
-    prepare(world, frame);
+    try {
+      prepare(world, frame);
+    } catch (error) {
+      source = null;
+      throw error;
+    }
     program ??= resources.program(vertex, fragment);
     vao ??= resources.allocate('VertexArray');
     output ??= resources.texture();
