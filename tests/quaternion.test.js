@@ -26,3 +26,5 @@ test('SQUAD joins preserve vector angular velocity through changing rotation axe
  const keys=[[[1,0,0],.2],[[0,1,0],1.1],[[1,1,0],1.5],[[0,0,1],.8]].map(([axis,a])=>Q.fromAxisAngle(axis,a)),spline=Q.spline(keys),h=1e-5;
  const velocity=(a,b)=>{const q=Q.mul(Q.inverse(a),b),w=q[3]<0?-1:1;return q.slice(0,3).map(v=>2*v*w/h);};for(const u of [1/3,2/3])vec(velocity(spline.sample(u-h),spline.sample(u)),velocity(spline.sample(u),spline.sample(u+h)),.002);
 });
+
+test('overflowing axis norms fail instead of producing nonunit rotations',()=>{assert.throws(()=>Q.fromAxisAngle([Number.MAX_VALUE,Number.MAX_VALUE,0],1));});

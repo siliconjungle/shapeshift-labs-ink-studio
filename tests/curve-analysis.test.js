@@ -65,3 +65,8 @@ test('interpolated camera rails use the same sampled curve without a second smoo
 test('CLI exports analysis for adaptive families and interpolated control points',()=>{
  const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cp=require('node:child_process'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-analysis-'));try{const file=path.join(dir,'curve.json');fs.writeFileSync(file,JSON.stringify({points:[[0,0,0],[2,1,0],[4,0,0]],options:{adaptive:{tolerance:.005}}}));const report=JSON.parse(cp.execFileSync(process.execPath,['cli/ink-studio.js','curve',file,'--closest','1,2,0','--curvature','1'],{cwd:path.resolve(__dirname,'..')}));assert(report.closest.distance>0);assert(report.curvature.defined);assert.equal(report.sampling.mode,'adaptive');assert.equal(report.points.length,report.parameters.length);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('curvature normals remain scale invariant and adaptive interpolation has its own budget',()=>{
+ const circle=C.create({type:'superellipse',radii:[1e-6,1e-6],exponent:2,scale:1e-4,segments:32}),bend=circle.curvature(0);near(bend.value,1e10,2e4);vec(bend.normal,[-1,0,0],1e-5);
+ const points=Array.from({length:400},(_,i)=>[i/100,0,0]),path=C.interpolate(points,{adaptive:{tolerance:.005}});assert(!path.sampling.limited);near(path.length,3.99);assert(path.points.length<450);
+});

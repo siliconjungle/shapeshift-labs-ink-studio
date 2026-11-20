@@ -15,6 +15,10 @@
     (Array.isArray(p) || ArrayBuffer.isView(p)) &&
     Array.from(p).every(v => Number.isFinite(v) && Math.abs(v) <= 1e9);
   const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const unit = v => {
+    const length = V.len(v);
+    return length > 0 ? V.mul(v, 1 / length) : [0, 0, 0];
+  };
   const source = input =>
     input && typeof input.at === 'function' && Array.isArray(input.points) ? input : C.path(input);
   function metadata(input) {
@@ -140,7 +144,7 @@
       tan = defined ? V.mul(d1, 1 / speed) : p.at(where.along).tan;
       value = defined ? V.len(V.cross(d1, d2)) / speed ** 3 : null;
       const acceleration = V.sub(d2, V.mul(tan, V.dot(d2, tan)));
-      normal = value > 1e-10 ? V.norm(acceleration) : null;
+      normal = value > 1e-10 ? unit(acceleration) : null;
     } else {
       method = 'circumcircle';
       const n = p.points.length - (p.closed ? 1 : 0);
@@ -157,11 +161,11 @@
             den = V.len(ab) * V.len(bc) * V.len(ac);
           if (V.len(ac) <= 1e-10 * (V.len(ab) + V.len(bc))) return { value: null, normal: null, defined: false };
           const value = (2 * V.len(V.cross(ab, bc))) / den,
-            T = V.norm(ac),
-            delta = V.sub(V.norm(bc), V.norm(ab));
+            T = unit(ac),
+            delta = V.sub(unit(bc), unit(ab));
           return {
             value,
-            normal: value > 1e-10 ? V.norm(V.sub(delta, V.mul(T, V.dot(delta, T)))) : null,
+            normal: value > 1e-10 ? unit(V.sub(delta, V.mul(T, V.dot(delta, T)))) : null,
             defined: true
           };
         });
@@ -170,7 +174,7 @@
       defined = a.defined && b.defined;
       value = defined ? a.value + (b.value - a.value) * where.fraction : null;
       normal =
-        defined && value > 1e-10 ? V.norm(V.lerp(a.normal ?? [0, 0, 0], b.normal ?? [0, 0, 0], where.fraction)) : null;
+        defined && value > 1e-10 ? unit(V.lerp(a.normal ?? [0, 0, 0], b.normal ?? [0, 0, 0], where.fraction)) : null;
       const at = p.at(where.along);
       position = at.p;
       tan = at.tan;
@@ -180,6 +184,7 @@
       value = null;
       normal = null;
     }
+    if (normal && V.len(normal) === 0) normal = null;
     return {
       p: position,
       tan,
@@ -281,7 +286,7 @@
         const x = V.sub(positions[i], positions[i - 1]),
           y = V.sub(positions[i + 1], positions[i]);
         if (V.len(x) > 1e-12 && V.len(y) > 1e-12)
-          turn = Math.max(turn, Math.acos(clamp(V.dot(V.norm(x), V.norm(y)), -1, 1)));
+          turn = Math.max(turn, Math.acos(clamp(V.dot(unit(x), unit(y)), -1, 1)));
       }
       const split = error > tolerance || turn > angle || V.len(chord) > maxSegmentLength;
       if (split && depth < maxDepth && leaves < maxSegments) {
@@ -358,7 +363,8 @@
         tension <= 1 &&
         Number.isSafeInteger(segmentsPerSpan) &&
         segmentsPerSpan >= 1 &&
-        segmentsPerSpan * spans <= 4096,
+        segmentsPerSpan <= 4096 &&
+        (options.adaptive !== undefined || segmentsPerSpan * spans <= 4096),
       'invalid interpolation parameters or segment budget'
     );
     const lengths = Array.from({ length: spans }, (_, i) => V.dist(points[i], points[(i + 1) % n]) ** alpha),

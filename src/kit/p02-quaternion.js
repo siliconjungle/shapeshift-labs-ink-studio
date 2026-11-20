@@ -146,7 +146,10 @@
     mul: (a, b) => normalize(product(normalize(a), normalize(b))),
     inverse: q => conjugate(normalize(q)),
     fromAxisAngle(axis, angle) {
-      check(vector(axis, 3) && V.len(axis) > 1e-12 && Number.isFinite(angle), 'invalid rotation axis or angle');
+      check(
+        vector(axis, 3) && V.len(axis) > 1e-12 && Number.isFinite(V.len(axis)) && Number.isFinite(angle),
+        'invalid rotation axis or angle'
+      );
       const half = angle / 2;
       return [...Array.from(axis, v => (v / V.len(axis)) * Math.sin(half)), Math.cos(half)];
     },
