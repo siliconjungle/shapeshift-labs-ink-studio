@@ -174,8 +174,8 @@
       read(tick){
         try {
           if(!run){
-            run=R.create(world,{...options,checkpoint:log?.origin,traceSteps:0});
-            if(log)run.schedule(log.commands);
+            const config={...options,traceSteps:0};
+            run=log?R.openRecording(log,config):R.create(world,config);
           }
           run.advance(tick);
         } catch(error) {

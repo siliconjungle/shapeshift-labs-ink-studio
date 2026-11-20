@@ -58,6 +58,35 @@ const branch = KIT.world.runtime.create(snapshot.world, { checkpoint: snapshot }
 `save` also accepts a recording. `load` verifies the block representation.
 The runtime validates the restored state against the world before advancing.
 
+## Reproducible run records
+
+`sim run`, `sim resume`, and `sim fork` retain execution evidence when
+you pass `--record FILE`. Add `--observations PLAN.json` to sample named
+query fields at scheduled ticks. The plan uses the same `ticks` and
+`observations` as [scheduled observations](headless-worlds.md#scheduled-observations-and-parameter-sweeps).
+Both standalone run JSON and block-backed recording references carry the
+evidence.
+
+| Recorded evidence | Contents |
+| --- | --- |
+| Scene | World ID, random seed, and the content fingerprint of each committed manifest revision with its tick and time. The checkpoints keep the full starting and ending manifests. |
+| Submissions | The committed tick at which each batch of user commands was queued. Replay submits it at the same boundary to preserve ordering with event-routed commands. |
+| Applied actions | The commands that ran at each tick and their order, including authored, timeline, and event-routed commands. Future commands remain in the ending checkpoint. |
+| Simulation timing | Fixed timestep, tick and time range, system schedules, actual solver call counts and simulated durations, and a fingerprint of the ordered solver phases. |
+| Observations | Sampled field values, statuses, units, and tick times. A run records the samples that fall within its captured tick range. |
+
+`ink-studio sim verify RUN.json` replays the recording and reports the
+first discrepancy in the evidence or ending checkpoint. It exits with
+status 2 when replay diverges. Use `--workers N` to verify on Node
+workers. `sim replay` also checks the evidence before returning a run.
+Older records continue to verify against their ending checkpoint.
+
+In JavaScript, pass `{ recordRun: true }` to `KIT.world.runtime.create`,
+or pass the observation plan as `recordRun`. Save `run.recording()`.
+Use `KIT.world.runtime.verify(log, options)` for a structured report
+or `verifyAsync(log, options)` with browser workers. Custom systems use
+the same implementation factories during capture and verification.
+
 ## Interactive checkpoint branching
 
 `KIT.world.branches.create(source, options)` accepts a world manifest,

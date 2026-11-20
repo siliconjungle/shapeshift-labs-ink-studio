@@ -444,6 +444,8 @@
 
   K.cloth = (B, o) => {
     o = o || {};
+    const sceneWind = o.wind === 'scene';
+    if (sceneWind) o = { ...o, wind: undefined };
     const nu = o.nu || 22,
       nv = o.nv || 14,
       at = o.at || [0, 2, 0],
@@ -574,16 +576,18 @@
         put(st, first + m, x, y, z, nn, R, thin, cols[ci]);
       }
     }
+    let presented, windOptions, hasSceneWind;
     const sys = {
       sim,
       first,
       nu,
       nv,
       shared: !!o.sim,
+      independentCloth: !o.sim,
       count: dabs.length,
       restPose: () => Float32Array.from(rest.flat()),
       makeProxy({ pins = () => false, pinAt, ...options } = {}) {
-        const solver = K.xpbd.sim({ ...o, ...options });
+        const solver = K.xpbd.sim({ ...o, ...(sceneWind && {wind:sim.wind}), ...options });
         linkGrid(solver, pins, pinAt, grid(0));
         return solver;
       },
@@ -592,8 +596,18 @@
           throw new TypeError('A cloth pose needs one finite XYZ position per point');
         draw(st, positions, 0, false);
       },
+      bind(st) { if (sceneWind) st.usesSceneWind = true; },
       update(dt, t, st) {
+        if (sceneWind && st.sceneWind && (!hasSceneWind || windOptions !== st.motionEnvironment)) {
+          windOptions = st.motionEnvironment;
+          sim.wind = st.sceneWind();
+          hasSceneWind = true;
+        }
         if (!sys.shared) sim.step(dt, t);
+        const settings = st.motionSettings?.(), rate = settings?.cadence.cloth;
+        const sample = ArtDirection.time(settings, t, 'cloth');
+        if (rate && sample === presented) return;
+        presented = sample;
         draw(st, sim.X, base0, sim.torn);
       }
     };

@@ -114,7 +114,7 @@ function depthBounds(row, view) {
 export function createDepthSorter() {
   const counts = new Uint32Array(65536);
   let depth, keys, order;
-  return function sort(world, view, time, instances, placements, stabilize) {
+  return function sort(world, view, time, instances, placements, stabilize, rainClocks = [time,time], rainWind = [0,0]) {
     const { count, data } = world;
     const stride = instances ? 2 : 1;
     const total = count + (instances?.reduce((sum,row) => sum + row.asset.count, 0) ?? 0);
@@ -134,8 +134,14 @@ export function createDepthSorter() {
       const phase = data[o + 12], speed = data[o + 13], range = data[o + 14];
       let x = data[o], y = data[o + 1], z = data[o + 2];
       if (kind === 2 || kind === 3) {
-        const f = time * speed / range + phase;
-        y += (kind === 2 ? -1 : 1) * (f - Math.floor(f)) * range;
+        const clock = kind === 2 ? rainClocks[(Math.round(data[o + 11]) & 8192) ? 1 : 0] : time;
+        const f = clock * speed / range + phase;
+        const flight = (f - Math.floor(f)) * range;
+        y += kind === 2 ? -flight : flight;
+        if (kind === 2) {
+          x += rainWind[0] * flight / Math.max(speed, .00001);
+          z += rainWind[1] * flight / Math.max(speed, .00001);
+        }
       } else if (kind === 5) {
         const theta = time * speed, c = Math.cos(theta), s = Math.sin(theta);
         const nx = c * x + s * z;

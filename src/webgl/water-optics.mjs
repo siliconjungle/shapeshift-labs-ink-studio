@@ -47,7 +47,7 @@ uniform mat4 u_waterView;
 uniform vec3 u_waterEye;
 uniform vec3 u_waterCamera;
 uniform vec4 u_arrivalPlane;
-uniform float u_waterTime;
+uniform float u_waterTime, u_waterWindGain;
 
 // Captures reuse the same body/style index in the column and atlas layouts.
 uniform sampler2D u_waterReflections;
@@ -137,7 +137,7 @@ void waterSurface(int body, vec3 p, vec3 ray, vec4 column, WaterStyle style, ino
     reflection = f0 > 0.0 ? f0 + (1.0 - f0) * pow(1.0 - abs(ray.y), 5.0) : 0.0;
   }
   float opacity = clamp(reflection + foam, 0.0, 1.0);
-  light += through * mix(waterReflectedColor(style, p, ripple), vec3(0.9, 0.98, 0.94), foam) * opacity;
+  light += through * mix(waterReflectedColor(style, p, ripple * (1.0 + u_waterWindGain)), vec3(0.9, 0.98, 0.94), foam) * opacity;
   through *= 1.0 - opacity;
   #ifdef WATER_ATLAS
   float refraction = style.deep.w;

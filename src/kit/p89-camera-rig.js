@@ -116,7 +116,8 @@
     const dist = channels.dist ?? (length > 1e-8 ? length : shot.dist ?? base.dist);
     const fov = channels.fov ?? shot.fov ?? base.fov;
     const projection = channels.projection ?? shot.projection;
-    return { target, yaw, pitch, dist, fov, ortho: projection === undefined ? base.ortho : projection === 'orthographic' };
+    const sensorHeight = shot.sensorHeight ?? (shot.focalLength !== undefined ? CameraStaging.defaultSensorHeight : undefined);
+    return { target, yaw, pitch, dist, fov, ...(sensorHeight !== undefined && { sensorHeight }), ortho: projection === undefined ? base.ortho : projection === 'orthographic' };
   }
 
   function blendCamera(a, b, u, useIncomingProjection) {
@@ -128,15 +129,20 @@
     return { target: a.target.map((x, i) => mix(x, b.target[i], u)), dist,
       yaw: a.yaw + angle(b.yaw-a.yaw)*u, pitch: mix(a.pitch, b.pitch, u),
       fov: 2*Math.atan(logMix(height(a), height(b), u)/dist),
+      ...((a.sensorHeight !== undefined || b.sensorHeight !== undefined) && {
+        sensorHeight: mix(a.sensorHeight ?? CameraStaging.defaultSensorHeight, b.sensorHeight ?? CameraStaging.defaultSensorHeight, u)
+      }),
       ortho: useIncomingProjection ? b.ortho : a.ortho };
   }
 
-  function avoid(camera, settings, ctx, exclude) {
+  function avoid(camera, settings, ctx, exclude, orbit) {
     if (!settings || !ctx.clearance && !ctx.occlusion) return { camera };
     const { target, dist, yaw, pitch } = camera, { radius, start, minDistance, yawOffsets } = settings;
     let best, turn = 0;
     for (const offset of yawOffsets) {
-      const direction = back(yaw + offset, pitch);
+      const candidate = yaw + offset;
+      if (offset && Math.abs(CameraStaging.constrain({ ...camera, yaw: candidate }, orbit).yaw - candidate) > 1e-9) continue;
+      const direction = back(candidate, pitch);
       const origin = V.mad(target, direction, Math.min(start, dist)), length = Math.max(0, dist-start);
       let available = length;
       if (length && ctx.clearance) {
@@ -156,7 +162,7 @@
       if (available === length) break;
     }
     const free = Math.min(start, dist) + best;
-    const resolved = Math.max(Math.min(dist, minDistance), free);
+    const resolved = Math.max(Math.min(dist, Math.max(minDistance, orbit?.distance?.[0] ?? 0)), free);
     return { camera: { ...camera, yaw: yaw + turn, dist: resolved, fov: 2*Math.atan(height(camera)/resolved) },
       avoidance: { requested: dist, available: free, shortened: resolved < dist - 1e-8, yawOffset: turn,
         occluded: free < resolved - 1e-8 } };
@@ -164,20 +170,22 @@
 
   function compile(definition, { parts } = {}) {
     const root = freeze(clone(definition));
-    check(keys(root, ['targets', 'rails', 'shots', 'sequence', 'avoidance', 'duration']), 'invalid definition');
+    check(keys(root, ['targets', 'rails', 'shots', 'sequence', 'avoidance', 'orbit', 'duration']), 'invalid definition');
+    const orbit = CameraStaging.orbit(root.orbit, minimumArm);
     const targets = catalog(root.targets ?? {}, 'target', (row, id) => target(row, id, parts));
     const rails = catalog(root.rails ?? {}, 'rail', rail);
     const shots = catalog(root.shots, 'shot', (row, id) => {
-      const { target, rail, eye, progress: travel, dist, yaw, pitch, fov, projection } = row ?? {};
-      check(keys(row, ['target', 'rail', 'progress', 'eye', 'dist', 'yaw', 'pitch', 'fov', 'projection']) &&
+      const { target, rail, eye, progress: travel, dist, yaw, pitch, fov, focalLength, sensorHeight, projection } = row ?? {};
+      check(keys(row, ['target', 'rail', 'progress', 'eye', 'dist', 'yaw', 'pitch', 'fov', 'focalLength', 'sensorHeight', 'projection']) &&
         (target === undefined || xyz(target) || targets.has(target)) && (rail === undefined || rails.has(rail)) &&
         (eye === undefined || xyz(eye) && rail === undefined) && (travel === undefined || rail !== undefined) &&
         (!(rail || eye) || [dist, yaw, pitch].every(n => n === undefined)) &&
         (dist === undefined || finite(dist) && dist >= minimumArm) &&
         (yaw === undefined || finite(yaw)) && (pitch === undefined || range(pitch, -Math.PI/2, Math.PI/2)) &&
-        (fov === undefined || fovOK(fov)) && (projection === undefined || projectionOK(projection)), 'invalid shot ' + id);
+        (fov === undefined || fovOK(fov) && focalLength === undefined) &&
+        (sensorHeight === undefined || focalLength !== undefined) && (projection === undefined || projectionOK(projection)), 'invalid shot ' + id);
       const focus = targets.get(target) ?? target;
-      return { ...row, focus, path: rails.get(rail), progress: progress(travel ?? 0, id) };
+      return { ...row, fov: focalLength === undefined ? fov : CameraStaging.fieldOfView(focalLength, sensorHeight), focus, path: rails.get(rail), progress: progress(travel ?? 0, id) };
     });
     check(shots.size > 0, 'at least one shot is required');
     const sequence = shotSequence(root.sequence, shots);
@@ -209,7 +217,8 @@
       check(xyz(camera.target) && finite(camera.yaw) && finite(camera.pitch) && finite(camera.dist) && camera.dist > 0 &&
         fovOK(camera.fov) && finite(height(camera)), 'sampled camera needs a finite pose and lens');
       const exclude = [...new Set([shot.focus, source?.focus].map(focus => focus?.entity ?? focus?.part).filter(Boolean))];
-      const result = avoid(camera, avoidance, ctx, exclude);
+      camera = CameraStaging.constrain(camera, orbit);
+      const result = avoid(camera, avoidance, ctx, exclude, orbit);
       return { time, shot: incoming, ...result, ...(blend && { blend }) };
     }
     return Object.freeze({ duration, shots: Object.freeze([...shots.keys()]), sample, avoidance: freeze(avoidance) });
@@ -258,5 +267,6 @@
     return world;
   }
 
+  K.cameraStaging = CameraStaging;
   K.cameraRig = Object.freeze({ compile, channel, bind, defaultFov, fovOK, projectionOK });
 })(KIT);

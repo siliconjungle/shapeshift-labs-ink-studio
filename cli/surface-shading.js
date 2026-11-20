@@ -76,6 +76,8 @@ function surfaceShading(world, options, camera) {
     footprint,
     stableDetail: camera.detail,
     time,
+    waterTime: camera.waterTime,
+    waterWind: camera.waterWind,
     weather: camera.weather,
     rain: camera.rain,
     visibility: 1,

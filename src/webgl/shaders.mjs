@@ -28,7 +28,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, relighting = false, optical = false, stableDetail, cutaway
+  environment = false, relighting = false, optical = false, stableDetail, cutaway, airflow
 } = {}) {
   const coverageStride = coverageRules?.coverageStride ?? 4;
   const continuousMode = coverageRules?.continuousCoverage ?? 1, softMode = coverageRules?.softCoverage ?? 2;
@@ -42,6 +42,10 @@ uniform mat4 u_view, u_proj;
 uniform bool u_geometryDepth;
 uniform vec2 u_viewport;
 uniform float u_focal, u_time, u_scale, u_snap, u_dilate, u_near, u_ortho, u_idx;
+uniform bool u_motionCadence, u_motionWind;
+uniform vec4 u_effectTimes, u_effectWind;
+uniform vec2 u_waterAndRainTime, u_rainWind; uniform float u_emissiveWind;
+${airflow?.glsl ?? ''}
 uniform float u_paintMarker; uniform int u_afterimageStart; flat out int v_paint;
 uniform int u_splatCoverage; uniform float u_materialGridScale; flat out int v_coverage;
 ${stableDetail ? `uniform vec2 u_detailTexture, u_detailGeometry;
@@ -157,30 +161,40 @@ void main(){
       else color *= 0.5; }
     else if (veg && eco.b > hb * 0.8 + 0.1 && up < 1.2) { float lm = dot(color, vec3(0.3, 0.59, 0.11)); veg = false; green = false; color = lm < 0.45 ? vec3(0.54, 0.52, 0.58) : lm < 0.62 ? vec3(0.56, 0.77, 0.96) : vec3(0.96, 0.95, 0.92); }   // rime on the grass
   }
-  if (kind == 1) { alpha *= 0.62 + 0.38 * sin(u_time * sp + ph); snap = u_snap > 0.5; }                      // twinkle
-  else if (kind == 2) { float pr = fract(u_time * sp / rg + ph); pos.y -= pr * rg; alpha *= 1.0 - pr * pr; sc *= 1.0 + pr * ex; }   // fall
+  bool fabric = (kraw & 6144) == 4096;
+  float foliageTime = u_motionCadence ? u_effectTimes.x : u_time;
+  float bendTime = fabric && u_motionCadence ? u_effectTimes.y : foliageTime;
+  float fallTime = u_motionCadence ? ((kraw & 8192) != 0 ? u_waterAndRainTime.y : u_effectTimes.z) : u_time;
+  float flickerTime = u_motionCadence ? u_effectTimes.w : u_time;
+  float waterTime = u_motionCadence ? u_waterAndRainTime.x : u_time;
+  if (kind == 1) { alpha *= 0.62 + 0.38 * sin(flickerTime * sp + ph); snap = u_snap > 0.5; }                      // twinkle
+  else if (kind == 2) { float pr = fract(fallTime * sp / rg + ph); pos.y -= pr * rg; alpha *= 1.0 - pr * pr; sc *= 1.0 + pr * ex;
+    pos.xz += u_rainWind * (pr * rg / max(sp, 0.00001)); }   // fall
   else if (kind == 3) { float pr = fract(u_time * sp / rg + ph); pos.y += pr * rg; pos.x += sin(pr * 7.0 + ph * 50.0) * 0.25 * pr;
                         alpha *= (1.0 - pr) * smoothstep(0.0, 0.1, pr); sc *= 0.6 + pr * ex; }                 // rise
-  else if (kind == 4) { color += vec3(0.3) * smoothstep(0.75, 1.0, sin(u_time * sp + ph)); }                   // shimmer
+  else if (kind == 4) { color += vec3(0.3) * smoothstep(0.75, 1.0, sin(waterTime * sp + ph)); }                   // shimmer
   else if (kind == 5) { float a = u_time * sp, c = cos(a), s = sin(a);
                         mat3 R = mat3(c, 0.0, -s,  0.0, 1.0, 0.0,  s, 0.0, c); pos = R * pos; cov = R * cov * transpose(R); FM = R; } // orbit
   else if (kind == 6) { pos.y += sin(u_time * sp + ph) * rg; }                                                 // bob
-  else if (kind == 7) { alpha *= 0.82 + 0.18 * sin(u_time * sp + ph); }                                        // glow
+  else if (kind == 7) { alpha *= 0.82 + 0.18 * sin(flickerTime * sp + ph); }                                        // glow
   else if (kind == 8) { float f = 0.2 + 0.8 * abs(sin(u_time * sp + ph)); pos.x = rg + (pos.x - rg) * f; pos.z = ex + (pos.z - ex) * f; pos.y += 0.14 * sin(u_time * sp * 0.31 + ph); }   // flap about a pivot
   else if (kind == 9) { pos.xz *= 1.0 + rg * sin(u_time * sp + ph - pos.y * ex); }                                                         // swell about the centre line
   else if (kind == 10) { float q = length(pos.xz), w = min(1.0, q * 0.22); pos.y += rg * w * sin(u_time * sp + ph - q * ex);
                          pos.xz += rg * 0.6 * w * vec2(-pos.z, pos.x) / max(q, 0.01) * sin(u_time * sp * 0.7 + ph - q * ex * 0.6); }                 // writhe outward from the centre
-  else if (kind == 11) { pos.x += rg * sin(u_time * sp + pos.y * 1.3 + pos.z * 0.9 + ph); pos.y += rg * 0.6 * sin(u_time * sp * 1.3 + pos.x * 1.1 + ph);
+  else if (kind == 11) {
+    ${airflow ? 'if (u_motionWind && (kraw & 8192) != 0) pos.xz += (fabric ? u_effectWind.zw : u_effectWind.xy) * airflowBend(bendTime, ph, sp, rg); else' : ''}
+    { pos.x += rg * sin(bendTime * sp + pos.y * 1.3 + pos.z * 0.9 + ph); pos.y += rg * 0.6 * sin(bendTime * sp * 1.3 + pos.x * 1.1 + ph); }
     vec2 dv = pos.xz - u_actor.xy; float q = length(dv); if (u_actor.z > 0.0 && q < u_actor.z && pos.y - u_actor.w < 2.3 && pos.y - u_actor.w > -0.4) { float pf = 1.0 - q / u_actor.z; pos.xz += dv / max(q, 0.05) * pf * pf * 0.5; pos.y -= pf * pf * 0.07; } }
   else if (kind == 12 || kind == 13) { int bi = int(ph + 0.5) * 3; ivec2 bq = ivec2(bi % 768, bi / 768); vec4 b0 = texelFetch(u_bones, bq, 0), b1 = texelFetch(u_bones, bq + ivec2(1, 0), 0), b2 = texelFetch(u_bones, bq + ivec2(2, 0), 0);   // carried by a bone: the splat is kept as it was made, and turned and moved here
                          mat3 A = mat3(b0.x, b1.x, b2.x, b0.y, b1.y, b2.y, b0.z, b1.z, b2.z); vec3 p1 = A * pos + vec3(b0.w, b1.w, b2.w); cov = A * cov * transpose(A); FM = A;
                          if (rg > 0.0) { int ci = int(sp + 0.5) * 3; ivec2 cq = ivec2(ci % 768, ci / 768); vec4 c0 = texelFetch(u_bones, cq, 0), c1 = texelFetch(u_bones, cq + ivec2(1, 0), 0), c2 = texelFetch(u_bones, cq + ivec2(2, 0), 0);   // shared with a second bone: its place is blended
                            p1 = mix(p1, vec3(dot(c0.xyz, pos) + c0.w, dot(c1.xyz, pos) + c1.w, dot(c2.xyz, pos) + c2.w), rg); }
                          pos = p1;
-                         if (kind == 13) { pos.x += 0.022 * sin(u_time * 1.9 + pos.y * 1.3 + pos.z * 0.9 + 1.0); pos.y += 0.0132 * sin(u_time * 2.47 + pos.x * 1.1 + 1.0); } }   /* carried, and then stirred by the wind as hair and grass are */
-  else if (kind == 15) { float pr = fract(u_time * sp / rg + ph); pos.y -= pr * rg; pos.x += sin(pr * 11.0 + ph * 40.0) * ex; pos.z += cos(pr * 7.0 + ph * 23.0) * ex * 0.6;   // flutter down: a leaf or a flake, swinging as it falls
+                         if (kind == 13) { pos.x += 0.022 * sin(foliageTime * 1.9 + pos.y * 1.3 + pos.z * 0.9 + 1.0); pos.y += 0.0132 * sin(foliageTime * 2.47 + pos.x * 1.1 + 1.0); } }   /* carried, and then stirred by the wind as hair and grass are */
+  else if (kind == 15) { float pr = fract(foliageTime * sp / rg + ph); pos.y -= pr * rg; pos.x += sin(pr * 11.0 + ph * 40.0) * ex; pos.z += cos(pr * 7.0 + ph * 23.0) * ex * 0.6;   // flutter down: a leaf or a flake, swinging as it falls
                          alpha *= smoothstep(0.0, 0.05, pr) * (1.0 - smoothstep(0.92, 1.0, pr)); }
-  else if (kind == 14) { float hg = max(0.0, pos.y - ex); pos.x += rg * hg * sin(u_time * sp + ph); pos.z += rg * 0.6 * hg * sin(u_time * sp * 0.73 + ph * 1.7); }   // sways as a whole from its foot (a placed copy: ex is where its foot is)
+  else if (kind == 14) { float hg = max(0.0, pos.y - ex); pos.x += rg * hg * sin(foliageTime * sp + ph); pos.z += rg * 0.6 * hg * sin(foliageTime * sp * 0.73 + ph * 1.7); }   // sways as a whole from its foot (a placed copy: ex is where its foot is)
+  if ((flags & 2) != 0 && (kind == 1 || (kind == 7 && ex != -7.0))) alpha *= 1.0 - u_emissiveWind;
   if ((flags & 32) != 0) { float gt = (u_time - u_born.x) * u_born.y; if (u_born.w > 0.0) gt = mod(gt, u_born.w); float gs = clamp((gt - ex) / u_born.z, 0.0, 1.0);   // born: not there till its time, then it grows to its size
                            if (gs <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; } sc *= gs * (2.0 - gs); }
   else if ((flags & 64) != 0) { float wt = clamp(((u_time - u_born.x) * u_born.y - ex) / 2.0, 0.0, 1.0); color = mix(color, color * vec3(0.58, 0.62, 0.7), wt); }   // wet: from its time on it darkens, as rain soaks it

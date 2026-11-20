@@ -179,10 +179,11 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
     if (!reflection) return;
     let reflected;
     if (style.reflection && options?.reflection) {
-      const x = origin[0] + direction[0]*t, z = origin[2] + direction[2]*t, time = options.time ?? 0;
+      const x = origin[0] + direction[0]*t, z = origin[2] + direction[2]*t, time = options.waterTime ?? options.time ?? 0;
       const flow=options.reflectionCurrent?.(x,surface-1e-5,z)?.current;
       const px=x-(flow?.[0]??0)*time*.25,pz=z-(flow?.[2]??0)*time*.25;
-      const dx = Math.sin(px*3.1 + pz*1.9 + time*2), dz = Math.sin(-px*1.7 + pz*4.4 - time*1.6);
+      const swell = 1 + (options.waterWind?.(x,surface,z) ?? 0);
+      const dx = swell * Math.sin(px*3.1 + pz*1.9 + time*2), dz = swell * Math.sin(-px*1.7 + pz*4.4 - time*1.6);
       reflected = options.reflection(style.reflection, options.reflectionX, options.reflectionY, dx, 0, dz, options.reflectionBackground);
     }
     for (let channel = 0; channel < 3; channel++) {

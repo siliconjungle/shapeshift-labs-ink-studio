@@ -46,18 +46,25 @@ const EnvironmentFrame = (() => {
     const wind = airflow.frame(flow ? flow.open(skyTime) : fallbackWind);
     const localWind = flow && (windConfig?.cover || weatherWindHere || (windConfig && weather?.gustHere) || exposure?.wind)
       ? (time,x,z,_fallback,y=0) => flow.sample(x,y,z,time) : weatherWindHere;
-    const airAt = (x,y,z) => localWind ? airflow.frame(localWind(skyTime,x,z,wind.velocity,y)) : wind;
     const windAt = flow ? flow.open : weatherWindAt;
+    let lastAirTime = skyTime, timedAir = wind;
+    const airAt = (x,y,z,time=skyTime) => {
+      if (time !== lastAirTime) {
+        lastAirTime = time;
+        timedAir = time === skyTime ? wind : airflow.frame(windAt?.(time) ?? wind.velocity);
+      }
+      return localWind ? airflow.frame(localWind(time,x,z,timedAir.velocity,y)) : timedAir;
+    };
     return { windConfig,flow,wind,localWind,airAt,windAt };
   }
 
-  function opticalWeather(world, options, sampled) {
+  function opticalWeather(world, options, sampled, frontsEnabled = false) {
     if (!sampled.clock) return;
     const api = typeof WeatherBinding === 'undefined' ? require('./weather-binding.js') : WeatherBinding;
     const config = api.settings(world.weatherBinding, options.weatherBinding);
     if (!config) return;
     config.surface = undefined;
-    return api.bind(sampled.clock, config, { profiles:options.skyProfiles, frontsEnabled:false })
+    return api.bind(sampled.clock, config, { profiles:options.skyProfiles, frontsEnabled })
       .frame(sampled.skyTime,sampled.environment?.parameters);
   }
 

@@ -547,6 +547,8 @@ const SurfaceLook = (() => {
     if (settings.normal) {
       if (!isRecord(settings.normal)) throw new TypeError('Surface normal variation must be an object');
       numeric(settings.normal, ['amplitude', 'scale', 'speed'], 'surface.normal');
+      if (normal.cadence !== undefined && !['water','scene'].includes(normal.cadence))
+        throw new TypeError('Surface normal cadence must be water or scene');
       if (settings.normal.type && !['noise', 'waves', 'rings'].includes(settings.normal.type))
         throw new RangeError('Unknown surface normal pattern: ' + settings.normal.type);
       if (settings.normal.type === 'rings' && typeof settings.normal.sample !== 'function') {
@@ -561,7 +563,7 @@ const SurfaceLook = (() => {
         }
         const scale = positive(normal.scale, 0.3);
         normal = {
-          type: 'rings',
+          type: 'rings', cadence: normal.cadence,
           sample: optics.ringSampler(() => settings.normal.drops, {
             along: unit(vector(normal.axis)),
             across: unit(vector(normal.cross, AXES.z)),
@@ -755,7 +757,11 @@ const SurfaceLook = (() => {
     let n = unit(normal),
       t = tangent(sample.tangent ?? directionAt(settings.direction, p, n), n);
     const geometricNormal = n, geometricTangent = t;
-    n = bump(prepared.normal, n, t, cross(n, t), p, sample.time || 0, footprint, seed);
+    const normalClock = prepared.normal?.cadence ?? (prepared.normal?.type === 'rings' ? 'water' : 'scene');
+    const normalTime = normalClock === 'water' ? sample.waterTime ?? sample.time ?? 0 : sample.time ?? 0;
+    const geometric = bump(prepared.normal, n, t, cross(n, t), p, normalTime, footprint, seed);
+    const reshape = normalClock === 'water' && sample.waterWind?.(...(sample.worldPosition ?? position));
+    n = reshape ? unit(geometric.map((value,i) => value + reshape*(value-n[i])), n) : geometric;
     if (settings.rainRipple && sample.rainSlope) n = unit(n.map((value, i) => value + sample.rainSlope[i]), n);
     t = tangent(t, n);
     const b = cross(n, t),

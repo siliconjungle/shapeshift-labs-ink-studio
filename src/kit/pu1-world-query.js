@@ -126,13 +126,14 @@
     const transfers = () => W.transfers.bind(systems);
     const look = () => appearance ??= W.lookQuery(scene,base.time);
     const physical = () => W.materials.catalog(world);
+    const overlay = view[W.entityLifecycle?.projection];
     let dataInputs = sceneInputs?.dataInputs;
 
     function location(id) {
       if (locations.has(id)) return locations.get(id);
       const entity = own(world.entities,id) && world.entities[id];
       let point = null, socketTurn = null, material, deformation;
-      for (const system of Object.keys(systems)) {
+      if(!own(overlay?.entities,id))for (const system of Object.keys(systems)) {
         const pose = systems[system].pose?.(states[system],id);
         if (pose === false) { locations.set(id,null); return null; }
         if (pose) {
@@ -145,6 +146,7 @@
       }
       if (!point && entity) {
         point = entity.position ?? [0,0,0];
+        socketTurn = own(overlay?.rotations,id) ? overlay.rotations[id] : null;
         const parent = parentOf(entity);
         if (parent) {
           const host = location(parent);

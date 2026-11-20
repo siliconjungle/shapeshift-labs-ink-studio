@@ -92,7 +92,8 @@ async function exercise() {
       {from:'driver/value',to:'fast/energy'},
       {from:'fast/value',to:'slow/energy',sample:'average',delay:1}
     ]};
-    const run = runtime.create(source, {workerPool:pool});
+    const recordRun = {ticks:[0,4,8],observations:{signal:{field:'world/signal',args:{port:'fast/value'}}}};
+    const run = runtime.create(source, {workerPool:pool,recordRun});
     let paintTick;
     const paint = new Promise(resolve => requestAnimationFrame(() => {paintTick=run.view().tick; resolve();}));
     const first = run.stepAsync();
@@ -109,6 +110,9 @@ async function exercise() {
     check(same(host.checkpoint(),run.checkpoint()),'Browser worker checkpoint differs from host');
     const restored = await runtime.replayAsync(run.recording(),{workerPool:pool});
     check(same(restored.checkpoint(),run.checkpoint()),'Browser worker replay differs');
+    check(same(restored.recording().evidence,run.recording().evidence),'Browser worker evidence differs');
+    const verified=await runtime.verifyAsync(run.recording(),{workerPool:pool});
+    check(verified.status==='verified'&&verified.observations===3,'Browser worker evidence was not verified');
 
     const fault = runtime.create({systems:{fault:{kind:'oscillator',config:{fail:2}}}},{workerPool:pool});
     await fault.stepAsync();

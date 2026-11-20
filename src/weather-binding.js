@@ -181,9 +181,9 @@ const WeatherBinding = (() => {
     const localWind = active.some(front => front.target.wind);
     const localGust = active.some(front => front.target.windGust !== undefined);
     const localWetness = active.some(front => front.target.wetness !== undefined);
-    function frame(time, parameters) {
+    function frame(time, parameters, { retained = true } = {}) {
       const signal = parameters ? read(parameters) : uniform(time);
-      const state = surfaceAt(time);
+      const state = retained ? surfaceAt(time) : undefined;
       const region = active.length ? spatial(time,signal) : null;
       const history = region && new Map([[time,region]]);
       const at = t => {

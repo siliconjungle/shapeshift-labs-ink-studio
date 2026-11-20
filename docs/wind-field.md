@@ -34,3 +34,5 @@ ink-studio render examples/windbreak.js --t 2.45 --raw --wind-field off --out ba
 ```
 
 Use `--wind-field on|off|file.json` or the matching renderer option. A JSON override of `{"shelter": false}` keeps the gust profile active for comparing sheltered and exposed behavior. The [windbreak example](../examples/windbreak.js) places similar flags, reeds, pools, and smoke sources on either side of a stone wall.
+
+[Motion cadence by effect](art-direction.md#motion-cadence-by-effect) keeps independent foliage, fabric, precipitation, water, and emissive holds on a common gust signal. Use `wind: 'scene'` on a live stage cloth panel to connect it directly to the authored wind.

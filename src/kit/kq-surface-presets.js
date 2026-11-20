@@ -266,7 +266,7 @@
     },
     'rippling-water': {
       direction: 'x',
-      normal: waves(0.2, 0.44, 2.1),
+      normal: { ...waves(0.2, 0.44, 2.1), cadence:'water' },
       layers: {
         sky: reflect(0.88, { ...waterSky, f0: 0.08 }),
         sun: spec([0.42, 0.12], '#fff3c2', 0.98),

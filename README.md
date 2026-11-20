@@ -298,7 +298,7 @@ The larger [lab/data-shrine.json](lab/data-shrine.json) demonstrates joins, fold
 
 ## Animation and puppets
 
-Named framing targets, rails, occlusion avoidance, and shot blends work across the CPU and WebGL renderers. [Camera rigs](docs/camera-rigs.md)
+Named framing targets, rails, occlusion avoidance, and shot blends work across the CPU and WebGL renderers. [Camera rigs and staging](docs/camera-rigs.md)
 
 Tables, spatial features, and time series can drive shared parameters and simulation queries with declared types, units, coordinate systems, and missing-value policies. [Typed data inputs](docs/typed-data-inputs.md)
 
@@ -650,6 +650,10 @@ A custom indexed mesh supplies `points` and triangle or quad `faces`. It may pro
 
 Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/weighted-roof.js), [texture synthesis](examples/texture-synthesis.js), or [a transport morph](examples/transport-morph.js) from the checkout.
 
+[Proportional subdivision](docs/proportional-layout.md) reuses a golden-ratio or custom hierarchy across façade parts, trim, and shot layouts.
+
+[Surface phyllotaxis](docs/surface-phyllotaxis.md) grows golden-angle layouts on spheres and curved charts while preserving earlier placements.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```
@@ -733,6 +737,10 @@ keep terrain, surface, and object edits across saves, travel, and resumed region
 define regional sources, sinks, barriers, open edges, and exchange with spatial head fields.
 [Simulation workers](docs/simulation-workers.md) run custom and built-in
 solvers at independent rates on Node or browser worker threads.
+[Reproducible run records](docs/simulation-checkpoints.md#reproducible-run-records)
+verify scene revisions, command order, solver timing, and observations on replay.
+[Modular scene and entity lifecycle](docs/portals.md#modular-scene-and-entity-lifecycle)
+preserves a group's identity, attachments, and state through unloading, travel, and restoration.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
@@ -751,6 +759,7 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `render <scene> --t 1.5` | Render one PNG at a chosen time. |
 | `data-inputs <scene-or-catalog> [dataset] [--sample JSON] [--rows]` | Inspect typed columns, sample values, or export normalized rows and spatial features. |
 | `camera-rig <scene> [--at seconds] [--camera-shot id]` | Inspect the resolved shot, projection, blend, and occlusion clearance. |
+| `camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96` | Check subject framing across a shot at the native export crop. |
 | `passes <scene>` | Save art-pixel coverage, depth, normals, IDs and emission previews. |
 | `atlas <scene> --directions 8` | Export an RGBA atlas with registered pivots and optional relighting maps. |
 | `pose-review <scene> --directions 8` | Render named poses and breakdowns as color and silhouette tiles at sprite resolution. |
@@ -1040,7 +1049,7 @@ Named targets can drive shared brackets, labels, glyph ripples, depth visibility
 
 `KIT.paint` adds dependency-free spectral paint mixing, reusable swatch recipes, tint/shade controls, gradients and baked RGB ramps or mixture lookup tables. See [paint mixing](docs/paint-mixing.md) and the [interactive Pigment atelier](examples/paint-mixing.html).
 
-`KIT.curve` includes clothoid chains, torus knots, Lissajous curves, logarithmic spirals, superellipses and flowers with shared arc-length paths for sweeps, route followers, particles, camera rails and curved text. See [curve families](docs/curve-families.md) and the [interactive Curve conservatory](examples/curve-families.html).
+`KIT.curve` includes clothoid chains, torus knots, Lissajous curves, logarithmic, Archimedean and Fermat spirals, cycloids, spirographs, superellipses and flowers. They share arc-length paths for sweeps, route followers, particles, camera rails and curved text. See [curve families](docs/curve-families.md) and the [interactive Curve conservatory](examples/curve-families.html).
 
 `KIT.curve` also supports cached closest-point queries, curvature estimates, adaptive sampling and periodic interpolation. `KIT.Q` supplies dependency-free quaternion SLERP/SQUAD, path-frame rotations and quaternion animation channels. See [curve analysis](docs/curve-analysis.md) and [Path observatory](examples/curve-analysis.html).
 

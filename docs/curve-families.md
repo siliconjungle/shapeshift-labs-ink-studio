@@ -1,8 +1,8 @@
 # Curve families
 
-`KIT.curve` adds six dependency-free parametric families. They compile once into immutable point arrays and a common distance-sampled path. SDF sculpting and splats remain the geometry and rendering core; these paths feed the existing sweep, route, particle and camera systems.
+`KIT.curve` offers dependency-free parametric families. They compile once into immutable point arrays and a common distance-sampled path. The paths feed SDF sweeps, routes, particles, lettering, and camera rigs.
 
-Try [Curve conservatory](../examples/curve-families.html): six sculptures, freely orbitable, with moving followers, particle trails, curved stroke lettering, ribbon/tube profiles and an optional rail camera. Serve the repository root after building the browser bundle with `require('.').bundle()`.
+The [Curve conservatory](../examples/curve-families.html) has orbitable sculptures with moving followers, particle trails, curved stroke lettering, ribbon and tube profiles, and an optional rail camera. Serve the repository root after building the browser bundle with `require('.').bundle()`.
 
 ```js
 const path = K.curve.create({ type: 'torusKnot', p: 2, q: 3 });
@@ -26,6 +26,11 @@ All angles are radians. All families accept `origin` (default `[0,0,0]`), `axis`
 | `torusKnot` | `p:2`, `q:3`, `majorRadius:1.6`, `minorRadius:.55`, `phase:0` | Closed |
 | `lissajous` | `amplitude:[1.6,1.2,.7]`, `frequency:[3,2,1]`, `phase:[π/2,0,0]` | Closed |
 | `logSpiral` | `startRadius:.12`, `endRadius:2`, `turns:2.5`, `height:0`, `phase:0` | Open |
+| `archimedeanSpiral` | `startRadius:0`, `endRadius:2`, `turns:2.5`, `height:0`, `phase:0` | Open |
+| `fermatSpiral` | `startRadius:0`, `endRadius:2`, `turns:2.5`, `height:0`, `phase:0` | Open |
+| `cycloid` | `radius:.55`, `penRadius:radius`, `turns:3`, `phase:0` | Open |
+| `epitrochoid` | `fixedRadius:1.8`, `fixedTeeth:7`, `rollingTeeth:3`, `pen:.8`, `phase:0`, `penPhase:0` | Closed |
+| `hypotrochoid` | `fixedRadius:1.8`, `fixedTeeth:7`, `rollingTeeth:3`, `pen:.8`, `phase:0`, `penPhase:0` | Closed |
 | `superellipse` | `radii:[1.8,1.2]`, `exponent:4`, `phase:0` | Closed |
 | `flower` | `petals:7`, `radius:1.5`, `depth:.38`, `height:.22`, `phase:0` | Closed |
 
@@ -46,6 +51,22 @@ const transition = K.curve.create({
 ```
 
 Torus knots require nonzero coprime integer `p/q`, each magnitude ≤32, and major radius larger than minor radius. Lissajous frequencies are positive integers ≤32; active frequencies' common divisor is removed to trace the fundamental period once. Logarithmic spirals interpolate radius exponentially, permit negative turns, and lift along the axis through `height`. Superellipses use signed powers `2/exponent`, with exponent `.25…16`. Flowers use radius `radius*(1+depth*cos(petals*angle+phase))` and axial height `height*sin(petals*angle+phase)`; depth is `0….95`, petals `1…32`.
+
+### Spirals and rolling curves
+
+- **Archimedean spiral.** Radius changes linearly with angle, so successive turns are evenly spaced. Either end can start at radius zero.
+- **Fermat spiral.** Squared radius changes linearly with angle. Starting at zero gives one arm of the square-root spiral. Add another arm with `phase + Math.PI` to make the paired form.
+- **Cycloid.** A wheel rolls on the local X axis. `radius` is its rolling radius and `penRadius` is the pen's distance from the wheel center. A pen on the rim produces cusps. Moving the pen inside or outside the rim produces the curtate or prolate form. `phase` sets the wheel angle at the start, with its center initially above the local origin.
+- **Epitrochoid and hypotrochoid.** The small wheel rolls around the outside or inside of the fixed circle. Tooth counts are integers from 1 to 32. The inside wheel requires fewer teeth than the fixed wheel. The ratio determines the rolling radius and reduces automatically to the fundamental period. `pen` is measured in rolling radii and ranges from 0 to 4. Use 0 to trace the wheel center and 1 to trace its rim. `phase` rotates the full pattern and `penPhase` sets the initial pen orientation relative to contact.
+
+The two spirals accept different nonnegative endpoint radii and optional axial lift through `height`. Both spirals and the cycloid accept signed, nonzero `turns` up to 32 in magnitude. For rolling curves with the pen on the rim, `breaks` includes the cusp parameters and path endpoints. Both uniform and adaptive sampling retain the cusp stations. Motion and cameras sample distance along the resulting path.
+
+The [Rolling Curves gallery](../examples/rolling-curve-gallery.js) compares all five families and sets lettering along one cycloid arch. [Gear Lantern](../examples/gear-lantern.js) combines two rolling ribbons with a lettered Fermat spiral and an Archimedean camera rail.
+
+```sh
+node cli/ink-studio.js render examples/rolling-curve-gallery.js --w 1000 --h 630 --out rolling-curves.png
+node cli/ink-studio.js clip examples/gear-lantern.js --w 720 --h 478 --to 5 --fps 12 --out gear-lantern.png
+```
 
 The smooth mathematical curve is sampled into straight segments. More segments improve fidelity; they do not eliminate intrinsic crossings or derivative singularities (for example, a degenerate Lissajous line or a pointed superellipse). Sweeps may intersect themselves when the curve does. Closed transported frames distribute residual roll over arc length so their endpoints meet exactly. Profiles must also match at the seam: use matching width/height and a compatible total twist.
 

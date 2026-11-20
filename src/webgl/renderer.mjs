@@ -106,7 +106,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const post = program(sources.POST_FS), clean = program(sources.CLEAN_FS);
     // Rebirth hosts can opt into geometry specialization through the lower
     // level pipeline. The canvas path specializes its own fullscreen resolve.
-    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl });
+    const motionAPI = toolkit.ArtDirection ?? toolkit.KIT?.artDirection;
+    const airflow = toolkit.KIT?.procedural?.airflow, climateAPI = toolkit.KIT?.environmentFrame;
+    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow });
     const emptyVao = resources.allocate('VertexArray');
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
@@ -150,7 +152,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let toneKey, tone, sorted, instanceDraw, expandInstances, lastInstances;
 
     function orderFor(world, frame, camera, time, isNew, plan, width, height, scale,
-      tolerance, histories, source) {
+      tolerance, histories, source, rainClocks, rainWind) {
       const sceneTime = frame.time ?? world.lookSnapshot?.time ?? 0;
       const seeking = tolerance && sorted?.source === source && sorted.histories === histories && sceneTime < sorted.sceneTime;
       let history = histories.get(source);
@@ -166,10 +168,10 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       }
       const moving = world.moving ?? [], back = world.back ?? [];
       const canReuse = reuseOrder && !world.anim?.bones?.length;
-      const clock = moving.length ? time : 0;
+      const clock = moving.length ? [time,...rainClocks,...rainWind] : [];
       const viewport = plan ? [width,height,scale,camera.tangent,camera.clipNear,+camera.ortho] : [];
       if (canReuse && !isNew && (frame.changedRows?.length === 0 || plan && !world.count && !frame.changedRows) &&
-          !frame.resetTransparency && !seeking && sorted?.tolerance === tolerance && sorted.clock === clock &&
+          !frame.resetTransparency && !seeking && sorted?.tolerance === tolerance && sameValues(sorted.clock,clock) &&
           (!tolerance || sorted.histories === histories) &&
           sorted.revision === plan?.orderRevision && sameValues(sorted.viewport,viewport) &&
           sameValues(sorted.view, camera.view) && sameValues(sorted.moving, moving) && sameValues(sorted.back, back)) {
@@ -183,7 +185,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         data: source.data, layout: frame.instances, view: camera.view, time: sceneTime, tolerance, depthAt: i => depths[i],
         transparentAt: i => transparencyAPI.isTransparent(data, i, data[i * 16 + 3], opticalSplats?.[i * 12 + 3], backRows)
       }) : undefined;
-      pipeline.setOrder(sort(world, camera.view, time, visible, plan?.rows, stabilize), !!plan);
+      pipeline.setOrder(sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind), !!plan);
       sorted = canReuse ? { view: camera.view, moving: Int32Array.from(moving), back: Int32Array.from(back),
         clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport } : null;
     }
@@ -776,12 +778,30 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       }
       const clip = plane === zero ? zero : planeInView(plane, camera);
       const t = frame.time ?? world.lookSnapshot?.time ?? 0;
-      const water = waterUniforms(waterScene, camera, t, plane, captures, width, height);
+      const time = frame.stepAnimation !== false && look.pixel ? Math.floor(t * 10) / 10 : t;
+      const direction = motionAPI?.prepare(look.artDirection,frame.artDirection);
+      const hasCadence = ['foliage','cloth','rain','water','emissive'].some(key => direction?.cadence[key] !== undefined);
+      const motion = motionAPI?.motion(direction,t,frame.skyTime ?? t,time);
+      const rainClocks = direction?.cadence.rain === undefined ? [time,time] : [motion.falling,motion.rain];
+      const windResponse = direction?.windResponse;
+      const useWind = climateAPI && airflow && (hasCadence || windResponse?.water || windResponse?.emissive) &&
+        (frame.windField ?? world.windField ?? world.weatherBinding);
+      let flex = () => [0,0], rainWind = [0,0];
+      if (useWind) {
+        const sampled = climateAPI.timeline(world,frame,t,direction,toolkit.KIT?.weather?.tracks);
+        const weather = climateAPI.opticalWeather(world,frame,sampled,frame.weatherFronts !== false);
+        const air = climateAPI.wind(world,frame,{ ...sampled, weather });
+        const velocity = (channel) => air.windAt?.(direction.cadence[channel] === undefined ? sampled.skyTime :
+          frame.skyTime ?? motion[channel]) ?? air.wind.velocity;
+        flex = channel => airflow.frame(velocity(channel)).flex;
+        if (direction.cadence.rain !== undefined) rainWind = velocity('rain');
+      }
+      const water = waterUniforms(waterScene, camera, direction?.cadence.water === undefined ? t : motion.water, plane, captures, width, height);
+      if (water) water.u_waterWindGain = (windResponse?.water ?? 0) * Math.hypot(...flex('water'));
       const env = environment.prepare(world,frame,camera,t,width,height);
       if (env || lastEnvironment) historyValid = false;
       lastEnvironment = !!env;
       const wet = water && wetVariant(water,!!env?.media);
-      const time = frame.stepAnimation !== false && look.pixel ? Math.floor(t * 10) / 10 : t;
       const opticalMaterials = !!world.opticalSplats;
       if (opticalMaterials) {
         const K = toolkit.KIT;
@@ -828,7 +848,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         fineValues = fineTiles;
       } else fine.bind();
       uploadBones(world.anim?.bones);
-      orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source);
+      orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind);
       if (patterned) {
         if (isNew || materials?.world !== world || materials.values !== world.pix ||
             materials.ramps !== world.ramps || materials.rampOff !== world.rampOff || materials.patterns !== world.pats) {
@@ -875,6 +895,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         u_data: 0, u_bones: 4, u_fine: 7, ...(plan && { u_instances: 15 }), u_fineOn: +hasFine, u_fpal: pal, u_view: camera.view,
         ...(materialStyles && { u_materialStyles: 16, u_materialPatterned: patterned, u_materialStylesOn: !raw }),
         u_proj: camera.projection, u_time: time, u_scale: scale, u_ortho: +camera.ortho,
+        u_motionCadence: hasCadence, u_rainWind:rainWind,
+        u_motionWind: !!useWind && (direction.cadence.foliage !== undefined || direction.cadence.cloth !== undefined),
+        ...(hasCadence && { u_effectTimes:[motion.foliage,motion.cloth,rainClocks[0],motion.emissive],
+          u_waterAndRainTime:[motion.water,rainClocks[1]] }),
+        ...(useWind && { u_effectWind:[...flex('foliage'),...flex('cloth')] }),
+        u_emissiveWind:(windResponse?.emissive ?? 0) * Math.hypot(...flex('emissive')),
         ...(constraints && (coverage || masked) && { u_constraintSlots:9,u_constraintRows:8,
           u_constraintDefault:constraints.defaultSlot,u_constraintMap:constraintMap,u_constraintMask:maskAt,
           u_lookSites:10,u_maskTextures:14,u_maskTime:t,u_lookProjection:camera.projection,u_lookRadius:camera.radius,u_lookOrtho:+camera.ortho,

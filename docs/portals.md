@@ -88,6 +88,46 @@ pulling updates from the restored place. Reentering a region reads the saved
 terrain, object, and surface state from the authority. See
 [region revisions](region-revisions.md) for cursor and recovery behavior.
 
+## Modular scene and entity lifecycle
+
+Set `lifecycle: true` on `portals.create` to manage portable scene
+entities through `session.lifecycle`. Spawn a group with
+`{id, place, entities, state?, rotation?}`. The `id` is the root key
+in the ordinary world entity table. All other rows attach to that root
+through parents or sockets within the group. Root positions use world
+coordinates and attachment offsets use local coordinates. Rotation is
+an optional right-handed 3×3 matrix. `state` is any portable JSON value.
+
+| Method | Effect |
+| --- | --- |
+| `spawn(spec)` | Returns a stable `{id, generation}` lifetime handle. Entity IDs are reserved across all groups, including unloaded ones. |
+| `update(handle, {position?, rotation?, state?})` | Changes the root pose or replaces the saved state. A state-only update keeps the existing scene projection. |
+| `unload(handle)` / `restoreEntity(handle)` | Hide or republish the entire group. The handle, attachments, transform and state are retained. |
+| `despawn(handle)` | Ends the lifetime and releases its IDs. Spawning the same ID again assigns a new generation. |
+| `get(id, generation?)` / `scene(place)` | Read a durable group or the loaded entity projection for a place. |
+| `actor(handle, properties?)` | Builds a traveler for `cross` or `fade`. Supply the proposed position and any additional traveler properties. |
+
+Arrival checks leave ownership unchanged. On successful travel, the group
+changes place with the mapped root pose and its unchanged local attachments.
+The destination is visible to `onCross` listeners and the source
+projection no longer includes the group. Occupied destination IDs, stale
+handles, and blocked arrivals leave the group at its source. Destination
+`canArrive` and the optional carry registry still handle clearance.
+
+Native simulation places include loaded groups in their payload `view()`,
+`query()` and rendered world. Native solver bodies keep their existing
+state, which is saved in the place runtime checkpoint. The session save
+also keeps each lifecycle group and its loaded status. Restore with
+`lifecycle: true` to open both. Paused places still release their
+payload on departure and prepare it again on reentry.
+
+Custom place loaders receive a scoped `context.lifecycle` with
+`scene()`, `get(id)`, and `assert(authoredEntities)`. The view includes
+the staged state during restore and the live state after activation.
+Provide a synchronous `authoredEntities()` on the payload so the session
+can check conflicts with authored IDs, including when a place prepares
+for the first time.
+
 ## Portable entrances and persistent instances
 
 Pass `templates` to `portals.create()` alongside the ordinary `places`.

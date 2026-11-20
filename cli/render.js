@@ -21,6 +21,7 @@ const ContactDepth = require('./contact-shadows.js');
 const RenderGraph = require('../src/render-graph.js');
 const runGraph = require('./render-graph.js');
 const FrameComposite = require('../src/frame-composite.js');
+const CameraStaging = require('../src/camera-staging.js');
 const SplatOrder = require('../src/splat-order.js');
 const Cutaway = require('../src/cutaway.js');
 const { blendLayers } = require('./translucent-layers.js');
@@ -140,6 +141,10 @@ function cameraCapture(options, receive) {
 
 function render(world, o, preparedPalettes) {
   if(o?.timeDomains||world.timeDomains){const times=require('../index.js').load().KIT.timeDomains.frame(world,{...o,time:o?.t});o={...times,t:times.time};}
+  if (o?.cameraGuides && !o.samples && !o.captureCoverage) {
+    const staging = o.cameraStaging ?? world.look?.cameraStaging;
+    return CameraStaging.overlay(render(world, { ...o, cameraGuides: false, cameraStaging: staging || true }, preparedPalettes));
+  }
   const reconstruction = o?.reconstruction ?? world.look?.reconstruction;
   if (reconstruction !== undefined && reconstruction !== false && !o?.[reconstructionSource]) {
     const source = world, time = o?.t ?? world.lookSnapshot?.time ?? 0;
@@ -250,18 +255,28 @@ function renderFrame(world, o, preparedPalettes) {
   const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
   const authored = world.cameraRig?.sample(o?.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? sceneTime, { shot: o.cameraShot }).camera;
   const c = authored ?? world.cam;
-  const fov = o.fov ?? c.fov ?? FOV;
+  const viewStaging = o[probeCamera] ? null : CameraStaging.prepare(o.cameraStaging ?? look.cameraStaging);
+  const framing = o.samples || o.captureCoverage || o.reflectionPlane ? null : viewStaging;
+  const focusBands = o.depthOfField === false ? [] : framing?.depthOfField ?? [];
+  const hasFocus = focusBands.some(band => band.radius > 0);
+  const focalLength = o[probeCamera] ? undefined : o.focalLength;
+  if (!o[probeCamera] && (focalLength !== undefined && o.fov !== undefined ||
+    focalLength === undefined && o.sensorHeight !== undefined))
+    throw new RangeError('A sensor-height override needs a focal-length override, which replaces FOV');
+  const sensorHeight = focalLength === undefined ? c.sensorHeight : o.sensorHeight ?? CameraStaging.defaultSensorHeight;
+  const fov = focalLength === undefined ? o.fov ?? c.fov ?? FOV : CameraStaging.fieldOfView(focalLength, sensorHeight);
   if (!Number.isFinite(fov) || fov <= 0 || fov >= Math.PI) throw new RangeError('Camera field of view must be in (0, π)');
   const tangent = Math.tan(fov / 2) / lensScale;
   const ortho = o.ortho ?? c.ortho ?? (c.projection === 'orthographic');
-  const t = ArtDirection.time(direction,sceneTime),
-    yaw = o.yaw === undefined ? c.yaw : o.yaw,
-    pitch = o.pitch === undefined ? c.pitch : o.pitch,
+  const motion = ArtDirection.motion(direction,sceneTime,o.skyTime ?? sceneTime);
+  const t = motion.scene,
     an = world.anim || {},
     cameraMotion = o.lockCamera ? {} : an,
     dist0 = o.dist || c.dist / (o.zoom || 1),
     /* a diorama's own zoom (a camera punch) moves the eye, not the size of an art pixel */
-    dist = dist0 / (cameraMotion.zoom || 1),
+    { yaw, pitch, dist } = CameraStaging.constrain({
+      yaw: o.yaw ?? c.yaw, pitch: o.pitch ?? c.pitch, dist: dist0 / (cameraMotion.zoom || 1)
+    }, viewStaging?.orbit),
     T0 = o.target || c.target,
     T = cameraMotion.kick ? [T0[0] + cameraMotion.kick[0], T0[1] + cameraMotion.kick[1], T0[2] + cameraMotion.kick[2]] : T0,
     cw = o.w || 900,
@@ -316,6 +331,8 @@ function renderFrame(world, o, preparedPalettes) {
   const requestedPasses = ArtPasses.select(o.passes);
   const passSelection = new Set(requestedPasses);
   let lookPass;
+  if (framing?.subjects.length) passSelection.add('splatId');
+  if (hasFocus) passSelection.add('depth');
   if (styled && stages?.owner) passSelection.add('splatId');
   if (styled && stages?.postMask) {
     for (const channel of ['position', 'objectPosition', 'normal']) passSelection.add(channel);
@@ -355,6 +372,14 @@ function renderFrame(world, o, preparedPalettes) {
       frame = EffectPalettes.apply(frame, passes, effectSignals, source, world.pal, o.captureEffectPalettes, ditherAt);
       if (audit) for (const ramp of effectSignals.rules.ramps.values()) audit.addPalette(ramp.packed);
     }
+    if (hasFocus) frame = CameraStaging.focus(frame, passes.depth, focusBands, depthOffset,
+      styled && (!o.colored || !!tone));
+    if (framing) frame.cameraStaging = {
+      ...CameraStaging.inspect(framing, world, { w: frame.w, h: frame.h, splatId: passes?.splatId }),
+      camera: { yaw, pitch, distance: dist, target: Array.from(T), orthographic: ortho, fov: 2*Math.atan(tangent),
+        ...(sensorHeight !== undefined && { sensorHeight, focalLength: sensorHeight / (2*tangent) }) },
+      focusPixels: frame.focusPixels ?? 0
+    };
     if (audit) {
       frame.lookAudit = audit.report();
     }
@@ -499,6 +524,12 @@ function renderFrame(world, o, preparedPalettes) {
   const effectRules = EffectPalettes.activate(effectPaletteSettings, environment?.parameters);
   const windState = resolveWind(world,o,climate);
   const { windConfig,flow,wind,localWind,airAt,windAt } = windState;
+  const windResponse = direction?.windResponse;
+  const gustTime = (channel, sampled) => direction?.cadence[channel] === undefined ? skyTime : o.skyTime ?? sampled;
+  const windGain = (amount, time, x, y, z) => {
+    const { flex } = airAt(x,y,z,time);
+    return amount * Math.hypot(flex[0],flex[1]);
+  };
   const relative = SplatRelighting.frame(world, o, climate);
   const lightingOptions = (o.relighting ?? world.relighting) ? { ...o, liveSun: false } : o;
   const { celestial,sun,flash,clouds } = resolveLighting(world,lightingOptions,climate,windState,direction);
@@ -647,22 +678,24 @@ function renderFrame(world, o, preparedPalettes) {
   ];
   const lamps = LightSchedule.select(world.lights || [], lampEye, { daylight, duskOnly: true });
   const rainConfig = RainImpacts.settings(world.rainImpacts, o.rainImpacts);
+  const rainWeather = motion.rain === skyTime ? weather : climate.binding?.frame(motion.rain, undefined, { retained: false });
   const precipitation = Precipitation.frame(world, o.precipitation, {
-    time: skyTime, wind: wind.velocity, windAt, weather, localWind, impacts: rainConfig, exposure,
+    time: motion.rain, wind: windAt?.(motion.rain) ?? wind.velocity, windAt, weather: rainWeather, localWind, impacts: rainConfig, exposure,
     lamps: world.precipitationRanges?.length ? LightSchedule.select(world.lights || [], lampEye, { daylight }) : [],
     localLighting: prepareVolumeLight
   });
-  const rain = RainImpacts.frame(rainConfig, precipitation?.contacts, skyTime);
+  const rain = RainImpacts.frame(rainConfig, precipitation?.contacts, motion.rain);
   const volumeWind = !windConfig && world.volumeWind && !o.wind && !weather?.wind && !an.wind
     ? Airflow.frame(world.volumeWind).velocity : null;
   const volumeFlow = volumes.some(v => v.type === 'field' || v.depthBand?.wind) && (volumeWind && exposure?.wind
     ? WindField.create(WindField.settings(true), { ambient:() => volumeWind, exposure }) : flow)?.frame(skyTime);
+  const waterWind = windResponse?.water && ((x,y,z) => windGain(windResponse.water,gustTime('water', motion.water),x,y,z));
   const atmosphereOptions = () => {
     const quality = atmosphereQuality({ ...world.volumeQuality, ...o.volumeQuality });
     quality.wind = volumeWind ?? wind.velocity;
     if (volumeFlow) quality.windOffset = volumeFlow.windOffset;
     const media = volumes.some(volume => volume.type === 'field') ? prepareVolumeLight() : undefined;
-    return { ...quality, time: t, cloudShadow, flash, media, exposure, cutouts, cloud:cloudView, effectCoverage: trackMedia,
+    return { ...quality, time: t, waterTime: motion.water, waterWind, cloudShadow, flash, media, exposure, cutouts, cloud:cloudView, effectCoverage: trackMedia,
       cloudStart:cloudView && eyeD-dist, fogTransmittance:!!fogPass, bands:direction?.bands, counters:counters?.volume };
   };
   const geometrySample = probe || sortedSurfaces || sdf || emitterHits || aerial || cloudShadow || flash || cloudView ? sampleFrames(world, t) : null;
@@ -734,7 +767,7 @@ function renderFrame(world, o, preparedPalettes) {
     parallel: ortho ? [V[2], V[6], V[10]] : null,
     footprint: (dist * 2) / (tp * H),
     detail: stableDetail, pixelsPerUnit: focal / (o.artGridScale || 1), orthographic: ortho,
-    time: t,
+    time: t, waterTime: motion.water, waterWind,
     sun: sun?.direction, sunIntensity: sun?.intensity,
     transmissionLamps: () => LightSchedule.select(world.lights || [], lampEye, { daylight }),
     transmissionOccluded,
@@ -811,19 +844,19 @@ function renderFrame(world, o, preparedPalettes) {
       const pose = precipitation.pose?.(i, x, y, z, kind, ph, sp, rg, ex, al);
       if (pose) [x, y, z, al] = pose;
       else al = 0;
-    } else if (kind === 1) al *= 0.62 + 0.38 * Math.sin(t * sp + ph);
+    } else if (kind === 1) al *= 0.62 + 0.38 * Math.sin(motion.emissive * sp + ph);
     else if (kind === 2) {
       const profileRain = kraw & Airflow.packedFlag;
-      const f = ((profileRain ? skyTime : t) * sp) / rg + ph,
+      const f = ((profileRain ? motion.rain : motion.falling) * sp) / rg + ph,
         pr = f - Math.floor(f);
       y -= pr * rg;
       al *= 1 - pr * pr;
       if (profileRain) {
-        const { velocity } = airAt(x,y,z);
+        const { velocity } = airAt(x,y,z,motion.rain);
         const age = pr * rg / Math.max(sp, 1e-5);
         x += velocity[0] * age;
         z += velocity[1] * age;
-        al *= weather?.rainHere ? weather.rainHere(x,z) : weather?.rainGain ?? 0;
+        al *= rainWeather?.rainHere ? rainWeather.rainHere(x,z) : rainWeather?.rainGain ?? 0;
       }
       if (exposure?.rain) {
         al *= exposure.rain(x,y,z);
@@ -843,7 +876,7 @@ function renderFrame(world, o, preparedPalettes) {
       }
       al *= (1 - pr) * sstep(0, 0.1, pr);
       sc *= 0.6 + pr * ex;
-    } else if (kind === 4) add[i] = 0.3 * sstep(0.75, 1, Math.sin(t * sp + ph));
+    } else if (kind === 4) add[i] = 0.3 * sstep(0.75, 1, Math.sin(motion.water * sp + ph));
     else if (kind === 5) {
       const a = t * sp,
         cs = Math.cos(a),
@@ -852,7 +885,7 @@ function renderFrame(world, o, preparedPalettes) {
       z = -sn * x + cs * z;
       x = nx;
     } else if (kind === 6) y += Math.sin(t * sp + ph) * rg;
-    else if (kind === 7 && ex !== LightSchedule.emissionMarker) al *= 0.82 + 0.18 * Math.sin(t * sp + ph);
+    else if (kind === 7 && ex !== LightSchedule.emissionMarker) al *= 0.82 + 0.18 * Math.sin(motion.emissive * sp + ph);
     else if (kind === 8) {
       const f = 0.2 + 0.8 * Math.abs(Math.sin(t * sp + ph));
       x = rg + (x - rg) * f;
@@ -864,7 +897,8 @@ function renderFrame(world, o, preparedPalettes) {
       z *= k;
     } else if (kind === 15) {
       // flutter down: a leaf or a flake, swinging as it falls
-      const f = (t * sp) / rg + ph,
+      const snow = direction?.cadence.rain !== undefined && world.fallingSnowRanges?.some(({ first,end }) => first <= i && i < end);
+      const f = ((snow ? motion.falling : motion.foliage) * sp) / rg + ph,
         pr = f - Math.floor(f);
       y -= pr * rg;
       x += Math.sin(pr * 11 + ph * 40) * ex;
@@ -872,20 +906,24 @@ function renderFrame(world, o, preparedPalettes) {
       al *= sstep(0, 0.05, pr) * (1 - sstep(0.92, 1, pr));
     } else if (kind === 14) {
       const hg = Math.max(0, y - ex);
-      x += rg * hg * Math.sin(t * sp + ph);
-      z += rg * 0.6 * hg * Math.sin(t * sp * 0.73 + ph * 1.7);
+      x += rg * hg * Math.sin(motion.foliage * sp + ph);
+      z += rg * 0.6 * hg * Math.sin(motion.foliage * sp * 0.73 + ph * 1.7);
     } else if (kind === 11) {
+      const channel = Airflow.isCloth(kraw) ? 'cloth' : 'foliage';
+      const bendTime = motion[channel];
       if (kraw & Airflow.packedFlag) {
-        const displacement = Airflow.bend(t, ph, sp, rg);
-        const { flex } = airAt(x,y,z);
+        const displacement = Airflow.bend(bendTime, ph, sp, rg);
+        const { flex } = airAt(x,y,z,gustTime(channel,bendTime));
         x += flex[0] * displacement;
         z += flex[1] * displacement;
       } else {
         const x0 = x;
-        x += rg * Math.sin(t * sp + y * 1.3 + z * 0.9 + ph);
-        y += rg * 0.6 * Math.sin(t * sp * 1.3 + x0 * 1.1 + ph);
+        x += rg * Math.sin(bendTime * sp + y * 1.3 + z * 0.9 + ph);
+        y += rg * 0.6 * Math.sin(bendTime * sp * 1.3 + x0 * 1.1 + ph);
       }
     }
+    if (windResponse?.emissive && (kraw & 32) && (kind === 1 || kind === 7 && ex !== LightSchedule.emissionMarker))
+      al *= 1 - windGain(windResponse.emissive,gustTime('emissive',motion.emissive),x,y,z);
     if (kraw & 512) {
       // born: not there till its time, then it grows to its size (as the page does it)
       const gw = world.grow || {};
@@ -1318,7 +1356,7 @@ function renderFrame(world, o, preparedPalettes) {
       c22 = d[q + 10] * s2;
     if (kind === 2 && (precipitation?.rows[i] || (kraw & Airflow.packedFlag))) {
       // Profile and world precipitation rain are baked vertical. Rebuild its axial covariance along the current flow.
-      const [wx, wz] = airAt(x,y,z).velocity, speed = d[q + 13];
+      const [wx, wz] = airAt(x,y,z,motion.rain).velocity, speed = d[q + 13];
       const length = Math.hypot(wx, speed, wz);
       const ax = wx / length, ay = -speed / length, az = wz / length;
       const cross = c00, stretch = c11 - cross;

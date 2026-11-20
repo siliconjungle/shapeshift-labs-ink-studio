@@ -619,6 +619,11 @@
       bad('finish.look.effectPalettes', error.message);
     }
     try {
+      CameraStaging.prepare(look?.cameraStaging);
+    } catch (error) {
+      bad('finish.look.cameraStaging', error.message);
+    }
+    try {
       ArtInk.prepare(look?.ink, st.palette);
     } catch (error) {
       bad('finish.look.ink', error.message);
@@ -1746,15 +1751,17 @@
       let acc = 0;
       st.add({
         update(dt, t) {
+          const direction = st.motionSettings();
           acc += dt;
-          if (!liveLamps && acc < 1 / 12) return;
+          if (!liveLamps && direction?.cadence.emissive === undefined && acc < 1 / 12) return;
           acc = 0;
+          const flickerTime = ArtDirection.time(direction, t, 'emissive');
           let moved = false;
           L.forEach((l, i) => {
             if (liveLamps) {
               const e = activeEffects[l.index], position = e.follow ? rig.at(e.follow, e.at) : e.at;
               const strength = (e.strength ?? .9) * (1 - (e.flicker ?? 0) *
-                (.5 + .5 * Math.sin(t * 9.1 + i * 2.3) * Math.sin(t * 5.3 + i)));
+                (.5 + .5 * Math.sin(flickerTime * 9.1 + i * 2.3) * Math.sin(flickerTime * 5.3 + i)));
               const range = e.r ?? 6;
               if (l.s !== strength || l.r !== range || !position.every((n, axis) => n === l.p[axis])) {
                 Object.assign(l, { p: position, s: strength, r: range });
@@ -1763,8 +1770,8 @@
               return;
             }
             if (l.e.flicker) {
-              l.s = l.s0 * (1 - l.e.flicker * (0.5 + 0.5 * Math.sin(t * 9.1 + i * 2.3) * Math.sin(t * 5.3 + i)));
-              moved = true;
+              const strength = l.s0 * (1 - l.e.flicker * (0.5 + 0.5 * Math.sin(flickerTime * 9.1 + i * 2.3) * Math.sin(flickerTime * 5.3 + i)));
+              if (l.s !== strength) { l.s = strength; moved = true; }
             }
             if (l.e.follow) {
               l.p = rig.at(l.e.follow, l.e.at);

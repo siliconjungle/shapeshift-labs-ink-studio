@@ -20,7 +20,12 @@ function curveConservatory(kit) {
     { name: 'Lissajous', type: 'lissajous', segments: 192, axis: [0, 0, 1] },
     { name: 'Logarithmic spiral', type: 'logSpiral', turns: 2.2, height: 0.65, axis: [0, 0, 1], segments: 160 },
     { name: 'Superellipse', type: 'superellipse', exponent: 4, axis: [0, 0, 1], segments: 128 },
-    { name: 'Parametric flower', type: 'flower', petals: 7, height: 0.45, axis: [0, 0, 1], segments: 224 }
+    { name: 'Parametric flower', type: 'flower', petals: 7, height: 0.45, axis: [0, 0, 1], segments: 224 },
+    { name: 'Archimedean spiral', type: 'archimedeanSpiral', turns: 2.3, axis: [0, 0, 1] },
+    { name: 'Fermat spiral', type: 'fermatSpiral', turns: 2.3, height: .32, axis: [0, 0, 1] },
+    { name: 'Cycloid', type: 'cycloid', turns: 3, axis: [0, 0, 1] },
+    { name: 'Epitrochoid', type: 'epitrochoid', fixedTeeth: 5, rollingTeeth: 3, pen: .65, axis: [0, 0, 1] },
+    { name: 'Hypotrochoid', type: 'hypotrochoid', fixedTeeth: 7, rollingTeeth: 3, pen: .85, axis: [0, 0, 1] }
   ];
   const controls = { family: 0, ribbon: true, text: true, tracers: true, playing: true, ride: false },
     cache = new Map();

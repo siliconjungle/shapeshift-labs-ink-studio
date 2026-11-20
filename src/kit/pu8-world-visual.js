@@ -255,6 +255,7 @@
       }
       for(const body of bodies)drawBody(body,surfaceAtlas);
     }
+    const managed=view[W.entityLifecycle?.projection]?.entities;
     for (const [id,entity] of Object.entries(view.world.entities)) {
       if (!entity.visual?.half) continue;
       const pose=query.target({entity:id}), point=pose?.point;
@@ -264,7 +265,9 @@
       const finish=looks.material(finishFor({r:ramp??[19,20,21,22,23],surface,albedo:entity.visual.albedo,
         materialId:entity.visual.materialId??entity.visual.material??'entity'},physical),looks.forEntity(id));
       hasSurface ||= Boolean(finish.surface);
-      S.box(point,half,finish,{res:resolution*.72,tag:id,target:targetFor(id)});
+      const rotation=managed&&Object.hasOwn(managed,id)?query.frame({entity:id})?.rotation:null;
+      S.box(point,half,finish,{res:resolution*.72,tag:id,target:targetFor(id),
+        ...(rotation&&{ax:[0,1,2].map(i=>[rotation[i],rotation[i+3],rotation[i+6]])})});
     }
     const agentFields=[fields.agents,fields.characters].filter(Boolean).flat();
     for (const field of agentFields) {

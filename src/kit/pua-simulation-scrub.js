@@ -60,7 +60,7 @@
     check(Number.isSafeInteger(checkpointEvery) && checkpointEvery >= 1 && checkpointEvery <= R.maxTick &&
       Number.isSafeInteger(checkpointCache) && checkpointCache >= 0 && checkpointCache <= 128, 'Invalid scrub checkpoint policy');
     check(Array.isArray(commands), 'Expected a list of scrub commands');
-    const recording = source?.format === R.runFormat ? source : null;
+    const recording = source?.format === R.runFormat ? (isImmutable(source) ? source : freeze(copy(source))) : null;
     const checkpoint = recording?.origin ?? (source?.format === R.checkpointFormat ? source : undefined);
     let end;
     if (recording) {
@@ -71,9 +71,10 @@
       end = isImmutable(recording.end) ? recording.end : freeze(copy(recording.end));
     }
     const options = { implementations: runtime.implementations, workerPool: runtime.workerPool };
-    const restore = saved => R.create(saved.world, { ...options, checkpoint: saved });
-    let current = checkpoint ? restore(checkpoint) : R.create(source, options);
-    current.schedule(recording ? recording.commands : commands);
+    const restore = saved => recording ? R.openRecording(recording, { ...options, checkpoint: saved }) :
+      R.create(saved.world, { ...options, checkpoint: saved });
+    let current = recording ? R.openRecording(recording, options) : checkpoint ? restore(checkpoint) : R.create(source, options);
+    if (!recording) current.schedule(commands);
     const origin = current.checkpoint(), dt = origin.world.dt, toTick = end?.tick ?? R.maxTick;
     let cached = new Map(), last = { checkpointTick: origin.tick, replayedTicks: 0 };
 

@@ -194,11 +194,13 @@
     }
     const clothStage = { D: world.data, base: world.data, rows: world.anim.rows };
     function drawCloth(time, polish) {
-      const applied = [];
+      const applied = [], direction = ArtDirection.prepare(world.look?.artDirection,frameOptions?.artDirection);
       for (const [panel, entries] of panels) {
         const current = entries.findLast(entry => entry.start <= time);
         const placement = current ?? entries[0];
-        const elapsed = polish && current ? clamp(time - placement.start, 0, placement.take.duration) : 0;
+        const local = time - placement.start;
+        const elapsed = polish && current ? local >= placement.take.duration ? placement.take.duration :
+          ArtDirection.time(direction,local,'cloth') : 0;
         const points = polish && current ? placement.take.sample(elapsed)
           : placement.before?.(time, puppet) ?? placement.take.sample(0);
         panel.drawPose(clothStage, points);
@@ -232,10 +234,10 @@
       if (!inShot(time) || !stages.includes(stage)) throw new RangeError('Invalid timeline sample time or stage');
       return copyInto(evaluate(time, stage, layersFor(stage, before)).pose, out);
     }
-    function frame(time = cursor.time, { stage = cursor.stage, before = false } = {}) {
+    function frame(time = cursor.time, { stage = cursor.stage, before = false, artDirection } = {}) {
       if (!inShot(time) || !stages.includes(stage)) throw new RangeError('Invalid timeline frame time or stage');
       current = undefined;
-      frameOptions = { stage, before };
+      frameOptions = { stage, before, artDirection };
       try { world.anim.update(0, time); }
       finally { frameOptions = undefined; }
       if (!current) throw new Error('The timeline no longer owns this puppet pose sampler');
