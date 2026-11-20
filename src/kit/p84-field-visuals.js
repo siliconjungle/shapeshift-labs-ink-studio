@@ -8,6 +8,7 @@
   const defaultRamp = ['#192b68','#276f9b','#32bbb3','#dddf8b','#ffad63'];
   const kinds = {
     slice:['plane','counts'],
+    lic:['plane','counts','length','step','seed','grain','kernel','motion','minSpeed','maxWork'],
     contours:['plane','levels','cell','maxCells'],
     isosurface:['level','inside','resolution','maxCells','maxTriangles','edgeRefinements'],
     streamlines:['seeds','maxChecks','direction','step','minStep','tolerance','normalize','maxLength',
@@ -98,7 +99,7 @@
   }
 
   function estimate(view) {
-    if (view.kind === 'slice') return view.values.reduce((n,value) => n+Number(value !== null),0);
+    if (view.kind === 'slice' || view.kind === 'lic') return view.values.reduce((n,value) => n+Number(value !== null),0);
     if (view.kind === 'isosurface') return view.mesh.positions.length/9;
     if (view.kind === 'glyphs') return view.arrows.length*(view.frame ? 3 : 4);
     return view.paths.reduce((n,row) => n+Math.max(0,row.points.length-1),0);
@@ -108,7 +109,7 @@
     const first = B.count();
     if (style.opacity > 0) {
       const tint = transfer(style,view.range), density = 1.5*style.opacity;
-      if (view.kind === 'slice') drawSlice(B,view,tint,density);
+      if (view.kind === 'slice' || view.kind === 'lic') drawSlice(B,view,tint,density);
       else if (view.kind === 'isosurface') drawSurface(B,view,style,tint,density);
       else if (view.kind === 'glyphs')
         for (const row of view.arrows) arrow(B,row,view.frame,style,tint(row.magnitude),density);

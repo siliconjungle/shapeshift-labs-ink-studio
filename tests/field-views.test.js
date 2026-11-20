@@ -104,7 +104,10 @@ function manifest() {
         {id:'one-degree',kind:'contours',field:'sensors/heat',options:{levels:[1],plane:{axis:'y',at:.02}}},
         {id:'heat-shell',kind:'isosurface',field:'sensors/heat',options:{level:1.5,resolution:.25}},
         {id:'wind-line',kind:'streamlines',field:'sensors/current',options:{seeds:[[0,.1,0]],maxLength:.8}},
-        {id:'wind-glyphs',kind:'glyphs',field:'sensors/current',options:{plane:{axis:'y',at:.12},counts:[7,7]}}
+        {id:'wind-glyphs',kind:'glyphs',field:'sensors/current',options:{plane:{axis:'y',at:.12},counts:[7,7]}},
+        {id:'wind-grain',kind:'lic',field:'sensors/current',bounds,
+          options:{plane:{axis:'y',at:-.09},counts:[20,20],length:.45,motion:{wavelength:.7,phase:.3}},
+          style:{ramp:['#143443','#85d4ae'],domain:[0,1],opacity:.7}}
       ] }
   };
 }
@@ -113,9 +116,11 @@ test('world renders bind all field view kinds to the current query, with targets
   const run=K.world.runtime.create(manifest());
   const old=run.query();
   const initial=K.world.visual(kit,run.view(),old);
-  assert.deepEqual(initial.fieldViews.map(view=>view.kind),['slice','contours','isosurface','streamlines','glyphs']);
+  assert.deepEqual(initial.fieldViews.map(view=>view.kind),['slice','contours','isosurface','streamlines','glyphs','lic']);
   assert(initial.fieldViews.every(view=>view.count>0));
   assert.equal(initial.fieldViews[0].count,400);
+  assert.equal(initial.fieldViews[5].count,400);
+  assert(initial.renderMetadata.targets.some(row=>row?.surface==='fieldView/wind-grain'));
   assert(initial.fieldViews[0].range[1]<2);
   assert(initial.renderMetadata.targets.some(row=>row?.surface==='fieldView/heat-map'));
   const b=kit.makeBuilder(3);
