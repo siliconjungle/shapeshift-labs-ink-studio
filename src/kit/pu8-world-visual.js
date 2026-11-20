@@ -424,10 +424,13 @@
     }
     const marks = K.dataMarks.prepare(config.dataMarks, { dataInputs })?.sample(time, { query });
     if (marks) K.dataMarks.stamp(B, marks);
+    const fieldViews = config.fieldViews === undefined ? null :
+      K.fieldViews.stampQuery(B,query,config.fieldViews,{bounds:region});
     const baked=B.finish({lookSnapshot: { time, tick: view.tick, query }, cam,
       ...(timeline && { timeline }),
       ...(values && { parameterValues: values }),
       ...(dataInputs && { dataInputs }),
+      ...(fieldViews?.length && { fieldViews }),
       ...(contacts?.kick.some(Boolean)&&{anim:{kick:contacts.kick}}),
       radius:span,detail:30,dither:.22,look:looks.look,paletteRoles:config.paletteRoles,
       ...K.authoring.environments.rendererSettings(config),
@@ -448,6 +451,7 @@
     visualLooks(presentation, catalog).validate();
     sceneCameraRig(presentation);
     K.dataMarks.prepare(presentation.visual?.dataMarks, { dataInputs });
+    K.fieldViews.prepare(presentation.visual?.fieldViews);
     return presentation.visual;
   };
 })(KIT);

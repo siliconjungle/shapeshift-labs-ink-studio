@@ -67,7 +67,8 @@
       ],
       slot = (x, y, z) => x + dimensions[0] * y + stride * z;
     function write(x, y, z, distance) {
-      if (!Number.isFinite(distance)) throw new Error('Implicit mesh field must return finite values');
+      if (o.allowMissing && distance === null) distance = NaN;
+      else if (!Number.isFinite(distance)) throw new Error('Implicit mesh field must return finite values');
       values[slot(x, y, z)] = distance;
     }
     if (o.prepareColumn) {
@@ -95,6 +96,7 @@
       for (let y = 0; y < counts[1]; y++)
         for (let x = 0; x < counts[0]; x++) {
           const base = slot(x, y, z), inside = values[base] < 0;
+          if (o.allowMissing && offsets.some(offset => Number.isNaN(values[base + offset]))) continue;
           // Most cells have one sign. Leave their vertices in the sampled grid.
           let i = 1;
           while (i < offsets.length && (values[base + offsets[i]] < 0) === inside) i++;
@@ -111,6 +113,7 @@
             for (let i = 0; i < o.edgeRefinements; i++) {
               const mid = (low + high) / 2;
               const value = field(V.mad(p[a], delta, mid));
+              if (o.allowMissing && value === null) return V.mad(p[a], delta, d[a] / (d[a] - d[b]));
               if (!Number.isFinite(value)) throw new Error('Implicit mesh field must return finite values');
               if (value < 0) low = mid;
               else high = mid;
@@ -142,8 +145,14 @@
     return A.data.freeze({ cells: counts.reduce((n, v) => n * v, 1), counts, resolution: step });
   }
   A.geometry.implicitSurface = (field, bounds, options) => {
-    const builder = A.geometry.builder();
-    const sampling = march(field, bounds, options, (a, b, c) => builder.triangle(a, b, c, options?.meta));
+    const builder = A.geometry.builder(), maxTriangles = options?.maxTriangles;
+    if (maxTriangles !== undefined && (!Number.isSafeInteger(maxTriangles) || maxTriangles < 1))
+      throw new Error('Implicit mesh triangle budget must be a positive integer');
+    let triangles = 0;
+    const sampling = march(field, bounds, options, (a, b, c) => {
+      if (maxTriangles !== undefined && ++triangles > maxTriangles) throw new Error('Implicit mesh exceeds its triangle budget');
+      builder.triangle(a, b, c, options?.meta);
+    });
     return { ...builder.finish(), sampling };
   };
   A.geometry.implicitTriangles = (field, bounds, options, emit) => {
