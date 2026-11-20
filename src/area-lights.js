@@ -1,7 +1,16 @@
 /* Shared shaped emitters: deterministic sampling, projected transmission and native shadow queries. */
 const AreaLights = (() => {
-  const cookies = typeof LightCookies === 'undefined' ? require('./light-cookies.js') : LightCookies;
-  const colorSpace = typeof ColorSpace === 'undefined' ? require('./color-space.js') : ColorSpace;
+  let cookies, colorSpace;
+  try {
+    cookies = LightCookies;
+  } catch {
+    cookies = require('./light-cookies.js');
+  }
+  try {
+    colorSpace = ColorSpace;
+  } catch {
+    colorSpace = require('./color-space.js');
+  }
   const linear = colorSpace.prepare('srgb', 'srgb-linear');
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;

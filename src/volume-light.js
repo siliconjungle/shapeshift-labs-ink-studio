@@ -1,7 +1,8 @@
 /* Front-to-back integration for a bounded density with optional single scattering. */
 const VolumeLight = (() => {
-  const cookies=typeof LightCookies==='undefined'?require('./light-cookies.js'):LightCookies;
-  const areas=typeof AreaLights==='undefined'?require('./area-lights.js'):AreaLights;
+  let cookies,areas;
+  try{cookies=LightCookies;}catch{cookies=require('./light-cookies.js');}
+  try{areas=AreaLights;}catch{areas=require('./area-lights.js');}
   const clouds = typeof CloudField === 'undefined' ? require('./cloud-field.js') : CloudField;
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

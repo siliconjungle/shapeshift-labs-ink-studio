@@ -387,3 +387,22 @@ test(
     assert(result.changed);
   }
 );
+
+test('cold CommonJS loading permits direct destructured public names', () => {
+  const cp = require('node:child_process'),
+    path = require('node:path');
+  const names = ['AreaLights', 'LightCookies', 'VolumeLight', 'ColorSpace'];
+  const source = `const {${names.join(',')}}=require(${JSON.stringify(path.resolve(__dirname, '..'))}).load();process.stdout.write([${names.map(n => 'typeof ' + n).join(',')}].join(','));`;
+  assert.equal(cp.execFileSync(process.execPath, ['-e', source], { encoding: 'utf8' }), 'object,object,object,object');
+});
+test('hierarchy-bound emitters transform normals correctly under shear while size stays in world units', () => {
+  const matrix = [2, 0.5, 0.3, 0, 1, 0.4, 0, 0, 1],
+    position = [3, 2, 1],
+    graph = { toWorld: (id, v) => K.V.add(K.M.app(matrix, v), position) },
+    source = K.lightEmitters.follow(graph, 'lamp', { ...lamp, at: t => [t, 0, 0] });
+  const light = A.prepare([source], { time: 1 })[0];
+  vec(light.at, [5, 2, 1]);
+  near(K.V.dot(light.normal, K.M.app(matrix, [1, 0, 0])), 0);
+  near(K.V.dot(light.normal, K.M.app(matrix, [0, 1, 0])), 0);
+  vec(light.half, [0.5, 0.3]);
+});
