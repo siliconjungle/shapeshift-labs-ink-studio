@@ -80,6 +80,8 @@ net X/Z displacement on each wrap, keeping the within-cycle root path.
 Both modes keep authored vertical motion. Use a matching start and end
 body pose for a seamless traveling cycle.
 
+Use [loop authoring](loop-authoring.md) to phase-lock procedural tracks or inspect a rendered clip’s final join.
+
 ## Try it
 
 ```sh

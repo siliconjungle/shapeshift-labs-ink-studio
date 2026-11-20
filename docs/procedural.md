@@ -153,6 +153,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `KIT.cellular.graph` | [Graph automata](graph-automata.md) with named cells, weighted and delayed edges, and seeded replay |
 | `KIT.cellular.domain` | [Shared cellular domains](shared-domains.md) for the same discrete or named-channel rule on images, joined UV charts, graphs, and volumes |
 | `KIT.simulationInputs` | [Editable simulation inputs](editable-simulation-inputs.md) for pins, brushes, obstacles, and timed injections with fixed-tick replay |
+| `KIT.loopAuthoring` | [Cycle detection and loop authoring](loop-authoring.md) for exact discrete repeats, phase-locked tracks, checkpoint blends, and clip join evidence |
 | `KIT.cellular.learned` | [Learned cellular growth](learned-cellular-growth.md) from data-only neighborhood rule weights, with damage and replay |
 | `KIT.cellular.continuous` | [Continuous cellular automata](continuous-cellular.md) with sampled kernels, coupled channels, masks, brush injections, and replay |
 | `layouts.bsp(options)`, `layouts.cave(options)`, `layouts.pack(items, options)`, `layouts.floorPlan(rooms, options)` | Connected room partitions and caves, constrained rectangle packing and named room adjacencies |

@@ -4,17 +4,20 @@ const PNG = require('./png.js');
 const { json } = require('./asset-files.js');
 const { resize } = require('./render.js');
 const Replay = require('./scene-replay.js');
+const Join = require('./loop-join.js');
 
 const products = ['still', 'loop', 'replay', 'embed'];
 
 function exportScene(createCapture, { out, formats = products, width = 640, height = 360, fps = 12, from = 0, to,
-  stillScale = 2, stillTime = from, embed } = {}) {
+  stillScale = 2, stillTime = from, embed, loopJoin = false } = {}) {
   if (typeof out !== 'string' || !out.trim()) throw new TypeError('Scene export needs an output directory');
   if (!Array.isArray(formats) || !formats.length || Array.from(formats).some(format => !products.includes(format)))
     throw new RangeError('Choose scene export formats from ' + products.join(', '));
   const selected = new Set(formats);
   const still = selected.has('still'), sequence = [...selected].some(format => format !== 'still');
   const keepRecording = selected.has('replay') || selected.has('embed');
+  if (typeof loopJoin !== 'boolean' || loopJoin && !sequence)
+    throw new TypeError('Loop join inspection needs a moving export');
   const stillWidth = width * stillScale, stillHeight = height * stillScale;
   if (!Replay.dimensions(width, height) || still && !Replay.dimensions(stillWidth, stillHeight) ||
       still && (!Number.isFinite(stillTime) || !Number.isFinite(stillScale) || stillScale < 1) ||
@@ -62,10 +65,16 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
       const packed = [], frames = [], files = [];
       const lastTime = from + (count - 1) / fps;
       const extra = inputs ? Buffer.byteLength(JSON.stringify(inputs)) : 0;
-      let encodedLength = extra;
+      let encodedLength = extra, first, penultimate, last;
       for (let index = 0; index < count; index++) {
         const time = from + index / fps;
-        const frame = PNG.packFrame(resize(source.sample(time, lastTime), width, height));
+        const image = resize(source.sample(time, lastTime), width, height);
+        if (loopJoin) {
+          if (index === 0) first = Join.capture(image);
+          if (index === count - 2) penultimate = index === 0 ? first : Join.capture(image);
+          if (index === count - 1) last = index === 0 ? first : Join.capture(image);
+        }
+        const frame = PNG.packFrame(image);
         if (selected.has('loop')) packed.push(frame);
         const png = PNG.encodeFrame(frame);
         if (selected.has('loop')) {
@@ -80,6 +89,12 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
         }
       }
       manifest.sequence = { width, height, start: from, fps, frameCount: count, duration: count / fps };
+      if (loopJoin) {
+        const endpoint = resize(source.sample(from + count / fps, lastTime), width, height);
+        const { report, image } = Join.inspect({ first, penultimate, last, endpoint, from, fps, count });
+        manifest.loopJoin = { image: save('loop-join.png', PNG.encode(image.w, image.h, image.rgb)),
+          report: save('loop-join.json', JSON.stringify(report, null, 2) + '\n') };
+      }
       if (selected.has('loop')) {
         manifest.loop = { file: save('loop.png', PNG.encodeAnimation(packed, fps)), frames: files };
       }
