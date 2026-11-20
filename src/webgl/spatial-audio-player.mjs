@@ -69,8 +69,12 @@ export function createSpatialAudioPlayer(context, {
   function stop(row,fade=false){
     if(voices.get(row.voice.id)===row)voices.delete(row.voice.id);
     if(!row.source)return;
-    const now=context.currentTime, tail=fade&&row.started<=now?smoothing*3:0;
-    if(tail){parameter(row.gain.gain,0,now);retiring.add(row);}
+    const now=context.currentTime, tail=fade&&context.state==='running'&&row.started<=now?smoothing*3:0;
+    if(tail){
+      if(retiring.size>=maxVoices)stop(retiring.values().next().value);
+      parameter(row.gain.gain,0,now);
+      retiring.add(row);
+    }
     else retiring.delete(row);
     row.source.stop(now+tail);
     if(!tail)disconnect(row);
