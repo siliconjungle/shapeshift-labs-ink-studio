@@ -221,6 +221,49 @@ samples and call `KIT.palette.extract({ width, height, data }, options)`.
 An `ImageData` object can be passed directly. Both entry points accept
 `{ size, alpha }` and return the CLI's report.
 
+## Measure palette usage at export size
+
+Use the same camera, time, and art resolution as the intended export.
+Omit `--select` to measure the whole frame.
+
+```sh
+ink-studio palette usage examples/palette-composition.js --w 368 --h 188 --px 1 \
+  --select '{"material":"fabric","effect":"bounce"}' --out fabric-usage.json
+```
+
+Select an authored `object` or `material` by its label. A screen
+`region` uses `[x, y, width, height]` in top-down art pixels and is
+clipped to the image. A world region uses
+`{"min":[x,y,z],"max":[x,y,z]}` and tests owned surface positions.
+An `effect` selects the final palette assignment for `fog`,
+`clouds`, `sky`, `emission`, `bounce`, or `shadow`. Combine fields
+to measure their intersection.
+
+Counts come from the exact RGB bytes of the rendered frame. Fully
+transparent pixels are excluded. Partial pixels count once. Object
+and material selections follow the [surface ownership pass](art-passes.md).
+When export and ownership pass grids differ, ownership uses the
+nearest source pixel at each export pixel centre.
+
+Each row reports its swatch, pixel count, fraction of selected pixels,
+and declaration status. Identical RGB swatches share a row. Compiled
+palette declarations cover scene and scoped palettes, including
+reserved swatches. An offscreen object or gated-off palette effect
+can report its unused declarations with zero visible pixels.
+Colours introduced by blending or overlays appear in the counts and
+are flagged as undeclared when they match no applicable declaration.
+
+The `unused` list contains declared swatches with zero matches.
+The `rare` list contains declared swatches with at least one match
+and at most `--rare-pixels` (default 3) or `--rare-share`
+(default .001, or 0.1% of the selected pixels). Set a threshold to
+zero to disable that criterion.
+
+Node callers can use
+`ink.paletteUsage(world, { w, h, px, t, select, rarePixels, rareShare })`
+and pass the usual render options. Pose mutable worlds using the same
+workflow as a direct render.
+
 ## Transfer a reference ramp
 
 ```js
@@ -464,7 +507,7 @@ The [glaze firing trials](../examples/chroma-glazes.js) project both definitions
 | `swatches` | Indexed swatches in palette order |
 | `brightness` | OKLab lightness bars in palette order |
 | `saturation` | HSV saturation bars in palette order |
-| `closest-pairs` | Distinct index pairs sorted by Euclidean distance in OKLab, with ties in index order |
+| `closest-pairs` | Distinct index pairs sorted by Euclidean distance in OKLab, with lightness differences and ties in index order |
 | `dither-pairs` | Bayer dither tiles containing only the two source swatches at each mix share |
 
 Set `cell: [width, height]` and `gap` in native texels. Use `columns` for swatch and closest-pair grids, or set `labels: false` for unlabelled art. Pair charts accept an optional `limit` for the number of automatically ranked pairs. For dithering, supply ordered `pairs` such as `[[0, 5], [2, 10]]`. Each `mix` share gives the requested fraction of the second swatch and defaults to `[0, 0.25, 0.5, 0.75, 1]`. The report includes the actual fraction of texels for each tile. Cell sizes divisible by four fit complete Bayer tiles.
@@ -480,6 +523,83 @@ ink-studio render examples/palette-chart-archive.js --w 382 --h 168 --px 1 --raw
 
 PNG files carry the palette in their indexed colour table and preserve transparent gaps. `chart.raster()` also exposes RGB, alpha and the original swatch indices as typed arrays. The JSON export includes the cell bounds and measurements plus a self-contained `raster` for an [indexed projected material](projected-effects.md#indexed-palette-charts). The [pigment archive](../examples/palette-chart-archive.js) mounts charts on sculpted display boards.
 
+## Review duplicate and close swatches
+
+```sh
+ink-studio palette pairs palette-report.json --sort distance --limit 12 --scale 16 --out pair-review
+```
+
+The input accepts a JSON array of colours or an object with a
+`palette` array, including output from `palette extract`.
+The review compares RGB8 values and preserves the original swatch
+indices, including all copies of an identical RGB value.
+
+`pairs.json` contains duplicate groups and every distinct index pair,
+with ranks for Euclidean OKLab distance and absolute OKLab lightness
+separation. A pair is `close` when its distance is at most
+`--max-distance` (default .035). The separate `lowLightnessSeparation`
+flag uses `--max-lightness` (default .02). Two strongly different hues
+can have nearly the same lightness.
+
+`native.png` shows each pair as two adjacent art pixels. `view.png`
+enlarges those exact pixels by `--scale` with nearest-neighbour
+sampling. Transparent gutters separate pairs. `--sort lightness`
+changes which pairs appear first. `--limit` sets how many pairs appear
+in the previews, and `--columns` sets their layout. The JSON report
+maps each cell's bounds on the native grid to its two palette indices.
+
+Use `KIT.palette.reviewPairs({ palette, sort, limit, columns,
+maxDistance, maxLightnessDelta })` with up to 256 swatches. Read
+`.report` for the measurements and use `.preview(scale)` for RGB and
+alpha bytes.
+
+
+## Review ramp spacing
+
+```sh
+ink-studio palette ramp-review ramp.json --out spacing.json
+ink-studio palette ramp-review --scene examples/palette-remap.json --role stone \
+  --w 240 --h 168 --px 1 --t .75 --out shot-spacing.json
+```
+
+The JSON input can be an ordered array of colours or an object with
+`stops`. Stops can be colours with optional `positions`, or pairs such
+as `[0.4, "#867b6e"]`. Unspecified positions are evenly spaced.
+`direction` defaults to `auto` and accepts `ascending` or `descending`
+to check an explicitly intended order.
+
+The report measures RGB8 stops in OKLab lightness. It includes each
+actual and expected step and flags the following.
+
+- `uneven-step` means a step differs from the lightness slope implied
+  by the endpoints and authored positions by more than `maxDeviation`
+  (default .035).
+- `reversal` means a step moves against the ramp direction by more
+  than `reversalTolerance` (default .005).
+- `missing-midtones` identifies two available lightness levels with no
+  stop between them and a gap greater than `maxGap` (default .22).
+  The report includes the midpoint lightness.
+- `duplicate-stop` and `resolved-collapse` identify adjacent stops
+  that share authored or resolved RGB8 values.
+
+For a shot using the indexed scene palette, use `--role` to track
+the original slots through the sampled time, colour grade, and remap.
+With a ramp file and `--scene`, a stop can bind automatically when its
+RGB identifies exactly one scene slot. The report counts where each
+resulting RGB appears anywhere in the export. Stops that share an RGB
+value report the same count.
+
+For material palettes, tone resolve, or other composited colour,
+pass a list such as `--pixels '[[41,62],[44,62],null]'` with one entry per stop.
+Coordinates are top-down art pixels. Use `null` for an unsampled
+stop. Probes read the final export RGB, including post styling, and
+fully transparent pixels have no reading.
+
+Use `KIT.palette.reviewRamp({ stops, positions, direction, ...thresholds })`
+for authored spacing, or `ink.reviewRampShot(world, { role, pixels, ...view })`
+in Node. The shot API accepts explicit `stops` in place of `role`.
+CLI thresholds are `--max-deviation`, `--reversal-tolerance`, and
+`--max-gap`. Use `--positions` to supply positions for a scene role.
 
 ## Fit a target with two swatches
 

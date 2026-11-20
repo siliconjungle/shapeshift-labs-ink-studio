@@ -25,10 +25,10 @@ const VolumeLight = (() => {
     return direction.map(v => v / length);
   }
 
-  function cookieRaster(raw,direction,outer,atTime) {
+  function cookieRaster(raw,direction,outer,time,atTime) {
     if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new TypeError('Spot cookie needs a raster');
     if(raw.mask!==undefined){if(!raw.mask||raw.mask.length!==raw.width*raw.height)throw new TypeError('Spot cookie needs a bounded byte mask');for(const v of raw.mask)if(!Number.isInteger(v)||v<0||v>255)throw new RangeError('Spot cookie mask needs bytes');}
-    const projected=cookies.projection(raw,direction,outer,0,atTime),rgb=[0,0,0];
+    const projected=cookies.projection(raw,direction,outer,time,atTime),rgb=[0,0,0];
     const scalar=(toLight,forward=-dot(toLight,direction))=>Math.max(...projected.sample(toLight,forward,rgb));
     scalar.rgb=(toLight,forward=-dot(toLight,direction))=>{const out=projected.sample(toLight,forward),max=Math.max(...out);return max?out.map(v=>v/max):out;};
     scalar.projection=projected;return scalar;
@@ -38,7 +38,7 @@ const VolumeLight = (() => {
     const { ambient = .35, sun, point, points = [], spots = [], shadow } = settings || {};
     if (shadow !== undefined && typeof shadow !== 'function') throw new TypeError('Atmosphere shadow must be a ray query');
     if (!Array.isArray(points) || !Array.isArray(spots)) throw new TypeError('Volume points and spots must be arrays');
-    let directional = null, animatedLocals = false;
+    let directional = null, animatedLocals = Boolean(areaLights?.some(light => light.cookie?.animated));
     if (sun) {
       directional = { direction: unit(celestialSun?.direction ?? sun.direction, 'Sun direction'), rgb: color(sun.color ?? '#fff3dc', palette),
         intensity: number(sun.intensity ?? .7, 0, 64, 'Sun intensity') * (celestialSun?.gain ?? 1),
@@ -69,10 +69,12 @@ const VolumeLight = (() => {
       const outer = number(light.outerAngle ?? 24, .01, 90, 'Spot outer angle');
       const inner = number(light.innerAngle ?? outer * .65, 0, outer, 'Spot inner angle');
       const direction = unit(atTime(light.direction), 'Spot direction');
+      const surfaceIntensity = number(atTime(light.surfaceIntensity ?? 0), 0, 64, 'Spot surface intensity');
+      const cookie = light.cookie === undefined || light.cookie === false ? undefined :
+        cookieRaster(light.cookie, direction, outer, time, atTime);
+      animatedLocals ||= !!cookie?.projection.animated;
       return { ...source, direction, innerCos: Math.cos(inner * radians), outerCos: Math.cos(outer * radians),
-        surfaceIntensity: number(atTime(light.surfaceIntensity ?? 0), 0, 64, 'Spot surface intensity'),
-        cookie: light.cookie === undefined || light.cookie === false ? undefined :
-          cookieRaster(light.cookie, direction, outer, atTime) };
+        surfaceIntensity, cookie };
     }
     const single = localLights && point ? local(point, 'Point light') : null;
     const pointLights = localLights ? Array.from(points, light => local(light, 'Point light')) : [];

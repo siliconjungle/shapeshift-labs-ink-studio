@@ -46,13 +46,16 @@ function surfaceShading(world, options, camera) {
     (camera.transmissionLamps?.() ?? []).map(light => ({ ...light, tint: linear(light.color) })) : [];
   const ids = new Map(), albedos = new Map();
   const palettes = [], constraints = [];
+  const paletteSlots = options.paletteUsageSelection && [];
   for (const material of materials) {
+    const slots = paletteSlots && [];
     for (const layer of material.layers) {
       const { effect } = layer;
       const palette = effect?.paletteAt?.(time) ?? effect?.palette;
       if (!palette || SurfaceLook.basePaint(layer)) continue;
       palettes.push(palette);
       ids.set(palette, palettes.length);
+      if (slots) slots.push(palettes.length);
     }
     if (material.paletteConstraint) {
       const policy = material.paletteConstraint;
@@ -60,7 +63,9 @@ function surfaceShading(world, options, camera) {
       policy.assetId ??= material.settings.lookAssetId;
       constraints[palettes.length] = policy;
       ids.set(policy.swatches, palettes.push(policy.swatches));
+      if (slots) slots.push(palettes.length);
     }
+    if (paletteSlots) paletteSlots.push(slots);
   }
   const planarMaterials = materials.map(
     material =>
@@ -248,7 +253,7 @@ function surfaceShading(world, options, camera) {
   }
 
   return {
-    has, normalAt, surfaceNormal, planar, environment, shade, palettes, constraints,
+    has, normalAt, surfaceNormal, planar, environment, shade, palettes, constraints, paletteSlots,
     projected, bevel, local, thin, paintsBase: i => materials[surfaceData[i * STRIDE] - 1]?.paintsBase,
     finishBeforeFog: i => materials[surfaceData[i * STRIDE] - 1]?.finishBeforeFog,
     reveals: i => materials[surfaceData[i * STRIDE] - 1]?.reveals

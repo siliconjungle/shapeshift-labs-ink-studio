@@ -1,6 +1,6 @@
 // Shared colored stencils for surface and volume lights. Texels store linear transmission.
 const LightCookies = (() => {
-  const cache = new WeakMap(),
+  const cache = new WeakMap(), geometricKey = Symbol.for('ink-studio.geometric-light-cookie'),
     radians = Math.PI / 180;
   const check = (ok, s) => {
     if (!ok) throw new RangeError('Light cookie: ' + s);
@@ -41,7 +41,8 @@ const LightCookies = (() => {
     }
     return Object.freeze({ width, height, data, filter });
   }
-  function prepare(raw) {
+  function prepare(raw, time = 0) {
+    if (raw?.[geometricKey]) raw = raw[geometricKey].frame(time);
     const previous = cache.get(raw);
     if (previous?.revision === (raw.revision ?? 0)) return previous.image;
     const result = raster(raw);
@@ -72,7 +73,7 @@ const LightCookies = (() => {
     return out;
   }
   function projection(raw, direction, outer, time = 0, evaluate = v => (typeof v === 'function' ? v(time) : v)) {
-    const image = prepare(raw),
+    const image = prepare(raw, time),
       normal = unit(direction),
       up = unit(raw.up ?? (Math.abs(normal[1]) > 0.95 ? [0, 0, 1] : [0, 1, 0])),
       right = unit(cross(normal, up)),
@@ -101,6 +102,7 @@ const LightCookies = (() => {
       v = vertical.map((n, i) => (right[i] * s - n * c) * scale);
     return {
       image,
+      animated: !!raw[geometricKey],
       u,
       v,
       wrap: !!raw.wrap,
@@ -199,6 +201,29 @@ const LightCookies = (() => {
     });
     return result;
   }
-  return Object.freeze({ prepare, sample, projection, pattern, invalidate: raw => cache.delete(raw) });
+  function geometric({ width = 128, height = 128, angle = 24, focus = 5, lens, samples, exposure, blur, incident,
+    filter = 'linear', period, ...projection } = {}) {
+    const G = typeof GeometricCaustics !== 'undefined' ? GeometricCaustics : require('./geometric-caustics.js');
+    check(['nearest','linear'].includes(filter) && (period === undefined || Number.isFinite(period) && period > 0),
+      'invalid geometric filter or period');
+    const bake = G.compile({width,height,angle,focus,lens,samples,exposure,blur,incident});
+    let lastTime, lastFrame;
+    const settings = { ...projection,width,height,angle,filter };
+    function frame(time = 0) {
+      check(Number.isFinite(time),'geometric cookies need a finite time');
+      const t = period === undefined ? time : ((time%period)+period)%period;
+      if (lastFrame && t===lastTime) return lastFrame;
+      const rgb = bake(t);
+      lastFrame = Object.freeze({ ...settings,rgb,toJSON:()=>({ ...settings,rgb:Array.from(rgb) }) });
+      lastTime = t;
+      return lastFrame;
+    }
+    const generator = Object.freeze({ frame,invalidate() { lastFrame=undefined; } });
+    return Object.freeze({ ...settings,frame,toJSON:()=>frame().toJSON(),[geometricKey]:generator });
+  }
+  return Object.freeze({ prepare, sample, projection, pattern, geometric, invalidate(raw) {
+    if (raw?.[geometricKey]) raw[geometricKey].invalidate();
+    else cache.delete(raw);
+  } });
 })();
 if (typeof module !== 'undefined') module.exports = LightCookies;

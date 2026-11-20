@@ -885,6 +885,9 @@ const CMD = {
         '  ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern',
         '  palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D',
         '  palette extract <reference.png> [--size 32] [--alpha visible|opaque|all] [--out report.json]',
+        '  palette usage <scene> [--select JSON] [--rare-pixels 3] [--rare-share .001] [--out report.json]',
+        '  palette pairs <palette.json> [--sort distance|lightness] [--limit 12] [--scale 16] [--out directory]',
+        '  palette ramp-review [ramp.json] [--scene scene --role name] [--pixels JSON] [--out report.json]',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
         '  palette chart <chart.json> [--type chart] [--format png|data]   export an indexed swatch, bar or pair chart',
         '  palette lighting <source-or-draft.json> [--approve] [--out file.json]   suggest or save named lighting ramps',
@@ -1072,6 +1075,57 @@ const CMD = {
     if (pos[0] === 'plot') return require('./palette-plot.js')(pos.slice(1), opt, lib(), outputFile);
     if (pos[0] === 'fit') return require('./palette-fit.js')(pos.slice(1), opt, lib(), outputFile);
     if (pos[0] === 'chart') return require('./palette-chart.js')(pos.slice(1), opt, lib(), outputFile);
+    if (pos[0] === 'pairs') return require('./palette-pairs.js')(pos.slice(1),opt,lib(),outputFile);
+    if (pos[0] === 'ramp-review') {
+      const scene = opt.scene, role = opt.role;
+      if (pos.length>2 || (!pos[1] && (!scene || !role)) || (role && (!scene || pos[1])) ||
+          (opt.pixels !== undefined && !scene) ||
+          ['scene','role','pixels','positions','direction','max-deviation','max-gap','reversal-tolerance','out','t']
+            .some(key=>opt[key]===true))
+        die('Use palette ramp-review [ramp.json] [--scene scene --role name] [--pixels JSON] [--out report.json]');
+      const source = pos[1] && path.resolve(pos[1]);
+      const input = source ? JSON.parse(fs.readFileSync(source,'utf8')) : {};
+      const definition = Array.isArray(input) ? {stops:input} : input;
+      const settings = { ...definition, ...(opt.positions !== undefined && {positions:JSON.parse(opt.positions)}),
+        ...(opt.direction !== undefined && {direction:opt.direction}),
+        ...(opt['max-deviation'] !== undefined && {maxDeviation:num('max-deviation')}),
+        ...(opt['max-gap'] !== undefined && {maxGap:num('max-gap')}),
+        ...(opt['reversal-tolerance'] !== undefined && {reversalTolerance:num('reversal-tolerance')}) };
+      let report;
+      if (scene) {
+        const t = num('t',0);
+        if (!Number.isFinite(t)) die('Ramp review time must be finite');
+        const world = buildPreview(scene);
+        pose(world,t);
+        const pixels = opt.pixels === undefined ? undefined : JSON.parse(opt.pixels);
+        report = require('./ramp-review.js').reviewRampShot(world,view({ ...settings,role,pixels,t,
+          transparent:onOffOption('transparent') }));
+      } else report = lib().KIT.palette.reviewRamp(settings);
+      const json = JSON.stringify(report,null,2)+'\n';
+      if (!opt.out) return process.stdout.write(json);
+      const file = outputFile('ramp-review.json');
+      if (file === source || scene && file === path.resolve(scene)) die('Choose an output separate from the ramp and scene inputs');
+      fs.mkdirSync(path.dirname(file),{recursive:true});
+      fs.writeFileSync(file,json);
+      return;
+    }
+    if (pos[0] === 'usage') {
+      if (pos.length !== 2 || ['select','rare-pixels','rare-share','t','out'].some(key=>opt[key] === true))
+        die('Use palette usage <scene> [--select JSON] [--rare-pixels 3] [--rare-share .001] [--out report.json]');
+      const t = num('t',0);
+      if (!Number.isFinite(t)) die('Palette usage time must be finite');
+      const select = opt.select === undefined ? undefined : JSON.parse(opt.select);
+      const world = buildPreview(pos[1]);
+      pose(world,t);
+      const report = require('./palette-usage.js').paletteUsage(world,view({t,select,transparent:onOffOption('transparent'),
+        rarePixels:num('rare-pixels',3),rareShare:num('rare-share',.001)}));
+      const json = JSON.stringify(report,null,2)+'\n';
+      if (!opt.out) return process.stdout.write(json);
+      const file = outputFile('palette-usage.json');
+      fs.mkdirSync(path.dirname(file),{recursive:true});
+      fs.writeFileSync(file,json);
+      return;
+    }
     if (pos[0] === 'extract') {
       if (pos.length !== 2 || Object.entries(opt).some(([key,value])=>!['size','alpha','out'].includes(key) || value === true))
         die('Use palette extract <reference.png> [--size 32] [--alpha visible|opaque|all] [--out report.json]');

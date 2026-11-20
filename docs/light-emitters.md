@@ -116,6 +116,9 @@ increment `cookie.revision` or call `LightCookies.invalidate(cookie)`. Animated
 projection coordinates do not require recompiling or reuploading the raster.
 `LightCookies.prepare`, `projection` and `sample` are also standalone tools.
 
+Use [geometric caustic projection](geometric-caustics.md) to generate
+an animated cookie from refractive lens surfaces and an authored aperture.
+
 ## Light-catching fog
 
 ```js

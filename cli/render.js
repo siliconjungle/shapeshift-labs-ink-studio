@@ -43,6 +43,7 @@ const SdfRaster = require('./sdf-assist.js');
 const { footprint, exportOffsets, sampledDepth } = require('./splat-sampling.js');
 const { createMaskResolve, applyMasks } = require('./look-mask-resolve.js');
 const PaletteComposition = require('./palette-composition.js');
+const PaletteUsage = require('./palette-usage.js');
 const { createLookPass } = require('./look-pass.js');
 const { createAudit } = require('./render-audit.js');
 const { contributionLook, contributionLayers } = require('./look-contributions.js');
@@ -342,7 +343,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (specializedResolve || (legacyLook && stable?.protect.size)) {
     for (const channel of ['objectId', 'materialId', 'emission', 'protected']) passSelection.add(channel);
   }
-  const finishLook = (frame, passes, fog, effectSignals, source, paletteState) => {
+  const finishLook = (frame, passes, fog, effectSignals, source, paletteState, paletteInventory) => {
     if (ink) frame = ArtInk.apply(frame, passes, ink, world.pal, fog, { world, depthOffset });
     if (effects) frame = ArtEffects.apply(frame, passes, effects, t, {
       history: o.artHistory, world: o[reconstructionSource] ?? world, palette: world.pal, motionReference: frame.motionReference,
@@ -352,8 +353,10 @@ function renderFrame(world, o, preparedPalettes) {
       frame = ArtEffects.paletteUse(EmissiveFinishes.applyGlow(frame, passes, emissive.profiles), world.pal);
     }
     const ditherAt = anchoring ? (x,y) => ArtStability.ditherCoordinates(stable, passes, y*frame.w+x, x, y) : undefined;
+    const basePalette = (paletteState || paletteInventory || o.captureScenePalette) &&
+      (tone?.palette ?? evaluatedPalette ?? (!o.raw && grade ? PixelLook.gradePalette(grade) : world.pal));
     const ownership = paletteState?.capture?.view(frame,passes,{ ...paletteState,stable,time:t,
-      base:tone?.palette ?? evaluatedPalette ?? world.pal,composited:retainContributions });
+      base:basePalette,composited:retainContributions });
     if (effectSignals) {
       frame = EffectPalettes.apply(frame, passes, effectSignals, source, world.pal, o.captureEffectPalettes, ditherAt, ownership);
       if (audit) for (const ramp of effectSignals.rules.ramps.values()) audit.addPalette(ramp.packed);
@@ -383,6 +386,25 @@ function renderFrame(world, o, preparedPalettes) {
     if (audit) {
       frame.lookAudit = audit.report();
     }
+    if (paletteInventory) {
+      const { declared,baseSlots,usesBase,full } = paletteInventory;
+      if (usesBase || (tone && baseSlots.size)) for (const color of basePalette) declared.add(color);
+      else for (const slot of baseSlots) declared.add(basePalette[slot]);
+      if (full) {
+        for (const ramp of ink?.ramps.values() ?? []) for (const color of ramp) declared.add(color);
+        if (ink) for (const style of [ink.base,...ink.styles.values(),...ink.scoped.map(row=>row.patch)]) {
+          for (const color of style.ramp ?? []) declared.add(color);
+          for (const key of ['silhouette','crease','boundary']) {
+            const line = style[key];
+            for (const color of [line?.color,line?.highlight,line?.shadow]) if (color !== undefined) declared.add(color);
+          }
+        }
+        for (const layer of [effects?.halo,effects?.emitter,effects?.reflection,effects?.trail,effects?.smear,...(effects?.cycles ?? [])])
+          for (const color of layer?.colors ?? []) declared.add(color);
+      }
+      frame.paletteInventory = { base:basePalette, colors:[...declared].filter(Number.isInteger) };
+    }
+    if (o.captureScenePalette) frame.scenePalette = legacyLook && !tone ? basePalette : null;
     if (!o.captureMotion) delete frame.motionReference;
     if (requestedPasses.length) frame.passes = ArtPasses.subset(passes, requestedPasses);
     return frame;
@@ -478,7 +500,8 @@ function renderFrame(world, o, preparedPalettes) {
       native.alpha && { alpha: native.alpha },
       (native.orderFallback || samples.orderFallback) && { orderFallback: true },
       native.volumeStats && { volumeStats: native.volumeStats },
-      o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color, native.paletteState);
+      o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color,
+      native.paletteState,native.paletteInventory);
   }
   lookPass = createLookPass(W, H, passSelection, o.lookPassRegistry);
   /* Legacy orthographic views back the eye away. Authored rigs keep their rail or orbit position. */
@@ -811,6 +834,8 @@ function renderFrame(world, o, preparedPalettes) {
   if (audit && !o.raw) audit.addPalette(PixelLook.outputPalettes([], localPalettes).packed);
   const localAt = localPalettes.length && !o.raw && !retainContributions ? new Uint32Array(W * H) : null;
   const targetSlots = paletteRules?.slots(world);
+  const paletteInventory = o.paletteUsageSelection && !o.captureCoverage && (!o.samples || o.worked) &&
+    PaletteUsage.inventory(world,o.paletteUsageSelection,{surface,paletteRules,targetSlots,stages,optics,effects:effectPaletteSettings});
   const defaultSlot = paletteRules?.defaultSlot || 0;
   const overlay = localAt && localConstraints?.some(policy => policy?.mask) &&
     { slots: new Uint32Array(W * H), owners: new Uint32Array(W * H) };
@@ -2357,6 +2382,7 @@ function renderFrame(world, o, preparedPalettes) {
       ...(o.resolveDetailCleanup && pixelBudgets && { cleanDetail: cleanPixels }),
       ...(localAt && { localAt, localPalettes, localConstraints }), ...(detail && { detail }), ...(passes && { passes }), ...(motionReference && { motionReference }),
       ...(paletteState && {paletteState}),
+      ...(paletteInventory && {paletteInventory}),
       ...(masks && { masked: masks.output }),
       ...(atmosphere?.fog && { fog: atmosphere.fog }), ...(silhouetteMask && {silhouetteMask}), ...(effectSignals && { effectSignals }), ...(volumeStats && { volumeStats }), ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
     };
@@ -2678,7 +2704,7 @@ function renderFrame(world, o, preparedPalettes) {
     ...(detail && { detail }), ...(motionReference && { motionReference }),
     ...(volumeStats && { volumeStats }), ...(silhouetteMask && {silhouetteMask}), ...(o.captureFog && atmosphere?.fog && { fog: atmosphere.fog }),
     ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
-  }, passes, atmosphere?.fog, effectSignals, effectColor, paletteState);
+  }, passes, atmosphere?.fog, effectSignals, effectColor, paletteState,paletteInventory);
 }
 function pixelIndex(w, h, sourceW, sourceH) {
   if (w === sourceW && h === sourceH) return (x, y) => y * w + x;

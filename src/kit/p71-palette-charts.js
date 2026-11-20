@@ -8,13 +8,81 @@
   const hex = rgb=>'#'+colors.toHex(rgb).toString(16).padStart(6,'0');
   let font;
 
+  function swatchRows(palette) {
+    return Array.from(palette,(value,index)=>{
+      const input = colors.parse(value);
+      if (!Array.from(input).every(unit)) throw new TypeError('Palette swatches need finite normalized RGB');
+      const rgb = input.map(n=>Math.round(n*255)/255);
+      const hi = Math.max(...rgb), lo = Math.min(...rgb), lab = colors.lab(rgb);
+      return {index,rgb,lab,lightness:Math.max(0,Math.min(1,lab[0])),saturation:hi ? (hi-lo)/hi : 0};
+    });
+  }
+
   function swatchPairs(rows) {
     const pairs = [];
     for (let a=0;a<rows.length-1;a++) for (let b=a+1;b<rows.length;b++) {
       const x = rows[a].lab, y = rows[b].lab;
-      pairs.push({indices:[a,b],distance:Math.hypot(x[0]-y[0],x[1]-y[1],x[2]-y[2])});
+      pairs.push({indices:[a,b],distance:Math.hypot(x[0]-y[0],x[1]-y[1],x[2]-y[2]),
+        lightnessDelta:Math.abs(x[0]-y[0])});
     }
     return pairs.sort((a,b)=>a.distance-b.distance || a.indices[0]-b.indices[0] || a.indices[1]-b.indices[1]);
+  }
+
+  function reviewPairs(definition) {
+    if (!record(definition) || Object.keys(definition).some(key=>
+      !['palette','maxDistance','maxLightnessDelta','sort','limit','columns'].includes(key)))
+      throw new TypeError('Palette pair review needs a palette and review settings');
+    const {palette, maxDistance=.035, maxLightnessDelta=.02, sort='distance', limit=12, columns=4} = definition;
+    if (!Array.isArray(palette) || palette.length>256 || !unit(maxDistance) || !unit(maxLightnessDelta) ||
+        !['distance','lightness'].includes(sort) || !integer(limit,1,256) || !integer(columns,1,16))
+      throw new RangeError('Use up to 256 swatches, thresholds in [0, 1], a distance or lightness sort, and valid preview dimensions');
+
+    const rows = swatchRows(palette), swatches = rows.map(row=>hex(row.rgb));
+    const pairs = swatchPairs(rows).map((pair,i)=>{
+      const [a,b] = pair.indices, duplicate = swatches[a] === swatches[b];
+      return { ...pair, swatches:[swatches[a],swatches[b]], distanceRank:i+1,
+        classification:duplicate ? 'duplicate' : pair.distance<=maxDistance ? 'close' : 'distinct',
+        lowLightnessSeparation:pair.lightnessDelta<=maxLightnessDelta };
+    });
+    const lightnessOrder = pairs.slice().sort((a,b)=>a.lightnessDelta-b.lightnessDelta || a.distanceRank-b.distanceRank);
+    lightnessOrder.forEach((pair,i)=>{pair.lightnessRank=i+1;});
+    const ordered = sort === 'lightness' ? lightnessOrder : pairs;
+    const groups = new Map();
+    swatches.forEach((swatch,index)=>{
+      if (!groups.has(swatch)) groups.set(swatch,[]);
+      groups.get(swatch).push(index);
+    });
+    const duplicateGroups = Array.from(groups,([swatch,indices])=>({swatch,indices})).filter(row=>row.indices.length>1);
+    const visible = ordered.slice(0,limit), cols = Math.min(columns,visible.length);
+    const cells = visible.map(({indices,distanceRank,lightnessRank},i)=>({
+      indices,distanceRank,lightnessRank,bounds:[(i%cols)*3,Math.floor(i/cols)*2,2,1]
+    }));
+    const w = cols ? 3*cols-1 : 1, h = cols ? 2*Math.ceil(cells.length/cols)-1 : 1;
+    const bytes = rows.map(row=>row.rgb.map(n=>Math.round(n*255)));
+    function preview(scale=1) {
+      if (!integer(scale,1,64) || w*h*scale*scale>2**22)
+        throw new RangeError('Palette pair preview exceeds its scale or pixel budget');
+      const width=w*scale,height=h*scale, rgb=new Uint8Array(width*height*3), alpha=new Uint8Array(width*height);
+      for (const {indices,bounds:[x,y]} of cells) {
+        for (let dy=0;dy<scale;dy++) for (let side=0;side<2;side++) {
+          const at=(y*scale+dy)*width+(x+side)*scale;
+          alpha.fill(255,at,at+scale);
+          for (let dx=0;dx<scale;dx++) rgb.set(bytes[indices[side]],(at+dx)*3);
+        }
+      }
+      return { w:width,h:height,rgb,alpha };
+    }
+    const report = K.procedural.data.freeze({
+      palette:swatches, sort, thresholds:{maxDistance,maxLightnessDelta}, duplicateGroups, pairs:ordered,
+      counts:{
+        pairs:pairs.length,
+        duplicate:pairs.filter(pair=>pair.classification==='duplicate').length,
+        close:pairs.filter(pair=>pair.classification==='close').length,
+        lowLightnessSeparation:pairs.filter(pair=>pair.lowLightnessSeparation).length
+      },
+      cells
+    });
+    return Object.freeze({ report, preview });
   }
 
   function chart(definition) {
@@ -38,13 +106,7 @@
         dither && (!Array.isArray(mix) || !integer(mix.length,1,17) || !Array.from(mix).every(unit)))
       throw new RangeError('Dither charts take a list of pairs and 1–17 mix shares. Pair charts need at least two swatches');
 
-    const rows = Array.from(palette,(value,index)=>{
-      const input = colors.parse(value);
-      if (!Array.from(input).every(unit)) throw new TypeError('Palette chart swatches need finite normalized RGB');
-      const rgb = input.map(n=>Math.round(n*255)/255);
-      const hi = Math.max(...rgb), lo = Math.min(...rgb), lab = colors.lab(rgb);
-      return {index,rgb,lab,lightness:Math.max(0,Math.min(1,lab[0])),saturation:hi ? (hi-lo)/hi : 0};
-    });
+    const rows = swatchRows(palette);
     const swatches = Object.freeze(rows.map(row=>hex(row.rgb)));
     const ranked = paired ? swatchPairs(rows) : [];
     let selected = ranked.slice(0,limit);
@@ -57,7 +119,7 @@
         return {indices:[a,b],distance:row.distance};
       });
     }
-    const entries = paired ? selected : rows;
+    const entries = dither ? selected.map(({indices,distance})=>({indices,distance})) : paired ? selected : rows;
     const cols = bars ? 1 : dither ? mix.length : Math.min(columns,entries.length);
     const rowCount = bars || dither ? entries.length : Math.ceil(entries.length/cols);
     const gutter = labels ? bars ? 16 : dither ? 34 : 0 : 0;
@@ -141,4 +203,5 @@
   }
 
   materials.paletteChart = chart;
+  materials.palettePairReview = reviewPairs;
 })(KIT);

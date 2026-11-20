@@ -592,5 +592,6 @@
   K.palette = Object.freeze({ path, transfer, recipe, duotone, animate, bind, extract: PaletteExtract.extract,
     hueBrightness: PaletteFields.hueBrightness, polar: PaletteFields.polar, coverage: PaletteFields.coverage,
     chromaField: PaletteFields.chromaField, ramp: PaletteFields.ramp, plot: P.materials.palettePlot,
-    chart: P.materials.paletteChart, fitDither: P.materials.fitDither, lightingRamps: P.materials.lightingRamps });
+    chart: P.materials.paletteChart, reviewPairs: P.materials.palettePairReview, reviewRamp: P.materials.reviewRamp,
+    fitDither: P.materials.fitDither, lightingRamps: P.materials.lightingRamps });
 })(KIT);
