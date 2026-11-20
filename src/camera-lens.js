@@ -178,6 +178,76 @@ const CameraLens = (() => {
       back
     };
   }
+  const clamp = (n, low, high) => Math.max(low, Math.min(high, n));
+  function constrain(camera, limits) {
+    if (!limits) return camera;
+    let { yaw, pitch, dist } = camera;
+    if (limits.yaw && limits.yaw[1] - limits.yaw[0] < 2 * Math.PI) {
+      const middle = (limits.yaw[0] + limits.yaw[1]) / 2, offset = yaw - middle;
+      const wrapped = middle + Math.atan2(Math.sin(offset), Math.cos(offset));
+      yaw += clamp(wrapped, ...limits.yaw) - wrapped;
+    }
+    if (limits.pitch) pitch = clamp(pitch, ...limits.pitch);
+    if (limits.distance) dist = clamp(dist, ...limits.distance);
+    return { ...camera, yaw, pitch, dist };
+  }
+
+  function orbitPose(yaw, pitch, distance, at) {
+    const sin = Math.sin(yaw), cos = Math.cos(yaw), cp = Math.cos(pitch), sign = cp < 0 ? -1 : 1;
+    const back = [cp * sin, Math.sin(pitch), cp * cos], right = [sign * cos, 0, -sign * sin];
+    return { eye: at.map((n, i) => n + distance * back[i]), right, up: cross(back, right), back };
+  }
+
+  function snapView(view, pixelsPerUnit, anchor) {
+    const result = view.slice();
+    for (let row = 0; row < 2; row++) {
+      const position = anchor[0] * view[row] + anchor[1] * view[4 + row] + anchor[2] * view[8 + row] + view[12 + row];
+      result[row + 12] += Math.round(position * pixelsPerUnit) / pixelsPerUnit - position;
+    }
+    return result;
+  }
+  function artView(sample, height, authored, override, grid = 1) {
+    const read = value => value === true ? { snap: true } : value || {};
+    const { snap, anchor = [0, 0, 0] } = { ...read(authored), ...read(override) };
+    if (!sample.ortho || !snap || override === false) return sample.view;
+    check(Array.isArray(anchor) && anchor.length === 3 && Array.from(anchor).every(finite),
+      'snap anchor must be finite XYZ');
+    return snapView(sample.view, height / (2 * sample.tangent * sample.dist * grid), anchor);
+  }
+
+  function frame(world, options, width, height, { orbit, impulse, probe = false } = {}) {
+    check([width, height].every(value => finite(value) && value > 0), 'viewport must be positive');
+    const cameraTime = options.cameraTime ?? (options.timeDomains ?? world.timeDomains)?.read('camera').sampleTime ??
+      options.time ?? options.t ?? world.lookSnapshot?.time;
+    const time = cameraTime ?? 0;
+    const authored = world.cameraRig?.sample(time, { shot: options.cameraShot }).camera;
+    const base = view(world.cam, authored, probe ? undefined : options.camera);
+    const keys = probe ? ['fov'] : ['fov', 'focalLength', 'sensorHeight', 'focusDistance'];
+    const lens = resolve(base, Object.fromEntries(keys.filter(key => options[key] !== undefined).map(key => [key, options[key]])));
+    const lensScale = options.lensScale ?? 1, zoom = options.zoom ?? 1;
+    check(finite(lensScale) && lensScale > 0 && finite(zoom) && zoom > 0, 'lens scale and zoom must be positive');
+    const tangent = Math.tan(lens.fov / 2) / lensScale, aspect = width / height;
+    const ortho = options.ortho ?? (options.projection === undefined ? base.ortho : options.projection === 'orthographic');
+    const animation = options.lockCamera ? undefined : world.anim;
+    const dist0 = options.dist ?? base.dist / zoom;
+    const { yaw, pitch, dist } = constrain({ yaw: options.yaw ?? base.yaw, pitch: options.pitch ?? base.pitch,
+      dist: dist0 / (animation?.zoom || 1) }, orbit);
+    check([yaw, pitch, dist].every(finite) && dist > 0, 'finite orbit and positive distance required');
+    const output = options.target && Object.hasOwn(options.target, 'framebuffer');
+    const at = !output && options.target != null ? options.target : base.target;
+    check((Array.isArray(at) || ArrayBuffer.isView(at)) && at.length === 3 && Array.from(at).every(finite),
+      'target must be finite XYZ');
+    const composed = target({ target: Array.from(at), yaw, pitch, dist, fov: 2 * Math.atan(tangent),
+      composition: options.composition ?? base.composition }, aspect);
+    const framed = composed.map((n, i) => n + (animation?.kick?.[i] ?? 0));
+    const radius = world.radius ?? 14, setback = ortho && !authored && !base.pose ? 2 * radius + 4 : 0;
+    const distance = dist + setback;
+    let pose = base.pose ?? orbitPose(yaw, pitch, distance, framed);
+    const motion = !probe && impulse?.(world, { ...options, cameraTime }, listenerPose(pose, setback));
+    if (motion && (motion.translation.some(Boolean) || motion.rotation.some(Boolean))) pose = applyMotion(pose, motion, { setback });
+    return { base, lens, time, motion: motion || null, pose, view: matrix(pose), framed, yaw, pitch, dist, dist0, distance, radius,
+      setback, aspect, tangent, ortho, clipNear: Math.max(.4, .15 * dist), clipFar: 400 };
+  }
   return Object.freeze({
     defaultFov,
     defaultSensorHeight,
@@ -191,7 +261,12 @@ const CameraLens = (() => {
     fromView,
     matrix,
     listenerPose,
-    applyMotion
+    applyMotion,
+    constrain,
+    orbitPose,
+    frame,
+    snapView,
+    artView
   });
 })();
 if (typeof module !== 'undefined') module.exports = CameraLens;

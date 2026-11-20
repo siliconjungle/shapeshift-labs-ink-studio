@@ -91,7 +91,7 @@ function override(world, opt, kit) {
   return world;
 }
 
-const bindingKeys = new Set(['asset', 'revision', 'strength', 'params', 'palette', 'mask', 'stage', 'order', 'weight', 'inputs', 'select']);
+const bindingKeys = new Set(['asset', 'revision', 'strength', 'params', 'palette', 'mask', 'stage', 'paletteStage', 'order', 'weight', 'inputs', 'select']);
 
 function editPalette(world, { palette, select }, kit) {
   const settings = Array.isArray(palette) ? { palette } : palette;

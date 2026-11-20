@@ -154,8 +154,9 @@ const ReflectionProbes = (() => {
           if(!influence) return null;
         }
       }
-      if(!cache.has(probe.id)) cache.set(probe.id,levels(faces.map((_,i)=>capture(probe,i)),probe.size));
-      const mip=cache.get(probe.id), [along,across]=roughness;
+      const key=JSON.stringify([probe.id,probe.size]);
+      if(!cache.has(key)) cache.set(key,levels(faces.map((_,i)=>capture(probe,i)),probe.size));
+      const mip=cache.get(key), [along,across]=roughness;
       const minor=Math.min(along,across), spread=Math.abs(along*along-across*across)*.9;
       const lod=Math.min(mip.length-1,Math.log2(1+(minor*minor+spread*.29)*probe.size*.65));
       const low=Math.floor(lod), high=Math.min(low+1,mip.length-1), fraction=lod-low;

@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { document, readGlb, embed } = require('./glb-file');
+const files = require('./asset-files');
 const writeRig = require('./glb-rig');
 const writeMesh = require('./glb-mesh');
 
@@ -39,6 +40,8 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024 } = 
   } else {
     if (input && extension !== '.obj') throw new Error('Mesh input must be an OBJ, glTF or GLB');
     const { KIT: K } = studio.load();
+    if (K.authoring.gltfAssets.is(modelOrFile))
+      return { ...summarize(modelOrFile.snapshot().document), preserved: true, ...studio.writeGltfAsset(modelOrFile, { out }) };
     if (input) modelOrFile = K.model.fromMesh(studio.readMesh(input, { attributes: true }));
     const model = modelOrFile?.meshes ? modelOrFile : { meshes: [modelOrFile] };
     if (!model.meshes.length || model.meshes.some(m => !m)) throw new Error('GLB export requires a model');
@@ -51,16 +54,8 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024 } = 
     bytes = doc.finish();
     report = { meshes, joints: rig.size };
   }
-  fs.mkdirSync(path.dirname(output), { recursive: true });
-  const dir = fs.mkdtempSync(path.join(path.dirname(output), '.ink-glb-'));
-  const staged = path.join(dir, 'asset.glb');
-  try {
-    fs.writeFileSync(staged, bytes);
-    fs.renameSync(staged, output);
-    return { ...report, file: output };
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  files.write(output, bytes);
+  return { ...report, file: output };
 }
 
 module.exports = exportGlb;

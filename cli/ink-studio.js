@@ -313,7 +313,14 @@ function skyTransitionsOption() {
   if (typeof value !== 'string') die('--sky-transitions needs a JSON array file or off');
   return skyTransitionsOverride ??= JSON.parse(fs.readFileSync(path.resolve(value),'utf8'));
 }
-let inspectionOverride, shadowArtOverride, compositeOverride, cutawayOverride, renderGraphOverride, afterimagesOverride, reconstructionOverride;
+let inspectionOverride, shadowArtOverride, compositeOverride, cutawayOverride, renderGraphOverride, afterimagesOverride, reconstructionOverride, passQualityOverride;
+function passQualityOption() {
+  const value = opt['pass-quality'];
+  if (value === undefined) return;
+  if (value === 'off') return false;
+  if (typeof value !== 'string') die('--pass-quality needs a JSON file or off');
+  return passQualityOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
+}
 function shadowArtOption() {
   const value = opt['shadow-art'];
   if (value === undefined) return;
@@ -717,6 +724,8 @@ const view = extra =>
       coverageAware: opt['coverage-aware'] === undefined ? undefined : opt['coverage-aware'] !== 'off',
       lookMasks: opt['look-masks'] === 'off' ? false : undefined,
       ignoreLookGrade: opt.look === 'off',
+      strictContract: onOffOption('strict-contract'),
+      stepAnimation: onOffOption('step-animation'),
       raw: !!opt.raw,
       paintCorrections: opt['paint-corrections'] !== 'off',
       colored: !!opt.colored,
@@ -742,6 +751,7 @@ const view = extra =>
       surface: opt.surface === 'off' ? false : undefined,
       water: opt.water === 'off' ? false : undefined,
       reflections: opt.reflections === 'off' ? false : undefined,
+      passQuality: passQualityOption(),
       reflectionProbes: onOffOption('reflection-probes'),
       transmission: onOffOption('transmission'),
       surfaceDetailKits: onOffOption('surface-detail-kits'),
@@ -811,6 +821,16 @@ function buildPreview(id = pos[0]) {
 const previewPasses = () => require('./look-preview.js').preview(opt);
 const reviewSidecars = diagnostics => [...(diagnostics?.suffixes ?? []), ...(opt.text ? ['.txt'] : [])];
 const textSidecar = file => file.replace(/\.(?:a?png)$/i, '') + '.txt';
+function sequenceHistory() {
+  const K = lib().KIT;
+  return {
+    artHistory: require('../src/art-effects.js').history({ frames: 24 }),
+    afterimageHistory: K.afterimages.history(),
+    renderHistory: K.renderGraph.history(),
+    volumeHistory: K.atmosphere.history(),
+    transparencyHistory: K.stableTransparency.history()
+  };
+}
 function feedbackReplay(world, start, frame) {
   const api = lib().KIT.renderGraph;
   const graph = frame.renderGraph ?? world.look?.renderGraph;
@@ -852,7 +872,9 @@ const CMD = {
         '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
         '  ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern',
         '  palette plot <plot.json> [--space rgb|oklab] [--orbit degrees] [--format png|data]   render a palette in 3D',
+        '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
         '  palette chart <chart.json> [--type chart] [--format png|data]   export an indexed swatch, bar or pair chart',
+        '  palette lighting <source-or-draft.json> [--approve] [--out file.json]   suggest or save named lighting ramps',
         '  palette field <field.json> [--w width --h height] [--format png|data]   render a palette field or report grayscale bands',
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
@@ -929,6 +951,7 @@ const CMD = {
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
+        '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
         '  depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF',
         '                              [--size 6 --cells 64 --res 0.09 --hues 6 --shades 4 --up z --spin 0.5 --thick 0.1]; a mesh file also works wherever an id does',
@@ -973,6 +996,7 @@ const CMD = {
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
         '  passes <id> [--channels coverage,depth,normal,objectId,materialId,emission]  save art-pixel render pass previews',
+        '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--out directory]   export aligned RGBA, depth, normals, IDs and material mattes',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -985,6 +1009,7 @@ const CMD = {
         'any command that plays a diorama takes --poke 2:x,y,z (tap it at 2 seconds, toward that point; several with ;)',
         'sun options: --live-sun on|off --sun-direction x,y,z --sun-ambient n --sun-intensity n --shadow-map-size n --shadow-bias n --sun-shadows off',
         'shadow art: --shadow-art file.json|off for baked JSON scenes and live sun',
+        'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
         'detail-preserving relighting: --relighting on|off|file.json --sky-time seconds',
         'bounce options: --sky-bounce color|preset|off --ground-bounce color|preset|off --sky-bounce-intensity n --ground-bounce-intensity n',
         'cloud options: --cloud-field cirrus|coastal-stratus|cumulus|storm-front|file.json|off --cloud-representation auto|card|impostor|volume|off --cloud-shadows on|off --cloud-shadow-strength 0..1 --cloud-shadow-softness units',
@@ -1007,6 +1032,7 @@ const CMD = {
         'layered horizon: --horizon-bands on|off|file.json',
         'staging: --fov radians | --focal-length mm [--sensor-height mm] --focus-distance units --composition u,v --camera-staging on|off|file.json --camera-guides [on|off] --depth-of-field [on|off]',
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
+        'shared rendering: --strict-contract [on|off] --step-animation [on|off]',
         'effect palette options: --effect-palettes on|off|file.json',
         'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
@@ -1023,7 +1049,21 @@ const CMD = {
   },
   palette() {
     if (pos[0] === 'plot') return require('./palette-plot.js')(pos.slice(1), opt, lib(), outputFile);
+    if (pos[0] === 'fit') return require('./palette-fit.js')(pos.slice(1), opt, lib(), outputFile);
     if (pos[0] === 'chart') return require('./palette-chart.js')(pos.slice(1), opt, lib(), outputFile);
+    if (pos[0] === 'lighting') {
+      if (pos.length !== 2 || (opt.approve !== undefined && opt.approve !== true) || opt.out === true)
+        die('Use palette lighting <source-or-draft.json> [--approve] [--out file.json]');
+      const input = JSON.parse(fs.readFileSync(path.resolve(pos[1]), 'utf8'));
+      const api = lib().KIT.palette.lightingRamps;
+      const data = opt.approve ? api.approve(input) : api.suggest(input);
+      const json = JSON.stringify(data,null,2)+'\n';
+      if (!opt.out) return process.stdout.write(json);
+      const file = outputFile(opt.approve ? 'lighting-roles.json' : 'lighting-draft.json');
+      fs.mkdirSync(path.dirname(file),{recursive:true});
+      fs.writeFileSync(file,json);
+      return;
+    }
     if (pos[0] === 'field') {
       if (pos.length !== 2 || ['w', 'h', 'saturation', 'view', 'out', 'format'].some(key => opt[key] === true))
         die('Use palette field <field.json> [--saturation 0–1] [--view nearest|error|boundary] [--format png|data] [--w width --h height --out file]');
@@ -1149,6 +1189,26 @@ const CMD = {
     const lut = require('./lut.js'), definition = lut.read(file, lut.importOptions(opt));
     if (opt.out) lut.write(opt.out, definition);
     else process.stdout.write(JSON.stringify(definition) + '\n');
+  },
+  interchange() {
+    const [input] = pos, { out } = opt;
+    if (pos.length !== 1 || typeof out !== 'string')
+      die('Usage: ink-studio interchange <asset.gltf|.glb|.json> --out <file>');
+    try {
+      if (path.resolve(input) === path.resolve(out)) throw new Error('Choose an output different from the input asset');
+      const studio = require('../index.js');
+      let result;
+      if (/\.(gltf|glb)$/i.test(input)) result = studio.writeGltfAsset(studio.readGltfAsset(input), { out });
+      else if (/\.json$/i.test(input)) {
+        const manifest = JSON.parse(fs.readFileSync(input, 'utf8'));
+        if (manifest?.layers) result = studio.writeRasterAsset(studio.readRasterAsset(input), { out });
+        else if (manifest?.files?.color) result = studio.writeSpriteAtlas(studio.readSpriteAtlas(input), { out });
+        else throw new Error('Expected a layered raster or sprite atlas manifest');
+      } else throw new Error('Expected glTF, GLB or a raster manifest');
+      console.log(JSON.stringify(result, null, 2));
+    } catch (error) {
+      die(error.message);
+    }
   },
   'export-glb'() {
     const id = pos[0];
@@ -1697,6 +1757,21 @@ const CMD = {
     require('./pass-preview.js').writePasses(directory, im, opt.px1 ? 1 : im.px);
     console.log('wrote', directory);
   },
+  'export-layers'() {
+    if (pos.length !== 1 || opt.out === true)
+      die('Use export-layers <scene> [--t seconds,... | --from seconds --to seconds --n count] [--out directory]');
+    if (opt.t !== undefined && (typeof opt.t !== 'string' || opt.t.split(',').some(time => !time.trim())))
+      die('--t needs one or more comma-separated times');
+    if (['from', 'to', 'n'].some(key => opt[key] === true) || !Number.isSafeInteger(num('n', 1)) || num('n', 1) < 1)
+      die('Layered exports need numeric range endpoints and a positive frame count');
+    const world = buildPreview(), ts = ['t', 'from', 'to', 'n'].some(key => opt[key] !== undefined) ? times() : [0];
+    const frame = view(ts.length > 1 ? sequenceHistory() : {});
+    const out = opt.out ?? path.join(OUT, world.id + '-layers');
+    const { file, manifest } = require('./export-layers.js').exportLayers(world, {
+      out, view: frame, times: ts, native: !!opt.px1, pose, replay: feedbackReplay(world, ts[0], frame)
+    });
+    console.log('wrote', file, manifest.frames.length, 'frame(s)');
+  },
   /* the ramps a diorama is shaded on, most used first, and what kind each is: one hue darker and lighter, or turning as it darkens.
      For a one-hue ramp a turning one made from the same palette is offered (the diorama is not changed). */
   ramps() {
@@ -1817,16 +1892,11 @@ const CMD = {
     if (!opt.quiet) save(w.id + '-values.png', R.grid([R.upscale(im, im.px), R.upscale(out, im.px)], 2));
   },
   sheet() {
-    const artHistory = require('../src/art-effects.js').history({ frames: 24 });
-    const afterimageHistory = lib().KIT.afterimages.history();
-    const renderHistory = lib().KIT.renderGraph.history();
-    const volumeHistory = lib().KIT.atmosphere.history();
-    const transparencyHistory = lib().KIT.stableTransparency.history();
     const w = buildPreview(), diagnostics = previewPasses(),
       ts = times(),
       cols = num('cols', Math.min(4, ts.length)),
       imgs = [];
-    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+    const frame = { ...sequenceHistory(),
       w: num('w', 600), h: num('h', 420), ...diagnostics?.settings };
     const replay = feedbackReplay(w, Math.min(...ts), view(frame));
     function draw(t, resetRenderHistory) {
@@ -2005,11 +2075,6 @@ const CMD = {
     save(w.id + '-turn.png', R.grid(imgs, num('cols', 4), labs));
   },
   clip() {
-    const artHistory = require('../src/art-effects.js').history({ frames: 24 });
-    const afterimageHistory = lib().KIT.afterimages.history();
-    const renderHistory = lib().KIT.renderGraph.history();
-    const volumeHistory = lib().KIT.atmosphere.history();
-    const transparencyHistory = lib().KIT.stableTransparency.history();
     const w = buildPreview(), diagnostics = previewPasses(),
       fps = num('fps', 12),
       from = num('from', 0),
@@ -2020,7 +2085,7 @@ const CMD = {
       f = outputFile(w.id+'-clip.png');
     const suffixes = reviewSidecars(diagnostics);
     shot?.destination(f,suffixes);
-    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+    const frame = { ...sequenceHistory(),
       w: num('w', 600), h: num('h', 420) };
     const replay = feedbackReplay(w, from, view(frame));
     function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1)))) {

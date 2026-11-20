@@ -144,7 +144,7 @@
     const pack = manifest(input), looks = pack.looks?.slice() ?? [];
     const index = looks.findIndex(look => look.id === id);
     if (index === -1) throw Error('Unknown look asset: ' + id);
-    if (!object(changes) || Object.keys(changes).some(key => !['label', 'params', 'stack', 'palette', 'mask', 'stage', 'order', 'weight'].includes(key)))
+    if (!object(changes) || Object.keys(changes).some(key => !['label', 'params', 'stack', 'palette', 'mask', 'stage', 'paletteStage', 'order', 'weight'].includes(key)))
       throw Error('Look revision needs editable look fields');
     looks[index] = A.looks.definition(clone({ ...looks[index], ...changes }), pack.id);
     if (canonical(looks[index]) === canonical(pack.looks[index])) return pack;

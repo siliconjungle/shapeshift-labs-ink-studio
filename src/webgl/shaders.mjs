@@ -522,6 +522,29 @@ ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
 }
 
 const paletteRowGlsl = `
+// OKLab and matching coordinates mirror PixelLook.preparePalette.
+vec4 paletteLab(vec3 rgb) {
+  vec3 m = abs(rgb);
+  vec3 c = sign(rgb) * mix(pow((m+.055)/1.055,vec3(2.4)),m/12.92,lessThanEqual(m,vec3(.04045)));
+  vec3 lms = vec3(dot(vec3(.4122214708,.5363325363,.0514459929),c),
+                  dot(vec3(.2119034982,.6806995451,.1073969566),c),
+                  dot(vec3(.0883024619,.2817188376,.6299787005),c));
+  lms = sign(lms)*pow(abs(lms),vec3(1.0/3.0));
+  vec3 lab = vec3(dot(vec3(.2104542553,.7936177850,-.0040720468),lms),
+                  dot(vec3(1.9779984951,-2.4285922050,.4505937099),lms),
+                  dot(vec3(.0259040371,.7827717662,-.8086757660),lms));
+  return vec4(lab,length(lab.yz));
+}
+float paletteLabDistance(vec4 a, vec4 b, int mode, float hue) {
+  vec4 q = a-b;
+  float distance = (mode == 2 ? 25.0 : 1.0)*q.x*q.x+dot(q.yz,q.yz);
+  if (mode == 3) distance += 25.0*q.w*q.w;
+  if (hue > 0.0) {
+    vec2 d = a.yz/max(.04,a.w)-b.yz/max(.04,b.w);
+    distance += hue*dot(d,d);
+  }
+  return distance;
+}
 vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
   int row = slot - 1;
   vec4 settings = texelFetch(u_constraintRows, ivec2(0, row), 0);
@@ -543,8 +566,13 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
     if (mapping > 1.5) { return inputColor; }
     gradedBytes = floor(clamp(inputColor, 0.0, 1.0) * 255.0 + 0.5);
   }
+  int mode = int(texelFetch(u_constraintRows, ivec2(4, row), 0).a);
+  vec4 inputLab = mode == 0 ? vec4(0.0) : paletteLab(inputColor);
+  float hue = mode == 4 ? .49*smoothstep(.02,.06,inputLab.w) : 0.0;
   float firstDistance = 1e9, secondDistance = 1e9;
+  int bestSlot = 0;
   vec3 best = vec3(0.0), second = vec3(0.0);
+  vec4 firstLab = vec4(0.0), secondLab = vec4(0.0);
   for (int i = 0; i < 48; i++) {
     if (i >= total) break;
     vec3 swatch = texelFetch(u_constraintRows, ivec2(i + 1, row), 0).rgb;
@@ -555,12 +583,13 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
       continue;
     }
     vec3 d = inputColor - swatch;
-    float distance = dot(weight, d * d);
+    vec4 swatchLab = mode == 0 ? vec4(0.0) : texelFetch(u_constraintRows,ivec2(u_constraintLab+i,row),0);
+    float distance = mode == 0 ? dot(weight,d*d) : paletteLabDistance(inputLab,swatchLab,mode,hue);
     if (distance < firstDistance) {
-      second = best; secondDistance = firstDistance;
-      best = swatch; firstDistance = distance;
+      second = best; secondDistance = firstDistance; secondLab = firstLab;
+      best = swatch; firstDistance = distance; firstLab = swatchLab; bestSlot = i;
     } else if (distance < secondDistance) {
-      second = swatch; secondDistance = distance;
+      second = swatch; secondDistance = distance; secondLab = swatchLab;
     }
   }
   if (hasGradedReserve) { return gradedReserve; }
@@ -570,9 +599,42 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
   ivec2 size = ivec2(settings.zw);
   int cell = (p.y % size.y) * size.x + p.x % size.x;
   float rank = texelFetch(u_constraintRows, ivec2(49 + cell / 4, row), 0)[cell & 3];
-  vec3 delta = second - best;
-  if (rank < 0.5 && dot(weight * delta, inputColor - best) >=
-      (0.5 + (rank - 0.5) * amount) * dot(weight, delta * delta)) color = second;
+  if (rank >= .5) return color;
+  int pairCount = int(texelFetch(u_constraintRows,ivec2(5,row),0).a)-1;
+  if (pairCount >= 0) {
+    int partner = -1;
+    secondDistance = 1e9;
+    float lightness = mode == 0 ? -1.0 : clamp(inputLab.x,0.0,1.0);
+    for (int i=0;i<256;i++) {
+      if (i >= pairCount) break;
+      vec4 pair = texelFetch(u_constraintRows,ivec2(u_constraintPairs+i,row),0);
+      ivec2 slots = ivec2(pair.xy);
+      int candidate = slots.x == bestSlot ? slots.y : slots.y == bestSlot ? slots.x : -1;
+      if (candidate < 0) continue;
+      if (pair.z >= 0.0) {
+        if (lightness < 0.0) lightness = clamp(paletteLab(inputColor).x,0.0,1.0);
+        if (lightness < pair.z || lightness > pair.w) continue;
+      }
+      vec3 rgb = texelFetch(u_constraintRows,ivec2(candidate+1,row),0).rgb;
+      vec4 lab = mode == 0 ? vec4(0.0) : texelFetch(u_constraintRows,ivec2(u_constraintLab+candidate,row),0);
+      vec3 d = inputColor-rgb;
+      float distance = mode == 0 ? dot(weight,d*d) : paletteLabDistance(inputLab,lab,mode,hue);
+      if (distance < secondDistance || distance == secondDistance && candidate < partner) {
+        partner = candidate;
+        second = rgb;
+        secondLab = lab;
+        secondDistance = distance;
+      }
+    }
+    if (partner < 0) return color;
+  }
+  float threshold = .5+(rank-.5)*amount;
+  if (mode != 0) {
+    float reach = paletteLabDistance(firstLab,secondLab,mode,hue);
+    return reach > 0.0 && .5*(firstDistance+reach-secondDistance) >= threshold*reach ? second : color;
+  }
+  vec3 delta = second-best;
+  if (dot(weight*delta,inputColor-best) >= threshold*dot(weight,delta*delta)) color = second;
   return color;
 }
 `;

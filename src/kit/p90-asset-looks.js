@@ -6,7 +6,7 @@
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const fields = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
   const fraction = value => Number.isFinite(value) && value >= 0 && value <= 1;
-  const stageRuleFields = ['asset', 'select', 'mask', 'stage', 'order', 'weight'];
+  const stageRuleFields = ['asset', 'select', 'mask', 'stage', 'paletteStage', 'order', 'weight'];
   const hasBlend = value => value?.order !== undefined || value?.weight !== undefined || Boolean(value?.driver);
   const active = bound => bound && (bound.strength || bound.driver?.inputs.strength !== undefined);
   const type = value => value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
@@ -14,15 +14,16 @@
   const { substitute } = LookInputs;
 
   function definition(value, packId) {
-    if (!fields(value, ['id', 'label', 'params', 'stack', 'palette', 'mask', 'stage', 'order', 'weight']) || typeof value.id !== 'string' ||
+    if (!fields(value, ['id', 'label', 'params', 'stack', 'palette', 'mask', 'stage', 'paletteStage', 'order', 'weight']) || typeof value.id !== 'string' ||
         !assetId.test(value.id) || !value.id.startsWith(packId + '/') ||
         typeof value.label !== 'string' || !value.label.trim() || value.label.length > 100 ||
         (value.stack === undefined && value.palette === undefined))
       throw Error('A look needs a namespaced ID, label and color stack or palette');
-    const { id, label, params = {}, stack, palette, mask, stage, order, weight } = value;
+    const { id, label, params = {}, stack, palette, mask, stage, paletteStage, order, weight } = value;
     RenderStages.blend(value);
     if (stage !== undefined) RenderStages.stage(stage);
-    if (stage === 'palette' && palette === undefined) throw Error('A palette stage needs a look palette');
+    if (paletteStage !== undefined) RenderStages.stage(paletteStage);
+    if ((stage === 'palette' || paletteStage !== undefined) && palette === undefined) throw Error('A palette stage needs a look palette');
     if (!record(params) || Object.keys(params).length > 64 || !Object.keys(params).every(name => parameter.test(name)))
       throw Error('Look parameters need named JSON defaults');
     if (stack !== undefined) {
@@ -30,18 +31,21 @@
       if (!record(resolved)) throw Error('A look color stack must be an object');
       ColorStack.normalize(resolved);
     }
-    if (palette !== undefined && !fields(substitute(palette, params), ['palette', 'reserved', 'dither']))
-      throw Error('A look palette needs palette constraint settings');
+    if (palette !== undefined) {
+      const policy = substitute(palette,params);
+      if (!fields(policy,['palette','reserved','dither','match'])) throw Error('A look palette needs palette constraint settings');
+      if (policy.match !== undefined) PixelLook.preparePalette({palette:['#000000'],match:policy.match});
+    }
     SplatEffects.prepareMask(substitute(mask, params), undefined, { validateOnly: true });
     return freeze({ id, label: label.trim(), params, ...(stack !== undefined && { stack }),
-      ...(palette !== undefined && { palette }), ...(mask !== undefined && { mask }), ...(stage && { stage }),
+      ...(palette !== undefined && { palette }), ...(mask !== undefined && { mask }), ...(stage && { stage }), ...(paletteStage && { paletteStage }),
       ...(order !== undefined && { order }), ...(weight !== undefined && { weight }) });
   }
 
   function bind(binding, catalog) {
     if (binding === undefined || binding === false) return null;
     const value = typeof binding === 'string' ? { asset: binding } : binding;
-    if (!fields(value, ['asset', 'revision', 'strength', 'palette', 'params', 'mask', 'stage', 'order', 'weight', 'inputs']) || typeof value.asset !== 'string' ||
+    if (!fields(value, ['asset', 'revision', 'strength', 'palette', 'params', 'mask', 'stage', 'paletteStage', 'order', 'weight', 'inputs']) || typeof value.asset !== 'string' ||
         !assetId.test(value.asset) || (value.revision !== undefined &&
           (!Number.isSafeInteger(value.revision) || value.revision < 1)))
       throw Error('Expected a look asset ID and optional positive pack revision');
@@ -50,9 +54,10 @@
     const { look, revision } = entry;
     if (value.revision !== undefined && revision !== value.revision)
       throw Error('Look asset ' + value.asset + ' requires pack revision ' + value.revision + ', installed ' + revision);
-    const { strength = 1, params = {}, palette, stage = look.stage, order = look.order, weight = look.weight, inputs } = value;
+    const { strength = 1, params = {}, palette, stage = look.stage, paletteStage = look.paletteStage, order = look.order, weight = look.weight, inputs } = value;
     RenderStages.blend({ order, weight });
     if (stage !== undefined) RenderStages.stage(stage);
+    if (paletteStage !== undefined) RenderStages.stage(paletteStage);
     if (!fraction(strength) || !record(params) || (palette !== undefined && palette !== false && !Array.isArray(palette)))
       throw Error('Look overrides need strength in [0, 1], a palette swatch list or false, and named parameters');
     for (const [name, item] of Object.entries(params)) {
@@ -71,8 +76,8 @@
       ? { ...substitute(look.palette, values), ...(palette !== undefined && { palette: clone(palette) }) } : undefined;
     const mask = value.mask === undefined ? substitute(look.mask, values) : clone(value.mask);
     SplatEffects.prepareMask(mask, undefined, { validateOnly: true });
-    if (stage === 'palette' && !policy) throw Error('A palette stage needs a look palette');
-    return freeze({ id: look.id, revision, strength, ...(stage && { stage }), ...(driver && { driver }),
+    if ((stage === 'palette' || value.paletteStage !== undefined) && !policy) throw Error('A palette stage needs a look palette');
+    return freeze({ id: look.id, revision, strength, ...(stage && { stage }), ...(policy && paletteStage && { paletteStage }), ...(driver && { driver }),
       ...(order !== undefined && { order }), ...(weight !== undefined && { weight }),
       ...(stack && { stack: { ...stack, amount: strength * (stack.amount ?? 1) } }),
       ...(policy && { palette: policy }), ...(mask && { mask }) });
@@ -92,13 +97,13 @@
 
   function stageRules(bound, select, fallback) {
     if (!active(bound)) return [];
-    const { id, stack, palette, mask, order, weight, driver, stage = hasBlend(bound) ? 'lit' : fallback } = bound;
+    const { id, stack, palette, mask, order, weight, driver, paletteStage, stage = hasBlend(bound) || paletteStage ? 'lit' : fallback } = bound;
     if (stage === undefined) return [];
     const scope = { assetId: id, ...(driver && { driver }), ...(select && { select }), ...(mask && { mask }),
       ...(order !== undefined && { order }), ...(weight !== undefined && { weight }) };
     const rules = [];
     if (stage !== 'palette' && stack) rules.push({ ...scope, stage, stack });
-    if (palette) rules.push({ ...scope, stage: 'palette', palette });
+    if (palette) rules.push({ ...scope, stage: paletteStage ?? 'palette', palette });
     return rules;
   }
 
@@ -146,7 +151,7 @@
     }).concat(boundStages);
     for (const rule of targets) {
       const { target, select } = ruleBinding(rule, catalog, true);
-      if (target?.stage || hasBlend(target)) staged.push(...stageRules(target, select));
+      if (target?.stage || target?.paletteStage || hasBlend(target)) staged.push(...stageRules(target, select));
       else if (target?.strength && (target.stack || target.palette))
         rules.push({ ...target.palette, select, stack: target.stack, assetId: target.id, ...(target.mask && { mask: target.mask }) });
     }

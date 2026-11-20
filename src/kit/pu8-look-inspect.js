@@ -5,6 +5,8 @@
   const rgbLayer = type => ['colorCurve', 'colorLut', 'colorStack', 'projected'].includes(type);
   const swatch = value => typeof value === 'string' && /^#[\da-f]{6}$/i.test(value);
   const paletteReference = value => typeof value === 'number' || typeof value === 'string' && !swatch(value);
+  const paletteSwatches = policy => [...(policy?.palette ?? []), ...(policy?.reserved ?? []),
+    ...(Array.isArray(policy?.dither?.pairs) ? policy.dither.pairs.flatMap(rule => rule?.colors ?? []) : [])];
   const lutInfo = lut => {
     const { data, ...info } = ColorLUT.normalize(lut);
     return { ...info, rows: data.length / 3 };
@@ -42,7 +44,7 @@
       for (const value of [...(item.protect ?? []), ...(item.rules ?? []).map(rule => rule.from)]) add('swatch', value);
     }
     if (palette?.palette === undefined && (palette?.dither || palette?.reserved)) add('scene-palette');
-    for (const value of [...(palette?.palette ?? []), ...(palette?.reserved ?? [])])
+    for (const value of paletteSwatches(palette))
       if (paletteReference(value)) add('swatch', value);
     return rows;
   }
@@ -204,9 +206,9 @@
           !(typeof value === 'string' && value.trim() || Number.isSafeInteger(value) && value >= 0 ||
             Array.isArray(value) && value.length === 3 && value.every(n => Number.isFinite(n) && n >= 0 && n <= 1)))))
         throw new TypeError('Invalid native ' + name + ' swatches');
-      const contextDependent = !palette.palette || [...palette.palette, ...(palette.reserved ?? [])].some(paletteReference);
+      const contextDependent = !palette.palette || paletteSwatches(palette).some(paletteReference);
       PixelLook.preparePalette(contextDependent ? { ...palette, palette: ['#000000'], reserved: [] } : palette,
-        { blueNoise: K.procedural.materials.blueNoise });
+        { blueNoise: K.procedural.materials.blueNoise, deferDitherColors: contextDependent });
     }
     SplatEffects.prepareMask(mask, undefined, { validateOnly: true });
     const issues = [];

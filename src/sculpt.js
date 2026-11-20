@@ -1726,7 +1726,8 @@ function makeSculpt(B, rest) {
     }
     return open / dirs.length;
   };
-  const stagedAlbedo = surface => surface?.renderStages?.some(rule => rule.stage === 'material');
+  const stagedAlbedo = surface => Array.isArray(surface?.renderStages) && surface.renderStages.some(rule => rule.stage === 'material') ||
+    surface?.layers && Object.values(surface.layers).some(SurfaceLook.basePaint);
   const unnamedTarget = {}, surfaceTargets = new WeakMap();
   function renderTarget(owner, surfaceId) {
     const target = owner?.renderTarget;

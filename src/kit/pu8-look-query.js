@@ -69,6 +69,7 @@
         }
         const describe = (kind, local, select) => ({ stage: 'palette', kind, select: select ?? null,
           asset: local.assetId ?? null, ...(local.stackName && { stack: local.stackName }),
+          ...(local.matchId && { match: local.match }),
           maskWeight: local.mask ? sample ? local === policy ? amount : local.mask(sample) : null : 1,
           ...(local === policy && selectedSwatch && { selectedSwatch }),
           applied: local === dryPolicy || local === policy && Boolean(input && (!local.mask || amount > 0)) });
@@ -135,7 +136,7 @@
           const evaluated = stage && input ? RenderStages.trace(rules[stage], input, sample, pixel) : null;
           const stagesForTarget = Object.fromEntries(RenderStages.names.filter(name => rules[name]).map(name =>
             [name, evaluated && stage === name ? evaluated.contributions : rules[name].map(rule => RenderStages.describe(rule, sample))]));
-          const swatch = stage === 'palette' && evaluated?.contributions.some(rule => rule.applied) ? hex(pack(evaluated.rgb)) : null;
+          const swatch = evaluated?.contributions.filter(rule=>rule.applied).at(-1)?.palette ? hex(pack(evaluated.rgb)) : null;
           return { target, count, material: target.material ?? null, stages: stagesForTarget,
             ...(evaluated && { input, rgb: evaluated.rgb, swatch }) };
         });
@@ -190,9 +191,9 @@
         (look.paletteConstraints?.targets?.length || world.surfaces?.some(({ settings }) => settings.paletteConstraint)));
       const looks = [];
       let color = baked, swatch = null, projected;
-      const material = [];
+      const material = [], paintedAlbedo = rules.material && slot ? [] : undefined;
       if (rules.material) {
-        color = RenderStages.material(rules.material, color, albedo ? albedo - 1 : undefined, site, material);
+        color = RenderStages.material(rules.material, color, albedo ? albedo - 1 : undefined, site, material, undefined, paintedAlbedo);
         looks.push(...material.map(rule => ({ stage: 'material', maskWeight: 1, ...rule })));
       }
       if (slot) {
@@ -217,6 +218,7 @@
         ]);
         const shaded = SurfaceLook.shade(prepared, { ...site, normal, view, ...(tangent.some(Boolean) && { tangent }),
           ...(sky && { sky: (direction, output) => SkyEnvironment.shade(sky, direction, output), skyReflectionSource: world.skyReflections }),
+          albedo: paintedAlbedo ?? (albedo ? RenderStages.unpack(albedo-1) : undefined),
           depth: Math.hypot(...view),
           visibility: surface[surfaceOffset + 4] }, color, [0, 0, 0, 1, 0, undefined], layers);
         color = shaded.slice(0, 3);
@@ -235,11 +237,11 @@
         const trace = RenderStages.trace(entries, color, site, coordinates);
         looks.push(...trace.contributions.map(rule => ({ stage, maskWeight: 1, ...rule })));
         const final = stage === 'optics' ? trace.rgb.map(n => Math.max(0, Math.min(1, n))) : trace.rgb;
-        if (stage === 'palette' && trace.contributions.some(rule => rule.applied)) swatch = hex(pack(final));
+        if (trace.contributions.filter(rule=>rule.applied).at(-1)?.palette) swatch = hex(pack(final));
         else if (final.some((value, i) => value !== color[i])) swatch = null;
         color = final;
       }
-      applyStage('lit', rules.lit);
+      applyStage('lit', rules.lit, null);
       if (optics && TargetSelectors.isGlass(world, first)) applyStage('optics', optics.matching(target), null);
       applyStage('frame', rules.frame);
       applyStage('palette', rules.palette);

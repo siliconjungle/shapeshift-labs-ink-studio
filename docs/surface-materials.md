@@ -143,6 +143,8 @@ and worn stone under a shared key light.
 node cli/ink-studio.js render examples/material-lighting-ramps.js --w 288 --h 128 --px 1 --t 0.75
 ```
 
+To choose swatches from an existing palette, [generate and approve an editable lighting draft](palette-recipes.md#suggest-editable-lighting-ramps). The approved five-stop role and positions plug into the same diffuse layer, and named bounce and neutralizer swatches can also tint other finishes.
+
 ## Bevel highlights
 
 Add a `bevel` finish layer to catch light along features in a native sculpt.
@@ -235,6 +237,23 @@ ink-studio render examples/thin-transmission.js --w 356 --h 172 --px 1 --out lan
 ink-studio render examples/thin-transmission.js --w 356 --h 172 --px 1 --transmission off --out lantern-unlit.png
 ```
 
+## Palette matching
+
+Give a material a `paletteConstraint` to select swatches after shading
+in headless renders and custom hosts. Set `match` to prioritize hue,
+brightness, chroma, or perceptual distance. A
+[material-targeted palette policy](pixel-look.md#choose-a-matching-priority)
+exposes the same matching choices in the standard WebGL renderer.
+
+```js
+const paintedCloth = K.surface.material({ r: [9, 10, 11], materialId: 'cloth' }, {
+  paletteConstraint: {
+    palette: ['#261e36', '#65384f', '#b2788c', '#f0cba8'],
+    match: 'brightness'
+  }
+});
+```
+
 ## Drive finish properties
 
 Name a source in `surface.signals` and bind it to one or more layer
@@ -274,12 +293,15 @@ const glazedCeramic = K.surface.material(clay, {
   scene seconds. Set `range: [low, high]` and optionally choose `linear`,
   `smooth` (the default), or `step` interpolation. In a custom host pass
   the weather frame's `surface` function as `sample.weather(x, z)`.
+- A `light` source reads directional visibility multiplied by how directly
+  the surface faces the sun. It accepts the same range and interpolation.
 - Use the existing `axis`, `query`, `field`, and `texture` mask sources
   as signals with the same settings. JavaScript materials can also
   supply a function that takes the surface sample and returns a value
   in zero to one. Missing values keep the authored property.
 - Signals are shared across layer bindings at each sample. Independent
-  layer masks, finish order, and the export palette still apply.
+  layer masks, finish order, and the export palette still apply. The same
+  signals can [drive the axes of projected palette fields](projected-effects.md#drive-palette-fields-with-scene-data).
 
 The [retained weather example](retained-weather.md#put-it-on-a-material)
 uses the same film signal for stone color and highlight width. Standing

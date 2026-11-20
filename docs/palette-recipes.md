@@ -329,3 +329,60 @@ ink-studio render examples/palette-chart-archive.js --w 382 --h 168 --px 1 --raw
 ```
 
 PNG files carry the palette in their indexed colour table and preserve transparent gaps. `chart.raster()` also exposes RGB, alpha and the original swatch indices as typed arrays. The JSON export includes the cell bounds and measurements plus a self-contained `raster` for an [indexed projected material](projected-effects.md#indexed-palette-charts). The [pigment archive](../examples/palette-chart-archive.js) mounts charts on sculpted display boards.
+
+
+## Fit a target with two swatches
+
+`K.palette.fitDither({ target, policy, size }, { palette, roles })` searches
+the policy's explicit [authorized pairs](pixel-look.md#authorize-dither-pairs)
+for a target hex swatch or normalized RGB triple. Each pair's lightness
+range applies to the target's OKLab L. Supply the optional scene context
+when the policy refers to palette indices or roles. The CLI reads the same
+definition with optional `context: { palette, roles }`.
+
+The fitter counts the fractions of pixels each pair can draw using the
+pattern at the requested native size. It averages the two swatches in
+linear sRGB and ranks the averages by OKLab distance to the 8-bit target.
+The report gives the closest solid, selected swatches, actual share of the
+second swatch, average, and both errors. The average shown as hex is rounded
+for display. The scores use the unrounded average. Exact matches, including
+reserved matches, stay solid. A target also stays solid if no approved mix
+improves the error.
+
+Choose `size: [width, height]` in native pixels. It defaults to `[32, 24]`.
+The fit uses the policy's Bayer, checker, or seeded blue-noise pattern, with
+a fixed top-left origin. It searches the coverage levels in that exact crop,
+including partial patterns at the edges. The fitted texture has an explicit
+coverage. The policy's automatic strength and matching priority still govern
+the ordinary scene resolve. `pattern: "none"` and an empty `pairs` list each
+produce a solid.
+
+```sh
+ink-studio palette fit examples/palette-dither-fit.json --out comparison.png
+ink-studio palette fit examples/palette-dither-fit.json --tile --out slate.png
+ink-studio palette fit examples/palette-dither-fit.json --format data --out slate.json
+```
+
+The comparison PNG shows target, closest solid, and fit side by side at 1×.
+Use `result.indexed()` or the JSON report's `raster` as an
+[indexed projected material](projected-effects.md#indexed-palette-charts).
+The fit raster contains only the selected palette swatches, with no
+interpolated colors baked into it.
+
+## Suggest editable lighting ramps
+
+Use `K.palette.lightingRamps.suggest({ palette, roles, materials })` to choose lighting swatches from an existing palette. `roles` can carry the scene's current named roles. Each material needs a `base` palette index or a hex/RGB target. An index pins the exact swatch. A target uses the nearest allowed swatch as the base.
+
+Choose `preset: 'cloth' | 'iron' | 'stone' | 'skin'` per material. A matching material name selects its preset automatically. Other names default to stone. Optional `bounce` supplies an index or a colour hint for reflected light. Optional `candidates` limits suggestions to the listed palette indices. A candidate list must include a pinned base.
+
+The draft holds six indices per material. The five diffuse stops run from shadow through bounce, half-shade and base to highlight in order of increasing lightness. The neutralizer is a suggested low-chroma swatch near the base lightness. The generator may repeat a swatch in a limited palette. Review and edit the indices, the five `positions`, and `interpolation` before approval.
+
+```sh
+ink-studio palette lighting examples/lighting-ramp-palette.json --out lighting-draft.json
+ink-studio palette lighting lighting-draft.json --approve --out lighting-roles.json
+ink-studio render examples/authored-lighting-ramps.js --w 368 --h 158 --px 1 --t 0.75 --out lighting-bench.png
+```
+
+Approval validates the draft and saves the chosen indices as written. It returns the original packed `palette`, updated `roles`, and `ramps` ready for `lightingRamp` bindings. For example, `roles.cloth` contains the five diffuse indices, `roles['cloth.bounce']` contains the selected bounce swatch, and `roles['cloth.neutralizer']` contains the companion neutralizer. The output also includes a one-swatch role for each of the other named tones. Existing roles are carried forward, with matching names updated by approval.
+
+Use `paletteRoles: approved.roles` in `B.finish()`. In a JSON diorama, use the approved `palette` and `roles` and copy the matching `ramps` entry to the finish's `lightingRamp`. The [lighting bench](../examples/authored-lighting-ramps.js) shows cloth, iron, stone, and skin, with an artist-edited stone highlight. [Material lighting ramps](surface-materials.md#material-lighting-ramps)

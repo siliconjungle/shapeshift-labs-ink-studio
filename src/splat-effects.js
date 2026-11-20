@@ -373,7 +373,26 @@ const SplatEffects = (() => {
     return rgbEffect(plan.sample, outputPalette, resolveColor);
   }
 
-  function paletteFieldLayer(value, resolveColor, label) {
+  function paletteAxes(definition, label, signals) {
+    if (definition === undefined) return [];
+    if (!definition || Object.getPrototypeOf(definition) !== Object.prototype)
+      throw new TypeError('Palette axes must name axis bindings');
+    const allowed = label === 'hueBrightness' || label === 'polar'
+      ? ['u','v','hue','brightness','saturation'] : ['u','v'];
+    return Object.entries(definition).map(([axis,binding])=>{
+      if (!allowed.includes(axis) || !binding || Object.getPrototypeOf(binding) !== Object.prototype ||
+          Object.keys(binding).some(key=>!['signal','range'].includes(key)))
+        throw new TypeError('Invalid palette axis binding for ' + axis);
+      const { signal:id, range = [0,1] } = binding, signal = signals?.get(id);
+      if (!signal) throw new TypeError('Palette axis ' + axis + ' needs a named surface signal');
+      if (!vector(range,2) || !Number.isFinite(range[1]-range[0]) ||
+          (axis !== 'hue' && range.some(value=>value<0 || value>1)))
+        throw new RangeError('Palette axis ' + axis + ' needs a finite output range' + (axis === 'hue' ? ' in turns' : ' in [0, 1]'));
+      return {axis,signal,low:range[0],span:range[1]-range[0]};
+    });
+  }
+
+  function paletteFieldLayer(value, resolveColor, label, bindings) {
     const polar = label === 'polar';
     if (!value || Object.getPrototypeOf(value) !== Object.prototype)
       throw new TypeError('Projected palette field needs a ' + label + ' definition');
@@ -391,20 +410,25 @@ const SplatEffects = (() => {
     const fitU = spanU / diameter, fitV = spanV / diameter;
     if (polar && (!Number.isFinite(fitU) || !Number.isFinite(fitV)))
       throw new RangeError('Projected polar field aspect ratio must be finite');
+    const axes = bindings.length ? Object.create(null) : undefined;
     return {
       palette: field.outputPalette ?? field.palette,
-      sample(u, v, _time, out) {
+      boundAxes: Boolean(axes),
+      weather: bindings.some(binding=>binding.signal.weather),
+      sample(u, v, _time, out, readSignal) {
         u /= spanU;
         v /= spanV;
         if (!Number.isFinite(u) || !Number.isFinite(v) || (!wrap && (u < 0 || v < 0 || u > 1 || v > 1))) return 0;
-        const x = wrap ? fract(u) : u, y = wrap ? fract(v) : v;
+        if (axes) for (const {axis,signal,low,span} of bindings) axes[axis] = low+span*(readSignal?.(signal) ?? 0);
+        const x = axes?.u ?? (wrap ? fract(u) : u), y = axes?.v ?? (wrap ? fract(v) : v);
         if (isRamp) { field.sample(axis === 'across' ? y : x,out); return 1; }
-        return Number(Boolean(polar ? field.sample(.5 + (x - .5) * fitU, .5 + (y - .5) * fitV, out) : field.sample(x, y, out)));
+        return Number(Boolean(polar ? field.sample(.5 + (x - .5) * fitU, .5 + (y - .5) * fitV, out, axes) :
+          field.sample(x, y, out, axes)));
       }
     };
   }
 
-  function layer(definition, context, resolveColor, roles = {}) {
+  function layer(definition, context, resolveColor, roles = {}, signals) {
     const { projection = {}, space = 'rest', field, maskChannel, revealChannel, contourChannel,
       warpChannels, warp = 1, range = [0, 1], scroll = [0, 0], scale = 1, width = 0.16,
       pattern = 'solid', color, colors, outputPalette, ink = false, bandChannel, bands } = definition;
@@ -420,11 +444,12 @@ const SplatEffects = (() => {
     const lookup = coordinates({ projection, space, field }, channels, context);
     if (pattern === 'contour' && !contourChannel) throw new TypeError('Contours need a contourChannel');
     const indexed = pattern === 'indexed' ? indexedRaster(definition.raster, definition.cycles, resolveColor, roles) : null;
-    const paletteField = pattern === 'hue-brightness' ? paletteFieldLayer(definition.hueBrightness, resolveColor, 'hueBrightness') :
-      pattern === 'polar-colour' ? paletteFieldLayer(definition.polar, resolveColor, 'polar') :
-      pattern === 'chroma-field' ? paletteFieldLayer(definition.chromaField, resolveColor, 'chromaField') :
-      pattern === 'palette-coverage' ? paletteFieldLayer(definition.coverage, resolveColor, 'coverage') :
-      pattern === 'palette-ramp' ? paletteFieldLayer(definition.paletteRamp, resolveColor, 'ramp') : null;
+    const paletteKey = pattern === 'hue-brightness' ? 'hueBrightness' :
+      pattern === 'polar-colour' ? 'polar' : pattern === 'chroma-field' ? 'chromaField' :
+      pattern === 'palette-coverage' ? 'coverage' : pattern === 'palette-ramp' ? 'ramp' : undefined;
+    const paletteField = paletteKey && paletteFieldLayer(
+      definition[paletteKey === 'ramp' ? 'paletteRamp' : paletteKey],resolveColor,paletteKey,
+      paletteAxes(definition.axes,paletteKey,signals));
     const pixels = indexed?.sample ?? paletteField?.sample ?? (pattern === 'raster' ? raster(definition.raster) : null);
     const custom = typeof pattern === 'function' ? pattern :
       Object.hasOwn(context?.shaders || {}, pattern) ? context.shaders[pattern] : null;
@@ -439,9 +464,9 @@ const SplatEffects = (() => {
     const result = new Float64Array(6); // RGB, amount, coverage, glint
     const detailSize = Object.hasOwn(motifs,pattern) ? scale * (pattern === 'checker' ? .5 : width) : 0;
     return {
-      palette, detailSize,
+      palette, detailSize, boundAxes: paletteField?.boundAxes, weather: paletteField?.weather,
       reveals: revealChannel !== undefined || Boolean(custom),
-      sample(sample, base) {
+      sample(sample, base, _layer, readSignal) {
         result[0] = tint[0]; result[1] = tint[1]; result[2] = tint[2];
         result[3] = 0; result[4] = 1; result[5] = 0;
         const time = sample.time || 0;
@@ -466,7 +491,7 @@ const SplatEffects = (() => {
           const band = stepped.sample(at(bandChannel));
           amount = Number(Boolean(band));
           if (band) result.set(band.rgb, 0);
-        } else if (pixels) amount = pixels(x, y, time, result);
+        } else if (pixels) amount = pixels(x, y, time, result, readSignal);
         else if (custom) {
           // Custom JS effects can set RGB, amount, coverage and glint in their sample.
           result[3] = 1;

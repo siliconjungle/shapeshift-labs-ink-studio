@@ -55,7 +55,7 @@ function read(file, packs, colorOptions) {
       palette: { palette: entries.map(Palette.hex) } };
   }
   if (record(value) && Object.keys(value).length && (value.palette === undefined || Array.isArray(value.palette)) &&
-      Object.keys(value).every(key => ['palette', 'reserved', 'dither', 'source'].includes(key)))
+      Object.keys(value).every(key => ['palette', 'reserved', 'dither', 'source', 'match'].includes(key)))
     return { source: 'native-palette', fallback, label: fallback, palette: value };
   throw new TypeError('JSON needs a LUT, color stack, palette, asset pack or asset bundle');
 }
@@ -244,15 +244,15 @@ function toPalette(look, options, format, readReference, report) {
     if (clipped || rounded) note(report, 'palette-precision', clipped + ' sampled swatches were clipped and ' + rounded + ' were rounded to 8-bit RGB.');
   } else if (look.paletteFile) file = look.paletteFile;
   else if (look.palette) {
-    const { palette, reserved, dither, source } = look.palette;
+    const { palette, reserved, dither, source, match } = look.palette;
     const ref = reference?.rows.map(row => row.color);
     if (palette === undefined && !ref) throw new TypeError('A scene-dependent palette needs --swatches');
     const { entries, rounded } = palette === undefined ? { entries: ref, rounded: 0 } : Palette.colors(palette, { reference: ref });
     const extra = reserved?.length ? Palette.colors(reserved, { reference: ref }) : { entries: [], rounded: 0 };
     for (const color of extra.entries) if (!entries.includes(color)) entries.push(color);
     if (look.stack) note(report, 'omitted-stack', 'The file contains the authored palette. Use --swatches to sample the color stack.');
-    if (reserved?.length || dither !== undefined || source === 'graded')
-      note(report, 'omitted-palette-rules', 'The external file stores colors. Reservation, dithering and graded source rules were omitted.');
+    if (reserved?.length || dither !== undefined || source === 'graded' || match && match !== 'rgb')
+      note(report, 'omitted-palette-rules', 'The external file stores colors. Reservation, dithering, source and matching rules were omitted.');
     if (rounded + extra.rounded + (look.rounded ?? 0)) note(report, 'palette-rounding', 'Some swatches were rounded to 8-bit RGB.');
     file = { rows: entries.map(color => ({ color })), title: report.look ? look.label : undefined };
   } else throw new TypeError('A color stack needs --swatches with a reference palette for palette export');
@@ -336,7 +336,7 @@ function isSource(file) {
     typeof value === 'number' || typeof value === 'string' || Array.isArray(value));
   return record(input) && ([packFormat, bundleFormat, 'ink-studio/lut'].includes(input.format) ||
     Object.hasOwn(input, 'size') && Object.hasOwn(input, 'data') || Object.hasOwn(input, 'steps') ||
-    Object.keys(input).length > 0 && Object.keys(input).every(key => ['palette', 'reserved', 'dither', 'source'].includes(key)));
+    Object.keys(input).length > 0 && Object.keys(input).every(key => ['palette', 'reserved', 'dither', 'source', 'match'].includes(key)));
 }
 
 function inspectSource(file, options, kit) {

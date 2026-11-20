@@ -1,5 +1,6 @@
 const { performance } = require('node:perf_hooks');
 const frameBudget = require('../src/frame-budget.js');
+const PassQuality = require('../src/pass-quality.js');
 // Draws a world without a browser: motion kinds, projection of each splat's covariance to a screen ellipse,
 // blending from far to near, low-resolution sampling, dithering and palette quantization.
 const FOV = (38 * Math.PI) / 180;
@@ -23,6 +24,7 @@ const runGraph = require('./render-graph.js');
 const FrameComposite = require('../src/frame-composite.js');
 const CameraStaging = require('../src/camera-staging.js');
 const CameraLens = require('../src/camera-lens.js');
+const RenderContract = require('../src/render-contract.js');
 const CameraImpulses = require('../src/camera-impulses.js');
 const SplatOrder = require('../src/splat-order.js');
 const Cutaway = require('../src/cutaway.js');
@@ -85,43 +87,7 @@ const clamp = (x, a, b) => (x < a ? a : x > b ? b : x),
     return t * t * (3 - 2 * t);
   };
 function viewMatrix(yaw, pitch, dist, T) {
-  const cp = Math.cos(pitch),
-    sp = Math.sin(pitch),
-    e = [T[0] + dist * cp * Math.sin(yaw), T[1] + dist * sp, T[2] + dist * cp * Math.cos(yaw)];
-  let zx = e[0] - T[0],
-    zy = e[1] - T[1],
-    zz = e[2] - T[2];
-  const zl = Math.hypot(zx, zy, zz);
-  zx /= zl;
-  zy /= zl;
-  zz /= zl;
-  let xx = zz,
-    xz = -zx;
-  const xy = 0,
-    xl = Math.hypot(xx, xz);
-  xx = xl ? xx / xl : Math.cos(yaw);
-  xz = xl ? xz / xl : -Math.sin(yaw);
-  const yx = zy * xz - zz * xy,
-    yy = zz * xx - zx * xz,
-    yz = zx * xy - zy * xx;
-  return [
-    xx,
-    yx,
-    zx,
-    0,
-    xy,
-    yy,
-    zy,
-    0,
-    xz,
-    yz,
-    zz,
-    0,
-    -(xx * e[0] + xy * e[1] + xz * e[2]),
-    -(yx * e[0] + yy * e[1] + yz * e[2]),
-    -(zx * e[0] + zy * e[1] + zz * e[2]),
-    1
-  ];
+  return CameraLens.matrix(CameraLens.orbitPose(yaw, pitch, dist, T));
 }
 // o: t (seconds), yaw, pitch, dist, target, w, h (the size of the stage in screen pixels), zoom (1 = the diorama's own distance), raw (skip the palette)
 const edgeCoverageThreshold = .03;
@@ -142,10 +108,8 @@ function cameraCapture(options, receive) {
 }
 
 function render(world, o, preparedPalettes) {
-  if (o?.timeDomains || world.timeDomains) {
-    const times = require('../index.js').load().KIT.timeDomains.frame(world, { ...o, time: o?.t });
-    o = { ...times, t: times.time };
-  }
+  o = RenderContract.options(world, o, (w, frame) => require('../index.js').load().KIT.timeDomains.frame(w, frame));
+  if (o.strictContract) RenderContract.requirePortable(world, o);
   if (o?.cameraGuides && !o.samples && !o.captureCoverage) {
     const staging = o.cameraStaging ?? world.look?.cameraStaging;
     return CameraStaging.overlay(render(world, { ...o, cameraGuides: false, cameraStaging: staging || true }, preparedPalettes));
@@ -238,6 +202,7 @@ function render(world, o, preparedPalettes) {
   const start = performance.now();
   const counters = {
     rasterPasses:0, reflectionProbeFaces:0, fragments:0, translucentFragments:0, peakDeferredFragments:0, deferredFlushes:0,
+    planarCaptures:0, planarPixels:0, reflectionProbePixels:0, splatRows:0, omittedBackgroundRows:0, omittedParticleRows:0,
     volume:{ traces:0, boundsTests:0, boundsCacheHits:0, mediaQueries:0, mediaCacheHits:0, fullFogCacheHits:0, emptyFogIntervals:0, raySamples:0,
       analyticSegments:0, marchSteps:0, densitySamples:0, skipTests:0, skippedSteps:0, cloudTraces:0, cloudSamples:0 }
   };
@@ -255,34 +220,19 @@ function renderFrame(world, o, preparedPalettes) {
   const look = world.look || {};
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
-  const direction = ArtDirection.prepare(look.artDirection,o.artDirection);
+  const motion = RenderContract.clock(world, o), { direction, time: sceneTime, scene: t } = motion;
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
+  const passQuality = PassQuality.prepare(o.passQuality ?? look.passQuality);
   const subject = protection?.bind(world);
-  const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
-  const authored = world.cameraRig?.sample(o?.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? sceneTime, { shot: o.cameraShot }).camera;
-  const c = CameraStaging.view(world.cam, authored, o[probeCamera] ? undefined : o.camera);
   const viewStaging = o[probeCamera] ? null : CameraStaging.prepare(o.cameraStaging ?? look.cameraStaging);
   const framing = o.samples || o.captureCoverage || o.reflectionPlane ? null : viewStaging;
   const focusBands = o.depthOfField === false ? [] : framing?.depthOfField ?? [];
   const hasFocus = focusBands.some(band => band.radius > 0);
-  const lens = CameraStaging.lens(c,o[probeCamera] ? (o.fov===undefined?{}:{fov:o.fov}) : Object.fromEntries(['fov','focalLength','sensorHeight','focusDistance'].filter(key=>o[key]!==undefined).map(key=>[key,o[key]])));
-  const { fov,sensorHeight } = lens;
-  const tangent = Math.tan(fov / 2) / lensScale;
-  const ortho = o.ortho ?? c.ortho ?? (c.projection === 'orthographic');
-  const motion = ArtDirection.motion(direction,sceneTime,o.skyTime ?? sceneTime);
-  const t = motion.scene,
-    an = world.anim || {},
-    cameraMotion = o.lockCamera ? {} : an,
-    dist0 = o.dist || c.dist / (o.zoom || 1),
-    /* a diorama's own zoom (a camera punch) moves the eye, not the size of an art pixel */
-    { yaw, pitch, dist } = CameraStaging.constrain({
-      yaw: o.yaw ?? c.yaw, pitch: o.pitch ?? c.pitch, dist: dist0 / (cameraMotion.zoom || 1)
-    }, viewStaging?.orbit),
-    cw = o.w || 900,
-    ch = o.h || 620,
-    T0 = CameraStaging.frameTarget({target:o.target || c.target,yaw,pitch,dist,fov:2*Math.atan(tangent),composition:o.composition ?? c.composition},cw/ch),
-    T = cameraMotion.kick ? [T0[0] + cameraMotion.kick[0], T0[1] + cameraMotion.kick[1], T0[2] + cameraMotion.kick[2]] : T0;
-  const depthOffset = ortho && !authored && !c.pose ? 2 * world.radius + 4 : 0;
+  const cw = o.w ?? o.width ?? 900, ch = o.h ?? o.height ?? 620;
+  const camera = CameraLens.frame(world, o, cw, ch, { orbit: viewStaging?.orbit, impulse: CameraImpulses.frame, probe: !!o[probeCamera] });
+  const { lens: { fov, sensorHeight }, tangent, ortho, dist, dist0, yaw, pitch, framed: T, base: c,
+    setback: depthOffset, radius: R } = camera;
+  const an = world.anim || {};
   const audit = o.lookAudit === true ? createAudit() : o.lookAudit;
   const onPaletteClip = audit && ((scope, i, r, g, b) => audit.palette(scope, world.pal[i], r, g, b));
   const transparent = !!o.transparent && !o.captureCoverage;
@@ -309,7 +259,7 @@ function renderFrame(world, o, preparedPalettes) {
     world.lookSnapshot?.query ?? world.surfaceEffects?.query ?? require('../index.js').load().KIT.world.query.fromScene(world, t)));
   const lookOptions = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, lookInputs,
     blueNoise: settings => blueNoise(world, settings), skipMasks: o.lookMasks === false };
-  const stages = !o.raw && RenderStages.plan(world, lookOptions);
+  const stages = RenderContract.stagePlan(world, o, t, lookOptions);
   const optics = o.raw ? null : RenderStages.optics(look.optics, lookOptions);
   const useLocalReflections = o.surface !== false && o.reflections !== false && o.reflectionProbes !== false;
   const scopedReflection = (world.reflections?.length || (useLocalReflections && world.reflectionProbes?.length)) && (look.paletteConstraints?.targets?.length ||
@@ -368,13 +318,13 @@ function renderFrame(world, o, preparedPalettes) {
       frame = ArtEffects.paletteUse(EmissiveFinishes.applyGlow(frame, passes, emissive.profiles), world.pal);
     }
     const ditherAt = anchoring ? (x,y) => ArtStability.ditherCoordinates(stable, passes, y*frame.w+x, x, y) : undefined;
-    if (styled && stages?.post) RenderStages.finish(frame, stages, passes, t, lookPass?.post, audit, ditherAt);
     if (effectSignals) {
       frame = EffectPalettes.apply(frame, passes, effectSignals, source, world.pal, o.captureEffectPalettes, ditherAt);
       if (audit) for (const ramp of effectSignals.rules.ramps.values()) audit.addPalette(ramp.packed);
     }
     if (hasFocus) frame = CameraStaging.focus(frame, passes.depth, focusBands, depthOffset,
-      styled && (!o.colored || !!tone));
+      styled && !stages && (!o.colored || !!tone));
+    if (styled && stages?.post) RenderStages.finish(frame, stages, passes, t, lookPass?.post, audit, ditherAt);
     if (framing) frame.cameraStaging = {
       ...CameraStaging.inspect(framing, world, { w: frame.w, h: frame.h, splatId: passes?.splatId }),
       camera: { yaw, pitch, distance: dist, target: Array.from(T), orthographic: ortho, fov: 2*Math.atan(tangent),
@@ -395,14 +345,10 @@ function renderFrame(world, o, preparedPalettes) {
     palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
     context: world.surfaceEffects, skipMasks: o.lookMasks === false, skipMaskedStacks: o.colorStack === false, onPaletteClip
   }) : preparedPalettes;
-  const animationGrade = o.ignoreLookGrade ? undefined : an.grade;
-  const colorGrade = (legacyLook || coverageAware) && !tone && PixelLook.colorGrade(world.pal, world.paletteRoles, animationGrade,
-    o.paletteRemap ?? look.paletteRemap, o.colorCurves ?? look.colorCurves, o.colorLut ?? look.colorLut,
-    o.colorStack ?? look.colorStack,
-    onPaletteClip && ((i, r, g, b) => onPaletteClip({
+  const { colorGrade, grade } = RenderContract.palette(world, o, { grading: (legacyLook || coverageAware) && !tone, tone: false,
+    onClip: onPaletteClip && ((i, r, g, b) => onPaletteClip({
       assetId: o.colorStack === undefined ? look.colorStackAssetId : undefined, stack: (o.colorStack ?? look.colorStack)?.name
-    }, i, r, g, b)));
-  const grade = colorGrade || animationGrade;
+    }, i, r, g, b)) });
   const evaluatedPalette = colorGrade ? PixelLook.gradePalette(grade) : undefined;
   if (audit) {
     if (legacyLook) audit.addPalette(tone?.palette || evaluatedPalette || (grade ? PixelLook.gradePalette(grade) : world.pal));
@@ -490,20 +436,17 @@ function renderFrame(world, o, preparedPalettes) {
   lookPass = createLookPass(W, H, passSelection, o.lookPassRegistry);
   /* Legacy orthographic views back the eye away. Authored rigs keep their rail or orbit position. */
   const oh = dist * tangent,
-    eyeD = dist + depthOffset,
+    eyeD = camera.distance,
     reflectionPlane = o.reflectionPlane,
     focal = ortho ? H / 2 / oh : H / 2 / tangent,
-    baseView = probeView?.matrix ?? (c.pose ? CameraLens.matrix(c.pose) : viewMatrix(yaw,pitch,eyeD,T)),
-    cameraImpulse = !probeView && CameraImpulses.frame(world,o,CameraLens.listenerPose(CameraLens.fromView(baseView),depthOffset)),
-    cameraView = cameraImpulse && (cameraImpulse.translation.some(Boolean)||cameraImpulse.rotation.some(Boolean)) ? CameraLens.matrix(CameraLens.applyMotion(CameraLens.fromView(baseView),cameraImpulse,{setback:depthOffset})) : baseView,
-    view = ortho && stable?.snap ? ArtStability.snapView(cameraView, focal / (o.artGridScale || 1), stable.anchor) : cameraView,
+    cameraView = probeView?.matrix ?? camera.view,
+    view = CameraLens.artView(probeView ? { ...camera, view: cameraView } : camera, H, stable, undefined, o.artGridScale || 1),
     V = reflectionPlane ? SceneOptics.reflectedView(view, reflectionPlane) : view,
-    near = probeView?.near ?? Math.max(0.4, 0.15 * dist),
+    near = probeView?.near ?? camera.clipNear,
     tp = 1 / tangent,
     asp = W / H,
-    baseCount = world.count,
-    R = world.radius;
-  if(!o.reflectionPlane&&!probeView)o.cameraFrame?.({time:o.cameraTime??sceneTime,pose:CameraLens.fromView(V),motion:cameraImpulse||null});
+    baseCount = world.count;
+  if(!o.reflectionPlane&&!probeView)o.cameraFrame?.({time:camera.time,pose:CameraLens.fromView(V),motion:camera.motion});
   if (!o.reflectionPlane && !probeView) o[captureCamera]?.({view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
     clipNear: near, clipFar: 400, distance: eyeD, setback: eyeD - dist, depthRange: [eyeD - R, eyeD + R],
     eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]});
@@ -576,6 +519,12 @@ function renderFrame(world, o, preparedPalettes) {
   if (paint) {
     if (d === world.data) d = d.slice(0, baseCount * 16);
     paint.paint(d, world.pal, paintView);
+  }
+  const qualityRows = PassQuality.planRows(world, passQuality, { data: d, count: N, particleStart: baseCount, protection });
+  if (counters) {
+    counters.splatRows += qualityRows?.submitted ?? N;
+    counters.omittedBackgroundRows += qualityRows?.backgroundSkipped ?? 0;
+    counters.omittedParticleRows += qualityRows?.particlesSkipped ?? 0;
   }
   const mediumLook = medium => optics?.transform(medium) ?? PixelLook.mediumTransform(paletteRules, medium);
   const colorForVolume = volume => mediumLook(TargetSelectors.medium(volume.id, volume.mediumKind ?? volume.type, volume.tags));
@@ -708,9 +657,10 @@ function renderFrame(world, o, preparedPalettes) {
     o.surface !== false && o.reflections !== false && world.reflections?.length
       ? reflectionSampler(
           world.reflections,
-          plane =>
-            render(world, {
+          (plane, factor) => {
+            const capture = render(world, {
               ...o,
+              ...(factor < 1 && { w: Math.max(1, Math.round(W * factor)), h: Math.max(1, Math.round(H * factor)), px: 1 }),
               samples: false,
               colored: false,
               worked: false,
@@ -727,17 +677,32 @@ function renderFrame(world, o, preparedPalettes) {
               water: false,
               reflections: false,
               edges: false
-            }),
+            });
+            if (counters) {
+              counters.planarCaptures++;
+              counters.planarPixels += capture.w * capture.h;
+            }
+            return capture;
+          },
           V,
           eye,
-          o.reflectionScale ?? 1
+          o.reflectionScale ?? 1,
+          { quality: passQuality, width: W, height: H }
         )
       : null;
-  const definitions = useLocalReflections ? ReflectionProbes.prepare(world.reflectionProbes) : [];
+  let definitions = useLocalReflections ? ReflectionProbes.prepare(world.reflectionProbes) : [];
+  const probeLevels = PassQuality.reflectionPlan(passQuality, definitions.map(probe => probe.id));
+  if (probeLevels) definitions = definitions.filter(probe => probeLevels.get(probe.id)).map(probe => {
+    const factor = probeLevels.get(probe.id);
+    return factor === 1 ? probe : { ...probe, size: Math.max(4, 2 ** Math.floor(Math.log2(probe.size * factor))) };
+  });
   const probeFilters = definitions.length && new Map();
   const localReflection = definitions.length ? ReflectionProbes.sampler(definitions, (probe, face) => {
     if (!probeFilters.has(probe.id)) probeFilters.set(probe.id, ShadowArt.bind({ cast:probe.capture }, captureWorld,'cast'));
-    if (counters) counters.reflectionProbeFaces++;
+    if (counters) {
+      counters.reflectionProbeFaces++;
+      counters.reflectionProbePixels += probe.size ** 2;
+    }
     return render(captureWorld, {
       ...o, [probeCamera]:{ matrix:ReflectionProbes.view(probe.at,face), near:probe.near, allow:probeFilters.get(probe.id) },
       target:probe.at, dist:1, yaw:0, pitch:0, fov:Math.PI/2, lensScale:1, lockCamera:true, ortho:false,
@@ -829,6 +794,7 @@ function renderFrame(world, o, preparedPalettes) {
     wet = new Float32Array(N);
   const sampleWithdrawal = SampleCoverage.amount(o.sampleWithdrawal ?? world.sampleWithdrawal ?? 0);
   for (let i = 0, q = 0; i < N; i++, q += 16) {
+    if (qualityRows && !qualityRows.keep[i]) continue;
     let x = d[q],
       y = d[q + 1],
       z = d[q + 2],
@@ -977,12 +943,12 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const relight = relative && SplatRelighting.rows(world, relative, sampleFrames(world, t), { x: X, y: Y, z: Z, alpha: AL });
   let mn = Infinity;
-  for (let i = 0; i < N; i++) if ((i < baseCount || AL[i] > 0) && depth[i] < mn) mn = depth[i];
+  for (let i = 0; i < N; i++) if ((!qualityRows || qualityRows.keep[i]) && (i < baseCount || AL[i] > 0) && depth[i] < mn) mn = depth[i];
   const mediumHorizon = aerial ? Math.max(horizon, -mn + R) : horizon;
   const backRows = blendDepth && world.back?.length ? new Set(world.back) : null;
   if (world.back) for (let j = 0; j < world.back.length; j++) depth[world.back[j]] = mn;
-  const order = new Uint32Array(N);
-  for (let i = 0; i < N; i++) order[i] = i;
+  const order = new Uint32Array(qualityRows?.submitted ?? N);
+  for (let i = 0, j = 0; i < N; i++) if (!qualityRows || qualityRows.keep[i]) order[j++] = i;
   order.sort((a, b) => depth[a] - depth[b]);
   if (transparency && !blendDepth) {
     const { depthTolerance: tolerance } = transparency;
@@ -1078,9 +1044,9 @@ function renderFrame(world, o, preparedPalettes) {
       renderMeta?.materials?.[renderMeta.materialIds?.[i]]) : stable;
     return rule.dither === 'screen' ? null : rule;
   }
-  function stagedMaterial(i, rules, rgb, sample) {
+  function stagedMaterial(i, rules, rgb, sample, paintedAlbedo) {
     const reference = world.materialAlbedo?.[i];
-    return RenderStages.material(rules, rgb, reference ? reference - 1 : undefined, sample, undefined, lookPass?.stage);
+    return RenderStages.material(rules, rgb, reference ? reference - 1 : undefined, sample, undefined, lookPass?.stage, paintedAlbedo);
   }
   let pixed = null,
     sprM = null;
@@ -1190,7 +1156,8 @@ function renderFrame(world, o, preparedPalettes) {
       color=live?.albedo(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
       const staged=stages && stages.at(i);
       const sample=(staged?.material || staged?.lit) && (stageMasks ? stageSample(i,position) : undefined);
-      if (staged?.material) color=stagedMaterial(i,staged.material,color,sample);
+      const paintedAlbedo = staged?.material && surface?.paintsBase(i) ? [] : undefined;
+      if (staged?.material) color=stagedMaterial(i,staged.material,color,sample,paintedAlbedo);
       if (live?.normal(i)) {
         live.gains(i,...position,sunGains);
         color=color.map((v,k)=>v*sunGains[k]);
@@ -1200,7 +1167,7 @@ function renderFrame(world, o, preparedPalettes) {
         color = probes.shade(position,sprite.normal,color,undefined,0,probeAlbedo(i));
       if (surface?.has(i) && !PIX?.[i*8]) {
         const value=surface.shade(i,...position,X[i],Y[i],Z[i],...color,sprite.p%W+.5,Math.floor(sprite.p/W)+.5,
-          undefined,fragmentReflection);
+          undefined,fragmentReflection,paintedAlbedo);
         color=value.slice(0,3);
         highlight=value[4]; paletteId=value[5];
         reflected=fragmentReflection?.slice();
@@ -1267,7 +1234,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (blendDepth) countDeferred();
     deferred.set(sample.p,[{sort:sample.z,center:sample.z,index:-1e9,transparent:false,sample:spriteSample(sample)}]);
   }
-  for (let n = 0; n < N; n++) {
+  for (let n = 0; n < order.length; n++) {
     const i = order[n];
     if ((!sortedSurfaces || !deferred) && spriteIndex<sprites.length) playSprites(-depth[i],false);
     const q = i * 16,
@@ -1315,7 +1282,8 @@ function renderFrame(world, o, preparedPalettes) {
     let r = liveAlbedo ? liveAlbedo[0] : (pk % 256) / 255,
       g = liveAlbedo ? liveAlbedo[1] : (Math.floor(pk / 256) % 256) / 255,
       b = liveAlbedo ? liveAlbedo[2] : Math.floor(pk / 65536) / 255;
-    if (staged?.material) [r, g, b] = stagedMaterial(i, staged.material, [r, g, b], materialSample);
+    const paintedAlbedo = staged?.material && surface?.paintsBase(i) ? [] : undefined;
+    if (staged?.material) [r, g, b] = stagedMaterial(i, staged.material, [r, g, b], materialSample, paintedAlbedo);
     r += add[i];
     g += add[i];
     b += add[i];
@@ -1427,7 +1395,7 @@ function renderFrame(world, o, preparedPalettes) {
     const centered = hasSurface && !pixelSurface && !fragmentSurface;
     if (centered) {
       [r, g, b, coverage, glint, centerPalette] = surface.shade(i, x, y, z, x, y, z, r, g, b, undefined, undefined,
-        lookPass?.surface, centerReflection);
+        lookPass?.surface, centerReflection, paintedAlbedo);
     }
     const splatFlash = flash && !(flags & 6) ? flash.light(x, y, z, liveNormal || (!fieldParticle ? geometrySample(i).normal : null)) : null;
     if (pixelSurface && splatFlash) patternFlashes.set(i, splatFlash);
@@ -1597,7 +1565,7 @@ function renderFrame(world, o, preparedPalettes) {
         if (fragmentSurface) {
           hit = exact?.position ?? surfacePoint(rayAt(ix + 0.5, iy + 0.5), normal, x, y, z, -cz, R);
           [pr, pg, pb, alpha, highlight, paletteId] = surface.shade(i, ...hit, x, y, z, pr, pg, pb, ix + 0.5, iy + 0.5,
-            lookPass?.surface, fragmentReflection);
+            lookPass?.surface, fragmentReflection, paintedAlbedo);
           reflected = fragmentReflection;
         }
         if (relit) {
@@ -1969,7 +1937,8 @@ function renderFrame(world, o, preparedPalettes) {
         lookPass?.begin();
         const masked = staged?.material?.some(rule => rule.mask) || staged?.lit?.some(rule => rule.mask);
         const sample = masked ? stageSample(i, [HX[p], HY[p], HZ[p]]) : undefined;
-        let base = staged?.material ? stagedMaterial(i, staged.material, PALC[ci], sample) : PALC[ci];
+        const paintedAlbedo = staged?.material && surface?.paintsBase(i) ? [] : undefined;
+        let base = staged?.material ? stagedMaterial(i, staged.material, PALC[ci], sample, paintedAlbedo) : PALC[ci];
         if (exposure?.light && !live?.normal(i) && !(Math.round(d[i*16+11]) & (32 | 64))) {
           const gain = .24 + .76 * exposure.light(HX[p],HY[p],HZ[p]);
           if (gain < 1) base = base.map(value => value * gain);
@@ -2702,4 +2671,4 @@ function grid(imgs, cols, labels) {
   });
   return out;
 }
-module.exports = { render, upscale, grid, label, viewMatrix, FOV };
+module.exports = { render, upscale, grid, label, viewMatrix, FOV, cameraCapture };

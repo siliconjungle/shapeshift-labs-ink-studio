@@ -1,5 +1,6 @@
 /* Optional camera and sampling controls in native art pixels. */
 const ArtStability = (() => {
+  const lens = typeof CameraLens === 'undefined' ? require('./camera-lens.js') : CameraLens;
   const spaces = ['screen', 'world', 'object'];
   const origin = [0, 0, 0];
   const vector = value => Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
@@ -42,15 +43,7 @@ const ArtStability = (() => {
     return { ...main, snap, anchor: anchor.slice(), resolve, threshold, protect: new Set(protect.map(String)), rules, anchorSpaces };
   }
 
-  function snapView(view, pixelsPerUnit, anchor) {
-    const result = view.slice();
-    for (let row = 0; row < 2; row++) {
-      const position = anchor[0] * view[row] + anchor[1] * view[4 + row] + anchor[2] * view[8 + row] + view[12 + row];
-      const snapped = Math.round(position * pixelsPerUnit) / pixelsPerUnit;
-      result[row + 12] += snapped - position;
-    }
-    return result;
-  }
+  const snapView = lens.snapView;
 
   const modulo = (n, size) => ((n % size) + size) % size;
   function matching(settings, object, material) {

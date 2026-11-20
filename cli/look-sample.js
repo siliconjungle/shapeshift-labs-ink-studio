@@ -54,7 +54,7 @@ module.exports = function sample({ file, options, source, look, reference, kit, 
   const pixel = vector(options.pixel, 2, '--pixel') ?? [0, 0];
   if (!pixel.every(Number.isSafeInteger)) throw new TypeError('--pixel needs two integer art coordinates');
 
-  const { PixelLook, SplatEffects, KIT } = kit;
+  const { PixelLook, RenderStages, SplatEffects, KIT } = kit;
   const refs = reference?.rows.map(row => row.color) ?? [];
   const stack = look.stage === 'palette' ? undefined : look.stack;
   const transfer = stack && compile(stack, reference, 'Indexed remaps need --swatches to supply the reference palette');
@@ -70,27 +70,34 @@ module.exports = function sample({ file, options, source, look, reference, kit, 
   const havePoint = (look.mask?.space ?? (look.mask?.type === 'query' ? 'world' : 'rest')) === 'world' ? worldPosition : position;
   const maskWeight = mask ? !sceneMask && havePoint ? mask({ worldPosition, position, time: 0 }) : null : 1;
   const weight = look.weight ?? 1;
-  const staged = look.stage !== undefined || look.order !== undefined || look.weight !== undefined;
+  const staged = look.stage !== undefined || look.paletteStage !== undefined || look.order !== undefined || look.weight !== undefined;
+  const beforeStack = look.paletteStage !== undefined &&
+    RenderStages.names.indexOf(look.paletteStage) < RenderStages.names.indexOf(look.stage ?? 'lit');
+  const dither = look.paletteStage !== 'material' && look.paletteStage !== 'lit';
+  const match = rgb => policy ? policy.index(rgb,...pixel,dither) : PixelLook.nearest(rgb,candidates,false);
+  const amount = weight*(maskWeight ?? 1), activePalette = palette && (!staged || amount>=.5);
   const rows = colors.map((value, i) => {
     const input = typeof value === 'string' && /^#[\da-f]{6}$/i.test(value) ? normalized(parseInt(value.slice(1), 16)) :
       Array.isArray(value) && value.length === 3 && value.every(Number.isFinite) ? value : null;
     if (!input) throw new TypeError('Color ' + (i + 1) + ' needs a six-digit hex swatch or a finite RGB triple');
+    const priorSlot = beforeStack && activePalette ? match(input) : null;
+    const base = priorSlot === null ? input : normalized(palette[priorSlot]);
     // Arbitrary RGB colors use the closest reference swatch when a look requires a palette index.
-    const index = indexed ? PixelLook.nearest(input, indexed, false) : undefined;
-    const transformed = transfer ? transfer.sample(input, undefined, index) : input;
-    const amount = weight * (maskWeight ?? 1);
-    const graded = staged ? mix(input, transformed, amount) : transformed;
-    const slot = palette && (!staged || amount >= .5) ?
-      policy ? policy.index(graded, ...pixel) : PixelLook.nearest(graded, candidates, false) : null;
-    const resolved = slot == null ? graded : normalized(palette[slot]);
-    const rgb = staged || !mask ? resolved : mix(input, resolved, amount);
-    const swatch = slot != null && (staged || !mask || amount === 1) ? Palette.hex(palette[slot]) : null;
+    const index = indexed ? PixelLook.nearest(base,indexed,false) : undefined;
+    const transformed = transfer ? transfer.sample(base,undefined,index) : base;
+    const graded = staged ? mix(base,transformed,amount) : transformed;
+    const slot = beforeStack ? priorSlot : activePalette ? match(graded) : null;
+    const resolved = beforeStack || slot === null ? graded : normalized(palette[slot]);
+    const rgb = staged || !mask ? resolved : mix(input,resolved,amount);
+    const exact = beforeStack ? graded.every((v,i)=>Math.abs(v-base[i])<1e-12) : staged || !mask || amount===1;
+    const swatch = slot !== null && exact ? Palette.hex(palette[slot]) : null;
     return { input, transformed, rgb, swatch, ...(index !== undefined && { paletteIndex: index }) };
   });
   const columns = Math.min(8, rows.length);
   const output = { source, look: look.id ?? null, label: look.label, ...(look.stage && { stage: look.stage }),
+    ...(look.paletteStage && { paletteStage: look.paletteStage }),
     maskWeight, ...(sceneMask && { maskNeedsScene: true }),
-    ...(palette && { palette: palette.map(Palette.hex) }), ...(generated && { chart: { columns, rows: 4 } }), samples: rows };
+    ...(palette && { palette: palette.map(Palette.hex) }), ...(policy?.matchId && { match: policy.match }), ...(generated && { chart: { columns, rows: 4 } }), samples: rows };
   if (options.out && /\.png$/i.test(options.out)) {
     if (path.resolve(options.out) === path.resolve(file)) throw new TypeError('--out needs a separate path');
     writeChart(options.out, rows, columns);

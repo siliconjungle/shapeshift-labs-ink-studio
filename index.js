@@ -15,7 +15,7 @@ const files = () =>
     'src/color-space.js', 'src/paint-corrections.js', 'src/color-curves.js', 'src/color-lut.js', 'src/color-stack.js', 'src/pixel-look.js', 'src/palette-fields.js', 'src/reflection-plane.js', 'src/airflow.js', 'src/wind-field.js', 'src/light-schedule.js', 'src/light-cookies.js', 'src/area-lights.js', 'src/emissive-finishes.js',
     'src/route-visibility.js', 'src/sample-coverage.js', 'src/contribution-rules.js', 'src/sample-visibility.js', 'src/swept-disc.js', 'src/splat-order.js', 'src/cutaway.js', 'src/splat-codec.js', 'src/ripple-field.js',
     'src/volume-field.js', 'src/field-bands.js', 'src/geometry-density.js', 'src/volume-cutouts.js', 'src/cloud-recipes.js', 'src/cloud-detail.js', 'src/cloud-field.js', 'src/lightning.js', 'src/volume-light.js', 'src/celestial-tracks.js', 'src/sky-environment.js', 'src/environment-frame.js', 'src/weather-front.js', 'src/weather-binding.js', 'src/optical-materials.js', 'src/atmosphere-depth-bands.js', 'src/scene-optics.js', 'src/scene-exposure.js', 'src/splat-effects.js',
-    'src/look-inputs.js', 'src/render-graph.js', 'src/render-stages.js', 'src/effect-palettes.js', 'src/silhouette-protection.js', 'src/detail-budgets.js', 'src/shadow-art.js', 'src/reflection-probes.js', 'src/contact-shadows.js', 'src/bounce-probes.js', 'src/horizon-bands.js', 'src/surface-detail-kits.js', 'src/surface-look.js', 'src/splat-frames.js', 'src/splat-relighting.js', 'src/sdf-assist.js', 'src/sculpt-sampling.js', 'src/builder.js', 'src/sculpt.js'
+    'src/look-inputs.js', 'src/render-graph.js', 'src/render-stages.js', 'src/render-contract.js', 'src/effect-palettes.js', 'src/silhouette-protection.js', 'src/pass-quality.js', 'src/detail-budgets.js', 'src/shadow-art.js', 'src/reflection-probes.js', 'src/contact-shadows.js', 'src/bounce-probes.js', 'src/horizon-bands.js', 'src/surface-detail-kits.js', 'src/surface-look.js', 'src/splat-frames.js', 'src/splat-relighting.js', 'src/sdf-assist.js', 'src/sculpt-sampling.js', 'src/builder.js', 'src/sculpt.js'
   ]
     .map(f => path.join(__dirname, f))
     .concat(
@@ -101,7 +101,10 @@ module.exports = {
     return api.prepare(require('./cli/data-inputs.js').embed(api, dataInputs, file));
   },
   exportGlb: require('./cli/export-glb.js'),
+  ...require('./cli/gltf-asset.js'),
   render: require('./cli/render.js').render,
+  exportLayers: require('./cli/export-layers.js').exportLayers,
+  describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
   createCameraAtlas(options) {
     return module.exports.load().KIT.cameraAtlas.raster(options, (world, frame) => {
       const { width: w, height: h, time: t, camera, cameraSnapshot, ...settings } = frame;
@@ -118,12 +121,14 @@ module.exports = {
   transitionReview: require('./cli/transition-review.js').transitionReview,
   spriteAtlas: require('./cli/sprite-atlas.js').spriteAtlas,
   readSpriteAtlas: require('./cli/sprite-atlas.js').readSpriteAtlas,
+  writeSpriteAtlas: require('./cli/sprite-atlas.js').writeSpriteAtlas,
   readHorizonBands: require('./cli/horizon-bands.js').readHorizonBands,
   readEnvironmentImage: require('./cli/horizon-bands.js').readEnvironmentImage,
   previewTimeline: require('./cli/animation-timeline.js').previewTimeline,
   readRasterAsset(file) {
     return require('./cli/raster-asset.js').readRasterAsset(file, module.exports.load().KIT.procedural.graph.raster);
   },
+  writeRasterAsset: require('./cli/raster-asset.js').writeRasterAsset,
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },

@@ -78,10 +78,17 @@ function readGlb(bytes) {
   const end = 20 + bytes.readUInt32LE(12);
   if (end > bytes.length || end % 4) throw new Error('Invalid GLB JSON chunk');
   const gltf = JSON.parse(bytes.subarray(20, end).toString('utf8'));
-  const payload = end + 8;
-  const bin = payload <= bytes.length && bytes.toString('ascii', end + 4, payload) === 'BIN\0'
-    ? bytes.subarray(payload, payload + bytes.readUInt32LE(end)) : Buffer.alloc(0);
-  return { gltf, bin };
+  let bin;
+  for (let at = end; at < bytes.length;) {
+    const start = at + 8;
+    if (start > bytes.length) throw new Error('Truncated GLB chunk header');
+    const next = start + bytes.readUInt32LE(at), tag = bytes.toString('ascii', at + 4, start);
+    if (next > bytes.length || next % 4) throw new Error('Invalid GLB chunk length');
+    if (tag === 'JSON' || tag === 'BIN\0' && (bin || at !== end)) throw new Error('Invalid GLB chunk order');
+    if (tag === 'BIN\0') bin = bytes.subarray(start, next);
+    at = next;
+  }
+  return { gltf, bin: bin ?? Buffer.alloc(0) };
 }
 
 // glTF containers can be packed without decoding meshes, animations, or image data.
@@ -107,19 +114,25 @@ function embed(gltf, file, binary) {
     if (/^\w+:/.test(uri)) throw new Error('Use local glTF companion files');
     return fs.readFileSync(path.resolve(path.dirname(file), decodeURIComponent(uri)));
   };
-  const bases = (gltf.buffers || []).map(({ uri, byteLength }, index) => {
+  const buffers = gltf.buffers || [];
+  const bases = buffers.map(({ uri, byteLength }, index) => {
     const bytes = uri === undefined && index === 0 ? binary : read(uri);
-    if (!bytes || bytes.length < byteLength) throw new Error('Incomplete glTF buffer');
+    if (!Number.isSafeInteger(byteLength) || byteLength < 1 || !bytes || bytes.length < byteLength)
+      throw new Error('Incomplete glTF buffer');
     return push(bytes.subarray(0, byteLength));
   });
-  for (const view of gltf.bufferViews || []) {
-    view.byteOffset = bases[view.buffer] + (view.byteOffset || 0);
+  function relocate(view) {
+    const offset = view.byteOffset ?? 0, size = view.byteLength;
+    if (!Number.isSafeInteger(view.buffer) || !buffers[view.buffer] || !Number.isSafeInteger(offset) || offset < 0 ||
+        !Number.isSafeInteger(size) || size < 1 || offset + size > buffers[view.buffer].byteLength)
+      throw new RangeError('glTF data exceeds its source buffer');
+    view.byteOffset = bases[view.buffer] + offset;
     view.buffer = 0;
+  }
+  for (const view of gltf.bufferViews || []) {
+    relocate(view);
     const compression = view.extensions?.EXT_meshopt_compression;
-    if (compression) {
-      compression.byteOffset = bases[compression.buffer] + (compression.byteOffset || 0);
-      compression.buffer = 0;
-    }
+    if (compression) relocate(compression);
   }
   for (const image of gltf.images || []) {
     if (image.uri === undefined) continue;
@@ -138,4 +151,4 @@ function embed(gltf, file, binary) {
   return pack(gltf, Buffer.concat(pieces, length));
 }
 
-module.exports = { document, readGlb, embed };
+module.exports = { document, pack, readGlb, embed };

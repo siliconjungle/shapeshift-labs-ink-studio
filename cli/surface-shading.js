@@ -1,6 +1,7 @@
 // Bind the common shader to the software renderer's camera and splat buffers.
 const SurfaceLook = require('../src/surface-look.js');
 const LightSchedule = require('../src/light-schedule.js');
+const { unpack } = require('../src/render-stages.js');
 const linear = require('../src/color-space.js').prepare('srgb', 'srgb-linear');
 
 function surfaceShading(world, options, camera) {
@@ -43,11 +44,12 @@ function surfaceShading(world, options, camera) {
   });
   const lamps = materials.some(material => material.thinLocal) ?
     (camera.transmissionLamps?.() ?? []).map(light => ({ ...light, tint: linear(light.color) })) : [];
-  const ids = new Map();
+  const ids = new Map(), albedos = new Map();
   const palettes = [], constraints = [];
   for (const material of materials) {
-    for (const { effect } of material.layers) {
-      if (!effect?.palette) continue;
+    for (const layer of material.layers) {
+      const { effect } = layer;
+      if (!effect?.palette || SurfaceLook.basePaint(layer)) continue;
       palettes.push(effect.palette);
       ids.set(effect.palette, palettes.length);
     }
@@ -114,7 +116,7 @@ function surfaceShading(world, options, camera) {
   const sampleSky = sky && ((direction, out) => sky(direction, out, sample.worldPosition));
   const sampleLocal = localReflection && ((layer, ray, axis) =>
     localReflection(layer.probe, sample.worldPosition, ray, layer.roughness, axis));
-  function shade(i, x, y, z, centerX, centerY, centerZ, r, g, b, sx, sy, visit, reflected) {
+  function shade(i, x, y, z, centerX, centerY, centerZ, r, g, b, sx, sy, visit, reflected, paintedAlbedo) {
     const offset = i * STRIDE;
     const { position, normal, view } = sample;
     const prepared = materials[surfaceData[offset] - 1];
@@ -231,6 +233,11 @@ function surfaceShading(world, options, camera) {
       }
       return incident;
     } : undefined;
+    if (prepared.paintsBase) {
+      const reference = world.materialAlbedo?.[i];
+      if (reference && !paintedAlbedo && !albedos.has(reference)) albedos.set(reference,unpack(reference-1));
+      sample.albedo = paintedAlbedo ?? albedos.get(reference);
+    } else sample.albedo = undefined;
     rgb[0] = r;
     rgb[1] = g;
     rgb[2] = b;
@@ -241,7 +248,7 @@ function surfaceShading(world, options, camera) {
 
   return {
     has, normalAt, surfaceNormal, planar, environment, shade, palettes, constraints,
-    projected, bevel, local, thin,
+    projected, bevel, local, thin, paintsBase: i => materials[surfaceData[i * STRIDE] - 1]?.paintsBase,
     finishBeforeFog: i => materials[surfaceData[i * STRIDE] - 1]?.finishBeforeFog,
     reveals: i => materials[surfaceData[i * STRIDE] - 1]?.reveals
   };

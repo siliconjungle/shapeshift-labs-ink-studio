@@ -57,8 +57,8 @@ const PaletteFields = (() => {
         !pair(brightness) || !brightness.every(fraction) || brightness[0] > brightness[1] || !fraction(saturation))
       throw new RangeError('Use an increasing hue range up to one turn, ordered brightness in [0, 1], and saturation in [0, 1]');
     const startHue = wrap(hue[0]), hueSpan = hue[1] - hue[0], [dark, light] = brightness;
-    return field(palette, resolveColor, match => (u, v) =>
-      match(startHue + hueSpan * coord(u), saturation, dark + (light - dark) * coord(v)));
+    return field(palette, resolveColor, match => (u, v, axes) =>
+      match(startHue + hueSpan * coord(u), saturation, dark + (light - dark) * coord(v), axes));
   }
 
   function polar(definition, resolveColor = swatch) {
@@ -73,12 +73,12 @@ const PaletteFields = (() => {
     if ((byBrightness ? brightness : saturation) !== undefined || !fraction(fixed))
       throw new RangeError('Set only the fixed axis in [0, 1]. Use range to control the radial axis');
     const startHue = wrap(rotation), [inner, outer] = range;
-    return field(palette, resolveColor, match => (u, v) => {
+    return field(palette, resolveColor, match => (u, v, axes) => {
       const x = u * 2 - 1, y = v * 2 - 1, radius = Math.hypot(x, y);
       if (radius > 1) return -1;
       const hue = startHue + Math.atan2(y, x) / (2 * Math.PI);
       const value = inner + (outer - inner) * radius;
-      return byBrightness ? match(hue, fixed, value) : match(hue, value, fixed);
+      return byBrightness ? match(hue, fixed, value, axes) : match(hue, value, fixed, axes);
     }, true);
   }
 
@@ -97,13 +97,15 @@ const PaletteFields = (() => {
   function field(palette, resolveColor, sampler, disk = false) {
     const swatches = readSwatches(palette, resolveColor);
     const rgb = [0, 0, 0];
-    const pick = sampler((hue, saturation, value) => pixels.nearest(hsv(hue,saturation,value,rgb),swatches));
+    const pick = sampler((hue, saturation, value, axes) =>
+      pixels.nearest(hsv(axes?.hue ?? hue,axes?.saturation ?? saturation,axes?.brightness ?? value,rgb),swatches));
     function index(u, v) {
       checkCoordinates(u, v);
       return pick(u, v);
     }
-    function sample(u, v, out = [0, 0, 0]) {
-      const slot = index(u, v);
+    function sample(u, v, out = [0, 0, 0], axes) {
+      checkCoordinates(u,v);
+      const slot = pick(u,v,axes);
       if (slot < 0) return null;
       const swatch = swatches[slot];
       for (let k = 0; k < 3; k++) out[k] = swatch[k];

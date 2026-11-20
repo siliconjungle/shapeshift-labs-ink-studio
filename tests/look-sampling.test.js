@@ -126,3 +126,19 @@ test('scene sample explains a surface layer and the blended palette color', () =
   assert.deepEqual(result.rgb, [.7, .7, .7]);
   assert.equal(result.swatch, null);
 });
+
+test('standalone look sampling follows the order of look and palette stages', t => {
+  const temp = temporary(t), asset = {
+    id:'stages/placement', label:'Placement', stage:'frame', paletteStage:'material',
+    palette:{palette:['#303030']}, stack:{name:'Lift',steps:[{type:'exposure',stops:1}]}
+  };
+  const pack = {format:'ink-studio/asset-pack',version:1,revision:1,id:'stages',title:'Placement',looks:[asset]};
+  const colors = '["#121212"]';
+  const before = cli('look','sample',temp('early.json',pack),'--colors',colors);
+  assert.equal(before.paletteStage,'material');
+  assert.deepEqual(before.samples[0].rgb,Array(3).fill(96/255));
+  assert.equal(before.samples[0].swatch,null);
+  const final = cli('look','sample',temp('late.json',{...pack,looks:[{...asset,paletteStage:'palette'}]}),'--colors',colors);
+  assert.deepEqual(final.samples[0].rgb,Array(3).fill(48/255));
+  assert.equal(final.samples[0].swatch,'#303030');
+});

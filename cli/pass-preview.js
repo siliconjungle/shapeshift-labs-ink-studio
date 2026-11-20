@@ -93,4 +93,4 @@ function writePasses(directory, frame, scale = 1) {
   return manifest;
 }
 
-module.exports = { encode, labels, environmentEncoding, writePasses };
+module.exports = { encode, labels, depthRange, environmentEncoding, writePasses };

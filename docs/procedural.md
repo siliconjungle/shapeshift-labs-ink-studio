@@ -141,9 +141,13 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `fields.simplex(options)`, `fields.periodic(options)`, `fields.compile(expression, options)` | Seeded analytic noise and serializable field composition for SDFs, materials and placement |
 | `grammar.expand(scope, rules, options)`, `grammar.children(layout)` | Bounded shape grammar with named partitions, fitted repeats, pinned spans, sockets and retained child specs |
 | `grammar.rewriteGrid(rows, rules)`, `grammar.rewriteGraph(graph, rules)` | Seeded weighted pattern replacement on scalar grids and directed graphs |
+| `KIT.cellular.create(options)`, `KIT.cellular.rules` | [Seeded cellular automata](cellular-lattices.md) on line, square, hex, and voxel lattices, including reversible block rules |
+| `KIT.cellular.graph` | [Graph automata](graph-automata.md) with named cells, weighted and delayed edges, and seeded replay |
+| `KIT.cellular.continuous` | [Continuous cellular automata](continuous-cellular.md) with sampled kernels, coupled channels, masks, brush injections, and replay |
 | `layouts.bsp(options)`, `layouts.cave(options)`, `layouts.pack(items, options)`, `layouts.floorPlan(rooms, options)` | Connected room partitions and caves, constrained rectangle packing and named room adjacencies |
 | `growth.lsystem(axiom, rules, options)`, `growth.turtle(tokens, options)`, `growth.venation(outline, options)`, `growth.roots(starts, options)`, `growth.pipe(nodes, options)` | Growth grammars, SDF branch runs, venation, obstacle-aware roots and pipe taper |
 | `growth.aggregate(options)`, `growth.grayScottGrid(options)`, `growth.grayScottSurface(points, links, options)`, `growth.dispersal(options)`, `growth.succession(options)` | Grid and surface patterns, seed dispersal and habitat competition |
+| `growth.grayScott.create(options)` | [Live Gray–Scott brushing](reaction-diffusion-brushing.md) with painted rates, linked UV seams, and flow advection |
 | `forms.superquadric(spec)`, `forms.loft(sections)`, `forms.skeleton(nodes)`, `forms.periodic(spec)`, `forms.shell(host, options)` | Bounded analytic forms and locally variable shells for the sculptor |
 | `measureSculptBounds(build)` | Measure a finite rest-pose recipe without generating splats |
 | `forms.fractal(spec)` | [Bounded quaternion Julia, Mandelbulb, and Menger fold forms](fractal-forms.md) for implicit geometry and adaptive splat bakes |
@@ -2263,7 +2267,8 @@ It emits marks at `L` by default. Pass the result directly to
   arbitrary curved domains with `growth.grayScottSurface(points, links, options)`.
   Supply surface-local links as `[indexA, indexB, weight?]` to control
   where diffusion crosses. The returned `u` and `v` buffers can drive
-  material masks, relief, or sample density.
+  material masks, relief, or sample density. For retained brushing, paired
+  charts, and flow, use [`growth.grayScott.create`](reaction-diffusion-brushing.md).
 - `growth.dispersal({model, radius, spread, drift, aspect, angle})`
   returns normalized weights on XZ offsets. `growth.succession` uses
   those kernels to model stylized turnover and competition among named

@@ -33,6 +33,23 @@ directly from Node's typed arrays for floating-point coordinates.
 
 With [mixed-resolution compositing](mixed-resolution.md), the color export uses the output grid and diagnostic passes retain their own `w` and `h` on the world grid.
 
+## Layered exports
+
+`ink-studio export-layers <scene> --t 0,1,2 --out directory` writes numbered image sequences and a `layers.json` manifest. Use the usual camera and render options and set `--w` and `--h` for the output size. Use `--px1` to keep the renderer's native color grid. A single frame at time zero is the default. Use `--from`, `--to`, and `--n` for evenly spaced samples.
+
+In Node, use `exportLayers(world, { out, view, times, native, pose })`. The optional `pose(world, time)` callback can advance authored simulation or mutable scene state before capture. The result contains the manifest and its absolute file path.
+
+| Layer | Encoding |
+| --- | --- |
+| Color | RGBA8 PNG with straight alpha. |
+| Depth | Grayscale 16-bit PNG. Zero means no surface. Codes 1–65,535 interpolate linearly between that frame's recorded `depthRange.near` and `depthRange.far`. A constant finite depth uses code 1. |
+| Exact depth | Headerless little-endian float32 samples in scene units along the camera axis. Positive infinity means no surface. |
+| Normals | RGBA8 PNG. World XYZ is `2 * (RGB / 255) - 1`. Alpha 255 indicates a reported normal. |
+| Object and material IDs | RGB24 PNG data. Decode `65536 * R + 256 * G + B` from the file's channel bytes. Index the frame's `objects` or `materials` table for labels. Zero means unassigned. |
+| Material mattes | One grayscale PNG per visible material ID. White pixels belong to that material. All other pixels are black. A missing matte means the material has no pixels in that frame. |
+
+All files in a frame have the declared dimensions and top-down rows. The manifest records the sampled camera, the original surface grid, and labels. Surface data uses nearest sampling from that grid. Surface ownership follows the render-pass rule above. Color can also include soft coverage, fog, and screen-space overlays. For analysis, read the stored PNG sample values directly.
+
 ## Environment passes for compositing
 
 ```sh

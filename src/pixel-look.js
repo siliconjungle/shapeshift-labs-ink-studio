@@ -168,6 +168,16 @@ const PixelLook = (() => {
     return resolved;
   }
 
+  function framePalette(world, frame, { grading = true, tone = true, onClip } = {}) {
+    const look = world.look ?? {};
+    const toneDefinition = tone ? frame.tone ?? look.tone : null;
+    const animationGrade = frame.ignoreLookGrade ? undefined : world.anim?.grade;
+    const colors = grading && !toneDefinition ? colorGrade(world.pal, world.paletteRoles, animationGrade,
+      frame.paletteRemap ?? look.paletteRemap, frame.colorCurves ?? look.colorCurves,
+      frame.colorLut ?? look.colorLut, frame.colorStack ?? look.colorStack, onClip) : null;
+    return { toneDefinition, colorGrade: colors, grade: colors || animationGrade };
+  }
+
   function toneSettings(definition) {
     if (definition === undefined || definition === false) return null;
     const overrides = typeof definition === 'string' ? { preset: definition } : definition;
@@ -234,10 +244,32 @@ const PixelLook = (() => {
     return best;
   }
 
-  function preparePalette(definition, { palette = [], roles = {}, blueNoise } = {}) {
-    if (!record(definition) || Object.keys(definition).some(key => !['palette', 'reserved', 'dither', 'source'].includes(key)))
-      throw new TypeError('A palette constraint accepts palette, reserved, dither and source settings');
-    const { source = 'lit' } = definition;
+  const matchModes = Object.freeze(['rgb','perceptual','brightness','chroma','hue']);
+  function labPoint(rgb) {
+    const lab = spaces.toOKLab(rgb);
+    return [...lab,Math.hypot(lab[1],lab[2])];
+  }
+  function hueWeight(chroma) {
+    const t = clamp((chroma-.02)/.04);
+    return .49*t*t*(3-2*t);
+  }
+  function matchDistance(a,b,mode,hue) {
+    if (mode === 0) return weights[0]*(a[0]-b[0])**2+weights[1]*(a[1]-b[1])**2+weights[2]*(a[2]-b[2])**2;
+    let distance = (mode === 2 ? 25 : 1)*(a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2;
+    if (mode === 3) distance += 25*(a[3]-b[3])**2;
+    if (hue) {
+      const ca = Math.max(.04,a[3]), cb = Math.max(.04,b[3]);
+      distance += hue*((a[1]/ca-b[1]/cb)**2+(a[2]/ca-b[2]/cb)**2);
+    }
+    return distance;
+  }
+
+  function preparePalette(definition, { palette = [], roles = {}, blueNoise, deferDitherColors = false, prepareDitherTile = false } = {}) {
+    if (!record(definition) || Object.keys(definition).some(key => !['palette', 'reserved', 'dither', 'source', 'match'].includes(key)))
+      throw new TypeError('A palette constraint accepts palette, reserved, dither, source and match settings');
+    const { source = 'lit', match = 'rgb' } = definition;
+    const matchId = matchModes.indexOf(match);
+    if (matchId < 0) throw new RangeError('Palette match must be rgb, perceptual, brightness, chroma or hue');
     if (!['lit', 'graded'].includes(source)) throw new RangeError('Palette source must be lit or graded');
     const select = paletteSelector(palette, roles);
     function colors(values, name) {
@@ -259,18 +291,54 @@ const PixelLook = (() => {
     const packed = [...candidates, ...reserved];
     if (!candidates.length || packed.length > 48) throw new RangeError('Use 1 to 48 swatches with at least one unreserved color');
     const swatches = packed.map(unpack), exact = new Map(reserved.map((color, index) => [color, candidates.length + index]));
+    const lab = matchId ? swatches.map(labPoint) : undefined;
     const dither = definition.dither ?? {};
-    if (!record(dither) || Object.keys(dither).some(key => !['pattern', 'strength', 'seed'].includes(key)))
-      throw new TypeError('Palette dither accepts pattern, strength and seed settings');
+    if (!record(dither) || Object.keys(dither).some(key => !['pattern', 'strength', 'seed', 'pairs'].includes(key)))
+      throw new TypeError('Palette dither accepts pattern, strength, seed and pairs settings');
     const { pattern = 'bayer', strength = 0, seed = 0 } = dither;
     if (!['none', 'checker', 'bayer', 'blue-noise'].includes(pattern) || !fraction(strength) || !Number.isSafeInteger(seed))
       throw new RangeError('Palette dither requires a valid pattern, strength in [0, 1] and integer seed');
+    let pairs, partners;
+    if (dither.pairs !== undefined) {
+      if (!Array.isArray(dither.pairs) || dither.pairs.length > 256)
+        throw new TypeError('Palette dither accepts up to 256 authorized pairs');
+      partners = candidates.map(() => []);
+      const rules = Array.from(dither.pairs, rule => {
+        if (!record(rule) || Object.keys(rule).some(key => !['colors', 'lightness'].includes(key)) ||
+            !Array.isArray(rule.colors) || rule.colors.length !== 2)
+          throw new TypeError('A dither pair needs two swatches and an optional lightness range');
+        const { lightness } = rule;
+        if (lightness !== undefined && (!Array.isArray(lightness) || lightness.length !== 2 ||
+            !Array.from(lightness).every(fraction) || lightness[0] > lightness[1]))
+          throw new RangeError('Dither lightness must be an ordered range in [0, 1]');
+        for (const value of rule.colors) {
+          if (!(typeof value === 'string' && value.trim() || Number.isSafeInteger(value) && value >= 0 ||
+              Array.isArray(value) && value.length === 3 && Array.from(value).every(fraction)))
+            throw new TypeError('A dither pair needs palette swatches, indices or named stops');
+        }
+        return rule;
+      });
+      pairs = deferDitherColors ? [] : rules.map(rule => {
+        const slots = rule.colors.map(value => {
+          const swatches = colors([value], 'Dither pair');
+          const slot = swatches.length === 1 ? candidates.indexOf(swatches[0]) : -1;
+          if (slot < 0) throw new RangeError('Dither pair colors must identify single unreserved palette candidates');
+          return slot;
+        });
+        const [a, b] = slots;
+        if (a === b) throw new RangeError('A dither pair needs two distinct palette colors');
+        const range = rule.lightness?.slice();
+        partners[a].push({ slot: b, range });
+        partners[b].push({ slot: a, range });
+        return { slots, lightness: range };
+      });
+    }
     const amount = pattern === 'none' ? 0 : strength;
     let width = 4, height = 4, ranks = bayerRanks;
     if (pattern === 'checker') {
       width = height = 2;
       ranks = Float32Array.of(.25, .75, .75, .25);
-    } else if (pattern === 'blue-noise' && amount) {
+    } else if (pattern === 'blue-noise' && (amount || prepareDitherTile)) {
       if (typeof blueNoise !== 'function') throw new TypeError('Pass materials.blueNoise to prepare this palette pattern');
       const tile = blueNoise({ seed });
       ({ width, height } = tile);
@@ -282,10 +350,11 @@ const PixelLook = (() => {
     function index(rgb, x = 0, y = 0, useDither = true) {
       const locked = reservedIndex(rgb);
       if (locked !== undefined) return locked;
+      const sites = lab ?? swatches, input = lab ? labPoint(rgb) : rgb;
+      const hue = matchId === 4 ? hueWeight(input[3]) : 0;
       let best = 0, second = 0, firstDistance = Infinity, secondDistance = Infinity;
       for (let i = 0; i < count; i++) {
-        let distance = 0;
-        for (let k = 0; k < 3; k++) distance += weights[k] * (rgb[k] - swatches[i][k]) ** 2;
+        const distance = matchDistance(input,sites[i],matchId,hue);
         if (distance < firstDistance) {
           second = best; secondDistance = firstDistance;
           best = i; firstDistance = distance;
@@ -296,15 +365,38 @@ const PixelLook = (() => {
       if (!amount || !useDither || count < 2) return best;
       const rank = ranks[mod(y, height) * width + mod(x, width)];
       if (rank >= .5) return best;
+      if (partners) {
+        second = best;
+        secondDistance = Infinity;
+        let lightness;
+        for (const { slot, range } of partners[best]) {
+          if (range) {
+            lightness ??= clamp(lab ? input[0] : spaces.toOKLab(rgb)[0]);
+            if (lightness < range[0] || lightness > range[1]) continue;
+          }
+          const distance = matchDistance(input,sites[slot],matchId,hue);
+          if (distance < secondDistance || distance === secondDistance && slot < second) {
+            second = slot;
+            secondDistance = distance;
+          }
+        }
+        if (second === best) return best;
+      }
+      const threshold = .5 + (rank-.5)*amount;
+      if (lab) {
+        const length = matchDistance(sites[best],sites[second],matchId,hue);
+        // Recover the projection using distances in the same metric used to rank the pair.
+        return length > 0 && .5*(firstDistance+length-secondDistance) >= threshold*length ? second : best;
+      }
       let projection = 0, length = 0;
       for (let k = 0; k < 3; k++) {
         const delta = swatches[second][k] - swatches[best][k];
         projection += weights[k] * delta * (rgb[k] - swatches[best][k]);
         length += weights[k] * delta * delta;
       }
-      return projection >= (.5 + (rank - .5) * amount) * length ? second : best;
+      return projection >= threshold * length ? second : best;
     }
-    return { packed, swatches, count, width, height, ranks, amount, source, reservedIndex, index };
+    return { packed, swatches, count, width, height, ranks, amount, source, match, matchId, lab, pairs, reservedIndex, index };
   }
 
   function prepareLookPolicy(definition, options = {}) {
@@ -539,6 +631,6 @@ vec3 inkToneResolve(vec3 color, ivec2 pixel) {
 }`;
   return { nearest, rgbWeights:weights, ink, resolve, glsl, presets, toneSettings, prepareTone, toneIndex, toneGlsl, bayerRank, outputPalettes, localIndex,
     preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
-    prepareRemap, gradePalette, prepareColorStack, colorGrade };
+    prepareRemap, gradePalette, prepareColorStack, colorGrade, framePalette };
 })();
 if (typeof module !== 'undefined') module.exports = PixelLook;

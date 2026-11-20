@@ -11,7 +11,7 @@ float contributionAlpha(float power, float density, bool solid) {
 export const coverageSource = shared => shared?.glsl ?? fallbackCoverage;
 export const policyUniforms = `
 uniform highp sampler2D u_constraintSlots, u_constraintRows;
-uniform int u_constraintDefault, u_constraintMap;
+uniform int u_constraintDefault, u_constraintMap, u_constraintLab, u_constraintPairs;
 int contributionSlot(int index) {
   int span = textureSize(u_constraintSlots, 0).x * 4;
   int slot = int(texelFetch(u_constraintSlots, ivec2((index % span) / 4, index / span), 0)[index & 3]);

@@ -87,7 +87,8 @@ test('staged assets survive revisions, material binding, sculpt capture and dior
   assert(RenderStages.plan(world).at(0).material?.length);
   assert(studio.render(world, options).rgb.some((n, i, rgb) => i % 3 === 2 && n > rgb[i - 2]));
 
-  assert.throws(() => RenderStages.prepare([{ stage: 'frame', palette: { palette: ['#112233'] } }]), /color stack/);
+  assert.throws(() => RenderStages.prepare([{ stage: 'frame', stack: paint, palette: { palette: ['#112233'] } }]),
+    /one color stack or palette policy/);
   const invalid = { id: 'bad-stage', finish: { look: { renderStages: [{ stage: 'finish', stack: paint }] } },
     solids: [{ kind: 'ball', at: [0, 0, 0], r: 1, mat: 'stone' }] };
   assert.throws(() => K.diorama.build(invalid), /finish\.look\.renderStages/);
@@ -158,4 +159,62 @@ test('palette weights gate ordered quantization while preserving exact swatches'
   assert.deepEqual(trace.rgb, [34 / 255, 51 / 255, 68 / 255]);
   const frame = studio.render(world, options);
   assert(frame.rgb.every((n, i) => n === [34, 51, 68][i % 3]));
+});
+
+test('the same palette can match base paint, a lit sample, the image or the final grade',()=>{
+  const policy = {palette:['#213554','#55aad4']}, select = {material:'paint'};
+  const dim = {stage:'frame',order:10,stack:{name:'Dim',steps:[{type:'exposure',stops:-1}]}};
+  const at = (name,extra=[])=>studio.render(disc([{stage:name,palette:policy,select},...extra]),options).rgb.slice(center,center+3);
+  const base = at('material'), lit = at('lit'), frame = at('frame',[dim]), final = at('palette',[dim]);
+  const distance = (a,b)=>a.reduce((sum,n,i)=>sum+Math.abs(n-b[i]),0);
+  assert(lit.every((n,i)=>Math.abs(n-[33,53,84][i])<=1));
+  assert(distance(base,lit)>20);
+  assert(frame.every((v,i)=>v<lit[i]));
+  assert.deepEqual([...final],[33,53,84]);
+
+  const halfLit = studio.render(disc([{stage:'lit',palette:{palette:['#ffffff']}}],{opacity:.5}),options);
+  const wholeFrame = studio.render(disc([{stage:'frame',palette:{palette:['#ffffff']}}],{opacity:.5}),options);
+  assert(halfLit.rgb[center] < 255);
+  assert(wholeFrame.rgb.every(v=>v===255));
+});
+
+test('projected base paint inherits attenuation, and scoped resolve preserves the sign swatch',()=>{
+  const build = (stage,policy=false) => {
+    const B = makeBuilder(3,[0x262936,0x555555,0xeeeeee]);
+    const S = makeSculpt(B);
+    Object.assign(S,{amb:.16,sky:.05,sunK:0});
+    const layer = {
+      type:'projected',stage,pattern:'indexed',
+      projection:{origin:[-1,-1,0],across:[0,1,0]},
+      raster:{width:2,height:1,slots:[0,1],palette:['#21adba','#eaa64f'],size:[2,2]}
+    };
+    const panel = K.surface.material({r:[1,2],materialId:'tile'},{layers:{paint:layer}});
+    S.box([0,0,0],[.8,.75,.13],panel,{res:.08});
+    S.bake();
+    return B.finish({cam:camera,look:{splatCoverage:'continuous',
+      renderStages:policy?[{stage:'palette',select:{material:'tile'},palette:{palette:layer.raster.palette}}]:undefined}});
+  };
+  const a = build('material'), b = build('lit');
+  assert(a.materialAlbedo.some(n=>n===0xeeeeef));
+  const dry = studio.render(a,options), lit = studio.render(b,options), final = studio.render(build('lit',true),options);
+  const left = (32*64+25)*3, right = (32*64+39)*3;
+  assert(dry.rgb[left+1]<lit.rgb[left+1] && dry.rgb[left+1]>dry.rgb[left]+15);
+  assert(dry.rgb[right]>dry.rgb[right+2]+15);
+  assert.deepEqual([...final.rgb.slice(left,left+3)],[33,173,186]);
+  assert.deepEqual([...final.rgb.slice(right,right+3)],[234,166,79]);
+  assert.deepEqual([...final.rgb.slice(0,3)],[38,41,54]);
+});
+
+test('look assets can place the swatch policy independently of the stack',()=>{
+  const id='paint-stages/pigment', A=K.authoring;
+  const pack={format:'ink-studio/asset-pack',id:'paint-stages',title:'Paint stages',version:1,revision:1,
+    looks:[{id,label:'Pigment',stack:paint,palette:{palette:['#123456']},stage:'frame',paletteStage:'material'}]};
+  const catalog = A.assetPacks.create({packs:[pack]});
+  const rules = A.looks.scene({asset:id},catalog).renderStages;
+  assert.equal(rules[0].stage,'frame');
+  assert.equal(rules[1].stage,'material');
+  const moved = A.looks.scene({renderStages:[{asset:id,paletteStage:'lit'}]},catalog).renderStages;
+  assert.equal(moved[1].stage,'lit');
+  const old = A.assetPacks.reviseLook(pack,id,{paletteStage:'palette'});
+  assert.equal(A.looks.scene({asset:id},A.assetPacks.create({packs:[old]})).renderStages[1].stage,'palette');
 });

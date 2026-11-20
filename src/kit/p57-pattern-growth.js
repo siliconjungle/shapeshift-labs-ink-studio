@@ -3,7 +3,6 @@
   const P = K.procedural,
     integer = (n, a, b) => Number.isSafeInteger(n) && n >= a && n <= b,
     fraction = n => Number.isFinite(n) && n >= 0 && n <= 1,
-    saturate = n => Math.max(0, Math.min(1, n)),
     compass = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
   function dimensions(width, height) {
@@ -86,66 +85,12 @@
     return Object.freeze({ status, width, height, cells, nodes: P.data.freeze(nodes), work: Object.freeze(work) });
   }
 
-  function react(points, links, {
-    steps = 400, dt = 1, du = 0.8, dv = 0.39, feed = 0.0367, kill = 0.0649,
-    spots, initial, seed = 0, maxWork = 34000000
-  } = {}) {
-    if (
-      !Array.isArray(points) || !integer(points.length, 1, 180000) ||
-      !Array.isArray(links) || links.length > points.length * 12 ||
-      !integer(steps, 0, 20000) || !fraction(dt) || dt <= 0 || !fraction(du) || !fraction(dv) ||
-      ![feed, kill].every(n => fraction(n) || typeof n === 'function') ||
-      (initial !== undefined && typeof initial !== 'function') ||
-      (spots !== undefined && (!Array.isArray(spots) || spots.length > points.length ||
-        !spots.every(i => integer(i, 0, points.length - 1)))) ||
-      !Number.isSafeInteger(seed) || !integer(maxWork, 1, 85000000)
-    ) throw new Error('Gray–Scott needs a bounded domain, seed and stable integration controls');
-    const n = points.length, work = (n + 2 * links.length) * steps;
-    if (work > maxWork) throw new Error('Gray–Scott exceeds its integration budget');
-    const neighbors = points.map(() => []),
-      count = new Float64Array(n), f = new Float64Array(n), k = new Float64Array(n),
-      dice = K.grow.dice(P.data.hash('reaction-diffusion', seed)),
-      seeded = new Set(spots ?? [Math.floor(n / 2)]);
-    let u = new Float64Array(n), v = new Float64Array(n),
-      nextU = new Float64Array(n), nextV = new Float64Array(n);
-    for (const link of links) {
-      if (
-        !Array.isArray(link) || link.length < 2 || link.length > 3 ||
-        !integer(link[0], 0, n - 1) || !integer(link[1], 0, n - 1) || link[0] === link[1] ||
-        (link[2] !== undefined && (!Number.isFinite(link[2]) || link[2] <= 0 || link[2] > 1e6))
-      ) throw new Error('Gray–Scott surface links need distinct indices and positive weights');
-      const [a, b, weight = 1] = link;
-      neighbors[a].push({ i: b, weight });
-      neighbors[b].push({ i: a, weight });
-      count[a] += weight;
-      count[b] += weight;
-    }
-    for (const [i, p] of points.entries()) {
-      f[i] = typeof feed === 'function' ? feed(p, i) : feed;
-      k[i] = typeof kill === 'function' ? kill(p, i) : kill;
-      const value = initial ? initial(p, i) : seeded.has(i) ? [0.48 + 0.04 * dice(), 0.24 + 0.025 * dice()] : [1, 0];
-      if (!fraction(f[i]) || !fraction(k[i]) || !Array.isArray(value) || value.length !== 2 || !value.every(fraction))
-        throw new Error('Gray–Scott field values must be between zero and one');
-      [u[i], v[i]] = value;
-    }
-    for (let step = 0; step < steps; step++) {
-      for (let i = 0; i < n; i++) {
-        let sumU = 0, sumV = 0;
-        for (const neighbor of neighbors[i]) {
-          sumU += u[neighbor.i] * neighbor.weight;
-          sumV += v[neighbor.i] * neighbor.weight;
-        }
-        const a = u[i], b = v[i],
-          lapU = count[i] ? sumU / count[i] - a : 0,
-          lapV = count[i] ? sumV / count[i] - b : 0,
-          reaction = a * b * b;
-        nextU[i] = saturate(a + dt * (du * lapU - reaction + f[i] * (1 - a)));
-        nextV[i] = saturate(b + dt * (dv * lapV + reaction - (f[i] + k[i]) * b));
-      }
-      [u, nextU] = [nextU, u];
-      [v, nextV] = [nextV, v];
-    }
-    return Object.freeze({ u, v, work: Object.freeze({ steps, updates: work }) });
+  function react(points, links, { steps = 400, ...options } = {}) {
+    if (!integer(steps, 0, 20000)) throw new RangeError('Gray–Scott needs a bounded number of steps');
+    const run = GrayScott.create(points, links, options);
+    run.advance(steps);
+    const { u, v } = run.channels;
+    return Object.freeze({ u, v, work: Object.freeze({ steps, updates: steps * run.work }) });
   }
 
   function grayScottSurface(points, links, options = {}) {

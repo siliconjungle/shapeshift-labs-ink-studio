@@ -589,5 +589,5 @@
     update(0);
     return Object.freeze({ world: view, grade, update, sample, source });
   }
-  K.palette = Object.freeze({ path, transfer, recipe, duotone, animate, bind, hueBrightness: PaletteFields.hueBrightness, polar: PaletteFields.polar, coverage: PaletteFields.coverage, chromaField: PaletteFields.chromaField, ramp: PaletteFields.ramp, plot: P.materials.palettePlot, chart: P.materials.paletteChart });
+  K.palette = Object.freeze({ path, transfer, recipe, duotone, animate, bind, hueBrightness: PaletteFields.hueBrightness, polar: PaletteFields.polar, coverage: PaletteFields.coverage, chromaField: PaletteFields.chromaField, ramp: PaletteFields.ramp, plot: P.materials.palettePlot, chart: P.materials.paletteChart, fitDither: P.materials.fitDither, lightingRamps: P.materials.lightingRamps });
 })(KIT);

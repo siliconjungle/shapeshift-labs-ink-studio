@@ -1,4 +1,4 @@
-// PNG output supports 8-bit RGB, RGBA and indexed colour. Import also handles non-interlaced grayscale.
+// PNG output supports RGB8, RGBA8, indexed colour and grayscale.
 const zlib = require('zlib'),
   fs = require('fs');
 const CRC = new Uint32Array(256);
@@ -39,19 +39,30 @@ function withAlpha(rgb, alpha) {
   }
   return rgba;
 }
-function encode(w, h, pixels, channels = 3) {
-  if (![3,4].includes(channels)) throw new Error('PNG pixel count does not match its shape');
+function image(w, h, pixels, bytesPerPixel, bits, color) {
   const hd = Buffer.alloc(13);
   hd.writeUInt32BE(w, 0);
   hd.writeUInt32BE(h, 4);
-  hd[8] = 8;
-  hd[9] = channels === 4 ? 6 : 2;
+  hd[8] = bits;
+  hd[9] = color;
   return Buffer.concat([
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
       chunk('IHDR', hd),
-      chunk('IDAT', scanlines(w, h, pixels, channels)),
+      chunk('IDAT', scanlines(w, h, pixels, bytesPerPixel)),
       chunk('IEND', Buffer.alloc(0))
   ]);
+}
+function encode(w, h, pixels, channels = 3) {
+  if (![3,4].includes(channels)) throw new Error('PNG pixel count does not match its shape');
+  return image(w, h, pixels, channels, 8, channels === 4 ? 6 : 2);
+}
+function encodeGray(w, h, values) {
+  if (values instanceof Uint16Array) {
+    const bytes = Buffer.alloc(values.length * 2);
+    for (let i = 0; i < values.length; i++) bytes.writeUInt16BE(values[i], i * 2);
+    return image(w, h, bytes, 2, 16, 0);
+  }
+  return image(w, h, values, 1, 8, 0);
 }
 function write(file, w, h, rgb, alpha) {
   fs.writeFileSync(file, alpha ? encode(w, h, withAlpha(rgb, alpha), 4) : encode(w, h, rgb));
@@ -224,4 +235,4 @@ function animate(file, frames, fps) {
   out.push(chunk('IEND', Buffer.alloc(0)));
   fs.writeFileSync(file, Buffer.concat(out));
 }
-module.exports = { encode, write, writeIndexed, read, raster, animate };
+module.exports = { encode, encodeGray, write, writeIndexed, read, raster, animate };

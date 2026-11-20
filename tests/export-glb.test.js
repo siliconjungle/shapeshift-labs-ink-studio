@@ -151,6 +151,14 @@ test('GLB export writes a clean UV atlas and reproduces the puppet deformation',
   assert.ok(drift < 1e-4, 'maximum vertex drift ' + drift);
   assert.ok(displacement > 0.05);
 
+  const asset = studio.readGltfAsset(file), interchange = path.join(dir, 'puppet.gltf');
+  studio.writeGltfAsset(asset, { out: interchange });
+  const roundTrip = studio.readGltfAsset(interchange);
+  assert.deepEqual(roundTrip.snapshot(), asset.snapshot());
+  const pose = new Map(roundTrip.sample(at, { clip: clip.name }).map(node => [node.id, node.world]));
+  for (const joint of skin.joints)
+    assert.ok(pose.get(joint).every((value, j) => Math.abs(value - jointWorld(animated, joint)[j]) < 1e-6));
+
   const copy = path.join(dir, 'copy.glb');
   assert.equal(studio.exportGlb(file, { out: copy }).preserved, true);
   assert.deepEqual(fs.readFileSync(copy), bytes);

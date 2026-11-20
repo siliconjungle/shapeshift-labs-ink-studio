@@ -383,6 +383,91 @@ node cli/ink-studio.js render examples/palette-constraints.js --ortho --out cons
 Use `--palette-constraints rules.json` to override the authored rules
 in `render` or `sim render`. `off` bypasses the target policies.
 
+### Authorize dither pairs
+
+Set `dither.pairs` on a palette policy to choose which swatches can
+mix. The closest swatch is still the solid color. Ink tries the closest
+authorized companion when the dither pattern calls for a mix. The pair
+works in both directions. In this example slate can mix with blue-gray
+and the warm swatches stay solid.
+
+```json
+{
+  "targets": [
+    {
+      "material": "slate",
+      "palette": ["#263747", "#536b84", "#b35b35", "#f6a74b"],
+      "dither": {
+        "pattern": "bayer",
+        "strength": 1,
+        "pairs": [{"colors": ["#263747", "#536b84"], "lightness": [0.38, 0.44]}]
+      }
+    }
+  ]
+}
+```
+
+Each endpoint must identify one unreserved candidate. Use a hex swatch,
+normalized RGB triple, scene palette index, or individual role stop
+such as `slate.shadow`. The optional `lightness` bounds are inclusive
+and measure the input color's OKLab L on a 0–1 scale. That input is the
+color at the point where the palette policy runs. List the same pair
+with several ranges to allow it in separate bands. A policy accepts up
+to 256 pair rules. An omitted `pairs`
+keeps ordinary dithering. An empty array makes every swatch solid.
+
+Use the same policy in a scene target, a material's `paletteConstraint`,
+a native look asset, or an explicit render stage. WebGL supports it in
+scene target palettes. Render the signal house example to compare the
+same scene with open, authorized, and out-of-range pairs.
+
+```sh
+node cli/ink-studio.js render examples/authorized-dither-pairs.js --ortho --w 320 --h 176 --px 1 --out signal.png
+node cli/ink-studio.js render examples/authorized-dither-pairs.js --ortho --w 320 --h 176 --px 1 --params '{"mode":"open"}' --out signal-open.png
+```
+
+To find a pair and pixel ratio for a particular target, use the
+[native-size dither fit](palette-recipes.md#fit-a-target-with-two-swatches).
+
+### Choose a matching priority
+
+Set `match` on a palette policy to choose the closest swatch for the
+input color. This works on a [surface material](surface-materials.md#palette-matching),
+a scene target or default, a look asset's palette, and [explicit stage rules](#explicit-render-stages).
+
+| Setting | Priority |
+| --- | --- |
+| `rgb` | Ink's existing weighted RGB distance. This is the default. |
+| `perceptual` | Distance across all three OKLab components. |
+| `brightness` | Give OKLab lightness extra weight to retain shadows and highlight bands. |
+| `chroma` | Give OKLab chroma extra weight to keep the strength of a color. |
+| `hue` | Favor the hue direction around the OKLab color wheel. Near-neutral inputs fade to perceptual matching. |
+
+The three priorities keep OKLab distance as part of the score. They can
+trade off other attributes when a palette lacks a close swatch. The same
+score selects the dither pair and determines where its transition falls.
+Reserved swatches still take precedence. A tie uses the earliest candidate.
+
+```json
+{
+  "targets": [
+    {"material": "cloth", "palette": ["#261e36", "#65384f", "#b2788c", "#f0cba8"], "match": "brightness"},
+    {"material": "copper", "palette": ["#304b50", "#66372b", "#986047", "#e6b59a"], "match": "hue"}
+  ]
+}
+```
+
+Use the same target policies in the CLI and standard WebGL renderer.
+`look sample` and the `look/output` probe report the selected matching
+mode. The [dye and copper works](../examples/palette-material-matching.js)
+compares two materials with the same candidate swatches in both views.
+
+```sh
+node cli/ink-studio.js render examples/palette-material-matching.js --w 336 --h 160 --px 1 \
+  --params '{"mode":"rgb"}' --out rgb.png
+node cli/ink-studio.js render examples/palette-material-matching.js --w 336 --h 160 --px 1 --out priorities.png
+```
+
 ## Look assets and overrides
 
 An `ink-studio/asset-pack` can carry named `looks`, either on their own or
@@ -897,15 +982,16 @@ currently evaluates unmasked look rules.
 
 Set `finish.look.renderStages` on a diorama, `visual.look.renderStages`
 on a simulation world, or `look.renderStages` on a built JavaScript scene.
-Use a color stack at `material`, `lit`, or `frame`, and a palette policy
-at `palette`. The headless renderer runs these stages in fixed order.
+Place a palette policy at any of the four stages. A rule can instead use a
+color stack at `material`, `lit`, or `frame`. The headless renderer runs
+the stages in fixed order.
 
 | Stage | Input |
 | --- | --- |
 | `material` | Base paint before lighting. Sculpt materials use `albedo` (a palette index, hex swatch, or normalized RGB triple) or the last swatch in their authored ramp. The renderer carries the baked ramp's light response onto the new paint and then adds runtime surface lighting. |
 | `lit` | The shaded splat or surface fragment, including its highlights, before it blends into the scene. |
-| `frame` | The resolved frame after compositing, including the background, ink, and art effects. |
-| `palette` | The graded frame. The palette policy picks the final swatches, with optional dithering and reserved colors. |
+| `frame` | The composited image, including background, ink, art effects and focus. Later frame rules can grade these colors. |
+| `palette` | The graded frame. This stage chooses the final swatches after frame rules. |
 
 ```json
 {
@@ -935,8 +1021,10 @@ at `palette`. The headless renderer runs these stages in fixed order.
 
 A versioned look asset can declare a default `stage`. A binding or a
 `look.targets` entry can override it. If the asset contains a stack and a
-palette, the stack runs at its assigned stage and the palette runs at
-`palette`. Assigning `palette` directly uses just the asset's palette.
+palette, the stack runs at its assigned stage and the palette defaults to
+`palette`. Set `paletteStage` on the asset, binding, or outer stage rule
+to place its palette policy independently. Assigning the stack's
+`stage` to `palette` uses just the asset's palette policy.
 Matching rules within a stage can be [ordered and blended](#stack-order-and-blending).
 
 The stages share [look selectors](#shared-look-selectors) and
@@ -944,26 +1032,29 @@ The stages share [look selectors](#shared-look-selectors) and
 center, or the surface hit when a per-pixel pattern is resolved. Lit
 masks follow the fragment hit when a normal is available. Scoped frame
 and palette rules use the visible splat owner's metadata. Unscoped,
-unmasked frame rules also reach pixels without an owner. Palette masks
-gate quantization at 50% coverage, so affected pixels remain exact
-swatches. The `look/output` probe reports matched stage rules. To sample
+unmasked frame rules also reach pixels without an owner. Palette rules quantize when weight times mask coverage reaches 0.5.
+Material and lit policies use nearest swatches at the sample. Frame and
+final palette policies can also use art-pixel dithering. Reserved colors
+work at any stage.
+Use a scoped final palette policy to keep an emissive sign's swatches
+through a frame grade. The `look/output` probe reports matched stage rules. To sample
 one stage, supply `stage` and the RGB entering that stage in `--args`.
 
 JavaScript sculpt builds can set `S.captureAlbedo = true` before baking
 if a scene-level material rule will be applied. JSON dioramas and
 simulation views capture it automatically. Use
 `B.describeAlbedo(first, end, color)` for a baked range of custom splats.
-For direct splats without a separate albedo, their packed RGB is treated
-as the base paint. The plain JavaScript bundle exposes `RenderStages`
+Sculpt materials with a `stage: 'material'` [surface color layer](projected-effects.md#paint-before-or-after-lighting)
+capture their albedo automatically. For direct splats without a separate
+albedo, packed RGB is treated as base paint. The plain JavaScript bundle exposes `RenderStages`
 for custom hosts. The standard WebGL renderer still uses its existing
 palette path.
 
 Explicit rules opt the CLI and software renderer into continuous RGB
-through frame grading, followed by quantization only when a palette
-stage is present. Use staged bindings for any scene stack and palette
+through frame grading, with quantization at the stages where a palette policy is authored. Use staged bindings for any scene stack and palette
 you want in this pipeline. Indexed remaps and the legacy tone and
-coverage palette resolves use the legacy pipeline. `--raw` bypasses
-authored stages. `--look-masks off` bypasses masked rules.
+coverage palette resolves use the legacy pipeline. `--raw` bypasses the stage rules and
+continues to show authored surface color layers. `--look-masks off` bypasses masked rules.
 
 ```sh
 node cli/ink-studio.js render examples/render-stages.js --ortho \
@@ -975,6 +1066,11 @@ node cli/ink-studio.js render examples/render-stages.js --ortho \
 node cli/ink-studio.js render examples/render-stages.js --ortho \
   --params '{"stage":"palette"}' --out palette.png
 ```
+
+The [harbour signal works](../examples/palette-placement.js) places an
+indexed graphic on a ceramic plaque before lighting and uses a scoped final
+policy on an emissive sign. For a stage comparison, pass
+`--params '{"stage":"material"}'`, `lit`, `frame`, or `palette` to the same scene.
 
 ## Stack order and blending
 

@@ -31,17 +31,7 @@ const CameraStaging = (() => {
   }
 
   function constrain(camera, limits) {
-    if (!limits) return camera;
-    let { yaw, pitch, dist } = camera;
-    if (limits.yaw && limits.yaw[1] - limits.yaw[0] < turn) {
-      const middle = (limits.yaw[0] + limits.yaw[1]) / 2;
-      const offset = yaw - middle;
-      const wrapped = middle + Math.atan2(Math.sin(offset), Math.cos(offset));
-      yaw += clamp(wrapped, ...limits.yaw) - wrapped;
-    }
-    if (limits.pitch) pitch = clamp(pitch, ...limits.pitch);
-    if (limits.distance) dist = clamp(dist, ...limits.distance);
-    return { ...camera, yaw, pitch, dist };
+    return lens.constrain(camera, limits);
   }
 
   function prepare(value) {

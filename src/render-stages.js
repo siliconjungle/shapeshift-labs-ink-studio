@@ -49,20 +49,21 @@ const RenderStages = (() => {
       if (!entry || Object.getPrototypeOf(entry) !== Object.prototype ||
           Object.keys(entry).some(key => !['stage', 'stack', 'palette', 'select', 'mask', 'assetId', 'order', 'weight', 'driver'].includes(key)))
         throw new TypeError('Invalid render stage rule at index ' + i);
-      const name = stage(entry.stage), isPalette = name === 'palette';
+      const name = stage(entry.stage), usePalette = entry.palette !== undefined;
       const sampled = entry.driver && !options.validateOnly && inputs.resolve(entry.driver, options.lookInputs);
       const { order, weight } = blend(entry);
-      const strengthWeight = isPalette && entry.driver?.inputs?.strength !== undefined ? sampled?.strength ?? entry.driver.strength : 1;
-      if (sampled) entry = { ...entry, ...(isPalette ? { palette: sampled.palette } : { stack: sampled.stack }), mask: sampled.mask };
+      const strengthWeight = usePalette && entry.driver?.inputs?.strength !== undefined ? sampled?.strength ?? entry.driver.strength : 1;
+      if (sampled) entry = { ...entry, ...(usePalette ? { palette: sampled.palette } : { stack: sampled.stack }), mask: sampled.mask };
       if (options.optical && entry.mask) throw new TypeError('Optical look inputs need a uniform binding');
-      if (isPalette ? !entry.palette || entry.stack !== undefined : !entry.stack || entry.palette !== undefined)
-        throw new TypeError('The ' + name + ' stage needs ' + (isPalette ? 'a palette policy' : 'a color stack'));
-      if (!isPalette && Object.getPrototypeOf(entry.stack) !== Object.prototype)
+      if (usePalette ? !entry.palette || entry.stack !== undefined : !entry.stack || name === 'palette')
+        throw new TypeError(name === 'palette' ? 'The palette stage needs a palette policy' :
+          'A render stage needs one color stack or palette policy');
+      if (!usePalette && Object.getPrototypeOf(entry.stack) !== Object.prototype)
         throw new TypeError('A render stage color stack must be an object');
       if (Array.isArray(entry.stack?.steps) && entry.stack.steps.some(step => step?.type === 'paletteRemap'))
         throw new TypeError('Render stage stacks operate on RGB and require RGB color transforms');
-      if (isPalette && entry.palette.source !== undefined)
-        throw new TypeError('The palette stage samples the resolved frame');
+      if (usePalette && entry.palette.source !== undefined)
+        throw new TypeError('A stage palette samples the RGB entering its stage');
       const { amount: stackAmount = 1 } = entry.stack ?? {};
       if (!Number.isFinite(stackAmount) || stackAmount < 0 || stackAmount > 1)
         throw new RangeError('Color stack amount must be in [0, 1]');
@@ -73,10 +74,10 @@ const RenderStages = (() => {
         select: entry.select === undefined ? null : targets.prepare(entry.select),
         ...(options.surface && { scope: 'surface' }),
         assetId: entry.assetId,
-        stack: isPalette ? null : stacks.prepare({ ...entry.stack, amount: 1 }, {
+        stack: usePalette ? null : stacks.prepare({ ...entry.stack, amount: 1 }, {
           resolveColor: value => unpack(albedo(value, options.palette))
         }),
-        palette: isPalette ? pixels.preparePalette(entry.palette, options) : null
+        palette: usePalette ? pixels.preparePalette(entry.palette, options) : null
       };
     });
   }
@@ -105,14 +106,15 @@ const RenderStages = (() => {
   }
 
   function plan(world, options = {}) {
-    const entries = world.look?.renderStages;
-    if ((entries === undefined || entries === false || Array.isArray(entries) && !entries.length) &&
+    const entries = options.sceneRules ?? world.look?.renderStages;
+    const paint = world.surfaces?.some(({settings})=>Object.values(settings.layers ?? {}).some(layer=>layer?.stage === 'material'));
+    if (!paint && (entries === undefined || entries === false || Array.isArray(entries) && !entries.length) &&
         !world.surfaces?.some(({ settings }) => settings.renderStages !== undefined && settings.renderStages !== false)) return null;
     const context = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, ...options };
     const scene = prepare(entries, context);
     const surfaces = world.surfaces?.map(({ settings }) => prepare(settings.renderStages, { ...context, surface: true })) ?? [];
     const rules = [...scene, ...surfaces.flat()];
-    if (!rules.length) return null;
+    if (!rules.length && !paint) return null;
     const all = rules.filter(rule => !rule.disabled);
     const lookup = all.some(rule => rule.select) ? targets.index(world) : null;
     const cache = new Map();
@@ -143,6 +145,7 @@ const RenderStages = (() => {
     return {
       at, post: all.some(post), postMask, owner,
       palettes: [...new Set(all.flatMap(rule => rule.palette?.packed ?? []))],
+      outputPalettes: [...new Set(all.filter(post).flatMap(rule => rule.palette?.packed ?? []))],
       surfaceMask: all.some(rule => !post(rule) && rule.mask)
     };
   }
@@ -156,7 +159,7 @@ const RenderStages = (() => {
       ...(rule.stack && { stack: rule.stack.name, stackAmount: rule.stackAmount }),
       ...(rule.mask && { maskWeight }),
       effectiveWeight: maskWeight === null ? null : rule.weight * rule.stackAmount * maskWeight,
-      ...(rule.palette && { palette: rule.palette.packed })
+      ...(rule.palette && { palette: rule.palette.packed, ...(rule.palette.matchId && { match: rule.palette.match }) })
     };
   }
 
@@ -170,7 +173,8 @@ const RenderStages = (() => {
       const applied = rule.palette ? amount >= .5 : amount > 0;
       let transformed;
       if (applied && rule.palette) {
-        transformed = result = rule.palette.swatches[rule.palette.index(input, x, y, x !== undefined)];
+        const dither = x !== undefined && (rule.name === 'frame' || rule.name === 'palette');
+        transformed = result = rule.palette.swatches[rule.palette.index(input, x, y, dither)];
       } else if (applied) {
         transformed = rule.stack.sample(input);
         result = amount === 1 ? transformed : transformed.map((n, i) => input[i] + (n - input[i]) * amount);
@@ -194,10 +198,15 @@ const RenderStages = (() => {
     return { rgb: output, contributions };
   }
 
-  function material(rules, shaded, reference, sample, contributions, visit) {
-    if (!rules || reference === undefined) return evaluate(rules, shaded, sample, undefined, undefined, contributions, visit);
-    const base = unpack(reference), painted = evaluate(rules, base, sample, undefined, undefined, contributions, visit);
-    if (painted.every((value, i) => value === base[i])) return shaded;
+  function material(rules, shaded, reference, sample, contributions, visit, paintedAlbedo) {
+    const base = reference === undefined ? shaded : unpack(reference);
+    const painted = evaluate(rules, base, sample, undefined, undefined, contributions, visit);
+    if (paintedAlbedo) for (let i=0;i<3;i++) paintedAlbedo[i] = painted[i];
+    return reference === undefined ? painted : repaint(shaded,base,painted);
+  }
+
+  function repaint(shaded, base, painted) {
+    if (base[0] === painted[0] && base[1] === painted[1] && base[2] === painted[2]) return shaded;
     const unlit = linear(base), lit = linear(shaded), changed = linear(painted);
     const baseLuma = luma(unlit);
     const fallback = baseLuma > 0 ? Math.min(1, luma(lit) / baseLuma) : 1;
@@ -215,7 +224,7 @@ const RenderStages = (() => {
 
   function finish(frame, plan, passes, time, visitPixel, audit, ditherAt) {
     const { w, h, rgb } = frame;
-    const swatches = new Map(plan.palettes.map((color, i) => [color, i]));
+    const swatches = new Map(plan.outputPalettes.map((color, i) => [color, i]));
     const use = new Uint32Array(swatches.size);
     for (let p = 0; p < w * h; p++) {
       const owner = (passes?.splatId?.[p] || 0) - 1;
@@ -233,9 +242,10 @@ const RenderStages = (() => {
       } : null;
       const original = [rgb[offset] / 255, rgb[offset + 1] / 255, rgb[offset + 2] / 255];
       const visit = visitPixel && visitPixel(p);
-      const graded = apply(rules.frame, original, sample, visit);
       const x = p % w, y = Math.floor(p / w);
-      const [dx,dy] = rules.palette && ditherAt ? ditherAt(x,y) : [x,y];
+      const palette = rules.palette || rules.frame?.some(rule => rule.palette);
+      const [dx,dy] = palette && ditherAt ? ditherAt(x,y) : [x,y];
+      const graded = evaluate(rules.frame,original,sample,dx,dy,undefined,visit);
       const color = evaluate(rules.palette, graded, sample, dx, dy, undefined, visit);
       if (audit) audit.pixel('frame', p, color[0], color[1], color[2]);
       const index = swatches.get(pack(color));
@@ -243,12 +253,12 @@ const RenderStages = (() => {
       if (color !== original) for (let k = 0; k < 3; k++) rgb[offset + k] = byte(color[k]);
     }
     if (swatches.size) {
-      frame.palette = plan.palettes;
+      frame.palette = plan.outputPalettes;
       frame.use = use;
     }
     return frame;
   }
 
-  return Object.freeze({ names, stage, blend, albedo, prepare, optics, plan, describe, trace, apply, material, quantize, finish });
+  return Object.freeze({ names, stage, blend, albedo, prepare, optics, plan, describe, trace, apply, material, repaint, unpack, quantize, finish });
 })();
 if (typeof module !== 'undefined') module.exports = RenderStages;

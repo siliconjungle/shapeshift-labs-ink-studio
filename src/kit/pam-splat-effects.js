@@ -207,7 +207,9 @@
         const packed = data[q + 7];
         let rgb = [(packed & 255) / 255, ((packed >> 8) & 255) / 255, (packed >> 16) / 255];
         if (lit) {
-          const shade = SurfaceLook.shade(prepared[world.surfaceData[s] - 1], {
+          const surface = prepared[world.surfaceData[s] - 1], albedo = surface.paintsBase && world.materialAlbedo?.[i];
+          const shade = SurfaceLook.shade(surface, {
+            albedo: albedo ? RenderStages.unpack(albedo-1) : undefined,
             position: Array.from(data.subarray(q, q + 3)), worldPosition: position,
             normal: Array.from(world.surfaceData.subarray(s + 1, s + 4)), view, time,
             visibility: world.surfaceData[s + 4]
