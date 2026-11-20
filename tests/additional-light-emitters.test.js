@@ -334,11 +334,11 @@ test(
           S = K.sculpt(kit.makeSculpt(B)),
           plane = K.reflection.plane({ id: 'pool' }),
           water = K.reflection.material({ r: [1] }, 'pool', { f0: 1, strength: 1, distortion: 0 });
-        S.box([0, -0.025, 0.32], [2.4, 0.025, 2.14], water, { res: 0.13 });
+        S.box([0, -0.825, -0.5], [2.4, 0.025, 2.5], { r: [1] }, { res: 0.13 });
         S.bake();
         const lamp = {
             id: 'reflection',
-            at: [0, 1, -0.64],
+            at: [0, 1, -2],
             normal: [0, 0, 1],
             shape: 'disk',
             size: [0.8, 1],
@@ -349,7 +349,7 @@ test(
             visible: false
           },
           world = B.finish({
-            cam: { target: [0, 0.48, 0], yaw: 0, pitch: 0.44, dist: 6.7 },
+            cam: { target: [0, 0, 0], yaw: 0, pitch: Math.atan(0.5), dist: Math.sqrt(45) },
             radius: 6,
             reflections: [plane],
             areaLights: [lamp]
@@ -359,9 +359,9 @@ test(
         world.water = waters.scene([
           waters.create({
             id: 'lake',
-            bounds: { min: [-2.4, -1.82], max: [2.4, 2.46] },
+            bounds: { min: [-2.4, -3], max: [2.4, 2] },
             resolution: [16, 16],
-            sample: () => ({ bed: -0.5, surface: 0 }),
+            sample: () => ({ bed: -0.8, surface: 0 }),
             optics: {
               tint: [0, 0, 0],
               extinction: [0, 0, 0],

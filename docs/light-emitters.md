@@ -176,8 +176,9 @@ Native frame options:
 | `emitterSurfaceResolution` | 16 | Per-triangle light chart, 4–64 |
 
 The example uses a 32-cell fog field for its animated preview. Increasing it
-sharpens volumetric stencil detail. Surface pixels and the projected surface
-patterns keep their own resolution. Lit fog uses four integration samples per
+sharpens volumetric stencil detail. Painted texels keep their authored resolution. Projected lighting detail on
+atlas meshes follows the light-chart resolution and triangle density; splats
+retain per-sample lighting. Lit fog uses four integration samples per
 homogeneous interval; the CPU integrator retains its independent step budget.
 
 The native path supports up to 32 combined shaped/volume lights, within the

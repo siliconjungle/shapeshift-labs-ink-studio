@@ -393,7 +393,7 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
       throw new RangeError('Emitter fog resolution must be 8..128');
     const extent = max.map((n, k) => n - min[k]),
       step = Math.max(...extent) / (resolution - 1),
-      size = extent.map(n => Math.max(2, Math.ceil(n / step) + 1));
+      size = extent.map(n => Math.max(2, Math.ceil(n / step - 1e-9) + 1));
     gl.activeTexture(gl.TEXTURE0 + 25);
     gl.bindTexture(gl.TEXTURE_3D, fogTexture);
     const key = [
@@ -450,7 +450,8 @@ uniform vec3 u_fogMin,u_fogExtent,u_fogSize;uniform int u_fogSlice;out vec4 colo
       receiverWorld = world;
       receiverMetadata = world.renderMetadata;
     }
-    const reuse = receiverStatic && normalRows?.length === world.count * 8 && state.frame.changedRows?.length === 0;
+    const reuse =
+      receiverStatic && !world.anim && normalRows?.length === world.count * 8 && state.frame.changedRows?.length === 0;
     const rows = normalRows?.length === world.count * 8 ? normalRows : new Float32Array(world.count * 8);
     if (!reuse) {
       const sample = K.splatFrames.create(world, time, K.M);
@@ -460,6 +461,7 @@ uniform vec3 u_fogMin,u_fogExtent,u_fogSize;uniform int u_fogSlice;out vec4 colo
           f = sample(i),
           n = f.normal,
           p = f.position();
+        if ((Math.round(world.data[o + 11]) & 15) !== 0) receiverStatic = false;
         rows.set([...p, world.data[o + 3], ...(n ?? [0, 0, 0]), world.data[o + 7]], q);
         if (Math.round(world.data[o + 11]) & (32 | 64 | 256) || !n) rows[q + 3] = 0;
       }
