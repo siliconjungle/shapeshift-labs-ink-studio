@@ -48,8 +48,8 @@ function network(K, set, cells, wires, injections, paintCell, cam) {
       for (let j = 10; j >= 0; j--) {
         const at = position - j * (type === 'skybridge' ? .029 : .052);
         if (at < 0) continue;
-        const fade = (1 - j / 11) ** 1.3, p = K.curve.at(route, at);
-        draw.point(p, { width: .016 + fade * (type === 'skybridge' ? .054 : .036), density: .93 * fade,
+        const fade = (1 - j / 11) ** 1.3, p = raise(K.curve.at(route, at), .067);
+        draw.point(p, { width: .019 + fade * (type === 'skybridge' ? .062 : .038), density: fade,
           rgb: lerp(tint, ivory, .37 * fade), emissive: true, depth: true });
       }
     }
@@ -130,7 +130,7 @@ function facade(K, set) {
     }
   };
   return network(K, set, cells, wires, { 0: ['a00'] }, paint,
-    { target: [-.02, 3.12, .02], dist: 12.61, fov: .58, yaw: -.29, pitch: .19, sway: 0 });
+    { target: [-.02, 2.91, .02], dist: 12.86, fov: .58, yaw: -.29, pitch: .19, sway: 0 });
 }
 
 function loom(K, set) {
