@@ -658,6 +658,8 @@ Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/wei
 
 [Quasiperiodic tilings](docs/quasiperiodic-tilings.md) generate Penrose and Ammann–Beenker pavement with stable tile addresses.
 
+[Hyperbolic mosaics and circle packing](docs/hyperbolic-mosaics.md) generate Poincaré-disk tiles and Apollonian circles with bounded detail.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```
