@@ -9,6 +9,10 @@ class ProceduralHeap {
     return this.items.length;
   }
 
+  peek() {
+    return this.items[0];
+  }
+
   push(value) {
     const { items, before } = this;
     let i = items.length;

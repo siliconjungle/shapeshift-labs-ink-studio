@@ -123,6 +123,7 @@
       check(target.point&&vector(args.to),'Route needs start and end XYZ points');
       const mode=args.mode??'walk', radius=args.radius??.13;
       check(['walk','swim','fly'].includes(mode)&&Number.isFinite(radius)&&radius>0,'Invalid travel mode or body radius');
+      check(args.strategy===undefined||Boolean(tiled)&&mode==='walk','Navigation strategies need tiled walking routes');
       return Q.ok(mode==='walk'?(tiled?tiled.bind(query).route(target.point,args.to,args):groundPlan({query},config,target.point,args.to,args)):
         spatialPlan({query},config,target.point,args.to,{mode,radius,entity:args.exclude}));
     }
@@ -134,6 +135,10 @@
           check(query.field(field),'Unknown tiled navigation field '+field);
       }}),fields:{
       ...(tiled&&{tiles:{type:'record',qualified:true,read:({query})=>Q.ok(tiled.bind(query).report())}}),
+      ...(config.tiles?.flowFields!==undefined&&{flow:{type:'record',qualified:true,read({query,target,args}){
+        check(target.point&&vector(args.to),'Flow probe needs a start and destination XYZ point');
+        return Q.ok(tiled.bind(query).flow(target.point,args.to,args));
+      }}}),
       height:{type:'number',units:'world',read:({query,target})=>target.point?
         Q.ok(heightAt({query},config,target.point[0],target.point[2])):Q.missing('point required')}
     },traces:{route:{run:route}}};

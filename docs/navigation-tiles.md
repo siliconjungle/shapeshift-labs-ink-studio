@@ -21,6 +21,9 @@ remaining route against the live crossings and reuse valid routes beyond
 their normal retry interval. Agents with a blocked route retry after a
 short interval. Flight and swimming use their existing spatial planner.
 
+Use [shared destination fields](navigation-flow.md) when several walkers
+head for the same destination.
+
 ## Trace a changing crossing
 
 The [ford example](../examples/world-tiled-ford.json) transfers water into

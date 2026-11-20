@@ -15,10 +15,11 @@
 
   function create(config,optionsFor){
     const {bounds,cell=.25,tiles}=config;
-    const {size=16,maxTiles=512,maxProfiles=16,maxVisits=100000}=tiles;
-    check(record(tiles)&&Object.keys(tiles).every(key=>['size','maxTiles','maxProfiles','maxVisits'].includes(key))&&
+    const {size=16,maxTiles=512,maxProfiles=16,maxVisits=100000,flowFields}=tiles;
+    check(record(tiles)&&Object.keys(tiles).every(key=>['size','maxTiles','maxProfiles','maxVisits','flowFields'].includes(key))&&
       integer(size,4,64)&&integer(maxTiles,4,4096)&&integer(maxProfiles,1,64)&&integer(maxVisits,1,500000),
     'Invalid navigation tile settings');
+    const flow=flowFields===undefined?null:W.navigationFlow.create(flowFields);
     const [x0,,z0]=bounds.min,[x1,,z1]=bounds.max;
     const nx=Math.ceil((x1-x0)/cell)+1,nz=Math.ceil((z1-z0)/cell)+1,dx=(x1-x0)/(nx-1),dz=(z1-z0)/(nz-1);
     check(Number.isSafeInteger(nx*nz)&&nx>1&&nz>1&&dx>eps&&dz>eps&&
@@ -27,6 +28,7 @@
     const profiles=new Map(), proofs=new WeakMap(), keyOf=(i,j)=>j*nx+i;
     const xAt=i=>i===nx-1?x1:x0+i*dx, zAt=j=>j===nz-1?z1:z0+j*dz;
     const inDomain=p=>W.fields.zone(p,bounds);
+    const owner=p=>Math.floor(Math.round((p[0]-x0)/dx)/size)+','+Math.floor(Math.round((p[2]-z0)/dz)/size);
     const nearLimit=2*Math.hypot(dx,dz);
     let current,sources,invalidated=[],serial=0,frame;
 
@@ -49,14 +51,17 @@
             profile.tiles.delete(name);
             invalidated.push({tile:name,profile:key});
           }
+        flow?.invalidate(profiles.values(),global?null:dirty);
       }
       current=query;
       sources=resolved;
       frame=Object.freeze({route:(from,to,spec)=>route(query,from,to,spec),
+        ...(flow&&{flow:(from,to,spec)=>flowSample(query,from,to,spec)}),
         valid:(from,points,cursor,goal,spec)=>valid(query,from,points,cursor,goal,spec),
         report:()=>{
           bind(query);
-          return {tileCells:size,cached:[...profiles.values()].reduce((n,row)=>n+row.tiles.size,0),invalidated};
+          return {tileCells:size,cached:[...profiles.values()].reduce((n,row)=>n+row.tiles.size,0),invalidated,
+            ...(flow&&{flowFields:flow.report(profiles.values())})};
         }});
       return frame;
     }
@@ -118,8 +123,18 @@
         if(i<0||i>=nx||j<0||j>=nz||Math.abs(xAt(i)-p[0])>eps||Math.abs(zAt(j)-p[2])>eps)return null;
         return node(keyOf(i,j));
       }
+      function neighbors(index,visit){
+        const row=node(index);
+        for(const [di,dj] of directions){
+          const i=row.i+di,j=row.j+dj;
+          if(i<0||i>=nx||j<0||j>=nz)continue;
+          const next=node(keyOf(i,j));
+          visit(next,edge(row,next));
+        }
+      }
       const pin=p=>[p[0],options.height(p[0],p[2]),p[2]];
-      return {node,edge,near,lattice,pin,sampler,options,touched,built,profile};
+      return {node,edge,near,lattice,neighbors,pin,sampler,options,touched,built,profile,
+        pad:profile.spec.radius+Math.max(dx,dz)};
     }
     function valid(query,from,points,cursor,goal,spec){
       if(!points[cursor]||horizontal(points.at(-1),goal)>eps||!inDomain(from))return false;
@@ -148,15 +163,55 @@
         proofs.set(points,{profile:map.profile.id,cursor,tiles});
       return true;
     }
-    function route(query,from,to,spec){
+    function routeData(path,cost){
+      const points=[],tiles=[],crossings=[];
+      let previous,length=0;
+      for(const point of path){
+        if(!points.length||horizontal(points.at(-1),point)>eps){
+          if(points.length)length+=V.dist(points.at(-1),point);
+          points.push(point);
+        }
+        const name=owner(point);
+        if(!previous||previous.name!==name){
+          tiles.push(name);
+          if(previous)crossings.push({from:previous.name,to:name,points:[previous.point,point]});
+        }
+        previous={name,point};
+      }
+      return {points,cost,length,tiles,crossings};
+    }
+    function reportWork(map,visits){
+      return {visits,built:[...map.built].sort(),reused:[...map.touched].filter(name=>!map.built.has(name)).sort(),
+        invalidated:[...new Set(invalidated.map(row=>row.tile))].sort()};
+    }
+    function flowRequest(map,start,end,trace){
+      const direct=owner(start)===owner(end)&&horizontal(start,end)<=nearLimit;
+      return flow.sample(map,start,end,{direct,trace});
+    }
+    function flowSample(query,from,to,spec){
+      if(!inDomain(from)||!inDomain(to))return {status:'outside'};
+      const map=access(query,spec);
+      return flowRequest(map,map.pin(from),map.pin(to),false);
+    }
+    function route(query,from,to,spec={}){
+      const {strategy=flow?'flow':'astar'}=spec;
+      check(strategy==='astar'||strategy==='flow'&&flow,'Unknown or disabled navigation strategy');
       if(!inDomain(from)||!inDomain(to))return {status:'outside',points:[]};
       const map=access(query,spec), start=map.pin(from), end=map.pin(to), source=-1, target=-2;
+      let shared;
+      if(strategy==='flow'){
+        const result=flowRequest(map,start,end,true);
+        if(result.status!=='budget'||spec.strategy==='flow'){
+          const {path,cost,flow:stats,status}=result;
+          return {status,points:[],...(path&&routeData(path,cost)),...(stats&&{flow:stats}),
+            ...(result.reason&&{reason:result.reason}),work:reportWork(map,stats?.expanded??0)};
+        }
+        shared=result.flow;
+      }
       const best=new Map(), parent=new Map(), positions=new Map([[source,start],[target,end]]);
-      const owner=p=>Math.floor(Math.round((p[0]-x0)/dx)/size)+','+Math.floor(Math.round((p[2]-z0)/dz)/size);
       let visits=0;
       const outcome=(status,extra={})=>({status,points:[],...extra,
-        work:{visits,built:[...map.built].sort(),reused:[...map.touched].filter(name=>!map.built.has(name)).sort(),
-          invalidated:[...new Set(invalidated.map(row=>row.tile))].sort()}});
+        ...(shared&&{flow:{...shared,fallback:'astar'}}),work:reportWork(map,visits)});
       if(![start,end].every(p=>Number.isFinite(map.sampler.pin(p))))return outcome('blocked-pin');
       if(horizontal(start,end)<=eps)return outcome('ok',{points:[start],cost:0,length:0,tiles:[owner(start)],crossings:[]});
       const endNodes=new Map(map.near(end).map(index=>[index,map.sampler.edge(map.node(index).p,end)]));
@@ -175,22 +230,7 @@
           for(let i=index;i!==null;i=parent.get(i))path.push(i);
           if(path.length>4097)return outcome('budget',{reason:'points'});
           path.reverse();
-          const points=[], tiles=[], crossings=[];
-          let prev=null,length=0;
-          for(const key of path){
-            const p=positions.get(key);
-            if(!points.length||horizontal(points.at(-1),p)>eps){
-              if(points.length)length+=V.dist(points.at(-1),p);
-              points.push(p);
-            }
-            const name=key<0?owner(p):map.node(key).tile.name;
-            if(!prev||prev.name!==name){
-              tiles.push(name);
-              if(prev)crossings.push({from:prev.name,to:name,points:[prev.p,p]});
-            }
-            prev={name,p};
-          }
-          return outcome('ok',{points,cost,length,tiles,crossings});
+          return outcome('ok',routeData(path.map(key=>positions.get(key)),cost));
         }
         if(visits>=maxVisits)return outcome('budget',{reason:'visits'});
         visits++;
@@ -203,14 +243,8 @@
           }
           continue;
         }
-        const row=map.node(index);
         if(endNodes.has(index))push(target,end,index,cost+endNodes.get(index));
-        for(const [di,dj] of directions){
-          const i=row.i+di,j=row.j+dj;
-          if(i<0||i>=nx||j<0||j>=nz)continue;
-          const next=map.node(keyOf(i,j));
-          push(next.index,next.p,index,cost+map.edge(row,next));
-        }
+        map.neighbors(index,(next,weight)=>push(next.index,next.p,index,cost+weight));
       }
       return outcome('unreachable');
     }

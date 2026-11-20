@@ -7,6 +7,42 @@
     clamp = (value, low, high) => Math.max(low, Math.min(high, value)),
     distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
+  const frontier = () => new ProceduralHeap((a,b)=>a.value<b.value||a.value===b.value&&a.i<b.i);
+  function march(queue,live,accept,stop) {
+    while(queue.size){
+      const next=queue.peek();
+      if(!live(next)){queue.pop();continue;}
+      const reason=stop?.(next.value);
+      if(reason)return reason;
+      accept(queue.pop());
+    }
+    return 'exhausted';
+  }
+
+  // Incremental reverse propagation for sampled graphs with weighted edges.
+  function travelCosts(seeds,maxCells){
+    const pending=new Map(), fixed=new Map(), queue=frontier();
+    function offer(i,value,next){
+      if(!Number.isFinite(value)||fixed.has(i)||value>=(pending.get(i)?.value??Infinity))return;
+      const entry={i,value,next};
+      pending.set(i,entry);
+      queue.push(entry);
+    }
+    for(const [i,value] of seeds)offer(i,value,null);
+    return Object.freeze({
+      get settled(){return fixed.size;},
+      at:i=>fixed.get(i),
+      advance(neighbors,ready,visit){
+        return march(queue,entry=>pending.get(entry.i)===entry,entry=>{
+          pending.delete(entry.i);
+          fixed.set(entry.i,entry);
+          visit(entry);
+          neighbors(entry.i,(i,cost)=>offer(i,entry.value+cost,entry.i));
+        },value=>ready(value)?'ready':fixed.size>=maxCells?'budget':null);
+      }
+    });
+  }
+
   function travelTime(sources, { bounds, cell = 0.5, speed = () => 1, maxCells = 80000 } = {}) {
     if (
       !point(bounds?.min) || !point(bounds?.max) || bounds.min.some((x, i) => bounds.max[i] - x <= EPS) ||
@@ -33,7 +69,7 @@
       fixed = new Uint8Array(count),
       owner = new Int16Array(count).fill(-1),
       parent = new Int32Array(count).fill(-1),
-      queue = new ProceduralHeap((a, b) => a.value < b.value || (a.value === b.value && a.i < b.i)),
+      queue = frontier(),
       stride = Math.min(dx, dz),
       work = { accepted: 0 };
     function rate(x, z) {
@@ -117,9 +153,7 @@
       }
       if (previous >= 0) queueAt(i, value, owner[previous], previous);
     }
-    while (queue.size) {
-      const { i, value } = queue.pop();
-      if (fixed[i] || value !== times[i]) continue;
+    march(queue,({i,value})=>!fixed[i]&&value===times[i],({i})=>{
       fixed[i] = 1;
       work.accepted++;
       const x = i % cols, z = Math.floor(i / cols);
@@ -127,7 +161,7 @@
       update(indexAt(x + 1, z));
       update(indexAt(x, z - 1));
       update(indexAt(x, z + 1));
-    }
+    });
     function time(x, z) {
       if (!Number.isFinite(x) || !Number.isFinite(z) || !contained([x, z])) return Infinity;
       if (pinKeys.has(x + ':' + z)) return 0;
@@ -207,4 +241,5 @@
   }
 
   P.routes.travelTime = travelTime;
+  P.routes.travelCosts = travelCosts;
 })(KIT);
