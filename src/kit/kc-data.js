@@ -226,6 +226,7 @@
     environmentPreset: 'obj',
     roles: 'obj',
     camera: 'obj',
+    cameraRig: 'obj',
     light: 'obj',
     finish: 'obj',
     groups: 'obj',
@@ -1001,9 +1002,16 @@
     };
     listOf('motion', MOTION);
     listOf('effects', EFFECT);
+    if (spec.cameraRig !== undefined) {
+      try {
+        presentation.cameraRig = K.cameraRig.compile(spec.cameraRig, { parts });
+      } catch (error) {
+        bad('cameraRig', error.message);
+      }
+    }
     if (spec.timeline !== undefined) {
       try {
-        presentation.timeline = dioramaTimeline(spec, parts);
+        presentation.timeline = dioramaTimeline(spec, parts, presentation.cameraRig);
       } catch (error) {
         bad('timeline', error.message);
       }
@@ -1014,9 +1022,13 @@
       matOk(spec.tap.colours, 'tap.colours');
     }
     if (spec.camera) {
-      keys(spec.camera, 'camera', { target: 1, dist: 1, pitch: 1, yaw: 1, sway: 1 });
+      keys(spec.camera, 'camera', { target: 1, dist: 1, pitch: 1, yaw: 1, sway: 1, fov: 1, projection: 1 });
       if (spec.camera.target !== undefined && !isVec(spec.camera.target, 3))
         bad('camera.target', 'three numbers [x, y, z]');
+      if (spec.camera.fov !== undefined && !K.cameraRig.fovOK(spec.camera.fov))
+        bad('camera.fov', 'vertical radians between zero and pi');
+      if (spec.camera.projection !== undefined && !K.cameraRig.projectionOK(spec.camera.projection))
+        bad('camera.projection', 'expected perspective or orthographic');
     }
     if (spec.brushRegion != null) {
       try {
@@ -1085,11 +1097,11 @@
     dust: ['at', 'n', 'every', 'spread'], embers: ['at', 'n', 'every'],
     smoke: ['at', 'n', 'every'], sparks: ['at', 'n', 'every', 'dir', 'speed']
   };
-  function dioramaTimeline(spec, parts) {
+  function dioramaTimeline(spec, parts, cameraRig) {
     const poses = { translation: { size: 3 }, rotation: { size: 3, mode: 'radians' },
       orientation: { size: 9, mode: 'orientation' }, scale: { mode: 'positive' } };
     return K.timeline.compile(spec.timeline, { channel([root, name, field, ...rest]) {
-      if (root === 'camera' && field === undefined && Object.hasOwn(K.timeline.camera, name)) return K.timeline.camera[name];
+      if (root === 'camera' && field === undefined) return K.cameraRig.channel(name, cameraRig?.shots);
       if (rest.length || spec.brushRegion != null) return null;
       if (root === 'poses' && parts.has(name) && Object.hasOwn(poses, field)) return poses[field];
       const effect = root === 'effects' && /^(0|[1-9][0-9]*)$/.test(name) ? spec.effects?.[name] : undefined;
@@ -1115,6 +1127,7 @@
   }
   function timelineCamera(world, timeline) {
     world.timeline = timeline;
+    if (world.cameraRig) return () => {};
     const names = timeline.targets.filter(path => path[0] === 'camera').map(path => path[1]);
     const base = Object.fromEntries(names.map(name => [name, world.cam[name]]));
     if (names.length) world.cam = { ...world.cam };
@@ -1202,7 +1215,7 @@
       e.problems = problems;
       throw e;
     }
-    const { spec } = resolved, { timeline } = presentation, dynamics = boundRuntime(source, env, resolved);
+    const { spec } = resolved, { timeline, cameraRig } = presentation, dynamics = boundRuntime(source, env, resolved);
     const st0 = styleOf(spec), catalog = lookCatalog(spec),
       seed = spec.seed === undefined ? 1 : spec.seed,
       effects = spec.effects || [],
@@ -1212,9 +1225,10 @@
     if (spec.brushRegion != null) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
-      const { timeline: authoredTimeline, ...geometry } = spec;
+      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, ...geometry } = spec;
       const world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       world.spec = source;
+      if (cameraRig) K.cameraRig.bind(world, cameraRig);
       if (dynamics) world.parameters = dynamics.api;
       if (timeline) {
         const apply = timelineCamera(world, timeline);
@@ -1535,6 +1549,13 @@
           ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
+    if (cameraRig) K.cameraRig.bind(W, cameraRig, {
+      resolvePart(part, point) {
+        if (!rig?.at || !rig.has(part)) return;
+        const i = rig.names.indexOf(part);
+        return { point: rig.at(i, point), rotation: rig.M.subarray(i*12, i*12+9) };
+      }
+    });
     const applyCamera = timeline && timelineCamera(W, timeline);
     const timelineActive = !!timeline?.targets.length;
     const liveLamps = dynamics?.lamps || timeline?.targets.some(([root, index]) =>

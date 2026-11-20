@@ -95,7 +95,7 @@
     if(!(world.data instanceof Float32Array)||!Number.isSafeInteger(count)||count<0||world.data.length<count*16||!Number.isFinite(time))
       throw new TypeError('Picking needs a baked splat world and finite time');
     const opticalFrames=opticalSplats&&SplatFrames.create(world,time,K.M);
-    const data=world.anim?.bones?K.bones.posed({...world,posedBuf:undefined}):world.data;
+    const data=world.anim?.bones?K.bones.posed({...world,data:world.rest??world.data,posedBuf:undefined}):world.data;
     const rows=new Float32Array(count*10), selected=[];
     const back=new Set(world.back??[]),withdrawal=SampleCoverage.amount(sampleWithdrawal);
     for(let i=0;i<count;i++){
@@ -109,9 +109,10 @@
     }
     const indices=Uint32Array.from(selected),tree=orderedTree(rows,indices);
     let provenance;
-    function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true}={}){
+    function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true,accept}={}){
       if(!valid(origin)||!valid(direction)||V.len(direction)<=1e-8||!Number.isFinite(maxDistance)||maxDistance<=0||
-          !Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(limit)||limit<1||limit>256)
+          !Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(limit)||limit<1||limit>256||
+          accept!==undefined&&typeof accept!=='function')
         throw new RangeError('A contribution ray needs XYZ origin, nonzero direction, positive distance and a bounded limit');
       const d=V.norm(direction), u=V.perp(d), v=V.cross(d,u), hits=[];
       let visited=0;
@@ -139,8 +140,9 @@
           const target=(provenance??=TargetSelectors.index(world)).row(i);
           const at=Math.abs(f)>1e-7?V.dot(normal,delta)/f:t;
           const distance=at>0&&at<=maxDistance&&Math.abs(at-t)<=3*Math.sqrt(cov[0]+cov[3]+cov[5])?at:t;
-          hits.push({kind:raw&256?'glass':'splat',index:i,...(world.splatIds?.[i]&&{id:world.splatIds[i]}),
-            target,distance,point:V.mad(origin,d,distance),alpha,solid:!optical&&!softCoverage&&density>=1&&alpha>=.5&&!(raw&(16|256))});
+          const hit={kind:raw&256?'glass':'splat',index:i,...(world.splatIds?.[i]&&{id:world.splatIds[i]}),
+            target,distance,point:V.mad(origin,d,distance),alpha,solid:!optical&&!softCoverage&&density>=1&&alpha>=.5&&!(raw&(16|256))};
+          if(!accept||accept(hit))hits.push(hit);
         }
       }
       visit(tree);

@@ -194,15 +194,19 @@ function renderFrame(world, o, preparedPalettes) {
   if (counters) counters.rasterPasses++;
   const lensScale = o.lensScale ?? 1;
   if (!Number.isFinite(lensScale) || lensScale <= 0) throw new RangeError('Lens scale must be finite and positive');
-  const tangent = Math.tan(FOV / 2) / lensScale;
   const look = world.look || {};
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
   const direction = ArtDirection.prepare(look.artDirection,o.artDirection);
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
   const subject = protection?.bind(world);
-  const c = world.cam,
-    sceneTime = o.t ?? world.lookSnapshot?.time ?? 0,
-    t = ArtDirection.time(direction,sceneTime),
+  const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
+  const authored = world.cameraRig?.sample(sceneTime, { shot: o.cameraShot }).camera;
+  const c = authored ?? world.cam;
+  const fov = o.fov ?? c.fov ?? FOV;
+  if (!Number.isFinite(fov) || fov <= 0 || fov >= Math.PI) throw new RangeError('Camera field of view must be in (0, π)');
+  const tangent = Math.tan(fov / 2) / lensScale;
+  const ortho = o.ortho ?? c.ortho ?? (c.projection === 'orthographic');
+  const t = ArtDirection.time(direction,sceneTime),
     yaw = o.yaw === undefined ? c.yaw : o.yaw,
     pitch = o.pitch === undefined ? c.pitch : o.pitch,
     an = world.anim || {},
@@ -322,7 +326,7 @@ function renderFrame(world, o, preparedPalettes) {
     W = Math.ceil(cw / px),
     H = Math.ceil(ch / px);
   if (!o.samples && !o.captureCoverage) o.shotFrame?.({
-    time:sceneTime, skyTime:ArtDirection.time(direction,o.skyTime ?? sceneTime,'environment'), camera:{ target:Array.from(T), yaw, pitch, distance:dist, lensScale, orthographic:!!o.ortho },
+    time:sceneTime, skyTime:ArtDirection.time(direction,o.skyTime ?? sceneTime,'environment'), camera:{ target:Array.from(T), yaw, pitch, distance:dist, lensScale, orthographic:ortho, ...(fov !== FOV && { fov }) },
     art:{ width:W, height:H, pixelSize:px }
   });
   const historyFrames = effects?.smear && o.artHistory ? o.artHistory.previous(t, W, H, o[reconstructionSource] ?? world) : [];
@@ -382,11 +386,9 @@ function renderFrame(world, o, preparedPalettes) {
       o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color);
   }
   lookPass = createLookPass(W, H, passSelection, o.lookPassRegistry);
-  /* orthographic (o.ortho): no perspective, every ray parallel, the picture as big as the perspective one is at the target. The eye
-     is set well back, so nothing comes behind it however far in the camera zooms; the zoom is the size of the view */
-  const ortho = !!o.ortho,
-    oh = dist * tangent,
-    eyeD = ortho ? dist + 2 * world.radius + 4 : dist,
+  /* Legacy orthographic views back the eye away. Authored rigs keep their rail or orbit position. */
+  const oh = dist * tangent,
+    eyeD = ortho && !authored ? dist + 2 * world.radius + 4 : dist,
     reflectionPlane = o.reflectionPlane,
     focal = ortho ? H / 2 / oh : H / 2 / tangent,
     cameraView = viewMatrix(yaw, pitch, eyeD, T),

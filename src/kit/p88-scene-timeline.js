@@ -4,7 +4,10 @@
   const timeOK = value => Number.isFinite(value) && value >= 0;
   const vector = value => Array.isArray(value) && value.length > 0 && Array.from(value).every(Number.isFinite);
   const camera = Object.freeze({ target: { size: 3 }, dist: { mode: 'positive' },
-    yaw: { mode: 'radians' }, pitch: { mode: 'number' }, sway: { mode: 'number' } });
+    yaw: { mode: 'radians' }, pitch: { mode: 'number' }, sway: { mode: 'number' },
+    fov: { mode: 'positive', validate: value => value < Math.PI },
+    projection: { mode: 'step', validate: value => K.cameraRig.projectionOK(value) },
+    railProgress: { mode: 'number', validate: value => value >= 0 && value <= 1 } });
   const own = (obj, key) => Object.hasOwn(obj, key);
   const has = (a, b) => Object.keys(a).every(key => b.includes(key));
   const maxItems = 10000;

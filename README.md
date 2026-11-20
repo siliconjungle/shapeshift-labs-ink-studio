@@ -296,6 +296,8 @@ The larger [lab/data-shrine.json](lab/data-shrine.json) demonstrates joins, fold
 
 ## Animation and puppets
 
+Named framing targets, rails, occlusion avoidance, and shot blends work across the CPU and WebGL renderers. [Camera rigs](docs/camera-rigs.md)
+
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
 
 Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.puppet` for hierarchical parts with deformation. `K.anim` provides clips, easing, layers, state machines, constraints, facial controls and presentation cues. `K.acts` provides ready-made action and reaction clips.
@@ -705,6 +707,7 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `acts` | List action clips, reactions, easing names and cues. |
 | `authoring inspect\|preview\|apply <scene>` | Inspect generated parts, preview JSON edits and save validated snapshots. |
 | `render <scene> --t 1.5` | Render one PNG at a chosen time. |
+| `camera-rig <scene> [--at seconds] [--camera-shot id]` | Inspect the resolved shot, projection, blend, and occlusion clearance. |
 | `passes <scene>` | Save art-pixel coverage, depth, normals, IDs and emission previews. |
 | `atlas <scene> --directions 8` | Export an RGBA atlas with registered pivots and optional relighting maps. |
 | `pose-review <scene> --directions 8` | Render named poses and breakdowns as color and silhouette tiles at sprite resolution. |

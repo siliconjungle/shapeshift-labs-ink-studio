@@ -1,8 +1,11 @@
 const defaultFov = 38 * Math.PI / 180;
 
 export function makeCamera(world, frame, width, height) {
-  const camera = { target: [0, 0, 0], dist: 12, yaw: 0, pitch: 0, ...world.cam, ...frame.camera };
-  const { yaw, pitch, dist, target, fov = defaultFov, ortho = false } = camera;
+  const authored = world.cameraRig?.sample(frame.time ?? world.lookSnapshot?.time ?? 0, { shot: frame.cameraShot }).camera;
+  const camera = { target: [0, 0, 0], dist: 12, yaw: 0, pitch: 0, ...world.cam, ...authored, ...frame.camera };
+  const { yaw, pitch, dist, target, fov = defaultFov } = camera;
+  const ortho = frame.camera?.ortho ?? (frame.camera?.projection !== undefined
+    ? frame.camera.projection === 'orthographic' : camera.ortho ?? camera.projection === 'orthographic');
   if (![yaw, pitch, dist, fov, target?.[0], target?.[1], target?.[2]].every(Number.isFinite) ||
       dist <= 0 || fov <= 0 || fov >= Math.PI)
     throw new RangeError('The camera needs a finite orbit, positive distance, and field of view in (0, π)');
@@ -10,7 +13,7 @@ export function makeCamera(world, frame, width, height) {
   const tanFov = Math.tan(fov / 2), aspect = width / height;
   const zoomedDistance = dist / (world.anim?.zoom || 1);
   const viewHeight = zoomedDistance * tanFov;
-  const distance = ortho ? zoomedDistance + 2 * radius + 4 : zoomedDistance;
+  const distance = ortho && !authored ? zoomedDistance + 2 * radius + 4 : zoomedDistance;
   const xs = Math.sin(yaw), cs = Math.cos(yaw), cy = Math.cos(pitch);
   const zx = cy * xs, zy = Math.sin(pitch), zz = cy * cs;
   const xl = Math.hypot(zz, zx);

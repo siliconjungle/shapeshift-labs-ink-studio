@@ -38,7 +38,7 @@ function target(opt) {
   return {};
 }
 
-module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,atmosphereEmittersOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,weatherTracksOption,skyOptions,shot,shotReplay,shotRender}) {
+module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,atmosphereEmittersOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,weatherTracksOption,skyOptions,cameraOptions,shot,shotReplay,shotRender}) {
   const W = kit.KIT.world, R = W.runtime;
   let workerPool;
   const args = () => opt.args ? parse(opt.args) : {};
@@ -135,9 +135,10 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     run.advance(tick, {onTick:observe});
     return history.at;
   }
-  function visualSnapshot(input) {
+  function visualSnapshot(input, at) {
     const initial = runtime(input);
-    const tick = opt.steps === undefined && opt.ticks === undefined && opt.t === undefined ? initial.view().tick : to(initial);
+    const tick = at !== undefined ? Math.floor(at/initial.view().world.dt+1e-10) :
+      opt.steps === undefined && opt.ticks === undefined && opt.t === undefined ? initial.view().tick : to(initial);
     const run = snapshotRun(input, initial, tick);
     const atmospherePose = advanceVisual(run,tick);
     const view = run.view(), Preview = require('./look-preview.js');
@@ -181,6 +182,19 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const at = Number(opt.at ?? 0), from = Number(opt.from ?? -1), to = Number(opt.to ?? timeline.duration);
     ensure(![opt.at, opt.from, opt.to].includes(true), 'Timeline times need numeric values');
     respond({ duration: timeline.duration, targets: timeline.targets, frame: timeline.sample(at), cues: timeline.between(from, to) });
+  }
+  function inspectCameraRig(file) {
+    ensure(file && opt.at !== true, 'Use camera-rig <scene or world> [--at seconds] [--camera-shot ID]');
+    const at = opt.at === undefined ? undefined : Number(opt.at);
+    ensure(at === undefined || Number.isFinite(at) && at >= 0, 'Camera rig time must be nonnegative and finite');
+    const input = load(file);
+    const world = input.world ? visualSnapshot(input, at) : build(input.legacy);
+    const t = at ?? world.lookSnapshot?.time ?? 0;
+    if (!input.world) pose(world, t);
+    const rig = world.cameraRig;
+    ensure(rig, 'This scene has no authored camera rig');
+    const { cameraShot } = cameraOptions();
+    respond({ duration: rig.duration, shots: rig.shots, ...rig.sample(t, { shot: cameraShot }) });
   }
   function assert(run,rules) {
     ensure(Array.isArray(rules) && rules.length<=10000,'Expected an assertion list');
@@ -531,7 +545,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           paletteConstraints:require('./palette-constraints.js').override(opt['palette-constraints']),
           water:opt.water==='off'?false:undefined, effectPalettes:effectPalettesOption?.(), stable:stabilityOption?.(), artDirection:artDirectionOption?.(), silhouetteProtection:silhouetteOption?.(),
           horizonBands:horizonOption?.(), skyTransitions:skyTransitionsOption?.(), weatherTracks:weatherTracksOption?.(),
-          ...skyOptions?.(),
+          ...skyOptions?.(), ...cameraOptions?.(),
           atmosphere:opt.atmosphere==='off'?false:undefined, atmosphereEmitters:atmosphereEmittersOption?.(),
           coverageAware:opt['coverage-aware']===undefined?undefined:opt['coverage-aware']!=='off',
           lookMasks:opt['look-masks']==='off'?false:undefined,
@@ -761,5 +775,5 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     respond({valid:true,format:raw.format});
     return true;
   }
-  return {execute,validate,inspectLook,lookSnapshot,environmentSnapshot,inspectTimeline};
+  return {execute,validate,inspectLook,lookSnapshot,environmentSnapshot,inspectTimeline,inspectCameraRig};
 };

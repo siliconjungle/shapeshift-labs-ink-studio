@@ -23,17 +23,25 @@
     const config = world.visual ?? {};
     return K.authoring.environments.apply(config,config.environmentPreset,catalog,config.palette ?? palette);
   }
-  const timelines = new WeakMap();
+  const timelines = new WeakMap(), cameraRigs = new WeakMap();
+  function sceneCameraRig(world) {
+    const definition = world.visual?.cameraRig;
+    if (definition === undefined) return;
+    const cached = cameraRigs.get(definition);
+    if (cached) return cached;
+    const rig = K.cameraRig.compile(definition, { parts: new Set() });
+    if (K.procedural.data.isImmutable(world)) cameraRigs.set(definition, rig);
+    return rig;
+  }
   function sceneTimeline(world) {
     if (world.timeline === undefined) return;
     const cached = timelines.get(world);
     if (cached) return cached;
-    const { read } = W.data;
+    const { read } = W.data, rig = sceneCameraRig(world);
     const timeline = K.timeline.compile(world.timeline, { channel(path) {
       const [root, field] = path;
-      if (root === 'camera' && path.length === 2 && Object.hasOwn(K.timeline.camera, field))
-        return K.timeline.camera[field];
-      if (root !== 'visual' || path.length < 2 || ['camera', 'parameterBindings'].includes(field)) return null;
+      if (root === 'camera' && path.length === 2) return K.cameraRig.channel(field, rig?.shots);
+      if (root !== 'visual' || path.length < 2 || ['camera', 'cameraRig', 'parameterBindings'].includes(field)) return null;
       const value = read(world, path);
       if (Number.isFinite(value)) return { validate: Number.isFinite };
       if (typeof value === 'boolean' || typeof value === 'string')
@@ -394,7 +402,8 @@
       { ...config.surfaceEffects, query };
     const airborne=config.air&&W.ventilation.render(query,config.air);
     const defaultCam={target:[mid[0],.05,mid[2]],dist:span*1.48,yaw:.62,pitch:.8};
-    const camera = frame?.edits.filter(edit => edit.path[0] === 'camera');
+    const rig = sceneCameraRig(world);
+    const camera = !rig && frame?.edits.filter(edit => edit.path[0] === 'camera');
     const cam = camera?.length ? { ...defaultCam, ...config.camera,
       ...Object.fromEntries(camera.map(({ path, value }) => [path[1], value])) } : config.camera ?? defaultCam;
     const contacts=fields.contactEffects&&query.probe(fields.contactEffects,cam.target).value;
@@ -421,7 +430,8 @@
       ...(waterScene && { water: waterScene }),
       ...(airborne?.length && {shapedAtmosphere:[...(config.shapedAtmosphere || []),...airborne]}),
       ...(config.reflections && { reflections: config.reflections }), ...(surfaceEffects&&{surfaceEffects})});
-    return volume?SplatProvenance.join([...volume.parts,baked],baked):baked;
+    const result=volume?SplatProvenance.join([...volume.parts,baked],baked):baked;
+    return rig ? K.cameraRig.bind(result, rig, { query }) : result;
   }
   W.visual = visual;
   W.sceneTimeline = sceneTimeline;
@@ -429,6 +439,7 @@
   W.validateLooks = (world, catalog) => {
     const { world: presentation } = visualParameters(world);
     visualLooks(presentation, catalog).validate();
+    sceneCameraRig(presentation);
     return presentation.visual;
   };
 })(KIT);

@@ -889,7 +889,8 @@
     function obstruction({state,target},excluded) {
       if(!target.point)return Q.missing('point required');
       const broad=colliderIndex(state.bodies);
-      const eligible=body=>body.id!==excluded&&body.entity!==excluded;
+      const exclusions=new Set(Array.isArray(excluded)?excluded:excluded===undefined?[]:[excluded]);
+      const eligible=body=>!exclusions.has(body.id)&&!exclusions.has(body.entity);
       if(broad){
         const hit=broad.nearest(target.point,(row,point)=>eligible(row.value)?distance(row.value,point):Infinity);
         if(hit)return {status:'ok',value:hit.value,body:hit.id};
