@@ -1,6 +1,6 @@
 /* Checkpoint-backed simulation transport and editable timeline takes. */
 (function (K) {
-  const W = K.world, R = W.runtime, { check, copy, equal, id, record, read, selector, vector } = W.data;
+  const W = K.world, R = W.runtime, { check, copy, id, record, read, selector, vector } = W.data;
   const { freeze, isImmutable } = K.procedural.data, { M, V } = K;
   const takeFormat = 'ink-studio/simulation-take';
   const tickOK = tick => Number.isSafeInteger(tick) && tick >= 0 && tick <= R.maxTick;
@@ -78,7 +78,8 @@
     let cached = new Map(), last = { checkpointTick: origin.tick, replayedTicks: 0 };
 
     function checkEnd(run) {
-      if (end && run.view().tick === toTick) check(equal(run.checkpoint(), end), 'Replay diverged at tick ' + toTick);
+      if (end && run.view().tick === toTick)
+        check(R.checkpointsEqual(run.checkpoint(), end, options), 'Replay diverged at tick ' + toTick);
     }
     checkEnd(current);
 

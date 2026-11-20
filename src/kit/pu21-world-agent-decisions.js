@@ -189,9 +189,11 @@
       checkFields(query) {
         for (const field of fields) check(query.field(field), 'Unknown activity condition field ' + field);
       },
-      validate(state) {
-        check(record(state) && Object.keys(state).length === policies.size, 'Invalid agent decisions checkpoint');
+      validate(state, live = policies) {
+        check(record(state) && Object.keys(state).every(name => policies.has(name) && live.has(name)),
+          'Invalid agent decisions checkpoint');
         for (const [name, allowed] of policies) {
+          if (!live.has(name)) continue;
           const row = own(state, name) && state[name], choice = row?.choice;
           check(record(row) && phases.includes(row.phase) && (row.phase === 'idle' ? choice === null :
             record(choice) && allowed.includes(choice.activity) && catalog.get(choice.activity).destinations.has(choice.destination) &&

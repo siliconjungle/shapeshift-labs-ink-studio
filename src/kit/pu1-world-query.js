@@ -286,7 +286,8 @@
       let byKey=aliases.get(map);
       if(!byKey){
         byKey=new Map();
-        for(const row of map.values())byKey.set(row.key,byKey.has(row.key)?null:row);
+        for(const row of map.values())
+          if(!row.description.qualified)byKey.set(row.key,byKey.has(row.key)?null:row);
         aliases.set(map,byKey);
       }
       return byKey.get(name);

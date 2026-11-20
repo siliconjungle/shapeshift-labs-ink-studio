@@ -176,12 +176,15 @@
     return {initial:()=>null,fields:{suitability:{type:'record',read:suitability}}};
   }
   function agents(config,{catalog}) {
+    const S=W.agentStorage, freeze=P.data.freeze, emptyList=freeze([]), defaultLook=freeze([4,5,6,24]);
     const materialContacts=config.contactEvents==='material';
     check(config.contactEvents===undefined||typeof config.contactEvents==='boolean'||materialContacts,
       'contactEvents must be boolean or material');
     bounds(config.bounds);
-    const initial={}, profiles=config.species??{}, source=config.agents??{}, poseCache=new WeakMap();
-    check(record(profiles)&&record(source)&&Object.keys(source).length<=512,'Invalid creature catalog');
+    const initial={}, profiles=config.species??{}, source=config.agents??{}, aliases=new WeakMap();
+    const maxAgents=config.maxAgents??16384;
+    check(Number.isSafeInteger(maxAgents)&&maxAgents>=1&&maxAgents<=65536,'Invalid agent capacity');
+    check(record(profiles)&&record(source)&&Object.keys(source).length<=maxAgents,'Invalid creature catalog');
     for(const [key,spec] of Object.entries(profiles)){
       check(id(key)&&record(spec)&&['walk','swim','fly'].includes(spec.mode)&&
         Number.isFinite(spec.speed??1)&&(spec.speed??1)>=0&&Number.isFinite(spec.radius??.15)&&(spec.radius??.15)>=.03&&(spec.radius??.15)<=4&&
@@ -195,15 +198,29 @@
         Array.isArray(spec.limbs??[])&&(spec.limbs??[]).length<=16&&(spec.limbs??[]).every(p=>vector(p)),
         'Invalid movement profile '+key);
     }
-    for(const [key,spec] of Object.entries(source)){
+    function checkAgent(key,spec){
       check(id(key)&&record(spec)&&own(profiles,spec.species)&&vector(spec.position)&&
-        (spec.goal===undefined||vector(spec.goal))&&(spec.entity===undefined||id(spec.entity)),'Invalid creature '+key);
-      initial[key]={id:key,entity:spec.entity??key,species:spec.species,position:spec.position,
-        goal:spec.goal??spec.position,home:spec.position,direction:east,radius:profiles[spec.species].radius??.15,
-        route:[],cursor:0,mode:'idle',retry:0,travel:0,footprints:0,limbs:[],look:profiles[spec.species].look??[4,5,6,24]};
+        (spec.goal===undefined||vector(spec.goal))&&(spec.entity===undefined||id(spec.entity))&&
+        (spec.task==null||id(spec.task))&&(spec.name===undefined||typeof spec.name==='string'&&spec.name.length<=256)&&
+        (spec.metadata===undefined||record(spec.metadata)),'Invalid creature '+key);
     }
+    function makeAgent(key,spec){
+      return {id:key,entity:spec.entity??key,species:spec.species,position:spec.position,velocity:S.zero,task:spec.task??null,
+        ...(spec.name!==undefined&&{name:spec.name}),...(spec.metadata!==undefined&&{metadata:spec.metadata}),
+        goal:spec.goal??spec.position,home:spec.position,direction:east,radius:profiles[spec.species].radius??.15,
+        route:emptyList,cursor:0,mode:'idle',retry:0,travel:0,footprints:0,limbs:emptyList,look:profiles[spec.species].look??defaultLook};
+    }
+    const starting=S.edit(S.empty);
+    for(const key of Object.keys(source).sort()){
+      checkAgent(key,source[key]);
+      initial[key]=makeAgent(key,source[key]);
+      starting.add(initial[key]);
+    }
+    const initialRoster=starting.finish();
     const policy = config.decisions === undefined ? null : W.agentDecisions.create(config.decisions, initial);
     const species=Object.keys(profiles).sort();
+    const staticFit=!config.bed&&!config.support&&!config.water&&!config.clearance&&!config.habitat;
+    const settled=new WeakSet();
     const replan=config.replanTicks??24;
     check(Number.isSafeInteger(replan)&&replan>=1&&replan<=10000,'Invalid movement replanning interval');
     function fit(ctx,profile,p){
@@ -257,8 +274,12 @@
       }
       let {route,cursor,retry,travel,footprints}=previous;
       const goal=directed ? fit(ctx,profile,agent.goal) : choose(ctx,agent,profile);
-      if(!goal || directed&&!suitable(ctx,agent,goal))return {...previous,position,mode:'waiting',route:[],cursor:0};
-      if(V.dist(position,goal)<profile.radius*.65)return {...previous,position,mode:'rest',route:[],cursor:0};
+      const resting=!goal||directed&&!suitable(ctx,agent,goal)?'waiting':
+        V.dist(position,goal)<profile.radius*.65?'rest':null;
+      if(resting){
+        return previous.mode===resting&&S.sameVector(position,previous.position)&&!route.length&&!cursor?
+          previous:{...previous,position,mode:resting,route:[],cursor:0};
+      }
       let corridor;
       if (dirty && route.length) {
         const envelope = P.spatial.boxOf([position,...route.slice(cursor)]);
@@ -331,34 +352,129 @@
       });
       return {...previous,position:moved,direction,route,cursor,retry,mode:profile.mode,travel,footprints,limbs};
     }
-    return {initial:()=>({agents:initial,contacts:[],...(policy&&{decisions:policy.initial})}),dependencies:routeDependencies(config),
+    function validateRow(key,agent){
+      checkAgent(key,agent);
+      check(agent.id===key&&vector(agent.goal)&&vector(agent.direction)&&Array.isArray(agent.route)&&
+        agent.route.every(p=>vector(p)),'Invalid agent checkpoint');
+    }
+    function validateState(state){
+      check(record(state)&&Array.isArray(state.contacts),'Invalid agent checkpoint');
+      let names;
+      if(own(state,'roster'))names=S.validate(state.roster,maxAgents,validateRow);
+      else{
+        check(record(state.agents)&&Object.keys(state.agents).length===Object.keys(source).length,'Invalid agent checkpoint');
+        names=new Set(Object.keys(state.agents));
+        for(const key of names){
+          check(own(source,key),'Invalid agent checkpoint');
+          validateRow(key,state.agents[key]);
+        }
+      }
+      policy?.validate(state.decisions,names);
+    }
+    function requireAgent(roster,{agent,generation}){
+      const slot=S.find(roster,agent);
+      check(slot,'Unknown live agent '+agent);
+      const row=S.read(roster,slot);
+      check(generation===undefined||generation===row.generation,'Stale agent generation for '+agent);
+      return {slot,row};
+    }
+    function packed(roster,contacts,decisions){
+      return freeze({roster,contacts,...(policy&&{decisions})});
+    }
+    function replace(state,args,update){
+      const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
+      draft.update(slot,row,update(row));
+      return packed(draft.finish(),state.contacts,state.decisions);
+    }
+    function byEntity(roster,entity){
+      let index=aliases.get(roster);
+      if(!index){
+        index=new Map();
+        for(const slot of S.order(roster)){
+          const {entity,mode}=roster.pages[slot.p].details[slot.i];
+          if(mode!=='dormant'&&!index.has(entity))index.set(entity,slot);
+        }
+        aliases.set(roster,index);
+      }
+      const slot=index.get(entity);
+      return slot&&S.read(roster,slot);
+    }
+    function agentField(type,select,units){
+      return {type,selector:true,qualified:true,...(units&&{units}),read({state,args,target}){
+        const roster=S.get(state), name=args.agent??target?.agent;
+        const row=name!==undefined?S.select(roster,name):target?.entity&&byEntity(roster,target.entity);
+        return row&&(args.generation===undefined||args.generation===row.generation)?
+          Q.ok(select(row)):Q.missing('unknown live agent or generation','missing');
+      }};
+    }
+    return {initial:()=>packed(initialRoster,[],policy?.initial),
+    shareCheckpoint:true,viewState:S.view,legacyCheckpoint:S.legacyState,dependencies:routeDependencies(config),
     simulationAggregate(settings){
-      return W.aggregatePopulation.cohorts(settings,{initial,profiles,fit,bounds:config.bounds,contacts:config.contactEvents});
+      return W.aggregatePopulation.cohorts(settings,{profiles,fit,bounds:config.bounds,contacts:config.contactEvents,validateState});
     },
     ...(config.contactEvents&&{outputs:{contacts:'event'},output:state=>({contacts:state.contacts})}),
     ...((config.surface!==undefined||policy)&&{checkFields(query){
       if(config.surface!==undefined)W.materials.checkSurface(query,config.surface);
       policy?.checkFields(query);
-    }}),validateState(state){
-      check(record(state?.agents)&&Array.isArray(state.contacts)&&Object.keys(state.agents).length===Object.keys(initial).length&&
-        Object.entries(state.agents).every(([key,agent])=>own(initial,key)&&own(profiles,agent.species)&&vector(agent.position)&&
-          vector(agent.goal)&&vector(agent.direction)&&Array.isArray(agent.route)&&agent.route.every(p=>vector(p))),
-        'Invalid agent checkpoint');
-      policy?.validate(state.decisions);
-    },checkAction(type,args){
-      check(own(initial,args.agent)&&vector(args.to),'Invalid creature destination');
-      check(!policy?.managed(args.agent),'The activity policy owns this creature destination');
+    }}),validateState,checkAction(type,args){
+      if(type==='spawn'){
+        checkAgent(args.agent,args);
+        check(args.generation===undefined,'Agent generations are assigned at spawn');
+        return;
+      }
+      check(id(args.agent)&&(args.generation===undefined||Number.isSafeInteger(args.generation)&&args.generation>0),
+        'Invalid agent selector');
+      if(type==='seek'){
+        check(vector(args.to),'Invalid creature destination');
+        check(!policy?.managed(args.agent),'The activity policy owns this creature destination');
+      }
+      if(type==='set-task'){
+        check(args.task===null||id(args.task),'Invalid agent task');
+        check(!policy?.managed(args.agent),'The activity policy owns this creature task');
+      }
     },actions:{
-      seek(state,{agent,to},ctx){
-        ctx.emit('destination',{entity:state.agents[agent].entity,at:to});
-        return {...state,agents:{...state.agents,[agent]:{...state.agents[agent],goal:to,route:[],cursor:0,retry:0}}};
+      spawn(state,args,ctx){
+        const roster=S.get(state), {agent}=args;
+        check(!S.find(roster,agent),'Agent already exists '+agent);
+        check(S.count(roster)<maxAgents,'Agent capacity exceeded');
+        const row=makeAgent(agent,args), draft=S.edit(roster), generation=draft.add(row);
+        ctx.emit('agent-spawned',{agent,entity:row.entity,generation,at:row.position});
+        const decisions=policy?.managed(agent)?{...state.decisions,[agent]:policy.initial[agent]}:state.decisions;
+        return packed(draft.finish(),state.contacts,decisions);
+      },
+      despawn(state,args,ctx){
+        const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
+        const decisions=policy&&{...state.decisions};
+        if(decisions)delete decisions[row.id];
+        draft.remove(slot);
+        ctx.emit('agent-despawned',{agent:row.id,entity:row.entity,generation:row.generation,at:row.position});
+        return packed(draft.finish(),state.contacts,decisions);
+      },
+      seek(state,args,ctx){
+        return replace(state,args,row=>{
+          ctx.emit('destination',{entity:row.entity,at:args.to});
+          return {...row,goal:args.to,route:[],cursor:0,retry:0};
+        });
+      },
+      'set-task'(state,args){
+        return replace(state,args,row=>({...row,task:args.task}));
       }
     },step(state,ctx){
-      const contacts=[], agents={}, decisions=policy?{}:null, dirty=ctx.spatial?.changes().length>0;
-      for(const key of Object.keys(state.agents).sort()){
-        const agent=state.agents[key];
-        if(!policy?.managed(key)){
-          agents[key]=one(agent,ctx,contacts,dirty);
+      const roster=S.get(state), draft=S.edit(roster);
+      const contacts=[], decisions=policy?{}:null, dirty=ctx.spatial?.changes().length>0;
+      const skipRest=staticFit&&settled.has(roster);
+      function store(slot,before,next,task=next.task){
+        const velocity=S.sameVector(before.position,next.position)?S.zero:
+          next.position.map((n,i)=>(n-before.position[i])/ctx.dt);
+        if(before===next&&before.task===task&&S.sameVector(before.velocity,velocity))return;
+        draft.update(slot,before,{...next,velocity,task});
+      }
+      for(const slot of S.order(roster)){
+        const key=slot.id, managed=policy?.managed(key);
+        if(!managed&&skipRest&&S.atRest(roster,slot))continue;
+        const agent=S.read(roster,slot);
+        if(!managed){
+          store(slot,agent,one(agent,ctx,contacts,dirty));
           continue;
         }
         const profile=profileFor(agent);
@@ -375,40 +491,49 @@
         };
         const {next,route}=policy.select(state.decisions[key],agent,ctx,movement);
         if(!next.choice){
-          agents[key]={...agent,goal:agent.position,route:[],cursor:0,mode:'rest'};
+          store(slot,agent,{...agent,goal:agent.position,route:[],cursor:0,mode:'rest'},null);
           decisions[key]=next;
           continue;
         }
         if(next.phase==='blocked'){
-          agents[key]=agent;
+          store(slot,agent,agent,next.choice.activity);
           decisions[key]=next;
           continue;
         }
         const directed=route?{...agent,goal:next.choice.point,route,cursor:route.length>1?1:0,retry:ctx.tick+replan}:agent;
-        agents[key]=one(directed,ctx,contacts,dirty,true);
-        decisions[key]=policy.observe(next,agents[key],ctx,movement);
+        const moved=one(directed,ctx,contacts,dirty,true);
+        decisions[key]=policy.observe(next,moved,ctx,movement);
+        store(slot,agent,moved,decisions[key].choice?.activity??null);
       }
-      return {agents,contacts,...(policy&&{decisions})};
+      const next=draft.finish();
+      if(staticFit)settled.add(next);
+      return packed(next,contacts,decisions);
     },*poseEntities(state){
-      for(const agent of Object.values(state?.agents??{}))yield agent.entity;
+      if(state)for(const page of S.get(state).pages)for(const row of page.details)yield row.entity;
     },pose(state,entity){
-      if(!state)return null;
-      let poses=poseCache.get(state.agents);
-      if(!poses){
-        poses=new Map();
-        for(const agent of Object.values(state.agents))
-          if(agent.mode!=='dormant'&&!poses.has(agent.entity))poses.set(agent.entity,agent);
-        poseCache.set(state.agents,poses);
-      }
-      return poses.get(entity);
+      return state&&byEntity(S.get(state),entity);
     },fields:{
-      agents:{type:'record',read:({state})=>Q.ok(state.agents)},
-      population:{type:'record',read:({state})=>Q.ok(W.aggregatePopulation.population(state.agents,species))},
+      agents:{type:'record',read:({state})=>Q.ok(S.rows(S.get(state)))},
+      agent:agentField('record',row=>row),
+      position:agentField('vector',row=>row.position,'world'),
+      velocity:agentField('vector',row=>row.velocity,'world/s'),
+      task:agentField('categorical',row=>row.task),
+      components:{type:'record',qualified:true,read({state,args}){
+        const roster=S.get(state), page=args.page;
+        if(page!==undefined&&(!Number.isSafeInteger(page)||page<0||page>=roster.pages.length))
+          return Q.missing('unknown component page','missing');
+        const batch=page===undefined?roster.pages:[roster.pages[page]];
+        return Q.ok({total:S.count(roster),pageCount:roster.pages.length,taskNames:roster.taskNames,
+          pages:batch.map(({ids,generations,positions,velocities,tasks},i)=>
+            ({index:page??i,ids,generations,positions,velocities,tasks}))});
+      }},
+      population:{type:'record',read:({state})=>Q.ok(W.aggregatePopulation.population(S.get(state),species))},
       contacts:{type:'records',units:'world',read:({state})=>Q.ok(state.contacts)},
       ...(policy&&{decisions:{type:'record',read:({state})=>Q.ok(state.decisions)}})
     },...(policy&&{traces:{why:{run({state,args,target}){
       const name=args.agent??target.entity;
-      const key=own(state.decisions,name) ? name : Object.keys(state.decisions).find(key=>state.agents[key].entity===name);
+      const roster=S.get(state);
+      const key=own(state.decisions,name) ? name : Object.keys(state.decisions).find(key=>S.select(roster,key)?.entity===name);
       const decision=own(state.decisions,key) ? state.decisions[key] : null;
       return decision ? Q.ok(decision) : Q.missing('unknown managed agent','missing');
     }}}})};

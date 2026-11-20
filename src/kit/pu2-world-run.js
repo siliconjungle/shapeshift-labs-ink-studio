@@ -338,16 +338,32 @@
     let currentQuery, lastTransfers = [], lastSignals = {...rootInputs,...rootOutputs};
     let lastCheckpoint;
 
+    const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
+    function visibleStates(values){
+      const base=aggregates?.view(values)??values;
+      if(!stateViews.length)return base;
+      let visible=viewCache.get(base);
+      if(!visible){
+        const descriptors=Object.getOwnPropertyDescriptors(base);
+        for(const name of stateViews){
+          let projected;
+          descriptors[name]={enumerable:true,get:()=>projected??=systems[name].viewState(base[name])};
+        }
+        visible=Object.freeze(Object.create(Object.getPrototypeOf(base),descriptors));
+        if(Object.isFrozen(values))viewCache.set(base,visible);
+      }
+      return visible;
+    }
     function view(worldValue = world, statesValue = states, signals = lastSignals, tickValue = tick, receipts = lastTransfers,
       causes = causalState, chunkView = chunkState) {
-      return Object.freeze({world:worldValue,states:aggregates?.view(statesValue)??statesValue,
-        ...(aggregates&&{[W.simulationAggregate.rawStates]:statesValue}),signals,tick:tickValue,time:tickValue*worldValue.dt,history,dropped,
+      return Object.freeze({world:worldValue,states:visibleStates(statesValue),
+        ...((aggregates||stateViews.length)&&{[W.simulationAggregate.rawStates]:statesValue}),signals,tick:tickValue,time:tickValue*worldValue.dt,history,dropped,
         ...(receipts.length && {transfers:receipts}),...(causes && {causality:causes}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function context(name, worldValue, statesValue, at, input, emit, query, spatial, timing, causal) {
-      return Object.freeze({world:worldValue,query,id:name,states:aggregates?.view(statesValue)??statesValue,
+      return Object.freeze({world:worldValue,query,id:name,states:visibleStates(statesValue),
         ...stepTiming(worldValue,at,timing),input,emit,
         ...(spatial && {spatial}),...(causal && {causal}),
         random:randomSource(worldValue.seed,name,at,timing)});
@@ -859,8 +875,17 @@
     const run = create(log.origin.world,{...options,checkpoint:log.origin});
     run.schedule(log.commands);
     run.advance(log.end.tick);
-    check(equal(run.checkpoint(),log.end),'Replay diverged at tick ' + log.end.tick);
+    check(checkpointsEqual(run.checkpoint(),log.end,options),'Replay diverged at tick ' + log.end.tick);
     return run;
+  }
+  function checkpointsEqual(actual,expected,{implementations}={}){
+    if(equal(actual,expected))return true;
+    if(!record(expected?.states)||!equal(actual.world,expected.world))return false;
+    const {systems}=compile(actual.world,implementations,true);
+    const states={...actual.states};
+    for(const [name,system] of Object.entries(systems))
+      if(system.legacyCheckpoint)states[name]=system.legacyCheckpoint(states[name],expected.states[name]);
+    return equal({...actual,states},expected);
   }
   function diff(a,b) {
     check(a?.format === checkpointFormat && b?.format === checkpointFormat && a.tick === b.tick,
@@ -868,5 +893,6 @@
     return {tick:a.tick,time:{before:a.tick*a.world.dt,after:b.tick*b.world.dt},edits:Q.keyedChanges(a,b)};
   }
   W.runtime = Object.freeze({register,validate,create,replay,diff,firstDivergence:W.stepDebug.firstDivergence,
-    checkpointFormat,runFormat,maxTick,partitionKernel,prefabInterfaces:(world,{implementations}={})=>compile(world,implementations,true)});
+    checkpointFormat,runFormat,maxTick,partitionKernel,checkpointsEqual,
+    prefabInterfaces:(world,{implementations}={})=>compile(world,implementations,true)});
 })(KIT);

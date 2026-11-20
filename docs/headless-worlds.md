@@ -710,7 +710,7 @@ reaches the feeder.
 | `routed-links` | Socket-to-socket cables, hoses and belt loops with guide points, slack, tension, break limits, typed signals, torque transmission and conservative transfers. |
 | `navigation` | Bounded walking, swimming or flying route traces. Ground search can take depth, clearance and wear into account. Hosts can also expose the volumetric traversal graph. |
 | `habitat` | Authored species rules evaluate world fields and nearby or reachable resources. Probes return a score, suitability and the reasons behind the decision. |
-| `agents` | Ground, swim and flight movement with replanning, scene-aware destinations and optional limb contacts. Agents publish their real movement contacts for other systems. Add [activity decisions](agent-decisions.md) for prioritized goals and confirmed arrivals. |
+| `agents` | Ground, swim and flight movement with replanning, scene-aware destinations and optional limb contacts. [Agent storage and lifecycle](agent-storage.md) covers runtime spawning, removal, and packed component queries. Add [activity decisions](agent-decisions.md) for prioritized goals and confirmed arrivals. |
 | `wear` | Optional wear from contact-producing systems or submitted contact batches. Track local accumulation and recovery, and use `enabled` to control updates. Trace a durable route and promote it with `scene promote <run> <trace> --as id`, supplying its endpoints through `--at` and JSON `--args`. |
 
 Water handles one surface column per XZ cell. Keep a simulation's resolution
