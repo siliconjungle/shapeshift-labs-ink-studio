@@ -1294,7 +1294,7 @@
       W.anim = stage;
       stage.bones = own.bones;
       stage.boned = own.boned;
-      stage.add({
+      pup.system = stage.add({
         update(dt, t) {
           own.update(dt, t);
           for (let r = 0; r < own.rows.length; r++)

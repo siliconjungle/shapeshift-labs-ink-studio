@@ -108,7 +108,7 @@ export function createInspection(
     if (!capture) throw new Error('Inspection could not capture the scene camera');
     const plan = api.plan(settings, {
       world,
-      time: frame.time ?? world.lookSnapshot?.time ?? 0,
+      time: frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0,
       width: w,
       height: h,
       camera: capture.camera,

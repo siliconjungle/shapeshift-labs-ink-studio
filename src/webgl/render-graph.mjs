@@ -196,7 +196,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_3D, cube);
     const outputs = new Map([['scene', scene]]), free = pool.slice(), selections = new Map();
-    const time = frame.time ?? world.lookSnapshot?.time ?? 0;
+    const time = frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0;
     const openHistory = history.begin(plan, { source: frame.renderHistoryKey ?? world,
       w, h, time, camera, reset: frame.resetRenderHistory });
     let lastSelect;

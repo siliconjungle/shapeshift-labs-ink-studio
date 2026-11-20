@@ -32,7 +32,8 @@
       };
     const flag = new Uint8Array(N),
       queue = new Int32Array(N);
-    let qn = 0, atmosphereProgram, atmosphereHistory;
+    let qn = 0, atmosphereProgram, atmosphereHistory, domains=null, advanceDomains=true, domainFrame=-1, domainEpoch=-1;
+    const routed=new WeakMap();
     const rgba = [0, 0, 0, 0];
     st.touch = i => {
       rows[i >> 9] = 1;
@@ -46,7 +47,20 @@
     st.repaintAll = ids => {
       for (let k = 0; k < ids.length; k++) st.repaint(ids[k]);
     };
-    st.add = sys => {
+    st.useTimeDomains = (clocks,{advance=true}={}) => {
+      if(!clocks?.read||typeof advance!=='boolean')throw new TypeError('Expected shared time domains');
+      for(const sys of st.systems){const route=routed.get(sys);if(route&&!clocks.has(route.domain))throw new Error('Unknown clock '+route.domain);}
+      domains=clocks;advanceDomains=advance;domainFrame=domainEpoch=-1;st.t0=0;W.timeDomains=clocks;return st;
+    };
+    st.clockFor = sys => domains?.read(routed.get(sys)?.domain??'animation');
+    st.setTimeDomain = (sys,domain) => {
+      if(!st.systems.includes(sys))throw new Error('System must be installed on this stage');
+      if(domain===null)routed.delete(sys);
+      else {if(typeof domain!=='string'||domains&&!domains.has(domain))throw new Error('Unknown system clock');routed.set(sys,{domain,epoch:-1,time:null});}
+      return sys;
+    };
+    st.add = (sys,options={}) => {
+      if(options.domain!==undefined){if(typeof options.domain!=='string'||domains&&!domains.has(options.domain))throw new Error('Unknown system clock');routed.set(sys,{domain:options.domain,epoch:-1,time:null});}
       st.systems.push(sys);
       if (sys.paint) st.painters.push(sys);
       if (sys.bind) sys.bind(st);
@@ -54,13 +68,17 @@
     };
     st.update = (dt, t) => {
       const sceneTime = t;
-      if (st.t0 === undefined) st.t0 = t;
-      t -= st.t0;
-      dt = dt < 0 ? 0 : dt > 0.05 ? 0.05 : dt;
-      st.time = t;
-      st.dt = dt;
-      for (let k = st.systems.length - 1; k >= 0; k--) if (st.systems[k].pre) st.systems[k].pre(dt, t, st);
-      for (const s of st.systems) if (s.update) s.update(dt, t, st);
+      if(domains){if(advanceDomains)domains.advance(dt);const clock=domains.read('animation');t=clock.sampleTime;dt=domainFrame===domains.frameId&&domainEpoch===domains.epoch?0:clock.sampleDt;}
+      else {if(st.t0===undefined)st.t0=t;t-=st.t0;dt=dt<0?0:dt>.05?.05:dt;}
+      st.time=t;st.dt=dt;
+      const context=sys=>{const route=routed.get(sys),clock=domains&&domains.read(route?.domain??'animation');return {route,clock,dt:clock?(domainFrame===domains.frameId&&domainEpoch===domains.epoch?0:clock.sampleDt):dt,time:clock?.sampleTime??t};};
+      for(let k=st.systems.length-1;k>=0;k--){const sys=st.systems[k],c=context(sys);if(sys.pre)sys.pre(c.dt,c.time,st,c.clock);}
+      for(const sys of st.systems){if(!sys.update)continue;const c=context(sys),r=c.route;
+        if(!domains||!r){sys.update(c.dt,c.time,st,c.clock);continue;}
+        if(r.epoch!==domains.epoch){r.epoch=domains.epoch;r.time=null;}
+        if(c.clock.step!==null){if(c.clock.steps.length){for(const step of c.clock.steps)if(r.time===null||step.time>r.time){sys.update(step.dt,step.time,st,c.clock);r.time=step.time;}}else if(r.time===null){sys.update(0,c.time,st,c.clock);r.time=c.time;}}
+        else if(r.time===null||c.time!==r.time){sys.update(r.time===null?c.clock.sampleDt:Math.max(0,c.time-r.time),c.time,st,c.clock);r.time=c.time;}
+      }
       for (let k = 0; k < qn; k++) {
         const i = queue[k],
           o = i * 16,
@@ -79,8 +97,9 @@
         rows[i >> 9] = 1;
       }
       qn = 0;
-      for (const system of st.systems) if (system.post) system.post(dt, t, st);
-      atmosphereHistory?.capture(sceneTime, socketPose);
+      for (const system of st.systems) if (system.post) {const c=context(system);system.post(c.dt,c.time,st,c.clock);}
+      atmosphereHistory?.capture(domains?domains.read('animation').sampleTime:sceneTime, socketPose);
+      if(domains){domainFrame=domains.frameId;domainEpoch=domains.epoch;}
       return true;
     };
     st.poke = (o, d) => {

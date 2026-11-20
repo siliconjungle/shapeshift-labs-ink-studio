@@ -1344,7 +1344,7 @@
         if (timeline.targets.length) {
           apply(timelineFrame(timeline, 0, effects));
           K.stage(world).add({ update(dt, t, stage) {
-            apply(timelineFrame(timeline, t + stage.t0, effects));
+            apply(timelineFrame(timeline, world.timeDomains?.read('camera').sampleTime ?? t + stage.t0, effects));
           } });
         }
       }
@@ -1705,7 +1705,7 @@
       activeEffects = frame?.effects ?? effects;
       if (timelineActive) {
         const keyed = timelineFrame(timeline, at, activeEffects);
-        applyCamera(keyed);
+        applyCamera(W.timeDomains ? timelineFrame(timeline, W.timeDomains.read('camera').sampleTime, activeEffects) : keyed);
         poses = keyed.poses;
         activeEffects = keyed.effects;
       }

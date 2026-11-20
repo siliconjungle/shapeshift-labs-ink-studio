@@ -1119,7 +1119,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if ([plan, plan.world].some(({ w, h }) => w > Math.min(maxSize, viewportLimit[0]) ||
           h > Math.min(maxSize, viewportLimit[1])) || plan.layers.some(({ w, h }) => w > maxSize || h > maxSize))
         throw new RangeError('Composite frame exceeds the WebGL viewport or texture size limit');
-      const time = frame.time ?? world.lookSnapshot?.time ?? 0;
+      const time = frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0;
       let camera;
       const drawFrame = plan.needsCamera ? { ...frame, ...captureFrameCamera(frame, view => { camera = view; }) } : frame;
       const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl) : api.layers(plan, world, time, undefined, gl);
@@ -1147,10 +1147,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     }
     let inspection;
     function presentFrame(world, frame, width, height, output) {
+      frame=toolkit.KIT?.timeDomains?.frame(world,frame)??frame;
       const source = frame.renderHistoryKey ?? world;
       ({ world, frame } = reconstructFrame(world, frame, reconstructionInstances));
       if (source !== world) frame = { ...frame, renderHistoryKey: source };
-      const presentation = toolkit.KIT?.presentationTimeline?.sample(world, frame.time ?? world.lookSnapshot?.time ?? 0, frame);
+      const presentation = toolkit.KIT?.presentationTimeline?.sample(world, frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0, frame);
       if (presentation) frame = { ...frame, ...presentation };
       const definition = frame.inspection ?? world.look?.inspection;
       if (definition === undefined || definition === false) return presentGraph(world, frame, width, height, output);

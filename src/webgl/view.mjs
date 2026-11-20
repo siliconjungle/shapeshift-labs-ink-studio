@@ -23,7 +23,7 @@ export function makeCamera(world, frame, width, height) {
     projection[0] *= camera.aspect/aspect;
     return { ...camera,aspect,projection,footprint:camera.footprint*scale,shadowFootprint:camera.shadowFootprint*scale };
   }
-  const authored = world.cameraRig?.sample(frame.time ?? world.lookSnapshot?.time ?? 0, { shot: frame.cameraShot }).camera;
+  const authored = world.cameraRig?.sample(frame.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? frame.time ?? world.lookSnapshot?.time ?? 0, { shot: frame.cameraShot }).camera;
   const camera = { target: [0, 0, 0], dist: 12, yaw: 0, pitch: 0, ...world.cam, ...authored, ...frame.camera };
   const { yaw, pitch, dist, target, fov = defaultFov } = camera;
   const ortho = frame.camera?.ortho ?? (frame.camera?.projection !== undefined

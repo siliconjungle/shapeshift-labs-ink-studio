@@ -139,6 +139,7 @@ function cameraCapture(options, receive) {
 }
 
 function render(world, o, preparedPalettes) {
+  if(o?.timeDomains||world.timeDomains){const times=require('../index.js').load().KIT.timeDomains.frame(world,{...o,time:o?.t});o={...times,t:times.time};}
   const reconstruction = o?.reconstruction ?? world.look?.reconstruction;
   if (reconstruction !== undefined && reconstruction !== false && !o?.[reconstructionSource]) {
     const source = world, time = o?.t ?? world.lookSnapshot?.time ?? 0;
@@ -162,7 +163,7 @@ function render(world, o, preparedPalettes) {
   }
   if (!o?.[sampledPresentation] && world.timeline && !o?.samples && !o?.captureCoverage) {
     const time = o?.t ?? world.lookSnapshot?.time ?? 0;
-    const presentation = require('../index.js').load().KIT.presentationTimeline.sample(world, time, o);
+    const presentation = require('../index.js').load().KIT.presentationTimeline.sample(world, o?.interfaceTime ?? time, o);
     o = { ...o, ...presentation, [sampledPresentation]: true };
   }
   const inspection = o?.inspection ?? world.look?.inspection;
@@ -172,7 +173,7 @@ function render(world, o, preparedPalettes) {
     const requested = ArtPasses.select(o?.passes); let camera;
     const base = render(world, { ...o, inspection: false, passes: [...new Set([...requested, 'depth'])],
       ...cameraCapture(o, view => { camera = view; }) }, preparedPalettes);
-    const plan = api.plan(settings, { world, time: o?.t ?? world.lookSnapshot?.time ?? 0,
+    const plan = api.plan(settings, { world, time: o?.interfaceTime ?? o?.t ?? world.lookSnapshot?.time ?? 0,
       width: base.w, height: base.h, camera, focus: o?.inspectionFocus });
     const passes = base.passes, range = camera.depthRange;
     const depthAt = (u,v) => {
@@ -195,7 +196,7 @@ function render(world, o, preparedPalettes) {
     let camera;
     const base = render(world, { ...o, renderGraph: false, renderHistory: undefined, passes,
       ...(graph.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
-    const time = o?.t ?? world.lookSnapshot?.time ?? 0;
+    const time = o?.interfaceTime ?? o?.t ?? world.lookSnapshot?.time ?? 0;
     const kit = require('../index.js').load().KIT;
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera, kit.annotations.anchor, { ...o, renderHistoryKey: o?.renderHistoryKey ?? o?.[reconstructionSource] }) };
     if (base.passes && diagnostic) {
@@ -212,7 +213,7 @@ function render(world, o, preparedPalettes) {
     const plan = FrameComposite.prepare(definition, o?.w || 900, o?.h || 620, o?.px ?? world.look?.pixelSize ?? 1);
     let camera;
     const api = require('../index.js').load().KIT.frameComposite;
-    const time = o?.t ?? world.lookSnapshot?.time ?? 0;
+    const time = o?.interfaceTime ?? o?.t ?? world.lookSnapshot?.time ?? 0;
     let layers = !plan.needsCamera && api.layers(plan, world, time);
     const base = render(world, { ...o, composite: false, w: plan.world.w, h: plan.world.h, px: 1,
       ...(plan.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
@@ -247,7 +248,7 @@ function renderFrame(world, o, preparedPalettes) {
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
   const subject = protection?.bind(world);
   const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
-  const authored = world.cameraRig?.sample(sceneTime, { shot: o.cameraShot }).camera;
+  const authored = world.cameraRig?.sample(o?.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? sceneTime, { shot: o.cameraShot }).camera;
   const c = authored ?? world.cam;
   const fov = o.fov ?? c.fov ?? FOV;
   if (!Number.isFinite(fov) || fov <= 0 || fov >= Math.PI) throw new RangeError('Camera field of view must be in (0, π)');

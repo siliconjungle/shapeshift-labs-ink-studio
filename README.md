@@ -1045,3 +1045,5 @@ Named targets can drive shared brackets, labels, glyph ripples, depth visibility
 `KIT.curve` also supports cached closest-point queries, curvature estimates, adaptive sampling and periodic interpolation. `KIT.Q` supplies dependency-free quaternion SLERP/SQUAD, path-frame rotations and quaternion animation channels. See [curve analysis](docs/curve-analysis.md) and [Path observatory](examples/curve-analysis.html).
 
 `KIT.sceneGraph` adds a dependency-free live affine hierarchy across rigged splats, sprite surfaces, point lamps, sockets and inspection/camera targets, with inherited visibility and world-preserving reparenting. See [live scene hierarchy](docs/live-scene-hierarchy.md) and the interactive [Lantern exchange](examples/live-scene-hierarchy.html). Inspect serialized graphs with `ink-studio hierarchy graph.json`.
+
+`KIT.timeDomains` separates fixed simulation, sampled animation, continuous camera and interface time, with named child clocks, inherited rates, independent pause, wall-timed freeze/slow cues and checkpoints. See [shared time domains](docs/shared-time-domains.md) and the interactive [Clockwork pavilion](examples/shared-time-domains.html).
