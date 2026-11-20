@@ -92,7 +92,9 @@ to `1` and the others to `0` to extract that species alone.
 
 [One Field, Six Outputs](../examples/shared-field-outputs.js) renders the
 same rosette as paint, raised relief, contours, volumetric density, splats,
-and an isosurface.
+and an isosurface. The density panel uses the software volume renderer.
+In WebGL scenes, use the same density as a placement mask for volume
+splats via `K.procedural.density.scatter`.
 
 ```sh
 node cli/ink-studio.js render examples/shared-field-outputs.js --w 1120 --h 700 --px 1 --out shared-field-outputs.png
