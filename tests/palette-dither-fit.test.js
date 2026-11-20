@@ -9,6 +9,15 @@ const { KIT: K, SplatEffects } = require('..').load();
 
 const fixture = require('../examples/palette-dither-fit.json');
 const { fitDither } = K.palette;
+const reviewFixture = {
+  target:'#808080',size:[64,32],
+  policy:{ palette:['#202020','#6f6f6f','#909090','#e0e0e0','#46607a','#3c5074'],
+    dither:{pattern:'bayer',pairs:[
+      {colors:['#6f6f6f','#909090']},
+      {colors:['#202020','#e0e0e0']},
+      {colors:['#46607a','#3c5074']}
+    ]} }
+};
 
 test('fits every authorized pair, including pairs that omit the closest solid swatch', () => {
   const { report, indexed } = fitDither(fixture);
@@ -103,4 +112,71 @@ test('the CLI exports native-size comparisons and matching indexed material tile
     projection: { across: [0, 1, 0] } }, undefined, resolve);
   assert.deepEqual([...layer.sample({ position: [.5 / raster.width, raster.size[1] - .5 / raster.width, 0] }).slice(0, 3)],
     K.procedural.materials.perceptual.parse(raster.palette[raster.slots[0]]));
+});
+
+test('review compares every attainable pair with the same solid and separates gain from texture', () => {
+  const result=K.palette.reviewDither(reviewFixture);
+  const [strong,subtle,cool]=result.report.pairs;
+  assert.equal(result.report.solid.color,'#909090');
+  assert.equal(strong.mix.share,.25);
+  assert(strong.gain>0);
+  assert.deepEqual(strong.flags,['high-texture']);
+  assert.deepEqual(subtle.flags,[]);
+  assert.equal(subtle.useful,true);
+  assert.deepEqual(cool.flags,['no-improvement']);
+  for (const pair of result.report.pairs) {
+    assert.equal(pair.gain,result.report.solid.error-pair.mix.error);
+    const tile=result.indexed(pair.index);
+    assert.equal(tile.slots.filter(slot=>slot===1).length,pair.mix.secondPixels);
+    const transitions=tile.slots.reduce((sum,slot,p)=>{
+      const x=p%tile.width, right=x+1<tile.width && slot!==tile.slots[p+1];
+      const down=p+tile.width<tile.slots.length && slot!==tile.slots[p+tile.width];
+      return sum+Number(right)+Number(down);
+    },0);
+    assert.equal(pair.texture.edges.different,transitions);
+  }
+  const stricter=K.palette.reviewDither({...reviewFixture,review:{minGain:.1,textureLimit:.1}});
+  assert.deepEqual(stricter.report.pairs[subtle.index].flags,['small-improvement','high-texture']);
+});
+
+test('a requested share snaps to the crop and the review reports why pairs are unavailable', () => {
+  const input = {
+    target:'#bcbcbc',size:[3,3],review:{share:.5},
+    policy:{palette:['#000000','#ffffff','#404040'],dither:{pattern:'checker',pairs:[
+      {colors:['#000000','#ffffff']},{colors:['#000000','#404040'],lightness:[0,.4]}
+    ]}}
+  };
+  const result=K.palette.reviewDither(input), [pair,excluded]=result.report.pairs;
+  assert.equal(pair.mix.share,5/9);
+  assert.deepEqual(result.indexed(pair.index).slots,[1,0,1,0,1,0,1,0,1]);
+  assert.equal(excluded.status,'outside-lightness');
+  assert.throws(()=>result.preview(excluded.index),/reviewed dither pair/);
+  const tiny=K.palette.reviewDither({...input,size:[1,1]});
+  assert.equal(tiny.report.pairs[0].status,'no-mixed-coverage');
+  const protectedTarget=K.palette.reviewDither({...input,target:'#bcbcbc',
+    policy:{...input.policy,reserved:['#bcbcbc']}});
+  assert.equal(protectedTarget.report.pairs[0].status,'reserved-target');
+  assert.throws(()=>K.palette.reviewDither({...input,review:{share:1}}),/strictly between/);
+});
+
+test('dither review CLI exports each native comparison with target, solid, average and pattern', t => {
+  const temp=mkdtempSync(join(tmpdir(),'ink-dither-review-'));
+  t.after(()=>rmSync(temp,{recursive:true,force:true}));
+  const source=join(temp,'review.json'), output=join(temp,'out');
+  writeFileSync(source,JSON.stringify(reviewFixture));
+  const cli=join(__dirname,'../cli/ink-studio.js');
+  execFileSync(process.execPath,[cli,'palette','dither-review',source,'--out',output]);
+  const saved=JSON.parse(readFileSync(join(output,'review.json'))), expected=K.palette.reviewDither(reviewFixture);
+  assert.deepEqual(saved.pairs,expected.report.pairs);
+  assert.equal(saved.previews.length,3);
+  for (const {index,file} of saved.previews) {
+    const raster=expected.preview(index), bytes=readFileSync(join(output,file)), pixels=PNG.raster(bytes);
+    assert.equal(bytes[25],3);
+    assert.deepEqual([pixels.w,pixels.h],[4*reviewFixture.size[0]+6,reviewFixture.size[1]]);
+    for (const [i,slot] of raster.slots.entries()) {
+      const rgb=slot===null ? [0,0,0,0] :
+        [...Buffer.from(raster.palette[slot].slice(1),'hex'),255];
+      assert.deepEqual([...pixels.data.subarray(i*4,i*4+4)],rgb);
+    }
+  }
 });

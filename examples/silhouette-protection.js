@@ -11,6 +11,7 @@ module.exports = ({ KIT:K, makeBuilder, makeSculpt }) => ({
       0x8a5c44,0xbb8155,0xe7ab6a,0xffd995,0xfff0c2
     ]);
     const S=K.sculpt(makeSculpt(B));
+    S.captureAlbedo=true;
     S.sun=K.V.norm([-.61,.73,.41]); S.amb=.41; S.sky=.20; S.sunK=.54;
     const stone={r:[1,2,3,4,5]}, basalt={r:[0,1,2,3,4]}, moss={r:[7,8,9,10,11]};
     const copper={r:[18,19,20,21,22,23]}, brass={r:[24,25,26,27]}, light={r:[25,26,27,28],em:true};
@@ -64,14 +65,15 @@ module.exports = ({ KIT:K, makeBuilder, makeSculpt }) => ({
       S.box(at(side*.139,.064,.071),[.085,.072,.149],gloves,{...actor,rd:.043});
       S.ball(at(side*.278,.704,.027),[.101,.212,.092],cloth,actor);
     }
-    S.ball(at(0,1.19,.044),[.185,.181,.158],face,actor);
+    S.ball(at(0,1.19,.044),[.185,.181,.158],face,{...actor,surfaceId:'courier-face'});
     S.lathe(at(0,1.274,.042),.124,[.235,.221],cloth,{...actor,res:.035});
     S.ball(at(0,1.408,.039),[.158,.119,.161],cloth,{...actor,res:.044});
     S.box(at(0,1.184,.181),[.129,.036,.031],gloves,{...actor,res:.026,rd:.012});
     S.box(at(.04,1.011,.154),[.159,.060,.066],brass,{...actor,res:.037,rd:.023});
     S.box(at(.264,.94,-.073),[.073,.048,.185],brass,{...actor,res:.031,rd:.026});
-    S.lathe(at(.343,.379,.22),.20,[.047,.047],brass,{...actor,res:.03});
-    S.ball(at(.343,.34,.219),[.073,.102,.077],light,{...actor,res:.03});
+    const lantern={...actor,res:.03,surfaceId:'courier-lantern'};
+    S.lathe(at(.343,.379,.22),.20,[.047,.047],brass,lantern);
+    S.ball(at(.343,.34,.219),[.073,.102,.077],light,lantern);
     S.bake();
 
     const fog=K.atmosphere.sphere({id:'estuary-fog',at:[0,1.28,0],radius:8.6,density:.236,color:'#a2bec7'});

@@ -594,5 +594,5 @@
     chromaField: PaletteFields.chromaField, ramp: PaletteFields.ramp, plot: P.materials.palettePlot,
     chart: P.materials.paletteChart, reviewPairs: P.materials.palettePairReview, reviewRamp: P.materials.reviewRamp,
     distributions: PaletteDistributions.analyze, compareDistributions: PaletteDistributions.compare,
-    fitDither: P.materials.fitDither, lightingRamps: P.materials.lightingRamps });
+    fitDither: P.materials.fitDither, reviewDither: P.materials.reviewDither, lightingRamps: P.materials.lightingRamps });
 })(KIT);

@@ -129,3 +129,43 @@ ink-studio clip examples/stable-dithering.js --camera-orbit 28 --from 0 --to 6 -
 ```
 
 A pan shifts the camera target by the given XYZ world offset across the clip. An orbit turns the camera heading by the given degrees around the target. These moves can be combined. The scene's animation still advances at the clip’s chosen times. Compare the pattern on the same patch of stone or the same face of the lantern as it travels through the frame.
+
+## Review palette shimmer across a shot
+
+```sh
+ink-studio palette shimmer examples/stable-dithering.js --ortho --camera-pan .65,0,0 \
+  --camera-orbit 9 --from 0 --to 2 --fps 10 --w 230 --h 138 --px 1 \
+  --animate --out palette-shimmer
+```
+
+The review renders each time and camera pose with screen, world, and
+object dither. It overrides the anchor space in scene, target, material,
+and stage palette settings while keeping the authored spacing, origin,
+strength, pattern and pair rules. A fixed camera can review animated
+lighting or palette changes on the same surfaces.
+
+Ink follows visible surface pixels with the motion and rest-position
+passes. Object and material IDs constrain the match, and a match must
+fall within the local surface sample spacing. The review counts a swatch
+reversal when a tracked surface changes from A to B and returns to A
+within `--window` frames on B (default 3). The swatches must differ by
+at least `--min-delta` in OKLab (default 0.025). Use `--min-coverage`
+(default 0.8) to limit tracking to better-covered pixels. Unowned and
+unmatched pixels are excluded from reversal counts. The report gives
+eligible and tracked counts so you can check the coverage of the review.
+
+`comparison.png` shows all three renders at the same peak frame, with
+amber marking flips next to another swatch on the same surface in either
+of the matched frames. Pink marks flips inside a swatch region.
+`review.json` contains per-frame counts and pixel bounds, the swatch
+pairs that flip most, and the reversal rate over tracked pixel steps.
+`--animate` adds an animated PNG of the comparison across the shot.
+The review measures the scene at native art resolution before
+screen overlays.
+
+In Node, use `ink.reviewPaletteShimmer(world, options)` for the image
+and report. Pass `camera(phase, time)` to sample a camera path.
+`pose(world, time)` can drive animated lighting or simulate the scene
+once per sample. It is required for stateful worlds. An optional
+`onFrame(image, { index, time })` receives the comparison for playback
+or further review.

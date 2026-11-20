@@ -110,6 +110,8 @@ module.exports = {
   measureQuantizationError: require('./cli/palette-error.js').measureQuantizationError,
   reviewQuantizationError: require('./cli/palette-error.js').reviewQuantizationError,
   inspectPalettePixel: require('./cli/palette-pixel.js').inspectPalettePixel,
+  reviewPaletteShimmer: require('./cli/palette-shimmer.js').reviewPaletteShimmer,
+  reviewSubjectReadability: require('./cli/readability-review.js').reviewSubjectReadability,
   exportLayers: require('./cli/export-layers.js').exportLayers,
   exportScene: require('./cli/scene-export.js').exportScene,
   readSceneReplay: require('./cli/scene-replay.js').readSceneReplay,

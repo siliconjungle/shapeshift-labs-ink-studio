@@ -8,7 +8,7 @@ const PixelLook = require('../src/pixel-look.js');
 const RenderStages = require('../src/render-stages.js');
 const LookInputs = require('../src/look-inputs.js');
 const TargetSelectors = require('../src/target-selectors.js');
-const { createArtPasses, sampleFrames } = require('./art-passes.js');
+const { createArtPasses, sampleFrames, selectVisibleSubjects } = require('./art-passes.js');
 const ArtPasses = require('../src/art-passes.js');
 const { createEnvironmentPasses } = require('./environment-passes.js');
 const ArtInk = require('../src/art-ink.js');
@@ -264,6 +264,7 @@ function renderFrame(world, o, preparedPalettes) {
   const lookInputs = !o.raw && (o.lookInputSession ?? LookInputs.session(t, () =>
     world.lookSnapshot?.query ?? world.surfaceEffects?.query ?? require('../index.js').load().KIT.world.query.fromScene(world, t)));
   const lookOptions = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, lookInputs,
+    ditherSpaceOverride:o.ditherSpaceOverride,
     blueNoise: settings => blueNoise(world, settings), skipMasks: o.lookMasks === false };
   const stages = RenderContract.stagePlan(world, o, t, lookOptions);
   const optics = o.raw ? null : RenderStages.optics(look.optics, lookOptions);
@@ -282,15 +283,18 @@ function renderFrame(world, o, preparedPalettes) {
   const effects = styled ? ArtEffects.prepare(o.artEffects ?? look.effects, world.pal) : null;
   const trackGlow = o[scopedGlowPass] || styled &&
     emissive?.profiles.some(profile => profile.glow?.strength || profile.glow !== undefined && effects?.halo);
-  const stable = ArtStability.prepare(look.stable, o.stable);
+  const stable = ArtStability.prepare(look.stable, o.stable, o.ditherSpaceOverride);
   const specializedResolve = legacyLook && stable && stable.resolve !== 'native';
   const anchoring = !o.raw && !o.captureCoverage && !!stable?.anchorSpaces.size;
   const paletteRules = legacyLook || coverageAware ? PixelLook.preparePaletteConstraints(o.paletteConstraints ?? look.paletteConstraints, {
     palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
-    context: world.surfaceEffects, skipMasks: o.lookMasks === false, skipMaskedStacks: o.colorStack === false, onPaletteClip
+    context: world.surfaceEffects, skipMasks: o.lookMasks === false, skipMaskedStacks: o.colorStack === false, onPaletteClip,
+    ditherSpaceOverride:o.ditherSpaceOverride
   }) : preparedPalettes;
   const requestedPasses = ArtPasses.select(o.passes);
   const passSelection = new Set(requestedPasses);
+  const readabilitySelectors = !o.samples && !o.captureCoverage && o.readabilitySelectors;
+  if (readabilitySelectors) passSelection.add('splatId');
   const paletteDiagnostic = passSelection.has('paletteOwner');
   if (paletteDiagnostic && !o.raw) passSelection.add('materialId');
   let lookPass;
@@ -384,6 +388,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (captureQuantization && !legacyLook) capture(graded ?? frame.rgb.slice(), 'frame');
     if (paletteTrace) frame.palettePixel = paletteTrace.finish(frame,passes);
+    if (readabilitySelectors) frame.readabilityMask = selectVisibleSubjects(world,passes.splatId,readabilitySelectors);
     ownership?.finish();
     if (paletteDiagnostic && !passes?.paletteOwner)
       passes = { ...passes,w:frame.w,h:frame.h,paletteOwner:new Uint32Array(frame.w*frame.h),paletteOwners:[null] };
@@ -2336,7 +2341,8 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const effectSignals = effectRules && { rules: effectRules, sky: showSky && !!sky, backdropCloud, media: effectMedia, haze: hazeCoverage };
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, rayAt, span: R,
-    detail, sprM, surfaceGlint, centers, motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0 });
+    detail, sprM, surfaceGlint, centers, motionFrom:o.surfaceMotionFrom ?? motionFrom,
+    emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0 });
   if (lightingEffects) effectSignals.lightAt = (p,bottom)=>PaletteComposition.lighting(passes,bottom,p,{
     live,sun,contact,probes,probeReceiver,cloudShadow,cloudsReceive:i=>!(Math.round(d[i*16+11]) & (32 | 64))
   });

@@ -11,22 +11,23 @@ const ArtStability = (() => {
     return { dither, spacing, origin: point.slice() };
   }
 
-  function prepare(definition, override) {
-    if (override === false || (override === undefined && !definition)) return null;
+  function prepare(definition, override, ditherSpaceOverride) {
+    if (ditherSpaceOverride === undefined && (override === false || (override === undefined && !definition))) return null;
     function read(value) {
       if (value === true) return { snap: true };
       if (value === undefined || value === false || value === null) return {};
       if (typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Expected pixel stability settings');
       return value;
     }
-    const settings = { ...read(definition), ...read(override) };
+    const settings = { ...read(override === false ? undefined : definition), ...read(override) };
     const { snap = false, anchor = origin, resolve = 'native', threshold = .4, protect = [], targets = [] } = settings;
     if (typeof snap !== 'boolean' || !vector(anchor) ||
         !['native', 'coverage', 'clusters'].includes(resolve) || !Number.isFinite(threshold) || threshold <= 0 || threshold > 1 ||
         !Array.isArray(protect) || !Array.from(protect).every(value => typeof value === 'string' || Number.isSafeInteger(value)) ||
         !Array.isArray(targets) || targets.length > 64)
       throw new RangeError('Invalid pixel stability settings');
-    const main = pattern(settings);
+    const space = ditherSpaceOverride === undefined ? {} : { dither:ditherSpaceOverride };
+    const main = pattern({ ...settings, ...space });
     const named = value => typeof value === 'string' && value.trim() || Number.isSafeInteger(value);
     const rules = Array.from(targets, row => {
       if (!row || Object.getPrototypeOf(row) !== Object.prototype ||
@@ -36,7 +37,7 @@ const ArtStability = (() => {
       if (object === undefined && material === undefined ||
           object !== undefined && !named(object) || material !== undefined && !named(material))
         throw new TypeError('A dither target needs an object or material name');
-      return { ...pattern({ ...main, ...row }), object, material };
+      return { ...pattern({ ...main, ...row, ...space }), object, material };
     });
     const anchorSpaces = new Set([main.dither, ...rules.map(rule => rule.dither)]);
     anchorSpaces.delete('screen');

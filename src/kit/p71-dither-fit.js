@@ -8,7 +8,7 @@
     .toString(16).padStart(2, '0')).join('');
   const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-  function fitDither(definition, { palette, roles } = {}) {
+  function prepare(definition, { palette, roles } = {}) {
     if (!definition || Object.getPrototypeOf(definition) !== Object.prototype ||
         Object.keys(definition).some(key => !['target', 'policy', 'size'].includes(key)))
       throw new TypeError('A dither fit needs a target, palette policy and optional size');
@@ -36,68 +36,143 @@
       }
     }
 
-    const eligible = new Map();
-    if (locked === undefined && solidError > 0 && pattern !== 'none') {
-      for (const { slots, lightness: range } of plan.pairs) {
-        if (range && (lightness < range[0] || lightness > range[1])) continue;
-        const a = Math.min(...slots), b = Math.max(...slots);
-        eligible.set(a * plan.swatches.length + b, [a, b]);
-      }
+    const byPair = new Map();
+    for (const { slots, lightness: range } of plan.pairs) {
+      const a = Math.min(...slots), b = Math.max(...slots), key = a * swatches.length + b;
+      if (!byPair.has(key)) byPair.set(key, { slots:[a,b], matchesLightness:false });
+      if (!range || lightness >= range[0] && lightness <= range[1]) byPair.get(key).matchesLightness = true;
     }
-
     const scale = plan.tuning?.scale ?? 1;
     const rankAt = (x, y) => plan.ranks[Math.floor(x / scale) % plan.width + (Math.floor(y / scale) % plan.height) * plan.width];
-    let error = solidError, average = swatches[best], colors = [average], secondPixels = 0, cutoff = -1;
-    if (eligible.size) {
-      // All attainable coverages, counting repeated ranks and incomplete tiles at the edges.
-      const counts = new Map();
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const rank = rankAt(x, y);
-        counts.set(rank, 1 + (counts.get(rank) ?? 0));
-      }
-      const shares = [];
-      let pixels = 0;
-      for (const [rank, count] of [...counts].sort(([a], [b]) => a - b)) {
-        pixels += count;
-        if (pixels < area) shares.push({ rank, pixels, share: pixels / area });
-      }
-      const linearSwatches = plan.swatches.map(rgb => linear(rgb));
-      for (const [, [a, b]] of [...eligible].sort(([i], [j]) => i - j)) {
-        const first = linearSwatches[a], delta = linearSwatches[b].map((n, i) => n - first[i]);
-        for (const coverage of shares) {
-          const mixed = display(first.map((n, i) => n + delta[i] * coverage.share));
-          const difference = distance(targetLab, lab(mixed));
-          if (difference >= error) continue;
-          error = difference;
-          average = hex(mixed);
-          colors = [swatches[a], swatches[b]];
-          secondPixels = coverage.pixels;
-          cutoff = coverage.rank;
-        }
+    const pairs = [...byPair].sort(([a], [b])=>a-b).map(([,pair])=>pair);
+    return { w,h,area,targetLab,target:targetHex,lightness,pattern,scale,locked,rankAt,pairs,seed:policy.dither.seed ?? 0,
+      swatches, rgb:plan.swatches, solid:{color:swatches[best],error:solidError} };
+  }
+
+  function coverageLevels({ w,h,area,rankAt }) {
+    // All attainable two-color coverages, including partial tiles at the edges.
+    const counts = new Map();
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const rank = rankAt(x, y);
+      counts.set(rank, 1 + (counts.get(rank) ?? 0));
+    }
+    const shares = [];
+    let pixels = 0;
+    for (const [rank, count] of [...counts].sort(([a], [b]) => a - b)) {
+      pixels += count;
+      if (pixels < area) shares.push({ rank, pixels, share: pixels / area });
+    }
+    return shares;
+  }
+
+  function bestMix(target, colors, linearSwatches, [a,b], coverages) {
+    const start = linearSwatches[a], delta = linearSwatches[b].map((n,i)=>n-start[i]);
+    let error = Infinity, mix, rgb;
+    for (const coverage of coverages) {
+      const candidate = display(start.map((n,i)=>n+delta[i]*coverage.share));
+      const difference = distance(target,lab(candidate));
+      if (difference >= error) continue;
+      error = difference;
+      mix = coverage;
+      rgb = candidate;
+    }
+    return { colors, secondPixels:mix.pixels, share:mix.share, average:hex(rgb), error, cutoff:mix.rank };
+  }
+
+  function indexed({ w,h,area,rankAt }, {colors,cutoff}, { size = [1, h / w], wrap = false } = {}) {
+    return { width:w,height:h,palette:colors.slice(),origin:'top-left',size,wrap,
+      slots:Array.from({ length:area }, (_,i)=>Number(rankAt(i%w,Math.floor(i/w))<=cutoff)) };
+  }
+
+  function compare(tile, references) {
+    const {width:w,height:h}=tile, offset=references.length, width=w+offset*(w+2);
+    const slots = new Array(width*h).fill(null);
+    for (let y=0;y<h;y++) {
+      const row=y*width;
+      for (let i=0;i<offset;i++) slots.fill(i,row+i*(w+2),row+i*(w+2)+w);
+      for (let x=0;x<w;x++) slots[row+offset*(w+2)+x]=offset+tile.slots[y*w+x];
+    }
+    return {width,height:h,palette:[...references,...tile.palette],slots};
+  }
+
+  function fitDither(definition, context) {
+    const plan = prepare(definition,context), {target,lightness,pattern,solid,locked,swatches} = plan;
+    let best = {colors:[solid.color],secondPixels:0,share:0,average:solid.color,error:solid.error,cutoff:-1};
+    const eligible = locked === undefined && solid.error > 0 && pattern !== 'none' ?
+      plan.pairs.filter(pair=>pair.matchesLightness) : [];
+    if (eligible.length) {
+      const coverages = coverageLevels(plan), endpoints = plan.rgb.map(rgb=>linear(rgb));
+      if (coverages.length) for (const {slots} of eligible) {
+        const fit = bestMix(plan.targetLab,slots.map(i=>swatches[i]),endpoints,slots,coverages);
+        if (fit.error < best.error) best = fit;
       }
     }
+    const {cutoff,...fit}=best;
+    const report = K.procedural.data.freeze({target,lightness,pattern,solid,fit});
+    return Object.freeze({report,indexed:options=>indexed(plan,best,options),
+      preview:()=>compare(indexed(plan,best),[target,solid.color])});
+  }
 
-    function indexed({ size = [1, h / w], wrap = false } = {}) {
-      return { width: w, height: h, palette: colors.slice(), origin: 'top-left', size, wrap,
-        slots: Array.from({ length: area }, (_, i) => Number(rankAt(i % w, Math.floor(i / w)) <= cutoff)) };
+  function adjacentEdges({w,h,rankAt}, cutoff) {
+    let different=0;
+    for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
+      const second=rankAt(x,y)<=cutoff;
+      if (x+1<w && second!==(rankAt(x+1,y)<=cutoff)) different++;
+      if (y+1<h && second!==(rankAt(x,y+1)<=cutoff)) different++;
     }
+    const total=(w-1)*h+(h-1)*w;
+    return {different,total,share:total ? different/total : 0};
+  }
 
-    function preview() {
-      const tile = indexed(), width = 3 * w + 4, slots = new Array(width * h).fill(null);
-      for (let y = 0; y < h; y++) {
-        const row = y * width;
-        slots.fill(0, row, row + w);
-        slots.fill(1, row + w + 2, row + 2 * w + 2);
-        for (let x = 0; x < w; x++) slots[row + 2 * w + 4 + x] = 2 + tile.slots[y * w + x];
-      }
-      return { width, height: h, palette: [targetHex, swatches[best], ...colors], slots };
+  function reviewDither(definition, context) {
+    if (!definition || Object.getPrototypeOf(definition)!==Object.prototype)
+      throw new TypeError('A dither review needs a fit definition');
+    const { review = {}, ...fit } = definition;
+    if (!review || Object.getPrototypeOf(review)!==Object.prototype ||
+        Object.keys(review).some(key=>!['minGain','textureLimit','share'].includes(key)))
+      throw new TypeError('Dither review needs optional minGain, textureLimit and share settings');
+    const {minGain=.01,textureLimit=.12,share}=review;
+    if (![minGain,textureLimit].every(n=>Number.isFinite(n)&&n>=0) ||
+        share!==undefined && (!Number.isFinite(share)||share<=0||share>=1))
+      throw new RangeError('Use nonnegative dither review limits and an optional share strictly between 0 and 1');
+    const plan=prepare(fit,context), {target,lightness,pattern,scale,seed,solid,locked,swatches,w,h}=plan;
+    const all = pattern==='none' || locked!==undefined || !plan.pairs.some(pair=>pair.matchesLightness) ? [] : coverageLevels(plan);
+    const coverages=share===undefined || !all.length ? all :
+      [all.reduce((a,b)=>Math.abs(b.share-share)<Math.abs(a.share-share) ? b : a)];
+    const endpoints=plan.rgb.map(rgb=>linear(rgb)), sites=plan.rgb.map(lab);
+    const cutoffs=[], edgesByCutoff=new Map();
+    const pairs=plan.pairs.map(({slots,matchesLightness},index)=>{
+      const [a,b]=slots, colors=slots.map(i=>swatches[i]);
+      const contrast={distance:distance(sites[a],sites[b]),lightness:Math.abs(sites[a][0]-sites[b][0])};
+      const status=locked!==undefined ? 'reserved-target' : pattern==='none' ? 'dither-disabled' :
+        !matchesLightness ? 'outside-lightness' : coverages.length ? 'reviewed' : 'no-mixed-coverage';
+      const base={index,colors,contrast,status};
+      if (status!=='reviewed') return base;
+      const {cutoff,...mix}=bestMix(plan.targetLab,colors,endpoints,slots,coverages);
+      cutoffs[index]=cutoff;
+      if (!edgesByCutoff.has(cutoff)) edgesByCutoff.set(cutoff,adjacentEdges(plan,cutoff));
+      const edges=edgesByCutoff.get(cutoff), gain=solid.error-mix.error;
+      const mixRms=contrast.distance*Math.sqrt(mix.share*(1-mix.share));
+      const edgeRms=contrast.distance*Math.sqrt(edges.share);
+      const texture={edges,mixRms,edgeRms,score:Math.max(mixRms,edgeRms)};
+      const flags=[];
+      if (gain<=0) flags.push('no-improvement');
+      else if (gain<minGain) flags.push('small-improvement');
+      if (texture.score>textureLimit) flags.push('high-texture');
+      return {...base,mix:{secondPixels:mix.secondPixels,share:mix.share,average:mix.average,error:mix.error},
+        gain,texture,flags,useful:flags.length===0};
+    });
+    const report=K.procedural.data.freeze({target,lightness,pattern,scale,width:w,height:h,metric:'oklab-distance',
+      ...(pattern==='blue-noise' && {seed}),settings:{minGain,textureLimit,...(share!==undefined && {share})},solid,pairs});
+    function tile(index,options) {
+      const pair=pairs[index];
+      if (!Number.isSafeInteger(index) || pair?.status!=='reviewed')
+        throw new RangeError('Choose a reviewed dither pair index');
+      return indexed(plan,{colors:pair.colors,cutoff:cutoffs[index]},options);
     }
-
-    const report = K.procedural.data.freeze({ target: targetHex, lightness, pattern,
-      solid: { color: swatches[best], error: solidError },
-      fit: { colors, secondPixels, share: secondPixels / area, average, error } });
-    return Object.freeze({ report, indexed, preview });
+    return Object.freeze({report,indexed:tile,preview:index=>compare(tile(index),[target,solid.color,pairs[index].mix.average])});
   }
 
   materials.fitDither = fitDither;
+  materials.reviewDither = reviewDither;
 })(KIT);

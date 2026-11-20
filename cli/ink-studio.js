@@ -892,6 +892,9 @@ const CMD = {
         '  palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]',
         '  palette inspect <scene> --at x,y [--out report.json]   explain the palette choice at one art pixel',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
+        '  palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture',
+        '  palette shimmer <scene> [--from 0 --to 3 --fps 12] [--camera-pan x,y,z --camera-orbit degrees] [--animate] [--out directory]',
+        '  palette readability <scene> [--select JSON | --plan file.json] [--directions N --times t1,t2] [--out directory]',
         '  palette chart <chart.json> [--type chart] [--format png|data]   export an indexed swatch, bar or pair chart',
         '  palette lighting <source-or-draft.json> [--approve] [--out file.json]   suggest or save named lighting ramps',
         '  palette field <field.json> [--t seconds] [--w width --h height] [--format png|data]   render a palette field or report grayscale bands',
@@ -1078,7 +1081,59 @@ const CMD = {
   },
   palette() {
     if (pos[0] === 'plot') return require('./palette-plot.js')(pos.slice(1), opt, lib(), outputFile);
-    if (pos[0] === 'fit') return require('./palette-fit.js')(pos.slice(1), opt, lib(), outputFile);
+    if (pos[0] === 'fit') return require('./palette-fit.js').fit(pos.slice(1), opt, lib(), outputFile);
+    if (pos[0] === 'dither-review') return require('./palette-fit.js').review(pos.slice(1),opt,lib(),outputFile);
+    if (pos[0] === 'readability') {
+      if (pos.length!==2 || ['plan','select','directions','pitches','t','times','w','h','cols','out']
+        .some(key=>opt[key]===true))
+        die('Use palette readability <scene> [--select JSON | --plan file.json] [--directions N --times t1,t2] [--out directory]');
+      const world=buildPreview(pos[1]), settings=view({t:num('t',0),transparent:onOffOption('transparent')});
+      const source=opt.plan===undefined ? world.readabilityReview??{} : JSON.parse(fs.readFileSync(path.resolve(opt.plan),'utf8'));
+      if (!source || Object.getPrototypeOf(source)!==Object.prototype) die('Readability plan needs a JSON object');
+      const plan={...source};
+      if (opt.select!==undefined) plan.subjects=[{id:'Subject',select:JSON.parse(opt.select)}];
+      if (opt.times!==undefined) plan.states=list('times').map(time=>({id:time+' s',time}));
+      if (opt.directions!==undefined || opt.pitches!==undefined) {
+        const angles=require('./sprite-atlas.js').exportViews(world,{directions:num('directions',8),yaw:settings.yaw,
+          pitch:settings.pitch,pitches:opt.pitches===undefined ? undefined : list('pitches')});
+        plan.views=angles.map(({yaw,pitch},i)=>({id:'View '+(i+1),yaw,pitch}));
+      }
+      const {image,report}=require('./readability-review.js').reviewSubjectReadability(world,{
+        plan,view:settings,pose,width:num('w',160),height:num('h',96),columns:num('cols')
+      });
+      const directory=outputFile('readability-review'), files={comparison:'comparison.png',report:'review.json'};
+      const sources=[pos[1],opt.plan].filter(Boolean).map(name=>fs.statSync(path.resolve(name),{throwIfNoEntry:false}));
+      for (const name of Object.values(files)) {
+        const file=fs.statSync(path.join(directory,name),{throwIfNoEntry:false});
+        if (file && sources.some(source=>source && source.dev===file.dev && source.ino===file.ino))
+          die('Choose readability output files separate from the scene and plan');
+      }
+      fs.mkdirSync(directory,{recursive:true});
+      PNG.write(path.join(directory,files.comparison),image.w,image.h,image.rgb);
+      fs.writeFileSync(path.join(directory,files.report),JSON.stringify({...report,files},null,2)+'\n');
+      console.log('wrote subject readability review to',directory);
+      return;
+    }
+    if (pos[0] === 'shimmer') {
+      if (pos.length!==2 || ['from','to','fps','out','window','min-delta','min-coverage','w','h']
+        .some(key=>opt[key]===true) || opt.animate!==undefined && opt.animate!==true)
+        die('Use palette shimmer <scene> [--from 0 --to 3 --fps 12] [--animate] [--out directory]');
+      const world=buildPreview(pos[1]), fps=num('fps',12), directory=outputFile('palette-shimmer');
+      const playback=opt.animate && [];
+      const {image,report}=require('./palette-shimmer.js').reviewPaletteShimmer(world,{
+        from:num('from',0),to:num('to',3),fps,window:num('window',3),minDelta:num('min-delta',.025),
+        minCoverage:num('min-coverage',.8),width:num('w',160),height:num('h',96),
+        view:view({transparent:onOffOption('transparent')}),pose,camera:clipCamera(world)??undefined,
+        onFrame:playback ? frame=>playback.push(PNG.packFrame(frame)) : undefined
+      });
+      const files={comparison:'comparison.png',...(playback && {playback:'playback.png'})};
+      fs.mkdirSync(directory,{recursive:true});
+      PNG.write(path.join(directory,files.comparison),image.w,image.h,image.rgb);
+      if (playback) fs.writeFileSync(path.join(directory,files.playback),PNG.encodeAnimation(playback,fps));
+      fs.writeFileSync(path.join(directory,'review.json'),JSON.stringify({...report,files},null,2)+'\n');
+      console.log('wrote palette shimmer review to',directory);
+      return;
+    }
     if (pos[0] === 'chart') return require('./palette-chart.js')(pos.slice(1), opt, lib(), outputFile);
     if (pos[0] === 'pairs') return require('./palette-pairs.js')(pos.slice(1),opt,lib(),outputFile);
     if (pos[0] === 'inspect') {

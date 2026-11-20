@@ -334,7 +334,8 @@ const PixelLook = (() => {
     });
   }
 
-  function preparePalette(definition, { palette = [], roles = {}, blueNoise, deferDitherColors = false, prepareDitherTile = false, context, validateOnly, skipMasks, skipDitherRegions } = {}) {
+  function preparePalette(definition, { palette = [], roles = {}, blueNoise, deferDitherColors = false, prepareDitherTile = false,
+    context, validateOnly, skipMasks, skipDitherRegions, ditherSpaceOverride } = {}) {
     if (!record(definition) || Object.keys(definition).some(key => !['palette', 'reserved', 'dither', 'source', 'match'].includes(key)))
       throw new TypeError('A palette constraint accepts palette, reserved, dither, source and match settings');
     const { source = 'lit', match = 'rgb' } = definition;
@@ -386,8 +387,10 @@ const PixelLook = (() => {
       throw new RangeError('Palette dither requires a valid pattern, strength in [0, 1] and integer seed');
     if (dither.space === undefined && (dither.spacing !== undefined || dither.origin !== undefined))
       throw new TypeError('Set a dither space to use spacing or origin');
-    const anchor = dither.space === undefined ? undefined :
+    const authoredAnchor = dither.space === undefined ? undefined :
       stability.pattern({ dither: dither.space, spacing: dither.spacing, origin: dither.origin });
+    const anchor = authoredAnchor && ditherSpaceOverride !== undefined ?
+      stability.pattern({ ...authoredAnchor, dither:ditherSpaceOverride }) : authoredAnchor;
     const tuning = prepareDitherTuning(dither, { context, validateOnly, skipMasks: skipMasks || skipDitherRegions });
     let pairs, partners;
     if (dither.pairs !== undefined) {

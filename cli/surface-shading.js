@@ -38,7 +38,8 @@ function surfaceShading(world, options, camera) {
       { colorCurves: options.colorCurves !== false, colorLut: options.colorLut !== false, colorStack: options.colorStack !== false,
         paletteConstraints: options.paletteConstraints !== false && (options.lookMasks !== false || !settings.paletteConstraint?.mask),
         skipMasks: options.lookMasks === false, transmission: options.transmission !== false, detailKits:options.surfaceDetailKits!==false,
-        paletteRoles: world.paletteRoles, blueNoise, onPaletteClip: camera.onPaletteClip });
+        paletteRoles: world.paletteRoles, blueNoise, onPaletteClip: camera.onPaletteClip,
+        ditherSpaceOverride:options.ditherSpaceOverride });
     if (bevelDistance && material.needsDistance) material.bevelDistance = bevelDistance;
     return material;
   });
