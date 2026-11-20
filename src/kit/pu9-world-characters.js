@@ -52,19 +52,20 @@
     return { position, rotation, velocity, angular };
   }
 
-  function fromBiome(frame, { supportPadding = 0.24, gravityAt, surfaceResponse } = {}) {
+  function fromBiome(frame, { supportPadding = 0.24, gravityAt, surfaceResponse, climbAt } = {}) {
     if (typeof frame?.supports !== 'function' || typeof frame.distance !== 'function' ||
         typeof frame.view?.mediumAt !== 'function' || !finite(supportPadding) || supportPadding < 0 ||
         gravityAt!==undefined&&typeof gravityAt!=='function' ||
+        climbAt!==undefined&&typeof climbAt!=='function' ||
         surfaceResponse!==undefined&&typeof surfaceResponse!=='function')
       throw new TypeError('Expected a prepared biome frame and nonnegative support padding');
     return Object.freeze({ supports: (x, z, low, high) => frame.supports(x, z, low, high),
       clearance: point => frame.distance(...point), mediumAt: point => frame.view.mediumAt(...point),
-      ...(gravityAt&&{gravityAt}),...(surfaceResponse&&{surfaceResponse}),supportPadding });
+      ...(gravityAt&&{gravityAt}),...(surfaceResponse&&{surfaceResponse}),...(climbAt&&{climbAt}),supportPadding });
   }
-  function fromQuery(query,{gravity,clearance,support,medium,supportPadding=0,exclude,surfaceBodies,surfaceResponse}={}){
+  function fromQuery(query,{gravity,clearance,support,medium,climb,supportPadding=0,exclude,surfaceBodies,surfaceResponse}={}){
     if(typeof query?.probe!=='function'||typeof clearance!=='string'||typeof gravity!=='string'||
-        [support,medium,surfaceBodies].some(field=>field!==undefined&&typeof field!=='string')||
+        [support,medium,climb,surfaceBodies].some(field=>field!==undefined&&typeof field!=='string')||
         surfaceResponse!==undefined&&typeof surfaceResponse!=='function'||
         !finite(supportPadding)||supportPadding<0)throw new TypeError('A local character adapter needs gravity and clearance fields');
     const bodies=surfaceBodies?query.probe(surfaceBodies):null;
@@ -83,6 +84,12 @@
         const hit=query.trace(support,origin,{direction:axis,distance,exclude});
         return hit.status==='ok'?hit.value:null;
       }}),
+      ...(climb&&{climbAt(point){
+        const {status,value}=query.probe(climb,point);
+        if(status!=='ok'||value?.enabled===false)return false;
+        if(value?.normal!==undefined)return {normal:value.normal};
+        return value===true||value?.enabled===true||typeof value==='number'&&value>0;
+      }}),
       ...(medium&&{mediumAt(point){
         const read=query.probe(medium,point);
         if(read.status!=='ok')return air;
@@ -99,7 +106,7 @@
     return length <= amount ? to : V.mad(from, delta, amount / length);
   }
 
-  function create({ tuning = {}, modes = {}, selectMode, allowSupport } = {}) {
+  function create({ tuning = {}, modes = {}, selectMode, allowSupport, controllers = {}, defaultController = 'auto' } = {}) {
     if (!W.data.record(tuning) || Object.keys(tuning).some(key => !Object.hasOwn(defaults, key)) ||
         !W.data.record(modes) || Object.entries(modes).some(([name, mode]) => !W.data.safeKey(name) ||
           standard.has(name) || typeof mode !== 'function') ||
@@ -116,6 +123,11 @@
         t.swimExit > t.swimEnter || t.swimEnter > t.eyes || t.eyes > 1)
       throw new RangeError('Invalid character body, medium thresholds or time limits');
     const { radius, height } = t, half = height / 2;
+    const movement=W.movementControllers, profiles=movement.compile(controllers,t);
+    const selection=name=>name==='auto'||profiles.has(name);
+    if(!selection(defaultController))throw new RangeError('Unknown default movement controller '+defaultController);
+    const profileModes=new Set([...profiles.values()].map(row=>row.kind).filter(name=>['climb','fly','vehicle'].includes(name)));
+    const grounded=actor=>actor.mode==='ground'||actor.mode==='vehicle'&&profiles.get(actor.controller)?.kind==='vehicle';
     const shaft = half - radius, sections = Math.max(1, Math.ceil(shaft * 2 / (radius * 0.55)));
     const sole=t.flatBottom?P.traversal.footprint(radius):null;
     const soleHeights=[-half,-half+radius*.5,-shaft];
@@ -132,15 +144,17 @@
           anchor !== undefined && (!W.data.record(anchor) || !W.data.safeKey(anchor.id) ||
             !xyz(anchor.local) || !xyz(anchor.foot) || !xyz(anchor.center)) ||
           actor.mode !== undefined &&
-          !standard.has(actor.mode) && !extensions.has(actor.mode) ||
+          !standard.has(actor.mode) && !extensions.has(actor.mode) && !profileModes.has(actor.mode) ||
+          profiles.size && actor.controller!==undefined && !selection(actor.controller) ||
           actor.jumpHeld !== undefined && typeof actor.jumpHeld !== 'boolean')
         throw new TypeError('A character needs a position, finite vectors and a known movement mode');
       return freeze(clone({ velocity: zero, forward: [0, 0, -1], up: [0, 1, 0],
-        mode: 'air', jumpHeld: false, ...actor }));
+        mode: 'air', jumpHeld: false, ...(profiles.size&&{controller:defaultController}), ...actor }));
     }
     function queries(world) {
       if (!world || typeof world.supports !== 'function' || typeof world.clearance !== 'function' ||
           world.mediumAt !== undefined && typeof world.mediumAt !== 'function' ||
+          world.climbAt !== undefined && typeof world.climbAt !== 'function' ||
           world.surfaceResponse !== undefined && typeof world.surfaceResponse !== 'function' ||
           world.supportPadding !== undefined && (!finite(world.supportPadding) || world.supportPadding < 0))
         throw new TypeError('A character world needs supports, point clearance and an optional medium query');
@@ -189,12 +203,15 @@
       }
       return { position: previous, blocked: false };
     }
-    function slide(world, from, delta, trace) {
+    function slide(world, from, delta, trace, freeAxes) {
       const to = V.add(from, delta), direct = sweep(world, from, to);
       trace(from, direct.position);
-      if (!direct.blocked || !delta[0] || !delta[2]) return direct;
+      if (!direct.blocked || !freeAxes&&(!delta[0]||!delta[2])) return direct;
       let p = direct.position;
-      for (const axis of Math.abs(delta[0]) >= Math.abs(delta[2]) ? [0, 2] : [2, 0]) {
+      const axes=freeAxes?[0,1,2].sort((a,b)=>Math.abs(delta[b])-Math.abs(delta[a])):
+        Math.abs(delta[0]) >= Math.abs(delta[2]) ? [0, 2] : [2, 0];
+      for (const axis of axes) {
+        if(!delta[axis])continue;
         const target = p.slice();
         target[axis] = to[axis];
         const next = sweep(world, p, target).position;
@@ -253,9 +270,14 @@
       if (!Array.isArray(move) || move.length !== 2 || !Array.from(move).every(finite) ||
           !finite(vertical) || typeof jump !== 'boolean' || typeof climb !== 'boolean')
         throw new TypeError('Movement needs world XZ input, vertical input and optional jump and climb buttons');
+      if(profiles.size&&(raw.controller!==undefined&&!selection(raw.controller)||
+        [raw.throttle,raw.steer].some(value=>value!==undefined&&!finite(value))))
+        throw new TypeError('Movement needs a known controller and finite vehicle inputs');
       const length = Math.max(1, Math.hypot(...move));
       return freeze({ ...clone(raw), move: [move[0] / length, 0, move[1] / length],
-        vertical: clamp(vertical, -1, 1), jump, climb });
+        vertical: clamp(vertical, -1, 1), jump, climb,
+        ...(profiles.size&&raw.throttle!==undefined&&{throttle:clamp(raw.throttle,-1,1)}),
+        ...(profiles.size&&raw.steer!==undefined&&{steer:clamp(raw.steer,-1,1)}) });
     }
     const tangent = (vector, normal) => V.mad(vector, normal, -V.dot(vector, normal));
     function profile(world, seat) {
@@ -278,6 +300,8 @@
       if (!finite(seconds) || seconds < 0 || Math.ceil(seconds / t.maxStep) > t.maxSteps)
         throw new RangeError('Character step duration exceeds its time budget');
       let current = state(actor), support = null, blocked = false;
+      const chosen=profiles.size?(input.controller??current.controller):undefined;
+      const driver=profiles.get(chosen);
       const events = [], segments = [], steps = Math.ceil(seconds / t.maxStep);
       const dt = steps ? seconds / steps : 0;
       for (let tick = 0; tick < steps; tick++) {
@@ -293,13 +317,20 @@
         const surface = drift === zero ? platform : V.add(platform, drift);
         const spring = floor && current.mode === 'air' && launch(current.velocity, surface, floor.seat, settings.launch);
         const planted = floor && !spring && current.velocity[1] <= 0 &&
-          (current.mode === 'ground' || Math.abs(floor.center[1] - from[1]) <= 0.008);
-        const natural = sampled.kind === 'water' ? 'swim' : planted ? 'ground' : 'air';
+          (grounded(current) || Math.abs(floor.center[1] - from[1]) <= 0.008);
+        const land = planted ? 'ground' : 'air';
+        const natural = sampled.kind === 'water' ? 'swim' : land;
+        const ladder=driver?.kind==='climb'&&input.climb?movement.climbSite(world,from):null;
+        const free=driver?.kind==='fly'||Boolean(ladder);
+        const driving=driver?.kind==='vehicle';
         const context = Object.freeze({ actor: current, input, world, medium: sampled, eyes,
           support: floor?.seat ?? null, natural, jumpPressed, dt, tuning: t });
-        let mode = selectMode?.(context) ?? natural, p = from, velocity = current.velocity, patch = {};
+        let mode=natural, p=from, velocity=current.velocity, patch={};
+        if(!driver)mode=selectMode?.(context)??natural;
+        else if(free)mode=driver.kind;
+        else if(driver.kind==='walk'||driving)mode=land;
         let momentum = mode === 'air' ? current.surfaceMomentum ?? zero : zero;
-        if (!standard.has(mode) && !extensions.has(mode)) throw new RangeError('Unknown character movement mode ' + mode);
+        if (!free&&!standard.has(mode) && !extensions.has(mode)) throw new RangeError('Unknown character movement mode ' + mode);
         const path = [], trace = (a, b) => { if (!close(a, b)) path.push({ previous: a, position: b }); };
         const climbed = mode === 'swim' && climb(world, ground, current, input, eyes, trace);
         support = null;
@@ -309,7 +340,13 @@
           velocity = V.mul(input.move, t.walkSpeed * 0.65);
           mode = 'ground';
           events.push({ type: 'climb-out', position: p });
-        } else if (extensions.has(mode)) {
+        } else if(free){
+          velocity=steer(velocity,movement.freeVelocity(driver,ladder,input),driver.acceleration*dt);
+          const motion=slide(world,p,V.mul(velocity,dt),trace,true);
+          p=motion.position;
+          blocked ||= motion.blocked;
+          if(motion.blocked)velocity=V.mul(V.sub(p,from),1/dt);
+        } else if (!driver&&extensions.has(mode)) {
           const result = extensions.get(mode)(context);
           if (!xyz(result?.velocity) || result.actor !== undefined && (!W.data.record(result.actor) ||
               result.actor.forward !== undefined && !xyz(result.actor.forward) ||
@@ -324,22 +361,36 @@
           if (motion.blocked) velocity = V.mul(V.sub(p, from), 1 / dt);
         } else {
           const swimming = mode === 'swim';
+          const swim = driver?.kind==='swim'?driver:null;
+          const walkProfile = driver?.kind==='walk'?driver:null;
           if (swimming) {
-            const desired = V.add(V.mul(input.move, t.swimSpeed), V.mul(sampled.current ?? zero, t.currentScale));
-            desired[1] += (input.jump ? 1 : input.vertical) * t.swimVerticalSpeed + t.buoyancy*(world.localBuoyancy??1);
-            velocity = steer(velocity, desired, t.swimAcceleration * dt);
+            const desired = V.add(V.mul(input.move, swim?.speed??t.swimSpeed), V.mul(sampled.current ?? zero, swim?.currentScale??t.currentScale));
+            desired[1] += (input.jump ? 1 : input.vertical) * (swim?.verticalSpeed??t.swimVerticalSpeed) +
+              (swim?.buoyancy??t.buoyancy)*(world.localBuoyancy??1);
+            velocity = steer(velocity, desired, (swim?.acceleration??t.swimAcceleration) * dt);
+          } else if(driving){
+            if(mode==='ground'){
+              const motion=movement.drive(current,input,driver,settings.traction,dt);
+              velocity=motion.velocity;
+              patch.forward=motion.forward;
+            }else{
+              velocity=velocity.slice();
+              patch.forward=current.forward;
+            }
           } else {
-            let speed = steer(horizontal(momentum === zero ? velocity : V.sub(velocity, momentum)), V.mul(input.move, t.walkSpeed),
-              (mode === 'ground' ? t.groundAcceleration * settings.traction : t.airAcceleration) * dt);
+            let speed = steer(horizontal(momentum === zero ? velocity : V.sub(velocity, momentum)), V.mul(input.move, walkProfile?.speed??t.walkSpeed),
+              (mode === 'ground' ? (walkProfile?.acceleration??t.groundAcceleration) * settings.traction :
+                walkProfile?.airAcceleration??t.airAcceleration) * dt);
             if (mode === 'ground' && settings.downhill > 0) {
               const gravity = world.localAcceleration ?? [0, -t.gravity, 0];
               speed = V.mad(speed, horizontal(tangent(gravity, floor?.seat.normal ?? [0, 1, 0])), settings.downhill * dt);
             }
             velocity = [speed[0] + momentum[0], velocity[1], speed[2] + momentum[2]];
           }
-          if (mode === 'ground' && floor && jumpPressed && t.jumpSpeed > 0) {
+          const jumpSpeed=walkProfile?.jumpSpeed??t.jumpSpeed;
+          if (mode === 'ground' && floor && jumpPressed && !driving && jumpSpeed > 0) {
             mode = 'air';
-            velocity[1] = t.jumpSpeed;
+            velocity[1] = jumpSpeed;
             if (surface !== zero) {
               velocity = V.add(velocity, surface);
               momentum = horizontal(surface);
@@ -375,7 +426,7 @@
                 const on = profile(world, target.seat), platform = velocityAt(target.seat);
                 const flow = on.drift === zero ? zero : tangent(on.drift, target.seat.normal);
                 const surfaceVelocity = flow === zero ? platform : V.add(platform, flow);
-                if (current.mode !== 'ground' || !floor) events.push({ type: 'land', position: p,
+                if (!grounded(current) || !floor) events.push({ type: 'land', position: p,
                   point: target.seat.foot, normal: target.seat.normal, support: target.seat.support,
                   speed: Math.max(0, -V.dot(V.sub(velocity, surfaceVelocity), target.seat.normal)) });
                 const rebound = launch(velocity, surfaceVelocity, target.seat, on.launch);
@@ -413,9 +464,13 @@
             p = flat.position;
             if (!rising) vertical();
           }
+          if(driving&&mode==='ground')mode='vehicle';
         }
         if (mode !== current.mode) events.push({ type: 'mode', from: current.mode, to: mode, position: p });
+        if(chosen!==undefined&&chosen!==current.controller)
+          events.push({type:'controller',from:current.controller,to:chosen,position:p});
         const next = { ...current, ...clone(patch), position: p, velocity, mode, jumpHeld: input.jump,
+          ...(chosen!==undefined&&{controller:chosen}),
           forward: patch.forward ? clone(patch.forward) : V.len(input.move) > 1e-5 ? V.norm(input.move) : current.forward };
         if (momentum !== zero && momentum.some(n => Math.abs(n) > 1e-8)) next.surfaceMomentum = momentum;
         else delete next.surfaceMomentum;
@@ -442,6 +497,10 @@
           const hit=medium(world,fromPoint(p));
           return hit.current?{...hit,current:toVector(hit.current)}:hit;
         },
+        ...(world.climbAt&&{climbAt(p){
+          const site=movement.climbSite(world,fromPoint(p));
+          return site?.normal?{normal:toVector(site.normal)}:Boolean(site);
+        }}),
         ...(world.surfaceResponse&&{surfaceResponse(seat){
           const profile=response(world.surfaceResponse(fromSeat(seat)));
           return {...profile,drift:toVector(profile.drift),...(profile.launch?.direction&&{
@@ -459,6 +518,8 @@
         throw new TypeError('Local gravity needs clearance and optional directional support');
       if(world.surfaceResponse!==undefined&&typeof world.surfaceResponse!=='function')
         throw new TypeError('Expected a surface response callback');
+      if(world.climbAt!==undefined&&typeof world.climbAt!=='function')
+        throw new TypeError('Expected a climb surface callback');
       const count=Math.ceil(seconds/t.maxStep);
       if(!finite(seconds)||seconds<0||count>t.maxSteps)throw new RangeError('Character step duration exceeds its time budget');
       raw??={};
@@ -470,13 +531,13 @@
         const frame=G.normalize(world.gravityAt(current.position),[0,-t.gravity,0]);
         const transport=G.turn(V.norm(current.up),frame.up);
         const heading=V.norm(G.tangent(M.app(transport,current.gravityForward??current.forward),frame.up),V.perp(frame.up));
-        const velocity=current.mode==='ground'?M.app(transport,current.velocity):current.velocity;
+        const velocity=grounded(current)?M.app(transport,current.velocity):current.velocity;
         const map=localWorld(world,current.position,frame,heading,velocity);
         const {toVector,fromVector,fromPoint,fromSeat}=map;
         const desired=raw.moveWorld===undefined?null:toVector(raw.moveWorld);
         const input=desired?{...raw,move:[desired[0],desired[2]]}:raw;
         const localVelocity=toVector(velocity);
-        if(current.mode==='ground')localVelocity[1]=0;
+        if(grounded(current))localVelocity[1]=0;
         const upright={...current,position:zero,up:[0,1,0],velocity:localVelocity,forward:toVector(M.app(transport,current.forward)),
           ...(current.surfaceMomentum&&{surfaceMomentum:toVector(current.surfaceMomentum)})};
         const localVelocityAt=velocityAt===noVelocity?noVelocity:seat=>toVector(velocityAt(fromSeat(seat)));
@@ -485,7 +546,7 @@
           const position=fromPoint(row.position), axis=G.normalize(world.gravityAt(position),[0,-t.gravity,0]).up;
           const change=G.turn(frame.up,axis);
           const speed=fromVector(row.velocity);
-          return {...row,position,up:axis,velocity:row.mode==='ground'?M.app(change,speed):speed,
+          return {...row,position,up:axis,velocity:grounded(row)?M.app(change,speed):speed,
             ...(row.surfaceMomentum&&{surfaceMomentum:fromVector(row.surfaceMomentum)}),
             forward:V.norm(G.tangent(M.app(change,fromVector(row.forward)),axis),V.perp(axis)),
             gravityForward:M.app(change,heading)};
@@ -521,7 +582,7 @@
       if (!finite(seconds) || seconds < 0 || Math.ceil(seconds / t.maxStep) > t.maxSteps)
         throw new RangeError('Character step duration exceeds its time budget');
       const { surfaceAnchor, ...current } = state(actor);
-      const anchor = current.mode === 'ground' && surfaceAnchor && close(current.position, surfaceAnchor.center)
+      const anchor = grounded(current) && surfaceAnchor && close(current.position, surfaceAnchor.center)
         ? surfaceAnchor : null;
       const frame = anchor && surfaceFrame(world, anchor.id);
       const moved = frame && carry(current, anchor, world, frame);
@@ -545,7 +606,7 @@
         return sample.angular ? V.add(sample.velocity ?? zero, V.cross(sample.angular, V.sub(seat.foot, sample.position))) :
           sample.velocity ?? zero;
       });
-      const landed = result.actor.mode === 'ground' && result.support;
+      const landed = grounded(result.actor) && result.support;
       const landingFrame = landed && surfaceFrame(world, landed.support);
       const next = landingFrame ? { ...result.actor, surfaceAnchor: {
         id: landed.support, local: M.app(M.tr(landingFrame.rotation), V.sub(landed.foot, landingFrame.position)),
@@ -591,7 +652,8 @@
       queries(world);
       return fits(world, position);
     }
-    return Object.freeze({ state, step, cross, sweepTo, fits: fitsAt, tuning: t });
+    return Object.freeze({ state, step, cross, sweepTo, fits: fitsAt, tuning: t,
+      ...(profiles.size&&{controllers:freeze(Object.fromEntries(profiles))}) });
   }
   W.characters = Object.freeze({ create, fromBiome, fromQuery, surfaces });
 })(KIT);
