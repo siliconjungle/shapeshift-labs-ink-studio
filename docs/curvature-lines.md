@@ -51,6 +51,11 @@ for (let d = .1; row.path && d < row.path.length; d += .22) {
   Define the field in a neighborhood around the zero surface so the
   difference stencil and projection can evaluate there.
 
+To trace an Ink Studio sculpt, call `S.ready()` after adding its base
+geometry and pass `S.sdf` to `surface.curvature.implicit`. Generate the
+traces before adding ornament or baking the sculpt. Use seeds on smooth
+patches away from sharp CSG joins.
+
 Both adapters give you `sample(seed)` and `trace(seed, options)`.
 A sample exposes `point`, `normal`, `min`, `max`, `mean`, `gaussian`,
 `gap`, and `directions: { min, max }`. Chart samples also include
