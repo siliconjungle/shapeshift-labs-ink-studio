@@ -248,8 +248,9 @@ function midnightMidway(kit, { sharedTime = true } = {}) {
   });
   const bursts = K.frameSplats(B, 160, (draw, dt, t) => {
     const wall = sharedTime ? motionTime() : t;
-    if (wall < state.flash) draw.streak([-3.5, 1.2, 4.4], [-3.5, 1.45, 3.8], { width: 0.08, color: 10, depth: true });
-    if (wall < state.lightning) {
+    if (wall >= state.flash - 0.12 && wall < state.flash)
+      draw.streak([-3.5, 1.2, 4.4], [-3.5, 1.45, 3.8], { width: 0.08, color: 10, depth: true });
+    if (wall >= state.lightning - 0.27 && wall < state.lightning) {
       const p = thunderSource;
       for (const [a, b] of [
         [
