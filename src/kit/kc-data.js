@@ -476,6 +476,11 @@
         bad('finish.surfaceEffects', error.message);
       }
     }
+    try {
+      SculptSampling.prepare(st.finish.adaptiveSampling);
+    } catch (error) {
+      bad('finish.adaptiveSampling', error.message);
+    }
     let look = st.finish.look;
     try {
       look = K.authoring.looks.scene(look, catalog);
@@ -1239,6 +1244,7 @@
       if (st0.amb !== undefined) S.amb = st0.amb;
       if (st0.sky !== undefined) S.sky = st0.sky;
       if (st0.finish.res) S.res = st0.finish.res;
+      if (st0.finish.adaptiveSampling !== undefined) S.adaptiveSampling = st0.finish.adaptiveSampling;
       grp = {};
       for (const [g, v] of Object.entries(spec.groups || {})) grp[g] = S.grp(v.blend);
     }

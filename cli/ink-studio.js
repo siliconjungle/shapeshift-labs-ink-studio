@@ -159,6 +159,13 @@ function build(id, seedOverride, { paint = true } = {}) {
         : { stretch: +String(opt.follow).split(',')[0], broad: +String(opt.follow).split(',')[1] || undefined };
   if (opt.bounce) globalThis.INK_BOUNCE = true; // bounce light: every dab is also lit by the lit things round it
   if (opt.fine) globalThis.INK_FINE = true; // inked detail: dabs are baked with a tile of the surface under them
+  const sampling = opt['adaptive-sampling'];
+  if (sampling !== undefined) {
+    if (sampling === 'on' || sampling === true) globalThis.INK_ADAPTIVE_SAMPLING = true;
+    else if (sampling === 'off') globalThis.INK_ADAPTIVE_SAMPLING = false;
+    else globalThis.INK_ADAPTIVE_SAMPLING = JSON.parse(fs.readFileSync(path.resolve(sampling), 'utf8'));
+    require('../src/sculpt-sampling.js').prepare(globalThis.INK_ADAPTIVE_SAMPLING);
+  }
   const s = scene(id);
   // Load paint by scene ID so rendering the same file from another path finds its decals.
   const decalFile = path.join(paintDirectory(s.id), 'decals.json');
@@ -793,7 +800,7 @@ const CMD = {
         'lightning options: --lightning on|off|file.json',
         'exposure options: --scene-exposure on|off|file.json',
         'aerial options: --aerial-perspective on|off --aerial-start units --aerial-density per-unit --aerial-contrast 0..1',
-        'view options: --surface off (no finish layers) --water off --reflections off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --clean (remove lone pixels) --ortho (orthographic: no perspective) --cols 4 --out file.png --seed n',
+        'view options: --surface off (no finish layers) --water off --reflections off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --ortho (orthographic: no perspective) --cols 4 --out file.png --seed n',
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
         'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor',

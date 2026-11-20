@@ -57,6 +57,8 @@ test('authored ink, wear and wetness persist through rig stretch and a transform
   next.solids[0].res = .13;
   assert(ink(K.diorama.build(next)).length > 5);
   assert.notEqual(rebake.count, K.diorama.build(next).count);
+  next.finish = { adaptiveSampling: true };
+  assert(ink(K.diorama.build(next)).length > 4);
 
   const cleared = copy(editor.snapshot().solids[0].surfaceState);
   cleared.charts['panel-front'].stamps = [];

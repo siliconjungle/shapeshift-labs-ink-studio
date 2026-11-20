@@ -196,6 +196,8 @@ Stateful worlds need their intervening simulation steps. Rebuild them to return 
 
 The core sculptor provides `ball`, `box`, `lathe`, `torus`, `tube`, `rock`, `ground` and vegetation helpers. The extended sculptor adds joins, folds, warps, shells, extrusion, revolution, text, grid operations and other modeling tools.
 
+Use [adaptive sculpt sampling](docs/adaptive-sculpt-sampling.md) to concentrate splats on bevels, tight curves and chosen silhouettes while reducing density across broad faces.
+
 This complete scene cuts a cylindrical opening through a box. `hold: true` creates operands without emitting them as separate visible solids; the join emits the combined result.
 
 ```js

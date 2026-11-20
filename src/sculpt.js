@@ -50,6 +50,7 @@ function makeSculpt(B, rest) {
     L = null;
   const S = {
     res: 0.09,
+    adaptiveSampling: false,
     sun: norm([-0.5, 0.8, 0.45]),
     amb: 0.14,
     sky: 0.26,
@@ -715,8 +716,7 @@ function makeSculpt(B, rest) {
     return d;
   }
   let gm = 1; // how steep the field is at the last point: roughness makes it steeper than a true distance
-  function grad(x, y, z, d) {
-    const e = 0.012;
+  function grad(x, y, z, d, e = 0.012) {
     g3[0] = field(x + e, y, z) - d;
     g3[1] = field(x, y + e, z) - d;
     g3[2] = field(x, y, z + e) - d;
@@ -1739,115 +1739,143 @@ function makeSculpt(B, rest) {
       solid.res = original;
     }
   }
+  function bakeBand(p, band, res, adaptive, probeStep, finePass) {
+    const bump = p.bump ? p.bump[0] : 0,
+      tout = res * 0.7 + bump + p.reach,
+      tin = res * 0.7 + bump + p.k * 0.4 + p.reach,
+      normalStep = finePass ? Math.min(.012, res * .1) : .012;
+    function shadedSpacing(query, d, x, y, z, nx, ny, nz) {
+      const before = own, negative = ownNeg;
+      const score = SculptSampling.detail(adaptive, query, probeStep, d, x, y, z, nx, ny, nz);
+      own = before;
+      ownNeg = negative;
+      // The two grids overlap at the transition, where coarse dabs taper to leave room for the detail.
+      const start = .78, end = 1.12;
+      if (finePass) return score >= start ? res : 0;
+      if (score >= end) return 0;
+      return res * (1 - .22 * clamp((score - start) / (end - start), 0, 1));
+    }
+    // Rough or blended solids stretch their sample points.
+    sampleAt(p, p.bump ? res * 0.8 : res, (x, y, z) => {
+      if (S.pre && !S.pre(x, y, z)) return;
+      if (band >= 0 && focusBand(x, y, z) !== band) return;
+      // whole: this solid's own surface, all of it, found from its own distance alone (a part that will move must not have gaps where it touched something)
+      if (p.whole) {
+        const e = normalStep;
+        let d = psd(p, x, y, z),
+          nx = 0,
+          ny = 1,
+          nz = 0;
+        for (let it = 0; it < 6; it++) {
+          nx = psd(p, x + e, y, z) - d;
+          ny = psd(p, x, y + e, z) - d;
+          nz = psd(p, x, y, z + e) - d;
+          const l = Math.hypot(nx, ny, nz) || 1;
+          nx /= l;
+          ny /= l;
+          nz /= l;
+          if (Math.abs(d) < 0.004) break;
+          const st = d / Math.max(0.6, l / e);
+          x -= nx * st;
+          y -= ny * st;
+          z -= nz * st;
+          d = psd(p, x, y, z);
+        }
+        if (Math.abs(d) > res * 0.5 || !p.mat.r || p.mat.skip) return;
+        if (S.capture) {
+          S.capture(p, S.materialAt(p.mat, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, 1);
+          return;
+        }
+        const spacing = adaptive ? shadedSpacing((a, b, c) => psd(p, a, b, c), d, x, y, z, nx, ny, nz) : res;
+        if (!spacing) return;
+        curP = p;
+        if (S.emit) {
+          const n0 = B.count();
+          shadeOwned(p, p.mat, spacing, x, y, z, nx, ny, nz, true);
+          S.emit(p, n0, B.count());
+        } else shadeOwned(p, p.mat, spacing, x, y, z, nx, ny, nz, true);
+        return;
+      }
+      /* a solid whose candidate points may lie well off its own surface (reach: grown rocks, typed-in shapes) has them taken onto
+         its own surface first. Otherwise, where something else is nearer than its own surface (the ground beside a rock's cut face,
+         the next rock) the field would carry them onto that, and its own surface there would get no dabs at all */
+      if (p.reach > 0)
+        for (let it = 0; it < 8; it++) {
+          const d0 = psd(p, x, y, z);
+          if (Math.abs(d0) < 0.002) break;
+          const e = 0.006,
+            gx = psd(p, x + e, y, z) - d0,
+            gy = psd(p, x, y + e, z) - d0,
+            gz = psd(p, x, y, z + e) - d0,
+            gl = Math.hypot(gx, gy, gz) || 1,
+            st = d0 / Math.max(0.6, gl / e);
+          x -= (gx / gl) * st;
+          y -= (gy / gl) * st;
+          z -= (gz / gl) * st;
+        }
+      let d = field(x, y, z);
+      if (d > tout || d < -tin) return;
+      for (let it = 0; it < 7 && Math.abs(d) > 0.004; it++) {
+        grad(x, y, z, d, normalStep);
+        const st = d / gm;
+        x -= g3[0] * st;
+        y -= g3[1] * st;
+        z -= g3[2] * st;
+        d = field(x, y, z);
+      }
+      if (Math.abs(d) > res * 0.5) return;
+      grad(x, y, z, d, normalStep);
+      const nx = g3[0],
+        ny = g3[1],
+        nz = g3[2];
+      field(x, y, z);
+      if (!own) return;
+      const m = ownNeg && ownNeg.mat.r ? ownNeg.mat : own.mat;
+      if (!m.r || m.skip) return;
+      if (S.capture) {
+        const pr = ownNeg && ownNeg.mat.r ? ownNeg : own;
+        let occ = 0,
+          w = 1;
+        for (let j = 1; j <= 3; j++) {
+          const h = S.aoR * j;
+          occ += (Math.max(0, h - field(x + nx * h, y + ny * h, z + nz * h)) * w) / h;
+          w *= 0.6;
+        }
+        S.capture(pr, S.materialAt(m, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, clamp(1 - (S.aoK * occ) / 1.96, 0, 1));
+        return;
+      }
+      const source = ownNeg && ownNeg.mat.r ? ownNeg : own;
+      if (adaptive && !SculptSampling.surface(m)) return;
+      const spacing = adaptive ? shadedSpacing(field, d, x, y, z, nx, ny, nz) : res;
+      if (!spacing || S.merge && merged(x, y, z, spacing, m)) return;
+      curP = source;
+      if (S.emit) {
+        const pr = curP,
+          n0 = B.count();
+        shadeOwned(curP, m, spacing, x, y, z, nx, ny, nz, true);
+        S.emit(pr, n0, B.count());
+      } else shadeOwned(curP, m, spacing, x, y, z, nx, ny, nz, true);
+    });
+  }
   S.bake = () => {
+    const override = typeof globalThis !== 'undefined' ? globalThis.INK_ADAPTIVE_SAMPLING : undefined;
+    const sampling = !S.capture && SculptSampling.prepare(override ?? S.adaptiveSampling);
     buildGrid();
     L = S.sun;
     for (const p of pos.concat(neg)) {
       if (p.mat.skip) continue;
+      const adaptive = sampling && SculptSampling.surface(p.mat) ? sampling : null;
       const res0 = p.res * (p.detailBudget?.spacing ?? 1),
         bands = S.focus && !S.capture ? focusBands(p) : ONE_BAND;
       for (let bi = 0; bi < bands.length; bi++) {
         const band = bands === ONE_BAND ? -1 : bands[bi][0],
-          res = bands === ONE_BAND ? res0 : res0 * bands[bi][1],
-          bm = p.bump ? p.bump[0] : 0,
-          tout = res * 0.7 + bm + p.reach,
-          tin = res * 0.7 + bm + p.k * 0.4 + p.reach;
-        // Rough or blended solids stretch their sample points.
-        sampleAt(p, p.bump ? res * 0.8 : res, (x, y, z) => {
-          if (S.pre && !S.pre(x, y, z)) return;
-          if (band >= 0 && focusBand(x, y, z) !== band) return;
-          // whole: this solid's own surface, all of it, found from its own distance alone (a part that will move must not have gaps where it touched something)
-          if (p.whole) {
-            const e = 0.012;
-            let d = psd(p, x, y, z),
-              nx = 0,
-              ny = 1,
-              nz = 0;
-            for (let it = 0; it < 6; it++) {
-              nx = psd(p, x + e, y, z) - d;
-              ny = psd(p, x, y + e, z) - d;
-              nz = psd(p, x, y, z + e) - d;
-              const l = Math.hypot(nx, ny, nz) || 1;
-              nx /= l;
-              ny /= l;
-              nz /= l;
-              if (Math.abs(d) < 0.004) break;
-              const st = d / Math.max(0.6, l / e);
-              x -= nx * st;
-              y -= ny * st;
-              z -= nz * st;
-              d = psd(p, x, y, z);
-            }
-            if (Math.abs(d) > res * 0.5 || !p.mat.r || p.mat.skip) return;
-            if (S.capture) {
-              S.capture(p, S.materialAt(p.mat, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, 1);
-              return;
-            }
-            curP = p;
-            if (S.emit) {
-              const n0 = B.count();
-              shadeOwned(p, p.mat, res, x, y, z, nx, ny, nz, true);
-              S.emit(p, n0, B.count());
-            } else shadeOwned(p, p.mat, res, x, y, z, nx, ny, nz, true);
-            return;
-          }
-          /* a solid whose candidate points may lie well off its own surface (reach: grown rocks, typed-in shapes) has them taken onto
-             its own surface first. Otherwise, where something else is nearer than its own surface (the ground beside a rock's cut face,
-             the next rock) the field would carry them onto that, and its own surface there would get no dabs at all */
-          if (p.reach > 0)
-            for (let it = 0; it < 8; it++) {
-              const d0 = psd(p, x, y, z);
-              if (Math.abs(d0) < 0.002) break;
-              const e = 0.006,
-                gx = psd(p, x + e, y, z) - d0,
-                gy = psd(p, x, y + e, z) - d0,
-                gz = psd(p, x, y, z + e) - d0,
-                gl = Math.hypot(gx, gy, gz) || 1,
-                st = d0 / Math.max(0.6, gl / e);
-              x -= (gx / gl) * st;
-              y -= (gy / gl) * st;
-              z -= (gz / gl) * st;
-            }
-          let d = field(x, y, z);
-          if (d > tout || d < -tin) return;
-          for (let it = 0; it < 7 && Math.abs(d) > 0.004; it++) {
-            grad(x, y, z, d);
-            const st = d / gm;
-            x -= g3[0] * st;
-            y -= g3[1] * st;
-            z -= g3[2] * st;
-            d = field(x, y, z);
-          }
-          if (Math.abs(d) > res * 0.5) return;
-          grad(x, y, z, d);
-          const nx = g3[0],
-            ny = g3[1],
-            nz = g3[2];
-          field(x, y, z);
-          if (!own) return;
-          const m = ownNeg && ownNeg.mat.r ? ownNeg.mat : own.mat;
-          if (!m.r || m.skip) return;
-          if (S.capture) {
-            const pr = ownNeg && ownNeg.mat.r ? ownNeg : own;
-            let occ = 0,
-              w = 1;
-            for (let j = 1; j <= 3; j++) {
-              const h = S.aoR * j;
-              occ += (Math.max(0, h - field(x + nx * h, y + ny * h, z + nz * h)) * w) / h;
-              w *= 0.6;
-            }
-            S.capture(pr, S.materialAt(m, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, clamp(1 - (S.aoK * occ) / 1.96, 0, 1));
-            return;
-          }
-          if (S.merge && merged(x, y, z, res, m)) return;
-          curP = ownNeg && ownNeg.mat.r ? ownNeg : own;
-          if (S.emit) {
-            const pr = curP,
-              n0 = B.count();
-            shadeOwned(curP, m, res, x, y, z, nx, ny, nz, true);
-            S.emit(pr, n0, B.count());
-          } else shadeOwned(curP, m, res, x, y, z, nx, ny, nz, true);
-        });
+          res = bands === ONE_BAND ? res0 : res0 * bands[bi][1];
+        if (!adaptive) bakeBand(p, band, res, null);
+        else {
+          const probeStep = res * adaptive.coarse * .9;
+          bakeBand(p, band, res * adaptive.coarse, adaptive, probeStep, false);
+          bakeBand(p, band, res * adaptive.fine, adaptive, probeStep, true);
+        }
       }
     }
     // ghosts are drawn but take no part in shadows (things in the sky, glass, glowing shapes)
