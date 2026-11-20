@@ -217,3 +217,25 @@ ink-studio palette plot examples/palette-space-plot.json --space oklab \
 ```
 
 The still render defaults to an isometric camera. Adjust `--yaw` and `--pitch` in radians, use `--ortho off` for perspective, and use `--labels off` to hide axis labels. `--orbit` is in degrees and writes an animated PNG. Full turns omit the duplicate end frame. Image output fits the plot to the viewport. JSON and embedded geometry keep the specified world scale.
+
+## Palette coverage fields
+
+Use `KIT.palette.coverage({ palette, space, slice, view })` to sample a plane through colour space. The field takes 1–48 swatches. `space: 'rgb'` uses normalized encoded RGB and Ink's weighted RGB match. `space: 'oklab'` uses `[L, a, b]` and Euclidean OKLab distance.
+
+Set `slice.origin` at the lower left. Add `slice.along` to reach the lower right and `slice.across` to reach the upper left. The vectors can be oblique and can vary more than one colour channel. The RGB default fixes blue at 0.5. The OKLab default fixes lightness at 0.62. Sample coordinates are literal, so slices can extend beyond the sRGB gamut.
+
+- `nearest` paints the exact winning swatch. Equal distances choose the earliest swatch.
+- `error` paints the distance from the sample to that swatch.
+- `boundary` paints the shortest distance, within the plane, to a change of winning swatch. It measures the full cell even if its edge falls beyond the output crop. A cell with no boundary in the plane returns `Infinity`.
+
+The diagnostic views use a stepped `ramp` and `displayRange: [low, high]`. The range defaults to `[0, 0.25]` for error and `[0, 0.09]` for boundary distance. An optional `edge: { width, color }` draws leading in the nearest view within the given distance of a cell edge. The width uses the same units as the boundary view.
+
+`index(u,v)` returns the nearest swatch slot. `sample(u,v,out?)` returns the chosen view's RGB. `measure(u,v)` returns the nearest `index`, `error`, and `boundary` together. `raster(w,h)` returns top-down RGB alongside swatch indices, errors, and boundary distances at pixel centres.
+
+```sh
+ink-studio palette field examples/palette-coverage-field.json --out cells.png
+ink-studio palette field examples/palette-coverage-field.json --view error --out error.png
+ink-studio palette field examples/palette-coverage-field.json --view boundary --out boundaries.png
+```
+
+Use `"type": "coverage"` in a CLI field JSON file. The [spectrum chapel](../examples/palette-coverage.js) uses the same OKLab slice as [projected leaded glass](projected-effects.md#palette-coverage-fields).

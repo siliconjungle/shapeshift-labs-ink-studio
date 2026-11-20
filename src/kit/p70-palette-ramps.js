@@ -3,7 +3,7 @@
   const P = K.procedural, TAU = 2 * Math.PI,
     clamp = n => Math.max(0, Math.min(1, n)),
     lerp = (a,b,t) => a + (b - a) * t,
-    linear = n => n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4,
+    lab = ColorSpace.toOKLab,
     encoded = n => n <= 0.0031308 ? 12.92 * n : 1.055 * n ** (1 / 2.4) - 0.055;
 
   function parse(input) {
@@ -13,17 +13,6 @@
     if (!Number.isSafeInteger(number) || number < 0 || number > 0xffffff)
       throw new Error('Palette ramp anchors need normalized RGB or six-digit hex colors');
     return [number >> 16,(number >> 8) & 255,number & 255].map(v => v / 255);
-  }
-  function lab(input) {
-    const [r,g,b] = input.map(linear),
-      l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b),
-      m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b),
-      s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-    return [
-      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
-    ];
   }
   function rgb([L,A,B], chroma = 1) {
     const a = A * chroma, b = B * chroma,

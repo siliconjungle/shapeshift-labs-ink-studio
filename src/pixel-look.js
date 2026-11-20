@@ -14,7 +14,7 @@ const PixelLook = (() => {
     stacks = require('./color-stack.js');
     spaces = require('./color-space.js');
   }
-  const weights = [0.30, 0.55, 0.15];
+  const weights = Object.freeze([0.30, 0.55, 0.15]);
   const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   const stipple = Object.freeze({
     cutoff: 0.19,
@@ -537,7 +537,7 @@ vec3 inkToneResolve(vec3 color, ivec2 pixel) {
   float rank = texelFetch(u_inkToneRanks, pixel % textureSize(u_inkToneRanks, 0), 0).r;
   return share >= mix(0.5, rank, u_inkToneAmount) ? b.rgb : a.rgb;
 }`;
-  return { nearest, ink, resolve, glsl, presets, toneSettings, prepareTone, toneIndex, toneGlsl, bayerRank, outputPalettes, localIndex,
+  return { nearest, rgbWeights:weights, ink, resolve, glsl, presets, toneSettings, prepareTone, toneIndex, toneGlsl, bayerRank, outputPalettes, localIndex,
     preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
     prepareRemap, gradePalette, prepareColorStack, colorGrade };
 })();

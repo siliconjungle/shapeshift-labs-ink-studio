@@ -259,6 +259,26 @@ Use `pattern: 'polar-colour'` with a `polar` definition on a projected layer. Th
 
 The layer defaults to its field's swatches as the output palette. As with rectangular palette fields, it is available in headless exports and through the shared `SurfaceLook` sampler. See [library and CLI controls](palette-recipes.md#polar-colour-fields).
 
+### Palette coverage fields
+
+Use `pattern: 'palette-coverage'` and pass the [coverage field definition](palette-recipes.md#palette-coverage-fields) as `coverage`. The defaults apply the nearest-swatch mosaic to a one-unit square. Use `size: [width, height]` inside `coverage` to fit the tile, and `wrap: true` when the pattern should repeat.
+
+```json
+{
+  "type": "projected",
+  "pattern": "palette-coverage",
+  "projection": { "origin": [0, 0, 0], "along": [1, 0, 0], "across": [0, 1, 0] },
+  "coverage": {
+    "space": "oklab",
+    "palette": ["#1b324f", "#267f87", "#ecb760", "#b95572"],
+    "edge": { "width": 0.004, "color": "#151822" },
+    "size": [2, 1.5]
+  }
+}
+```
+
+The layer can also show the error or boundary view. Its output palette defaults to the colours actually used by that view, including leading when present. The normal projection, mask, strength, and blending settings apply. The layer runs in headless exports and through the shared `SurfaceLook` sampler.
+
 ### Author a shader in JavaScript
 
 A layer can name a shader from `surfaceEffects.shaders` or use a function as
