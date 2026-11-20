@@ -10,7 +10,7 @@ const KIT_DIR = path.join(__dirname, 'src', 'kit'),
   read = f => fs.readFileSync(f, 'utf8').replace(/\nif \(typeof module[^\n]*\n?$/, '\n');
 const files = () =>
   [
-    'src/frame-budget.js', 'src/target-inspection.js', 'src/drawing-primitives.js', 'src/view-annotations.js', 'src/frame-composite.js', 'src/ink-veil.js', 'src/textured-surface.js', 'src/sprite-surface.js', 'src/sprite-cels.js', 'src/atlas-sprites.js', 'src/target-selectors.js', 'src/splat-provenance.js',
+    'src/frame-budget.js', 'src/target-inspection.js', 'src/drawing-primitives.js', 'src/view-annotations.js', 'src/frame-composite.js', 'src/ink-veil.js', 'src/textured-surface.js', 'src/sprite-surface.js', 'src/camera-atlas.js', 'src/sprite-cels.js', 'src/atlas-sprites.js', 'src/target-selectors.js', 'src/splat-provenance.js',
     'src/art-passes.js', 'src/art-direction.js', 'src/art-ink.js', 'src/art-effects.js', 'src/art-stability.js', 'src/stable-detail.js', 'src/edge-filter.js', 'src/material-pixel-style.js',
     'src/color-space.js', 'src/paint-corrections.js', 'src/color-curves.js', 'src/color-lut.js', 'src/color-stack.js', 'src/pixel-look.js', 'src/reflection-plane.js', 'src/airflow.js', 'src/wind-field.js', 'src/light-schedule.js', 'src/area-lights.js', 'src/emissive-finishes.js',
     'src/route-visibility.js', 'src/sample-coverage.js', 'src/contribution-rules.js', 'src/sample-visibility.js', 'src/swept-disc.js', 'src/splat-order.js', 'src/cutaway.js', 'src/splat-codec.js', 'src/ripple-field.js',
@@ -98,6 +98,16 @@ module.exports = {
   },
   exportGlb: require('./cli/export-glb.js'),
   render: require('./cli/render.js').render,
+  createCameraAtlas(options) {
+    return module.exports.load().KIT.cameraAtlas.raster(options, (world, frame) => {
+      const { width: w, height: h, time: t, camera, cameraSnapshot, ...settings } = frame;
+      if (cameraSnapshot !== undefined || camera?.pose !== undefined)
+        throw new TypeError('Headless camera atlas views use orbit camera settings');
+      const ortho = camera?.ortho ?? (camera?.projection === undefined ? settings.ortho :
+        camera.projection === 'orthographic');
+      return module.exports.render(world, { ...settings, ...camera, ortho, w, h, t, px: 1 });
+    });
+  },
   bakeBounceProbes: (world, settings) => module.exports.load().KIT.bounceProbes.bake(world, settings),
   inspectEnvironment: require('./cli/environment-inspector.js').inspectEnvironment,
   silhouetteReview: require('./cli/silhouette-review.js').silhouetteReview,

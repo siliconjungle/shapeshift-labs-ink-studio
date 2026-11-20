@@ -5,6 +5,7 @@ const FrameComposite = (() => {
   const byte = data => data instanceof Uint8Array || data instanceof Uint8ClampedArray;
   const positive = n => Number.isSafeInteger(n) && n > 0;
   const tuple = (value, length) => Array.isArray(value) && value.length === length && Array.from(value).every(Number.isFinite);
+  const textureSource = Symbol.for('ink-studio.composite-texture');
   const clamp = n => Math.min(1, Math.max(0, n));
 
   function record(value, fields, name) {
@@ -64,16 +65,19 @@ const FrameComposite = (() => {
     record(world, ['resolution', 'filter'], 'world composite');
     if (!Array.isArray(layers)) throw new TypeError('Composite layers must be an ordered list');
     const prepared = Array.from(layers, layer => {
-      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations'], 'composite layer');
-      const { opacity = 1, blend = 'over', draw, source } = layer;
+      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations', 'rect'], 'composite layer');
+      const { opacity = 1, blend = 'over', draw, source, rect } = layer;
       if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new RangeError('Layer opacity must be in [0, 1]');
       if (blend !== 'over' && blend !== 'add') throw new TypeError('Layer blend must be over or add');
       const layout = annotations.prepare(layer.annotations);
       const hasDrawing = draw !== undefined || layout !== null;
       if (hasDrawing === (source !== undefined) || draw !== undefined && !Array.isArray(draw))
         throw new TypeError('A layer needs drawing commands, annotations or a raster source');
+      if (rect !== undefined && (hasDrawing || !tuple(rect, 4) || rect[2] <= 0 || rect[3] <= 0 ||
+        !Number.isFinite(rect[0] + rect[2]) || !Number.isFinite(rect[1] + rect[3])))
+        throw new RangeError('A raster layer rectangle needs finite XY and positive size');
       if (source !== undefined && typeof source !== 'function') image(source);
-      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout,
+      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout, rect: rect?.slice(),
         draw: draw && Array.from(draw, command) };
     });
     return { world: { resolution: resolution(world.resolution), filter: filter(world.filter) }, layers: prepared,
@@ -95,7 +99,8 @@ const FrameComposite = (() => {
       world: { ...size(prepared.world.resolution ?? resolution(pixelSize), w, h), filter: prepared.world.filter },
       layers: prepared.layers.map(layer => {
         const grid = layer.resolution ?? (layer.source && typeof layer.source !== 'function' ? [layer.source.w, layer.source.h] : 1);
-        return { ...layer, ...size(grid, w, h) };
+        const dest = layer.rect ?? [0, 0, w, h];
+        return { ...layer, dest, ...size(grid, Math.ceil(dest[2]), Math.ceil(dest[3])) };
       }) };
   }
 
@@ -221,16 +226,18 @@ const FrameComposite = (() => {
     return drawLayer({ w, h }, w, h, null, null, Array.from(strokes, command), true).data;
   }
 
-  function layers(plan, world, time, text, camera, resolve) {
+  function layers(plan, world, time, text, camera, resolve, gl) {
     return plan.layers.filter(layer => layer.opacity > 0).map(layer => {
       const { w, h } = layer;
       const layout = layer.layout && annotations.layout(layer.layout,
         { width: plan.w, height: plan.h, camera, world, time, glyphs: text, resolve });
       const draw = layout ? [...(layer.draw ?? []), ...layout.draw.map(command)] : layer.draw;
-      const result = draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw) : pixels(
-        typeof layer.source === 'function' ? layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time }) : layer.source);
+      const gpu = gl && typeof layer.source === 'function' && layer.source[textureSource]?.(gl);
+      const result = gpu ? { w: gpu.region[2], h: gpu.region[3], gpu } :
+        draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw) : pixels(
+          typeof layer.source === 'function' ? layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time }) : layer.source);
       if (result.w !== w || result.h !== h) throw new RangeError('Composite raster dimensions must match the layer resolution');
-      return { ...result, filter: layer.filter, blend: layer.blend, opacity: layer.opacity };
+      return { ...result, dest: layer.dest, filter: layer.filter, blend: layer.blend, opacity: layer.opacity };
     });
   }
 
@@ -250,10 +257,21 @@ const FrameComposite = (() => {
     }
   }
 
+  function samplePlaced(layer, x, y, out) {
+    const [left, top, width, height] = layer.dest;
+    const u = x - left, v = y - top;
+    if (u < 0 || v < 0 || u >= width || v >= height) return false;
+    sample(layer, u * layer.w / width, v * layer.h / height, out);
+    return true;
+  }
+
   function resample(layer, w, h, visit) {
     const color = new Float64Array(4);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      sample(layer, (x + .5) * layer.w / w, (y + .5) * layer.h / h, color);
+    const [left, top, width, height] = layer.dest;
+    const startX = Math.max(0, Math.ceil(left - .5)), startY = Math.max(0, Math.ceil(top - .5));
+    const endX = Math.min(w, Math.ceil(left + width - .5)), endY = Math.min(h, Math.ceil(top + height - .5));
+    for (let y = startY; y < endY; y++) for (let x = startX; x < endX; x++) {
+      sample(layer, (x + .5 - left) * layer.w / width, (y + .5 - top) * layer.h / height, color);
       visit((y * w + x) * 4, color);
     }
   }
@@ -268,12 +286,13 @@ const FrameComposite = (() => {
 
   function compose(base, overlays, w, h, filter) {
     const data = new Uint8Array(w * h * 4);
-    resample({ ...pixels(base), filter }, w, h, (p, sample) => {
+    resample({ ...pixels(base), filter, dest: [0, 0, w, h] }, w, h, (p, sample) => {
       for (let c = 0; c < 4; c++) data[p + c] = Math.round(sample[c]);
     });
     for (const layer of overlays) {
       const add = layer.blend === 'add', opacity = layer.opacity;
-      resample(layer, w, h, (p, sample) => blend(data, p, sample, opacity, add));
+      resample(layer.dest ? layer : { ...layer, dest: [0, 0, w, h] }, w, h,
+        (p, sample) => blend(data, p, sample, opacity, add));
     }
     return straight(data, w, h, base.alpha);
   }
@@ -288,6 +307,6 @@ const FrameComposite = (() => {
     return { w, h, rgb, ...(alpha && { alpha }) };
   }
 
-  return Object.freeze({ settings, prepare, layers, compose, pixels, sample, blend, straight, paintMap });
+  return Object.freeze({ settings, prepare, layers, compose, image, pixels, sample, samplePlaced, blend, straight, paintMap, textureSource });
 })();
 if (typeof module !== 'undefined') module.exports = FrameComposite;

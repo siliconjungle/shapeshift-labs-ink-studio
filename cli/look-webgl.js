@@ -17,12 +17,12 @@ function runWebGL({ chrome, hardware }, buildFixture, runFixtures, inputs) {
     fs.writeFileSync(page, `<!doctype html><pre id="result">pending</pre>
 <script src="bundle.js"></script>
 <script type="module">
-import { createRenderer } from ${JSON.stringify(renderer)};
+import { createRenderer, createCameraAtlas } from ${JSON.stringify(renderer)};
 const result = document.querySelector('#result');
 try {
   const kit = { KIT, PixelLook, makeBuilder, makeSculpt, ContributionRules, RenderStages };
   const cases = (${runFixtures.toString()})(kit, ${buildFixture.toString()},
-    (${browserBackend.toString()})(kit, createRenderer), ${JSON.stringify(inputs)});
+    (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${JSON.stringify(inputs)});
   result.textContent = encodeURIComponent(JSON.stringify({ ...cases, browser: navigator.userAgent }));
 } catch (error) {
   result.textContent = encodeURIComponent(JSON.stringify({ error: error.stack ?? error.message }));
@@ -46,7 +46,7 @@ try {
   }
 }
 
-function browserBackend(kit, createRenderer) {
+function browserBackend(kit, createRenderer, createCameraAtlas) {
   return (width, height, view) => {
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -79,6 +79,7 @@ function browserBackend(kit, createRenderer) {
     }
     return {
       driver,
+      cameraAtlas(definition) { return createCameraAtlas(canvas, { toolkit: kit, ...definition }); },
       draw(world, overrides) { renderer.render(world, { changedRows:[], target, ...view,...overrides }); },
       fence() { gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel); },
       pick(world, ray, frame) { return renderer.pick(world,ray,frame); },

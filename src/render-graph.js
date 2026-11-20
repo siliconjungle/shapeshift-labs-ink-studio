@@ -219,9 +219,9 @@ const RenderGraph = (() => {
     return data;
   }
 
-  function layer(node, w, h, world, time, text, camera, resolve) {
+  function layer(node, w, h, world, time, text, camera, resolve, gl) {
     const plan = compositor.prepare({ layers: [node.layer] }, w, h);
-    return compositor.layers(plan, world, time, text, camera, resolve)[0];
+    return compositor.layers(plan, world, time, text, camera, resolve, gl)[0];
   }
 
   function history({ release = () => {} } = {}) {

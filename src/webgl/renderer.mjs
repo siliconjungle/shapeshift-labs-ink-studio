@@ -1122,7 +1122,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const time = frame.time ?? world.lookSnapshot?.time ?? 0;
       let camera;
       const drawFrame = plan.needsCamera ? { ...frame, ...captureFrameCamera(frame, view => { camera = view; }) } : frame;
-      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera) : api.layers(plan, world, time);
+      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl) : api.layers(plan, world, time, undefined, gl);
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
       composite(world, drawFrame, plan, layers, output, present);
     }

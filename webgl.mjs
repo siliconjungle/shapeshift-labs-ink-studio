@@ -14,3 +14,4 @@ export { createComparisonRenderer } from './src/webgl/comparison-renderer.mjs';
 export { captureCamera } from './src/webgl/view.mjs';
 export { mountComparisonView } from './src/webgl/comparison-view.mjs';
 export { mountSimulationBranches } from './src/webgl/simulation-branches-view.mjs';
+export { createCameraAtlas } from './src/webgl/camera-atlas.mjs';
