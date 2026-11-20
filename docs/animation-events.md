@@ -22,7 +22,7 @@ The `eventBindings` record maps each event name to an ordered list of responses.
 | Response type | Fields and behavior |
 | --- | --- |
 | `contact` | `contact` names a constraint and `action` is `plant` or `release`. A planted constraint persists until released. |
-| `sound` | `cue` names the sound asset or cue. Optional `gain` defaults to one. The host resolves and plays the named sound. |
+| `sound` | `cue` names the sound asset or cue. Optional `gain` defaults to one. An optional `contact` names the source anchor for [spatial playback](spatial-audio.md). |
 | `effect` | `effect` selects `flash`, `sprite-flash`, `shake`, `zoom`, `pan`, `fade`, `letterbox`, or `impact`. Optional `settings` supplies native cue parameters such as `duration`, `amount`, or RGB `color`. |
 
 `advance(dt)` steps the graph and returns the ordered events crossed during the step, the active contact IDs, and the sampled presentation. Named event rows include graph time, source time, layer, state, clip ID, and cycle. `pose(out)` returns the current layered and blended pose. Repeated reads of `frame()` and `pose()` leave the event cursor in place.

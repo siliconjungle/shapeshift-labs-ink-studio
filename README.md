@@ -330,6 +330,8 @@ Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.pupp
 
 Named clip markers can drive transitions, puppet contacts, sound cues, and presentation effects. [Animation events and state graphs](docs/animation-events.md)
 
+Bind audio cues to scene emitters, material contacts, and simulation events with listener-relative attenuation and occlusion. [Spatial audio and event cues](docs/spatial-audio.md)
+
 <!-- include: examples/puppet.js -->
 
 ```js

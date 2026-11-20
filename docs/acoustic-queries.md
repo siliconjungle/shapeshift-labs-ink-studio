@@ -49,6 +49,9 @@ if (read.status === "ok" && read.value.audible) {
 }
 ```
 
+Use the [spatial audio mixer](spatial-audio.md) to play cues with the same
+acoustic paths.
+
 The report includes the estimated level, linear amplitude gain, propagation
 delay, distance and high-frequency loss relative to the low band
 (`muffleDb`). `apparentSource` is the listener-side mouth of the last

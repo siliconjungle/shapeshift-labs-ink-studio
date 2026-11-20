@@ -85,8 +85,11 @@
       const list = clone(items).map(row => {
         if (!record(row)) throw new TypeError('Invalid animation event response: ' + name);
         const { type, cue, gain = 1, contact, action, effect, settings = {} } = row;
-        if (type === 'sound' && nameOK(cue) && nonnegative(gain) && allowed(row, ['type', 'cue', 'gain']))
-          return { type, cue, gain };
+        if (type === 'sound' && nameOK(cue) && nonnegative(gain) && allowed(row, ['type', 'cue', 'gain', 'contact']) &&
+            (contact === undefined || nameOK(contact))) {
+          if (contact !== undefined) contacts.add(contact);
+          return { type, cue, gain, ...(contact !== undefined && { contact }) };
+        }
         if (type === 'contact' && nameOK(contact) && ['plant', 'release'].includes(action) &&
             allowed(row, ['type', 'contact', 'action'])) {
           contacts.add(contact);
