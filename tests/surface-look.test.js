@@ -173,3 +173,71 @@ test('the plain script bundle exposes the same sampler and presets to hosts', ()
   `;
   assert(vm.runInNewContext(script) > 0.8);
 });
+
+test('diffuse lighting ramps use palette roles, authored stop positions and direct-light visibility', () => {
+  const shader = Surface.prepare({
+    layers: {
+      cloth: { type: 'diffuse', lightingRamp: {
+        role: 'cloth', positions: [0, 0.25, 0.8], interpolation: 'step'
+      } }
+    }
+  }, [0x112233, 0x456789, 0xf1cbda], neutralSun, {}, { paletteRoles: { cloth: [0, 1, 2] } });
+  const rgb = sample => Surface.shade(shader, { ...front, ...sample }, [0, 0, 0]).slice(0, 3);
+  assert.deepEqual(rgb({ visibility: 0 }), [0x11, 0x22, 0x33].map(n => n / 255));
+  assert.deepEqual(rgb({ visibility: 0.25 }), [0x45, 0x67, 0x89].map(n => n / 255));
+  assert.deepEqual(rgb({ normal: [0, 0, -1] }), rgb({ visibility: 0 }));
+  assert.deepEqual(rgb({ visibility: 0.5 }), rgb({ visibility: 0.25 }));
+  assert.deepEqual(rgb({ visibility: 1 }), [0xf1, 0xcb, 0xda].map(n => n / 255));
+});
+
+test('ramped highlights preserve roughness, respect shadow, and can shape tint and blend', () => {
+  const finish = roughness => prepare({ layers: { glint: { type: 'specular', roughness, lightingRamp: {
+    stops: [[0, '#785950'], [0.5, '#bab5c2'], [1, '#ffffff']],
+    weights: [0, 0.3, 0.8]
+  } } } });
+  const offAngle = { ...front, view: [0.48, 0, 0.877] };
+  const narrow = finish(0.11), wide = finish(0.55);
+  assert(Surface.shade(wide, offAngle, base)[0] - Surface.shade(narrow, offAngle, base)[0] > 0.45);
+  assert(Math.abs(Surface.shade(narrow, front, base)[0] - (base[0] * 0.2 + 0.8)) < 1e-10);
+  assert.deepEqual(Surface.shade(wide, { ...front, visibility: 0 }, base).slice(0, 3), base);
+  const { surface } = Surface.material({ surface: { layers: { glint: {
+    type: 'specular', lightingRamp: { role: 'iron' }
+  } } } }, { layers: { glint: { lightingRamp: { stops: [[0, 0], [1, 1]] } } } });
+  assert.deepEqual(surface.layers.glint.lightingRamp, { stops: [[0, 0], [1, 1]] });
+});
+
+test('ramp validation rejects missing roles, conflicting inputs and invalid response points', () => {
+  const finish = (lightingRamp, type = 'diffuse') => Surface.prepare(
+    { layers: { light: { type, lightingRamp } } }, [0x000000, 0xffffff], neutralSun, {},
+    { paletteRoles: { cloth: [0, 1] } }
+  );
+  assert.throws(() => finish(), /diffuse layer needs a lightingRamp/);
+  assert.throws(() => finish({ role: 'missing' }), /palette role/);
+  assert.throws(() => finish({ role: 'cloth', stops: [[0, 0], [1, 1]] }), /either role/);
+  assert.throws(() => finish({ role: 'cloth', positions: [0.2, 0.1] }), /strictly increasing/);
+  assert.throws(() => finish({ role: 'cloth', positions: [-0.1, 1] }), /in \[0, 1\]/);
+  assert.throws(() => finish({ role: 'cloth', weights: [1, 1] }, 'specular'), /inactive highlight/);
+  assert.throws(() => finish({ role: 'cloth' }, 'reflection'), /unavailable for reflection/);
+});
+
+test('JSON material ramps render with animated light, remain palette-resolved and can be disabled by name', () => {
+  const spec = {
+    id: 'light-ramp', palette: [...Array(30).fill(0x0b1020), 0x181d32, 0x365b94, 0x93beea, 0xfcfcff],
+    roles: { cloth: [30, 31, 32], plain: [31, 32, 33] },
+    light: { surfaceDirection: [[0, 0, 0, 1], [1, 0, 0, -1]] },
+    finish: { look: { pixel: true }, dither: 0, cam: { target: [0, 0, 0], dist: 4, yaw: 0, pitch: 0 } },
+    solids: [{ kind: 'ball', at: [0, 0, 0], r: 0.85, mat: { role: 'plain', surface: { layers: {
+      cloth: { type: 'diffuse', shadow: false, lightingRamp: { role: 'cloth', positions: [0, 0.25, 0.7] } }
+    } } } }]
+  };
+  const world = KIT.diorama.build(spec), view = { w: 72, h: 72, ortho: true };
+  const lit = render(world, { ...view, t: 0 }), dark = render(world, { ...view, t: 1 });
+  const center = ((lit.h >> 1) * lit.w + (lit.w >> 1)) * 3;
+  assert.deepEqual(Array.from(lit.rgb.slice(center, center + 3)), [0x93, 0xbe, 0xea]);
+  assert.deepEqual(Array.from(dark.rgb.slice(center, center + 3)), [0x18, 0x1d, 0x32]);
+  const layer = spec.solids[0].mat.surface.layers.cloth;
+  layer.lightingRamp.role = 'missing';
+  assert(KIT.diorama.check(spec).some(item => item.path === 'solids[0].mat.surface' && /palette role/.test(item.problem)));
+  spec.solids[0].mat.surface.layers.cloth = false;
+  assert.deepEqual(render(KIT.diorama.build(spec), view).rgb, render(world, { ...view, surface: false }).rgb);
+});
