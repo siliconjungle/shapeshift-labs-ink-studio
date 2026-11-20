@@ -11,6 +11,7 @@ const TargetInspection = (() => {
     return v;
   };
   const cache = new WeakMap();
+  const defaultGlyphs = Object.freeze({});
   function prepare(definition) {
     if (definition == null || definition === false) return null;
     if (cache.has(definition)) return cache.get(definition);
@@ -48,7 +49,8 @@ const TargetInspection = (() => {
       if (item.occlusion != null && !['depth', 'none'].includes(item.occlusion))
         throw new TypeError('Invalid inspection occlusion');
       const magnify = item.magnify === true ? {} : item.magnify;
-      if (magnify && (typeof magnify !== 'object' || (magnify.rect && !rect(magnify.rect))))
+      if (magnify && (typeof magnify !== 'object' || (magnify.rect && !rect(magnify.rect)) ||
+          magnify.enabled !== undefined && typeof magnify.enabled !== 'boolean'))
         throw new TypeError('Invalid inspection magnifier');
       const ripple =
         item.ripple === false
@@ -71,7 +73,7 @@ const TargetInspection = (() => {
     const settings = Object.freeze({
       targets: Object.freeze(targets),
       maxTargets: finite(definition.maxTargets, 12, 1, 32),
-      glyphs: definition.glyphs ?? {},
+      glyphs: definition.glyphs ?? defaultGlyphs,
       maxMagnifiers: finite(definition.maxMagnifiers, 1, 0, 4)
     });
     if (targets.some(t => !Number.isInteger(t.style.scale)))
@@ -238,7 +240,7 @@ const TargetInspection = (() => {
         phase: time,
         occlusion: target.occlusion !== 'none'
       };
-      if (target.magnify && magnifiers < settings.maxMagnifiers) {
+      if (target.magnify && target.magnify.enabled !== false && magnifiers < settings.maxMagnifiers) {
         const m = target.magnify,
           r = m.rect ?? [0.72, 0.08, 0.24, 0.24];
         const pane = [r[0] * width, r[1] * height, r[2] * width, r[3] * height];

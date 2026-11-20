@@ -17,6 +17,7 @@
     const { interval = 8, routeLimit = 12, activities, members } = config;
     check(integer(interval, 1, 3600) && integer(routeLimit, 1, 32) && record(activities) &&
       integer(Object.keys(activities).length, 1, 24) && record(members), 'Invalid agent decision policy');
+    const needs=W.agentNeeds.create(config);
     const fields = new Set();
     function compileTests(tests) {
       check(Array.isArray(tests) && tests.length <= 12, 'Expected a bounded list of activity conditions');
@@ -40,16 +41,59 @@
         return [key, { at: site.at, tests: compileTests(site.when ?? []) }];
       }));
       return [name, { priority: spec.priority ?? 0, duration: spec.duration, tests: compileTests(spec.when ?? []),
-        completion: compileTests(spec.completeWhen ?? []), destinations }];
+        completion: compileTests(spec.completeWhen ?? []), destinations, program:needs.compile(name,spec) }];
     }));
-    const policies = new Map(Object.entries(members).map(([name, list]) => {
+    const starting={};
+    const policies = new Map(Object.entries(members).map(([name, member]) => {
+      const list=Array.isArray(member)?member:member?.activities;
       check(own(agents, name) && Array.isArray(list) && integer(list.length, 1, 24) &&
         list.every(activity => catalog.has(activity)) && new Set(list).size === list.length,
         'Invalid activity list for ' + name);
-      return [name, list.slice().sort((a, b) => catalog.get(b).priority - catalog.get(a).priority)];
+      if(record(member))check(Object.keys(member).every(key=>['activities','needs'].includes(key)),
+        'Invalid agent decision member '+name);
+      if(needs.enabled)starting[name]=needs.values(member?.needs);
+      else check(member?.needs===undefined,'Member needs must have definitions');
+      return [name, needs.enabled?list.slice():list.slice().sort((a, b) => catalog.get(b).priority - catalog.get(a).priority)];
     }));
     check(policies.size > 0, 'Agent decisions need managed members');
-    const initial = Object.fromEntries([...policies.keys()].map(name => [name, blank()]));
+    const initial = Object.fromEntries([...policies.keys()].map(name => [name,
+      needs.enabled?{...blank(),needs:starting[name],needTick:0}:blank()]));
+
+    function update(previous,agent,ctx,available){
+      if(!needs.enabled||previous.needTick===ctx.tick)return previous;
+      const activity=available&&previous.phase==='acting'&&catalog.get(previous.choice.activity);
+      const elapsed=ctx.tick-previous.needTick;
+      const continuous=activity&&elapsed<=(ctx.every??1)&&agent.mode!=='dormant'&&
+        V.dist(agent.position,previous.choice.point)<=agent.radius*.65+1e-6;
+      const values=needs.advance(previous.needs,elapsed,continuous?activity.program:null);
+      const turn=policies.get(agent.id).some(name=>{
+        const program=catalog.get(name).program;
+        return program&&needs.gate(program,previous.needs,previous.needTick)!==needs.gate(program,values,ctx.tick);
+      });
+      return {...previous,needs:values,needTick:ctx.tick,nextPlan:turn?ctx.tick:previous.nextPlan};
+    }
+    function release(previous,agent,ctx,reason){
+      if(!needs.enabled)return null;
+      if(ctx&&['traveling','acting'].includes(previous.phase))
+        publish(ctx,agent,'activity-interrupted',{choice:previous.choice,by:null,reason});
+      return previous.choice===null&&previous.nextPlan===0?previous:
+        {...blank(),needs:previous.needs,needTick:previous.needTick};
+    }
+    function ordering(previous,agent){
+      const list=policies.get(agent.id);
+      if(!needs.enabled)return {ranked:list};
+      const scores=Object.fromEntries(list.map(name=>{
+        const activity=catalog.get(name);
+        return [name,activity.priority+needs.score(activity.program,previous.needs)];
+      }));
+      const scored=list.slice().sort((a,b)=>scores[b]-scores[a]);
+      const current=previous.choice?.activity, program=catalog.get(current)?.program;
+      if(!program?.commitment||['complete','blocked'].includes(previous.phase))return {ranked:scored,scores};
+      const limit=scored.indexOf(current);
+      const urgent=scored.slice(0,limit).filter(name=>catalog.get(name).program?.urgent);
+      const leading=new Set([...urgent,current]);
+      return {ranked:[...urgent,current,...scored.filter(name=>!leading.has(name))],scores,committed:current};
+    }
 
     function sample(tests, fallback, ctx, samples) {
       return tests.map(spec => {
@@ -76,13 +120,17 @@
     function select(previous, agent, ctx, movement) {
       if (ctx.tick < previous.nextPlan) return { next: previous };
       const samples = ctx.causal ? [] : undefined, rejected = [], from = agent.position;
+      const {ranked,scores,committed}=ordering(previous,agent);
+      const evidenceFor=checks=>({checks,rejected,...(scores&&{scores}),...(committed&&{committed})});
       let routes = 0, result;
       function reject(row) {
         if (rejected.length < 24) rejected.push(row);
       }
 
-      search: for (const name of policies.get(agent.id)) {
-        const activity = catalog.get(name), checks = sample(activity.tests, from, ctx, samples);
+      search: for (const name of ranked) {
+        const activity = catalog.get(name), reason=needs.gate(activity.program,previous.needs,ctx.tick);
+        if(reason){reject({activity:name,reason});continue;}
+        const checks = sample(activity.tests, from, ctx, samples);
         if (checks.some(check => !check.pass)) {
           reject({ activity: name, reason: 'activity-condition', checks });
           continue;
@@ -115,7 +163,8 @@
             continue;
           }
           if (continuing && current.destination === destination && V.dist(current.point, point) < 1e-6)
-            return { next: { ...previous, nextPlan: ctx.tick + interval } };
+            return { next: { ...previous, nextPlan: ctx.tick + interval,
+              ...(needs.enabled&&{decisionTick:ctx.tick,evidence:evidenceFor([...checks,...gate])}) } };
           if (routes >= routeLimit) {
             reject({ activity: name, destination, reason: 'route-budget' });
             break search;
@@ -132,9 +181,14 @@
           break search;
         }
       }
-      const choice = result?.choice ?? null, evidence = { checks: result?.checks ?? [], rejected };
-      const next = { choice, phase: choice ? 'traveling' : 'idle', since: ctx.tick, nextPlan: ctx.tick + interval,
+      const choice = result?.choice ?? null, evidence = evidenceFor(result?.checks ?? []);
+      const next = { ...(needs.enabled&&{needs:previous.needs,needTick:previous.needTick}),
+        choice, phase: choice ? 'traveling' : 'idle', since: ctx.tick, nextPlan: ctx.tick + interval,
         decisionTick: ctx.tick, evidence, blockers: [] };
+      if(needs.enabled&&previous.choice&&['traveling','acting'].includes(previous.phase)&&
+        previous.choice.activity!==choice?.activity)
+        publish(ctx,agent,'activity-interrupted',{choice:previous.choice,by:choice?.activity??null,
+          reason:rejected.find(row=>row.activity===previous.choice.activity)?.reason??'higher-priority'},samples);
       if (choice || previous.choice || previous.decisionTick === null)
         publish(ctx, agent, choice ? 'activity-selected' : 'activity-idle',
           { choice, previous: previous.choice, ...evidence }, samples);
@@ -149,6 +203,8 @@
       if (!at) return block('destination-missing');
       if (agent.mode === 'blocked' || agent.mode === 'waiting' || agent.mode === 'dormant')
         return block('movement-blocked');
+      const reason=needs.gate(activity.program,current.needs,ctx.tick);
+      if(reason)return block(reason);
       const traveling = current.phase === 'traveling';
       if (V.dist(agent.position, choice.point) > agent.radius * .65 + 1e-6)
         return traveling ? current : { ...current, phase: 'traveling', since: ctx.tick, blockers: [] };
@@ -172,8 +228,11 @@
       const checks = sample(activity.completion, agent.position, ctx, samples);
       const blockers = checks.filter(check => !check.pass);
       if (blockers.length) return { ...next, blockers };
-      publish(ctx, agent, 'activity-completed', { choice, position: agent.position, checks: [...guards, ...checks] }, samples);
-      return { ...next, phase: 'complete', since: ctx.tick, blockers: [] };
+      const values=needs.apply(next.needs,activity.program);
+      publish(ctx, agent, 'activity-completed', { choice, position: agent.position, checks: [...guards, ...checks],
+        ...(values!==next.needs&&{needs:values}) }, samples);
+      return { ...next, phase: 'complete', since: ctx.tick, blockers: [],
+        ...(values!==next.needs&&{needs:values,nextPlan:Math.min(next.nextPlan,ctx.tick+1)}) };
 
       function block(reason, checks = [], samples = []) {
         const blockers = [{ reason, ...(checks.length && { checks }) }];
@@ -185,6 +244,18 @@
     return {
       initial,
       managed: name => policies.has(name),
+      update,
+      release,
+      hasNeeds:needs.hasMeters,
+      checkNeed({agent,need,value}){
+        check(policies.has(agent)&&needs.validValue(need,value),'Invalid need or value for managed agent '+agent);
+      },
+      setNeed(previous,agent,{need,value},ctx,available){
+        previous=update(previous,agent,ctx,available);
+        const before=previous.needs[need];
+        publish(ctx,agent,'need-set',{need,before,value});
+        return {...previous,needs:{...previous.needs,[need]:value},nextPlan:ctx.tick};
+      },
       select,
       observe,
       checkFields(query) {
@@ -201,7 +272,8 @@
             vector(choice.point)) && integer(row.since, 0, 10000000) && (row.decisionTick === null ||
             integer(row.decisionTick, 0, 10000000)) && integer(row.nextPlan, 0, 10003600) &&
             record(row.evidence) && Array.isArray(row.evidence.checks) && Array.isArray(row.evidence.rejected) &&
-            Array.isArray(row.blockers), 'Invalid saved activity for ' + name);
+            Array.isArray(row.blockers)&&(!needs.enabled||needs.validate(row.needs,row.needTick)),
+          'Invalid saved activity for ' + name);
         }
       }
     };

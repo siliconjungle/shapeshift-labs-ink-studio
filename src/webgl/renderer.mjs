@@ -1122,18 +1122,24 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const time = frame.time ?? world.lookSnapshot?.time ?? 0;
       let camera;
       const drawFrame = plan.needsCamera ? { ...frame, ...captureFrameCamera(frame, view => { camera = view; }) } : frame;
-      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera) : api.layers(plan, world, time);
+      const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl) : api.layers(plan, world, time, undefined, gl);
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
       composite(world, drawFrame, plan, layers, output, present);
     }
     let renderGraph;
     function presentGraph(world, frame, width, height, output) {
       const definition = frame.renderGraph ?? world.look?.renderGraph;
-      if (definition === false || definition === undefined) return presentMixed(world, frame, width, height, output);
+      if (definition === false || definition === undefined) {
+        renderGraph?.reset();
+        return presentMixed(world, frame, width, height, output);
+      }
       const api = toolkit.KIT?.renderGraph;
       if (!api) throw new Error('Render graphs need the Ink Studio KIT');
       const plan = api.prepare(definition);
-      if (!plan?.passes.length) return presentMixed(world, frame, width, height, output);
+      if (!plan?.passes.length) {
+        renderGraph?.reset();
+        return presentMixed(world, frame, width, height, output);
+      }
       if (width > Math.min(maxSize, viewportLimit[0]) || height > Math.min(maxSize, viewportLimit[1]))
         throw new RangeError('Render graph exceeds the WebGL viewport or texture size limit');
       renderGraph ??= createRenderGraph(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize });
@@ -1141,7 +1147,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     }
     let inspection;
     function presentFrame(world, frame, width, height, output) {
+      const source = frame.renderHistoryKey ?? world;
       ({ world, frame } = reconstructFrame(world, frame, reconstructionInstances));
+      if (source !== world) frame = { ...frame, renderHistoryKey: source };
+      const presentation = toolkit.KIT?.presentationTimeline?.sample(world, frame.time ?? world.lookSnapshot?.time ?? 0, frame);
+      if (presentation) frame = { ...frame, ...presentation };
       const definition = frame.inspection ?? world.look?.inspection;
       if (definition === undefined || definition === false) return presentGraph(world, frame, width, height, output);
       const api = toolkit.KIT?.inspection;

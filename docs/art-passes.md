@@ -95,6 +95,31 @@ Use [Effect palette ramps](effect-palettes.md) to author independent fog, cloud,
 
 Give a line a fixed color, separate highlight and shadow colors, or steps along its authored material ramp. A material rule can override or disable any line independently. A palette reserved for a named material applies only to that material. The emission and fog ramps are keyed by their render signals.
 
+Use `ink.targets` to style lines by object, entity, material, surface, prefab, or tag. Ink applies scene rules first, then material rules, then each matching target in list order. Set `occlusionSilhouettes: true` to classify the near side of a depth break between separate objects as a silhouette. Touching materials still use the boundary rule.
+
+```js
+const ink = {
+  occlusionSilhouettes: true,
+  silhouette: { color: '#35464b' },
+  crease: { steps: 1 },
+  boundary: { color: '#496873' },
+  targets: [
+    { select: { tag: 'masonry' }, distance: { near: 12, far: 19 },
+      crease: { distance: { near: 10, far: 14 } } },
+    { select: { object: 'courier' }, crease: false,
+      silhouette: { shadow: '#301d37', highlight: '#711f45', distance: false } }
+  ]
+};
+```
+
+`distance` measures scene units along the view axis from the authored camera in either projection. A line stays at full strength through `near` and disappears at `far`. Put the range on `ink`, a material, or a target to apply it to all three line types there. A line's own range takes precedence. Use equal values for a hard cutoff or `distance: false` to clear an inherited range. Set a line to `false` to turn it off at every depth.
+
+Use `--ink file.json` to apply a standalone ink profile through the CLI or `--ink off` to disable selective ink. The [aqueduct courier scene](../examples/selective-ink.js) shows a colored character contour in front of stonework that loses its ink over distance.
+
+```sh
+node cli/ink-studio.js render examples/selective-ink.js --w 318 --h 160 --px 1 --out aqueduct.png
+```
+
 See [Stable dithering and camera review](stable-dithering.md) for per-object anchors and native-resolution pan and orbit clips. Camera snapping applies to orthographic projection. World-space dithering samples at the visible surface. Object-space dithering maps the sample back to the splat's rest frame, using the rig transform where available. Screen-space dithering follows the art grid. Use `--ortho --snap`, `--dither-space screen|world|object`, and `--resolve native|coverage|clusters`. The coverage and cluster modes render four subpixels per art pixel and can protect named objects, materials, glints and small emissive details.
 
 ## Art-pixel effects

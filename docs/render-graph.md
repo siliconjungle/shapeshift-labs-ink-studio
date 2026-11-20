@@ -6,15 +6,66 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 
 | Pass | Controls |
 | --- | --- |
-| `mask` | Outputs coverage for downstream passes. An optional `rect` uses `[x, y, width, height]` and `feather` softens its edges inward. `invert` flips the combined coverage. |
+| `mask` | Outputs coverage for downstream passes. An optional `rect` uses `[x, y, width, height]` and `feather` softens its edges inward. A `volume` masks visible world surfaces in a feathered ellipsoid. `invert` flips the combined coverage. |
 | `grade` | Applies an RGB `stack` to the input. CPU and WebGL use the same sampled color cube. `cubeSize` defaults to 33 and accepts 2–65. |
 | `reflection` | Mirrors the current image or a named `source` along `axis` (`x` or `y`). `line` sets the reflection line in output pixels and defaults to the midpoint. |
 | `distortion` | Samples the input or a named `source` using an XY `offset` in pixels and optional per-axis wave `amplitude`. `period` is in pixels, and `phase` and `rate` are in cycles and cycles per second. |
 | `composite` | Blends a named `source` image using `over` or `add`, or draws a single [mixed-resolution layer](mixed-resolution.md) from `layer` using its own resolution, filtering and blend settings. |
+| `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
 
 Screen coordinates are in final output pixels from the top left. Reflected and distorted samples outside the image leave the input pixel unchanged. Graph reflection and distortion work on screen images. Scene-space planar capture, glass refraction and depth-dependent media use the scene renderer.
 
 Passes can set `select` to a named object, entity, material, surface, prefab or tag selector. The selection follows the visible depth-writing splat at each pixel of the world grid. A `mask` reference can narrow the selection further. `opacity` scales the effect from zero to one. A pass with `enabled: false` keeps its image input or supplies zero mask coverage. Requested diagnostic buffers remain on the native world grid.
+
+## Moving world reveals
+
+For a `mask` pass, set `volume: { at, extent, feather }`. The first two fields
+are XYZ center and positive radii in world units. Feather is the fractional
+width of the soft inner edge, from zero to one, and defaults to .25. The
+mask checks the resolved scene depth on the native world grid. It can be
+combined with the usual target selector, rectangle, and earlier mask.
+
+Use an inverted copy of that mask to place a dimming layer over the rest of
+the scene. Animate the volume with
+[a presentation track](scene-timeline.md#presentation-tracks), and reference
+the original mask from a history pass to capture the signal as it crosses
+the selected subject.
+
+## Target-scoped screen history
+
+```json
+{
+  "id": "relay-persistence",
+  "type": "history",
+  "select": { "object": "relay" },
+  "mask": "reveal",
+  "mode": "persistence",
+  "halfLife": 0.7,
+  "cameraMotion": "keep"
+}
+```
+
+`hold` keeps the first captured color and coverage at a pixel until the pass
+resets. Previously empty pixels can capture as the mask moves. `persistence`
+keeps fading prior color under new samples, with `halfLife` in scene
+seconds. Default half-life is .45 seconds. Both modes capture their image
+input with the optional mask and use `opacity` for display. The current
+visible target owns the overlay pixel, so a nearer object suppresses the
+held image. History is stored at output resolution in premultiplied 8-bit
+color. Graphs may retain up to four live histories with a combined budget
+of 8,388,608 output pixels.
+
+WebGL keeps the history on the GPU per renderer. For CPU playback, create
+one `KIT.renderGraph.history()` and pass it as `renderHistory` on each
+`render` call. CLI sheets and clips keep one history for their rendered
+sequence. A graph pass can be compiled without a session for a still.
+
+Disabling or removing a history pass clears it. Backward time jumps,
+dimension changes, source changes, and `resetRenderHistory: true` reset
+history. The default `cameraMotion: "reset"` also clears it on camera
+movement. Use `"keep"` for deliberate screen-space persistence through
+camera moves. Supply a stable `renderHistoryKey` when consecutive world
+snapshots in a shot use different object identities.
 
 ## Editing a live graph
 

@@ -292,6 +292,8 @@ console.log(world.count);
 
 Use the [headless scene editor](docs/scene-editor.md) to select solids, edit transforms and materials, and save the resulting diorama JSON.
 
+Apply a [versioned complete look](docs/environment-packs.md#complete-looks) to a diorama with `--asset-pack` and `--environment-preset`. The Copperwind example compares three styles with the same camera, geometry, and animation.
+
 The larger [lab/data-shrine.json](lab/data-shrine.json) demonstrates joins, folded and warped geometry, parented parts, lights, particles and tap effects.
 
 ## Animation and puppets
@@ -315,6 +317,8 @@ Accumulate moving deposits on surface charts or in world volumes, then render th
 Move section planes, depth ranges, and spatial masks across a native render. [Interactive cutaways and clipping](docs/cutaways.md)
 
 Compare synchronized scenes with side-by-side playback, a swipe divider, and signed overlays. [Comparison views](docs/comparison-views.md)
+
+Capture independent cameras under a shared budget and compose their feeds into overlays and textured world panels. [Multi-camera render atlases](docs/camera-atlas.md)
 
 Encode categories with patterns and shapes, label scale endpoints, and navigate linked records with a keyboard. [Accessible data encodings](docs/linked-views.md#accessible-encodings)
 
@@ -715,6 +719,8 @@ shared world queries, timed actions, checkpoints, replay and branch comparison.
 typed connections, state reads, event kinds, and execution dependencies.
 [Spatial field coupling](docs/headless-worlds.md#spatial-field-coupling) shares
 neighborhood values and gradients with solvers and entity queries.
+[Interactive checkpoint branching](docs/simulation-checkpoints.md#interactive-checkpoint-branching)
+retains named outcomes, queued edits, and shared starting points in one session.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
@@ -787,7 +793,7 @@ Common rendering controls:
 | `--w`, `--h`, `--out` | Output viewport size and destination. The renderer resolves a lower-resolution pixel grid derived from the scene's detail settings. |
 | `--px 2` | Use two screen pixels per art pixel. In `compare` and `review`, `--px` specifies the scale of the reference. |
 | `--tone stipple\|off` | Enable the stipple preset or turn off the scene's tone settings. |
-| `--ink off`, `--effects off` | Disable authored selective ink or art-pixel effects. |
+| `--ink on\|off\|file.json`, `--effects off` | Choose a [selective ink profile](docs/art-passes.md#selective-ink-and-stable-pixels) or disable art-pixel effects. |
 | `--emissive-finishes off` | Disable authored emissive cores, shaped spill, and size-aware glow. |
 | `--snap`, `--dither-space screen\|world\|object`, `--resolve native\|coverage\|clusters` | Configure camera snapping, dither coordinates, and pixel resolve. Use `--stable off` to disable the scene's stability profile. |
 | `--splat-order center\|surface` | Choose global center ordering or local ordering using the sampled surface plane. |

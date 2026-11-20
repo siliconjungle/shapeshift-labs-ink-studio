@@ -48,4 +48,10 @@ Paint returns a 24-bit RGB integer or `undefined` for a transparent cutout. Samp
 
 Grids default to a 200,000-triangle budget. Raise `maxTriangles` explicitly up to 2,000,000. The atlas has its existing configurable width and maximum height. Invalid geometry or paint leaves the atlas allocation unchanged. Treat finished geometry and atlas data as immutable and create a new atlas when editing them.
 
+To share an updateable texture region among faces, call `atlas.reserve(width, height)`
+and attach it with `atlas.faceRegion(origin, right, up, region)` or
+`atlas.meshRegion(surface, region)`. After `finish()`, `SpriteSurface.update`
+writes a matching top-down RGBA raster into the region and marks those pixels
+dirty. [Camera feeds on textured panels](camera-atlas.md#route-a-feed-to-the-world)
+
 Run `ink-studio render examples/textured-surfaces.js` for a mixed example. Its `build(seed,{textured:false})` also exercises the SDF and splat rendering path.

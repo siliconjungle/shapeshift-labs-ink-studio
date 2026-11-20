@@ -42,7 +42,7 @@ Selectors cache membership by geometry layout and metadata identity, and sample 
 
 Targets are evaluated in descending `priority`, preserving declaration order for ties. `inspectionFocus: 'relay'` raises a target ahead of that ordering without changing the camera or enabling an inactive target. `maxTargets` defaults to 12 and is limited to 32; excess candidates report `budget`. Definitions may declare up to 256 targets. `maxMagnifiers` defaults to one and may be zero through four. Both annotation and magnification remain active for the chosen target; `magnify: false` disables only its inset.
 
-Callbacks can consume a simulation state, parameter sample, timeline state or event envelope. Inspection owns no second simulation clock. For declarative parameter or timeline authoring, use the existing [parameter bindings](parameter-bindings.md) and [scene timeline](scene-timeline.md) to sample target data before preparing the definition; use callbacks when those values need to change each frame.
+Callbacks can consume a simulation state, parameter sample, timeline state or event envelope. Inspection owns no second simulation clock. Use [presentation tracks](scene-timeline.md#presentation-tracks) to key activation, coverage, labels, and the magnifier from a scene timeline. JavaScript callbacks can sample host state or shared parameter bindings.
 
 ## Shared visibility
 
@@ -63,7 +63,7 @@ const glyphs = { 日: ['#####', '#...#', '#...#', '#####', '#...#', '#...#', '##
 // { glyphs, targets: [{ ...target, ripple: { chars: '日0123:+' } }] }
 ```
 
-The magnifier's `rect` uses normalized top-left `[x, y, width, height]` coordinates and must fit within the frame. Its default is `[.72, .08, .24, .24]`. `zoom` is 1–32. The crop keeps the target near its center and clamps to the source frame. The inset receives the resolved scene's grading and effects. Inspection itself runs after grading, render-graph passes and mixed-resolution layers, keeping its annotation palette crisp. A screen-space render-graph warp does not remap target projection coordinates; put a warp around the final output in a host if it should distort the HUD too.
+The magnifier's `rect` uses normalized top-left `[x, y, width, height]` coordinates and must fit within the frame. Its default is `[.72, .08, .24, .24]`. Set `enabled: false` to leave the authored inset in place for later activation. `zoom` is 1–32. The crop keeps the target near its center and clamps to the source frame. The inset receives the resolved scene's grading and effects. Inspection itself runs after grading, render-graph passes and mixed-resolution layers, keeping its annotation palette crisp. A screen-space render-graph warp does not remap target projection coordinates; put a warp around the final output in a host if it should distort the HUD too.
 
 Without mixed-resolution composition the CPU works in returned art-pixel coordinates, and its existing `px` controls display upscaling. To keep world art coarse and labels fine, set `composite.world.resolution` and render with final output dimensions. Native inspection is always at the requested frame resolution. Requested CPU art passes retain their original world dimensions, and transparent CPU exports gain annotation alpha coverage.
 

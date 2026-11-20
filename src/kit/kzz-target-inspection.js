@@ -47,14 +47,16 @@
     throw new TypeError('Inspection anchors support splat, part, bone, or selector');
   }
   const getFont = settings => {
-    if (!fonts.has(settings)) {
+    if (!settings.glyphs || typeof settings.glyphs !== 'object') return TargetInspection.font(K.ascii.atlas(), settings.glyphs);
+    if (!fonts.has(settings.glyphs)) {
       const glyphs = TargetInspection.font(K.ascii.atlas(), settings.glyphs);
-      for (const target of settings.targets)
-        for (const ch of target.ripple?.chars ?? '')
-          if (!glyphs.has(ch)) throw new RangeError('Missing inspection ripple glyph: ' + ch);
-      fonts.set(settings, glyphs);
+      fonts.set(settings.glyphs, glyphs);
     }
-    return fonts.get(settings);
+    const glyphs = fonts.get(settings.glyphs);
+    for (const target of settings.targets)
+      for (const ch of target.ripple?.chars ?? '')
+        if (!glyphs.has(ch)) throw new RangeError('Missing inspection ripple glyph: ' + ch);
+    return glyphs;
   };
   K.inspection = Object.freeze({
     ...TargetInspection,

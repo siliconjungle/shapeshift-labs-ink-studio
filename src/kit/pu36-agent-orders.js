@@ -23,7 +23,8 @@
     const fields=new Set(), staticTransfers=[], staticWork=[], interactions=[];
     let validateTransfer, validateReservation, validateWork, validateInteraction;
     const catalog=new Map(Object.entries(tasks).map(([name,spec])=>{
-      check(id(name)&&keys(spec,['steps'])&&Array.isArray(spec.steps)&&integer(spec.steps.length,1,32),'Invalid order task '+name);
+      check(id(name)&&keys(spec,['steps','blockedTimeout'])&&Array.isArray(spec.steps)&&integer(spec.steps.length,1,32)&&
+        (spec.blockedTimeout===undefined||integer(spec.blockedTimeout,1,10000000)),'Invalid order task '+name);
       const targets=new Set(), params=new Set();
       function target(value){
         if(keyRef(value,'target'))targets.add(value.target);
@@ -81,7 +82,8 @@
           default: throw Error('Unknown order task step in '+name);
         }
       }
-      return [name,{steps:spec.steps,targets:[...targets].sort(),params:[...params].sort()}];
+      return [name,{steps:spec.steps,targets:[...targets].sort(),params:[...params].sort(),
+        ...(spec.blockedTimeout!==undefined&&{blockedTimeout:spec.blockedTimeout})}];
     }));
 
     const reference=(value,bag,kind)=>value?.[kind]!==undefined?bag[value[kind]]:value;
@@ -105,6 +107,7 @@
       const spec=catalog.get(order.task);
       check(spec&&(order.id===undefined||id(order.id))&&
         (order.timeout===undefined||integer(order.timeout,1,10000000))&&
+        (order.blockedTimeout===undefined||integer(order.blockedTimeout,1,10000000))&&
         (order.priority===undefined||W.routeRequests.priority(order.priority)),'Invalid agent order');
       const {targets={},params={}}=order;
       if(order.reservation!==undefined){
@@ -121,7 +124,8 @@
     }
     function checkIssue(args){
       check(keys(args,['agent','generation','mode','order'])&&(args.mode===undefined||modes.includes(args.mode))&&
-        keys(args.order,['id','task','targets','params','timeout','priority','reservation']),'Expected an order and a valid queue mode');
+        keys(args.order,['id','task','targets','params','timeout','blockedTimeout','priority','reservation']),
+      'Expected an order and a valid queue mode');
       orderShape(args.order);
     }
     function checkCancel(args){
@@ -133,9 +137,10 @@
         sequence:order.sequence,order:order.id??null,task:order.task,at:agent.position,...detail});
     }
     function finish(book,order,phase,reason,agent,ctx){
-      const lastBlocker=reason==='timeout'&&order.reason?{lastBlocker:order.reason}:{};
+      const lastBlocker=['timeout','route-blocked'].includes(reason)&&order.reason?{lastBlocker:order.reason}:{};
       const entry={...order,phase,reason,ended:ctx.tick,...lastBlocker};
-      emit(ctx,agent,'order-'+phase,entry,{reason,results:entry.results,...lastBlocker});
+      emit(ctx,agent,'order-'+phase,entry,{reason,results:entry.results,...lastBlocker,
+        ...(reason==='route-blocked'&&{blockedTicks:entry.blockedTicks})});
       return {...book,outcomes:[...book.outcomes,entry].slice(-historyLimit),
         ...(entry.reservation&&phase==='succeeded'&&{lastReservedSuccess:entry.sequence})};
     }
@@ -185,6 +190,7 @@
     }
     function completed(book,entry,result,agent,ctx){
       const next={...entry,step:entry.step+1,entered:entry.elapsed,results:[...entry.results,{...result,tick:ctx.tick}]};
+      if(next.blockedTicks!==undefined)delete next.blockedTicks;
       return next.step===catalog.get(entry.task).steps.length?
         finish({...book,active:null},next,'succeeded',null,agent,ctx):
         {...book,active:status(next,'starting')};
@@ -228,11 +234,25 @@
         const target=reference(value,entry.targets,'target');
         return keyRef(target,'claim')?reservation?.grants.find(grant=>grant.claim===target.claim)?.at:target;
       }
+      function motion(row,phase,reason=null){
+        const limit=entry.blockedTimeout??catalog.get(entry.task).blockedTimeout;
+        if(limit===undefined)return {...book,active:status(entry,phase,reason)};
+        if(phase!=='blocked'){
+          const next=status(entry,phase,reason);
+          if(next.blockedTicks===undefined)return {...book,active:next};
+          const {blockedTicks,...cleared}=next;
+          return {...book,active:cleared};
+        }
+        const ticks=(entry.phase==='blocked'?entry.blockedTicks??0:0)+Number(advanced);
+        const next={...status(entry,phase,reason),blockedTicks:ticks};
+        return ticks>=limit?finish({...book,active:null},next,'failed','route-blocked',row,ctx):
+          {...book,active:next};
+      }
       if(step.op==='move'){
         const target=at(step.at), point=target===undefined?null:ctx.query.target(target)?.point;
         const moved=point?movement.move(agent,point,entry):movement.hold(agent,entry.task);
         const next=moved.arrived?completed(book,entry,{op:'move',at:moved.agent.position},moved.agent,ctx):
-          {...book,active:status(entry,point?moved.phase:'blocked',point?moved.reason:'target-missing')};
+          motion(moved.agent,point?moved.phase:'blocked',point?moved.reason:'target-missing');
         return {row:moved.agent,book:next};
       }
       if(step.op==='work'){
@@ -244,7 +264,7 @@
         }
         if(report?.position&&K.V.dist(agent.position,report.position)>report.radius+1e-8){
           const moved=movement.move(agent,report.position,entry,report.radius);
-          return {row:moved.agent,book:{...book,active:status(entry,moved.phase??'moving',moved.reason??null)}};
+          return {row:moved.agent,book:motion(moved.agent,moved.phase??'moving',moved.reason??null)};
         }
         const {agent:row,clearing}=movement.hold(agent,entry.task);
         const ready=Boolean(report?.position&&!clearing), pending=report?.completed+1<batch;
@@ -255,7 +275,7 @@
         const {path,target,verb}=offering(step,entry.params), report=ctx.query.probe(path,undefined,{target,verb}).value;
         if(report?.position&&K.V.dist(agent.position,report.position)>report.range+1e-8){
           const moved=movement.move(agent,report.position,entry,report.range);
-          return {row:moved.agent,book:{...book,active:status(entry,moved.phase??'moving',moved.reason??null)}};
+          return {row:moved.agent,book:motion(moved.agent,moved.phase??'moving',moved.reason??null)};
         }
         const {agent:row,clearing}=movement.hold(agent,entry.task);
         const reason=clearing?'crossing':report?.position?null:'target-unavailable';
@@ -341,7 +361,9 @@
           (row.lastTick===null?row.started===null:tick(row.lastTick)&&row.started!==null&&row.lastTick>=row.started)&&
           (terminal?outcomes.includes(row.phase)&&tick(row.ended)&&row.ended>=(row.lastTick??row.issued):
             phases.includes(row.phase)&&!outcomes.includes(row.phase)&&!own(row,'ended'))&&
-          (row.reason===null||id(row.reason))&&(row.lastBlocker===undefined||row.reason==='timeout'&&id(row.lastBlocker))&&
+          (row.reason===null||id(row.reason))&&(row.lastBlocker===undefined||
+            ['timeout','route-blocked'].includes(row.reason)&&id(row.lastBlocker))&&
+          (row.blockedTicks===undefined||tick(row.blockedTicks)&&row.blockedTicks<=row.elapsed)&&
           tick(row.elapsed)&&integer(row.entered,0,row.elapsed)&&
           Array.isArray(row.results),'Invalid saved order entry');
         orderShape(row);

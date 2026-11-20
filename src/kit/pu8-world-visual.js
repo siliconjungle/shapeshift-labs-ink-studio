@@ -39,9 +39,14 @@
     const cached = timelines.get(world);
     if (cached) return cached;
     const { read } = W.data, rig = sceneCameraRig(world);
+    let look;
     const timeline = K.timeline.compile(world.timeline, { channel(path) {
       const [root, field] = path;
       if (root === 'camera' && path.length === 2) return K.cameraRig.channel(field, rig?.shots);
+      if (root === 'renderGraph' || root === 'inspection') {
+        look ??= visualLooks(world, W.materials.catalog(world)).look;
+        return K.presentationTimeline.channel(look, path);
+      }
       if (root !== 'visual' || path.length < 2 || ['camera', 'cameraRig', 'dataMarks', 'parameterBindings'].includes(field)) return null;
       const value = read(world, path);
       if (Number.isFinite(value)) return { validate: Number.isFinite };

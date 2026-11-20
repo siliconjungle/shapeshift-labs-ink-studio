@@ -12,16 +12,18 @@ const RenderGraph = (() => {
     targets = require('./target-selectors.js');
     compositor = require('./frame-composite.js');
   }
-  const operations = Object.freeze({ mask: 1, grade: 2, reflection: 3, distortion: 4, composite: 5 });
+  const operations = Object.freeze({ mask: 1, grade: 2, reflection: 3, distortion: 4, composite: 5, history: 6 });
   const fields = {
-    mask: ['rect', 'feather', 'invert'],
+    mask: ['rect', 'feather', 'invert', 'volume'],
     grade: ['stack', 'cubeSize'],
     reflection: ['source', 'axis', 'line'],
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase'],
-    composite: ['source', 'layer', 'blend']
+    composite: ['source', 'layer', 'blend'],
+    history: ['mode', 'halfLife', 'cameraMotion']
   };
   const editorSnapshot = Symbol.for('ink-studio.renderGraph.snapshot');
   const compiled = new WeakMap(), cubes = new WeakMap();
+  const maxHistoryPasses = 4, maxHistoryPixels = 8388608;
   const plain = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const tuple = (value, len) => Array.isArray(value) && value.length === len && Array.from(value).every(Number.isFinite);
   const clamp = x => Math.min(1, Math.max(0, x));
@@ -62,11 +64,20 @@ const RenderGraph = (() => {
       const node = { id, type, operation: operations[type], enabled, opacity, select, mask, input };
       switch (type) {
         case 'mask': {
-          const { rect, feather = 0, invert = false } = pass;
+          const { rect, feather = 0, invert = false, volume } = pass;
           if ((rect !== undefined && (!tuple(rect, 4) || rect[2] <= 0 || rect[3] <= 0)) ||
               !Number.isFinite(feather) || feather < 0 || typeof invert !== 'boolean')
             throw new TypeError('A mask needs a positive rectangle, nonnegative feather and boolean invert');
           Object.assign(node, { rect: rect?.slice(), feather, invert });
+          if (volume !== undefined) {
+            record(volume, ['at', 'extent', 'feather'], 'world reveal volume');
+            const { at, extent, feather = .25 } = volume;
+            if (!tuple(at, 3) || !tuple(extent, 3) || extent.some(radius => radius <= 0) ||
+                !Number.isFinite(feather) || feather < 0 || feather > 1)
+              throw new RangeError('A world reveal needs a finite center, positive XYZ radii and a feather in [0, 1]');
+            node.volume = { at: at.slice(), extent: extent.slice(), feather };
+            node.needsCamera = true;
+          }
           break;
         }
         case 'grade': {
@@ -90,6 +101,15 @@ const RenderGraph = (() => {
             throw new RangeError('Distortion needs finite XY offset and amplitude and a positive period');
           Object.assign(node, { offset: offset.slice(), amplitude: amplitude.slice(), period,
             rate: finite(rate, 'Distortion rate'), phase: finite(phase, 'Distortion phase'), source: reference(pass.source ?? input, 'image') });
+          break;
+        }
+        case 'history': {
+          const { mode = 'persistence', halfLife = .45, cameraMotion = 'reset' } = pass;
+          if (!select || !['hold', 'persistence'].includes(mode) || !['reset', 'keep'].includes(cameraMotion) ||
+              !Number.isFinite(halfLife) || halfLife <= 0)
+            throw new TypeError('Screen history needs a target selector, hold or persistence, a positive halfLife and a camera policy');
+          Object.assign(node, { mode, halfLife, cameraMotion, needsCamera: cameraMotion === 'reset',
+            historyKey: JSON.stringify([input, mask, Object.entries(select).sort(), mode, cameraMotion]) });
           break;
         }
         case 'composite': {
@@ -117,7 +137,10 @@ const RenderGraph = (() => {
       for (const dependency of nodes[i].dependencies) live.add(dependency);
     const passes = nodes.filter(node => live.has(node.id)), lastUse = new Map();
     passes.forEach((node, i) => node.dependencies.forEach(id => lastUse.set(id, i)));
-    const plan = { passes, output, lastUse, needsOwner: passes.some(node => node.enabled && node.select),
+    const historyPasses = passes.filter(node => node.enabled && node.type === 'history');
+    if (historyPasses.length > maxHistoryPasses) throw new RangeError('A graph supports up to four live screen history passes');
+    const plan = { passes, output, lastUse, historyPasses, needsDepth: passes.some(node => node.enabled && node.volume),
+      needsOwner: passes.some(node => node.enabled && node.select),
       needsCamera: passes.some(node => node.enabled && node.needsCamera) };
     if (readSnapshot) compiled.set(value, plan);
     return plan;
@@ -196,11 +219,69 @@ const RenderGraph = (() => {
     return data;
   }
 
-  function layer(node, w, h, world, time, text, camera, resolve) {
+  function layer(node, w, h, world, time, text, camera, resolve, gl) {
     const plan = compositor.prepare({ layers: [node.layer] }, w, h);
-    return compositor.layers(plan, world, time, text, camera, resolve)[0];
+    return compositor.layers(plan, world, time, text, camera, resolve, gl)[0];
   }
 
-  return Object.freeze({ prepare, create, cube, selection, layer });
+  function history({ release = () => {} } = {}) {
+    const entries = new Map();
+    let previousFrame;
+    function drop(id) {
+      const entry = entries.get(id);
+      entries.delete(id);
+      if (entry) release(entry.value);
+    }
+    function clear() {
+      for (const id of entries.keys()) drop(id);
+      previousFrame = undefined;
+    }
+    function begin(plan, { source, w, h, time, camera, reset } = {}) {
+      if (!plan?.historyPasses.length) {
+        clear();
+        return;
+      }
+      if (!Number.isFinite(time)) throw new RangeError('Screen history needs a finite frame time');
+      if (w * h * plan.historyPasses.length > maxHistoryPixels) throw new RangeError('Screen history exceeds its pixel budget');
+      const signature = camera && [...camera.view, camera.tangent, camera.aspect, +camera.ortho, ...camera.depthRange];
+      const before = previousFrame;
+      if (reset || !before || before.source !== source || before.w !== w || before.h !== h || before.time > time) clear();
+      const still = signature && before?.signature && signature.every((value, i) => Math.abs(value - before.signature[i]) < 1e-5);
+      const active = new Map(plan.historyPasses.map(node => [node.id, node]));
+      for (const [id, entry] of entries) {
+        const node = active.get(id);
+        if (!node || node.historyKey !== entry.key || node.cameraMotion === 'reset' && !still) drop(id);
+      }
+      previousFrame = { source, w, h, time, signature };
+      return node => {
+        const prior = entries.get(node.id);
+        return {
+          value: prior?.value,
+          capture: !prior || prior.time < time,
+          decay: prior ? 2 ** (-(time - prior.time) / node.halfLife) : 0,
+          save(value) {
+            drop(node.id);
+            entries.set(node.id, { key: node.historyKey, time, value });
+          }
+        };
+      };
+    }
+    return Object.freeze({ begin, clear });
+  }
+
+  // Depth is the axial camera distance at the center of the native texel.
+  function volumeCoverage(volume, camera, u, v, depth) {
+    if (!Number.isFinite(depth)) return 0;
+    const view = camera.view, scale = camera.tangent * (camera.ortho ? 1 : depth);
+    const x = (2 * u - 1) * scale * camera.aspect, y = (1 - 2 * v) * scale;
+    const [a, b, c] = volume.at, [rx, ry, rz] = volume.extent, eye = camera.eye;
+    const distance = Math.hypot(
+      (eye[0] + x * view[0] + y * view[1] - depth * view[2] - a) / rx,
+      (eye[1] + x * view[4] + y * view[5] - depth * view[6] - b) / ry,
+      (eye[2] + x * view[8] + y * view[9] - depth * view[10] - c) / rz);
+    return volume.feather ? clamp((1 - distance) / volume.feather) : Number(distance <= 1);
+  }
+
+  return Object.freeze({ prepare, create, cube, selection, layer, history, volumeCoverage });
 })();
 if (typeof module !== 'undefined') module.exports = RenderGraph;

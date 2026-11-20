@@ -34,6 +34,14 @@ function floorRows(w, radius = .15) {
 const shade = (w, i) => w.data[i * 16 + 7];
 const options = { w: 100, h: 80, px: 1, dither: 0, ortho: true };
 
+test('a small-shadow row can be authored immediately after filling the builder buffer', () => {
+  const builder = makeBuilder(1, [0x222222, 0xeeeeee], { initialCapacity: 1, shadowArt: art });
+  builder.disc(0, 0, 0, [0, 0, 1], .2, .02, builder.P[0]);
+  builder.shadowNext(0, { ci: 1, t: 1, visibility: 1 });
+  builder.disc(0, 1, 0, [0, 0, 1], .2, .02, builder.P[0]);
+  assert.equal(shade(KIT.shadowArt.frame(builder.finish({}), 1), 1), 0xeeeeee);
+});
+
 test('casting and receiving can be masked independently of the visible sculpt', () => {
   const bake = settings => authored(makeBuilder, makeSculpt, settings);
   const normal = bake({ ramp: [0, 1] });

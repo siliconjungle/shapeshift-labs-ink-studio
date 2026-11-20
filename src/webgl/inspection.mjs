@@ -126,7 +126,7 @@ export function createInspection(
     fullscreen(copyProgram, output, w, h, { u_scene: 0, u_size: [w, h] });
     if (!plan.targets.length) return;
     const glyphs = api.font(settings);
-    if (fontSettings !== settings) {
+    if (fontSettings !== glyphs) {
       const entries = [...glyphs],
         height = Math.ceil(entries.length / 64) * 8,
         bitmap = new Uint8Array(384 * height);
@@ -138,7 +138,7 @@ export function createInspection(
       });
       if (height > maxSize) throw new RangeError('Inspection glyph atlas exceeds texture limit');
       upload(font, 384, height, bitmap, gl.RED);
-      fontSettings = settings;
+      fontSettings = glyphs;
       labelCache.clear();
     }
     const probes = new Float32Array(640),

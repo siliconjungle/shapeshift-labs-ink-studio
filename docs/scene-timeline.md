@@ -29,6 +29,34 @@ Camera tracks work on the visual snapshot. Tracks under `/visual` can key existi
 
 Timeline events enter the simulation's command queue on the first tick at or after their timestamp. Time-zero events enter on tick one. Recorded events include their source ID, instance path, and authored time under `timeline`. Pending events travel with checkpoints and recordings so resume and replay use the same order and emit each event once.
 
+## Presentation tracks
+
+Dioramas and simulation worlds can address render-graph passes and inspection
+targets by ID. Use the existing sequence catalog and clips to place or
+retime a reveal, callout, inset, camera move, and audio cue together.
+
+| Target path | Keyed fields |
+| --- | --- |
+| `/renderGraph/<pass-id>/<field>` | `enabled`, `opacity`, mask `rect` and `feather`, distortion `offset` and `amplitude`, or history `halfLife`. |
+| `/renderGraph/<mask-id>/volume/<field>` | An existing world mask's `at`, `extent`, or `feather`. |
+| `/inspection/<target-id>/<field>` | `active`, `coverage`, `label`, or `detail`. |
+| `/inspection/<target-id>/magnify/<field>` | `enabled` or `zoom` on an authored magnifier. |
+
+Put the graph and inspection definitions in `finish.look` for a diorama or
+`visual.look` for a world. The renderers sample the named channels at frame
+time. Explicit frame overrides for `renderGraph` or `inspection` take
+precedence. The base definitions still supply unkeyed fields. Hosts
+advance a diorama's stage for its camera and poses, as with other scene
+timeline channels, and resolve its audio cues.
+
+The [signal observatory](../examples/signal-observatory.json) sweeps an
+ellipsoidal reveal through two stations. A selected phosphor surface holds
+its fading color as the beam moves on. Callout labels and magnifiers
+activate on the same clock as the camera and cues, and a second clip
+reuses the sequence. Use `ink-studio timeline examples/signal-observatory.json
+--at 3.25` to inspect the sampled tracks and audio, or use `clip` to render
+the history across frames.
+
 ## Hosts and CLI
 
 Diorama builds, simulation runs, and visual snapshots expose the compiled program as `world.timeline` or `run.timeline`. A host can also compile standalone tracks with `KIT.timeline.compile(definition)`.
