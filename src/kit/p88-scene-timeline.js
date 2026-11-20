@@ -6,6 +6,8 @@
   const camera = Object.freeze({ target: { size: 3 }, dist: { mode: 'positive' },
     yaw: { mode: 'radians' }, pitch: { mode: 'number' }, sway: { mode: 'number' },
     fov: { mode: 'positive', validate: value => value < Math.PI },
+    focalLength: {mode:'positive'}, sensorHeight:{mode:'positive'}, focusDistance:{mode:'positive'},
+    composition:{size:2,validate:value=>value.every(n=>n>=0&&n<=1)},
     projection: { mode: 'step', validate: value => K.cameraRig.projectionOK(value) },
     railProgress: { mode: 'number', validate: value => value >= 0 && value <= 1 } });
   const own = (obj, key) => Object.hasOwn(obj, key);

@@ -258,18 +258,13 @@ function renderFrame(world, o, preparedPalettes) {
   const subject = protection?.bind(world);
   const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
   const authored = world.cameraRig?.sample(o?.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? sceneTime, { shot: o.cameraShot }).camera;
-  const c = authored ?? world.cam;
+  const c = CameraStaging.view(world.cam, authored, o[probeCamera] ? undefined : o.camera);
   const viewStaging = o[probeCamera] ? null : CameraStaging.prepare(o.cameraStaging ?? look.cameraStaging);
   const framing = o.samples || o.captureCoverage || o.reflectionPlane ? null : viewStaging;
   const focusBands = o.depthOfField === false ? [] : framing?.depthOfField ?? [];
   const hasFocus = focusBands.some(band => band.radius > 0);
-  const focalLength = o[probeCamera] ? undefined : o.focalLength;
-  if (!o[probeCamera] && (focalLength !== undefined && o.fov !== undefined ||
-    focalLength === undefined && o.sensorHeight !== undefined))
-    throw new RangeError('A sensor-height override needs a focal-length override, which replaces FOV');
-  const sensorHeight = focalLength === undefined ? c.sensorHeight : o.sensorHeight ?? CameraStaging.defaultSensorHeight;
-  const fov = focalLength === undefined ? o.fov ?? c.fov ?? FOV : CameraStaging.fieldOfView(focalLength, sensorHeight);
-  if (!Number.isFinite(fov) || fov <= 0 || fov >= Math.PI) throw new RangeError('Camera field of view must be in (0, π)');
+  const lens = CameraStaging.lens(c,o[probeCamera] ? (o.fov===undefined?{}:{fov:o.fov}) : Object.fromEntries(['fov','focalLength','sensorHeight','focusDistance'].filter(key=>o[key]!==undefined).map(key=>[key,o[key]])));
+  const { fov,sensorHeight } = lens;
   const tangent = Math.tan(fov / 2) / lensScale;
   const ortho = o.ortho ?? c.ortho ?? (c.projection === 'orthographic');
   const motion = ArtDirection.motion(direction,sceneTime,o.skyTime ?? sceneTime);
@@ -281,10 +276,10 @@ function renderFrame(world, o, preparedPalettes) {
     { yaw, pitch, dist } = CameraStaging.constrain({
       yaw: o.yaw ?? c.yaw, pitch: o.pitch ?? c.pitch, dist: dist0 / (cameraMotion.zoom || 1)
     }, viewStaging?.orbit),
-    T0 = o.target || c.target,
-    T = cameraMotion.kick ? [T0[0] + cameraMotion.kick[0], T0[1] + cameraMotion.kick[1], T0[2] + cameraMotion.kick[2]] : T0,
     cw = o.w || 900,
-    ch = o.h || 620;
+    ch = o.h || 620,
+    T0 = CameraStaging.frameTarget({target:o.target || c.target,yaw,pitch,dist,fov:2*Math.atan(tangent),composition:o.composition ?? c.composition},cw/ch),
+    T = cameraMotion.kick ? [T0[0] + cameraMotion.kick[0], T0[1] + cameraMotion.kick[1], T0[2] + cameraMotion.kick[2]] : T0;
   const depthOffset = ortho && !authored ? 2 * world.radius + 4 : 0;
   const audit = o.lookAudit === true ? createAudit() : o.lookAudit;
   const onPaletteClip = audit && ((scope, i, r, g, b) => audit.palette(scope, world.pal[i], r, g, b));

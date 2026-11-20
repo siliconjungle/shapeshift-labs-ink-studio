@@ -416,8 +416,8 @@
     const defaultCam={target:[mid[0],.05,mid[2]],dist:span*1.48,yaw:.62,pitch:.8};
     const rig = sceneCameraRig(world);
     const camera = !rig && frame?.edits.filter(edit => edit.path[0] === 'camera');
-    const cam = camera?.length ? { ...defaultCam, ...config.camera,
-      ...Object.fromEntries(camera.map(({ path, value }) => [path[1], value])) } : config.camera ?? defaultCam;
+    const cam = camera?.length ? CameraLens.view({...defaultCam,...config.camera},
+      Object.fromEntries(camera.map(({ path, value }) => [path[1], value]))) : config.camera ?? defaultCam;
     const contacts=fields.contactEffects&&query.probe(fields.contactEffects,cam.target).value;
     if(contacts?.particles.length){
       const colors=new Map();
