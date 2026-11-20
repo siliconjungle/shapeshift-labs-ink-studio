@@ -97,6 +97,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
   const sampleCoverage = toolkit.KIT?.procedural?.sampleCoverage;
   const coverageRules = toolkit.ContributionRules ?? toolkit.KIT?.procedural?.contributionRules;
   const stableDetailAPI = toolkit.StableDetail ?? toolkit.KIT?.stableDetail;
+  const cutawayAPI = toolkit.KIT?.cutaway;
   let pipeline;
   try {
     const pixelSources = options => pixelShaderSources(toolkit.PixelLook, { packedTone: true, ...options });
@@ -105,7 +106,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const post = program(sources.POST_FS), clean = program(sources.CLEAN_FS);
     // Rebirth hosts can opt into geometry specialization through the lower
     // level pipeline. The canvas path specializes its own fullscreen resolve.
-    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI });
+    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl });
     const emptyVao = resources.allocate('VertexArray');
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
@@ -145,7 +146,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let surfacePipeline, reflectionTarget, reflectionAtlas, reflectionAtlasSize;
     let simple, simpleUnavailable = false, keyProgram, damp, copy, spriteProgram, spriteEnvProgram, spriteLayer, spriteTable, anchors;
     let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, fineValues, materials, anchorCount = 0;
-    let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousColorGrade, previousDetailRanges;
+    let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousColorGrade, previousDetailRanges, previousSection;
     let toneKey, tone, sorted, instanceDraw, expandInstances, lastInstances;
 
     function orderFor(world, frame, camera, time, isNew, plan, width, height, scale,
@@ -484,7 +485,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       }
       if(options.surfaces){
-        surfacePipeline??=createSurfacePipeline(gl,{updatesSince:toolkit.SpriteSurface?.updatesSince??toolkit.KIT?.ecology?.atlasUpdates});
+        surfacePipeline??=createSurfacePipeline(gl,{updatesSince:toolkit.SpriteSurface?.updatesSince??toolkit.KIT?.ecology?.atlasUpdates,
+          cutaway:cutawayAPI?.glsl});
         buffer.ensureDepth();
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
         gl.clearBufferfv(gl.DEPTH,0,[1]);gl.disable(gl.BLEND);
@@ -509,7 +511,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       gl.disable(gl.DEPTH_TEST);gl.depthMask(true);
     }
 
-    function drawSprites(camera, world, width, height, time, pixelOutline, water, pal, wet, clip, foreground, env, relighting) {
+    function drawSprites(camera, world, width, height, time, pixelOutline, water, pal, wet, clip, foreground, env, relighting, section) {
       const buffer = foreground ? portalSpriteLayer : spriteLayer;
       buffer.resize(width, height);
       data.bind();
@@ -525,12 +527,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       gl.enable(gl.DEPTH_TEST);
       gl.depthFunc(gl.LESS);
       let sprites;
-      if (relighting) {
-        const key = [!!wet, wet?.airPockets, wet?.layered, wet?.atlas, !!env?.media].join('/');
+      if (relighting || section) {
+        const key = [!!wet, wet?.airPockets, wet?.layered, wet?.atlas, !!env?.media, !!relighting, !!section].join('/');
         if (!relitSprites.has(key)) {
           const shaders = pixelSources({
             water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas,
-            environment: !!env?.media, relighting: true
+            environment: !!env?.media, relighting, cutaway:section ? cutawayAPI.glsl : undefined
           });
           relitSprites.set(key, resources.program(shaders.SPR_VS, shaders.SPR_FS));
         }
@@ -547,7 +549,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         u_ortho: +camera.ortho, u_rmpN4: materials.gpu.lens, u_pview: camera.view, u_peye: camera.eye,
         u_tanF: camera.tangent, u_asp: camera.aspect, u_portho: +camera.ortho,
         u_eGap: (pixelOutline?.gap ?? 0.3) / (2 * camera.radius), u_tol: 3 * camera.footprint + 0.02,
-        ...water, ...env?.uniforms,
+        ...water, ...env?.uniforms, ...section,
         ...(relighting && { u_relight: relightUnit }),
         ...(water || env?.media || relighting ? { u_waterSpritePalette: pal, u_rmp4: materials.gpu.ramps } : {})
       });
@@ -614,6 +616,15 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         world = toolkit.KIT?.shadowArt?.frame(world, camera.shadowFootprint) ?? world;
       const { raw = false, outline = true, dither = 0.35, scale = 1 } = frame;
       const look = world.look ?? {};
+      const cutawayDefinition = frame.cutaway ?? look.cutaway;
+      if (cutawayDefinition && !cutawayAPI) throw new Error('Cutaways need the Ink Studio KIT');
+      const cutaway = cutawayAPI?.prepare(cutawayDefinition);
+      const section = cutaway && cutawayAPI.uniforms(cutaway,camera.setback);
+      if (!reflectionCapture && plane === zero) {
+        const signature = cutaway ? JSON.stringify(cutaway) : null;
+        if (signature !== previousSection) historyValid = false;
+        previousSection = signature;
+      }
       const detailDefinition = frame.stableDetail ?? look.stableDetail;
       if (detailDefinition && !stableDetailAPI) throw new Error('Stable detail needs the Ink Studio KIT');
       const stableDetail = stableDetailAPI?.prepare(detailDefinition);
@@ -856,7 +867,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
-        materialStyles, environment:env?.media, relighting, optical:opticalMaterials
+        materialStyles, environment:env?.media, relighting, optical:opticalMaterials, cutaway:!!section
       });
       gl.useProgram(shader.p);
       const growth = world.grow ?? {};
@@ -877,12 +888,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         ...(opticalMaterials && { u_optical: opticalUnit }),
         ...(relighting && { u_relight: relightUnit }),
         u_fog: rgb(world.pal[fog.c ?? 0] ?? 0),
-        u_fogp: [fog.start ?? 1, fog.max ?? 0, ...camera.depthRange], ...water, ...env?.uniforms
+        u_fogp: [fog.start ?? 1, fog.max ?? 0, ...camera.depthRange], ...water, ...env?.uniforms, ...section
       });
       const background = [...rgb(world.pal[0]), 1], tangent = camera.tangent;
       const surfaces=frame.spriteSurfaces===false?null:world.spriteSurfaces;
       const surfaceFrame={view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
-        fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip};
+        fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section};
       if(layeredGlass){
         textureUnit(13,null);
         drawGeometry(shader,glassBoundary,width,height,{u_idx:3,u_snap:1,u_hard:0,tangent,indices:glassIndices});
@@ -928,7 +939,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       textureUnit(15, key.textures[0]);
       const sprites = patterned && anchorCount > 0 && frame.edges !== false;
       const spriteCover = sprites && drawSprites(camera, world, width, height, time, pixelOutline, water, pal, wet, clip, cover?.plane, env,
-        relighting);
+        relighting, section);
       const lines = outline && look.lines;
       const lineIndex = world.outline?.c ?? 0;
       const glass = raw ? null : world.glass;
@@ -1241,11 +1252,18 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
             (reconstruction !== undefined || world.moving?.length || world.grow || world.anim?.bones)) {
         let posed = group ? pickInstances(world, group, frame.changedRows).world : world;
         if (reconstruction !== undefined) posed = reconstruct(toolkit, posed, frame, definition);
-        const picker = create(posed, { time, sampleWithdrawal: withdrawal, splatCoverage });
+        const picker = create(posed, { time, sampleWithdrawal: withdrawal, splatCoverage, cutaway:false });
         picking = { world, data: world.data, count: world.count, opticalSplats: world.opticalSplats,
           group, revision, time, withdrawal, reconstruction, splatCoverage, materialStyles, marks, picker };
       }
-      return picking.picker.ray({ water:frame.water !== false,...ray });
+      const section = toolkit.KIT.cutaway?.prepare(ray?.cutaway ?? frame.cutaway ?? world.look?.cutaway);
+      let camera = ray?.camera;
+      if (section?.range && !camera) {
+        const view = makeCamera(world,frame,frame.width ?? frame.target?.width ?? canvas.width,
+          frame.height ?? frame.target?.height ?? canvas.height);
+        camera = { ...cameraPose(view),setback:view.setback };
+      }
+      return picking.picker.ray({ water:frame.water !== false,...ray,cutaway:section,camera });
     },
     dispose() {
       if (disposed) return;

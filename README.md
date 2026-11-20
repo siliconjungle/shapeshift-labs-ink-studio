@@ -310,6 +310,8 @@ Synchronize records, filters, and time across charts, maps, tables, and WebGL sc
 
 Render scalar slices, contours, and isosurfaces alongside vector streamlines and glyphs. [Field and volume visualization](docs/field-visualization.md)
 
+Move section planes, depth ranges, and spatial masks across a native render. [Interactive cutaways and clipping](docs/cutaways.md)
+
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
 
 Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.puppet` for hierarchical parts with deformation. `K.anim` provides clips, easing, layers, state machines, constraints, facial controls and presentation cues. `K.acts` provides ready-made action and reaction clips.

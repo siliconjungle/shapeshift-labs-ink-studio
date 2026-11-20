@@ -93,6 +93,7 @@
       W.data.check(look?.coverageAware === undefined || typeof look.coverageAware === 'boolean', 'coverageAware must be a boolean');
       HorizonBands.compile(look?.horizonBands);
       FrameComposite.settings(look?.composite);
+      Cutaway.prepare(look?.cutaway);
       RenderGraph.prepare(look?.renderGraph);
       RenderStages.prepare(look?.renderStages, paletteOptions);
       RenderStages.optics(look?.optics, paletteOptions);

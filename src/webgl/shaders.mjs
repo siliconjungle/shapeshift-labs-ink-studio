@@ -28,7 +28,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, relighting = false, optical = false, stableDetail
+  environment = false, relighting = false, optical = false, stableDetail, cutaway
 } = {}) {
   const coverageStride = coverageRules?.coverageStride ?? 4;
   const continuousMode = coverageRules?.continuousCoverage ?? 1, softMode = coverageRules?.softCoverage ?? 2;
@@ -72,6 +72,7 @@ layout(location=1) in int a_index;
 ${instances ? 'layout(location=2) in int a_instance; uniform highp sampler2D u_instances;' : ''}
 out vec2 v_d; out vec3 v_conic; out vec4 v_color; out float v_depth;
 ${portal ? 'flat out vec3 v_portalDepth;' : 'flat out float v_ownerDepth;'}
+${cutaway ? 'flat out vec4 v_sectionSample;' : ''}
 out float v_gl; out float v_as; out float v_ast; uniform vec4 u_az[4]; uniform int u_azn; uniform float u_asoft, u_azst;
 ${water && !portal ? 'flat out float v_waterAxial;' : ''}
 ${environment ? 'flat out float v_envAxial;' : ''}
@@ -294,11 +295,19 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   float det = A * C - B * B;
   if (det <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   v_conic = vec3(C, -B, A) / det;
-  ${portal ? `
-  // Condition axial depth on the pixel offset using the same projected covariance as the footprint.
+  ${portal || cutaway ? `
+  // Condition axial depth on pixel offset using projected Gaussian covariance.
   vec3 back = vec3(u_view[0].z, u_view[1].z, u_view[2].z);
-  vec2 depthCov = -(T * (cov * back)).xy;
-  v_portalDepth = vec3(-cam.z, mat2(v_conic.x, v_conic.y, v_conic.y, v_conic.z) * depthCov);
+  vec3 crossDepth = cov * back;
+  vec2 depthCov = -(T * crossDepth).xy;
+  ` : ''}
+  ${portal ? 'v_portalDepth = vec3(-cam.z, mat2(v_conic.x, v_conic.y, v_conic.y, v_conic.z) * depthCov);' : ''}
+  ${cutaway ? `
+  float pureDet = c2[0][0] * c2[1][1] - B * B;
+  vec3 sectionConic = pureDet > 1e-8 * max(1.0, c2[0][0] * c2[1][1])
+    ? vec3(c2[1][1], -B, c2[0][0]) / pureDet : v_conic;
+  vec2 sectionSlope = mat2(sectionConic.x, sectionConic.y, sectionConic.y, sectionConic.z) * depthCov;
+  v_sectionSample = vec4(-cam.z, sectionSlope, 3.0 * sqrt(max(0.0, dot(back, crossDepth))));
   ` : ''}
   vec2 ext = min(3.0 * sqrt(vec2(A, C)), vec2(2048.0));
   vec2 ndc = clip.xy / clip.w;
@@ -332,8 +341,14 @@ ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geomet
 precision highp float; precision highp int;
 in vec2 v_d; in vec3 v_conic; in vec4 v_color; in float v_depth; flat in int v_coverage;
 ${stableDetail ? 'flat in float v_detailGeometry, v_detailTexture;' : ''}
-${portal ? 'flat in vec3 v_portalDepth; uniform mat4 u_proj; uniform float u_ortho; uniform vec4 u_splatPlane;' :
-  'flat in float v_ownerDepth;'}
+${portal ? 'flat in vec3 v_portalDepth; uniform vec4 u_splatPlane;' : 'flat in float v_ownerDepth;'}
+${portal || cutaway ? 'uniform mat4 u_proj; uniform float u_ortho;' : ''}
+${cutaway ? cutaway + `
+flat in vec4 v_sectionSample;
+uniform mat4 u_view;
+uniform vec4 u_fogp;
+uniform float u_near;
+uniform bool u_geometryDepth;` : ''}
 in float v_gl; in float v_as; in float v_ast;
 ${ascii ? ascii.fsDecl : 'uniform float u_gly;\n'}uniform float u_crisp, u_hard;
 flat in vec4 v_fm; flat in vec4 v_ft; flat in float v_fk; flat in float v_lit; flat in float v_ix; uniform vec3 u_fpal[64]; uniform vec3 u_fog;
@@ -353,9 +368,9 @@ flat in float v_glassNearDepth;
 float glassDepth(vec4 sampleDepth) {
   return dot(floor(sampleDepth.rgb*255.0+0.5),vec3(1.0,256.0,65536.0)) / 16777215.0;
 }` : ''}
-${water || portal || environment ? 'uniform vec2 u_viewport;' : ''}
+${water || portal || environment || cutaway ? 'uniform vec2 u_viewport;' : ''}
 ${environment ? environmentMediaGLSL + 'flat in float v_envAxial;' : ''}
-${portal ? axialPosition : ''}
+${portal || cutaway ? axialPosition : ''}
 ${coverageSource(coverageRules)}
 ${contributions || masked ? `${policyUniforms}flat in int v_policySlot;` : ''}
 ${contributions ? `uniform vec3 u_pal[64], u_out[64]; uniform int u_n;
@@ -371,12 +386,26 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   bool continuous = v_coverage == ${continuousMode};
   float surfaceAlpha = continuous ? smoothstep(${continuousLow}, ${continuousHigh.toFixed(2)}, g) : 0.0;
   ${optical ? 'bool hasOptical = v_optical.w > 0.5; if (hasOptical && v_optical.x == 0.0) discard;' : ''}
+  ${cutaway ? `
+  float sectionAxial = v_sectionSample.x + clamp(dot(v_sectionSample.yz, v_d), -v_sectionSample.w, v_sectionSample.w);
+  if (sectionAxial < u_near) discard;
+  vec3 inView = axialPosition(gl_FragCoord.xy, sectionAxial, u_viewport);
+  vec3 inWorld = transpose(mat3(u_view)) * (inView - u_view[3].xyz);
+  float margin = sectionMargin(inWorld, sectionAxial);
+  if (margin < 0.0) discard;
+  float cutInk = sectionInk(margin);
+  vec4 sectionProjected = u_proj * vec4(inView,1.0);
+  float sectionZ = sectionProjected.z / sectionProjected.w * 0.5 + 0.5;
+  gl_FragDepth = u_geometryDepth ? clamp(sectionZ,0.0,1.0) : gl_FragCoord.z;
+  float sectionDepth = clamp((sectionAxial - u_fogp.z) / (u_fogp.w - u_fogp.z), 0.0, 1.0);
+  ` : ''}
   ${layeredGlass ? `
-  gl_FragDepth = gl_FragCoord.z;
+  ${cutaway ? '' : 'gl_FragDepth = gl_FragCoord.z;'}
   if (u_idx > 2.5) {
     if (v_gl < 0.5 || g ${optical ? '* (hasOptical ? v_optical.x : 1.0)' : ''} < 0.004) discard;
-    float z = round(clamp(v_ownerDepth,0.0,1.0)*16777215.0);
-    gl_FragDepth = clamp(v_ownerDepth,0.000001,1.0);
+    float depth = ${cutaway ? 'sectionZ' : 'v_ownerDepth'};
+    float z = round(clamp(depth,0.0,1.0)*16777215.0);
+    gl_FragDepth = clamp(depth,0.000001,1.0);
     o = vec4(mod(z,256.0),mod(floor(z/256.0),256.0),floor(z/65536.0),255.0)/255.0;
     return;
   }` : ''}
@@ -394,7 +423,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   ` : `
   if (u_idx > 1.5) {
     if (v_coverage == ${softMode} || v_color.a < 0.5 || (continuous ? surfaceAlpha <= 0.5 : g < 0.38)${optical ? ' || hasOptical' : ''}) discard;
-    float k = v_ix + 1.0, z = round(clamp(v_ownerDepth, 0.0, 1.0) * 16777215.0);
+    float k = v_ix + 1.0, z = round(clamp(${cutaway ? 'sectionZ' : 'v_ownerDepth'}, 0.0, 1.0) * 16777215.0);
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(mod(z, 256.0), mod(floor(z / 256.0), 256.0), floor(z / 65536.0), 255.0) / 255.0;
     oa = vec4(0);
@@ -403,6 +432,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   `}
   if (u_idx > 0.5) {   // the index pass (colour per pixel): which solid dab is in front here, its number in three bytes
     if (v_color.a < 1.0 || (continuous ? surfaceAlpha <= 0.5 : g < 0.5) || v_depth < 0.0) discard;
+    ${cutaway ? 'if (cutInk > 0.0) { o = vec4(0.0); od = vec4(0.0); oa = vec4(0.0); return; }' : ''}
     float k = v_ix + 1.0;
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(0.0); ${masked ? `if (v_policySlot > 0) {${ownerMaskWrite}}` : ''}
@@ -452,9 +482,10 @@ ${contributions ? `  if (v_policySlot > 0) {
     }
     rgb = next;
   }` : ''}
+${cutaway ? 'rgb = mix(rgb, u_sectionEdge.rgb, cutInk);' : ''}
 ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
-    ${portal ? 'clipped ? axial : v_portalDepth.x' : 'v_waterAxial'}, mark);` : ''}
-  ${environment ? 'rgb = envMedia(rgb, gl_FragCoord.xy, u_viewport, v_envAxial);' : ''}
+    ${cutaway ? 'sectionAxial' : portal ? 'clipped ? axial : v_portalDepth.x' : 'v_waterAxial'}, mark);` : ''}
+  ${environment ? 'rgb = envMedia(rgb, gl_FragCoord.xy, u_viewport, ' + (cutaway ? 'sectionAxial' : 'v_envAxial') + ');' : ''}
   if (u_paintPass) {
     // Every fragment attenuates the overlay behind it.
     bool overlay = v_paint != 0 ${optical ? '|| hasOptical' : ''};
@@ -465,12 +496,12 @@ ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
   o = vec4(rgb * a, a);
   ${layeredGlass ? `vec4 pane = texelFetch(u_glassBoundary,ivec2(gl_FragCoord.xy),0);
   // Keep near-coplanar transparent contributions together through crossings.
-  float splitDepth = v_depth < 0.0 || v_color.a < 1.0 ? v_glassNearDepth : v_ownerDepth;
+  float splitDepth = v_depth < 0.0 || v_color.a < 1.0 ? v_glassNearDepth : ${cutaway ? 'sectionZ' : 'v_ownerDepth'};
   bool behind = pane.a > 0.0 && splitDepth > glassDepth(pane)+0.0000001;
   o_back = behind ? o : vec4(0.0);
   o_through = pane.a > 0.0 && !behind ? vec4(0.0,0.0,0.0,a) : vec4(0.0);` : ''}
   float a2 = v_color.a >= 1.0 && v_depth >= 0.0 ? a : 0.0;   // only solid splats write depth
-  od = vec4(v_depth * a2, v_gl * a * 0.5, v_lit * a2, a2);   // (green: how much glass lies over this pixel, in front of the last solid thing; a solid splat wipes it)
+  od = vec4(${cutaway ? 'sectionDepth' : 'v_depth'} * a2, v_gl * a * 0.5, v_lit * a2, a2);   // (green: how much glass lies over this pixel, in front of the last solid thing; a solid splat wipes it)
   oa = ${water ? 'vec4(mark * a, a)' : 'vec4(v_as * a, v_ast * 0.25 * a, 0.0, a)'};
 }`;
   return { vertex: SPLAT_VS, fragment: SPLAT_FS };
@@ -571,7 +602,7 @@ bool constrainPalette(ivec2 p, vec3 inputColor, out vec3 color) {
 
 export function pixelShaderSources(PixelLook, { water = false, airPockets = false, layered = false, atlas = false,
   paletteConstraints = false, masked = false, contributions = false, layeredGlass = false, materialStyles = false,
-  environment = false, relighting = false, packedTone = false } = {}) {
+  environment = false, relighting = false, packedTone = false, cutaway } = {}) {
   const waterPixelGLSL = `
 uniform highp sampler2D u_waterMask;
 ivec2 waterPixel(ivec2 p) {
@@ -1238,6 +1269,7 @@ ${relighting ? relightTable + 'flat in int v_relightOwner;' : ''}
 layout(location=0) out vec4 o;
 layout(location=1) out vec4 cover;
 ${axialPosition}
+${cutaway ?? ''}
 ${water ? waterGLSL(airPockets, layered, atlas) : ''}
 ${environment ? environmentMediaGLSL : ''}
 ${water || environment || relighting ? `
@@ -1267,6 +1299,10 @@ void main() {
   vec4 I = sprT(0, 32 + s); int w = int(I.x + 0.5), h = int(I.y + 0.5), sk = int(I.w + 0.5), rr = d.x * od.x + d.y * od.y - 1 + sk, cc = d.x * td.x + d.y * td.y + int(I.z + 0.5);
   if (rr < 0 || rr >= h || cc < 0 || cc >= w) discard;
   int k = rr * w + cc; vec4 t = sprT(1 + (k >> 2), 32 + s); int v = int(t[k & 3] + 0.5); if (v == 0) discard;
+  ${cutaway ? `
+  vec3 inView = axialPosition(gl_FragCoord.xy, v_axial, u_vp);
+  if (sectionMargin(transpose(mat3(u_pview)) * (inView - u_pview[3].xyz), v_axial) < 0.0) discard;
+  ` : ''}
   cover = vec4(0.0);
   if (any(notEqual(u_splatPlane.xyz, vec3(0.0))) || any(notEqual(u_spriteCover.xyz, vec3(0.0)))) {
     vec4 at = vec4(axialPosition(gl_FragCoord.xy, v_axial, u_vp), 1.0);

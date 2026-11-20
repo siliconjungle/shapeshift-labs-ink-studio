@@ -89,8 +89,8 @@
   }
 
   function picker(world,{time=world.lookSnapshot?.time??0,sampleWithdrawal=world.sampleWithdrawal??0,
-    splatCoverage=world.look?.splatCoverage}={}){
-    const coverageMode=R.coverageMode(splatCoverage);
+    splatCoverage=world.look?.splatCoverage,cutaway=world.look?.cutaway,camera}={}){
+    const coverageMode=R.coverageMode(splatCoverage), defaultCutaway=Cutaway.prepare(cutaway);
     const {count,renderMetadata,opticalSplats}=world, marks=world.dataMarks?.snapshot();
     if(!(world.data instanceof Float32Array)||!Number.isSafeInteger(count)||count<0||world.data.length<count*16||!Number.isFinite(time))
       throw new TypeError('Picking needs a baked splat world and finite time');
@@ -109,12 +109,20 @@
     }
     const indices=Uint32Array.from(selected),tree=orderedTree(rows,indices);
     let provenance;
-    function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true,accept}={}){
+    function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true,accept,
+      cutaway=defaultCutaway,camera:sectionCamera=camera}={}){
       if(!valid(origin)||!valid(direction)||V.len(direction)<=1e-8||!Number.isFinite(maxDistance)||maxDistance<=0||
           !Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(limit)||limit<1||limit>256||
           accept!==undefined&&typeof accept!=='function')
         throw new RangeError('A contribution ray needs XYZ origin, nonzero direction, positive distance and a bounded limit');
       const d=V.norm(direction), u=V.perp(d), v=V.cross(d,u), hits=[];
+      const section=Cutaway.prepare(cutaway);
+      let back;
+      if(section?.range && sectionCamera){
+        if(!valid(sectionCamera.eye)||!valid(sectionCamera.back)||V.len(sectionCamera.back)<=1e-8||
+            !Number.isFinite(sectionCamera.setback??0))throw new TypeError('Cutaway picking needs a finite camera eye and back axis');
+        back=V.norm(sectionCamera.back);
+      }
       let visited=0;
       function visit(node){
         if(!node||P.spatial.rayBox(node,origin,d,maxDistance)===null)return;
@@ -139,10 +147,20 @@
           if(alpha<R.minimum)continue;
           const target=(provenance??=TargetSelectors.index(world)).row(i);
           const at=Math.abs(f)>1e-7?V.dot(normal,delta)/f:t;
-          const distance=at>0&&at<=maxDistance&&Math.abs(at-t)<=3*Math.sqrt(cov[0]+cov[3]+cov[5])?at:t;
+          let distance=at>0&&at<=maxDistance&&Math.abs(at-t)<=3*Math.sqrt(cov[0]+cov[3]+cov[5])?at:t;
+          let point;
+          if(section){
+            const shift=(tensor(cov,d,u)*(C*x-B*y)+tensor(cov,d,v)*(A*y-B*x))/det;
+            const reach=3*Math.sqrt(Math.max(0,tensor(cov,d,d)));
+            distance=t-K.clamp(shift,-reach,reach);
+            if(distance<=0||distance>maxDistance)continue;
+            point=V.mad(origin,d,distance);
+            const depth=back ? V.dot(V.sub(sectionCamera.eye,point),back)-(sectionCamera.setback??0) : distance;
+            if(Cutaway.margin(section,...point,depth)<0)continue;
+          }
           const dataMark = target.mark === undefined ? undefined : marks?.get(target.mark);
           const hit={kind:raw&256?'glass':'splat',index:i,...(world.splatIds?.[i]&&{id:world.splatIds[i]}),
-            target,...(dataMark && { dataMark }),distance,point:V.mad(origin,d,distance),alpha,solid:!optical&&!softCoverage&&density>=1&&alpha>=.5&&!(raw&(16|256))};
+            target,...(dataMark && { dataMark }),distance,point:point??V.mad(origin,d,distance),alpha,solid:!optical&&!softCoverage&&density>=1&&alpha>=.5&&!(raw&(16|256))};
           if(!accept||accept(hit))hits.push(hit);
         }
       }

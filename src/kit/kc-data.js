@@ -521,6 +521,11 @@
       bad('finish.look.composite', error.message);
     }
     try {
+      Cutaway.prepare(look?.cutaway);
+    } catch (error) {
+      bad('finish.look.cutaway', error.message);
+    }
+    try {
       RenderGraph.prepare(look?.renderGraph);
     } catch (error) {
       bad('finish.look.renderGraph', error.message);
