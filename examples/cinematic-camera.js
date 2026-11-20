@@ -311,7 +311,7 @@ function lanternPassage(kit, { sharedTime = true } = {}) {
     update(dt) {
       clocks.pause('animation', !settings.drift);
       stage.update(dt, clocks.wall + dt);
-      control.update(clocks.read('camera').dt, clocks.read('camera').sampleTime);
+      control.update(clocks.read('interface').dt, clocks.read('camera').sampleTime);
       return world;
     }
   };
