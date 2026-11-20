@@ -75,6 +75,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         ensure(opt['asset-pack']===undefined,'Recorded runs and checkpoints keep their original asset packs');
       if (value.format === R.checkpointFormat) return {world:value.world,checkpoint:value,store};
       if (value.format === R.runFormat) return {world:value.end.world,checkpoint:value.end,log:value,store};
+      const bundles = kit.KIT.authoring.projectBundles;
+      if (bundles && value.format === bundles.format) return { legacy: file, document: bundles.open(value).scene() };
       return {legacy:file,document:value};
     }
     return {legacy:file};

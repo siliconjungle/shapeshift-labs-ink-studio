@@ -95,8 +95,9 @@ module.exports = {
       new Uint8Array(fs.readFileSync(file)), { ...options, decodeImage });
   },
   readDataInputs(file) {
-    const api = module.exports.load().KIT.dataInputs;
-    const { dataInputs } = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const { KIT } = module.exports.load(), api = KIT.dataInputs;
+    const input = JSON.parse(fs.readFileSync(file, 'utf8')), bundles = KIT.authoring.projectBundles;
+    const { dataInputs } = input?.format === bundles.format ? bundles.open(input).scene() : input;
     if (dataInputs === undefined) throw new TypeError('Expected a dataInputs catalog in ' + file);
     return api.prepare(require('./cli/data-inputs.js').embed(api, dataInputs, file));
   },
@@ -108,6 +109,7 @@ module.exports = {
   readSceneReplay: require('./cli/scene-replay.js').readSceneReplay,
   sampleSceneReplay: require('./cli/scene-replay.js').sampleSceneReplay,
   writeSceneEmbed: require('./cli/scene-replay.js').writeSceneEmbed,
+  ...require('./cli/project-bundle.js'),
   describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
   createCameraAtlas(options) {
     return module.exports.load().KIT.cameraAtlas.raster(options, (world, frame) => {

@@ -790,6 +790,8 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `export-layers <scene>` | Export transparent color, depth, normals, object IDs, and material mattes on one grid. |
 | `export-scene <scene> --out directory` | Publish a high-resolution still, loop and PNG sequence, replay recording, and web embed. |
 | `scene-replay <recording> --out frame.png` | Sample a recording or regenerate its web embed with `--embed`. |
+| `project pack <scene.json> --out project.json` | Package an editable diorama and its dependencies for the editor, browser, and CLI. |
+| `project inspect <project.json>` | Show project revisions, toolkit version, and retained files. |
 | `atlas <scene> --directions 8` | Export an RGBA atlas with registered pivots and optional relighting maps. |
 | `pose-review <scene> --directions 8` | Render named poses and breakdowns as color and silhouette tiles at sprite resolution. |
 | `motion-review <scene> [--finding kind-or-id]` | Report motion findings, focus ranges, and evidence from a scene that exposes Motion Review. |
@@ -918,6 +920,8 @@ shows the core APIs and a runnable pool scene. The [depth import guide](docs/dep
 ## Embedding and custom scene collections
 
 Use [scene publishing](docs/scene-publishing.md) to export a self-contained web player for rendered scene frames.
+
+Use a [portable project bundle](docs/project-bundles.md) to carry an editable diorama and its local dependencies into Node, WebGL, or the CLI.
 
 The browser-facing toolkit sources are plain scripts concatenated in dependency order. Generate a bundle from Node:
 

@@ -297,7 +297,7 @@
     mesh.skipped = skipped;
     return mesh;
   };
-  M.glb = bytes => {
+  M.glbParts = bytes => {
     const u = bytesOf(bytes),
       dv = new DataView(u.buffer, u.byteOffset, u.byteLength);
     if (dv.getUint32(0, true) !== 0x46546c67) throw new Error('not a GLB file');
@@ -315,6 +315,10 @@
       } else if (kind === 0x004e4942) bins.push(body);
       o += 8 + len;
     }
+    return { json, bins };
+  };
+  M.glb = bytes => {
+    const { json, bins } = M.glbParts(bytes);
     return M.gltf(json, bins);
   };
 
