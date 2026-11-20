@@ -7,6 +7,9 @@
   const check = (ok,message) => { if (!ok) throw new TypeError('Linked views: '+message); };
   const keys = (value,allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
   const axes = { xy:[0,1], xz:[0,2], yz:[1,2] };
+  const patterns = Object.freeze(['diagonal','dots','crosshatch','horizontal','vertical','checker','solid']);
+  const symbols = Object.freeze(['circle','square','diamond','triangle','hexagon','ring']);
+  const scalar = value => value===null || typeof value==='string' || typeof value==='boolean' || finite(value);
 
   function filters(rule) {
     if (rule === null || rule === undefined) return null;
@@ -168,6 +171,50 @@
         return shape?[{ref:row.ref,geometry:shape,selected:selected.has(row.ref.row)}]:[];
       });
     }
+    function encoding({ category, label, categories=[], monochrome=false }={}) {
+      const columns=description.columns;
+      check((category===undefined || own(columns,category) &&
+        ['string','boolean','integer','number','timestamp'].includes(columns[category].type)) &&
+        (label===undefined || own(columns,label)) && Array.isArray(categories) && typeof monochrome==='boolean',
+        'invalid category or record label encoding');
+      const custom=new Map(), groups=new Map(), used=new Map();
+      for(const row of categories) {
+        check(keys(row,['value','label','pattern','symbol']) && scalar(row.value) && !custom.has(row.value) &&
+          (row.label===undefined || typeof row.label==='string' && row.label.trim()) &&
+          (row.pattern===undefined || patterns.includes(row.pattern)) &&
+          (row.symbol===undefined || symbols.includes(row.symbol)),'invalid or duplicate category encoding');
+        custom.set(row.value,row);
+      }
+      if(category!==undefined)for(const row of records) {
+        const value=row.record[category]??null;
+        if(groups.has(value))continue;
+        const i=groups.size, a=i%patterns.length, style=custom.get(value);
+        const pattern=style?.pattern??patterns[a], symbol=style?.symbol??symbols[(a+Math.floor(i/patterns.length))%symbols.length];
+        const key=pattern+'/'+symbol;
+        const entry={value,label:style?.label??(value===null?'Missing':String(value)),pattern,symbol};
+        groups.set(value,entry);
+        const matching=used.get(key)??[];
+        matching.push(entry);
+        used.set(key,matching);
+      }
+      // Add a textual code when a pair of visual encodings is shared.
+      let code=0;
+      for(const matching of used.values())if(matching.length>1)
+        for(const entry of matching)entry.code=String(++code);
+      const entries=freeze([...groups.values()]);
+      return Object.freeze({ category,label,monochrome,entries,
+        mark(ref) {
+          const row=records[rowOf(ref)];
+          return row&&category!==undefined ? groups.get(row.record[category]??null) : undefined;
+        },
+        name(ref) {
+          const row=records[rowOf(ref)];
+          if(!row)return '';
+          return String((label===undefined?undefined:row.record[label])??row.ref.key??('Record '+(row.ref.row+1)));
+        }
+      });
+    }
+
     function pick(hit,{mode='replace'}={}) {
       const row=rowOf(hit?.dataMark?.source ?? hit?.target?.source);
       if(row===undefined||!selectionState(state).visible.has(row))return false;
@@ -218,7 +265,7 @@
       return { ...world,data:transform(world.data),...(world.rest&&{rest:transform(world.rest)}),dataMarks };
     }
 
-    return Object.freeze({ description,records:freeze(records),timeRange,snapshot:()=>state,update,chart,table,map,scene,pick,
+    return Object.freeze({ description,records:freeze(records),timeRange,snapshot:()=>state,update,chart,table,map,scene,pick,encoding,
       subscribe(listener,{ immediate=true }={}) {
         check(typeof listener==='function','expected a listener');
         subscribers.add(listener);
@@ -254,5 +301,5 @@
       return world;
     };
   }
-  K.linkedViews=Object.freeze({create,diorama});
+  K.linkedViews=Object.freeze({create,diorama,patterns,symbols});
 })(KIT);

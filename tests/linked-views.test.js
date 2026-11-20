@@ -125,6 +125,26 @@ test('series timestamps and spatial geometry keep their original record identity
   assert.equal(point.selected,true);
 });
 
+test('category encodings stay assigned across filters and add codes when symbols repeat', () => {
+  const session=create(), encoding=session.encoding({category:'sector',label:'station',monochrome:true,
+    categories:[
+      {value:'Inner',pattern:'dots',symbol:'square',label:'Inner reach'},
+      {value:'Outer',pattern:'dots',symbol:'square',label:'Outer reach'}
+    ]});
+  const [a,b,c]=session.records.map(row=>row.ref);
+  assert.deepEqual(encoding.entries,[
+    {value:'Inner',label:'Inner reach',pattern:'dots',symbol:'square',code:'1'},
+    {value:'Outer',label:'Outer reach',pattern:'dots',symbol:'square',code:'2'}
+  ]);
+  assert.equal(encoding.mark(a),encoding.mark(c));
+  assert.equal(encoding.name(b),'B');
+  assert(Object.isFrozen(encoding.mark(a)));
+  session.update({filter:{path:['sector'],value:'Outer'}});
+  assert.equal(encoding.mark(session.snapshot().visible[0].ref).code,'2');
+  assert.equal(encoding.mark({dataset:'missing',row:0}),undefined);
+  assert.throws(()=>session.encoding({category:'sector',categories:[{value:'Inner',pattern:'unknown'}]}),/category encoding/);
+});
+
 test('browser controls link table, chart, map and WebGL scene picks', {skip:!process.env.INK_TEST_CHROME}, () => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-linked-'));
   try {
@@ -188,6 +208,39 @@ try {
     root.querySelectorAll('style').length,at('[data-label="chart"]').textContent,at('[part=toolbar]').hidden,
     Array.from(ctx.getImageData(0,0,1,1).data).join(','));
   themed.destroy();
+
+  const accessible=mountLinkedViews(host,{session,panels:['chart','map','table'],chart:{x:'$time',y:'reading',
+    scaleLabels:{x:{min:'Opening',max:'Closing'}}},table:{columns:['station','reading'],pageSize:1,caption:'Survey readings'},
+    encoding:{category:'sector',label:'station',monochrome:true,
+      categories:[{value:'Inner',label:'Inner reach'},{value:'Outer',label:'Outer reach'}]}});
+  const press=(node,key,shiftKey=false)=>node.dispatchEvent(new KeyboardEvent('keydown',{key,shiftKey,bubbles:true,cancelable:true}));
+  const keys=()=>session.snapshot().selection.map(r=>r.key).join('');
+  accessible.render();
+  const graph=at('[data-view="chart"]'), plan=at('[data-view="map"]');
+  graph.focus();
+  press(graph,'End');press(graph,'Enter');
+  accessible.render();
+  const keyboardChart=[keys(),at('tbody button').dataset.row,at('tbody button').getAttribute('aria-label')];
+  plan.focus();
+  press(plan,'Home');press(plan,' ',true);
+  accessible.render();
+  const keyboardMap=keys();
+  const button=at('tbody button');
+  button.focus();press(button,'End');press(button,'Enter',true);
+  accessible.render();
+  const keyboardTable=[keys(),root.activeElement.dataset.row,root.activeElement.tabIndex];
+  session.update({filter:{path:['sector'],value:'Outer'}});
+  accessible.render();
+  graph.focus();press(graph,' ');
+  accessible.render();
+  const legend=at('[part="encoding-items"]'), swatches=Array.from(legend.querySelectorAll('canvas'),swatch=>
+    Array.from(swatch.getContext('2d').getImageData(0,0,23,20).data).join(','));
+  fired.push({keyboardChart,keyboardMap,keyboardTable,filtered:keys(),caption:at('caption').textContent,
+    list:Array.from(legend.querySelectorAll('li span'),node=>node.textContent),
+    distinctSwatches:swatches[0]!==swatches[1],description:graph.getAttribute('aria-describedby'),
+    timeBounds:Array.from(at('#chart-scale dd').children,node=>node.textContent),
+    scope:at('th').scope,status:at('[part="record-status"]').textContent});
+  accessible.destroy();
   result.textContent=JSON.stringify(fired);
 } catch(error) {result.textContent=error.stack;}
 </script>`);
@@ -199,7 +252,12 @@ try {
     const decoded=result?.replaceAll('&gt;','>').replaceAll('&lt;','<').replaceAll('&amp;','&');
     assert(decoded?.startsWith('['),decoded||'Browser did not report linked view results');
     assert.deepEqual(JSON.parse(decoded),['A','B','true','C','ABC','2 s','B\t50',2,'true',0,0,
-      'table,chart',1,'Readings',true,'242,225,208,255']);
+      'table,chart',1,'Readings',true,'242,225,208,255',{
+        keyboardChart:['C','2','C. Inner reach'],keyboardMap:'AC',keyboardTable:['A','2',0],filtered:'B',
+        caption:'Survey readings',list:['Inner reach','Outer reach'],distinctSwatches:true,
+        description:'keyboard-help chart-scale',timeBounds:['Opening 0','Closing 2'],
+        scope:'col',status:'B. Outer reach. Record 1 of 1. Selected'
+      }]);
   } finally {
     fs.rmSync(dir,{recursive:true,force:true});
   }

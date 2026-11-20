@@ -314,6 +314,8 @@ Move section planes, depth ranges, and spatial masks across a native render. [In
 
 Compare synchronized scenes with side-by-side playback, a swipe divider, and signed overlays. [Comparison views](docs/comparison-views.md)
 
+Encode categories with patterns and shapes, label scale endpoints, and navigate linked records with a keyboard. [Accessible data encodings](docs/linked-views.md#accessible-encodings)
+
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
 
 Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.puppet` for hierarchical parts with deformation. `K.anim` provides clips, easing, layers, state machines, constraints, facial controls and presentation cues. `K.acts` provides ready-made action and reaction clips.

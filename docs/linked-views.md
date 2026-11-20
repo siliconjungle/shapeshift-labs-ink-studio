@@ -31,3 +31,16 @@ Import `mountLinkedViews` from `webgl.mjs` and supply a host element and a linke
 Style the shell and controls with CSS custom properties or `::part()`. Parts include `header`, `toolbar`, `panels`, each named panel and canvas, `filter-input`, `time-slider`, `table`, `row`, and `selected-row`. Supply a `stylesheet` string to add rules inside the shadow root. Set `defaultStyles: false` to supply the entire stylesheet. Chart and map paint reads `--ink-linked-plot-background`, `--ink-linked-grid`, `--ink-linked-muted`, `--ink-linked-point`, `--ink-linked-selection`, `--ink-linked-playhead`, `--ink-linked-series`, and `--ink-linked-plot-font` from each canvas. CSS can vary these per panel.
 
 Click a record, chart point, map feature, or scene mark to select it everywhere. Drag across the chart to select an area. Shift, Control, and Command toggle records in the existing selection. The returned handle offers `render()` to refresh immediately and `destroy()` to release the renderer and subscriptions.
+
+
+## Accessible encodings
+
+Pass `encoding: { category, label, monochrome, categories }` to the mounted view. `category` names the grouping column, and `label` names the column used to announce a record. The chart and map use the same patterns and symbols, and the structured table uses the same swatches. `monochrome: true` uses a single fill color. The legend gives each encoding a text label, and repeated symbol-pattern combinations get visible number codes.
+
+Each optional `categories` entry can supply a typed `value` and any of `label`, `pattern`, and `symbol`. Category encodings are assigned from the full dataset and stay stable while filtering and scrubbing. Use `session.encoding(options)` for a custom view. Its `entries` are the legend rows, `mark(ref)` returns the record's category encoding, and `name(ref)` returns its spoken label. Available values are listed in `KIT.linkedViews.patterns` and `KIT.linkedViews.symbols`.
+
+Chart and map panels display both scale endpoints with their axis name and units. Override endpoint text prefixes using `chart.scaleLabels` or `map.scaleLabels` with `x` and `y` entries containing `min` and `max`. A table `caption` provides a name for the structured record view.
+
+Tab to a chart, map, scene, or table record to use the keyboard. Arrow keys move the record cursor, Home and End jump to either end, Enter or Space selects the cursor, Shift toggles it in the current selection, and Escape clears the selection. The table follows the focused record across pages. Selection is announced with the record and its category, and the chart and map show a dashed focus outline.
+
+Style the legend, swatches, focus outline, and endpoints with the `encoding-legend`, `pattern-swatch`, `scale`, and `scale-endpoint` parts and the `--ink-linked-pattern-fill`, `--ink-linked-pattern-ink`, and `--ink-linked-focus` properties. The `controls` options include `legend`, `scales`, and `keyboard`.

@@ -1,5 +1,6 @@
 import { createRenderer } from './renderer.mjs';
 import { makeCamera, cameraPose } from './view.mjs';
+import { linkedPaint, linkedSymbol } from './linked-encoding-paint.mjs';
 
 const theme = `
   :host{display:block;color:var(--ink);font:var(--ink-linked-font,14px system-ui,sans-serif);
@@ -33,11 +34,25 @@ const theme = `
   tr[data-selected=true] button{color:var(--ink-linked-selected-text,#ffe0ab)}
   .table-controls{height:44px;display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:6px 12px;border-top:1px solid var(--line)}
   .table-controls button{min-height:25px}
+  .encoding-legend{display:flex;align-items:center;flex-wrap:wrap;gap:10px 18px;padding:9px 12px;margin:0 0 14px;
+    border:1px solid var(--line);border-radius:7px;background:var(--surface)}
+  .encoding-legend strong{font-size:12px}
+  .encoding-legend ul{display:flex;flex-wrap:wrap;gap:8px 16px;list-style:none;padding:0;margin:0}
+  .encoding-legend li{display:flex;align-items:center;gap:5px;font-size:12px}
+  [part~=pattern-swatch]{width:23px;height:20px;flex:none;display:inline-block;vertical-align:middle;touch-action:auto}
+  .scale{margin:0;padding:9px 13px;border-top:1px solid var(--line);display:grid;gap:4px;font-size:12px}
+  .scale>div{display:flex;gap:12px;justify-content:space-between;flex-wrap:wrap}
+  .scale dt{font-weight:600}.scale dd{margin:0;display:flex;gap:8px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .scale dd span:last-child::before{content:'–';padding-right:8px}
+  :is(canvas,button):focus-visible{outline:2px solid var(--ink-linked-focus,#e8f3ff);outline-offset:-3px}
+  button[aria-pressed=true]{text-decoration:underline;text-underline-offset:3px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   [hidden]{display:none!important}
   @media(max-width:760px){.shell{padding:20px 14px}.panels{grid-template-columns:1fr}.toolbar,.top{flex-wrap:wrap}}
 `;
 const paintDefaults={ selection:'#ffc477',point:'#6cdadf',grid:'#263a4c',muted:'#9fb2c7',
-  'plot-background':'#101b28','plot-font':'11px system-ui,sans-serif',playhead:'#d89445',series:'#527285' };
+  'plot-background':'#101b28','plot-font':'11px system-ui,sans-serif',playhead:'#d89445',series:'#527285',
+  'pattern-fill':'#e8edf2','pattern-ink':'#26313c',focus:'#f4f8ff' };
 const allPanels=['scene','map','chart','table'], roots=new WeakMap();
 function plotStyle(canvas) {
   const style=canvas.ownerDocument.defaultView.getComputedStyle(canvas);
@@ -83,10 +98,10 @@ function viewport(canvas,style) {
   return {ctx,width,height};
 }
 
-function plot(canvas, points, bounds, labels, time, { connect, color, brush }) {
-  const style=plotStyle(canvas), {selection,grid,muted,point,playhead,series}=style;
+function plot(canvas, points, bounds, labels, time, { connect, color, brush, encoding, focusRow }) {
+  const style=plotStyle(canvas), {selection,grid,muted,playhead,series}=style;
   const {ctx,width,height}=viewport(canvas,style), left=56,right=width-20,top=22,bottom=height-43;
-  const [[x0,x1],[y0,y1]]=bounds;
+  const paint=linkedPaint(ctx,style,encoding,color), [[x0,x1],[y0,y1]]=bounds;
   const x=v=>left+(v-x0)/(x1-x0)*(right-left), y=v=>bottom-(v-y0)/(y1-y0)*(bottom-top);
   ctx.strokeStyle=grid;
   ctx.fillStyle=muted;
@@ -107,9 +122,21 @@ function plot(canvas, points, bounds, labels, time, { connect, color, brush }) {
   }
   const hits=points.map(p=>({...p,px:x(p.x),py:y(p.y)}));
   for(const p of [...hits].sort((a,b)=>Number(a.selected)-Number(b.selected))){
-    ctx.fillStyle=p.selected?selection:color?.(p.ref)??point;
-    ctx.beginPath();ctx.arc(p.px,p.py,p.selected?6:3.4,0,2*Math.PI);ctx.fill();
-    if(p.selected){ctx.strokeStyle=selection;ctx.beginPath();ctx.arc(p.px,p.py,9,0,2*Math.PI);ctx.stroke();}
+    const mark=encoding.mark(p.ref), size=mark?7:p.selected?6:3.4, path=new Path2D();
+    linkedSymbol(path,p.px,p.py,size,mark?.symbol);
+    paint.fill(path,mark||!p.selected?paint.tint(p.ref):selection,mark);
+    if(mark){
+      ctx.strokeStyle=style['pattern-ink'];ctx.stroke(path);
+      if(mark.code){
+        ctx.textAlign='left';ctx.fillStyle=style.focus;
+        ctx.fillText(mark.code,p.px+size+4,p.py-5);
+      }
+    }
+    if(p.selected){
+      ctx.strokeStyle=selection;ctx.lineWidth=1.6;
+      ctx.beginPath();ctx.arc(p.px,p.py,mark?11:9,0,2*Math.PI);ctx.stroke();ctx.lineWidth=1;
+    }
+    if(p.ref.row===focusRow)focusBox(ctx,style,p.px,p.py,mark?14:12);
   }
   if(brush){
     const [a,b]=brush, x=Math.min(a[0],b[0]),y=Math.min(a[1],b[1]),w=Math.abs(a[0]-b[0]),h=Math.abs(a[1]-b[1]);
@@ -119,9 +146,15 @@ function plot(canvas, points, bounds, labels, time, { connect, color, brush }) {
   return hits;
 }
 
-function mapPlot(canvas, shapes, bounds, color) {
-  const style=plotStyle(canvas), {selection,grid,point}=style;
+function focusBox(ctx,style,x,y,r) {
+  ctx.save();ctx.setLineDash([3,2]);ctx.strokeStyle=style.focus;ctx.lineWidth=1.5;
+  ctx.strokeRect(x-r,y-r,r*2,r*2);ctx.restore();
+}
+
+function mapPlot(canvas, shapes, bounds, { color, encoding, focusRow }) {
+  const style=plotStyle(canvas), {selection,grid}=style;
   const {ctx,width,height}=viewport(canvas,style), [[a,b],[c,d]]=bounds, margin=24;
+  const paint=linkedPaint(ctx,style,encoding,color);
   const scale=Math.max(.001,Math.min((width-2*margin)/(b-a),(height-2*margin)/(d-c)));
   const toScreen=([x,y])=>[width*.5+(x-(a+b)*.5)*scale,height*.5-(y-(c+d)*.5)*scale];
   ctx.strokeStyle=grid;ctx.beginPath();
@@ -133,10 +166,11 @@ function mapPlot(canvas, shapes, bounds, color) {
   const hits=[];
   function trace(shape, ref, selected) {
     if(shape.type==='GeometryCollection'){shape.geometries.forEach(child=>trace(child,ref,selected));return;}
-    const p=new Path2D(), data=shape.coordinates;
+    const p=new Path2D(), data=shape.coordinates, mark=encoding.mark(ref), anchors=[];
     function dot(point) {
-      const [x,y]=toScreen(point), r=selected?6:4;
-      p.moveTo(x+r,y);p.arc(x,y,r,0,2*Math.PI);
+      const [x,y]=toScreen(point);
+      anchors.push([x,y]);
+      linkedSymbol(p,x,y,mark?7:selected?6:4,mark?.symbol);
     }
     function track(row, close=false) {
       row.forEach((point,i)=>i?p.lineTo(...toScreen(point)):p.moveTo(...toScreen(point)));
@@ -146,14 +180,25 @@ function mapPlot(canvas, shapes, bounds, color) {
     const draw={Point:dot,MultiPoint:rows=>rows.forEach(dot),LineString:track,MultiLineString:rows=>rows.forEach(row=>track(row)),
       Polygon:polygon,MultiPolygon:rows=>rows.forEach(polygon)};
     draw[shape.type]?.(data);
-    const fill=shape.type.includes('Polygon')||shape.type.includes('Point');
-    const tint=selected?selection:color?.(ref)??point;
-    ctx.strokeStyle=tint;ctx.lineWidth=selected?2.6:1.5;
-    if(fill){
-      ctx.fillStyle=tint;ctx.globalAlpha=shape.type.includes('Polygon')?.24:1;
-      ctx.fill(p,'evenodd');ctx.globalAlpha=1;
-    }
+    const area=shape.type.includes('Polygon'), fill=area||shape.type.includes('Point');
+    const tint=selected&&!mark?selection:paint.tint(ref);
+    ctx.strokeStyle=selected?selection:fill&&mark?style['pattern-ink']:tint;
+    ctx.lineWidth=selected?2.6:1.5;
+    if(fill)paint.fill(p,tint,mark,{area});
+    else paint.dash(mark);
     ctx.stroke(p);
+    ctx.setLineDash([]);
+    if(mark?.code && !anchors.length)vertices(shape,point=>{
+      if(!anchors.length)anchors.push(toScreen(point));
+    });
+    for(const [x,y] of anchors){
+      if(mark?.code){ctx.textAlign='left';ctx.fillStyle=style.focus;ctx.fillText(mark.code,x+10,y-6);}
+      if(selected){ctx.strokeStyle=selection;ctx.beginPath();ctx.arc(x,y,11,0,2*Math.PI);ctx.stroke();}
+      if(ref.row===focusRow)focusBox(ctx,style,x,y,14);
+    }
+    if(ref.row===focusRow&&!anchors.length){
+      ctx.strokeStyle=style.focus;ctx.setLineDash([2,2]);ctx.lineWidth=2;ctx.stroke(p);ctx.setLineDash([]);
+    }
     hits.push({p,ref,fill});
   }
   [...shapes].sort((a,b)=>Number(a.selected)-Number(b.selected)).forEach(row=>trace(row.geometry,row.ref,row.selected));
@@ -161,6 +206,35 @@ function mapPlot(canvas, shapes, bounds, color) {
     ctx.lineWidth=10;
     return hits.findLast(({p,fill})=>fill&&ctx.isPointInPath(p,...point,'evenodd')||ctx.isPointInStroke(p,...point))?.ref;
   };
+}
+
+function drawSwatch(doc,style,mark) {
+  const canvas=element(doc,'canvas');
+  canvas.width=23;canvas.height=20;
+  canvas.setAttribute('aria-hidden','true');
+  canvas.setAttribute('part','pattern-swatch');
+  const ctx=canvas.getContext('2d'), path=new Path2D();
+  linkedSymbol(path,11.5,10,8,mark.symbol);
+  linkedPaint(ctx,style,{}).fill(path,style['pattern-fill'],mark);
+  ctx.strokeStyle=style['pattern-ink'];ctx.stroke(path);
+  return canvas;
+}
+
+function scaleEndpoints(doc,node,bounds,axes,names={}) {
+  const rows=bounds.map(([min,max],i)=>{
+    const line=element(doc,'div'), pair=element(doc,'dd');
+    const [unit,description]=axes[i], defaults=description==='$time'?{min:'Start',max:'End'}:{min:'Min',max:'Max'};
+    const labels=names[i===0?'x':'y']??{};
+    for(const [key,value] of [['min',min],['max',max]]) {
+      const text=(labels[key]??defaults[key])+' '+String(Number(value.toPrecision(10)));
+      const end=element(doc,'span',text);
+      end.setAttribute('part','scale-endpoint '+key+'-endpoint');
+      pair.append(end);
+    }
+    line.append(element(doc,'dt',unit),pair);
+    return line;
+  });
+  node.replaceChildren(...rows);
 }
 
 function ray(world, frame, canvas, [x,y]) {
@@ -176,11 +250,11 @@ function ray(world, frame, canvas, [x,y]) {
 /** Mount linked chart, scene, map, and table controls on one session. */
 export function mountLinkedViews(host, { toolkit, session, chart, map={}, table={}, scene, title='Linked views',
   filterBy, timeRange=session?.timeRange, timeStep=.01, color, panels=allPanels, labels={}, controls={},
-  stylesheet='', defaultStyles=true }={}) {
+  stylesheet='', defaultStyles=true, encoding }={}) {
   if(!Array.isArray(panels)||!panels.length||new Set(panels).size!==panels.length||
     !Array.from(panels).every(name=>allPanels.includes(name))||typeof stylesheet!=='string'||typeof defaultStyles!=='boolean')
     throw new TypeError('Invalid linked panel layout or stylesheet');
-  const has=name=>panels.includes(name);
+  const has=name=>panels.includes(name), keyboard=controls.keyboard!==false;
   if(!session?.subscribe||has('chart')&&!chart||has('scene')&&(!scene?.world||!toolkit?.KIT))
     throw new TypeError('Linked panels need a session, chart axes for a chart, and a world and toolkit for a scene');
   if(timeRange&&(!Array.isArray(timeRange)||timeRange.length!==2||!timeRange.every(finite)||timeRange[1]<timeRange[0]||
@@ -190,6 +264,7 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
   if(filterBy&&!Object.hasOwn(columns,filterBy))throw new TypeError('Unknown filter column');
   if(has('table')&&(!fieldNames.length||!Number.isSafeInteger(rowsPerPage)||rowsPerPage<1||rowsPerPage>100))
     throw new TypeError('Invalid linked table columns or page size');
+  const coding=session.encoding(encoding);
   if(has('chart'))session.chart(chart);
   if(has('map'))session.map(map);
   if(has('table'))session.table({columns:fieldNames,limit:1});
@@ -203,19 +278,28 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
       <label class="clock" part="clock"><span><span data-label="time">Time</span><output part="time-value"></output></span>
         <input part="time-slider" type="range" aria-label="Scene time in seconds"></label>
       <button class="clear" part="clear-selection" data-label="clear">Clear selection</button></div>
+    <div class="encoding-legend" part="encoding-legend"><strong id="encoding-title"></strong>
+      <ul aria-labelledby="encoding-title" part="encoding-items"></ul></div>
+    <p class="sr-only" id="keyboard-help" part="keyboard-help">Use arrow keys to move between records.
+      Home and End jump to the first or last record. Press Enter or Space to select, or hold Shift to toggle selection. Press Escape to clear selection.</p>
+    <output class="sr-only" role="status" aria-live="polite" part="record-status"></output>
     <div class="panels" part="panels">
       <section data-panel="scene" part="panel scene-panel"><div class="panel-head" part="panel-header"><h2 data-label="scene">Scene</h2>
         <span class="meta" part="panel-detail" data-label="world">World view</span></div>
         <canvas data-view="scene" part="canvas scene-canvas" aria-label="3D scene"></canvas></section>
       <section data-panel="map" part="panel map-panel"><div class="panel-head" part="panel-header"><h2 data-label="map">Map</h2>
         <span class="meta map-meta" part="panel-detail"></span></div>
-        <canvas data-view="map" part="canvas map-canvas" aria-label="Spatial map"></canvas></section>
+        <canvas data-view="map" part="canvas map-canvas" aria-label="Spatial map"></canvas>
+        <dl class="scale" id="map-scale" part="scale map-scale"></dl></section>
       <section data-panel="chart" part="panel chart-panel"><div class="panel-head" part="panel-header"><h2 data-label="chart">Chart</h2>
         <span class="meta chart-meta" part="panel-detail"></span></div>
-        <canvas data-view="chart" part="canvas chart-canvas" aria-label="Data chart"></canvas></section>
+        <canvas data-view="chart" part="canvas chart-canvas" aria-label="Data chart"></canvas>
+        <dl class="scale" id="chart-scale" part="scale chart-scale"></dl></section>
       <section data-panel="table" part="panel table-panel"><div class="panel-head" part="panel-header"><h2 data-label="table">Records</h2>
         <span class="meta record-meta" part="panel-detail"></span></div>
-        <div class="table-wrap" part="table-scroll"><table part="table"><thead part="table-header"></thead><tbody part="table-body"></tbody></table></div>
+        <div class="table-wrap" part="table-scroll"><table part="table" tabindex="-1">
+          <caption class="sr-only" part="table-caption"></caption>
+          <thead part="table-header"></thead><tbody part="table-body"></tbody></table></div>
         <div class="table-controls" part="pagination"><button class="prev" part="previous-page" aria-label="Previous records">‹</button>
           <span class="small page" part="page"></span><button class="next" part="next-page" aria-label="Next records">›</button></div></section>
     </div></div>`;
@@ -229,6 +313,33 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
   const units=column=>column==='$time'?'Time · s':[column,columns[column]?.units].filter(Boolean).join(' · ');
   if(has('chart'))$('.chart-meta').textContent=units(chart.y);
   if(has('map'))$('.map-meta').textContent=map.coordinates?.join(' / ')??(map.plane??'xz').toUpperCase();
+  $('#keyboard-help').hidden=!keyboard;
+  const announce=$('[part="record-status"]');
+  const legend=$('.encoding-legend');
+  legend.hidden=controls.legend===false||!coding.entries.length;
+  $('#encoding-title').textContent=labels.encoding??coding.category??'';
+  let swatchTheme, swatchStyle;
+  const swatchImages=new Map();
+  function syncSwatches() {
+    if(!coding.entries.length)return;
+    const style=plotStyle(host), theme=style['pattern-fill']+'/'+style['pattern-ink'];
+    if(theme===swatchTheme)return;
+    swatchTheme=theme;swatchStyle=style;swatchImages.clear();
+    if(!legend.hidden)legend.querySelector('ul').replaceChildren(...coding.entries.map(item=>{
+      const li=element(doc,'li');
+      li.setAttribute('part','encoding-item');
+      li.append(drawSwatch(doc,style,item),element(doc,'span',item.code===undefined?item.label:item.code+' · '+item.label));
+      return li;
+    }));
+  }
+  function recordSwatch(mark) {
+    const code=mark.pattern+'/'+mark.symbol;
+    if(!swatchImages.has(code))swatchImages.set(code,drawSwatch(doc,swatchStyle,mark).toDataURL());
+    const image=element(doc,'img');
+    image.src=swatchImages.get(code);image.alt='';image.width=23;image.height=20;
+    image.setAttribute('aria-hidden','true');image.setAttribute('part','pattern-swatch');
+    return image;
+  }
   const chartCanvas=canvas('chart'), mapCanvas=canvas('map'), sceneCanvas=canvas('scene');
   let renderer;
   try {
@@ -259,17 +370,98 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
     else vertices(row.geometry,p=>mapPoints.push(indices.map(i=>p[i])));
   }
   const mapBounds=extent(mapPoints);
-  const head=element(doc,'tr');
-  fieldNames.forEach(key=>head.append(element(doc,'th',units(key))));
-  $('thead')?.append(head);
-  let page=0, pending=0, stopped=false, drawn, source, linkedWorld, view, points=[], findMap=()=>undefined, brush;
-  const select=(ref,event)=>{if(ref)session.update({selection:[ref],mode:pickMode(event)});};
+  if(chartCanvas){
+    const node=$('#chart-scale');
+    node.hidden=controls.scales===false;
+    scaleEndpoints(doc,node,chartBounds,[[units(chart.x),chart.x],[units(chart.y),chart.y]],chart.scaleLabels);
+  }
+  if(mapCanvas){
+    const node=$('#map-scale');
+    node.hidden=controls.scales===false;
+    const mapAxes=map.coordinates?map.coordinates.map(key=>[units(key),key]):
+      Array.from((map.plane??'xz').toUpperCase(),key=>[key+' · world units',key]);
+    scaleEndpoints(doc,node,mapBounds,mapAxes,map.scaleLabels);
+  }
+  const body=$('tbody');
+  if(body){
+    $('caption').textContent=table.caption??(labels.table??'Records');
+    const head=element(doc,'tr');
+    for(const key of fieldNames){
+      const heading=element(doc,'th',units(key));
+      heading.scope='col';
+      head.append(heading);
+    }
+    $('thead').append(head);
+  }
+  let page=0, pending=0, stopped=false, drawn, source, linkedWorld, view, points=[], findMap=()=>undefined, brush, cursor;
+  function showRecord(ref) {
+    cursor=ref.row;
+    if(body)page=Math.floor(session.snapshot().visible.findIndex(row=>row.ref.row===cursor)/rowsPerPage);
+  }
+  const select=(ref,event)=>{
+    if(!ref)return;
+    showRecord(ref);
+    session.update({selection:[ref],mode:pickMode(event)});
+    schedule();
+  };
   const position=(event,canvas)=>{const box=canvas.getBoundingClientRect();return [event.clientX-box.left,event.clientY-box.top];};
   const schedule=()=>{if(!pending&&!stopped)pending=requestAnimationFrame(render);};
+  function candidateRefs(kind,snapshot) {
+    if(kind==='chart')return session.chart(chart,snapshot).map(row=>row.ref);
+    if(kind==='map')return session.map(map,snapshot).map(row=>row.ref);
+    if(kind==='scene'){
+      const marks=linkedWorld?.dataMarks?.list({limit:20000}).marks??[];
+      const visible=new Set(marks.filter(mark=>mark.status==='visible'&&mark.source?.dataset===session.description.id)
+        .map(mark=>mark.source.row));
+      return snapshot.visible.filter(row=>visible.has(row.ref.row)).map(row=>row.ref);
+    }
+    return snapshot.visible.map(row=>row.ref);
+  }
+  function focusRecord(ref,refs) {
+    if(!ref)return;
+    showRecord(ref);
+    const category=coding.mark(ref)?.label, selected=session.snapshot().selection.some(row=>row.row===cursor);
+    announce.textContent=[coding.name(ref),category,'Record '+(refs.indexOf(ref)+1)+' of '+refs.length,
+      selected?'Selected':'Unselected'].filter(Boolean).join('. ');
+    schedule();
+  }
+  function navigate(event,kind) {
+    const delta={ArrowLeft:-1,ArrowUp:-1,ArrowRight:1,ArrowDown:1};
+    if(!Object.hasOwn(delta,event.key)&&!['Home','End','Enter',' ','Escape'].includes(event.key))return;
+    const refs=candidateRefs(kind,session.snapshot());
+    if(event.key==='Escape'){
+      event.preventDefault();
+      session.update({selection:[]});
+      if(!refs.length)announce.textContent='No matching records in this view';
+    }
+    if(!refs.length)return;
+    event.preventDefault();
+    const current=refs.findIndex(ref=>ref.row===cursor);
+    let index;
+    if(Object.hasOwn(delta,event.key))index=current<0?0:Math.max(0,Math.min(refs.length-1,current+delta[event.key]));
+    else index=event.key==='Home'?0:event.key==='End'?refs.length-1:Math.max(0,current);
+    const ref=refs[index];
+    if(event.key==='Enter'||event.key===' ')select(ref,event);
+    focusRecord(ref,refs);
+  }
+  if(keyboard)for(const item of [chartCanvas,mapCanvas,sceneCanvas])if(item){
+    const kind=item.dataset.view;
+    item.tabIndex=0;
+    item.setAttribute('aria-describedby',['keyboard-help',...((kind==='chart'||kind==='map')&&controls.scales!==false?[kind+'-scale']:[])].join(' '));
+    item.onkeydown=event=>navigate(event,kind);
+    item.onfocus=()=>{
+      const refs=candidateRefs(kind,session.snapshot());
+      const ref=refs.find(row=>row.row===cursor)??refs[0];
+      if(ref)focusRecord(ref,refs);
+      else announce.textContent='No matching records in this view';
+    };
+    item.onblur=schedule;
+  }
   function render() {
     pending=0;
     if(stopped)return;
     const snapshot=session.snapshot(), {time,selection,visible}=snapshot;
+    syncSwatches();
     $('.summary').textContent=visible.length+' / '+session.records.length+' records · '+selection.length+' selected';
     $('.clock output').textContent=print(time)+' s';
     slider.value=time;
@@ -280,14 +472,16 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
       customFilter.hidden=!rule||i>=0;
       filter.value=i>=0?String(i):rule?'custom':'';
     }
+    const active=root.activeElement;
+    const focusRow=keyboard&&(active?.dataset.view||body?.contains(active))?cursor:undefined;
     if(chartCanvas)points=plot(chartCanvas,session.chart(chart,snapshot),chartBounds,[units(chart.x),units(chart.y)],
-      chart.x==='$time'?time:undefined,{connect:chart.connect,color,brush});
-    if(mapCanvas)findMap=mapPlot(mapCanvas,session.map(map,snapshot),mapBounds,color);
-    if(has('table')){
-      page=Math.min(page,Math.max(0,Math.ceil(visible.length/rowsPerPage)-1));
+      chart.x==='$time'?time:undefined,{connect:chart.connect,color,brush,encoding:coding,focusRow});
+    if(mapCanvas)findMap=mapPlot(mapCanvas,session.map(map,snapshot),mapBounds,{color,encoding:coding,focusRow});
+    if(body){
+      page=Math.max(0,Math.min(page,Math.ceil(visible.length/rowsPerPage)-1));
       const rows=session.table({columns:fieldNames,offset:page*rowsPerPage,limit:rowsPerPage},snapshot);
-      const body=$('tbody');
-      const focused=body.contains(root.activeElement)?root.activeElement.dataset.row:undefined;
+      const focused=body.contains(active)?active.dataset.row:undefined;
+      const tabStop=rows.rows.find(row=>row.ref.row===cursor)?.ref??rows.rows[0]?.ref;
       body.replaceChildren(...rows.rows.map(row=>{
         const tr=element(doc,'tr');
         tr.dataset.selected=row.selected;
@@ -298,13 +492,38 @@ export function mountLinkedViews(host, { toolkit, session, chart, map={}, table=
           if(i===0){
             const btn=element(doc,'button',print(value));
             btn.type='button';btn.setAttribute('part','record');btn.dataset.row=row.ref.row;btn.setAttribute('aria-pressed',String(row.selected));
-            btn.onclick=event=>select(row.ref,event);td.append(btn);
+            const mark=coding.mark(row.ref);
+            if(mark)btn.prepend(recordSwatch(mark));
+            if(mark?.code){
+              const tag=element(doc,'span',mark.code+' ');
+              tag.setAttribute('aria-hidden','true');
+              btn.insertBefore(tag,btn.lastChild);
+            }
+            if(mark||coding.label!==undefined)btn.setAttribute('aria-label',[
+              coding.label===undefined?print(value):coding.name(row.ref),mark?.label].filter(Boolean).join('. '));
+            btn.onclick=event=>select(row.ref,event);
+            if(keyboard){
+              btn.tabIndex=row.ref===tabStop?0:-1;
+              btn.onkeydown=event=>navigate(event,'table');
+              btn.onfocus=()=>{
+                if(cursor!==row.ref.row){cursor=row.ref.row;schedule();}
+              };
+            }
+            td.append(btn);
           }else td.textContent=print(value);
           tr.append(td);
         });
         return tr;
       }));
-      if(focused!==undefined)body.querySelector(`button[data-row="${focused}"]`)?.focus({preventScroll:true});
+      if(!rows.rows.length){
+        const empty=element(doc,'tr'), cell=element(doc,'td',labels.empty??'No matching records');
+        cell.colSpan=fieldNames.length;
+        empty.append(cell);body.append(empty);
+      }
+      if(focused!==undefined){
+        const row=body.querySelector(`button[data-row="${keyboard?tabStop?.row:focused}"]`);
+        (row??$('table')).focus({preventScroll:true});
+      }
       $('.record-meta').textContent=String(rows.total);
       $('.prev').disabled=page===0;$('.next').disabled=(page+1)*rowsPerPage>=rows.total;
       $('.page').textContent=rows.total?(page*rowsPerPage+1)+'–'+Math.min(rows.total,(page+1)*rowsPerPage):'0';
