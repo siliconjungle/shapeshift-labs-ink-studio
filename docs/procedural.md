@@ -74,6 +74,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `sampling.eliminate(points, options)`, `sampling.lloyd(points, options)`, `sampling.patch(spec)`, `sampling.geodesicSpacing(points, links, options)` | Progressive point subsets, centroidal layout, stratified surface sampling and surface-neighbor separation |
 | `sampling.phyllotaxis.sphere(options)`, `sampling.phyllotaxis.surface(chart, options)` | [Golden-angle placement](surface-phyllotaxis.md) with stable IDs, tangent frames, and area-weighted density |
 | `surfaceGrowth.trace(options)` | Seeded, bounded branching paths over caller-supplied surfaces, with a link query for seams and obstacles |
+| `surface.curvature.chart(carrier, options)`, `surface.curvature.implicit(field, options)` | [Curvature-line ornament](curvature-lines.md) with signed principal curvature, surface-aligned paths, and arc frames |
 | `surface.mobius(options)`, `surface.kleinBottle(options)`, `surface.helicoid(options)`, `surface.catenoid(options)` | [Non-orientable and minimal surfaces](topological-surfaces.md) with mesh UVs, lifted frames, and seam-aware paint and motion |
 | `materialBands(spec)` | Nonoverlapping intervals with material and pattern metadata, plus optional spatial projection and period |
 | `masks.stroke(spec)`, `masks.compose(specs, options)` | Tapered and feathered swept discs, ordered addition and erasure, signed distance and visible source ownership |
