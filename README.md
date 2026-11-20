@@ -650,6 +650,8 @@ A custom indexed mesh supplies `points` and triangle or quad `faces`. It may pro
 
 Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/weighted-roof.js), [texture synthesis](examples/texture-synthesis.js), or [a transport morph](examples/transport-morph.js) from the checkout.
 
+[Proportional subdivision](docs/proportional-layout.md) reuses a golden-ratio or custom hierarchy across façade parts, trim, and shot layouts.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```

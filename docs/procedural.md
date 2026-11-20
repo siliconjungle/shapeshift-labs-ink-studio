@@ -2145,6 +2145,9 @@ parts and sockets with stable keys and a work count.
 - `split` divides a scope on an `axis`. Give each `parts` entry a `key`
   and a production in `use`. A fixed `size` reserves world units.
   `weight` shares the remaining space among flexible parts.
+- `proportion` recursively splits a pair of axes by the golden ratio
+  or an authored ratio. The same rectangle tree can place parts, trim,
+  and pixel-aligned camera views. [Proportional subdivision](proportional-layout.md)
 - `repeat` fits cells at a nominal `pitch` on an `axis`. Supply `use`
   for each bay and optional `gap` between bays. Pass inline `pins` or
   use a `pinSet` name with `options.pinSets`. Each pin has a stable

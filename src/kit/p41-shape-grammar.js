@@ -76,6 +76,34 @@
         at = end;
       }
     }
+    function proportion(node, box, path, depth) {
+      const { plane = ['x', 'y'], use = null, seam = null, ratio, depth: levels, axis, recurse, majorAt, gap,
+        minSpan } = node;
+      if (!Array.isArray(plane) || plane.length !== 2 || plane[0] === plane[1])
+        fail('proportion needs two distinct axes');
+      const dims = Array.from(plane, axisOf);
+      const layout = P.proportions.subdivide({
+        min: dims.map(dim => box.min[dim]), max: dims.map(dim => box.max[dim])
+      }, { ratio, depth: levels, axis, recurse, majorAt, gap, minSpan });
+      steps += layout.nodes.length - 1;
+      if (steps > maxSteps) fail('execution exceeds its step or depth budget');
+      function place(region, production) {
+        const min = box.min.slice(), max = box.max.slice();
+        for (const [i, dim] of dims.entries()) {
+          min[dim] = region.bounds.min[i];
+          max[dim] = region.bounds.max[i];
+        }
+        visit(production, { min, max }, [...path, ...region.path], depth + region.depth + 1);
+      }
+      for (const leaf of layout.leaves) {
+        const side = leaf.path.at(-1);
+        place(leaf, side && Object.hasOwn(node, side) ? node[side] : use);
+      }
+      if (seam !== null) for (const cut of layout.seams) {
+        const dim = cut.axis === 'u' ? 0 : 1;
+        if (cut.bounds.max[dim] - cut.bounds.min[dim] > EPS) place(cut, seam);
+      }
+    }
     function repeat(node, box, path, depth) {
       const axis = axisOf(node.axis),
         pitch = node.pitch, gap = node.gap ?? 0,
@@ -151,6 +179,9 @@
           break;
         case 'split':
           split(operation, box, path, depth);
+          break;
+        case 'proportion':
+          proportion(operation, box, path, depth);
           break;
         case 'repeat':
           repeat(operation, box, path, depth);
