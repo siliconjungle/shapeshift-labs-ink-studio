@@ -141,6 +141,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `fields.simplex(options)`, `fields.periodic(options)`, `fields.compile(expression, options)` | Seeded analytic noise and serializable field composition for SDFs, materials and placement |
 | `grammar.expand(scope, rules, options)`, `grammar.children(layout)` | Bounded shape grammar with named partitions, fitted repeats, pinned spans, sockets and retained child specs |
 | `grammar.rewriteGrid(rows, rules)`, `grammar.rewriteGraph(graph, rules)` | Seeded weighted pattern replacement on scalar grids and directed graphs |
+| `KIT.cellular.create(options)`, `KIT.cellular.rules` | [Seeded cellular automata](cellular-lattices.md) on line, square, hex, and voxel lattices, including reversible block rules |
 | `layouts.bsp(options)`, `layouts.cave(options)`, `layouts.pack(items, options)`, `layouts.floorPlan(rooms, options)` | Connected room partitions and caves, constrained rectangle packing and named room adjacencies |
 | `growth.lsystem(axiom, rules, options)`, `growth.turtle(tokens, options)`, `growth.venation(outline, options)`, `growth.roots(starts, options)`, `growth.pipe(nodes, options)` | Growth grammars, SDF branch runs, venation, obstacle-aware roots and pipe taper |
 | `growth.aggregate(options)`, `growth.grayScottGrid(options)`, `growth.grayScottSurface(points, links, options)`, `growth.dispersal(options)`, `growth.succession(options)` | Grid and surface patterns, seed dispersal and habitat competition |

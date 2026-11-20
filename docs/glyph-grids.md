@@ -5,6 +5,9 @@ Render each state as an existing atlas glyph or a custom glyph. A grid can
 also treat its cells as individual pixels, allowing new letterforms to
 emerge from local rules or pattern recall.
 
+The same engine provides [built-in cellular rules, line and hex grids, and
+voxel lattices](cellular-lattices.md) through `KIT.cellular`.
+
 The [Palimpsest Terminal](../examples/glyph-grid.js) recalls a damaged
 inscription around locked fragments from a second memory. The bottom strip
 runs a seeded neighborhood rule through the glyph atlas. The main display

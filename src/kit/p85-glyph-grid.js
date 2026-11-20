@@ -9,6 +9,13 @@
   const check = (ok, message) => { if (!ok) throw new RangeError('Glyph grid: ' + message); };
   const cardinal = [[0, -1], [1, 0], [0, 1], [-1, 0]];
   const moore = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  const axial = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]], line = [[-1, 0], [1, 0]];
+  const voxelNames = ['faces', 'edges', 'corners'], voxel = [[], [], []];
+  for (let z = -1; z <= 1; z++) for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+    const length = Math.abs(x) + Math.abs(y) + Math.abs(z);
+    if (!length) continue;
+    for (let level = length; level <= 3; level++) voxel[level - 1].push([x, y, z]);
+  }
   const maxCells = 65536, maxWork = 32000000;
   const shuffle = (values, random) => {
     for (let i = values.length - 1; i > 0; i--) {
@@ -17,8 +24,8 @@
     }
     return values;
   };
-  function dimensions(width, height, states) {
-    check(integer(width, 1, 1024) && integer(height, 1, 1024) && width * height <= maxCells &&
+  function dimensions(width, height, states, depth = 1) {
+    check(integer(width, 1, 1024) && integer(height, 1, 1024) && integer(depth, 1, 1024) && width * height * depth <= maxCells &&
       integer(states, 2, 256), 'expected bounded dimensions and 2–256 states');
   }
 
@@ -30,32 +37,62 @@
     });
   }
 
-  function offsetsFor(neighborhood) {
-    if (neighborhood === 'moore') return moore;
-    if (neighborhood === 'cardinal') return cardinal;
+  function offsetsFor(neighborhood, lattice) {
+    if (neighborhood === undefined) {
+      if (lattice === 'voxel') return voxel[2];
+      if (lattice === 'hex') return axial;
+      return lattice === 'line' ? line : moore;
+    }
+    if (lattice === 'voxel' && voxelNames.includes(neighborhood)) return voxel[voxelNames.indexOf(neighborhood)];
+    if (lattice !== 'voxel' && neighborhood === 'moore') return moore;
+    if (lattice !== 'voxel' && neighborhood === 'cardinal') return cardinal;
+    if (lattice !== 'voxel' && neighborhood === 'line') return line;
+    if (lattice !== 'voxel' && neighborhood === 'hex') return axial;
+    const arity = lattice === 'voxel' ? 3 : 2;
     check(Array.isArray(neighborhood) && integer(neighborhood.length, 1, 32) &&
-      Array.from(neighborhood).every(point => Array.isArray(point) && point.length === 2 &&
-        Array.from(point).every(n => integer(n, -16, 16)) && (point[0] || point[1])) &&
+      Array.from(neighborhood).every(point => Array.isArray(point) && point.length === arity &&
+        Array.from(point).every(n => integer(n, -16, 16)) && point.some(Boolean)) &&
       new Set(neighborhood.map(point => point.join(','))).size === neighborhood.length,
-    'expected distinct nonzero neighborhood offsets');
+    'expected distinct nonzero neighborhood offsets for the lattice');
     return neighborhood.map(point => point.slice());
   }
 
-  function create({ width, height, states = 2, initial = 0, seed = 0, rule,
-    neighborhood = 'moore', boundary = 'empty', patterns = [] } = {}) {
-    dimensions(width, height, states);
-    check(Number.isSafeInteger(seed) && (rule === undefined || typeof rule === 'function') &&
-      ['empty', 'wrap'].includes(boundary), 'expected a seed, synchronous rule and valid boundary');
-    const size = width * height, offsets = offsetsFor(neighborhood);
+  function create({ width, height, depth = 1, lattice, states, initial = 0, seed = 0, rule,
+    neighborhood, boundary = 'empty', patterns = [] } = {}) {
+    const info = CellularRules.info(rule);
+    lattice ??= depth > 1 ? 'voxel' : info?.line ? 'line' : 'square';
+    height ??= lattice === 'line' ? 1 : undefined;
+    states ??= info?.states ?? 2;
+    dimensions(width, height, states, depth);
+    check(['square', 'line', 'hex', 'voxel'].includes(lattice) && (lattice === 'voxel' || depth === 1) &&
+      (lattice !== 'line' || height === 1), 'expected valid line, square, hex or voxel dimensions');
+    check(Number.isSafeInteger(seed) && ['empty', 'wrap'].includes(boundary),
+      'expected a seed and valid boundary');
+    const plane = width * height, size = plane * depth, offsets = offsetsFor(neighborhood, lattice),
+      volume = lattice === 'voxel', legacy = lattice === 'square';
     const state = value => integer(value, 0, states - 1);
     const randomAt = (scope, index) => K.grow.dice(scope ^ Math.imul(index + 1, 0x9e3779b1));
-    const at = (x, y) => integer(x, 0, width - 1) && integer(y, 0, height - 1);
-    const index = (x, y) => y * width + x;
+    const at = (x, y, z) => integer(x, 0, width - 1) && integer(y, 0, height - 1) && integer(z, 0, depth - 1);
+    const index = (x, y, z) => z * plane + y * width + x;
+    const coords = i => [i % width, Math.floor(i / width) % height, Math.floor(i / plane)];
+    const context = (x, y, z) => volume ? { x, y, z } : { x, y };
     const seedInitial = hash('glyph-grid/initial', seed);
+    function checkRule(update) {
+      const spec = CellularRules.info(update);
+      check(typeof update === 'function' || spec?.block, 'step needs a synchronous neighborhood or reversible block rule');
+      check(!spec || spec.states === states, 'rule alphabet must match grid states');
+      if (spec?.line) check(!volume && height === 1 && offsets.length === 2 &&
+        offsets[0][0] === -1 && offsets[0][1] === 0 && offsets[1][0] === 1 && offsets[1][1] === 0,
+      'elementary rules need one row with left and right neighbors in order');
+      if (spec?.block) check(lattice === 'square' && width >= 2 && height >= 2 && !(width % 2 || height % 2),
+        'reversible blocks need an even square-lattice grid');
+      return spec;
+    }
+    if (rule !== undefined) checkRule(rule);
     let start;
     if (typeof initial === 'function') {
       start = packed(Array.from({ length: size }, (_, i) =>
-        initial({ x: i % width, y: Math.floor(i / width), random: randomAt(seedInitial, i) })), size, states);
+        initial({ ...context(...coords(i)), random: randomAt(seedInitial, i) })), size, states);
     } else if (sequence(initial)) start = packed(initial, size, states);
     else {
       check(state(initial), 'initial state is outside the alphabet');
@@ -85,11 +122,11 @@
       available();
       check(Array.isArray(changes) && changes.length <= maxCells, 'expected a bounded edit list');
       const edits = Array.from(changes, item => {
-        check(record(item) && at(item.x, item.y) && Object.keys(item).every(key =>
-          ['x', 'y', 'state', 'locked'].includes(key)) && (item.state !== undefined || item.locked !== undefined) &&
+        check(record(item) && at(item.x, item.y, item.z ?? 0) && Object.keys(item).every(key =>
+          (['x', 'y', 'state', 'locked'].includes(key) || volume && key === 'z')) && (item.state !== undefined || item.locked !== undefined) &&
           (item.state === undefined || state(item.state)) && (item.locked === undefined || typeof item.locked === 'boolean'),
         'each edit needs valid coordinates and a state or lock');
-        return { ...item, i: index(item.x, item.y) };
+        return { ...item, i: index(item.x, item.y, item.z ?? 0) };
       });
       for (const change of edits) {
         if (change.state !== undefined) cells[change.i] = change.state;
@@ -98,16 +135,17 @@
       if (edits.length) revision++;
     }
 
-    function advance(steps, work, evolve) {
+    function advance(steps, work, evolve, direction = 1) {
       available();
-      check(integer(steps, 1, 10000) && steps * work <= maxWork && Number.isSafeInteger(tick + steps),
-        'updates exceed the step budget');
+      check(integer(steps, 1, 10000) && steps * work <= maxWork, 'updates exceed the step budget');
+      const end = tick + direction * steps;
+      check(integer(end, 0, Number.MAX_SAFE_INTEGER), 'updates would rewind before tick zero or exceed the tick range');
       busy = true;
       try {
         let next = cells.slice();
-        for (let j = 1; j <= steps; j++) next = evolve(next, tick + j);
+        for (let j = 1; j <= steps; j++) next = evolve(next, tick + direction * j);
         cells = next;
-        tick += steps;
+        tick = end;
         revision++;
       } finally {
         busy = false;
@@ -115,25 +153,55 @@
       return tick;
     }
 
-    function neighbor(cells, x, y) {
-      if (boundary === 'wrap') return cells[index((x % width + width) % width, (y % height + height) % height)];
-      return at(x, y) ? cells[index(x, y)] : 0;
+    const wrap = (i, n) => (i % n + n) % n;
+    function neighborIndex(x, y, z) {
+      if (boundary === 'wrap') return index(wrap(x, width), wrap(y, height), wrap(z, depth));
+      return at(x, y, z) ? index(x, y, z) : -1;
+    }
+
+    let lookup;
+    function links() {
+      const data = new Int32Array(size * offsets.length);
+      for (let i = 0, j = 0; i < size; i++) {
+        const [x, y, z] = coords(i);
+        for (const [dx, dy, dz = 0] of offsets) data[j++] = neighborIndex(x + dx, y + dy, z + dz);
+      }
+      return data;
+    }
+
+    function blockStep(current, phase, table) {
+      const next = current.slice(), start = phase ? -1 : 0;
+      for (let y = start; y < height + start; y += 2) for (let x = start; x < width + start; x += 2) {
+        const corners = [neighborIndex(x, y, 0), neighborIndex(x + 1, y, 0),
+          neighborIndex(x + 1, y + 1, 0), neighborIndex(x, y + 1, 0)];
+        if (corners.some(i => i < 0 || locked[i])) continue;
+        const bits = corners.reduce((n, i, bit) => n | current[i] << bit, 0), value = table[bits];
+        corners.forEach((i, bit) => { next[i] = value >> bit & 1; });
+      }
+      return next;
     }
 
     function step(steps = 1, update = rule) {
-      check(typeof update === 'function', 'step needs a synchronous neighborhood rule');
+      const spec = checkRule(update);
+      if (spec?.block) return advance(steps, size, (current, tick) => blockStep(current, (tick - 1) % 2, spec.forward));
       return advance(steps, size * (offsets.length + 1), (current, tick) => {
+        lookup ??= links();
         const next = current.slice(), scope = hash('glyph-grid/rule/' + tick, seed);
         for (let i = 0; i < size; i++) {
           if (locked[i]) continue;
-          const x = i % width, y = Math.floor(i / width), previous = current[i];
-          const value = update({ x, y, state: previous, tick, random: randomAt(scope, i),
-            neighbors: offsets.map(([dx, dy]) => neighbor(current, x + dx, y + dy)) });
+          const offset = i * offsets.length, neighbors = offsets.map((_, j) => current[lookup[offset + j]] ?? 0);
+          const value = update({ ...context(...coords(i)), state: current[i], tick, random: randomAt(scope, i), neighbors });
           check(state(value), 'a rule must return a valid cell state');
           next[i] = value;
         }
         return next;
       });
+    }
+
+    function back(steps = 1, update = rule) {
+      const spec = checkRule(update);
+      check(spec?.block, 'rewind needs a reversible block rule');
+      return advance(steps, size, (current, tick) => blockStep(current, tick % 2, spec.backward), -1);
     }
 
     // The overlap excludes the cell being updated, so locks provide evidence instead of self-coupling.
@@ -170,18 +238,29 @@
         });
     }
 
+    const frame = (from, to, extra = {}) => Object.freeze({ width, height, states, tick,
+      cells: cells.slice(from, to), locked: locked.slice(from, to), ...extra });
     return Object.freeze({
-      width, height, states, edit, learn, step, recall,
+      width, height, depth, lattice, states, edit, learn, step, back, recall,
       get tick() { return tick; },
       get revision() { return revision; },
-      get(x, y) {
-        check(at(x, y), 'cell coordinates are out of bounds');
-        return cells[index(x, y)];
+      get(x, y = 0, z = 0) {
+        check(at(x, y, z), 'cell coordinates are out of bounds');
+        return cells[index(x, y, z)];
       },
-      snapshot() { return Object.freeze({ width, height, states, tick, cells: cells.slice(), locked: locked.slice() }); },
+      position(x, y = 0, z = 0) {
+        check(at(x, y, z), 'cell coordinates are out of bounds');
+        return lattice === 'hex' ? [x + .5 * y, Math.sqrt(3) / 2 * y, 0] : [x, y, z];
+      },
+      slice(z = 0) {
+        check(integer(z, 0, depth - 1), 'slice coordinate is out of bounds');
+        return frame(z * plane, (z + 1) * plane);
+      },
+      snapshot() { return frame(0, size, legacy ? {} : { lattice, depth }); },
       restore(snapshot) {
         available();
         check(snapshot?.width === width && snapshot.height === height && snapshot.states === states &&
+          (snapshot.lattice ?? 'square') === lattice && (snapshot.depth ?? 1) === depth &&
           integer(snapshot.tick, 0, Number.MAX_SAFE_INTEGER), 'snapshot is incompatible');
         const next = packed(snapshot.cells, size, states), pins = packed(snapshot.locked, size, 2);
         cells = next;
@@ -274,5 +353,7 @@
     return Object.freeze({ raster, emit });
   }
 
-  K.glyphGrid = Object.freeze({ create, paint, rules: Object.freeze({ life }) });
+  const rules = Object.freeze({ life, ...CellularRules.rules });
+  K.cellular = Object.freeze({ create, rules });
+  K.glyphGrid = Object.freeze({ create, paint, rules });
 })(KIT);
