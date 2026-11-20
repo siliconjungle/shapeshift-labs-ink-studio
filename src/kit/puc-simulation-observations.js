@@ -21,24 +21,41 @@
     return ticks;
   }
 
+  function measurements({ticks,observations:definitions}) {
+    const defaults=ticks===undefined?null:schedule(ticks);
+    check(record(definitions)&&Object.keys(definitions).length>0&&
+      Object.keys(definitions).length<=128,'An observation plan needs 1–128 named observations');
+    const observations=Object.entries(definitions).map(([name,item])=>{
+      check(id(name)&&shape(item,['field','at','args','path','ticks','units'])&&typeof item.field==='string'&&
+        item.field.length>0&&(item.args===undefined||record(item.args))&&
+        (item.units===undefined||typeof item.units==='string'&&item.units.trim().length>0),'Invalid observation '+name);
+      const sampleTicks=item.ticks===undefined?defaults:schedule(item.ticks);
+      check(sampleTicks,'No tick schedule for observation '+name);
+      const {ticks:ignored,...definition}=item;
+      return {id:name,...definition,...(item.path!==undefined&&{path:selector(item.path)}),ticks:sampleTicks};
+    });
+    const count=observations.reduce((sum,row)=>sum+row.ticks.length,0);
+    check(count<=maxSamples,'Observation plan exceeds the sample budget');
+    const slots=observations.flatMap(observation=>observation.ticks.map(tick=>({tick,observation}))).sort((a,b)=>a.tick-b.tick);
+    function reader(query){
+      const units=new Map(observations.map(({id,field,path,units})=>{
+        const actual=path===undefined?query.field(field)?.units??null:null;
+        check(units===undefined||actual===null||actual===units,'Observation '+id+' units do not match '+field);
+        return [id,units??actual];
+      }));
+      return (query,{tick,observation},dt)=>({...sample(query,observation),
+        observation:observation.id,tick,time:tick*dt,units:units.get(observation.id)});
+    }
+    return {observations,slots,reader};
+  }
+
   function prepare(input) {
     check(shape(input,['ticks','observations','seeds','parameters','cases','actions']),'Invalid observation sweep plan');
-    const spec=copy(input), defaults=spec.ticks===undefined?null:schedule(spec.ticks);
+    const spec=copy(input), {observations,slots,reader}=measurements(spec);
     const {seeds,parameters:bindings={},cases=[{id:'base'}],actions=[]}=spec;
     check(seeds===undefined||Array.isArray(seeds)&&seeds.length>0&&seeds.length<=maxRuns&&
       seeds.every(Number.isSafeInteger)&&new Set(seeds).size===seeds.length,'Sweep seeds need distinct safe integers');
     check(Array.isArray(actions),'Sweep actions need a command list');
-    check(record(spec.observations)&&Object.keys(spec.observations).length>0&&
-      Object.keys(spec.observations).length<=128,'A sweep needs 1–128 named observations');
-    const observations=Object.entries(spec.observations).map(([name,item])=>{
-      check(id(name)&&shape(item,['field','at','args','path','ticks','units'])&&typeof item.field==='string'&&
-        item.field.length>0&&(item.args===undefined||record(item.args))&&
-        (item.units===undefined||typeof item.units==='string'&&item.units.trim().length>0),'Invalid observation '+name);
-      const ticks=item.ticks===undefined?defaults:schedule(item.ticks);
-      check(ticks,'No tick schedule for observation '+name);
-      const {ticks:ignored,...definition}=item;
-      return {id:name,...definition,...(item.path!==undefined&&{path:selector(item.path)}),ticks};
-    });
 
     check(record(bindings)&&Object.keys(bindings).length<=16,'Invalid sweep parameter bindings');
     const parameters=Object.entries(bindings).map(([name,item])=>{
@@ -55,13 +72,11 @@
       shape(row,['id','edits','actions'])&&id(row.id)&&Array.isArray(row.edits??[])&&Array.isArray(row.actions??[]))&&
       new Set(cases.map(row=>row.id)).size===cases.length,'Sweep cases need distinct IDs and optional edits and actions');
     const runCount=parameters.reduce((n,item)=>n*item.values.length,cases.length*(seeds?.length??1));
-    const samples=observations.reduce((sum,row)=>sum+row.ticks.length,0);
-    check(runCount<=maxRuns&&runCount*samples<=maxSamples,'Observation sweep exceeds the run or sample budget');
+    check(runCount<=maxRuns&&runCount*slots.length<=maxSamples,'Observation sweep exceeds the run or sample budget');
 
     let combinations=[[]];
     for(const parameter of parameters)combinations=combinations.flatMap(items=>parameter.values.map(value=>
       [...items,{name:parameter.name,path:parameter.path,port:parameter.port,tick:parameter.tick,value}]));
-    const slots=observations.flatMap(observation=>observation.ticks.map(tick=>({tick,observation}))).sort((a,b)=>a.tick-b.tick);
     const groups=cases.flatMap(row=>combinations.map((entries,index)=>({
       id:parameters.length?row.id+':'+(index+1):row.id, case:row.id,
       parameters:Object.fromEntries(entries.map(({name,value})=>[name,value])),
@@ -70,7 +85,7 @@
     })));
     const definitions=freeze(observations);
     return Object.freeze({observations:definitions,run(source,options){
-      return execute(source,{seeds,actions,slots,groups,observations:definitions},options);
+      return execute(source,{seeds,actions,slots,groups,observations:definitions,reader},options);
     }});
   }
 
@@ -121,19 +136,14 @@
             ({tick:tick??fromTick+1,action:'world/input',args:{port,value}}))]);
           const measurements=[], {dt}=run.view().world;
           let currentTick=fromTick, query=run.query();
-          const units=new Map(plan.observations.map(({id,field,path,units})=>{
-            const actual=path===undefined?query.field(field)?.units??null:null;
-            check(units===undefined||actual===null||actual===units,'Observation '+id+' units do not match '+field);
-            return [id,units??actual];
-          }));
+          const readObservation=plan.reader(query);
           for(const {tick,observation} of plan.slots){
             if(currentTick!==tick){
               run.advance(tick);
               query=run.query();
               currentTick=tick;
             }
-            const reading=sample(query,observation);
-            measurements.push({...reading,observation:observation.id,tick,time:tick*dt,units:units.get(observation.id)});
+            measurements.push(readObservation(query,{tick,observation},dt));
           }
           const result={id,group:group.id,seed,fromTick,toTick:currentTick,dt,samples:measurements};
           runs.push(result);
@@ -146,5 +156,5 @@
     return freeze({format,version:1,world:world.id,observations:plan.observations,runs,groups});
   }
 
-  W.observations=Object.freeze({format,prepare,run:(source,spec,options)=>prepare(spec).run(source,options)});
+  W.observations=Object.freeze({format,prepare,measurements,run:(source,spec,options)=>prepare(spec).run(source,options)});
 })(KIT);

@@ -112,8 +112,10 @@ scene with those layers disabled.
 
 `sim resume` and `sim fork` both start a new process from a checkpoint. Keep
 their output paths distinct to retain both branches. A run file contains its
-starting checkpoint, added commands, and ending checkpoint. Replay verifies the
-result against the recorded ending state. Sign differences between positive
+starting checkpoint, added commands, and ending checkpoint. [Reproducible run
+records](simulation-checkpoints.md#reproducible-run-records) also retain the
+scene revisions, command submission order, solver timing, and sampled
+observations for replay verification. Sign differences between positive
 and negative zero follow JSON numeric equality. `sim reset` on a recording
 returns to its starting checkpoint. `--ticks` selects an absolute tick,
 `--steps` advances relative to the current tick, and `--t` converts seconds

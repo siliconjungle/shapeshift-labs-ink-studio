@@ -86,8 +86,20 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       ? {...input.world,...(opt.seed===undefined?{}:{seed:Number(opt.seed)}),...(opt.dt===undefined?{}:{dt:Number(opt.dt)})}
       : input.world;
   }
-  function runtime(input, profile = false, regionRevisions) {
-    return R.create(sourceWorld(input),{checkpoint:input.checkpoint,profile,workerPool,regionRevisions,traceSteps:traceRetention()});
+  function runtime(input, profile = false, regionRevisions, recordRun) {
+    return R.create(sourceWorld(input),{checkpoint:input.checkpoint,profile,workerPool,regionRevisions,traceSteps:traceRetention(),recordRun});
+  }
+  function recordingRun(input, options) {
+    sourceWorld(input);
+    return R.openRecording(input.log,{workerPool,traceSteps:traceRetention(),...options});
+  }
+  function recordOptions() {
+    ensure(opt.observations===undefined||typeof opt.observations==='string'&&typeof opt.record==='string',
+      '--observations needs a plan file and --record FILE');
+    if(opt.observations===undefined)return opt.record?true:undefined;
+    const plan=read(opt.observations);
+    ensure(W.data.record(plan?.observations),'The observation plan needs named observations');
+    return plan;
   }
   function traceRetention(){
     const value=opt['trace-steps'];
@@ -111,10 +123,9 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
   }
   function snapshotRun(input, run, tick) {
     if (input.log && tick < run.view().tick) {
-      const { origin, commands } = input.log;
+      const { origin } = input.log;
       ensure(tick >= origin.tick, 'Tick precedes the start of the recording');
-      run = runtime({ world: origin.world, checkpoint: origin });
-      run.schedule(commands);
+      run = recordingRun(input);
     }
     schedule(run);
     return run;
@@ -223,8 +234,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       temporal.push({i,rule,at});
     }
     if(temporal.length){
-      const replay=R.create(log.origin.world,{checkpoint:log.origin,workerPool});
-      replay.schedule(log.commands);
+      const replay=R.openRecording(log,{workerPool});
       const exact=new Map(), deadlines=[];
       for(const item of temporal){
         if(item.rule.tick===undefined)deadlines.push(item);
@@ -350,12 +360,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       }
     }
     const input = load(file);
-    let run = runtime(input);
-    if (input.log) {
-      const origin = input.log.origin;
-      run = R.create(origin.world,{checkpoint:origin,workerPool});
-      run.schedule(input.log.commands);
-    }
+    const run = input.log ? recordingRun(input) : runtime(input);
     schedule(run);
     const start = run.view().tick;
     const end = input.log && opt.ticks===undefined && opt.steps===undefined && opt.t===undefined ? input.log.end.tick : to(run);
@@ -392,10 +397,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     ensure(opt.regions===undefined||typeof opt.regions==='string','Use --regions ID,ID for an explicit selection');
     ensure(opt.near===undefined||typeof opt.near==='string','Use --near X,Y,Z for a nearby selection');
     ensure(opt.since===undefined||typeof opt.since==='string','Use --since FILE for an applied cursor');
-    const origin=input.log?.origin;
-    const run=runtime(origin?{world:origin.world,checkpoint:origin}:input,false,
-      {stream:opt.stream,...(opt.retain!==undefined&&{retain:opt.retain===true?NaN:Number(opt.retain)})});
-    if(input.log)run.schedule(input.log.commands);
+    const regionRevisions={stream:opt.stream,...(opt.retain!==undefined&&{retain:opt.retain===true?NaN:Number(opt.retain)})};
+    const run=input.log?recordingRun(input,{regionRevisions}):runtime(input,false,regionRevisions);
     schedule(run);
     const tick=input.log&&opt.ticks===undefined&&opt.steps===undefined&&opt.t===undefined?input.log.end.tick:to(run);
     run.advance(tick);
@@ -457,7 +460,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       case 'fork': {
         const input = load(file);
         ensure(mode==='run' || input.checkpoint,'Expected a checkpoint or recording to resume or fork');
-        const run = runtime(input,!!(opt.profile||opt.assert));
+        const run = runtime(input,!!(opt.profile||opt.assert),undefined,recordOptions());
         schedule(run);
         run.advance(to(run),{stopOnOutcome:!!opt.scenario});
         finish(run,input.store);
@@ -471,13 +474,25 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       case 'regions-apply': return applyRegionUpdate(file,other);
       case 'reset': {
         const input=load(file);
-        finish(input.log?R.create(input.log.origin.world,{checkpoint:input.log.origin,workerPool}):runtime(input),input.store);
+        const recordRun=recordOptions();
+        finish(input.log?R.create(input.log.origin.world,{checkpoint:input.log.origin,workerPool,recordRun}):
+          runtime(input,false,undefined,recordRun),input.store);
         break;
       }
       case 'replay': {
         const input=load(file);
         ensure(input.log,'Expected a run recording');
-        finish(R.replay(input.log,{profile:!!(opt.profile||opt.assert),workerPool,traceSteps:traceRetention()}),input.store);
+        ensure(opt.observations===undefined,'The replay uses the observation plan saved with the run');
+        finish(R.replay(input.log,{profile:!!(opt.profile||opt.assert),workerPool,traceSteps:traceRetention(),
+          recordRun:recordOptions()}),input.store);
+        break;
+      }
+      case 'verify': {
+        const {log}=load(file);
+        ensure(log,'Expected a run recording');
+        const report=R.verify(log,{workerPool});
+        respond(report);
+        if(report.status==='diverged')process.exitCode=2;
         break;
       }
       case 'diff': {
@@ -532,10 +547,9 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       case 'render': {
         const recording=shotReplay?.runtime;
         const input=recording ? null : load(file);
-        const initial=recording ? R.create(recording.origin.world,{checkpoint:recording.origin,workerPool}) : runtime(input);
+        const initial=recording ? R.openRecording(recording,{workerPool,recordRun:recording.evidence?.plan}) : runtime(input);
         const tick=recording?.end.tick ?? to(initial);
         const run=recording ? initial : snapshotRun(input,initial,tick);
-        if (recording) run.schedule(recording.commands);
         ensure(typeof opt.out==='string','Simulation render needs --out image.png');
         const output=path.resolve(opt.out), diagnostics=require('./look-preview.js').preview(opt);
         const suffixes=diagnostics?.suffixes ?? [];
@@ -571,7 +585,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         shot?.finish(output,{suffixes});
         break;
       }
-      default: throw Error('Use sim run|resume|fork|reset|replay|scrub|take|diff|sweep|render|plan|dependencies|regions|regions-apply');
+      default: throw Error('Use sim run|resume|fork|reset|replay|verify|scrub|take|diff|sweep|render|plan|dependencies|regions|regions-apply');
     }
   }
   function applyEdits(input, edits, { dryRun = false } = {}) {

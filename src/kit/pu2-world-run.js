@@ -316,7 +316,8 @@
     {...workerPool.implementations,...implementations}:implementations;
   const validate=(source,{implementations,workerPool}={})=>
     prepare(source,{implementations:implementationsFor(implementations,workerPool)}).world;
-  function create(source, {checkpoint,implementations,profile = false,validated = false,workerPool,regionRevisions,traceSteps} = {}, token) {
+  function create(source, {checkpoint,implementations,profile = false,validated = false,workerPool,regionRevisions,traceSteps,
+    recordRun,playback,skipInitialSubmission=false} = {}, token) {
     check(workerPool===undefined||typeof workerPool?.solve==='function'&&
       (workerPool.async===undefined||typeof workerPool.async==='boolean'),'Invalid simulation worker pool');
     const modules=workerPool?.implementations;
@@ -420,15 +421,19 @@
       }
       if (log) added.push(...entries);
     }
-    function enqueue(commands, log) {
+    function parseCommands(commands,log,min){
       check(Array.isArray(commands) && commands.length <= 100000, 'Expected a bounded command list');
-      const entries = commands.map(raw => {
-        const command = actionCheck(raw,plan,Math.max(tick,inFlightTick)+1);
+      return commands.map(raw => {
+        const command = actionCheck(raw,plan,min);
         if (log && world.scenario?.allow) check(world.scenario.allow.includes(command.action), 'Action is disabled in this scenario: ' + command.action);
         return command;
       });
+    }
+    function enqueue(commands, log) {
+      const entries=parseCommands(commands,log,Math.max(tick,inFlightTick)+1);
       check(entries.length + packCommands().length <= 100000, 'Pending command budget exceeded');
       queue(entries,log);
+      if(log)evidence?.submit(tick,entries.length);
     }
     function readOutputs(name,state,ctx,target) {
       const out = systems[name].output?.(state,ctx) ?? {};
@@ -572,6 +577,8 @@
       enqueue([...world.commands,...(world.scenario?.commands ?? []),...timelineCommands(world,timeline)],false);
     }
     const origin = save();
+    const evidence=recordRun===undefined||recordRun===false?null:W.runRecords.capture(recordRun,origin,rates,query);
+    if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
     debug?.publish(origin);
     function query() {
@@ -607,6 +614,7 @@
       check(tickOK(at),'Tick budget exceeded');
       debug?.start();
       const observedSteps=debug?[]:null;
+      const observedTiming=evidence?[]:null;
       let nextWorld = world, changedEntities = new Set();
       const drafts = {...states}, nextManual = {...manual}, requests = [];
       let nextChunkState=chunkState;
@@ -905,6 +913,8 @@
           cost.calls++;
           cost.ms += clock()-start+(worker?.ms??0);
         }
+        if(observedTiming&&system.step)observedTiming.push([name,ctx.dt,timing?.start??0,timing?.end??1,
+          timing?.every??1,timing?.substep??1,timing?.substeps??1,timing?.detail?.level??null]);
         return next;
       }
 
@@ -943,6 +953,9 @@
         const emit = makeEmit('world');
         for (const row of routed.scheduled) emit('event-action-scheduled', row);
       }
+      const submitted=playback?.has(at)?parseCommands(playback.get(at),true,at+1):null;
+      if(submitted)check(submitted.length+(routed?.commands.length??0)+packCommands().length-commands.length<=100000,
+        'Pending command budget exceeded');
       if(observers.length){
         freeze(events);
         const snapshot=freeze(nextStates), completed=Q.create(
@@ -970,6 +983,8 @@
       const nextScenario = evaluateScenario(nextView,events);
       const nextWeather = weather?.step(weatherTrackState,{time:nextView.time,view:nextView,events,
         query:Q.create(nextView,systems,projection)});
+      const recordView=evidence&&weather?{...nextView,weatherTrackState:nextWeather}:nextView;
+      const retained=evidence?.prepare(recordView,()=>Q.create(recordView,systems,projection),commands,observedTiming);
       tick = at;
       world = nextWorld;
       states = nextStates;
@@ -994,6 +1009,11 @@
         eventActionCounts = routed.counts;
         queue(routed.commands, false);
       }
+      if(submitted){
+        queue(submitted,true);
+        evidence?.submit(tick,submitted.length);
+      }
+      if(retained)evidence.publish(retained);
       currentQuery = undefined;
       lastCheckpoint=undefined;
       for (const [name,{calls,ms}] of Object.entries(spent)) {
@@ -1057,8 +1077,9 @@
       }finally{asyncActive=false;}
     }
     function recording() {
-      const trace=debug?.recording();
-      return freeze({format:runFormat,version:1,origin,commands:added.slice(),end:save(),...(trace&&{trace})});
+      const trace=debug?.recording(),end=save();
+      return freeze({format:runFormat,version:1,origin,commands:added.slice(),end,...(trace&&{trace}),
+        ...(evidence&&{evidence:evidence.document(end)})});
     }
     return Object.freeze({view,query,step,advance,stepAsync,advanceAsync,...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
       ...(debug&&{stepFrame:debug.latest,stepAttempt:debug.attempt}),
@@ -1076,30 +1097,58 @@
         systems:Object.fromEntries(names.filter(name=>jobsBySystem.has(name)).map(name=>[name,jobsBySystem.get(name)]))}),
       dependencies:() => ({declarations:dependencies.describe,
         ...(lastDependencies ?? {changes:[],affected:[],work:[]}),pending:pendingWrites}),
-      fork:() => branch(save()),
+      fork:() => branch(save(),playback),
       reset:() => branch(origin)});
-    function branch(checkpoint){
-      return create(checkpoint.world,{checkpoint,implementations,profile,validated:true,workerPool,traceSteps},
+    function branch(checkpoint,remaining){
+      return create(checkpoint.world,{checkpoint,implementations,profile,validated:true,workerPool,traceSteps,
+        recordRun:evidence?.plan,playback:remaining,skipInitialSubmission:true},
         checkpoint.world===plan.world?branchToken:undefined);
     }
   }
+  function openRecording(log,{checkpoint, ...options}={}){
+    const playback=W.runRecords.playback(log), start=checkpoint??log.origin;
+    check(tickOK(start.tick)&&start.tick>=log.origin.tick&&start.tick<=log.end.tick&&
+      ['id','seed','dt'].every(key=>start.world?.[key]===log.origin.world[key]),'Checkpoint lies outside the recording');
+    return create(start.world,{...options,checkpoint:start,playback,skipInitialSubmission:checkpoint!==undefined});
+  }
   function prepareReplay(log,options){
-    check(record(log) && log.format === runFormat && log.version === 1, 'Invalid world recording');
-    const run = create(log.origin.world,{...options,checkpoint:log.origin});
-    run.schedule(log.commands);
+    return openRecording(log,{...options,checkpoint:undefined,recordRun:log?.evidence?.plan??options?.recordRun});
+  }
+  function assertReplay(run,log,options){
+    if(log.evidence){
+      const mismatch=W.runRecords.difference(log.evidence,run.recording().evidence);
+      if(mismatch)W.runRecords.mismatch(mismatch);
+    }
+    if(!checkpointsEqual(run.checkpoint(),log.end,options))
+      W.runRecords.mismatch({kind:'checkpoint',tick:log.end.tick});
     return run;
   }
   function replay(log, options) {
     const run=prepareReplay(log,options);
     run.advance(log.end.tick);
-    check(checkpointsEqual(run.checkpoint(),log.end,options),'Replay diverged at tick ' + log.end.tick);
-    return run;
+    return assertReplay(run,log,options);
   }
   async function replayAsync(log,options){
     const run=prepareReplay(log,options);
     await run.advanceAsync(log.end.tick);
-    check(checkpointsEqual(run.checkpoint(),log.end,options),'Replay diverged at tick '+log.end.tick);
-    return run;
+    return assertReplay(run,log,options);
+  }
+  function verification(log,mismatch){
+    const {origin,end,evidence}=log;
+    return freeze({status:mismatch?'diverged':'verified',scene:origin.world.id,seed:origin.world.seed,
+      fromTick:origin.tick,toTick:end.tick,observations:evidence?.observations.length??0,
+      revisions:evidence?.scene.revisions.length??0,actions:evidence?.actions.reduce((sum,row)=>sum+row.commands.length,0)??0,
+      ...(mismatch&&{mismatch})});
+  }
+  function verify(log,options){
+    try{replay(log,options);}
+    catch(error){if(!error.runMismatch)throw error;return verification(log,error.runMismatch);}
+    return verification(log);
+  }
+  async function verifyAsync(log,options){
+    try{await replayAsync(log,options);}
+    catch(error){if(!error.runMismatch)throw error;return verification(log,error.runMismatch);}
+    return verification(log);
   }
   function checkpointsEqual(actual,expected,{implementations,workerPool}={}){
     if(equal(actual,expected))return true;
@@ -1115,7 +1164,7 @@
       'Simulation diff needs two checkpoints at the same tick');
     return {tick:a.tick,time:{before:a.tick*a.world.dt,after:b.tick*b.world.dt},edits:Q.keyedChanges(a,b)};
   }
-  W.runtime = Object.freeze({register,validate,create,replay,replayAsync,diff,firstDivergence:W.stepDebug.firstDivergence,
+  W.runtime = Object.freeze({register,validate,create,openRecording,replay,replayAsync,verify,verifyAsync,diff,firstDivergence:W.stepDebug.firstDivergence,
     checkpointFormat,runFormat,maxTick,partitionKernel,checkpointsEqual,
     prefabInterfaces:(world,{implementations}={})=>compile(world,implementations,true)});
 })(KIT);
