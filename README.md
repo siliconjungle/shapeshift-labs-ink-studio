@@ -1073,4 +1073,6 @@ Named targets can drive shared brackets, labels, glyph ripples, depth visibility
 
 Camera rigs support dependency-free dolly zoom, tracked orbit, keyed crane moves, subject-height framing, composition, focus-driven lens breathing and smooth handoff to free controls. Shared `CameraLens` math unifies browser/headless FOV and millimeter lenses. See [cinematic camera rigs](docs/camera-rigs.md#cinematic-moves-and-live-control) and [Lantern passage](examples/cinematic-camera.html).
 
+`Typography` / `KIT.typography` adds dependency-free TrueType and portable outlines, kerning, transported curve text, per-glyph animation, contour write-on, seeded scrambling, native SDF extrusion, live bitmap sprites and existing surface materialisation. See [typography](docs/typography.md) and [The shape of words](examples/typography.html). Inspect the same frame data with `ink-studio typography type.json --at .6`.
+
 `CameraImpulses` / `KIT.cameraImpulses` adds dependency-free directional translation/rotation, source-distance attenuation, propagation delay and layered handheld motion, with shared browser/headless pose application and compatibility with existing animation shake. See [directional camera impulses](docs/camera-impulses.md) and [Midnight midway](examples/directional-camera-impulses.html). Inspect portable motion with `ink-studio camera-impulses motion.json --at 1`.

@@ -951,6 +951,7 @@ const CMD = {
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
         '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
+        '  typography <type.json> [--font font.ttf --at seconds --out report.json]  inspect glyph layout and animation',
         '  camera-impulses <motion.json> [--at seconds --eye x,y,z --yaw radians --pitch radians --out report.json]  inspect camera motion',
         '  camera-rig <scene or world> [--at seconds --camera-shot ID --out report.json]  sample a shot and its clearance',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
@@ -1565,6 +1566,9 @@ const CMD = {
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
+  },
+  typography() {
+    return require('./typography.js')(pos,opt,lib());
   },
   'camera-impulses'() {
     return require('./camera-impulses.js')(pos,opt,lib());
