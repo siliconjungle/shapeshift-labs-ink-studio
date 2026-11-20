@@ -723,6 +723,8 @@ neighborhood values and gradients with solvers and entity queries.
 retains named outcomes, queued edits, and shared starting points in one session.
 [Causal inspection](docs/headless-worlds.md#inspect-a-selected-object-or-region)
 links selected objects and regions to recorded actions, transfers, and prior states.
+[Scheduled observations](docs/headless-worlds.md#scheduled-observations-and-parameter-sweeps)
+reuse measurements across seeds and settings and report aligned results.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.

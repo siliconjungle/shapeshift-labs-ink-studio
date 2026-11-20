@@ -821,6 +821,7 @@ const CMD = {
         '    sim regions-apply <snapshot.json> <update.json>   reconstruct a scoped snapshot',
         '    sim dependencies <scene|run|driver.js> [--ticks N] [--actions file] [--out report.json]   report spatial rebuilds',
         '    sim sweep <world|run> <cases.json>   use look cases to compare one fixed simulation snapshot',
+        '    sim sweep <world|checkpoint|run> <observations.json>   sample scheduled observations across seeds and settings',
         '  compare <scene|run> --looks cases.json [--out sheet.png]   compare look variants on the same view',
         '    --comparison side-by-side|swipe|difference   compose exactly two look cases into one image',
         '    --divider 0.5 --swipe-axis x|y --difference-channel luminance|red|green|blue --difference-gain 3',

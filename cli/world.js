@@ -493,6 +493,14 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       }
       case 'sweep': {
         const spec=read(other);
+        if (W.data.record(spec)) {
+          ensure(opt.ticks===undefined&&opt.steps===undefined&&opt.t===undefined,
+            'The observation plan sets the sweep sample ticks');
+          const input=load(file), world=sourceWorld(input);
+          return respond(W.observations.run(input.checkpoint??world,spec,{
+            runtime:{workerPool},actions:opt.actions===undefined?[]:read(opt.actions)
+          }));
+        }
         ensure(Array.isArray(spec) && spec.length>0 && spec.length<=2000,'Expected a bounded sweep list');
         const lookPreview = spec.some(row => row && Object.hasOwn(row, 'look'));
         const input=load(file,{lookPreview});
