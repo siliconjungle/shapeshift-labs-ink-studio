@@ -275,7 +275,7 @@
       if (t === times[hi]) return { index: hi };
       return { index: lo, ...(t > times[lo] && interpolation === 'linear' && { next: hi, weight: (t-times[lo])/(times[hi]-times[lo]) }) };
     }
-    return { locate, describe: { column: clock, origin: base, interpolation, outside, units: 's',
+    return { locate, timeAt: row => times[row], describe: { column: clock, origin: base, interpolation, outside, units: 's',
       range: [times[0], times.at(-1)] } };
   }
 
@@ -386,7 +386,7 @@
       if (value === null) return { status: 'missing', reason: 'missing data value', row };
       return { status: 'ok', value: convert(value), row, ...(meta.units !== undefined && { units: units ?? meta.units }) };
     }
-    return Object.freeze({ description, rows, ...(features && { features }), ...(clock && { interval(time) {
+    return Object.freeze({ description, rows, ...(features && { features }), ...(clock && { timeAt: clock.timeAt, interval(time) {
       check(finite(time), 'Expected finite scene seconds for time-series sampling');
       return clock.locate(time);
     } }), sample });

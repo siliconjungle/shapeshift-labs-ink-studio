@@ -9,3 +9,4 @@ export { createSplatInstances } from './src/webgl/instances.mjs';
 
 export { createSurfacePipeline } from './src/webgl/surfaces.mjs';
 export { createDrawingInput } from './src/webgl/drawing-input.mjs';
+export { mountLinkedViews } from './src/webgl/linked-views.mjs';

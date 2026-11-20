@@ -306,6 +306,8 @@ Draw crisp world and screen paths, arrows, polygons, grids, axes, and scale bars
 
 Keep legends fixed while world labels reposition around anchors and thin out as the camera pulls back. [View-adaptive legends and labels](docs/view-annotations.md)
 
+Synchronize records, filters, and time across charts, maps, tables, and WebGL scenes. [Linked views and selections](docs/linked-views.md)
+
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
 
 Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.puppet` for hierarchical parts with deformation. `K.anim` provides clips, easing, layers, state machines, constraints, facial controls and presentation cues. `K.acts` provides ready-made action and reaction clips.
