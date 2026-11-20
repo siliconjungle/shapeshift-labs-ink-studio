@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),core=require('..'),{KIT:K}=core.load(),C=K.curve,V=K.V;
 const near=(a,b,e=1e-7)=>assert(Math.abs(a-b)<=e,`${a} != ${b}`),vector=(a,b,e=1e-7)=>a.forEach((v,i)=>near(v,b[i],e));
-const kinds=['clothoid','torusKnot','lissajous','logSpiral','superellipse','flower'];
-test('six families expose the same immutable point-array and route contracts',()=>{
+const kinds=['clothoid','torusKnot','lissajous','logSpiral','superellipse','flower',
+ 'archimedeanSpiral','fermatSpiral','cycloid','epitrochoid','hypotrochoid'];
+test('curve families expose the same immutable point-array and route contracts',()=>{
  for(const type of kinds){const curve=C.create({type});assert(curve.points.length>=9);assert(curve.points.every(p=>p.length===3&&p.every(Number.isFinite)));assert(curve.length>0);assert.equal(C.path(curve),curve);assert.equal(C.create(curve),curve);vector(curve.sample(.4),curve.at(curve.length*.4).p);near(V.len(curve.at(.3).tan),1);assert(Object.isFrozen(curve.points));
  const restored=C.create(JSON.parse(JSON.stringify(curve.snapshot())));assert.deepEqual(curve.points,restored.points);assert.deepEqual(C[type](),curve.points);
  if(curve.closed){assert.deepEqual(curve.points[0],curve.points.at(-1));assert.deepEqual(curve.evaluate(0),curve.evaluate(1));vector(curve.at(-.1).p,curve.at(curve.length-.1).p);}

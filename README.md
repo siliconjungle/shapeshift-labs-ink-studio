@@ -1047,7 +1047,7 @@ Named targets can drive shared brackets, labels, glyph ripples, depth visibility
 
 `KIT.paint` adds dependency-free spectral paint mixing, reusable swatch recipes, tint/shade controls, gradients and baked RGB ramps or mixture lookup tables. See [paint mixing](docs/paint-mixing.md) and the [interactive Pigment atelier](examples/paint-mixing.html).
 
-`KIT.curve` includes clothoid chains, torus knots, Lissajous curves, logarithmic spirals, superellipses and flowers with shared arc-length paths for sweeps, route followers, particles, camera rails and curved text. See [curve families](docs/curve-families.md) and the [interactive Curve conservatory](examples/curve-families.html).
+`KIT.curve` includes clothoid chains, torus knots, Lissajous curves, logarithmic, Archimedean and Fermat spirals, cycloids, spirographs, superellipses and flowers. They share arc-length paths for sweeps, route followers, particles, camera rails and curved text. See [curve families](docs/curve-families.md) and the [interactive Curve conservatory](examples/curve-families.html).
 
 `KIT.curve` also supports cached closest-point queries, curvature estimates, adaptive sampling and periodic interpolation. `KIT.Q` supplies dependency-free quaternion SLERP/SQUAD, path-frame rotations and quaternion animation channels. See [curve analysis](docs/curve-analysis.md) and [Path observatory](examples/curve-analysis.html).
 

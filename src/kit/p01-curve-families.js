@@ -125,8 +125,82 @@
       }
     };
   }
+  const phaseOK = angle => range(angle, -TAU * 100, TAU * 100);
+  const turnsOK = turns => range(turns, -32, 32) && turns !== 0;
+  const segmentsFor = turns => ({
+    minSegments: Math.max(8, Math.ceil(Math.abs(turns) * 8)),
+    defaultSegments: Math.max(8, Math.ceil(Math.abs(turns) * 64))
+  });
+  function spiralModel(def) {
+    check(fields(def, [...common, 'startRadius', 'endRadius', 'turns', 'phase', 'height']), 'invalid spiral settings');
+    const { startRadius: a = 0, endRadius: b = 2, turns = 2.5, phase = 0, height = 0 } = def;
+    check(range(a, 0, 1e6) && range(b, 0, 1e6) && a !== b &&
+      turnsOK(turns) && phaseOK(phase) && range(height, -1e6, 1e6), 'invalid spiral dimensions');
+    const radiusAt = def.type === 'fermatSpiral'
+      ? t => Math.hypot(a * Math.sqrt(1 - t), b * Math.sqrt(t))
+      : t => a * (1 - t) + b * t;
+    return {
+      closed: false, ...segmentsFor(turns),
+      point(t) {
+        const r = radiusAt(t), theta = phase + TAU * turns * t;
+        return [r * Math.cos(theta), r * Math.sin(theta), height * t];
+      }
+    };
+  }
+
+  function cuspBreaks(initial, turns) {
+    const start = initial / TAU, end = start + turns;
+    const breaks = [0];
+    for (let n = Math.ceil(Math.min(start, end)); n <= Math.floor(Math.max(start, end)); n++) {
+      const t = (n - start) / turns;
+      if (t > 1e-12 && t < 1 - 1e-12) breaks.push(t);
+    }
+    return breaks.sort((a, b) => a - b).concat(1);
+  }
+
+  function cycloidModel(def) {
+    check(fields(def, [...common, 'radius', 'penRadius', 'turns', 'phase']), 'invalid cycloid settings');
+    const { radius = .55, penRadius = radius, turns = 3, phase = 0 } = def;
+    check(range(radius, 1e-6, 1e6) && range(penRadius, 0, 1e6) && turnsOK(turns) && phaseOK(phase),
+      'invalid cycloid radius, pen radius, turns or phase');
+    return {
+      closed: false, ...segmentsFor(turns),
+      cusps: penRadius === radius ? cuspBreaks(phase, turns) : undefined,
+      point(t) {
+        const advance = TAU * turns * t, angle = phase + advance;
+        return [radius * advance - penRadius * Math.sin(angle), radius - penRadius * Math.cos(angle), 0];
+      }
+    };
+  }
+
+  function trochoidModel(def) {
+    check(fields(def, [...common, 'fixedRadius', 'fixedTeeth', 'rollingTeeth', 'pen', 'phase', 'penPhase']),
+      'invalid spirograph settings');
+    const { fixedRadius = 1.8, fixedTeeth = 7, rollingTeeth = 3, pen = .8, phase = 0, penPhase = 0 } = def;
+    const inside = def.type === 'hypotrochoid';
+    const teeth = n => Number.isSafeInteger(n) && range(n, 1, 32);
+    check(teeth(fixedTeeth) && teeth(rollingTeeth) && (!inside || rollingTeeth < fixedTeeth),
+      'gears need 1–32 teeth and an inside gear must fit the fixed circle');
+    check(range(fixedRadius, 1e-6, 1e6) && range(pen, 0, 4) && phaseOK(phase) && phaseOK(penPhase),
+      'invalid spirograph radius, pen offset or phase');
+    const divisor = gcd(fixedTeeth, rollingTeeth), p = fixedTeeth / divisor, q = rollingTeeth / divisor;
+    const side = inside ? -1 : 1, r = fixedRadius * q / p, center = fixedRadius + side * r;
+    const baseTurns = pen === 0 ? 1 : q, penTurns = q + side * p, offset = -side * pen * r;
+    return {
+      closed: true, ...segmentsFor(pen === 0 ? 1 : Math.max(q, Math.abs(penTurns))),
+      cusps: pen === 1 ? cuspBreaks(penPhase, side * p) : undefined,
+      point(t) {
+        const a = phase + TAU * baseTurns * t, b = phase + penPhase + TAU * penTurns * t;
+        return [center * Math.cos(a) + offset * Math.cos(b), center * Math.sin(a) + offset * Math.sin(b), 0];
+      }
+    };
+  }
+
   function model(def) {
     if (def.type === 'clothoid') return clothoidModel(def);
+    if (def.type === 'archimedeanSpiral' || def.type === 'fermatSpiral') return spiralModel(def);
+    if (def.type === 'cycloid') return cycloidModel(def);
+    if (def.type === 'epitrochoid' || def.type === 'hypotrochoid') return trochoidModel(def);
     if (def.type === 'torusKnot') {
       check(fields(def, [...common, 'p', 'q', 'majorRadius', 'minorRadius', 'phase']), 'invalid torus-knot settings');
       const { p = 2, q = 3, majorRadius: R = 1.6, minorRadius: r = 0.55, phase = 0 } = def;
@@ -343,6 +417,21 @@
     compiled.add(api);
     return api;
   }
+  function uniformParameters(segments, cusps) {
+    if (!cusps || cusps.length === 2) return Array.from({ length: segments + 1 }, (_, i) => i / segments);
+    const parameters = [0];
+    let used = 0;
+    for (let i = 1; i < cusps.length; i++) {
+      const a = cusps[i - 1], b = cusps[i];
+      // Keep every cusp and reserve at least one segment for each remaining span.
+      const end = Math.min(segments - (cusps.length - 1 - i), Math.max(used + 1, Math.round(b * segments)));
+      const size = end - used;
+      for (let j = 1; j < size; j++) parameters.push(a + (b - a) * j / size);
+      parameters.push(b);
+      used = end;
+    }
+    return parameters;
+  }
   function create(definition) {
     if (isPath(definition)) return definition;
     check(record(definition), 'expected a curve family definition');
@@ -362,16 +451,16 @@
       );
     if (def.adaptive?.minSegments !== undefined)
       check(def.adaptive.minSegments >= m.minSegments, 'adaptive minimum is below family frequency floor');
+    const breaks = m.cusps ?? m.breaks ?? [0, 1];
     const sampled =
       def.adaptive === undefined
         ? null
         : C.adaptive(
-            { evaluate, closed: m.closed, breaks: m.breaks ?? [0, 1] },
+            { evaluate, closed: m.closed, breaks },
             { ...def.adaptive, minSegments: def.adaptive.minSegments ?? m.minSegments }
           );
-    const points = sampled
-      ? sampled.points.map(p => p.slice())
-      : Array.from({ length: segments + 1 }, (_, i) => evaluate(i / segments));
+    const sourceParameters = sampled?.parameters ?? uniformParameters(segments, m.cusps);
+    const points = sampled ? sampled.points.map(p => p.slice()) : sourceParameters.map(evaluate);
     if (m.closed) points[points.length - 1] = points[0].slice();
     check(points.every(xyz), 'curve coordinates exceed the finite world range');
     const rail = path(points, { closed: m.closed }),
@@ -379,15 +468,16 @@
     let previous;
     for (let i = 0; i < points.length; i++)
       if (!previous || V.dist(points[i], previous) > 1e-12) {
-        parameters.push(sampled?.parameters[i] ?? i / (points.length - 1));
+        parameters.push(sourceParameters[i]);
         previous = points[i];
       }
     check(parameters.length === rail.points.length, 'sampling parameters must match retained points');
+    if (m.closed) parameters[parameters.length - 1] = 1;
     const api = freeze({
       ...rail,
       type: def.type,
       parameters,
-      breaks: m.breaks ?? [0, 1],
+      breaks,
       sampling: sampled?.sampling ?? { mode: 'uniform', segments: rail.points.length - 1, limited: false },
       closest(point) {
         return C.closest(api, point);
@@ -493,7 +583,8 @@
     );
   }
   Object.assign(C, { path, create, drawOnPath, text });
-  for (const type of ['clothoid', 'torusKnot', 'lissajous', 'logSpiral', 'superellipse', 'flower'])
+  for (const type of ['clothoid', 'torusKnot', 'lissajous', 'logSpiral', 'superellipse', 'flower',
+    'archimedeanSpiral', 'fermatSpiral', 'cycloid', 'epitrochoid', 'hypotrochoid'])
     C[type] = (options = {}) => {
       check(record(options), 'family options must be an object');
       return create({ ...options, type }).points;
