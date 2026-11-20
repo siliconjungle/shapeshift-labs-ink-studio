@@ -21,6 +21,9 @@ uniform vec2 u_depthRange, u_projectionScale;
 uniform mat4 u_view;
 uniform bool u_volume, u_ortho, u_captureHistory, u_hasHistory, u_hold;
 uniform float u_volumeFeather, u_decay;
+uniform vec2 u_feedbackPivot, u_feedbackTransform, u_threshold;
+uniform float u_blockSize, u_gain;
+uniform bool u_feedbackLinear, u_hasThreshold;
 out vec4 color;
 
 ${layerSamplingGLSL}
@@ -73,6 +76,34 @@ void main() {
     } else {
       vec4 sampleColor = previous * (chosen * u_opacity);
       color = sampleColor + inputColor * (1.0 - sampleColor.a);
+    }
+    return;
+  }
+  if (u_operation == 7) {
+    if (u_captureHistory) {
+      vec4 previous = vec4(0.0);
+      if (u_hasHistory) {
+        vec2 local = pixel - u_feedbackPivot;
+        float c = u_feedbackTransform.x, s = u_feedbackTransform.y;
+        vec2 field = u_blockSize > 0.0 ? (floor(pixel / u_blockSize) + .5) * u_blockSize : pixel;
+        vec2 sampleAt = u_feedbackPivot + vec2(c * local.x + s * local.y, -s * local.x + c * local.y)
+          - u_offset - u_amplitude * sin(field.yx * u_frequency + u_phase);
+        if (all(greaterThanEqual(sampleAt, vec2(0.0))) && all(lessThan(sampleAt, u_size)))
+          previous = layerAt(u_history, sampleAt, u_size, false, u_feedbackLinear);
+      }
+      vec4 fresh = u_layer ? placedLayerAt(u_source, pixel, u_layerDest, u_layerRegion, u_layerTopDown, u_linear)
+        : texelFetch(u_source, pos, 0);
+      float gain = weight * u_gain;
+      if (u_hasThreshold && fresh.a > 0.0) {
+        float amount = max(fresh.r, max(fresh.g, fresh.b)) / fresh.a;
+        gain *= clamp((amount - u_threshold.x) / (u_threshold.y - u_threshold.x), 0.0, 1.0);
+      }
+      fresh *= gain;
+      color = min(vec4(1.0), fresh + floor(previous * u_decay * (1.0 - fresh.a) * 255.0 + .00001) / 255.0);
+    } else {
+      vec4 signal = texelFetch(u_history, pos, 0) * u_opacity;
+      color.a = signal.a + inputColor.a * (1.0 - signal.a);
+      color.rgb = min(vec3(color.a), signal.rgb + inputColor.rgb * (u_add ? 1.0 : 1.0 - signal.a));
     }
     return;
   }
@@ -143,10 +174,12 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         const out = free.pop() ?? target();
         if (!pool.includes(out)) pool.push(out);
         out.resize(w, h);
+        const feedback = node.type === 'feedback';
+        const memory = feedback || node.type === 'history' ? openHistory(node) : null;
         const mask = outputs.get(node.mask), table = node.type === 'grade' && api.cube(node);
-        const layer = node.layer && api.layer(node, w, h, world, time, camera, gl);
+        const layer = node.layer && (!feedback || memory.capture) && api.layer(node, w, h, world, time, camera, gl);
         const select = node.enabled && ownership && node.select && JSON.stringify(node.select);
-        const opacity = node.opacity * (node.layer ? layer?.opacity ?? 0 : 1);
+        const opacity = node.opacity * (node.layer && !feedback ? layer?.opacity ?? 0 : 1);
         if (layer?.gpu) textureUnit(1, layer.gpu.texture);
         else if (layer) {
           if (layer.w > maxSize || layer.h > maxSize) throw new RangeError('Render graph layer exceeds the WebGL texture size limit');
@@ -187,13 +220,12 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             u_depthRange: camera.depthRange, u_projectionScale: [camera.tangent * camera.aspect, camera.tangent],
             u_ortho: camera.ortho }),
           u_layer: Boolean(layer), ...(layer && { u_layerDest: layer.dest, u_layerTopDown: !layer.gpu,
-            u_layerRegion: layer.gpu?.region ?? [0, 0, layer.w, layer.h] }), u_linear: layer?.filter === 'linear', u_add: (layer?.blend ?? node.blend) === 'add',
+            u_layerRegion: layer.gpu?.region ?? [0, 0, layer.w, layer.h] }), u_linear: layer?.filter === 'linear', u_add: (feedback ? node.blend : layer?.blend ?? node.blend) === 'add',
           u_reflectX: node.axis === 'x', u_line: node.line ?? (node.axis === 'x' ? w : h) * .5,
           ...(node.offset && { u_offset: node.offset, u_amplitude: node.amplitude, u_frequency: 2 * Math.PI / node.period,
             u_phase: 2 * Math.PI * ((node.phase + time * node.rate) % 1) })
         };
-        if (node.type === 'history') {
-          const memory = openHistory(node);
+        if (memory) {
           let stamp = memory.value;
           if (memory.capture) {
             // Target allocation binds a texture on the active unit.
@@ -203,9 +235,16 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             // Resizing rebinds texture unit zero.
             textureUnit(0, input.textures[0]);
             textureUnit(7, memory.value?.textures[0] ?? scene.textures[0]);
+            const motion = feedback && api.feedbackMotion(node, time, memory.decay > 0 ? memory.elapsed : 0, w, h);
             fullscreen(shader, stamp.framebuffer, w, h, { ...values, u_captureHistory: true,
-              u_hasHistory: Boolean(memory.value), u_hold: node.mode === 'hold',
-              u_decay: node.mode === 'persistence' ? memory.decay : 0 });
+              u_hasHistory: Boolean(memory.value) && (!feedback || memory.decay > 0), u_hold: node.mode === 'hold',
+              u_decay: feedback || node.mode === 'persistence' ? memory.decay : 0,
+              ...(motion && { u_feedbackTransform: motion.transform, u_feedbackPivot: motion.pivot,
+                u_offset: motion.offset, u_amplitude: motion.wave, u_frequency: motion.frequency,
+                u_phase: motion.theta, u_blockSize: motion.blockSize, u_feedbackLinear: node.filter === 'linear',
+                u_gain: node.gain * (node.layer ? layer?.opacity ?? 0 : 1),
+                u_hasThreshold: Boolean(node.threshold), u_threshold: node.threshold ?? [0, 1] })
+            });
             memory.save(stamp);
           }
           textureUnit(7, stamp.textures[0]);

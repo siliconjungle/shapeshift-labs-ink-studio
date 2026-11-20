@@ -1,5 +1,5 @@
 const FrameComposite = require('../src/frame-composite.js');
-const { cube, selection, layer, history, volumeCoverage } = require('../src/render-graph.js');
+const { cube, selection, layer, history, feedbackMotion, volumeCoverage } = require('../src/render-graph.js');
 
 function runGraph(plan, frame, world, time, text, camera, resolve, options) {
   const { w, h, passes } = frame;
@@ -19,7 +19,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
   const nativeIndex = (owner || depth) && (passes.w !== w || passes.h !== h) ?
     (x, y) => Math.floor(y * passes.h / h) * passes.w + Math.floor(x * passes.w / w) :
     (_x, _y, p) => p;
-  const color = new Float64Array(4), rgb = [0, 0, 0], graded = [0, 0, 0];
+  const color = new Float64Array(4), previousColor = new Float64Array(4), rgb = [0, 0, 0], graded = [0, 0, 0];
   for (const [index, node] of plan.passes.entries()) {
     const input = outputs.get(node.input);
     const maskPass = node.type === 'mask';
@@ -28,9 +28,13 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
     else {
       const rows = selected(node.select), mask = outputs.get(node.mask), source = outputs.get(node.source);
       const table = node.type === 'grade' && cube(node);
-      const memory = node.type === 'history' ? openHistory(node) : null;
+      const feedback = node.type === 'feedback';
+      const memory = node.type === 'history' || feedback ? openHistory(node) : null;
       const held = memory && (memory.capture ? new Uint8Array(input.length) : memory.value);
-      const raster = node.layer && layer(node, w, h, world, time, text, camera, resolve);
+      const raster = node.layer && (!feedback || memory.capture) && layer(node, w, h, world, time, text, camera, resolve);
+      const oldSignal = feedback && memory.capture && memory.decay > 0 &&
+        { data: memory.value, w, h, filter: node.filter };
+      const motion = oldSignal && feedbackMotion(node, time, memory.elapsed, w, h);
       output = maskPass ? new Uint8Array(w * h) : input.slice();
       const { rect, feather, opacity } = node;
       const line = node.line ?? (node.axis === 'x' ? w : h) * .5;
@@ -52,6 +56,41 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
             weight *= feather ? Math.max(0, Math.min(1, edge / feather)) : Number(edge >= 0);
           }
           output[p] = Math.round((node.invert ? 1 - weight : weight) * opacity * 255);
+          continue;
+        }
+        if (feedback) {
+          if (memory.capture) {
+            previousColor.fill(0);
+            if (motion) {
+              const { pivot, blockSize, transform: [cos, sin], offset, wave, theta, frequency } = motion;
+              const u = x - pivot[0], v = y - pivot[1];
+              const qx = blockSize ? (Math.floor(x / blockSize) + .5) * blockSize : x;
+              const qy = blockSize ? (Math.floor(y / blockSize) + .5) * blockSize : y;
+              const sx = pivot[0] + cos * u + sin * v - offset[0] - wave[0] * Math.sin(qy * frequency + theta);
+              const sy = pivot[1] - sin * u + cos * v - offset[1] - wave[1] * Math.sin(qx * frequency + theta);
+              if (sx >= 0 && sy >= 0 && sx < w && sy < h) FrameComposite.sample(oldSignal, sx, sy, previousColor);
+            }
+            color.fill(0);
+            let amount = weight * node.gain;
+            if (amount > 0) {
+              if (node.layer) {
+                if (raster) FrameComposite.samplePlaced(raster, x, y, color);
+                amount *= raster?.opacity ?? 0;
+              } else for (let c = 0; c < 4; c++) color[c] = source[q + c];
+              if (node.threshold && color[3] > 0) {
+                const [lo, hi] = node.threshold;
+                const intensity = Math.max(color[0], color[1], color[2]) / color[3];
+                amount *= Math.min(1, Math.max(0, (intensity - lo) / (hi - lo)));
+              }
+            }
+            const remain = memory.decay * (1 - color[3] * amount / 255);
+            for (let c = 0; c < 4; c++)
+              held[q + c] = Math.min(255, Math.round(color[c] * amount + Math.floor(previousColor[c] * remain + 1e-5)));
+          }
+          if (held[q + 3] && opacity) {
+            for (let c = 0; c < 4; c++) color[c] = held[q + c];
+            FrameComposite.blend(output, q, color, opacity, node.blend === 'add');
+          }
           continue;
         }
         if (memory) {

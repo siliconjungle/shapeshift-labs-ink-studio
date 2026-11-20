@@ -12,6 +12,7 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 | `distortion` | Samples the input or a named `source` using an XY `offset` in pixels and optional per-axis wave `amplitude`. `period` is in pixels, and `phase` and `rate` are in cycles and cycles per second. |
 | `composite` | Blends a named `source` image using `over` or `add`, or draws a single [mixed-resolution layer](mixed-resolution.md) from `layer` using its own resolution, filtering and blend settings. |
 | `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
+| `feedback` | Warps and decays the previous signal and composites new emission into it. Accepts an earlier image or a mixed-resolution emission layer. |
 
 Screen coordinates are in final output pixels from the top left. Reflected and distorted samples outside the image leave the input pixel unchanged. Graph reflection and distortion work on screen images. Scene-space planar capture, glass refraction and depth-dependent media use the scene renderer.
 
@@ -66,6 +67,87 @@ history. The default `cameraMotion: "reset"` also clears it on camera
 movement. Use `"keep"` for deliberate screen-space persistence through
 camera moves. Supply a stable `renderHistoryKey` when consecutive world
 snapshots in a shot use different object identities.
+
+## Feedback
+
+A feedback pass keeps a premultiplied signal at output resolution. At each
+new time it samples its previous signal through the warp, decays it, then
+composites the current emission over it. The resulting signal is stored for
+the next step and drawn over the pass's `input`. Compositing over the input
+keeps the background in its current position.
+
+```js
+const feedback = {
+  id: 'phosphor',
+  type: 'feedback',
+  input: 'scene',
+  layer: { resolution: [256, 144], source: ({ w, h, time }) => paintEmission(w, h, time) },
+  halfLife: .7,
+  blend: 'add',
+  cameraMotion: 'keep',
+  warp: {
+    velocity: [20, -9], rotation: .55, zoom: 1.15,
+    wave: [14, 18], period: 80, rate: .3
+  }
+};
+```
+
+- Use `source` for an earlier image, `layer` for a mixed-resolution
+  emission layer, or omit both to inject the image `input`. A layer can
+  provide a transparent raster, drawing commands or a camera atlas feed.
+- `gain` multiplies emission strength from zero to one. An optional
+  `threshold: [low, high]` ramps it by the maximum straight RGB component
+  from zero to one. An input mask and a visible target selector limit where
+  new emission enters. Trails can then travel beyond that selection. Mask a
+  later composite pass to clip the displayed trails to a region.
+- `halfLife` is in scene seconds. `opacity` fades the displayed signal,
+  while the retained signal continues to evolve. Choose `blend: "add"`
+  (the default) for light buildup or `"over"` for ink-like layering.
+- `warp.velocity` is XY pixels per second, with positive Y moving down.
+  `rotation` is clockwise radians per second and `zoom` is the scale
+  multiplier per second. `center` is a normalized XY pivot and defaults to
+  the center of the frame.
+- `warp.wave` gives XY displacement in pixels per second. Its `period` is
+  in pixels, `rate` is in cycles per second, and `phase` is in cycles.
+  Set `blockSize` to a positive pixel size to sample the displacement
+  field per block. Choose `filter: "linear"` for smooth resampling or
+  `"nearest"` for stepped pixels. Samples beyond the frame are empty.
+
+Feedback shares the screen-history limits and reset rules above. A repeated
+timestamp draws the retained signal without injecting or warping it again.
+Pass `resetRenderHistory: true` on a cut. Use `cameraMotion: "keep"` when
+camera movement should carry the screen-space trails through the shot.
+Live graph edits and presentation tracks can animate warp, gain and decay.
+
+### Fixed-step playback and exports
+
+The CLI runs `clip` and `sheet` exports containing feedback at 24 feedback
+steps per second by default. `--feedback-fps` sets that rate independently
+of output `--fps`. Feedback is replayed from scene time zero before a
+trimmed export; an output between feedback ticks holds the latest completed
+frame. Use `--feedback-cuts 2.5,4` to clear history at the first feedback
+tick at or after each scene time.
+
+```sh
+node cli/ink-studio.js clip examples/render-feedback.js --w 408 --h 216 --to 7.2 --fps 16 --feedback-fps 24 --out phosphor-relay.png
+```
+
+To drive either renderer yourself, create a fixed-step replay clock and pose
+and render each tick. Keep the render session between calls.
+
+```js
+const replay = K.renderGraph.replay({ fps: 24, cuts: [2.5] });
+const renderHistory = K.renderGraph.history();
+const frame = replay.sample(seconds, (t, resetRenderHistory) => {
+  poseWorld(t);
+  return studio.render(world, { t, renderHistory, resetRenderHistory });
+});
+```
+
+For WebGL, pass the tick as `time` and keep the same renderer. The clock
+requests a restart from its origin after a backward seek, and sets
+`resetRenderHistory` on the first tick. Reset any stateful world pose that
+needs to restart independently of the render history.
 
 ## Editing a live graph
 

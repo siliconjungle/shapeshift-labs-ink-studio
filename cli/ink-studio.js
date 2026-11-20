@@ -766,6 +766,21 @@ function buildPreview(id = pos[0]) {
 const previewPasses = () => require('./look-preview.js').preview(opt);
 const reviewSidecars = diagnostics => [...(diagnostics?.suffixes ?? []), ...(opt.text ? ['.txt'] : [])];
 const textSidecar = file => file.replace(/\.(?:a?png)$/i, '') + '.txt';
+function feedbackReplay(world, start, frame) {
+  const api = lib().KIT.renderGraph;
+  const graph = frame.renderGraph ?? world.look?.renderGraph;
+  const definition = graph?.snapshot?.() ?? graph;
+  const cuts = opt['feedback-cuts'];
+  if (opt['feedback-fps'] === undefined && cuts === undefined &&
+      !definition?.passes?.some(pass => pass.type === 'feedback')) return null;
+  if (opt['feedback-fps'] === true) die('--feedback-fps needs a rate in (0, 240]');
+  if (cuts !== undefined && (typeof cuts !== 'string' && typeof cuts !== 'number' ||
+      String(cuts).split(',').some(cut => !cut.trim())))
+    die('--feedback-cuts needs a comma-separated list of scene times');
+  return api.replay({ fps: num('feedback-fps', 24), start: Math.min(0, start),
+    cuts: cuts === undefined ? [] : String(cuts).split(',').map(Number) });
+}
+
 const times = () =>
   opt.t !== undefined
     ? list('t')
@@ -852,7 +867,7 @@ const CMD = {
         '  values <id> [--t 1.5]       the value check: the picture sorted into dark, middle and light, and whether it reads in three tones',
         '  sheet <id> [--from 0 --to 6 --n 12 | --t 0,1,2]   the same view at several moments, on one sheet',
         '  turn <id> [--n 8] [--t 0]   the diorama from all round, on one sheet',
-        '  clip <id> [--from 0 --to 6 --fps 12]   an animated PNG of it moving (also supports --text)',
+        '  clip <id> [--from 0 --to 6 --fps 12]   animated PNG (also --text, --feedback-fps 24, --feedback-cuts 2.5,4)',
         '    --camera-pan x,y,z --camera-orbit degrees --px 1   review slow camera motion at native art resolution',
         '  ghost <id> [--t 2 --spacing 0.12 --n 2 | --ghosts 1.6,1.8]   one moment with those either side laid faintly over it',
         '  acts                        the ready clips, reactions, easings and cues, by name',
@@ -1687,9 +1702,15 @@ const CMD = {
       ts = times(),
       cols = num('cols', Math.min(4, ts.length)),
       imgs = [];
-    for (const t of ts) {
+    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+      w: num('w', 600), h: num('h', 420), ...diagnostics?.settings };
+    const replay = feedbackReplay(w, Math.min(...ts), view(frame));
+    function draw(t, resetRenderHistory) {
       pose(w, t);
-      const im = R.render(w, view({ t, artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory, w: num('w', 600), h: num('h', 420), ...diagnostics?.settings }));
+      return R.render(w, view({ ...frame, t, resetRenderHistory }));
+    }
+    for (const t of ts) {
+      const im = replay ? replay.sample(t, draw) : draw(t);
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
       imgs.push(displayFrame(im, w));
     }
@@ -1875,11 +1896,16 @@ const CMD = {
       f = outputFile(w.id+'-clip.png');
     const suffixes = reviewSidecars(diagnostics);
     shot?.destination(f,suffixes);
+    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+      w: num('w', 600), h: num('h', 420) };
+    const replay = feedbackReplay(w, from, view(frame));
+    function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1)))) {
+      pose(w, t);
+      return R.render(w, view({ ...frame, t, resetRenderHistory, ...camera?.(fraction), ...diagnostics?.settings }));
+    }
     for (let k = 0; k < n; k++) {
       const t = from + k / fps;
-      pose(w, t);
-      const im = R.render(w, view({ t, artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory, w: num('w', 600), h: num('h', 420),
-        ...camera?.(k/(n-1)), ...diagnostics?.settings }));
+      const im = replay ? replay.sample(t, draw) : draw(t, undefined, k / (n - 1));
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
       ts.push(t);
       frames.push(displayFrame(im, w));

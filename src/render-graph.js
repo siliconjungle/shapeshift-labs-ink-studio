@@ -12,14 +12,15 @@ const RenderGraph = (() => {
     targets = require('./target-selectors.js');
     compositor = require('./frame-composite.js');
   }
-  const operations = Object.freeze({ mask: 1, grade: 2, reflection: 3, distortion: 4, composite: 5, history: 6 });
+  const operations = Object.freeze({ mask: 1, grade: 2, reflection: 3, distortion: 4, composite: 5, history: 6, feedback: 7 });
   const fields = {
     mask: ['rect', 'feather', 'invert', 'volume'],
     grade: ['stack', 'cubeSize'],
     reflection: ['source', 'axis', 'line'],
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase'],
     composite: ['source', 'layer', 'blend'],
-    history: ['mode', 'halfLife', 'cameraMotion']
+    history: ['mode', 'halfLife', 'cameraMotion'],
+    feedback: ['source', 'layer', 'halfLife', 'cameraMotion', 'gain', 'threshold', 'filter', 'blend', 'warp']
   };
   const editorSnapshot = Symbol.for('ink-studio.renderGraph.snapshot');
   const compiled = new WeakMap(), cubes = new WeakMap();
@@ -112,6 +113,24 @@ const RenderGraph = (() => {
             historyKey: JSON.stringify([input, mask, Object.entries(select).sort(), mode, cameraMotion]) });
           break;
         }
+        case 'feedback': {
+          const { halfLife = .55, cameraMotion = 'reset', gain = 1, threshold,
+            filter = 'linear', blend = 'add', warp = {} } = pass;
+          if (!(Number.isFinite(halfLife) && halfLife > 0) || !['reset', 'keep'].includes(cameraMotion) ||
+              !Number.isFinite(gain) || gain < 0 || gain > 1 || !['nearest', 'linear'].includes(filter) ||
+              !['over', 'add'].includes(blend) || threshold !== undefined &&
+                (!tuple(threshold, 2) || threshold[0] < 0 || threshold[1] > 1 || threshold[0] >= threshold[1]))
+            throw new RangeError('Feedback needs a positive halfLife, valid gain, threshold, blend, filter and camera policy');
+          if (pass.layer !== undefined && pass.source !== undefined)
+            throw new TypeError('Feedback accepts an image source or an emission layer');
+          const layer = pass.layer;
+          const source = layer === undefined ? reference(pass.source ?? input, 'image') : undefined;
+          const needsCamera = layer !== undefined && compositor.settings({ layers: [layer] }).needsCamera;
+          Object.assign(node, { halfLife, cameraMotion, gain, threshold: threshold?.slice(),
+            filter, blend, layer, source, warp: feedbackWarp(warp), needsCamera: needsCamera || cameraMotion === 'reset',
+            historyKey: JSON.stringify([type, input, source, mask, select && Object.entries(select).sort(), cameraMotion]) });
+          break;
+        }
         case 'composite': {
           if ((pass.layer === undefined) === (pass.source === undefined))
             throw new TypeError('A composite pass needs a previous image source or one mixed-resolution layer');
@@ -137,7 +156,7 @@ const RenderGraph = (() => {
       for (const dependency of nodes[i].dependencies) live.add(dependency);
     const passes = nodes.filter(node => live.has(node.id)), lastUse = new Map();
     passes.forEach((node, i) => node.dependencies.forEach(id => lastUse.set(id, i)));
-    const historyPasses = passes.filter(node => node.enabled && node.type === 'history');
+    const historyPasses = passes.filter(node => node.enabled && (node.type === 'history' || node.type === 'feedback'));
     if (historyPasses.length > maxHistoryPasses) throw new RangeError('A graph supports up to four live screen history passes');
     const plan = { passes, output, lastUse, historyPasses, needsDepth: passes.some(node => node.enabled && node.volume),
       needsOwner: passes.some(node => node.enabled && node.select),
@@ -258,6 +277,7 @@ const RenderGraph = (() => {
         return {
           value: prior?.value,
           capture: !prior || prior.time < time,
+          elapsed: prior ? time - prior.time : 0,
           decay: prior ? 2 ** (-(time - prior.time) / node.halfLife) : 0,
           save(value) {
             drop(node.id);
@@ -267,6 +287,66 @@ const RenderGraph = (() => {
       };
     }
     return Object.freeze({ begin, clear });
+  }
+
+  function feedbackWarp(value) {
+    record(value, ['velocity', 'rotation', 'zoom', 'wave', 'period', 'rate', 'phase', 'blockSize', 'center'], 'feedback warp');
+    const { velocity = [0, 0], rotation = 0, zoom = 1, wave = [0, 0], period = 32,
+      rate = 0, phase = 0, blockSize = 0, center = [.5, .5] } = value;
+    if (!tuple(velocity, 2) || !tuple(wave, 2) || !tuple(center, 2) || !center.every(n => n >= 0 && n <= 1) ||
+        ![...velocity, ...wave, rotation, rate].every(n => Math.abs(n) <= 1e6) ||
+        ![rotation, zoom, period, rate, phase, blockSize].every(Number.isFinite) || zoom < .01 || zoom > 100 ||
+        period < .01 || blockSize < 0)
+      throw new RangeError('Feedback warp needs finite controls, positive zoom and period, and a normalized center');
+    return { velocity: velocity.slice(), rotation, zoom, wave: wave.slice(), period, rate,
+      phase, blockSize, center: center.slice() };
+  }
+
+  function feedbackMotion({ warp }, time, elapsed, w, h) {
+    const { rotation, zoom, phase, rate, period, blockSize } = warp;
+    const inverse = Math.exp(Math.max(-20, Math.min(20, -Math.log(zoom) * elapsed)));
+    const tau = 2 * Math.PI;
+    const angle = rotation ? (elapsed % Math.abs(tau / rotation)) * rotation : 0;
+    const cycle = rate ? (time % Math.abs(1 / rate)) * rate : 0;
+    const theta = tau * ((phase % 1 + cycle) % 1);
+    return {
+      pivot: [warp.center[0] * w, warp.center[1] * h], blockSize,
+      transform: [Math.cos(angle) * inverse, Math.sin(angle) * inverse],
+      offset: warp.velocity.map(n => n * elapsed), wave: warp.wave.map(n => n * elapsed),
+      frequency: 2 * Math.PI / period, theta
+    };
+  }
+
+  // Render every tick from the same origin, including unexported ticks before a trim.
+  function replay({ fps = 24, start = 0, maxSteps = 36000, cuts = [] } = {}) {
+    if (!(Number.isFinite(fps) && fps > 0 && fps <= 240) || !Number.isFinite(start) ||
+        !Number.isSafeInteger(maxSteps) || maxSteps < 1 || maxSteps > 1000000)
+      throw new RangeError('Feedback replay needs a finite start, a rate up to 240 and a positive step budget');
+    if (!Array.isArray(cuts) || cuts.length > 4096 || !Array.from(cuts).every(cut => Number.isFinite(cut) &&
+        cut >= start && (cut - start) * fps <= maxSteps - 1))
+      throw new RangeError('Feedback replay cuts need finite times within the replay range');
+    const cutTicks = new Set(cuts.map(cut => Math.ceil((cut - start) * fps - 1e-8)));
+    let next = 0, priorTime, value;
+    function reset() {
+      next = 0;
+      priorTime = value = undefined;
+    }
+    function sample(time, render) {
+      if (!Number.isFinite(time) || time < start || typeof render !== 'function')
+        throw new RangeError('Feedback replay needs a time at or after start and a render callback');
+      const end = Math.floor((time - start) * fps + 1e-8);
+      if (!Number.isSafeInteger(end) || end >= maxSteps) throw new RangeError('Feedback replay exceeds its step budget');
+      if (priorTime !== undefined && time < priorTime) reset();
+      priorTime = time;
+      while (next <= end) {
+        const frame = render(start + next / fps, next === 0 || cutTicks.has(next));
+        if (frame?.then) throw new TypeError('Feedback replay requires synchronous rendering');
+        value = frame;
+        next++;
+      }
+      return value;
+    }
+    return Object.freeze({ sample, reset });
   }
 
   // Depth is the axial camera distance at the center of the native texel.
@@ -282,6 +362,6 @@ const RenderGraph = (() => {
     return volume.feather ? clamp((1 - distance) / volume.feather) : Number(distance <= 1);
   }
 
-  return Object.freeze({ prepare, create, cube, selection, layer, history, volumeCoverage });
+  return Object.freeze({ prepare, create, cube, selection, layer, history, feedbackMotion, replay, volumeCoverage });
 })();
 if (typeof module !== 'undefined') module.exports = RenderGraph;
