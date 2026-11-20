@@ -42,6 +42,9 @@ routes and recompute crossings affected by local changes.
 [Agent orders](agent-orders.md) schedule and inspect reusable tasks with
 movement, waits, events, and conservative transfers.
 
+[Agent needs and schedules](agent-needs.md) rank activities over changing
+needs and recurring shifts, and let orders end after sustained route failures.
+
 [Jobs and reservations](job-reservations.md) arbitrate shared capacity and
 single-use work across agent rosters.
 

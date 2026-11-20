@@ -33,6 +33,11 @@ the active order. Multiple substeps in that tick count once. Waiting on
 routing, a crossing, a missing target, or a field condition can be inspected
 while the order runs.
 
+Set `blockedTimeout` on a task or on one issued order to fail after that
+many consecutive confirmed blocked movement ticks. The outcome is
+`route-blocked` and includes the last blocker. Routes waiting on a budget
+and agents queued at crossings stay in their regular waiting phases.
+
 Add [jobs and reservations](job-reservations.md) when an order must claim
 limited capacity or a single-use job before any of its steps run.
 [Physical work](physical-work.md) adds range-checked transfers and a

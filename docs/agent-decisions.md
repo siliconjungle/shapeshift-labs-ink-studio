@@ -5,6 +5,9 @@ chooses an eligible activity and reachable destination. The existing mover
 follows the route, and the policy confirms arrival using the actual position.
 The same policy can govern walking, swimming, or flying agents.
 
+[Agent needs and schedules](agent-needs.md) add changing priorities,
+recurring windows, and commitments to these activities.
+
 The [resident example](../examples/world-resident-shelter.json) starts at a
 workbench. When rain starts, the agent checks the nearer shed, reads its locked
 door state, and walks to an open porch. Work resumes when the weather clears and

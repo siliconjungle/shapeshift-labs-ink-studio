@@ -669,6 +669,7 @@
         'Invalid agent selector');
       if(type==='issue-order')orders.checkIssue(args);
       if(type==='cancel-order')orders.checkCancel(args);
+      if(type==='set-need')policy.checkNeed(args);
       if(type==='seek'){
         check(vector(args.to),'Invalid creature destination');
         check(args.priority===undefined||routeQueue&&RQ.priority(args.priority),'Invalid route request priority');
@@ -679,6 +680,12 @@
         check(!policy?.managed(args.agent),'The activity policy owns this creature task');
       }
     },actions:{
+      ...(policy?.hasNeeds&&{'set-need'(state,args,ctx){
+        const roster=S.get(state), {row}=requireAgent(roster,args);
+        const decisions={...state.decisions,
+          [row.id]:policy.setNeed(state.decisions[row.id],row,args,ctx,!O.holding(row.orders)&&!row.formationDriven)};
+        return packed(roster,state.contacts,decisions,state.routeWork,state.crowd,state.formations);
+      }}),
       ...(formations&&Object.fromEntries(W.formations.actions.map(type=>[type,(state,args,ctx)=>{
         const roster=S.get(state);
         const result=formations.edit(state.formations,type,args,name=>S.select(roster,name),ctx);
@@ -686,7 +693,11 @@
       }]))),
       ...(orders&&{
         'issue-order'(state,args,ctx){
-          const decisions=policy?.managed(args.agent)?{...state.decisions,[args.agent]:policy.initial[args.agent]}:state.decisions;
+          let decisions=state.decisions;
+          if(policy?.managed(args.agent)){
+            const {row}=requireAgent(S.get(state),args);
+            decisions={...decisions,[row.id]:policy.release(decisions[row.id],row,ctx,'order-issued')??policy.initial[row.id]};
+          }
           return replace(state,args,row=>changeOrders(row,orders.issue(row,args,ctx)),decisions);
         },
         'cancel-order'(state,args,ctx){
@@ -754,7 +765,9 @@
         const guide=formation?.guides.get(key);
         if(!managed&&!O.holding(book)&&!guide&&!detail.formationDriven&&skipRest&&S.atRest(roster,slot))continue;
         const agent=S.read(roster,slot);
-        if(O.holding(book)||guide||agent.formationDriven){
+        const external=O.holding(book)||guide||agent.formationDriven;
+        const decision=managed&&policy.update(state.decisions[key],agent,ctx,!external);
+        if(external){
           const profile=profileFor(agent), exit=group?.exitGoal(agent);
           function drive(row,goal,task,priority,direction,arrival,pace){
             const nextPriority=row.routing?(priority??book?.priorPriority??row.routePriority):undefined;
@@ -795,7 +808,7 @@
               moved=individual;
             }
             store(slot,agent,moved);
-            if(managed)decisions[key]=policy.initial[key];
+            if(managed)decisions[key]=policy.release(decision,agent,ctx,'formation-controlled')??policy.initial[key];
             continue;
           }
           const execution=orders.advance(book,agent,ctx,{hold,move(row,point,order,range){
@@ -814,7 +827,7 @@
             return {agent:moved,phase:blocked?'blocked':'moving',reason:blocked?moved.routing?.reason??'movement-blocked':null};
           }});
           store(slot,agent,{...execution.row,orders:execution.book});
-          if(managed)decisions[key]=state.decisions[key];
+          if(managed)decisions[key]=decision;
           continue;
         }
         const routes=agent.routing&&schedule?.session(agent);
@@ -835,7 +848,7 @@
               {status:'origin-unfit',points:[]};
           }
         };
-        const {next,route,pending}=policy.select(state.decisions[key],agent,ctx,movement);
+        const {next,route,pending}=policy.select(decision,agent,ctx,movement);
         if(!next.choice){
           const row={...agent,goal:agent.position,route:[],cursor:0,mode:pending?'waiting':'rest'};
           store(slot,agent,routes?routes.finish(row,'idle'):row,null);
@@ -898,7 +911,15 @@
       }},
       population:{type:'record',read:({state})=>Q.ok(W.aggregatePopulation.population(S.get(state),species))},
       contacts:{type:'records',units:'world',read:({state})=>Q.ok(state.contacts)},
-      ...(policy&&{decisions:{type:'record',read:({state})=>Q.ok(state.decisions)}})
+      ...(policy&&{decisions:{type:'record',read:({state})=>Q.ok(state.decisions)}}),
+      ...(policy?.hasNeeds&&{needs:{type:'record',qualified:true,selector:true,read:({state,args,target})=>{
+        const roster=S.get(state), row=args.agent!==undefined?S.select(roster,args.agent):
+          target?.entity&&byEntity(roster,target.entity);
+        const decision=row&&state.decisions[row.id];
+        return decision&&(args.generation===undefined||args.generation===row.generation)?
+          Q.ok({agent:row.id,generation:row.generation,tick:decision.needTick,values:decision.needs}):
+          Q.missing('unknown managed agent or generation','missing');
+      }}})
     },...(policy&&{traces:{why:{run({state,args,target}){
       const name=args.agent??target.entity;
       const roster=S.get(state);
