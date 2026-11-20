@@ -317,6 +317,19 @@ test('bitmap font traces actual cell boundaries, retains holes and rasterises pi
   bits.forEach((v, i) => assert.equal(image.rgba[i * 4 + 3], v * 255));
   assert(Ty.fonts.bitmap().has('Ω'));
 });
+test('fitting centered or right-aligned runs fills the path and clipped outline pens stay hidden', () => {
+  const path = K.curve.path([
+    [0, 0, 0],
+    [4, 0, 0]
+  ]);
+  for (const align of ['center', 'right']) {
+    const run = Ty.layout('FORM', { align });
+    const frames = T.pose(run, 0, { path, fit: true });
+    assert(frames.every(f => f.opacity === 1));
+    near(frames[0].position[0], 0);
+  }
+  assert(Ty.outlineStrokes(Ty.layout('FORM'), 0, { path, offset: 20 }).every(f => f.strokes.length === 0));
+});
 function extrusion() {
   const B = makeBuilder(5, [0x0a1020, 0x2e71ab, 0xf8b855]),
     S = K.sculpt(makeSculpt(B)),

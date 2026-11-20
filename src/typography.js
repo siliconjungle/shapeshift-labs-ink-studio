@@ -283,7 +283,8 @@ const Typography = (() => {
       );
     }
     const global = rotation(angles),
-      factor = path && fit ? path.length / Math.max(run.width, 1e-8) : 1;
+      factor = path && fit ? path.length / Math.max(run.width, 1e-8) : 1,
+      anchor = path && fit && run.glyphs.length ? Math.min(...run.glyphs.map(g => g.x)) : 0;
     return run.glyphs.map(g => {
       let char = g.char;
       if (scramble && char.trim()) {
@@ -313,7 +314,7 @@ const Typography = (() => {
       );
       let p = [g.x * factor, g.y * factor, 0],
         basis = identity,
-        distance = offset + (g.x + g.advance / 2) * factor,
+        distance = offset + (g.x - anchor + g.advance / 2) * factor,
         visible = true;
       if (path) {
         const d = wrap ? ((distance % path.length) + path.length) % path.length : distance;
@@ -323,7 +324,8 @@ const Typography = (() => {
         basis = [f.T[0], f.N[0], f.B[0], f.T[1], f.N[1], f.B[1], f.T[2], f.N[2], f.B[2]];
         p = f.p.map((v, i) => v - (f.T[i] * g.advance * factor) / 2 + f.N[i] * g.y * factor);
       }
-      p = p.map((v, i) => v + app(basis, delta)[i]);
+      const displacement = app(basis, delta);
+      p = p.map((v, i) => v + displacement[i]);
       p = app(global, p).map((v, i) => position[i] + v * scale);
       const axes = mul(global, mul(basis, rotation(turn))),
         scales = typeof s === 'number' ? [s, s, s] : s;

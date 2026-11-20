@@ -595,7 +595,7 @@
   function outlineStrokes(run, time, options = {}) {
     return T.pose(run, time, options).map(f => ({
       glyph: f,
-      strokes: T.strokes(T.outline(run.font, f.char), f.progress).map(l =>
+      strokes: T.strokes(T.outline(run.font, f.char), f.opacity > 0 ? f.progress : 0).map(l =>
         l.map(p => T.transform(f, [p[0] * f.scale, p[1] * f.scale, 0]))
       )
     }));
