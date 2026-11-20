@@ -3,7 +3,8 @@
   const P=K.procedural,M=P.motion,
     integer=(n,a,b)=>Number.isSafeInteger(n)&&n>=a&&n<=b,
     number=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b,
-    vector=p=>Array.isArray(p)&&p.length===2&&p.every(v=>number(v,-1e7,1e7)),
+    vector=p=>Array.isArray(p)&&p.length===2&&number(p[0],-1e7,1e7)&&number(p[1],-1e7,1e7),
+    record=v=>v!=null&&[Object.prototype,null].includes(Object.getPrototypeOf(v)),
     clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
   function bilinear(data,width,height,x,z,mask){
     const u=clamp(x,0,width-1),v=clamp(z,0,height-1),
@@ -27,19 +28,76 @@
       open=new Uint8Array(size),xAt=i=>ox+(i%width+0.5)*dx,zAt=i=>oz+(Math.floor(i/width)+0.5)*dz,
       center=i=>[xAt(i),zAt(i)];
     for(let i=0;i<size;i++)open[i]=Number(!mask||Boolean(mask(xAt(i),zAt(i),i)));
+    const available=(i,j)=>i>=0&&i<width&&j>=0&&j<height&&Boolean(open[j*width+i]);
+    const column=x=>Math.min(width-1,Math.floor((x-ox)/dx));
+    const row=z=>Math.min(height-1,Math.floor((z-oz)/dz));
     function inside(x,z){
-      if(x<ox||x>bounds.max[0]||z<oz||z>bounds.max[1]||!Number.isFinite(x)||!Number.isFinite(z))return false;
-      const i=Math.min(width-1,Math.floor((x-ox)/dx)),j=Math.min(height-1,Math.floor((z-oz)/dz));
-      return Boolean(open[j*width+i]);
+      return Number.isFinite(x)&&Number.isFinite(z)&&x>=ox&&x<=bounds.max[0]&&z>=oz&&z<=bounds.max[1]&&
+        available(column(x),row(z));
     }
-    return {width,height,size,dx,dz,ox,oz,bounds:P.data.freeze(bounds),open,center,inside,
-      sample:(data,x,z)=>Number.isFinite(x)&&Number.isFinite(z)&&inside(x,z)?
-        bilinear(data,width,height,(x-ox)/dx-0.5,(z-oz)/dz-0.5,open):0};
+    function trace(x,z,qx,qz){
+      if(!inside(x,z)||!Number.isFinite(qx)||!Number.isFinite(qz))return 0;
+      let c=column(x),r=row(z);
+      const ax=(qx-x)/dx,az=(qz-z)/dz,sx=Math.sign(ax),sz=Math.sign(az);
+      const stepX=ax?1/Math.abs(ax):Infinity,stepZ=az?1/Math.abs(az):Infinity;
+      let tx=ax?(c+Number(sx>0)-(x-ox)/dx)/ax:Infinity,
+        tz=az?(r+Number(sz>0)-(z-oz)/dz)/az:Infinity;
+      for(;;){
+        const t=Math.min(tx,tz);
+        if(t>1)return 1;
+        const cx=tx<=t+1e-12,cz=tz<=t+1e-12,i=c+(cx?sx:0),j=r+(cz?sz:0);
+        if(!available(i,j)||cx&&cz&&(!available(i,r)||!available(c,j))){
+          const roundoff=4*Number.EPSILON,
+            bx=cx?Math.max(1e-8,roundoff*Math.max(Math.abs(x),Math.abs(qx))/dx)*stepX:0,
+            bz=cz?Math.max(1e-8,roundoff*Math.max(Math.abs(z),Math.abs(qz))/dz)*stepZ:0;
+          return Math.max(0,t-Math.max(bx,bz));
+        }
+        c=i;
+        r=j;
+        if(cx)tx+=stepX;
+        if(cz)tz+=stepZ;
+      }
+    }
+    function distribute(x,z,write){
+      if(!inside(x,z))return;
+      const col=column(x),line=row(z),u=clamp((x-ox)/dx-.5,0,width-1),
+        v=clamp((z-oz)/dz-.5,0,height-1),a=Math.floor(u),b=Math.floor(v),fu=u-a,fv=v-b;
+      function weight(c,r,w){
+        return w&&available(c,r)&&(c===col||r===line||available(c,line)&&available(col,r))?w:0;
+      }
+      const p=weight(a,b,(1-fu)*(1-fv)),q=weight(a+1,b,fu*(1-fv)),
+        s=weight(a,b+1,(1-fu)*fv),t=weight(a+1,b+1,fu*fv),sum=p+q+s+t;
+      if(p)write(b*width+a,p/sum);
+      if(q)write(b*width+a+1,q/sum);
+      if(s)write((b+1)*width+a,s/sum);
+      if(t)write((b+1)*width+a+1,t/sum);
+    }
+    return {width,height,size,dx,dz,ox,oz,bounds:P.data.freeze(bounds),open,center,inside,trace,distribute,
+      sample:(data,x,z)=>inside(x,z)?bilinear(data,width,height,(x-ox)/dx-0.5,(z-oz)/dz-0.5,open):0};
   }
   function stableFluid(options={}){
     const domain=gridDomain(options),{width:w,height:h,size,dx,dz,ox,oz,open,center,inside}=domain,
       {initial,maxDt=0.045,maxSpeed=12,maxDensity=50,pressureIterations=28,diffusionIterations=10,
-        maxTracing=40,maxWork=92000000}=options;
+        maxTracing=40,maxWork=92000000,dyes={}}=options;
+    if(!record(dyes)||Object.keys(dyes).length>8||size*Object.keys(dyes).length>880000)
+      throw new Error('Stable fluids need a bounded dye channel map');
+    const names=Object.freeze(Object.keys(dyes)),indices=new Map(names.map((name,i)=>[name,i]));
+    const dyeSettings=names.map(name=>{
+      const settings=dyes[name];
+      if(!/^[a-z][\w-]*$/i.test(name)||!record(settings)) throw new Error('Invalid fluid dye channel');
+      const {diffusion=0.001,dissipation=0.025}=settings;
+      if(!number(diffusion,0,1e8)||!number(dissipation,0,1e8)) throw new Error('Invalid fluid dye transport');
+      return {diffusion,dissipation};
+    });
+    function eachDye(values,use){
+      if(values==null)return;
+      if(!record(values))throw new Error('Fluid dye values need a channel map');
+      for(const [name,value] of Object.entries(values)){
+        const i=indices.get(name);
+        if(i===undefined)throw new Error('Unknown fluid dye channel '+name);
+        use(i,value);
+      }
+    }
     if((initial!==undefined&&typeof initial!=='function')||!number(maxDt,1e-5,1)||
       !number(maxSpeed,1e-4,1e5)||!number(maxDensity,1e-4,1e6)||!integer(pressureIterations,2,240)||
       !integer(diffusionIterations,1,80)||!integer(maxTracing,4,128)||!integer(maxWork,1,260000000))
@@ -48,8 +106,9 @@
       X=1/(dx*dx),Z=1/(dz*dz),zeroU=new Float64Array(uw*h),zeroV=new Float64Array(w*vh);
     for(let z=0;z<h;z++)for(let x=1;x<w;x++)uf[z*uw+x]=open[z*w+x-1]&open[z*w+x];
     for(let z=1;z<h;z++)for(let x=0;x<w;x++)vf[z*w+x]=open[(z-1)*w+x]&open[z*w+x];
-    const fields={u:zeroU,v:zeroV,density:new Float64Array(size)};
-    let time=0;
+    const fields={u:zeroU,v:zeroV,density:new Float64Array(size),dyes:names.map(()=>new Float64Array(size))};
+    const saved=new WeakMap();
+    let time=0,stepping=false;
     function velocityAt(u,v,x,z){
       return [bilinear(u,uw,h,(x-ox)/dx,(z-oz)/dz-0.5),bilinear(v,w,vh,(x-ox)/dx-0.5,(z-oz)/dz)];
     }
@@ -87,10 +146,14 @@
     const initX=new Float64Array(size),initZ=new Float64Array(size);
     for(let i=0;i<size;i++){
       if(!open[i]||!initial)continue;
-      const {density=0,velocity=[0,0]}=initial(...center(i),i)??{};
+      const {density=0,velocity=[0,0],dyes:pigment}=initial(...center(i),i)??{};
       if(!number(density,0,maxDensity)||!vector(velocity))
         throw new Error('Initial fluid values must be finite');
       fields.density[i]=density;
+      eachDye(pigment,(channel,value)=>{
+        if(!number(value,0,maxDensity))throw new Error('Initial fluid dye values must be finite and bounded');
+        fields.dyes[channel][i]=value;
+      });
       initX[i]=clamp(velocity[0],-maxSpeed,maxSpeed);
       initZ[i]=clamp(velocity[1],-maxSpeed,maxSpeed);
     }
@@ -115,7 +178,7 @@
       return out;
     }
     function advect(values,width,height,mask,u,v,dt,offsetX,offsetZ,scalar){
-      const out=new Float64Array(values.length);
+      const out=values.map(data=>new Float64Array(data.length));
       for(let z=0,i=0;z<height;z++)for(let x=0;x<width;x++,i++){
         if(!mask[i])continue;
         const px=ox+(x+offsetX)*dx,pz=oz+(z+offsetZ)*dz,
@@ -124,80 +187,133 @@
           limit=0.47*Math.min(dx,dz),ratio=Math.max(1,Math.hypot(vx,vz)*dt/(maxTracing*limit)),
           ax=-vx*dt/ratio,az=-vz*dt/ratio,
           steps=Math.max(1,Math.ceil(Math.hypot(ax,az)/limit));
+        if(scalar){
+          const t=domain.trace(px,pz,px+ax,pz+az);
+          domain.distribute(px+ax*t,pz+az*t,(j,w)=>{
+            for(let k=0;k<values.length;k++)out[k][i]+=w*values[k][j];
+          });
+          continue;
+        }
         let tx=px,tz=pz;
         for(let j=1;j<=steps;j++){
           const qx=px+ax*j/steps,qz=pz+az*j/steps;
           if(!inside(qx,qz))break;
           tx=qx;tz=qz;
         }
-        out[i]=bilinear(values,width,height,(tx-ox)/dx-offsetX,(tz-oz)/dz-offsetZ,scalar?mask:undefined);
+        const a=(tx-ox)/dx-offsetX,b=(tz-oz)/dz-offsetZ;
+        for(let k=0;k<values.length;k++)
+          out[k][i]=bilinear(values[k],width,height,a,b);
       }
       return out;
     }
     function snapshot(substeps=0){
-      const density=fields.density.slice(),u=fields.u.slice(),v=fields.v.slice(),
+      const {density,u,v,dyes:channels}=fields,
         vx=new Float64Array(size),vz=new Float64Array(size),div=new Float64Array(size);
       for(let i=0;i<size;i++)if(open[i]){
         [vx[i],vz[i]]=cellVelocity(u,v,i);
         div[i]=divergence(u,v,i);
       }
-      return Object.freeze({time,width:w,height:h,bounds:domain.bounds,density,vx,vz,divergence:div,substeps,
-        sample(x,z){return inside(x,z)?{density:domain.sample(density,x,z),velocity:velocityAt(u,v,x,z)}:null;}});
+      function dye(name){
+        if(!indices.has(name))throw new Error('Unknown fluid dye channel '+name);
+        return channels[indices.get(name)];
+      }
+      function pigment(data,x,z){
+        let value=0;
+        domain.distribute(x,z,(i,w)=>{value+=data[i]*w;});
+        return value;
+      }
+      return Object.freeze({time,width:w,height:h,bounds:domain.bounds,density:density.slice(),
+        vx,vz,divergence:div,substeps,dyes:names,
+        dye:name=>dye(name).slice(),
+        sampleDye(name,x,z){
+          const data=dye(name);
+          return inside(x,z)?pigment(data,x,z):null;
+        },
+        sampleVelocity(x,z){return inside(x,z)?velocityAt(u,v,x,z):null;},
+        sample(x,z){return inside(x,z)?{density:pigment(density,x,z),velocity:velocityAt(u,v,x,z)}:null;}});
+    }
+    function checkpoint(){
+      const token=Object.freeze({time});
+      saved.set(token,{...fields,time});
+      return token;
+    }
+    function restore(token){
+      const prior=saved.get(token);
+      if(stepping||!prior)throw new Error('Invalid fluid checkpoint or step in progress');
+      const {time:clock,...buffers}=prior;
+      Object.assign(fields,buffers);
+      time=clock;
     }
     function step(duration,{
-      force,source,viscosity=0.0002,diffusion=0.001,dissipation=0.025
+      force,source,dyeSource,viscosity=0.0002,diffusion=0.001,dissipation=0.025
     }={}){
+      if(stepping)throw new Error('A fluid step is already in progress');
       if(!number(duration,0,120)||![viscosity,diffusion,dissipation].every(v=>number(v,0,1e8))||
-        [force,source].some(fn=>fn!==undefined&&typeof fn!=='function'))
+        [force,source,dyeSource].some(fn=>fn!==undefined&&typeof fn!=='function'))
         throw new Error('Fluid steps need finite intervals and source controls');
       if(!duration)return snapshot();
       const n=Math.ceil(duration/maxDt),dt=duration/n,
-        work=n*size*(26+2*pressureIterations+3*diffusionIterations+3*maxTracing);
+        work=n*size*(26+2*pressureIterations+3*diffusionIterations+3*maxTracing+names.length*(8+diffusionIterations));
       if(n>5000||work>maxWork)throw new Error('Fluid step exceeds its work budget');
-      let u=fields.u.slice(),v=fields.v.slice(),density=fields.density.slice();
+      let {u,v}=fields,scalars=[fields.density.slice(),...fields.dyes.map(data=>data.slice())];
+      u=u.slice();
+      v=v.slice();
+      const transport=[{diffusion,dissipation},...dyeSettings],
+        decay=transport.map(settings=>Math.exp(-settings.dissipation*dt));
       const forceX=new Float64Array(size),forceZ=new Float64Array(size);
-      for(let k=0;k<n;k++){
-        const t=time+k*dt;
-        for(let i=0;i<size;i++){
-          if(!open[i])continue;
-          const pos=center(i),values={density:density[i],velocity:cellVelocity(u,v,i)};
+      stepping=true;
+      try{
+        for(let k=0;k<n;k++){
+          const t=time+k*dt;
+          if(force||source||dyeSource)for(let i=0;i<size;i++){
+            if(!open[i])continue;
+            const pos=center(i),values={density:scalars[0][i],velocity:cellVelocity(u,v,i),index:i};
+            if(force){
+              const f=force(...pos,t,values);
+              if(!vector(f))throw new Error('Fluid forces must be finite XZ vectors');
+              forceX[i]=f[0];
+              forceZ[i]=f[1];
+            }
+            if(source){
+              const rate=source(...pos,t,values);
+              if(!number(rate,-1e7,1e7))throw new Error('Fluid density sources must be finite and bounded');
+              scalars[0][i]=clamp(scalars[0][i]+rate*dt,0,maxDensity);
+            }
+            if(dyeSource)eachDye(dyeSource(...pos,t,values),(channel,rate)=>{
+              if(!number(rate,-1e7,1e7))throw new Error('Fluid dye sources must be finite and bounded');
+              const data=scalars[channel+1];
+              data[i]=clamp(data[i]+rate*dt,0,maxDensity);
+            });
+          }
           if(force){
-            const f=force(...pos,t,values);
-            if(!vector(f))throw new Error('Fluid forces must be finite XZ vectors');
-            forceX[i]=f[0];
-            forceZ[i]=f[1];
+            for(let z=0;z<h;z++)for(let x=1;x<w;x++)if(uf[z*uw+x]){
+              const i=z*uw+x,p=z*w+x;
+              u[i]=clamp(u[i]+dt*(forceX[p-1]+forceX[p])*0.5,-maxSpeed,maxSpeed);
+            }
+            for(let z=1;z<h;z++)for(let x=0;x<w;x++)if(vf[z*w+x]){
+              const i=z*w+x,p=z*w+x;
+              v[i]=clamp(v[i]+dt*(forceZ[p-w]+forceZ[p])*0.5,-maxSpeed,maxSpeed);
+            }
           }
-          if(source){
-            const rate=source(...pos,t,values);
-            if(!number(rate,-1e7,1e7))throw new Error('Fluid density sources must be finite');
-            density[i]=clamp(density[i]+rate*dt,0,maxDensity);
-          }
+          u=diffuse(u,uw,h,uf,viscosity,dt,true);
+          v=diffuse(v,w,vh,vf,viscosity,dt,true);
+          project(u,v);
+          const [nextU]=advect([u],uw,h,uf,u,v,dt,0,0.5,false),
+            [nextV]=advect([v],w,vh,vf,u,v,dt,0.5,0,false);
+          [u,v]=[nextU,nextV];
+          project(u,v);
+          const diffused=scalars.map((data,i)=>diffuse(data,w,h,open,transport[i].diffusion,dt,false));
+          scalars=advect(diffused,w,h,open,u,v,dt,0.5,0.5,true);
+          scalars.forEach((data,k)=>{
+            for(let i=0;i<size;i++)data[i]*=decay[k];
+          });
         }
-        if(force){
-          for(let z=0;z<h;z++)for(let x=1;x<w;x++)if(uf[z*uw+x]){
-            const i=z*uw+x,p=z*w+x;
-            u[i]=clamp(u[i]+dt*(forceX[p-1]+forceX[p])*0.5,-maxSpeed,maxSpeed);
-          }
-          for(let z=1;z<h;z++)for(let x=0;x<w;x++)if(vf[z*w+x]){
-            const i=z*w+x;
-            v[i]=clamp(v[i]+dt*(forceZ[i-w]+forceZ[i])*0.5,-maxSpeed,maxSpeed);
-          }
-        }
-        u=diffuse(u,uw,h,uf,viscosity,dt,true);
-        v=diffuse(v,w,vh,vf,viscosity,dt,true);
-        project(u,v);
-        const nextU=advect(u,uw,h,uf,u,v,dt,0,0.5,false), nextV=advect(v,w,vh,vf,u,v,dt,0.5,0,false);
-        [u,v]=[nextU,nextV];
-        project(u,v);
-        density=diffuse(density,w,h,open,diffusion,dt,false);
-        density=advect(density,w,h,open,u,v,dt,0.5,0.5,true);
-        const decay=Math.exp(-dissipation*dt);
-        for(let i=0;i<size;i++)density[i]*=decay;
-      }
-      fields.u=u;fields.v=v;fields.density=density;time+=duration;
-      return snapshot(n);
+        Object.assign(fields,{u,v,density:scalars[0],dyes:scalars.slice(1)});
+        time+=duration;
+        return snapshot(n);
+      }finally{stepping=false;}
     }
-    return Object.freeze({step,snapshot});
+    return Object.freeze({step,snapshot,checkpoint,restore});
   }
   Object.assign(M,{stableFluid,gridDomain,gridSpacing});
 })(KIT);

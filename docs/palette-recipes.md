@@ -221,6 +221,79 @@ samples and call `KIT.palette.extract({ width, height, data }, options)`.
 An `ImageData` object can be passed directly. Both entry points accept
 `{ size, alpha }` and return the CLI's report.
 
+## Compare colour distributions with a reference
+
+```sh
+ink-studio palette distributions reference.png --scene examples/animated-palette-fields.js \
+  --w 340 --h 178 --px 1 --raw --t 4 --out distribution-review
+ink-studio palette distributions reference.png --render exported-frame.png --out distribution-review
+```
+
+`comparison.png` puts both images beside each other and uses the same
+histogram scale for each pair of charts. `distributions.json` records the
+pixel counts, shares, and Studio-minus-reference changes. The previews are
+resized for the sheet. The counts come from the source pixels and use the
+share of each image so different resolutions can be compared.
+
+Brightness uses OKLab lightness. Saturation uses HSV saturation. Hue
+uses 30° HSV families plus a neutral group for greys and colours below
+the neutral saturation or OKLab chroma threshold. The tonal rows divide
+the image into shadows, midtones, and highlights. Accents can overlap
+those rows and require both high saturation and high chroma. Each row
+shows how much of the image it covers and each family's share within it,
+with the most frequent actual swatch for that family.
+
+Use `--bins` for the number of brightness and saturation intervals (2–32,
+default 12) and `--alpha visible|opaque|all` to choose which pixels count.
+The default `visible` counts partially transparent pixels once using their
+stored RGB and skips fully transparent pixels. A `--settings` JSON file can
+set `shadow` and `highlight` (default 0.40 and 0.75), `neutralSaturation`
+and `neutralChroma` (0.10 and 0.02), and `accentSaturation` and
+`accentChroma` (0.65 and 0.10).
+
+In Node, `ink.comparePaletteDistributions(reference, studio, options)`
+accepts PNG paths, PNG buffers, or decoded RGB or RGBA rasters and returns
+`{ report, image }`. Pass a frame from `ink.render` to compare it directly.
+Use `KIT.palette.distributions(image, options)` or
+`KIT.palette.compareDistributions(reference, studio, options)` for
+just the measurements on decoded image data.
+
+## Review quantization error
+
+```sh
+ink-studio palette error examples/render-stages.js --params '{"stage":"palette"}' \
+  --w 760 --h 420 --px 2 --threshold .06 --out palette-error
+```
+
+The command exports `graded.png`, `resolved.png`, and `heatmap.png` on the
+same art grid. The heatmap shows Euclidean OKLab distance per pixel,
+including the selected dither pattern. Its fixed scale runs from dark
+at zero to red at `--heatmap-max` (default 0.20). Larger errors use
+the same red. Fully transparent pixels are skipped and partially
+transparent pixels count once using their stored RGB.
+
+`error.json` carries the heatmap legend, mean, RMS and maximum errors,
+and the same measurements by visible material. The material pass gives
+each pixel one owner. Pixels with no named owner are reported under ID
+`0`. Regions group horizontally or vertically adjacent pixels of the
+same material that reach `--threshold` (default 0.06). The report ranks
+these groups by total distance, with their pixel bounds and worst swatch
+pair. Coordinates start at the top-left art pixel. Use `--region-limit`
+to set how many regions are listed (default 20, maximum 100).
+
+For explicit render stages, the reference keeps frame grading and the
+authored material, lighting, and effect work. The measurement isolates
+the palette policies in the frame and palette stages. Legacy looks
+compare their continuous input to the scene resolver's output, including
+indexed grading, coverage choices, and pixel cleanup. Screen overlays
+are outside the measured pass.
+
+In Node use `ink.reviewQuantizationError(world, options)` for the three
+rasters, report, and a row-major `Float32Array` of distances. For aligned
+RGB8 buffers use `ink.measureQuantizationError({ w, h, graded, resolved, alpha },
+{ passes, threshold, heatmapMax, regionLimit })`. The optional material pass
+uses Ink's `{ w, h, materialId, materials }` format.
+
 ## Measure palette usage at export size
 
 Use the same camera, time, and art resolution as the intended export.

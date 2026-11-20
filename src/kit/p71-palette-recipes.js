@@ -593,5 +593,6 @@
     hueBrightness: PaletteFields.hueBrightness, polar: PaletteFields.polar, coverage: PaletteFields.coverage,
     chromaField: PaletteFields.chromaField, ramp: PaletteFields.ramp, plot: P.materials.palettePlot,
     chart: P.materials.paletteChart, reviewPairs: P.materials.palettePairReview, reviewRamp: P.materials.reviewRamp,
+    distributions: PaletteDistributions.analyze, compareDistributions: PaletteDistributions.compare,
     fitDither: P.materials.fitDither, lightingRamps: P.materials.lightingRamps });
 })(KIT);

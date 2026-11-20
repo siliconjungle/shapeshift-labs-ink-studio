@@ -23,13 +23,14 @@ const PaletteExtract = (() => {
   function histogram() {
     let sparse = new Map(), dense, size = 0;
     return {
-      add(color) {
+      add(color, occurrences = 1) {
         if (dense) {
-          if (dense[color]++ === 0) size++;
+          if (dense[color] === 0) size++;
+          dense[color] += occurrences;
           return;
         }
         const count = sparse.get(color) ?? 0;
-        sparse.set(color,count+1);
+        sparse.set(color,count+occurrences);
         if (!count) size++;
         // Keep small palettes cheap and avoid an unbounded object per color in photographs.
         if (size === 65536 && !count) {
@@ -106,20 +107,15 @@ const PaletteExtract = (() => {
     return groups;
   }
 
-  function extract(image, { size = 32, alpha = 'visible' } = {}) {
-    if (!Number.isSafeInteger(size) || size < 1 || size > 256)
-      throw new RangeError('Reference palette size must be an integer from 1 to 256');
+  function rasterColors(image, alpha) {
     if (!['visible','opaque','all'].includes(alpha))
       throw new RangeError('Reference alpha mode must be visible, opaque or all');
-    const { w: width = image?.width, h: height = image?.height, bitDepth, indexed, data } = image ?? {};
+    const { w: width = image?.width, h: height = image?.height, bitDepth, indexed, rgb } = image ?? {};
+    const data = image?.data ?? image?.rgba ?? rgb, separateAlpha = data === rgb ? image?.alpha : undefined;
     const total = width*height;
     if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || total > 2 ** 24)
       throw new RangeError('Reference raster needs positive dimensions and up to 16,777,216 pixels');
     const transparency = alphaStats(alpha,total), dimensions = { width, height, ...(bitDepth !== undefined && { bitDepth }) };
-    function report(source, requestedSize, sourceSwatches, method, swatches) {
-      return { ...dimensions, source, alpha: transparency.report(), requestedSize, sourceSwatches,
-        reduced: method === 'weighted-median-cut', method, palette: swatches.map(row=>row.color), swatches };
-    }
     if (indexed) {
       const {table, counts, transparency: opacity} = indexed;
       if (!(table instanceof Uint8Array) || !(counts instanceof Uint32Array) ||
@@ -133,7 +129,7 @@ const PaletteExtract = (() => {
         return { index, color:hex(pack(table[offset],table[offset+1],table[offset+2])),
           alpha:a, pixels, includedPixels:included ? pixels : 0 };
       });
-      return report('indexed',null,counts.length,'indexed',swatches);
+      return {dimensions, alpha:transparency.report(), swatches};
     }
 
     const depth = data instanceof Uint16Array ? 65535 :
@@ -141,19 +137,45 @@ const PaletteExtract = (() => {
     const max = image.max ?? depth, stride = data?.length / total;
     if (!depth || !Number.isInteger(max) || max < 1 || max > depth || (stride !== 3 && stride !== 4))
       throw new TypeError('Reference raster needs RGB or RGBA integer samples and a valid sample maximum');
+    if (separateAlpha !== undefined &&
+        (!(separateAlpha instanceof Uint8Array || separateAlpha instanceof Uint8ClampedArray ||
+          separateAlpha instanceof Uint16Array) || separateAlpha.length !== total || stride !== 3))
+      throw new TypeError('Reference alpha needs one integer sample per RGB pixel');
     const hist = histogram(), byte = max === 255 ? n => n : n => Math.round(n * 255 / max);
     for (let i=0; i<data.length; i+=stride) {
-      const r = data[i], g = data[i+1], b = data[i+2], a = stride === 4 ? data[i+3] : max;
+      const r = data[i], g = data[i+1], b = data[i+2],
+        a = stride === 4 ? data[i+3] : separateAlpha?.[i/3] ?? max;
       if (r > max || g > max || b > max || a > max) throw new RangeError('Reference sample exceeds its maximum');
       if (transparency.add(a,max)) hist.add(pack(byte(r),byte(g),byte(b)));
     }
-    const { colors, counts } = hist.finish(), reduced = colors.length > size;
+    return {dimensions, alpha:transparency.report(), ...hist.finish()};
+  }
+
+  function colorHistogram(image, { alpha='visible' } = {}) {
+    const source = rasterColors(image,alpha);
+    if (!source.swatches) return source;
+    const hist = histogram();
+    for (const {color,includedPixels} of source.swatches) if (includedPixels)
+      hist.add(parseInt(color.slice(1),16),includedPixels);
+    return {dimensions:source.dimensions,alpha:source.alpha,...hist.finish()};
+  }
+
+  function extract(image, { size = 32, alpha = 'visible' } = {}) {
+    if (!Number.isSafeInteger(size) || size < 1 || size > 256)
+      throw new RangeError('Reference palette size must be an integer from 1 to 256');
+    const input = rasterColors(image,alpha);
+    function report(source, requestedSize, sourceSwatches, method, swatches) {
+      return { ...input.dimensions, source, alpha:input.alpha, requestedSize, sourceSwatches,
+        reduced: method === 'weighted-median-cut', method, palette: swatches.map(row=>row.color), swatches };
+    }
+    if (input.swatches) return report('indexed',null,input.swatches.length,'indexed',input.swatches);
+    const { colors, counts } = input, reduced = colors.length > size;
     const rows = reduced ? reduce(colors,counts,size) : Array.from(colors,color=>({ color, pixels:counts(color) }));
     rows.sort((a,b)=>b.pixels-a.pixels || a.color-b.color);
     return report('rgb',size,colors.length,reduced ? 'weighted-median-cut' : 'exact',
       rows.map(({color,pixels},index)=>({ index, color:hex(color), pixels })));
   }
 
-  return Object.freeze({ extract });
+  return Object.freeze({ extract, colorHistogram });
 })();
 if (typeof module !== 'undefined') module.exports = PaletteExtract;

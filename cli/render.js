@@ -259,6 +259,7 @@ function renderFrame(world, o, preparedPalettes) {
     throw new RangeError('Invalid splat order or fragment budget');
   const probe = typeof o.fragmentProbe === 'function' ? o.fragmentProbe : null;
   const styled = !o.raw && !o.samples && !o.captureCoverage;
+  const captureQuantization = styled && o.captureQuantization === true;
   const lookInputs = !o.raw && (o.lookInputSession ?? LookInputs.session(t, () =>
     world.lookSnapshot?.query ?? world.surfaceEffects?.query ?? require('../index.js').load().KIT.world.query.fromScene(world, t)));
   const lookOptions = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, lookInputs,
@@ -343,7 +344,12 @@ function renderFrame(world, o, preparedPalettes) {
   if (specializedResolve || (legacyLook && stable?.protect.size)) {
     for (const channel of ['objectId', 'materialId', 'emission', 'protected']) passSelection.add(channel);
   }
-  const finishLook = (frame, passes, fog, effectSignals, source, paletteState, paletteInventory) => {
+  const finishLook = (frame, passes, fog, effectSignals, source, paletteState, paletteInventory, beforePalette) => {
+    function capture(graded, stage) {
+      frame.quantization = { w:frame.w,h:frame.h,px:frame.px,stage,graded,resolved:frame.rgb.slice(),
+        ...(frame.alpha && {alpha:frame.alpha.slice()}) };
+    }
+    if (captureQuantization && legacyLook) capture(beforePalette, 'legacy');
     if (ink) frame = ArtInk.apply(frame, passes, ink, world.pal, fog, { world, depthOffset });
     if (effects) frame = ArtEffects.apply(frame, passes, effects, t, {
       history: o.artHistory, world: o[reconstructionSource] ?? world, palette: world.pal, motionReference: frame.motionReference,
@@ -363,6 +369,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (hasFocus) frame = CameraStaging.focus(frame, passes.depth, focusBands, depthOffset,
       styled && !stages && (!o.colored || !!tone));
+    const graded = captureQuantization && !legacyLook && stages?.post ? new Uint8Array(frame.rgb.length) : undefined;
     if (styled && stages?.post) {
       const visit = ownership ? p => {
         const post = lookPass?.post(p);
@@ -371,9 +378,10 @@ function renderFrame(world, o, preparedPalettes) {
           post?.(rule,mask,amount);
         };
       } : lookPass?.post;
-      RenderStages.finish(frame, stages, passes, t, visit, audit, ditherAt, stable);
+      RenderStages.finish(frame, stages, passes, t, visit, audit, ditherAt, stable, graded);
       if (effectSignals) frame = ArtEffects.paletteUse(frame,world.pal);
     }
+    if (captureQuantization && !legacyLook) capture(graded ?? frame.rgb.slice(), 'frame');
     ownership?.finish();
     if (paletteDiagnostic && !passes?.paletteOwner)
       passes = { ...passes,w:frame.w,h:frame.h,paletteOwner:new Uint32Array(frame.w*frame.h),paletteOwners:[null] };
@@ -492,6 +500,10 @@ function renderFrame(world, o, preparedPalettes) {
       }));
     native.cleanDetail?.(img.rgb, !!(o.clean || (look.clean && !tone?.preserveDots)));
     applyMasks(img.rgb, native.masked);
+    const reference = captureQuantization ? new Uint8Array(img.rgb.length) : undefined;
+    if (reference) for (let y = 0; y < H; y++) {
+      reference.set(native.color.subarray(y*W*3, (y+1)*W*3), (H-1-y)*W*3);
+    }
     return finishLook(Object.assign(img, { px, drawn: samples.drawn },
       evaluatedPalette && !local && { palette: evaluatedPalette },
       !specializedResolve && native.detail && { detail: native.detail },
@@ -501,7 +513,7 @@ function renderFrame(world, o, preparedPalettes) {
       (native.orderFallback || samples.orderFallback) && { orderFallback: true },
       native.volumeStats && { volumeStats: native.volumeStats },
       o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color,
-      native.paletteState,native.paletteInventory);
+      native.paletteState,native.paletteInventory,reference);
   }
   lookPass = createLookPass(W, H, passSelection, o.lookPassRegistry);
   /* Legacy orthographic views back the eye away. Authored rigs keep their rail or orbit position. */
@@ -2389,6 +2401,7 @@ function renderFrame(world, o, preparedPalettes) {
   }
   // the second pass: an outline where the picture steps back sharply, a little ordered noise, then the nearest colour of the palette
   const effectColor = effectSignals && new Uint8Array(W * H * 3);
+  const beforePalette = captureQuantization && legacyLook ? new Uint8Array(W * H * 3) : undefined;
   const out = new Uint8Array(W * H * 3),
     np = world.pal.length,
     pal = [];
@@ -2498,6 +2511,11 @@ function renderFrame(world, o, preparedPalettes) {
         out[q + 1] = Math.round(clamp(g, 0, 1) * 255);
         out[q + 2] = Math.round(clamp(b, 0, 1) * 255);
         continue;
+      }
+      if (beforePalette) {
+        beforePalette[q] = Math.round(clamp(r, 0, 1) * 255);
+        beforePalette[q + 1] = Math.round(clamp(g, 0, 1) * 255);
+        beforePalette[q + 2] = Math.round(clamp(b, 0, 1) * 255);
       }
       const localId = outlined ? 0 : localAt?.[p];
       const localCoordinates = tone || localId || masks;
@@ -2704,7 +2722,7 @@ function renderFrame(world, o, preparedPalettes) {
     ...(detail && { detail }), ...(motionReference && { motionReference }),
     ...(volumeStats && { volumeStats }), ...(silhouetteMask && {silhouetteMask}), ...(o.captureFog && atmosphere?.fog && { fog: atmosphere.fog }),
     ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
-  }, passes, atmosphere?.fog, effectSignals, effectColor, paletteState,paletteInventory);
+  }, passes, atmosphere?.fog, effectSignals, effectColor, paletteState,paletteInventory,beforePalette);
 }
 function pixelIndex(w, h, sourceW, sourceH) {
   if (w === sourceW && h === sourceH) return (x, y) => y * w + x;

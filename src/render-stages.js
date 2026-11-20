@@ -172,10 +172,11 @@ const RenderStages = (() => {
     };
   }
 
-  function evaluate(rules, rgb, sample, x, y, contributions, visit, anchorAt, placement) {
+  function evaluate(rules, rgb, sample, x, y, contributions, visit, anchorAt, placement, skipPalettes) {
     if (!rules) return rgb;
     let result = rgb;
     for (const rule of rules) {
+      if (skipPalettes && rule.palette) continue;
       const maskWeight = coverage(rule, sample);
       const amount = rule.weight * rule.stackAmount * (maskWeight ?? 0);
       const input = result;
@@ -235,7 +236,7 @@ const RenderStages = (() => {
     return evaluate(rules, rgb, sample, x, y);
   }
 
-  function finish(frame, plan, passes, time, visitPixel, audit, ditherAt, stable) {
+  function finish(frame, plan, passes, time, visitPixel, audit, ditherAt, stable, beforePalette) {
     const { w, h, rgb } = frame;
     const swatches = new Map(plan.outputPalettes.map((color, i) => [color, i]));
     const use = new Uint32Array(swatches.size);
@@ -244,6 +245,7 @@ const RenderStages = (() => {
       const rules = plan.at(owner);
       const offset = p * 3;
       if (!rules.frame && !rules.palette) {
+        if (beforePalette) beforePalette.set(rgb.subarray(offset, offset + 3), offset);
         const index = swatches.get(rgb[offset] * 65536 + rgb[offset + 1] * 256 + rgb[offset + 2]);
         if (index !== undefined) use[index]++;
         continue;
@@ -261,6 +263,11 @@ const RenderStages = (() => {
       const anchorAt = plan.anchorSpaces?.size ? anchor => stability.ditherCoordinates(null, passes, p, x, y, anchor) : undefined;
       const placement = () => stability.placement(stable, passes, p, x, y, time);
       const graded = evaluate(rules.frame, original, sample, dx, dy, undefined, visit, anchorAt, placement);
+      if (beforePalette) {
+        const reference = rules.frame?.some(rule => rule.palette) ?
+          evaluate(rules.frame, original, sample, dx, dy, undefined, undefined, undefined, undefined, true) : graded;
+        for (let k = 0; k < 3; k++) beforePalette[offset + k] = byte(reference[k]);
+      }
       const color = evaluate(rules.palette, graded, sample, dx, dy, undefined, visit, anchorAt, placement);
       if (audit) audit.pixel('frame', p, color[0], color[1], color[2]);
       const index = swatches.get(pack(color));

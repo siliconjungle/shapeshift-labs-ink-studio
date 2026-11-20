@@ -888,6 +888,8 @@ const CMD = {
         '  palette usage <scene> [--select JSON] [--rare-pixels 3] [--rare-share .001] [--out report.json]',
         '  palette pairs <palette.json> [--sort distance|lightness] [--limit 12] [--scale 16] [--out directory]',
         '  palette ramp-review [ramp.json] [--scene scene --role name] [--pixels JSON] [--out report.json]',
+        '  palette distributions <reference.png> [--scene scene | --render frame.png] [--out directory]',
+        '  palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
         '  palette chart <chart.json> [--type chart] [--format png|data]   export an indexed swatch, bar or pair chart',
         '  palette lighting <source-or-draft.json> [--approve] [--out file.json]   suggest or save named lighting ramps',
@@ -1077,6 +1079,61 @@ const CMD = {
     if (pos[0] === 'fit') return require('./palette-fit.js')(pos.slice(1), opt, lib(), outputFile);
     if (pos[0] === 'chart') return require('./palette-chart.js')(pos.slice(1), opt, lib(), outputFile);
     if (pos[0] === 'pairs') return require('./palette-pairs.js')(pos.slice(1),opt,lib(),outputFile);
+    if (pos[0] === 'error') {
+      if (pos.length !== 2 || ['threshold','heatmap-max','region-limit','t','out'].some(key=>opt[key] === true))
+        die('Use palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]');
+      const t = num('t',0);
+      if (!Number.isFinite(t)) die('Palette error review time must be finite');
+      const world = buildPreview(pos[1]);
+      pose(world,t);
+      const result = require('./palette-error.js').reviewQuantizationError(world,view({ t,
+        transparent:onOffOption('transparent'), threshold:num('threshold',.06),
+        heatmapMax:num('heatmap-max',.20),regionLimit:num('region-limit',20) }));
+      const directory = outputFile('palette-error');
+      const files = Object.fromEntries(['graded','resolved','heatmap'].map(key=>[key,key+'.png']));
+      fs.mkdirSync(directory,{recursive:true});
+      for (const [key,name] of Object.entries(files)) {
+        const {w,h,rgb,alpha} = result[key];
+        PNG.write(path.join(directory,name),w,h,rgb,alpha);
+      }
+      fs.writeFileSync(path.join(directory,'error.json'),JSON.stringify({...result.report,files},null,2)+'\n');
+      console.log('wrote palette error review to',directory);
+      return;
+    }
+    if (pos[0] === 'distributions') {
+      const scene=opt.scene, render=opt.render;
+      if (pos.length!==2 || Boolean(scene)===Boolean(render) ||
+          ['scene','render','settings','bins','alpha','out','t'].some(key=>opt[key]===true))
+        die('Use palette distributions <reference.png> [--scene scene | --render frame.png] [--out directory]');
+      const source=path.resolve(pos[1]), directory=outputFile('palette-distributions');
+      const files={report:path.join(directory,'distributions.json'),preview:path.join(directory,'comparison.png')};
+      const inputs=[source,render ?? scene].map(name=>fs.statSync(path.resolve(name),{bigint:true,throwIfNoEntry:false}));
+      for (const file of Object.values(files)) {
+        const prior=fs.statSync(file,{bigint:true,throwIfNoEntry:false});
+        if (prior && inputs.some(input=>input && input.dev===prior.dev && input.ino===prior.ino))
+          die('Choose output files separate from the reference and render inputs');
+      }
+      const settings=opt.settings===undefined ? {} : JSON.parse(fs.readFileSync(path.resolve(opt.settings),'utf8'));
+      if (!settings || typeof settings!=='object' || Array.isArray(settings)) die('Palette distribution settings need a JSON object');
+      const analysis={...settings,...(opt.bins!==undefined && {bins:num('bins')}),...(opt.alpha!==undefined && {alpha:opt.alpha})};
+      let frame=render, shot;
+      if (scene) {
+        const t=num('t',0);
+        if (!Number.isFinite(t)) die('Palette distribution time must be finite');
+        const world=buildPreview(scene);
+        pose(world,t);
+        frame=R.render(world,view({t,transparent:onOffOption('transparent')}));
+        shot={scene:world.id ?? scene,time:t,pixelSize:frame.px};
+      }
+      const {report,image}=require('./palette-distributions.js').comparePaletteDistributions(source,frame,analysis);
+      if (shot) report.studio.shot=shot;
+      report.preview={file:'comparison.png',width:image.w,height:image.h};
+      fs.mkdirSync(directory,{recursive:true});
+      PNG.write(files.preview,image.w,image.h,image.rgb);
+      fs.writeFileSync(files.report,JSON.stringify(report,null,2)+'\n');
+      console.log('wrote',files.preview,'and',files.report);
+      return;
+    }
     if (pos[0] === 'ramp-review') {
       const scene = opt.scene, role = opt.role;
       if (pos.length>2 || (!pos[1] && (!scene || !role)) || (role && (!scene || pos[1])) ||
