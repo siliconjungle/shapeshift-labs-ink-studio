@@ -165,6 +165,7 @@ function render(world, o, preparedPalettes) {
   }
   const graph = o?.samples || o?.captureCoverage ? null : RenderGraph.prepare(o?.renderGraph ?? world.look?.renderGraph);
   if (graph?.passes.length) {
+    RenderGraph.resources(graph, o.w ?? o.width ?? 900, o.h ?? o.height ?? 620);
     const start = o?.renderStats ? performance.now() : 0;
     const requested = ArtPasses.select(o?.passes);
     const diagnostic = graph.needsOwner || graph.needsDepth;

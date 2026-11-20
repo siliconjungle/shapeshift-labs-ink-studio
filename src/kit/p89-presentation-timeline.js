@@ -25,6 +25,11 @@
       }
       if (subfield !== undefined) return null;
       if (field === 'gain' && node.type === 'feedback') return unit;
+      if (['bloom','halation'].includes(node.type) && field==='intensity') return {mode:'number',validate:n=>n>=0&&n<=8};
+      if (['bloom','halation'].includes(node.type) && field==='radius') return {mode:'positive',validate:n=>n>=.1&&n<=512};
+      if (node.type==='blocks' && field==='probability') return unit;
+      if (node.type==='blocks' && field==='rate') return {mode:'number',validate:n=>n>=0&&n<=120};
+      if (['blocks','chromatic'].includes(node.type) && field==='offset') return {size:2,validate:v=>v.every(n=>Math.abs(n)<=(node.type==='chromatic'?8:512))};
       if (field === 'opacity') return unit;
       if (field === 'enabled') return toggle;
       if (field === 'rect' && node.type === 'mask') return { size: 4, validate: v => v[2] > 0 && v[3] > 0 };

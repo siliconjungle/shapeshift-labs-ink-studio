@@ -220,3 +220,75 @@ Call `K.renderGraph.create(definition)` and give the returned editor to the rend
 | `snapshot()` | Returns the current read-only definition. |
 
 Edits validate the entire dependency order before they take effect. A rejected edit leaves the previous definition active. JSON graphs can be authored with the scene or passed to the CLI using `--render-graph file.json`. Use `--render-graph off` or `renderGraph: false` for an unmodified comparison.
+
+## Bounded film and signal effects
+
+`bloom`, `halation`, `outline`, `chromatic`, `blocks`, and `pixelSort` are normal ordered graph passes. They work in the software and WebGL renderers, use the existing native owner/depth buffers, and require no packages or external assets. See `examples/render-effects.html` for a live SDF scene with switches, camera controls, and an inspectable resource plan.
+
+```js
+const graph = K.renderGraph.create({
+  budget: { maxTransientPixels: 12000000, maxHistoryPixels: 1000000, maxWork: 80000000 },
+  passes: [
+    { id: 'light', type: 'bloom', select: { material: 'neon' },
+      radius: 22, threshold: .6, intensity: .85,
+      budget: { scale: .5, maxPixels: 65536, maxSamples: 24 } },
+    { id: 'film', type: 'halation', select: { material: 'neon' },
+      tint: [255, 94, 38], radius: 9, inner: .4, intensity: .45 },
+    { id: 'edge', type: 'outline', width: 1, side: 'inner', color: [10, 20, 31] },
+    { id: 'lens', type: 'chromatic', offset: [.65, 0], radial: .4 },
+    { id: 'signal', type: 'blocks', select: { object: 'screen' },
+      blockSize: [40, 12], offset: [18, 0], probability: .08, rate: 5, seed: 12,
+      depth: { near: 2, far: 30, feather: 1 } },
+    { id: 'sort', type: 'pixelSort', select: { object: 'screen' },
+      axis: 'y', span: 12, threshold: [.25, .95], opacity: .35,
+      budget: { maxPixels: 32768, maxSamples: 12, filter: 'nearest' } }
+  ]
+});
+const report = K.renderGraph.resources(K.renderGraph.prepare(graph), 1280, 720);
+```
+
+The scene and each named image remain full resolution. A small RGBA work packet carries only the effect contribution; reconstruction composites it onto the untouched full-resolution input. Unselected pixels under `maskMode:'both'` remain byte-exact. Effects preserve input alpha. Bloom/halation add linear-light radiance inside the existing frame coverage; they do not manufacture alpha outside a transparent frame.
+
+### Effect controls
+
+| Pass | Controls | Behavior |
+| --- | --- | --- |
+| `bloom` | `radius:16`, `threshold:.65`, `intensity:.6`, `tint:[255,255,255]` | Bounded golden-angle Gaussian gather of selected bright sources; linear-light addition. |
+| `halation` | same, `radius:9`, `tint:[255,88,35]`, `inner:.35` | Annular warm scatter; `inner` excludes the center of the kernel. |
+| `outline` | `width:1`, `color:[18,28,39]`, `side:'inner'`, `relativeDepth:.01` | Native depth discontinuities and logical object boundaries. Side is `inner`, `outer`, or `both`. |
+| `chromatic` | `offset:[.7,0]`, `radial:0`, `center:[.5,.5]` | Red/blue separation, bounded to eight pixels per offset component; green stays fixed. |
+| `blocks` | `blockSize:[48,16]`, `offset:[16,0]`, `probability:.08`, `rate:5`, `seed:1` | Coherent rectangular displacement with a deterministic unsigned hash; holds each pattern until the next time tick. |
+| `pixelSort` | `span:12`, `axis:'x'`, `threshold:[.15,1]`, `descending:false` | Stable luminance sorting in bounded buckets. Gaps in mask/threshold, depth, and object boundaries split contiguous runs. |
+
+Distances, radii, and block dimensions are **final output pixels**, independent of work resolution. Pixel-sort `span` is deliberately measured in **working-grid cells** (2–32). The effective span is the smaller of `span` and `budget.maxSamples`. Sorting is an insertion kernel bounded to 32 cells; its quadratic comparisons are charged in the work report. It is intended for scoped signal corruption, with reduced resolution, rather than unbounded whole-row sorting.
+
+### Masks and depth protection
+
+Every pass accepts `select`, an earlier named `mask`, and `depth:{near,far,feather,invert,background}`. Finite axial distances use scene world units. Depth feather fades **inside** the interval. Sky/background is excluded even from inverted intervals unless `background:true` is explicit. Masks multiply; `opacity` controls the final contribution.
+
+New spatial effects also accept:
+
+- `maskMode:'source'|'output'|'both'`. Bloom/halation/outlines default to source masking, allowing a selected sign to cast a halo or an outer silhouette. Chromatic/blocks/sorting default to both, keeping the destination and sampled source inside their scope.
+- `depthThreshold:.25` (world units). Spatial transforms reject depth discontinuities and sky/surface crossings. Glow accepts only emitters at or in front of the destination depth: a hidden sign cannot glow over a nearer foreground object. Reconstruction repeats this test at full resolution. WebGL reuses the ownership draw to write a packed 24-bit axial depth attachment; soft lighting-depth blending does not determine foreground visibility.
+- `protectObjects:true` for transforms/outlines, false for glow. Uses logical entity/object identity, falling back to material and then the unnamed group. Neighboring splats in one object are not mistaken for separate objects. Set false to permit displacement across different objects at compatible depths.
+
+The mask belongs to the resolved **frontmost scene owner**; it does not reconstruct hidden contributors or generate ownership for later 2D composite layers. Use a screen rectangle or a named graph mask for those layers. This is a screen-space system, not volumetric transport.
+
+### Resolution and allocation budgets
+
+Each new effect and optional `history`/`feedback` budget accepts:
+
+- `scale` in `(0,1]`, default 1.
+- `maxPixels`, default 65,536 for glow/blocks/sort and 1,048,576 for outline/chromatic. The aspect-preserving working size is limited by both scale and this cap.
+- `maxSamples` (1–64), default 24. Limits glow taps and sort span. Outline uses eight directional taps (or fewer if budgeted).
+- `filter:'linear'|'nearest'`, controlling work reconstruction. Blocks/sort default nearest; others linear. Reconstruction rejects incompatible full-resolution depth/object neighborhoods.
+
+`K.renderGraph.resources(plan,w,h)` reports each pass's actual working size, samples, and conservative work units; peak simultaneously-live image/work pixels; and retained-history demand. `transientBytes` estimates RGBA8 graph image/packet storage; `historyBytes` includes double buffering. These are graph working-set estimates, excluding scene renderer buffers, ownership/selector textures, driver overhead, and cached high-water allocations. They are not GPU time predictions.
+
+The graph's `budget` can cap `maxTransientPixels` (default 67,108,864), `maxHistoryPixels` (8,388,608), and `maxWork` (268,435,456). Plans over these limits fail before graph target allocation; the software render entry also validates before rendering the scene. Dead branches cost nothing. No silent removal of requested passes occurs. Inspect the same plan from the CLI:
+
+```sh
+ink-studio render-graph graph.json --w 1280 --h 720 --out budget.json
+```
+
+Existing feedback keeps its warp, threshold, half-life, camera policies, and deterministic replay. Adding `budget` reduces **retained signal** resolution while keeping final output crisp. `displayMask:true` clips retained trails by the current combined object/mask/depth scope; default false lets trails advect away. Editing a retained signal's working dimensions clears that signal; repeated timestamps, rewind, cuts, and camera resets retain their existing semantics. Radius/intensity, block probability/rate/offset, and chromatic offsets are available through presentation timeline channels.

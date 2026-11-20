@@ -122,7 +122,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const skyPrograms = new Map();
     const dryGeometry = target(2), dryContours = target(2), plainOwner = target(), key = target(1, { integer: true });
     const wetVariants = new Map();
-    let wetGeometry, wetContours, waterTexture, packedWater, maskOwner, glassBoundary, dryGlassGeometry, wetGlassGeometry;
+    let graphOwnership, wetGeometry, wetContours, waterTexture, packedWater, maskOwner, glassBoundary, dryGlassGeometry, wetGlassGeometry;
     let portalSource, portalDestination, portalMask, portalSpriteLayer, portalProgram;
     let lastWater, lastWaterTime, uploadedWater, waterWidth = 0, waterHeight = 0;
     let waterLookSource, waterLookPlan, waterOpticalPlan, mappedWater;
@@ -493,6 +493,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         }
         gl.clearBufferfv(gl.COLOR, 0, zero);
         if (options.u_idx === 1 && buffer.textures.length > 1) gl.clearBufferfv(gl.COLOR,1,zero);
+        if (options.u_idx === 1 && buffer.textures.length > 2) gl.clearBufferfv(gl.COLOR,2,zero);
       } else {
         if (env) {
           let programs = wet ? (wet.skyPrograms ??= new Map()) : skyPrograms;
@@ -735,7 +736,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const coverage = !raw && (frame.coverageAware ?? look.coverageAware) === true;
       const masked = Boolean(constraints?.masked);
       if (masked && !coverage) maskOwner ??= target(2);
-      const owner = masked && !coverage ? maskOwner : plainOwner;
+      const owner = frame[graphOwner]?.depth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
       const sourceWater = frame.water !== false && world.water?.count ? world.water : null;
       const drivenOptics = Array.isArray(look.optics) && look.optics.some(rule => rule.driver);
       const inputTime = drivenOptics ? frame.time ?? world.lookSnapshot?.time ?? 0 : undefined;
@@ -1003,7 +1004,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       }
       if (ownsPixels)
         drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,surfaces,surfaceFrame:{...surfaceFrame,index:true} });
-      frame[graphOwner]?.(world, owner.textures[0]);
+      frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (cover)
         drawGeometry(shader, cover.buffer, width, height,
           { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_splatPlane: cover.plane, tangent, surfaces, surfaceFrame:{...surfaceFrame,index:true,clip:cover.plane} });

@@ -450,7 +450,8 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     float k = v_ix + 1.0;
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(0.0); ${masked ? `if (v_policySlot > 0) {${ownerMaskWrite}}` : ''}
-    oa = vec4(0.0); return; }
+    float graphDepth = round(clamp(${cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
+    oa = vec4(mod(graphDepth,256.0), mod(floor(graphDepth/256.0),256.0), floor(graphDepth/65536.0),255.0)/255.0; return; }
   bool solid = u_crisp > 0.5 && v_color.a >= 1.0 && v_coverage != ${softMode};
   float a = continuous ? surfaceAlpha :
     (solid && u_hard > 0.5 ? (g > 0.5 ? 1.0 : 0.0) : contributionAlpha(power,v_color.a,solid));
