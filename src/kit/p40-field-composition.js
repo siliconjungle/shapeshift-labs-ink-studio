@@ -293,6 +293,12 @@
           } };
           break;
         }
+        case 'namedNoise': {
+          const names=Array.isArray(node.stream)?node.stream:[node.stream];
+          const stream=Randomness.create(salt).stream(...names);
+          result=noise({...node,type:'simplex'},stream.seed32);
+          break;
+        }
         case 'simplex': case 'periodic': case 'loop':
           result = noise(node, salt);
           break;

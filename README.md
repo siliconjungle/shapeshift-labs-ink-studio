@@ -1106,3 +1106,5 @@ Camera rigs support dependency-free dolly zoom, tracked orbit, keyed crane moves
 `KIT.renderGraph` adds scoped bloom, halation, depth outlines, restrained chromatic separation, block displacement, bounded pixel sorting and budgeted temporal feedback. Effects preserve full-resolution source images and accept object/depth masks. See [render effects and budgets](docs/render-graph.md#bounded-film-and-signal-effects) and the interactive [Signal House](examples/render-effects.html).
 
 `KIT.procedural.mathFields` supplies finite complex-plane, polar and logarithmic charts; analytic deformation/flow/mask adapters; and bounded fixed-step attractor integration. It shares existing field-expression, streamline and trace tooling. See [procedural math fields](docs/math-fields.md) and the [strange garden](examples/math-fields.html).
+
+`KIT.random` / `KIT.procedural.random` adds independent named streams, stable object/property keys, controlled distributions, correlated channels, coherent variation and replay checkpoints. See [randomness authoring](docs/randomness.md) and the interactive [seeded courtyard](examples/randomness.html).

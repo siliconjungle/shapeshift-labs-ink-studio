@@ -3708,3 +3708,6 @@ reference using WebGL2 transform feedback.
 
 
 For complex-plane transforms, polar/logarithmic material coordinates, bounded attractor integration and reveal masks, see [procedural math fields](math-fields.md). `fields.compile` accepts `coordinateMap` and `mathMask` nodes with analytic spatial/time derivatives.
+
+
+[Randomness authoring](randomness.md) adds named streams and stable keyed samples through `K.random` / `K.procedural.random`, with distributions, correlated channels and coherent fields. Existing numeric-seed APIs can use `stream.seed32`; existing global random sequences remain unchanged.

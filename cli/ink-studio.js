@@ -999,6 +999,7 @@ const CMD = {
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
         '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
+        '  randomness <recipe.json> [--samples 16 --out report.json]  inspect named authoring streams and distributions',
         '  math-fields <field.json> [--point x,y,z --time n --integrate seconds --out report.json]  inspect procedural math fields',
         '  render-graph <graph.json> [--w 900 --h 620 --out report.json]  inspect effect resolution and memory/work budgets',
         '  material-controls <material.json> [--palette colors.json --out report.json]  inspect shared material controls',
@@ -1818,6 +1819,9 @@ const CMD = {
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
+  },
+  'randomness'() {
+    return require('./randomness.js')(pos,opt,lib());
   },
   'math-fields'() {
     return require('./math-fields.js')(pos,opt,lib());
