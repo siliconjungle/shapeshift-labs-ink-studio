@@ -654,6 +654,8 @@ Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/wei
 
 [Surface phyllotaxis](docs/surface-phyllotaxis.md) grows golden-angle layouts on spheres and curved charts while preserving earlier placements.
 
+[Wallpaper and frieze groups](docs/wallpaper-frieze.md) repeat a vector motif as seamless pigment, etched relief, or tiles.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```

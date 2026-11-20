@@ -139,6 +139,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `forms.superquadric(spec)`, `forms.loft(sections)`, `forms.skeleton(nodes)`, `forms.periodic(spec)`, `forms.shell(host, options)` | Bounded analytic forms and locally variable shells for the sculptor |
 | `measureSculptBounds(build)` | Measure a finite rest-pose recipe without generating splats |
 | `grammar.symmetry(scope, rules, options)` | Reflected or radial grammar instances with optional variations and stable copy keys |
+| `ornament.compile(spec)` | [Wallpaper and frieze groups](wallpaper-frieze.md) for repeated motifs, seamless pigment, etched relief, and physical tiles |
 | `fracture.power(spec)`, `fracture.separate(graph, options)`, `fracture.crack(options)` | Anisotropic power cells, cumulative bond failure and stress-guided crack paths |
 | `grammar.assemble(route, modules, options)`, `construct.loadPaths(sockets, spans, options)`, `construct.supportGraph(parts)`, `construct.damage(parts, options)` | Dimensioned, socket-connected assemblies, stylized supports, support propagation and seeded part damage |
 | `construct.profile(rings)`, `construct.offset(profile, distance)`, `construct.extrude(profile, options)`, `construct.weightedRoof(rings, options)` | Signed footprints, planar offsets, extrusions and roof wavefronts with per-edge pitches |

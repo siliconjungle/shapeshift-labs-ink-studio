@@ -844,6 +844,7 @@ const CMD = {
         '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
         '  hierarchy <graph.json> [--node id] [--parent id|world] [--out file.json]   inspect or reparent live scene nodes',
         '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
+        '  ornament <pattern.json> [--format pigment|relief|tiles] [--out file]   export a wallpaper or frieze pattern',
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
         '  environment inspect <scene|run> --at x,y,z [--t seconds] [--out report.json]   explain sky and local weather',
@@ -1003,6 +1004,9 @@ const CMD = {
   },
   curve() {
     return require('./curve.js')(pos, opt, lib());
+  },
+  ornament() {
+    return require('./ornament.js')(pos, opt, lib(), outputFile);
   },
   palette() {
     if (!pos[0]) die('palette needs a recipe, path or animation JSON file');
