@@ -10,7 +10,7 @@
   const keyRef=(value,key)=>keys(value,[key])&&id(value[key]);
   const modes=['append','interrupt','replace'];
   const outcomes=['succeeded','failed','cancelled'];
-  const phases=['queued','starting','moving','waiting','blocked','settling','working',...outcomes];
+  const phases=['queued','starting','moving','waiting','blocked','settling','working','interacting',...outcomes];
   const blank=freeze({serial:0,active:null,paused:[],queue:[],outcomes:[]});
   const runnable=book=>Boolean(book&&(book.active||book.paused.length||book.queue.length));
   const holding=book=>own(book,'priorTask');
@@ -20,8 +20,8 @@
     const {tasks,maxQueued=16,historyLimit=16}=config;
     check(integer(maxQueued,1,256)&&integer(historyLimit,1,64)&&record(tasks)&&
       integer(Object.keys(tasks).length,1,256),'Orders need a bounded task catalog and queue');
-    const fields=new Set(), staticTransfers=[], staticWork=[];
-    let validateTransfer, validateReservation, validateWork;
+    const fields=new Set(), staticTransfers=[], staticWork=[], interactions=[];
+    let validateTransfer, validateReservation, validateWork, validateInteraction;
     const catalog=new Map(Object.entries(tasks).map(([name,spec])=>{
       check(id(name)&&keys(spec,['steps'])&&Array.isArray(spec.steps)&&integer(spec.steps.length,1,32),'Invalid order task '+name);
       const targets=new Set(), params=new Set();
@@ -70,6 +70,14 @@
             if(keyRef(step.site,'param'))params.add(step.site.param);
             else {W.data.endpoint(step.site);staticWork.push(step);}
             break;
+          case 'interact':
+            check(keys(step,['op','system','target','verb'])&&id(step.system),'Invalid interaction order in '+name);
+            for(const value of [step.target,step.verb]){
+              if(keyRef(value,'param'))params.add(value.param);
+              else check(id(value),'Invalid interaction target or verb in '+name);
+            }
+            interactions.push(step);
+            break;
           default: throw Error('Unknown order task step in '+name);
         }
       }
@@ -77,6 +85,13 @@
     }));
 
     const reference=(value,bag,kind)=>value?.[kind]!==undefined?bag[value[kind]]:value;
+    const offering=(step,params)=>({path:step.system+'/offering',target:reference(step.target,params,'param'),
+      verb:reference(step.verb,params,'param')});
+    function checkInteraction(step,params){
+      const {path,target,verb}=offering(step,params);
+      check(id(target)&&id(verb),'Invalid interaction order parameters');
+      validateInteraction(path,target,verb);
+    }
     function transfer(step,order,requestId){
       const get=value=>reference(value,order.params,'param');
       return {from:get(step.from),to:get(step.to),amount:get(step.amount),mode:step.mode??'exact',
@@ -102,6 +117,7 @@
       if(validateTransfer)for(const step of spec.steps)if(step.op==='transfer')checkTransfer(step,params);
       if(validateWork)for(const step of spec.steps)if(step.op==='work')
         validateWork(reference(step.site,params,'param'),step.batch??1);
+      if(validateInteraction)for(const step of spec.steps)if(step.op==='interact')checkInteraction(step,params);
     }
     function checkIssue(args){
       check(keys(args,['agent','generation','mode','order'])&&(args.mode===undefined||modes.includes(args.mode))&&
@@ -235,6 +251,16 @@
         const reason=clearing?'crossing':!ready?'worksite-missing':pending?'prior-batch':report.reason;
         return {row,book:{...book,active:status(entry,ready?'working':'waiting',reason)}};
       }
+      if(step.op==='interact'){
+        const {path,target,verb}=offering(step,entry.params), report=ctx.query.probe(path,undefined,{target,verb}).value;
+        if(report?.position&&K.V.dist(agent.position,report.position)>report.range+1e-8){
+          const moved=movement.move(agent,report.position,entry,report.range);
+          return {row:moved.agent,book:{...book,active:status(entry,moved.phase??'moving',moved.reason??null)}};
+        }
+        const {agent:row,clearing}=movement.hold(agent,entry.task);
+        const reason=clearing?'crossing':report?.position?null:'target-unavailable';
+        return {row,book:{...book,active:status(entry,reason?'waiting':'interacting',reason)}};
+      }
       const {agent:row,clearing}=movement.hold(agent,entry.task);
       if(clearing)return {row,book:{...book,active:status(entry,'waiting','crossing')}};
       if(step.op==='emit'){
@@ -277,6 +303,19 @@
       return {site:reference(step.site,entry.params,'param'),batch:step.batch??1,rate:step.rate??1,
         agent:agent.id,generation:agent.generation,at:agent.position};
     }
+    function interactionRequest(ctx,agent){
+      const entry=agent.orders?.active;
+      if(entry?.phase!=='interacting'||entry.timeout!==undefined&&entry.elapsed>=entry.timeout||
+        entry.reservation&&claim(ctx,agent,entry)?.status!=='held')return;
+      return {...offering(catalog.get(entry.task).steps[entry.step],entry.params),sequence:entry.sequence,step:entry.step,
+        agent:agent.id,generation:agent.generation};
+    }
+    function receiveInteraction(agent,outcome,ctx){
+      const book=agent.orders, entry=book.active;
+      return outcome.status==='completed'?completed(book,entry,{op:'interact',attempt:outcome.id,
+        target:outcome.target,verb:outcome.verb},agent,ctx):
+        finish({...book,active:null},entry,'failed',outcome.reason,agent,ctx);
+    }
     function receive(agent,receipt,ctx){
       const book=agent.orders, entry=book.active, result={op:'transfer',receipt,tick:ctx.tick};
       return receipt.status==='blocked'?
@@ -312,12 +351,17 @@
           (row.phase==='succeeded'?row.step===steps.length:row.step<steps.length)&&
           (row.phase!=='settling'||steps[row.step].op==='transfer')&&
           (row.phase!=='working'||steps[row.step].op==='work')&&
+          (row.phase!=='interacting'||steps[row.step].op==='interact')&&
           row.results.length===row.step+Number(blockedTransfer)&&row.results.every((result,i)=>{
             if(!record(result)||!tick(result.tick)||result.op!==steps[i]?.op)return false;
             if(result.op==='move')return vector(result.at);
             if(result.op==='emit')return result.kind===steps[i].kind;
             if(result.op==='work')return result.site===reference(steps[i].site,row.params,'param')&&
               result.batch===(steps[i].batch??1);
+            if(result.op==='interact'){
+              const {target,verb}=offering(steps[i],row.params);
+              return W.targetedInteractions.validToken(result.attempt)&&result.target===target&&result.verb===verb;
+            }
             if(result.op!=='transfer')return true;
             const request=transfer(steps[i],row), receipt=result.receipt;
             return record(receipt)&&receipt.tick===result.tick&&receipt.from===request.from&&receipt.to===request.to&&
@@ -339,6 +383,14 @@
       for(const row of book.outcomes)entry(row,true);
     }
     return {checkIssue,checkCancel,issue,cancel,advance,validate,pending,receive,claim,transferBlocker,workRequest,
+      hasInteractions:interactions.length>0,interactionRequest,receiveInteraction,
+      checkInteractions(validate){
+        validateInteraction=validate;
+        for(const step of interactions){
+          if(id(step.target)&&id(step.verb))checkInteraction(step,{});
+          else validate(step.system+'/offering');
+        }
+      },
       checkWork(validate){
         validateWork=validate;
         for(const step of staticWork)validate(step.site,step.batch??1);

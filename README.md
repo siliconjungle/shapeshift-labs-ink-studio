@@ -709,6 +709,10 @@ sample withdrawal.
 
 [Headless worlds](docs/headless-worlds.md) adds declarative simulation scenes,
 shared world queries, timed actions, checkpoints, replay and branch comparison.
+[System contracts](docs/headless-worlds.md#compose-system-contracts) expose
+typed connections, state reads, event kinds, and execution dependencies.
+[Spatial field coupling](docs/headless-worlds.md#spatial-field-coupling) shares
+neighborhood values and gradients with solvers and entity queries.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
@@ -782,6 +786,7 @@ Common rendering controls:
 | `--px 2` | Use two screen pixels per art pixel. In `compare` and `review`, `--px` specifies the scale of the reference. |
 | `--tone stipple\|off` | Enable the stipple preset or turn off the scene's tone settings. |
 | `--ink off`, `--effects off` | Disable authored selective ink or art-pixel effects. |
+| `--emissive-finishes off` | Disable authored emissive cores, shaped spill, and size-aware glow. |
 | `--snap`, `--dither-space screen\|world\|object`, `--resolve native\|coverage\|clusters` | Configure camera snapping, dither coordinates, and pixel resolve. Use `--stable off` to disable the scene's stability profile. |
 | `--splat-order center\|surface` | Choose global center ordering or local ordering using the sampled surface plane. |
 | `--stable-transparency on\|off` | Stabilize close translucent layers through camera motion. |

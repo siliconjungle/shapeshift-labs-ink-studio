@@ -56,6 +56,7 @@ const LightSchedule = require('../src/light-schedule.js');
 const LiveSun = require('./live-sun.js');
 const ProbeLighting = require('./bounce-probes.js');
 const AreaLights = require('../src/area-lights.js');
+const EmissiveFinishes = require('../src/emissive-finishes.js');
 const AreaRaster = require('./area-lights.js');
 const surfaceShading = require('./surface-shading.js');
 const SceneOptics = require('../src/scene-optics.js');
@@ -122,6 +123,7 @@ const edgeCoverageThreshold = .03;
 const afterimageRows = Symbol('afterimage rows');
 const reconstructionSource = Symbol('reconstruction source');
 const captureCamera = Symbol('rendered camera');
+const scopedGlowPass = Symbol('emissive glow pass');
 const probeCamera = Symbol('reflection probe camera');
 const probeCaptures = Symbol('reflection probe captures');
 
@@ -289,7 +291,11 @@ function renderFrame(world, o, preparedPalettes) {
     o.effectPalettes === true ? look.effectPalettes : o.effectPalettes ?? look.effectPalettes, world.pal
   ) : !o.raw && !o.captureCoverage ? o.effectPaletteCapture : null;
   const ink = styled ? ArtInk.prepare(o.ink ?? look.ink, world.pal) : null;
+  const emissive = EmissiveFinishes.bind(EmissiveFinishes.prepare(
+    o.emissiveFinishes ?? world.emissiveFinishes, world.pal), world);
   const effects = styled ? ArtEffects.prepare(o.artEffects ?? look.effects, world.pal) : null;
+  const trackGlow = o[scopedGlowPass] || styled &&
+    emissive?.profiles.some(profile => profile.glow?.strength || profile.glow !== undefined && effects?.halo);
   const stable = ArtStability.prepare(look.stable, o.stable);
   const specializedResolve = legacyLook && stable && stable.resolve !== 'native';
   const anchoring = !o.raw && !o.captureCoverage && !!stable?.anchorSpaces.size;
@@ -300,6 +306,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (styled && stages?.postMask) {
     for (const channel of ['position', 'objectPosition', 'normal']) passSelection.add(channel);
   }
+  if (trackGlow) for (const channel of ['depth','emissionDepth']) passSelection.add(channel);
   if (effects) for (const channel of ArtEffects.channels) passSelection.add(channel);
   if (effects?.smear && o.artHistory) passSelection.add('emissionMotion');
   if (ink) for (const channel of ArtInk.channels) passSelection.add(channel);
@@ -322,8 +329,12 @@ function renderFrame(world, o, preparedPalettes) {
   const finishLook = (frame, passes, fog, effectSignals, source) => {
     if (ink) frame = ArtInk.apply(frame, passes, ink, world.pal, fog);
     if (effects) frame = ArtEffects.apply(frame, passes, effects, t, {
-      history: o.artHistory, world: o[reconstructionSource] ?? world, palette: world.pal, motionReference: frame.motionReference
+      history: o.artHistory, world: o[reconstructionSource] ?? world, palette: world.pal, motionReference: frame.motionReference,
+      haloSource: passes.scopedEmission && (p => emissive.profiles[passes.scopedEmission.slots[p]-1]?.glow === undefined)
     });
+    if (styled && trackGlow && passes.scopedEmission && emissive.profiles.some(profile => profile.glow?.strength)) {
+      frame = ArtEffects.paletteUse(EmissiveFinishes.applyGlow(frame, passes, emissive.profiles), world.pal);
+    }
     const ditherAt = anchoring ? (x,y) => ArtStability.ditherCoordinates(stable, passes, y*frame.w+x, x, y) : undefined;
     if (styled && stages?.post) RenderStages.finish(frame, stages, passes, t, lookPass?.post, audit, ditherAt);
     if (effectSignals) {
@@ -375,7 +386,7 @@ function renderFrame(world, o, preparedPalettes) {
   const motionFrom = o.motionFrom ?? motionFrame?.motionReference;
   const captureMotion = !!o.captureMotion || passSelection.has('motion') || passSelection.has('emissionMotion');
   if (legacyLook && (specializedResolve || (o.colored && !tone))) {
-    const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], artInkActive: !!ink,
+    const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], [scopedGlowPass]: trackGlow, artInkActive: !!ink,
       captureMotion, motionFrom, maskGrade: !tone && grade, reflectionTint: effects?.reflection,
       previewPalette: globalPaletteMark, lookAudit: audit,
       effectPaletteCapture: effectPaletteSettings,
@@ -518,7 +529,7 @@ function renderFrame(world, o, preparedPalettes) {
   const centers = captureMotion ? new Float32Array(N * 2).fill(NaN) : null;
   const motionReference = centers && { w: W, h: H, centers, ...(birthIds && { birthIds, baseCount, splatSource, emitterSource }) };
   const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' &&
-    !ArtPasses.environment.includes(name)), W, H);
+    !ArtPasses.environment.includes(name)), W, H, trackGlow && emissive?.slots);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
   const reflectPass = environmentPasses?.passes.reflections;
@@ -877,7 +888,8 @@ function renderFrame(world, o, preparedPalettes) {
     sampleFrames(world, t), coverageMode, rayAt, surface?.reveals);
   const optical = world.opticalSplats && OpticalMaterials.frame(world, { view: V, eye, ortho },
     sampleFrames(world, t), { x: X, y: Y, z: Z });
-  const areaLight = areaLights.length && AreaRaster.createLighting(areaLights,world,d,AL);
+  const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, { x:X, y:Y, z:Z, alpha:AL });
+  const areaLight = (areaLights.length || spillLights.length) && AreaRaster.createLighting([...areaLights,...spillLights],world,d,AL);
   const diffuseFrames = (areaLight || probes) && sampleFrames(world,t), diffuseNormals = [];
   function diffuseNormal(i) {
     return diffuseNormals[i] ?? (diffuseNormals[i] = receivesDiffuse(i) && diffuseFrames(i).normal || false);
@@ -1122,7 +1134,8 @@ function renderFrame(world, o, preparedPalettes) {
       const shaded=value+(fog[c]-value)*fogMix;
       return ink ? shaded+(cutaway.edge.color[c]-shaded)*ink : shaded;
     });
-    return [i,z,dn,alpha,...rgb,alpha>=.5,false,highlight,paletteId,false,false,alpha<.5,false,undefined,z,sprite,fogMix,
+    return [i,z,dn,alpha,...rgb,!sprite.effect&&alpha>=.5,false,highlight,paletteId,false,false,
+      Boolean(sprite.effect)||alpha<.5,false,undefined,z,sprite,fogMix,
       rule,reflected,false,1,ink>0];
   }
   function playSprites(through,queued) {
@@ -1234,6 +1247,8 @@ function renderFrame(world, o, preparedPalettes) {
       g *= 1 - 0.38 * wet[i];
       b *= 1 - 0.3 * wet[i];
     }
+    const core = emissive?.profiles[emissive.slots[i]-1]?.core;
+    if (core) [r,g,b] = EmissiveFinishes.coreRgb(core, r,g,b);
     const hasSurface = surface?.has(i);
     const emits = art && (flags & 2) !== 0 && !world.renderMetadata?.muteEmission?.[i];
     const automatic = kind === LightSchedule.emissionKind && d[q + 15] === LightSchedule.emissionMarker;

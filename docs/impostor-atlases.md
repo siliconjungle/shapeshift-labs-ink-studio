@@ -119,3 +119,65 @@ ink-studio clip examples/painted-scenery.js --from 0 --to 5.6 --fps 10 \
 ink-studio render examples/painted-scenery.js --t 3.2 --params '{"depth":false}' \
   --w 224 --h 152 --px 1 --out flattened.png
 ```
+
+## Hand-edited animation cels
+
+Bake the directional atlas as usual. Crop the view you want to paint from
+`color.png` using its `rect` in `atlas.json`. Save your painted RGBA tile
+outside the bake directory. The tile keeps the baked dimensions and
+alignment, including any transparent margin around the original sprite.
+Keep the edits in a separate JSON file so you can rebake the 3D animation
+without overwriting the paint.
+
+```json
+{
+  "poses": { "reach": 5, "brace": 6 },
+  "replacements": [
+    { "frame": "reach", "direction": 0, "effectDepth": -0.30, "files": { "effect": "sleeve-smear.png" } },
+    { "frame": "brace", "direction": 0, "files": { "color": "brace.png" } }
+  ],
+  "holds": [
+    { "frame": "brace", "direction": 0, "frames": 2 }
+  ]
+}
+```
+
+- `frame` accepts a baked frame number or a name from `poses`. Each
+  replacement must select exactly one view. Add `pitch` in radians if the
+  bake contains the same direction at multiple elevations.
+- A hold displays the named frame for the specified number of consecutive
+  baked frames, counting the source frame. A hold can target selected views
+  or omit `direction` and `pitch` to cover all views. It changes the displayed
+  cel while scene time, camera motion, and other animations advance.
+- Replacing `color` inherits the baked pivot, scale, and per-texel depth,
+  normal, and emission. You can supply aligned `depth`, `normal`, or
+  `emission` PNGs using the same encodings as the atlas. Paint outside the
+  original alpha requires an authored depth texel or a numeric
+  `extensionDepth` in scene units relative to the pivot plane.
+- An optional `effect` PNG can paint outside the silhouette. It is a
+  separate color layer that participates in sorting without writing depth.
+  Use `effectDepth` to place it relative to the pivot plane. Negative offsets
+  place paint toward the viewer.
+
+To load the edits from a scene, reference them with `"cels": "edits.json"`
+in `atlas.json`. The patch PNG paths are relative to the sidecar. In Node
+you can pass `{ cels: '/path/to/edits.json' }` to `readSpriteAtlas`. For
+an in-memory atlas use the same `metadata.cels` structure, with decoded RGBA
+tiles in `images` instead of paths in `files`.
+
+Set `playback: 'once'` or `playback: 'loop'` on a placement to sample the
+baked timing from the scene clock. Elapsed time starts at the first frame.
+Existing explicit `frame` controls can also select edited or held frames.
+The Node renderer and CLI support cel edits on card and impostor atlases.
+
+```sh
+ink-studio clip my-scene.json --sprite-atlas path/to/atlas.json \
+  --sprite-cels path/to/edits.json --sprite-playback once
+ink-studio clip examples/lantern-catch.js --from 0 --to 1.65 --fps 24 \
+  --w 192 --h 140 --px 1 --out lantern-catch.png
+```
+
+[Lantern catch](../examples/lantern-catch.js) bakes a roughly 32-pixel
+character, paints its catch sleeve and holds the braced pose for two frames
+while the swinging lantern and camera keep moving. Use `--params
+'{"edited":false}'` for the original bake.

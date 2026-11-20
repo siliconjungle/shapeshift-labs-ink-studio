@@ -410,9 +410,12 @@ function spriteAtlasOption() {
   if (value==='off') return false;
   if (value==='on' || value===true) return true;
   if (!inputSpriteAtlas) {
-    const atlas=require('./sprite-atlas.js').readSpriteAtlas(path.resolve(value));
+    const edits=opt['sprite-cels'];
+    if (edits!==undefined&&typeof edits!=='string') die('--sprite-cels needs a JSON path or off');
+    const atlas=require('./sprite-atlas.js').readSpriteAtlas(path.resolve(value),
+      { cels: edits==='off'?false:edits&&path.resolve(edits) });
     inputSpriteAtlas=[lib().KIT.sprite.placeAtlas({
-      atlas,at:opt['sprite-at']?list('sprite-at'):[0,0,0],scale:num('sprite-scale',1)
+      atlas,at:opt['sprite-at']?list('sprite-at'):[0,0,0],scale:num('sprite-scale',1),playback:opt['sprite-playback']
     })];
   }
   return inputSpriteAtlas;
@@ -642,6 +645,7 @@ const view = extra =>
       horizonBands: horizonOption(),
       effectPalettes: effectPalettesOption(),
       artEffects: opt.effects === 'off' ? false : opt.effects,
+      emissiveFinishes: onOffOption('emissive-finishes') === false ? false : undefined,
       ink: opt.ink === 'off' ? false : opt.ink,
       tone: opt.tone === 'off' ? false : opt.tone,
       paletteRemap: opt['palette-remap'] === 'off' ? false : undefined,
@@ -789,6 +793,7 @@ const CMD = {
         '    scene sync-prefab <release.json> <world ...> --out NEW_DIRECTORY | --dry-run',
         '    scene apply <scene> <edits.json> --dry-run   preview edited paths and look targets',
         '  sim run|resume|fork|reset|replay|scrub|take|diff|sweep|render ...  run or compare fixed-tick simulations',
+        '    sim plan <world|checkpoint|recording>  report system contracts and the resolved execution order',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',
         '    sim run <world> --record file.json [--trace-steps [N]]   retain actual solver inputs and state for debugging',
         '    sim diff <run|world> [<run|world>] --first [--from N] [--ticks N]   locate the first divergence',
@@ -904,13 +909,14 @@ const CMD = {
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
         'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery',
+        '                --sprite-cels edits.json|off --sprite-playback once|loop',
         'shaped fog options: --shaped-atmosphere on|off|file.json --volume-cutouts on|off|file.json',
         'fog lighting options: --volume-local-lights on|off --volume-local-shadows on|off',
         'silhouette protection: --silhouette-protection on|off|file.json',
         'layered horizon: --horizon-bands on|off|file.json',
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'effect palette options: --effect-palettes on|off|file.json',
-        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
+        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
   },

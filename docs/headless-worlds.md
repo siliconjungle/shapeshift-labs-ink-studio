@@ -19,6 +19,9 @@ from explicit inputs, or hold its state in a checkpoint while sleeping.
 [Deterministic simulation workers](simulation-workers.md) run independent
 system steps on Node threads. A checkpoint can move between worker counts.
 
+[Composable system contracts](#compose-system-contracts) declare shared
+state reads, emitted events, and same-phase dependencies.
+
 [Shared simulation checkpoints](simulation-checkpoints.md) let branches
 reuse immutable state in process and content-addressed blocks on disk.
 
@@ -29,6 +32,9 @@ local snapshots and bounded changes against an applied cursor.
 
 [Batch spatial queries](batch-spatial-queries.md) find nearby agents,
 test free space, and discover usable sockets on the same snapshot.
+
+[Spatial field coupling](#spatial-field-coupling) lets solvers respond to
+neighboring heat, depth, wind, pressure, and other numeric fields.
 
 [Incremental navigation tiles](navigation-tiles.md) share walking
 routes and recompute crossings affected by local changes.
@@ -47,6 +53,9 @@ destinations, per-member slots, and rally points beyond narrow passages.
 
 [Faction perception](faction-perception.md) batches sight, hearing, and
 proximity queries and saves each faction's dated observations with the world.
+
+[Targeted interactions](targeted-interactions.md) give orders and direct
+actions shared range, access, duration, and effects.
 
 [First-divergence debugging](first-divergence.md) compares timelines
 tick by tick and reports actual inputs and changed state paths.
@@ -223,6 +232,42 @@ In a mechanics system, a force of kind `sail` samples a vector wind
 field, takes the apparent wind along the sail's local `axis`, and
 applies a two-sided pressure force. Set `field` to the field name and
 `units` to the expected velocity unit (default `world/s`).
+
+### Spatial field coupling
+
+`query.neighborhood(field, at, options)` reads a spatial field around
+an XYZ point, entity, or entity socket on the same query snapshot.
+It samples the origin and one point in each direction along each
+chosen world axis. The origin and neighbors carry equal weight.
+
+| Option | Meaning |
+| --- | --- |
+| `radius` | Offset in world units. The default of zero reads only the origin. |
+| `axes` | Axes to sample, such as `xz` for a horizontal neighborhood. Defaults to `xyz`. |
+| `operation` | `mean` for scalars and vectors, or `min`, `max`, and `gradient` for scalars. A gradient needs a positive radius and returns an XYZ vector in source units per world unit. |
+| `missing` | `skip` uses available samples and allows one-sided differences at a boundary. `strict` requires the full stencil. A gradient always needs two valid positions per selected axis. |
+| `explain` | Include the source field, sample points, statuses, and measured values. |
+
+Use `world/neighborhood` with the CLI's `probe` command. Pass `field`
+and the options in `--args`, and select the origin with `--at`,
+`--entity`, or `--entity` and `--socket`.
+
+To bind a neighborhood to other systems, add a `field-coupling` system.
+Each entry in `config.fields` supplies `source`, optional world XYZ
+`bounds`, and the same stencil options. Its `type` and `units` describe
+the source and default to `number` and `null`. For a `vec2` source,
+set `components` to its component axes when they differ from `xz`.
+The result is a regular spatial field with its own name and query
+provenance. A thermal water solver can bind it as `ambientField`,
+ventilation can use it as `windField`, and a sail can use it as its
+force field. Multiple channels can reuse one source or form a chain.
+
+The runtime checks source types and units and rejects cyclic or
+oversized chains. When providers declare a spatial write, the dirty
+area expands by each dependent stencil's reach and clips to the
+channel's bounds at the same invalidation boundary. Sampling follows
+the existing phase snapshot rules. Solvers that require conservative
+resource exchange can use the transfer accounts below.
 
 ## Conservative transfers between systems
 
@@ -1518,6 +1563,39 @@ then update those entities and their attachments between snapshots. A provider
 with only `pose` uses the per-snapshot index.
 Load custom factories through the CLI's existing `ink-studio.config.js`
 `load` hook when reading their checkpoints in a separate process.
+
+### Compose system contracts
+
+A factory can return a `contract`, and a world can set
+`systems.<id>.contract` for an individual instance. The instance overrides
+reads by alias, adds prerequisites from `after`, and replaces the event list
+when it supplies `emits`. Use `{$local: 'systemId'}` for references inside a
+prefab. Each system owns the state returned by its hooks, publishes typed
+`outputs` and reads connected `inputs`. Spatial field declarations keep
+their existing invalidation and snapshot rules.
+
+| Contract property | Effect |
+| --- | --- |
+| `reads` | Map a local alias to a system ID or to `{system, sample}`. Use `ctx.read(alias)` in `step` and `output` to retrieve immutable peer state. |
+| `after` | List prerequisite system IDs. When both solvers are due in a phase, the prerequisites step and publish first. |
+| `emits` | List event kinds the system may pass to `ctx.emit` during a tick. An empty list disallows emits. Omit it to leave emits unrestricted. Use typed `event` outputs to feed events to another system. |
+
+`sample: 'previous'` is the default. It reads the phase-start snapshot, so
+feedback across systems can use it without forming a schedule cycle.
+`sample: 'current'` reads the source's completed state in the same phase
+and adds a scheduling dependency. At initialization or when the source
+is idle, it reads the available snapshot. Established query and
+`ctx.states` reads still use the phase snapshot. Post-step observers run
+after solver phases. Missing peers, self-dependencies, and cycles across
+current reads, explicit prerequisites, and immediate signal wires are
+rejected during validation.
+
+`run.composition()` reports the order, state aliases, typed ports, spatial
+reads and writes, event declarations, same-phase dependencies, and connection
+sampling policies. The CLI exposes the same report as
+`ink-studio sim plan <world|checkpoint|recording>`. A system with declared
+peer state reads runs on the host. Worker systems can continue to exchange
+typed signals and use `after` to order their steps.
 
 Rill's revision and spatial lookup contracts inspired the query snapshots and
 stable selectors. Frontier's path edits and Ink's state/action/query separation

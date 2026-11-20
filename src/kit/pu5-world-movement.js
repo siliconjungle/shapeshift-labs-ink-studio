@@ -635,6 +635,25 @@
         return packed(draft.finish(),state.contacts,state.decisions,state.routeWork,state.crowd,state.formations);
       }
     }),
+    ...(orders?.hasInteractions&&{orderInteractions:{
+      check:orders.checkInteractions,
+      *rows(state,ctx){
+        const roster=S.get(state);
+        for(const slot of S.order(roster)){
+          if(roster.pages[slot.p].details[slot.i].orders?.active?.phase!=='interacting')continue;
+          const request=orders.interactionRequest(ctx,S.read(roster,slot));
+          if(request)yield request;
+        }
+      },
+      receive(state,{actor,sequence,step},outcome,ctx){
+        const roster=S.get(state), slot=S.find(roster,actor.id), row=slot&&S.read(roster,slot);
+        check(row?.generation===actor.generation&&row.orders?.active?.sequence===sequence&&
+          row.orders.active.step===step,'Interaction result does not match the active order');
+        const draft=S.edit(roster);
+        draft.update(slot,row,{...row,orders:orders.receiveInteraction(row,outcome,ctx)});
+        return packed(draft.finish(),state.contacts,state.decisions,state.routeWork,state.crowd,state.formations);
+      }
+    }}),
     ...((config.surface!==undefined||policy||orders)&&{checkFields(query){
       if(config.surface!==undefined)W.materials.checkSurface(query,config.surface);
       policy?.checkFields(query);

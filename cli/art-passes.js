@@ -1,4 +1,5 @@
 const ArtPasses = require('../src/art-passes.js');
+const EmissiveFinishes = require('../src/emissive-finishes.js');
 const { surfacePoint } = require('./scene-optics.js');
 
 const SplatFrames = require('../src/splat-frames.js');
@@ -8,14 +9,16 @@ function sampleFrames(world, time) {
   return SplatFrames.create(world, time, matrices);
 }
 
-function createArtPasses(request, w, h) {
+function createArtPasses(request, w, h, emissiveSlots) {
   const selected = new Set(ArtPasses.select(request));
   if (!selected.size) return null;
   const size = w * h;
   const coverage = selected.has('coverage') ? new Float32Array(size) : null;
   const emission = selected.has('emission') ? new Float32Array(size * 3) : null;
   const emissionOwner = selected.has('emissionMotion') ? new Int32Array(size).fill(-1) : null;
-  const emissionDepth = selected.has('emissionDepth') || emissionOwner ? new Float32Array(size).fill(Infinity) : null;
+  const scopedOwners = emissiveSlots && new Uint8Array(size);
+  const scopedCoverage = emissiveSlots && new Float32Array(size);
+  const emissionDepth = selected.has('emissionDepth') || emissionOwner || scopedOwners ? new Float32Array(size).fill(Infinity) : null;
   const needsOwner = [...selected].some(channel => !['emission', 'emissionDepth', 'emissionMotion', 'coverage', 'protected'].includes(channel));
   const owner = needsOwner ? new Int32Array(size).fill(-1) : null;
   const depth = needsOwner ? new Float32Array(size).fill(Infinity) : null;
@@ -31,6 +34,19 @@ function createArtPasses(request, w, h) {
         emission[j] = ArtPasses.over(tint ? tint[0] : emits ? r : 0, emission[j], a);
         emission[j + 1] = ArtPasses.over(tint ? tint[1] : emits ? g : 0, emission[j + 1], a);
         emission[j + 2] = ArtPasses.over(tint ? tint[2] : emits ? b : 0, emission[j + 2], a);
+      }
+    }
+    if (scopedOwners && z <= emissionDepth[p]) {
+      if (emits && a > .03) {
+        const slot = emissiveSlots[i] || EmissiveFinishes.unscoped;
+        scopedCoverage[p] = slot === scopedOwners[p] ? ArtPasses.over(1, scopedCoverage[p], a) : a;
+        scopedOwners[p] = slot;
+      } else if (!emits && scopedCoverage[p]) {
+        scopedCoverage[p] *= 1-a;
+        if (scopedCoverage[p] <= .03) {
+          scopedOwners[p] = 0;
+          scopedCoverage[p] = 0;
+        }
       }
     }
     if (emissionDepth && a > .03) {
@@ -56,6 +72,7 @@ function createArtPasses(request, w, h) {
     if (emission) emission.fill(0, p * 3, p * 3 + 3);
     if (emissionDepth) emissionDepth[p] = Infinity;
     if (emissionOwner) emissionOwner[p] = -1;
+    if (scopedOwners) scopedOwners[p] = scopedCoverage[p] = 0;
     if (owner) {
       owner[p] = i;
       depth[p] = z;
@@ -72,6 +89,7 @@ function createArtPasses(request, w, h) {
     const result = { w, h };
     if (coverage) result.coverage = topDown(coverage, 1);
     if (emission) result.emission = topDown(emission, 3);
+    if (scopedOwners) result.scopedEmission = { slots:topDown(scopedOwners,1), coverage:topDown(scopedCoverage,1) };
     if (selected.has('emissionDepth')) result.emissionDepth = topDown(emissionDepth, 1);
     if (selected.has('protected')) {
       const { detail, sprM, surfaceGlint } = geometry;

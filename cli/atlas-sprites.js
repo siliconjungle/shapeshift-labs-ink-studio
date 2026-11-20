@@ -25,6 +25,13 @@ function rasterize(placements, settings) {
     return [W*.5+scale*(V[0]*x+V[4]*y+V[8]*z+V[12]),
       H*.5+scale*(V[1]*x+V[5]*y+V[9]*z+V[13]),depth];
   };
+  const effectColor=[0,0,0];
+  function fragmentAt(ray, hit) {
+    const z=hit*ray.axial;
+    if (z<near) return null;
+    const position=ray.origin.map((n,i)=>n+hit*ray.direction[i]);
+    return clip&&!clip(position)?null:{z,position};
+  }
   const sample={ color:[0,0,0],normal:[0,0,0],emission:[0,0,0] };
   for (const placement of placements) {
     const {atlas,opacity}=placement, mode=override??placement.mode;
@@ -36,8 +43,9 @@ function rasterize(placements, settings) {
     const direction=ortho?viewForward:unit(eye.map((n,i)=>n-at[i]));
     if (!direction||(!fixed&&project(at)[2]<near)) continue;
     const rotation=basis(placement.yaw,0);
-    const frame=typeof placement.frame==='function'?placement.frame(time):placement.frame;
+    const frame=typeof placement.frame==='function'?placement.frame(time):placement.frame??placement.frameAt?.(time);
     const tile=atlas.select(frame,mode,local(rotation,direction));
+    const effect=atlas.effect?.(tile);
     const normalAxes=basis(tile.yaw+placement.yaw,tile.pitch);
     const axes=fixed?normalAxes:basis(...heading(direction));
     const units=tile.unitsPerPixel*placement.scale;
@@ -64,29 +72,37 @@ function rasterize(placements, settings) {
         const uAt=px+(dot(origin,axes.right)+plane*dot(ray.direction,axes.right))/units;
         const vAt=py-(dot(origin,axes.up)+plane*dot(ray.direction,axes.up))/units;
         const u=Math.floor(uAt), v=Math.floor(vAt);
-        if (u<u0||u>=u1||v<v0||v>=v1||!atlas.sample(tile,u,v,placement,sample,id)) continue;
-        const hit=fixed?plane:plane+placement.scale*sample.depth/facing, z=hit*ray.axial;
-        if (z<near) continue;
-        const position=ray.origin.map((n,i)=>n+hit*ray.direction[i]);
-        if (clip&&!clip(position)) continue;
-        let normal;
-        if (sample.hasNormal) {
-          if (mode==='card') {
-            const inView=atlas.normalSpace==='view'?sample.normal:local(tile.basis,sample.normal);
-            normal=unit(combine(axes,inView));
-          } else normal=unit(combine(atlas.normalSpace==='view'?normalAxes:rotation,sample.normal));
+        if (u<u0||u>=u1||v<v0||v>=v1) continue;
+        const p=y*W+x;
+        if (atlas.sample(tile,u,v,placement,sample,id)) {
+          const hit=fragmentAt(ray,fixed?plane:plane+placement.scale*sample.depth/facing);
+          if (hit) {
+            const {position}=hit;
+            let normal;
+            if (sample.hasNormal) {
+              if (mode==='card') {
+                const inView=atlas.normalSpace==='view'?sample.normal:local(tile.basis,sample.normal);
+                normal=unit(combine(axes,inView));
+              } else normal=unit(combine(atlas.normalSpace==='view'?normalAxes:rotation,sample.normal));
+            }
+            const gain=sun&&normal&&placement.lighting ?
+              sun.ambient+sun.intensity*Math.max(0,dot(normal,sun.direction))*(visibility?.(position,normal)??1) : 1;
+            const emission=sample.hasEmission?sample.emission.slice():null;
+            const color=sample.color.map((value,c)=>{
+              const glow=emission?.[c]??0;
+              if (atlas.emissionMode==='add') return clamp(value*gain+glow,0,1);
+              return gain===1 ? value : clamp(Math.max(0,value-glow)*gain+glow,0,1);
+            });
+            results.push({p,...hit,alpha:sample.alpha*opacity,color,normal,emission,protection,
+              objectPosition:local(rotation,position.map((n,i)=>(n-at[i])/placement.scale)),
+              ...(objectDither && mode==='card' && { patternPosition:[(uAt-px)*tile.unitsPerPixel,(py-vAt)*tile.unitsPerPixel,0] })});
+          }
         }
-        const gain=sun&&normal&&placement.lighting ?
-          sun.ambient+sun.intensity*Math.max(0,dot(normal,sun.direction))*(visibility?.(position,normal)??1) : 1;
-        const emission=sample.hasEmission?sample.emission.slice():null;
-        const color=sample.color.map((value,c)=>{
-          const glow=emission?.[c]??0;
-          if (atlas.emissionMode==='add') return clamp(value*gain+glow,0,1);
-          return gain===1 ? value : clamp(Math.max(0,value-glow)*gain+glow,0,1);
-        });
-        results.push({p:y*W+x,z,alpha:sample.alpha*opacity,color,normal,position,emission,protection,
-          objectPosition:local(rotation,position.map((n,i)=>(n-at[i])/placement.scale)),
-          ...(objectDither && mode==='card' && { patternPosition:[(uAt-px)*tile.unitsPerPixel,(py-vAt)*tile.unitsPerPixel,0] })});
+        const alpha=effect?.sample(u,v,effectColor);
+        if (alpha) {
+          const hit=fragmentAt(ray,plane+(placement.depth?placement.scale*effect.depth/facing:0));
+          if (hit) results.push({p,...hit,alpha:alpha*opacity,color:effectColor.slice(),protection,effect:true});
+        }
       }
     }
   }

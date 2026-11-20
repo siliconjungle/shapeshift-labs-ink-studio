@@ -24,6 +24,7 @@ step runs, so an order can follow a relocated destination.
 | `wait` | `ticks`, a query condition, or both. A query condition uses `field`, optional `at` and `args`, and `when` in the same format as [scenario conditions](headless-worlds.md#query-a-revision). The default sample location is the agent. |
 | `transfer` | `from`, `to`, and `amount` use literals or `{"param":"name"}`. The world transfer ledger validates resource, type, and units and records the actual receipt. `mode` defaults to `exact`. Use `partial` to accept a nonzero partial delivery. A blocked transfer fails the order with the receipt. |
 | `emit` | `kind` and optional `data` publish a world event with the order, target bindings, and agent position. Add a later `wait` step if the task should verify an outcome from another system. |
+| `interact` | `system`, `target`, and `verb` select a [targeted interaction](targeted-interactions.md). The agent approaches the live target and waits for the attempt to settle. The target and verb can use parameter slots. |
 
 An order can have an optional `timeout` in execution ticks. The timeout
 and elapsed waits pause while interrupted, sleeping, or in cohort LOD.

@@ -463,6 +463,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         finish(run,input.store);
         break;
       }
+      case 'plan': return respond(runtime(load(file)).composition());
       case 'dependencies': return dependencyReport(file);
       case 'scrub': return scrubSimulation(file);
       case 'take': return captureTake(file);
@@ -560,7 +561,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         shot?.finish(output,{suffixes});
         break;
       }
-      default: throw Error('Use sim run|resume|fork|reset|replay|scrub|take|diff|sweep|render|dependencies|regions|regions-apply');
+      default: throw Error('Use sim run|resume|fork|reset|replay|scrub|take|diff|sweep|render|plan|dependencies|regions|regions-apply');
     }
   }
   function applyEdits(input, edits, { dryRun = false } = {}) {

@@ -236,6 +236,10 @@
       } } }),
       position:{type:'vec3',units:'world',read:({target:site}) => site.point ? ok(site.point) : missing('point or entity required')},
       'spatial-batch':{type:'record',selector:true,qualified:true,read:({args})=>ok(spatialBatch(args))},
+      neighborhood:{type:'record',selector:true,qualified:true,read:({target:site,args})=>{
+        const {field:name,...options}=args;
+        return neighborhood(name,site,options);
+      }},
       history:{type:'records',read:({args}) => {
         const {after=-1e15,before=tick,entity,where,limit=history.length}=args;
         check(Number.isSafeInteger(after)&&Number.isSafeInteger(before)&&before>=after&&Number.isSafeInteger(limit)&&limit>=0,
@@ -360,6 +364,16 @@
         return sample.status === 'ok' ? sample.value : fallback;
       };
     }
+    function neighborhood(name,site,options) {
+      const descriptor=field(name), spatial=W.spatialNeighborhood;
+      check(descriptor?.spatial,'Unknown or non-spatial field '+name);
+      const stencil=spatial.prepare(options);
+      const {type,units}=spatial.output(descriptor.type,descriptor.units,stencil);
+      const point=target(site)?.point;
+      const result=point?spatial.sample(api,descriptor.name,point,stencil,descriptor.type):
+        missing('Neighborhood needs a point or a known entity or socket','missing');
+      return freeze({...result,type,units});
+    }
     function describe(map) {
       return [...map].map(([name,item]) => ({name,...item.description}));
     }
@@ -420,7 +434,7 @@
         ...(description?.spatial && {type:description.type,spatial:description.spatial}),
         ...(grid ? {grid} : {}),samples:points.map(point => ({point,...api.probe(field,point,args)}))};
     }
-    const api = Object.freeze({inspect,spatial,spatialBatch,anyAgent:(...args)=>occupancy().anyAgent(...args),target,frame:fieldFrame,field,sampler,navigation,navigationSource,
+    const api = Object.freeze({inspect,spatial,spatialBatch,anyAgent:(...args)=>occupancy().anyAgent(...args),target,frame:fieldFrame,field,sampler,neighborhood,navigation,navigationSource,
       simulationClock:name=>view.simulationChunks?.clocks[name],
       renderVolume:name=>own(systems,name)?systems[name].volumeFrame?.(states[name]):null,
       renderWater:name=>own(systems,name)?systems[name].waterFrame?.(states[name]):null,

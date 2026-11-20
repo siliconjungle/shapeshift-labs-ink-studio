@@ -414,6 +414,11 @@
       bad('finish.celestialTracks', error.message);
     }
     try {
+      EmissiveFinishes.prepare(st.finish.emissiveFinishes, st.palette);
+    } catch (error) {
+      bad('finish.emissiveFinishes', error.message);
+    }
+    try {
       AreaLights.prepare(st.finish.areaLights);
     } catch (error) {
       bad('finish.areaLights', error.message);
@@ -1343,7 +1348,8 @@
     const { detailBudgets, shadowArt } = st0.finish.look ?? {};
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
       undefined : { detailBudgets, shadowArt });
-    const keepLightCasters = AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity);
+    const keepLightCasters = AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
+      EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity);
     let S, grp;
     function startSculpt() {
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));

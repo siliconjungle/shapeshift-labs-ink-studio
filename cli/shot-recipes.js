@@ -14,7 +14,7 @@ const fileOptions = new Set([
   'actions','adaptive-sampling','area-lights','art-direction','asset-pack','atmosphere-emitters','authoring','bounce-probes','celestial-tracks','cloud-field',
   'color-stack','composite','contact-shadows','cutaway','edge-filter','effect-palettes','horizon-bands','lightning','look','lut','palette-constraints','plan','precipitation',
   'rain-impacts','relighting','scene-exposure','sdf-assist','shadow-art','shaped-atmosphere','silhouette-protection','sky-environment','sky-transitions',
-  'splat-fields','sprite-atlas','stable','stable-detail','volume-cutouts','weather-binding','wind-field'
+  'splat-fields','sprite-atlas','sprite-cels','stable','stable-detail','volume-cutouts','weather-binding','wind-field'
 ]);
 const omitted = new Set(['recipe','out','fail-on-flags']);
 const fileDigest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');

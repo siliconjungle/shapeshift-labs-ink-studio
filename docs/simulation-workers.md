@@ -27,6 +27,11 @@ exchange. The runner waits for same-phase combinational signals before
 dispatching their consumers. Delayed, sampled, and buffered inputs keep
 their existing meanings.
 
+[System contracts](headless-worlds.md#compose-system-contracts) can also
+declare an `after` dependency. Dispatch waits for its source when both
+systems are due in the phase. Solvers with named peer state reads run on
+the host.
+
 Commands, transfer planning and settlement, query-dependent steps,
 output publication, and scenario evaluation run on the host. The host
 applies returned states, events, and spatial invalidations in the same

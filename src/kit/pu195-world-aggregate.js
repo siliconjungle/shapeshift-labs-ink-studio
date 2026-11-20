@@ -184,7 +184,11 @@
           'Saved representation does not match the active simulation level for '+name);
       }
     }
-    return {view,transition,validate};
+    function readState(name,state){
+      const member=marked(state)&&members.find(row=>row.name===name);
+      return member?member.fine(state):state;
+    }
+    return {view,readState,transition,validate};
   }
 
   const modelSpec=(state,models)=>marked(state)?models?.get(state.level)?.spec:undefined;

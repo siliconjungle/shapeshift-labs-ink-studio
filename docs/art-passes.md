@@ -113,6 +113,32 @@ For trails that follow the camera and a moving object or surface, use [motion-aw
 
 Call `studio.load().ArtEffects.history()` and reuse the result as `artHistory` for consecutive frames of the same view. The CLI creates a history for sheets and animation clips. Call `clear()` after a camera cut. Art effects leave the source emission and geometry passes available for inspection.
 
+## Emissive finishes
+
+Set `finish.emissiveFinishes` in diorama data or pass `emissiveFinishes` to `B.finish` in a JavaScript scene. Match named emitting splats by object or material. Set `glow: true` on a diorama material or `em: true` on a JavaScript sculpt material to make it emissive. The first matching profile owns each emitter. Omit individual sections to use the base emissive appearance, no authored spill, or the scene's existing glow, respectively.
+
+```js
+emissiveFinishes: [{
+  id: 'lantern-light',
+  select: { object: 'lantern-flame' },
+  core: { color: '#fff0b0', strength: 1.2 },
+  spill: { color: '#ff823b', offset: [0, -0.18, 0.24],
+    normal: [0, -1, 0], shape: 'disk', size: [0.3, 0.3], radius: 2.8, intensity: 6 },
+  glow: { color: '#ffc05f', radius: 4, strength: 0.67,
+    small: { belowPixels: 96, radius: 1, strength: 0.45 } }
+}]
+```
+
+- `core` tints and scales the source emission while keeping its coverage. Strength `0` can darken the core while spill and glow still run.
+- `spill` uses an invisible area light. Give it a fixed world-space `at` position or an `offset` from the current center of the selected emitters. Control its shape, direction, falloff, and shadows with the [area light settings](scene-optics.md). For shadow-casting spill in JavaScript sculpts, set `keepRenderSdf: true` before baking. The diorama builder retains the required shadow geometry automatically.
+- `glow` uses visible emission coverage and depth to spread light around the core on the native art grid. It supports `falloff`, source `threshold`, and `depthBias`. Below 96 art pixels on the shorter side it defaults to one art pixel of reach and 68% of the regular strength. Override the cutoff, radius, and strength with `small`, or use `small: false` to keep the same appearance at every size. Set `glow: false` to suppress the scene glow for the selected emitter as well.
+
+Use `--emissive-finishes off` to disable the profiles. `--area-lights off` disables the spill, and `--raw` keeps the core and spill while bypassing the screen glow.
+
+```sh
+node cli/ink-studio.js render examples/emissive-finishes.js --w 322 --h 152 --px 1 --out night-market.png
+```
+
 ## Local splat ordering
 
 Set `look.splatOrder = 'surface'` or pass `--splat-order surface` to sort overlapping fragments by an estimated intersection with each splat's surface plane. `center` uses the ordinary global order. The queue has a configurable `fragmentBudget` and replays the original order if the budget is exceeded. The result sets `orderFallback` in that case.
