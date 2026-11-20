@@ -222,7 +222,8 @@ test('the browser toolkit samples authored source data during a normal WebGL dra
       draw.draw(world, { time: 0 });
       const before = draw.image();
       world.anim.update(1, 1);
-      draw.draw(world, { time: 1 });
+      const changedRows = Array.from(world.anim.rows).flatMap((dirty, row) => dirty ? [row] : []);
+      draw.draw(world, { time: 1, changedRows });
       return { strength: world.parameters.values().signal, changed: draw.image() !== before };
     } finally {
       draw.close();
