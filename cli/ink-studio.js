@@ -98,6 +98,11 @@ function dataScene(file, override, { installedPacks = false } = {}) {
     spec.finish = { ...spec.finish, look: { ...K.diorama.sceneLook(spec), shadowArt: shadowArtOption() } };
   if (!installedPacks && opt['asset-pack'] !== undefined)
     spec.assetPacks = require('./asset-pack.js').install(K.authoring.assetPacks, spec.assetPacks, opt['asset-pack']);
+  const preset = opt['environment-preset'];
+  if (preset !== undefined) {
+    if (typeof preset !== 'string') die('--environment-preset expects a pack/preset ID or off');
+    spec.environmentPreset = preset === 'off' ? false : preset;
+  }
   let prefabs, expanded;
   try {
     if (spec.prefabLibrary !== undefined) {
@@ -142,6 +147,8 @@ function dataScene(file, override, { installedPacks = false } = {}) {
 }
 function scene(id) {
   if (!id) die('which diorama? try: ink-studio scenes');
+  if (opt['environment-preset'] !== undefined && !id.endsWith('.json'))
+    die('--environment-preset selects a preset for a JSON diorama');
   if (/\.(obj|gltf|glb)$/i.test(id)) return meshScene(id);
   if (id.endsWith('.json')) return dataScene(id);
   if (id.endsWith('.js')) return require(path.resolve(id))(lib());
@@ -410,9 +417,12 @@ function spriteAtlasOption() {
   if (value==='off') return false;
   if (value==='on' || value===true) return true;
   if (!inputSpriteAtlas) {
-    const atlas=require('./sprite-atlas.js').readSpriteAtlas(path.resolve(value));
+    const edits=opt['sprite-cels'];
+    if (edits!==undefined&&typeof edits!=='string') die('--sprite-cels needs a JSON path or off');
+    const atlas=require('./sprite-atlas.js').readSpriteAtlas(path.resolve(value),
+      { cels: edits==='off'?false:edits&&path.resolve(edits) });
     inputSpriteAtlas=[lib().KIT.sprite.placeAtlas({
-      atlas,at:opt['sprite-at']?list('sprite-at'):[0,0,0],scale:num('sprite-scale',1)
+      atlas,at:opt['sprite-at']?list('sprite-at'):[0,0,0],scale:num('sprite-scale',1),playback:opt['sprite-playback']
     })];
   }
   return inputSpriteAtlas;
@@ -769,6 +779,7 @@ const CMD = {
         'ink-studio <command> <diorama id | lab/file.js> [options]',
         '',
         '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
+        '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
         '  environment inspect <scene|run> --at x,y,z [--t seconds] [--out report.json]   explain sky and local weather',
@@ -827,7 +838,7 @@ const CMD = {
         '  render <id> --look-masks off   bypass masked look bindings',
         '  render, clip, transition-review, sim render: --recipe <shot.json>   save reproducible review inputs',
         '  shot replay <shot.json> --out <image.png> [--root project]   verify and recreate the review render',
-        '  render <scene.json> --asset-pack <pack-or-bundle.json>   install look assets for this invocation',
+        '  render <scene.json> --asset-pack <pack-or-bundle.json> [--environment-preset pack/preset]   install and select a reusable look',
         '  ramps <id> [--n 12]         the ramps it is shaded on, and which only get darker without turning; a turning one is offered from the same palette',
         '  values <id> [--t 1.5]       the value check: the picture sorted into dark, middle and light, and whether it reads in three tones',
         '  sheet <id> [--from 0 --to 6 --n 12 | --t 0,1,2]   the same view at several moments, on one sheet',
@@ -905,6 +916,7 @@ const CMD = {
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
         'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery',
+        '                --sprite-cels edits.json|off --sprite-playback once|loop',
         'shaped fog options: --shaped-atmosphere on|off|file.json --volume-cutouts on|off|file.json',
         'fog lighting options: --volume-local-lights on|off --volume-local-shadows on|off',
         'silhouette protection: --silhouette-protection on|off|file.json',
@@ -914,6 +926,9 @@ const CMD = {
         'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
+  },
+  curve() {
+    return require('./curve.js')(pos, opt, lib());
   },
   palette() {
     if (!pos[0]) die('palette needs a recipe, path or animation JSON file');

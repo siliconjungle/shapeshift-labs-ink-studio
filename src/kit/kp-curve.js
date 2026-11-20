@@ -167,7 +167,15 @@
       let L = 0;
       const cum = [0];
       for (let i = 1; i < n; i++) cum.push((L += Math.hypot(...sub(pts[i], pts[i - 1]))));
-      for (let i = 0; i < n; i++) T.push(norm(sub(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)])));
+      const closed = n > 3 && Math.hypot(...sub(pts[0], pts[n-1])) < 1e-8;
+      for (let i = 0; i < n; i++) {
+        const tangent = closed && (i === 0 || i === n-1) ? sub(pts[1], pts[n-2]) :
+          sub(pts[Math.min(n-1,i+1)], pts[Math.max(0,i-1)]);
+        if (Math.hypot(...tangent) < 1e-12) {
+          const forward = sub(pts[Math.min(n-1,i+1)],pts[i]);
+          T.push(norm(Math.hypot(...forward)>1e-12 ? forward : sub(pts[i],pts[Math.max(0,i-1)])));
+        } else T.push(norm(tangent));
+      }
       let N = up || [0, 1, 0];
       // the first normal: `up`, made square to the way the curve starts
       N = sub(
@@ -206,6 +214,14 @@
           );
         }
         out.push({ p: pts[i], T: T[i], N, B: cross(T[i], N), t: L > 0 ? cum[i] / L : 0 });
+      }
+      if (closed && L > 0) {
+        const first=out[0],last=out[n-1],angle=Math.atan2(dot(first.T,cross(last.N,first.N)),dot(last.N,first.N));
+        for (const f of out) {
+          const a=angle*f.t,c=Math.cos(a),s=Math.sin(a),b=cross(f.T,f.N);
+          f.N=norm(f.N.map((v,k)=>v*c+b[k]*s));f.B=cross(f.T,f.N);
+        }
+        out[n-1].T=first.T.slice();out[n-1].N=first.N.slice();out[n-1].B=first.B.slice();
       }
       return out;
     },
@@ -283,6 +299,7 @@
       safe = fold || cup ? 0.75 : 0.95,
       F = C.frames(pts, o.up),
       n = F.length,
+      closed = n > 3 && Math.hypot(...sub(pts[0], pts[n-1])) < 1e-8,
       cum = [0];
     let L = 0;
     for (let i = 1; i < n; i++) cum.push((L += Math.hypot(...sub(pts[i], pts[i - 1]))));
@@ -397,7 +414,7 @@
           t = g[19] + (g[20] - g[19]) * f,
           d2 = section(u, v, t),
           // past an end: how far beyond it, along the curve
-          out = (NI === 0 && f === 0 && a < 0 ? -a : 0) + (NI === SEG.length - 1 && f === 1 && a > 0 ? a : 0);
+          out = closed ? 0 : (NI === 0 && f === 0 && a < 0 ? -a : 0) + (NI === SEG.length - 1 && f === 1 && a > 0 ? a : 0);
         return out > 0 ? Math.hypot(Math.max(d2, 0), out) * safe : d2 * safe;
       },
       sample(f) {

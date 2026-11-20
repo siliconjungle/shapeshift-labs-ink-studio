@@ -195,7 +195,8 @@ const SplatEffects = (() => {
     const mapping = typeof projection === 'function' ? projection : project(projection);
     let frame, frameTime, revision;
     return sample => {
-      const uv = mapping(space === 'world' ? sample.worldPosition || sample.position : sample.position, sample);
+      const point = pointFor(sample, space);
+      const uv = mapping(point, sample);
       if (!uv || !Number.isFinite(uv[0]) || !Number.isFinite(uv[1])) return null;
       const time = sample.time || 0;
       if (source && (frameTime !== time || revision !== source.revision)) {
@@ -204,7 +205,8 @@ const SplatEffects = (() => {
         revision = source.revision;
       }
       const [u, v] = uv;
-      return { u, v, at: name => frame?.sample(name, u, v) ?? 0 };
+      return { u, v, at: name => (source?.dimensions === 3 ?
+        frame?.sample(name, ...point) : frame?.sample(name, u, v)) ?? 0 };
     };
   }
 

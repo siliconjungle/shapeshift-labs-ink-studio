@@ -636,6 +636,11 @@
     } catch (error) {
       bad('finish.look.colorCurves', error.message);
     }
+    try {
+      SurfaceLook.lightRamps(look?.surfaceLightRamps);
+    } catch (error) {
+      bad('finish.look.surfaceLightRamps', error.message);
+    }
     if (look?.colorLut !== undefined && look.colorLut !== false) {
       try {
         ColorLUT.normalize(look.colorLut);

@@ -8,7 +8,8 @@
     'weatherBinding','weatherTracks','windField','lightning','sceneExposure','precipitation','rainImpacts','liveSun',
     'atmosphere','shapedAtmosphere','volumeCutouts','volumeLighting','volumeQuality','splatFields','atmosphereEmitters'
   ];
-  const lookFields = ['horizonBands','effectPalettes','artDirection','stable','silhouetteProtection'];
+  const lookFields = ['horizonBands','effectPalettes','artDirection','stable','silhouetteProtection',
+    'surfaceLightRamps','colorCurves','shadowArt','ink','contactShadows','edgeFilter'];
   const parts = (value, allowed) => Object.fromEntries(allowed.filter(name => value?.[name] !== undefined).map(name => [name,value[name]]));
   const claims = (value, allowed) => object(value) && Object.keys(value).every(name => allowed.includes(name));
   const namespaced = (value, pack) => typeof value === 'string' && key.test(value) && (pack === undefined || value.startsWith(pack+'/'));
@@ -101,6 +102,12 @@
     ArtStability.prepare(look?.stable);
     EffectPalettes.prepare(look?.effectPalettes,palette);
     SilhouetteProtection.prepare(look?.silhouetteProtection);
+    SurfaceLook.lightRamps(look?.surfaceLightRamps);
+    ColorCurves.prepare(look?.colorCurves);
+    ShadowArt.prepare(look?.shadowArt);
+    ArtInk.prepare(look?.ink,palette);
+    ContactShadows.prepare(look?.contactShadows);
+    EdgeFilter.prepare(look?.edgeFilter);
   }
 
   function resolveBinding(binding, catalog) {

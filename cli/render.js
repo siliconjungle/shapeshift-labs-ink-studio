@@ -1134,7 +1134,8 @@ function renderFrame(world, o, preparedPalettes) {
       const shaded=value+(fog[c]-value)*fogMix;
       return ink ? shaded+(cutaway.edge.color[c]-shaded)*ink : shaded;
     });
-    return [i,z,dn,alpha,...rgb,alpha>=.5,false,highlight,paletteId,false,false,alpha<.5,false,undefined,z,sprite,fogMix,
+    return [i,z,dn,alpha,...rgb,!sprite.effect&&alpha>=.5,false,highlight,paletteId,false,false,
+      Boolean(sprite.effect)||alpha<.5,false,undefined,z,sprite,fogMix,
       rule,reflected,false,1,ink>0];
   }
   function playSprites(through,queued) {

@@ -2,7 +2,8 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
   id: 'palette-cycling',
   name: 'Fernfall',
   seed: 29,
-  build(seed, { cycle = true } = {}) {
+  build(seed, { cycle = true, controls } = {}) {
+    const cycling = controls?.cycle ?? cycle;
     const palette = [
       0x111f2a, 0x172934, 0x22333d, 0x33454b, 0x495452, 0x66655a, 0x8b7962, 0xb19a78,
       0x142f2b, 0x1d4436, 0x2c5c43, 0x3f7550, 0x598c5b, 0x79a26b, 0xa8b875,
@@ -35,7 +36,7 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
     const wetRock = { r: [0, 1, 2, 3, 4] };
     const moss = { r: [8, 9, 10, 11, 12, 13] };
     const brush = { r: [9, 10, 11, 12, 13, 14] };
-    const box = (at, half, mat, res = .11, rd = .07) => S.box(at, half, mat, { res, rd });
+    const box = (at, half, mat, res = .11, rd = .07, tag) => S.box(at, half, mat, { res, rd, tag });
     const rock = (at, half, mat, res = .13) => S.rock(at, half, mat, { res });
     const tile = (width, height, size, paint) => ({
       width, height, size,
@@ -43,7 +44,7 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
     });
     const indexed = (projection, raster, loops) => ({
       type: 'projected', pattern: 'indexed', projection, raster,
-      cycles: cycle ? Object.fromEntries(loops.map(([role, period, phase = 0]) =>
+      cycles: cycling ? Object.fromEntries(loops.map(([role, period, phase = 0]) =>
         [role, { role, period, direction: 'reverse', phase }])) : {}
     });
     const turn = (n, length) => ((n % length) + length) % length;
@@ -51,8 +52,10 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
 
     // Long banks and fractured ledges lead from the shaded foreground up to the spring.
     box([0,-.31,.28], [4.18,.24,3.3], wetRock, .17, .14);
-    box([-.17,1.05,-1.14], [3.28,1.07,1.33], wetRock, .16, .19);
-    box([-.53,3.09,-2.89], [2.85,1.0,1.04], stone, .16, .21);
+    box([-.17,1.05,-1.23], [3.28,1.07,1.07], wetRock, .16, .19);
+    box([-.63,3.03,-2.89], [2.60,1.02,.96], stone, .16, .21);
+    rock([-1.70,4.03,-2.80],[.74,.28,.58],cliff,.105);
+    rock([.37,4.03,-2.82],[.67,.31,.62],cliff,.108);
     const walls = [
       [-2.69,.52,.87,.97,.83,.90],[-2.41,1.34,.19,1.03,.81,.92],
       [-2.65,2.25,-.71,1.05,.70,.88],[-2.62,3.12,-1.51,.90,.78,.68],
@@ -92,87 +95,101 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
       }
     }
 
-    // Staggered threads share the fall's direction and leave broad, quiet shadow between highlights.
+    // Bake the banks first so the overlapping water surfaces retain their own coverage.
+    S.bake();
+    const waterMaterial = { materialId: 'fernfall-water', r: [17, 18, 19, 20, 21] };
+
+    // Broad turquoise folds carry the water between the narrow travelling highlights.
     const threads = [
-      [.074,.019,4,.8], [.14,.031,2,.1], [.216,.015,9,.6], [.29,.055,3,.8],
-      [.388,.033,8,.2], [.445,.018,1,.4], [.510,.075,11,.7], [.622,.022,4,.2],
-      [.681,.038,7,.6], [.763,.051,2,.4], [.849,.015,4,.9], [.901,.031,8,.3]
+      [.115,.030,2,.2], [.223,.027,7,.7], [.342,.054,3,.8],
+      [.472,.031,11,.4], [.555,.057,5,.6], [.704,.046,7,.3], [.829,.034,4,.6], [.906,.023,8,.5]
     ];
     function paintSheet(u,v) {
-      const undulation=.022*Math.sin(v*6.9)+.016*Math.sin(v*14+u*5);
-      const center=u+undulation + (u-.5)*.19*v*v;
-      for (const [x,width,offset,sway] of threads) {
-        const centerline=x+.023*Math.sin(v*(6+sway*4)+offset);
-        const spread=width*(.62+.38*Math.sin((v*sway*3+offset)*Math.PI)**2);
-        const side=(center-centerline)/spread;
+      const bend = .018*Math.sin(v*7.4) + (u-.5)*.06*v*v;
+      const across = u+bend;
+      const travel = 35*(Math.sqrt(.21+v)-Math.sqrt(.21));
+      if (v<.07 && Math.sin(u*38+.8)+.64*Math.sin(u*73)>-.16)
+        return swatch('sheet',travel+u*5+1);
+      for (const [center,width,phase,sway] of threads) {
+        const drift = .024*Math.sin(v*(5+sway*3)+phase);
+        const side = (across-center-drift)/width;
         if (Math.abs(side)>1) continue;
-        const role = offset%3===1 || (Math.abs(side)>.60 && v>.12) ? 'shadowFlow' : 'sheet';
-        const travel=40*(Math.sqrt(.18+v)-Math.sqrt(.18));
-        return swatch(role, travel+offset+side*side*(.7+v*1.8));
+        const role = phase%3===2 || Math.abs(side)>.63 ? 'shadowFlow' : 'sheet';
+        return swatch(role,travel+phase+side*side*(.55+v*1.6));
       }
-      if (v<.09 && Math.sin(u*38)+Math.sin(u*86)>.32) return 22;
-      if (center>.28 && center<.78 && Math.sin(center*23)>-.21) return v>.69?20:21;
-      return center>.13 && center<.9?18:17;
+      if (v>.88 && Math.sin(u*99+v*7)+Math.sin(u*35-v*12)>1.12)
+        return swatch('sheet',travel+u*17+1);
+      const fold = Math.sin(across*21+v*.7)+.44*Math.sin(across*43-v*1.3);
+      return fold>.65 ? 21 : fold>-.49 ? 20 : across>.08&&across<.92 ? 19 : 18;
     }
-    function fall({x,z,top,bottom,width,lean,phases,split=false}) {
-      const height=top-bottom;
-      const flute=(u,v)=>.037*Math.sin(u*16+v*4)+.028*Math.cos(u*6-v*6);
+
+    function fall({x,z,top,bottom,width,lean,phase,id}) {
+      const height = top-bottom, thickness = .102;
+      const flute = (u,v) => .021*Math.sin(u*16+v*4)+.019*Math.cos(u*6-v*6);
       function crossSection(v) {
-        const shift=lean*v*v+.046*Math.sin(v*5);
-        const half=width*(1-.14*Math.sin(v*Math.PI)+.21*v**5);
-        const face=z+.24*(1-Math.exp(-v*13))+.28*v**5;
+        const shift = lean*v*v + .034*Math.sin(v*5);
+        const half = width*(1-.075*Math.sin(v*Math.PI)+.15*v**5);
+        const face = z+.19*(1-Math.exp(-v*10))+.27*v**5;
         return [x+shift,half,face];
       }
-      const material=K.surface.material({r:[16,17,18,19]}, {layers:{flow:indexed(
-        p=>{
-          const v=(top-p[1])/height;
-          const [center,half]=crossSection(v);
-          return [(p[0]-center)/(2*half)+.5,v];
+      const material = K.surface.material(waterMaterial, {layers:{flow:indexed(
+        p => {
+          const v = K.clamp((top-p[1])/height);
+          const [center,half] = crossSection(v);
+          // Samples at the traced edge still pick a painted texel.
+          const u = K.clamp((p[0]-center)/(2*half)+.5,0,.999999);
+          return [u,Math.min(v,.999999)];
         },
         tile(112,134,[1,1],paintSheet),
-        [['sheet',.6,phases],['shadowFlow',.75,phases+.2]]
+        [['sheet',.75,phase],['shadowFlow',1,phase+.2]]
       )}});
-      const center=[x,(top+bottom)*.5,z+.22];
+      const center=[x,(top+bottom)*.5,z+.21];
       S.add({
-        bc:center,br:Math.hypot(width*1.36,height*.5,.65),
+        bc:center,br:Math.hypot(width*1.39,height*.5,.76),
         sd(px,py,pz) {
-          const v=K.clamp((top-py)/height);
-          const [cx,half,face]=crossSection(v);
-          const u=(px-cx)/half;
-          const sheet=Math.max(Math.abs(px-cx)-half,Math.abs(pz-face-flute(u,v))-.061, bottom-py,py-top);
-          // The rock at the foot of the lower run divides its last few ribbons.
-          return split?Math.max(sheet,.093-Math.abs(px-(x+width*.52))-(1-v)*.78):sheet;
+          const v = K.clamp((top-py)/height);
+          const [cx,half,face] = crossSection(v);
+          const u = K.clamp((px-cx)/half,-1,1);
+          return .54*Math.max(Math.abs(px-cx)-half,Math.abs(pz-face-flute(u,v))-thickness,bottom-py,py-top);
         },
         sample(emit) {
-          for (let y=bottom;y<=top;y+=this.res*.83) {
-            const v=(top-y)/height;
-            const [cx,half,face]=crossSection(v);
-            for (let u=-1;u<=1;u+=this.res/half) {
-              const flutedFace=face+flute(u,v);
-              emit(cx+half*u,y,flutedFace+.061);
-              emit(cx+half*u,y,flutedFace-.061);
+          const rows = Math.ceil(height/this.res);
+          for (let row=0;row<=rows;row++) {
+            const v = row/rows, y = top-v*height;
+            const [cx,half,face] = crossSection(v);
+            const columns = Math.ceil(2*half/this.res);
+            for (let column=0;column<=columns;column++) {
+              const u = 2*column/columns-1;
+              const flutedFace = face+flute(u,v), px = cx+half*u;
+              emit(px,y,flutedFace+thickness);
+              emit(px,y,flutedFace-thickness);
+              if (column===0 || column===columns || row===0 || row===rows) emit(px,y,flutedFace);
             }
           }
         }
-      },material,{res:.061,tag:top>3?'upper-fall':'lower-fall'});
-      const lip=K.surface.material({r:[18,19,20,21]}, {layers:{crest:indexed(
-        {origin:[x-width,top,z-.48]},tile(104,24,[2*width,.67],(u,v)=>{
-          if (Math.sin(u*44)+.64*Math.sin(u*91)<-.62) return 19;
-          return swatch('sheet',v*6+Math.floor(u*14)*2+phases*8);
-        }),[['sheet',.6,phases]]
+      },material,{res:.077,tag:id});
+      const lip = K.surface.material(waterMaterial, {layers:{crest:indexed(
+        {origin:[x-width,top,z-.57]},tile(104,24,[2*width,.66],(u,v)=>{
+          if (Math.sin(u*27)+.48*Math.sin(u*67)<-.55) return 20;
+          return swatch('sheet',v*5+u*7+Math.sin(u*32));
+        }),[['sheet',.75,phase]]
       )}});
-      box([x,top-.033,z-.225],[width,.039,.281],lip,.063,.038);
+      box([x,top-.043,z-.24],[width,.056,.33],lip,.069,.043,id+'-lip');
     }
-    fall({x:-.79,z:-1.86,top:4.23,bottom:2.22,width:.70,lean:-.11,phases:.34});
-    fall({x:.05,z:-.10,top:2.28,bottom:.10,width:1.25,lean:.15,phases:0,split:true});
+    fall({x:-.79,z:-1.74,top:4.23,bottom:2.185,width:.70,lean:-.10,phase:.34,id:'upper-fall'});
+    fall({x:.02,z:.28,top:2.28,bottom:-.058,width:1.22,lean:.13,phase:0,id:'lower-fall'});
 
-    const terrace=K.surface.material({r:[17,18,19,20]}, {layers:{water:indexed(
-      {origin:[-1.51,2.2,-1.75]},tile(112,45,[2.94,1.75],(u,v)=>{
-        const weave=Math.sin(u*46+v*3)+Math.sin(u*17-v*7);
-        return weave>.44?swatch('shadowFlow',v*18+u*3):null;
-      }),[['shadowFlow',.75,.44]]
+    const terrace = K.surface.material(waterMaterial, {layers:{water:indexed(
+      {origin:[-1.53,2.22,-1.78]},tile(112,45,[2.98,2.05],(u,v)=>{
+        const impact = Math.hypot((u-.25)/.29,(v-.20)/.34);
+        if (impact>.71 && impact<.96 && v>.18 && Math.sin(u*88+v*17)>-.34)
+          return swatch('sheet',v*22+u*8);
+        const weave=Math.sin(u*42+v*3)+Math.sin(u*17-v*7);
+        return weave>.51?swatch('shadowFlow',v*15+u*3):20;
+      }),[['shadowFlow',1,.44],['sheet',.75,.34]]
     )}});
-    box([-.03,2.171,-.89],[1.45,.073,.91],terrace,.083,.065);
+    box([-.04,2.190,-.775],[1.49,.079,1.045],terrace,.083,.071,'terrace-water');
+    S.bake();
 
     // Pool marks become thinner, shorter and darker as they leave the impact zone.
     const pool = K.surface.material({r:[15,16,17]}, {layers:{
@@ -190,15 +207,16 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
         const x=(u-.52)*2;
         const reach=.65+.10*Math.sin(x*15)+.09*Math.cos(x*32);
         if ((x/.92)**2+(v/reach)**2>1) return null;
-        const turbulence=Math.sin(u*103+v*18)+.55*Math.cos(u*57-v*43);
-        if (turbulence<-.43+v*1.22) return null;
-        const curl=v*19+3*Math.sin(u*17+v*2)+2*Math.sin(u*34-v*6);
-        return swatch('splash',curl);
+        const wavefront = .52-.12*x*x+.038*Math.sin(u*19);
+        const curl = v*19+3*Math.sin(u*17+v*2)+2*Math.sin(u*34-v*6);
+        if (Math.abs(v-wavefront)<.061 && Math.abs(x)<.79) return swatch('splash',curl+2);
+        const turbulence = Math.sin(u*103+v*18)+.55*Math.cos(u*57-v*43);
+        return turbulence<-.43+v*1.22 ? null : swatch('splash',curl);
       }),[['splash',1.2,.18]])
     }});
     S.ball([0,-.053,1.71],[3.39,.082,1.79],pool,{res:.079});
 
-    for (const [x,y,z,s] of [[1.07,.23,.53,.25],[-1.39,.22,.65,.32],[-2.19,.08,2.14,.33],[2.42,.12,2.15,.37]])
+    for (const [x,y,z,s] of [[1.61,.20,1.01,.25],[-1.60,.22,1.07,.32],[-2.19,.08,2.14,.33],[2.42,.12,2.15,.37]])
       rock([x,y,z],[s,s*.66,s*.77],wetRock,.087);
     for (const [x,z,r] of [[-1.84,2.23,.14],[-1.57,2.56,.16],[1.36,2.28,.13],[2.10,2.56,.18]]) {
       S.ball([x,.035,z],[r,.024,r*.86],brush,{res:.045});
@@ -209,8 +227,8 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
       cam:{target:[0,2.05,.10],dist:11.65,yaw:.17,pitch:.36,ortho:true,sway:0},
       radius:11,detail:26,dither:0,paletteRoles:roles,look:{splatCoverage:'continuous'},
       atmosphere:[
-        K.atmosphere.sphere({at:[.08,.22,.59],radius:.51,color:'#9cbfb0',density:.28}),
-        K.atmosphere.sphere({at:[-.82,2.35,-1.24],radius:.49,color:'#a7c1b6',density:.22})
+        K.atmosphere.sphere({at:[.13,.14,.79],radius:.59,color:'#a4c7ba',density:.36}),
+        K.atmosphere.sphere({at:[-.82,2.30,-1.28],radius:.47,color:'#a7c1b6',density:.25})
       ]
     });
   }

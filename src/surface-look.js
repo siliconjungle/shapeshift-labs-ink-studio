@@ -147,6 +147,29 @@ const SurfaceLook = (() => {
     return { tint, amount };
   }
 
+  function lightRamps(definition) {
+    if (definition === undefined || definition === false) return null;
+    const namedMap = value => isRecord(value) && Object.keys(value).every(key => key.trim() && key.length <= 256);
+    if (!namedMap(definition)) throw new TypeError('Surface light ramps need a map of named finishes');
+    for (const [finish, layers] of Object.entries(definition)) {
+      if (!namedMap(layers)) throw new TypeError('Surface finish ' + finish + ' needs a map of named layer ramps');
+      for (const [layer, ramp] of Object.entries(layers)) {
+        if (!Array.isArray(ramp?.stops) || ramp.stops.some(stop => Number.isInteger(stop?.[1])))
+          throw new TypeError(finish + '.' + layer + ' needs explicit hex or RGB light ramp stops');
+        prepareLightingRamp(ramp, [], {}, finish + '.' + layer, 'diffuse');
+      }
+    }
+    return definition;
+  }
+
+  function withLightRamps(settings, ramps) {
+    if (!ramps || typeof settings.id !== 'string' || !Object.hasOwn(ramps, settings.id)) return settings;
+    const entries = ramps[settings.id];
+    const layers = Object.fromEntries(Object.entries(settings.layers ?? {}).map(([id, layer]) =>
+      [id, layer && Object.hasOwn(entries, id) ? { ...layer, lightingRamp: entries[id] } : layer]));
+    return { ...settings, layers };
+  }
+
   function material(base, settings) {
     const source = Array.isArray(base) ? { r: base } : base;
     return Object.assign({}, source, { surface: merge(source?.surface, settings) });
@@ -874,6 +897,6 @@ const SurfaceLook = (() => {
     return output;
   }
 
-  return { STRIDE, hasBevel, material, merge, prepare, shade, prepareLightTrack };
+  return { STRIDE, hasBevel, material, merge, prepare, shade, prepareLightTrack, lightRamps, withLightRamps };
 })();
 if (typeof module !== 'undefined') module.exports = SurfaceLook;

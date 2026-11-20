@@ -130,6 +130,13 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
   let cap = initialCapacity,
     n = 0,
     data = new Float32Array(cap * 16);
+  function reserveRow() {
+    if (n < cap) return;
+    cap *= 2;
+    const expanded = new Float32Array(cap * 16);
+    expanded.set(data);
+    data = expanded;
+  }
   const moving = [],
     back = [],
     cidx = [],
@@ -348,6 +355,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     const slot = pixHas && alternate.ramp ? pixelRamp(alternate.ramp, alternate.noLine) : 0;
     if (base === alternate.ci && (!pixHas || slot === pixN[0] && Math.fround(alternate.t) === pixN[1]) &&
         (!surfacePending || Math.fround(alternate.visibility) === surfaceRow[4])) return;
+    reserveRow();
     const stride = ShadowArt.stride;
     if (!shadowLod || shadowLod.length < cap * stride) {
       const next = new Float32Array(cap * stride);
@@ -368,6 +376,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     attrN[3] = d;
   };
   const fineTile = (t0, t1, t2, t3, ux, uy, uz, vx, vy, vz, col) => {
+    reserveRow();
     if (!fine || fine.length < cap * 12) {
       const f = new Float32Array(cap * 12);
       if (fine) f.set(fine);
@@ -388,12 +397,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     fine[o + 11] = 1;
   };
   function push(x, y, z, c00, c01, c02, c11, c12, c22, col, a, an) {
-    if (n === cap) {
-      cap *= 2;
-      const d = new Float32Array(cap * 16);
-      d.set(data);
-      data = d;
-    }
+    reserveRow();
     if (attrN) {
       if (!attr || attr.length < cap * 4) {
         const f = new Float32Array(cap * 4);

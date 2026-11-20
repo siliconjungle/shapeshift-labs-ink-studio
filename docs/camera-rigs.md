@@ -21,3 +21,5 @@ The unified timeline can key `/camera/fov`, `/camera/projection`, and the existi
 - `render`, `sheet`, `clip`, and `sim render` use the authored camera by default. Use `--camera-shot <id>` to select a shot and `--ortho on|off` to override the projection.
 - Use `world.cameraRig.sample(time, { shot })` to inspect a baked scene. Advance animated dioramas or obtain the simulation snapshot first so targets follow the current scene pose. WebGL accepts `time` and `cameraShot` on the render frame, and the Node renderer accepts `t` and `cameraShot` in its options.
 - Programmatic hosts can call `KIT.cameraRig.compile(definition)` and sample it with a base camera, a `resolveTarget` callback returning `{ point, rotation? }`, and a collision query. `clearance(point, { radius, exclude })` returns signed distance. `occlusion({ origin, direction, maxDistance, radius, exclude })` returns the first hit distance or `undefined`.
+
+Family rails can use `{family: {type: "torusKnot", p: 2, q: 3, ...}}` in place of a point rail. They retain the shared curve sampling and accept no other rail fields. See [curve families](curve-families.md).

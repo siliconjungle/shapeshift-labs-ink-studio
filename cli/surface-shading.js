@@ -31,8 +31,9 @@ function surfaceShading(world, options, camera) {
   const { STRIDE } = SurfaceLook;
   const liveLight = camera.sun ?? (world.surfaceLight === undefined ? undefined :
     SurfaceLook.prepareLightTrack(world.surfaceLight)(time));
+  const ramps = options.raw ? null : SurfaceLook.lightRamps(options.surfaceLightRamps ?? world.look?.surfaceLightRamps);
   const materials = world.surfaces.map(({ settings, light, bevelDistance }) => {
-    const material = SurfaceLook.prepare(settings, world.pal, liveLight ?? light, world.surfaceEffects,
+    const material = SurfaceLook.prepare(SurfaceLook.withLightRamps(settings, ramps), world.pal, liveLight ?? light, world.surfaceEffects,
       { colorCurves: options.colorCurves !== false, colorLut: options.colorLut !== false, colorStack: options.colorStack !== false,
         paletteConstraints: options.paletteConstraints !== false && (options.lookMasks !== false || !settings.paletteConstraint?.mask),
         transmission: options.transmission !== false, paletteRoles: world.paletteRoles, blueNoise, onPaletteClip: camera.onPaletteClip });

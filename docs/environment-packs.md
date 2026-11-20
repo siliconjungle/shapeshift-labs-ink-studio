@@ -42,3 +42,32 @@ A horizon band can set `image` to `{ "asset": "tideline/headland" }`. The owning
 - `KIT.authoring.environments.bind(binding, catalog)` returns immutable resolved settings, the installed pack revision, and the referenced image revisions. Use these settings directly with Ink’s sky, weather, or render APIs. Built scenes expose the resolved identities as `environmentSource`.
 
 Environment `settings.look` can carry horizon bands, effect palettes, art direction, stable dithering, and silhouette protection. Use portable JSON settings and literal swatch colours for presets meant to travel across scene palettes.
+
+## Complete looks
+
+An environment preset can also carry a complete look for the Node renderer and CLI. Package [scene color curves](pixel-look.md#color-ramps-and-channel-curves), [selective ink](art-passes.md), [shadow ramps](live-sun.md), [contact shadows](contact-shadows.md), and [edge filters](art-passes.md) as `settings.look.colorCurves`, `ink`, `shadowArt`, `contactShadows`, and `edgeFilter`. Use `settings.liveSun` for light direction and shadow softness, `settings.atmosphere` and `aerialPerspective` for fog, and [`settings.look.artDirection.cadence`](art-direction.md) to hold scene and environment motion at different rates. The camera still samples at the output frame time.
+
+Use `settings.look.surfaceLightRamps` to replace the light ramp on an existing diffuse or highlight layer. Keys first name the surface finish's `id`, then the layer's name. The profile leaves each layer's strength, masks, and other settings in place. Authors can reuse the same names across scenes or omit them on surfaces that should keep their own ramps. Use explicit hex or RGB stops to make the colors independent of each scene's palette.
+
+```json
+{
+  "surfaceLightRamps": {
+    "stone": {
+      "daylight": {
+        "interpolation": "step",
+        "stops": [[0, "#262439"], [0.32, "#534154"], [0.57, "#96736b"], [0.82, "#d0a880"]]
+      }
+    }
+  }
+}
+```
+
+The [Copperwind pack](../examples/copperwind-looks.json) contains painterly pixel art, hard-edged storybook, and soft atmospheric presets for the same [animated windmill scene](../examples/copperwind-crossing.json). Swap the binding with `--environment-preset` when rendering a JSON diorama. Use `off` to bypass the authored binding. Leave the option unset to use a revision-pinned binding and its scene overrides. A renderer host can bypass just the ramp overrides with `render(world, { surfaceLightRamps: false })`.
+
+```sh
+for style in painterly storybook atmospheric; do
+  node cli/ink-studio.js render examples/copperwind-crossing.json \
+    --asset-pack examples/copperwind-looks.json --environment-preset "copperwind/$style" \
+    --w 340 --h 184 --px 1 --t 1 --out "$style.png"
+done
+```

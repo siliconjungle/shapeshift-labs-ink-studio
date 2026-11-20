@@ -292,6 +292,8 @@ console.log(world.count);
 
 Use the [headless scene editor](docs/scene-editor.md) to select solids, edit transforms and materials, and save the resulting diorama JSON.
 
+Apply a [versioned complete look](docs/environment-packs.md#complete-looks) to a diorama with `--asset-pack` and `--environment-preset`. The Copperwind example compares three styles with the same camera, geometry, and animation.
+
 The larger [lab/data-shrine.json](lab/data-shrine.json) demonstrates joins, folded and warped geometry, parented parts, lights, particles and tap effects.
 
 ## Animation and puppets
@@ -309,6 +311,8 @@ Keep legends fixed while world labels reposition around anchors and thin out as 
 Synchronize records, filters, and time across charts, maps, tables, and WebGL scenes. [Linked views and selections](docs/linked-views.md)
 
 Render scalar slices, contours, and isosurfaces alongside vector streamlines and glyphs. [Field and volume visualization](docs/field-visualization.md)
+
+Accumulate moving deposits on surface charts or in world volumes, then render their decay and diffusion as color, contours, and splats. [Persistent spatial fields](docs/persistent-spatial-fields.md)
 
 Move section planes, depth ranges, and spatial masks across a native render. [Interactive cutaways and clipping](docs/cutaways.md)
 
@@ -1018,3 +1022,5 @@ Named targets can drive shared brackets, labels, glyph ripples, depth visibility
 `KIT.palette` adds dependency-free two-color recipes, independent OKLCh channel curves, named material roles, reference-ramp transfer, and seekable palette paths. See [palette recipes](docs/palette-recipes.md) and the [interactive Chromatic garden](examples/palette-recipes.html). Export colors with `ink-studio palette examples/palette-recipe.json`.
 
 `KIT.paint` adds dependency-free spectral paint mixing, reusable swatch recipes, tint/shade controls, gradients and baked RGB ramps or mixture lookup tables. See [paint mixing](docs/paint-mixing.md) and the [interactive Pigment atelier](examples/paint-mixing.html).
+
+`KIT.curve` includes clothoid chains, torus knots, Lissajous curves, logarithmic spirals, superellipses and flowers with shared arc-length paths for sweeps, route followers, particles, camera rails and curved text. See [curve families](docs/curve-families.md) and the [interactive Curve conservatory](examples/curve-families.html).

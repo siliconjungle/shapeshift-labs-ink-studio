@@ -141,19 +141,54 @@ function writeAtlas(directory, { images, metadata }) {
   fs.writeFileSync(path.join(directory, 'atlas.json'), JSON.stringify({ ...metadata, files }, null, 2) + '\n');
 }
 
-function readSpriteAtlas(file) {
+function readRgba(file, width, height) {
+  const {w,h,data,max}=PNG.raster(file);
+  if (w!==width||h!==height) throw new RangeError('Sprite PNG dimensions differ from its registered size: '+file);
+  return Uint8Array.from(data,n=>Math.round(n*255/max));
+}
+
+function readCels(definition, dir, { frames = [], pitch = 0 }) {
+  if (typeof definition==='string') {
+    const file=path.resolve(dir,definition);
+    definition=JSON.parse(fs.readFileSync(file,'utf8'));
+    dir=path.dirname(file);
+  }
+  if (!definition || typeof definition!=='object' || !Array.isArray(definition.replacements)) return definition;
+  const replacements=definition.replacements.map(edit=>{
+    if (!edit?.files || typeof edit.files!=='object' || Array.isArray(edit.files) || edit.images!==undefined)
+      throw new TypeError('Sprite cel manifest replacements need PNG files');
+    const { files, ...settings }=edit;
+    const frame=typeof edit.frame==='string'&&Object.hasOwn(definition.poses??{},edit.frame)
+      ? definition.poses[edit.frame]:edit.frame;
+    const views=frames.filter(entry=>(entry.frame??0)===frame &&
+      (edit.direction===undefined||entry.direction===edit.direction) &&
+      (edit.pitch===undefined||(entry.pitch??pitch)===edit.pitch));
+    if (views.length!==1) throw new RangeError('Sprite cel replacement must uniquely identify one baked view');
+    const {width,height}=views[0].rect;
+    const images=Object.fromEntries(Object.entries(files).map(([name,file])=>{
+      if (!['color','depth','normal','emission','effect'].includes(name)||typeof file!=='string')
+        throw new TypeError('Unknown sprite cel PNG channel: '+name);
+      return [name,readRgba(path.resolve(dir,file),width,height)];
+    }));
+    return {...settings,images};
+  });
+  return {...definition,replacements};
+}
+
+function readSpriteAtlas(file, { cels } = {}) {
   const manifest=fs.statSync(file).isDirectory()?path.join(file,'atlas.json'):file;
-  const metadata=JSON.parse(fs.readFileSync(manifest,'utf8'));
+  const metadata=JSON.parse(fs.readFileSync(manifest,'utf8')), dir=path.dirname(manifest);
   if (typeof metadata.files?.color!=='string') throw new TypeError('Sprite atlas manifest needs a color PNG');
   const images={};
   for (const name of ['color','depth','normal','emission']) {
     const asset=metadata.files[name];
     if (asset===undefined) continue;
     if (typeof asset!=='string') throw new TypeError('Sprite atlas '+name+' needs a PNG path');
-    const {w,h,data,max}=PNG.raster(path.resolve(path.dirname(manifest),asset));
-    if (w!==metadata.width||h!==metadata.height) throw new RangeError('Sprite atlas '+name+' PNG dimensions differ from the manifest');
-    images[name]=Uint8Array.from(data,n=>Math.round(n*255/max));
+    images[name]=readRgba(path.resolve(dir,asset),metadata.width,metadata.height);
   }
+  if (cels===false) delete metadata.cels;
+  else if (cels!==undefined || metadata.cels!==undefined)
+    metadata.cels=readCels(cels??metadata.cels,dir,metadata);
   return AtlasSprites.compile({metadata,images});
 }
 

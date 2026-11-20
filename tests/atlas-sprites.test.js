@@ -182,3 +182,83 @@ test('painted scenery stays fixed on a turn and its PNG manifest uses the same b
     ...source.metadata.scenery,depthPaint:[{band:'unknown',shape:{type:'rect',rect:[0,0,1,1]}}]
   }}}),/Unknown scenery band/);
 });
+
+test('paint and holds target one direction while the scene clock advances and other views keep their baked frames', () => {
+  const frames=Array.from({length:6},(_,i)=>({
+    frame:i>>1,direction:i%2,yaw:i%2*Math.PI,time:(i>>1)*.1,duration:.1,
+    rect:{x:i*2,y:0,width:2,height:1}
+  }));
+  const rows=frames.flatMap((_,i)=>[[26+i*33,28,37,255],[0,0,0,0]]);
+  const source=atlas(rows,{frames,depth:rows.map((p,i)=>[0,0,0,i%2?0:255]),depthRange:[-.3,.3],
+    normal:rows.map(()=>[127,127,255,255]),emission:rows.map(()=>[0,0,38,255])});
+  const picture=Uint8Array.from([133,97,64,255,0,0,0,0]);
+  const effect=Uint8Array.from([0,0,0,0,249,210,66,255]);
+  const cels={poses:{catch:0},replacements:[{frame:'catch',direction:0,images:{color:picture,effect},effectDepth:-.6}],
+    holds:[{frame:'catch',direction:0,frames:2}]};
+  const edited=K.sprite.atlas({...source,metadata:{...source.metadata,cels}});
+  const placement={atlas:edited,at:[0,0,0],playback:'loop'};
+  const scene=world(placement);
+  const opts={...view,ortho:true,transparent:true,passes:['depth','normal','emission']};
+  const first=ink.render(scene,{...opts,t:0}), held=ink.render(scene,{...opts,t:.15});
+  assert.deepEqual(first.rgb,held.rgb);
+  assert.deepEqual(first.rgb,ink.render(scene,{...opts,t:.3}).rgb);
+  assert.notDeepEqual(first.rgb,ink.render(scene,{...opts,t:.21}).rgb);
+  const other0=ink.render(scene,{...opts,yaw:Math.PI,t:0}), other1=ink.render(scene,{...opts,yaw:Math.PI,t:.15});
+  assert.notDeepEqual(other0.rgb,other1.rgb);
+  const left=36*first.w+40, right=36*first.w+55;
+  assert.deepEqual(pixel(first,40,36),[133,97,102]);
+  assert.deepEqual(pixel(first,55,36),[249,210,66]);
+  assert(Number.isFinite(first.passes.depth[left]));
+  assert.equal(first.passes.depth[right],Infinity);
+  const blocked=ink.render(world(placement,true),opts);
+  assert.deepEqual(pixel(blocked,55,36),[249,210,66]);
+  assert(Number.isFinite(blocked.passes.depth[right]));
+  close(first.passes.normal[left*3+2],1);
+  close(first.passes.emission[left*3+2],38/255);
+  assert.deepEqual(edited.select(1,'card',[0,0,1]).pivot,edited.select(0,'card',[0,0,1]).pivot);
+  assert.throws(()=>K.sprite.placeAtlas({...placement,frame:0}),/Invalid sprite atlas placement/);
+});
+
+test('a rebake can reuse a cel sidecar, preserving baked geometry and requiring depth for new opaque paint', () => {
+  const source=atlas([[246,29,14,255],[0,0,0,0]],{
+    depth:[[0,0,0,255],[0,0,0,0]],depthRange:[-.5,.5]
+  });
+  const color=Uint8Array.from([30,60,90,255,205,149,73,255]);
+  const depth=Uint8Array.from([0,0,0,255,128,0,0,255]);
+  const paint=extra=>({...source.metadata,cels:{replacements:[{frame:0,images:{color,...extra}}]}});
+  assert.throws(()=>K.sprite.atlas({...source,metadata:paint({})}),/outside the baked silhouette needs depth/);
+  const edited=K.sprite.atlas({...source,metadata:paint({depth})});
+  const sample={color:[0,0,0],normal:[0,0,0],emission:[0,0,0]};
+  edited.sample(edited.select(0,'card',[0,0,1]),1,0,{depth:true},sample);
+  close(sample.depth,0);
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ink-cel-edits-'));
+  try {
+    const patches=path.join(directory,'art'), sidecar=path.join(patches,'cels.json');
+    fs.mkdirSync(patches);
+    const {write:writePng,encode}=require('../cli/png.js');
+    fs.writeFileSync(path.join(patches,'paint.png'),encode(2,1,color,4));
+    fs.writeFileSync(sidecar,JSON.stringify({poses:{reach:0},replacements:[
+      {frame:'reach',extensionDepth:-.34,files:{color:'paint.png'}}
+    ]}));
+    for (const time of [1,2]) {
+      writeAtlas(directory,{...source,metadata:{...source.metadata,frames:[{...source.metadata.frames[0],time}]}});
+      const read=ink.readSpriteAtlas(directory,{cels:sidecar});
+      const scene=world({atlas:read,at:[0,0,0],playback:'once'});
+      const render=ink.render(scene,{...view,ortho:true,passes:['position']});
+      assert.deepEqual(pixel(render,55,36),[205,149,73]);
+      close(render.passes.position[(36*render.w+55)*3+2],.34,.02);
+    }
+    const sceneFile=path.join(directory,'diorama.json'), preview=path.join(directory,'preview.png');
+    fs.writeFileSync(sceneFile,JSON.stringify({id:'cel-smoke',camera:{target:[0,0,0],
+      dist:5,pitch:0,yaw:0,sway:0,projection:'orthographic'},solids:[]}));
+    require('node:child_process').execFileSync(process.execPath,[
+      path.join(__dirname,'../cli/ink-studio.js'),'render',sceneFile,'--sprite-atlas',directory,
+      '--sprite-cels',sidecar,'--sprite-playback','once','--t','.2','--w','96','--h','72','--px','1','--raw','--out',preview
+    ]);
+    assert.deepEqual(pixel(require('../cli/png.js').read(preview),55,36),[205,149,73]);
+    writePng(path.join(patches,'paint.png'),1,1,new Uint8Array([3,4,5]));
+    assert.throws(()=>ink.readSpriteAtlas(directory,{cels:sidecar}),/dimensions differ/);
+  } finally {
+    fs.rmSync(directory,{recursive:true,force:true});
+  }
+});

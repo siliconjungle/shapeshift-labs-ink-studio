@@ -37,6 +37,10 @@
   }
 
   function rail(row, id) {
+    if (row?.family !== undefined) {
+      check(keys(row, ['family']), 'family rails accept only their family definition: ' + id);
+      return K.curve.create(row.family);
+    }
     const { points, curve = 1, closed = false } = row ?? {};
     check(keys(row, ['points', 'curve', 'closed']) && Array.isArray(points) && points.length >= (closed ? 3 : 2) &&
       points.length <= 128 && Array.from(points).every(xyz) && range(curve, 0, 1) && typeof closed === 'boolean' &&
