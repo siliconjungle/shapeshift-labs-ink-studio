@@ -1,6 +1,7 @@
 /* Native splat frames for authored surface sampling and lighting. */
 const SplatFrames = (() => {
-  const surface = typeof SurfaceLook === 'undefined' ? require('./surface-look.js') : SurfaceLook;
+  let surface;
+  try { surface = SurfaceLook; } catch { surface = require('./surface-look.js'); }
   function covariance(data, q, basis, M, transpose = M.tr(basis)) {
     const [xx, xy, xz, yy, yz, zz] = [4, 5, 6, 8, 9, 10].map(k => data[q + k]);
     return M.mul(M.mul(basis, [xx, xy, xz, xy, yy, yz, xz, yz, zz]), transpose);

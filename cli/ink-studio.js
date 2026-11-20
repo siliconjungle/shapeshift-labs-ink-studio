@@ -992,6 +992,7 @@ const CMD = {
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
         '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
+        '  material-controls <material.json> [--palette colors.json --out report.json]  inspect shared material controls',
         '  light-emitters <lights.json> [--at seconds --out report.json]  inspect shaped lights and cookies',
         '  typography <type.json> [--font font.ttf --at seconds --out report.json]  inspect glyph layout and animation',
         '  camera-impulses <motion.json> [--at seconds --eye x,y,z --yaw radians --pitch radians --out report.json]  inspect camera motion',
@@ -1666,6 +1667,9 @@ const CMD = {
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
+  },
+  'material-controls'() {
+    return require('./material-controls.js')(pos,opt,lib());
   },
   'light-emitters'() {
     return require('./light-emitters.js')(pos,opt,lib());

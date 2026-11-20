@@ -21,13 +21,14 @@ const OpticalMaterials = (() => {
   }
   function material(options = {}) {
     if (packed.has(options)) return options;
-    record(options, ['absorption', 'reflection', 'scattering', 'scatteringColor', 'reflectionColor', 'depth'], 'optical material');
+    record(options, ['absorption', 'reflection', 'scattering', 'scatteringColor', 'reflectionColor', 'depth', 'coverage'], 'optical material');
     const { absorption = 0, reflection = 0, scattering = 0, scatteringColor, reflectionColor = '#ffffff', depth = {} } = options;
     record(depth, ['thickness', 'scale'], 'optical depth');
     const result = Object.freeze({
       absorption: bounded(absorption, 0, 32, 'Absorption'),
       reflection: bounded(reflection, 0, 1, 'Reflection'),
       scattering: bounded(scattering, 0, 32, 'Scattering'),
+      coverage: bounded(options.coverage ?? 0, 0, 1, 'Slab coverage'),
       ...(scatteringColor !== undefined && { scatteringColor: color(scatteringColor, 'Scattering color') }),
       reflectionColor: color(reflectionColor, 'Reflection color'),
       depth: Object.freeze({
@@ -36,7 +37,7 @@ const OpticalMaterials = (() => {
       })
     });
     packed.set(result, Object.freeze([result.absorption, result.scattering, result.reflection, result.depth.thickness,
-      ...(result.scatteringColor ?? [-1, -1, -1]), result.depth.scale, ...result.reflectionColor, 0]));
+      ...(result.scatteringColor ?? [-1, -1, -1]), result.depth.scale, ...result.reflectionColor, result.coverage]));
     return result;
   }
 
@@ -58,7 +59,7 @@ const OpticalMaterials = (() => {
 
   function slabLoss(rows, j, cosine) {
     const extinction = rows[j] + rows[j + 1];
-    return -Math.expm1(-extinction * rows[j + 3] * rows[j + 7] / Math.max(0.15, Math.abs(cosine)));
+    return rows[j + 11] + (1 - rows[j + 11]) * -Math.expm1(-extinction * rows[j + 3] * rows[j + 7] / Math.max(0.15, Math.abs(cosine)));
   }
   function slabOpacity(rows, j, cosine) {
     const reflection = fresnel(rows[j + 2], cosine);
@@ -93,7 +94,8 @@ const OpticalMaterials = (() => {
       const extinction = input[j] + input[j + 1];
       const loss = slabLoss(input, j, cosine);
       const opacity = reflection + (1 - reflection) * loss;
-      const scattering = extinction ? (1 - reflection) * loss * input[j + 1] / extinction : 0;
+      const intrinsic = input[j + 11];
+      const scattering = (1 - reflection) * (intrinsic + (extinction ? (loss - intrinsic) * input[j + 1] / extinction : 0));
       out[j] = opacity;
       out[j + 1] = opacity ? scattering / opacity : 0;
       out[j + 2] = opacity ? reflection / opacity : 0;

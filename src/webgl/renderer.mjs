@@ -1,3 +1,4 @@
+import { createMaterialControls } from './material-controls.mjs';
 import { createLightEmitters } from './light-emitters.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
@@ -117,6 +118,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const { target, table, textureUnit } = targets;
     const environment = createEnvironment(gl,resources,targets,maxSize,toolkit);
     const emitterLighting=createLightEmitters(gl,resources,targets,maxSize,toolkit);
+    const materialControls=createMaterialControls(gl,resources,targets,maxSize,toolkit);
     const skyPrograms = new Map();
     const dryGeometry = target(2), dryContours = target(2), plainOwner = target(), key = target(1, { integer: true });
     const wetVariants = new Map();
@@ -704,7 +706,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const rules = trails ? afterimagesAPI.prepare(afterimageDefinition) : [];
       const normalCaptures = rules.length ? null : captureWater(world, frame, camera, width, height, 0, quality);
       // Per-pixel material, palette, and detail rules index the expanded world.
-      if (group && (canStage || quality?.rows || rules.length || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsEmitters || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
+      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsEmitters || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
           needsDetailFlags || budget?.fineOn || budget?.fineOff))) {
         expandInstances ??= createExpandedInstances();
         const expanded = expandInstances(world,group,frame.changedRows);
@@ -917,6 +919,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         fineValues = fineTiles;
       } else fine.bind();
       uploadBones(world.anim?.bones);
+      relighting=materialControls.compose(world,frame,camera,time,relighting);
+      if(materialControls.has(world))historyValid=false;
       orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind, selection);
       if (patterned) {
         if (isNew || materials?.world !== world || materials.values !== world.pix ||

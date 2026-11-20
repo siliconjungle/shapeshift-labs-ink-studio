@@ -1,5 +1,9 @@
 # Surface materials
 
+For shared roughness, metalness, IOR, transmission and coating controls, see
+[consistent material controls](material-controls.md). They compile into these
+finish layers and the existing optical system, and can be edited on baked bindings.
+
 A surface finish is an ordered list of effects evaluated as the camera moves. Use it with the same sculpt materials, colour ramps and procedural patterns you already use. The headless renderer evaluates opaque layers at the art-pixel sample in per-pixel scenes. It also shades ordinary splats and composites translucent finishes over opaque surfaces.
 
 ## Start with a preset

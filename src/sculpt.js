@@ -8,6 +8,13 @@
 function makeSculpt(B, rest) {
   const { P, n3, fbm, disc, stick, fib, TAU, clamp, norm, R } = B;
   const detailBudget = B.detailBudget;
+  const controlledMaterials = new WeakMap();
+  function controlled(material) {
+    if (material?.controls === undefined && material?.top?.controls === undefined) return material;
+    if (!controlledMaterials.has(material))
+      controlledMaterials.set(material, MaterialControls.resolve(material, { palette: P, packed: true }));
+    return controlledMaterials.get(material);
+  }
   const shadowArt = B.shadowArt;
   const shadowTarget = (owner, mat) => ({
     object: owner?.renderOwner, entity: owner?.renderOwner, ...owner?.renderTarget,
@@ -100,7 +107,7 @@ function makeSculpt(B, rest) {
   let hasOptionalProxy = false;
   function add(p, mat, o) {
     o = o || {};
-    p.mat = Array.isArray(mat) ? { r: mat } : mat || {};
+    p.mat = controlled(Array.isArray(mat) ? { r: mat } : mat || {});
     p.res = o.res || S.res;
     p.k = o.k || 0;
     p.g = o.g || gid++;
@@ -1742,6 +1749,7 @@ function makeSculpt(B, rest) {
   function shadeOwned(owner, material, ...sample) {
     if (material.materialAt || material.surfaceState)
       material = S.materialAt(material, sample.slice(1, 4), sample.slice(4, 7));
+    material = controlled(material);
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
     const capture = B.describeAlbedo && (preview || S.captureAlbedo || stagedAlbedo(material.surface) || stagedAlbedo(material.top?.surface));
     const fine = owner?.detailBudget?.fine;

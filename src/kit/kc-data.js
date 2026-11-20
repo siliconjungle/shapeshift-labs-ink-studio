@@ -742,7 +742,11 @@
       if (m === undefined) return;
       const role = typeof m === 'string' ? m : m && m.role;
       if (m && typeof m === 'object') {
-        keys(m, path, { role: 1, ramp: 1, noise: 1, scale: 1, glow: 1, over: 1, surface: 1, model: 1, lookAsset: 1, albedo: 1, materialId: 1, surfaceId: 1, pixelStyle: 1, glass: 1, optical: 1 });
+        keys(m, path, { role: 1, ramp: 1, noise: 1, scale: 1, glow: 1, over: 1, surface: 1, model: 1, lookAsset: 1, albedo: 1, materialId: 1, surfaceId: 1, pixelStyle: 1, glass: 1, optical: 1, controls: 1 });
+        if (m.controls !== undefined) {
+          try { MaterialControls.describe(m.controls); }
+          catch (error) { bad(path + '.controls', error.message); }
+        }
         if (m.glass !== undefined && typeof m.glass !== 'boolean') bad(path + '.glass', 'expected a boolean');
         if (m.optical !== undefined) {
           try { OpticalMaterials.material(m.optical); }
@@ -1421,10 +1425,11 @@
           if (m.noise) out.mod = (x, y, z) => m.noise * (B.n3(x * sc, y * sc, z * sc) - 0.5);
           if (m.glow) out.em = true;
           if (m.model) out.model = m.model;
+          if (m.controls !== undefined) out.controls = MaterialControls.describe(m.controls);
           if (m.albedo !== undefined) out.albedo = m.albedo;
           if (m.surfaceId !== undefined) out.surfaceId = m.surfaceId;
           if (m.glass !== undefined) out.glass = m.glass;
-          if (m.optical !== undefined) out.optical = OpticalMaterials.material(m.optical);
+          if (m.optical !== undefined) out.optical = m.controls === undefined ? OpticalMaterials.material(m.optical) : m.optical;
           if (m.pixelStyle !== undefined) out.pixelStyle = m.pixelStyle;
           if (m.over) {
             const r2 = ramp(m.over.role),
