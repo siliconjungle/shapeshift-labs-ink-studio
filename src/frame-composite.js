@@ -112,7 +112,7 @@ const FrameComposite = (() => {
     return { w, h, data: output };
   }
 
-  function drawLayer(layer, w, h, text, camera, drawn) {
+  function drawLayer(layer, w, h, text, camera, drawn, hard = false) {
     const data = new Uint8Array(layer.w * layer.h * 4);
     const mask = new Float32Array(layer.w * layer.h);
     const sx = w / layer.w, sy = h / layer.h, aa = Math.max(sx, sy);
@@ -187,7 +187,8 @@ const FrameComposite = (() => {
       for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
         const p = y*layer.w+x;
         if (!mask[p]) continue;
-        const a = rgba[3]/255*mask[p], q = p*4;
+        const opacity = rgba[3]/255*mask[p], q = p*4;
+        const a = hard ? Number(opacity >= .5) : opacity;
         for (let c = 0; c < 4; c++)
           data[q+c] = Math.round(data[q+c]*(1-a) + (c === 3 ? 255 : rgba[c])*a);
         mask[p] = 0;
@@ -211,6 +212,13 @@ const FrameComposite = (() => {
       }
     }
     return { w: layer.w, h: layer.h, data };
+  }
+
+  function paintMap(w, h, strokes) {
+    if (strokes.some(stroke => !['path', 'polygon', 'rect'].includes(stroke?.type) ||
+        stroke.space !== undefined && stroke.space !== 'screen'))
+      throw new TypeError('Paint maps use pixel paths, polygons and rectangles');
+    return drawLayer({ w, h }, w, h, null, null, Array.from(strokes, command), true).data;
   }
 
   function layers(plan, world, time, text, camera, resolve) {
@@ -280,6 +288,6 @@ const FrameComposite = (() => {
     return { w, h, rgb, ...(alpha && { alpha }) };
   }
 
-  return Object.freeze({ settings, prepare, layers, compose, pixels, sample, blend, straight });
+  return Object.freeze({ settings, prepare, layers, compose, pixels, sample, blend, straight, paintMap });
 })();
 if (typeof module !== 'undefined') module.exports = FrameComposite;

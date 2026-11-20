@@ -15,7 +15,7 @@ function normalAt(field, [x,y,z], step) {
 function bind(world, data, settings) {
   const labels = TargetSelectors.index(world), rows = [];
   const normals = world.renderMetadata?.normals;
-  const boned = new Set(world.anim?.boned ?? []);
+  const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
   const { nearest } = require('../index.js').load().KIT.procedural.attributes;
   const sources = [];
   for (const source of world.renderSdfs) {
@@ -27,7 +27,7 @@ function bind(world, data, settings) {
       for (const [start,end,points] of ranges) for (let i=start;i<Math.min(end,world.count);i++) {
         const q = i*16, offset = (i-start)*3;
         if (data[q] !== points[offset] || data[q+1] !== points[offset+1] || data[q+2] !== points[offset+2]) continue;
-        if (data[q+3]<1 || Math.round(data[q+11]) & opaqueFlags || boned.has(i) || world.anim?.rig?.bid?.[i] ||
+        if (owned?.[i] || data[q+3]<1 || Math.round(data[q+11]) & opaqueFlags || boned.has(i) || world.anim?.rig?.bid?.[i] ||
             world.opticalSplats?.[i*OpticalMaterials.STRIDE+3]) continue;
         const target = {object:owner.renderOwner,entity:owner.renderOwner,material:owner.mat.materialId,
           surface:owner.mat.surfaceId ?? owner.mat.surface?.id,

@@ -35,6 +35,7 @@ function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
 
 function staticSources(world, data, alpha) {
   const sources = [], boned = new Set(world.anim?.boned ?? []), backdrop = new Set(world.back ?? []);
+  const owned = world.anim?.geometryOwned;
   for (const source of world.renderSdfs ?? []) {
     if (!(source.rows instanceof Map) || !source.rows.size || !source.bounds || typeof source.distance !== 'function') continue;
     let current = true;
@@ -42,7 +43,7 @@ function staticSources(world, data, alpha) {
       if (end>world.count) current = false;
       for (let i=start;i<end && current;i++) {
         const q=i*16, k=(i-start)*3;
-        current = data[q]===points[k] && data[q+1]===points[k+1] && data[q+2]===points[k+2] && alpha[i]>=1 && !backdrop.has(i) &&
+        current = !owned?.[i] && data[q]===points[k] && data[q+1]===points[k+1] && data[q+2]===points[k+2] && alpha[i]>=1 && !backdrop.has(i) &&
           !(Math.round(data[q+11]) & (15 | 512 | 32768)) && !boned.has(i) && !world.anim?.rig?.bid?.[i];
       }
     }

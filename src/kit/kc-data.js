@@ -235,6 +235,7 @@
     parts: 'obj',
     solids: 'list',
     brushRegion: 1,
+    breakables: 1,
     motion: 'list',
     timeline: 'obj',
     effects: 'list',
@@ -1092,6 +1093,12 @@
         bad('brushRegion', error.message);
       }
     }
+    try {
+      const breakables = K.authoring.breakables.prepare(spec);
+      if (breakables) presentation.breakables = breakables;
+    } catch (error) {
+      bad('breakables', error.message);
+    }
     if (area > 150000)
       warn(
         'solids',
@@ -1277,6 +1284,14 @@
       motion = spec.motion || [],
       lamps = effects.filter(e => e.do === 'lamp'),
       loose = effects.some(e => ['dust', 'embers', 'smoke', 'sparks', 'rain'].includes(e.do)) || !!spec.tap;
+    function bindBreakables(world) {
+      try {
+        return K.authoring.breakables.bind(world, spec, presentation.breakables);
+      } catch (error) {
+        error.problems = [{ level: 'error', path: 'breakables', problem: error.message, hint: '' }];
+        throw error;
+      }
+    }
     function marksQuery() {
       const query = resolved.inputs?.query ?? env.parameterInputs?.query;
       return typeof query === 'function' ? query() : query;
@@ -1285,7 +1300,7 @@
     if (spec.brushRegion != null) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
-      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks, ...geometry } = spec;
+      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks, breakables: authoredBreakables, ...geometry } = spec;
       let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       let marksSystem;
       if (marks) {
@@ -1296,6 +1311,7 @@
         marksSystem = K.dataMarks.bind(world, marks, dataMarks, { first, query: marksQuery });
       }
       world.spec = source;
+      bindBreakables(world);
       if (dataInputs) world.dataInputs = dataInputs;
       if (cameraRig) K.cameraRig.bind(world, cameraRig);
       if (dynamics) world.parameters = dynamics.api;
@@ -1635,6 +1651,7 @@
           ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
+    bindBreakables(W);
     const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });
     if (cameraRig) K.cameraRig.bind(W, cameraRig, {
       resolvePart(part, point) {

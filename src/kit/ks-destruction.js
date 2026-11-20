@@ -104,9 +104,13 @@
     const ground = options.ground ?? (() => 0), solid = options.solid ?? ((x, y, z) => y - ground(x, z));
     if (!Number.isFinite(gravity) || gravity < 0 || !positive(scale) || typeof ground !== 'function' || typeof solid !== 'function')
       throw new RangeError('Invalid destruction gravity or collision settings');
-    if (!Array.isArray(options.groups) || !options.groups.length || options.groups.length > 4096)
+    const authored = options.groups === undefined ? st.W?.breakables : undefined;
+    const definitions = authored?.groups ?? options.groups;
+    const connections = options.links === undefined ? authored?.links : options.links;
+    if (!Array.isArray(definitions) || !definitions.length || definitions.length > 4096)
       throw new RangeError('Destruction needs one to 4096 named groups');
     const groups = new Map(), owner = new Map(), links = [], events = [], projectiles = [], adjacency = new Map();
+    const pieceShapes = new WeakMap();
     let rubble, debris, accumulator = 0, clock = 0, serial = 0, disposed = false, selectionRows;
     function alive() { if (disposed) throw new Error('Destruction binding is disposed'); }
     const metadata = typeof TargetSelectors !== 'undefined' ? TargetSelectors.index(st.W) : null;
@@ -117,7 +121,7 @@
         D[q + 8] + Math.abs(D[q + 5]) + Math.abs(D[q + 9]),
         D[q + 10] + Math.abs(D[q + 6]) + Math.abs(D[q + 9])));
     }
-    for (const spec of options.groups) {
+    for (const spec of definitions) {
       if (!spec || typeof spec.id !== 'string' || !spec.id.trim() || spec.id.length > 256 || groups.has(spec.id))
         throw new RangeError('Structural groups need distinct nonempty names');
       if ((spec.ids === undefined) === (spec.selector === undefined)) throw new RangeError('Choose group ids or a named selector');
@@ -151,12 +155,12 @@
       ids.forEach((id, k) => { saved.set(D.subarray(id * 16, id * 16 + 16), k * 16); appearance[k * 2] = st.base[id * 16 + 3]; appearance[k * 2 + 1] = st.base[id * 16 + 7]; free[k] = st.rig?.free[id] ?? 0; owner.set(id, spec.id); });
       groups.set(spec.id, { id: spec.id, ids, saved, appearance, free, mass, strength, mode, fragmentSize,
         anchor: Boolean(spec.anchor), breakable: spec.breakable !== false, static: Boolean(spec.static), motion: spec.motion,
-        solid: spec.solid, guide: guide(ids, D), intact: true, damage: 0, v: [0, 0, 0], w: [0, 0, 0], sampled: false });
+        solid: spec.solid, parts: authored && spec.parts, guide: guide(ids, D), intact: true, damage: 0, v: [0, 0, 0], w: [0, 0, 0], sampled: false });
     }
-    if (options.links !== undefined && (!Array.isArray(options.links) || options.links.length > 16384)) throw new RangeError('Support link budget exceeded');
+    if (connections !== undefined && (!Array.isArray(connections) || connections.length > 16384)) throw new RangeError('Support link budget exceeded');
     for (const id of groups.keys()) adjacency.set(id, []);
     const linkKeys = new Set();
-    for (const link of options.links ?? []) {
+    for (const link of connections ?? []) {
       if (!Array.isArray(link) || link.length !== 2 || link[0] === link[1] || !link.every(id => groups.has(id))) throw new RangeError('Support links need two distinct known group names');
       const key = JSON.stringify(link.slice().sort());
       if (linkKeys.has(key)) throw new RangeError('Support links must be distinct');
@@ -164,7 +168,7 @@
       const edge = { a: link[0], b: link[1], active: true }; links.push(edge);
       adjacency.get(edge.a).push(edge); adjacency.get(edge.b).push(edge);
     }
-    const support = options.support ?? links.length > 0;
+    const support = options.support ?? authored?.support ?? links.length > 0;
     if (support && ![...groups.values()].some(g => g.anchor)) throw new RangeError('Support graphs need an anchored group');
     function unsupported(removed = new Set(), severed = null) {
       if (!support) return [];
@@ -208,6 +212,12 @@
     }
     sync();
     function known(id) { alive(); const g = groups.get(id); if (!g) throw new RangeError('Unknown structural group: ' + id); return g; }
+    function sampleHit(a, b, center, radius, splat, best) {
+      const fraction = sphereSweep(a, b, center, radius);
+      if (fraction === null || best && fraction >= best.fraction) return null;
+      const p = V.lerp(a, b, fraction), normal = V.norm(V.sub(p, center), V.norm(V.sub(a, b)));
+      return { fraction, center: p, normal, ...(splat !== undefined && { splat }) };
+    }
     function sweep(from, to, radius = 0, { exclude = null, environment = false, dynamic = false } = {}) {
       alive();
       const a = vector(from, 'Sweep start'), b = vector(to, 'Sweep end');
@@ -219,20 +229,30 @@
         let hit = null;
         if (g.solid) hit = fieldSweep(a, b, radius, g.solid);
         else for (const id of g.ids) {
-          const q = id * 16, center = [D[q], D[q + 1], D[q + 2]], fraction = sphereSweep(a, b, center, radius + radii(id));
-          if (fraction === null || hit && fraction >= hit.fraction) continue;
-          const p = V.lerp(a, b, fraction), normal = V.norm(V.sub(p, center), V.norm(V.sub(a, b)));
-          hit = { fraction, center: p, normal, splat: id };
+          const q = id * 16, center = [D[q], D[q + 1], D[q + 2]];
+          hit = sampleHit(a, b, center, radius + radii(id), id, hit) ?? hit;
         }
         if (hit && (!best || hit.fraction < best.fraction)) best = { ...hit, group: g.id };
       }
       if (dynamic) for (const body of rubble.bodies) {
-        if (sphereSweep(a, b, body.c, radius + body.rad + body.pr) === null) continue;
-        for (const local of body.pts) {
-          const center = V.add(body.c, M.app(body.R, local)), fraction = sphereSweep(a, b, center, radius + body.pr);
-          if (fraction === null || best && fraction >= best.fraction) continue;
-          const p = V.lerp(a, b, fraction), normal = V.norm(V.sub(p, center), V.norm(V.sub(a, b)));
-          best = { fraction, center: p, normal, group: body.group, body };
+        const shape = pieceShapes.get(body);
+        if (body.group === exclude || sphereSweep(a, b, body.c, radius + body.rad + (shape?.extent ?? body.pr)) === null) continue;
+        if (shape) {
+          // Trace in the moving body's frame so all splat centers stay fixed throughout the step.
+          const inverse = M.tr(body.R);
+          const from = M.app(inverse, V.sub(a, body.c)), to = M.app(inverse, V.sub(b, body.c));
+          const center = [0, 0, 0];
+          let localHit = null;
+          for (let i = 0; i < body.ids.length; i++) {
+            const start = i * 9;
+            center[0] = body.loc[start]; center[1] = body.loc[start + 1]; center[2] = body.loc[start + 2];
+            localHit = sampleHit(from, to, center, radius + shape.radii[i], body.ids[i], localHit ?? best) ?? localHit;
+          }
+          if (localHit) best = { ...localHit, center: V.lerp(a, b, localHit.fraction), normal: M.app(body.R, localHit.normal), group: body.group, body };
+        } else for (const local of body.pts) {
+          const center = V.add(body.c, M.app(body.R, local));
+          const hit = sampleHit(a, b, center, radius + body.pr, undefined, best);
+          if (hit) best = { ...hit, group: body.group, body };
         }
       }
       return best && { ...best, p: V.mad(best.center, best.normal, -radius) };
@@ -287,7 +307,14 @@
         for (const piece of plan.pieces) {
           const body = plan.mode === 'rubble' ? rubble.spawn(piece.ids, piece) : debris.spawn(piece.ids, { ...piece, life: plan.life });
           body.group = g.id; body.mass = piece.mass;
-          if (plan.mode === 'rubble') { body.im = 1 / piece.mass; body.ii = 1 / (0.4 * piece.mass * Math.max(body.rad, 0.15) ** 2); }
+          if (plan.mode === 'rubble') {
+            body.im = 1 / piece.mass;
+            body.ii = 1 / (0.4 * piece.mass * Math.max(body.rad, 0.15) ** 2);
+            if (g.parts) {
+              const sizes = piece.ids.map(radii);
+              pieceShapes.set(body, { radii: sizes, extent: sizes.reduce((max, size) => Math.max(max, size), 0) });
+            }
+          }
           result.push(body);
         }
         emit({ kind: 'release', group: g.id, reason: plan.direct ? reason : 'support', pieces: plan.pieces.length });
@@ -429,7 +456,7 @@
     }
     function inspect(id) {
       const g = known(id);
-      return { id, intact: g.intact, damage: g.damage, mass: g.mass, anchor: g.anchor, splats: g.ids.length,
+      return { id, ...(g.parts && { parts: g.parts.slice() }), intact: g.intact, damage: g.damage, mass: g.mass, anchor: g.anchor, splats: g.ids.length,
         center: g.center.slice(), velocity: g.v.slice(), angularVelocity: g.w.slice(),
         pieces: rubble.bodies.filter(b => b.group === id).length + debris.chunks.filter(b => b.group === id).length };
     }

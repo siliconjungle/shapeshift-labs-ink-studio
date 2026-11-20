@@ -40,9 +40,84 @@ destruction.release('car', { v: car.velocity, w: [0, 0, 0], origin: car.p });
 destruction.reset();
 ```
 
+## Breakable groups from authored parts
+
+Add `breakables` to a diorama to bind structure to names from the scene tree.
+Each group can combine multiple references:
+
+```json
+{
+  "breakables": {
+    "groups": [
+      { "id": "chain", "parts": ["solid:chain"], "anchor": true, "breakable": false },
+      { "id": "lantern", "parts": ["part:lantern-body"], "mass": 3, "strength": 1.5 },
+      { "id": "arch", "parts": ["solid:stone-arch"], "anchor": true, "breakable": false },
+      { "id": "seal", "parts": ["stroke:chalk-seal"], "mode": "debris", "fragmentSize": 0.3 }
+    ],
+    "links": [["chain", "lantern"], ["arch", "seal"]]
+  }
+}
+```
+
+- `solid:<id>` selects a named top-level solid, including scoped names from
+  prefab instances such as `solid:workshop.shutter`. Refer to the outer solid
+  when using boolean operations or modifier stacks.
+- `part:<name>` selects the solids of that rig part, including unnamed solids
+  assigned directly to it. Give child parts their own references.
+- `stroke:<id>` selects surface samples owned by a local sculpt, place, or
+  scatter stroke. Author terrain intended to detach as its own piece, such as
+  a seal across an arch. Keep surrounding terrain separately authored.
+
+Studio resolves references after baking, keeping group ownership tied to the
+authored parts across sample density changes and unrelated edits. Missing references,
+overlapping groups, and parts without visible samples are rejected. Use
+`editor.setBreakables(definitions)` to replace the definitions in an undoable
+scene edit or pass `null` to remove them. Bake a new world and bind that
+world's stage after an edit. Runtime damage belongs to the current stage.
+
+Bind after kinematic animation, as with explicit selectors. The
+[lantern and sealed arch fixture](../examples/breakable-parts.json) provides
+the matching groups for this example:
+
+```js
+const world = K.diorama.build(scene);
+const stage = world.anim ?? K.stage(world);
+const destruction = stage.add(K.destruction(stage));
+const hit = destruction.sweep([-2.17, 3.25, 2], [-2.17, 3.25, -2], 0.035);
+if (hit) destruction.impact({ p: hit.p, group: hit.group, impulse: [0, 0, -2] });
+
+// Let an actor or another effect query both intact structures and loose rubble.
+const obstruction = destruction.sweep(from, to, radius, { dynamic: true });
+```
+
+The sweep uses the same splat proxies before and after an authored rubble
+handoff, following each piece as it moves. Debris releases clear collision
+immediately. Keep detachable parts out of any separate environment SDF passed
+as `solid`, and compose that field with destruction sweeps for host movement.
+Passing explicit `groups` to `K.destruction` uses the manual binding below.
+
+### Suggest a breakable part
+
+The nearby search starts at the closest sample and walks connected voxels of
+the same authored owner. It skips anchors and groups marked unbreakable, and
+refuses components that reach the search boundary. A complete named component
+returns a `parts` reference you can add to a group. An anonymous or partial
+component returns sample IDs for inspection in that bake. The search leaves the
+scene untouched.
+
+```sh
+ink-studio authoring suggest-breakable examples/breakable-parts.json \
+  --at 2.44,0.8,0.45 --radius 1.35 --voxel 0.12
+```
+
+Use `--ids` to include row indices in the CLI report. The equivalent APIs are
+`editor.suggestBreakable({ at, radius, voxel })` and
+`K.authoring.breakables.suggest(world, { at, radius, voxel })`. The APIs
+also accept `exclude` (part keys), `minSamples`, and `maxSamples`.
+
 ## Groups, ownership and motion
 
-Each group needs a distinct `id` and either a nonempty `ids` array of stable
+Each manually bound group needs a distinct `id` and either a nonempty `ids` array of stable
 splat indices, or a shared `selector` such as `{ object: 'gate' }`,
 `{ material: 'stone' }` or `{ tag: 'breakable' }`. Selectors are resolved once
 at creation. Selection shares the same metadata as rendering and look tools.
@@ -125,7 +200,7 @@ supports, not constraints on an already released body.
 
 The default collision proxies are spheres enclosing each splat covariance.
 Group bounds provide broad-phase rejection; narrow-phase tests preserve gaps
-between samples. An authored group `solid` replaces that narrow phase with SDF
+between samples. A group-specific `solid` replaces the intact narrow phase with SDF
 tracing. Optional environment tracing uses the system `solid` field, defaulting
 to `y - ground(x, z)`. SDF tracing is bounded and requires finite signed distances.
 

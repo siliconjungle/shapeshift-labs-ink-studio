@@ -255,6 +255,23 @@
       else document.transact('Select brush region', write);
     }
 
+    function setBreakables(definitions) {
+      const value = clone(definitions);
+      function write() {
+        document.setEnvironment({ breakables: null });
+        if (value !== null) document.setEnvironment({ breakables: value });
+        document.preview();
+        return (previewWorld = build());
+      }
+      if (!document.pending()) return document.transact('Set breakable groups', write);
+      try {
+        return write();
+      } catch (error) {
+        document.cancel();
+        throw error;
+      }
+    }
+
     function applyBrush(stroke) {
       const value = clone(stroke);
       const region = snapshot().brushRegion;
@@ -306,6 +323,10 @@
       selection: selectedKeys,
       select,
       pick,
+      suggestBreakable({ world, ...options } = {}) {
+        current();
+        return A.breakables.suggest(world ?? (previewWorld ??= build()), options);
+      },
       selectRay(ray, { mode = 'replace', ...options } = {}) {
         const result = pick(ray, options);
         select(result ? [result.key] : [], { mode });
@@ -318,6 +339,7 @@
       setPrefabInstance,
       refreshPrefabs,
       setBrushRegion,
+      setBreakables,
       applyBrush,
       setMaterial,
       setSurfaceState,

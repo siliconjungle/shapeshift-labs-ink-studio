@@ -78,6 +78,15 @@ In Node, pass the shared map as `env.prefabs`. `setPrefabInstance(id, record)` c
 See [shared parameter bindings](parameter-bindings.md) for named controls, expressions, fields, and signals in editor builds.
 See the [unified scene timeline](scene-timeline.md) for animating those builds and inspecting their markers and audio cues.
 
+## Breakable groups
+
+Use `editor.suggestBreakable({ at, radius, voxel })` to query a nearby
+connected component. Author a destruction group with the returned part key,
+or combine several scene-tree keys in a group with
+`editor.setBreakables({ groups, links })`. See the
+[destruction binding and fixture](destruction.md#breakable-groups-from-authored-parts)
+for available keys and runtime collision queries.
+
 ## History
 
 Standalone edits commit immediately. Use `begin(label)` to group repeated transform or material edits into one gesture. `preview()` validates the draft, `commit()` records it as one undo step, and `cancel()` restores the prior scene. If preview or commit fails validation, the transaction rolls back.

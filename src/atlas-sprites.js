@@ -1,5 +1,6 @@
 /* Artist-authored directional sprite atlases. Coordinates in the atlas are top-down. */
 const AtlasSprites = (() => {
+  const drawing=typeof FrameComposite==='undefined'?require('./frame-composite.js'):FrameComposite;
   const assetBrand=Symbol.for('ink-studio.sprite-atlas'), placedBrand=Symbol.for('ink-studio.atlas-placement');
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const integer=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
@@ -22,10 +23,63 @@ const AtlasSprites = (() => {
     return {right:[z,0,-x],up:[-x*s,c,-z*s],normal:[x*c,s,z*c]};
   }
 
+  function paintedScenery(settings, width, height, maps) {
+    const { bands, base, depthPaint = [], lightPaint = [] } = settings ?? {};
+    const names = bands && typeof bands === 'object' && !Array.isArray(bands) ? Object.keys(bands) : [];
+    if (!names.length || names.length > 16 || names.some(name => !name.trim() || !Number.isFinite(bands[name])) ||
+        !names.includes(base) || width*height > 4e6)
+      throw new RangeError('Painted scenery needs 1–16 named depth bands, a base band and a bounded image');
+    if (maps.depth) throw new TypeError('Painted scenery uses depth bands in place of a depth image');
+    if (![depthPaint, lightPaint].every(paint => Array.isArray(paint) && paint.length <= 512))
+      throw new TypeError('Scenery paint needs lists of up to 512 strokes');
+    const depths = names.map(name => bands[name]);
+    const baseId = names.indexOf(base);
+    const hex = values => '#' + values.map(value => value.toString(16).padStart(2, '0')).join('');
+    const draw = (paint, color) => {
+      const { shape } = paint ?? {};
+      if (!shape || Object.keys(shape).some(key =>
+          !['type', 'points', 'width', 'closed', 'rect', 'rings'].includes(key)))
+        throw new TypeError('Scenery paint needs a pixel path, polygon or rectangle');
+      return { ...shape, color };
+    };
+    const ids = depthPaint.length && drawing.paintMap(width, height, Array.from(depthPaint, paint => {
+      const id = names.indexOf(paint?.band);
+      if (id < 0) throw new RangeError('Unknown scenery band: ' + paint?.band);
+      return draw(paint, hex([id, 0, 0]));
+    }));
+    if (lightPaint.length) {
+      const normals = drawing.paintMap(width, height, Array.from(lightPaint, paint => {
+        const normal = vector(paint?.normal, 'Painted normal');
+        const length = positive(Math.hypot(...normal), 'Painted normal length');
+        return draw(paint, hex(normal.map(value => Math.round((1 + value/length)*127.5))));
+      }));
+      if (!maps.normal) maps.normal = normals;
+      else for (let i = 0; i < normals.length; i += 4)
+        if (normals[i + 3]) maps.normal.set(normals.subarray(i, i + 4), i);
+    }
+    const bandAt = index => ids && ids[index + 3] ? ids[index] : baseId;
+    const bounds = new Map();
+    for (let i = 0; i < maps.color.length; i += 4) {
+      if (!maps.color[i + 3]) continue;
+      const id = bandAt(i), pixel = i / 4, x = pixel % width, y = Math.floor(pixel / width);
+      const rect = bounds.get(id);
+      if (rect) {
+        rect[0] = Math.min(rect[0], x);
+        rect[1] = Math.min(rect[1], y);
+        rect[2] = Math.max(rect[2], x + 1);
+        rect[3] = Math.max(rect[3], y + 1);
+      } else bounds.set(id, [x, y, x + 1, y + 1]);
+    }
+    const planes = Object.freeze([...bounds].map(([id, bounds]) =>
+      Object.freeze({ id, depth: depths[id], bounds: Object.freeze(bounds) })));
+    return { bandAt, depths, planes };
+  }
+
   function compile(source) {
     if (source?.[assetBrand]) return source;
     const { metadata:m,images }=source??{};
-    const { width,height,frames,encodings={},normalSpace=typeof encodings.normal==='string'?'asset':'view',
+    const { width,height,scenery:painted,frames=painted===undefined?undefined:[{rect:{x:0,y:0,width,height}}],
+      encodings={},normalSpace=typeof encodings.normal==='string'?'asset':'view',
       emissionMode=typeof encodings.emission==='string'?'baked':'add', depthFormat='rgb24' }=m??{};
     if (!integer(width,1,8192)||!integer(height,1,8192)||!Array.isArray(frames)||!frames.length||frames.length>32768)
       throw new RangeError('Sprite atlas needs valid dimensions and view frames');
@@ -43,6 +97,7 @@ const AtlasSprites = (() => {
         throw new TypeError('Sprite atlas '+name+' needs a matching RGBA image');
       maps[name]=Uint8Array.from(data);
     }
+    const scenery=painted===undefined?null:paintedScenery(painted,width,height,maps);
     const range=encodings.depth?.range??m.depthRange;
     if (maps.depth && range===undefined && !maps.depth.some((n,i)=>i%4===3&&n)) delete maps.depth;
     if (maps.depth&&(!Array.isArray(range)||range.length!==2||!Array.from(range).every(Number.isFinite)||range[1]<range[0]))
@@ -71,18 +126,19 @@ const AtlasSprites = (() => {
     function select(frame,mode,direction) {
       const views=groups.get(frame??groups.keys().next().value);
       if (!views) throw new RangeError('Unknown sprite atlas frame: '+frame);
-      if (mode==='card') return views[0];
+      if (mode==='card'||mode==='scenery') return views[0];
       return views.reduce((best,view)=>dot(view.basis.normal,direction)>dot(best.basis.normal,direction)?view:best);
     }
-    function sample(view,x,y,channels,out) {
+    function sample(view,x,y,channels,out,band) {
       const index=((view.rect.y+y)*width+view.rect.x+x)*4;
       const a=maps.color[index+3]/255;
-      if (!a) return false;
+      if (!a || band !== undefined && scenery.bandAt(index) !== band) return false;
       out.alpha=a;
       for (let c=0;c<3;c++) out.color[c]=maps.color[index+c]/255;
       out.depth=maps.depth?.[index+3]&&channels.depth
         ? depthLo+depthSpan*(depthFormat==='gray'?maps.depth[index]/255:
           (maps.depth[index]*65536+maps.depth[index+1]*256+maps.depth[index+2])/0xffffff)-view.depthOrigin : 0;
+      if (scenery && channels.depth) out.depth=scenery.depths[scenery.bandAt(index)];
       out.hasNormal=!!maps.normal?.[index+3];
       out.hasEmission=!!(channels.emission&&maps.emission?.[index+3]);
       if (out.hasNormal) for (let c=0;c<3;c++) out.normal[c]=maps.normal[index+c]/127.5-1;
@@ -92,13 +148,14 @@ const AtlasSprites = (() => {
       } else out.emission.fill(0);
       return true;
     }
-    return Object.freeze({[assetBrand]:true, select, sample, normalSpace, emissionMode, hasDepth:Boolean(maps.depth)});
+    return Object.freeze({[assetBrand]:true, select, sample, normalSpace, emissionMode, hasDepth:Boolean(maps.depth||scenery), sceneryPlanes:scenery?.planes});
   }
 
   function place(value) {
     if (value?.[placedBrand]) return value;
-    const { atlas,at,mode='impostor',yaw=0,scale=1,opacity=1,frame,depth=true,lighting=true,emission=true,objectId,materialId }=value??{};
-    if (!['card','impostor'].includes(mode)||!Number.isFinite(opacity)||opacity<0||opacity>1||
+    const { atlas,at,mode,yaw=0,scale=1,opacity=1,frame,depth=true,lighting=true,emission=true,objectId,materialId }=value??{};
+    const asset=compile(atlas), placementMode=mode===undefined?(asset.sceneryPlanes?'scenery':'impostor'):mode;
+    if (!['card','impostor','scenery'].includes(placementMode)||placementMode==='scenery'&&!asset.sceneryPlanes||!Number.isFinite(opacity)||opacity<0||opacity>1||
         [depth,lighting,emission].some(value=>typeof value!=='boolean')||
         (frame!==undefined&&typeof frame!=='function'&&!integer(frame,0,32767)))
       throw new RangeError('Invalid sprite atlas placement');
@@ -108,7 +165,7 @@ const AtlasSprites = (() => {
       if (materialId!==undefined) selectors.prepare({material:materialId});
     }
     const anchor=typeof at==='function'?at:Object.freeze(vector(at,'Sprite atlas anchor'));
-    return Object.freeze({[placedBrand]:true, atlas:compile(atlas), at:anchor, mode,
+    return Object.freeze({[placedBrand]:true, atlas:asset, at:anchor, mode:placementMode,
       yaw:finite(yaw,'Sprite placement yaw'), scale:positive(scale,'Sprite placement scale'),
       opacity,frame,depth,lighting,emission,...(objectId!==undefined&&{objectId}),...(materialId!==undefined&&{materialId}) });
   }

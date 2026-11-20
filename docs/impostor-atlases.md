@@ -54,3 +54,68 @@ ink-studio render examples/relightable-impostor.js --t 3 --sprite-atlas-mode imp
 A JSON diorama can put an array of placements in `finish.spriteAtlases` and refer to each `atlas` by a path relative to the diorama. Use `--sprite-atlas off` to hide the authored placements in a comparison. A manifest passed with `--sprite-atlas` replaces the scene's placements for that render and defaults to the world origin. Set `--sprite-at x,y,z` and `--sprite-scale n` to place it.
 
 Depth positions each texel along its draw ray and participates in the scene's depth, fog, and emission passes. The renderer uses the silhouette of the selected view. The [survey drone example](../examples/relightable-impostor.js) demonstrates both placement modes under changing camera and lighting angles.
+
+## Painted scenery
+
+A scenery atlas splits one painting into parallel planes in world space.
+Paint named depths for things a character can pass behind or in front of.
+The normal brush marks where the scene's live sun should relight the painting.
+The color PNG provides the silhouette and can include transparent pixels.
+Add the `scenery` section to an atlas manifest.
+
+```json
+{
+  "width": 196,
+  "height": 122,
+  "unitsPerPixel": 0.046,
+  "files": { "color": "arcade.png" },
+  "scenery": {
+    "bands": { "ivy": -0.98, "wall": 0, "recess": 1.32 },
+    "base": "wall",
+    "depthPaint": [
+      { "band": "recess", "shape": { "type": "rect", "rect": [74, 60, 68, 48] } },
+      { "band": "ivy", "shape": { "type": "path", "points": [[41, 15], [48, 28], [45, 46]], "width": 4 } }
+    ],
+    "lightPaint": [
+      { "normal": [-0.5, 0.55, 0.72], "shape": { "type": "rect", "rect": [19, 35, 17, 2] } }
+    ]
+  }
+}
+```
+
+- Each band is an offset from the reference plane in scene units. Negative
+  offsets bring paint toward the viewer. Positive offsets set paint back.
+  Use up to 16 bands. Unmarked paint uses `base`.
+- Both brush lists accept paths with a width in pixels, polygon fills, and
+  rectangles. Coordinates are on the full PNG with the origin at its top left.
+  Later strokes can override earlier marks. Brush edges snap to the painted
+  pixel grid and leave the source color and alpha intact.
+- Light brush normals use the atlas's normal space. View-space axes default
+  to right, up, and toward the viewer. The brush can add to or replace
+  regions of an imported normal PNG. Unmarked texels with no normal retain
+  their painted color.
+- Scenery uses the band offsets in place of a depth PNG. Omit `frames`
+  for a full-image view. Supply one to set the reference pitch, yaw or pivot.
+  Placement scale changes both the pixel size and the depth offsets.
+
+The usual `K.sprite.placeAtlas` and JSON `finish.spriteAtlases` placements
+select `scenery` mode automatically for this kind of atlas. The plane stays
+at its authored world orientation as the camera turns. Use the existing
+`depth: false` to flatten it for comparison and `lighting: false` to see the
+paint without live shading. The software renderer and CLI composite the
+paint with real geometry and depth-dependent fog.
+
+For a single flattened painting, match the reference camera and keep turns
+short. Wider turns can expose gaps behind painted foreground details. Fill
+those areas with a backing card or geometry when a shot needs them.
+
+[The Ivy Arcade](../examples/painted-scenery.js) uses one painting for the
+ivy, wall and recess. A courier crosses a floor baked to splats, and the
+stone piers use [SDF-assisted coverage](sdf-assist.md).
+
+```sh
+ink-studio clip examples/painted-scenery.js --from 0 --to 5.6 --fps 10 \
+  --w 224 --h 152 --px 1 --out ivy-arcade.png
+ink-studio render examples/painted-scenery.js --t 3.2 --params '{"depth":false}' \
+  --w 224 --h 152 --px 1 --out flattened.png
+```
