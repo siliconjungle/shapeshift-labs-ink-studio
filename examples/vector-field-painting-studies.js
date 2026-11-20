@@ -150,13 +150,11 @@ function silk(K, set, TexturedSurface) {
     const u=(i+.5)/13;
     S.tube([[tx+clothW*u,4.69,.50+fold(u,0)],[tx+clothW*u,4.822,.642]], .023,.022,brass,{res:.047});
   }
-  box([-1.30,.509,.305], [1.29,.191,.099], iron, .067, .057);
-  label('SILK CURRENT',[-1.30,.525,.476],2.16,true,0xffdaa3);
-  label('FLOW ALIGNED',[-1.30,.345,.476],1.50,true,0xafcecb);
   const rawX = 2.56, rawY = 2.86, rawW = 2.43, rawH = 2.16, proofCounts = [89,80];
   box([rawX,rawY,.24],[1.32,1.18,.147],brass,.077);
   const rawRegion = sprites.reserve(...proofCounts), drawRaw = raster(rawRegion,...proofCounts);
   sprites.faceRegion([rawX-rawW/2,rawY-rawH/2,.486],[rawW,0,0],[0,rawH,0],rawRegion);
+  label('SILK CURRENT',[rawX,4.442,.396],2.23,true,0xffdaa3);
   label('INPUT GRAIN',[rawX,1.375,.501],1.48,true,0xffcbab);
   const ink = [33,19,46], violet = [93,49,103], rose = [180,107,134], light = [252,211,170];
   let rawDone = false;
