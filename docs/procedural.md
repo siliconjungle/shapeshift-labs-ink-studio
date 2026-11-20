@@ -141,6 +141,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `growth.aggregate(options)`, `growth.grayScottGrid(options)`, `growth.grayScottSurface(points, links, options)`, `growth.dispersal(options)`, `growth.succession(options)` | Grid and surface patterns, seed dispersal and habitat competition |
 | `forms.superquadric(spec)`, `forms.loft(sections)`, `forms.skeleton(nodes)`, `forms.periodic(spec)`, `forms.shell(host, options)` | Bounded analytic forms and locally variable shells for the sculptor |
 | `measureSculptBounds(build)` | Measure a finite rest-pose recipe without generating splats |
+| `forms.fractal(spec)` | [Bounded quaternion Julia, Mandelbulb, and Menger fold forms](fractal-forms.md) for implicit geometry and adaptive splat bakes |
 | `grammar.symmetry(scope, rules, options)` | Reflected or radial grammar instances with optional variations and stable copy keys |
 | `ornament.compile(spec)` | [Wallpaper and frieze groups](wallpaper-frieze.md) for repeated motifs, seamless pigment, etched relief, and physical tiles |
 | `fracture.power(spec)`, `fracture.separate(graph, options)`, `fracture.crack(options)` | Anisotropic power cells, cumulative bond failure and stress-guided crack paths |
@@ -2298,6 +2299,8 @@ rendering resolution.
 - `forms.periodic({bounds, type, period, phase, mode, thickness, host})`
   makes gyroid, Schwarz P, and diamond sheets or solid phases in a bounded
   volume. An optional signed host field clips the result.
+- `forms.fractal(spec)` supplies clipped [3D fractal fields](fractal-forms.md)
+  for the implicit sculpt and voxel extractors.
 - `forms.shell(host, {inner, outer, maxOuter})` selects a band on either
   side of the host's zero surface. Each thickness can be a scalar or a
   world-space callback. Callback outer thickness requires an explicit

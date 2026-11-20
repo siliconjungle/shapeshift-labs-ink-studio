@@ -152,6 +152,90 @@
     }, box, pose);
   }
 
+  function boxDistance(x, y, z, min, max) {
+    const a = Math.max(min[0] - x, x - max[0]), b = Math.max(min[1] - y, y - max[1]),
+      c = Math.max(min[2] - z, z - max[2]), outside = Math.max(a, b, c);
+    return outside <= 0 ? outside : Math.hypot(Math.max(0, a), Math.max(0, b), Math.max(0, c));
+  }
+
+  function quaternionJulia(iterations, { constant = [-0.2, 0.8, 0, 0], slice = 0, bailout = 4 }) {
+    if (!Array.isArray(constant) || constant.length !== 4 || !Array.from(constant).every(finite) || !finite(slice) || Math.abs(slice) > 8 ||
+        !Number.isFinite(bailout) || bailout < 2 || bailout > 8 ||
+        Math.hypot(...constant) > bailout * (bailout - 1))
+      throw new RangeError('Quaternion Julia needs a finite constant, slice within ±8, and a valid bailout in [2, 8]');
+    const [ca, cb, cc, cd] = constant;
+    return (a, b, c) => {
+      let d = slice, derivative = 1, margin = -Infinity;
+      for (let i = 0; ; i++) {
+        const aa = a * a, bb = b * b, c2 = c * c, dd = d * d, r = Math.sqrt(aa + bb + c2 + dd);
+        // The signed orbit margin keeps zero crossings at the finite escape boundary.
+        margin = Math.max(margin, (r - bailout) / Math.max(1, derivative));
+        if (r > bailout || i === iterations) return margin;
+        derivative *= 2 * r;
+        const twice = 2 * a;
+        a = aa - bb - c2 - dd + ca;
+        b = twice * b + cb;
+        c = twice * c + cc;
+        d = twice * d + cd;
+      }
+    };
+  }
+
+  function mandelbulb(iterations, { power = 8, bailout = 4 }) {
+    if (!Number.isSafeInteger(power) || power < 2 || power > 12 ||
+        !Number.isFinite(bailout) || bailout < 2 || bailout > 8)
+      throw new RangeError('Mandelbulbs need an integer power in [2, 12] and bailout in [2, 8]');
+    return (x, y, z) => {
+      let a = x, b = y, c = z, derivative = 1, margin = -Infinity;
+      // The first update from zero is the input point itself.
+      for (let i = 1; ; i++) {
+        const r = Math.sqrt(a * a + b * b + c * c);
+        margin = Math.max(margin, (r - bailout) / derivative);
+        if (r > bailout || i === iterations) return margin;
+        const factor = r ** (power - 1), radial = r * factor,
+          theta = power * Math.atan2(Math.hypot(a, b), c),
+          phi = power * Math.atan2(b, a), ring = radial * Math.sin(theta);
+        derivative = power * factor * derivative + 1;
+        a = x + ring * Math.cos(phi);
+        b = y + ring * Math.sin(phi);
+        c = z + radial * Math.cos(theta);
+      }
+    };
+  }
+
+  const unitCube = { min: [-1, -1, -1], max: [1, 1, 1] };
+  function menger(iterations, { gap = 1 / 3 }) {
+    if (!Number.isFinite(gap) || gap < 0.1 || gap > 0.45)
+      throw new RangeError('Menger folds need a gap in [0.1, 0.45]');
+    const fold = n => Math.abs(n - 2 * Math.floor((n + 1) / 2));
+    return (x, y, z) => {
+      let field = boxDistance(x, y, z, unitCube.min, unitCube.max);
+      if (field >= gap) return field;
+      for (let i = 0, scale = 1; i < iterations; i++, scale *= 3) {
+        const a = fold(x * scale), b = fold(y * scale), c = fold(z * scale),
+          middle = Math.max(Math.min(a, b), Math.min(Math.max(a, b), c));
+        field = Math.max(field, (gap - middle) / scale);
+      }
+      return field;
+    };
+  }
+
+  function fractal({
+    family = 'mandelbulb', iterations = family === 'menger' ? 3 : 16, bounds, pose, ...options
+  } = {}) {
+    const fold = family === 'menger', julia = family === 'quaternionJulia';
+    if ((!fold && !julia && family !== 'mandelbulb') || !Number.isSafeInteger(iterations) ||
+        iterations < 1 || iterations > (fold ? 7 : 24))
+      throw new RangeError('Fractals need a supported family and a bounded integer iteration count');
+    const extent = fold ? 1 : julia ? 1.65 : 1.35,
+      box = P.spatial.bounds(bounds ?? { min: [-extent, -extent, -extent], max: [extent, extent, extent] });
+    if (![...box.min, ...box.max].every(v => Math.abs(v) <= 64) || box.min.some((v, i) => box.max[i] - v < 1e-5))
+      throw new RangeError('Fractal clips need local bounds within ±64 and positive extents of at least 1e-5');
+    const kernel = fold ? menger(iterations, options) : julia ? quaternionJulia(iterations, options) : mandelbulb(iterations, options);
+    return transformed((x, y, z) => Math.max(boxDistance(x, y, z, box.min, box.max), kernel(x, y, z)),
+      box, pose, iterations);
+  }
+
   function shell(host, { inner = 0.08, outer = 0, maxOuter } = {}) {
     const weight = v => typeof v === 'function' || (finite(v) && v >= 0);
     if (typeof host?.sd !== 'function' || !weight(inner) || !weight(outer) ||
@@ -215,5 +299,5 @@
     return S;
   };
 
-  P.forms = { superquadric, loft, skeleton, periodic, shell };
+  P.forms = { superquadric, loft, skeleton, periodic, shell, fractal };
 })(KIT);
