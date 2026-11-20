@@ -213,7 +213,8 @@
     const orders=config.orders===undefined?null:O.create(config.orders);
     const routeQueue=config.routeQueue===undefined?null:RQ.create(config.routeQueue);
     check(!routeQueue||navigation,'Route queues need a tiled navigation system');
-    const crowd=config.crowd===undefined?null:W.crowd.create(config.crowd,config.bounds);
+    const travel=config.paths===undefined&&config.rides===undefined?null:W.agentTravel.create(config.paths,config.rides,config.bounds);
+    const crowd=config.crowd===undefined&&!travel?.hasRides?null:W.crowd.create(config.crowd===undefined?{}:config.crowd,config.bounds);
     const materialContacts=config.contactEvents==='material';
     check(config.contactEvents===undefined||typeof config.contactEvents==='boolean'||materialContacts,
       'contactEvents must be boolean or material');
@@ -324,7 +325,7 @@
         if(profile.mode!=='walk')continue;
         const radius=profile.radius??.15;
         yield {id:page.ids[i],generation:page.generations[i],position:page.positions.slice(i*3,i*3+3),
-          radius,height:heightFor({...profile,radius}),goal:row.goal,active:row.mode!=='dormant'};
+          radius,height:heightFor({...profile,radius}),goal:row.goal,active:row.mode!=='dormant'&&row.mode!=='ride'};
       }
     }
     function plan(ctx,profile,from,goal){
@@ -480,6 +481,9 @@
       orders?.validate(agent.orders);
       check(agent.formationDriven===undefined||formations&&agent.formationDriven===true,'Invalid saved formation movement');
       check(agent.formationAfter===undefined||agent.formationDriven&&vector(agent.formationAfter),'Invalid saved exit destination');
+      check(!agent.travelPlan||travel&&profiles[agent.species].mode==='walk'&&!O.holding(agent.orders),
+        'Invalid walking travel controller');
+      travel?.validate(agent);
       if(routeQueue&&profiles[agent.species].mode==='walk')routeQueue.validateAgent(agent);
       if(crowd&&profiles[agent.species].mode==='walk')crowd.validateAgent(agent.crowd);
     }
@@ -499,6 +503,7 @@
       routeQueue?.validateWork(state.routeWork);
       crowd?.validate(state.crowd);
       if(formations)formations.validate(state.formations,name=>S.select(S.get(state),name));
+      travel?.ledger(travelRows(S.get(state)));
     }
     function requireAgent(roster,{agent,generation}){
       const slot=S.find(roster,agent);
@@ -515,6 +520,70 @@
         const {routing,routePriority}=page.details[i];
         if(routing?.request)yield {id:page.ids[i],generation:page.generations[i],routing,routePriority,slot:{p,i}};
       }
+    }
+    function* travelRows(roster){
+      for(const [p,page] of roster.pages.entries())for(let i=0;i<page.ids.length;i++)
+        if(page.details[i].travelPlan)yield S.read(roster,{p,i});
+    }
+    function syncRiders(state,ctx){
+      const roster=S.get(state), frames=new Map();
+      let draft;
+      for(const [p,page] of roster.pages.entries())for(let i=0;i<page.ids.length;i++){
+        if(page.details[i].travelPlan?.phase!=='riding')continue;
+        const slot={p,i}, row=S.read(roster,slot), next=travel.carry(row,ctx,frames);
+        if(next!==row)(draft??=S.edit(roster)).update(slot,row,next);
+      }
+      return draft?{...state,roster:draft.finish()}:state;
+    }
+    function holdTravel(row,position=row.position){
+      if(row.mode==='rest'&&S.sameVector(position,row.position)&&S.sameVector(position,row.goal)&&!row.route.length&&
+        (!row.routing||row.routing.status==='idle')&&
+        (!row.crowd||row.crowd.status==='clear'))return row;
+      return {...row,position,goal:position,route:emptyList,cursor:0,retry:0,mode:'rest',
+        ...(row.routing&&{routing:RQ.idle}),...(row.crowd&&{crowd:W.crowd.clear})};
+    }
+    function finishTravel(row,position){
+      const {travelPlan,...free}=row;
+      return holdTravel(free,position);
+    }
+    function travelMotion(ctx,contacts,dirty,group,schedule,agent){
+      const profile=profileFor(agent), arrival=profile.radius*.65, height=heightFor(profile);
+      const ground=point=>fit(ctx,profile,point);
+      return {
+        fit:ground,hold:holdTravel,release:finishTravel,
+        seatClear(point,otherPoint,other){
+          const [x,y,z]=V.sub(point,otherPoint);
+          return Math.hypot(x,z)>=profile.radius+other.radius+(crowd?.spacing??0)||
+            y>=heightFor(profileFor(other))||y<=-height;
+        },
+        arrived(row,target,next){
+          const point=ground(target);
+          if(!point||row.crowd?.status==='queued')return false;
+          const gap=V.dist(row.position,point);
+          return gap<=arrival+1e-7||next&&row.crowd?.status==='avoiding'&&gap<=profile.radius*2&&
+            V.dot(V.sub(row.position,point),V.sub(next,target))>0;
+        },
+        walk(row,target){
+          const controlled=S.sameVector(target,row.goal)?row:{...row,goal:target,route:emptyList,cursor:0,retry:0,
+            ...(row.routing&&{routing:RQ.idle})};
+          return one(controlled,ctx,contacts,dirty,true,controlled.routing&&schedule?.session(controlled),group,arrival);
+        },
+        transfer(row,from,to,carrier){
+          if(group&&!group.canTransfer(row,from,to))return false;
+          if(!config.clearance)return true;
+          const exclude=carrier?[row.entity,carrier]:row.entity;
+          const steps=Math.max(1,Math.ceil(V.dist(from,to)/Math.max(.02,profile.radius*.5)));
+          const levels=Math.max(1,Math.ceil((height-2*profile.radius)/profile.radius));
+          for(let i=0;i<=steps;i++){
+            const point=V.lerp(from,to,i/steps);
+            for(let j=0;j<=levels;j++){
+              const offset=profile.radius+.001+(height-2*profile.radius)*j/levels;
+              if(clearance(ctx,config,V.add(point,[0,offset,0]),exclude)<profile.radius-1e-7)return false;
+            }
+          }
+          return true;
+        }
+      };
     }
     function replace(state,args,update,decisions=state.decisions){
       const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
@@ -630,7 +699,7 @@
           const row=S.select(roster,agent);
           if(!row)continue;
           const decision=state.decisions?.[agent], group=formations?.active(state.formations,row);
-          const available=row.mode==='dormant'?'agent-unavailable':O.holding(row.orders)||row.formationDriven||group?
+          const available=row.mode==='dormant'?'agent-unavailable':O.holding(row.orders)||row.travelPlan||row.formationDriven||group?
             'agent-busy':policy?.committed(decision)?'activity-committed':true;
           rows.push({row,profile,wallet,available,context:{...row,needs:decision?.needs??{},
             activity:decision?.choice?.activity??null,phase:decision?.phase??null}});
@@ -658,7 +727,8 @@
         return outcomes.find(entry=>entry.sequence===owner.sequence)?.phase;
       }
     }}),
-    ...(crowd&&{inputs:crowd.inputs}),
+    ...((crowd||travel?.hasRides)&&{inputs:{...crowd?.inputs,...travel?.inputs}}),
+    ...(travel?.hasRides&&{afterStep:syncRiders}),
     workEffects:{recruit:{check:checkRecruit,run:recruit}},
     occupancy:{
       kind:'agent',key:S.get,rows:state=>occupants(S.get(state)),
@@ -667,7 +737,8 @@
     },
     simulationAggregate(settings){
       return W.aggregatePopulation.cohorts(settings,
-        {profiles,fit,bounds:config.bounds,contacts:config.contactEvents,validateState,occupants,blockedCoarse:crowd?.blockedCoarse,formationActive:formations?.active});
+        {profiles,fit,bounds:config.bounds,contacts:config.contactEvents,validateState,occupants,blockedCoarse:crowd?.blockedCoarse,
+          formationActive:formations?.active,syncRiders:travel?.hasRides?syncRiders:undefined});
     },
     ...(config.contactEvents&&{outputs:{contacts:'event'},output:state=>({contacts:state.contacts})}),
     ...(orders&&{orderWork:{check:orders.checkWork,*rows(state,ctx){
@@ -744,6 +815,7 @@
       }
       check(id(args.agent)&&(args.generation===undefined||Number.isSafeInteger(args.generation)&&args.generation>0),
         'Invalid agent selector');
+      if(travel&&W.agentTravel.actions.includes(type))travel.checkAction(type,args);
       if(type==='issue-order')orders.checkIssue(args);
       if(type==='cancel-order')orders.checkCancel(args);
       if(type==='set-need')policy.checkNeed(args);
@@ -757,6 +829,14 @@
         check(!policy?.managed(args.agent),'The activity policy owns this creature task');
       }
     },actions:{
+      ...(travel&&Object.fromEntries(W.agentTravel.actions.map(type=>[type,(state,args,ctx)=>
+        replace(state,args,row=>{
+          check(profiles[row.species].mode==='walk'&&!O.holding(row.orders)&&!row.formationDriven&&
+            !formations?.active(state.formations,row),'Shared travel needs a walker with control of its movement');
+          check(row.mode!=='ride','This walker is riding to its exit dock');
+          const travelPlan=travel.start(type,args,row,ctx), free=finishTravel(row,row.position);
+          return travelPlan?{...free,travelPlan}:free;
+        })]))),
       ...(policy?.hasNeeds&&{'set-need'(state,args,ctx){
         const roster=S.get(state), {row}=requireAgent(roster,args);
         const decisions={...state.decisions,
@@ -770,9 +850,10 @@
       }]))),
       ...(orders&&{
         'issue-order'(state,args,ctx){
+          const {row}=requireAgent(S.get(state),args);
+          check(!row.travelPlan,'Cancel shared travel before issuing an order');
           let decisions=state.decisions;
           if(policy?.managed(args.agent)){
-            const {row}=requireAgent(S.get(state),args);
             decisions={...decisions,[row.id]:policy.release(decisions[row.id],row,ctx,'order-issued')??policy.initial[row.id]};
           }
           return replace(state,args,row=>changeOrders(row,orders.issue(row,args,ctx)),decisions);
@@ -790,8 +871,9 @@
         return replace(state,args,row=>{
           check(!O.holding(row.orders),'Pending orders own this creature destination');
           check(!formations?.active(state.formations,row),'Detach from the active formation before using seek');
+          check(row.mode!=='ride','This walker is riding to its exit dock');
           ctx.emit('destination',{entity:row.entity,at:args.to});
-          const {formationDriven,formationAfter,...individual}=row;
+          const {formationDriven,formationAfter,travelPlan,...individual}=row;
           const crossing=formationDriven&&Object.values(state.crowd??{}).some(gate=>gate.holders.some(holder=>
             holder.agent===row.id&&holder.generation===row.generation&&holder.entered));
           return {...individual,goal:args.to,route:[],cursor:0,retry:0,
@@ -812,6 +894,7 @@
       const dirty=changes?.length&&(navigationReads?new Set(navigationReads.map(field=>ctx.query.field(field)?.name)):true);
       const skipRest=staticFit&&settled.has(roster);
       const group=crowd?.begin(state.crowd,walkers(roster),ctx);
+      const itinerary=travel?.begin(travelRows(roster),ctx);
       const formation=formations?.begin(state.formations,ctx,{
         read:name=>S.select(roster,name),profile:profileFor,
         fit:(profile,point)=>fit(ctx,profile,point),
@@ -833,10 +916,15 @@
         const key=slot.id, managed=policy?.managed(key);
         const detail=roster.pages[slot.p].details[slot.i], book=orders&&detail.orders;
         const guide=formation?.guides.get(key);
-        if(!managed&&!O.holding(book)&&!guide&&!detail.formationDriven&&skipRest&&S.atRest(roster,slot))continue;
+        if(!managed&&!O.holding(book)&&!guide&&!detail.formationDriven&&!detail.travelPlan&&skipRest&&S.atRest(roster,slot))continue;
         const agent=S.read(roster,slot);
-        const external=O.holding(book)||guide||agent.formationDriven;
+        const external=O.holding(book)||guide||agent.formationDriven||agent.travelPlan;
         const decision=managed&&policy.update(state.decisions[key],agent,ctx,!external);
+        if(agent.travelPlan){
+          store(slot,agent,itinerary.step(agent,travelMotion(ctx,contacts,dirty,group,schedule,agent)));
+          if(managed)decisions[key]=policy.release(decision,agent,ctx,'shared-travel')??policy.initial[key];
+          continue;
+        }
         if(external){
           const profile=profileFor(agent), exit=group?.exitGoal(agent);
           function drive(row,goal,task,priority,direction,arrival,pace){
@@ -949,6 +1037,9 @@
       position:agentField('vector',row=>row.position,'world'),
       velocity:agentField('vector',row=>row.velocity,'world/s'),
       task:agentField('categorical',row=>row.task),
+      ...(travel&&{'travel-status':agentField('record',row=>row.travelPlan??W.agentTravel.idle)}),
+      ...(travel?.hasRides&&{rides:{type:'record',qualified:true,read:ctx=>
+        Q.ok(travel.report(travelRows(S.get(ctx.state)),ctx))}}),
       ...(orders&&{
         orders:agentField('record',row=>row.orders??O.blank),
         'order-tasks':{type:'record',qualified:true,read:()=>Q.ok(orders.tasks)}

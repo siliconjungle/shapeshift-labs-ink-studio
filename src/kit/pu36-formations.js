@@ -243,7 +243,7 @@
       for(const name of names){
         const group=state[name];
         const all=group.members.map(link=>motion.read(link.agent)).filter(Boolean);
-        const ready=all.filter(row=>!W.agentOrders.holding(row.orders));
+        const ready=all.filter(row=>!W.agentOrders.holding(row.orders)&&!row.travelPlan);
         let move=group.move, phase=group.phase, reason=group.reason;
         const goalFor=row=>own(move.assignment?.slots,row.id)?move.assignment.slots[row.id]:null;
         const pending=ready.some(row=>!goalFor(row));

@@ -96,7 +96,7 @@
       function commit(row){
         const p=people.get(row.id);
         if(!p)return;
-        if(row.mode==='dormant'){
+        if(row.mode==='dormant'||row.mode==='ride'){
           if(p.slot)grid.remove(p.slot);
           p.slot=null;
           p.active=false;
@@ -122,7 +122,23 @@
         });
         return safe;
       }
-      return {move,commit,canRelocate,exitGoal:agent=>admission?.exitGoal(people.get(agent.id)),finish:()=>admission?.finish()??state};
+      function canTransfer(agent,from,to){
+        const p=people.get(agent.id);
+        if(!p||admission&&!admission.pass(p,from,to))return false;
+        let safe=true;
+        const pad=p.radius+radius+spacing;
+        grid?.overlap([Math.min(from[0],to[0])-pad,0,Math.min(from[2],to[2])-pad],
+          [Math.max(from[0],to[0])+pad,0,Math.max(from[2],to[2])+pad],other=>{
+            if(other.id===p.id)return;
+            const radius=p.radius+spacing;
+            const landsOnBody=to[1]<other.position[1]+other.height&&to[1]+p.height>other.position[1]&&
+              distance(to,other.position)<radius+other.radius-eps;
+            if(landsOnBody||!separation(from,to,other,radius,p.height))safe=false;
+          });
+        return safe;
+      }
+      return {move,commit,canRelocate,canTransfer,exitGoal:agent=>admission?.exitGoal(people.get(agent.id)),
+        finish:()=>admission?.finish()??state};
     }
     function validateAgent(state){
       check(record(state)&&statuses.includes(state.status)&&
