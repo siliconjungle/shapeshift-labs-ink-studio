@@ -749,6 +749,8 @@ verify scene revisions, command order, solver timing, and observations on replay
 preserves a group's identity, attachments, and state through unloading, travel, and restoration.
 [Reusable interaction components](docs/interaction-components.md)
 combine triggers, handles, pickups, sockets, checkpoint markers, and timed switches in one saved state.
+[Gameplay state and events](docs/gameplay-state.md) connects checkpointed
+timers, objectives, and state transitions to headless scene behavior.
 [Configurable movement controllers](docs/headless-worlds.md#configurable-movement-controllers)
 switch one character between walking, climbing, swimming, flying, and vehicle steering.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
