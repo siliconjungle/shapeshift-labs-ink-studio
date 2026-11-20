@@ -82,9 +82,9 @@ how many ticks would pass before rest in the absence of new input.
   new input for `refractory` ticks, eight by default.
 - `recovery` optionally adds partially excitable ticks, zero by default.
   A recovering cell can fire if its input reaches the current elevated
-  threshold. It becomes easier to excite as recovery advances and
-  returns to rest if the recovery runs out. Charge resumes accumulating
-  after rest. The alphabet can hold up to 256 states across all stages.
+  threshold. The recovery threshold is `threshold +
+  ceil(threshold * remaining / (recovery + 1))`. The cell returns to rest
+  when recovery runs out. Charge resumes accumulating after rest. The alphabet can hold up to 256 states across all stages.
 
 With one unit of input sufficient to fire and with recovery disabled,
 this is the basic excitable state cycle. Broken wavefronts curl into

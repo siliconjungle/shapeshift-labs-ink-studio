@@ -101,7 +101,7 @@ function avalanche(K, SpriteSurface, gadget) {
   box([X, 2.77, -.07], [2.83, 2.20, .198], dark, .108, .199);
   box([X, 5.05, -.026], [2.73, .193, .13], bronze, .086, .093);
   box([X, 5.047, .105], [2.45, .148, .086], dark, .080, .067);
-  title('AVALANCHE SEAL', X, 4.948, .234, 3.13, 0xffecb8);
+  title('AVALANCHE SEAL', X, 5.008, .359, 2.83, 0xffecb8);
   const cut = .74, h = span / 2, boundary = [[-h + cut, h], [h - cut, h], [h, h - cut], [h, -h + cut],
     [h - cut, -h], [-h + cut, -h], [-h, -h + cut], [-h, h - cut], [-h + cut, h]];
   const contour = scale => boundary.map(([x, y]) => [X + scale * x, Y + scale * y, .186]);
