@@ -244,6 +244,10 @@
     return {
       initial,
       managed: name => policies.has(name),
+      committed(decision){
+        return Boolean(decision?.choice&&['traveling','acting'].includes(decision.phase)&&
+          catalog.get(decision.choice.activity).program?.commitment);
+      },
       update,
       release,
       hasNeeds:needs.hasMeters,

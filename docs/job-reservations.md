@@ -5,6 +5,9 @@ pool for a tool, a workbench, a destination, or any resource whose access
 must be limited. Use a job for an offer that should close after one
 successful order. Both can carry metadata and a live scene target.
 
+[Public influence](public-influence.md) lets agents independently choose
+an offer and start an order that can require one of these reservations.
+
 The [shelter and crate example](../examples/world-shelter-reservations.json)
 runs twenty villagers through five shelter spots while two couriers compete
 for one crate job. One villager gives up a spot to answer an interruption

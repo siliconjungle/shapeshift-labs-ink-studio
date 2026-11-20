@@ -47,13 +47,15 @@
         const name = system+'/'+key;
         check(id(key) && record(spec) && id(spec.resource) && typeof spec.units === 'string' &&
           spec.units.trim().length > 0 && own(sizes,spec.type) &&
+          (spec.ownerOnly===undefined||typeof spec.ownerOnly==='boolean')&&
           typeof spec.read === 'function' && typeof spec.write === 'function','Invalid transfer account '+name);
-        const {resource,units,type,read,write,at} = spec;
+        const {resource,units,type,read,write,at,ownerOnly} = spec;
         check(at===undefined||W.worksites.target(at),'Invalid transfer endpoint '+name);
-        accounts.set(name,{system,name,type,resource,units,read,write,...(at!==undefined&&{at})});
+        accounts.set(name,{system,name,type,resource,units,read,write,...(at!==undefined&&{at}),...(ownerOnly&&{ownerOnly})});
       }
     }
-    const summary = ({name,type,resource,units,at}) => ({name,type,resource,units,...(at!==undefined&&{at})});
+    const summary = ({name,type,resource,units,at,ownerOnly}) => ({name,type,resource,units,...(at!==undefined&&{at}),
+      ...(ownerOnly&&{ownerOnly})});
 
     function validate(raw, allowZero = false) {
       check(record(raw) && Object.keys(raw).every(key=>['from','to','amount','mode','id'].includes(key)) &&
@@ -80,6 +82,13 @@
     function settle(states, raw, tick, requester, rooted) {
       const {from,to,requested} = validate(raw);
       const {resource,units,type} = from, mode = raw.mode ?? 'partial';
+      const zeros = requested.map(()=>0);
+      const receipt = (applied, status, limitedBy) => ({
+        tick,requester,...(raw.id && {requestId:raw.id}),from:from.name,to:to.name,resource,units,type,mode,
+        requested:shape(type,requested),applied:shape(type,applied),status,limitedBy
+      });
+      if([from,to].some(account=>account.ownerOnly&&requester!==account.system))
+        return receipt(zeros,'blocked',['access']);
       const a = quote(from,states[from.system]), b = quote(to,states[to.system]);
       const available = requested.map((n,i)=>n<0 ? a.high[i]-a.balance[i] : a.balance[i]-a.low[i]);
       const room = requested.map((n,i)=>n<0 ? b.balance[i]-b.low[i] : b.high[i]-b.balance[i]);
@@ -87,12 +96,7 @@
       const aRatio = ratio(available), bRatio = ratio(room), factor = Math.min(aRatio,bRatio);
       const limitedBy = [...(aRatio === factor && factor < 1 ? ['source'] : []),
         ...(bRatio === factor && factor < 1 ? ['destination'] : [])];
-      const zeros = requested.map(()=>0);
-      const receipt = (applied, status, limits = limitedBy) => ({
-        tick,requester,...(raw.id && {requestId:raw.id}),from:from.name,to:to.name,resource,units,type,mode,
-        requested:shape(type,requested),applied:shape(type,applied),status,limitedBy:limits
-      });
-      if (!factor || mode === 'exact' && factor < 1) return receipt(zeros,'blocked');
+      if (!factor || mode === 'exact' && factor < 1) return receipt(zeros,'blocked',limitedBy);
       const applied = requested.length === 1 ? [Math.min(requested[0],available[0],room[0])] :
         requested.map(n=>n*factor);
       const next = (q,sign) => q.balance.map((n,i)=>Math.min(q.high[i],Math.max(q.low[i],n+sign*applied[i])));
@@ -103,7 +107,7 @@
       if (!validChange(a.balance,debit,-1) || !validChange(b.balance,credit,1))
         return receipt(zeros,'blocked',[...limitedBy,'precision']);
 
-      const entry = receipt(applied,factor < 1 ? 'partial' : 'full');
+      const entry = receipt(applied,factor < 1 ? 'partial' : 'full',limitedBy);
       const source = rooted(from.write(states[from.system],shape(type,debit)));
       const destination = rooted(to.write(to.system === from.system ? source : states[to.system],shape(type,credit)));
       const afterSource = quote(from,to.system === from.system ? destination : source).balance;
@@ -120,7 +124,7 @@
       for (const value of receipts) {
         check(record(value) && value.tick === tick && id(value.requester) &&
           ['full','partial','blocked'].includes(value.status) && Array.isArray(value.limitedBy) &&
-          value.limitedBy.every(n=>['source','destination','precision'].includes(n)), 'Invalid saved transfer receipt');
+          value.limitedBy.every(n=>['source','destination','precision','access'].includes(n)), 'Invalid saved transfer receipt');
         const {from,requested} = validate({from:value.from,to:value.to,amount:value.requested,mode:value.mode,id:value.requestId});
         check(value.resource === from.resource && value.units === from.units && value.type === from.type,
           'Invalid saved transfer commodity');

@@ -213,8 +213,9 @@
     const causePolicy = W.causality.policy(world.causality);
     const rates = schedule.active ? W.rates.bind(schedule,systems,ports,incoming,order) : null;
     const interactions = W.interactionRuntime.bind({world,systems,chunks,transfers,ports,incoming,portValue});
+    const influence = W.influenceRuntime.bind({systems,transfers,chunks});
     return {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,causePolicy,contracts,phaseEdges};
+      interactions,influence,causePolicy,contracts,phaseEdges};
   }
   function actionCheck(raw, plan, min = 1) {
     check(record(raw) && tickOK(raw.tick) && raw.tick >= min && record(raw.args ?? {}) &&
@@ -318,7 +319,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,causePolicy,contracts,phaseEdges} = plan;
+      interactions,influence,causePolicy,contracts,phaseEdges} = plan;
     let composition;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -742,6 +743,13 @@
       });
       for(const [name,confirmed] of confirmations??[])
         drafts[name]=rootedState(systems[name].receiveTransfers(drafts[name],confirmed,{tick:at,emit:systemEmit(name)}));
+      function lateTransfer(source,request){
+        if(receipts.length>=W.transfers.limit)return undefined;
+        const receipt=rootedState(settleTransfer(request,source,systemEmit(source)));
+        receipts.push(receipt);
+        return receipt;
+      }
+      const queryDrafts=()=>Q.create(view(nextWorld,{...drafts},lastSignals,at,receipts.slice(),causalState,nextChunkState),systems,projection);
       aggregates?.transition(drafts,nextChunkState,makeEmit('world'));
       worksites?.run(drafts,{tick:at,dt:nextWorld.dt,detailed,root:rootedState,emit:makeEmit,
         input:name=>currentValues(name,nextManual,{},outputs,delays),
@@ -749,14 +757,13 @@
         context:(name,query)=>context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name),query,spatial(name,false))
       });
       interactions?.run(drafts,{world:nextWorld,tick:at,detailed,root:rootedState,emit:systemEmit,input:setInput,
-        query:()=>Q.create(view(nextWorld,{...drafts},lastSignals,at,receipts.slice(),causalState,nextChunkState),systems,projection),
+        query:queryDrafts,
         effect(source,effect,query){
           if((effect.destinations??[effect.destination]).some(name=>!detailed(name)||
             W.simulationAggregate.isAggregate(drafts[name])))return {reason:'effect-asleep'};
           if(effect.kind==='transfer'){
-            if(receipts.length>=W.transfers.limit)return {reason:'transfer-budget'};
-            const receipt=rootedState(settleTransfer(effect.request,source,systemEmit(source)));
-            receipts.push(receipt);
+            const receipt=lateTransfer(source,effect.request);
+            if(!receipt)return {reason:'transfer-budget'};
             return {receipt,...(receipt.status==='blocked'&&{reason:'transfer-blocked'})};
           }
           if(effect.kind==='input')return {port:effect.port,value:effect.value};
@@ -773,6 +780,17 @@
           return {};
         }
       });
+      if(influence){
+        const available=account=>{
+          const [name]=endpoint(account);
+          return detailed(name)&&!W.simulationAggregate.isAggregate(drafts[name]);
+        };
+        influence.run(drafts,{tick:at,root:rootedState,detailed,emit:systemEmit,query:queryDrafts,previousEvents:lastEvents,events,
+          transfer:(source,request)=>available(request.from)&&available(request.to)?lateTransfer(source,request):undefined,
+          balance:account=>available(account)?transfers.inspect(drafts,account):null,
+          context:(name,query)=>context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name),query,spatial(name,false))
+        });
+      }
       freeze(receipts);
       let nextSpatial = spatialSampling;
       if (slowReaders.size && (trace || Object.keys(spatialSampling).length)) {

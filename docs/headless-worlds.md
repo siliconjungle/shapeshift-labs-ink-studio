@@ -45,6 +45,9 @@ movement, waits, events, and conservative transfers.
 [Agent needs and schedules](agent-needs.md) rank activities over changing
 needs and recurring shifts, and let orders end after sustained route failures.
 
+[Public influence](public-influence.md) lets players post priority notices
+and fund rewards that agents may choose to pursue.
+
 [Jobs and reservations](job-reservations.md) arbitrate shared capacity and
 single-use work across agent rosters.
 

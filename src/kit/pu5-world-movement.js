@@ -256,6 +256,8 @@
       crowd?.spacing??0);
     const initialFormations=formations?.initial(name=>S.select(initialRoster,name));
     const policy = config.decisions === undefined ? null : W.agentDecisions.create(config.decisions, initial);
+    const influence=config.influence===undefined?null:W.influenceChoices.configure(config.influence);
+    check(!influence||config.orders!==undefined,'Influence responders need agent order tasks');
     const species=Object.keys(profiles).sort();
     const staticFit=!config.bed&&!config.support&&!config.water&&!config.clearance&&!config.habitat;
     const settled=new WeakSet();
@@ -581,6 +583,42 @@
     }
     return {initial:()=>packed(initialRoster,[],policy?.initial),
     shareCheckpoint:true,viewState:S.view,legacyCheckpoint:S.legacyState,dependencies:routeDependencies(config),
+    ...(influence&&{influenceResponder:{
+      config:influence,check:orders.checkIssue,
+      rows(state){
+        const roster=S.get(state), rows=[];
+        for(const {agent,profile,wallet} of influence.members){
+          const row=S.select(roster,agent);
+          if(!row)continue;
+          const decision=state.decisions?.[agent], group=formations?.active(state.formations,row);
+          const available=row.mode==='dormant'?'agent-unavailable':O.holding(row.orders)||row.formationDriven||group?
+            'agent-busy':policy?.committed(decision)?'activity-committed':true;
+          rows.push({row,profile,wallet,available,context:{...row,needs:decision?.needs??{},
+            activity:decision?.choice?.activity??null,phase:decision?.phase??null}});
+        }
+        return rows;
+      },
+      route(row,point,ctx){
+        const profile=profileFor(row), from=fit(ctx,profile,row.position), goal=fit(ctx,profile,point);
+        if(!from||!goal)return 'unfit';
+        const route=plan(ctx,profile,from,goal);
+        return route.status==='ok'&&route.points.length?'ok':route.status==='ok'?'empty':route.status;
+      },
+      issue(state,row,order,ctx){
+        const book=orders.issue(row,{order},ctx);
+        const decisions=policy?.managed(row.id)?{...state.decisions,[row.id]:
+          policy.release(state.decisions[row.id],row,ctx,'order-issued')??policy.initial[row.id]}:state.decisions;
+        return {sequence:book.serial,state:replace(state,{agent:row.id,generation:row.generation},
+          agent=>changeOrders(agent,book),decisions)};
+      },
+      status(state,owner){
+        const row=S.select(reservationRoster(state),owner.agent);
+        if(row?.generation!==owner.generation||!row.orders)return undefined;
+        const {active,paused,queue,outcomes}=row.orders;
+        if([active,...paused,...queue].some(entry=>entry?.sequence===owner.sequence))return 'active';
+        return outcomes.find(entry=>entry.sequence===owner.sequence)?.phase;
+      }
+    }}),
     ...(crowd&&{inputs:crowd.inputs}),
     workEffects:{recruit:{check:checkRecruit,run:recruit}},
     occupancy:{
