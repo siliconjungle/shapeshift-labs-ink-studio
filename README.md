@@ -652,6 +652,8 @@ Run [terrain routing](examples/terrain-route.js), [a weighted roof](examples/wei
 
 [Proportional subdivision](docs/proportional-layout.md) reuses a golden-ratio or custom hierarchy across façade parts, trim, and shot layouts.
 
+[Surface phyllotaxis](docs/surface-phyllotaxis.md) grows golden-angle layouts on spheres and curved charts while preserving earlier placements.
+
 ```sh
 node cli/ink-studio.js render examples/weighted-roof.js --seed 1 --ortho --colored
 ```
