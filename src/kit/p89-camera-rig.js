@@ -27,6 +27,11 @@
   }
 
   function target(row, id, parts) {
+    if(row?.node!==undefined){
+      check(keys(row,['node','socket','offset','fallback'])&&name(row.node)&&(row.socket===undefined||name(row.socket))&&
+        (row.offset===undefined||xyz(row.offset))&&(row.fallback===undefined||xyz(row.fallback)),'invalid hierarchy target '+id);
+      return row;
+    }
     const { point, part, entity, socket, offset, fallback } = row ?? {};
     check(keys(row, ['point', 'part', 'entity', 'socket', 'offset', 'fallback']) &&
       (part === undefined || name(part) && point !== undefined && (!parts || parts.has(part))) &&
@@ -94,7 +99,7 @@
   function framing(row, base, resolveTarget) {
     if (!row) return base.target;
     if (xyz(row)) return row;
-    const frame = row.entity || row.part ? resolveTarget?.(row) : { point: row.point };
+    const frame = row.entity || row.part || row.node ? resolveTarget?.(row) : { point: row.point };
     if (!xyz(frame?.point)) return row.fallback ?? base.target;
     return row.offset ? V.add(frame.point, frame.rotation ? M.app(frame.rotation, row.offset) : row.offset) : frame.point;
   }
@@ -219,6 +224,7 @@
     const settings = program.avoidance;
     const base = { ...world.cam, target: world.cam.target?.slice() };
     function resolveTarget(row) {
+      if(row.node){const graph=world.sceneGraph;if(!graph?.has(row.node)||row.socket&&!graph.node(row.node).sockets.includes(row.socket))return;const f=graph.frame({node:row.node,...(row.socket&&{socket:row.socket})});return f.visible?{point:f.position,rotation:f.matrix}:undefined;}
       if (row.part) return resolvePart?.(row.part, row.point) ?? { point: row.point };
       return query?.frame({ entity: row.entity, socket: row.socket });
     }

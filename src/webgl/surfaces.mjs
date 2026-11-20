@@ -2,7 +2,7 @@ import { waterGLSL } from './water-optics.mjs';
 import { createResources } from './resources.mjs';
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
-export function createSurfacePipeline(gl, { updatesSince, cutaway } = {}) {
+export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway } = {}) {
   const resources=createResources(gl);
   try {
     const shaders=new Map();
@@ -59,22 +59,30 @@ void main(){
     gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,20,0);
     gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,20,12);
     gl.bindVertexArray(null);
-    let active,activeVertices,revision=-1,width=0,height=0,disposed=false,staging=new Uint8Array(0);
+    let active,activeVertices,revision=-1,geometryRevision=-1,width=0,height=0,disposed=false,staging=new Uint8Array(0);
     const stats={textureBytes:0,geometryBytes:0};
     function upload(atlas){
       stats.textureBytes=0;stats.geometryBytes=0;
       if(disposed)throw new Error('Surface pipeline has been disposed');
-      const next=atlas?.revision??0;
-      if(active===atlas&&revision===next&&activeVertices===atlas.vertices&&width===atlas.width&&height===atlas.height)return;
+      const next=atlas?.revision??0,nextGeometry=atlas?.geometryRevision??0;
+      if(active===atlas&&revision===next&&geometryRevision===nextGeometry&&activeVertices===atlas.vertices&&width===atlas.width&&height===atlas.height)return;
       if(!atlas||!(atlas.vertices instanceof Float32Array)||atlas.vertices.length%15||
         !Number.isSafeInteger(atlas.width)||atlas.width<1||!Number.isSafeInteger(atlas.height)||atlas.height<1||
         !(atlas.pixels instanceof Uint8Array)||atlas.pixels.length!==atlas.width*atlas.height*4||
-        !atlas.vertices.every(Number.isFinite)||!Number.isSafeInteger(next)||next<0)throw new RangeError('Invalid sprite surface atlas');
+        !Number.isSafeInteger(next)||next<0||!Number.isSafeInteger(nextGeometry)||nextGeometry<0)throw new RangeError('Invalid sprite surface atlas');
       if(Math.max(atlas.width,atlas.height)>gl.getParameter(gl.MAX_TEXTURE_SIZE))throw new RangeError('Surface atlas exceeds GPU size limit');
       const replace=active!==atlas||width!==atlas.width||height!==atlas.height;
       if(replace||activeVertices!==atlas.vertices){
+        if(!atlas.vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface geometry');
         gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,atlas.vertices,gl.STATIC_DRAW);
         stats.geometryBytes=atlas.vertices.byteLength;
+      }
+      if(!replace&&activeVertices===atlas.vertices&&geometryRevision!==nextGeometry){
+        const changes=geometryUpdatesSince?.(atlas,geometryRevision);
+        const first=changes?.length?Math.min(...changes.map(r=>r.first)):0,end=changes?.length?Math.max(...changes.map(r=>r.first+r.count)):atlas.vertices.length/5;
+        const values=atlas.vertices.subarray(first*5,end*5);
+        if(!values.every(Number.isFinite))throw new RangeError('Invalid sprite surface geometry');
+        gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferSubData(gl.ARRAY_BUFFER,first*20,values);stats.geometryBytes=values.byteLength;
       }
       gl.activeTexture(gl.TEXTURE0+6);gl.bindTexture(gl.TEXTURE_2D,texture);
       if(replace){
@@ -93,7 +101,7 @@ void main(){
         gl.texSubImage2D(gl.TEXTURE_2D,0,x,y,w,h,gl.RGBA,gl.UNSIGNED_BYTE,staging.subarray(0,bytes));
         stats.textureBytes=bytes;
       }
-      active=atlas;activeVertices=atlas.vertices;revision=next;width=atlas.width;height=atlas.height;
+      active=atlas;activeVertices=atlas.vertices;revision=next;geometryRevision=nextGeometry;width=atlas.width;height=atlas.height;
     }
     function draw(atlas,{view,projection,range,fog,index=false,arrivalPlane=[0,0,0,0],clip=[0,0,0,0],water,wet,width=1,height=1,section}){
       upload(atlas);

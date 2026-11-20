@@ -79,6 +79,7 @@
         rows[i >> 9] = 1;
       }
       qn = 0;
+      for (const system of st.systems) if (system.post) system.post(dt, t, st);
       atmosphereHistory?.capture(sceneTime, socketPose);
       return true;
     };
@@ -189,7 +190,7 @@
   // ---- rig
   K.rig = (B, S) => {
     const names = ['still'],
-      ids = {},
+      ids = Object.create(null),
       owner = [],
       rig = { names, resolve: null };
     rig.part = name => ids[name] || (names.push(name), (ids[name] = names.length - 1));
@@ -209,10 +210,20 @@
       fn();
       for (let i = n0; i < B.count(); i++) owner[i] = b;
     };
+    rig.assign = (name, indices) => {
+      if (!Array.isArray(indices) && !ArrayBuffer.isView(indices)) throw new TypeError('Rig ownership needs splat indices');
+      const selected = Array.from(indices);
+      if (!selected.every(i => Number.isSafeInteger(i) && i >= 0)) throw new RangeError('Invalid rig splat index');
+      if(typeof name!=='string'&&!(Number.isSafeInteger(name)&&name>=0&&name<names.length))throw new TypeError('Invalid rig part');
+      if(B?.count&&!selected.every(i=>i<B.count()))throw new RangeError('Invalid rig splat index');
+      const b=typeof name==='number'?name:rig.part(name); for(const i of selected)owner[i]=b;
+      return rig;
+    };
     rig.bind = st => {
       const N = st.N,
         bid = (rig.bid = new Uint16Array(N)),
-        NP = names.length;
+        initialParts = names.length;
+      let NP = initialParts;
       for (let i = 0; i < N; i++) bid[i] = owner[i] > 0 ? owner[i] : 0;
       const cnt = new Int32Array(NP);
       for (let i = 0; i < N; i++) cnt[bid[i]]++;
@@ -223,13 +234,30 @@
         const b = bid[i];
         if (b) list[b][cnt[b]++] = i;
       }
-      const Mx = (rig.M = new Float32Array(NP * 12)),
+      let Mx = (rig.M = new Float32Array(NP * 12)),
         dirty = (rig.dirty = new Uint8Array(NP));
       for (let b = 0; b < NP; b++) {
         Mx[b * 12] = 1;
         Mx[b * 12 + 4] = 1;
         Mx[b * 12 + 8] = 1;
       }
+      rig.assign = (name, indices) => {
+        if (!Array.isArray(indices) && !ArrayBuffer.isView(indices)) throw new TypeError('Rig ownership needs splat indices');
+        const selected=Array.from(indices);
+        if(!selected.every(i=>Number.isSafeInteger(i)&&i>=0&&i<N))throw new RangeError('Invalid rig splat index');
+        if(typeof name!=='string'&&!(Number.isSafeInteger(name)&&name>=0&&name<names.length))throw new TypeError('Invalid rig part');
+        const b=typeof name==='number'?name:rig.part(name);
+        if(!Number.isSafeInteger(b)||b<0||b>=names.length)throw new RangeError('Invalid rig part');
+        if(names.length>65535)throw new RangeError('Rig part budget exceeded');
+        if(names.length>NP){
+          const next=new Float32Array(names.length*12);next.set(Mx);const flags=new Uint8Array(names.length);flags.set(dirty);
+          for(let i=NP;i<names.length;i++){next[i*12]=next[i*12+4]=next[i*12+8]=1;list.push(new Int32Array(0));}
+          NP=names.length;Mx=rig.M=next;dirty=rig.dirty=flags;
+        }
+        const affected=new Set([b]);for(const i of selected){affected.add(bid[i]);bid[i]=b;}
+        for(const part of affected)if(part)list[part]=Int32Array.from(Array.from({length:N},(_,i)=>i).filter(i=>bid[i]===part));
+        dirty[b]=1;return rig;
+      };
       st.rig = rig;
       st.parts = names;
       rig.st = st;
@@ -340,6 +368,15 @@
       return rig;
     };
     return rig;
+  };
+  K.rig.fromGroups = (stage, groups) => {
+    if(stage.rig)throw new Error('Stage already has a rig; assign groups on the existing rig');
+    const rig=K.rig({count:()=>stage.N},{});
+    for(const [name,indices]of Object.entries(groups)){
+      if(!Array.from(indices).every(i=>Number.isSafeInteger(i)&&i>=0&&i<stage.N))throw new RangeError('Invalid rig splat index');
+      rig.assign(name,indices);
+    }
+    rig.bind(stage);return rig;
   };
   // ---- pick: splats are binned into cells once (at rest); a line is walked through the cells until it passes close to one
   K.grid = (st, cell) => {

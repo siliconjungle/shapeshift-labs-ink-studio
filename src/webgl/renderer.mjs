@@ -485,7 +485,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       }
       if(options.surfaces){
-        surfacePipeline??=createSurfacePipeline(gl,{updatesSince:toolkit.SpriteSurface?.updatesSince??toolkit.KIT?.ecology?.atlasUpdates,
+        surfacePipeline??=createSurfacePipeline(gl,{geometryUpdatesSince:toolkit.SpriteSurface?.geometryUpdatesSince,updatesSince:toolkit.SpriteSurface?.updatesSince??toolkit.KIT?.ecology?.atlasUpdates,
           cutaway:cutawayAPI?.glsl});
         buffer.ensureDepth();
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);

@@ -2,6 +2,15 @@
   const bindings = new WeakMap(),
     fonts = new WeakMap();
   function anchor(spec, { world, time }) {
+    if(spec.node!==undefined){
+      const graph=world.sceneGraph;
+      if(!graph?.has(spec.node)||spec.socket&&!graph.node(spec.node).sockets.includes(spec.socket))return null;
+      const ref={node:spec.node,...(spec.socket&&{socket:spec.socket})},frame=graph.frame(ref);
+      if(!frame.visible)return null;
+      const p=spec.point??[0,0,0];if(!Array.isArray(p)||p.length!==3||!p.every(Number.isFinite))throw new TypeError('Invalid hierarchy inspection point');
+      if(spec.halfSize&&(!Array.isArray(spec.halfSize)||spec.halfSize.length!==3||!spec.halfSize.every(v=>Number.isFinite(v)&&v>=0)))throw new TypeError('Invalid hierarchy inspection bounds');
+      return {at:graph.toWorld(ref,p),...(spec.halfSize&&{halfSize:[0,1,2].map(i=>[0,1,2].reduce((sum,k)=>sum+Math.abs(frame.matrix[i*3+k])*spec.halfSize[k],0))})};
+    }
     if (Number.isSafeInteger(spec.splat)) {
       if (spec.splat < 0 || spec.splat >= world.count) return null;
       return { at: K.splatFrames.create(world, time, K.M)(spec.splat).position() };

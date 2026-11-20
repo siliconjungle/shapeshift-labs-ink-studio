@@ -104,6 +104,22 @@ const SpriteSurface = (() => {
     const rows = (updates.get(atlas) ?? []).filter(row => row.revision > revision);
     return rows[0]?.revision === revision + 1 && rows.at(-1).revision === atlas.revision ? rows.map(row => ({ ...row })) : null;
   }
-  return Object.freeze({ make, markDirty, updatesSince, update });
+  const geometryUpdates=new WeakMap();
+  function markGeometryDirty(atlas,{first=0,count=atlas?.vertices?.length/5}={}) {
+    if(!(atlas?.vertices instanceof Float32Array)||atlas.vertices.length%15||!Number.isSafeInteger(first)||!Number.isSafeInteger(count)||first<0||count<1||first%3||count%3||(first+count)*5>atlas.vertices.length||!atlas.vertices.subarray(first*5,(first+count)*5).every(Number.isFinite))
+      throw new RangeError('Invalid surface geometry range');
+    const revision=(atlas.geometryRevision??0)+1;
+    if(!Number.isSafeInteger(revision)||revision<1)throw new RangeError('Invalid surface geometry revision');
+    atlas.geometryRevision=revision;
+    if(!geometryUpdates.has(atlas))geometryUpdates.set(atlas,[]);
+    const history=geometryUpdates.get(atlas);history.push({revision,first,count});if(history.length>32)history.shift();
+    return revision;
+  }
+  function geometryUpdatesSince(atlas,revision){
+    if(revision===(atlas.geometryRevision??0))return [];
+    const rows=(geometryUpdates.get(atlas)??[]).filter(r=>r.revision>revision);
+    return rows[0]?.revision===revision+1&&rows.at(-1)?.revision===atlas.geometryRevision?rows.map(r=>({...r})):null;
+  }
+  return Object.freeze({ make, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince });
 })();
 if (typeof module !== 'undefined') module.exports = SpriteSurface;
