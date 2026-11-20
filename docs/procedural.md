@@ -175,6 +175,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `motion.streamline(field, start, options)`, `motion.obstacleWake(sdf, options)`, `motion.loopTrajectory(points, options)`, `motion.surfaceAdvection(chart, seeds, options)` | Field integration, wake and curl sampling, closed tracks and UV-attached motion |
 | `KIT.fieldViews.lic(field, options)` | [Vector-field painting](vector-field-painting.md) with aligned grain, obstacle masks, and traveling convolution kernels |
 | `motion.stableFluid(options)`, `motion.shallowWater(options)` | Persistent density and velocity grids, and conservative terrain-aligned water |
+| `motion.coupledFluid(options)` | [Bidirectional field–particle coupling](field-particle-coupling.md) for flow, dye, and drag feedback |
 | `motion.scalarWave(options)` | [Wave propagation through geometry](scalar-wave.md) with reflecting walls, absorbing edges, and retained pressure frames |
 | `motion.trailAgents(options)`, `KIT.deposition.grid(options)` | [Trail-sensing agents](trail-sensing-agents.md) with shared field feedback, diffuse trails, and route cuts |
 | `motion.surfaceWeather(options)`, `motion.materialStateGraph(machine, entities, options)` | Persistent wetness and thermal fields, and event-driven material changes |
