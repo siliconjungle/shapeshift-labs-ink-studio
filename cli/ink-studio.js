@@ -768,6 +768,7 @@ const CMD = {
         'ink-studio <command> <diorama id | lab/file.js> [options]',
         '',
         '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
+        '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
         '  environment inspect <scene|run> --at x,y,z [--t seconds] [--out report.json]   explain sky and local weather',
@@ -912,6 +913,9 @@ const CMD = {
         'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
+  },
+  curve() {
+    return require('./curve.js')(pos, opt, lib());
   },
   palette() {
     if (!pos[0]) die('palette needs a recipe, path or animation JSON file');
