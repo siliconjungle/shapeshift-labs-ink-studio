@@ -835,7 +835,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const pal = palette(world.pal);
       const palCount = Math.min(world.pal.length, 64);
       const fog = world.fog ?? {};
-      const dirty = isNew ? undefined : frame.changedRows;
+      // An editor may provide a row diff against the exact bake currently on the GPU.
+      const incremental = frame.previousWorld && frame.previousWorld === lastWorld &&
+        lastWorld.data === lastData && world.count === lastCount && !group && !lastInstances &&
+        !paint && !lastWorld.paintCorrections && !world.anim && !lastWorld.anim;
+      const dirty = !isNew || incremental ? frame.changedRows : undefined;
       const geometryDirty = dirty && paint ?
         [...new Set([...dirty, ...paint.dirtyRows.filter(row => row * 512 < world.count)])] : dirty;
       let plan;
@@ -845,7 +849,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       } else data.upload(geometryData, world.count * 16, geometryDirty);
       if (materialStyles) bindMaterialStyles(world, group, plan, dirty);
       if (hasFine && (isNew || fineValues !== fineTiles)) {
-        fine.upload(fineTiles, world.count * 12);
+        const fineDirty = incremental && !detail && fineValues === lastWorld.fine ? frame.changedFineRows : undefined;
+        fine.upload(fineTiles, world.count * 12, fineDirty);
         fineValues = fineTiles;
       } else fine.bind();
       uploadBones(world.anim?.bones);
@@ -853,7 +858,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if (patterned) {
         if (isNew || materials?.world !== world || materials.values !== world.pix ||
             materials.ramps !== world.ramps || materials.rampOff !== world.rampOff || materials.patterns !== world.pats) {
-          pattern.upload(world.pix, world.count * 8);
+          const patternDirty = incremental && materials?.world === lastWorld &&
+            materials.values === lastWorld.pix ? frame.changedPatternRows : undefined;
+          pattern.upload(world.pix, world.count * 8, patternDirty);
           const gpu = materialData(pixel, world);
           updateSprites(world, pixel);
           materials = { world, values: world.pix, ramps: world.ramps, rampOff: world.rampOff, patterns: world.pats, gpu };
@@ -1239,10 +1246,12 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         (!(frame.order instanceof Int32Array) || frame.order.length !== logicalCount ||
          frame.order.some(index => index < 0 || index >= logicalCount)))
       throw new TypeError('Draw order must contain valid Int32 splat indices');
-    if (frame.changedRows !== undefined &&
-        (!Array.isArray(frame.changedRows) || frame.changedRows.some(row =>
-          !Number.isInteger(row) || row < 0 || row >= Math.max(1, Math.ceil(world.count / 512)))))
-      throw new RangeError('changedRows must contain valid 512-splat row indices');
+    for (const [key, perRow] of [['changedRows', 512], ['changedFineRows', 512], ['changedPatternRows', 1024]]) {
+      const rows = frame[key];
+      if (rows !== undefined && (!Array.isArray(rows) || rows.some(row =>
+        !Number.isInteger(row) || row < 0 || row >= Math.max(1, Math.ceil(world.count / perRow)))))
+        throw new RangeError(key + ' must contain valid ' + perRow + '-splat row indices');
+    }
     if (![frame.time ?? 0, frame.bornAt ?? 0, frame.scale ?? 1, frame.dither ?? 0.35].every(Number.isFinite))
       throw new RangeError('Ink Studio frame parameters must be finite');
   }

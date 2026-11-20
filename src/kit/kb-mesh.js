@@ -654,6 +654,10 @@
       D[i] = s;
     }
     const hi = [lo[0] + (n0 - 1) * h, lo[1] + (n1 - 1) * h, lo[2] + (n2 - 1) * h];
+    return M.fieldFromData({ lo, hi, h, n, open, thick, D, near });
+  };
+  M.fieldFromData = ({ lo, hi, h, n, open, thick, D, near }) => {
+    const [n0, n1, n2] = n;
     const sd = M.gridSampler(lo, n, h, D);
     const tri = (x, y, z) =>
       near[

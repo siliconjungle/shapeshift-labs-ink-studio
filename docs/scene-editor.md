@@ -4,6 +4,16 @@ Open a JSON diorama with `studio.createSceneEditor(source, options)` in Node or 
 
 `snapshot()` returns the current immutable diorama. `serialize(space)` produces the same JSON that `ink-studio validate` and `ink-studio render` accept. Keep relative asset files in the same location relative to the saved scene. `build()` bakes the current state for preview or picking.
 
+## Incremental baking
+
+The editor keeps a bounded cache of mesh distance fields, supported solids' sampling points, and complete static splat bakes. A camera-only edit can reuse all packed splats. A geometry or material edit can reuse unaffected inputs while the sculptor recomputes blending, visibility, and shadows. Decoded imported image pixels are shared by content across portable asset recipes. Moving parts, effects, retained render SDFs, and paint corrections use their existing bake paths.
+
+Use `editor.buildIncremental(previousWorld, inputs)` to obtain `{ world, frame }`. Pass both to `renderer.render(world, { ...frame, ...view })`. The WebGL renderer patches changed splat, fine detail, and pattern rows when the supplied previous world is the bake it last uploaded. Keep that world unmodified between builds and uploads. A renderer that missed a revision uploads the whole bake. CPU rendering can use the returned world directly.
+
+`editor.cacheStats()` reports resident bytes and hit, miss, and store counts by entry type. Pass `env.bakeCache` to share a cache between editors or use it directly with `KIT.diorama.build`. Create it with `KIT.authoring.bakeCache.create({ maxBytes })`. Its default memory budget is 64 MiB, and `clear()` evicts entries and resets statistics.
+
+For CLI diorama builds, add `--asset-cache DIR` to reuse candidate points, mesh fields, and static splat buffers across invocations. Entries are keyed by the bake inputs and the compiler version. Keep the directory outside version control and remove it when its disk space is needed.
+
 ## Scene tree and selection
 
 - `tree()` returns the scene hierarchy with blend groups, rig parts, solids, and nested operands. Solids assigned to a rig part appear under that part, with any blend group still recorded on the solid.

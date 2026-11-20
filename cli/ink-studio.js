@@ -131,7 +131,11 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   if (problems.length) console.error(K.diorama.report(problems));
   if (problems.some(p => p.level === 'error'))
     die('not built: ' + problems.filter(p => p.level === 'error').length + ' mistake(s) in ' + file);
-  const descriptor=K.diorama.scene(spec,{assets,prefabs});
+  const cacheDirectory = opt['asset-cache'];
+  if (cacheDirectory !== undefined && (typeof cacheDirectory !== 'string' || !cacheDirectory.length))
+    die('--asset-cache expects a directory');
+  const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
+  const descriptor=K.diorama.scene(spec,{assets,prefabs,bakeCache});
   const atlases=new Map();
   return { ...descriptor, lookPreviewPacks:spec.assetPacks, build(seed, options = {}) {
     const parameterTime = opt['parameter-time'] ?? (Number.isFinite(Number(opt.t)) ? opt.t : 0);
@@ -864,6 +868,7 @@ const CMD = {
         '  authoring apply <scene> <edits.json> [--authoring snapshot.json] --out snapshot.json   save validated edits',
         '  authoring suggest-breakable <scene> --at x,y,z [--radius 1] [--voxel .1] [--ids]   suggest a connected breakable part',
         '  --params JSON --parameter-time SEC   supply shared controls and choose the material bake time for a diorama',
+        '  --asset-cache DIR   reuse diorama bake data across CLI invocations',
         '  scene apply|stamp|remix|capture|upgrade|sync-prefab|history|promote <world> ...  edit or derive a world manifest',
         '    scene upgrade <world|checkpoint> <instance> --to PREFAB [--migration FILE] [--dry-run]',
         '    scene sync-prefab <release.json> <world ...> --out NEW_DIRECTORY | --dry-run',
