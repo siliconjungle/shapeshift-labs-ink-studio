@@ -87,6 +87,7 @@
     prepare: A.prepare,
     report,
     cookie: C.pattern,
+    caustic: C.geometric,
     cookies: C
   });
 })(KIT);

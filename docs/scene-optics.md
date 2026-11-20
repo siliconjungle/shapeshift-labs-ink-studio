@@ -87,6 +87,8 @@ Water column intervals clip reflections at wet/dry shoreline cells and air pocke
 Textured terrain receives water absorption, tint, caustics and surface reflection at
 its own fragment depth. A submerged lakebed does not occlude the reflected object
 at its virtual mirrored depth; raised foreground terrain still occludes the water.
+[Geometric caustic cookies](geometric-caustics.md) can project authored lens
+patterns onto these terrain receivers through the existing light pipeline.
 No reflection proxies or custom ellipse masks are required.
 
 For WebGL, `frame.reflections: false` disables live captures while retaining the
