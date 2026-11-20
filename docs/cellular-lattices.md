@@ -21,6 +21,9 @@ const ink = glyphGrid.paint({ mode: 'pixel', tiles: [
 const slice = ink.raster(brain.slice(6), { scale: 2 });
 ```
 
+For floating-point state, sampled kernels, and coupled channels, use
+[continuous cellular automata](continuous-cellular.md).
+
 ## Rule library
 
 | Factory | Update |
