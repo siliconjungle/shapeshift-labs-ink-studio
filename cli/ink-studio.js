@@ -586,6 +586,15 @@ function compositeOption() {
   return compositeOverride ??= JSON.parse(fs.readFileSync(path.resolve(opt.composite), 'utf8'));
 }
 
+let contactShadowsOverride;
+function contactShadowsOption() {
+  const value = opt['contact-shadows'];
+  if (value === undefined) return undefined;
+  if (value === true || value === 'on') return true;
+  if (value === 'off') return false;
+  return contactShadowsOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
+}
+
 const view = extra =>
   Object.assign(
     {
@@ -659,6 +668,7 @@ const view = extra =>
       liveSun: liveSunOption(),
       relighting: relightingOption(),
       shadowArt: shadowArtOption(),
+      contactShadows: contactShadowsOption(),
       atmosphere: opt.atmosphere === 'off' ? false : undefined,
       shapedAtmosphere: shapedAtmosphereOption(),
       volumeCutouts: volumeCutoutsOption(),
@@ -859,7 +869,7 @@ const CMD = {
         'layered horizon: --horizon-bands on|off|file.json',
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'effect palette options: --effect-palettes on|off|file.json',
-        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
+        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink off --effects off --stable on|off|file.json --stable-detail on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --snap on|off --dither-space screen|world|object --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --sdf-assist on|off|file.json --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --render-graph file.json|off --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
   },

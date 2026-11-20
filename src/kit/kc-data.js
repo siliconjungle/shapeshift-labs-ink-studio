@@ -561,6 +561,11 @@
       bad('finish.look.shadowArt', error.message);
     }
     try {
+      ContactShadows.prepare(look?.contactShadows);
+    } catch (error) {
+      bad('finish.look.contactShadows', error.message);
+    }
+    try {
       HorizonBands.compile(look?.horizonBands);
     } catch (error) {
       bad('finish.look.horizonBands', error.message);

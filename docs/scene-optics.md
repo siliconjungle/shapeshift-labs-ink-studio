@@ -172,6 +172,10 @@ Use `--stable-transparency blend` to turn on blending with the default 0.04 spac
 for a scene without an authored setting. The tide gauge scene provides a colored
 pane that moves through bounded mist, world-space rain, and a reflective basin.
 
+## Local contact shadows
+
+[Use contact shadows](contact-shadows.md) to ground feet, crates, railing posts, and foliage with a short world-space reach. Configure strength and cast or receive masks independently of the directional lights.
+
 ## Measured render budgets
 
 Run the headless benchmark from the repository root. It covers the fog observatory, the shaped-mist ravine, sparse illuminated mist pockets, and the lens workshop's transparent layers.

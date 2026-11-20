@@ -15,6 +15,8 @@ const ArtDirection = require('../src/art-direction.js');
 const SilhouetteProtection = require('../src/silhouette-protection.js');
 const DetailBudgets = require('../src/detail-budgets.js');
 const ShadowArt = require('../src/shadow-art.js');
+const ContactShadows = require('../src/contact-shadows.js');
+const ContactDepth = require('./contact-shadows.js');
 const RenderGraph = require('../src/render-graph.js');
 const runGraph = require('./render-graph.js');
 const FrameComposite = require('../src/frame-composite.js');
@@ -244,6 +246,7 @@ function renderFrame(world, o, preparedPalettes) {
   const edgeStrengthAt = !o.captureCoverage && EdgeFilter.prepare(o.edgeFilter ?? look.edgeFilter)?.bind(world);
   const stableDetail = StableDetail.prepare(o.stableDetail ?? look.stableDetail);
   const coverageMode = ContributionRules.coverageMode(o.splatCoverage ?? look.splatCoverage);
+  const contactSettings = ContactShadows.prepare(o.contactShadows ?? look.contactShadows);
   const orderMode = o.splatOrder ?? look.splatOrder ?? 'center';
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const useSdf = sdfSettings && world.renderSdfs?.length && !o.reflectionPlane?.select;
@@ -813,6 +816,8 @@ function renderFrame(world, o, preparedPalettes) {
     live = LiveSun.create(sun, world, { x: X, y: Y, z: Z, alpha: AL, scale: SC }, normalAt, cloudShadow, exposure?.light,
       { shadowArt: o.shadowArt, footprint: shadowFootprint });
   }
+  const contact = contactSettings && ContactDepth.create(contactSettings, world, d, { x:X, y:Y, z:Z, alpha:AL, scale:SC },
+    sampleFrames(world, t), coverageMode, rayAt, surface?.reveals);
   const optical = world.opticalSplats && OpticalMaterials.frame(world, { view: V, eye, ortho },
     sampleFrames(world, t), { x: X, y: Y, z: Z });
   const relight = relative && SplatRelighting.rows(world, relative, sampleFrames(world, t), { x: X, y: Y, z: Z, alpha: AL });
@@ -1034,6 +1039,11 @@ function renderFrame(world, o, preparedPalettes) {
         highlight=value[4]; paletteId=value[5];
         reflected=fragmentReflection?.slice();
       }
+      const receiver = contact?.at(i);
+      if (receiver) {
+        const gain = contact.sample(receiver, sprite.p, position, sprite.normal);
+        color = color.map(value => value*gain);
+      }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample);
     }
     const rgb=color.map((value,c)=>value+(fog[c]-value)*fogMix);
@@ -1237,11 +1247,13 @@ function renderFrame(world, o, preparedPalettes) {
     const coverGain = !liveNormal && !(flags & 6) && exposure?.light ?
       .24 + .76 * exposure.light(x,y,z) : 1;
     const rule = subject?.(i);
+    const contactReceiver = contact?.at(i);
     const fogMix = !(flags & 2) && world.fog.max > 0 && world.fog.start < 1
       ? targetFog(sstep(world.fog.start,1,dn)*world.fog.max*(exposure?.fog?.(x,y,z)??1),rule) : 0;
     const reflectInRaster = (planar || reflectedSky) && !pixelSurface;
     const normal = fragmentSurface ? surface.surfaceNormal(i) : null;
-    if (fogMix && !opticalActive && !reflectInRaster && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1) {
+    const centerFog = !opticalActive && !reflectInRaster && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
+    if (fogMix && centerFog) {
       r += (fog[0] - r) * fogMix;
       g += (fog[1] - g) * fogMix;
       b += (fog[2] - b) * fogMix;
@@ -1384,6 +1396,13 @@ function renderFrame(world, o, preparedPalettes) {
           pr = Math.min(1, pr * relight[lightSlot]);
           pg = Math.min(1, pg * relight[lightSlot + 1]);
           pb = Math.min(1, pb * relight[lightSlot + 2]);
+        }
+        if (contactReceiver) {
+          const gain = contact.pixel(contactReceiver, p, ix + .5, iy + .5, -cz, exact);
+          const bakedFog = centerFog ? fogMix : 0;
+          pr -= Math.max(0, pr - fog[0]*bakedFog)*(1 - gain);
+          pg -= Math.max(0, pg - fog[1]*bakedFog)*(1 - gain);
+          pb -= Math.max(0, pb - fog[2]*bakedFog)*(1 - gain);
         }
         const scoped = contribution?.applies(i, paletteId);
         if (opticalActive) {
@@ -1728,6 +1747,12 @@ function renderFrame(world, o, preparedPalettes) {
         const lightSlot = i * 4;
         if (relight?.[lightSlot + 3]) rgb = c.slice(0, 3).map((value, channel) =>
           Math.min(1, value * relight[lightSlot + channel]));
+        const receiver = contact?.at(i);
+        if (receiver) {
+          const point = [HX[p], HY[p], HZ[p]], exact = sdf?.hits[p];
+          const gain = exact ? contact.sample(receiver, p, exact.position, exact.normal) : contact.sample(receiver, p, point);
+          if (gain < 1) rgb = rgb.slice(0, 3).map(value => value*gain);
+        }
         if (contribution?.applies(i, c[5])) {
           const rule = fragmentRule(i);
           const site = sample ?? (rule || contribution.masked(i, c[5]) ? stageSample(i, [HX[p], HY[p], HZ[p]]) : undefined);
