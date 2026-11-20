@@ -115,7 +115,7 @@
   }
 
   const lookFields = ['output', 'provenance', 'sample'].map(key => ({name:'look/'+key,type:'record',selector:true}));
-  function create(view, systems = {}, projected, visual) {
+  function create(view, systems = {}, projected, visual, sceneData) {
     const {world, states:visible = {}, signals = {}, tick = 0, history = [], dropped = 0} = view;
     const states=view[W.simulationAggregate.rawStates]??visible;
     const fields = new Map(), traces = new Map();
@@ -126,6 +126,7 @@
     const transfers = () => W.transfers.bind(systems);
     const look = () => appearance ??= W.lookQuery(scene,base.time);
     const physical = () => W.materials.catalog(world);
+    let dataInputs = sceneData;
 
     function location(id) {
       if (locations.has(id)) return locations.get(id);
@@ -217,6 +218,11 @@
             system.simulationRepresentation&&own(states,key)?[[key,system.simulationRepresentation(states[key])]]:[])));
         }}
       }),
+      ...((world.dataInputs !== undefined || dataInputs) && { data: { type: 'value', read({target, args, time}) {
+        dataInputs ??= K.dataInputs.prepare(world.dataInputs);
+        const options = target.point && args.at === undefined ? { ...args, at: target.point } : args;
+        return dataInputs.sample(options, time);
+      } } }),
       position:{type:'vec3',units:'world',read:({target:site}) => site.point ? ok(site.point) : missing('point or entity required')},
       'spatial-batch':{type:'record',selector:true,qualified:true,read:({args})=>ok(spatialBatch(args))},
       history:{type:'records',read:({args}) => {
@@ -457,7 +463,7 @@
         return value?ok(value):missing('point is outside the material grid','outside');
       }}}};
     }
-    return create({world:W.manifest({id:W.data.id(w.id)?w.id:'world',systems:configs}),tick:Math.round(time*60),time},descriptors,undefined,()=>w);
+    return create({world:W.manifest({id:W.data.id(w.id)?w.id:'world',systems:configs}),tick:Math.round(time*60),time},descriptors,undefined,()=>w,w.dataInputs);
   }
   function keyedChanges(a,b,{limit=Infinity}={}) {
     const operations = [];

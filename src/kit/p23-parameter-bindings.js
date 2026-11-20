@@ -83,7 +83,16 @@
         return named(value.name, depth + 1);
       }
       const { fallback, ...driver } = value;
-      check(own(value, 'fallback'), 'Time, field and signal parameters need a fallback');
+      check(own(value, 'fallback'), 'Time, field, signal and data parameters need a fallback');
+      if (driver.source === 'data') {
+        const { source, ...sample } = driver;
+        K.dataInputs.sampleOptions(sample);
+        freeze(fallback);
+        return state => {
+          const result = state.dataInputs.sample(sample, state.inputs.time);
+          return result.status === 'ok' && kind(result.value) === kind(fallback) ? result.value : fallback;
+        };
+      }
       if (driver.source === 'field') driver.source = 'query';
       LookInputs.validateDriver(driver, fallback);
       freeze(fallback);
@@ -93,7 +102,7 @@
     const defaults = freeze(controls);
 
     function sample(input = {}) {
-      const { time = 0, controls: overrides = {}, query } = input;
+      const { time = 0, controls: overrides = {}, query, dataInputs = K.dataInputs.prepare() } = input;
       check(record(overrides), 'Control overrides must be a named map');
       const active = { ...defaults };
       for (const [name, value] of Object.entries(overrides)) {
@@ -101,7 +110,7 @@
         active[name] = freeze(clone(value));
       }
       const inputs = LookInputs.session(time, typeof query === 'function' ? query : () => query);
-      const state = { controls: active, values: new Map(), inputs };
+      const state = { controls: active, values: new Map(), inputs, dataInputs };
       for (const read of compiled.values()) read(state);
       return freeze(clone({ ...active, ...Object.fromEntries(state.values) }));
     }

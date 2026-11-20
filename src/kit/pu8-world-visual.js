@@ -8,7 +8,8 @@
     0x4e302a,0x815032,0xab6e3b,0xd29f55,0xf0cb7b,0xf8edd0
   ];
   function visualParameters(world, input) {
-    if (world.visual?.parameterBindings === undefined) return { world };
+    const dataInputs = world.dataInputs === undefined ? undefined : K.dataInputs.prepare(world.dataInputs);
+    if (world.visual?.parameterBindings === undefined) return { world, dataInputs };
     const { parameterBindings, ...visual } = world.visual;
     const program = K.parameters.prepare(parameterBindings);
     for (const { path } of program.targets) {
@@ -16,8 +17,8 @@
           path[0] === 'entities' && path[2] === 'visual' && path.length >= 3))
         throw new RangeError('Unsupported world visual parameter path: ' + path.join('/'));
     }
-    const { document, values } = program.apply({ visual, entities: world.entities }, input);
-    return { world: { ...world, ...document }, values };
+    const { document, values } = program.apply({ visual, entities: world.entities }, { ...input, dataInputs });
+    return { world: { ...world, ...document }, values, dataInputs };
   }
   function visualEnvironment(world, catalog = W.materials.catalog(world)) {
     const config = world.visual ?? {};
@@ -117,7 +118,7 @@
   function visual({makeBuilder,makeSculpt},view,query,{ controls } = {}) {
     const time = view.time ?? view.tick * view.world.dt;
     const timeline = sceneTimeline(view.world), frame = timeline?.sample(time);
-    const { world: bound, values } = visualParameters(view.world, { time, query, controls });
+    const { world: bound, values, dataInputs } = visualParameters(view.world, { time, query, controls });
     const edits = frame?.edits.filter(edit => edit.path[0] === 'visual');
     const world = edits?.length ? W.apply(bound, edits, { validate: false }).world : bound;
     if (world !== view.world) view = { ...view, world };
@@ -422,6 +423,7 @@
     const baked=B.finish({lookSnapshot: { time, tick: view.tick, query }, cam,
       ...(timeline && { timeline }),
       ...(values && { parameterValues: values }),
+      ...(dataInputs && { dataInputs }),
       ...(contacts?.kick.some(Boolean)&&{anim:{kick:contacts.kick}}),
       radius:span,detail:30,dither:.22,look:looks.look,paletteRoles:config.paletteRoles,
       ...K.authoring.environments.rendererSettings(config),

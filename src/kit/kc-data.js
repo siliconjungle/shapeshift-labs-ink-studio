@@ -227,6 +227,7 @@
     roles: 'obj',
     camera: 'obj',
     cameraRig: 'obj',
+    dataInputs: 'obj',
     light: 'obj',
     finish: 'obj',
     groups: 'obj',
@@ -318,15 +319,25 @@
   const parameterRoots = ['solids', 'roles', 'palette', 'motion', 'light', 'effects', 'finish', 'tap'];
   function resolveParameters(source, env) {
     const { spec: expanded } = K.authoring.scenePrefabs.expand(source, env);
-    if (expanded?.parameterBindings === undefined) return { spec: expanded };
+    let dataInputs;
+    if (expanded?.dataInputs !== undefined) {
+      try {
+        dataInputs = K.dataInputs.prepare(expanded.dataInputs);
+      } catch (error) {
+        error.problems = [{ level: 'error', path: 'dataInputs', problem: error.message, hint: '' }];
+        throw error;
+      }
+    }
+    if (expanded?.parameterBindings === undefined) return { spec: expanded, dataInputs };
     try {
-      const { parameterBindings, timeline, ...base } = expanded, program = K.parameters.prepare(parameterBindings);
+      const { parameterBindings, timeline, dataInputs: authoredData, ...base } = expanded;
+      const program = K.parameters.prepare(parameterBindings);
       for (const { path } of program.targets) if (!parameterRoots.includes(path[0]) || path.length < 2)
         throw new RangeError('Unsupported diorama parameter path: ' + path.join('/'));
-      const inputs = { ...env?.parameterInputs };
+      const inputs = { ...env?.parameterInputs, ...(dataInputs && { dataInputs }) };
       const { document, values } = program.apply(base, inputs);
       const spec = timeline === undefined ? document : { ...document, timeline };
-      return { spec, program, values, inputs };
+      return { spec, program, values, inputs, dataInputs };
     } catch (error) {
       error.problems = [{ level: 'error', path: 'parameterBindings', problem: error.message, hint: '' }];
       throw error;
@@ -1220,7 +1231,7 @@
       e.problems = problems;
       throw e;
     }
-    const { spec } = resolved, { timeline, cameraRig } = presentation, dynamics = boundRuntime(source, env, resolved);
+    const { spec, dataInputs } = resolved, { timeline, cameraRig } = presentation, dynamics = boundRuntime(source, env, resolved);
     const st0 = styleOf(spec), catalog = lookCatalog(spec),
       seed = spec.seed === undefined ? 1 : spec.seed,
       effects = spec.effects || [],
@@ -1230,9 +1241,10 @@
     if (spec.brushRegion != null) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
-      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, ...geometry } = spec;
+      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, ...geometry } = spec;
       const world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       world.spec = source;
+      if (dataInputs) world.dataInputs = dataInputs;
       if (cameraRig) K.cameraRig.bind(world, cameraRig);
       if (dynamics) world.parameters = dynamics.api;
       if (timeline) {
@@ -1552,6 +1564,7 @@
         { cam, detail: 14, palName: typeof spec.style === 'string' ? spec.style : 'Data', dither: 0.25, radius: 9 },
         st0.finish,
         { made, spec: source, paletteRoles: st0.roles, ...(dynamics && { parameters: dynamics.api }),
+          ...(dataInputs && { dataInputs }),
           ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );

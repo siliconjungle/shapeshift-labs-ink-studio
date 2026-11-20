@@ -298,6 +298,8 @@ The larger [lab/data-shrine.json](lab/data-shrine.json) demonstrates joins, fold
 
 Named framing targets, rails, occlusion avoidance, and shot blends work across the CPU and WebGL renderers. [Camera rigs](docs/camera-rigs.md)
 
+Tables, spatial features, and time series can drive shared parameters and simulation queries with declared types, units, coordinate systems, and missing-value policies. [Typed data inputs](docs/typed-data-inputs.md)
+
 The [unified scene timeline](docs/scene-timeline.md) synchronizes camera motion, rig poses, lights, effects, audio cues, and world events through keyframes and nested sequences.
 
 Use `K.rig` for tagged rigid parts, `K.creature` for a creature rig, and `K.puppet` for hierarchical parts with deformation. `K.anim` provides clips, easing, layers, state machines, constraints, facial controls and presentation cues. `K.acts` provides ready-made action and reaction clips.
@@ -707,6 +709,7 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `acts` | List action clips, reactions, easing names and cues. |
 | `authoring inspect\|preview\|apply <scene>` | Inspect generated parts, preview JSON edits and save validated snapshots. |
 | `render <scene> --t 1.5` | Render one PNG at a chosen time. |
+| `data-inputs <scene-or-catalog> [dataset] [--sample JSON] [--rows]` | Inspect typed columns, sample values, or export normalized rows and spatial features. |
 | `camera-rig <scene> [--at seconds] [--camera-shot id]` | Inspect the resolved shot, projection, blend, and occlusion clearance. |
 | `passes <scene>` | Save art-pixel coverage, depth, normals, IDs and emission previews. |
 | `atlas <scene> --directions 8` | Export an RGBA atlas with registered pivots and optional relighting maps. |

@@ -89,6 +89,8 @@ function dataScene(file, override, { installedPacks = false } = {}) {
     spec = override ? { ...override } : JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')),
     dir = path.dirname(path.resolve(file)),
     assets = {};
+  if (spec.dataInputs !== undefined)
+    spec.dataInputs = require('./data-inputs.js').embed(K.dataInputs, spec.dataInputs, file, shot?.dependency);
   if (opt.style) spec.style = opt.style;
   if (opt['shadow-art'] !== undefined)
     spec.finish = { ...spec.finish, look: { ...K.diorama.sceneLook(spec), shadowArt: shadowArtOption() } };
@@ -697,7 +699,7 @@ function die(m) {
 }
 const worldCLI = () => require('./world.js')({kit:lib(),build,pose,dataScene,opt,renderOptions:view,atmosphereEmittersOption,effectPalettesOption,stabilityOption,artDirectionOption,silhouetteOption,horizonOption,skyTransitionsOption,
   weatherTracksOption:() => onOffOption('weather-tracks'),skyOptions,cameraOptions,shot,shotReplay,shotRender});
-const worldCommands = new Set(['inspect','probe','trace','field','scene','sim']);
+const worldCommands = new Set(['inspect','probe','trace','field','data-inputs','scene','sim']);
 const CMD = {
   help() {
     console.log(
@@ -794,6 +796,7 @@ const CMD = {
         '  motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges',
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
+        '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
         '  camera-rig <scene or world> [--at seconds --camera-shot ID --out report.json]  sample a shot and its clearance',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',

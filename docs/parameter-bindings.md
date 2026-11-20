@@ -9,6 +9,7 @@ Use `parameterBindings` in a JSON diorama or `visual.parameterBindings` in a sim
 | `time` | Reads scene seconds. |
 | `field` | `field` selects a queryable world field. Optional `target` supplies an XYZ position or selector, and `args` supplies query arguments. |
 | `signal` | `port` selects a typed simulation output or public port alias. |
+| `data` | `dataset` and `column` select a typed input with a required `fallback`. [Typed data inputs](typed-data-inputs.md) |
 
 Time, field, and signal readers require a typed `fallback`. Field and signal readers can use `path` to select a member from a record or array. Optional `keys` map increasing numeric inputs to output values using `linear` or `step` interpolation. The fallback is the output used when a read is missing or incompatible. Field and signal reads share one query snapshot for each sample.
 

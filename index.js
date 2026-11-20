@@ -90,6 +90,12 @@ module.exports = {
     return module.exports.load().KIT.authoring.assetMeshes.importGLB(
       new Uint8Array(fs.readFileSync(file)), { ...options, decodeImage });
   },
+  readDataInputs(file) {
+    const api = module.exports.load().KIT.dataInputs;
+    const { dataInputs } = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (dataInputs === undefined) throw new TypeError('Expected a dataInputs catalog in ' + file);
+    return api.prepare(require('./cli/data-inputs.js').embed(api, dataInputs, file));
+  },
   exportGlb: require('./cli/export-glb.js'),
   render: require('./cli/render.js').render,
   inspectEnvironment: require('./cli/environment-inspector.js').inspectEnvironment,

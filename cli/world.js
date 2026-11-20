@@ -55,7 +55,9 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     if (opt.out) write(opt.out,value);
     else process.stdout.write(JSON.stringify(value,null,opt.json?0:2)+'\n');
   };
-  function document(world) {
+  function document(world, file) {
+    if (file !== undefined && world.dataInputs !== undefined) world = { ...world,
+      dataInputs: require('./data-inputs.js').embed(kit.KIT.dataInputs, world.dataInputs, file, shot?.dependency) };
     if (opt['asset-pack'] === undefined) return {world};
     const packs = require('./asset-pack.js').install(kit.KIT.authoring.assetPacks, world.assetPacks, opt['asset-pack']);
     return {world:{...world,assetPacks:packs}};
@@ -64,11 +66,11 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     ensure(typeof file === 'string','Expected a scene or run file');
     if (/\.(js|cjs)$/i.test(file)) {
       const factory = require(path.resolve(file)), value = typeof factory === 'function' ? factory(kit) : factory;
-      return value.format===W.format ? document(value) : value.simulation ? document(value.simulation) : {legacy:file};
+      return value.format===W.format ? document(value,file) : value.simulation ? document(value.simulation,file) : {legacy:file};
     }
     if (/\.json$/i.test(file)) {
       const { value,store } = readCheckpointFile(file);
-      if (value.format === W.format) return document(value);
+      if (value.format === W.format) return document(value,file);
       if (!lookPreview && [R.checkpointFormat,R.runFormat].includes(value.format))
         ensure(opt['asset-pack']===undefined,'Recorded runs and checkpoints keep their original asset packs');
       if (value.format === R.checkpointFormat) return {world:value.world,checkpoint:value,store};
@@ -661,6 +663,21 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     R.validate(result.world);
     respond(opt['dry-run']?{changed:result.paths,...(result.events?{events:result.events}:{})}:result.world);
   }
+  function inspectData(file, name) {
+    const input = load(file);
+    const api = kit.KIT.dataInputs;
+    const data = input.world ? api.prepare(input.world.dataInputs) : input.document
+      ? api.prepare(require('./data-inputs.js').embed(api, input.document.dataInputs, file))
+      : build(input.legacy).dataInputs;
+    ensure(data?.describe().length, 'This file has no typed data inputs');
+    ensure(name || opt.sample === undefined && !opt.rows, 'Select a dataset before requesting rows or a sample');
+    if (name === undefined) return respond({ datasets: data.describe() });
+    const dataset = data.get(name), time = Number(opt.t ?? 0);
+    ensure(opt.t !== true && Number.isFinite(time), 'Data sample time must be finite seconds');
+    return respond({ ...dataset.description,
+      ...(opt.rows && { rows: dataset.rows, ...(dataset.features && { features: dataset.features }) }),
+      ...(opt.sample !== undefined && { sample: dataset.sample(parse(opt.sample), time) }) });
+  }
   function execute(command,pos) {
     const [file,name] = pos;
     switch (command) {
@@ -730,6 +747,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         } else respond(view(file).export(name,spec,sample));
         break;
       }
+      case 'data-inputs': return inspectData(file,name);
       case 'scene': scene(pos); break;
       case 'sim': return sim(pos);
       default: throw Error('Unknown world command');
@@ -763,7 +781,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     if (raw.format!==W.format && raw.format!==R.checkpointFormat && raw.format!==R.runFormat) return false;
     const run = raw.format===R.runFormat ? R.replay(raw) :
       raw.format===R.checkpointFormat ? R.create(raw.world,{checkpoint:raw}) : undefined;
-    const world = run?.view().world ?? R.validate(document(raw).world);
+    const world = run?.view().world ?? R.validate(document(raw,file).world);
     const visual = world.visual;
     if (opt.renderer || visual?.look || visual?.terrainSurface || visual?.terrainLookAsset ||
         Object.values(world.entities).some(entity=>entity.lookAsset || entity.visual?.lookAsset || entity.visual?.surface)) {
