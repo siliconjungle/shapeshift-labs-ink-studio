@@ -63,7 +63,7 @@ const MathFields = (() => {
     if (o.type === 'mobius') {
       for (const [key, value] of Object.entries({ a: [1, 0], b: [0, 0], c: [0, 0], d: [1, 0] }))
         o[key] = vector(o[key] ?? value, 2);
-      const norm = Math.max(...['a', 'b', 'c', 'd'].flatMap(key => o[key].map(Math.abs)));
+      const norm = Math.max(...['a', 'b', 'c', 'd'].map(key => Math.hypot(...o[key])));
       if (!norm) throw new RangeError('Math fields: degenerate Mobius transform');
       for (const key of ['a', 'b', 'c', 'd']) o[key] = o[key].map(n => n / norm);
       const a = mul(o.a, o.d),

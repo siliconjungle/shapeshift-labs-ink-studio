@@ -29,9 +29,9 @@ chart.sampleInto(reusableSample, x, y, z, time);
 | --- | --- | --- |
 | `affine` | `scale:[1,1]`, `offset:[0,0]`, `rotate:0`, `velocity:[0,0]`, `spin:0` | Scale, rotate, translate; spin is radians/second and velocity is chart units/second. |
 | `mobius` | complex `a,b,c,d` as `[real,imaginary]` | `(a*z+b)/(c*z+d)`; default identity. Coefficients are normalized up to common scale; a numerically degenerate determinant is rejected. |
-| `power` | `exponent:2` in `[-16,16]` | Principal complex power, including fractional and negative exponents. |
+| `power` | `exponent:2` in `[-16,16]` | Branch-controlled complex power, including fractional and negative exponents. |
 | `reciprocal` | none | `1/z`. |
-| `exp`, `log`, `sin` | none | Complex exponential, principal logarithm, and sine. |
+| `exp`, `log`, `sin` | none | Complex exponential, branch-controlled logarithm, and sine. |
 | `conjugate` | none | Negates the imaginary coordinate. |
 | `polar` | `logRadius:false` | `[radius,angle]`, or `[log(radius),angle]`. |
 | `cartesian` | `logRadius:false` | Inverse polar mapping; exponentiates the first coordinate for log-radius charts. |

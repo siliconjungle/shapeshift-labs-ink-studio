@@ -335,6 +335,7 @@
     }
     $('family').onchange = e => {
       demo.setFamily(e.target.value);
+      metrics();
       $('note').textContent = 'Same integration kernel / new initial orbit.\nThe camera remains yours.';
     };
     $('pause').onclick = () => {
@@ -342,6 +343,13 @@
       $('pause').textContent = demo.state.paused ? 'Resume fields' : 'Pause fields';
     };
     $('return').onclick = () => demo.control.release();
+    function metrics() {
+      const s = demo.inspect();
+      $('cost').value = s.chartCost + ' UNITS';
+      $('particles').value = s.particles + ' × RK4';
+      $('coverage').value = Math.round((s.visible / s.totalReveal) * 100) + '%';
+      $('step').value = s.integration.dt.toFixed(3) + ' S';
+    }
     let drag,
       last,
       stamp,
@@ -388,11 +396,7 @@
         fps = Math.round((frames * 1000) / (now - stamp));
         stamp = now;
         frames = 0;
-        const s = demo.inspect();
-        $('cost').value = s.chartCost + ' UNITS';
-        $('particles').value = s.particles + ' × RK4';
-        $('coverage').value = Math.round((s.visible / s.totalReveal) * 100) + '%';
-        $('step').value = s.integration.dt.toFixed(3) + ' S';
+        metrics();
       }
       $('status').value =
         fps + ' FPS · ' + (demo.state.paused ? 'FIELDS HELD' : demo.state.family.toUpperCase() + ' / LIVE');

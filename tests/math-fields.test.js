@@ -376,3 +376,60 @@ test('Mobius charts are invariant to common coefficient scaling and reusable out
   discrete.advance(1);
   point(discrete.reset([0.2, 0.3]).point, [0.2, 0.3, 0]);
 });
+
+function nativeMathFixture({ KIT: K, makeBuilder }) {
+  const B = makeBuilder(3, [0x0c1020, 0xe1d3ee, 0xfff3cf]);
+  for (let j = -3; j <= 3; j++)
+    for (let i = -3; i <= 3; i++) B.disc(i * 0.16, j * 0.16, 0, [0, 0, 1], 0.08, 0.01, B.P[(i + j) % 2 ? 1 : 2], 3);
+  const world = B.finish({ cam: { target: [0, 0, 0], dist: 3, yaw: 0, pitch: 0 }, radius: 2 }),
+    ids = Array.from({ length: world.count }, (_, i) => i);
+  const map = K.procedural.mathFields
+    .mapping({
+      scale: [0.65, 0.65],
+      steps: [
+        { type: 'mobius', c: [0.15, 0.08] },
+        { type: 'spiral', twist: 0.4 },
+        { type: 'affine', rotate: 0.15 }
+      ]
+    })
+    .deform({ amount: 0.65, maxDisplacement: 0.2 });
+  const skin = K.deform.skin(world, ids, { grid: [4, 4, 1] }),
+    matrices = new Float32Array(skin.n * 12);
+  const anim = K.bones.bind(world, {
+    ids,
+    bid: skin.bid,
+    M: matrices,
+    pose(t) {
+      map.time = t;
+      skin.fill(matrices, 0, map);
+    }
+  });
+  anim.update(0, 0.4);
+  return { world };
+}
+
+test('math fields match CPU-posed geometry and GPU-carried splats', { skip: !process.env.INK_TEST_CHROME }, () => {
+  const run = require('../cli/look-webgl');
+  const result = run({ hardware: true }, nativeMathFixture, (kit, build, backend) => {
+    const { world } = build(kit),
+      draw = backend(64, 48, { raw: true, offscreen: true });
+    const read = () => Array.from(atob(draw.image()), c => c.charCodeAt(0));
+    try {
+      draw.draw(world, { time: 0.4 });
+      const live = read();
+      const data = kit.KIT.bones.posed(world);
+      draw.draw({ ...world, data, anim: undefined }, { time: 0.4 });
+      return { live, baked: read() };
+    } finally {
+      draw.close();
+    }
+  });
+  let sum = 0,
+    changed = 0;
+  for (let i = 0; i < result.live.length; i++) {
+    sum += Math.abs(result.live[i] - result.baked[i]);
+    if (result.live[i] > 70) changed++;
+  }
+  assert(changed > 150);
+  assert(sum / result.live.length < 2.5, 'mean posed/GPU error ' + sum / result.live.length);
+});
