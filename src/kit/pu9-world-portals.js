@@ -477,6 +477,10 @@
       return Object.freeze({ opening: link.opening, source: active.asset.world, destination: job.asset.world,
         link, asset: job.asset });
     }
+    function previewLinks(actor) {
+      if (!active || walking || fading) return noLinks;
+      return Object.freeze((exits.get(active.id) ?? noLinks).filter(link => link.opening && permits(link, actor)));
+    }
     async function cross(id, { previous, actor, camera, radius } = {}) {
       guard();
       if (walking || fading) return null;
@@ -661,7 +665,7 @@
     return Object.freeze({ current: () => active, place, linksFrom: id => exits.get(id) ?? noLinks,
       ...(entities && { lifecycle: entities.api }),
       registerInstance, openEntrance, closeEntrance,
-      enter, approach, prepare, checkArrival, cancelPreparation, view, cross, fade, onCross, step, checkpoint, restore,
+      enter, approach, prepare, checkArrival, cancelPreparation, view, previewLinks, cross, fade, onCross, step, checkpoint, restore,
       dispose() {
         if (disposed) return;
         if (stepping || handoff) throw new Error('Place state is already being updated');

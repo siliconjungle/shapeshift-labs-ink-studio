@@ -7,7 +7,7 @@ import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
 import { createSplatPipeline } from './pipeline.mjs';
 import { pixelShaderSources } from './shaders.mjs';
-import { createDepthSorter, makeCamera, cameraPose, withCameraPose } from './view.mjs';
+import { createDepthSorter, makeCamera, cameraPose, withCameraPose, captureStreamingCamera } from './view.mjs';
 import { waterBackgroundShader } from './water-optics.mjs';
 import { createEnvironment } from './environment.mjs';
 import { environmentBackgroundShader } from './environment-shaders.mjs';
@@ -1219,7 +1219,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
     try { controls=createViewerInput(canvas,{...input,toolkit}); }
     catch(error){ backend.dispose();throw error; }
   }
-  let disposed = false, picking;
+  let disposed = false, picking, streamAssemblies = new WeakMap();
   const pickInstances = createExpandedInstances();
   const lose = event => {
     event.preventDefault();
@@ -1255,11 +1255,39 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
     if (![frame.time ?? 0, frame.bornAt ?? 0, frame.scale ?? 1, frame.dither ?? 0.35].every(Number.isFinite))
       throw new RangeError('Ink Studio frame parameters must be finite');
   }
-  return {
+  const api = {
     ...(controls&&{input:controls}),
     cameraPose(world, frame = {}) {
       return cameraPose(makeCamera(world, frame, frame.width ?? frame.target?.width ?? canvas.width,
         frame.height ?? frame.target?.height ?? canvas.height));
+    },
+    renderStream(stream, cameraWorld, { place, portals = [], selected, assemble, ...frame } = {}) {
+      if (disposed) throw new Error('The Ink Studio renderer has been disposed');
+      if (typeof stream?.advance !== 'function' || typeof assemble !== 'function')
+        throw new TypeError('Stream rendering needs a scene stream and a world assembler');
+      const width = frame.width ?? frame.target?.width ?? canvas.width;
+      const height = frame.height ?? frame.target?.height ?? canvas.height;
+      const { snapshot, camera } = captureStreamingCamera(cameraWorld, frame, width, height);
+      const scene = stream.advance({ place, camera, portals, selected, portalLimit: 1 });
+      const previous = streamAssemblies.get(stream), current = new Map();
+      function worldFor({ id, place, entries }) {
+        const saved = previous?.assemble === assemble && previous.worlds.get(id);
+        const same = saved?.place === place && entries.length === saved.entries.length &&
+          entries.every((row, i) => {
+            const old = saved.entries[i];
+            return old.key === row.key && old.revision === row.revision && old.value === row.value;
+          });
+        const world = same ? saved.world : assemble(place, entries);
+        if (world?.count > entries.reduce((sum, row) => sum + row.splats, 0))
+          throw new RangeError('Assembled scene exceeds its packed splat budget');
+        current.set(id, { place, entries, world });
+        return world;
+      }
+      const world = worldFor(scene.views[0]), next = scene.views[1];
+      const portal = next?.entries.length ? { opening: next.opening, destination: worldFor(next) } : undefined;
+      api.render(world, { ...frame, cameraSnapshot: snapshot, portal });
+      streamAssemblies.set(stream, { assemble, worlds: current });
+      return { world, portal, scene };
     },
     render(world, frame = {}) {
       if (disposed) throw new Error('The Ink Studio renderer has been disposed');
@@ -1321,6 +1349,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
     dispose() {
       if (disposed) return;
       disposed = true;
+      streamAssemblies = new WeakMap();
       try { controls?.dispose(); }
       finally {
         backend?.dispose();
@@ -1328,4 +1357,5 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       }
     }
   };
+  return api;
 }

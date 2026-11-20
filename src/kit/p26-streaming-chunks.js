@@ -69,10 +69,12 @@
   };
 
   chunks.createScheduler = function createScheduler({
-    budgetBytes, concurrency = 2, describe, load, release, sizeOf
+    budgetBytes, concurrency = 2, describe, load, release, sizeOf, startsPerFrame
   } = {}) {
     if (!integer(budgetBytes) || budgetBytes < 1 || !integer(concurrency) || concurrency < 1)
       throw new RangeError('Chunk scheduling needs a positive byte budget and concurrency');
+    if (startsPerFrame !== undefined && (!integer(startsPerFrame) || startsPerFrame < 1))
+      throw new RangeError('Chunk starts per frame must be a positive integer');
     if (typeof describe !== 'function' || typeof load !== 'function' ||
         release !== undefined && typeof release !== 'function' || sizeOf !== undefined && typeof sizeOf !== 'function')
       throw new TypeError('Chunk scheduling needs describe and load callbacks');
@@ -81,6 +83,7 @@
     let demand = new Map(), admitted = new Map(), descriptions = new Map();
     let dirty = true, refreshAll = false, scheduled = false, disposed = false;
     let bytes = 0, reservedBytes = 0, sequence = 0, published, releaseError = null;
+    let starts = startsPerFrame === undefined ? Infinity : 0;
     let completed = [];
 
     function schedule(replan = false) {
@@ -220,13 +223,14 @@
       for (const job of finished) publish(job);
       if (dirty && !disposed) plan();
       if (!disposed) for (const [key, descriptor] of admitted) {
-        if (loading.size >= concurrency) break;
+        if (loading.size >= concurrency || starts === 0) break;
         if (residents.has(key) || loading.has(key) || failures.has(key)) continue;
         // A superseded job keeps its reservation until it settles.
         if (descriptor.bytes > budgetBytes - bytes - reservedBytes) break;
         const controller = new AbortController(), job = { controller, descriptor };
         loading.set(key, job);
         reservedBytes += descriptor.bytes;
+        starts--;
         Promise.resolve().then(() => {
           if (controller.signal.aborted) throw controller.signal.reason;
           return load(descriptor, { signal: controller.signal });
@@ -288,6 +292,11 @@
     }
     return Object.freeze({
       interest, status,
+      advance() {
+        guard();
+        starts = startsPerFrame ?? Infinity;
+        schedule();
+      },
       refresh() { guard(); refreshAll = true; schedule(true); },
       get: key => residents.get(key) ?? null,
       snapshot() {

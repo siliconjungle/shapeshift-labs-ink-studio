@@ -15,6 +15,14 @@ export function captureCamera(world, frame, width, height) {
   return snapshot;
 }
 
+export function captureStreamingCamera(world, frame, width, height) {
+  const snapshot = captureCamera(world, frame, width, height);
+  const { camera } = snapshots.get(snapshot);
+  const { eye, back } = snapshot.pose;
+  return { snapshot, camera: { ...snapshot.pose, ortho: camera.ortho, tangent: camera.tangent, aspect: camera.aspect,
+    near: camera.clipNear, far: camera.clipFar, observer: eye.map((v, i) => v - back[i] * camera.setback) } };
+}
+
 export function makeCamera(world, frame, width, height) {
   if (frame.cameraSnapshot !== undefined) {
     const locked = snapshots.get(frame.cameraSnapshot);
