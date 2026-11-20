@@ -212,8 +212,9 @@
       'Instantaneous signal cycle; use a delay or a stateful system');
     const causePolicy = W.causality.policy(world.causality);
     const rates = schedule.active ? W.rates.bind(schedule,systems,ports,incoming,order) : null;
-    return {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy,
-      contracts,phaseEdges};
+    const interactions = W.interactionRuntime.bind({world,systems,chunks,transfers,ports,incoming,portValue});
+    return {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
+      interactions,causePolicy,contracts,phaseEdges};
   }
   function actionCheck(raw, plan, min = 1) {
     check(record(raw) && tickOK(raw.tick) && raw.tick >= min && record(raw.args ?? {}) &&
@@ -316,8 +317,8 @@
       world=result.world;
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
-    const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy,
-      contracts,phaseEdges} = plan;
+    const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
+      interactions,causePolicy,contracts,phaseEdges} = plan;
     let composition;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -615,15 +616,22 @@
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
         const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
         events.push(row);
-        if (causal) causal.event(row,parents??scope?.emitParents()??(root?[root]:[]),scope?.location,
+        if (causal) return causal.event(row,parents??scope?.emitParents()??(root?[root]:[]),scope?.location,
           parents?'declared':root?'command':'observed-inputs');
       };
+      function setInput(port,next,root){
+        const descriptor=ports.inputs[port];
+        if (causal && (!rates || descriptor.type!=='event' || next.length))
+          causal.manual(port,root,rates && descriptor.type==='event' && nextManual[port].length>0);
+        nextManual[port] = rates && descriptor.type==='event' ?
+          W.rates.add(nextManual[port],next,'event') : next;
+      }
       function systemEmit(name,scope,root) {
         const emit=makeEmit(name,scope,root), allowed=contracts.get(name)?.emits;
         if (!allowed) return emit;
         return (kind,detail,parents) => {
           check(allowed.includes(kind),'Undeclared simulation event '+String(kind)+' from '+name);
-          emit(kind,detail,parents);
+          return emit(kind,detail,parents);
         };
       }
       for (const item of commands) {
@@ -635,10 +643,7 @@
             const {port,value} = item.args, descriptor = ports.inputs[port];
             if(commanded)commanded.add(endpoint(port)[0]);
             const next = portValue(descriptor,value,port);
-            if (causal && (!rates || descriptor.type!=='event' || next.length))
-              causal.manual(port,root,rates && descriptor.type==='event' && nextManual[port].length>0);
-            nextManual[port] = rates && descriptor.type==='event' ?
-              W.rates.add(nextManual[port],next,'event') : next;
+            setInput(port,next,root);
           }
           if (key === 'patch') {
             const result = W.apply(nextWorld,item.args.edits);
@@ -705,7 +710,7 @@
       }
       check(requests.length <= W.transfers.limit,'Transfer request budget exceeded');
       let confirmations;
-      const receipts = requests.length ? rootedState(requests.map(({name,request,root})=>{
+      const receipts = requests.map(({name,request,root})=>{
         const receipt = transfers.settle(drafts,request,at,name,rootedState);
         makeEmit(name,undefined,root)('transfer',receipt);
         if(systems[name]?.receiveTransfers){
@@ -714,7 +719,7 @@
           confirmations.get(name).push(receipt);
         }
         return receipt;
-      })) : [];
+      });
       for(const [name,confirmed] of confirmations??[])
         drafts[name]=rootedState(systems[name].receiveTransfers(drafts[name],confirmed,{tick:at,emit:systemEmit(name)}));
       aggregates?.transition(drafts,nextChunkState,makeEmit('world'));
@@ -723,6 +728,33 @@
         query:()=>Q.create(view(nextWorld,{...drafts},lastSignals,at,receipts,causalState,nextChunkState),systems,projection),
         context:(name,query)=>context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name),query,spatial(name,false))
       });
+      interactions?.run(drafts,{world:nextWorld,tick:at,detailed,root:rootedState,emit:systemEmit,input:setInput,
+        query:()=>Q.create(view(nextWorld,{...drafts},lastSignals,at,receipts.slice(),causalState,nextChunkState),systems,projection),
+        effect(source,effect,query){
+          if((effect.destinations??[effect.destination]).some(name=>!detailed(name)||
+            W.simulationAggregate.isAggregate(drafts[name])))return {reason:'effect-asleep'};
+          if(effect.kind==='transfer'){
+            if(receipts.length>=W.transfers.limit)return {reason:'transfer-budget'};
+            const receipt=rootedState(transfers.settle(drafts,effect.request,at,source,rootedState));
+            receipts.push(receipt);
+            systemEmit(source)('transfer',receipt);
+            return {receipt,...(receipt.status==='blocked'&&{reason:'transfer-blocked'})};
+          }
+          if(effect.kind==='input')return {port:effect.port,value:effect.value};
+          const {destination,handler,args}=effect, emit=systemEmit(destination), writer=spatial(destination,false);
+          const base=context(destination,nextWorld,Object.freeze({...drafts}),at,{},emit,query,writer);
+          const notes=[], deferred=(write)=>(...args)=>notes.push(()=>write(...args));
+          const staged=Object.freeze({...base,emit:deferred(emit),...(writer&&{spatial:Object.freeze({
+            ...writer,write:deferred(writer.write),rebuilt:deferred(writer.rebuilt)
+          })})});
+          const prepared=handler.run(drafts[destination],args,1,staged);
+          if(prepared.reason)return {reason:prepared.reason};
+          drafts[destination]=rootedState(prepared.state);
+          for(const publish of notes)publish();
+          return {};
+        }
+      });
+      freeze(receipts);
       let nextSpatial = spatialSampling;
       if (slowReaders.size && (trace || Object.keys(spatialSampling).length)) {
         nextSpatial = {...spatialSampling};

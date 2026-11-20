@@ -54,6 +54,9 @@ destinations, per-member slots, and rally points beyond narrow passages.
 [Faction perception](faction-perception.md) batches sight, hearing, and
 proximity queries and saves each faction's dated observations with the world.
 
+[Targeted interactions](targeted-interactions.md) give orders and direct
+actions shared range, access, duration, and effects.
+
 [First-divergence debugging](first-divergence.md) compares timelines
 tick by tick and reports actual inputs and changed state paths.
 

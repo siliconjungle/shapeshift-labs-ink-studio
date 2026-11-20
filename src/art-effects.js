@@ -109,12 +109,13 @@ const ArtEffects = (() => {
     }
   }
 
-  function sourceSpread(passes, layer, up = 0) {
+  function sourceSpread(passes, layer, up = 0, sourceAllowed) {
     const { w, h, depth } = passes, radius = layer.radius;
     const scores = new Float32Array(w * h);
     const sourceDepth = new Float32Array(w * h).fill(Infinity);
     const rings = new Uint8Array(w * h);
-    walkSources(passes, layer.threshold, (x, y, intensity, z) => {
+    walkSources(passes, layer.threshold, (x, y, intensity, z, p) => {
+      if (sourceAllowed && !sourceAllowed(p)) return;
       for (let v = -radius - up; v <= radius; v++) {
         const row = y + v;
         if (row < 0 || row >= h) continue;
@@ -186,7 +187,7 @@ const ArtEffects = (() => {
       }
     }
     if (halo) {
-      const spread = sourceSpread(passes, halo);
+      const spread = sourceSpread(passes, halo, 0, context.haloSource);
       for (let p = 0; p < size; p++) {
         if (!spread.scores[p] || strength(emission, p) >= halo.threshold) continue;
         const band = Math.min(halo.bands - 1, Math.floor((spread.rings[p] - 1) * halo.bands / halo.radius));
@@ -213,13 +214,17 @@ const ArtEffects = (() => {
         mask[p] = 5;
       }
     }
-    const palette = Array.from(frame.palette || context.palette);
+    return paletteUse({ ...frame, effectsMask: mask }, context.palette);
+  }
+
+  function paletteUse(frame, fallback) {
+    const palette = Array.from(frame.palette ?? fallback);
     const counts = new Map(palette.map(color => [color, 0]));
-    for (let p = 0; p < size; p++) {
-      const color = packed(rgb, p);
+    for (let p = 0; p < frame.w * frame.h; p++) {
+      const color = packed(frame.rgb, p);
       counts.set(color, (counts.get(color) || 0) + 1);
     }
-    return { ...frame, palette: Array.from(counts.keys()), use: Uint32Array.from(counts.values()), effectsMask: mask };
+    return { ...frame, palette: Array.from(counts.keys()), use: Uint32Array.from(counts.values()) };
   }
 
   function tintReflection(rgb, coverage, emission, w, h, layer, time) {
@@ -233,6 +238,6 @@ const ArtEffects = (() => {
     }
   }
 
-  return Object.freeze({ prepare, apply, history, channels, tintReflection });
+  return Object.freeze({ prepare, apply, history, channels, tintReflection, paletteUse });
 })();
 if (typeof module !== 'undefined') module.exports = ArtEffects;
