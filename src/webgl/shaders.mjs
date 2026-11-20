@@ -545,6 +545,10 @@ float paletteLabDistance(vec4 a, vec4 b, int mode, float hue) {
   }
   return distance;
 }
+bool paletteAccess(int slot, int row, int base) {
+  int bits = int(texelFetch(u_constraintRows, ivec2(base + slot / 24, row), 0).a);
+  return (bits & (1 << (slot % 24))) != 0;
+}
 vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
   int row = slot - 1;
   vec4 settings = texelFetch(u_constraintRows, ivec2(0, row), 0);
@@ -569,7 +573,7 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
   int mode = int(texelFetch(u_constraintRows, ivec2(4, row), 0).a);
   vec4 inputLab = mode == 0 ? vec4(0.0) : paletteLab(inputColor);
   float hue = mode == 4 ? .49*smoothstep(.02,.06,inputLab.w) : 0.0;
-  float firstDistance = 1e9, secondDistance = 1e9;
+  float firstDistance = 1e9;
   int bestSlot = 0;
   vec3 best = vec3(0.0), second = vec3(0.0);
   vec4 firstLab = vec4(0.0), secondLab = vec4(0.0);
@@ -580,23 +584,21 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
       vec3 code = floor(swatch * 255.0 + 0.5);
       if (all(equal(bytes, code))) { return swatch; }
       if (all(equal(gradedBytes, code))) { gradedReserve = swatch; hasGradedReserve = true; }
-      continue;
+      if (!paletteAccess(i, row, 8)) continue;
     }
     vec3 d = inputColor - swatch;
     vec4 swatchLab = mode == 0 ? vec4(0.0) : texelFetch(u_constraintRows,ivec2(u_constraintLab+i,row),0);
     float distance = mode == 0 ? dot(weight,d*d) : paletteLabDistance(inputLab,swatchLab,mode,hue);
     if (distance < firstDistance) {
-      second = best; secondDistance = firstDistance; secondLab = firstLab;
       best = swatch; firstDistance = distance; firstLab = swatchLab; bestSlot = i;
-    } else if (distance < secondDistance) {
-      second = swatch; secondDistance = distance; secondLab = swatchLab;
     }
   }
   if (hasGradedReserve) { return gradedReserve; }
   vec3 color = best;
   float amount = texelFetch(u_constraintRows, ivec2(1, row), 0).a;
   float gain = texelFetch(u_constraintRows, ivec2(7, row), 0).a;
-  if (count < 2 || amount == 0.0 || gain <= 0.0) return color;
+  if (total < 2 || amount == 0.0 || gain <= 0.0 ||
+      (bestSlot >= count && !paletteAccess(bestSlot, row, 10))) return color;
   ivec2 size = ivec2(settings.zw);
   float scale = texelFetch(u_constraintRows, ivec2(6, row), 0).a;
   ivec2 grid = ivec2(floor(vec2(p) / scale));
@@ -604,33 +606,35 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
   float rank = texelFetch(u_constraintRows, ivec2(49 + cell / 4, row), 0)[cell & 3] / gain;
   if (rank >= .5) return color;
   int pairCount = int(texelFetch(u_constraintRows,ivec2(5,row),0).a)-1;
-  if (pairCount >= 0) {
-    int partner = -1;
-    secondDistance = 1e9;
-    float lightness = mode == 0 ? -1.0 : clamp(inputLab.x,0.0,1.0);
-    for (int i=0;i<256;i++) {
-      if (i >= pairCount) break;
-      vec4 pair = texelFetch(u_constraintRows,ivec2(u_constraintPairs+i,row),0);
+  int partner = -1;
+  float secondDistance = 1e9;
+  float lightness = mode == 0 ? -1.0 : clamp(inputLab.x,0.0,1.0);
+  int entries = pairCount >= 0 ? pairCount : total;
+  for (int i = 0; i < 256; i++) {
+    if (i >= entries) break;
+    int candidate = i;
+    if (pairCount >= 0) {
+      vec4 pair = texelFetch(u_constraintRows, ivec2(u_constraintPairs + i, row), 0);
       ivec2 slots = ivec2(pair.xy);
-      int candidate = slots.x == bestSlot ? slots.y : slots.y == bestSlot ? slots.x : -1;
+      candidate = slots.x == bestSlot ? slots.y : slots.y == bestSlot ? slots.x : -1;
       if (candidate < 0) continue;
       if (pair.z >= 0.0) {
-        if (lightness < 0.0) lightness = clamp(paletteLab(inputColor).x,0.0,1.0);
+        if (lightness < 0.0) lightness = clamp(paletteLab(inputColor).x, 0.0, 1.0);
         if (lightness < pair.z || lightness > pair.w) continue;
       }
-      vec3 rgb = texelFetch(u_constraintRows,ivec2(candidate+1,row),0).rgb;
-      vec4 lab = mode == 0 ? vec4(0.0) : texelFetch(u_constraintRows,ivec2(u_constraintLab+candidate,row),0);
-      vec3 d = inputColor-rgb;
-      float distance = mode == 0 ? dot(weight,d*d) : paletteLabDistance(inputLab,lab,mode,hue);
-      if (distance < secondDistance || distance == secondDistance && candidate < partner) {
-        partner = candidate;
-        second = rgb;
-        secondLab = lab;
-        secondDistance = distance;
-      }
+    } else if (candidate == bestSlot || (candidate >= count && !paletteAccess(candidate, row, 10))) continue;
+    vec3 rgb = texelFetch(u_constraintRows, ivec2(candidate + 1, row), 0).rgb;
+    vec4 lab = mode == 0 ? vec4(0.0) : texelFetch(u_constraintRows, ivec2(u_constraintLab + candidate, row), 0);
+    vec3 d = inputColor - rgb;
+    float distance = mode == 0 ? dot(weight, d*d) : paletteLabDistance(inputLab, lab, mode, hue);
+    if (distance < secondDistance || distance == secondDistance && candidate < partner) {
+      partner = candidate;
+      second = rgb;
+      secondLab = lab;
+      secondDistance = distance;
     }
-    if (partner < 0) return color;
   }
+  if (partner < 0) return color;
   float threshold = .5+(rank-.5)*amount;
   if (mode != 0) {
     float reach = paletteLabDistance(firstLab,secondLab,mode,hue);

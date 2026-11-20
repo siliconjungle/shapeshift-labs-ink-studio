@@ -248,7 +248,7 @@ function toPalette(look, options, format, readReference, report) {
     const ref = reference?.rows.map(row => row.color);
     if (palette === undefined && !ref) throw new TypeError('A scene-dependent palette needs --swatches');
     const { entries, rounded } = palette === undefined ? { entries: ref, rounded: 0 } : Palette.colors(palette, { reference: ref });
-    const extra = reserved?.length ? Palette.colors(reserved, { reference: ref }) : { entries: [], rounded: 0 };
+    const extra = reserved?.length ? Palette.colors(PixelLook.reserveEntries(reserved).map(row => row.color), { reference: ref }) : { entries: [], rounded: 0 };
     for (const color of extra.entries) if (!entries.includes(color)) entries.push(color);
     if (look.stack) note(report, 'omitted-stack', 'The file contains the authored palette. Use --swatches to sample the color stack.');
     if (reserved?.length || dither !== undefined || source === 'graded' || match && match !== 'rgb')

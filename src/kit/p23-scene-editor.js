@@ -92,9 +92,12 @@
   }
 
   function create(source, { env, historyLimit } = {}) {
-    const baked = source?.data instanceof Float32Array;
-    if (baked && !source.spec) throw new TypeError('This splat bake has no retained diorama source');
-    const scene = clone(baked ? source.spec : typeof source === 'string' ? JSON.parse(source) : source);
+    const input = typeof source === 'string' ? JSON.parse(source) : source;
+    if (A.projectBundles && input?.format === A.projectBundles.format)
+      return A.projectBundles.open(input).editor({ env, historyLimit });
+    const baked = input?.data instanceof Float32Array;
+    if (baked && !input.spec) throw new TypeError('This splat bake has no retained diorama source');
+    const scene = clone(baked ? input.spec : input);
     const buildEnv = { ...env, brushSession: A.brushRegions.create(), bakeCache: env?.bakeCache ?? A.bakeCache.create() };
     function validate(candidate, bindings = buildEnv) {
       const problems = DIO.check(candidate, bindings);

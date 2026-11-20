@@ -346,7 +346,9 @@ linear sRGB and ranks the averages by OKLab distance to the 8-bit target.
 The report gives the closest solid, selected swatches, actual share of the
 second swatch, average, and both errors. The average shown as hex is rounded
 for display. The scores use the unrounded average. Exact matches, including
-reserved matches, stay solid. A target also stays solid if no approved mix
+reserved matches, stay solid. The closest-solid comparison uses matchable
+swatches. Reserved swatches can enter the search as pair endpoints if
+they allow dithering. A target also stays solid if no approved mix
 improves the error.
 
 Choose `size: [width, height]` in native pixels. It defaults to `[32, 24]`.

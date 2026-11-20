@@ -343,6 +343,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           rows[offset + 23] = palette.pairs ? palette.pairs.length+1 : 0;
           rows[offset + 27] = palette.tuning?.scale ?? 1;
           rows[offset + 31] = palette.tuning?.screenGain ?? 1;
+          // Two 24-bit words per permission fit exactly in the float texture.
+          palette.reserveAccess?.forEach((access, i) => {
+            const slot = palette.count + i, word = Math.floor(slot / 24), bit = 1 << (slot % 24);
+            if (access & 1) rows[offset + (8 + word) * 4 + 3] += bit;
+            if (access & 2) rows[offset + (10 + word) * 4 + 3] += bit;
+          });
           palette.pairs?.forEach(({slots,lightness},j)=>
             rows.set([...slots,...(lightness ?? [-1,1])],offset+(constraintPairs+j)*4));
           palette.lab?.forEach((row,j)=>rows.set(row,offset+(constraintLab+j)*4));

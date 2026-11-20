@@ -358,7 +358,7 @@ optional `default` policy to cover foreground surfaces without a target.
 - Swatches accept hex colors, normalized RGB triples, scene palette
   indices, and named palette roles or stops. Omitting `palette` uses the
   scene swatches. `reserved` entries preserve exact matches at 8-bit RGB
-  precision and stay out of ordinary quantization and dithering.
+  precision. An entry can opt into nearest matching or dithering separately.
   A policy samples lit color by default. Use `source: "graded"` to
   sample the graded scene swatches before the final palette selection.
 - `none`, `checker`, `bayer`, and seeded `blue-noise` set the threshold
@@ -388,6 +388,49 @@ To place the dither pattern per palette policy, set
 Set [cell scale, regional masks and a native-pixel fade](stable-dithering.md#tune-dither-by-region-and-scale)
 to protect fine features and reduce subpixel stipple.
 
+### Protect meaningful swatches
+
+Use `reserved` for authored colors such as a face accent, glyph, team
+badge or lantern core. An exact 8-bit RGB match always resolves to that
+swatch. Plain entries such as `"#f3e4a2"` keep the swatch exclusive to
+exact inputs.
+
+```json
+{
+  "palette": ["#773832", "#966756"],
+  "reserved": [
+    "#f3e4a2",
+    {"color": "#52bcd0", "match": true},
+    {"color": "#ffc36a", "dither": true}
+  ],
+  "dither": {
+    "pattern": "bayer",
+    "strength": 1,
+    "pairs": [{"colors": ["#773832", "#ffc36a"]}]
+  }
+}
+```
+
+- `match: true` lets nearby colors choose the protected swatch as their
+  nearest solid color. That choice stays solid unless the swatch also
+  allows dithering.
+- `dither: true` lets the swatch participate in dither pairs. With
+  `match: false` it can appear as an alternate while the nearest solid
+  still comes from the matchable colors. Use `dither.pairs` to choose
+  its partners and optional lightness ranges.
+- Both flags default to false. `color` accepts the same swatch selectors
+  as the output palette. A role with multiple swatches applies the
+  same permissions to all of them.
+
+The [ferry console](../examples/protected-swatches.js) keeps its glyph,
+badge and lamp core exact while switching how the lamp surround uses
+the core color.
+
+```sh
+ink-studio render examples/protected-swatches.js --ortho --w 320 --h 156 --px 1 --out ferry-dither.png
+ink-studio render examples/protected-swatches.js --ortho --w 320 --h 156 --px 1 --params '{"mode":"exact"}' --out ferry-exact.png
+```
+
 ### Authorize dither pairs
 
 Set `dither.pairs` on a palette policy to choose which swatches can
@@ -412,7 +455,7 @@ and the warm swatches stay solid.
 }
 ```
 
-Each endpoint must identify one unreserved candidate. Use a hex swatch,
+Each endpoint must identify one dither-enabled swatch. Use a hex swatch,
 normalized RGB triple, scene palette index, or individual role stop
 such as `slate.shadow`. The optional `lightness` bounds are inclusive
 and measure the input color's OKLab L on a 0–1 scale. That input is the

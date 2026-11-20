@@ -1744,6 +1744,9 @@
           ...(spec.light?.surfaceDirection !== undefined && { surfaceLight: spec.light.surfaceDirection }) }
       )
     );
+    if (env.resolveSpriteAtlas && Array.isArray(W.spriteAtlases))
+      W.spriteAtlases = W.spriteAtlases.map(placement => typeof placement?.atlas === 'string' ?
+        K.sprite.placeAtlas({ ...placement, atlas: env.resolveSpriteAtlas(placement.atlas) }) : placement);
     if (staticBake && !baked) cache.write('splats', bakeKey, cacheAPI.pack(W));
     if (pool) W.qualityParticleRanges = [{ first: pool.first, count: pool.n }];
     bindBreakables(W);

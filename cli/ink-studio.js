@@ -86,10 +86,12 @@ function meshScene(file) {
 /* a diorama written as data (see lab/data-shrine.json). --style puts it in another style; meshes it names are looked for beside the file */
 function dataScene(file, override, { installedPacks = false } = {}) {
   const K = lib().KIT,
-    spec = override ? { ...override } : JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')),
-    dir = path.dirname(path.resolve(file)),
-    assets = {};
-  if (spec.dataInputs !== undefined)
+    source = override ?? JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')),
+    bundles = K.authoring.projectBundles,
+    project = bundles && source?.format === bundles.format ? bundles.open(source) : undefined,
+    spec = project ? project.scene() : { ...source },
+    dir = path.dirname(path.resolve(file));
+  if (!project && spec.dataInputs !== undefined)
     spec.dataInputs = require('./data-inputs.js').embed(K.dataInputs, spec.dataInputs, file, shot?.dependency);
   if (opt.style) spec.style = opt.style;
   const area = areaLightsOption();
@@ -103,9 +105,13 @@ function dataScene(file, override, { installedPacks = false } = {}) {
     if (typeof preset !== 'string') die('--environment-preset expects a pack/preset ID or off');
     spec.environmentPreset = preset === 'off' ? false : preset;
   }
-  let prefabs, expanded;
+  let assets = {}, prefabs, expanded, problems, resolveSpriteAtlas;
   try {
-    if (spec.prefabLibrary !== undefined) {
+    if (project) {
+      const bindings = project.resolve(spec);
+      ({ assets, prefabs, resolveSpriteAtlas } = bindings.env);
+      problems = bindings.problems;
+    } else if (spec.prefabLibrary !== undefined) {
       if (typeof spec.prefabLibrary !== 'string' || !spec.prefabLibrary.length) throw new TypeError('Expected a prefabLibrary file path');
       const library = path.resolve(dir, spec.prefabLibrary);
       prefabs = JSON.parse(fs.readFileSync(library, 'utf8'));
@@ -116,7 +122,7 @@ function dataScene(file, override, { installedPacks = false } = {}) {
         }
       }
     }
-    expanded = K.authoring.scenePrefabs.expand(spec, { prefabs }).spec;
+    if (!project) expanded = K.authoring.scenePrefabs.expand(spec, { prefabs }).spec;
   } catch (error) {
     die(error.message);
   }
@@ -127,7 +133,7 @@ function dataScene(file, override, { installedPacks = false } = {}) {
         .find(q => fs.existsSync(q) && fs.statSync(q).isFile());
       if (f) assets[s.asset] = require('../index.js').readMesh(f);
     }
-  const problems = K.diorama.check(spec, { assets, prefabs });
+  problems ??= K.diorama.check(spec, { assets, prefabs });
   if (problems.length) console.error(K.diorama.report(problems));
   if (problems.some(p => p.level === 'error'))
     die('not built: ' + problems.filter(p => p.level === 'error').length + ' mistake(s) in ' + file);
@@ -135,9 +141,9 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   if (cacheDirectory !== undefined && (typeof cacheDirectory !== 'string' || !cacheDirectory.length))
     die('--asset-cache expects a directory');
   const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
-  const descriptor=K.diorama.scene(spec,{assets,prefabs,bakeCache});
+  const descriptor=K.diorama.scene(spec,{assets,prefabs,bakeCache,resolveSpriteAtlas});
   const atlases=new Map();
-  return { ...descriptor, lookPreviewPacks:spec.assetPacks, build(seed, options = {}) {
+  return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks, build(seed, options = {}) {
     const parameterTime = opt['parameter-time'] ?? (Number.isFinite(Number(opt.t)) ? opt.t : 0);
     const world=descriptor.build(seed, { ...options, parameterInputs: { time: Number(parameterTime), ...options.parameterInputs } });
     if (Array.isArray(world.spriteAtlases)) world.spriteAtlases=world.spriteAtlases.map(placement=>{
@@ -186,7 +192,7 @@ function build(id, seedOverride, { paint = true, parameterInputs } = {}) {
   // Load paint by scene ID so rendering the same file from another path finds its decals.
   const decalFile = path.join(paintDirectory(s.id), 'decals.json');
   shot?.dependency(decalFile);
-  const savedPaint = paint && (fs.existsSync(decalFile) ? readPaint(decalFile) : globalThis.INK_PAINT?.[s.id]);
+  const savedPaint = !s.project && paint && (fs.existsSync(decalFile) ? readPaint(decalFile) : globalThis.INK_PAINT?.[s.id]);
   globalThis.INK_DECAL_NEXT = savedPaint?.layers !== undefined || Array.isArray(savedPaint) ?
     savedPaint : savedPaint?.decals ?? null;
   const t0 = Date.now();
@@ -1007,6 +1013,8 @@ const CMD = {
         '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
         '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
+        '  project pack <scene.json> --out <bundle.json> [--root directory --revision n --asset-pack file --paint file --attachments file]',
+        '  project inspect <bundle.json>   show the bundle version, scene path and retained files',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -1825,6 +1833,20 @@ const CMD = {
       require('./asset-files.js').write(file, frame.png);
     }
     console.log('wrote', file);
+  },
+  project() {
+    const [mode, input] = pos, api = require('./project-bundle.js');
+    if (pos.length !== 2 || !['pack', 'inspect'].includes(mode))
+      die('Use project pack <scene.json> --out <bundle.json> or project inspect <bundle.json>');
+    if (mode === 'inspect') {
+      const project = api.readProjectBundle(input), { format, version, attachments } = project.snapshot();
+      process.stdout.write(JSON.stringify({ format, version, ...project.metadata, files: project.files(), attachments }, null, 2) + '\n');
+      return;
+    }
+    if ([opt.root, opt.revision].includes(true)) die('--root and --revision need values');
+    const { file, project } = api.packProject(input, { out: opt.out, root: opt.root, revision: num('revision', 1),
+      assetPack: opt['asset-pack'], paint: opt.paint, attachments: opt.attachments });
+    console.log('wrote', file, project.files().length, 'file(s)');
   },
   /* the ramps a diorama is shaded on, most used first, and what kind each is: one hue darker and lighter, or turning as it darkens.
      For a one-hue ramp a turning one made from the same palette is offered (the diorama is not changed). */

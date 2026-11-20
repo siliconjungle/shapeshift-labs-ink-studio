@@ -5,7 +5,7 @@
   const rgbLayer = type => ['colorCurve', 'colorLut', 'colorStack', 'projected'].includes(type);
   const swatch = value => typeof value === 'string' && /^#[\da-f]{6}$/i.test(value);
   const paletteReference = value => typeof value === 'number' || typeof value === 'string' && !swatch(value);
-  const paletteSwatches = policy => [...(policy?.palette ?? []), ...(policy?.reserved ?? []),
+  const paletteSwatches = policy => [...(policy?.palette ?? []), ...PixelLook.reserveEntries(policy?.reserved ?? []).map(row => row.color),
     ...(Array.isArray(policy?.dither?.pairs) ? policy.dither.pairs.flatMap(rule => rule?.colors ?? []) : [])];
   const lutInfo = lut => {
     const { data, ...info } = ColorLUT.normalize(lut);
@@ -208,11 +208,12 @@
       });
     }
     if (palette && !externalPalette) {
-      for (const name of ['palette', 'reserved']) if (palette[name] !== undefined &&
-        (!Array.isArray(palette[name]) || palette[name].length > 48 || palette[name].some(value =>
+      if (palette.palette !== undefined &&
+        (!Array.isArray(palette.palette) || palette.palette.length > 48 || Array.from(palette.palette).some(value =>
           !(typeof value === 'string' && value.trim() || Number.isSafeInteger(value) && value >= 0 ||
-            Array.isArray(value) && value.length === 3 && value.every(n => Number.isFinite(n) && n >= 0 && n <= 1)))))
-        throw new TypeError('Invalid native ' + name + ' swatches');
+            Array.isArray(value) && value.length === 3 && Array.from(value).every(n => Number.isFinite(n) && n >= 0 && n <= 1)))))
+        throw new TypeError('Invalid native palette swatches');
+      if (palette.reserved !== undefined) PixelLook.reserveEntries(palette.reserved);
       const contextDependent = !palette.palette || paletteSwatches(palette).some(paletteReference);
       PixelLook.preparePalette(contextDependent ? { ...palette, palette: ['#000000'], reserved: [] } : palette,
         { blueNoise: K.procedural.materials.blueNoise, deferDitherColors: contextDependent, validateOnly: true });

@@ -38,6 +38,8 @@ const PixelLook = (() => {
   const unpack = color => [color >> 16, (color >> 8) & 255, color & 255].map(n => n / 255);
   const clamp = n => Math.max(0, Math.min(1, n));
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
+  const swatchValue = value => typeof value === 'string' && value.trim() || Number.isSafeInteger(value) && value >= 0 ||
+    Array.isArray(value) && value.length === 3 && Array.from(value).every(fraction);
   const packedRgb = ([r, g, b]) => (Math.round(clamp(r) * 255) << 16) |
     (Math.round(clamp(g) * 255) << 8) | Math.round(clamp(b) * 255);
 
@@ -288,6 +290,18 @@ const PixelLook = (() => {
     return { scale, fade: fade?.slice(), regions: skipMasks ? [] : rules, screenGain: detail.weight(fade, scale) };
   }
 
+  function reserveEntries(entries) {
+    if (!Array.isArray(entries) || entries.length > 48) throw new RangeError('Reserved list needs up to 48 swatches');
+    return Array.from(entries, entry => {
+      const row = record(entry) ? entry : { color: entry };
+      const { color, match = false, dither = false } = row;
+      if (Object.keys(row).some(key => !['color', 'match', 'dither'].includes(key)) ||
+          typeof match !== 'boolean' || typeof dither !== 'boolean' || !swatchValue(color))
+        throw new TypeError('A reserved swatch needs a color and optional match and dither booleans');
+      return { color, match, dither };
+    });
+  }
+
   function preparePalette(definition, { palette = [], roles = {}, blueNoise, deferDitherColors = false, prepareDitherTile = false, context, validateOnly, skipMasks, skipDitherRegions } = {}) {
     if (!record(definition) || Object.keys(definition).some(key => !['palette', 'reserved', 'dither', 'source', 'match'].includes(key)))
       throw new TypeError('A palette constraint accepts palette, reserved, dither, source and match settings');
@@ -309,12 +323,28 @@ const PixelLook = (() => {
         });
       }))];
     }
-    const reserved = colors(definition.reserved ?? [], 'Reserved list');
+    const reserved = new Map();
+    for (const { color, match, dither } of reserveEntries(definition.reserved ?? [])) {
+      const access = Number(match) | (Number(dither) << 1);
+      for (const swatch of colors([color], 'Reserved list')) {
+        if (reserved.has(swatch) && reserved.get(swatch) !== access)
+          throw new RangeError('A reserved swatch cannot have conflicting match or dither settings');
+        reserved.set(swatch, access);
+      }
+    }
     const candidates = colors(definition.palette ?? Array.from(palette, (_, i) => i), 'Output palette')
-      .filter(color => !reserved.includes(color));
-    const packed = [...candidates, ...reserved];
-    if (!candidates.length || packed.length > 48) throw new RangeError('Use 1 to 48 swatches with at least one unreserved color');
-    const swatches = packed.map(unpack), exact = new Map(reserved.map((color, index) => [color, candidates.length + index]));
+      .filter(color => !reserved.has(color));
+    const count = candidates.length, packed = [...candidates, ...reserved.keys()];
+    const reserveAccess = [...reserved.values()];
+    const matchSlots = [...candidates.keys()], mixSlots = candidates.map((_, slot) => ({ slot }));
+    reserveAccess.forEach((access, i) => {
+      if (access & 1) matchSlots.push(count + i);
+      if (access & 2) mixSlots.push({ slot: count + i });
+    });
+    if (!matchSlots.length || packed.length > 48)
+      throw new RangeError('Use 1 to 48 swatches with at least one swatch enabled for matching');
+    const swatches = packed.map(unpack), exact = new Map([...reserved.keys()].map((color, i) => [color, count + i]));
+    const canMix = slot => slot >= 0 && (slot < count || (reserveAccess[slot - count] & 2) !== 0);
     const lab = matchId ? swatches.map(labPoint) : undefined;
     const dither = definition.dither ?? {};
     if (!record(dither) || Object.keys(dither).some(key => !['pattern', 'strength', 'seed', 'pairs', 'space', 'spacing', 'origin', 'scale', 'fade', 'regions'].includes(key)))
@@ -331,7 +361,7 @@ const PixelLook = (() => {
     if (dither.pairs !== undefined) {
       if (!Array.isArray(dither.pairs) || dither.pairs.length > 256)
         throw new TypeError('Palette dither accepts up to 256 authorized pairs');
-      partners = candidates.map(() => []);
+      partners = packed.map(() => []);
       const rules = Array.from(dither.pairs, rule => {
         if (!record(rule) || Object.keys(rule).some(key => !['colors', 'lightness'].includes(key)) ||
             !Array.isArray(rule.colors) || rule.colors.length !== 2)
@@ -341,8 +371,7 @@ const PixelLook = (() => {
             !Array.from(lightness).every(fraction) || lightness[0] > lightness[1]))
           throw new RangeError('Dither lightness must be an ordered range in [0, 1]');
         for (const value of rule.colors) {
-          if (!(typeof value === 'string' && value.trim() || Number.isSafeInteger(value) && value >= 0 ||
-              Array.isArray(value) && value.length === 3 && Array.from(value).every(fraction)))
+          if (!swatchValue(value))
             throw new TypeError('A dither pair needs palette swatches, indices or named stops');
         }
         return rule;
@@ -350,8 +379,9 @@ const PixelLook = (() => {
       pairs = deferDitherColors ? [] : rules.map(rule => {
         const slots = rule.colors.map(value => {
           const swatches = colors([value], 'Dither pair');
-          const slot = swatches.length === 1 ? candidates.indexOf(swatches[0]) : -1;
-          if (slot < 0) throw new RangeError('Dither pair colors must identify single unreserved palette candidates');
+          const slot = swatches.length === 1 ? packed.indexOf(swatches[0]) : -1;
+          if (!canMix(slot))
+            throw new RangeError('Dither pair colors must identify single unreserved palette candidates or reserved swatches with dithering enabled');
           return slot;
         });
         const [a, b] = slots;
@@ -373,7 +403,6 @@ const PixelLook = (() => {
       ({ width, height } = tile);
       ranks = Float32Array.from(tile.ranks, rank => (rank + .5) / tile.ranks.length);
     }
-    const count = candidates.length;
     const mod = (n, size) => ((Math.floor(n) % size) + size) % size;
     const reservedIndex = rgb => exact.size ? exact.get(packedRgb(rgb)) : undefined;
     function index(rgb, x = 0, y = 0, useDither = true, placement) {
@@ -381,17 +410,15 @@ const PixelLook = (() => {
       if (locked !== undefined) return locked;
       const sites = lab ?? swatches, input = lab ? labPoint(rgb) : rgb;
       const hue = matchId === 4 ? hueWeight(input[3]) : 0;
-      let best = 0, second = 0, firstDistance = Infinity, secondDistance = Infinity;
-      for (let i = 0; i < count; i++) {
-        const distance = matchDistance(input,sites[i],matchId,hue);
+      let best = matchSlots[0], firstDistance = Infinity;
+      for (const slot of matchSlots) {
+        const distance = matchDistance(input, sites[slot], matchId, hue);
         if (distance < firstDistance) {
-          second = best; secondDistance = firstDistance;
-          best = i; firstDistance = distance;
-        } else if (distance < secondDistance) {
-          second = i; secondDistance = distance;
+          best = slot;
+          firstDistance = distance;
         }
       }
-      if (!amount || !useDither || count < 2) return best;
+      if (!amount || !useDither || mixSlots.length < 2 || !canMix(best)) return best;
       let gain = 1;
       if (tuning) {
         const { sample, pixel = [x, y], inherited } = placement ?? {};
@@ -412,23 +439,20 @@ const PixelLook = (() => {
       }
       const rank = ranks[mod(y, height) * width + mod(x, width)] / gain;
       if (rank >= .5) return best;
-      if (partners) {
-        second = best;
-        secondDistance = Infinity;
-        let lightness;
-        for (const { slot, range } of partners[best]) {
-          if (range) {
-            lightness ??= clamp(lab ? input[0] : spaces.toOKLab(rgb)[0]);
-            if (lightness < range[0] || lightness > range[1]) continue;
-          }
-          const distance = matchDistance(input,sites[slot],matchId,hue);
-          if (distance < secondDistance || distance === secondDistance && slot < second) {
-            second = slot;
-            secondDistance = distance;
-          }
+      let second = best, secondDistance = Infinity, lightness;
+      for (const { slot, range } of partners?.[best] ?? mixSlots) {
+        if (slot === best) continue;
+        if (range) {
+          lightness ??= clamp(lab ? input[0] : spaces.toOKLab(rgb)[0]);
+          if (lightness < range[0] || lightness > range[1]) continue;
         }
-        if (second === best) return best;
+        const distance = matchDistance(input, sites[slot], matchId, hue);
+        if (distance < secondDistance || distance === secondDistance && slot < second) {
+          second = slot;
+          secondDistance = distance;
+        }
       }
+      if (second === best) return best;
       const threshold = .5 + (rank-.5)*amount;
       if (lab) {
         const length = matchDistance(sites[best],sites[second],matchId,hue);
@@ -443,7 +467,7 @@ const PixelLook = (() => {
       }
       return projection >= threshold * length ? second : best;
     }
-    return { packed, swatches, count, width, height, ranks, amount, source, match, matchId, lab, pairs, anchor, tuning, reservedIndex, index };
+    return { packed, swatches, count, reserveAccess, matchSlots, width, height, ranks, amount, source, match, matchId, lab, pairs, anchor, tuning, reservedIndex, index };
   }
 
   function prepareLookPolicy(definition, options = {}) {
@@ -679,7 +703,7 @@ vec3 inkToneResolve(vec3 color, ivec2 pixel) {
   return share >= mix(0.5, rank, u_inkToneAmount) ? b.rgb : a.rgb;
 }`;
   return { nearest, rgbWeights:weights, ink, resolve, glsl, presets, toneSettings, prepareTone, toneIndex, toneGlsl, bayerRank, outputPalettes, localIndex,
-    preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
+    reserveEntries, preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
     prepareRemap, gradePalette, prepareColorStack, colorGrade, framePalette };
 })();
 if (typeof module !== 'undefined') module.exports = PixelLook;

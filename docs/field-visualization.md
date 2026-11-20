@@ -8,7 +8,10 @@
 - `fromQuery(query, name, { bounds, args })` samples a typed spatial field from a world query. A bounded world-space XYZ field supplies its own box. Pass a world-space box for attached, unbounded, or lower-dimensional fields. Each query holds one simulation revision.
 - `magnitude(vectorSource)` derives a scalar field with the same bounds and units.
 
-Outside coordinates and missing samples give `null`. Slices leave those cells empty, contours and isosurfaces leave gaps, streamlines stop at the missing region, and glyphs omit missing and zero vectors.
+Outside coordinates and missing samples give `null`.
+
+[Fourier and standing-wave fields](spectral-fields.md) can supply signed
+displacement, phase or energy to the same views. Slices leave those cells empty, contours and isosurfaces leave gaps, streamlines stop at the missing region, and glyphs omit missing and zero vectors.
 
 ## Geometry
 

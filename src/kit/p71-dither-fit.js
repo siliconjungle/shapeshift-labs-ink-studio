@@ -28,7 +28,7 @@
     const targetLab = lab(targetRgb), lightness = Math.min(1, Math.max(0, targetLab[0]));
     const swatches = plan.swatches.map(hex), locked = plan.reservedIndex(targetRgb);
     let best = locked ?? 0, solidError = locked === undefined ? Infinity : 0;
-    if (locked === undefined) for (let i = 0; i < plan.count; i++) {
+    if (locked === undefined) for (const i of plan.matchSlots) {
       const error = distance(targetLab, lab(plan.swatches[i]));
       if (error < solidError) {
         best = i;
@@ -41,7 +41,7 @@
       for (const { slots, lightness: range } of plan.pairs) {
         if (range && (lightness < range[0] || lightness > range[1])) continue;
         const a = Math.min(...slots), b = Math.max(...slots);
-        eligible.set(a * plan.count + b, [a, b]);
+        eligible.set(a * plan.swatches.length + b, [a, b]);
       }
     }
 

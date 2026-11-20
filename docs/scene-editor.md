@@ -4,6 +4,8 @@ Open a JSON diorama with `studio.createSceneEditor(source, options)` in Node or 
 
 `snapshot()` returns the current immutable diorama. `serialize(space)` produces the same JSON that `ink-studio validate` and `ink-studio render` accept. Keep relative asset files in the same location relative to the saved scene. `build()` bakes the current state for preview or picking.
 
+Open a [project bundle](project-bundles.md) with `project.editor()` to resolve its files from the bundle. `project.withScene(editor.snapshot())` creates a revised project with the same retained resources.
+
 ## Incremental baking
 
 The editor keeps a bounded cache of mesh distance fields, supported solids' sampling points, and complete static splat bakes. A camera-only edit can reuse all packed splats. A geometry or material edit can reuse unaffected inputs while the sculptor recomputes blending, visibility, and shadows. Decoded imported image pixels are shared by content across portable asset recipes. Moving parts, effects, retained render SDFs, and paint corrections use their existing bake paths.
