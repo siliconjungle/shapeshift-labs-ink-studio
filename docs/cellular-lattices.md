@@ -22,7 +22,8 @@ const slice = ink.raster(brain.slice(6), { scale: 2 });
 ```
 
 For floating-point state, sampled kernels, and coupled channels, use
-[continuous cellular automata](continuous-cellular.md).
+[continuous cellular automata](continuous-cellular.md). For named cells
+connected by authored edges, use [graph automata](graph-automata.md).
 
 ## Rule library
 

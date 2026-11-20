@@ -142,6 +142,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `grammar.expand(scope, rules, options)`, `grammar.children(layout)` | Bounded shape grammar with named partitions, fitted repeats, pinned spans, sockets and retained child specs |
 | `grammar.rewriteGrid(rows, rules)`, `grammar.rewriteGraph(graph, rules)` | Seeded weighted pattern replacement on scalar grids and directed graphs |
 | `KIT.cellular.create(options)`, `KIT.cellular.rules` | [Seeded cellular automata](cellular-lattices.md) on line, square, hex, and voxel lattices, including reversible block rules |
+| `KIT.cellular.graph` | [Graph automata](graph-automata.md) with named cells, weighted and delayed edges, and seeded replay |
 | `KIT.cellular.continuous` | [Continuous cellular automata](continuous-cellular.md) with sampled kernels, coupled channels, masks, brush injections, and replay |
 | `layouts.bsp(options)`, `layouts.cave(options)`, `layouts.pack(items, options)`, `layouts.floorPlan(rooms, options)` | Connected room partitions and caves, constrained rectangle packing and named room adjacencies |
 | `growth.lsystem(axiom, rules, options)`, `growth.turtle(tokens, options)`, `growth.venation(outline, options)`, `growth.roots(starts, options)`, `growth.pipe(nodes, options)` | Growth grammars, SDF branch runs, venation, obstacle-aware roots and pipe taper |
