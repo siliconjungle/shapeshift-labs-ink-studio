@@ -3,13 +3,17 @@
   const W=K.world, Q=W.query, {V,M}=K, {record,check,vector,id,own}=W.data;
   const zero=[0,0,0];
   function characters(config){
-    const {gravity,clearance,support,medium,supportPadding,surfaceBodies,surfaces}=config, authored=config.characters;
+    const {gravity,clearance,support,medium,supportPadding,surfaceBodies,surfaces,traversalLinks}=config, authored=config.characters;
     check(typeof gravity==='string'&&typeof clearance==='string'&&
       [support,medium,surfaceBodies].every(name=>name===undefined||typeof name==='string')&&
       (surfaces===undefined||record(surfaces))&&(surfaceBodies===undefined||typeof support==='string')&&
       (supportPadding===undefined||Number.isFinite(supportPadding)&&supportPadding>=0&&supportPadding<=2)&&
       record(authored)&&Object.keys(authored).length>0&&Object.keys(authored).length<=128,'Invalid local character configuration');
     const initial={}, specs={}, inputs={};
+    check(traversalLinks===undefined||record(traversalLinks),'Invalid character traversal link table');
+    const linkIds=Object.keys(traversalLinks??{});
+    const traversalCatalog=traversalLinks===undefined?null:W.traversalLinks.create({links:traversalLinks});
+    for(const link of linkIds)inputs['enable.'+link]={type:'bool',default:true};
     const surfaceResponse=surfaces===undefined?undefined:W.characters.surfaces(surfaces);
     for(const key of Object.keys(authored).sort()){
       const row=authored[key];
@@ -21,7 +25,9 @@
       const controller=W.characters.create({tuning:row.tuning});
       initial[key]=controller.state({position,...(forward!==undefined&&{forward}),...(up!==undefined&&{up}),
         ...(velocity!==undefined&&{velocity})});
-      specs[key]={entity,controller,worldMove,look};
+      const traversal=traversalCatalog?.withController(controller);
+      specs[key]={entity,controller,traversal,worldMove,look};
+      if(traversal)inputs['traversal.'+key]='record';
       inputs['move.'+key]='vec3';inputs['vertical.'+key]='number';
       inputs['jump.'+key]='bool';inputs['climb.'+key]={type:'bool',default:true};
     }
@@ -56,9 +62,11 @@
       step(state,ctx){
         return Object.fromEntries(Object.entries(state).map(([key,actor])=>{
           const spec=specs[key], move=ctx.input['move.'+key]??zero;
-          const result=spec.controller.step(actor,{...(spec.worldMove?{moveWorld:move}:{move:[move[0],move[2]]}),
-            vertical:ctx.input['vertical.'+key],jump:ctx.input['jump.'+key],climb:ctx.input['climb.'+key]},
-          ctx.dt,environment(ctx.query,spec));
+          const command=ctx.input['traversal.'+key]??{}, env=environment(ctx.query,spec);
+          const input={...(spec.worldMove?{moveWorld:move}:{move:[move[0],move[2]]}),
+            vertical:ctx.input['vertical.'+key],jump:ctx.input['jump.'+key],climb:ctx.input['climb.'+key]};
+          const result=spec.traversal?spec.traversal.step(actor,{...input,traverse:command.link,detach:command.detach},
+            ctx.dt,env,{time:ctx.time-ctx.dt,enabled:id=>ctx.input['enable.'+id]}):spec.controller.step(actor,input,ctx.dt,env);
           for(const {type,...detail} of result.events)ctx.emit('character-'+type,{entity:spec.entity,...detail});
           return [key,result.actor];
         }));
@@ -66,7 +74,7 @@
         check(record(state)&&Object.keys(state).length===Object.keys(specs).length&&Object.entries(state).every(([key,actor])=>
           own(specs,key)&&record(actor)&&vector(actor.gravityForward)&&vector(actor.up)&&V.len(actor.up)>1e-8),
         'Invalid saved local characters');
-        for(const [key,actor] of Object.entries(state))specs[key].controller.state(actor);
+        for(const [key,actor] of Object.entries(state))(specs[key].traversal??specs[key].controller).state(actor);
       },*poseEntities(){for(const row of Object.values(specs))yield row.entity;},
       pose(state,entity){
         const key=Object.keys(specs).find(key=>specs[key].entity===entity), actor=key===undefined?null:state?.[key];

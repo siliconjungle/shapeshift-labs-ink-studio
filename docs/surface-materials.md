@@ -43,6 +43,7 @@ For per-pixel rendering set `S.pixel = true` before baking and set `look: { pixe
 
 | Layer type | Controls |
 | --- | --- |
+| `diffuse` | Map the direct-light response through a material lighting ramp. |
 | `specular` | Set `roughness` to one value or to `[along, across]` to shape the reflected highlight. Set `color` for a tinted highlight. |
 | `fiber` | Set `roughness`, `shift` and optionally `figure`, `axis` and `scale` for tilted fibres with a moving band. |
 | `reflection` | Approximate sky, horizon and ground reflection with `sky`, `horizon` and `ground` colours. Use `f0` and `power` to shape the facing-to-grazing response. |
@@ -53,6 +54,55 @@ For per-pixel rendering set `S.pixel = true` before baking and set `look: { pixe
 | `glints` | Set cell `scale`, candidate `density`, inset `radius`, normal `tilt`, angular `roughness` and one `color` or a list of `colors`. A lower `response` makes faint glints more visible. Glints are deterministic, fade at subpixel size, and can survive the pixel cleanup pass. |
 
 These are stylized reflectance models. The CLI resolves them into the scene palette and uses its existing baked direct-light visibility. Subtle tones can share the same palette entry, so include colours for any highlights you want visible in the final render.
+
+## Material lighting ramps
+
+Use a `diffuse` finish layer to give a material its own transition from
+shadow to direct light. A `lightingRamp` can also tint and shape the response
+of a `specular`, `sheen`, `fiber`, or `glints` layer. The effects run in layer
+order, so put the diffuse layer before highlights or projected paint it
+should sit beneath.
+
+```js
+// scene palette role: cloth: [8, 9, 10, 11] (shadow to highlight)
+const cloth = K.surface.material({ r: [8, 9, 10, 11] }, {
+  layers: {
+    diffuse: {
+      type: 'diffuse', strength: 0.85,
+      lightingRamp: { role: 'cloth', positions: [0, 0.18, 0.46, 1], interpolation: 'smooth' }
+    },
+    nap: { type: 'sheen', strength: 0.25, color: 10, power: 2 }
+  }
+});
+```
+
+- Reference a scene `role` with two or more swatches. Use the scene's `roles`
+  in JSON and pass `paletteRoles` to `B.finish()` in JavaScript. Stops are evenly
+  spaced unless you supply one `positions` entry per swatch.
+- Use `stops: [[0, 8], [0.4, "#744b43"], [1, 11]]` for explicit palette indices,
+  hex swatches, or normalized RGB triples. Stop positions must increase
+  within zero to one. Values outside the stop range use the closest endpoint.
+- Set `interpolation` to `linear` (the default), `smooth`, or `step`. For
+  stepped ramps each stop's color holds until the next stop.
+- Optional `weights` supply one blend value from zero to one per stop, using
+  the same interpolation. By default a diffuse ramp uses the layer's full
+  strength and a highlight uses its original angular response. Explicit
+  highlight weights must start at zero so an inactive highlight stays dark.
+- Diffuse ramps use the angle to the directional light and the existing
+  shadow visibility. Specular ramps keep the layer's `roughness` control.
+  Use the layer's mask or strength to blend with the underlying shading.
+  Disable a diffuse layer by setting its named slot to `false`, or clear a
+  highlight ramp with `lightingRamp: false`. A ramp override replaces its
+  configuration as a unit.
+
+Ink resolves the resulting colors through the usual export palette.
+For custom hosts, pass `{ paletteRoles }` as the fifth argument to
+`SurfaceLook.prepare`. Render the headless example to compare cloth, iron,
+and worn stone under a shared key light.
+
+```sh
+node cli/ink-studio.js render examples/material-lighting-ramps.js --w 288 --h 128 --px 1 --t 0.75
+```
 
 ## Presets
 
@@ -213,8 +263,8 @@ increase and directions are nonzero vectors pointing toward the light.
 The track interpolates smoothly on the unit sphere and holds its first or
 last direction outside the keyed interval.
 
-The track changes the direction used by finish layers such as specular,
-sheen and glints. Baked diffuse shading and visibility remain as authored.
+The track changes the direction sampled by diffuse lighting ramps and
+angle-dependent highlights. Baked shading and visibility remain as authored.
 Browser hosts can prepare the track once with
 `SurfaceLook.prepareLightTrack(keys)` and pass the sampled direction to
 `SurfaceLook.shade` as `sample.lightDirection`, in the same coordinate

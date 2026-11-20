@@ -5,11 +5,13 @@ const SurfaceLook = (() => {
   const detail = typeof StableDetail === 'undefined' ? require('./stable-detail.js') : StableDetail;
   const effects = typeof SplatEffects === 'undefined' ? require('./splat-effects.js') : SplatEffects;
   const pixelLook = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
-  let luts, stacks;
+  let curves, luts, stacks;
   try {
+    curves = ColorCurves;
     luts = ColorLUT;
     stacks = ColorStack;
   } catch {
+    curves = require('./color-curves.js');
     luts = require('./color-lut.js');
     stacks = require('./color-stack.js');
   }
@@ -18,6 +20,7 @@ const SurfaceLook = (() => {
   const WHITE = [1, 1, 1];
   const TAU = Math.PI * 2;
   const specularLayers = new Set(['specular','fiber','sheen','film','diffraction','glints','reflection','planarReflection']);
+  const rampLayers = new Set(['diffuse', 'specular', 'fiber', 'sheen', 'glints']);
   const clamp = n => Math.min(1, Math.max(0, n));
   const mix = (a, b, t) => a + (b - a) * t;
   const unit = (v, fallback = AXES.y) => {
@@ -91,6 +94,7 @@ const SurfaceLook = (() => {
         const value = Object.hasOwn(b, key) ? b[key] : a[key];
         if (key === 'lut' && (b.type ?? a.type) === 'colorLut') return [key, luts.normalize(value)];
         if (key === 'stack' && (b.type ?? a.type) === 'colorStack') return [key, stacks.normalize(value)];
+        if (key === 'lightingRamp' && isRecord(value)) return [key, merge({}, value)];
         return [key, isRecord(value) ? merge(a[key], value) : Array.isArray(value) ? value.slice() : value];
       })
     );
@@ -104,6 +108,37 @@ const SurfaceLook = (() => {
     else throw new TypeError('Expected a palette index, #rrggbb or RGB triple for a surface colour');
     if (!Number.isInteger(value)) throw new RangeError('Surface colour is outside the palette');
     return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
+  }
+
+  function prepareLightingRamp(definition, palette, roles, id, type) {
+    if (!rampLayers.has(type)) throw new RangeError(id + '.lightingRamp is unavailable for ' + type);
+    if (!isRecord(definition) ||
+        Object.keys(definition).some(key => !['role', 'positions', 'stops', 'interpolation', 'weights'].includes(key)))
+      throw new TypeError(id + '.lightingRamp needs a palette role or color stops and optional weights');
+    const { role, positions, stops, interpolation, weights } = definition;
+    if ((role === undefined) === (stops === undefined) || (positions !== undefined && role === undefined))
+      throw new TypeError(id + '.lightingRamp needs either role with optional positions or explicit stops');
+    let rows = stops;
+    if (role !== undefined) {
+      const indices = typeof role === 'string' && role && Object.hasOwn(roles, role) && roles[role];
+      if (!Array.isArray(indices) || indices.length < 2 || !Array.from(indices).every(Number.isInteger))
+        throw new RangeError(id + '.lightingRamp needs a palette role with at least two swatches');
+      if (positions !== undefined && (!Array.isArray(positions) || positions.length !== indices.length))
+        throw new RangeError(id + '.lightingRamp.positions must match the palette role length');
+      rows = indices.map((index, i) => [positions === undefined ? i / (indices.length - 1) : positions[i], index]);
+    }
+    if (!Array.isArray(rows) || !Array.from(rows).every(row => Array.isArray(row) && Number.isFinite(row[0]) && row[0] >= 0 && row[0] <= 1))
+      throw new RangeError(id + '.lightingRamp stop positions must be in [0, 1]');
+    const tint = curves.ramp({ stops: rows, interpolation }, value => color(value, palette));
+    let amount;
+    if (weights !== undefined) {
+      if (!Array.isArray(weights) || weights.length !== rows.length)
+        throw new RangeError(id + '.lightingRamp.weights must match the color stop count');
+      amount = curves.scalar({ stops: rows.map(([at], i) => [at, weights[i]]), interpolation }, true);
+      if (type !== 'diffuse' && amount(0) !== 0)
+        throw new RangeError(id + '.lightingRamp must give zero weight to an inactive highlight');
+    }
+    return { tint, amount };
   }
 
   function material(base, settings) {
@@ -214,6 +249,9 @@ const SurfaceLook = (() => {
   }
 
   const models = {
+    diffuse(layer, { nl, light }) {
+      return clamp(nl) * light;
+    },
     specular(layer, q) {
       const { nt, ht, hb, nl, light } = q;
       if (nl <= 0 || nt <= 0 || light <= 0) return 0;
@@ -388,6 +426,9 @@ const SurfaceLook = (() => {
         const colorLayer = ['projected', 'colorCurve', 'colorLut', 'colorStack'].includes(layer.type);
         if (!colorLayer && !Object.hasOwn(models, layer.type))
           throw new RangeError('Unknown surface layer: ' + layer.type);
+        const lightingRamp = layer.lightingRamp === undefined || layer.lightingRamp === false ? null :
+          prepareLightingRamp(layer.lightingRamp, palette, paletteRoles ?? {}, id, layer.type);
+        if (layer.type === 'diffuse' && !lightingRamp) throw new TypeError(id + ' diffuse layer needs a lightingRamp');
         numeric(
           layer,
           [
@@ -468,6 +509,7 @@ const SurfaceLook = (() => {
           id,
           spatialMask,
           model: models[layer.type],
+          lightingRamp,
           strength: clamp(layer.strength ?? 1),
           roughness: [roughness[0], roughness[1] ?? roughness[0]].map(v =>
             positive(v, layer.type === 'glints' ? 0.085 : 0.22)
@@ -602,7 +644,13 @@ const SurfaceLook = (() => {
       shading.lb = bl * c - tl * s;
       shading.light = layer.shadow === false ? 1 : visibility;
       for (let i = 0; i < 3; i++) rgb[i] = layer.color[i];
-      const weight = clamp(layer.model(layer, shading, rgb) * strength);
+      let response = layer.model(layer, shading, rgb);
+      if (layer.lightingRamp) {
+        const level = clamp(response);
+        layer.lightingRamp.tint(level, rgb);
+        response = layer.lightingRamp.amount ? layer.lightingRamp.amount(level) : layer.type === 'diffuse' ? 1 : level;
+      }
+      const weight = clamp(response * strength);
       const spark = layer.type === 'glints';
       const size = layer.detailSize ?? (spark ? 2 * clamp(layer.radius ?? .37) * positive(layer.scale,.12) * scale : 0);
       const range = stableDetail && (specularLayers.has(layer.type) ? stableDetail.specular : stableDetail.texture);

@@ -21,7 +21,7 @@
     check(integer(maxQueued,1,256)&&integer(historyLimit,1,64)&&record(tasks)&&
       integer(Object.keys(tasks).length,1,256),'Orders need a bounded task catalog and queue');
     const fields=new Set(), staticTransfers=[];
-    let validateTransfer;
+    let validateTransfer, validateReservation;
     const catalog=new Map(Object.entries(tasks).map(([name,spec])=>{
       check(id(name)&&keys(spec,['steps'])&&Array.isArray(spec.steps)&&integer(spec.steps.length,1,32),'Invalid order task '+name);
       const targets=new Set(), params=new Set();
@@ -81,13 +81,18 @@
         (order.timeout===undefined||integer(order.timeout,1,10000000))&&
         (order.priority===undefined||W.routeRequests.priority(order.priority)),'Invalid agent order');
       const {targets={},params={}}=order;
-      check(keys(targets,spec.targets)&&spec.targets.every(key=>site(targets[key]))&&
+      if(order.reservation!==undefined){
+        W.reservations.checkSpec(order.reservation);
+        validateReservation?.(order.reservation);
+      }
+      const orderSite=value=>site(value)||keyRef(value,'claim')&&own(order.reservation?.require,value.claim);
+      check(keys(targets,spec.targets)&&spec.targets.every(key=>orderSite(targets[key]))&&
         keys(params,spec.params)&&spec.params.every(key=>own(params,key)),'Invalid targets or parameters for order '+order.task);
       if(validateTransfer)for(const step of spec.steps)if(step.op==='transfer')validateTransfer(transfer(step,{params}));
     }
     function checkIssue(args){
       check(keys(args,['agent','generation','mode','order'])&&(args.mode===undefined||modes.includes(args.mode))&&
-        keys(args.order,['id','task','targets','params','timeout','priority']),'Expected an order and a valid queue mode');
+        keys(args.order,['id','task','targets','params','timeout','priority','reservation']),'Expected an order and a valid queue mode');
       orderShape(args.order);
     }
     function checkCancel(args){
@@ -102,7 +107,8 @@
       const lastBlocker=reason==='timeout'&&order.reason?{lastBlocker:order.reason}:{};
       const entry={...order,phase,reason,ended:ctx.tick,...lastBlocker};
       emit(ctx,agent,'order-'+phase,entry,{reason,results:entry.results,...lastBlocker});
-      return {...book,outcomes:[...book.outcomes,entry].slice(-historyLimit)};
+      return {...book,outcomes:[...book.outcomes,entry].slice(-historyLimit),
+        ...(entry.reservation&&phase==='succeeded'&&{lastReservedSuccess:entry.sequence})};
     }
     function cancel(book,selection,agent,ctx,reason='cancelled'){
       const matches=order=>order&&(selection===undefined||order.sequence===selection||order.id===selection);
@@ -155,6 +161,12 @@
         {...book,active:status(next,'starting')};
     }
 
+    function claim(ctx,agent,entry){
+      if(!entry?.reservation)return null;
+      return ctx.query.probe(entry.reservation.board+'/claim',undefined,{
+        system:ctx.id,agent:agent.id,generation:agent.generation,sequence:entry.sequence
+      }).value;
+    }
     function advance(book,agent,ctx,movement){
       if(!runnable(book)){
         const row=movement.hold(agent,book.priorTask,book.priorPriority);
@@ -168,15 +180,27 @@
         entry={...entry,started:ctx.tick};
         emit(ctx,agent,'order-started',entry);
       }
-      if(entry.lastTick!==ctx.tick)entry={...entry,lastTick:ctx.tick,elapsed:entry.elapsed+1};
+      const advanced=entry.lastTick!==ctx.tick;
+      if(advanced)entry={...entry,lastTick:ctx.tick,elapsed:entry.elapsed+1};
       book={...book,active:entry};
       const step=catalog.get(entry.task).steps[entry.step];
       if(entry.timeout!==undefined&&entry.elapsed>entry.timeout)
         return {row:movement.hold(agent,entry.task).agent,
           book:finish({...book,active:null},entry,'failed','timeout',agent,ctx)};
-      const at=value=>reference(value,entry.targets,'target');
+      const reservation=claim(ctx,agent,entry);
+      if(entry.reservation&&reservation?.status!=='held'){
+        const row=movement.hold(agent,entry.task).agent;
+        return {row,book:reservation?.status==='failed'?
+          finish({...book,active:null},entry,'failed',reservation.reason,row,ctx):
+          {...book,active:status(advanced?{...entry,entered:entry.entered+1}:entry,
+            'waiting',reservation?.reason??'reservation-pending')}};
+      }
+      function at(value){
+        const target=reference(value,entry.targets,'target');
+        return keyRef(target,'claim')?reservation?.grants.find(grant=>grant.claim===target.claim)?.at:target;
+      }
       if(step.op==='move'){
-        const point=ctx.query.target(at(step.at))?.point;
+        const target=at(step.at), point=target===undefined?null:ctx.query.target(target)?.point;
         const moved=point?movement.move(agent,point,entry):movement.hold(agent,entry.task);
         const next=moved.arrived?completed(book,entry,{op:'move',at:moved.agent.position},moved.agent,ctx):
           {...book,active:status(entry,point?moved.phase:'blocked',point?moved.reason:'target-missing')};
@@ -185,14 +209,17 @@
       const {agent:row,clearing}=movement.hold(agent,entry.task);
       if(clearing)return {row,book:{...book,active:status(entry,'waiting','crossing')}};
       if(step.op==='emit'){
-        emit(ctx,row,step.kind,entry,{targets:entry.targets,params:entry.params,data:step.data??{}});
+        emit(ctx,row,step.kind,entry,{targets:entry.targets,params:entry.params,data:step.data??{},
+          ...(reservation&&{grants:reservation.grants})});
         return {row,book:completed(book,entry,{op:'emit',kind:step.kind},row,ctx)};
       }
       if(step.op==='transfer')return {row,book:{...book,active:status(entry,'settling')}};
       if(entry.elapsed-entry.entered<(step.ticks??0))
         return {row,book:{...book,active:status(entry,'waiting','duration')}};
       if(step.field!==undefined){
-        const sample=ctx.query.probe(step.field,step.at===undefined?row.position:at(step.at),step.args);
+        const target=step.at===undefined?row.position:at(step.at);
+        if(target===undefined)return {row,book:{...book,active:status(entry,'waiting','target-missing')}};
+        const sample=ctx.query.probe(step.field,target,step.args);
         if(sample.status!=='ok'||!Q.condition(step.when,sample.value))
           return {row,book:{...book,active:status(entry,'waiting',sample.status==='ok'?'condition':'field-'+sample.status)}};
       }
@@ -219,7 +246,8 @@
         (book.priorPriority===undefined||holding(book)&&W.routeRequests.priority(book.priorPriority))&&
         (book.active===null||record(book.active))&&
         Array.isArray(book.paused)&&Array.isArray(book.queue)&&book.paused.length+book.queue.length<=maxQueued&&
-        Array.isArray(book.outcomes)&&book.outcomes.length<=historyLimit&&(!runnable(book)||holding(book)),
+        Array.isArray(book.outcomes)&&book.outcomes.length<=historyLimit&&(!runnable(book)||holding(book))&&
+        (book.lastReservedSuccess===undefined||integer(book.lastReservedSuccess,1,book.serial)),
       'Invalid saved agent orders');
       const sequences=new Set(), labels=new Set();
       function entry(row,terminal){
@@ -249,6 +277,8 @@
               (Array.isArray(request.amount)?vector(receipt.applied,request.amount.length):Number.isFinite(receipt.applied))&&
               (i===row.step?receipt.status==='blocked':receipt.status==='full'||request.mode==='partial'&&receipt.status==='partial');
           }),'Invalid saved order progress');
+        if(row.sequence===book.lastReservedSuccess)
+          check(terminal&&row.phase==='succeeded'&&row.reservation,'Invalid saved reservation completion');
         sequences.add(row.sequence);
         if(row.id!==undefined)labels.add(row.id);
       }
@@ -260,7 +290,8 @@
       }
       for(const row of book.outcomes)entry(row,true);
     }
-    return {checkIssue,checkCancel,issue,cancel,advance,validate,pending,receive,
+    return {checkIssue,checkCancel,issue,cancel,advance,validate,pending,receive,claim,
+      checkReservations(validate){validateReservation=validate;},
       tasks:Object.fromEntries(catalog),hasTransfers:staticTransfers.length>0,
       checkFields(query){
         for(const field of fields)check(query.field(field),'Unknown order condition field '+field);

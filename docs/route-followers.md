@@ -4,6 +4,9 @@
 arc-length path. It works with SDF/splat models, rigid instances, meshes, or
 plain simulation data. It does not add geometry or require a renderer.
 
+[Character traversal links](traversal-links.md) use these followers for
+rails and scheduled crossings.
+
 ```js
 const path = K.anim.path(points, { closed: true });
 const route = K.anim.route(path, {

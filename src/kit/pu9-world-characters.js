@@ -553,6 +553,18 @@
           : [{ previous: current.position, actor: start }, ...result.segments],
         events: event ? [event, ...result.events] : result.events });
     }
+    function sweepTo(actor, target, world) {
+      const current = state(actor);
+      if (!xyz(target)) throw new TypeError('A character sweep needs a finite destination');
+      if (typeof world?.gravityAt !== 'function') {
+        queries(world);
+        return sweep(world, current.position, target);
+      }
+      const frame = W.gravity.normalize(world.gravityAt(current.position), [0, -t.gravity, 0]);
+      const map = localWorld(world, current.position, frame, current.forward, current.velocity);
+      const result = sweep(map.adapter, zero, map.toPoint(target));
+      return { ...result, position: map.fromPoint(result.position) };
+    }
     async function cross(session, linkId, movement, { camera } = {}) {
       const link = session.linksFrom(session.current()?.id).find(row => row.id === linkId);
       if (!link?.sweep) return null;
@@ -576,7 +588,7 @@
       queries(world);
       return fits(world, position);
     }
-    return Object.freeze({ state, step, cross, fits: fitsAt, tuning: t });
+    return Object.freeze({ state, step, cross, sweepTo, fits: fitsAt, tuning: t });
   }
   W.characters = Object.freeze({ create, fromBiome, fromQuery, surfaces });
 })(KIT);

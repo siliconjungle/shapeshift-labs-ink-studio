@@ -188,5 +188,5 @@
   }
 
   const modelSpec=(state,models)=>marked(state)?models?.get(state.level)?.spec:undefined;
-  W.simulationAggregate=Object.freeze({define,bind,advance,modelSpec,rawStates});
+  W.simulationAggregate=Object.freeze({define,bind,advance,modelSpec,rawStates,isAggregate:marked});
 })(KIT);

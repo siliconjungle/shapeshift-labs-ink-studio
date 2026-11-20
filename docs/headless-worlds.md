@@ -36,6 +36,9 @@ routes and recompute crossings affected by local changes.
 [Agent orders](agent-orders.md) schedule and inspect reusable tasks with
 movement, waits, events, and conservative transfers.
 
+[Jobs and reservations](job-reservations.md) arbitrate shared capacity and
+single-use work across agent rosters.
+
 [First-divergence debugging](first-divergence.md) compares timelines
 tick by tick and reports actual inputs and changed state paths.
 
@@ -719,6 +722,7 @@ reaches the feeder.
 | `routed-links` | Socket-to-socket cables, hoses and belt loops with guide points, slack, tension, break limits, typed signals, torque transmission and conservative transfers. |
 | `navigation` | Bounded walking, swimming or flying route traces. Ground search can take depth, clearance and wear into account. Hosts can also expose the volumetric traversal graph. |
 | `habitat` | Authored species rules evaluate world fields and nearby or reachable resources. Probes return a score, suitability and the reasons behind the decision. |
+| `reservations` | Shared capacity pools and single-use jobs with leases and atomic claim bundles. See [jobs and reservations](job-reservations.md). |
 | `agents` | Ground, swim and flight movement with replanning, scene-aware destinations and optional limb contacts. [Agent storage and lifecycle](agent-storage.md) covers runtime spawning, removal, and packed component queries. Add [activity decisions](agent-decisions.md) for prioritized goals or [orders](agent-orders.md) for queued tasks and outcomes. |
 | `wear` | Optional wear from contact-producing systems or submitted contact batches. Track local accumulation and recovery, and use `enabled` to control updates. Trace a durable route and promote it with `scene promote <run> <trace> --as id`, supplying its endpoints through `--at` and JSON `--args`. |
 
@@ -1594,6 +1598,8 @@ Use [shared boarding](boarding.md) for occupied mounts, carts, and ferries
 whose movement must clear both the carrier and its passengers.
 [Character surface contact](character-surfaces.md) lets walking characters
 ride moving decks, slip or drift along materials, and launch on landing.
+[Traversal links](traversal-links.md) connect characters to rails, timed
+lifts, boost rings, and flow volumes.
 
 `KIT.world.characters.create({tuning, selectMode, modes, allowSupport})`
 is an optional Y-up capsule solver. It uses the same support, signed

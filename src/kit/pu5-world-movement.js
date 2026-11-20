@@ -500,15 +500,28 @@
       return {...row,orders,...(switched&&{route:emptyList,cursor:0,retry:0,
         ...(row.routing&&{routing:RQ.idle})})};
     }
-    function pendingTransfers(roster,limit){
-      const pending=new Map();
+    function* pendingTransfers(roster){
       for(const slot of S.order(roster)){
-        if(pending.size>=limit)break;
         if(roster.pages[slot.p].details[slot.i].orders?.active?.phase!=='settling')continue;
-        const row=S.read(roster,slot), request=orders.pending(row);
-        pending.set(request.id,{slot,row,request});
+        const row=S.read(roster,slot);
+        yield {slot,row,request:orders.pending(row)};
       }
-      return pending;
+    }
+    const reservationRoster=state=>S.get(W.simulationAggregate.isAggregate(state)?state.data:state);
+    const reservationRows=new WeakMap();
+    function reservations(state){
+      const roster=reservationRoster(state);
+      if(reservationRows.has(roster))return reservationRows.get(roster);
+      const rows=[];
+      for(const page of roster.pages)for(const [i,row] of page.details.entries()){
+        if(!row.orders)continue;
+        const {active,paused}=row.orders;
+        if(active?.reservation)rows.push({agent:page.ids[i],generation:page.generations[i],entry:active,paused:false});
+        for(const entry of paused)if(entry.reservation)
+          rows.push({agent:page.ids[i],generation:page.generations[i],entry,paused:true});
+      }
+      reservationRows.set(roster,rows);
+      return rows;
     }
     function byEntity(roster,entity){
       let index=aliases.get(roster);
@@ -544,17 +557,38 @@
         {profiles,fit,bounds:config.bounds,contacts:config.contactEvents,validateState,occupants,blockedCoarse:crowd?.blockedCoarse});
     },
     ...(config.contactEvents&&{outputs:{contacts:'event'},output:state=>({contacts:state.contacts})}),
+    ...(orders&&{reservationOrders:{
+      check:orders.checkReservations,rows:reservations,
+      outcome(state,owner){
+        const row=S.select(reservationRoster(state),owner.agent);
+        if(!row?.orders||row.generation!==owner.generation)return null;
+        return row.orders.lastReservedSuccess===owner.sequence?{phase:'succeeded'}:
+          row.orders.outcomes.find(entry=>entry.sequence===owner.sequence);
+      }
+    }}),
     ...(orders?.hasTransfers&&{
       checkTransfers:orders.checkTransfers,
       requestTransfers(state,ctx,budget){
-        return [...pendingTransfers(S.get(state),budget).values()].map(item=>item.request);
+        const requests=[];
+        if(budget>0)for(const {row,request} of pendingTransfers(S.get(state))){
+          const entry=row.orders.active;
+          if(entry.reservation&&orders.claim(ctx,row,entry)?.status!=='held')continue;
+          requests.push(request);
+          if(requests.length===budget)break;
+        }
+        return requests;
       },
       receiveTransfers(state,receipts,ctx){
-        const roster=S.get(state), pending=pendingTransfers(roster,receipts.length), draft=S.edit(roster);
-        for(const receipt of receipts){
-          const {slot,row}=pending.get(receipt.requestId);
+        const roster=S.get(state), draft=S.edit(roster);
+        const pending=new Map(receipts.map(receipt=>[receipt.requestId,receipt]));
+        for(const {slot,row,request} of pendingTransfers(roster)){
+          const receipt=pending.get(request.id);
+          if(!receipt)continue;
           draft.update(slot,row,{...row,orders:orders.receive(row,receipt,ctx)});
+          pending.delete(request.id);
+          if(!pending.size)break;
         }
+        check(!pending.size,'Transfer receipts could not be matched to active orders');
         return packed(draft.finish(),state.contacts,state.decisions,state.routeWork,state.crowd);
       }
     }),

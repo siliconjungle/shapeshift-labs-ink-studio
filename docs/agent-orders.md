@@ -32,6 +32,9 @@ the active order. Multiple substeps in that tick count once. Waiting on
 routing, a crossing, a missing target, or a field condition can be inspected
 while the order runs.
 
+Add [jobs and reservations](job-reservations.md) when an order must claim
+limited capacity or a single-use job before any of its steps run.
+
 ## Issue, interrupt, and cancel
 
 A scheduled move for an agents system named `crew` looks like this:
