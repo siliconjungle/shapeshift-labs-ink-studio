@@ -311,6 +311,29 @@
         case 'terrace': case 'clamp':
           result = remap(node, get);
           break;
+        case 'coordinateMap': {
+          if(Object.keys(node).some(key=>!['type','mapping','source','fallback'].includes(key)))fieldsError('invalid coordinateMap field');
+          const mapping=MathFields.mapping(node.mapping), source=get(node.source), fallback=level(node.fallback,0,'coordinate fallback');
+          result={cost:mapping.cost+source.cost,run(p,jet){
+            const q=mapping.sample(...p);
+            if(!q.valid)return jet?asJet(fallback):fallback;
+            const value=source.run([...q.point,p[3]],jet);
+            if(!jet)return value;
+            const J=q.jacobian,T=q.dt,g=value.slice(1,4);
+            return [value[0], ...[0,1,2].map(i=>g[0]*J[i]+g[1]*J[3+i]+g[2]*J[6+i]),value[4]+g.reduce((n,v,i)=>n+v*T[i],0)];
+          }};
+          break;
+        }
+        case 'mathMask': {
+          if(Object.keys(node).some(key=>!['type','mapping','pattern','frequency','phase','rate','threshold','feather','invert'].includes(key)))fieldsError('invalid mathMask field');
+          const {type,mapping:definition,...controls}=node;
+          const sample=MathFields.mapping(definition).mask(controls);
+          result={cost:sample.cost,run(p,jet){
+            if(!jet)return sample(...p);
+            const s=sample.sample(...p);return [s.value,...s.gradient,s.dt];
+          }};
+          break;
+        }
         default:
           fieldsError('unknown operation ' + node.type);
       }

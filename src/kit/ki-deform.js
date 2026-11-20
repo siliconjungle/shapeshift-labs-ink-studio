@@ -725,6 +725,12 @@
         };
   };
   D.jac = (map, p, e) => {
+    if(typeof map.jacobian==='function'){
+      const J=map.jacobian(p);
+      if(!(Array.isArray(J)||ArrayBuffer.isView(J))||J.length!==9||!Array.from(J).every(Number.isFinite))
+        throw new TypeError('A deformation Jacobian must contain nine finite values');
+      return Array.from(J);
+    }
     e = e || 1e-3;
     const a = map([p[0] + e, p[1], p[2]]),
       b = map([p[0] - e, p[1], p[2]]),

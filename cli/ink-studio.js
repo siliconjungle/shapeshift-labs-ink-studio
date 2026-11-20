@@ -996,6 +996,7 @@ const CMD = {
         '  clip-sequence <id> [--handoff 0] [--out report.json]  inspect clip instances, retimed cues, and handoffs',
         '  animation-graph <graph.json> [--at seconds] [--inputs file.json] [--out report.json]  inspect poses and event responses',
         '  data-inputs <scene or catalog> [dataset] [--sample JSON --t seconds --rows --out report.json]  inspect typed source data',
+        '  math-fields <field.json> [--point x,y,z --time n --integrate seconds --out report.json]  inspect procedural math fields',
         '  render-graph <graph.json> [--w 900 --h 620 --out report.json]  inspect effect resolution and memory/work budgets',
         '  material-controls <material.json> [--palette colors.json --out report.json]  inspect shared material controls',
         '  light-emitters <lights.json> [--at seconds --out report.json]  inspect shaped lights and cookies',
@@ -1741,6 +1742,9 @@ const CMD = {
   },
   timeline() {
     return worldCLI().inspectTimeline(pos[0]);
+  },
+  'math-fields'() {
+    return require('./math-fields.js')(pos,opt,lib());
   },
   'render-graph'() {
     return require('./render-graph-plan.js')(pos,opt,lib());

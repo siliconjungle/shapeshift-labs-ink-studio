@@ -1104,3 +1104,5 @@ Camera rigs support dependency-free dolly zoom, tracked orbit, keyed crane moves
 `KIT.material` supplies shared roughness, metalness, IOR, transmission and coating descriptors, live binding edits and an inspector, backed by the existing stylized finishes and optics. See [material controls](docs/material-controls.md) and the [material atelier](examples/material-controls.html).
 
 `KIT.renderGraph` adds scoped bloom, halation, depth outlines, restrained chromatic separation, block displacement, bounded pixel sorting and budgeted temporal feedback. Effects preserve full-resolution source images and accept object/depth masks. See [render effects and budgets](docs/render-graph.md#bounded-film-and-signal-effects) and the interactive [Signal House](examples/render-effects.html).
+
+`KIT.procedural.mathFields` supplies finite complex-plane, polar and logarithmic charts; analytic deformation/flow/mask adapters; and bounded fixed-step attractor integration. It shares existing field-expression, streamline and trace tooling. See [procedural math fields](docs/math-fields.md) and the [strange garden](examples/math-fields.html).

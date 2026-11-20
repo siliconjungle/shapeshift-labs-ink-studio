@@ -4,23 +4,8 @@
     integer = (n, lo, hi) => Number.isSafeInteger(n) && n >= lo && n <= hi,
     finite = (n, max) => Number.isFinite(n) && Math.abs(n) <= max,
     dimensions = Object.freeze({ xy: [0, 1], xz: [0, 2], yz: [1, 2], xyz: [0, 1, 2] }),
-    systems = {
-      lorenz: { dt: .01, start: [1, 1, 1], parameters: { sigma: 10, rho: 28, beta: 8 / 3 },
-        field: ({ sigma, rho, beta }) => (x, y, z) => [sigma * (y - x), x * (rho - z) - y, x * y - beta * z] },
-      rossler: { dt: .04, start: [1, 0, 0], parameters: { a: .2, b: .2, c: 5.7 },
-        field: ({ a, b, c }) => (x, y, z) => [-y - z, x + a * y, b + z * (x - c)] },
-      clifford: { start: [.1, .1], parameters: { a: -1.4, b: 1.6, c: 1, d: .7 },
-        field: ({ a, b, c, d }) => (x, y) => [Math.sin(a * y) + c * Math.cos(a * x),
-          Math.sin(b * x) + d * Math.cos(b * y), 0] },
-      deJong: { start: [.1, .1], parameters: { a: 1.4, b: -2.3, c: 2.4, d: -2.1 },
-        field: ({ a, b, c, d }) => (x, y) => [Math.sin(a * y) - Math.cos(b * x), Math.sin(c * x) - Math.cos(d * y), 0] }
-    };
-
-  function rk4(field, p, step) {
-    const k0 = field(...p), k1 = field(...V.mad(p, k0, step / 2)),
-      k2 = field(...V.mad(p, k1, step / 2)), k3 = field(...V.mad(p, k2, step));
-    return V.mad(p, V.add(V.add(k0, k3), V.mul(V.add(k1, k2), 2)), step / 6);
-  }
+    systems = MathFields.systems;
+  const rk4 = MathFields.rk4;
 
   function trace({ family = 'lorenz', parameters = {}, start, steps, burnIn, dt, stride = 1,
     escape = 1e5, pose } = {}) {
