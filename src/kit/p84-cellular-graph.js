@@ -1,4 +1,4 @@
-/* Retained discrete automata on stable, authored graph connections. */
+/* Retained neighborhood rules on stable, authored connections. */
 const GraphCellular = (() => {
   const { clone, freeze, hash } = KIT.procedural.data;
   const integer = (n, lo, hi) => Number.isSafeInteger(n) && n >= lo && n <= hi;
@@ -29,7 +29,7 @@ const GraphCellular = (() => {
     return Object.freeze(update);
   }
 
-  function topology(rawNodes, rawEdges, stateOK) {
+  function topology(rawNodes, rawEdges, stateOK, domain) {
     check(Array.isArray(rawNodes) && integer(rawNodes.length, 1, maxNodes) &&
       Array.isArray(rawEdges) && rawEdges.length <= maxEdges, 'expected a bounded node and edge list');
     const sorted = Array.from(rawNodes, raw => {
@@ -49,17 +49,18 @@ const GraphCellular = (() => {
       'edges need valid endpoints, positive weight and delay of 1–64 ticks');
       const ids = bidirectional && from > to ? [to, from] : [from, to];
       const key = id ?? JSON.stringify([bidirectional, ...ids, type]);
-      return freeze({ id: key, from: ids[0], to: ids[1], type, bidirectional, weight, delay, data: clone(data) });
+      const metrics = domain && { length: raw.length, units: domain.units, seam: raw.seam ?? null };
+      return freeze({ id: key, from: ids[0], to: ids[1], type, bidirectional, weight, delay, ...metrics, data: clone(data) });
     }).sort(order);
     check(new Set(edges.map(edge => edge.id)).size === edges.length, 'edge IDs must be unique');
     const incoming = nodes.map(() => []);
     let historySize = 1, work = nodes.length;
     for (const edge of edges) {
       const from = indices.get(edge.from), to = indices.get(edge.to);
-      incoming[to].push({ index: from, node: nodes[from], edge });
+      incoming[to].push({ index: from, node: nodes[from], edge, ...(domain && { cell: domain.cell(nodes[from].id) }) });
       work++;
       if (edge.bidirectional && from !== to) {
-        incoming[from].push({ index: to, node: nodes[to], edge });
+        incoming[from].push({ index: to, node: nodes[to], edge, ...(domain && { cell: domain.cell(nodes[to].id) }) });
         work++;
       }
       historySize = Math.max(historySize, edge.delay);
@@ -67,29 +68,42 @@ const GraphCellular = (() => {
     return { sorted, nodes, indices, edges: Object.freeze(edges), incoming, work, historySize };
   }
 
-  function create({ nodes: rawNodes, edges: rawEdges = [], states, initial = 0, rule, seed = 0 } = {}) {
+  function create({ nodes: rawNodes, edges: rawEdges = [], states, initial, rule, seed = 0 } = {}, domain) {
     function ruleInfo(update) { return ruleStates.get(update) ?? CellularRules.info(update)?.states; }
-    states ??= ruleInfo(rule) ?? 2;
-    check(integer(states, 2, 256) && Number.isSafeInteger(seed) &&
-      (typeof initial === 'function' || integer(initial, 0, states - 1)), 'expected 2–256 states and a valid seed and initializer');
-    const stateOK = value => integer(value, 0, states - 1);
+    const channels = domain?.channels, dt = domain?.dt;
+    const fieldMode = channels !== undefined;
+    if (fieldMode) check(states === undefined, 'named channels and an integer alphabet are separate state models');
+    else states ??= ruleInfo(rule) ?? 2;
+    const zero = fieldMode ? freeze(Object.fromEntries(channels.map(name => [name, 0]))) : 0;
+    if (initial === undefined) initial = zero;
+    const stateOK = fieldMode
+      ? value => record(value) && Object.keys(value).length === channels.length &&
+        channels.every(name => Object.hasOwn(value, name) && Number.isFinite(value[name]))
+      : value => integer(value, 0, states - 1);
+    const plane = fieldMode ? Array : Uint8Array;
+    const encode = fieldMode ? value => freeze(Object.fromEntries(channels.map(name => [name, value[name]]))) : value => value;
+    check((fieldMode || integer(states, 2, 256)) && Number.isSafeInteger(seed) &&
+      (typeof initial === 'function' || stateOK(initial)), 'expected a valid state model, seed and initializer');
     function checkRule(update) {
       const known = CellularRules.info(update);
       check(typeof update === 'function' && !known?.line, 'graph needs a neighborhood rule');
       const expected = ruleInfo(update);
-      check(expected === undefined || expected === states, 'rule alphabet must match graph states');
+      check(expected === undefined || !fieldMode && expected === states, 'rule alphabet must match graph states');
     }
     if (rule !== undefined) checkRule(rule);
-    const { sorted, nodes, edges, incoming, indices, work, historySize } = topology(rawNodes, rawEdges, stateOK);
+    const { sorted, nodes, edges, incoming, indices, work, historySize } = topology(rawNodes, rawEdges, stateOK, domain);
+    if (fieldMode) check(nodes.length * historySize * channels.length <= 2000000, 'named channel history exceeds its sample budget');
     const idSeeds = nodes.map(({ id }) => hash(id));
     const initialScope = hash('cellular-graph/initial', seed);
-    const start = Uint8Array.from(sorted, ({ id, node, state }, i) => {
+    const start = plane.from(sorted, ({ id, node, state }, i) => {
       const value = state ?? (typeof initial === 'function' ? initial({ id, node, random: KIT.grow.dice(initialScope ^ idSeeds[i]) }) : initial);
       check(stateOK(value), 'initial state is outside the alphabet');
-      return value;
+      return encode(value);
     });
     const pins = Uint8Array.from(sorted, item => Number(item.locked));
-    const signature = hash(JSON.stringify([states, seed, nodes, edges]));
+    const signature = hash(JSON.stringify(domain
+      ? [states, seed, nodes, edges, domain.kind, domain.units, domain.dt, domain.timeUnit, channels, domain.cells]
+      : [states, seed, nodes, edges]));
     const ring = () => { const entries = new Array(historySize); entries[0] = start; return entries; };
     let history = ring(), locked = pins, tick = 0, revision = 0, busy = false, previous;
     const available = () => check(!busy, 'cannot edit the graph during a rule');
@@ -97,7 +111,7 @@ const GraphCellular = (() => {
       check(indices.has(id), 'unknown node ' + String(id));
       return indices.get(id);
     };
-    const read = (entries, i, at) => at < 0 ? 0 : entries[at % historySize][i];
+    const read = (entries, i, at) => at < 0 ? zero : entries[at % historySize][i];
     function commit(entries, at, locks = locked) {
       history = entries; tick = at; locked = locks; revision++; previous = undefined;
     }
@@ -105,7 +119,8 @@ const GraphCellular = (() => {
     function step(count = 1, update = rule) {
       available();
       checkRule(update);
-      check(integer(count, 1, 10000) && count * work <= maxWork && tick + count <= Number.MAX_SAFE_INTEGER,
+      check(integer(count, 1, 10000) && count * work * (channels?.length ?? 1) <= maxWork &&
+        tick + count <= Number.MAX_SAFE_INTEGER && (!domain || Number.isFinite((tick + count) * dt)),
         'step exceeds the work or tick budget');
       const draft = history.slice();
       busy = true;
@@ -116,15 +131,15 @@ const GraphCellular = (() => {
           for (let i = 0; i < nodes.length; i++) {
             if (locked[i]) continue;
             const node = nodes[i];
-            const inputs = incoming[i].map(({ index, node, edge }) => {
+            const inputs = incoming[i].map(({ index, node, edge, cell }) => {
               const sampledTick = time - edge.delay;
-              return { id: node.id, node, edge, sampledTick, state: read(draft, index, sampledTick) };
+              return { id: node.id, node, edge, sampledTick, state: read(draft, index, sampledTick), ...(domain && { cell }) };
             });
             const neighbors = inputs.map(input => input.state);
             const state = update({ id: node.id, node, state: before[i], tick: time, inputs, neighbors,
-              random: KIT.grow.dice(scope ^ idSeeds[i]) });
+              random: KIT.grow.dice(scope ^ idSeeds[i]), ...(domain && { cell: domain.cell(node.id), dt, time: time * dt, timeUnit: domain.timeUnit }) });
             check(stateOK(state), 'a rule must return a valid cell state');
-            next[i] = state;
+            next[i] = encode(state);
           }
           draft[time % historySize] = next;
         }
@@ -145,7 +160,7 @@ const GraphCellular = (() => {
       if (!plan.length) return;
       const next = history[tick % historySize].slice(), locks = locked.slice(), draft = history.slice();
       for (const { i, state, lock } of plan) {
-        if (state !== undefined) next[i] = state;
+        if (state !== undefined) next[i] = encode(state);
         if (lock !== undefined) locks[i] = Number(lock);
       }
       draft[tick % historySize] = next;
@@ -173,18 +188,19 @@ const GraphCellular = (() => {
     function restore(saved) {
       available();
       check(saved?.format === format && saved.version === 1 && saved.signature === signature &&
-        integer(saved.tick, 0, Number.MAX_SAFE_INTEGER) && Array.isArray(saved.history) &&
+        integer(saved.tick, 0, Number.MAX_SAFE_INTEGER) && (!domain || Number.isFinite(saved.tick * dt)) &&
+        Array.isArray(saved.history) &&
         saved.history.length === Math.min(saved.tick + 1, historySize), 'checkpoint is incompatible');
-      function pack(values, valid) {
+      function pack(values, valid, output = Uint8Array, convert = value => value) {
         check(sequence(values) && values.length === nodes.length, 'checkpoint planes must match the graph');
-        return Uint8Array.from(values, value => {
+        return output.from(values, value => {
           check(valid(value), 'checkpoint contains an invalid state or lock');
-          return value;
+          return convert(value);
         });
       }
       const locks = pack(saved.locked, n => n === 0 || n === 1), entries = new Array(historySize);
       const first = saved.tick - saved.history.length + 1;
-      for (let i = 0; i < saved.history.length; i++) entries[(first + i) % historySize] = pack(saved.history[i], stateOK);
+      for (let i = 0; i < saved.history.length; i++) entries[(first + i) % historySize] = pack(saved.history[i], stateOK, plane, encode);
       commit(entries, saved.tick, locks);
       return tick;
     }
@@ -195,5 +211,6 @@ const GraphCellular = (() => {
       reset() { available(); commit(ring(), 0, pins); }
     });
   }
-  return Object.freeze({ create, rules: Object.freeze({ pulse }) });
+  const api = Object.freeze({ create: options => create(options), rules: Object.freeze({ pulse }) });
+  return Object.freeze({ api, onDomain: create });
 })();
