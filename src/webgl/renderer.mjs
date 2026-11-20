@@ -1003,7 +1003,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           tangent, lookGrid: coverage && [width, height] }, water, wet, env);
       }
       if (ownsPixels)
-        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,surfaces,surfaceFrame:{...surfaceFrame,index:true} });
+        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,surfaces,surfaceFrame:{...surfaceFrame,index:true,graphDepth:Boolean(frame[graphOwner]?.depth)} });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (cover)
         drawGeometry(shader, cover.buffer, width, height,

@@ -44,7 +44,7 @@ uniform vec4 u_range,u_splatPlane;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
 uniform vec2 u_surfaceViewport;
 uniform vec3 u_fog;
-uniform bool u_index;
+uniform bool u_index, u_graphDepth;
 ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
@@ -70,6 +70,7 @@ void main(){
   ${section ? 'rgb=mix(rgb,u_sectionEdge.rgb,sectionInk(margin));' : ''}
   color=u_index?vec4(0.0):vec4(rgb,1.0);
   depth=vec4(d,0.0,0.0,1.0);water=vec4(mark,1.0);
+  if(u_index&&u_graphDepth){float z=round(d*16777215.0);water=vec4(mod(z,256.0),mod(floor(z/256.0),256.0),floor(z/65536.0),255.0)/255.0;}
 }`
       );
       shaders.set(key, shader);
@@ -342,6 +343,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         range,
         fog,
         index = false,
+        graphDepth = false,
         arrivalPlane = [0, 0, 0, 0],
         clip = [0, 0, 0, 0],
         water,
@@ -378,6 +380,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
         u_index: +index,
+        u_graphDepth: graphDepth,
         u_arrivalPlane: arrivalPlane,
         u_splatPlane: clip,
         u_surfaceViewport: [width, height],

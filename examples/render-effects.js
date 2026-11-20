@@ -120,6 +120,7 @@ function renderEffectsScene({ KIT: K, makeBuilder, makeSculpt, SpriteSurface }) 
   for (const x of [-4.92, 4.92]) label('012', [x, 0.35, 3.51], 0.2, colors[16]);
   const graph = K.renderGraph.create({
     passes: [
+      { id: 'screenMask', type: 'mask', volume: { at: [3.5, 1.85, 0.02], extent: [1.4, 1.5, 0.3], feather: 0.06 } },
       {
         id: 'bloom',
         type: 'bloom',
@@ -159,7 +160,8 @@ function renderEffectsScene({ KIT: K, makeBuilder, makeSculpt, SpriteSurface }) 
       {
         id: 'blocks',
         type: 'blocks',
-        select: { object: 'screen' },
+        mask: 'screenMask',
+        protectObjects: false,
         offset: [21, 0],
         blockSize: [65, 15],
         probability: 0.2,
@@ -170,7 +172,8 @@ function renderEffectsScene({ KIT: K, makeBuilder, makeSculpt, SpriteSurface }) 
       {
         id: 'pixelSort',
         type: 'pixelSort',
-        select: { object: 'screen' },
+        mask: 'screenMask',
+        protectObjects: false,
         span: 12,
         axis: 'y',
         threshold: [0.1, 0.9],

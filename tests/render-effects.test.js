@@ -394,3 +394,52 @@ test('CLI planner and pre-render admission use the same working-set limits', () 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+function atlasFixture({ makeBuilder, KIT }) {
+  const world = makeBuilder(1, [0x071322]).finish({ cam: { target: [0, 0, 0], dist: 4, yaw: 0, pitch: 0 }, radius: 4 });
+  const points = [
+      [-0.6, -0.6, 0.5],
+      [0.6, -0.6, 0.5],
+      [-0.6, 0.6, 0.5],
+      [0.6, 0.6, 0.5]
+    ],
+    vertices = [];
+  for (const i of [0, 1, 2, 2, 1, 3]) vertices.push(...points[i], 0, 0);
+  world.spriteSurfaces = {
+    width: 1,
+    height: 1,
+    pixels: new Uint8Array([35, 80, 110, 255]),
+    vertices: new Float32Array(vertices)
+  };
+  const graph = KIT.renderGraph.create({
+    passes: [
+      { id: 'scope', type: 'mask', depth: { near: 3.4, far: 3.6 } },
+      {
+        id: 'highlight',
+        type: 'composite',
+        mask: 'scope',
+        layer: { draw: [{ type: 'rect', rect: [0, 0, 32, 24], color: '#ffd080' }] }
+      }
+    ]
+  });
+  return { world, graph };
+}
+
+test(
+  'native depth masks include atlas surfaces with precise axial distances',
+  { skip: !process.env.INK_TEST_CHROME },
+  () => {
+    const result = runWebGL({ hardware: true }, atlasFixture, (kit, build, backend) => {
+      const { world, graph } = build(kit),
+        gpu = backend(32, 24, { raw: true, offscreen: true });
+      try {
+        gpu.draw(world, { renderGraph: graph });
+        return gpu.sample({ face: [16, 12], sky: [1, 1] });
+      } finally {
+        gpu.close();
+      }
+    });
+    assert.deepEqual(result.face, [255, 208, 128]);
+    assert.notDeepEqual(result.sky, [255, 208, 128]);
+  }
+);

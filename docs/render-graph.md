@@ -269,10 +269,10 @@ Every pass accepts `select`, an earlier named `mask`, and `depth:{near,far,feath
 New spatial effects also accept:
 
 - `maskMode:'source'|'output'|'both'`. Bloom/halation/outlines default to source masking, allowing a selected sign to cast a halo or an outer silhouette. Chromatic/blocks/sorting default to both, keeping the destination and sampled source inside their scope.
-- `depthThreshold:.25` (world units). Spatial transforms reject depth discontinuities and sky/surface crossings. Glow accepts only emitters at or in front of the destination depth: a hidden sign cannot glow over a nearer foreground object. Reconstruction repeats this test at full resolution. WebGL reuses the ownership draw to write a packed 24-bit axial depth attachment; soft lighting-depth blending does not determine foreground visibility.
+- `depthThreshold:.25` (world units). Spatial transforms reject depth discontinuities and sky/surface crossings. Glow accepts only emitters at or in front of the destination depth: a hidden sign cannot glow over a nearer foreground object. Reconstruction repeats this test at full resolution. WebGL reuses the ownership draw to write a packed 24-bit axial depth attachment for splats and atlas surfaces; soft lighting-depth blending does not determine foreground visibility.
 - `protectObjects:true` for transforms/outlines, false for glow. Uses logical entity/object identity, falling back to material and then the unnamed group. Neighboring splats in one object are not mistaken for separate objects. Set false to permit displacement across different objects at compatible depths.
 
-The mask belongs to the resolved **frontmost scene owner**; it does not reconstruct hidden contributors or generate ownership for later 2D composite layers. Use a screen rectangle or a named graph mask for those layers. This is a screen-space system, not volumetric transport.
+The mask belongs to the resolved **frontmost scene owner**; it does not reconstruct hidden contributors or generate ownership for later 2D composite layers. Use a screen rectangle or a named graph mask for those layers. Atlas surfaces also carry precise graph depth; a world-volume mask scopes a textured monitor without claiming it is a named splat object. This is a screen-space system, not volumetric transport.
 
 ### Resolution and allocation budgets
 

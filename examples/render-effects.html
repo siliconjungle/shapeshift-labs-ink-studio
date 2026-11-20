@@ -316,7 +316,8 @@
     }
     function metrics() {
       const r = demo.inspect();
-      $('grid').value = r.passes[0].width + ' × ' + r.passes[0].height;
+      $('grid').value =
+        r.passes.find(p => p.id === 'bloom').width + ' × ' + r.passes.find(p => p.id === 'bloom').height;
       $('history').value = (r.historyPixels / 1000).toFixed(0) + 'K PX';
       $('memory').value = ((r.transientBytes + r.historyBytes) / 1048576).toFixed(1) + ' MB';
       $('splats').value = (demo.world.count / 1000).toFixed(1) + 'K';
