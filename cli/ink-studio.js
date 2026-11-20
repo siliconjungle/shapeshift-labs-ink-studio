@@ -757,6 +757,7 @@ const CMD = {
       [
         'ink-studio <command> <diorama id | lab/file.js> [options]',
         '',
+        '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
         '  environment inspect <scene|run> --at x,y,z [--t seconds] [--out report.json]   explain sky and local weather',
@@ -2156,6 +2157,7 @@ const CMD = {
      it, carried on), so it stays put from every view. The decals are kept in studio/paint/<id>/decals.json; the game's build puts
      them in the page, and the CLI draws them at once */
   paint() {
+    if (['mix', 'ramp', 'table', 'swatches'].includes(pos[0])) return require('./paint.js')(pos, opt, lib());
     const [sub, id] = pos;
     if (!['export', 'absorb', 'clear', 'layers', 'tune'].includes(sub) || !id)
       die(
