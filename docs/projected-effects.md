@@ -112,6 +112,61 @@ channels. Each frame maps to one unit tile after applying `scale`. Samples
 use nearest texels and honor RGBA transparency. `repeat` loops frame time
 and `wrap` repeats the tile in the projection.
 
+### Indexed rasters and palette cycling
+
+Use `pattern: 'indexed'` to paint a projected layer with explicit indices from
+the scene palette. The raster is one row-major list of `width × height` slots.
+A `null` texel leaves the underlying finish visible. Slot `0` is ordinary paint.
+The tile is sampled with nearest texels. `size: [u, v]` sets its dimensions in
+projected units before the layer's uniform `scale`. It defaults to `[1, 1]`.
+Use `wrap: true` to repeat the tile. A wrapping one-texel tile also works with
+an ordinary material mask to cycle a whole region.
+
+```json
+{
+  "type": "projected",
+  "pattern": "indexed",
+  "projection": { "origin": [0, 2, 0], "across": [0, -1, 0] },
+  "raster": {
+    "width": 4, "height": 2, "size": [2, 0.25],
+    "slots": [4, 5, 6, 7, null, 4, 5, null]
+  },
+  "cycles": {
+    "copper-glint": { "role": "copper", "period": 1.6, "direction": "forward", "phase": 0.25 }
+  }
+}
+```
+
+- Each named cycle selects an ordered palette role or an explicit `slots`
+  list. It needs at least two distinct indices. Within one layer each index
+  can belong to one cycle.
+- `period` is the time in seconds for a full rotation. Each step lasts
+  `period / number of slots`. The default `direction` of `forward` selects
+  the next swatch for each painted index. Use `reverse` to select the
+  previous one. The apparent direction depends on the order you paint the
+  indices into the image.
+- `phase` is a fraction of one rotation and defaults to zero. The sampler
+  reads the scene clock directly, so scrubbing and rendering frames out of
+  order produce the same steps. Omit `cycles` to show the static image.
+- Cycle membership is local to the layer. Paint with an unlisted slot, leave
+  a hole, mask a region, or use a separate material to hold a color still.
+  By default the projected layer contributes its exact swatches to palette
+  resolution. As with other projected layers, strength, blending, fog and
+  later grading can change the visible color.
+
+Use indexed rasters in the Node renderer and CLI, or through the shared
+surface sampler in browser hosts. The default WebGL renderer uses its
+existing [surface finish coverage](browser-renderer.md#feature-coverage).
+
+[Fernfall](../examples/palette-cycling.js) uses separate cycles for the
+waterfall, the foam at its base and ripples in the pool. Use `--params '{"cycle":false}'` to
+render its painted indices at rest.
+
+```sh
+ink-studio clip examples/palette-cycling.js --from 0 --to 6 --fps 12 \
+  --w 216 --h 144 --px 1 --out fernfall.png
+```
+
 ### Author a shader in JavaScript
 
 A layer can name a shader from `surfaceEffects.shaders` or use a function as

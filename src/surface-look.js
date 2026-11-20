@@ -578,7 +578,8 @@ const SurfaceLook = (() => {
             } };
           }
           else if (layer.type === 'colorLut' || layer.type === 'colorStack') effect = effects[layer.type](layer, resolveColor);
-          else effect = (layer.type === 'projected' ? effects.layer : effects.colorCurve)(layer, context, resolveColor);
+          else if (layer.type === 'projected') effect = effects.layer(layer, context, resolveColor, paletteRoles);
+          else effect = effects.colorCurve(layer, context, resolveColor);
           const compiled = { ...layer, id, blend, strength: clamp(layer.strength ?? 1), effect, spatialMask, retainedMask };
           if (layer.type === 'tint') compiled.color = resolveColor(layer.color);
           return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, palette) };

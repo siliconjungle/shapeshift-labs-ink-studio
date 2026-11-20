@@ -116,6 +116,75 @@ const SplatEffects = (() => {
     };
   }
 
+  function indexedRaster(spec = {}, cycles = {}, resolveColor, roles) {
+    const { width, height, slots, size = [1, 1], wrap = false } = spec;
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 ||
+        width * height > 2 ** 20 || !Array.isArray(slots) || slots.length !== width * height ||
+        !vector(size, 2) || size.some(value => value <= 0) || typeof wrap !== 'boolean')
+      throw new TypeError('Indexed rasters need bounded dimensions, one slot per texel and a positive size');
+    if (!cycles || Object.getPrototypeOf(cycles) !== Object.prototype)
+      throw new TypeError('Palette cycles must be named in an object');
+    const swatches = new Map();
+    const add = slot => {
+      if (!Number.isInteger(slot) || slot < 0 || slot >= 0xffffffff)
+        throw new RangeError('Indexed raster slots must be nonnegative scene palette indices');
+      if (!swatches.has(slot)) swatches.set(slot, resolveColor(slot));
+      return slot;
+    };
+    // Null paint leaves the underlying surface visible. Zero is a palette slot.
+    const texels = Uint32Array.from(slots, slot => slot === null ? 0 : add(slot) + 1);
+    const claimed = new Set();
+    const groups = Object.entries(cycles).map(([name, cycle]) => {
+      if (!name.trim() || !cycle || Object.getPrototypeOf(cycle) !== Object.prototype ||
+          Object.keys(cycle).some(key => !['role', 'slots', 'period', 'direction', 'phase'].includes(key)))
+        throw new TypeError('Each palette cycle needs a name and cycle settings');
+      const { role, slots, period, direction = 'forward', phase = 0 } = cycle;
+      if ((role === undefined) === (slots === undefined))
+        throw new TypeError('Palette cycle ' + name + ' needs either a role or a list of slots');
+      const order = role === undefined ? slots :
+        typeof role === 'string' && Object.hasOwn(roles, role) && roles[role];
+      if (!Array.isArray(order) || order.length < 2 || !Number.isFinite(period) || period <= 0 ||
+          !['forward', 'reverse'].includes(direction) || !Number.isFinite(phase))
+        throw new RangeError('Palette cycle ' + name + ' needs two or more slots, a positive period and valid direction and phase');
+      const indices = Array.from(order, add);
+      for (const slot of indices) {
+        if (claimed.has(slot)) throw new RangeError('Palette cycles cannot share a slot within one raster');
+        claimed.add(slot);
+      }
+      return { indices, period, direction: direction === 'forward' ? 1 : -1, phase: fract(phase) };
+    });
+    const active = new Map(swatches);
+    const [spanU, spanV] = size;
+    let lastTime;
+    return {
+      palette: Array.from(swatches.values()),
+      sample(u, v, time, result) {
+        u /= spanU;
+        v /= spanV;
+        if (!Number.isFinite(u) || !Number.isFinite(v) || (!wrap && (u < 0 || v < 0 || u >= 1 || v >= 1))) return 0;
+        const x = Math.min(width - 1, Math.floor(fract(u) * width));
+        const y = Math.min(height - 1, Math.floor(fract(v) * height));
+        const slot = texels[y * width + x] - 1;
+        if (slot === -1) return 0;
+        if (!Number.isFinite(time)) time = 0;
+        if (lastTime !== time) {
+          for (const { indices, period, direction, phase } of groups) {
+            const length = indices.length;
+            const position = fract((time % period) / period + phase) * length;
+            // A decimal period can land just below the step when sampled on its loop boundary.
+            const step = Math.floor(position + 4 * Number.EPSILON * length);
+            const offset = length + direction * step;
+            indices.forEach((index, i) => active.set(index, swatches.get(indices[(i + offset) % length])));
+          }
+          lastTime = time;
+        }
+        const rgb = active.get(slot);
+        for (let k = 0; k < 3; k++) result[k] = rgb[k];
+        return 1;
+      }
+    };
+  }
+
   function coordinates({ projection = {}, space = 'rest', field }, channels, context) {
     if (space !== 'rest' && space !== 'world') throw new TypeError('Projection space must be rest or world');
     const source = Object.hasOwn(context?.fields || {}, field) ? context.fields[field] : undefined;
@@ -292,7 +361,7 @@ const SplatEffects = (() => {
     return rgbEffect(plan.sample, outputPalette, resolveColor);
   }
 
-  function layer(definition, context, resolveColor) {
+  function layer(definition, context, resolveColor, roles = {}) {
     const { projection = {}, space = 'rest', field, maskChannel, revealChannel, contourChannel,
       warpChannels, warp = 1, range = [0, 1], scroll = [0, 0], scale = 1, width = 0.16,
       pattern = 'solid', color, colors, outputPalette, ink = false } = definition;
@@ -303,7 +372,8 @@ const SplatEffects = (() => {
     const channels = [maskChannel, revealChannel, contourChannel, ...(warpChannels || [])].filter(name => name !== undefined);
     const lookup = coordinates({ projection, space, field }, channels, context);
     if (pattern === 'contour' && !contourChannel) throw new TypeError('Contours need a contourChannel');
-    const pixels = pattern === 'raster' ? raster(definition.raster) : null;
+    const indexed = pattern === 'indexed' ? indexedRaster(definition.raster, definition.cycles, resolveColor, roles) : null;
+    const pixels = indexed?.sample ?? (pattern === 'raster' ? raster(definition.raster) : null);
     const custom = typeof pattern === 'function' ? pattern :
       Object.hasOwn(context?.shaders || {}, pattern) ? context.shaders[pattern] : null;
     if (custom !== null && typeof custom !== 'function') throw new TypeError('A projected shader must be a function');
@@ -311,7 +381,7 @@ const SplatEffects = (() => {
       throw new RangeError('Unknown projected pattern: ' + pattern);
     if (colors !== undefined && (!Array.isArray(colors) || colors.length < 2 || !Array.from(colors).every(value => value !== undefined)))
       throw new TypeError('Projected color ramps need at least two colors');
-    const palette = outputColors(outputPalette, resolveColor);
+    const palette = outputColors(outputPalette, resolveColor) ?? indexed?.palette;
     const ramp = colors?.map(resolveColor);
     const tint = resolveColor(color);
     const result = new Float64Array(6); // RGB, amount, coverage, glint
