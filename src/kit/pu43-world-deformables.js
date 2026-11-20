@@ -1,6 +1,7 @@
 /* Checkpointed cloth and rope using the stage's XPBD solver. */
 (function(K) {
   const W=K.world, Q=W.query, {V,M}=K, {check,record,id,own,vector}=W.data, {clamp}=W.fields;
+  const S=K.procedural.surfaceState;
   const zero=[0,0,0], gravityDefault=[0,-9.81,0], freeze=K.procedural.data.freeze;
   const finite=(n,min=0,max=1e6)=>Number.isFinite(n)&&n>=min&&n<=max;
   const xyz=p=>vector(p)&&p.every(n=>Math.abs(n)<=1e7);
@@ -8,11 +9,11 @@
   const vec=(p,i)=>p.slice(i*3,i*3+3);
   const mean=points=>V.mul(points.reduce(V.add),1/points.length);
   const intact=(indices,broken)=>indices.every(i=>!broken[i]);
-  function writeBounds(ctx,points,padding,reason) {
+  function writeBounds(ctx,points,padding,reason,fields=['support','surfaces']) {
     if(!ctx.spatial)return;
     const area={min:zero.map((_,axis)=>Math.min(...points.map(p=>p[axis]))-padding),
       max:zero.map((_,axis)=>Math.max(...points.map(p=>p[axis]))+padding)};
-    for(const field of ['support','surfaces'])ctx.spatial.write(field,area,reason);
+    for(const field of fields)ctx.spatial.write(field,area,reason);
   }
   function segmentDistance(point,a,b) {
     const d=V.sub(b,a), length=V.dot(d,d);
@@ -41,7 +42,8 @@
         link.guards=[h[corner],vLinks[corner],h[corner+nu],vLinks[corner+1]];
       }
     }
-    return {points,links,faces:faces.map(({nodes,diagonal})=>({nodes,guards:[...links[diagonal].guards,diagonal]}))};
+    return {points,links,faces:faces.map(({nodes,diagonal})=>({nodes,guards:[...links[diagonal].guards,diagonal]})),
+      uvs:points.map((_,i)=>[i%nu/(nu-1),Math.floor(i/nu)/(nv-1)]), size:[V.len(u),V.len(v)]};
   }
 
   function attachment(raw,shape) {
@@ -104,6 +106,7 @@
   function deformables(config,{id:system}) {
     const {shapes,ground=0,gravity=gravityDefault,damping=.9,friction=.2,substeps=8,trafficDuration=.15}=config;
     const sources=config.supports??[], specs={};
+    const definitions=S.channels(config.surfaceChannels);
     check(record(shapes)&&integer(Object.keys(shapes).length,1,24)&&finite(ground,-1e7,1e7)&&xyz(gravity)&&
       finite(damping,0,100)&&finite(friction,0,1)&&integer(substeps,1,64)&&finite(trafficDuration,0,10)&&
       ['bed','clearance','wind','rain'].every(key=>config[key]===undefined||typeof config[key]==='string')&&
@@ -118,6 +121,12 @@
         (raw.look===undefined||Array.isArray(raw.look)&&integer(raw.look.length,1,32)&&raw.look.every(i=>integer(i,0,255))),
       'Invalid deformable '+key);
       const mesh=topology(raw), anchors=raw.attachments??{}, water=raw.water;
+      const coating=raw.surfaceState;
+      if(coating!==undefined){
+        check(raw.kind==='cloth'&&record(coating)&&Object.keys(coating).every(key=>['chart','stamps'].includes(key))&&
+          (coating.chart===undefined||TargetSelectors.name(coating.chart)),'Invalid cloth surface state on '+key);
+        S.prepare(coating.stamps,{size:mesh.size,definitions});
+      }
       count+=mesh.points.length;
       check(record(anchors)&&Object.keys(anchors).every(id)&&Object.keys(anchors).length<=mesh.points.length&&
         new Set(Object.values(anchors).map(row=>attachment(row,mesh).node)).size===Object.keys(anchors).length,
@@ -126,19 +135,29 @@
         finite(water.capacity,.001,1e4)&&finite(water.rain??0)&&finite(water.drain??0,0,100)&&finite(water.density??1000,.001),
       'Invalid rain collector for '+key);
       specs[key]={...raw,...mesh,attachments:anchors,id:key,entity:raw.entity??key,material:raw.material??raw.kind,
+        ...(raw.kind==='cloth'&&{chart:coating?.chart??system+'/'+key+'/sheet'}),
         support:raw.support!==false,radius:raw.radius??.04,mass:(raw.mass??1)/mesh.points.length};
     }
     check(count<=2048,'Deformable point budget exceeded');
 
-    const surfaceCache=new WeakMap();
+    const surfaceCache=new WeakMap(), stampsCache=new WeakMap(), empty=freeze([]);
+    function stampSampler(spec,stamps) {
+      let samplers=stampsCache.get(stamps);
+      if(!samplers)stampsCache.set(stamps,samplers=new Map());
+      if(!samplers.has(spec.id))samplers.set(spec.id,S.prepare(stamps,{size:spec.size,definitions}));
+      return samplers.get(spec.id);
+    }
     function surfaces(state) {
       if(surfaceCache.has(state))return surfaceCache.get(state);
       const result=Object.fromEntries(Object.entries(specs).map(([key,spec])=>{
-        const {positions,broken,water}=state.shapes[key], {id,entity,material,kind,support,radius,look,style}=spec;
+        const {positions,broken,water,surfaceStamps}=state.shapes[key], {id,entity,material,kind,support,radius,look,style}=spec;
         const points=spec.points.map((_,i)=>vec(positions,i));
         const faces=spec.faces.map(face=>intact(face.guards,broken)?face.nodes:null);
         const strands=spec.links.flatMap(({kind,a,b},i)=>kind==='stretch'&&!broken[i]?[[i,[a,b]]]:[]);
-        return [key,{id,entity,material,kind,support,radius,points,faces,strands,water,...(look&&{look}),...(style&&{style})}];
+        const surfaceState=(spec.surfaceState||surfaceStamps)&&{
+          chart:spec.chart,uvs:spec.uvs,size:spec.size,stamps:surfaceStamps??spec.surfaceState?.stamps??empty,definitions};
+        return [key,{id,entity,material,kind,support,radius,points,faces,strands,water,
+          ...(look&&{look}),...(style&&{style}),...(surfaceState&&{surfaceState})}];
       }));
       freeze(result);
       surfaceCache.set(state,result);
@@ -269,6 +288,10 @@
         check(id(name),'Invalid attachment name');attachment(anchor,spec);
       }else if(type==='detach')check(id(args.attachment),'Invalid attachment name');
       else if(type==='load')check(integer(args.node,0,spec.points.length-1)&&xyz(args.impulse),'Invalid deformable impulse');
+      else if(type==='surface-stamp'){
+        check(spec.kind==='cloth'&&record(args.stamp)&&!own(args.stamp,'window'),'Cloth stamps need a shape and a rest UV brush');
+        S.prepare([args.stamp],{size:spec.size,definitions});
+      }
       else check(xyz(args.point)&&finite(args.radius,.001,1e4),'A cut needs a point and radius');
     }
     function update(state,key,changes){return {shapes:{...state.shapes,[key]:{...state.shapes[key],...changes}}};}
@@ -301,6 +324,10 @@
           row.contacts.every(row=>record(row)&&typeof row.source==='string'&&vector(row.point))&&
           Array.isArray(row.runoff)&&record(row.load)&&vector(row.load.impulse)&&integer(row.load.traffic,0,10000),
         'Invalid deformable checkpoint for '+key);
+        if(row.surfaceStamps!==undefined){
+          check(spec.kind==='cloth'&&Array.isArray(row.surfaceStamps),'Invalid saved cloth surface state');
+          stampSampler(spec,row.surfaceStamps);
+        }
       }
     },actions:{
       attach(state,{shape:key,attachment:name,...anchor},ctx){
@@ -319,6 +346,14 @@
         const pending=state.shapes[key].pending;
         check(pending.length<1024,'Deformable pending load budget exceeded');
         return update(state,key,{pending:[...pending,{node,impulse}]});
+      },'surface-stamp'(state,{shape:key,stamp},ctx){
+        const spec=specs[key], before=state.shapes[key].surfaceStamps??spec.surfaceState?.stamps??empty;
+        const surfaceStamps=[...before,stamp];
+        stampSampler(spec,surfaceStamps);
+        if(ctx.spatial)writeBounds(ctx,spec.points.map((_,i)=>vec(state.shapes[key].positions,i)),
+          spec.radius,'deformable-surface-stamp',['surfaces']);
+        ctx.emit('surface-stamped',{shape:key,chart:spec.chart,channel:stamp.channel});
+        return update(state,key,{surfaceStamps});
       },cut(state,{shape:key,point,radius},ctx){
         const spec=specs[key], {positions,broken}=state.shapes[key];
         const next=broken.map((cut,i)=>{
@@ -333,6 +368,19 @@
       }
     },fields:{
       surfaces:{type:'record',role:'deformable-surfaces',read:({state})=>Q.ok(surfaces(state))},
+      'surface-state':{type:'record',read:({state,args})=>{
+        const shape=own(specs,args.shape)&&specs[args.shape];
+        if(!shape||shape.kind!=='cloth')return Q.missing('unknown cloth shape','missing');
+        let uv=args.uv;
+        if(args.face!==undefined){
+          const face=surfaces(state)[shape.id].faces[args.face];
+          if(!face)return Q.missing('removed or unknown cloth face','missing');
+          uv=S.correspondence(face.map(node=>({chart:shape.chart,uv:shape.uvs[node]})),args.weights).uv;
+        }
+        check(S.isUv(uv),'Cloth surface-state needs rest UV or a live face and barycentric weights');
+        const stamps=state.shapes[shape.id].surfaceStamps??shape.surfaceState?.stamps??empty;
+        return Q.ok({chart:shape.chart,uv,values:stampSampler(shape,stamps).sample(uv)});
+      }},
       support:{type:'records',units:'world',read:supports},
       motion:{type:'record',read:({state,args})=>args.shape===undefined?Q.ok(state.shapes):own(state.shapes,args.shape)?
         Q.ok(state.shapes[args.shape]):Q.missing('unknown deformable','missing')},

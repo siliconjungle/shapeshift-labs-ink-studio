@@ -12,7 +12,7 @@
   const defaults=freeze({
     paint:{type:'color'}, heat:{type:'number',default:20,min:-273.15,max:1e4,units:'degC'},
     grime:{type:'number',default:0,min:0,max:1}, scar:{type:'number',default:0,min:0,max:1},
-    wear:{type:'number',default:0,min:0,max:1}
+    wear:{type:'number',default:0,min:0,max:1}, wetness:{type:'number',default:0,min:0,max:1}
   });
   function check(condition,message) {if(!condition)throw Error(message);}
   const scalar=(schema,value)=>finite(value)&&value>=schema.min&&value<=schema.max;
@@ -25,7 +25,7 @@
     check(record(extra)&&Object.keys(extra).length<=16,'Expected a bounded surface channel table');
     const definitions={...defaults};
     for(const [key,spec] of Object.entries(extra)){
-      check(name(key)&&!own(defaults,key)&&keys(spec,['type','default','min','max','units'])&&
+      check(name(key)&&(!own(defaults,key)||key==='wetness')&&keys(spec,['type','default','min','max','units'])&&
         ['number','color'].includes(spec.type),'Invalid surface channel '+key);
       if(spec.type==='number'){
         check(finite(spec.min)&&finite(spec.max)&&spec.min<=spec.max&&scalar(spec,spec.default)&&
@@ -115,5 +115,83 @@
     const total=weights.reduce((a,b)=>a+b,0);
     return {chart:corners[0].chart,uv:[0,1].map(i=>clamp(corners.reduce((a,row,j)=>a+row.uv[i]*weights[j]/total,0),0,1))};
   }
-  P.surfaceState=Object.freeze({channels,prepare,correspondence,window,into,isUv:uv,full});
+  const wetness=values=>finite(values.wetness)?clamp(values.wetness,0,1):0;
+  const active=values=>values.paint||(values.heat??20)!==20||values.grime||values.scar||values.wear||wetness(values);
+  const mix=(a,b,t)=>a+(b-a)*t;
+  const linear=ColorSpace.prepare('srgb','srgb-linear'), display=ColorSpace.prepare('srgb-linear','srgb');
+  function shade(rgb,values,light=1) {
+    const {paint,heat=20,grime=0,scar=0,wear=0}=values, wet=wetness(values);
+    const ink=(paint?.coverage??0)*(1-wear), tint=clamp((heat-20)/350,0,.45);
+    return rgb.map((v,k)=>{
+      const worn=mix(v,180,wear*.23);
+      const marked=mix(worn,(paint?.color[k]??0)*255*light,ink);
+      return mix(marked,[255,105,39][k],tint)*(1-.55*grime)*(1-.4*scar)*(1-wet*[.36,.28,.2][k]);
+    });
+  }
+  function ramp(indices,palette,values) {
+    if(!active(values))return indices;
+    return indices.map((index,i)=>{
+      const rgb=palette[index]??palette[1]??palette[0], light=.45+.55*i/Math.max(1,indices.length-1);
+      return PixelLook.nearest(shade(rgb,values,light),palette,true);
+    });
+  }
+  function colorFor(input,palette,fallback) {
+    if(input===undefined)return palette[fallback];
+    if(Number.isSafeInteger(input))return palette[input];
+    return color(input).map(v=>v*255);
+  }
+  function appearance(base,hit,palette,point) {
+    const {values,chart}=hit, adjusted={...base,surfaceId:chart};
+    if(!active(values))return adjusted;
+    const source=base.rf?.(...point)||base.r;
+    adjusted.r=ramp(source,palette,values);
+    adjusted.rf=undefined;
+    const rgb=colorFor(base.albedo,palette,source.at(-1));
+    if(rgb)adjusted.albedo=shade(rgb,values).map(v=>v/255);
+    const wet=wetness(values);
+    if(base.model||wet)adjusted.model=(point,normal)=>{
+      const model=typeof base.model==='function'?base.model(point,normal):base.model;
+      const modelRGB=model?.color&&display(model.color).map(v=>v*255);
+      return {...model,...(modelRGB&&{color:linear(shade(modelRGB,values).map(v=>v/255))}),
+        ...(wet&&{roughness:mix(model?.roughness??.8,.25,wet)})};
+    };
+    return adjusted;
+  }
+  function bind(material,locate,palette) {
+    return {...material,surfaceState:{locate,apply(base,hit,point) {
+      return appearance(base,hit,palette,point);
+    }}};
+  }
+  const xyz=value=>Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
+  function projection(spec) {
+    check(keys(spec,['charts'])&&record(spec.charts)&&Object.keys(spec.charts).length>0&&Object.keys(spec.charts).length<=32,
+      'Expected one to 32 named rest surface charts');
+    const {V}=K;
+    const projectors=Object.entries(clone(spec.charts)).map(([chart,row])=>{
+      check(name(chart)&&keys(row,['origin','u','v','depth','twoSided','stamps']),'Invalid rest surface chart '+chart);
+      const {origin,u,v,depth=.035,twoSided=false,stamps=[]}=row;
+      check([origin,u,v].every(xyz)&&finite(depth)&&depth>0&&depth<=1e4&&typeof twoSided==='boolean',
+        'Surface chart needs a finite origin, UV axes and positive depth');
+      const cross=V.cross(u,v), uu=V.dot(u,u), vv=V.dot(v,v), uv=V.dot(u,v), det=V.dot(cross,cross);
+      check(det>1e-12&&det>uu*vv*1e-10,'Surface chart UV axes must span a plane');
+      const n=V.norm(cross), sampler=prepare(stamps,{size:[Math.sqrt(uu),Math.sqrt(vv)]});
+      return {chart,sampler,point(point,normal) {
+        const delta=V.sub(point,origin), distance=Math.abs(V.dot(delta,n)), facing=V.dot(n,normal);
+        if(distance>depth||(twoSided?Math.abs(facing):facing)<.5)return null;
+        const a=V.dot(delta,u), b=V.dot(delta,v);
+        const p=[(vv*a-uv*b)/det,(uu*b-uv*a)/det];
+        if(p.some(value=>value< -1e-6||value>1+1e-6))return null;
+        return {distance,uv:p.map(value=>clamp(value,0,1))};
+      }};
+    });
+    return (point,normal)=>{
+      let best, distance=Infinity;
+      for(const row of projectors){
+        const hit=row.point(point,normal);
+        if(hit&&hit.distance<distance){best={row,uv:hit.uv};distance=hit.distance;}
+      }
+      return best?{chart:best.row.chart,uv:best.uv,values:best.row.sampler.sample(best.uv)}:null;
+    };
+  }
+  P.surfaceState=Object.freeze({channels,prepare,correspondence,projection,bind,appearance,ramp,window,into,isUv:uv,full});
 })(KIT);

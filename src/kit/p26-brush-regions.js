@@ -140,15 +140,16 @@
       return clamp(d, -band, band);
     };
     if (!surface) surface = P.geometry.surfaceNets(sdf, chunk.bounds, { cell, latticeBounds: chunk.grid, topology: false, refine: 1 });
-    function materialAt(point) {
-      const source = state.field?.surfaceAt(...point, true);
-      let sample = source?.distance <= 0 && source.material ? {
-        owner: source.owner, material: source.material.materialId, target: source.target,
-        ramp: source.material.rf?.(...point) || source.material.r
+    function materialAt(probe, point, normal) {
+      const source = state.field?.surfaceAt(...probe, true);
+      const base = source?.distance <= 0 && state.field.materialAt(source.material, point, normal);
+      let sample = base ? {
+        owner: source.owner, material: base.materialId, target: base.surfaceId ? { surface: base.surfaceId, ...source.target } : source.target,
+        ramp: base.rf?.(...probe) || base.r
       } : null;
-      if (!contains(region.bounds, point)) return sample;
+      if (!contains(region.bounds, probe)) return sample;
       for (const op of active) {
-        const entry = op.entries.find(item => contains(item.bounds, point) && item.sdf(...point) <= 0);
+        const entry = op.entries.find(item => contains(item.bounds, probe) && item.sdf(...probe) <= 0);
         if (!entry) continue;
         if (op.mode === 'erase') sample = null;
         else if (op.mode === 'paint') {
@@ -161,8 +162,8 @@
     const B = makeBuilder(hash(chunk.key, seed), settings.palette, { initialCapacity: Math.max(1, surface.points.length) });
     const ids = [];
     for (const [i, point] of surface.points.entries()) {
-      const normal = surface.normals[i], sample = materialAt(V.mad(point, normal, -cell * .1)) ??
-        materialAt(V.mad(point, normal, -cell * .35));
+      const normal = surface.normals[i], sample = materialAt(V.mad(point, normal, -cell * .1), point, normal) ??
+        materialAt(V.mad(point, normal, -cell * .35), point, normal);
       if (!sample?.ramp?.length) continue;
       const shade = clamp((V.dot(normal, state.sun) + .23) / 1.23, 0, 1);
       const color = B.P[sample.ramp[Math.round(shade * (sample.ramp.length - 1))]];

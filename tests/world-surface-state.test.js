@@ -26,6 +26,8 @@ test('chart channels sample through known remesh correspondences and preserve th
   assert.equal(atlas.sample(remeshed.uv).heat,72);
   assert.equal(atlas.sample(remeshed.uv).moisture,1);
   assert.equal(atlas.sample([.1,.4]).paint.coverage,.75);
+  const custom=P.surfaceState.channels({wetness:{type:'number',min:0,max:5,default:2,units:'film'}});
+  assert.equal(P.surfaceState.prepare([],{definitions:custom}).sample([.5,.5]).wetness,2);
   assert.equal(P.surfaceState.correspondence([corners[0],corners[1],{...corners[2],chart:'other'}],[.2,.4,.4]),null);
   assert.throws(()=>P.surfaceState.correspondence(corners,[.4,.4,.4]),/barycentric/);
 });
@@ -64,7 +66,7 @@ test('heat, paint, grime, scars and wear stay at their rest coordinates through 
   assert.notEqual(edges[0].chart,edges[1].chart);
   for(const edge of edges){
     assert.equal(edge.fresh,true);
-    assert.deepEqual(edge.values,{paint:null,heat:20,grime:0,scar:0,wear:0});
+    assert.deepEqual(edge.values,{paint:null,heat:20,grime:0,scar:0,wear:0,wetness:0});
   }
   const replay=W.runtime.replay(packed(run.recording()));
   assert.deepEqual(replay.checkpoint(),run.checkpoint());

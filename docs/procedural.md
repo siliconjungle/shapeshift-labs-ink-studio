@@ -1618,6 +1618,8 @@ weights for a new sample, interpolate its reference with
 address when all three corners share a chart. Keep chart seams split and
 give new interior faces their own charts with the default state.
 
+Retained sculpts and simulated cloth use the same stamps during their native surface bakes. [Deformation-aware materials](deformation-materials.md)
+
 ### Sparse bricks
 
 `P.sparseBricks.create({cell, brickSize, base})` makes an empty snapshot around

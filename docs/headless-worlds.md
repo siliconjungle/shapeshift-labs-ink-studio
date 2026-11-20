@@ -555,7 +555,7 @@ Add `surfaceState` to a mechanics body to attach state to its original
 faces. Face keys are `-x`, `+x`, `-y`, `+y`, `-z`, and `+z`. Each
 entry in `surfaceState.faces` is an ordered array of stamps in unit UV.
 The default channels are `paint` in RGB, `heat` in degrees Celsius, and
-`grime`, `scar`, and `wear` on a scale from zero to one. Mechanics
+`grime`, `scar`, `wear`, and `wetness` on a scale from zero to one. Mechanics
 `surfaceChannels` can add named color or scalar channels with bounds,
 defaults, and units.
 
@@ -579,6 +579,8 @@ Probe `rig/surface-state` by body ID and face UV, or pass a world-space point
 and body ID to resolve the local face and original UV. `rig/surface-charts`
 returns the atlas data. Checkpoints save the chart windows and stamps.
 For a custom mesh, use [surface chart correspondences](procedural.md#surface-state-through-remeshing).
+
+Cloth sheets and nets can stamp the same channels in their rest UVs and keep them through stretch, tears, and replay. [Deformation-aware materials](deformation-materials.md)
 
 The [split sign](../examples/world-surface-state.json) keeps the same
 lettering through a reshape and fracture. Each broken edge exposes a

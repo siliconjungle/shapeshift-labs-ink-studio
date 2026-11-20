@@ -107,6 +107,7 @@
   const COMMON = {
     id: 'str',
     surfaceId: 'str',
+    surfaceState: 1,
     prefabs: 'list',
     tags: 'list',
     mat: 'mat',
@@ -839,6 +840,10 @@
         );
       }
       fields(s, path, def, COMMON);
+      if (s.surfaceState !== undefined) {
+        try { K.procedural.surfaceState.projection(s.surfaceState); }
+        catch (error) { bad(path + '.surfaceState', error.message); }
+      }
       checkModifiers(s.modifiers, path + '.modifiers');
       let scale = 1;
       try {
@@ -1332,7 +1337,10 @@
         if (s.bump) o.bump = s.bump;
         if (held || s.hold) o.hold = true;
         if (s.turn) o.ax = B.frame(s.turn[0], s.turn[1], s.turn[2]);
-        const m = matOf(s.mat), sub = q => make(q, true), k = s.kind;
+        const charts = K.procedural.surfaceState;
+        const locate = s.surfaceState && charts.projection(s.surfaceState);
+        const m = locate ? charts.bind(matOf(s.mat), locate, B.P) : matOf(s.mat);
+        const sub = q => make(q, true), k = s.kind;
         const baseOptions = modifiers.length ? { ...o, hold: true } : o;
         if (s.mat !== undefined && (k === 'join' || unaryKinds.includes(k))) baseOptions.mat = m;
         let p;
@@ -1356,7 +1364,8 @@
           const ml = meshLooks.get(s) || {
             mesh: K.mesh.fit(env.assets[s.asset], { size: s.size || 4, at: s.at, turn: s.spin, up: s.up })
           };
-          p = S.mesh(ml.mesh, s.mat === undefined ? ml.look : m, Object.assign({ cells: s.cells, thick: s.thick }, baseOptions));
+          const mat = s.mat !== undefined ? m : locate ? charts.bind(ml.look, locate, B.P) : ml.look;
+          p = S.mesh(ml.mesh, mat, Object.assign({ cells: s.cells, thick: s.thick }, baseOptions));
         } else if (k === 'join') p = S.join(s.how, sub(s.a), sub(s.b), Object.assign({ r: s.size, n: s.steps }, baseOptions));
         else if (unaryKinds.includes(k)) p = deform(sub(s.of), s, baseOptions);
         else if (builtKinds.includes(k)) {
@@ -1377,6 +1386,7 @@
             p = pieces.length === 1 ? pieces[0] : S.join('union', pieces[0], pieces.slice(1), { hold: true, r: 0, mat: m });
           } else p = buildRecipe();
         }
+        if (locate && s.mat === undefined && (k === 'join' || unaryKinds.includes(k))) p.mat = charts.bind(p.mat, locate, B.P);
         if (modifiers.length) {
           const res = p.res;
           for (const modifier of modifiers) {

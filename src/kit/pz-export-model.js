@@ -128,7 +128,7 @@
       !g.center.every(Number.isFinite) || !Number.isFinite(g.radius) || g.radius <= 0 ||
       (g.axis && (!Array.isArray(g.axis) || g.axis.length !== 3 || !g.axis.every(Number.isFinite) || V.len(g.axis) <= 1e-6))))
       throw new Error('Topology guides need a center and positive radius');
-    const sample = (material, p, n) => bakeMaterial(palette, material, p, n);
+    const sample = (material, p, n) => bakeMaterial(palette, sculpt.materialAt(material, p, n), p, n);
     const attachments = parts.map(part => G.analyticModelPart(part, sample));
     if (!field) {
       const [root, ...rest] = attachments;

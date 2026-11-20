@@ -43,6 +43,8 @@ A solid can store an ordered `modifiers` array in the diorama. Each entry has a 
 
 Use `setModifiers(list, keys)` to add, remove, or reorder entries. Use `updateModifier(id, patch, keys)` to edit an entry or bypass it with `enabled: false`. Optional parameter fields can be cleared with `null` in a patch. Mask and join operands appear in the tree even while bypassed. An unnamed operand's tree key follows the modifier ID when the stack is reordered. These edits share the same transactions and undo history as transforms and materials.
 
+Use `setSurfaceState(state, keys)` to edit a solid's rest-chart marks or pass `null` to clear them. The marks are retained with the source and resampled when geometry is rebuilt. [Deformation-aware materials](deformation-materials.md)
+
 Pass the result of `build()` to `createSceneEditor` to reopen its source at the time of the bake. Retain `serialize()` output for durable storage alongside any exported splat or image data. Opening a scene with mesh operands uses the same asset lookup as opening its source JSON. Active modifiers on a separate analytic shape send its edited surface through the general mesh export path.
 
 ## Brushes and local rebuilds

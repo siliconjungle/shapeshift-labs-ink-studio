@@ -133,6 +133,19 @@ function makeSculpt(B, rest) {
       pos.length = start;
     }
   };
+  S.materialAt = (material, point, normal) => {
+    if (!material) return material;
+    const selected = material.materialAt?.(...point, ...normal) ?? material;
+    const state = selected.surfaceState, hit = state?.locate(point, normal);
+    return hit ? state.apply(selected, hit, point, normal) : selected;
+  };
+  S.mapSurfaceState = (material, inverse, pullNormal) => {
+    const state = material?.surfaceState;
+    return state ? { ...material, surfaceState: { ...state, locate(point, normal) {
+      const rest = inverse(point);
+      return state.locate(rest, pullNormal ? pullNormal(normal, rest, point) : normal);
+    } } } : material;
+  };
   // Transform the geometry registered by one recipe, or its held boolean operand.
   S.transformSolids = ({ point, inverse, direction, scale }, build) => {
     const lists = [pos, neg, ghosts], starts = lists.map(list => list.length);
@@ -158,6 +171,11 @@ function makeSculpt(B, rest) {
       if (lowerBound) solid.lowerBound = (x, y, z, limit) => scale * lowerBound(...inverse([x, y, z]), limit / scale);
       if (along) solid.along = (x, y, z) => along(...inverse([x, y, z]));
       if (mat.rf) solid.mat = { ...mat, rf: (x, y, z) => mat.rf(...inverse([x, y, z])) };
+      if (mat.surfaceState) {
+        const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(direction);
+        solid.mat = S.mapSurfaceState(solid.mat, inverse,
+          normal => axes.map(axis => axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]));
+      }
       if (analytic) {
         const axes = analytic.frame ?? [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
         solid.analytic = { ...analytic, center: point(analytic.center), frame: axes.map(direction),
@@ -1685,7 +1703,8 @@ function makeSculpt(B, rest) {
   }
 
   function shadeOwned(owner, material, ...sample) {
-    if (material.materialAt) material = material.materialAt(sample[1], sample[2], sample[3], sample[4], sample[5], sample[6]) ?? material;
+    if (material.materialAt || material.surfaceState)
+      material = S.materialAt(material, sample.slice(1, 4), sample.slice(4, 7));
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
     const capture = B.describeAlbedo && (preview || S.captureAlbedo || stagedAlbedo(material.surface) || stagedAlbedo(material.top?.surface));
     const fine = owner?.detailBudget?.fine;
@@ -1761,7 +1780,7 @@ function makeSculpt(B, rest) {
             }
             if (Math.abs(d) > res * 0.5 || !p.mat.r || p.mat.skip) return;
             if (S.capture) {
-              S.capture(p, p.mat, res, x, y, z, nx, ny, nz, 1);
+              S.capture(p, S.materialAt(p.mat, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, 1);
               return;
             }
             curP = p;
@@ -1817,7 +1836,7 @@ function makeSculpt(B, rest) {
               occ += (Math.max(0, h - field(x + nx * h, y + ny * h, z + nz * h)) * w) / h;
               w *= 0.6;
             }
-            S.capture(pr, m, res, x, y, z, nx, ny, nz, clamp(1 - (S.aoK * occ) / 1.96, 0, 1));
+            S.capture(pr, S.materialAt(m, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz, clamp(1 - (S.aoK * occ) / 1.96, 0, 1));
             return;
           }
           if (S.merge && merged(x, y, z, res, m)) return;
@@ -1857,7 +1876,7 @@ function makeSculpt(B, rest) {
           d = psd(p, x, y, z);
         }
         if (S.capture) {
-          S.capture(p, p.mat, res, x, y, z, nx, ny, nz);
+          S.capture(p, S.materialAt(p.mat, [x, y, z], [nx, ny, nz]), res, x, y, z, nx, ny, nz);
           return;
         }
         curP = p;

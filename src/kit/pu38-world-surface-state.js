@@ -136,21 +136,12 @@
   function materialSampler(body,atlas,base,palette) {
     if(!body.surfaceState||!atlas)return null;
     const locate=frame(body), fresh=body.surfaceState.fresh;
-    const lerp=(a,b,t)=>a+(b-a)*t;
     return (x,y,z,nx,ny,nz)=>{
       const at=locate([x,y,z],[nx,ny,nz]), hit=sample(body,atlas.charts,atlas.channels,at.face,at.uv);
-      const {paint,heat,grime,scar,wear}=hit.values;
       const raw=hit.fresh&&fresh.ramp?fresh.ramp:base.r;
       const selected=raw.map(swatch=>palette[swatch]?swatch:Math.min(1,palette.length-1));
-      const ramp=paint||heat!==20||grime||scar||wear?selected.map((swatch,i)=>{
-        const light=.45+.55*i/Math.max(1,selected.length-1);
-        const rgb=palette[swatch]??palette[1]??palette[0];
-        const ink=(paint?.coverage??0)*(1-wear), tint=clamp((heat-20)/350,0,.45);
-        const result=rgb.map((v,k)=>lerp(lerp(v,(paint?.color[k]??0)*255*light,ink),
-          [255,105,39][k],tint)*(1-.55*grime)*(1-.4*scar));
-        return PixelLook.nearest(result,palette,true);
-      }):selected;
-      return {...base,r:ramp,surfaceId:hit.chart,materialId:hit.fresh?fresh.material??base.materialId:base.materialId};
+      return S.appearance({...base,r:selected,materialId:hit.fresh?fresh.material??base.materialId:base.materialId},
+        hit,palette,[x,y,z]);
     };
   }
   W.surfaceState=Object.freeze({init,fragment,prune,checkStamp,apply,validate,frame,sample,materialSampler,

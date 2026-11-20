@@ -211,6 +211,10 @@
       const value = clone(material);
       return edit('Set solid material', targets, solid => ({ ...solid, mat: value }));
     }
+    function setSurfaceState(state, targets = selectedKeys()) {
+      const value = clone(state);
+      return edit('Set rest surface state', targets, solid => patchFields(solid, { surfaceState: value }));
+    }
     function setRole(name, ramp) {
       if (!TargetSelectors.name(name)) throw new TypeError('A material role needs a name');
       const indices = clone(ramp);
@@ -316,6 +320,7 @@
       setBrushRegion,
       applyBrush,
       setMaterial,
+      setSurfaceState,
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),
       build,

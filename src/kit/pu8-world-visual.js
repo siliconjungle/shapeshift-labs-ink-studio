@@ -301,33 +301,45 @@
       const read=query.probe(field);
       if(read.status!=='ok')continue;
       for(const shape of Object.values(read.value)){
-        const {id,entity,kind,points,strands,faces,style,radius,material,water:wet}=shape;
-        const first=B.count(), target=targetFor(entity);
+        const {id,entity,kind,points,strands,faces,style,radius,material,water:wet,surfaceState:coating}=shape;
+        const first=B.count(), target=coating?{...targetFor(entity),surface:coating.chart}:targetFor(entity);
         const physical=W.materials.forBody(catalog,view.world,{entity});
         const finish=looks.material(finishFor({r:shape.look??[19,20,21,22],materialId:material},physical),looks.forEntity(entity));
         const ramp=finish.r;
+        const state=K.procedural.surfaceState;
+        const sampler=coating&&state.prepare(coating.stamps,coating);
+        function shade(ramp,light) {
+          return B.P[ramp[Math.min(ramp.length-1,Math.floor(light*ramp.length))]]??B.P[1];
+        }
+        function coated(uv,light,water=0) {
+          const values=sampler.sample(uv);
+          if(water>0)values.wetness=Math.max(Number(values.wetness)||0,K.clamp(water,0,1));
+          return shade(state.ramp(ramp,B.P,values),light);
+        }
         if(kind==='rope'||style==='net')for(const [,[a,b]] of strands){
           const p=points[a], q=points[b], d=V.sub(q,p), length=V.len(d);
           if(length<1e-6)continue;
           const axis=V.mul(d,1/length), light=1-.7*Math.abs(V.dot(axis,sun));
-          const color=ramp[Math.min(ramp.length-1,Math.floor(light*ramp.length))];
-          B.stick(...V.lerp(p,q,.5),axis,length*.45,radius,B.P[color]??B.P[1],2.5);
+          const color=sampler?coated(coating.uvs[a].map((n,i)=>(n+coating.uvs[b][i])*.5),light):shade(ramp,light);
+          B.stick(...V.lerp(p,q,.5),axis,length*.45,radius,color,2.5);
         }else faces.forEach((indices,index)=>{
           if(!indices)return;
           const [a,b,c]=indices.map(i=>points[i]), u=V.sub(b,a), v=V.sub(c,a), cross=V.cross(u,v), area=V.len(cross)*.5;
           if(area<1e-8)return;
           const n=V.norm(cross), cuts=Math.min(60,Math.max(1,Math.ceil(Math.sqrt(2*area)/resolution)));
-          const colorRamp=wet[index]>.004*area?[13,14,15,16,17]:ramp;
           const light=.29+.69*Math.abs(V.dot(n,sun));
-          const color=B.P[colorRamp[Math.min(colorRamp.length-1,Math.floor(light*colorRamp.length))]]??B.P[1];
-          const step=Math.sqrt(2*area)/cuts;
+          const water=wet[index]/(.004*area);
+          const color=sampler?null:shade(wet[index]>.004*area?[13,14,15,16,17]:ramp,light);
+          const step=Math.sqrt(2*area)/cuts, thin=Math.min(radius,step*.3);
+          const [uvA,uvB,uvC]=sampler?indices.map(i=>coating.uvs[i]):[];
+          function dab(s,t) {
+            const p=V.mad(V.mad(a,u,s),v,t);
+            const mark=sampler?coated(uvA.map((n,i)=>K.clamp(n+s*(uvB[i]-n)+t*(uvC[i]-n),0,1)),light,water):color;
+            B.disc(...p,n,step*.7,thin,mark,2.5);
+          }
           for(let i=0;i<cuts;i++)for(let j=0;j<cuts-i;j++){
-            const p=V.mad(V.mad(a,u,(i+.33)/cuts),v,(j+.33)/cuts);
-            B.disc(...p,n,step*.7,Math.min(radius,step*.3),color,2.5);
-            if(i+j+1<cuts){
-              const q=V.mad(V.mad(a,u,(i+.67)/cuts),v,(j+.67)/cuts);
-              B.disc(...q,n,step*.7,Math.min(radius,step*.3),color,2.5);
-            }
+            dab((i+.33)/cuts,(j+.33)/cuts);
+            if(i+j+1<cuts)dab((i+.67)/cuts,(j+.67)/cuts);
           }
         });
         B.describeSplats?.(first,B.count(),{object:id,material:finish.materialId,target});
