@@ -147,7 +147,17 @@ function readRgba(file, width, height) {
   return Uint8Array.from(data,n=>Math.round(n*255/max));
 }
 
-function readCels(definition, dir, { frames = [], pitch = 0 }) {
+function celSize(edit, definition, { frames = [], pitch = 0 }) {
+  const frame=typeof edit.frame==='string'&&Object.hasOwn(definition.poses??{},edit.frame)
+    ? definition.poses[edit.frame]:edit.frame;
+  const views=frames.filter(entry=>(entry.frame??0)===frame &&
+    (edit.direction===undefined||entry.direction===edit.direction) &&
+    (edit.pitch===undefined||(entry.pitch??pitch)===edit.pitch));
+  if (views.length!==1) throw new RangeError('Sprite cel replacement must uniquely identify one baked view');
+  return views[0].rect;
+}
+
+function readCels(definition, dir, metadata) {
   if (typeof definition==='string') {
     const file=path.resolve(dir,definition);
     definition=JSON.parse(fs.readFileSync(file,'utf8'));
@@ -158,13 +168,7 @@ function readCels(definition, dir, { frames = [], pitch = 0 }) {
     if (!edit?.files || typeof edit.files!=='object' || Array.isArray(edit.files) || edit.images!==undefined)
       throw new TypeError('Sprite cel manifest replacements need PNG files');
     const { files, ...settings }=edit;
-    const frame=typeof edit.frame==='string'&&Object.hasOwn(definition.poses??{},edit.frame)
-      ? definition.poses[edit.frame]:edit.frame;
-    const views=frames.filter(entry=>(entry.frame??0)===frame &&
-      (edit.direction===undefined||entry.direction===edit.direction) &&
-      (edit.pitch===undefined||(entry.pitch??pitch)===edit.pitch));
-    if (views.length!==1) throw new RangeError('Sprite cel replacement must uniquely identify one baked view');
-    const {width,height}=views[0].rect;
+    const {width,height}=celSize(edit, definition, metadata);
     const images=Object.fromEntries(Object.entries(files).map(([name,file])=>{
       if (!['color','depth','normal','emission','effect'].includes(name)||typeof file!=='string')
         throw new TypeError('Unknown sprite cel PNG channel: '+name);
@@ -180,7 +184,7 @@ function readSpriteAtlas(file, { cels } = {}) {
   const metadata=JSON.parse(fs.readFileSync(manifest,'utf8')), dir=path.dirname(manifest);
   if (typeof metadata.files?.color!=='string') throw new TypeError('Sprite atlas manifest needs a color PNG');
   const images={};
-  for (const name of ['color','depth','normal','emission']) {
+  for (const name of ['color','depth','normal','emission','silhouette']) {
     const asset=metadata.files[name];
     if (asset===undefined) continue;
     if (typeof asset!=='string') throw new TypeError('Sprite atlas '+name+' needs a PNG path');
@@ -192,4 +196,19 @@ function readSpriteAtlas(file, { cels } = {}) {
   return AtlasSprites.compile({metadata,images});
 }
 
-module.exports = { spriteAtlas, writeAtlas, readSpriteAtlas, exportViews };
+function writeSpriteAtlas(source, { out } = {}) {
+  if (typeof out !== 'string' || path.extname(out).toLowerCase() !== '.json') throw new TypeError('Choose a sprite atlas .json filename');
+  const files=require('./asset-files.js'), file=path.resolve(out), directory=path.dirname(file);
+  const { metadata, images }=AtlasSprites.compile(source).snapshot();
+  const save=(channels, width, height)=>Object.fromEntries(Object.entries(channels).map(([name, rgba])=>
+    [name,files.image(directory,width,height,rgba)]));
+  metadata.files=save(images,metadata.width,metadata.height);
+  if (metadata.cels?.replacements) metadata.cels.replacements=metadata.cels.replacements.map(({images,...edit})=>{
+    const {width,height}=celSize(edit,metadata.cels,metadata);
+    return {...edit,files:save(images,width,height)};
+  });
+  files.json(file,metadata);
+  return { file };
+}
+
+module.exports = { spriteAtlas, writeAtlas, writeSpriteAtlas, readSpriteAtlas, exportViews };

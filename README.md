@@ -630,6 +630,10 @@ The exporter uses Ink Studio and the Node standard library. It preserves self-co
 
 A custom indexed mesh supplies `points` and triangle or quad `faces`. It may provide linear RGB `colors` per point, face-corner `uvs`, `materials: [{ name, color }]` and a material index per face in `faceMaterials`. A model joint has `{ name, parent, head, tail }` with the parent index preceding its children. Each skinned mesh supplies a list of `[jointIndex, weight]` pairs per vertex. Use `static: true` for scenery. The writer keeps and normalizes the four strongest weights. Each custom clip supplies `frames: [{ time, matrices }]` beginning at time zero. Matrices are rest-to-pose transforms in world space, with nine row-major linear components followed by XYZ translation. The export uses a pair of nodes when a sampled affine transform needs shear.
 
+## Round-trip asset interchange
+
+`ink-studio interchange <input> --out <output>` round-trips glTF 2.0, GLB, layered raster manifests, and sprite atlases. The [asset interchange guide](docs/asset-interchange.md) covers the retained data, file layouts, and JavaScript APIs.
+
 ## Importing depth maps
 
 `ink-studio depth` converts a grayscale PNG or numeric depth map into Gaussian splats, a backed signed-distance field and an OBJ mesh. Add an aligned RGB or RGBA PNG with `--image` to project its colour onto the observed surface. `KIT.depth.fromMap()` gives scene authors the same conversion and accepts typed arrays directly. See the [depth import guide](docs/depth-maps.md) for camera calibration, output formats, and converting a signed field back into mesh geometry or splats.
@@ -808,6 +812,7 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `shimmer <scene> --mode orbit` | Measure pixels that change and quickly change back across frames, and save a GIF. |
 | `compare <scene> <ref.png>` | Render the scene alongside a reference and measure both at the reference's pixel size. |
 | `export-glb <scene or mesh>` | Export indexed mesh geometry, UVs, materials, and available skins and clips. |
+| `interchange <asset>` | Repackage glTF, GLB, or PNG-backed raster assets with their editable asset data. |
 | `paint export <scene> [--layer name]` | Export `paint.png` and the surface coordinates of the rendered view. |
 | `paint absorb <scene> [--layer name]` | Convert edited pixels into permanent paint or a named view correction. |
 | `paint layers|tune <scene>` | List corrections or adjust a named layer with `--layer name`. |

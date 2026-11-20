@@ -189,6 +189,7 @@
       5126: [4, 'getFloat32', 1]
     },
     WIDTH = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+  M.gltfTransforms = Object.freeze(mat4);
   M.gltf = (json, bins, { visitNode, visitPrimitive } = {}) => {
     const g = typeof json === 'string' ? JSON.parse(json) : json,
       bufs = (g.buffers || []).map((b, i) =>

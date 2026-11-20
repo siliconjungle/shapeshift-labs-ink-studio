@@ -1,22 +1,33 @@
 /* Generic layered frame data and procedural material outputs for graph inputs. */
 (function (K) {
   const P = K.procedural;
+  const rasterBrand = Symbol.for('ink-studio.layered-raster');
   const axis = (value, length) => Array.isArray(value) && value.length === length && value.every(Number.isFinite);
   const clamp = value => Math.max(0, Math.min(1, value));
   const coordinate = (x, y) => Number.isFinite(x) && Number.isFinite(y);
 
-  function raster({ width, height, layers, tags = {}, fps = 12 } = {}) {
+  function raster(source = {}) {
+    if (source?.[rasterBrand]) return source;
+    const { width, height, layers, tags = {}, fps = 12, pivot } = source;
     if (![width, height].every(n => Number.isSafeInteger(n) && n > 0 && n <= 4096) ||
         !layers || typeof layers !== 'object' || !Object.keys(layers).length ||
         !Number.isFinite(fps) || fps <= 0 || fps > 240)
       throw new RangeError('Raster assets need finite dimensions, named layers and a positive frame rate');
-    const size = width * height * 4, planes = new Map();
+    function copyPivot(value) {
+      if (value === undefined) return;
+      if (!axis(value, 2) || !Array.from(value).every(Number.isFinite))
+        throw new TypeError('Raster pivot needs two finite pixel coordinates');
+      return value.slice();
+    }
+    const origin = copyPivot(pivot), size = width * height * 4, planes = new Map();
     let frameCount = 0, written = 0;
     for (const [name, definition] of Object.entries(layers)) {
-      const { frames, opacity = 1 } = definition || {};
+      const { frames, opacity = 1, parent, material, pivot } = definition || {};
       if (!name || !Number.isFinite(opacity) || opacity < 0 || opacity > 1 ||
           !Array.isArray(frames) || !frames.length || frames.length > 512 || (written += size * frames.length) > 64e6)
         throw new RangeError('Invalid raster layer or pixel budget exceeded: ' + name);
+      if ([parent, material].some(value => value !== undefined && (typeof value !== 'string' || !value)))
+        throw new TypeError('Raster parent and material references need names: ' + name);
       const images = frames.map(frame => {
         const raw = frame?.data || frame;
         if ((!Array.isArray(raw) && !ArrayBuffer.isView(raw)) || raw.length !== size)
@@ -24,10 +35,19 @@
         if (!(raw instanceof Uint8Array || raw instanceof Uint8ClampedArray) &&
             !Array.from(raw).every(value => Number.isSafeInteger(value) && value >= 0 && value <= 255))
           throw new RangeError('Raster RGBA channels must be bytes');
-        return Uint8Array.from(raw);
+        return { data: Uint8Array.from(raw), pivot: copyPivot(frame?.pivot) };
       });
       frameCount = Math.max(frameCount, images.length);
-      planes.set(name, { opacity, images });
+      planes.set(name, { opacity, images, parent, material, pivot: copyPivot(pivot) });
+    }
+    const visited = new Set();
+    for (const name of planes.keys()) {
+      const chain = new Set();
+      for (let current = name; current !== undefined && !visited.has(current); current = planes.get(current).parent) {
+        if (!planes.has(current) || chain.has(current)) throw new RangeError('Invalid raster layer hierarchy: ' + name);
+        chain.add(current);
+      }
+      for (const current of chain) visited.add(current);
     }
     const clips = new Map([['all', { start: 0, end: frameCount, fps, loop: true }]]);
     for (const [name, item] of Object.entries(tags)) {
@@ -46,10 +66,11 @@
     }
     function layer(name, time = 0, tag = 'all') {
       if (!planes.has(name)) throw new RangeError('Unknown raster layer ' + name);
-      const { opacity, images } = planes.get(name), frame = frameAt(time, tag);
-      const data = images[Math.min(frame, images.length - 1)].slice();
+      const { opacity, images, parent, material, pivot } = planes.get(name), frame = frameAt(time, tag);
+      const image = images[Math.min(frame, images.length - 1)], data = image.data.slice(), at = image.pivot ?? pivot ?? origin;
       if (opacity < 1) for (let i = 3; i < size; i += 4) data[i] = Math.round(data[i] * opacity);
-      return { width, height, frame, data };
+      return { width, height, frame, data, ...(at && { pivot: at.slice() }),
+        ...(parent !== undefined && { parent }), ...(material !== undefined && { material }) };
     }
     function composite(time = 0, { tag = 'all', layers: names = [...planes.keys()] } = {}) {
       const frame = frameAt(time, tag), data = new Uint8Array(size), accum = new Float32Array(size);
@@ -69,7 +90,19 @@
       }
       return { width, height, frame, data };
     }
-    return Object.freeze({ width, height, frameCount, layers: [...planes.keys()], tags: [...clips.keys()], frameAt, layer, composite });
+    function snapshot() {
+      return {
+        width, height, fps, ...(origin && { pivot: origin.slice() }),
+        tags: Object.fromEntries([...clips].slice(1).map(([name, clip]) => [name, { ...clip }])),
+        layers: Object.fromEntries([...planes].map(([name, { opacity, parent, material, pivot, images }]) => [name, {
+          opacity, ...(parent !== undefined && { parent }), ...(material !== undefined && { material }),
+          ...(pivot && { pivot: pivot.slice() }),
+          frames: images.map(image => ({ data: image.data.slice(), ...(image.pivot && { pivot: image.pivot.slice() }) }))
+        }]))
+      };
+    }
+    return Object.freeze({ [rasterBrand]: true, width, height, frameCount, layers: [...planes.keys()], tags: [...clips.keys()],
+      frameAt, layer, composite, snapshot });
   }
 
   function material({ height = 0, wetness = 0, ink = 0, palette = 'stone', spacing = .005, normalStrength = 1 } = {}) {

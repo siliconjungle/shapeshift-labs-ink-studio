@@ -101,6 +101,7 @@ module.exports = {
     return api.prepare(require('./cli/data-inputs.js').embed(api, dataInputs, file));
   },
   exportGlb: require('./cli/export-glb.js'),
+  ...require('./cli/gltf-asset.js'),
   render: require('./cli/render.js').render,
   describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
   createCameraAtlas(options) {
@@ -119,12 +120,14 @@ module.exports = {
   transitionReview: require('./cli/transition-review.js').transitionReview,
   spriteAtlas: require('./cli/sprite-atlas.js').spriteAtlas,
   readSpriteAtlas: require('./cli/sprite-atlas.js').readSpriteAtlas,
+  writeSpriteAtlas: require('./cli/sprite-atlas.js').writeSpriteAtlas,
   readHorizonBands: require('./cli/horizon-bands.js').readHorizonBands,
   readEnvironmentImage: require('./cli/horizon-bands.js').readEnvironmentImage,
   previewTimeline: require('./cli/animation-timeline.js').previewTimeline,
   readRasterAsset(file) {
     return require('./cli/raster-asset.js').readRasterAsset(file, module.exports.load().KIT.procedural.graph.raster);
   },
+  writeRasterAsset: require('./cli/raster-asset.js').writeRasterAsset,
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },

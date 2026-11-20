@@ -93,7 +93,7 @@ const AtlasSprites = (() => {
       throw new RangeError('Sprite atlas needs valid dimensions and view frames');
     if (!['view','asset'].includes(normalSpace)||!['baked','add'].includes(emissionMode)||!['rgb24','gray'].includes(depthFormat))
       throw new RangeError('Invalid sprite atlas map encoding');
-    const names=['color','depth','normal','emission'];
+    const names=['color','depth','normal','emission','silhouette'];
     const pixels=width*height*names.filter(name=>images?.[name]).length;
     if (pixels>32e6)
       throw new RangeError('Sprite atlas exceeds its pixel budget');
@@ -103,6 +103,10 @@ const AtlasSprites = (() => {
       if (!data&&name!=='color') continue;
       maps[name]=copyRgba(data,width*height*4,'Sprite atlas '+name);
     }
+    const {cels:sourceCels,...settings}=m;
+    const sourceMaps={...maps}, metadata=structuredClone(settings);
+    delete metadata.files;
+    if (painted?.lightPaint?.length && maps.normal) maps.normal=maps.normal.slice();
     const scenery=painted===undefined?null:paintedScenery(painted,width,height,maps);
     const range=encodings.depth?.range??m.depthRange;
     if (maps.depth && range===undefined && !maps.depth.some((n,i)=>i%4===3&&n)) delete maps.depth;
@@ -131,9 +135,19 @@ const AtlasSprites = (() => {
       timing.push({frame,time:entry.time,duration:entry.duration});
     }
     if (scenery && m.cels !== undefined) throw new TypeError('Sprite cel edits apply to animated atlases');
-    const edits=cels.prepare(m.cels,groups,{
+    const edits=cels.prepare(sourceCels,groups,{
       width,color:maps.color,depthRange:validRange,copyRgba,pixelBudget:32e6-pixels
     });
+    if (edits) {
+      const {replacements,...celSettings}=sourceCels;
+      metadata.cels=structuredClone(celSettings);
+      if (replacements) {
+        const edited=[...edits.edited.values()];
+        metadata.cels.replacements=replacements.map(({images,...edit},index)=>({
+          ...structuredClone(edit), images:edited[index].maps
+        }));
+      }
+    }
     function select(frame,mode,direction) {
       const views=groups.get(frame??groups.keys().next().value);
       if (!views) throw new RangeError('Unknown sprite atlas frame: '+frame);
@@ -185,6 +199,7 @@ const AtlasSprites = (() => {
     }
     const editedDepth=edits&&Array.from(edits.edited.values()).some(edit=>edit.maps.depth||edit.extensionDepth!==undefined);
     return Object.freeze({[assetBrand]:true,select,sample,effect,playback:mode=>cels.playback(timing,fps,mode),
+      snapshot:()=>({metadata:structuredClone(metadata),images:structuredClone(sourceMaps)}),
       normalSpace,emissionMode,hasDepth:Boolean(maps.depth||scenery||editedDepth),sceneryPlanes:scenery?.planes});
   }
 

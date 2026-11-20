@@ -939,6 +939,7 @@ const CMD = {
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
+        '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
         '  depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF',
         '                              [--size 6 --cells 64 --res 0.09 --hues 6 --shades 4 --up z --spin 0.5 --thick 0.1]; a mesh file also works wherever an id does',
@@ -1160,6 +1161,26 @@ const CMD = {
     const lut = require('./lut.js'), definition = lut.read(file, lut.importOptions(opt));
     if (opt.out) lut.write(opt.out, definition);
     else process.stdout.write(JSON.stringify(definition) + '\n');
+  },
+  interchange() {
+    const [input] = pos, { out } = opt;
+    if (pos.length !== 1 || typeof out !== 'string')
+      die('Usage: ink-studio interchange <asset.gltf|.glb|.json> --out <file>');
+    try {
+      if (path.resolve(input) === path.resolve(out)) throw new Error('Choose an output different from the input asset');
+      const studio = require('../index.js');
+      let result;
+      if (/\.(gltf|glb)$/i.test(input)) result = studio.writeGltfAsset(studio.readGltfAsset(input), { out });
+      else if (/\.json$/i.test(input)) {
+        const manifest = JSON.parse(fs.readFileSync(input, 'utf8'));
+        if (manifest?.layers) result = studio.writeRasterAsset(studio.readRasterAsset(input), { out });
+        else if (manifest?.files?.color) result = studio.writeSpriteAtlas(studio.readSpriteAtlas(input), { out });
+        else throw new Error('Expected a layered raster or sprite atlas manifest');
+      } else throw new Error('Expected glTF, GLB or a raster manifest');
+      console.log(JSON.stringify(result, null, 2));
+    } catch (error) {
+      die(error.message);
+    }
   },
   'export-glb'() {
     const id = pos[0];
