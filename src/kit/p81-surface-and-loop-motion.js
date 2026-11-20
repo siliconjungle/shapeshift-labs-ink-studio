@@ -1,4 +1,11 @@
 /* Periodic Hermite tracks and material-coordinate transport on deforming charts. */
+const SurfaceVelocityProjection = (du, dv, velocity) => {
+  const V = KIT.V, a = V.dot(du, du), b = V.dot(du, dv), c = V.dot(dv, dv);
+  const u = V.dot(du, velocity), w = V.dot(dv, velocity), det = a * c - b * b;
+  if (det <= 1e-10 * a * c || det <= 1e-24) return [0, 0];
+  return [(c * u - b * w) / det, (a * w - b * u) / det];
+};
+
 (function (K) {
   const P=K.procedural,V=K.V,
     EPS=1e-10,
@@ -102,10 +109,7 @@
     function speed(chart,uv,t,particle){
       const s=frame(chart,uv,t,true),v=velocity(...s.position,t,{uv:uv.slice(),normal:s.normal,id:particle.id,data:particle.data});
       if(!point(v,3))throw new Error('Surface velocities must be finite XYZ');
-      const {du,dv}=s,a=V.dot(du,du),b=V.dot(du,dv),c=V.dot(dv,dv),
-        u=V.dot(du,v),w=V.dot(dv,v),det=a*c-b*b;
-      if(det<=EPS*a*c||det<=1e-24)return [0,0];
-      return [(c*u-b*w)/det,(a*w-b*u)/det];
+      return SurfaceVelocityProjection(s.du,s.dv,v);
     }
     function snapshot(){
       const chart=chartAt(time);
