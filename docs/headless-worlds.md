@@ -518,6 +518,41 @@ record a decision with its selected input keys, evidence IDs, and output
 keys. Pass the returned decision ID in `ctx.emit(kind, detail, [id])`
 to explain a specific event.
 
+### Inspect a selected object or region
+
+Trace `world/causal-inspection` with an entity and optional socket, an XYZ
+point and optional radius, or world `bounds` with `min`, `max`, and
+optional `axes`. An entity selection matches recorded entity references
+and spatial evidence at its current position. A region matches
+historically recorded positions or overlapping edit bounds.
+
+The report includes the selected target, live conditions, matching
+evidence roots, and the causal edges actually recorded. Choose current
+field values with `fields` or signal values with `ports`. Located transfer
+accounts appear automatically. A regional field read samples its center.
+`since`, `maxRoots`, `maxDepth`, and `limit` bound the search. The report
+marks missing ancestors and reports when recording is disabled or no
+evidence was retained for a selection.
+
+Set `"causality":{"inspection":true}` to capture before-and-after
+balances for settled transfers. Each balance cites the receipt and the
+prior observed balance. Pending or blocked transfers produce no balance
+change. Account positions are captured at settlement for historical
+region queries. An existing world using `"causality":true` can still
+inspect its recorded decisions and events.
+
+In the CLI, select an object with `--entity` and `--socket`, or pass
+the region descriptor as JSON in `--select` while tracing
+`world/causal-inspection`. In the browser, `mountCausalInspection` from
+`webgl.mjs` exposes an optional panel with current readings and links
+between recorded nodes. Supply a query or a function that returns the
+latest query. Named `targets` can populate a selector. Call `select(at)`
+with an entity or region after a scene pick, and `refresh()` when the
+committed snapshot changes. The default slot accepts the host's scene or
+map. Style the panel with CSS parts, `--ink-cause-*` properties, or a
+custom `stylesheet` with `defaultStyles:false`. Labels, value formatting,
+and visible controls are configurable.
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families

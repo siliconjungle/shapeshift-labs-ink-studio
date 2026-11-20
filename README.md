@@ -719,6 +719,8 @@ typed connections, state reads, event kinds, and execution dependencies.
 neighborhood values and gradients with solvers and entity queries.
 [Interactive checkpoint branching](docs/simulation-checkpoints.md#interactive-checkpoint-branching)
 retains named outcomes, queued edits, and shared starting points in one session.
+[Causal inspection](docs/headless-worlds.md#inspect-a-selected-object-or-region)
+links selected objects and regions to recorded actions, transfers, and prior states.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.

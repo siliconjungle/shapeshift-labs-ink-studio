@@ -82,10 +82,11 @@
     }
     for(const row of vents)input('vent.'+row.key,row.open);
     for(const row of boundaries)input('boundary.'+row.key,row.opening);
-    rooms.forEach(({key,capacity},i)=>{
+    rooms.forEach(({key,capacity,bounds},i)=>{
       outputs['level.'+key]=outputs['pressure.'+key]=outputs['volume.'+key]='number';
       outputs['vented.'+key]='bool';
-      accounts[key]={type:'number',resource:'water',units,read:state=>({balance:state.water[i],max:capacity}),
+      accounts[key]={type:'number',resource:'water',units,at:bounds.min.map((value,axis)=>(value+bounds.max[axis])/2),
+        read:state=>({balance:state.water[i],max:capacity}),
         write(state,balance){
           const water=state.water.slice(), waterBefore=state.waterBefore.slice(), delta=balance-water[i];
           waterBefore[i]??=water[i];

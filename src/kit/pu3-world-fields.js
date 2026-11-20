@@ -337,7 +337,7 @@
       const cell = index(...point);
       check(!usedCells.has(cell),'Water transfer accounts must use distinct cells');
       usedCells.add(cell);
-      accounts[name] = {resource:'water',units:'world^3',type:'number',
+      accounts[name] = {resource:'water',units:'world^3',type:'number',at:[point[0],0,point[1]],
         read(state) {return {balance:state.fluid.depth[cell]*cellArea,max:maxDepth*cellArea};},
         write(state,balance) {
           const old = state.fluid.depth[cell], level = Math.min(maxDepth,balance/cellArea);

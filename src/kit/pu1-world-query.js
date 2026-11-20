@@ -287,6 +287,8 @@
       cause:{selector:true,run:({target,args}) => view.causality ?
         W.causality.trace(view.causality,world,tick,args,target?.entity??args.entity) :
         missing('causal recording is not enabled for this snapshot')},
+      'causal-inspection':{selector:true,qualified:true,run:({target,args})=>
+        W.causalInspection.inspect(view,api,transfers().describe(),target,args)},
       signal:{run:({args}) => {
         let port = args.port;
         if (typeof port !== 'string') return missing('signal port required');

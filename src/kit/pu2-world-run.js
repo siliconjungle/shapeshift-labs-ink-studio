@@ -710,9 +710,29 @@
       }
       check(requests.length <= W.transfers.limit,'Transfer request budget exceeded');
       let confirmations;
+      function settleTransfer(request,name,emit) {
+        const before=causal?.balance&&[request.from,request.to].map(account=>transfers.inspect(drafts,account));
+        const receipt=transfers.settle(drafts,request,at,name,rootedState);
+        const ref=emit('transfer',receipt);
+        if(before&&receipt.status!=='blocked'){
+          let query;
+          for(const account of before){
+            const after=transfers.inspect(drafts,account.name);
+            const site=account.at;
+            let anchor=null;
+            if(Array.isArray(site))anchor={point:site};
+            else if(site){
+              query??=Q.create(view(nextWorld,{...drafts}),systems,projection);
+              const target=W.worksites.frame(query,site);
+              anchor={...site,...(target?.point&&{point:target.point})};
+            }
+            causal.balance(account,after,ref,anchor);
+          }
+        }
+        return receipt;
+      }
       const receipts = requests.map(({name,request,root})=>{
-        const receipt = transfers.settle(drafts,request,at,name,rootedState);
-        makeEmit(name,undefined,root)('transfer',receipt);
+        const receipt = settleTransfer(request,name,makeEmit(name,undefined,root));
         if(systems[name]?.receiveTransfers){
           confirmations??=new Map();
           if(!confirmations.has(name))confirmations.set(name,[]);
@@ -735,9 +755,8 @@
             W.simulationAggregate.isAggregate(drafts[name])))return {reason:'effect-asleep'};
           if(effect.kind==='transfer'){
             if(receipts.length>=W.transfers.limit)return {reason:'transfer-budget'};
-            const receipt=rootedState(transfers.settle(drafts,effect.request,at,source,rootedState));
+            const receipt=rootedState(settleTransfer(effect.request,source,systemEmit(source)));
             receipts.push(receipt);
-            systemEmit(source)('transfer',receipt);
             return {receipt,...(receipt.status==='blocked'&&{reason:'transfer-blocked'})};
           }
           if(effect.kind==='input')return {port:effect.port,value:effect.value};

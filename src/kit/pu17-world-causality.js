@@ -16,21 +16,24 @@
   }
   function policy(value) {
     if (value===undefined || value===false) return null;
-    check(value===true || record(value) && Object.keys(value).every(key=>key==='limit'),
+    check(value===true || record(value) && Object.keys(value).every(key=>key==='limit'||key==='inspection') &&
+      (value.inspection===undefined||typeof value.inspection==='boolean'),
       'Causality needs true or a retention policy');
     const limit = value.limit ?? 2048;
     check(Number.isSafeInteger(limit) && limit>=1 && limit<=20000,'Causality limit must be 1–20000');
-    return {limit};
+    return {limit,inspection:value.inspection===true};
   }
   const empty = freeze({nodes:[],dropped:0,outputs:{},inputs:{},manual:{},delays:{},buffers:{},actions:{}});
   const carries = (value,type) => type==='event' ? value.length>0 : type==='vec3' ? value.some(Boolean) : value!==0;
 
-  function begin(previous,tick,ports,incoming,{limit}) {
+  function begin(previous,tick,ports,incoming,{limit,inspection}) {
     const pending=[], retained=new Map(previous.nodes.map(row=>[row.id,row]));
     let outputHeads={...previous.outputs}, staged={}, ordinal=0;
     const inputHeads={...previous.inputs}, manual={...previous.manual},
       delays={...previous.delays}, buffers={...previous.buffers}, actions={...previous.actions};
     const delayed={};
+    const balanceHeads=inspection&&new Map(previous.nodes.filter(row=>row.type==='state'&&row.kind==='account-balance')
+      .map(row=>[row.data.account,row]));
     function add(type,system,kind,data,parents=[],location={}) {
       const index=ordinal++, ref='c.'+tick+'.'+index;
       check(Array.isArray(parents) && parents.every(parent=>validRef(parent)&&earlier(parent,ref)),
@@ -123,6 +126,16 @@
       Object.assign(outputHeads,staged);
       staged={};
     }
+    function balance(before,after,transfer,at) {
+      const {name:account,resource,units}=after, system=W.data.endpoint(account)[0];
+      const last=balanceHeads.get(account);
+      const detail={account,resource,units,at};
+      const prior=last&&equal(last.data.balance,before.balance)?last.id:
+        add('state',system,'balance-before-transfer',{...detail,balance:before.balance},[],{basis:'observed'});
+      const balance=after.balance, ref=add('state',system,'account-balance',{...detail,balance,
+        previous:before.balance},[prior,transfer],{basis:'settled-transfer'});
+      balanceHeads.set(account,{id:ref,data:{balance}});
+    }
     function finish() {
       completePhase();
       for (const [port,descriptor] of Object.entries(ports.inputs))
@@ -138,7 +151,7 @@
         outputs:outputHeads,inputs:inputHeads,manual,delays,buffers,actions});
     }
 
-    return {scope,output,completePhase,publish,collect,consume,held,delayedRefs,finish,
+    return {scope,output,completePhase,publish,collect,consume,held,delayedRefs,finish,...(inspection&&{balance}),
       ran:name=>{delete actions[name];},
       action(system,ref) {actions[system]=refs([...(own(actions,system)?actions[system]:[]),ref]);},
       manual(port,ref,append) {manual[port]=append?refs([...(manual[port]??[]),ref]):[ref];},
@@ -207,8 +220,12 @@
       (entity===undefined||[row.data.entity,row.data.body,row.data.place].includes(entity)) &&
       (ref!==undefined?row.id===ref:event!==undefined?row.event===event:key!==null?row.port===key&&row.type===portType:row.kind===kind));
     if (!root) return W.query.missing(state.dropped?'No matching retained cause':'No matching cause','missing');
+    const {status,...graph}=walk(state,[root.id],maxDepth,limit);
+    return W.query.ok({status,root:root.id,...graph});
+  }
+  function walk(state,roots,maxDepth,limit) {
     const byId=new Map(state.nodes.map(row=>[row.id,row])), nodes=[], gaps=[], edges=[], visited=new Set();
-    const queue=[[root.id,0,null]];
+    const queue=roots.map(ref=>[ref,0,null]);
     for(let i=0;i<queue.length;i++){
       const [ref,depth,child]=queue[i], row=byId.get(ref);
       if(child) edges.push({effect:child,cause:ref});
@@ -219,8 +236,8 @@
       nodes.push(row);
       for(const parent of row.parents)queue.push([parent,depth+1,ref]);
     }
-    return W.query.ok({status:gaps.length?'partial':'complete',root:root.id,nodes,edges,
-      gaps:[...new Map(gaps.map(row=>[row.id,row])).values()],dropped:state.dropped});
+    return {status:gaps.length?'partial':'complete',nodes,edges,
+      gaps:[...new Map(gaps.map(row=>[row.id,row])).values()],dropped:state.dropped};
   }
-  W.causality=Object.freeze({policy,begin,initial,validate,trace});
+  W.causality=Object.freeze({policy,begin,initial,validate,trace,walk});
 })(KIT);
