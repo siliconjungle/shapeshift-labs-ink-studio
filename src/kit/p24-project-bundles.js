@@ -5,7 +5,9 @@
   const maxBytes = 128 * 1024 * 1024, maxFiles = 4096;
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   const meshExtension = /\.(obj|gltf|glb)$/i;
-  const decoder = new TextDecoder(), encoder = new TextEncoder();
+  let encoder, decoder;
+  const encodeText = value => (encoder ??= new TextEncoder()).encode(value);
+  const decodeText = value => (decoder ??= new TextDecoder()).decode(value);
   const base64 = value => typeof value === 'string' && value.length % 4 === 0 && /^[a-z\d+/]*={0,2}$/i.test(value);
   const decodeBytes = value => Uint8Array.from(atob(value), ch => ch.charCodeAt(0));
 
@@ -96,10 +98,10 @@
     }
     function bytes(name) {
       const record = file(name);
-      return record.encoding === 'utf8' ? encoder.encode(record.data) : decodeBytes(record.data);
+      return record.encoding === 'utf8' ? encodeText(record.data) : decodeBytes(record.data);
     }
     function text(name, record = file(name)) {
-      return record.encoding === 'utf8' ? record.data : decoder.decode(bytes(name));
+      return record.encoding === 'utf8' ? record.data : decodeText(bytes(name));
     }
     return { file, bytes, text };
   }
@@ -186,7 +188,7 @@
         throw new TypeError('Invalid project file record: ' + name);
       if (record.encoding === 'base64' && !base64(record.data))
         throw new TypeError('Invalid base64 project file: ' + name);
-      size += record.encoding === 'base64' ? record.data.length * 3 / 4 : encoder.encode(record.data).length;
+      size += record.encoding === 'base64' ? record.data.length * 3 / 4 : encodeText(record.data).length;
       if (size > maxBytes) throw new RangeError('Project exceeds the file size budget');
       table.set(name, { encoding: record.encoding, data: record.data });
     }
