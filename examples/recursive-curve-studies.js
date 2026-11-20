@@ -167,7 +167,10 @@ function circuit(K, B, S, sprites, font, SpriteSurface) {
     cam: { target: [0, 2.78, .21], dist: 11.3, fov: .58, yaw: -.095, pitch: .09 },
     radius: 5.15, detail: 25, dither: .07, look: { pixelSize: 1, splatCoverage: 'continuous' }
   });
-  K.stage(world).add(charge);
+  const stage = K.stage(world);
+  stage.add(charge);
+  stage.stateful = false;
+  stage.update(0, 0);
   return world;
 }
 
