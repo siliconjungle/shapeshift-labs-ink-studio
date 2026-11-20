@@ -55,7 +55,7 @@
       throw new RangeError('A materialisation anchor must return finite geometry, PSD covariance and packed RGB');
     return row;
   }
-  function custom({ count, sample: read, begin, restore } = {}) {
+  function createProvider({ count, sample: read, begin, restore } = {}, complete = false) {
     if (
       !Number.isSafeInteger(count) ||
       count < 1 ||
@@ -77,18 +77,20 @@
         if (!Number.isInteger(index) || index < 0 || index >= count || !Number.isFinite(time))
           throw new RangeError('Invalid surface anchor sample');
         if (lastTime !== time) provider.begin(time);
-        out.position.fill(0);
-        out.normal[0] = 0;
-        out.normal[1] = 1;
-        out.normal[2] = 0;
-        out.covariance.fill(0);
-        out.covariance[0] = out.covariance[3] = out.covariance[5] = 0.0004;
-        out.color = 0xffffff;
-        out.alpha = 1;
-        out.velocity = null;
+        if (!complete) {
+          out.position.fill(0);
+          out.normal[0] = 0;
+          out.normal[1] = 1;
+          out.normal[2] = 0;
+          out.covariance.fill(0);
+          out.covariance[0] = out.covariance[3] = out.covariance[5] = 0.0004;
+          out.color = 0xffffff;
+          out.alpha = 1;
+          out.velocity = null;
+        }
         const row = read(index, time, out);
         const result = row && row !== out ? copy(out, row) : out;
-        result.color = api.color(result.color);
+        if (!complete) result.color = api.color(result.color);
         return validate(result);
       },
       ...(restore && { restore })
@@ -96,6 +98,7 @@
     providers.add(provider);
     return provider;
   }
+  const custom = options => createProvider(options);
   function indices(world, ids) {
     const selected =
       Array.isArray(ids) || ArrayBuffer.isView(ids)
@@ -112,7 +115,6 @@
       throw new RangeError('Surface splats need distinct valid indices');
     return selected;
   }
-  const covariance = row => [row[4], row[5], row[6], row[8], row[9], row[10]];
   function splats(input, selection, { pose, live = false } = {}) {
     const stage = input?.W ? input : null,
       world = stage?.W ?? input;
@@ -139,78 +141,141 @@
     });
     data.set(original);
     let frames;
+    const transforms = new Map();
     function begin(time) {
       pose?.(time);
       data.set(original);
       const rig = stage?.rig;
+      transforms.clear();
       if (live) ids.forEach((id, i) => data.set(world.data.subarray(id * 16, id * 16 + 16), i * 16));
       else if (rig?.M)
         for (let i = 0; i < count; i++) {
           const part = rig.bid[ids[i]];
           if (!part) continue;
           const q = i * 16,
-            k = part * 12,
-            A = rig.M.subarray(k, k + 9),
-            p = M.app(A, original.subarray(q, q + 3));
-          for (let a = 0; a < 3; a++) data[q + a] = p[a] + rig.M[k + 9 + a];
-          const c = covariance(original.subarray(q, q + 16)),
-            C = [c[0], c[1], c[2], c[1], c[3], c[4], c[2], c[4], c[5]],
-            r = M.mul(M.mul(A, C), M.tr(A));
-          [data[q + 4], data[q + 5], data[q + 6], data[q + 8], data[q + 9], data[q + 10]] = [
-            r[0],
-            r[1],
-            r[2],
-            r[4],
-            r[5],
-            r[8]
-          ];
+            k = part * 12;
+          let transform = transforms.get(part);
+          if (!transform) {
+            const A = rig.M.subarray(k, k + 9);
+            transform = { A, normal: Math.abs(M.det(A)) > 1e-10 ? M.tr(M.inv(A)) : null };
+            transforms.set(part, transform);
+          }
+          const { A } = transform,
+            x = original[q],
+            y = original[q + 1],
+            z = original[q + 2],
+            xx = original[q + 4],
+            xy = original[q + 5],
+            xz = original[q + 6],
+            yy = original[q + 8],
+            yz = original[q + 9],
+            zz = original[q + 10],
+            a = A[0] * xx + A[1] * xy + A[2] * xz,
+            b = A[0] * xy + A[1] * yy + A[2] * yz,
+            c = A[0] * xz + A[1] * yz + A[2] * zz,
+            d = A[3] * xx + A[4] * xy + A[5] * xz,
+            e = A[3] * xy + A[4] * yy + A[5] * yz,
+            f = A[3] * xz + A[4] * yz + A[5] * zz,
+            g = A[6] * xx + A[7] * xy + A[8] * xz,
+            h = A[6] * xy + A[7] * yy + A[8] * yz,
+            j = A[6] * xz + A[7] * yz + A[8] * zz;
+          data[q] = A[0] * x + A[1] * y + A[2] * z + rig.M[k + 9];
+          data[q + 1] = A[3] * x + A[4] * y + A[5] * z + rig.M[k + 10];
+          data[q + 2] = A[6] * x + A[7] * y + A[8] * z + rig.M[k + 11];
+          data[q + 4] = a * A[0] + b * A[1] + c * A[2];
+          data[q + 5] = a * A[3] + b * A[4] + c * A[5];
+          data[q + 6] = a * A[6] + b * A[7] + c * A[8];
+          data[q + 8] = d * A[3] + e * A[4] + f * A[5];
+          data[q + 9] = d * A[6] + e * A[7] + f * A[8];
+          data[q + 10] = g * A[6] + h * A[7] + j * A[8];
         }
       const anim = { bones: world.anim?.bones },
         fake = { data, rest: data, anim, pix, surfaceData, renderMetadata: { normals } };
       frames = K.splatFrames.create(fake, time, M);
     }
-    const provider = custom({
-      count,
-      begin,
-      sample(i, time, out) {
-        if (!frames) begin(time);
-        const frame = frames(i),
-          q = i * 16;
-        const position = frame.position();
-        for (let a = 0; a < 3; a++) out.position[a] = position[a];
-        frame.covariance(out.covariance);
-        let normal = frame.normal;
-        const localNormal = !!normal;
-        if (!normal) {
-          const [a, b, c, d, e, f] = out.covariance,
-            adj = [d * f - e * e, c * e - b * f, b * e - c * d, a * f - c * c, b * c - a * e, a * d - b * b];
-          const columns = [
-            [adj[0], adj[1], adj[2]],
-            [adj[1], adj[3], adj[4]],
-            [adj[2], adj[4], adj[5]]
-          ];
-          let best = 1;
-          for (const i of [0, 2]) if (V.len(columns[i]) > V.len(columns[best]) * 1.00001) best = i;
-          normal = V.norm(columns[best], [0, 1, 0]);
-        }
-        for (let a = 0; a < 3; a++) out.normal[a] = normal[a];
-        const rig = stage?.rig,
-          part = rig?.bid?.[ids[i]];
-        if (part && !live && localNormal) {
-          const A = rig.M.subarray(part * 12, part * 12 + 9);
-          if (Math.abs(M.det(A)) > 1e-10) {
-            const n = V.norm(M.app(M.tr(M.inv(A)), normal));
-            for (let a = 0; a < 3; a++) out.normal[a] = n[a];
+    const provider = createProvider(
+      {
+        count,
+        begin,
+        sample(i, time, out) {
+          if (!frames) begin(time);
+          out.velocity = null;
+          const q = i * 16,
+            p = i * 8,
+            r = i * 3,
+            plain = Math.round(data[q + 11]) % 16 === 0,
+            frame = plain ? null : frames(i),
+            position = plain ? null : frame.position();
+          for (let a = 0; a < 3; a++) out.position[a] = plain ? data[q + a] : position[a];
+          if (plain) {
+            const c = out.covariance;
+            c[0] = data[q + 4];
+            c[1] = data[q + 5];
+            c[2] = data[q + 6];
+            c[3] = data[q + 8];
+            c[4] = data[q + 9];
+            c[5] = data[q + 10];
+          } else frame.covariance(out.covariance);
+          let normal = frame?.normal;
+          if (plain) {
+            let source, offset;
+            if (pix?.[p]) {
+              source = pix;
+              offset = p + 3;
+            } else if (normals?.[r] || normals?.[r + 1] || normals?.[r + 2]) {
+              source = normals;
+              offset = r;
+            } else if (surfaceData?.[p]) {
+              source = surfaceData;
+              offset = p + 1;
+            }
+            if (source) {
+              for (let a = 0; a < 3; a++) out.normal[a] = source[offset + a];
+              const length = Math.hypot(out.normal[0], out.normal[1], out.normal[2]);
+              if (length > 1e-8) {
+                for (let a = 0; a < 3; a++) out.normal[a] /= length;
+                normal = out.normal;
+              }
+            }
           }
+          const localNormal = !!normal;
+          if (!normal) {
+            const [a, b, c, d, e, f] = out.covariance,
+              adj = [d * f - e * e, c * e - b * f, b * e - c * d, a * f - c * c, b * c - a * e, a * d - b * b];
+            const columns = [
+              [adj[0], adj[1], adj[2]],
+              [adj[1], adj[3], adj[4]],
+              [adj[2], adj[4], adj[5]]
+            ];
+            let best = 1;
+            for (const i of [0, 2]) if (V.len(columns[i]) > V.len(columns[best]) * 1.00001) best = i;
+            normal = V.norm(columns[best], [0, 1, 0]);
+          }
+          for (let a = 0; a < 3; a++) out.normal[a] = normal[a];
+          const rig = stage?.rig,
+            part = rig?.bid?.[ids[i]];
+          if (part && !live && localNormal) {
+            const matrix = transforms.get(part)?.normal;
+            if (matrix) {
+              const x = matrix[0] * normal[0] + matrix[1] * normal[1] + matrix[2] * normal[2],
+                y = matrix[3] * normal[0] + matrix[4] * normal[1] + matrix[5] * normal[2],
+                z = matrix[6] * normal[0] + matrix[7] * normal[1] + matrix[8] * normal[2],
+                length = Math.hypot(x, y, z);
+              out.normal[0] = length > 1e-9 ? x / length : 0;
+              out.normal[1] = length > 1e-9 ? y / length : 1;
+              out.normal[2] = length > 1e-9 ? z / length : 0;
+            }
+          }
+          out.color = data[q + 7];
+          out.alpha = plain ? data[q + 3] : frame.opacity();
+          return out;
+        },
+        restore(i, out) {
+          out.set(data.subarray(i * 16, i * 16 + 16));
         }
-        out.color = data[q + 7];
-        out.alpha = frame.opacity();
-        return out;
       },
-      restore(i, out) {
-        out.set(data.subarray(i * 16, i * 16 + 16));
-      }
-    });
+      true
+    );
     return provider;
   }
   function points(input, { size = 0.02, alpha = 2.4, color = 0xffffff, pose } = {}) {

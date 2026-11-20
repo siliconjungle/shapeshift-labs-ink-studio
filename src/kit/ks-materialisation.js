@@ -22,8 +22,11 @@
     };
   const mix = (a, b, t) => a + (b - a) * t;
   const packedMix = (a, b, t) =>
-    [0, 8, 16].reduce((v, s) => v + (Math.round(mix((a >>> s) & 255, (b >>> s) & 255, t)) << s), 0);
+    Math.round(mix(a & 255, b & 255, t)) +
+    (Math.round(mix((a >>> 8) & 255, (b >>> 8) & 255, t)) << 8) +
+    (Math.round(mix((a >>> 16) & 255, (b >>> 16) & 255, t)) << 16);
   const covarianceIndices = [4, 5, 6, 8, 9, 10];
+  const contextFreePaths = new WeakSet();
   function colorRGB(c) {
     return [(c & 255) / 255, ((c >>> 8) & 255) / 255, ((c >>> 16) & 255) / 255];
   }
@@ -108,9 +111,11 @@
       if (!vector(axis, 3) || V.len(axis) < 1e-10 || !Number.isFinite(height))
         throw new RangeError('An arc needs a direction and finite height');
       const a = V.mul(V.norm(axis), height);
-      return (ctx, out) => {
+      const path = (ctx, out) => {
         for (let k = 0; k < 3; k++) out[k] = a[k];
       };
+      contextFreePaths.add(path);
+      return path;
     },
     vortex({ axis = [0, 1, 0], radius = 1, turns = 2 } = {}) {
       if (!vector(axis, 3) || V.len(axis) < 1e-10 || !finite(radius, 0, 1000) || !finite(turns, -100, 100))
@@ -174,6 +179,7 @@
       originTime = options.time ?? stage.time ?? 0,
       maxEvents = options.maxEvents ?? 256,
       maxMappings = options.maxMappings ?? 8;
+    const seeds = Float64Array.from(ids, id => K.hash(id, seed, 1));
     const width = options.width ?? 0.015,
       length = options.length ?? 0.045,
       peel = options.peel ?? 0.22,
@@ -183,6 +189,7 @@
       forces = options.forces ?? [],
       paths = options.paths ?? [],
       appearance = options.appearance ?? [];
+    const flowContext = flow && !K.flow.contextFree(flow);
     if (
       !Number.isSafeInteger(seed) ||
       !finite(originTime, -1e9, 1e9) ||
@@ -208,6 +215,7 @@
       (options.emissive !== undefined && typeof options.emissive !== 'boolean')
     )
       throw new RangeError('Invalid materialisation flow, operators or fragment appearance');
+    const pathContext = paths.some(path => !contextFreePaths.has(path));
     const home = options.source ?? api.anchors.splats(stage, ids);
     if (!api.anchors.is(home) || home.count !== n) throw new RangeError('Source anchors must match the carrier count');
     const targets = new Map([['home', home]]);
@@ -273,6 +281,7 @@
       inherit: 1
     }));
     const cache = new Map(),
+      goalCache = new Map(),
       mappings = new Map(),
       homeVelocity = Array.from({ length: n }, () => [0, 0, 0]),
       previousHome = Array.from({ length: n }, () => [0, 0, 0]);
@@ -290,7 +299,7 @@
       scratch = [0, 0, 0],
       force = [0, 0, 0],
       flightCov = [0, 0, 0, 0, 0, 0],
-      goal = api.sample(),
+      weightedGoal = api.sample(),
       context = {};
     function alive() {
       if (disposed) throw new Error('Materialisation binding is disposed');
@@ -308,8 +317,20 @@
       if (!samples) {
         samples = Array.from({ length: provider.count }, () => api.sample());
         cache.set(name, samples);
+        goalCache.set(name, {
+          revision: 0,
+          views: samples.map(row => ({
+            position: row.position,
+            covariance: row.covariance,
+            normal: [0, 1, 0],
+            velocity: null,
+            revision: -1
+          }))
+        });
       }
       for (let i = 0; i < samples.length; i++) provider.sample(i, worldTime(t), samples[i]);
+      const goals = goalCache.get(name);
+      if (goals) goals.revision++;
     }
     function refreshAnchors(t) {
       const wanted = new Set(['home']);
@@ -330,14 +351,45 @@
       lastAnchorTime = t;
     }
     function cloneSample(out, row) {
-      for (const key of ['position', 'normal', 'covariance'])
-        for (let a = 0; a < out[key].length; a++) out[key][a] = row[key][a];
+      for (let a = 0; a < 3; a++) {
+        out.position[a] = row.position[a];
+        out.normal[a] = row.normal[a];
+      }
+      for (let a = 0; a < 6; a++) out.covariance[a] = row.covariance[a];
       out.color = row.color;
       out.alpha = row.alpha;
       return out;
     }
-    function targetSample(s, out) {
+    function targetSample(s, out = weightedGoal) {
       const samples = cache.get(s.target);
+      if (s.links.length === 1 && s.links[0][1] === 1) {
+        let goals = goalCache.get(s.target);
+        if (!goals) {
+          goals = { revision: 0, views: new Array(samples.length) };
+          goalCache.set(s.target, goals);
+        }
+        const index = s.links[0][0],
+          row = samples[index];
+        let view = goals.views[index];
+        if (!view)
+          view = goals.views[index] = {
+            position: row.position,
+            covariance: row.covariance,
+            normal: [0, 1, 0],
+            velocity: null,
+            revision: -1
+          };
+        if (view.revision !== goals.revision) {
+          const length = Math.hypot(row.normal[0], row.normal[1], row.normal[2]);
+          for (let a = 0; a < 3; a++) view.normal[a] = length > 1e-9 ? row.normal[a] / length : a === 1 ? 1 : 0;
+          view.position = row.position;
+          view.covariance = row.covariance;
+          view.color = row.color;
+          view.alpha = row.alpha;
+          view.revision = goals.revision;
+        }
+        return view;
+      }
       out.position.fill(0);
       out.normal.fill(0);
       out.covariance.fill(0);
@@ -378,7 +430,7 @@
       return list.filter(i => {
         const p = state[i].mode === HOME || state[i].mode === WAIT ? homeRows[i].position : state[i].position,
           weight = mask
-            ? mask(...p, executingTimeline ? time() : elapsed, { id: ids[i], index: i, seed: K.hash(ids[i], seed, 1) })
+            ? mask(...p, executingTimeline ? time() : elapsed, { id: ids[i], index: i, seed: seeds[i] })
             : 1;
         if (!finite(weight, 0, 1)) throw new RangeError('A materialisation mask must return a weight in [0,1]');
         return weight > 0 && K.hash(ids[i], seed, 7) < weight * fraction;
@@ -390,7 +442,7 @@
         for (let a = 0; a < 3; a++) array[id * stride + offset + a] = restore ? values[i * 3 + a] : normal[a];
     }
     function activate(i) {
-      ownership.activate(owner, [ids[i]]);
+      ownership.activate(owner, ids[i]);
       if (stage.rig?.free) stage.rig.free[ids[i]] = 1;
     }
     function attach(i) {
@@ -412,7 +464,7 @@
       }
       normals(i, null, true);
       if (home.restore) {
-        ownership.deactivate(owner, [id]);
+        ownership.deactivate(owner, id);
         if (stage.rig?.free) stage.rig.free[id] = free[i];
       } else activate(i);
       s.mode = HOME;
@@ -584,8 +636,12 @@
     function flowAt(p, t, out) {
       out.fill(0);
       if (!flow) return;
-      const fn = typeof flow === 'function' ? flow : (flow.xyz ?? flow.sample),
-        result = fn.call(flow, ...p, worldTime(t), out, context);
+      const result =
+        typeof flow === 'function'
+          ? flowContext
+            ? flow.call(flow, p[0], p[1], p[2], worldTime(t), out, context)
+            : flow(p[0], p[1], p[2], worldTime(t), out, context)
+          : (flow.xyz ?? flow.sample).call(flow, p[0], p[1], p[2], worldTime(t), out, context);
       if (result !== undefined) {
         if (vector(result, 2)) {
           out[0] = result[0];
@@ -601,24 +657,26 @@
         gathering = s.mode === GATHER,
         progress = gathering ? unit(age / s.duration) : unit(age / peel),
         blend = smooth(progress);
-      Object.assign(context, {
-        id: ids[i],
-        index: i,
-        time: worldTime(time()),
-        localTime: time(),
-        age,
-        progress,
-        airborne: gathering ? 4 * blend * (1 - blend) : blend,
-        source: cache.get('home')[i],
-        goal: gathering && forces.length ? targetSample(s, goal) : null,
-        seed: K.hash(ids[i], seed, 1),
-        mode: MODES[s.mode],
-        target: s.target,
-        position: s.position,
-        velocity: s.displayVelocity
-      });
+      if (flowContext || forces.length) {
+        context.id = ids[i];
+        context.index = i;
+        context.time = worldTime(time());
+        context.localTime = time();
+        context.age = age;
+        context.progress = progress;
+        context.airborne = gathering ? 4 * blend * (1 - blend) : blend;
+        context.source = cache.get('home')[i];
+        context.goal = gathering && forces.length ? targetSample(s) : null;
+        context.seed = seeds[i];
+        context.mode = MODES[s.mode];
+        context.target = s.target;
+        context.position = s.position;
+        context.velocity = s.displayVelocity;
+      }
       flowAt(s.free, time(), scratch);
-      force.splice(0, 3, ...gravity);
+      force[0] = gravity[0];
+      force[1] = gravity[1];
+      force[2] = gravity[2];
       for (const field of forces) {
         const out = [0, 0, 0],
           result = field(context, out) ?? out;
@@ -682,7 +740,7 @@
       flightCov[3] = w + d * y * y;
       flightCov[4] = d * y * z;
       flightCov[5] = w + d * z * z;
-      if (gathering) targetSample(s, goal);
+      const goal = gathering ? targetSample(s) : null;
       for (let a = 0; a < 3; a++) {
         s.position[a] = gathering ? mix(s.free[a], goal.position[a], blend) : s.free[a];
         s.display.normal[a] = gathering ? mix(s.start.normal[a], goal.normal[a], blend) : s.start.normal[a];
@@ -695,22 +753,22 @@
       s.display.alpha = gathering
         ? mix(s.start.alpha, goal.alpha, blend)
         : s.start.alpha * (1 - smooth((age - s.fadeAt) / s.fadeDuration));
-      Object.assign(context, {
-        id: ids[i],
-        index: i,
-        time: worldTime(time()),
-        localTime: time(),
-        age,
-        progress,
-        airborne: departure,
-        seed: K.hash(ids[i], seed, 1),
-        mode: MODES[s.mode],
-        target: s.target,
-        position: s.position,
-        velocity: s.velocity,
-        source: cache.get('home')[i],
-        goal: gathering ? goal : null
-      });
+      if (appearance.length || (gathering && progress > 0 && progress < 1 && pathContext)) {
+        context.id = ids[i];
+        context.index = i;
+        context.time = worldTime(time());
+        context.localTime = time();
+        context.age = age;
+        context.progress = progress;
+        context.airborne = departure;
+        context.seed = seeds[i];
+        context.mode = MODES[s.mode];
+        context.target = s.target;
+        context.position = s.position;
+        context.velocity = s.velocity;
+        context.source = cache.get('home')[i];
+        context.goal = gathering ? goal : null;
+      }
       if (gathering && progress > 0 && progress < 1)
         for (const path of paths) {
           scratch.fill(0);
@@ -722,6 +780,14 @@
       for (let a = 0; a < 3; a++) s.display.position[a] = s.position[a];
       for (const style of appearance) style(context, s.display);
       if (appearance.length) api.anchors.validate(s.display);
+      for (let a = 0; a < 3; a++) s.position[a] = s.display.position[a];
+    }
+    function write(i) {
+      const s = state[i];
+      if ((s.mode === HOME || s.mode === WAIT) && home.restore) return;
+      // Validate once at the publication boundary, rather than repeating it at
+      // every internal tick. Operator-supplied appearances are still validated
+      // immediately above, including their covariance and material constraints.
       if (
         !vector(s.display.position, 3) ||
         !s.display.position.every(v => Number.isFinite(Math.fround(v))) ||
@@ -734,11 +800,6 @@
         s.display.color > 0xffffff
       )
         throw new RangeError('Fragment appearance produced invalid geometry or color');
-      for (let a = 0; a < 3; a++) s.position[a] = s.display.position[a];
-    }
-    function write(i) {
-      const s = state[i];
-      if ((s.mode === HOME || s.mode === WAIT) && home.restore) return;
       const id = ids[i],
         q = id * 16,
         out = s.display;
@@ -1070,7 +1131,7 @@
         previousHome[i].splice(0, 3, ...snap.previousHome[i]);
         D.set(snap.rows[i], ids[i] * 16);
         if ((state[i].mode === HOME || state[i].mode === WAIT) && home.restore) {
-          ownership.deactivate(owner, [ids[i]]);
+          ownership.deactivate(owner, ids[i]);
           if (stage.rig?.free) stage.rig.free[ids[i]] = free[i];
           normals(i, null, true);
         } else {
@@ -1147,7 +1208,6 @@
         return { count: n, ...modes, time: elapsed, worldTime: worldTime(), ticks, pendingEvents: events.length };
       }
     };
-    refreshAnchors(0);
     ownership.reserve(owner, ids);
     reset();
     return binding;

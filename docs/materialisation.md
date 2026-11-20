@@ -194,6 +194,9 @@ shared `stage.geometryOwned` mask; `physicsOwned` remains its compatibility alia
 Rig, pool, frame-splat, bone fallback and morph writers respect this mask.
 Bindings retain reservations while attached and release them on disposal. For an
 explicit handoff, dispose one binding before constructing the other.
+`activate(owner, id)` and `deactivate(owner, id)` also accept one integer ID,
+with the same reservation checks, avoiding temporary singleton lists in carrier
+loops.
 
 While controlled, a carrier writes world geometry and temporarily clears native
 motion tags. `K.bones.posed` skips these detached rows. `K.materialisation.FLAG`
@@ -232,3 +235,32 @@ and 500,000 total anchors. Only active/pending target forms are sampled at runti
 Up to `maxMappings` cached correspondences are retained (default 8, maximum 64).
 Correspondence solves are outside the per-frame loop. No per-frame splat capacity
 is allocated. Use stage dirty rows when uploading the result, as the example does.
+
+## Live performance
+
+Prepare large bindings while constructing the scene and retain them between
+release/rejoin cycles. They return geometry ownership to the rig at home without
+needing disposal. Disposing and recreating thousands of carrier records on each
+button press creates avoidable stalls; dispose when removing or handing off the
+effect. The typography specimen follows this persistent lifecycle.
+
+Built-in curl fields share exact lattice corners and finite-difference
+interpolation in a bounded 256-cell cache per field. Cache collisions evict a
+cell and recompute it; they never substitute another cell's values. Custom
+`K.noise3` implementations retain the original sampling path. Native source
+anchors reuse each part's affine and normal transforms; ordinary splats avoid
+allocating shader-frame objects. Animated native kinds retain shared frame
+sampling. Gather goals reuse read-only normalized views of the current target
+frame, including changing position, covariance, color and opacity.
+
+Known coordinate-only flows and paths omit unused operator contexts; custom
+callbacks still receive the full context. Output validation runs before packed
+geometry is published, with custom appearance constraints checked at each tick.
+The fixed 120 Hz integration, fragment count and authored splat resolution stay
+the same.
+
+Run `node scripts/benchmark-materialisation.js` (or `--quick`) for reproducible
+CPU timings of the complete typography specimen while its camera rotates.
+The report separates scatter, gather and attached updates and records carrier
+counts. It measures CPU simulation cost, not displayed/GPU frame rate; use a
+browser frame trace for end-to-end performance.

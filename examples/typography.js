@@ -207,6 +207,11 @@ function typographySpecimen(kit) {
         paths: [K.materialisation.paths.arc({ height: 0.7 })]
       })
     ));
+  // Prepare the real carrier binding while building the scene, and retain it
+  // between releases. Reallocating thousands of particle records on a button
+  // click, then disposing/restoring the entire surface again on arrival, stalls
+  // otherwise smooth simulation frames.
+  createMatter();
   stage.update(0, 0);
   const control = K.cameraRig.control(() => ({ camera: world.cam }), { handoff: 0.7 });
   control.update(0, 0);
@@ -226,19 +231,16 @@ function typographySpecimen(kit) {
       if (!settings.held) {
         state.time += dt;
         stage.update(dt, state.time);
-        if (matter && !state.detached && matter.stats.home === title.ids.length) {
-          matter.dispose();
-          matter = null;
-        }
       }
       control.update(dt, state.time);
       return world;
     },
     write() {
-      if (matter) {
+      if (matter && matter.stats.home !== title.ids.length) {
         matter.dispose();
         matter = null;
       }
+      createMatter();
       settings.held = false;
       state.detached = false;
       state.writeStart = state.time;

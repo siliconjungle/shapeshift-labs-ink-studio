@@ -27,6 +27,15 @@
         throw new Error('Geometry reservation belongs to another system');
       return result;
     }
+    function active(owner, ids, value) {
+      if (typeof ids === 'number') {
+        if (!Number.isSafeInteger(ids) || ids < 0 || ids >= stage.N)
+          throw new RangeError('Geometry IDs must be distinct and in range');
+        if (owners.get(ids) !== owner || !sets.has(owner))
+          throw new Error('Geometry reservation belongs to another system');
+        mask[ids] = value;
+      } else for (const i of owned(owner, ids)) mask[i] = value;
+    }
     const api = Object.freeze({
       owner: i => owners.get(i),
       reserve(owner, ids) {
@@ -42,10 +51,10 @@
         sets.set(owner, set);
       },
       activate(owner, ids) {
-        for (const i of owned(owner, ids)) mask[i] = 1;
+        active(owner, ids, 1);
       },
       deactivate(owner, ids) {
-        for (const i of owned(owner, ids)) mask[i] = 0;
+        active(owner, ids, 0);
       },
       release(owner) {
         if (!sets.has(owner)) return;
