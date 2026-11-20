@@ -167,7 +167,7 @@ function frost({K,S,box,label,exhibit},seed){
     S.ball([x,y,.422],.039,frostLamp,{res:.036});
   }
   box([0,.412,.229],[1.82,.127,.045],iron,.062);
-  return exhibit(sim,{drive,warm:6,normal:2,overlay:()=>label('FROST CIRCUIT',[0,.298,.325],2.65,true),mount:(x,z,relief)=>[x,base+h/2+z,.309+relief],
+  return exhibit(sim,{drive,warm:6,normal:2,overlay:()=>label('FROST CIRCUIT',[0,.268,.384],2.65,true),mount:(x,z,relief)=>[x,base+h/2+z,.309+relief],
     particle:[.81,.99,1],cam:{target:[0,3.16,0],dist:12.71,fov:.553,yaw:-.108,pitch:.105,sway:0}});
 }
 
@@ -228,7 +228,7 @@ function drying({K,S,box,label,exhibit}){
   }
   box([0,.416,2.72],[1.98,.088,.166],iron,.061);
   return exhibit(sim,{drive,warm:6,normal:1,overlay:()=>label('EVAPORATION PLATE',[0,.58,2.88],3.33,false),mount:(x,z,relief)=>[x,.460+relief,z],particle:[1,.76,.46],
-    cam:{target:[0,.23,.08],dist:13.26,fov:.552,yaw:.15,pitch:1.07,sway:0}});
+    cam:{target:[0,.23,.08],dist:13.75,fov:.552,yaw:.15,pitch:1.07,sway:0}});
 }
 
 module.exports=kit=>({
