@@ -932,6 +932,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           const gpu = materialData(pixel, world);
           updateSprites(world, pixel);
           materials = { world, values: world.pix, ramps: world.ramps, rampOff: world.rampOff, patterns: world.pats, gpu };
+        } else if (world.anim?.dynamicPatternNormals) {
+          const patternDirty = dirty && [...new Set(dirty.map(row => Math.floor(row / 2)))];
+          pattern.upload(world.pix, world.count * 8, patternDirty);
         } else pattern.bind();
       }
 

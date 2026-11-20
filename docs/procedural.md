@@ -185,6 +185,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `motion.surfaceWeather(options)`, `motion.materialStateGraph(machine, entities, options)` | Persistent wetness and thermal fields, and event-driven material changes |
 | `motion.phaseChange(options)` | [Coupled phase changes](coupled-phase-changes.md) with reaction-driven finishes, relief, and emissions |
 | `motion.transportSplats(source, target, options)` | Balanced mass correspondences and barycentric splat targets |
+| `motion.geometryMorph(source, target, geometry)` | [Geometry-preserving morphs](geometry-morphs.md) with explicit point pairs, rigid features, and authored intermediate poses |
 | `contours.march(field, options)` | Bounded marching-squares paths at a scalar level |
 
 Heights and distances use world units. Planar masks take XZ and use negative
@@ -2777,6 +2778,11 @@ the existing stage effect. It can take contiguous dab ranges or explicit
 dab ID lists. Pass solver settings through `transport`. The normal
 correspondence mode uses nearest samples. `examples/transport-morph.js`
 shows a leaf, an intermediate stage, and the resulting flower.
+
+For authored correspondences, use `correspondence: 'geometry'` with
+[point tracks and rigid feature poses](geometry-morphs.md). The stage
+keeps the same live splat IDs through the morph, with intermediate keys
+for positions and feature rotations.
 
 ## Optional retained authoring
 
