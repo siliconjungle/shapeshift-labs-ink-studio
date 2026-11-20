@@ -339,17 +339,20 @@ const SplatEffects = (() => {
     const paletteTransfer = paletteRamp === undefined ? null : paletteFields.ramp(paletteRamp,resolveColor);
     if (ramp === undefined && !paletteTransfer && source !== 'luminance')
       throw new TypeError('A color curve source requires a ramp');
-    const transfer = paletteTransfer ? (base,out,value = curves.luminance(base)) => paletteTransfer.sample(value,out) :
+    const rampAt = time => paletteTransfer.frame?.(time) ?? paletteTransfer;
+    const transfer = paletteTransfer ? (base,out,value = curves.luminance(base),time) => rampAt(time).sample(value,out) :
       curves.prepare({ ramp, channels, color }, resolveColor);
     const lookup = ramp === undefined && !paletteTransfer ? null : curveSource(source, context);
     const result = [0, 0, 0, 0, 1, 0];
+    const explicit = outputColors(outputPalette, resolveColor);
     return {
-      palette: outputColors(outputPalette, resolveColor) ?? paletteTransfer?.outputPalette,
+      palette: explicit ?? paletteTransfer?.outputPalette,
+      ...(!explicit && paletteTransfer?.frame && { paletteAt:time=>rampAt(time).outputPalette }),
       depth: source === 'depth',
       sample(sample, base) {
         const value = lookup?.(sample, base);
         result[3] = lookup && !Number.isFinite(value) ? 0 : 1;
-        if (result[3]) transfer(base, result, value);
+        if (result[3]) transfer(base, result, value, sample.time ?? 0);
         return result;
       }
     };
@@ -405,6 +408,7 @@ const SplatEffects = (() => {
     if (!vector(size, 2) || size.some(n => n <= 0) || typeof wrap !== 'boolean')
       throw new RangeError('Projected palette fields need a positive size and optional wrap');
     const field = paletteFields[label](definition, resolveColor);
+    const fieldAt = time => field.frame?.(time) ?? field;
     const [spanU, spanV] = size;
     const diameter = Math.min(spanU, spanV);
     const fitU = spanU / diameter, fitV = spanV / diameter;
@@ -413,17 +417,22 @@ const SplatEffects = (() => {
     const axes = bindings.length ? Object.create(null) : undefined;
     return {
       palette: field.outputPalette ?? field.palette,
+      ...(field.frame && { paletteAt(time) {
+        const current = fieldAt(time);
+        return current.outputPalette ?? current.palette;
+      } }),
       boundAxes: Boolean(axes),
       weather: bindings.some(binding=>binding.signal.weather),
-      sample(u, v, _time, out, readSignal) {
+      sample(u, v, time, out, readSignal) {
         u /= spanU;
         v /= spanV;
         if (!Number.isFinite(u) || !Number.isFinite(v) || (!wrap && (u < 0 || v < 0 || u > 1 || v > 1))) return 0;
         if (axes) for (const {axis,signal,low,span} of bindings) axes[axis] = low+span*(readSignal?.(signal) ?? 0);
         const x = axes?.u ?? (wrap ? fract(u) : u), y = axes?.v ?? (wrap ? fract(v) : v);
-        if (isRamp) { field.sample(axis === 'across' ? y : x,out); return 1; }
-        return Number(Boolean(polar ? field.sample(.5 + (x - .5) * fitU, .5 + (y - .5) * fitV, out, axes) :
-          field.sample(x, y, out, axes)));
+        const current = fieldAt(time);
+        if (isRamp) { current.sample(axis === 'across' ? y : x,out); return 1; }
+        return Number(Boolean(polar ? current.sample(.5 + (x - .5) * fitU, .5 + (y - .5) * fitV, out, axes) :
+          current.sample(x, y, out, axes)));
       }
     };
   }
@@ -458,13 +467,15 @@ const SplatEffects = (() => {
       throw new RangeError('Unknown projected pattern: ' + pattern);
     if (colors !== undefined && (!Array.isArray(colors) || colors.length < 2 || !Array.from(colors).every(value => value !== undefined)))
       throw new TypeError('Projected color ramps need at least two colors');
-    const palette = outputColors(outputPalette, resolveColor) ?? indexed?.palette ?? stepped?.palette ?? paletteField?.palette;
+    const explicit = outputColors(outputPalette, resolveColor);
+    const palette = explicit ?? indexed?.palette ?? stepped?.palette ?? paletteField?.palette;
     const ramp = colors?.map(resolveColor);
     const tint = resolveColor(color);
     const result = new Float64Array(6); // RGB, amount, coverage, glint
     const detailSize = Object.hasOwn(motifs,pattern) ? scale * (pattern === 'checker' ? .5 : width) : 0;
     return {
-      palette, detailSize, boundAxes: paletteField?.boundAxes, weather: paletteField?.weather,
+      palette, ...(!explicit && paletteField?.paletteAt && { paletteAt:paletteField.paletteAt }),
+      detailSize, boundAxes: paletteField?.boundAxes, weather: paletteField?.weather,
       reveals: revealChannel !== undefined || Boolean(custom),
       sample(sample, base, _layer, readSignal) {
         result[0] = tint[0]; result[1] = tint[1]; result[2] = tint[2];

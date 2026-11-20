@@ -8,7 +8,7 @@ const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
 const idColor = id => Math.imul(id, 0x9e3779b1) & 0xffffff;
 
 function labels(passes) {
-  return Object.fromEntries(['objects', 'materials', 'targets'].flatMap(key => passes[key] ? [[key,
+  return Object.fromEntries(['objects', 'materials', 'targets', 'paletteOwners'].flatMap(key => passes[key] ? [[key,
     passes[key].map((label, index) => ({ label, color: '#' + idColor(index).toString(16).padStart(6, '0') }))
   ]] : []));
 }
@@ -79,6 +79,7 @@ function writePasses(directory, frame, scale = 1) {
   if (passes.objects) manifest.objects = passes.objects;
   if (passes.materials) manifest.materials = passes.materials;
   if (passes.targets) manifest.targets = passes.targets;
+  if (passes.paletteOwners) manifest.paletteOwners = passes.paletteOwners;
   manifest.legend = labels(passes);
   if (passes.depth || passes.emissionDepth) manifest.depth = depthRange(passes.depth || passes.emissionDepth);
   fs.mkdirSync(directory, { recursive: true });

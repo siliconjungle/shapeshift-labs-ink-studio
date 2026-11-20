@@ -70,6 +70,28 @@ const PixelLook = (() => {
     };
   }
 
+  function bindRoles(palette, roles, aliases) {
+    const scene = roles ?? {};
+    if (aliases === undefined) return scene;
+    if (!record(aliases) || Object.keys(aliases).length > 64)
+      throw new TypeError('Surface paletteRoles needs a map of up to 64 local names');
+    const select = paletteSelector(palette, scene);
+    const bindings = Object.entries(aliases).map(([name, value]) => {
+      if (!name.trim() || name.startsWith('#'))
+        throw new TypeError('Surface paletteRoles needs named aliases');
+      return [name, select(value)];
+    });
+    return { ...scene, ...Object.fromEntries(bindings) };
+  }
+
+  function roleColor(name, palette, roles = {}) {
+    const slots = paletteSelector(palette, roles)(name);
+    if (slots.length !== 1) throw new RangeError('Palette role ' + name + ' needs a specific stop for a single color');
+    const color = palette[slots[0]];
+    if (!isColor(color)) throw new RangeError('Palette role ' + name + ' needs a packed RGB swatch');
+    return color;
+  }
+
   function prepareRemap(definition, palette, roles = {}, override, { deferTargets = false } = {}) {
     if (definition === undefined || definition === false) return null;
     if (!record(definition) || Object.keys(definition).some(key => !['rules', 'protect', 'color'].includes(key)))
@@ -95,11 +117,14 @@ const PixelLook = (() => {
       if (!rule || Object.getPrototypeOf(rule) !== Object.prototype ||
           Object.keys(rule).some(key => key !== 'from' && key !== 'to'))
         throw new TypeError('Expected a palette remap rule with from and to');
-      const color = isSwatch(rule.to) ? parseInt(rule.to.slice(1), 16) : rule.to;
+      let color = rule.to;
+      if (isSwatch(color)) color = parseInt(color.slice(1), 16);
+      else if (typeof color === 'string' && color.trim() && !color.startsWith('#'))
+        color = deferTargets ? 0 : roleColor(color, colors, roles);
       let output;
       if (isColor(color)) output = encodeTarget ? encodeTarget(unpack(color)) : unpack(color);
       else if (contract && Array.isArray(color) && color.length === 3 && Array.from(color).every(Number.isFinite)) output = color.slice();
-      else throw new TypeError('Palette remap output needs a hex swatch, packed RGB or a declared numeric RGB triple');
+      else throw new TypeError('Palette remap output needs a role stop, hex swatch, packed RGB or a declared numeric RGB triple');
       for (const i of select(rule.from)) overrides.set(i, Object.freeze(output));
     }
     const locked = new Set();
@@ -703,7 +728,7 @@ vec3 inkToneResolve(vec3 color, ivec2 pixel) {
   return share >= mix(0.5, rank, u_inkToneAmount) ? b.rgb : a.rgb;
 }`;
   return { nearest, rgbWeights:weights, ink, resolve, glsl, presets, toneSettings, prepareTone, toneIndex, toneGlsl, bayerRank, outputPalettes, localIndex,
-    reserveEntries, preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
+    bindRoles, roleColor, paletteSelector, reserveEntries, preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
     prepareRemap, gradePalette, prepareColorStack, colorGrade, framePalette };
 })();
 if (typeof module !== 'undefined') module.exports = PixelLook;

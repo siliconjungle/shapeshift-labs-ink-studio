@@ -9,11 +9,14 @@ function contributionLook(palettes, policies, targets, targetOffset, fallback, s
     const policy = policies?.[slot(i, layer) - 1], explicit = policy?.anchor;
     return Boolean(policy && (policy.mask || policy.tuning?.regions.length || spatial(explicit ?? anchor)));
   }
-  function shade(i, layer, rgb, x, y, sample, dither, visit, inherited) {
+  function shade(i, layer, rgb, x, y, sample, dither, visit, inherited, claim) {
     const id = slot(i, layer);
     if (!id) return rgb;
     const policy = policies?.[id - 1];
-    if (!policy) return palettes[id - 1][PixelLook.nearest(rgb, palettes[id - 1], false)];
+    if (!policy) {
+      if (claim) claim[0] = id;
+      return palettes[id - 1][PixelLook.nearest(rgb, palettes[id - 1], false)];
+    }
     const amount = policy.mask ? sample ? policy.mask(sample) : 0 : 1;
     if (amount && visit) visit(policy, policy.mask ? amount : null, amount);
     const options = { scene, grade, useDither: dither };
@@ -22,10 +25,14 @@ function contributionLook(palettes, policies, targets, targetOffset, fallback, s
       return PixelLook.paletteIndex(plan, rgb, dx, dy, plan.tuning ?
         { ...options, placement: { pixel: [x, y], inherited, sample } } : options);
     };
-    if (amount === 1) return policy.swatches[index(policy)];
+    if (amount === 1) {
+      if (claim) claim[0] = id;
+      return policy.swatches[index(policy)];
+    }
 
     // A soft mask reveals the underlying material or default look in the same fragment.
     const under = underSlot(layer);
+    if (claim) claim[0] = amount > .5 ? id : under ?? 0;
     const underlying = policies?.[under - 1];
     if (!amount && underlying && visit) visit(underlying, null, 1);
     const base = underlying ? underlying.swatches[index(underlying)] : under ?

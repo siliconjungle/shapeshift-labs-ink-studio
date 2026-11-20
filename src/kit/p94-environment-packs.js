@@ -101,7 +101,7 @@
     HorizonBands.compile(look?.horizonBands);
     ArtDirection.prepare(look?.artDirection);
     ArtStability.prepare(look?.stable);
-    EffectPalettes.prepare(look?.effectPalettes,palette);
+    EffectPalettes.prepare(look?.effectPalettes,palette,undefined,{deferRoles:true});
     SilhouetteProtection.prepare(look?.silhouetteProtection);
     SurfaceLook.lightRamps(look?.surfaceLightRamps);
     ColorCurves.prepare(look?.colorCurves);

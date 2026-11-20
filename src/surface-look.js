@@ -112,12 +112,14 @@ const SurfaceLook = (() => {
     );
   }
 
-  function color(value, palette, fallback = WHITE) {
+  function color(value, palette, fallback = WHITE, roles) {
     if (value === undefined) return fallback;
     if (Array.isArray(value) && value.length === 3 && value.every(Number.isFinite)) return value.map(clamp);
     if (typeof value === 'string' && /^#[\da-f]{6}$/i.test(value)) value = parseInt(value.slice(1), 16);
     else if (Number.isInteger(value)) value = palette[value];
-    else throw new TypeError('Expected a palette index, #rrggbb or RGB triple for a surface colour');
+    else if (typeof value === 'string' && value && !value.startsWith('#') && roles)
+      value = pixelLook.roleColor(value, palette, roles);
+    else throw new TypeError('Expected a palette role, palette index, #rrggbb or RGB triple for a surface colour');
     if (!Number.isInteger(value)) throw new RangeError('Surface colour is outside the palette');
     return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
   }
@@ -141,7 +143,7 @@ const SurfaceLook = (() => {
     }
     if (!Array.isArray(rows) || !Array.from(rows).every(row => Array.isArray(row) && Number.isFinite(row[0]) && row[0] >= 0 && row[0] <= 1))
       throw new RangeError(id + '.lightingRamp stop positions must be in [0, 1]');
-    const tint = curves.ramp({ stops: rows, interpolation }, value => color(value, palette));
+    const tint = curves.ramp({ stops: rows, interpolation }, value => color(value, palette, WHITE, roles));
     let amount;
     if (weights !== undefined) {
       if (!Array.isArray(weights) || weights.length !== rows.length)
@@ -251,7 +253,7 @@ const SurfaceLook = (() => {
   }
 
   const roughnessPair = value => Array.isArray(value) ? Array.from(value) : [value, value];
-  function prepareDrive(definition, layer, signals, palette) {
+  function prepareDrive(definition, layer, signals, resolveColor) {
     if (definition === undefined) return null;
     if (!isRecord(definition)) throw new TypeError(layer.id + '.drive must name finish properties');
     const drive = Object.entries(definition).map(([key, setting]) => {
@@ -271,7 +273,7 @@ const SurfaceLook = (() => {
           throw new RangeError(layer.id + '.drive.roughness needs a valid value or along/across pair');
         if (!local) to = to.map(value => positive(value));
       } else if (key === 'color' && ['tint', 'specular', 'fiber', 'sheen', 'glints', 'bevel', 'planarReflection', 'localReflection', 'transmission'].includes(layer.type)) {
-        to = color(to, palette);
+        to = resolveColor(to);
       } else if (key === 'thickness' && layer.type === 'transmission') {
         if (!Number.isFinite(to) || to < 0) throw new RangeError(layer.id + '.drive.thickness must be nonnegative');
       } else throw new RangeError(layer.id + '.drive cannot control ' + key + ' on ' + layer.type);
@@ -528,9 +530,11 @@ const SurfaceLook = (() => {
     { colorCurves = true, colorLut = true, colorStack = true, paletteConstraints = true, paletteRoles, blueNoise, onPaletteClip,
       transmission = true, detailKits = true, validateOnly = false, skipMasks = false } = {}) {
     if (!isRecord(settings)) throw new TypeError('Surface settings must be an object');
+    const roles = pixelLook.bindRoles(palette, paletteRoles, settings.paletteRoles);
+    const resolveColor = value => color(value, palette, WHITE, roles);
     if (validateOnly && settings.renderStages !== undefined) {
       const stages = typeof RenderStages === 'undefined' ? require('./render-stages.js') : RenderStages;
-      stages.prepare(settings.renderStages, { palette, roles: paletteRoles, blueNoise, context, validateOnly });
+      stages.prepare(settings.renderStages, { palette, roles, blueNoise, context, validateOnly });
     }
     numeric(settings, ['scale', 'seed', 'steps'], 'surface');
     if (settings.rainRipple !== undefined && (typeof settings.rainRipple !== 'string' || !settings.rainRipple.trim()))
@@ -589,11 +593,11 @@ const SurfaceLook = (() => {
         const colorLayer = colorLayers.has(layer.type);
         if (colorLayer && layer.stage !== undefined && !['material','lit'].includes(layer.stage))
           throw new RangeError(id + '.stage must be material or lit for a surface color layer');
-        const kit = layer.type === 'detailKit' && kits.prepare(layer.pattern, value => color(value,palette));
+        const kit = layer.type === 'detailKit' && kits.prepare(layer.pattern, resolveColor);
         if (!colorLayer && !kit && !Object.hasOwn(models, layer.type))
           throw new RangeError('Unknown surface layer: ' + layer.type);
         const lightingRamp = layer.lightingRamp === undefined || layer.lightingRamp === false ? null :
-          prepareLightingRamp(layer.lightingRamp, palette, paletteRoles ?? {}, id, layer.type);
+          prepareLightingRamp(layer.lightingRamp, palette, roles, id, layer.type);
         if (layer.type === 'diffuse' && !lightingRamp) throw new TypeError(id + ' diffuse layer needs a lightingRamp');
         numeric(
           layer,
@@ -656,7 +660,6 @@ const SurfaceLook = (() => {
         if (colorLayer) {
           const blend = layer.blend ?? 'mix';
           if (!['mix', 'add', 'multiply'].includes(blend)) throw new RangeError('Unknown surface color blend: ' + blend);
-          const resolveColor = value => color(value, palette);
           let effect;
           if (layer.type === 'tint') {
             const result = [0, 0, 0, 1, 1, 0];
@@ -666,11 +669,11 @@ const SurfaceLook = (() => {
             } };
           }
           else if (layer.type === 'colorLut' || layer.type === 'colorStack') effect = effects[layer.type](layer, resolveColor);
-          else if (layer.type === 'projected') effect = effects.layer(layer, context, resolveColor, paletteRoles, signals);
+          else if (layer.type === 'projected') effect = effects.layer(layer, context, resolveColor, roles, signals);
           else effect = effects.colorCurve(layer, context, resolveColor);
           const compiled = { ...layer, id, blend, strength: clamp(layer.strength ?? 1), effect, spatialMask, retainedMask };
           if (layer.type === 'tint') compiled.color = resolveColor(layer.color);
-          return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, palette) };
+          return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, resolveColor) };
         }
         if (layer.colors !== undefined && !Array.isArray(layer.colors))
           throw new TypeError(id + '.colors must be a list');
@@ -717,16 +720,16 @@ const SurfaceLook = (() => {
           roughness: [roughness[0], roughness[1] ?? roughness[0]].map(v =>
             local ? v ?? 0.22 : positive(v, layer.type === 'glints' ? 0.085 : 0.22)
           ),
-          color: color(layer.color, palette),
-          crossColor: color(layer.crossColor, palette),
-          colors: (layer.colors || []).map(c => color(c, palette)),
-          sky: color(layer.sky, palette, [0.6, 0.78, 0.97]),
-          horizon: color(layer.horizon, palette, [0.86, 0.91, 0.97]),
-          ground: color(layer.ground, palette, [0.21, 0.23, 0.28]),
+          color: resolveColor(layer.color),
+          crossColor: resolveColor(layer.crossColor),
+          colors: (layer.colors || []).map(resolveColor),
+          sky: color(layer.sky, palette, [0.6, 0.78, 0.97], roles),
+          horizon: color(layer.horizon, palette, [0.86, 0.91, 0.97], roles),
+          ground: color(layer.ground, palette, [0.21, 0.23, 0.28], roles),
           cosine: Math.cos(layer.rotation || 0),
           sine: Math.sin(layer.rotation || 0)
         };
-        return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, palette) };
+        return { ...compiled, drive: prepareDrive(layer.drive, compiled, signals, resolveColor) };
       });
     const paintsBase = layers.some(basePaint);
     if (paintsBase) layers.sort((a,b)=>Number(basePaint(b))-Number(basePaint(a)));
@@ -741,7 +744,7 @@ const SurfaceLook = (() => {
       needsDistance: layers.some(layer=>layer.type==='bevel' || layer.kit?.recipe==='crevice-moss' && layer.kit.crevices!=='joints'),
       finishBeforeFog: thin || driven || hasKits || paintsBase || layers.some(layer => layer.type === 'tint'), sun: unit(vector(lightDirection, AXES.y)),
       paletteConstraint: paletteConstraints && settings.paletteConstraint !== undefined
-        ? pixelLook.prepareLookPolicy(settings.paletteConstraint, { palette, roles: paletteRoles, blueNoise, context, validateOnly, onPaletteClip,
+        ? pixelLook.prepareLookPolicy(settings.paletteConstraint, { palette, roles, blueNoise, context, validateOnly, onPaletteClip,
           skipMaskedStacks: !colorStack, skipMasks }) : null,
       projected: Boolean(settings.rainRipple) || driven || weather || hasKits || layers.some(layer => layer.effect || layer.spatialMask),
       depth: layers.some(layer => layer.effect?.depth),
@@ -883,7 +886,7 @@ const SurfaceLook = (() => {
         }
         output[3] *= mix(1, clamp(result[4]), strength);
         output[4] = Math.max(output[4], clamp(result[5] * strength) * detailGain);
-        if (!unlit && amount >= 0.5) output[5] = layer.effect.palette;
+        if (!unlit && amount >= 0.5) output[5] = layer.effect.paletteAt?.(sample.time ?? 0) ?? layer.effect.palette;
         let clipped;
         for (let i = 0; i < 3; i++) {
           const next = layer.blend === 'add' ? output[i] + result[i] :

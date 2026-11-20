@@ -49,9 +49,10 @@ function surfaceShading(world, options, camera) {
   for (const material of materials) {
     for (const layer of material.layers) {
       const { effect } = layer;
-      if (!effect?.palette || SurfaceLook.basePaint(layer)) continue;
-      palettes.push(effect.palette);
-      ids.set(effect.palette, palettes.length);
+      const palette = effect?.paletteAt?.(time) ?? effect?.palette;
+      if (!palette || SurfaceLook.basePaint(layer)) continue;
+      palettes.push(palette);
+      ids.set(palette, palettes.length);
     }
     if (material.paletteConstraint) {
       const policy = material.paletteConstraint;

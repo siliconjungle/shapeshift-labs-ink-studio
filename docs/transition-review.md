@@ -43,6 +43,11 @@ Set `world.transitionReview` in a JavaScript scene, or use `--plan file.json` wi
 
 Put any of these 0–1 values under `thresholds` in the plan. The metrics describe the rendered result. Inspect the source frames and difference map to identify the authored cause.
 
+Set `paletteMode: "visible"` for a continuously animated palette. The
+palette flag then counts changed palette entries toward the threshold
+only where their pixel change exceeds `pixelDelta`. The report still
+records total palette replacement.
+
 For a camera cut, the first row shows the actual framing change and its screen measurements. The matched row shows the preceding and event frame from the outgoing camera, then the same pair from the incoming camera. Flags at the cut come from those locked comparisons. The actual incoming shot starts with fresh temporal history.
 
 Save a [shot recipe](shot-recipes.md) with `--recipe <shot.json>` to replay and verify the sheet and metrics.

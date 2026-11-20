@@ -30,10 +30,11 @@ function camera(value, id) {
 }
 
 function prepare(plan, view, world) {
-  const { events, fps = 12, neighbors = 2, preroll = 0, thresholds: supplied = {} } = record(plan, 'Transition review plan');
+  const { events, fps = 12, neighbors = 2, preroll = 0, thresholds: supplied = {}, paletteMode = 'entries' } = record(plan, 'Transition review plan');
   if (!Number.isFinite(fps) || fps <= 0 || fps > 240 || !integer(neighbors, 2, 6) || !integer(preroll, 0, 48))
     throw new RangeError('Transition review needs a frame rate up to 240, 2 to 6 frames per side, and up to 48 preroll frames');
   if (!Array.isArray(events) || !events.length || events.length > 24) throw new RangeError('Transition review needs 1 to 24 events');
+  if (!['entries','visible'].includes(paletteMode)) throw new RangeError('Transition paletteMode must be entries or visible');
   const thresholds = { ...defaults };
   for (const [key, value] of Object.entries(record(supplied, 'Transition thresholds'))) {
     if (!Object.hasOwn(defaults, key) || !Number.isFinite(value) || value < 0 || value > 1)
@@ -63,11 +64,11 @@ function prepare(plan, view, world) {
     return { id, kind, at, skyTime, skyRate, outgoing:freeze(from),
       ...(kind === 'cut' && { incoming:freeze({ ...from, ...camera(incomingCamera, id + ' incoming') }) }) };
   });
-  return { rows, fps, neighbors, preroll, thresholds };
+  return { rows, fps, neighbors, preroll, thresholds, paletteMode };
 }
 
-function delta(before, after, thresholds) {
-  let changed = 0, lumaShift = 0, chromaShift = 0, replaced = 0;
+function delta(before, after, thresholds, paletteMode) {
+  let changed = 0, lumaShift = 0, chromaShift = 0, replaced = 0, visibleReplacement = 0;
   const a = before.rgb, b = after.rgb, count = a.length / 3, limit = thresholds.pixelDelta * 255;
   const aColors = new Set(before.palette), bColors = new Set(after.palette);
   const removed = new Set([...aColors].filter(color => !bColors.has(color)));
@@ -75,16 +76,20 @@ function delta(before, after, thresholds) {
   const paletteChanged = removed.size || added.size;
   for (let j = 0; j < a.length; j += 3) {
     const r = b[j] - a[j], g = b[j + 1] - a[j + 1], blue = b[j + 2] - a[j + 2];
-    if (Math.max(Math.abs(r), Math.abs(g), Math.abs(blue)) > limit) changed++;
+    const visible = Math.max(Math.abs(r), Math.abs(g), Math.abs(blue)) > limit;
+    if (visible) changed++;
     lumaShift += .2126*r + .7152*g + .0722*blue;
     chromaShift += Math.max(Math.abs(r-g), Math.abs(blue-g));
     if (paletteChanged && (removed.has((a[j]<<16) | (a[j+1]<<8) | a[j+2]) ||
-        added.has((b[j]<<16) | (b[j+1]<<8) | b[j+2]))) replaced++;
+        added.has((b[j]<<16) | (b[j+1]<<8) | b[j+2]))) {
+      replaced++;
+      if (visible) visibleReplacement++;
+    }
   }
   chromaShift /= 510*count;
   const paletteReplacement = replaced / count;
   return { changedFraction:changed / count, lumaShift:lumaShift / (255*count), chromaShift, paletteReplacement,
-    paletteShift:Math.max(chromaShift,paletteReplacement) };
+    paletteShift:Math.max(chromaShift,paletteMode === 'visible' ? visibleReplacement/count : paletteReplacement) };
 }
 
 function difference(before, after) {
@@ -100,8 +105,8 @@ function difference(before, after) {
   return { w, h, rgb };
 }
 
-function evidence(from, to, thresholds, comparison, flag = true) {
-  const measured = delta(from, to, thresholds);
+function evidence(from, to, thresholds, paletteMode, comparison, flag = true) {
+  const measured = delta(from, to, thresholds, paletteMode);
   const flags = flag ? checks.flatMap(([kind, metric, threshold]) => Math.abs(measured[metric]) > thresholds[threshold]
     ? [{ kind, value:round(measured[metric]), threshold:thresholds[threshold] }] : []) : [];
   const score = Math.max(...checks.map(([, metric, threshold]) => Math.abs(measured[metric]) / Math.max(1e-9, thresholds[threshold])));
@@ -171,7 +176,7 @@ function capture(world, settings, { rows, fps, neighbors, preroll }, pose) {
   return sequences;
 }
 
-function analyze(sequence, neighbors, thresholds) {
+function analyze(sequence, neighbors, thresholds, paletteMode) {
   const { event, frames, matched } = sequence;
   const steps = [];
   let screenEvidence;
@@ -179,14 +184,14 @@ function analyze(sequence, neighbors, thresholds) {
   for (let i = 1; i < frames.length; i++) {
     const from = frames[i - 1], to = frames[i];
     const expectedCut = Boolean(event.incoming && to.offset === 0);
-    const display = evidence(from.image,to.image,thresholds,'screen',!expectedCut);
+    const display = evidence(from.image,to.image,thresholds,paletteMode,'screen',!expectedCut);
     const step = { from:from.time, to:to.time, offset:to.offset, expectedCut, screen:display.result };
     const candidate = { ...display, offset:to.offset, expectedCut };
     if (!screenEvidence || candidate.score > screenEvidence.score ||
         (candidate.score === screenEvidence.score && Math.abs(candidate.offset) < Math.abs(screenEvidence.offset)))
       screenEvidence = candidate;
     if (expectedCut) {
-      const locked = Object.entries(matched).map(([shot,[a,b]]) => evidence(a,b,thresholds,shot));
+      const locked = Object.entries(matched).map(([shot,[a,b]]) => evidence(a,b,thresholds,paletteMode,shot));
       step.matched = locked.map(pair => pair.result);
       cutEvidence = locked.reduce((a,b) => b.score > a.score ? b : a);
     }
@@ -264,18 +269,19 @@ function transitionReview(world, { plan = world.transitionReview, width = 160, h
     throw new RangeError('Invalid transition review dimensions, scale, or pose callback');
   if (world.anim?.stateful && !pose) throw new TypeError('A stateful scene needs a pose callback for transition review');
   const prepared = prepare(plan,view,world);
-  const { rows, fps, neighbors, preroll, thresholds } = prepared;
+  const { rows, fps, neighbors, preroll, thresholds, paletteMode } = prepared;
   const cuts = rows.filter(event => event.incoming).length;
   const columns = neighbors*2+1, size = sheetLayout(width,height,columns,rows.length+cuts);
   const samples = rows.length*(neighbors*2+preroll) + cuts*(neighbors+preroll+2);
   if (size.w*size.h*scale*scale > 24e6 || samples*width*height > 72e6)
     throw new RangeError('Transition review exceeds its render or sheet pixel budget');
   const settings = { ...view,w:width,h:height,px:1,lockCamera:true,transparent:false,passes:false,samples:false,captureCoverage:false };
-  const results = capture(world,settings,prepared,pose).map(sequence => analyze(sequence,neighbors,thresholds));
+  const results = capture(world,settings,prepared,pose).map(sequence => analyze(sequence,neighbors,thresholds,paletteMode));
   const sheet = montage(results,width,height,columns,size);
   const events = results.map(result => result.report);
   return { image:scale === 1 ? sheet : upscale(sheet,scale),
-    report:{ width,height,scale,fps,neighbors,preroll,thresholds,sheet:size,flagCount:events.reduce((sum,event) => sum+event.flagCount,0),events } };
+    report:{ width,height,scale,fps,neighbors,preroll,thresholds,paletteMode,sheet:size,
+      flagCount:events.reduce((sum,event) => sum+event.flagCount,0),events } };
 }
 
 module.exports = { transitionReview };

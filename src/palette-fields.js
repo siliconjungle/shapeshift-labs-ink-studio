@@ -1,12 +1,14 @@
 /* Scoped, dependency-free palette fields for textures and material samplers. */
 const PaletteFields = (() => {
-  let pixels, spaces;
+  let pixels, spaces, curves;
   try {
     pixels = PixelLook;
     spaces = ColorSpace;
+    curves = ColorCurves;
   } catch {
     pixels = require('./pixel-look.js');
     spaces = require('./color-space.js');
+    curves = require('./color-curves.js');
   }
   const rgbScale = pixels.rgbWeights.map(Math.sqrt), identity = [1, 1, 1];
   const diagnosticRamp = ['#162135','#334f77','#597fa6','#65b4b4','#a3d5ae','#f1dc8e','#f59b65','#ed6258'];
@@ -49,19 +51,19 @@ const PaletteFields = (() => {
   function checkCoordinates(u, v) {
     if (!Number.isFinite(u) || !Number.isFinite(v)) throw new TypeError('Palette field coordinates must be finite');
   }
-  function hueBrightness(definition, resolveColor = swatch) {
+  function hueBrightness(definition, resolveColor = swatch, reference) {
     if (!record(definition) || Object.keys(definition).some(key => !['palette', 'hue', 'brightness', 'saturation'].includes(key)))
       throw new TypeError('A hue–brightness field needs a palette and optional hue, brightness and saturation');
     const { palette, hue = [0, 1], brightness = [0, 1], saturation = 1 } = definition;
-    if (!pair(hue) || hue[1] <= hue[0] || hue[1] - hue[0] > 1 ||
+    if (!pair(hue) || hue[1] <= hue[0] || hue[1] - hue[0] > 1 + 1e-12 ||
         !pair(brightness) || !brightness.every(fraction) || brightness[0] > brightness[1] || !fraction(saturation))
       throw new RangeError('Use an increasing hue range up to one turn, ordered brightness in [0, 1], and saturation in [0, 1]');
-    const startHue = wrap(hue[0]), hueSpan = hue[1] - hue[0], [dark, light] = brightness;
+    const startHue = wrap(hue[0]), hueSpan = Math.min(1,hue[1] - hue[0]), [dark, light] = brightness;
     return field(palette, resolveColor, match => (u, v, axes) =>
-      match(startHue + hueSpan * coord(u), saturation, dark + (light - dark) * coord(v), axes));
+      match(startHue + hueSpan * coord(u), saturation, dark + (light - dark) * coord(v), axes), false, reference);
   }
 
-  function polar(definition, resolveColor = swatch) {
+  function polar(definition, resolveColor = swatch, reference) {
     if (!record(definition) || Object.keys(definition).some(key =>
       !['palette', 'radial', 'range', 'rotation', 'brightness', 'saturation'].includes(key)))
       throw new TypeError('A polar field needs a palette and optional radial, range, rotation, brightness or saturation');
@@ -79,7 +81,7 @@ const PaletteFields = (() => {
       const hue = startHue + Math.atan2(y, x) / (2 * Math.PI);
       const value = inner + (outer - inner) * radius;
       return byBrightness ? match(hue, fixed, value, axes) : match(hue, value, fixed, axes);
-    }, true);
+    }, true, reference);
   }
 
   function readSwatches(palette, resolveColor) {
@@ -94,11 +96,11 @@ const PaletteFields = (() => {
     }));
   }
 
-  function field(palette, resolveColor, sampler, disk = false) {
+  function field(palette, resolveColor, sampler, disk = false, reference) {
     const swatches = readSwatches(palette, resolveColor);
     const rgb = [0, 0, 0];
     const pick = sampler((hue, saturation, value, axes) =>
-      pixels.nearest(hsv(axes?.hue ?? hue,axes?.saturation ?? saturation,axes?.brightness ?? value,rgb),swatches));
+      pixels.nearest(hsv(axes?.hue ?? hue,axes?.saturation ?? saturation,axes?.brightness ?? value,rgb),reference ?? swatches));
     function index(u, v) {
       checkCoordinates(u, v);
       return pick(u, v);
@@ -131,7 +133,7 @@ const PaletteFields = (() => {
     return Object.freeze({ palette: swatches, index, sample, raster });
   }
 
-  function coverage(definition, resolveColor = swatch) {
+  function coverage(definition, resolveColor = swatch, reference) {
     if (!record(definition) || Object.keys(definition).some(key =>
       !['palette','space','slice','view','displayRange','ramp','edge'].includes(key)))
       throw new TypeError('A coverage field needs a palette and optional space, slice, view, display range, ramp or edge');
@@ -160,7 +162,7 @@ const PaletteFields = (() => {
     const vLength = Math.hypot(...vPerpendicular), basisV = vPerpendicular.map(n => n/vLength);
     if (!(uLength > 1e-10 && vLength > 1e-10))
       throw new RangeError('Coverage slice axes must span a plane');
-    const sites = swatches.map(value => space === 'oklab' ? spaces.toOKLab(value) : metric(value));
+    const sites = (view === 'nearest' && reference || swatches).map(value => space === 'oklab' ? spaces.toOKLab(value) : metric(value));
     // Each cell is the intersection of pairwise half-planes on this slice.
     const inverseNormals = sites.map(site => sites.map(other => {
       const delta = minus(other,site);
@@ -170,7 +172,7 @@ const PaletteFields = (() => {
     let outputPalette = swatches, edgeSlot;
     if (edge) {
       const [color] = readSwatches([edge.color],resolveColor);
-      edgeSlot = swatches.findIndex(row => row.every((n,i) => n === color[i]));
+      edgeSlot = reference ? -1 : swatches.findIndex(row => row.every((n,i) => n === color[i]));
       if (edgeSlot < 0) {
         if (swatches.length === 48) throw new RangeError('Coverage edge and swatches must fit in 48 output colors');
         edgeSlot = swatches.length;
@@ -234,7 +236,7 @@ const PaletteFields = (() => {
     return Object.freeze({palette:swatches,outputPalette,index,sample,measure,raster});
   }
 
-  function chromaField(definition, resolveColor = swatch) {
+  function chromaField(definition, resolveColor = swatch, reference) {
     if (!record(definition)) throw new TypeError('A chroma field needs complementary or desaturation controls');
     const {type, color, opposite, neutralLightness, route = 'neutral', shade = [.68,0],
       shadow = '#000000', steps, palette} = definition;
@@ -263,6 +265,7 @@ const PaletteFields = (() => {
     const forward = turn < 1e-8 || turn > 1-1e-8 ? 0 : turn;
     const delta = (route === 'decreasing' && forward > 0 ? forward-1 : forward)*2*Math.PI;
     const colors = palette === undefined ? undefined : readSwatches(palette,resolveColor);
+    const match = reference ?? colors;
     const value = [0,0,0];
     const mix = (x,y,t)=>x+(y-x)*t;
     const band = (t,n)=>Math.min(n-1,Math.floor(t*n))/(n-1);
@@ -294,7 +297,7 @@ const PaletteFields = (() => {
       return spaces.fromOKLab(value);
     }
     function sample(u,v,out=[0,0,0]) {
-      const raw = paint(u,v), rgb = colors ? colors[pixels.nearest(raw,colors)] : raw;
+      const raw = paint(u,v), rgb = colors ? colors[pixels.nearest(raw,match)] : raw;
       for (let i=0;i<3;i++) out[i] = rgb[i];
       return out;
     }
@@ -303,13 +306,13 @@ const PaletteFields = (() => {
       const rgb = new Uint8Array(w*h*3), indices = colors && new Uint8Array(w*h);
       for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
         const p = y*w+x, raw = paint((x+.5)/w,1-(y+.5)/h);
-        const slot = colors && (indices[p] = pixels.nearest(raw,colors)), color = colors ? colors[slot] : raw;
+        const slot = colors && (indices[p] = pixels.nearest(raw,match)), color = colors ? colors[slot] : raw;
         for (let c=0;c<3;c++) rgb[p*3+c] = Math.round(color[c]*255);
       }
       return {w,h,rgb,...(colors && {indices,palette:colors})};
     }
     return Object.freeze({type,outputPalette:colors,sample,raster,
-      ...(colors && {index:(u,v)=>pixels.nearest(paint(u,v),colors)})});
+      ...(colors && {index:(u,v)=>pixels.nearest(paint(u,v),match)})});
   }
 
   function rampRaster(sample, outputPalette, w, h) {
@@ -323,20 +326,22 @@ const PaletteFields = (() => {
     return {w,h,rgb,outputPalette};
   }
 
-  function grayscale(definition, resolveColor) {
+  function grayscale(definition, resolveColor, reference) {
     const { palette, metric = 'nearest', range = [0,1] } = definition;
     if (Object.keys(definition).some(key => !['type','palette','metric','range'].includes(key)) ||
         !['nearest','lightness'].includes(metric) || !pair(range) || !range.every(fraction) || range[0] > range[1])
       throw new RangeError('Grayscale ramps need a palette, nearest or lightness metric and ordered gray endpoints in [0, 1]');
     const outputPalette = readSwatches(palette,resolveColor);
-    const lightness = Object.freeze(outputPalette.map(color=>spaces.toOKLab(color)[0]));
+    const match = reference ?? outputPalette;
+    const lightness = match.map(color=>spaces.toOKLab(color)[0]);
+    const outputLightness = match === outputPalette ? lightness : outputPalette.map(color=>spaces.toOKLab(color)[0]);
     const [low,high] = range, span = high-low, gray = [0,0,0];
     function setTarget(t) {
       if (!Number.isFinite(t)) throw new TypeError('Palette ramp coordinate must be finite');
       gray.fill(low+coord(t)*span);
     }
     function pick(targetLightness) {
-      if (metric === 'nearest') return pixels.nearest(gray,outputPalette);
+      if (metric === 'nearest') return pixels.nearest(gray,match);
       targetLightness ??= spaces.toOKLab(gray)[0];
       let index = 0, best = Infinity;
       for (let i=0;i<lightness.length;i++) {
@@ -360,12 +365,12 @@ const PaletteFields = (() => {
       const slot = pick(targetLightness), color = outputPalette[slot];
       const error = metric === 'nearest' ? Math.sqrt(dot(gray.map((v,i)=>(v-color[i])**2),pixels.rgbWeights)) :
         Math.abs(lightness[slot]-targetLightness);
-      return {index:slot,color,gray:gray[0],targetLightness,swatchLightness:lightness[slot],error};
+      return {index:slot,color,gray:gray[0],targetLightness,swatchLightness:outputLightness[slot],error};
     }
     function report(width=192) {
       if (!Number.isSafeInteger(width) || width < 1 || width > 4096)
         throw new RangeError('A grayscale report needs a width from 1 to 4096 pixels');
-      const swatches = outputPalette.map((rgb,index)=>({index,rgb,lightness:lightness[index],pixels:0}));
+      const swatches = outputPalette.map((rgb,index)=>({index,rgb,lightness:outputLightness[index],pixels:0}));
       const bands = [];
       for (let pixel=0;pixel<width;pixel++) {
         const slot = index((pixel+.5)/width);
@@ -380,10 +385,10 @@ const PaletteFields = (() => {
       raster:(w,h)=>rampRaster(sample,outputPalette,w,h)});
   }
 
-  function ramp(definition, resolveColor = swatch) {
+  function ramp(definition, resolveColor = swatch, reference, layout) {
     if (!record(definition)) throw new TypeError('A palette ramp needs a spectrum, primary or grayscale definition');
     const { type, steps, palette } = definition;
-    if (type === 'grayscale') return grayscale(definition,resolveColor);
+    if (type === 'grayscale') return grayscale(definition,resolveColor,reference);
     const fields = type === 'spectrum' ? ['hue','saturation','brightness'] :
       type === 'primary' ? ['accent','accentAt','shadow','highlight'] : null;
     if (!fields || Object.keys(definition).some(key => !['type','steps','palette',...fields].includes(key)))
@@ -394,10 +399,10 @@ const PaletteFields = (() => {
     let paint, fullTurn = false, accentStop;
     if (type === 'spectrum') {
       const { hue = [0, 1], saturation = 1, brightness = 1 } = definition;
-      if (!pair(hue) || Math.abs(hue[1]-hue[0]) > 1 || !fraction(saturation) || !fraction(brightness))
+      if (!pair(hue) || Math.abs(hue[1]-hue[0]) > 1 + 1e-12 || !fraction(saturation) || !fraction(brightness))
         throw new RangeError('Spectrum ramps need a hue span of at most one turn and saturation and brightness in [0, 1]');
-      const start = wrap(hue[0]), span = hue[1]-hue[0];
-      fullTurn = Math.abs(span) === 1;
+      const start = wrap(hue[0]), span = Math.max(-1,Math.min(1,hue[1]-hue[0]));
+      fullTurn = Math.abs(span) >= 1 - 1e-12;
       paint = (t,out) => hsv(start+span*t,saturation,brightness,out);
     } else {
       const { accent, accentAt = .5, shadow = '#000000', highlight = '#ffffff' } = definition;
@@ -423,13 +428,16 @@ const PaletteFields = (() => {
     }
 
     const swatches = palette === undefined ? undefined : readSwatches(palette,resolveColor);
+    const match = reference ?? swatches;
     const scratch = [0,0,0];
-    const accentStep = steps >= 3 && accentStop !== undefined
-      ? Math.max(1,Math.min(steps-2,Math.floor(accentStop*steps))) : -1;
+    const accentPosition = layout?.accentAt ?? accentStop;
+    const accentStep = steps >= 3 && accentPosition !== undefined
+      ? Math.max(1,Math.min(steps-2,Math.floor(accentPosition*steps))) : -1;
+    const closedHue = layout?.hue ? Math.abs(layout.hue[1]-layout.hue[0]) >= 1-1e-12 : fullTurn;
     const stepColors = steps && Object.freeze(Array.from({length:steps},(_,i) => {
-      const t = i === accentStep ? accentStop : i/(fullTurn ? steps : steps-1);
+      const t = i === accentStep ? accentStop : i/(closedHue ? steps : steps-1);
       const rgb = paint(t,[0,0,0]);
-      return swatches ? swatches[pixels.nearest(rgb,swatches)] : Object.freeze(rgb);
+      return swatches ? swatches[pixels.nearest(rgb,match)] : Object.freeze(rgb);
     }));
     const outputPalette = stepColors || swatches;
     function sample(t, out=[0,0,0]) {
@@ -437,13 +445,135 @@ const PaletteFields = (() => {
       const u = coord(t);
       if (!outputPalette) return paint(u,out);
       const color = stepColors ? stepColors[Math.min(steps-1,Math.floor(u*steps))] :
-        swatches[pixels.nearest(paint(u,scratch),swatches)];
+        swatches[pixels.nearest(paint(u,scratch),match)];
       for (let i=0;i<3;i++) out[i] = color[i];
       return out;
     }
     return Object.freeze({type,outputPalette,sample,raster:(w,h)=>rampRaster(sample,outputPalette,w,h)});
   }
 
-  return Object.freeze({ hueBrightness, polar, coverage, chromaField, ramp });
+  const controls = {
+    hueBrightness:['palette','hue','brightness','saturation'],
+    polar:['palette','rotation','range','brightness','saturation'],
+    coverage:['palette','ramp','displayRange'],
+    chromaField:['palette','color','shadow','opposite','shade','neutralLightness'],
+    spectrum:['palette','hue','saturation','brightness'],
+    primary:['palette','shadow','accent','highlight','accentAt'],
+    grayscale:['palette','range'],
+    bands:['palette']
+  };
+  const colorLists = ['palette','ramp'];
+  const colors = ['shadow','accent','highlight','color','opposite'];
+  const mix = (a,b,t) => a === b ? a : a*(1-t)+b*t;
+
+  function animate(compile, names) {
+    return (definition, resolveColor = swatch) => {
+      if (!record(definition) || definition.animation === undefined) return compile(definition, resolveColor);
+      const { animation, ...source } = definition;
+      if (!record(animation) || Object.keys(animation).some(key=>!['keys','playback','interpolation','protect'].includes(key)))
+        throw new TypeError('Palette field animation needs keys and optional playback, interpolation and protect');
+      const { keys, playback = 'clamp', interpolation = 'smooth', protect = [] } = animation;
+      if (!Array.isArray(keys) || keys.length < 2 || keys.length > 128 ||
+          !['clamp','loop','pingpong'].includes(playback) || !curves.modes.includes(interpolation) ||
+          !Array.isArray(protect))
+        throw new RangeError('Invalid palette field animation settings');
+      const base = structuredClone(source), kind = names ?? base.type;
+      const allowed = Object.hasOwn(controls,kind) ? controls[kind] : [];
+      compile(base,resolveColor);
+      const frames = Array.from(keys, (key,i) => {
+        if (!record(key) || !Number.isFinite(key.time) || key.time > 1e9 ||
+            (i ? !(key.time > keys[i-1].time) : key.time !== 0))
+          throw new RangeError('Palette field animation keys must increase from time zero');
+        const { time:at, ...values } = key;
+        if (Object.keys(values).some(name=>!allowed.includes(name) || base[name] === undefined))
+          throw new TypeError('Palette field keys must animate controls supplied in the base definition');
+        return { at, values };
+      });
+      const changed = [...new Set(frames.flatMap(key=>Object.keys(key.values)))];
+      const locks = new Set();
+      for (const value of protect) {
+        // Numeric protection addresses positions. Strings can also address a named stop.
+        const palette = Array.isArray(base.palette) ? base.palette : [];
+        const slots = typeof value === 'string' ? palette.flatMap((color,i)=>value === color ? [i] : []) :
+          Number.isSafeInteger(value) && value >= 0 && value < palette.length ? [value] : [];
+        const stop = typeof value === 'string' && colors.includes(value) && base[value] !== undefined;
+        if (!slots.length && !stop) throw new RangeError('Unknown protected palette slot or stop ' + value);
+        for (const slot of slots) locks.add(slot);
+        if (stop) locks.add(value);
+      }
+      const original = changed.includes('palette') ? readSwatches(base.palette,resolveColor) : undefined;
+      const rgbValues = new WeakSet();
+      const rgb = (a,b,t) => {
+        const result = a.map((n,i)=>mix(n,b[i],t));
+        rgbValues.add(result);
+        return result;
+      };
+      function valuesAt(key) {
+        return changed.map(name=>{
+          const value = Object.hasOwn(key.values,name) ? key.values[name] : base[name];
+          if (colorLists.includes(name)) {
+            const rows = readSwatches(value,resolveColor);
+            if (rows.length !== base[name].length) throw new RangeError('Animated palette lists must keep their slot count');
+            return rows.map((row,i)=>name === 'palette' && locks.has(i) ? original[i] : row);
+          }
+          if (colors.includes(name)) return readSwatches([locks.has(name) ? base[name] : value],resolveColor)[0];
+          const compatible = Array.isArray(base[name]) ? vector(value,base[name].length) : Number.isFinite(value);
+          if (!compatible) throw new TypeError('Invalid animated palette control ' + name);
+          return Array.isArray(value) ? value.slice() : value;
+        });
+      }
+      function build(a,b,t) {
+        const config = { ...base };
+        changed.forEach((name,i)=>{
+          const x = a[i], y = b[i];
+          config[name] = colorLists.includes(name) ? x.map((row,j)=>rgb(row,y[j],t)) :
+            colors.includes(name) ? rgb(x,y,t) :
+            Array.isArray(x) ? x.map((n,j)=>mix(n,y[j],t)) : mix(x,y,t);
+        });
+        return compile(config, value=>rgbValues.has(value) ? value : resolveColor(value), original, base);
+      }
+      const rows = frames.map(key=>{
+        const values = valuesAt(key);
+        return { at:key.at, values, field:build(values,values,0) };
+      });
+      const last = rows.at(-1), duration = last.at;
+      const first = rows[0], match = (a,b)=>Math.abs(a-b)<1e-9;
+      if (playback === 'loop' && !first.values.every((value,i)=>{
+        const end = last.values[i], name = changed[i];
+        if (name === 'hue') {
+          const turns = Math.round(end[0]-value[0]);
+          return value.every((n,j)=>match(n+turns,end[j]));
+        }
+        if (name === 'rotation') return match(end-value,Math.round(end-value));
+        return JSON.stringify(value) === JSON.stringify(end);
+      })) throw new RangeError('Palette field loop endpoints must match or differ by whole hue turns');
+
+      let previousTime, previousFrame;
+      function frame(seconds = 0) {
+        if (!Number.isFinite(seconds)) throw new TypeError('Palette field time must be finite');
+        if (seconds === previousTime) return previousFrame;
+        let time = Math.min(duration,Math.max(0,seconds));
+        if (playback === 'loop' || playback === 'pingpong') {
+          const period = playback === 'loop' ? duration : duration*2;
+          time = seconds%period;
+          if (time < 0) time += period;
+          if (time > duration) time = period-time;
+        }
+        const hi = curves.segmentIndex(rows,time), b = rows[hi];
+        let result = b.field;
+        if (hi && time !== b.at) {
+          const a = rows[hi-1], amount = curves.weight(interpolation,(time-a.at)/(b.at-a.at));
+          result = amount === 0 ? a.field : build(a.values,b.values,amount);
+        }
+        previousTime = seconds;
+        return previousFrame = result;
+      }
+      return Object.freeze({ ...first.field, duration, frame,
+        ...(first.field.raster && { raster:(w,h,time)=>frame(time).raster(w,h) }) });
+    };
+  }
+
+  return Object.freeze({ hueBrightness:animate(hueBrightness,'hueBrightness'), polar:animate(polar,'polar'),
+    coverage:animate(coverage,'coverage'), chromaField:animate(chromaField,'chromaField'), ramp:animate(ramp), animate });
 })();
 if (typeof module !== 'undefined') module.exports = PaletteFields;

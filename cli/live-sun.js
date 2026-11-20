@@ -199,16 +199,22 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure, { shadowArt, 
     return geometry * (cloudShadow?.(x, y, z) ?? 1) * (exposure?.(x, y, z) ?? 1);
   }
   const level = (i, x, y, z) => sun.ambient + sun.intensity * facing[i] * visibility(i, x, y, z);
-  function gains(i, x, y, z, rgb) {
-    rgb.fill(level(i, x, y, z));
+  const indirectScratch = [0,0,0];
+  function indirectAt(i,x,y,z,out = [0,0,0]) {
     const offset = i * 3;
     const local = probes?.(i,x,y,z,normals[i]);
-    if (!local && (!indirect || !(indirect[offset] || indirect[offset+1] || indirect[offset+2]))) return rgb;
+    if (!local && (!indirect || !(indirect[offset] || indirect[offset+1] || indirect[offset+2]))) return null;
+    const mix = local?.mix ?? 0, openness = exposure?.(x,y,z) ?? 1;
+    for (let c=0;c<3;c++) out[c] = (indirect?.[offset+c] ?? 0) * openness * (1-mix) + (local?.rgb[c] ?? 0) * mix;
+    return out;
+  }
+  function gains(i, x, y, z, rgb) {
+    rgb.fill(level(i, x, y, z));
+    const bounce = indirectAt(i,x,y,z,indirectScratch);
+    if (!bounce) return rgb;
     // Blend the local irradiance into the hemisphere fill in linear light.
     linear(rgb, rgb);
-    const mix = local?.mix ?? 0, openness = exposure?.(x,y,z) ?? 1;
-    for (let c = 0; c < 3; c++)
-      rgb[c] += (indirect?.[offset+c] ?? 0) * openness * (1-mix) + (local?.rgb[c] ?? 0) * mix;
+    for (let c = 0; c < 3; c++) rgb[c] += bounce[c];
     return srgb(rgb, rgb);
   }
   function rampLevel(i, x, y, z, tint) {
@@ -222,7 +228,8 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure, { shadowArt, 
     const n = fill[i];
     return n >= 0 ? [(n >> 16)/255, (n >> 8 & 255)/255, (n & 255)/255] : null;
   };
-  return { albedo, normal: i => normals[i], level, gains, rampLevel, visibility, transmissionVisibility, hasBounce: Boolean(indirect || probes) };
+  return { albedo, normal: i => normals[i], level, gains, rampLevel, visibility, transmissionVisibility,
+    indirectAt, hasBounce: Boolean(indirect || probes) };
 }
 
 module.exports = { prepare, create };

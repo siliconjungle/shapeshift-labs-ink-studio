@@ -54,12 +54,13 @@ const VolumeLight = (() => {
       if (!light || typeof light !== 'object' || Array.isArray(light)) throw new TypeError(name + ' needs an object');
       const { castsShadow = true } = light;
       if (typeof castsShadow !== 'boolean') throw new TypeError(name + ' castsShadow must be boolean');
+      const field = palettes.compile(light.paletteField, palettes.lightDomains, swatch => color(swatch, palette));
       return {
         at: vector(atTime(light.at), name + ' position'),
         rgb: color(light.color ?? '#ffd095', palette),
         intensity: number(atTime(light.intensity ?? 1), 0, 64, name + ' intensity'),
         radius: number(light.radius ?? 3, .001, 1000, name + ' radius'),
-        paletteField: palettes.compile(light.paletteField, palettes.lightDomains, swatch => color(swatch, palette)),
+        paletteField: field?.frame?.(time) ?? field,
         castsShadow
       };
     }

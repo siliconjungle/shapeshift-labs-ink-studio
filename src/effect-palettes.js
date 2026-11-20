@@ -1,9 +1,10 @@
 /* Per-effect output ramps, selected by visible coverage on the native art grid. */
 const EffectPalettes = (() => {
   const pixel = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
-  const kinds = Object.freeze(['fog', 'clouds', 'sky', 'emission']);
-  const floors = { fog: .58, clouds: .46, sky: .48, emission: .24 };
-  const order = ['emission', 'fog', 'clouds', 'sky'];
+  const kinds = Object.freeze(['fog', 'clouds', 'sky', 'emission', 'bounce', 'shadow']);
+  const floors = { fog: .58, clouds: .46, sky: .48, emission: .24, bounce: .12, shadow: .30 };
+  const order = ['emission', 'fog', 'clouds', 'shadow', 'bounce', 'sky'];
+  const lighting = kind => kind === 'shadow' || kind === 'bounce';
   const symbols = Object.freeze(Object.fromEntries(kinds.map((name, i) => [name, i + 1])));
   const list = (value, label) => {
     if (!Array.isArray(value) || Array.from(value).some(item => typeof item !== 'string' || !item.trim()))
@@ -25,30 +26,38 @@ const EffectPalettes = (() => {
     return value.slice();
   }
 
-  function prepare(source, palette) {
+  function prepare(source, palette, roles = {}, { deferRoles = false } = {}) {
     if (source == null || source === false) return null;
     record(source, [...kinds, 'protect'], 'effect palette');
     const protect = record(source.protect ?? {}, ['objects', 'materials'], 'effect palette protection');
     const objects = list(protect.objects ?? [], 'Protected objects'), materials = list(protect.materials ?? [], 'Protected materials');
     const ramps = new Map();
+    const select = pixel.paletteSelector(palette, roles);
     for (const kind of kinds) {
       const raw = source[kind];
       if (raw === undefined || raw === false) continue;
       const rule = Array.isArray(raw) ? { colors: raw } :
-        record(raw, ['colors', 'threshold', 'geometry', 'mode', 'range', 'dither', 'when'], kind + ' palette');
-      const { colors, geometry = false, mode = 'luma', dither = 0, when } = rule;
-      if (typeof geometry !== 'boolean' || !['luma','nearest'].includes(mode)) throw new TypeError('Invalid ' + kind + ' palette mode or geometry');
+        record(raw, ['colors', 'threshold', 'geometry', 'mode', 'range', 'dither', 'when', 'combine'], kind + ' palette');
+      const { colors, combine, geometry = lighting(kind) || combine === 'material',
+        mode = combine === 'material' ? 'nearest' : 'luma', dither = 0, when } = rule;
+      if (typeof geometry !== 'boolean' || !['luma','nearest'].includes(mode) || (combine !== undefined && combine !== 'material'))
+        throw new TypeError('Invalid ' + kind + ' palette mode, geometry or combine setting');
       const threshold = unit(rule.threshold ?? floors[kind], kind + ' coverage threshold');
       const amount = unit(dither, kind + ' palette dither');
       const range = limits(rule.range ?? [0,1], kind + ' tone range');
       range.forEach(n => unit(n, kind + ' tone range'));
       if (!Array.isArray(colors) || !colors.length || colors.length > 64)
         throw new RangeError('Effect palettes need 1 to 64 colors');
-      const packed = Array.from(colors, color => {
-        if (typeof color === 'string' && /^#[\da-f]{6}$/i.test(color)) return parseInt(color.slice(1),16);
-        if (Number.isSafeInteger(color) && color >= 0 && color < palette.length) return palette[color];
-        throw new TypeError('Effect colors need #rrggbb or a scene palette index');
+      const packed = Array.from(colors).flatMap(color => {
+        if (typeof color === 'string' && /^#[\da-f]{6}$/i.test(color)) return [parseInt(color.slice(1),16)];
+        if (Number.isSafeInteger(color) && color >= 0 && color < palette.length) return [palette[color]];
+        if (typeof color === 'string' && color.trim() && !color.startsWith('#')) {
+          // Environment packs validate structure before binding to a destination scene's roles.
+          return deferRoles ? [0] : select(color).map(index=>palette[index]);
+        }
+        throw new TypeError('Effect colors need #rrggbb, a scene palette index or a scene role');
       });
+      if (packed.length > 64) throw new RangeError('Expanded effect palette cannot exceed 64 colors');
       let gate;
       if (when !== undefined) {
         const { channel, min = -Infinity, max = Infinity } = record(when,['channel','min','max'],'effect palette profile gate');
@@ -58,7 +67,7 @@ const EffectPalettes = (() => {
         gate = { channel, min, max };
       }
       const rgb = packed.map(c => [(c>>16)/255, ((c>>8)&255)/255, (c&255)/255]);
-      ramps.set(kind, { packed, rgb, geometry, mode, amount, range, threshold, gate });
+      ramps.set(kind, { packed, rgb, geometry, mode, amount, range, threshold, gate, combine });
     }
     return ramps.size ? { ramps, objects, materials } : null;
   }
@@ -73,7 +82,8 @@ const EffectPalettes = (() => {
     return ramps.size ? { ...settings, ramps } : null;
   }
 
-  function apply(frame, passes, signals, source, palette, capture, ditherAt) {
+  const distance = (a,b) => pixel.rgbWeights.reduce((sum,weight,i)=>sum+weight*(a[i]-b[i])**2,0);
+  function apply(frame, passes, signals, source, palette, capture, ditherAt, ownership) {
     const { rules, media, backdropCloud, sky, haze } = signals;
     const { w, h, rgb } = frame, { ramps, objects, materials } = rules;
     const mask = capture ? new Uint8Array(w*h) : null;
@@ -94,13 +104,21 @@ const EffectPalettes = (() => {
         fog: (media?.[q] ?? 0) + through*(haze?.[bottom] ?? 0),
         clouds: (media?.[q+1] ?? 0) + back*cloud,
         sky: sky ? back*(1-cloud) : 0,
-        emission: emission ? Math.max(emission[q],emission[q+1],emission[q+2]) : 0
+        emission: emission ? Math.max(emission[q],emission[q+1],emission[q+2]) : 0,
+        bounce: 0, shadow: 0
       };
+      let light;
       for (const kind of active) {
-        const ramp = ramps.get(kind), weight = weights[kind];
+        if (lighting(kind) && geometry && signals.lightAt) light ??= signals.lightAt(p,bottom) ?? {};
+        const ramp = ramps.get(kind), weight = light?.[kind] ?? weights[kind];
         if (!(weight > 0 && weight >= ramp.threshold) ||
-            (geometry && !ramp.geometry && (kind === 'fog' || kind === 'clouds'))) continue;
-        for (let c=0;c<3;c++) sample[c] = kind === 'emission' ? emission[q+c] : source[bottom*3+c]/255;
+            (geometry && !ramp.geometry && (kind === 'fog' || kind === 'clouds' || lighting(kind)))) continue;
+        if (ramp.combine && ownership?.outlined?.[bottom]) break;
+        const local = geometry && ramp.combine && ownership?.material(p,bottom);
+        if (local?.reserved) break;
+        const lit = lighting(kind) && ownership?.lit;
+        for (let c=0;c<3;c++) sample[c] = kind === 'emission' ? emission[q+c] :
+          lit && local ? lit[bottom*3+c] : source[bottom*3+c]/255;
         let index;
         if (ramp.mode === 'nearest') index = pixel.nearest(sample, ramp.rgb, false);
         else {
@@ -110,11 +128,19 @@ const EffectPalettes = (() => {
           const [dx,dy] = ramp.amount && ditherAt ? ditherAt(x,y) : [x,y];
           index = Math.min(span, Math.max(0,Math.round(step + (pixel.bayerRank(dx,dy)-.5)*ramp.amount)));
         }
-        const color = ramp.packed[index];
+        let color = ramp.packed[index], winner = 'shared';
+        if (local) {
+          const swatch = ownership.pick(local, sample, x, y, p);
+          if (distance(sample,swatch) <= distance(sample,ramp.rgb[index])) {
+            color = (Math.round(swatch[0]*255)<<16) | (Math.round(swatch[1]*255)<<8) | Math.round(swatch[2]*255);
+            winner = 'material';
+          }
+        }
         rgb[q] = color>>16;
         rgb[q+1] = (color>>8)&255;
         rgb[q+2] = color&255;
         if (mask) mask[p] = symbols[kind];
+        ownership?.mark(p,{kind,ramp,local,winner,weight});
         changed = true;
         break;
       }

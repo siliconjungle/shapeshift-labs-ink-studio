@@ -45,6 +45,7 @@
     }
     for (const item of [remap, ...(stack?.steps ?? []).map(step => step.remap)]) if (item) {
       for (const value of [...(item.protect ?? []), ...(item.rules ?? []).map(rule => rule.from)]) add('swatch', value);
+      for (const { to } of item.rules ?? []) if (typeof to === 'string' && !swatch(to)) add('swatch', to);
     }
     if (palette?.palette === undefined && (palette?.dither || palette?.reserved)) add('scene-palette');
     for (const value of paletteSwatches(palette))
@@ -119,9 +120,9 @@
           matchedTargets: matched.map(({ target, count }) => ({ ...target, count })) });
       });
     }
-    function staged(path, entries, eligible, surface) {
+    function staged(path, entries, eligible, surface, localContext = context) {
       rulesAt(path, entries, 64, (at, rule) => {
-        if (check(at, () => RenderStages.prepare([rule], context)))
+        if (check(at, () => RenderStages.prepare([rule], localContext)))
           add(at, rule.stage, rule, eligible, { explicit: true, surface });
       });
     }
@@ -179,7 +180,9 @@
     for (const [i, { settings }] of (world.surfaces ?? []).entries()) {
       const surface = i + 1, eligible = bySurface.get(surface) ?? [];
       const base = 'surfaces[' + i + ']';
-      staged(base + '.renderStages', settings.renderStages, eligible, surface);
+      const roles = check(base + '.paletteRoles', () => PixelLook.bindRoles(world.pal, world.paletteRoles, settings.paletteRoles));
+      if (!roles) continue;
+      staged(base + '.renderStages', settings.renderStages, eligible, surface, { ...context, roles });
       const layers = Object.entries(settings.layers ?? {}).filter(([, layer]) => rgbLayer(layer?.type));
       if (!layers.length && settings.paletteConstraint === undefined) continue;
       check(base, () => SurfaceLook.prepare(settings, world.pal, undefined, world.surfaceEffects, {

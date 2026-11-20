@@ -619,7 +619,7 @@
       bad('finish.look.artDirection', error.message);
     }
     try {
-      EffectPalettes.prepare(look?.effectPalettes, st.palette);
+      EffectPalettes.prepare(look?.effectPalettes, st.palette, st.roles);
     } catch (error) {
       bad('finish.look.effectPalettes', error.message);
     }

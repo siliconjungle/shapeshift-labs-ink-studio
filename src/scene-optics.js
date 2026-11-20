@@ -128,7 +128,7 @@ const SceneOptics = (() => {
   }
 
   const volumeKinds = { fog, sphere, box, shaft, field };
-  function prepareVolumes(list, palette = [], colorFor, densityGain) {
+  function prepareVolumes(list, palette = [], colorFor, densityGain, time = 0) {
     if (!Array.isArray(list)) throw new TypeError('Atmosphere must be a list of volumes');
     return list
       .map(d => {
@@ -158,7 +158,7 @@ const SceneOptics = (() => {
           volume.ramp = volume.ramp?.map(rgb => opticalMaterials.medium(volume.optical, rgb, true, transform).tint);
         }
         const field = palettes.compile(volume.paletteField, palettes.volumeDomains, color);
-        if (field?.strength) volume.paletteField = field;
+        if (field?.strength) volume.paletteField = field.frame?.(time) ?? field;
         else delete volume.paletteField;
         if (volume.bands) volume.bands = fieldBands.bind(volume.bands, swatch => {
           const rgb = color(swatch);

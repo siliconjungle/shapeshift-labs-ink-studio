@@ -85,7 +85,7 @@ export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, 
       cloudView = clouds.view?.(eye,camera.ortho ? pose.back : null);
     }
     const card = cloudView?.card;
-    const fog = K?.atmosphere?.prepare(fogSource.filter(volume=>kinds.has(volume?.type)),world.pal,undefined,weather?.fogGain) ?? [];
+    const fog = K?.atmosphere?.prepare(fogSource.filter(volume=>kinds.has(volume?.type)),world.pal,undefined,weather?.fogGain,sampled.skyTime) ?? [];
     if (fog.length > fogLimit) throw new RangeError('WebGL supports up to '+fogLimit+' analytic atmosphere volumes per frame');
     const yaw = Math.atan2(pose.back[0],pose.back[2]);
     const pitch = Math.atan2(pose.back[1],Math.hypot(pose.back[0],pose.back[2]));

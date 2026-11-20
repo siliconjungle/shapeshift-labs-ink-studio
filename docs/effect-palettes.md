@@ -34,13 +34,60 @@ Set `look.effectPalettes` on the world, `finish.look.effectPalettes` in a dioram
 }
 ```
 
-- Give a ramp 1–64 hex swatches or scene palette indices. The array shorthand uses the default settings.
+- Give a ramp up to 64 swatches using hex colours, scene palette indices, or named scene roles and stops. Whole roles expand in shade order. The array shorthand uses the default settings.
 - The default `luma` mode interprets `colors` from dark to light. `range: [low, high]` fits the steps to the effect’s measured tones in 0–1. Set `dither` from 0 to 1 for ordered transitions between steps. The `nearest` mode selects the closest swatch by RGB distance.
 - `threshold` controls the minimum visible coverage or emission intensity required. Defaults are 0.58 for fog, 0.46 for clouds, 0.48 for sky, and 0.24 for emission. Overlaps resolve in the order emission, fog, clouds, sky.
 - Fog and clouds default to backdrop pixels. Set `geometry: true` on either ramp to include opaque surfaces they cover. Add object or material names to `protect` so those visible surfaces keep the scene’s original colors. Selective ink outlines are preserved.
 - A `when` gate reads a numeric sky profile channel at the active sky time. Supply `min`, `max`, or both. A missing channel leaves the ramp inactive.
 
-The ramps run after scene palette and art styling. Set `captureEffectPalettes: true` when rendering from the library to receive an `effectPaletteMask` for an active set. Its top-down pixel values are 0 for unassigned, 1 fog, 2 clouds, 3 sky, and 4 emission. The returned palette and usage counts include the selected swatches.
+The ramps run after scene palette and art styling. Set `captureEffectPalettes: true` when rendering from the library to receive an `effectPaletteMask` for an active set. Its top-down pixel values are 0 for unassigned, 1 fog, 2 clouds, 3 sky, 4 emission, 5 bounce, and 6 shadow. The returned palette and usage counts include the selected swatches.
+
+## Share scene swatches with materials
+
+Set `combine: "material"` on an effect ramp to let its approved scene
+colours compete with the visible material palette. The nearest effect
+swatch competes with the material's own match. Ties use the material
+swatch. An exact reserved material swatch keeps its colour. Effects can
+also exclude whole objects or materials using `protect`.
+
+```js
+world.look.effectPalettes = {
+  fog: { colors: ['shared-fog'], combine: 'material', threshold: .29 },
+  bounce: { colors: ['shared-bounce'], combine: 'material', threshold: .10 },
+  shadow: { colors: ['shared-shadow'], combine: 'material', threshold: .34 }
+};
+```
+
+The names above refer to `world.paletteRoles`. A surface's
+`paletteConstraint` or a matching scene target supplies the material
+swatches. Projected layers with an output palette can participate too.
+Composition enables geometry and defaults to nearest matching. Set
+`mode: "luma"` to propose the effect swatch from its ordered ramp.
+Pixels without a local palette use the active effect ramp.
+
+Fog uses visible atmospheric coverage. Bounce uses the strongest
+channel of the live sky, ground, or local probe irradiance. Shadow
+uses the loss of direct light or local contact shade. Defaults for
+bounce and shadow are .12 and .30 respectively. The headless renderer
+checks emission, fog, clouds, shadow, bounce, and sky in that order.
+An explicit frame or palette render stage can still override that
+selection.
+
+Render [Mist at the dye house](../examples/palette-composition.js) and
+its palette ownership map at the native art size.
+
+```sh
+ink-studio passes examples/palette-composition.js --w 368 --h 188 --px 1 \
+  --channels paletteOwner,materialId --out dye-house
+```
+
+`paletteOwner.png` uses false colours for the palette choices.
+`passes.json` lists the legend with the effect, material or target,
+available swatches, and whether a material or shared swatch won. In
+the library, request `passes: ['paletteOwner']` and look up the
+top-down pixel ID in `frame.passes.paletteOwners`. The pass follows
+the visible surface and reports the palette selection independently
+of subsequent RGB-only processing.
 
 ## Drive palette fields from atmosphere samples
 
@@ -85,6 +132,10 @@ Sky fields can bind `gain` to a numeric sky profile channel. Scene sky
 reflections use the same directional field by default. Set
 `reflections: false` inside the sky field to keep the base sky in the
 reflection. Surface finishes can also choose their own reflection source.
+
+[Animate the field's ramp or bands](palette-recipes.md#animate-a-palette-field-or-ramp)
+to change the pigment over time. Sky, fog and clouds use the environment
+clock. Local volume lights use the scene clock.
 
 The headless renderer supports all bindings. WebGL samples sky fields
 and supports fields on analytic fog volumes and its supported cloud

@@ -13,6 +13,18 @@ const AtmospherePalette = (() => {
     throw new TypeError('Atmosphere palette needs hex or normalized RGB swatches');
   }
 
+  const paletteBands = fields.animate(({ settings, palette }, resolveColor) => {
+    const bound = bands.bind({ ...settings,
+      stops: settings.stops.map((stop,i)=>({ ...stop, color:palette[i] })) }, resolveColor);
+    const stops = settings.stops.map(({ at }, i) => ({ at, rgb: bound.palette[i] }));
+    if (settings.edge) {
+      const { width } = settings.edge, first = stops[0];
+      stops.unshift({ at: first.at, rgb: bound.palette.at(-1) });
+      stops[1] = { ...first, at: first.at + width };
+    }
+    return { sampleUnit:t=>bound.sample(t)?.rgb, stops };
+  }, 'bands');
+
   function compile(value, domains, resolveColor = swatch) {
     if (value === undefined || value === false) return null;
     if (!object(value) || Object.keys(value).some(key => !['source', 'domain', 'field', 'strength'].includes(key)))
@@ -23,28 +35,24 @@ const AtmospherePalette = (() => {
         !(domain[1] > domain[0]) || !Number.isFinite(domain[1] - domain[0]) || !object(field) || !unit(strength))
       throw new RangeError('Atmosphere palette needs an increasing finite domain, a field and strength in [0, 1]');
     const [low, high] = domain, span = high - low;
-    let sampleUnit, stops;
+    let program;
     if (field.type === 'bands') {
-      const { type, ...definition } = field;
-      const settings = bands.settings(definition), bound = bands.bind(settings, resolveColor);
-      sampleUnit = t => bound.sample(t)?.rgb;
-      stops = settings.stops.map(({ at }, i) => ({ at, rgb: bound.palette[i] }));
-      if (settings.edge) {
-        const { width } = settings.edge, first = stops[0];
-        stops.unshift({ at: first.at, rgb: bound.palette.at(-1) });
-        stops[1] = { ...first, at: first.at + width };
-      }
-    } else {
-      const ramp = fields.ramp(field, resolveColor), color = [0, 0, 0];
-      sampleUnit = t => ramp.sample(t, color);
-    }
+      const { type, animation, ...definition } = field;
+      const settings = bands.settings(definition);
+      program = paletteBands({ settings, palette:settings.stops.map(stop=>stop.color), animation }, resolveColor);
+    } else program = fields.ramp(field, resolveColor);
 
-    function apply(value, input, out = input, gain = strength) {
-      const tint = gain && Number.isFinite(value) ? sampleUnit(clamp((value - low) / span)) : undefined;
-      for (let i = 0; i < 3; i++) out[i] = tint ? input[i] + (tint[i] - input[i]) * gain : input[i];
-      return out;
+    function bound(current) {
+      const color = [0,0,0];
+      const { stops, sampleUnit = t => current.sample(t,color) } = current;
+      function apply(value, input, out = input, gain = strength) {
+        const tint = gain && Number.isFinite(value) ? sampleUnit(clamp((value - low) / span)) : undefined;
+        for (let i = 0; i < 3; i++) out[i] = tint ? input[i] + (tint[i] - input[i]) * gain : input[i];
+        return out;
+      }
+      return { source, low, span, strength, stops, sampleUnit, apply };
     }
-    return Object.freeze({ source, low, span, strength, stops, sampleUnit, apply });
+    return Object.freeze({ ...bound(program), ...(program.frame && { frame:time=>bound(program.frame(time)) }) });
   }
 
   const volumeDomains = Object.freeze({ depth: [0, 24], altitude: [0, 12] });

@@ -102,8 +102,9 @@ with the usual lighting and dithering, then looks up its replacement.
 swatches, full role names, and role stops such as `stone.shadow`,
 `stone.midtone`, `stone.highlight`, or `stone.1`. A full role addresses
 every entry in its ramp. For a ramp with an even number of stops,
-`midtone` picks the lower middle stop. `to` accepts a packed RGB integer
-or `#rrggbb` string. Rules always match the original palette. The last
+`midtone` picks the lower middle stop. `to` accepts a packed RGB integer,
+a `#rrggbb` string, or a name resolving to one swatch such as
+`glacier.highlight`. Rules always match the original palette. The last
 rule for an entry wins, and protection restores the original color even
 when an animation grade is active.
 

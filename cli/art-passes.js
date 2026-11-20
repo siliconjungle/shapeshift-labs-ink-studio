@@ -64,6 +64,7 @@ function createArtPasses(request, w, h, emissiveSlots) {
       depth[p] = z;
       if (atlas) (atlasOwners??=new Map()).set(p,atlas);
       else atlasOwners?.delete(p);
+      return true;
     }
   }
 

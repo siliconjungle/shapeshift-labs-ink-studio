@@ -222,5 +222,145 @@
     return freeze({ kind:'glyphs',frame,arrows,range:rangeOf(arrows.map(row => row.magnitude)),units:field.units });
   }
 
-  K.fieldViews = { source,fromQuery,magnitude,slice,contours,isosurface,streamlines,glyphs };
+  // Dense planar LIC. Sample the scene once per texel, then integrate in the chart.
+  function lic(field, { plane, counts = [128,96], length, step, seed = 0, grain, texture, mask,
+    kernel = 'hann', motion, minSpeed = 1e-8, maxWork = 12000000 } = {}) {
+    requireType(field,'vec3');
+    const frame = frameFor(field.bounds,plane), [cols,rows] = countsFor(counts,2,65536);
+    const skew = V.dot(frame.u,frame.v), metric = 1-skew*skew, crossScale = Math.sqrt(metric);
+    const dx = frame.size[0]/cols, dy = frame.size[1]/rows, pixel = Math.min(dx,dy), total = cols*rows;
+    length ??= pixel*12;
+    step ??= pixel/2;
+    grain ??= pixel;
+    const { wavelength, phase = 0 } = motion ?? {};
+    check([length,step,grain,pixel].every(n => finite(n) && n > 0) &&
+      Math.max(...frame.size)/grain <= 1e9 &&
+      Number.isSafeInteger(seed) && Math.abs(seed) <= 0xffffffff &&
+      ['box','tent','hann'].includes(kernel) && finite(minSpeed) && minSpeed >= 0 &&
+      (texture === undefined || typeof texture === 'function') && (mask === undefined || typeof mask === 'function') &&
+      (motion === undefined || motion && finite(wavelength) && wavelength > 0 && finite(phase) &&
+        length/wavelength <= 1e6) && limit(maxWork,1,64000000),'invalid line integral convolution options');
+    const steps = Math.ceil(length/Math.min(step,pixel/2));
+    check(limit(steps,1,1024) && total*(1+4*steps) <= maxWork,'line integral convolution exceeds its work budget');
+    const ds = length/steps, sx = ds/dx, sy = ds/dy, alive = new Uint8Array(total);
+    const input = new Float64Array(total*3), output = new Float64Array(total*2);
+    const values = new Array(total).fill(null), speeds = values.slice();
+    const halfTurn = Math.PI, turn = 2*halfTurn;
+    const weights = Float64Array.from({length:2*steps+1},(_,i) => {
+      const distance = (i-steps)/steps, a = Math.abs(distance);
+      const w = kernel === 'box' ? 1 : kernel === 'tent' ? 1-a : .5+.5*Math.cos(halfTurn*a);
+      const moving = motion ? .5+.5*Math.cos(turn*(distance*length/wavelength+(phase%1))) : 1;
+      return w*moving*(a === 1 ? .5 : 1);
+    });
+
+    function noise(u,v) {
+      const key = Math.floor(u/grain) + ',' + Math.floor(v/grain);
+      return K.grow.dice(P.data.hash(key,seed))();
+    }
+    for (let i=0;i<total;i++) {
+      const u = (i%cols+.5)*dx, v = (Math.floor(i/cols)+.5)*dy, point = onPlane(frame,u,v);
+      if (mask && !mask(...point)) continue;
+      const velocity = field.sample(...point);
+      if (velocity === null) continue;
+      const along = V.dot(velocity,frame.u), across = V.dot(velocity,frame.v);
+      const vx = (along-skew*across)/metric, vy = (across-skew*along)/metric;
+      const speed = Math.hypot(along,vy*crossScale), ink = texture ? texture(u,v) : noise(u,v);
+      check(finite(speed) && finite(ink) && ink >= 0 && ink <= 1,'expected finite projected velocity and texture coverage from 0 to 1');
+      input[i*3] = vx;
+      input[i*3+1] = vy;
+      input[i*3+2] = ink;
+      speeds[i] = output[i*2+1] = speed;
+      alive[i] = 1;
+    }
+
+    // Samples are cell-centered. Do not blend diagonal cells through a sealed corner.
+    function rasterSample(data,stride,x,y,out,fromX,fromY) {
+      if (!(x >= 0 && y >= 0 && x <= cols && y <= rows)) return false;
+      const col = Math.min(cols-1,Math.floor(x)), row = Math.min(rows-1,Math.floor(y));
+      if (!alive[row*cols+col]) return false;
+      if (fromX !== undefined) {
+        const priorCol = Math.min(cols-1,Math.floor(fromX)), priorRow = Math.min(rows-1,Math.floor(fromY));
+        if (priorCol !== col && priorRow !== row) {
+          const xFirst = (Math.max(priorCol,col)-fromX)/(x-fromX);
+          const yFirst = (Math.max(priorRow,row)-fromY)/(y-fromY);
+          const aroundX = alive[priorRow*cols+col], aroundY = alive[row*cols+priorCol];
+          if (Math.abs(xFirst-yFirst) <= epsilon ? !aroundX && !aroundY : xFirst < yFirst ? !aroundX : !aroundY)
+            return false;
+        }
+      }
+      const left = Math.floor(x-.5), top = Math.floor(y-.5), fx = x-.5-left, fy = y-.5-top;
+      const x0 = Math.max(0,left), x1 = Math.min(cols-1,left+1);
+      const y0 = Math.max(0,top), y1 = Math.min(rows-1,top+1);
+      let weight = 0;
+      out.fill(0);
+      for (let b=0;b<2;b++) for (let a=0;a<2;a++) {
+        const c = a ? x1 : x0, r = b ? y1 : y0, k = r*cols+c;
+        if (!alive[k] || c !== col && r !== row && !alive[row*cols+c] && !alive[r*cols+col]) continue;
+        const w = (a ? fx : 1-fx)*(b ? fy : 1-fy);
+        for (let channel=0;channel<stride;channel++) out[channel] += w*data[k*stride+channel];
+        weight += w;
+      }
+      for (let channel=0;channel<stride;channel++) out[channel] /= weight;
+      return true;
+    }
+
+    const tap = new Float64Array(3);
+    for (let i=0;i<total;i++) {
+      if (!alive[i]) continue;
+      const x0 = i%cols+.5, y0 = Math.floor(i/cols)+.5;
+      const ink = input[i*3+2], centerSpeed = speeds[i];
+      let mass = weights[steps], sum = mass*ink;
+      for (const direction of [-1,1]) {
+        let x = x0, y = y0, vx = input[i*3], vy = input[i*3+1], speed = centerSpeed;
+        for (let j=1;j<=steps && speed>minSpeed;j++) {
+          const mx = x+direction*.5*sx*(vx/speed), my = y+direction*.5*sy*(vy/speed);
+          if (!rasterSample(input,3,mx,my,tap,x,y)) break;
+          const middle = Math.hypot(tap[0]+skew*tap[1],tap[1]*crossScale);
+          if (middle <= minSpeed) break;
+          const qx = x+direction*sx*(tap[0]/middle), qy = y+direction*sy*(tap[1]/middle);
+          if (!rasterSample(input,3,qx,qy,tap,x,y)) break;
+          const weight = weights[steps+direction*j];
+          mass += weight;
+          sum += weight*tap[2];
+          x = qx; y = qy;
+          vx = tap[0]; vy = tap[1]; speed = Math.hypot(vx+skew*vy,vy*crossScale);
+        }
+      }
+      values[i] = output[i*2] = mass ? Math.max(0,Math.min(1,sum/mass)) : ink;
+    }
+
+    function sample(u,v,channel = 'grain') {
+      check(channel === 'grain' || channel === 'speed','unknown LIC channel');
+      const result = [0,0];
+      return rasterSample(output,2,u/dx,v/dy,result) ? result[channel === 'grain' ? 0 : 1] : null;
+    }
+    function fieldSource(channel = 'grain',{ bounds,project } = {}) {
+      check((channel === 'grain' || channel === 'speed') &&
+        (project === undefined || typeof project === 'function' && bounds),'invalid LIC field projection');
+      const corners = [[0,0],[0,frame.size[1]],[frame.size[0],0],frame.size].map(uv => onPlane(frame,...uv));
+      const box = bounds ?? {
+        min:frame.origin.map((_,axis) => Math.min(...corners.map(p => p[axis]))),
+        max:frame.origin.map((_,axis) => Math.max(...corners.map(p => p[axis])))
+      };
+      return source({type:'number',bounds:box,units:channel === 'speed' ? field.units : null,sample(x,y,z) {
+        const point = [x,y,z];
+        if (project) {
+          const uv = project(point);
+          return vector(uv,2) ? sample(...uv,channel) : null;
+        }
+        const offset = V.sub(point,frame.origin);
+        if (Math.abs(V.dot(offset,frame.normal)) > epsilon*Math.max(1,...frame.size)) return null;
+        const along = V.dot(offset,frame.u), across = V.dot(offset,frame.v);
+        const [u,v] = [(along-skew*across)/metric,(across-skew*along)/metric].map((value,i) => {
+          const edge = frame.size[i], slack = epsilon*Math.max(dx,dy,edge);
+          return value >= -slack && value <= edge+slack ? Math.max(0,Math.min(edge,value)) : value;
+        });
+        return sample(u,v,channel);
+      }});
+    }
+    return freeze({kind:'lic',frame,counts:counts.slice(),values,speeds,range:rangeOf(values),units:null,step:ds,length,
+      sample,source:fieldSource});
+  }
+
+  K.fieldViews = { source,fromQuery,magnitude,slice,contours,isosurface,streamlines,glyphs,lic };
 })(KIT);

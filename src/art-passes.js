@@ -2,7 +2,7 @@
 const ArtPasses = (() => {
   const surface = Object.freeze(['coverage', 'depth', 'normal', 'objectId', 'materialId', 'emission', 'splatId', 'position', 'objectPosition', 'protected', 'emissionDepth', 'motion', 'emissionMotion', 'target', 'mask']);
   const environment = Object.freeze(['sky', 'fogTransmittance', 'precipitation', 'reflections', 'foregroundCoverage']);
-  const channels = Object.freeze([...surface, ...environment]);
+  const channels = Object.freeze([...surface, ...environment, 'paletteOwner']);
   const cutoff = 0.5;
   const ownsSurface = (alpha, writesDepth, depth, nearest) => writesDepth && alpha > cutoff && depth <= nearest;
   const over = (value, below, alpha) => value * alpha + below * (1 - alpha);
@@ -21,6 +21,7 @@ const ArtPasses = (() => {
     if (output.objectId) output.objects = passes.objects;
     if (output.materialId) output.materials = passes.materials;
     if (output.target) output.targets = passes.targets;
+    if (output.paletteOwner) output.paletteOwners = passes.paletteOwners;
     return output;
   }
 

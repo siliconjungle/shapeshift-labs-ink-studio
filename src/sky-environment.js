@@ -190,7 +190,7 @@ const SkyEnvironment = (() => {
       bounded(start, axis === 'elevation' ? 0 : -1e6, axis === 'elevation' ? limit : 1e6, 'Sky ramp start');
       if (end <= start || (axis === 'elevation' ? end > limit : end > start + limit))
         throw new RangeError('Sky ramp domain must increase within one ' + axis + ' range');
-      return { sample: paletteFields.ramp(ramp).sample, axis, start, span: end-start,
+      return { program: paletteFields.ramp(ramp), axis, start, span: end-start,
         strength: bounded(strength, 0, 1, 'Sky ramp strength'), gain: gainBinding(gain) };
     }
     let backdrop = null;
@@ -328,7 +328,7 @@ const SkyEnvironment = (() => {
         })),values };
       }
       function frame(seconds, overrides) {
-        return skyFrame(sample(seconds,overrides));
+        return skyFrame(sample(seconds,overrides),seconds);
       }
       return Object.freeze({ [compiled]:true, sample, frame, inspect, profile, transitions:events,
         interrupt(event) { return playback(transitionList([...events,event])); },
@@ -336,7 +336,7 @@ const SkyEnvironment = (() => {
       });
     }
 
-    function skyFrame(parameters) {
+    function skyFrame(parameters, seconds) {
       const p = Object.assign(Object.create(null), parameters);
       const sun = direction(mod(p.sunAzimuth ?? base.sunAzimuth, TAU), p.sunAltitude ?? base.sunAltitude);
       function style(layer) {
@@ -357,8 +357,10 @@ const SkyEnvironment = (() => {
         sunColor: p.sunColor ?? rgb(base.sunColor), sunStrength,
         sunEdge: Math.cos(p.sunSize ?? base.sunSize), sunCore: Math.cos(.86 * (p.sunSize ?? base.sunSize)),
         splats: backdrop.splats.map(style).filter(layer => layer.opacity > 0),
-        ...(rampStrength > 0 && { paletteRamp: { ...ramp, strength: rampStrength } }),
-        ...(fieldStrength > 0 && { paletteField: { ...field, strength: fieldStrength } })
+        ...(rampStrength > 0 && { paletteRamp: { axis:ramp.axis, start:ramp.start, span:ramp.span, gain:ramp.gain, strength: rampStrength,
+          sample:(ramp.program.frame?.(seconds) ?? ramp.program).sample } }),
+        ...(fieldStrength > 0 && { paletteField: { ...(field.frame?.(seconds) ?? field),
+          gain:field.gain, reflections:field.reflections, strength:fieldStrength } })
       };
       return { parameters: p, sky };
     }

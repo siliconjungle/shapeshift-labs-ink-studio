@@ -123,7 +123,7 @@ const CloudField = (() => {
     if (typeof repeat !== 'boolean' || typeof visible !== 'boolean') throw new TypeError('Cloud repeat and visible must be boolean');
     const rgb = colorRGB(color,'Cloud color');
     const style = prepareLight(lighting);
-    const paletteField = palettes.compile(source.paletteField, palettes.cloudDomains);
+    const paletteProgram = palettes.compile(source.paletteField, palettes.cloudDomains);
     number(thickness,0,1e5,'Cloud thickness');
     if (!Number.isInteger(steps) || steps<2 || steps>32) throw new RangeError('Cloud steps must be 2–32');
     const low=height-thickness*.5, high=height+thickness*.5;
@@ -185,6 +185,7 @@ const CloudField = (() => {
       return cache.get(softness);
     }
     function frame(time, shadows, light = [-.52, .64, .57], displacement, representation, flashAt, cutouts, edge) {
+      const paletteField = paletteProgram?.frame?.(time) ?? paletteProgram;
       const mode=representation ?? (lod || (geometry && lod!==false) ? 'auto' : 'off');
       if (!detail.modes.includes(mode)) throw new RangeError('Unknown cloud representation: ' + mode);
       const useDetail=mode!=='off';

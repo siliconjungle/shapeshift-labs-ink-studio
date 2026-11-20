@@ -68,6 +68,7 @@ test('stage grade can replace and clear a palette remap without altering the bak
 });
 
 function testWebGL(createRenderer, spec) {
+  spec.finish.look.paletteRemap.rules[0].to = 'metal.highlight';
   const canvas = document.querySelector('canvas');
   const renderer = createRenderer(canvas, { toolkit: { KIT, PixelLook } });
   const gl = canvas.getContext('webgl2'), world = KIT.diorama.build(spec);

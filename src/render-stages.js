@@ -35,12 +35,14 @@ const RenderStages = (() => {
     return { order, weight };
   }
 
-  function albedo(value, palette) {
+  function albedo(value, palette, roles) {
     if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return parseInt(value.slice(1), 16);
     if (Array.isArray(value) && value.length === 3 && Array.from(value).every(n => Number.isFinite(n) && n >= 0 && n <= 1))
       return pack(value);
     if (Number.isSafeInteger(value) && value >= 0 && Number.isSafeInteger(palette?.[value])) return palette[value];
-    throw new TypeError('Material albedo must be a palette index, #rrggbb or normalized RGB triple');
+    if (typeof value === 'string' && value && !value.startsWith('#') && palette)
+      return pixels.roleColor(value, palette, roles);
+    throw new TypeError('Material albedo must be a palette role, palette index, #rrggbb or normalized RGB triple');
   }
 
   function prepare(entries, options = {}) {
@@ -76,7 +78,7 @@ const RenderStages = (() => {
         ...(options.surface && { scope: 'surface' }),
         assetId: entry.assetId,
         stack: usePalette ? null : stacks.prepare({ ...entry.stack, amount: 1 }, {
-          resolveColor: value => unpack(albedo(value, options.palette))
+          resolveColor: value => unpack(albedo(value, options.palette, options.roles))
         }),
         palette: usePalette ? pixels.preparePalette(entry.palette, options) : null
       };
@@ -113,7 +115,9 @@ const RenderStages = (() => {
         !world.surfaces?.some(({ settings }) => settings.renderStages !== undefined && settings.renderStages !== false)) return null;
     const context = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, ...options };
     const scene = prepare(entries, context);
-    const surfaces = world.surfaces?.map(({ settings }) => prepare(settings.renderStages, { ...context, surface: true })) ?? [];
+    const surfaces = world.surfaces?.map(({ settings }) => settings.renderStages === undefined || settings.renderStages === false
+      ? [] : prepare(settings.renderStages, { ...context, roles: pixels.bindRoles(context.palette, context.roles, settings.paletteRoles),
+        surface: true })) ?? [];
     const rules = [...scene, ...surfaces.flat()];
     if (!rules.length && !paint) return null;
     const all = rules.filter(rule => !rule.disabled);

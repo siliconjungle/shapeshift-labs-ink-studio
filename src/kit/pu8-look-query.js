@@ -42,7 +42,8 @@
         const binding = first === undefined ? undefined : world.surfaceData?.[first * SurfaceLook.STRIDE];
         const surface = world.surfaces?.[binding - 1]?.settings;
         if (surface?.paletteConstraint && !surfacePalettes.has(binding))
-          surfacePalettes.set(binding, PixelLook.prepareLookPolicy(surface.paletteConstraint, options));
+          surfacePalettes.set(binding, PixelLook.prepareLookPolicy(surface.paletteConstraint, { ...options,
+            roles: PixelLook.bindRoles(options.palette, options.roles, surface.paletteRoles) }));
         const underlying = surfacePalettes.get(binding), fallback = plan && plan.palettes[plan.defaultSlot - 1];
         const policy = id ? plan.palettes[id - 1] : target.kind === 'splat' && !projected && (underlying || fallback);
         const useDither = target.kind === 'splat';
