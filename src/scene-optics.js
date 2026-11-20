@@ -6,7 +6,8 @@ const SceneOptics = (() => {
   const { field: ripple, ringSampler } = ripples;
   const densities = typeof VolumeField === 'undefined' ? require('./volume-field.js') : VolumeField;
   const geometry = typeof GeometryDensity === 'undefined' ? require('./geometry-density.js') : GeometryDensity;
-  const volumeLight = typeof VolumeLight === 'undefined' ? require('./volume-light.js') : VolumeLight;
+  let volumeLight;
+  try{volumeLight=VolumeLight;}catch{volumeLight=require('./volume-light.js');}
   const fieldBands = typeof FieldBands === 'undefined' ? require('./field-bands.js') : FieldBands;
   const opticalMaterials = typeof OpticalMaterials === 'undefined' ? require('./optical-materials.js') : OpticalMaterials;
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
