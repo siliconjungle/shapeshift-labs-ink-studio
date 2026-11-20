@@ -34,7 +34,11 @@ module.exports = {
   demoFiles,
   EXPORTS,
   version: require('./package.json').version,
-  bundle: () => files().map(read).join('\n'),
+  bundle: ({ format = 'script' } = {}) => {
+    if (format !== 'script' && format !== 'module') throw Error('Ink bundle format must be script or module');
+    const sources = files().map(read).join('\n');
+    return format === 'module' ? sources + '\nexport { ' + EXPORTS + ' };\n' : sources;
+  },
   // the seven built-in demo dioramas. They push onto an array called SCENES, which must already exist
   demos: () => demoFiles().map(read).join('\n'),
   // refuse-to-build check: code written after a // comment on the same line never runs. Returns the offending lines

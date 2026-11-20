@@ -312,11 +312,15 @@
     }
     return {world,plan,weather,timeline};
   }
-  const validate=(source,options)=>prepare(source,options).world;
+  const implementationsFor=(implementations,workerPool)=>workerPool?.implementations?
+    {...workerPool.implementations,...implementations}:implementations;
+  const validate=(source,{implementations,workerPool}={})=>
+    prepare(source,{implementations:implementationsFor(implementations,workerPool)}).world;
   function create(source, {checkpoint,implementations,profile = false,validated = false,workerPool,regionRevisions,traceSteps} = {}, token) {
-    check(workerPool===undefined||typeof workerPool?.solve==='function','Invalid simulation worker pool');
+    check(workerPool===undefined||typeof workerPool?.solve==='function'&&
+      (workerPool.async===undefined||typeof workerPool.async==='boolean'),'Invalid simulation worker pool');
     const modules=workerPool?.implementations;
-    const installed=modules?{...modules,...implementations}:implementations;
+    const installed=implementationsFor(implementations,workerPool);
     let result=validated?{world:source,plan:compile(source,installed)}:prepare(source,{implementations:installed});
     let {world}=result;
     if (!checkpoint && world.scenario?.start?.length) {
@@ -358,7 +362,7 @@
     let pendingWrites = [], lastDependencies = null, sampling = rates?.initial, spatialSampling = {};
     let causalState, weatherTrackState, chunkState;
     let currentQuery, lastTransfers = [], lastSignals = {...rootInputs,...rootOutputs};
-    let lastCheckpoint, eventActionCounts = freeze({});
+    let lastCheckpoint, eventActionCounts = freeze({}), asyncActive=false, inFlightTick=0;
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -419,7 +423,7 @@
     function enqueue(commands, log) {
       check(Array.isArray(commands) && commands.length <= 100000, 'Expected a bounded command list');
       const entries = commands.map(raw => {
-        const command = actionCheck(raw,plan,tick+1);
+        const command = actionCheck(raw,plan,Math.max(tick,inFlightTick)+1);
         if (log && world.scenario?.allow) check(world.scenario.allow.includes(command.action), 'Action is disabled in this scenario: ' + command.action);
         return command;
       });
@@ -598,7 +602,7 @@
       }
       return freeze(next);
     }
-    function step() {
+    function* tickWork() {
       const at = tick+1, commands = scheduled.get(at) ?? [], events = [];
       check(tickOK(at),'Tick budget exceeded');
       debug?.start();
@@ -835,7 +839,7 @@
       const spent = {};
       let workerResults=null, workerBatches=0, workersThisTick=0;
       const offloaded=partitioned?.size?new Map():null;
-      function launch(group,snapshot,peekInput,timingFor){
+      function* launch(group,snapshot,peekInput,timingFor){
         const jobs=[];
         for(const name of group)if(partitioned.has(name)){
           const timing=timingFor?.(name);
@@ -845,7 +849,7 @@
         }
         workerResults=null;
         if(!jobs.length)return;
-        const batch=workerPool.solve(plan.world,jobs);
+        const batch=yield jobs;
         workerResults=batch.results;
         workerBatches++;
         workersThisTick=Math.max(workersThisTick,batch.workers);
@@ -906,7 +910,7 @@
 
       let nextStates, nextOutputs, publishedSignals, nextSampling, delayedSamples;
       if (rates) {
-        const frame = rates.advance(at,committed,outputs,nextManual,delays,lastSignals,sampling,integrate,causal,chunkStep,
+        const frame = yield* rates.advance(at,committed,outputs,nextManual,delays,lastSignals,sampling,integrate,causal,chunkStep,
           prepare&&{prepare,groupsFor});
         ({states:nextStates,outputs:nextOutputs,signals:publishedSignals,buffers:nextSampling,delayedSamples}=frame);
       } else {
@@ -914,7 +918,7 @@
         const immediate = {}, observed = {};
         const groups=prepare?groupsFor(order):[order];
         for(const group of groups){
-          if(prepare)prepare(group,committed,name=>currentValues(name,nextManual,immediate,outputs,delays));
+          if(prepare)yield* prepare(group,committed,name=>currentValues(name,nextManual,immediate,outputs,delays));
           for (const name of group) {
             const input = currentValues(name,nextManual,immediate,outputs,delays);
             for (const [key,value] of Object.entries(input)) observed[name+'/'+key] = value;
@@ -1006,7 +1010,33 @@
       if(debug)debug.publish(save(),commands,observedSteps);
       return committedView;
     }
+    function step() {
+      check(!asyncActive,'A simulation advance is already in progress');
+      check(!workerPool?.async||!partitioned?.size,'Use stepAsync or advanceAsync with asynchronous simulation workers');
+      const work=tickWork();
+      let result=work.next();
+      while(!result.done)result=work.next(workerPool.solve(plan.world,result.value));
+      return result.value;
+    }
+    async function stepInBackground(){
+      inFlightTick=tick+1;
+      try{
+        const work=tickWork();
+        let result=work.next();
+        while(!result.done)result=work.next(await workerPool.solve(plan.world,result.value));
+        return result.value;
+      }finally{
+        inFlightTick=0;
+      }
+    }
+    async function stepAsync(){
+      check(!asyncActive,'A simulation advance is already in progress');
+      asyncActive=true;
+      try{return await stepInBackground();}
+      finally{asyncActive=false;}
+    }
     function advance(to, {onTick,stopOnOutcome = false} = {}) {
+      check(!asyncActive,'A simulation advance is already in progress');
       check(tickOK(to) && to >= tick, 'Target tick precedes current state or exceeds the run budget');
       while (tick < to && (!stopOnOutcome || scenario.status === 'running')) {
         step();
@@ -1014,11 +1044,23 @@
       }
       return view();
     }
+    async function advanceAsync(to,{onTick,stopOnOutcome=false}={}){
+      check(!asyncActive,'A simulation advance is already in progress');
+      check(tickOK(to)&&to>=tick,'Target tick precedes current state or exceeds the run budget');
+      asyncActive=true;
+      try{
+        while(tick<to&&(!stopOnOutcome||scenario.status==='running')){
+          const completed=await stepInBackground();
+          if(onTick)await onTick(completed,query());
+        }
+        return view();
+      }finally{asyncActive=false;}
+    }
     function recording() {
       const trace=debug?.recording();
       return freeze({format:runFormat,version:1,origin,commands:added.slice(),end:save(),...(trace&&{trace})});
     }
-    return Object.freeze({view,query,step,advance,...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
+    return Object.freeze({view,query,step,advance,stepAsync,advanceAsync,...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
       ...(debug&&{stepFrame:debug.latest,stepAttempt:debug.attempt}),
       get scenario(){return scenario;}, get history(){return history;}, get events(){return lastEvents;},
       schedule:commands => enqueue(commands,true),checkpoint:save,recording,
@@ -1041,18 +1083,28 @@
         checkpoint.world===plan.world?branchToken:undefined);
     }
   }
-  function replay(log, options) {
+  function prepareReplay(log,options){
     check(record(log) && log.format === runFormat && log.version === 1, 'Invalid world recording');
     const run = create(log.origin.world,{...options,checkpoint:log.origin});
     run.schedule(log.commands);
+    return run;
+  }
+  function replay(log, options) {
+    const run=prepareReplay(log,options);
     run.advance(log.end.tick);
     check(checkpointsEqual(run.checkpoint(),log.end,options),'Replay diverged at tick ' + log.end.tick);
     return run;
   }
-  function checkpointsEqual(actual,expected,{implementations}={}){
+  async function replayAsync(log,options){
+    const run=prepareReplay(log,options);
+    await run.advanceAsync(log.end.tick);
+    check(checkpointsEqual(run.checkpoint(),log.end,options),'Replay diverged at tick '+log.end.tick);
+    return run;
+  }
+  function checkpointsEqual(actual,expected,{implementations,workerPool}={}){
     if(equal(actual,expected))return true;
     if(!record(expected?.states)||!equal(actual.world,expected.world))return false;
-    const {systems}=compile(actual.world,implementations,true);
+    const {systems}=compile(actual.world,implementationsFor(implementations,workerPool),true);
     const states={...actual.states};
     for(const [name,system] of Object.entries(systems))
       if(system.legacyCheckpoint)states[name]=system.legacyCheckpoint(states[name],expected.states[name]);
@@ -1063,7 +1115,7 @@
       'Simulation diff needs two checkpoints at the same tick');
     return {tick:a.tick,time:{before:a.tick*a.world.dt,after:b.tick*b.world.dt},edits:Q.keyedChanges(a,b)};
   }
-  W.runtime = Object.freeze({register,validate,create,replay,diff,firstDivergence:W.stepDebug.firstDivergence,
+  W.runtime = Object.freeze({register,validate,create,replay,replayAsync,diff,firstDivergence:W.stepDebug.firstDivergence,
     checkpointFormat,runFormat,maxTick,partitionKernel,checkpointsEqual,
     prefabInterfaces:(world,{implementations}={})=>compile(world,implementations,true)});
 })(KIT);

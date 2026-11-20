@@ -94,7 +94,7 @@
       }
     }
 
-    function advance(at,committed,previous,manual,delays,signals,saved,visit,causal,chunkStep,parallel) {
+    function* advance(at,committed,previous,manual,delays,signals,saved,visit,causal,chunkStep,parallel) {
       const buffers = {...saved}, delayedSamples = {}, eventValues = {}, observed = {};
       for (const port of Object.keys(ports.inputs))
         observed[port] = ports.inputs[port].type==='event'?[]:signals[port];
@@ -165,7 +165,7 @@
         }
         const groups=parallel?parallel.groupsFor(names):[names];
         for(const group of groups){
-          if(parallel)parallel.prepare(group,states,name=>inputsFor(name,false),timingFor);
+          if(parallel)yield* parallel.prepare(group,states,name=>inputsFor(name,false),timingFor);
           for(const name of group){
             const timing=timingFor(name);
             if(!timing)continue;

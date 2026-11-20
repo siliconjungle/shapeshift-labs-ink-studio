@@ -1,5 +1,12 @@
 # Deterministic simulation workers
 
+The same fixed-tick world can run in process, on Node worker threads,
+or with [browser workers](#browser-integration). Each solver uses its
+manifest schedule. Set `schedule.every` to run once per specified
+number of world ticks, or `schedule.substeps` to divide each world tick
+into faster solver updates. A slower call receives the elapsed time
+since its previous update.
+
 Use `--workers N` to step eligible systems on 1–32 Node worker threads.
 The count is a run option. The world manifest, checkpoint, and recording
 can be used with any count or with the default in-process runner.
@@ -74,8 +81,52 @@ state. A step can use `ctx.emit` and declared spatial write or rebuild
 methods. Express dependencies as input ports and account exchanges.
 Actions, queries, and outputs still use the normal provider hooks.
 Application factories passed as host-only implementations continue to
-run in process. The browser runtime retains its synchronous in-process API.
+run in process.
 
 ```sh
 node scripts/benchmark-simulation-workers.js
 ```
+
+## Browser integration
+
+Generate a browser module bundle with the Node package and serve it
+over HTTP alongside the application. Keep the worker entry and its
+module imports available at their package URLs.
+
+```js
+const fs = require('node:fs');
+const studio = require('@shapeshift-labs/ink-studio');
+fs.writeFileSync('ink-studio.mjs', studio.bundle({ format: 'module' }));
+```
+
+Import `createBrowserSimulationWorkers` from `webgl.mjs`. Provide the
+generated bundle URL and any application solver modules as URLs.
+Each application module default-exports its system factory table.
+The browser host and every worker load the same modules. Factories
+use the same `partitionStep: true` contract as Node.
+
+```js
+import { KIT } from './ink-studio.mjs';
+import { createBrowserSimulationWorkers } from './webgl.mjs';
+
+const workerPool = await createBrowserSimulationWorkers(4, {
+  bundle: new URL('./ink-studio.mjs', import.meta.url),
+  modules: [new URL('./solvers.mjs', import.meta.url)]
+});
+const run = KIT.world.runtime.create(manifest, { workerPool });
+await run.advanceAsync(120);
+workerPool.close();
+```
+
+`stepAsync()` and `advanceAsync(tick, options)` use the same phase order
+and publish each tick after its workers finish. The renderer can read
+`run.view()` or `run.query()` while it waits. A run accepts one active
+advance at a time. Schedule commands for ticks beyond the one currently
+being computed. `advanceAsync` supports `stopOnOutcome` and an optional
+`onTick(view, query)` callback after each commit.
+
+Use `KIT.world.runtime.replayAsync(recording, { workerPool })` to replay
+with browser workers. Checkpoints, recordings and the `partitions()`
+report use the same formats as Node. A pool can be shared across runs.
+Close it when done to terminate its workers and reject outstanding work.
+A worker fault leaves the last committed world readable.

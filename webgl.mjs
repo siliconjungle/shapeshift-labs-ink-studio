@@ -16,3 +16,4 @@ export { mountComparisonView } from './src/webgl/comparison-view.mjs';
 export { mountSimulationBranches } from './src/webgl/simulation-branches-view.mjs';
 export { createCameraAtlas } from './src/webgl/camera-atlas.mjs';
 export { mountCausalInspection } from './src/webgl/causal-inspection-view.mjs';
+export { createBrowserSimulationWorkers } from './src/webgl/simulation-workers.mjs';

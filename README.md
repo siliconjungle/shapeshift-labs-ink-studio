@@ -731,6 +731,8 @@ reuse measurements across seeds and settings and report aligned results.
 keep terrain, surface, and object edits across saves, travel, and resumed region streams.
 [Editable water boundaries](docs/headless-worlds.md#editable-water-boundaries)
 define regional sources, sinks, barriers, open edges, and exchange with spatial head fields.
+[Simulation workers](docs/simulation-workers.md) run custom and built-in
+solvers at independent rates on Node or browser worker threads.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
