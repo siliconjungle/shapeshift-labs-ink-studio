@@ -788,6 +788,7 @@ const CMD = {
         '    scene sync-prefab <release.json> <world ...> --out NEW_DIRECTORY | --dry-run',
         '    scene apply <scene> <edits.json> --dry-run   preview edited paths and look targets',
         '  sim run|resume|fork|reset|replay|scrub|take|diff|sweep|render ...  run or compare fixed-tick simulations',
+        '    sim plan <world|checkpoint|recording>  report system contracts and the resolved execution order',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',
         '    sim run <world> --record file.json [--trace-steps [N]]   retain actual solver inputs and state for debugging',
         '    sim diff <run|world> [<run|world>] --first [--from N] [--ticks N]   locate the first divergence',

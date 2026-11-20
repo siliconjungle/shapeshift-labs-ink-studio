@@ -61,8 +61,10 @@
       const note=method=>(...args)=>{effects.push([method,args.map(value=>value===undefined?value:copy(value))]);};
       const spatial=provider.dependencies&&Object.freeze({write:note('write'),rebuilt:note('rebuilt'),
         changes(){throw Error('Partition solvers cannot read spatial invalidations');}});
+      const contracted=provider.contract!==undefined||world.systems[name].contract!==undefined;
       const ctx=Object.freeze(Object.defineProperties({id:name,...stepTiming(world,at,freeze(timing)),input:freeze(input),query,
-        emit:note('emit'),...(spatial&&{spatial}),random:randomSource(world.seed,name,at,timing)},restricted));
+        emit:note('emit'),...(spatial&&{spatial}),random:randomSource(world.seed,name,at,timing),
+        ...(contracted&&{read(alias){throw Error('Undeclared system state read '+name+'/'+String(alias));}})},restricted));
       const start=profile?clock():0, saved=freeze(state);
       const next=adapter?W.simulationAggregate.advance(adapter,saved,ctx):provider.step(saved,ctx);
       return { ...(next===saved?{unchanged:true}:{state:next}),effects,ms:profile?clock()-start:0 };
@@ -169,6 +171,7 @@
     for (const name of transfers.producers) systems[name].checkTransfers?.(transfers.validate);
     const schedule = W.rates.schedules(world,systems,chunks);
     const incoming = new Map(), edges = new Map(), indegree = new Map();
+    const {contracts,edges:phaseEdges} = W.systemComposition.compile(world,systems);
     for (const name of ordered(systems)) {
       edges.set(name,[]);
       indegree.set(name,0);
@@ -184,11 +187,14 @@
       check(!incoming.has(edge.to), 'More than one connection feeds ' + edge.to);
       const sample = W.rates.policy(edge,source.type,schedule.active);
       incoming.set(edge.to,{from:edge.from,to:edge.to,delay,sample});
-      if (delay === 0 && sample !== 'average' && systems[from].combinational) {
-        indegree.set(to,indegree.get(to)+1);
-        edges.get(from).push(to);
-      }
+      if (delay === 0 && sample !== 'average' && systems[from].combinational)
+        phaseEdges.push({kind:'signal',from,to,output:edge.from,input:edge.to});
     }
+    for (const {from,to} of phaseEdges) {
+      indegree.set(to,indegree.get(to)+1);
+      edges.get(from).push(to);
+    }
+    if (contracts.size) for (const targets of edges.values()) targets.sort();
     const names = ordered(systems), ready = names.filter(name => indegree.get(name) === 0), order = [];
     for (let i=0;i<ready.length;i++) {
       const name = ready[i];
@@ -199,10 +205,13 @@
         if (!degree) ready.push(other);
       }
     }
-    check(order.length === names.length, 'Instantaneous signal cycle; use a delay or a stateful system');
+    check(order.length === names.length, contracts.size ?
+      'Same-phase simulation dependency cycle prevents scheduling: '+names.filter(name=>indegree.get(name)>0).join(', ') :
+      'Instantaneous signal cycle; use a delay or a stateful system');
     const causePolicy = W.causality.policy(world.causality);
     const rates = schedule.active ? W.rates.bind(schedule,systems,ports,incoming,order) : null;
-    return {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy};
+    return {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy,
+      contracts,phaseEdges};
   }
   function actionCheck(raw, plan, min = 1) {
     check(record(raw) && tickOK(raw.tick) && raw.tick >= min && record(raw.args ?? {}) &&
@@ -305,21 +314,20 @@
       world=result.world;
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
-    const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy} = plan;
+    const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,causePolicy,
+      contracts,phaseEdges} = plan;
+    let composition;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
     const observers=names.filter(name=>systems[name].afterStep);
     const partitioned=workerPool&&new Set(names.filter(name=>{
       const {kind}=world.systems[name];
-      return systems[name].partitionStep===true&&(own(installed,kind)?
+      return systems[name].partitionStep===true&&!Object.keys(contracts.get(name)?.reads??{}).length&&(own(installed,kind)?
         own(modules,kind)&&installed[kind]===modules[kind]:bundledPartitions.has(kind));
     }));
     const partitionBarriers=workerPool&&new Set();
-    if(partitioned?.size)for(const {from,to,delay,sample} of incoming.values()){
-      const source=endpoint(from)[0];
-      if(!delay&&sample!=='average'&&systems[source].combinational&&partitioned.has(endpoint(to)[0]))
-        partitionBarriers.add(source);
-    }
+    if(partitioned?.size)for(const {from,to} of phaseEdges)
+      if(partitioned.has(to))partitionBarriers.add(from);
     const jobsBySystem=new Map();
     let partitionBatches=0, peakWorkers=0;
     const projection = Q.projection(systems);
@@ -365,10 +373,21 @@
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(weatherTrackState && {weatherTrackState})});
     }
-    function context(name, worldValue, statesValue, at, input, emit, query, spatial, timing, causal) {
+    function phaseReader(name,snapshot,staged) {
+      const contract=contracts.get(name);
+      if (!contract) return undefined;
+      return alias => {
+        check(typeof alias==='string'&&own(contract.reads,alias),'Undeclared system state read '+name+'/'+String(alias));
+        const {system,sample}=contract.reads[alias];
+        if (sample!=='current'||!own(staged,system)) return rootedState(visibleStates(snapshot)[system]);
+        const state=aggregates ? aggregates.readState(system,staged[system]) : staged[system];
+        return rootedState(systems[system].viewState ? systems[system].viewState(state) : state);
+      };
+    }
+    function context(name, worldValue, statesValue, at, input, emit, query, spatial, timing, causal, read) {
       return Object.freeze({world:worldValue,query,id:name,states:visibleStates(statesValue),
         ...stepTiming(worldValue,at,timing),input,emit,
-        ...(spatial && {spatial}),...(causal && {causal}),
+        ...(spatial && {spatial}),...(causal && {causal}),...(read && {read}),
         random:randomSource(worldValue.seed,name,at,timing)});
     }
     function rootedState(value) {
@@ -519,7 +538,8 @@
       }
       const startQuery = Q.create(view(),systems,projection);
       const initialOutputs = {};
-      for (const name of names) readOutputs(name,states[name],context(name,world,states,0,{},() => {},startQuery),initialOutputs);
+      for (const name of names) readOutputs(name,states[name],context(name,world,states,0,{},() => {},startQuery,
+        undefined,undefined,undefined,phaseReader(name,states)),initialOutputs);
       outputs = freeze(initialOutputs);
       if (causePolicy) causalState = W.causality.initial(ports,incoming,outputs,causePolicy);
       lastSignals = freeze({...manual,...outputs});
@@ -596,6 +616,14 @@
         if (causal) causal.event(row,parents??scope?.emitParents()??(root?[root]:[]),scope?.location,
           parents?'declared':root?'command':'observed-inputs');
       };
+      function systemEmit(name,scope,root) {
+        const emit=makeEmit(name,scope,root), allowed=contracts.get(name)?.emits;
+        if (!allowed) return emit;
+        return (kind,detail,parents) => {
+          check(allowed.includes(kind),'Undeclared simulation event '+String(kind)+' from '+name);
+          emit(kind,detail,parents);
+        };
+      }
       for (const item of commands) {
         const [name,key] = endpoint(item.action);
         if(debug)debug.enter({system:W.stepDebug.actionSystem(item),inputs:item.args});
@@ -636,7 +664,7 @@
           const actionQuery = Q.create(view(nextWorld,{...drafts}),systems,projection);
           const scope=causal?.scope(name,{}, {},actionQuery,{root,queryTick:tick,queryTime:tick*nextWorld.dt});
           causal?.action(name,root);
-          const ctx = context(name,nextWorld,Object.freeze({...drafts}),at,{},makeEmit(name,scope,root),actionQuery,
+          const ctx = context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name,scope,root),actionQuery,
             spatial(name,false),undefined,scope?.api);
           drafts[name] = rootedState(systems[name].actions[key](drafts[name],item.args,ctx));
         }
@@ -666,7 +694,7 @@
           if(managed&&!detail)continue;
           const input = currentValues(name,nextManual,{},outputs,delays);
           const timing=detail&&{start:0,end:1,every:detail.every,substeps:1,substep:1,detail};
-          const ctx = context(name,nextWorld,before,at,input,makeEmit(name),requestQuery,undefined,timing||undefined);
+          const ctx = context(name,nextWorld,before,at,input,systemEmit(name),requestQuery,undefined,timing||undefined);
           const planned = systems[name].requestTransfers(before[name],ctx,Math.max(0,W.transfers.limit-requests.length));
           check(Array.isArray(planned) && planned.length + requests.length <= W.transfers.limit,
             'Expected a bounded transfer request list from '+name);
@@ -686,12 +714,12 @@
         return receipt;
       })) : [];
       for(const [name,confirmed] of confirmations??[])
-        drafts[name]=rootedState(systems[name].receiveTransfers(drafts[name],confirmed,{tick:at,emit:makeEmit(name)}));
+        drafts[name]=rootedState(systems[name].receiveTransfers(drafts[name],confirmed,{tick:at,emit:systemEmit(name)}));
       aggregates?.transition(drafts,nextChunkState,makeEmit('world'));
       worksites?.run(drafts,{tick:at,dt:nextWorld.dt,detailed,root:rootedState,emit:makeEmit,
         input:name=>currentValues(name,nextManual,{},outputs,delays),
         query:()=>Q.create(view(nextWorld,{...drafts},lastSignals,at,receipts,causalState,nextChunkState),systems,projection),
-        context:(name,query)=>context(name,nextWorld,Object.freeze({...drafts}),at,{},makeEmit(name),query,spatial(name,false))
+        context:(name,query)=>context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name),query,spatial(name,false))
       });
       let nextSpatial = spatialSampling;
       if (slowReaders.size && (trace || Object.keys(spatialSampling).length)) {
@@ -738,7 +766,7 @@
       const prepare=partitioned?.size?launch:undefined;
       const groupsFor=prepare&&(ordered=>partitionGroups(ordered,partitionBarriers));
       let phaseQuery, phaseStart;
-      function integrate(name, snapshot, input, timing, target, sources, priorOutputs) {
+      function integrate(name, snapshot, input, timing, target, sources, priorOutputs, stagedStates) {
         if (!phaseQuery || phaseStart !== timing?.start) {
           phaseStart = timing?.start;
           const base = view(nextWorld,snapshot,timing?.signals??lastSignals,tick,receipts,causalState,nextChunkState);
@@ -748,7 +776,8 @@
         const scope=causal?.scope(name,input,sources,phaseQuery,{substep:timing?.substeps>1?timing.substep:undefined,
           queryTick:tick,queryTime:(tick+(timing?.start??0))*nextWorld.dt});
         if (scope) for (const key of Object.keys(input)) scope.api.input(key);
-        const ctx = context(name,nextWorld,snapshot,at,input,makeEmit(name,scope),phaseQuery,spatial(name,true),timing,scope?.api);
+        const ctx = context(name,nextWorld,snapshot,at,input,systemEmit(name,scope),phaseQuery,spatial(name,true),timing,scope?.api,
+          phaseReader(name,snapshot,stagedStates));
         const observed=debug&&{system:name,fraction:timing?.end??1,substep:timing?.substep??1,
           substeps:timing?.substeps??1,dt:ctx.dt,inputs:input};
         const eventStart=debug?events.length:0, writeStart=debug?nextWrites.length:0;
@@ -805,7 +834,7 @@
               const port=name+'/'+key, edge=incoming.get(port);
               return [key,{parents:causal.held(port,edge,own(immediate,edge?.from)),source:edge?.from,delay:edge?.delay}];
             }));
-            nextStates[name] = integrate(name,committed,input,undefined,nextOutputs,sources,outputs);
+            nextStates[name] = integrate(name,committed,input,undefined,nextOutputs,sources,outputs,nextStates);
             if (systems[name].combinational) for (const key of Object.keys(systems[name].outputs ?? {}))
               immediate[name+'/'+key] = nextOutputs[name+'/'+key];
           }
@@ -902,6 +931,7 @@
       profile:() => rates && profile ? Object.fromEntries(names.map(name=>[name,
         metrics.get(name)??{calls:0,ms:0,maxMs:0}])) : Object.fromEntries(metrics),
       rates:() => rates ? {subdivision:rates.subdivision,systems:rates.rates} : null,
+      composition:() => composition ??= W.systemComposition.describe(plan),
       partitions:()=>({workers:workerPool?.size??0,peakWorkers,batches:partitionBatches,
         systems:Object.fromEntries(names.filter(name=>jobsBySystem.has(name)).map(name=>[name,jobsBySystem.get(name)]))}),
       dependencies:() => ({declarations:dependencies.describe,

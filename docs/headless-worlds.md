@@ -19,6 +19,9 @@ from explicit inputs, or hold its state in a checkpoint while sleeping.
 [Deterministic simulation workers](simulation-workers.md) run independent
 system steps on Node threads. A checkpoint can move between worker counts.
 
+[Composable system contracts](#compose-system-contracts) declare shared
+state reads, emitted events, and same-phase dependencies.
+
 [Shared simulation checkpoints](simulation-checkpoints.md) let branches
 reuse immutable state in process and content-addressed blocks on disk.
 
@@ -1518,6 +1521,39 @@ then update those entities and their attachments between snapshots. A provider
 with only `pose` uses the per-snapshot index.
 Load custom factories through the CLI's existing `ink-studio.config.js`
 `load` hook when reading their checkpoints in a separate process.
+
+### Compose system contracts
+
+A factory can return a `contract`, and a world can set
+`systems.<id>.contract` for an individual instance. The instance overrides
+reads by alias, adds prerequisites from `after`, and replaces the event list
+when it supplies `emits`. Use `{$local: 'systemId'}` for references inside a
+prefab. Each system owns the state returned by its hooks, publishes typed
+`outputs` and reads connected `inputs`. Spatial field declarations keep
+their existing invalidation and snapshot rules.
+
+| Contract property | Effect |
+| --- | --- |
+| `reads` | Map a local alias to a system ID or to `{system, sample}`. Use `ctx.read(alias)` in `step` and `output` to retrieve immutable peer state. |
+| `after` | List prerequisite system IDs. When both solvers are due in a phase, the prerequisites step and publish first. |
+| `emits` | List event kinds the system may pass to `ctx.emit` during a tick. An empty list disallows emits. Omit it to leave emits unrestricted. Use typed `event` outputs to feed events to another system. |
+
+`sample: 'previous'` is the default. It reads the phase-start snapshot, so
+feedback across systems can use it without forming a schedule cycle.
+`sample: 'current'` reads the source's completed state in the same phase
+and adds a scheduling dependency. At initialization or when the source
+is idle, it reads the available snapshot. Established query and
+`ctx.states` reads still use the phase snapshot. Post-step observers run
+after solver phases. Missing peers, self-dependencies, and cycles across
+current reads, explicit prerequisites, and immediate signal wires are
+rejected during validation.
+
+`run.composition()` reports the order, state aliases, typed ports, spatial
+reads and writes, event declarations, same-phase dependencies, and connection
+sampling policies. The CLI exposes the same report as
+`ink-studio sim plan <world|checkpoint|recording>`. A system with declared
+peer state reads runs on the host. Worker systems can continue to exchange
+typed signals and use `after` to order their steps.
 
 Rill's revision and spatial lookup contracts inspired the query snapshots and
 stable selectors. Frontier's path edits and Ink's state/action/query separation

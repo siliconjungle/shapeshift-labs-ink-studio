@@ -171,7 +171,7 @@
             if(!timing)continue;
             const sources=causal?{}:undefined;
             changed[name]=visit(name,states,inputsFor(name,true,sources),{...timing,signals:snapshotSignals},
-              staged,sources,outputs);
+              staged,sources,outputs,changed);
             if(systems[name].combinational)for(const key of Object.keys(systems[name].outputs??{})){
               const port=name+'/'+key;
               live[port]=staged[port];
