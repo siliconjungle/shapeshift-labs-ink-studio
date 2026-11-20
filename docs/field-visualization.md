@@ -15,6 +15,8 @@ missing region, and glyphs omit missing and zero vectors.
 [Fourier and standing-wave fields](spectral-fields.md) supply signed
 displacement, phase, or energy. [Wave propagation](scalar-wave.md) supplies
 retained pressure, pressure rate, or energy from a slice with obstacles.
+[Boundary-driven potentials](boundary-potential-fields.md) supply scalar
+solutions and downhill vectors from pinned, masked grids.
 
 ## Geometry
 
