@@ -126,6 +126,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const cleaned = target(), finished = target(), history = [target(), target()];
     const detailAPI = toolkit.DetailBudgets ?? toolkit.KIT?.detailBudgets;
     const qualityAPI = toolkit.KIT?.passQuality;
+    const contract = toolkit.KIT?.renderContract;
     const lighting = toolkit.KIT?.splatRelighting, relightUnit = 21;
     const relitSprites = new Map();
     let relightData, relightRows, lastRelighting;
@@ -150,7 +151,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const mainTransparency = new WeakMap(), portalTransparency = new WeakMap();
     let surfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let simple, simpleUnavailable = false, keyProgram, damp, copy, spriteProgram, spriteEnvProgram, spriteLayer, spriteTable, anchors;
-    let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, fineValues, materials, anchorCount = 0;
+    let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, lastStaged, fineValues, materials, anchorCount = 0;
     let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousColorGrade, previousDetailRanges, previousSection, lastQualityKey;
     let toneKey, tone, sorted, instanceDraw, expandInstances, lastInstances;
 
@@ -600,8 +601,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           source = expandInstances(world,instances,frame.changedRows).world;
           instances = undefined;
         }
-        const t=frame.time??world.lookSnapshot?.time??0;
-        const time=frame.stepAnimation!==false&&world.look?.pixel?Math.floor(t*10)/10:t;
+        const t = frame.time ?? world.lookSnapshot?.time ?? 0;
+        const time = contract?.clock(world, frame).scene ?? t;
         source = selectReflectionWorld(source,capture.plane,time,toolkit);
         render(source,{...frame,instances,order:undefined,changedRows:undefined,water:false,reflections:false,
           raw:frame.raw??false,outline:false,dither:0,damp:false,edges:false,clean:false,tone:false},
@@ -643,6 +644,14 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         world = toolkit.KIT?.shadowArt?.frame(world, camera.shadowFootprint) ?? world;
       const { raw = false, outline = true, dither = 0.35, scale = 1 } = frame;
       const look = world.look ?? {};
+      const clock = contract?.clock(world, frame);
+      const t = clock?.time ?? frame.time ?? world.lookSnapshot?.time ?? 0;
+      const time = clock?.scene ?? (frame.stepAnimation !== false && look.pixel ? Math.floor(t * 10) / 10 : t);
+      if (frame.strictContract) {
+        if (!contract) throw new Error('Strict frame validation needs the Ink Studio KIT');
+        contract.requirePortable(world, frame);
+      }
+      const canStage = contract?.hasStages(world, frame) && !contract.compatibility(world, frame).length;
       const qualityDefinition = frame.passQuality ?? look.passQuality;
       if (qualityDefinition && !qualityAPI) throw new Error('Pass quality needs the Ink Studio KIT');
       const quality = qualityAPI?.prepare(qualityDefinition);
@@ -676,7 +685,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const rules = trails ? afterimagesAPI.prepare(afterimageDefinition) : [];
       const normalCaptures = rules.length ? null : captureWater(world, frame, camera, width, height, 0, quality);
       // Per-pixel material, palette, and detail rules index the expanded world.
-      if (group && (quality?.rows || rules.length || frame[graphOwner] || frame.order || tolerance || wantsRelight || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
+      if (group && (canStage || quality?.rows || rules.length || frame[graphOwner] || frame.order || tolerance || wantsRelight || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
           needsDetailFlags || budget?.fineOn || budget?.fineOff))) {
         expandInstances ??= createExpandedInstances();
         const expanded = expandInstances(world,group,frame.changedRows);
@@ -688,9 +697,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       let trailStart = reflectedTrailStart;
       if (!reflectionCapture && (frame.resetAfterimages || !rules.length)) trailHistory?.clear();
       if (rules.length) {
-        const time = frame.time ?? world.lookSnapshot?.time ?? 0;
-        const poseTime = frame.stepAnimation !== false && look.pixel ? Math.floor(time * 10) / 10 : time;
-        const rows = trailHistory.frame(world, time, rules, { source, layout: reconstruction?.layout ?? frame.instances, poseTime, bornAt: frame.bornAt,
+        const rows = trailHistory.frame(world, t, rules, { source, layout: reconstruction?.layout ?? frame.instances, poseTime: time, bornAt: frame.bornAt,
           withdrawal: frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0 });
         if (rows.length) {
           trailStart = world.count;
@@ -699,6 +706,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       }
       const captures = rules.length ?
         captureWater(world, { ...frame, instances: group }, camera, width, height, trailStart, quality) : normalCaptures;
+      const portableStages = canStage && contract.stagePlan(world, frame, time, { skipMasks: frame.lookMasks === false,
+        blueNoise: settings => toolkit.KIT.procedural.materials.blueNoise(settings),
+        query: () => toolkit.KIT.world.query.fromScene(world, time) });
       const selection = prepareQualityRows(world, frame, quality, qualityKey, trailStart || world.count);
       const constraints = !raw && prepareConstraints(world, constraintDefinition, frame.lookMasks === false);
       const coverage = !raw && (frame.coverageAware ?? look.coverageAware) === true;
@@ -757,11 +767,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const coverageSetting = frame.splatCoverage ?? look.splatCoverage ?? 'legacy';
       const splatCoverage = coverageRules?.coverageMode?.(coverageSetting) ?? ['legacy', 'continuous', 'soft'].indexOf(coverageSetting);
       if (splatCoverage < 0) throw new RangeError('Splat coverage must be legacy, continuous or soft');
-      const colored = !raw && !patterned && !coverage && (frame.colored ?? true);
+      const colored = !raw && !portableStages && !patterned && !coverage && (frame.colored ?? true);
       const detail = prepareDetail(world, budget);
       const scopedCleanup = !!needsDetailFlags && !!detail?.flags;
       const cleaning = globalCleanup || scopedCleanup;
-      const damping = !raw && !coverage && !colored && !constraints && !!look.pixel && frame.damp !== false;
+      const damping = !raw && !portableStages && !coverage && !colored && !constraints && !!look.pixel && frame.damp !== false;
       const samples = colored ? 2 : 1, rw = width * samples, rh = height * samples;
       if (rw > maxSize || rh > maxSize ||
           rw > viewportLimit[0] || rh > viewportLimit[1])
@@ -798,6 +808,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         geometryData = paintData;
       }
       const paintView = paintActive ? camera.view : undefined;
+      if (portableStages) geometryData = contract.materialData(portableStages, world, geometryData);
       if ((paintView || lastPaintView) && (!paintView || !lastPaintView || !sameValues(paintView, lastPaintView)))
         historyValid = false;
       lastPaintView = paintView;
@@ -807,12 +818,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         paintOverlay.resize(width, height);
       }
       const clip = plane === zero ? zero : planeInView(plane, camera);
-      const t = frame.time ?? world.lookSnapshot?.time ?? 0;
-      const time = frame.stepAnimation !== false && look.pixel ? Math.floor(t * 10) / 10 : t;
-      const direction = motionAPI?.prepare(look.artDirection,frame.artDirection);
-      const hasCadence = ['foliage','cloth','rain','water','emissive'].some(key => direction?.cadence[key] !== undefined);
-      const motion = motionAPI?.motion(direction,t,frame.skyTime ?? t,time);
-      const rainClocks = direction?.cadence.rain === undefined ? [time,time] : [motion.falling,motion.rain];
+      const direction = clock?.direction ?? motionAPI?.prepare(look.artDirection,frame.artDirection);
+      const motion = clock ?? motionAPI?.motion(direction,t,frame.skyTime ?? t,time);
+      const rainClocks = motion ? [motion.falling, motion.rain] : [time,time];
+      const hasCadence = rainClocks.some(value => value !== time) ||
+        ['foliage','cloth','rain','water','emissive'].some(key => direction?.cadence[key] !== undefined);
       const windResponse = direction?.windResponse;
       const useWind = climateAPI && airflow && (hasCadence || windResponse?.water || windResponse?.emissive) &&
         (frame.windField ?? world.windField ?? world.weatherBinding);
@@ -821,12 +831,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         const sampled = climateAPI.timeline(world,frame,t,direction,toolkit.KIT?.weather?.tracks);
         const weather = climateAPI.opticalWeather(world,frame,sampled,frame.weatherFronts !== false);
         const air = climateAPI.wind(world,frame,{ ...sampled, weather });
-        const velocity = (channel) => air.windAt?.(direction.cadence[channel] === undefined ? sampled.skyTime :
+        const velocity = (channel) => air.windAt?.(direction?.cadence[channel] === undefined ? sampled.skyTime :
           frame.skyTime ?? motion[channel]) ?? air.wind.velocity;
         flex = channel => airflow.frame(velocity(channel)).flex;
-        if (direction.cadence.rain !== undefined) rainWind = velocity('rain');
+        if (direction?.cadence.rain !== undefined) rainWind = velocity('rain');
       }
-      const water = waterUniforms(waterScene, camera, direction?.cadence.water === undefined ? t : motion.water, plane, captures, width, height);
+      const water = waterUniforms(waterScene, camera, motion?.water ?? time, plane, captures, width, height);
       if (water) water.u_waterWindGain = (windResponse?.water ?? 0) * Math.hypot(...flex('water'));
       const env = environment.prepare(world,frame,camera,t,width,height);
       if (env || lastEnvironment) historyValid = false;
@@ -869,7 +879,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         lastWorld.data === lastData && world.count === lastCount && !group && !lastInstances &&
         !paint && !lastWorld.paintCorrections && !world.anim && !lastWorld.anim;
       const dirty = !isNew || incremental ? frame.changedRows : undefined;
-      const geometryDirty = dirty && paint ?
+      const geometryDirty = portableStages || lastStaged ? undefined : dirty && paint ?
         [...new Set([...dirty, ...paint.dirtyRows.filter(row => row * 512 < world.count)])] : dirty;
       let plan;
       if (group) {
@@ -896,18 +906,10 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         } else pattern.bind();
       }
 
-      const definition = raw || coverage || frame.tone === false ? null : (frame.tone ?? look.tone);
-      const remapDefinition = frame.paletteRemap ?? look.paletteRemap;
-      const curveDefinition = frame.colorCurves ?? look.colorCurves;
-      const lutDefinition = frame.colorLut ?? look.colorLut;
-      const stackDefinition = frame.colorStack ?? look.colorStack;
-      const hasColorGrade = (remapDefinition !== undefined && remapDefinition !== false) ||
-        (curveDefinition !== undefined && curveDefinition !== false) || (lutDefinition !== undefined && lutDefinition !== false) ||
-        (stackDefinition !== undefined && stackDefinition !== false);
-      const colorGrade = !raw && !definition && hasColorGrade &&
-        toolkit.PixelLook.colorGrade(world.pal, world.paletteRoles, world.anim?.grade,
-          remapDefinition, curveDefinition, lutDefinition, stackDefinition);
-      const grade = reflectionCapture ? null : colorGrade || world.anim?.grade;
+      const paletteFrame = toolkit.PixelLook.framePalette?.(world, frame, { grading: !raw && !portableStages, tone: !raw && !coverage }) ??
+        { toneDefinition: raw || coverage ? null : frame.tone ?? look.tone, grade: frame.ignoreLookGrade ? undefined : world.anim?.grade };
+      const { toneDefinition: definition, colorGrade } = paletteFrame;
+      const grade = reflectionCapture ? null : paletteFrame.grade;
       if (masked) bindMaskSites(world,dirty);
       if (constraints?.textured) textureUnit(14,maskTexture);
       if (constraints && (coverage || masked)) {
@@ -933,7 +935,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         ...(materialStyles && { u_materialStyles: 16, u_materialPatterned: patterned, u_materialStylesOn: !raw }),
         u_proj: camera.projection, u_time: time, u_scale: scale, u_ortho: +camera.ortho,
         u_motionCadence: hasCadence, u_rainWind:rainWind,
-        u_motionWind: !!useWind && (direction.cadence.foliage !== undefined || direction.cadence.cloth !== undefined),
+        u_motionWind: !!useWind && (direction?.cadence.foliage !== undefined || direction?.cadence.cloth !== undefined),
         ...(hasCadence && { u_effectTimes:[motion.foliage,motion.cloth,rainClocks[0],motion.emissive],
           u_waterAndRainTime:[motion.water,rainClocks[1]] }),
         ...(useWind && { u_effectWind:[...flex('foliage'),...flex('cloth')] }),
@@ -1061,7 +1063,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           u_relightFogRange: [fog.start ?? 1, fog.max ?? 0] }),
         u_idxTex: 9,
         u_sprLayer: 13, u_markA: +cleaning, u_pal: pal, u_n: palCount, u_luma: 0,
-        u_bypass: +raw, u_colored: +colored, u_dither: dither * 0.3 * (world.dither ?? 1),
+        u_bypass: +(raw || !!portableStages), u_colored: +colored, u_dither: dither * 0.3 * (world.dither ?? 1),
         u_line: rgb(world.pal[lineIndex] ?? 0),
         u_remapLine: colorGrade && Number.isInteger(lineIndex) && lineIndex >= 0 && lineIndex < palCount ? lineIndex + 1 : 0,
         u_edge: outline ? (world.outline?.edge ?? 0) / (2 * camera.radius) : 0,
@@ -1116,6 +1118,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       lastWorld = world;
       lastInstances = group;
       lastData = world.data;
+      lastStaged = Boolean(portableStages);
       lastCount = world.count;
       lastOutput = output;
       lastDetail = detail;
@@ -1150,10 +1153,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         portalDestination.resize(width, height);
         portalMask.resize(width, height);
         const nextCamera = withCameraPose(camera, opening.camera(cameraPose(camera)));
-        const { raw, outline, dither, scale, clean, lineClean, colored, tone, edges, water, time, stepAnimation, environment,
+        const { raw, outline, dither, scale, clean, lineClean, colored, tone, edges, water, time, skyTime, cameraTime,
+          stepAnimation, artDirection, renderStages, strictContract, environment,
           stableTransparency, resetTransparency, stableDetail, passQuality, silhouetteProtection } = frame;
         const destination = reconstructFrame(portal.destination, { raw, outline, dither, scale, clean, lineClean, colored, tone,
-          edges, water, time, stepAnimation, environment, stableTransparency, resetTransparency, stableDetail, passQuality,
+          edges, water, time, skyTime, cameraTime, stepAnimation, artDirection, renderStages, strictContract,
+          environment, stableTransparency, resetTransparency, stableDetail, passQuality,
           silhouetteProtection, ...portal.destinationFrame, damp: false },
           portalReconstructionInstances);
         render(destination.world, destination.frame, width, height, portalDestination.framebuffer, nextCamera, anchorPlane(opening.to));
@@ -1213,7 +1218,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     }
     let inspection;
     function presentFrame(world, frame, width, height, output) {
-      frame = toolkit.KIT?.timeDomains?.frame(world, frame) ?? frame;
+      frame = contract?.options(world, frame, toolkit.KIT.timeDomains?.frame) ??
+        { ...frame, time: frame.time ?? frame.t };
       const source = frame.renderHistoryKey ?? world;
       ({ world, frame } = reconstructFrame(world, frame, reconstructionInstances));
       if (source !== world) frame = { ...frame, renderHistoryKey: source };
@@ -1284,21 +1290,27 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         !Number.isInteger(row) || row < 0 || row >= Math.max(1, Math.ceil(world.count / perRow)))))
         throw new RangeError(key + ' must contain valid ' + perRow + '-splat row indices');
     }
-    if (![frame.time ?? 0, frame.bornAt ?? 0, frame.scale ?? 1, frame.dither ?? 0.35].every(Number.isFinite))
+    if (![frame.time ?? frame.t ?? 0, frame.bornAt ?? 0, frame.scale ?? 1, frame.dither ?? 0.35].every(Number.isFinite))
       throw new RangeError('Ink Studio frame parameters must be finite');
   }
   const api = {
     ...(controls&&{input:controls}),
+    describeFrame(world, frame = {}) {
+      const contract = toolkit.KIT?.renderContract;
+      if (!contract) throw new Error('Frame descriptions need the Ink Studio KIT');
+      return contract.describe(world, { ...frame, width: frame.width ?? frame.w ?? frame.target?.width ?? canvas.width,
+        height: frame.height ?? frame.h ?? frame.target?.height ?? canvas.height }, toolkit.KIT.timeDomains?.frame);
+    },
     cameraPose(world, frame = {}) {
-      return cameraPose(makeCamera(world, frame, frame.width ?? frame.target?.width ?? canvas.width,
-        frame.height ?? frame.target?.height ?? canvas.height));
+      return cameraPose(makeCamera(world, frame, frame.width ?? frame.w ?? frame.target?.width ?? canvas.width,
+        frame.height ?? frame.h ?? frame.target?.height ?? canvas.height));
     },
     renderStream(stream, cameraWorld, { place, portals = [], selected, assemble, ...frame } = {}) {
       if (disposed) throw new Error('The Ink Studio renderer has been disposed');
       if (typeof stream?.advance !== 'function' || typeof assemble !== 'function')
         throw new TypeError('Stream rendering needs a scene stream and a world assembler');
-      const width = frame.width ?? frame.target?.width ?? canvas.width;
-      const height = frame.height ?? frame.target?.height ?? canvas.height;
+      const width = frame.width ?? frame.w ?? frame.target?.width ?? canvas.width;
+      const height = frame.height ?? frame.h ?? frame.target?.height ?? canvas.height;
       const { snapshot, camera } = captureStreamingCamera(cameraWorld, frame, width, height);
       const scene = stream.advance({ place, camera, portals, selected, portalLimit: 1 });
       const previous = streamAssemblies.get(stream), current = new Map();
@@ -1333,9 +1345,9 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       }
       if (frame.fade !== undefined && (!Number.isFinite(frame.fade) || frame.fade < 0 || frame.fade > 1))
         throw new RangeError('Scene fade opacity must be in [0, 1]');
-      const target = frame.target;
-      const width = frame.width ?? target?.width ?? canvas.width;
-      const height = frame.height ?? target?.height ?? canvas.height;
+      const target = Array.isArray(frame.target) || ArrayBuffer.isView(frame.target) ? undefined : frame.target;
+      const width = frame.width ?? frame.w ?? target?.width ?? canvas.width;
+      const height = frame.height ?? frame.h ?? target?.height ?? canvas.height;
       const output = target?.framebuffer ?? null;
       if (target && (width !== target.width || height !== target.height || !output || !gl.isFramebuffer(output)))
         throw new TypeError('Draw target must match the frame size and use the renderer WebGL context');
@@ -1351,7 +1363,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       const create = toolkit.KIT?.procedural?.contributions?.create;
       if (!create) throw new Error('Contribution picking needs the Ink Studio KIT');
       const group = frame.instances, revision = group && instancePlan(group).revision;
-      const time = frame.time ?? world.lookSnapshot?.time ?? 0;
+      const time = frame.time ?? frame.t ?? world.lookSnapshot?.time ?? 0;
       const withdrawal = frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0;
       const splatCoverage = frame.splatCoverage ?? world.look?.splatCoverage;
       const materialStyles = world.materialPixelStyles;

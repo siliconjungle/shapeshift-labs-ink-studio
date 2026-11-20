@@ -168,6 +168,16 @@ const PixelLook = (() => {
     return resolved;
   }
 
+  function framePalette(world, frame, { grading = true, tone = true, onClip } = {}) {
+    const look = world.look ?? {};
+    const toneDefinition = tone ? frame.tone ?? look.tone : null;
+    const animationGrade = frame.ignoreLookGrade ? undefined : world.anim?.grade;
+    const colors = grading && !toneDefinition ? colorGrade(world.pal, world.paletteRoles, animationGrade,
+      frame.paletteRemap ?? look.paletteRemap, frame.colorCurves ?? look.colorCurves,
+      frame.colorLut ?? look.colorLut, frame.colorStack ?? look.colorStack, onClip) : null;
+    return { toneDefinition, colorGrade: colors, grade: colors || animationGrade };
+  }
+
   function toneSettings(definition) {
     if (definition === undefined || definition === false) return null;
     const overrides = typeof definition === 'string' ? { preset: definition } : definition;
@@ -539,6 +549,6 @@ vec3 inkToneResolve(vec3 color, ivec2 pixel) {
 }`;
   return { nearest, rgbWeights:weights, ink, resolve, glsl, presets, toneSettings, prepareTone, toneIndex, toneGlsl, bayerRank, outputPalettes, localIndex,
     preparePalette, prepareLookPolicy, preparePaletteConstraints, paletteIndex, mediumTransform,
-    prepareRemap, gradePalette, prepareColorStack, colorGrade };
+    prepareRemap, gradePalette, prepareColorStack, colorGrade, framePalette };
 })();
 if (typeof module !== 'undefined') module.exports = PixelLook;

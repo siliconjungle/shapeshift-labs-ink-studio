@@ -1,6 +1,5 @@
 import { cameraLens } from './camera-lens.mjs';
 import { cameraImpulses } from './camera-impulses.mjs';
-const defaultFov = 38 * Math.PI / 180;
 const snapshots = new WeakMap();
 
 export function captureCamera(world, frame, width, height) {
@@ -33,57 +32,29 @@ export function makeCamera(world, frame, width, height) {
     projection[0] *= camera.aspect/aspect;
     return { ...camera,aspect,projection,footprint:camera.footprint*scale,shadowFootprint:camera.shadowFootprint*scale };
   }
-  const authored = world.cameraRig?.sample(frame.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? frame.time ?? world.lookSnapshot?.time ?? 0, { shot: frame.cameraShot }).camera;
-  const flat = Object.fromEntries(['fov','focalLength','sensorHeight','focusDistance','composition'].filter(key=>frame[key]!==undefined).map(key=>[key,frame[key]]));
-  const camera = cameraLens.view(world.cam, authored, frame.camera, flat);
-  const { yaw, pitch, dist, fov } = camera;
-  const ortho = frame.camera?.ortho ?? (frame.camera?.projection !== undefined
-    ? frame.camera.projection === 'orthographic' : camera.ortho ?? camera.projection === 'orthographic');
-  if (![yaw, pitch, dist, fov, camera.target?.[0], camera.target?.[1], camera.target?.[2]].every(Number.isFinite) ||
-      dist <= 0 || fov <= 0 || fov >= Math.PI)
-    throw new RangeError('The camera needs a finite orbit, positive distance, and field of view in (0, π)');
-  const radius = world.radius ?? 14;
-  const tanFov = Math.tan(fov / 2), aspect = width / height;
-  const zoomedDistance = dist / (frame.lockCamera ? 1 : world.anim?.zoom || 1);
-  const viewHeight = zoomedDistance * tanFov;
-  const target = cameraLens.target({...camera,dist:zoomedDistance},aspect);
-  const distance = ortho && !authored && !camera.pose ? zoomedDistance + 2 * radius + 4 : zoomedDistance;
-  const xs = Math.sin(yaw), cs = Math.cos(yaw), cy = Math.cos(pitch);
-  const zx = cy * xs, zy = Math.sin(pitch), zz = cy * cs;
-  const xl = Math.hypot(zz, zx);
-  const xx = xl ? zz / xl : cs, xz = xl ? -zx / xl : -xs;
-  const yx = zy * xz, yy = zz * xx - zx * xz, yz = -zy * xx;
-  const kick = frame.lockCamera ? null : world.anim?.kick;
-  const eye = [
-    (target[0] + (kick?.[0] ?? 0)) + distance * zx,
-    (target[1] + (kick?.[1] ?? 0)) + distance * zy,
-    (target[2] + (kick?.[2] ?? 0)) + distance * zz
-  ];
-  const view = new Float32Array([
-    xx, yx, zx, 0, 0, yy, zy, 0, xz, yz, zz, 0,
-    -(xx * eye[0] + xz * eye[2]), -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
-    -(zx * eye[0] + zy * eye[1] + zz * eye[2]), 1
-  ]);
-  const near = 0.4, far = 400, scale = 1 / tanFov;
+  const staging = frame.cameraStaging ?? world.look?.cameraStaging;
+  const sample = cameraLens.frame(world, frame, width, height, { orbit: staging?.orbit, impulse: cameraImpulses.frame });
+  const { dist, distance, aspect, radius, ortho, tangent: tanFov, clipNear, clipFar: far, setback } = sample;
+  const view = cameraLens.artView(sample, height, world.look?.stable, frame.stable);
+  const eye = view === sample.view ? sample.pose.eye : cameraLens.fromView(view).eye;
+  const viewHeight = dist * tanFov, near = .4, scale = 1 / tanFov;
   const projection = ortho
     ? new Float32Array([1 / (viewHeight * aspect), 0, 0, 0, 0, 1 / viewHeight, 0, 0,
       0, 0, -2 / (far - near), 0, 0, 0, -(far + near) / (far - near), 1])
     : new Float32Array([scale / aspect, 0, 0, 0, 0, scale, 0, 0, 0, 0,
       (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0]);
   const depthCenter = ortho ? distance : dist;
-  const result = {
-    view, projection, eye, aspect, ortho, radius, distance, lens:cameraLens.resolve(camera), composition:camera.composition ?? [.5,.5], setback:distance-zoomedDistance,
+  return {
+    view: Float32Array.from(view), projection, eye, aspect, ortho, radius, distance,
+    lens: sample.lens, composition: frame.composition ?? sample.base.composition ?? [.5,.5], setback,
     tangent: ortho ? viewHeight : tanFov,
     footprint: dist * 2 * tanFov / height,
     shadowFootprint: 2 * viewHeight / height,
-    clipNear: Math.max(0.4, 0.15 * dist),
+    clipNear,
     clipFar: far,
-    depthRange: [depthCenter - radius, depthCenter + radius]
+    depthRange: [depthCenter - radius, depthCenter + radius],
+    ...(sample.motion && { cameraImpulse: sample.motion })
   };
-  let resolved = camera.pose ? withCameraPose(result,camera.pose) : result;
-  const motion = cameraImpulses.frame(world,frame,cameraLens.listenerPose(cameraPose(resolved),resolved.setback));
-  if(motion){if(motion.translation.some(Boolean)||motion.rotation.some(Boolean))resolved=withCameraPose(resolved,cameraLens.applyMotion(cameraPose(resolved),motion,{setback:resolved.setback}));resolved={...resolved,cameraImpulse:motion};}
-  return resolved;
 }
 
 export function cameraPose({ eye, view }) {

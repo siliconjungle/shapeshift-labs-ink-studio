@@ -3,6 +3,7 @@
 const KIT = {};
 KIT.detailBudgets = DetailBudgets;
 KIT.passQuality = PassQuality;
+KIT.renderContract = RenderContract;
 KIT.shadowArt = ShadowArt;
 KIT.splatFrames = SplatFrames;
 KIT.splatRelighting = SplatRelighting;

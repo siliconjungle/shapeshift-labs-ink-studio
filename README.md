@@ -747,6 +747,8 @@ keep terrain, surface, and object edits across saves, travel, and resumed region
 [Scene-aware streaming](docs/procedural.md#scene-aware-streaming) prioritizes nearby detail, selected subjects, and visible portal destinations within memory and frame budgets.
 
 [Render pass quality](docs/scene-optics.md#render-pass-quality) scales background splats, particles, and secondary reflections while protecting focal subjects and data marks.
+
+[The shared rendering contract](docs/browser-renderer.md#shared-rendering-contract) aligns cameras, clocks, palette inputs, and portable material stages across WebGL and the headless renderer.
 [Editable water boundaries](docs/headless-worlds.md#editable-water-boundaries)
 define regional sources, sinks, barriers, open edges, and exchange with spatial head fields.
 [Simulation workers](docs/simulation-workers.md) run custom and built-in

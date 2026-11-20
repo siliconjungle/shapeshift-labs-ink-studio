@@ -106,7 +106,7 @@ const RenderStages = (() => {
   }
 
   function plan(world, options = {}) {
-    const entries = world.look?.renderStages;
+    const entries = options.sceneRules ?? world.look?.renderStages;
     const paint = world.surfaces?.some(({settings})=>Object.values(settings.layers ?? {}).some(layer=>layer?.stage === 'material'));
     if (!paint && (entries === undefined || entries === false || Array.isArray(entries) && !entries.length) &&
         !world.surfaces?.some(({ settings }) => settings.renderStages !== undefined && settings.renderStages !== false)) return null;

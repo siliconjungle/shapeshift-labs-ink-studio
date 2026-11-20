@@ -57,7 +57,7 @@ tone mapping, and grading are inactive. Pass `reuseOrder: false` or
 | `colorStack` | Override a world's [named color stack](pixel-look.md#named-color-stacks), or pass `false` to disable it. |
 | `clean`, `lineClean`, `damp` | Control isolated-pixel cleanup, line cleanup, and per-pixel flicker damping. |
 | `edges`, `lightShape` | Toggle surface edge sprites and per-pixel line shading. |
-| `scale`, `stepAnimation` | Change the splat size or disable the shared per-pixel animation clock stepping. |
+| `scale`, `stepAnimation` | Change the splat size or explicitly enable the legacy 10 fps step for pixel looks. |
 | `afterimages` | Draw historical splat poses with scene depth. See [motion-aware afterimages](motion-afterimages.md). |
 | `reconstruction` | Animate selected splats through fragmentation, withdrawal, and reassembly. See [world-space reveal and reconstruction](world-reconstruction.md). |
 | `stableTransparency` | Hold the order of nearby translucent splats during motion. See [stable transparency](scene-optics.md#stable-transparency-during-motion). |
@@ -70,6 +70,18 @@ Set `frame.target` to a same-context framebuffer descriptor with `framebuffer`,
 `width`, and `height` to draw offscreen. Its dimensions supply the defaults for
 the frame. The [screen transition compositor](transitions.md#render-ink-studio-worlds-directly-into-a-transition)
 can create these targets and reuse their color textures on the GPU.
+
+## Shared rendering contract
+
+The WebGL and headless entry points accept the same authored camera and time settings. Both resolve orbit, projection, composition, lenses, camera rails, camera impulses, and orthographic art-pixel snapping through shared math. Use `time` or `t` for the animation sample and `width`/`height` or `w`/`h` for viewport dimensions. Override the authored camera with `camera` or flat camera fields. A flat `target` XYZ array sets camera aim. WebGL still accepts a framebuffer descriptor in `target`.
+
+Sampling is continuous by default. Authored cadence and live time domains determine the corresponding sample times and leave the camera and interface clocks independent. A pixel look that used WebGL's old implicit stepping can set `stepAnimation: true` to request 10 fps in both backends. An explicitly authored scene cadence takes precedence.
+
+The shared palette pipeline resolves tone and palette overrides, animation grades, curves, LUTs, and color stacks. `ignoreLookGrade` bypasses the animation grade. WebGL also evaluates ordered `material` and `lit` color stacks and uniform palette policies on baked splat colors with the same target selectors, albedo references, and look inputs used headlessly.
+
+Use `studio.describeRenderFrame(world, frame)` in Node or `renderer.describeFrame(world, frame)` in WebGL to inspect the versioned camera, clock samples, palette input under `palette`, palette mode, and stage issues. The description samples the scene without advancing simulation. Describe and draw at the same native art size for framing comparisons.
+
+`strictContract: true` or CLI `--strict-contract` rejects an incompatible staged frame or a palette above WebGL's 64-swatch limit. The portable staged path covers baked RGB with uniform material and lit rules. Spatial stage masks, frame and palette stages, per-pixel material colors, live lighting, and advanced surface composition use backend-specific paths. The ordinary rendering mode preserves the backend's existing fallback for unsupported combinations. Raster edges, coverage, and precision can still differ with matched inputs.
 
 ## Shared baked splat instances
 

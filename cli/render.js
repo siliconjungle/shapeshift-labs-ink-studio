@@ -24,6 +24,7 @@ const runGraph = require('./render-graph.js');
 const FrameComposite = require('../src/frame-composite.js');
 const CameraStaging = require('../src/camera-staging.js');
 const CameraLens = require('../src/camera-lens.js');
+const RenderContract = require('../src/render-contract.js');
 const CameraImpulses = require('../src/camera-impulses.js');
 const SplatOrder = require('../src/splat-order.js');
 const Cutaway = require('../src/cutaway.js');
@@ -86,43 +87,7 @@ const clamp = (x, a, b) => (x < a ? a : x > b ? b : x),
     return t * t * (3 - 2 * t);
   };
 function viewMatrix(yaw, pitch, dist, T) {
-  const cp = Math.cos(pitch),
-    sp = Math.sin(pitch),
-    e = [T[0] + dist * cp * Math.sin(yaw), T[1] + dist * sp, T[2] + dist * cp * Math.cos(yaw)];
-  let zx = e[0] - T[0],
-    zy = e[1] - T[1],
-    zz = e[2] - T[2];
-  const zl = Math.hypot(zx, zy, zz);
-  zx /= zl;
-  zy /= zl;
-  zz /= zl;
-  let xx = zz,
-    xz = -zx;
-  const xy = 0,
-    xl = Math.hypot(xx, xz);
-  xx = xl ? xx / xl : Math.cos(yaw);
-  xz = xl ? xz / xl : -Math.sin(yaw);
-  const yx = zy * xz - zz * xy,
-    yy = zz * xx - zx * xz,
-    yz = zx * xy - zy * xx;
-  return [
-    xx,
-    yx,
-    zx,
-    0,
-    xy,
-    yy,
-    zy,
-    0,
-    xz,
-    yz,
-    zz,
-    0,
-    -(xx * e[0] + xy * e[1] + xz * e[2]),
-    -(yx * e[0] + yy * e[1] + yz * e[2]),
-    -(zx * e[0] + zy * e[1] + zz * e[2]),
-    1
-  ];
+  return CameraLens.matrix(CameraLens.orbitPose(yaw, pitch, dist, T));
 }
 // o: t (seconds), yaw, pitch, dist, target, w, h (the size of the stage in screen pixels), zoom (1 = the diorama's own distance), raw (skip the palette)
 const edgeCoverageThreshold = .03;
@@ -143,10 +108,8 @@ function cameraCapture(options, receive) {
 }
 
 function render(world, o, preparedPalettes) {
-  if (o?.timeDomains || world.timeDomains) {
-    const times = require('../index.js').load().KIT.timeDomains.frame(world, { ...o, time: o?.t });
-    o = { ...times, t: times.time };
-  }
+  o = RenderContract.options(world, o, (w, frame) => require('../index.js').load().KIT.timeDomains.frame(w, frame));
+  if (o.strictContract) RenderContract.requirePortable(world, o);
   if (o?.cameraGuides && !o.samples && !o.captureCoverage) {
     const staging = o.cameraStaging ?? world.look?.cameraStaging;
     return CameraStaging.overlay(render(world, { ...o, cameraGuides: false, cameraStaging: staging || true }, preparedPalettes));
@@ -257,35 +220,19 @@ function renderFrame(world, o, preparedPalettes) {
   const look = world.look || {};
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
-  const direction = ArtDirection.prepare(look.artDirection,o.artDirection);
+  const motion = RenderContract.clock(world, o), { direction, time: sceneTime, scene: t } = motion;
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
   const passQuality = PassQuality.prepare(o.passQuality ?? look.passQuality);
   const subject = protection?.bind(world);
-  const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
-  const authored = world.cameraRig?.sample(o?.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? sceneTime, { shot: o.cameraShot }).camera;
-  const c = CameraStaging.view(world.cam, authored, o[probeCamera] ? undefined : o.camera);
   const viewStaging = o[probeCamera] ? null : CameraStaging.prepare(o.cameraStaging ?? look.cameraStaging);
   const framing = o.samples || o.captureCoverage || o.reflectionPlane ? null : viewStaging;
   const focusBands = o.depthOfField === false ? [] : framing?.depthOfField ?? [];
   const hasFocus = focusBands.some(band => band.radius > 0);
-  const lens = CameraStaging.lens(c,o[probeCamera] ? (o.fov===undefined?{}:{fov:o.fov}) : Object.fromEntries(['fov','focalLength','sensorHeight','focusDistance'].filter(key=>o[key]!==undefined).map(key=>[key,o[key]])));
-  const { fov,sensorHeight } = lens;
-  const tangent = Math.tan(fov / 2) / lensScale;
-  const ortho = o.ortho ?? c.ortho ?? (c.projection === 'orthographic');
-  const motion = ArtDirection.motion(direction,sceneTime,o.skyTime ?? sceneTime);
-  const t = motion.scene,
-    an = world.anim || {},
-    cameraMotion = o.lockCamera ? {} : an,
-    dist0 = o.dist || c.dist / (o.zoom || 1),
-    /* a diorama's own zoom (a camera punch) moves the eye, not the size of an art pixel */
-    { yaw, pitch, dist } = CameraStaging.constrain({
-      yaw: o.yaw ?? c.yaw, pitch: o.pitch ?? c.pitch, dist: dist0 / (cameraMotion.zoom || 1)
-    }, viewStaging?.orbit),
-    cw = o.w || 900,
-    ch = o.h || 620,
-    T0 = CameraStaging.frameTarget({target:o.target || c.target,yaw,pitch,dist,fov:2*Math.atan(tangent),composition:o.composition ?? c.composition},cw/ch),
-    T = cameraMotion.kick ? [T0[0] + cameraMotion.kick[0], T0[1] + cameraMotion.kick[1], T0[2] + cameraMotion.kick[2]] : T0;
-  const depthOffset = ortho && !authored && !c.pose ? 2 * world.radius + 4 : 0;
+  const cw = o.w ?? o.width ?? 900, ch = o.h ?? o.height ?? 620;
+  const camera = CameraLens.frame(world, o, cw, ch, { orbit: viewStaging?.orbit, impulse: CameraImpulses.frame, probe: !!o[probeCamera] });
+  const { lens: { fov, sensorHeight }, tangent, ortho, dist, dist0, yaw, pitch, framed: T, base: c,
+    setback: depthOffset, radius: R } = camera;
+  const an = world.anim || {};
   const audit = o.lookAudit === true ? createAudit() : o.lookAudit;
   const onPaletteClip = audit && ((scope, i, r, g, b) => audit.palette(scope, world.pal[i], r, g, b));
   const transparent = !!o.transparent && !o.captureCoverage;
@@ -312,7 +259,7 @@ function renderFrame(world, o, preparedPalettes) {
     world.lookSnapshot?.query ?? world.surfaceEffects?.query ?? require('../index.js').load().KIT.world.query.fromScene(world, t)));
   const lookOptions = { palette: world.pal, roles: world.paletteRoles, context: world.surfaceEffects, lookInputs,
     blueNoise: settings => blueNoise(world, settings), skipMasks: o.lookMasks === false };
-  const stages = !o.raw && RenderStages.plan(world, lookOptions);
+  const stages = RenderContract.stagePlan(world, o, t, lookOptions);
   const optics = o.raw ? null : RenderStages.optics(look.optics, lookOptions);
   const useLocalReflections = o.surface !== false && o.reflections !== false && o.reflectionProbes !== false;
   const scopedReflection = (world.reflections?.length || (useLocalReflections && world.reflectionProbes?.length)) && (look.paletteConstraints?.targets?.length ||
@@ -398,14 +345,10 @@ function renderFrame(world, o, preparedPalettes) {
     palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
     context: world.surfaceEffects, skipMasks: o.lookMasks === false, skipMaskedStacks: o.colorStack === false, onPaletteClip
   }) : preparedPalettes;
-  const animationGrade = o.ignoreLookGrade ? undefined : an.grade;
-  const colorGrade = (legacyLook || coverageAware) && !tone && PixelLook.colorGrade(world.pal, world.paletteRoles, animationGrade,
-    o.paletteRemap ?? look.paletteRemap, o.colorCurves ?? look.colorCurves, o.colorLut ?? look.colorLut,
-    o.colorStack ?? look.colorStack,
-    onPaletteClip && ((i, r, g, b) => onPaletteClip({
+  const { colorGrade, grade } = RenderContract.palette(world, o, { grading: (legacyLook || coverageAware) && !tone, tone: false,
+    onClip: onPaletteClip && ((i, r, g, b) => onPaletteClip({
       assetId: o.colorStack === undefined ? look.colorStackAssetId : undefined, stack: (o.colorStack ?? look.colorStack)?.name
-    }, i, r, g, b)));
-  const grade = colorGrade || animationGrade;
+    }, i, r, g, b)) });
   const evaluatedPalette = colorGrade ? PixelLook.gradePalette(grade) : undefined;
   if (audit) {
     if (legacyLook) audit.addPalette(tone?.palette || evaluatedPalette || (grade ? PixelLook.gradePalette(grade) : world.pal));
@@ -493,20 +436,17 @@ function renderFrame(world, o, preparedPalettes) {
   lookPass = createLookPass(W, H, passSelection, o.lookPassRegistry);
   /* Legacy orthographic views back the eye away. Authored rigs keep their rail or orbit position. */
   const oh = dist * tangent,
-    eyeD = dist + depthOffset,
+    eyeD = camera.distance,
     reflectionPlane = o.reflectionPlane,
     focal = ortho ? H / 2 / oh : H / 2 / tangent,
-    baseView = probeView?.matrix ?? (c.pose ? CameraLens.matrix(c.pose) : viewMatrix(yaw,pitch,eyeD,T)),
-    cameraImpulse = !probeView && CameraImpulses.frame(world,o,CameraLens.listenerPose(CameraLens.fromView(baseView),depthOffset)),
-    cameraView = cameraImpulse && (cameraImpulse.translation.some(Boolean)||cameraImpulse.rotation.some(Boolean)) ? CameraLens.matrix(CameraLens.applyMotion(CameraLens.fromView(baseView),cameraImpulse,{setback:depthOffset})) : baseView,
-    view = ortho && stable?.snap ? ArtStability.snapView(cameraView, focal / (o.artGridScale || 1), stable.anchor) : cameraView,
+    cameraView = probeView?.matrix ?? camera.view,
+    view = CameraLens.artView(probeView ? { ...camera, view: cameraView } : camera, H, stable, undefined, o.artGridScale || 1),
     V = reflectionPlane ? SceneOptics.reflectedView(view, reflectionPlane) : view,
-    near = probeView?.near ?? Math.max(0.4, 0.15 * dist),
+    near = probeView?.near ?? camera.clipNear,
     tp = 1 / tangent,
     asp = W / H,
-    baseCount = world.count,
-    R = world.radius;
-  if(!o.reflectionPlane&&!probeView)o.cameraFrame?.({time:o.cameraTime??sceneTime,pose:CameraLens.fromView(V),motion:cameraImpulse||null});
+    baseCount = world.count;
+  if(!o.reflectionPlane&&!probeView)o.cameraFrame?.({time:camera.time,pose:CameraLens.fromView(V),motion:camera.motion});
   if (!o.reflectionPlane && !probeView) o[captureCamera]?.({view: V, tangent: ortho ? oh : tangent, aspect: asp, ortho,
     clipNear: near, clipFar: 400, distance: eyeD, setback: eyeD - dist, depthRange: [eyeD - R, eyeD + R],
     eye: [-(V[0]*V[12]+V[1]*V[13]+V[2]*V[14]), -(V[4]*V[12]+V[5]*V[13]+V[6]*V[14]), -(V[8]*V[12]+V[9]*V[13]+V[10]*V[14])]});

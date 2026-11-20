@@ -59,7 +59,7 @@ const ArtDirection = (() => {
       return gradeContrast(r,g,b,amount,pivot,out);
     }
     return Object.freeze({ cloudEdge, bands, atmosphereBands:count, cloudHardness:hardness, foreground: contrast === 1 ? null : foreground,
-      cadence: Object.freeze(cadence), windResponse });
+      cadence: Object.freeze(cadence), sceneCadence: Object.hasOwn(authoredCadence, 'scene'), windResponse });
   }
 
   function gradeContrast(r,g,b,amount,pivot,out) {
