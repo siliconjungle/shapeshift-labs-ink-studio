@@ -49,8 +49,12 @@
     return transform({ position: point(a, b.position), matrix: M.mul(a.matrix, b.matrix) });
   }
   function inverse(frame) {
-    const matrix = M.inv(frame.matrix);
-    return transform({ matrix, position: V.mul(M.app(matrix, frame.position), -1) });
+    const determinant = M.det(frame.matrix);
+    check(Number.isFinite(determinant) && determinant !== 0, 'frame cannot be inverted at numeric precision');
+    const matrix = M.inv(frame.matrix),
+      position = V.mul(M.app(matrix, frame.position), -1);
+    check([...matrix, ...position].every(Number.isFinite), 'inverse exceeds numeric precision');
+    return freeze({ matrix, position });
   }
   function reference(raw) {
     if (raw === null || raw === undefined) return null;
@@ -359,8 +363,9 @@
       },
       normal(raw, v) {
         check(vector(v, 3) && V.len(v) > 0, 'invalid normal');
-        const n = M.app(M.tr(M.inv(frame(raw).matrix)), v),
+        const n = M.app(M.tr(inverse(frame(raw)).matrix), v),
           l = V.len(n);
+        check(Number.isFinite(l) && l > 0, 'normal exceeds numeric precision');
         return V.mul(n, 1 / l);
       },
       snapshot,

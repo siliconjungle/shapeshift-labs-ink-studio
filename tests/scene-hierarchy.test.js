@@ -69,3 +69,7 @@ test('adapter exceptions restore ownership and allow another binding',()=>{
 test('camera hierarchy selectors accept the same qualified IDs as scene nodes',()=>{
  const id='prefab:lantern',world=fixture(),graph=G.create({nodes:{[id]:{transform:{position:[1,2,3]}}}});G.attach(world,graph);world.cam={target:[0,0,0],dist:8,yaw:0,pitch:0};K.cameraRig.bind(world,K.cameraRig.compile({targets:{subject:{node:id}},shots:{view:{target:'subject',dist:5}}}));vec(world.cameraRig.sample(0).camera.target,[1,2,3]);
 });
+
+test('nested small scales retain invertible point and normal queries',()=>{
+ const g=G.create({nodes:{a:{transform:{scale:.001}},b:{parent:'a',transform:{scale:.001}},c:{parent:'b',transform:{scale:.001}}}});vec(g.toLocal('c',g.toWorld('c',[1,2,3])),[1,2,3]);vec(g.normal('c',[0,1,0]),[0,1,0]);
+});
