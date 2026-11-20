@@ -1,10 +1,10 @@
 # Learned cellular growth
 
 `KIT.cellular.learned` loads the weights of a small neural cellular rule. Each
-cell applies the same network to nearby state. The runtime does not read a
-target image, a cell's absolute position, or earlier saved patterns when
-updating a cell. The bundled Harbor Mark rule grows an original two-color
-ornament from one seed and repairs damage using its surviving local state.
+cell applies the same network to the state in its 3×3 neighborhood. The
+bundled Harbor Mark rule grows an original two-color ornament from one seed
+and repairs damage from the state that survives around the cut. The model
+file carries the shared weights and the seed vector.
 [Mordvintsev et al., Growing Neural Cellular Automata](https://distill.pub/2020/growing-ca/)
 
 ```js
@@ -49,7 +49,7 @@ Each tick reads the previous grid, applies the selected residual updates, then
 commits together. The life mask keeps cells near alpha above the threshold in
 both the input and the intermediate output. Cells outside the input life mask
 remain zero during the update. The seed and tick determine which cells update,
-so forecasts and exports can replay the same partial updates. State values
+so previews and exports can replay the same partial updates. State values
 are signed Float32 and can exceed the display color range. Each batch has an
 inference work budget and aborts atomically if the model produces a value
 outside the bounded `[-64, 64]` state range.
@@ -81,8 +81,8 @@ outside the bounded `[-64, 64]` state range.
 23×23 grid with ten state channels and 48 hidden units. It takes transparent
 artwork, grows samples from one cell, and trains over trajectories that
 include circular erasures. The JSON written at the end of training contains
-the shared rule and one seed vector. The renderer and runtime use JavaScript
-and require no Python dependency.
+the shared rule and one seed vector. Inference and rendering run in
+JavaScript in the browser and CLI.
 
 ```sh
 python -m pip install torch numpy pillow
