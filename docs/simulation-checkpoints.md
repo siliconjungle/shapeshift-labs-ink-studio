@@ -9,6 +9,9 @@ Sediment and thermal transport can replace it.
 
 [Simulation scrubbing and takes](simulation-scrubbing.md) uses these snapshots for backward and forward seeks and recording editable motion.
 
+[Interactive checkpoint branching](#interactive-checkpoint-branching) keeps
+multiple named outcomes and their starting points in one session.
+
 The default checkpoint and recording are still standalone version 1 JSON.
 For experiments with several saved runs, use a shared block directory.
 
@@ -54,6 +57,48 @@ const branch = KIT.world.runtime.create(snapshot.world, { checkpoint: snapshot }
 
 `save` also accepts a recording. `load` verifies the block representation.
 The runtime validates the restored state against the world before advancing.
+
+## Interactive checkpoint branching
+
+`KIT.world.branches.create(source, options)` accepts a world manifest,
+checkpoint, recording, live runtime, or saved branch session. A live
+runtime is forked at its current tick. A recording opens at its verified
+end and keeps the earlier commands. Pass custom implementations or a
+worker pool as `options.runtime` when opening portable data.
+
+| Session method | Behavior |
+| --- | --- |
+| `play()`, `pause()`, `update(seconds)` | Drive the active run using fixed ticks. While paused, elapsed time has no effect. `maxStepsPerFrame` limits catch-up work and defaults to 12. |
+| `step()`, `advance(tick)` | Pause playback and commit one tick or advance to an absolute tick. |
+| `mark(id, {branch})` | Retain a named checkpoint with the branch's current state and pending commands. |
+| `fork(id, {mark, label})`, `fork(id, {from, label})` | Start from a mark, another branch's current head, or the active head by default. The new branch is selected and paused. |
+| `select(id)` | Switch the active branch and pause playback. Other branches keep their own tick and command queue. |
+| `queue({inputs, edits, actions}, {branch, tick})` | Queue typed input changes, live entity or metadata patches, and system actions as one validated batch. The default boundary is the selected branch's next tick. |
+| `view(id)`, `query(id)`, `checkpoint(id)`, `recording(id)` | Read any branch without switching or advancing it. Omitting the ID reads the active branch. |
+| `diff(left, right)` | Compare two branch heads at the same tick. |
+| `status()`, `subscribe(callback)` | Read current playback state, branch lineage, ticks, pending command counts, and available marks. |
+| `save()` | Export the whole session as portable JSON. Reopen it with `KIT.world.branches.create(saved)`. Playback opens paused. |
+
+Input edits use the world's existing unconnected typed ports. For other
+live changes, use a system action or the existing entity and metadata
+patch operations. Save or export a branch's regular checkpoint or run
+recording to use it with the existing CLI, checkpoint store, and scrub
+session.
+
+### Optional browser controls
+
+`mountSimulationBranches(host, {session, inputs, actions})` is exported
+from `webgl.mjs`. Configure the exposed inputs with
+`{port, label, min, max, step}` and action buttons with
+`{action, args, label}`. The host's light DOM is assigned to the preview
+slot, so any canvas, comparison view, or custom readout can sit alongside
+the controls. The mount uses its own animation-frame clock by default.
+Set `clock: false` to drive `session.update(seconds)` from your app.
+
+`labels` overrides the control copy. Use `controls` to hide groups,
+`--ink-branch-*` custom properties and CSS parts to theme them, or set
+`defaultStyles: false` and supply a `stylesheet`. The mount returns
+`destroy()` to remove the controls and release its clock.
 
 ```sh
 node scripts/benchmark-shared-checkpoints.js
