@@ -174,6 +174,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `KIT.fieldViews.lic(field, options)` | [Vector-field painting](vector-field-painting.md) with aligned grain, obstacle masks, and traveling convolution kernels |
 | `motion.stableFluid(options)`, `motion.shallowWater(options)` | Persistent density and velocity grids, and conservative terrain-aligned water |
 | `motion.scalarWave(options)` | [Wave propagation through geometry](scalar-wave.md) with reflecting walls, absorbing edges, and retained pressure frames |
+| `motion.trailAgents(options)`, `KIT.deposition.grid(options)` | [Trail-sensing agents](trail-sensing-agents.md) with shared field feedback, diffuse trails, and route cuts |
 | `motion.surfaceWeather(options)`, `motion.materialStateGraph(machine, entities, options)` | Persistent wetness and thermal fields, and event-driven material changes |
 | `motion.transportSplats(source, target, options)` | Balanced mass correspondences and barycentric splat targets |
 | `contours.march(field, options)` | Bounded marching-squares paths at a scalar level |
