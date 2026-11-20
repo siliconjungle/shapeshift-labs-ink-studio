@@ -25,3 +25,5 @@ The unified timeline can key `/camera/fov`, `/camera/projection`, and the existi
 Family rails can use `{family: {type: "torusKnot", p: 2, q: 3, ...}}` in place of a point rail. They retain the shared curve sampling and accept no other rail fields. See [curve families](curve-families.md).
 
 Interpolated rails accept `{interpolated:{points,options}}`, where the contents are a `K.curve.interpolate()` snapshot. This retains shared adaptive sampling and periodic interpolation without a second spline pass. See [curve analysis](curve-analysis.md).
+
+Named targets can follow a live hierarchy frame with `{node,socket?,offset?,fallback?}`. Hidden/missing nodes use the framing fallback. See [live scene hierarchy](live-scene-hierarchy.md).

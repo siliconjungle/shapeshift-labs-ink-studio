@@ -74,3 +74,5 @@ Without mixed-resolution composition the CPU works in returned art-pixel coordin
 `visibility(item, depthAt)` returns the coverage-weighted visible fraction; `depthAt(u,v)` supplies normalized linear depth. `font(settings)` reuses the ASCII atlas and custom glyphs. `labels(item, glyphs)` gives a small RGBA bitmap. `compose(frame, plan, settings, depthAt)` provides a software adapter and returns `inspection.targets` with final visibility values. These pieces let a host reuse the target definition without adopting the native frame layer. Native visibility remains GPU-only; planner diagnostics describe projection and activation, not a CPU copy of GPU occlusion.
 
 CLI stills, sheets and clips accept `--inspection file.json|off` and `--inspection-focus id`. JSON definitions support static fields and anchors; use the JavaScript API for callbacks.
+
+Live hierarchy anchors use `at:{node:"lantern",socket:"label"}` and inherit parent visibility. See [live scene hierarchy](live-scene-hierarchy.md).

@@ -27,9 +27,10 @@
   }
 
   function target(row, id, parts) {
-    if(row?.node!==undefined){
-      check(keys(row,['node','socket','offset','fallback'])&&name(row.node)&&(row.socket===undefined||name(row.socket))&&
-        (row.offset===undefined||xyz(row.offset))&&(row.fallback===undefined||xyz(row.fallback)),'invalid hierarchy target '+id);
+    if (row?.node !== undefined) {
+      K.sceneGraph.reference({node:row.node,...(row.socket!==undefined&&{socket:row.socket})});
+      check(keys(row,['node','socket','offset','fallback']) &&
+        (row.offset===undefined||xyz(row.offset)) && (row.fallback===undefined||xyz(row.fallback)), 'invalid hierarchy target '+id);
       return row;
     }
     const { point, part, entity, socket, offset, fallback } = row ?? {};

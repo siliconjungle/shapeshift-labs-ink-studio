@@ -1039,3 +1039,5 @@ Named targets can drive shared brackets, labels, glyph ripples, depth visibility
 `KIT.curve` includes clothoid chains, torus knots, Lissajous curves, logarithmic spirals, superellipses and flowers with shared arc-length paths for sweeps, route followers, particles, camera rails and curved text. See [curve families](docs/curve-families.md) and the [interactive Curve conservatory](examples/curve-families.html).
 
 `KIT.curve` also supports cached closest-point queries, curvature estimates, adaptive sampling and periodic interpolation. `KIT.Q` supplies dependency-free quaternion SLERP/SQUAD, path-frame rotations and quaternion animation channels. See [curve analysis](docs/curve-analysis.md) and [Path observatory](examples/curve-analysis.html).
+
+`KIT.sceneGraph` adds a dependency-free live affine hierarchy across rigged splats, sprite surfaces, point lamps, sockets and inspection/camera targets, with inherited visibility and world-preserving reparenting. See [live scene hierarchy](docs/live-scene-hierarchy.md) and the interactive [Lantern exchange](examples/live-scene-hierarchy.html). Inspect serialized graphs with `ink-studio hierarchy graph.json`.

@@ -75,6 +75,8 @@
         );
         for (const j of indices) {
           check(row.part !== undefined || !priorRig?.bid[j], 'use an existing rig part binding for owned geometry');
+          const kind = Math.round(world.data[j * 16 + 11]) % 16;
+          check(kind !== 12 && kind !== 13, 'use a skeletal adapter for skinned geometry');
           claims.add(j);
         }
         return {
@@ -95,7 +97,8 @@
           atlas = row.atlas ?? world.spriteSurfaces,
           { first = 0, count = atlas?.vertices?.length / 5 } = row;
         check(
-          atlas?.vertices instanceof Float32Array &&
+          Object.isExtensible(atlas) &&
+            atlas?.vertices instanceof Float32Array &&
             atlas.vertices.length % 15 === 0 &&
             Number.isSafeInteger(first) &&
             Number.isSafeInteger(count) &&
@@ -131,7 +134,10 @@
         const reference = ref(row),
           light = row.light,
           source = row.source ?? { ...light };
-        check(light && typeof light === 'object' && !usedLights.has(light), 'invalid or duplicate light');
+        check(
+          light && typeof light === 'object' && Object.isExtensible(light) && !usedLights.has(light),
+          'expected a unique mutable light'
+        );
         usedLights.add(light);
         const lamp = 'r' in light || 's' in light;
         check(!('shape' in light), 'area emitters need an adapter for their authored surface');
@@ -355,12 +361,19 @@
         for (const row of socketRows)
           if (row.previous) stage.sockets[row.name] = row.previous;
           else delete stage.sockets[row.name];
-        for (const row of custom) row.restore?.();
         for (const i of controlled) stage.touch(i);
         world.sceneGraph = priorGraph;
         owned.delete(world);
         stage.systems = stage.systems.filter(system => system !== binding);
         disposed = true;
+        const errors = [];
+        for (const row of custom)
+          try {
+            row.restore?.();
+          } catch (error) {
+            errors.push(error);
+          }
+        if (errors.length) throw new AggregateError(errors, 'Scene adapter restoration failed');
       },
       get disposed() {
         return disposed;
@@ -369,7 +382,14 @@
     world.sceneGraph = graph;
     owned.set(world, binding);
     stage.add(binding);
-    binding.apply();
+    try {
+      binding.apply();
+    } catch (error) {
+      try {
+        binding.dispose();
+      } catch {}
+      throw error;
+    }
     return binding;
   }
   function fromRig(rig, { parts = {} } = {}) {

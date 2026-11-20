@@ -74,7 +74,7 @@ void main(){
       const replace=active!==atlas||width!==atlas.width||height!==atlas.height;
       if(replace||activeVertices!==atlas.vertices){
         if(!atlas.vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface geometry');
-        gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,atlas.vertices,gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,atlas.vertices,nextGeometry?gl.DYNAMIC_DRAW:gl.STATIC_DRAW);
         stats.geometryBytes=atlas.vertices.byteLength;
       }
       if(!replace&&activeVertices===atlas.vertices&&geometryRevision!==nextGeometry){

@@ -61,3 +61,11 @@ test('bindings keep claimed rig transforms authoritative until disposal',()=>{
 test('hierarchy CLI round-trips definitions and preserves world pose on reparent',()=>{
  const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cp=require('node:child_process'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-hierarchy-'));try{const file=path.join(dir,'graph.json');fs.writeFileSync(file,JSON.stringify({nodes}));const report=JSON.parse(cp.execFileSync(process.execPath,['cli/ink-studio.js','hierarchy',file,'--node','leaf','--parent','world','--point','0,0,0'],{cwd:path.resolve(__dirname,'..')}));assert.equal(report.node.parent,null);vec(report.point,G.create({nodes}).frame('leaf').position);assert.deepEqual(G.create(report.definition).frame('leaf').position,report.point);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('adapter exceptions restore ownership and allow another binding',()=>{
+ const world=fixture(),g=G.create({nodes:{a:{}}});assert.throws(()=>G.attach(world,g,{geometry:[{node:'a',indices:[0]}],adapters:[{node:'a',apply(){throw Error('broken adapter');}}]}),/broken adapter/);assert.equal(world.sceneGraph,undefined);assert.equal(world.anim.systems.length,0);
+ const binding=G.attach(world,g,{adapters:[{node:'a',apply(){},restore(){throw Error('restore failure');}}]});assert.throws(()=>binding.dispose(),/restoration failed/);assert(binding.disposed);assert.equal(world.sceneGraph,undefined);assert.equal(world.anim.systems.length,0);G.attach(world,g).dispose();
+});
+test('camera hierarchy selectors accept the same qualified IDs as scene nodes',()=>{
+ const id='prefab:lantern',world=fixture(),graph=G.create({nodes:{[id]:{transform:{position:[1,2,3]}}}});G.attach(world,graph);world.cam={target:[0,0,0],dist:8,yaw:0,pitch:0};K.cameraRig.bind(world,K.cameraRig.compile({targets:{subject:{node:id}},shots:{view:{target:'subject',dist:5}}}));vec(world.cameraRig.sample(0).camera.target,[1,2,3]);
+});
