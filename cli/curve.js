@@ -13,7 +13,8 @@ module.exports = function curveCLI(pos, opt, kit) {
     properties: curve.properties,
     sampling: curve.sampling,
     parameters: curve.parameters,
-    points: curve.points
+    points: curve.points,
+    ...(curve.generation !== undefined && { generation: curve.generation, segments: curve.segments, cells: curve.cells })
   };
   if (opt.distance !== undefined) report.sample = curve.at(Number(opt.distance));
   if (opt.closest !== undefined) report.closest = curve.closest(String(opt.closest).split(',').map(Number));

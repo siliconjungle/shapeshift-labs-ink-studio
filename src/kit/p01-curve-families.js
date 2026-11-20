@@ -435,8 +435,9 @@
   function create(definition) {
     if (isPath(definition)) return definition;
     check(record(definition), 'expected a curve family definition');
-    const def = clone(json(definition)),
-      m = model(def),
+    const def = clone(json(definition));
+    if (RecursiveCurves.families.includes(def.type)) return RecursiveCurves.compile(def, frame).level();
+    const m = model(def),
       transform = frame(def),
       segments = def.segments ?? Math.min(4096, m.defaultSegments);
     check(
@@ -582,9 +583,13 @@
       layout
     );
   }
-  Object.assign(C, { path, create, drawOnPath, text });
+  const recursive = definition => {
+    check(record(definition), 'expected a recursive curve definition');
+    return RecursiveCurves.compile(clone(json(definition)), frame);
+  };
+  Object.assign(C, { path, create, drawOnPath, text, recursive });
   for (const type of ['clothoid', 'torusKnot', 'lissajous', 'logSpiral', 'superellipse', 'flower',
-    'archimedeanSpiral', 'fermatSpiral', 'cycloid', 'epitrochoid', 'hypotrochoid'])
+    'archimedeanSpiral', 'fermatSpiral', 'cycloid', 'epitrochoid', 'hypotrochoid', 'koch', 'dragon', 'hilbert', 'peano'])
     C[type] = (options = {}) => {
       check(record(options), 'family options must be an object');
       return create({ ...options, type }).points;
