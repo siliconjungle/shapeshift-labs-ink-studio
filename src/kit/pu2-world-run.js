@@ -155,7 +155,9 @@
       }
     }
     const systemDependencies = Object.entries(systems).filter(([,system])=>system.dependencies !== undefined);
+    const coupledFields=Object.values(systems).filter(system=>system.spatialCouplings);
     let fieldQuery;
+    const relays=coupledFields.length?W.fieldCoupling.relays(coupledFields,fieldQuery=Q.create({world},systems)):[];
     function canonical(entry,writer) {
       const name = typeof entry === 'string' ? entry : entry?.field;
       const field = typeof name === 'string' && !name.includes('/') ? (writer ? writer+'/'+name : (fieldQuery ??= Q.create({world},systems)).field(name)?.name ?? name) : name;
@@ -166,7 +168,7 @@
       check(record(spec) && Array.isArray(spec.reads ?? []) && Array.isArray(spec.writes ?? []),
         'Invalid spatial dependencies for '+name);
       return [name,{reads:(spec.reads ?? []).map(entry=>canonical(entry)),writes:(spec.writes ?? []).map(entry=>canonical(entry,name))}];
-    })));
+    })),{relays});
     const transfers = W.transfers.bind(systems);
     for (const name of transfers.producers) systems[name].checkTransfers?.(transfers.validate);
     const schedule = W.rates.schedules(world,systems,chunks);
@@ -503,7 +505,7 @@
         for (const [name,notices] of Object.entries(payload.spatialSampling)) {
           const waiting=chunks?.managed.has(name)?payload.simulationChunks.clocks[name].lastTick!==payload.tick:payload.tick%slowReaders.get(name);
           check(slowReaders.has(name) && waiting && Array.isArray(notices) &&
-            dependencies.begin(notices).affected(name).length===notices.length,'Invalid saved spatial notices for '+name);
+            dependencies.begin(notices,{propagate:false}).affected(name).length===notices.length,'Invalid saved spatial notices for '+name);
         }
       }
       if (causePolicy) {

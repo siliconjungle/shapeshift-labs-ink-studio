@@ -711,6 +711,8 @@ sample withdrawal.
 shared world queries, timed actions, checkpoints, replay and branch comparison.
 [System contracts](docs/headless-worlds.md#compose-system-contracts) expose
 typed connections, state reads, event kinds, and execution dependencies.
+[Spatial field coupling](docs/headless-worlds.md#spatial-field-coupling) shares
+neighborhood values and gradients with solvers and entity queries.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.

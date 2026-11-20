@@ -33,6 +33,9 @@ local snapshots and bounded changes against an applied cursor.
 [Batch spatial queries](batch-spatial-queries.md) find nearby agents,
 test free space, and discover usable sockets on the same snapshot.
 
+[Spatial field coupling](#spatial-field-coupling) lets solvers respond to
+neighboring heat, depth, wind, pressure, and other numeric fields.
+
 [Incremental navigation tiles](navigation-tiles.md) share walking
 routes and recompute crossings affected by local changes.
 
@@ -226,6 +229,42 @@ In a mechanics system, a force of kind `sail` samples a vector wind
 field, takes the apparent wind along the sail's local `axis`, and
 applies a two-sided pressure force. Set `field` to the field name and
 `units` to the expected velocity unit (default `world/s`).
+
+### Spatial field coupling
+
+`query.neighborhood(field, at, options)` reads a spatial field around
+an XYZ point, entity, or entity socket on the same query snapshot.
+It samples the origin and one point in each direction along each
+chosen world axis. The origin and neighbors carry equal weight.
+
+| Option | Meaning |
+| --- | --- |
+| `radius` | Offset in world units. The default of zero reads only the origin. |
+| `axes` | Axes to sample, such as `xz` for a horizontal neighborhood. Defaults to `xyz`. |
+| `operation` | `mean` for scalars and vectors, or `min`, `max`, and `gradient` for scalars. A gradient needs a positive radius and returns an XYZ vector in source units per world unit. |
+| `missing` | `skip` uses available samples and allows one-sided differences at a boundary. `strict` requires the full stencil. A gradient always needs two valid positions per selected axis. |
+| `explain` | Include the source field, sample points, statuses, and measured values. |
+
+Use `world/neighborhood` with the CLI's `probe` command. Pass `field`
+and the options in `--args`, and select the origin with `--at`,
+`--entity`, or `--entity` and `--socket`.
+
+To bind a neighborhood to other systems, add a `field-coupling` system.
+Each entry in `config.fields` supplies `source`, optional world XYZ
+`bounds`, and the same stencil options. Its `type` and `units` describe
+the source and default to `number` and `null`. For a `vec2` source,
+set `components` to its component axes when they differ from `xz`.
+The result is a regular spatial field with its own name and query
+provenance. A thermal water solver can bind it as `ambientField`,
+ventilation can use it as `windField`, and a sail can use it as its
+force field. Multiple channels can reuse one source or form a chain.
+
+The runtime checks source types and units and rejects cyclic or
+oversized chains. When providers declare a spatial write, the dirty
+area expands by each dependent stencil's reach and clips to the
+channel's bounds at the same invalidation boundary. Sampling follows
+the existing phase snapshot rules. Solvers that require conservative
+resource exchange can use the transfer accounts below.
 
 ## Conservative transfers between systems
 

@@ -27,7 +27,7 @@
     });
   }
 
-  function create(definitions = {}) {
+  function create(definitions = {}, {relays=[]} = {}) {
     if (!record(definitions) || Object.keys(definitions).length > limit)
       throw new TypeError('Expected a bounded spatial dependency registry');
     const declarations = new Map();
@@ -46,6 +46,11 @@
       declarations.set(id,freeze({id,reads:access('reads'),writes:access('writes')}));
     }
     const describe = freeze([...declarations.values()]);
+    const downstream=new Map();
+    for (const link of relays) {
+      if (!downstream.has(link.from)) downstream.set(link.from,[]);
+      downstream.get(link.from).push(link);
+    }
 
     // Validate and snapshot a write before publishing it to consumers.
     function write(writer,field,domain,reason) {
@@ -55,7 +60,7 @@
       return freeze({writer,field,bounds:area,reason});
     }
 
-    function begin(pending = []) {
+    function begin(pending = [], {propagate=true} = {}) {
       const changes = [], byField = new Map(), work = [];
       function append(row,because = []) {
         if (changes.length >= limit || !Array.isArray(because) || because.some(n => !Number.isSafeInteger(n) ||
@@ -66,7 +71,20 @@
         byField.get(change.field).push(change);
         return change;
       }
-      for (const row of pending) append(write(row.writer,row.field,row.bounds,row.reason));
+      function publish(row,because) {
+        const root=append(row,because);
+        if (!propagate||!downstream.has(root.field)) return root;
+        const queue=[root];
+        for (let i=0;i<queue.length;i++) {
+          const change=queue[i];
+          for (const {area,writer,to} of downstream.get(change.field)??[]) {
+            const bounds=area(change.bounds);
+            if (bounds!==undefined) queue.push(append(write(writer,to,bounds,'coupled-field'),[change.id]));
+          }
+        }
+        return root;
+      }
+      for (const row of pending) publish(write(row.writer,row.field,row.bounds,row.reason));
       function affected(id,area) {
         const local = bounds(area), reasons = new Map();
         for (const read of declarations.get(id)?.reads ?? []) for (const change of byField.get(read.field) ?? []) {
@@ -92,7 +110,7 @@
         if (!declarations.has(reader)) throw new TypeError('Unknown spatial reader '+reader);
         return append({...write(row.writer,row.field,row.bounds,row.reason),deliveredTo:reader});
       }
-      return Object.freeze({change:(id,field,domain,reason,because)=>append(write(id,field,domain,reason),because),
+      return Object.freeze({change:(id,field,domain,reason,because)=>publish(write(id,field,domain,reason),because),
         affected,recordWork,report,deliver});
     }
     return Object.freeze({describe,write,begin});
