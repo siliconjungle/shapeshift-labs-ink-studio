@@ -75,16 +75,25 @@ const SurfaceVelocityProjection = (du, dv, velocity) => {
     function chartAt(t){
       const chart=typeof carrier==='function'?carrier(t):carrier;
       if(typeof chart?.sample!=='function')throw new Error('Surface carrier returned no chart');
-      return {chart,periodic:explicit??[Boolean(chart.periodicU),Boolean(chart.periodicV)]};
+      const topology=SurfaceChartTopologies.has(chart.topology)?chart.topology:null;
+      const joins=topology?[topology.periodicU,topology.periodicV]:[Boolean(chart.periodicU),Boolean(chart.periodicV)];
+      if(topology&&(lo.some((v,i)=>v!==0||hi[i]!==1)||
+        explicit?.some((periodic,i)=>periodic&&!joins[i])))
+        throw new Error('Lifted surface charts need their unit domain and can only wrap joined axes');
+      return {chart,topology,periodic:explicit??joins};
     }
     function normalize(uv,chart){
-      return uv.map((v,i)=>chart.periodic[i]?wrap(v,lo[i],hi[i]):Math.min(hi[i],Math.max(lo[i],v)));
+      return uv.map((v,i)=>{
+        if(chart.periodic[i])return chart.topology?v:wrap(v,lo[i],hi[i]);
+        return Math.min(hi[i],Math.max(lo[i],v));
+      });
     }
     function frame(chart,uv,t,derivatives){
-      const source=chart.chart.sample(normalize(uv,chart),t);
+      const lift=normalize(uv,chart),source=chart.chart.sample(lift,t);
       if(!point(source?.p,3)||!point(source?.n,3)||V.len(source.n)<EPS)
         throw new Error('Surface charts must return a finite position and normal');
       const normal=V.norm(source.n),sample={position:source.p.slice(),normal};
+      if(chart.topology)Object.assign(sample,chart.topology.canonical(lift),{lift});
       if(!derivatives){
         const ref=point(source.tangent,3)?source.tangent:Math.abs(normal[0])<0.85?[1,0,0]:[0,0,1],
           tangent=V.mad(ref,normal,-V.dot(ref,normal));
@@ -107,7 +116,8 @@ const SurfaceVelocityProjection = (du, dv, velocity) => {
       return sample;
     }
     function speed(chart,uv,t,particle){
-      const s=frame(chart,uv,t,true),v=velocity(...s.position,t,{uv:uv.slice(),normal:s.normal,id:particle.id,data:particle.data});
+      const s=frame(chart,uv,t,true),v=velocity(...s.position,t,{uv:s.uv??uv.slice(),normal:s.normal,id:particle.id,data:particle.data,
+        ...(chart.topology&&{lift:s.lift,orientation:s.orientation,du:s.du.slice(),dv:s.dv.slice()})});
       if(!point(v,3))throw new Error('Surface velocities must be finite XYZ');
       return SurfaceVelocityProjection(s.du,s.dv,v);
     }

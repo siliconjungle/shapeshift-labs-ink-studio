@@ -3,11 +3,46 @@
   const P = K.procedural || K.authoring;
   const unit = value => Number.isFinite(value) && value >= 0 && value <= 1;
 
-  function prepare(strokes, { size, periodic = false } = {}) {
+  function liftedRuns(points, topology, size) {
+    const runs = [];
+    let previous = topology.canonical(points[0]).uv, run = [previous];
+    for (const at of points.slice(1)) {
+      const next = topology.liftNear(at, previous, size), canonical = topology.canonical(next).uv;
+      run.push(next);
+      // Keep each run in the base chart and at most one step into an adjacent copy.
+      if (next[0] !== canonical[0] || next[1] !== canonical[1]) {
+        runs.push(run);
+        run = [canonical];
+      }
+      previous = canonical;
+    }
+    if (run.length > 1 || !runs.length) runs.push(run);
+    return runs;
+  }
+
+  function chartCopies({bounds}, topology, width, height) {
+    const copies = [], shifts = [-3,-2,-1,0,1,2,3];
+    const u0=bounds.min[0]/width,u1=bounds.max[0]/width,v0=bounds.min[2]/height,v1=bounds.max[2]/height;
+    for (const x of topology.periodicU ? shifts : [0]) {
+      const lo = Math.max(0, u0-x), hi = Math.min(1, u1-x);
+      if (lo > hi) continue;
+      const sign = topology.orientationAt(x);
+      for (const y of topology.periodicV ? shifts : [sign === -1 ? 1 : 0]) {
+        const a = sign*(v0-y), b = sign*(v1-y);
+        const bottom = Math.max(0, Math.min(a,b)), top = Math.min(1, Math.max(a,b));
+        if (bottom <= top) copies.push({ x,y,sign,min:[lo,bottom],max:[hi,top] });
+      }
+    }
+    return copies;
+  }
+
+  function prepare(strokes, { size, periodic = false, topology } = {}) {
     if (!Array.isArray(size) || size.length !== 2 ||
         !size.every(length => Number.isFinite(length) && length > 0 && length <= 5e5) ||
         typeof periodic !== 'boolean')
       throw Error('Surface masks need a finite chart size');
+    if (topology !== undefined && (periodic || !SurfaceChartTopologies.has(topology)))
+      throw Error('Surface masks need a chart join descriptor without legacy periodic wrapping');
     if (!Array.isArray(strokes) || strokes.length > 256)
       throw Error('Surface masks need at most 256 strokes');
 
@@ -25,7 +60,8 @@
 
       const runs = [];
       const measure = (u, v) => [u * width, v * height];
-      if (!periodic) runs.push(points.map(([u, v]) => measure(u, v)));
+      if (topology) runs.push(...liftedRuns(points, topology, size).map(run => run.map(([u,v]) => measure(u,v))));
+      else if (!periodic) runs.push(points.map(([u, v]) => measure(u, v)));
       else {
         // Join across the seam by the shortest step. Rebase at each chart turn so
         // queries only need the central copy and its two immediate neighbors.
@@ -43,20 +79,29 @@
         }
         if (run.length > 1 || !runs.length) runs.push(run);
       }
+      const compiled = runs.map(points => sweep({ id: String(id), points, width: brushWidth, softness }));
       return {
         erase: operation === 'erase',
-        runs: runs.map(points => sweep({ id: String(id), points, width: brushWidth, softness }))
+        runs: compiled,
+        ...(topology && { copies: compiled.map(run => chartCopies(run, topology, width, height)) })
       };
     });
 
-    return {width,height,periodic,wrap,masks};
+    return {width,height,periodic,topology,wrap,masks};
   }
 
   function compile(strokes, options) {
-    const {width,height,periodic,wrap,masks}=prepare(strokes,options);
+    const {width,height,periodic,topology,wrap,masks}=prepare(strokes,options);
     function weight(u, v, initial = 0) {
       if (!Number.isFinite(u) || !Number.isFinite(v) || !unit(initial))
         throw Error('Surface mask queries need finite chart coordinates and unit initial coverage');
+      if (topology) {
+        if (!topology.contains([u,v])) return initial;
+        const {uv:[s,t]} = topology.canonical([u,v]);
+        let amount = initial;
+        for (const mask of masks) amount = applyTopology(mask,s,t,width,height,amount);
+        return amount;
+      }
       if (v < 0 || v > 1 || (!periodic && (u < 0 || u > 1))) return initial;
       const x = (periodic ? wrap(u) : u) * width;
       const y = v * height;
@@ -78,6 +123,16 @@
         if(at>=min[0]&&at<=max[0])coverage=Math.max(coverage,run.weight([at,y]));
       }
       if(coverage===1)break;
+    }
+    return erase?amount*(1-coverage):amount+(1-amount)*coverage;
+  }
+
+  function applyTopology({erase,runs,copies},u,v,width,height,amount) {
+    let coverage=0;
+    for (let i=0;i<runs.length && coverage<1;i++) for (const copy of copies[i]) {
+      const {x,y,sign,min,max}=copy;
+      if(u<min[0]||u>max[0]||v<min[1]||v>max[1])continue;
+      coverage=Math.max(coverage,runs[i].weight([(u+x)*width,(v*sign+y)*height]));
     }
     return erase?amount*(1-coverage):amount+(1-amount)*coverage;
   }
@@ -105,7 +160,8 @@
 
   function dirtyBounds(before, after, options) {
     return changed(before,after).flatMap(strokes=>{
-      const {masks,width,height,periodic}=prepare(strokes,options);
+      const {masks,width,height,periodic,topology}=prepare(strokes,options);
+      if (topology) return masks.flatMap(mask=>mask.copies.flat().map(({min,max})=>({min,max})));
       return rectangles(masks,width,height,periodic);
     });
   }

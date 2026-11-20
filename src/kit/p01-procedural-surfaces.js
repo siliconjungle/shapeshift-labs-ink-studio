@@ -344,6 +344,12 @@
     const planeNormal = planePoint && worldNormal(surface.sample([0, 0]).n);
     function sample(at) {
       const s = surface.sample(at);
+      if (surface.topology && s.du && s.dv) {
+        const du = M.app(pose.R, s.du), dv = M.app(pose.R, s.dv);
+        const axis = v => V.mul(v, 1 / V.len(v));
+        const tangent = axis(du), n = axis(V.cross(tangent, axis(dv)));
+        return { ...s, p: point(pose, s.p), n, tangent, bitangent: V.cross(n, tangent), du, dv };
+      }
       return {
         p: point(pose, s.p),
         n: worldNormal(s.n),
@@ -354,6 +360,10 @@
     }
     function samplePointNormal(at) {
       if (planePoint) return { p: planePoint(at), n: planeNormal.slice() };
+      if (surface.topology) {
+        const { p, n } = sample(at);
+        return { p, n };
+      }
       const s = surface.samplePointNormal ? surface.samplePointNormal(at) : surface.sample(at);
       return { p: point(pose, s.p), n: worldNormal(s.n) };
     }
@@ -440,14 +450,18 @@
       id: surface.id,
       kind: 'transformed',
       periodicU: surface.periodicU,
+      ...(surface.periodicV !== undefined && { periodicV: surface.periodicV }),
+      ...(surface.topology && { topology: surface.topology }),
+      ...(surface.topology && typeof surface.mesh === 'function' && { mesh: (settings = {}) =>
+        TexturedSurface.grid({ segments: [96, 32], ...settings, point: (u, v) => sample([u, v]).p }) }),
       data: freeze({ local: clone(surface.data || {}), transform: clone(pose) }),
       bounds: freeze(transformBounds(pose, surface.bounds)),
       sample,
       samplePointNormal,
       ...(planePoint ? { planePoint } : {}),
-      project,
-      closest,
-      raycast
+      ...(surface.project && { project }),
+      ...(surface.closest && { closest }),
+      ...(surface.raycast && { raycast })
     });
   };
 })(KIT);
