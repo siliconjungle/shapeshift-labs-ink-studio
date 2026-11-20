@@ -115,3 +115,100 @@ test('WebGL executes the same graph with live edits and native world ownership',
   assert(result.owners.panel[2] > 245 && result.owners.panel[0] < 10, JSON.stringify(result));
   assert(result.owners.marker[1] > 245 && result.owners.marker[2] < 10, JSON.stringify(result));
 });
+
+function scanlines({ makeBuilder, KIT }, kind) {
+  const B = makeBuilder(1, [0x102030, 0xdd3322, 0x448855]);
+  const cam = { target:[0,0,0], dist:4, yaw:0, pitch:0, ortho:true };
+  if (kind === 'depth') {
+    B.disc(-.58,0,-1,[0,0,1],.41,.02,B.P[2],3);
+    B.disc(.58,0,1,[0,0,1],.41,.02,B.P[1],3);
+    const world = B.finish({ cam, radius:3,
+      look:{splatCoverage:'continuous',composite:{world:{resolution:[40,24]}}} });
+    const distortion = {id:'shift',type:'distortion',offset:[28,0]};
+    const open = { passes:[distortion] }, guarded = { passes:[{...distortion,depthThreshold:.45}] };
+    return { world, open, guarded };
+  }
+  const world = B.finish({cam,radius:3});
+  const stripe = (x,color) => ({type:'rect',rect:[x,0,2,6],color});
+  const editor = KIT.renderGraph.create({passes:[
+    {id:'unused',type:'composite',layer:{draw:[stripe(0,'#ffffff')]}},
+    {id:'paint',type:'composite',isolated:true,
+      layer:{draw:[stripe(0,'#a01e19'),stripe(2,'#0f8241'),stripe(6,'#192dbe')]}},
+    {id:'band',type:'mask',rect:[0,1,8,4]},
+    {id:'raster',type:'distortion',input:'scene',source:'paint',mask:'band',blend:'over',wrap:true,rows:[
+      {at:0}, {at:1,offset:[4,0],scale:[.5,1],tint:[50,-25,0]}
+    ]}
+  ]});
+  return {world,editor};
+}
+
+const scanPoints = {above:[0,0],scaled:[0,2],hole:[3,2],wrapped:[7,2]};
+const scanExpected = {above:[16,32,48],scaled:[35,120,65],hole:[16,32,48],wrapped:[180,20,25]};
+
+test('scanlines interpolate offset, scale and signed tint on an isolated graph source', () => {
+  const {world,editor} = scanlines(kit);
+  const base = ink.render(world, {...view,renderGraph:editor});
+  const sampled = Object.fromEntries(Object.entries(scanPoints).map(([name,[x,y]])=>[name,pixel(base,x,y)]));
+  assert.deepEqual(sampled,scanExpected);
+  assert(!kit.KIT.renderGraph.prepare(editor).passes.some(node=>node.id==='unused'));
+  const snapshot = editor.snapshot();
+  assert.throws(()=>editor.update('raster',{rows:[{at:.5},{at:.2}]}),/increasing/);
+  assert.throws(()=>editor.update('raster',{rows:[{at:0,tint:[0,256,0]}]}),/RGB tint/);
+  assert.throws(()=>editor.update('raster',{depthThreshold:-1}),/depth threshold/);
+  assert.equal(editor.snapshot(),snapshot);
+  const rows = [];
+  editor.update('raster',{rows:({y,width,height,time})=>{
+    rows.push([y,width,height,time]);
+    return {offset:[time,0]};
+  }});
+  assert.deepEqual(pixel(ink.render(world,{...view,t:2,renderGraph:editor}),0,2),[15,130,65]);
+  assert.deepEqual(rows,Array.from({length:6},(_,y)=>[y,8,6,2]));
+});
+
+test('distortion can reject a displaced sample from across a native depth edge', () => {
+  const {world,open,guarded} = scanlines(kit,'depth');
+  const options={w:80,h:48,raw:true,outline:false};
+  const original=ink.render(world,options), shifted=ink.render(world,{...options,renderGraph:open});
+  const clipped=ink.render(world,{...options,renderGraph:guarded});
+  assert(clipped.passes === undefined);
+  let blocked = 0, retained = 0;
+  for (let y=0;y<48;y++) for (let x=0;x<52;x++) {
+    const [r,g] = pixel(original,x,y), [rr,gg] = pixel(shifted,x,y), [a,b] = pixel(clipped,x,y);
+    if (g>90 && r<100 && rr>180 && gg<90 && a===r && b===g) blocked++;
+    if (r===rr && g===gg && a===r && b===g) retained++;
+  }
+  assert(blocked>20);
+  assert(retained>20);
+  assert.deepEqual(clipped.worldSize,[40,24]);
+});
+
+test('WebGL scanlines match isolated CPU color and reject depth edges with a mixed world grid', {
+  skip: !process.env.INK_TEST_CHROME
+}, () => {
+  const result = runWebGL({}, scanlines, (kit, fixture, backend, points) => {
+    const {world,editor} = fixture(kit);
+    const draw=backend(8,6,{raw:true,offscreen:true});
+    const depth=backend(80,48,{raw:true,outline:false});
+    try {
+      draw.draw(world,{renderGraph:editor});
+      const colors=draw.sample(points), scene=fixture(kit,'depth');
+      const read = renderGraph => {
+        depth.draw(scene.world,{renderGraph});
+        return atob(depth.image());
+      };
+      const original=read(false), open=read(scene.open), guarded=read(scene.guarded);
+      let blocked=0;
+      for (let i=0;i<original.length;i+=3) {
+        if (original.charCodeAt(i)<100 && original.charCodeAt(i+1)>90 &&
+            open.charCodeAt(i)>180 && open.charCodeAt(i+1)<90 &&
+            guarded.slice(i,i+3)===original.slice(i,i+3)) blocked++;
+      }
+      return {colors,blocked};
+    } finally {
+      draw.close();
+      depth.close();
+    }
+  }, scanPoints);
+  assert.deepEqual(result.colors,scanExpected);
+  assert(result.blocked>20,JSON.stringify(result));
+});

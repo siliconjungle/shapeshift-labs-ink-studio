@@ -71,6 +71,77 @@ test('protection follows depth ownership and can change contrast without fog',()
   assert(on.silhouetteMask.some((id,p)=>id && rgb(on,p)[0]!==rgb(off,p)[0]));
 });
 
+test('shot focus grades a nearby backdrop, preserves a nearer obstruction, and attenuates only nearby rain',()=>{
+  const B=makeBuilder(17,[0x162335,0xc47f46,0x268da2,0x61abc3,0xbbdfed]);
+  function disc(x,z,r,color,object) {
+    const first=B.count();
+    B.disc(x,0,z,[0,0,1],r,.026,B.P[color],3);
+    B.describeSplats(first,B.count(),{object});
+  }
+  disc(0,-1.3,2.45,2,'wall');
+  disc(-.64,0,.31,1,'produce');
+  disc(.20,.5,.15,3,'post');
+  for (const [x,kind] of [[-.64,2],[-.64,15],[1.76,2]]) {
+    const first=B.count();
+    if (kind===2) B.stick(x,0,.95,[0,1,0],.18,.035,B.P[4],.9,{k:kind,sp:2,rg:4,ph:0,nd:true});
+    else B.disc(x,.125,.95,[0,0,1],.054,.032,B.P[4],.9,{k:kind,sp:2,rg:4,ph:.06,nd:true});
+    B.describePrecipitation(first,B.count());
+  }
+  const focus={subjects:['produce'],radius:19,depthBias:.12,background:{saturation:0,contrast:.62},rain:{subject:0,surroundings:1}};
+  const config={targets:[{id:'produce',select:{object:'produce'}}],focus};
+  const world=B.finish({cam:camera,radius:7,dither:0,look:{silhouetteProtection:config}});
+  const settings={...view,t:0,passes:['objectId','precipitation','foregroundCoverage']};
+  for (const ortho of [false,true]) {
+    const baseline=ink.render(world,{...settings,ortho,silhouetteProtection:{...config,focus:false}});
+    const framed=ink.render(world,{...settings,ortho});
+    const gradeOnly=ink.render(world,{...settings,ortho,silhouetteProtection:{...config,focus:{...focus,rain:{}}}});
+    const rainAlpha=(frame,p)=>frame.passes.precipitation[p*4+3];
+    const label=(frame,p)=>frame.passes.objects[frame.passes.objectId[p]];
+    assert.deepEqual(framed.passes.foregroundCoverage,baseline.passes.foregroundCoverage);
+    let graded=0, localRain=0, farRain=0, obstruction=0, subject=0;
+    for (let p=0;p<framed.w*framed.h;p++) {
+      const x=p%framed.w, rain=rainAlpha(baseline,p);
+      if (label(framed,p)==='wall' && !rain && rgb(framed,p).some((v,i)=>v!==rgb(baseline,p)[i])) graded++;
+      if (framed.silhouetteMask[p] && rainAlpha(framed,p)<rain) localRain++;
+      if (framed.silhouetteMask[p] && !rain) { assert.deepEqual(rgb(framed,p),rgb(baseline,p)); subject++; }
+      if (label(framed,p)==='post') { assert.deepEqual(rgb(framed,p),rgb(baseline,p)); obstruction++; }
+      if (x>framed.w*.70 && rain) { assert.equal(rainAlpha(framed,p),rain); farRain++; }
+      assert.equal(rainAlpha(gradeOnly,p),rain);
+    }
+    assert(graded>20 && localRain>2 && farRain>2 && obstruction>4 && subject>12);
+  }
+  const resolved={...settings,raw:false,colored:true};
+  const native=ink.render(world,resolved);
+  assert(native.silhouetteMask.some(Boolean));
+  assert.notDeepEqual(native.rgb,ink.render(world,{...resolved,silhouetteProtection:{...config,focus:false}}).rgb);
+  assert.throws(()=>SilhouetteProtection.prepare({...config,focus:{subjects:['missing']}}),/unique IDs/);
+  assert.throws(()=>SilhouetteProtection.prepare({...config,focus:{rain:{subject:2}}}),/rain visibility/);
+});
+
+test('focused detail smoothing stays within background surfaces and preserves visible precipitation',()=>{
+  const Focus=require('../cli/subject-focus.js');
+  const w=7,h=3,size=w*h;
+  const config=SilhouetteProtection.prepare({targets:[{select:{object:'produce'}}],focus:{radius:8,background:{detail:0}}}).focus;
+  const passes={w,h,depth:new Float32Array(size).fill(6),objectId:new Uint32Array(size).fill(2),
+    materialId:new Uint32Array(size).fill(1),emission:new Float32Array(size*3)};
+  const silhouetteMask=new Uint16Array(size);
+  silhouetteMask[w]=1;
+  passes.depth[w]=4;
+  const dot=w+2, rain=w+4, otherSurface=dot-w;
+  passes.objectId[dot+w]=3;
+  const field=Focus.frame(config,{passes,silhouetteMask});
+  const color=new Float32Array(size*3).fill(.3), precipitation=new Float32Array(size);
+  color[dot*3]=.95;
+  color[rain*3]=.95;
+  color[otherSurface*3]=.95;
+  precipitation[rain]=1;
+  Focus.grade(color,w,h,field,Focus.raster(field,w,h),precipitation);
+  assert(color[dot*3]<.8);
+  assert(Math.abs(color[rain*3]-.95)<1e-6);
+  assert(Math.abs(color[otherSurface*3]-.95)<1e-6);
+  assert.equal(Focus.frame(config,{passes,silhouetteMask:new Uint16Array(size)}),null);
+});
+
 test('fog scale preserves independent water, cloud, and solid occlusion',()=>{
   const volume=K.atmosphere.field({field:K.procedural.density.bounded({
     bounds:{min:[-1,-1,-1],max:[6,1,1]},sample:()=>1}),density:.5,lit:false,color:'#bcd6ca'});

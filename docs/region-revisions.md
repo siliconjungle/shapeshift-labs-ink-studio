@@ -43,6 +43,12 @@ chunk clocks. Aggregate and sleeping state keeps its working representation.
 The resulting view is a regional read model. Resume an entire simulation
 from a world checkpoint.
 
+To persist a receiver, serialize `receiver.snapshot()` after applying an
+update. Reopen it with `receiver({snapshot: saved})` and pass its cursor on
+the next pull. A [runtime-backed place](portals.md#persistent-simulation-places)
+restores the authority from its world checkpoint, so the saved stream can
+resume across travel and reload.
+
 Updates also include ordered, committed actions relevant to the scope.
 Entity edits in a mixed patch are filtered by membership before or after
 the committed tick. Whole-table edits are reflected in the resulting state.

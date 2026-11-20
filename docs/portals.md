@@ -57,6 +57,37 @@ places. A failed load leaves the session empty. The format also accepts
 older `{place, saved}` checkpoints. Save the actor and camera separately
 if the experience needs their exact poses on reload.
 
+## Persistent simulation places
+
+`KIT.world.simulationPlace({id, source, anchors, tickPolicy})` creates a
+place definition for `portals.create`. Give it a world manifest, runtime
+checkpoint, recording, or a source callback that receives the preparation
+context. A recording starts at its saved endpoint. Use a callback to
+read `context.instance` for procedural place templates.
+
+The payload exposes `schedule(commands)`, `view()`, and `query()`.
+Schedule ordinary world commands for terrain edits, surface stamps, and
+object changes. The default `world` getter realizes a renderable view from
+the committed runtime. Supply a synchronous `visual(view, query)` callback
+for a custom view, or use `visual: false` for headless places. Optional
+`canArrive(actor, link, query)` can check the destination's live geometry.
+Pass custom implementations or a worker pool as `runtime`.
+
+Portal time advances the fixed-tick runtime. The place checkpoint
+stores its runtime checkpoint and the local clock origin. Saving while
+away preserves paused edits and pending commands. Continuing places keep
+ticking while away. On reload, the place opens its saved world and state.
+A doorway within the same place keeps using its current runtime.
+An older place save that stores a raw runtime checkpoint can load that
+checkpoint at its saved portal time.
+
+Set `regionRevisions: {}` to expose the same world's regional stream
+as `asset.regions`. It uses the place ID as its default stream ID.
+Save a client's last applied snapshot to reopen its receiver and continue
+pulling updates from the restored place. Reentering a region reads the saved
+terrain, object, and surface state from the authority. See
+[region revisions](region-revisions.md) for cursor and recovery behavior.
+
 ## Portable entrances and persistent instances
 
 Pass `templates` to `portals.create()` alongside the ordinary `places`.

@@ -312,6 +312,8 @@ Synchronize records, filters, and time across charts, maps, tables, and WebGL sc
 
 Render scalar slices, contours, and isosurfaces alongside vector streamlines and glyphs. [Field and volume visualization](docs/field-visualization.md)
 
+Evolve editable cells with seeded neighborhoods and associative recall, then paint the glyph atlas or emit splats. [Procedural glyph grids](docs/glyph-grids.md)
+
 Accumulate moving deposits on surface charts or in world volumes, then render their decay and diffusion as color, contours, and splats. [Persistent spatial fields](docs/persistent-spatial-fields.md)
 
 Move section planes, depth ranges, and spatial masks across a native render. [Interactive cutaways and clipping](docs/cutaways.md)
@@ -723,6 +725,10 @@ neighborhood values and gradients with solvers and entity queries.
 retains named outcomes, queued edits, and shared starting points in one session.
 [Causal inspection](docs/headless-worlds.md#inspect-a-selected-object-or-region)
 links selected objects and regions to recorded actions, transfers, and prior states.
+[Scheduled observations](docs/headless-worlds.md#scheduled-observations-and-parameter-sweeps)
+reuse measurements across seeds and settings and report aligned results.
+[Persistent simulation places](docs/portals.md#persistent-simulation-places)
+keep terrain, surface, and object edits across saves, travel, and resumed region streams.
 The watershed and quarry examples run entirely from the CLI. The [puzzle recipes guide](docs/puzzles.md) shows how to wire ordered
 switches to a physical gate, inspect blockers and verify a solution. The [agent decision guide](docs/agent-decisions.md)
 covers reachable activity choices and confirmed arrivals.
@@ -790,6 +796,7 @@ Common rendering controls:
 | `--edges off` | Hide the edge sprites attached to materials in a per-pixel scene. |
 | `--surface off` | Render without the view-dependent finish layers. |
 | `--transmission off` | Toggle thin-material transmission in surface finishes. |
+| `--surface-detail-kits off` | Hide authored [surface detail kits](docs/surface-materials.md#surface-detail-kits). |
 | `--reflection-probes off` | Toggle local reflection probes. |
 | `--reflections off` / `--atmosphere off` | Toggle scene reflection captures or atmosphere volumes. |
 | `--w`, `--h`, `--out` | Output viewport size and destination. The renderer resolves a lower-resolution pixel grid derived from the scene's detail settings. |
@@ -806,6 +813,7 @@ Common rendering controls:
 | `--inspection-focus id` | Prioritize an inspection target without changing the camera. |
 | `--composite file.json\|off` | Set independent world and screen-layer resolutions. See [mixed-resolution compositing](docs/mixed-resolution.md). |
 | `--render-graph file.json\|off` | Order and scope screen-space passes. See [the render graph](docs/render-graph.md). |
+| `--feedback-fps n` and `--feedback-cuts t1,t2` | Set a fixed feedback replay rate and explicit scene-time resets for clips and sheets. |
 | `--volume-scale`, `--volume-steps`, `--volume-jitter` | Override the atmosphere volume's sampling settings. |
 | `--seed` | Override the scene seed. |
 | `--colored` | Use palette-aware smoothing of silhouettes and body-colored contours. |
@@ -892,6 +900,7 @@ module.exports = {
 ```
 
 Then `ink-studio scenes`, `render`, `snap` and other commands operate on that collection. The load callback returns the toolkit exports alongside `SCENES`.
+Use [`ink-studio reel`](docs/reel.md) to share selected stills and motion captures from that collection in one offline HTML file.
 
 ## Browser renderer
 

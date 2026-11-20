@@ -701,6 +701,7 @@ const view = extra =>
       reflections: opt.reflections === 'off' ? false : undefined,
       reflectionProbes: onOffOption('reflection-probes'),
       transmission: onOffOption('transmission'),
+      surfaceDetailKits: onOffOption('surface-detail-kits'),
       skyReflections: opt['sky-reflections'],
       ...skyOptions(),
       celestialTracks: celestialOption(),
@@ -766,6 +767,21 @@ function buildPreview(id = pos[0]) {
 const previewPasses = () => require('./look-preview.js').preview(opt);
 const reviewSidecars = diagnostics => [...(diagnostics?.suffixes ?? []), ...(opt.text ? ['.txt'] : [])];
 const textSidecar = file => file.replace(/\.(?:a?png)$/i, '') + '.txt';
+function feedbackReplay(world, start, frame) {
+  const api = lib().KIT.renderGraph;
+  const graph = frame.renderGraph ?? world.look?.renderGraph;
+  const definition = graph?.snapshot?.() ?? graph;
+  const cuts = opt['feedback-cuts'];
+  if (opt['feedback-fps'] === undefined && cuts === undefined &&
+      !definition?.passes?.some(pass => pass.type === 'feedback')) return null;
+  if (opt['feedback-fps'] === true) die('--feedback-fps needs a rate in (0, 240]');
+  if (cuts !== undefined && (typeof cuts !== 'string' && typeof cuts !== 'number' ||
+      String(cuts).split(',').some(cut => !cut.trim())))
+    die('--feedback-cuts needs a comma-separated list of scene times');
+  return api.replay({ fps: num('feedback-fps', 24), start: Math.min(0, start),
+    cuts: cuts === undefined ? [] : String(cuts).split(',').map(Number) });
+}
+
 const times = () =>
   opt.t !== undefined
     ? list('t')
@@ -822,6 +838,7 @@ const CMD = {
         '    sim regions-apply <snapshot.json> <update.json>   reconstruct a scoped snapshot',
         '    sim dependencies <scene|run|driver.js> [--ticks N] [--actions file] [--out report.json]   report spatial rebuilds',
         '    sim sweep <world|run> <cases.json>   use look cases to compare one fixed simulation snapshot',
+        '    sim sweep <world|checkpoint|run> <observations.json>   sample scheduled observations across seeds and settings',
         '  compare <scene|run> --looks cases.json [--out sheet.png]   compare look variants on the same view',
         '    --comparison side-by-side|swipe|difference   compose exactly two look cases into one image',
         '    --divider 0.5 --swipe-axis x|y --difference-channel luminance|red|green|blue --difference-gain 3',
@@ -853,8 +870,9 @@ const CMD = {
         '  values <id> [--t 1.5]       the value check: the picture sorted into dark, middle and light, and whether it reads in three tones',
         '  sheet <id> [--from 0 --to 6 --n 12 | --t 0,1,2]   the same view at several moments, on one sheet',
         '  turn <id> [--n 8] [--t 0]   the diorama from all round, on one sheet',
-        '  clip <id> [--from 0 --to 6 --fps 12]   an animated PNG of it moving (also supports --text)',
+        '  clip <id> [--from 0 --to 6 --fps 12]   animated PNG (also --text, --feedback-fps 24, --feedback-cuts 2.5,4)',
         '    --camera-pan x,y,z --camera-orbit degrees --px 1   review slow camera motion at native art resolution',
+        '  reel <manifest.json> [--out reel.html] [--clean]   export selected captures as an offline reel',
         '  ghost <id> [--t 2 --spacing 0.12 --n 2 | --ghosts 1.6,1.8]   one moment with those either side laid faintly over it',
         '  acts                        the ready clips, reactions, easings and cues, by name',
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
@@ -922,7 +940,7 @@ const CMD = {
         'lightning options: --lightning on|off|file.json',
         'exposure options: --scene-exposure on|off|file.json',
         'aerial options: --aerial-perspective on|off --aerial-start units --aerial-density per-unit --aerial-contrast 0..1',
-        'view options: --surface off (no finish layers) --water off --reflections off --reflection-probes off --transmission off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
+        'view options: --surface off (no finish layers) --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
         'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery',
@@ -1691,9 +1709,15 @@ const CMD = {
       ts = times(),
       cols = num('cols', Math.min(4, ts.length)),
       imgs = [];
-    for (const t of ts) {
+    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+      w: num('w', 600), h: num('h', 420), ...diagnostics?.settings };
+    const replay = feedbackReplay(w, Math.min(...ts), view(frame));
+    function draw(t, resetRenderHistory) {
       pose(w, t);
-      const im = R.render(w, view({ t, artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory, w: num('w', 600), h: num('h', 420), ...diagnostics?.settings }));
+      return R.render(w, view({ ...frame, t, resetRenderHistory }));
+    }
+    for (const t of ts) {
+      const im = replay ? replay.sample(t, draw) : draw(t);
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
       imgs.push(displayFrame(im, w));
     }
@@ -1879,11 +1903,16 @@ const CMD = {
       f = outputFile(w.id+'-clip.png');
     const suffixes = reviewSidecars(diagnostics);
     shot?.destination(f,suffixes);
+    const frame = { artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory,
+      w: num('w', 600), h: num('h', 420) };
+    const replay = feedbackReplay(w, from, view(frame));
+    function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1)))) {
+      pose(w, t);
+      return R.render(w, view({ ...frame, t, resetRenderHistory, ...camera?.(fraction), ...diagnostics?.settings }));
+    }
     for (let k = 0; k < n; k++) {
       const t = from + k / fps;
-      pose(w, t);
-      const im = R.render(w, view({ t, artHistory, afterimageHistory, renderHistory, volumeHistory, transparencyHistory, w: num('w', 600), h: num('h', 420),
-        ...camera?.(k/(n-1)), ...diagnostics?.settings }));
+      const im = replay ? replay.sample(t, draw) : draw(t, undefined, k / (n - 1));
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
       ts.push(t);
       frames.push(displayFrame(im, w));
@@ -1898,6 +1927,15 @@ const CMD = {
     }
     shot?.finish(f,{fps,suffixes});
     console.log('wrote', f, frames.length, 'frames at', fps, 'a second (an animated PNG: a browser will play it)');
+  },
+  reel() {
+    if (pos.length !== 1 || Object.keys(opt).some(key => !['out', 'clean'].includes(key)) ||
+        opt.out === true || (opt.clean !== undefined && opt.clean !== true))
+      die('Use reel <manifest.json> [--out reel.html] [--clean]');
+    const file = outputFile('reel.html');
+    if (!/\.html$/i.test(file) || file === path.resolve(pos[0])) die('A reel needs a separate .html output');
+    const result = require('./reel.js').write(file, pos[0], { clean: opt.clean });
+    console.log('wrote', file, result.shots, 'shots and', result.frames, 'captured frames');
   },
   motion() {
     const w = build(pos[0]);

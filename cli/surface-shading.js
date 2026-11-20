@@ -36,8 +36,9 @@ function surfaceShading(world, options, camera) {
     const material = SurfaceLook.prepare(SurfaceLook.withLightRamps(settings, ramps), world.pal, liveLight ?? light, world.surfaceEffects,
       { colorCurves: options.colorCurves !== false, colorLut: options.colorLut !== false, colorStack: options.colorStack !== false,
         paletteConstraints: options.paletteConstraints !== false && (options.lookMasks !== false || !settings.paletteConstraint?.mask),
-        transmission: options.transmission !== false, paletteRoles: world.paletteRoles, blueNoise, onPaletteClip: camera.onPaletteClip });
-    if (bevelDistance && material.layers.some(layer => layer.type === 'bevel')) material.bevelDistance = bevelDistance;
+        transmission: options.transmission !== false, detailKits:options.surfaceDetailKits!==false,
+        paletteRoles: world.paletteRoles, blueNoise, onPaletteClip: camera.onPaletteClip });
+    if (bevelDistance && material.needsDistance) material.bevelDistance = bevelDistance;
     return material;
   });
   const lamps = materials.some(material => material.thinLocal) ?
@@ -81,6 +82,7 @@ function surfaceShading(world, options, camera) {
     skyView: [0, 0, 0], skyOverlay: camera.skyOverlay, skyReflectionSource
   };
   const rgb = [0, 0, 0];
+  const kitExposure = channel=>camera.exposure?.[channel]?.(...sample.worldPosition) ?? 1;
   const result = [0, 0, 0, 1, 0];
   const rotation = i => {
     const offset = i * 16;
@@ -134,6 +136,7 @@ function surfaceShading(world, options, camera) {
     sample.worldPosition[0] = x;
     sample.worldPosition[1] = y;
     sample.worldPosition[2] = z;
+    sample.exposure = prepared.kitExposure ? kitExposure : undefined;
     if (prepared.settings.rainRipple) {
       const slope = camera.rain?.normal(prepared.settings.rainRipple, sample.worldPosition, footprint);
       const local = slope && [c * slope[0] - s * slope[2], slope[1], s * slope[0] + c * slope[2]];
@@ -154,7 +157,7 @@ function surfaceShading(world, options, camera) {
     view[0] = c * vx - s * vz;
     view[1] = parallel ? parallel[1] : eye[1] - y;
     view[2] = s * vx + c * vz;
-    if (prepared.bevelDistance || camera.detail?.texture || camera.detail?.specular) {
+    if (prepared.bevelDistance || prepared.hasKits || camera.detail?.texture || camera.detail?.specular) {
       const depth = camera.orthographic ? 1 :
         (eye[0]-x)*forward[0]+(eye[1]-y)*forward[1]+(eye[2]-z)*forward[2];
       sample.artFootprint = Math.max(1e-6, depth) / camera.pixelsPerUnit;

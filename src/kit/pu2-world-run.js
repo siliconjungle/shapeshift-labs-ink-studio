@@ -214,8 +214,9 @@
     const rates = schedule.active ? W.rates.bind(schedule,systems,ports,incoming,order) : null;
     const interactions = W.interactionRuntime.bind({world,systems,chunks,transfers,ports,incoming,portValue});
     const influence = W.influenceRuntime.bind({systems,transfers,chunks});
+    const population = W.populationRuntime.bind({systems,transfers,chunks});
     const plan = {world,systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,causePolicy,contracts,phaseEdges};
+      interactions,influence,population,causePolicy,contracts,phaseEdges};
     if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
       dt: world.dt, validateAction: command => actionCheck(command, plan),
       validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
@@ -325,7 +326,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,causePolicy,contracts,phaseEdges,eventActions} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions} = plan;
     let composition;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -703,6 +704,12 @@
         const managed=chunks?.managed.get(name), entry=managed&&nextChunkState.entries[managed.chunk];
         return !entry||!entry.sleeping&&!managed.models.has(entry.level);
       };
+      population?.run(drafts,{tick:at,root:rootedState,emit:systemEmit,
+        query:()=>Q.create(view(nextWorld,{...drafts},lastSignals,at,[],causalState,nextChunkState),systems,projection),
+        context:(name,query)=>context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name),query,spatial(name,false)),
+        detail:(name,state)=>aggregates?aggregates.readState(name,state):state,
+        retain:(name,previous,state)=>aggregates?aggregates.retainDetail(name,previous,state):state
+      });
       if(reservations)Object.assign(drafts,reservations.run(drafts,{tick:at,emit:makeEmit},detailed));
       if (transfers.producers.length) {
         const before = Object.freeze({...drafts});

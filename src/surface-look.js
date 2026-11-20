@@ -3,6 +3,7 @@
 const SurfaceLook = (() => {
   const optics = typeof SceneOptics === 'undefined' ? require('./scene-optics.js') : SceneOptics;
   const detail = typeof StableDetail === 'undefined' ? require('./stable-detail.js') : StableDetail;
+  const kits = typeof SurfaceDetailKits === 'undefined' ? require('./surface-detail-kits.js') : SurfaceDetailKits;
   const effects = typeof SplatEffects === 'undefined' ? require('./splat-effects.js') : SplatEffects;
   const pixelLook = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
   let curves, luts, stacks, colorSpace;
@@ -27,6 +28,8 @@ const SurfaceLook = (() => {
   const rampLayers = new Set(['diffuse', 'specular', 'fiber', 'sheen', 'glints', 'bevel']);
   const hasBevel = settings => Object.values(settings.layers ?? {}).some(layer =>
     layer?.type === 'bevel' && (layer.strength !== 0 || layer.drive?.strength !== undefined));
+  const needsDistance = settings => hasBevel(settings) || kits.needsDistance(settings);
+  const crevice = { edge:'concave', minBend:.025, softness:.19 };
   const clamp = n => Math.min(1, Math.max(0, n));
   const mix = (a, b, t) => a + (b - a) * t;
   const unit = (v, fallback = AXES.y) => {
@@ -330,7 +333,7 @@ const SurfaceLook = (() => {
     return f0 + (1 - f0) * (1 - clamp(cosine)) ** power;
   }
 
-  function bevelCoverage(layer, sample, normal, view) {
+  function bevelCoverage(layer, sample, normal, view, worldReach) {
     const distance = sample.bevelDistance, pixel = sample.artFootprint ?? sample.footprint;
     if (typeof distance !== 'function' || !Number.isFinite(pixel) || pixel <= 0) return 0;
     const [x, y, z] = sample.position;
@@ -343,7 +346,7 @@ const SurfaceLook = (() => {
     for (const direction of [u, v, diagonal(1), diagonal(-1)]) {
       // Use a projected pixel radius across the face, with a limit at grazing angles.
       const foreshortening = Math.sqrt(Math.max(0.16, 1 - dot(direction, view) ** 2));
-      const reach = layer.width * pixel / foreshortening;
+      const reach = worldReach ?? layer.width * pixel / foreshortening;
       const [dx, dy, dz] = direction.map(value => value * reach);
       // Opposed probes cancel linear slope. A flat face produces no bend.
       const departure = (distance(x + dx, y + dy, z + dz) + distance(x - dx, y - dy, z - dz) - 2 * center) / reach;
@@ -520,7 +523,7 @@ const SurfaceLook = (() => {
 
   function prepare(settings, palette = [], lightDirection = [-0.55, 0.72, 0.43], context = {},
     { colorCurves = true, colorLut = true, colorStack = true, paletteConstraints = true, paletteRoles, blueNoise, onPaletteClip,
-      transmission = true, validateOnly = false } = {}) {
+      transmission = true, detailKits = true, validateOnly = false } = {}) {
     if (!isRecord(settings)) throw new TypeError('Surface settings must be an object');
     if (validateOnly && settings.renderStages !== undefined) {
       const stages = typeof RenderStages === 'undefined' ? require('./render-stages.js') : RenderStages;
@@ -575,10 +578,12 @@ const SurfaceLook = (() => {
     const layers = Object.entries(settings.layers || {})
       .filter(([, layer]) => layer && (layer.strength !== 0 || layer.drive?.strength !== undefined) &&
         (colorCurves || layer.type !== 'colorCurve') && (colorLut || layer.type !== 'colorLut') &&
-        (colorStack || layer.type !== 'colorStack') && (transmission || layer.type !== 'transmission'))
+        (colorStack || layer.type !== 'colorStack') && (transmission || layer.type !== 'transmission') &&
+        (detailKits || layer.type !== 'detailKit'))
       .map(([id, layer]) => {
         const colorLayer = ['tint', 'projected', 'colorCurve', 'colorLut', 'colorStack'].includes(layer.type);
-        if (!colorLayer && !Object.hasOwn(models, layer.type))
+        const kit = layer.type === 'detailKit' && kits.prepare(layer.pattern, value => color(value,palette));
+        if (!colorLayer && !kit && !Object.hasOwn(models, layer.type))
           throw new RangeError('Unknown surface layer: ' + layer.type);
         const lightingRamp = layer.lightingRamp === undefined || layer.lightingRamp === false ? null :
           prepareLightingRamp(layer.lightingRamp, palette, paletteRoles ?? {}, id, layer.type);
@@ -694,6 +699,7 @@ const SurfaceLook = (() => {
         const compiled = {
           ...layer,
           id,
+          kit,
           ...bevel,
           ...thin,
           spatialMask,
@@ -719,13 +725,16 @@ const SurfaceLook = (() => {
     const thinLocal = layers.some(layer => layer.type === 'transmission' && layer.source !== 'sun');
     const driven = layers.some(layer => layer.drive);
     const weather = layers.some(layer => layer.retainedMask || layer.drive?.some(entry => entry.signal.weather));
+    const hasKits = layers.some(layer=>layer.kit);
+    const kitExposure = layers.some(layer=>layer.kit?.exposure);
     return {
-      settings, normal, layers, driven, weather, thin, thinLocal,
-      finishBeforeFog: thin || driven || layers.some(layer => layer.type === 'tint'), sun: unit(vector(lightDirection, AXES.y)),
+      settings, normal, layers, driven, weather, thin, thinLocal, hasKits, kitExposure,
+      needsDistance: layers.some(layer=>layer.type==='bevel' || layer.kit?.recipe==='crevice-moss' && layer.kit.crevices!=='joints'),
+      finishBeforeFog: thin || driven || hasKits || layers.some(layer => layer.type === 'tint'), sun: unit(vector(lightDirection, AXES.y)),
       paletteConstraint: paletteConstraints && settings.paletteConstraint !== undefined
         ? pixelLook.prepareLookPolicy(settings.paletteConstraint, { palette, roles: paletteRoles, blueNoise, context, validateOnly, onPaletteClip,
           skipMaskedStacks: !colorStack }) : null,
-      projected: Boolean(settings.rainRipple) || driven || weather || layers.some(layer => layer.effect || layer.spatialMask),
+      projected: Boolean(settings.rainRipple) || driven || weather || hasKits || layers.some(layer => layer.effect || layer.spatialMask),
       depth: layers.some(layer => layer.effect?.depth),
       reveals: layers.some(layer => layer.effect?.reveals)
     };
@@ -796,6 +805,11 @@ const SurfaceLook = (() => {
     output[4] = 0;
     if (prepared.projected || output.length > 5) output[5] = undefined;
     const detailScale = sample.detailFootprint ?? sample.footprint ?? 0, stableDetail = sample.stableDetail;
+    const kitFrame = prepared.hasKits && { position:p, normal:geometricNormal, seed, hash, noise, visibility,
+      lambert:Math.max(0,dot(geometricNormal,sun)), reflected, exposure:sample.exposure,
+      footprint:(sample.artFootprint ?? sample.footprint ?? 0)/scale/Math.max(.24,Math.abs(dot(geometricNormal,v))),
+      concavity:width=>bevelCoverage(crevice,sample,geometricNormal,v,width*scale) };
+    let joints = 0;
     const weatherPosition = sample.worldPosition ?? position;
     const weather = prepared.weather && sample.weather?.(weatherPosition[0], weatherPosition[2]);
     const signals = prepared.driven ? new Map() : null;
@@ -819,6 +833,11 @@ const SurfaceLook = (() => {
         }
       }
       const strength = layer.strength * maskWeight;
+      if (layer.kit) {
+        joints = kits.shade(layer.kit,kitFrame,output,strength,joints,layer.shadow!==false);
+        if (strength && visit) visit(layer,layer.mask ? maskWeight : null,strength,settings);
+        continue;
+      }
       const step = trace && layer.effect && { layer: layer.id, type: layer.type,
         ...(layer.stack?.name && { stack: layer.stack.name }), maskWeight, input: output.slice(0, 3) };
       if (step) trace.push(step);
@@ -897,6 +916,6 @@ const SurfaceLook = (() => {
     return output;
   }
 
-  return { STRIDE, hasBevel, material, merge, prepare, shade, prepareLightTrack, lightRamps, withLightRamps };
+  return { STRIDE, hasBevel, needsDistance, material, merge, prepare, shade, prepareLightTrack, lightRamps, withLightRamps };
 })();
 if (typeof module !== 'undefined') module.exports = SurfaceLook;

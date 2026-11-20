@@ -44,6 +44,7 @@ For per-pixel rendering set `S.pixel = true` before baking and set `look: { pixe
 | Layer type | Controls |
 | --- | --- |
 | `diffuse` | Map the direct-light response through a material lighting ramp. |
+| `detailKit` | Add a rest-space pattern with scale-aware filtering and optional geometry and exposure masks. |
 | `tint` | Apply a constant `color` using `blend: 'mix'`, `'add'`, or `'multiply'`. |
 | `bevel` | Highlight sculpted ridges and creases within a configurable art-pixel reach. |
 | `transmission` | Add tinted backlight through a thin sheet using its thickness and incident light. |
@@ -58,6 +59,40 @@ For per-pixel rendering set `S.pixel = true` before baking and set `look: { pixe
 | `glints` | Set cell `scale`, candidate `density`, inset `radius`, normal `tilt`, angular `roughness` and one `color` or a list of `colors`. A lower `response` makes faint glints more visible. Glints are deterministic, fade at subpixel size, and can survive the pixel cleanup pass. |
 
 These are stylized reflectance models. The CLI resolves them into the scene palette and uses its existing baked direct-light visibility. Subtle tones can share the same palette entry, so include colours for any highlights you want visible in the final render.
+
+## Surface detail kits
+
+Add named `detailKit` layers to a surface finish in JavaScript or diorama JSON. A finish can travel with its material definition or be shared between several solids. Layer order matters. Put plaster above brick to expose brick through chips, or put moss above stone joints to grow it in the mortar. The headless renderer samples the patterns at the visible surface in its rest frame and filters details against the native art-pixel footprint.
+
+```js
+const wall = K.surface.material({ r: [3, 4, 5, 6] }, {
+  layers: {
+    brick: { type: 'detailKit', pattern: { recipe: 'exposed-brick', size: [.48, .23], width: .05 } },
+    plaster: { type: 'detailKit', pattern: { recipe: 'chipped-plaster', coverage: .57, seed: 9 } },
+    moss: { type: 'detailKit', pattern: { recipe: 'crevice-moss', width: .16,
+      exposure: { channel: 'rain', range: [.2, .85], invert: true } } }
+  }
+});
+```
+
+| Recipe | Controls |
+| --- | --- |
+| `stone-joints` | Staggered blocks with dark joints, lit lips, and variation in the original stone. |
+| `exposed-brick` | Set brick dimensions with `size`, mortar width with `width`, and row offset with `stagger`. |
+| `chipped-plaster` | Set patch sizes with `size`, intact plaster with `coverage`, and the chipped lip with `width`. |
+| `roof-seams` | Set the course and tile spacing with `size`. Align `axes` to the roof slope. |
+| `cloth-stitching` | Set stitch pitch with `size[0]` and place the seam with `origin`. Enable `repeat` for rows spaced at `size[1]`. |
+| `crevice-moss` | Select `crevices: 'geometry'\|'joints'\|'both'`. `width` sets the reach from a sculpted recess. Geometry mode follows the source SDF. Joint mode uses earlier course layers on the same finish. |
+
+Dimensions are in material units, using the surface's existing `origin` and `scale`. A pattern can add its own `origin` and two perpendicular `axes`. Each axis accepts `x`, `y`, `z`, or an XYZ vector. Stone and brick pick the projection plane from the surface normal by default. Use `normal: { axis, range: [from, to] }` to gate a layer by the normal's alignment. `exposure` uses the current scene's `rain`, `light`, `fog`, or `wind` access. Combine it with the usual layer `mask` and `strength` for local exceptions.
+
+The three optional `colors` supply the seam or chip, the body, and the lit rim. `seed` controls repeatable variation. Set `fade: [start, full]` in art pixels to control when the smallest marks fade. Crevice moss can also use a retained [surface weather mask](retained-weather.md#put-it-on-a-material) to reflect local conditions.
+
+Compare the [courtyard scene](../examples/surface-detail-courtyard.js) with `--surface-detail-kits off` or pass `surfaceDetailKits: false` to `render`.
+
+```sh
+node cli/ink-studio.js render examples/surface-detail-courtyard.js --w 372 --h 204 --px 1 --out courtyard.png
+```
 
 ## Material lighting ramps
 

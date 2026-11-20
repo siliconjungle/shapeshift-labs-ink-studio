@@ -188,7 +188,14 @@
       const member=marked(state)&&members.find(row=>row.name===name);
       return member?member.fine(state):state;
     }
-    return {view,readState,transition,validate};
+    function retainDetail(name,previous,detail){
+      if(!marked(previous))return detail;
+      const member=members.find(row=>row.name===name), adapter=member.using(previous), data=rooted(adapter.reduce(detail));
+      adapter.validate(data);
+      audit(adapter,detail,data,name);
+      return freeze({...previous,data});
+    }
+    return {view,readState,retainDetail,transition,validate};
   }
 
   const modelSpec=(state,models)=>marked(state)?models?.get(state.level)?.spec:undefined;

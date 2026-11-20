@@ -27,6 +27,36 @@ Set `look.silhouetteProtection` on a world, `finish.look.silhouetteProtection` i
 - `contrast` runs from 0 to 4 and defaults to 1. Values above 1 deepen shadows and brighten highlights around the `pivot` luminance. Emissive details keep their own contrast.
 - Use `--silhouette-protection on|off|file.json` or `render(world, { silhouetteProtection })` to use the authored configuration, disable it, or replace it. Both raw and stylized rendering support protection.
 
+## Give a shot a focal subject
+
+Add `focus` beside `targets` to treat the area around the visible subjects. Select target IDs with `subjects` or omit the list to use every target. Existing subject fog and contrast rules still apply to their named objects.
+
+```json
+{
+  "targets": [
+    { "id": "produce", "select": { "object": "west-produce" }, "fogScale": 0.32, "contrast": 1.6, "pivot": 0.31 },
+    { "id": "lanterns", "select": { "object": "west-lanterns" }, "fogScale": 0.28 }
+  ],
+  "focus": {
+    "subjects": ["produce", "lanterns"],
+    "radius": 57,
+    "depthBias": 0.24,
+    "background": { "contrast": 0.52, "pivot": 0.5, "saturation": 0.42, "detail": 0.32 },
+    "rain": { "subject": 0.1, "surroundings": 0.78 }
+  }
+}
+```
+
+- `radius` sets the feather's reach in native art pixels. `depthBias` allows a small depth overlap, measured in scene units along the view axis. Nearer obstructions and fully hidden subjects respect the visibility pass.
+- `background.contrast` and `background.saturation` range from 0 to 2, with 1 giving the usual treatment. `pivot` is the luminance that contrast compresses toward. `detail` ranges from 0 for maximum smoothing to 1 for the usual detail. The filter uses neighboring pixels on the same object and material and preserves visible precipitation, subject edges, and emissive cores.
+- `rain.subject` controls falling rain over the subject. `rain.surroundings` controls the nearby rain. Both range from 0 to 1 and feather back to full rain at the edge of the region. This control changes rendered opacity and the precipitation pass. Rain impacts, wetness, and snow use their authored simulation settings.
+
+Focus uses an additional visibility raster in the headless renderer. Set `focus: false` to compare with ordinary subject protection, or use `--silhouette-protection off` for a scene-wide baseline. It can travel in an environment pack as part of `settings.look.silhouetteProtection`.
+
+```sh
+node cli/ink-studio.js render examples/market-shot-focus.js --t 2.3 --w 340 --h 188 --px 1 --out market.png
+```
+
 ## Check the export views
 
 ```sh

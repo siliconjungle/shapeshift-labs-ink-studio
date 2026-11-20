@@ -857,7 +857,7 @@ function makeSculpt(B, rest) {
   const bevelMaterials = new Map(), bevelPrimitives = new WeakMap();
   let bevelSculpt;
   function bevelDistance(settings, owner) {
-    if (!bevelMaterials.has(settings)) bevelMaterials.set(settings, SurfaceLook.hasBevel(settings));
+    if (!bevelMaterials.has(settings)) bevelMaterials.set(settings, SurfaceLook.needsDistance(settings));
     if (!bevelMaterials.get(settings)) return undefined;
     if (owner?.bevelDistance) return owner.bevelDistance;
     if (owner && (owner.whole || ghosts.includes(owner))) {

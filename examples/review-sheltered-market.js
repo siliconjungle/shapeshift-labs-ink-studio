@@ -38,7 +38,7 @@ module.exports = ({KIT:K,makeBuilder,makeSculpt}) => {
         const x=-4.8+i*.585+(j%2)*.093, z=-3.05+j*.567;
         if (x>pool.min[0]-.2 && x<pool.max[0]+.2 && z>pool.min[1]-.2 && z<pool.max[1]+.2) continue;
         const paving=(i+3*j)%5===0 ? {r:[0,1,2,3,4]} : stone;
-        S.box([x,.003,z],[.287,.056,.282],paving,{res:.124,rd:.042});
+        S.box([x,.003,z],[.287,.056,.282],paving,{res:.124,rd:.042,objectId:'aisle-paving'});
       }
       for (const x of [pool.min[0]-.05,pool.max[0]+.05])
         S.box([x,.038,.465],[.094,.073,1.98],stone,{res:.094,rd:.027});
@@ -68,11 +68,11 @@ module.exports = ({KIT:K,makeBuilder,makeSculpt}) => {
           S.box([xx,.836,z],[.22,.082,.30],timber,{res:.069,rd:.032});
           const produce={r:[[22,23,24],[25,23,24],[21,22,23],[26,25,24]][i]};
           for (const dx of [-.105,.10]) for (const dz of [-.15,.02,.17])
-            S.ball([xx+dx,.96,z+dz],[.081,.079,.082],produce,{res:.066});
+            S.ball([xx+dx,.96,z+dz],[.081,.079,.082],produce,{res:.066,...(stripe===0 && {objectId:'west-produce'})});
         }
         for (const dx of [-.91,.91]) {
           const p=[x+dx,2.21,z+.77];
-          S.box(p,[.122,.149,.11],glow,{res:.059,rd:.034});
+          S.box(p,[.122,.149,.11],glow,{res:.059,rd:.034,...(stripe===0 && {objectId:'west-lanterns'})});
           S.lathe([p[0],p[1]+.14,p[2]],.16,[.15,.044],timber,{res:.052});
           lights.push({p,radius:2.48,intensity:2.55,color:[1,.68,.36]});
         }

@@ -13,6 +13,7 @@ const { createEnvironmentPasses } = require('./environment-passes.js');
 const ArtInk = require('../src/art-ink.js');
 const ArtDirection = require('../src/art-direction.js');
 const SilhouetteProtection = require('../src/silhouette-protection.js');
+const SubjectFocus = require('./subject-focus.js');
 const DetailBudgets = require('../src/detail-budgets.js');
 const ShadowArt = require('../src/shadow-art.js');
 const ContactShadows = require('../src/contact-shadows.js');
@@ -125,6 +126,7 @@ const reconstructionSource = Symbol('reconstruction source');
 const captureCamera = Symbol('rendered camera');
 const sampledPresentation = Symbol('sampled presentation');
 const scopedGlowPass = Symbol('emissive glow pass');
+const subjectFocusPass = Symbol('subject focus pass');
 const probeCamera = Symbol('reflection probe camera');
 const probeCaptures = Symbol('reflection probe captures');
 
@@ -395,8 +397,17 @@ function renderFrame(world, o, preparedPalettes) {
   const motionFrame = historyFrames[Math.max(0, historyFrames.length - (effects?.smear?.frames || 1))];
   const motionFrom = o.motionFrom ?? motionFrame?.motionReference;
   const captureMotion = !!o.captureMotion || passSelection.has('motion') || passSelection.has('emissionMotion');
+  const focus = !o.captureCoverage && protection?.focus && (o[subjectFocusPass] !== undefined ? o[subjectFocusPass] :
+    SubjectFocus.frame(protection.focus,renderFrame(world,{
+      ...o, [subjectFocusPass]:false, px, samples:true, worked:false, artInkActive:!!ink || o.artInkActive,
+      passes:['depth','emission',...(protection.focus.detail < 1 ? ['objectId','materialId'] : [])],
+      captureSilhouetteProtection:true, captureMotion:false, lookAudit:false, fragmentProbe:undefined, pick:undefined,
+      reflections:false, atmosphere:false, precipitation:false, rainImpacts:false, captureFog:false, volumeHistory:null,
+      [captureCamera]:undefined
+    })));
   if (legacyLook && (specializedResolve || (o.colored && !tone))) {
     const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], [scopedGlowPass]: trackGlow, artInkActive: !!ink,
+      [subjectFocusPass]:focus,
       captureMotion, motionFrom, maskGrade: !tone && grade, reflectionTint: effects?.reflection,
       previewPalette: globalPaletteMark, lookAudit: audit,
       effectPaletteCapture: effectPaletteSettings,
@@ -415,6 +426,7 @@ function renderFrame(world, o, preparedPalettes) {
         artGridScale: 2,
         volumeHistory: null,
         artInkActive: !!ink,
+        [subjectFocusPass]:focus,
         captureMotion: false, motionFrom: undefined, effectPaletteCapture: null, reflectionTint: effects?.reflection,
         passes: specializedResolve ? ['coverage'] : false,
         lookAudit: false
@@ -734,6 +746,8 @@ function renderFrame(world, o, preparedPalettes) {
     onSurfaceClip: audit && ((r, g, b) => audit.sample('surface', r, g, b))
   });
   const surfaceGlint = surface ? new Uint8Array(W * H) : null;
+  const focusPixel = SubjectFocus.raster(focus,W,H);
+  const fallingCoverage = focus && focus.settings.detail < 1 ? new Float32Array(W*H) : null;
   const layerPalettes = surface?.palettes ?? [];
   const localConstraints = paletteRules
     ? Object.assign(Array(layerPalettes.length).fill(undefined), surface?.constraints).concat(paletteRules.palettes)
@@ -784,6 +798,7 @@ function renderFrame(world, o, preparedPalettes) {
       sp = d[q + 13],
       rg = d[q + 14],
       ex = d[q + 15];
+    if (o[subjectFocusPass] === false && (kind === 2 || kind === 15)) continue;
     if (!SampleCoverage.visible(kraw, sampleWithdrawal)) al = 0;
     if (precipitation?.rows[i]) {
       const pose = precipitation.pose?.(i, x, y, z, kind, ph, sp, rg, ex, al);
@@ -1049,6 +1064,14 @@ function renderFrame(world, o, preparedPalettes) {
   function composite(p, i, z, dn, a, pr, pg, pb, wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, mark,
     opticalDepth = z, sprite, haze = 0, rule, reflected, filteredEdge = false, refraction = 1, sectionEdge = false) {
     if (surfaceDepth && (!sprite?.surface || sdf) && opticalDepth > surfaceDepth[p]+1e-5) return;
+    if (focus?.rain || fallingCoverage) {
+      const kind = i < 0 ? 0 : Math.round(d[i*16+11])%16;
+      if (kind === 2 && focus.rain) {
+        a *= focus.rain[focusPixel(p)];
+        if (a < .004) return;
+      }
+      if (fallingCoverage) fallingCoverage[p] = (kind === 2 || kind === 15 ? a : 0)+fallingCoverage[p]*(1-a);
+    }
     const p3 = p * 3, ia = 1 - a;
     if (counters) {
       counters.fragments++;
@@ -2160,6 +2183,7 @@ function renderFrame(world, o, preparedPalettes) {
   const effectSignals = effectRules && { rules: effectRules, sky: showSky && !!sky, backdropCloud, media: effectMedia, haze: hazeCoverage };
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, motionFrom, motionReference });
+  if (o[subjectFocusPass] === false) return { passes, silhouetteMask };
   if (o.captureCoverage) {
     if (reflectionTint && passes?.emission) ArtEffects.tintReflection(col, captured, passes.emission, W, H, reflectionTint, t);
     const reflectionLook = reflectionPlane && optics?.transform(TargetSelectors.medium(reflectionPlane.id, 'reflection', reflectionPlane.tags));
@@ -2182,6 +2206,7 @@ function renderFrame(world, o, preparedPalettes) {
       if (a > 1e-6) for (let c = 0; c < 3; c++) col[p * 3 + c] /= a;
     }
   }
+  SubjectFocus.grade(col,W,H,focus,focusPixel,fallingCoverage);
   const masks = overlay && createMaskResolve(world, { w: W, h: H, time: t, x: X, y: Y, z: Z, depth, rayAt, span: R },
     overlay, localConstraints, o.maskGrade ?? (!tone && grade), lookPass?.local);
   if (environmentPasses) passes = { w:W, h:H, ...passes, ...environmentPasses.passes };

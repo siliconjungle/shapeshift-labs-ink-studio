@@ -568,8 +568,8 @@
         id(args.prefix)&&args.prefix.length<=80&&W.worksites.target(args.at),'Invalid recruitment effect');
       checkAgent(args.prefix,{...args,position:S.zero});
     }
-    function recruit(state,args,batch,ctx){
-      const agent=args.prefix+'.'+batch, roster=S.get(state);
+    function placedSpawn(state,args,ctx){
+      const {agent}=args, roster=S.get(state);
       if(S.find(roster,agent))return {reason:'recruit-id-in-use'};
       if(S.count(roster)>=maxAgents)return {reason:'recruit-roster-full'};
       const at=W.worksites.frame(ctx.query,args.at)?.point, profile=profileFor({species:args.species,entity:agent});
@@ -581,8 +581,29 @@
       if(space.state!=='free')return {reason:'recruit-site-occupied'};
       return {state:spawnAgent(state,{...args,agent,position},ctx)};
     }
+    function recruit(state,args,batch,ctx){
+      return placedSpawn(state,{...args,agent:args.prefix+'.'+batch},ctx);
+    }
+    function despawnAgent(state,args,ctx){
+      const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
+      const decisions=policy&&{...state.decisions};
+      if(decisions)delete decisions[row.id];
+      if(O.runnable(row.orders))orders.cancel(row.orders,undefined,row,ctx,'despawned');
+      draft.remove(slot);
+      ctx.emit('agent-despawned',{agent:row.id,entity:row.entity,generation:row.generation,at:row.position});
+      const formationState=formations?.discard(state.formations,row,ctx);
+      return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd,formationState);
+    }
     return {initial:()=>packed(initialRoster,[],policy?.initial),
     shareCheckpoint:true,viewState:S.view,legacyCheckpoint:S.legacyState,dependencies:routeDependencies(config),
+    populationActor:{
+      check(name){check(own(profiles,name),'Unknown population actor species '+name);},
+      read(state,name,generation){
+        const row=S.select(S.get(state),name);
+        return row&&(generation===undefined||row.generation===generation)?row:undefined;
+      },
+      spawn:placedSpawn,remove:despawnAgent
+    },
     ...(influence&&{influenceResponder:{
       config:influence,check:orders.checkIssue,
       rows(state){
@@ -746,16 +767,7 @@
         }
       }),
       spawn:spawnAgent,
-      despawn(state,args,ctx){
-        const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
-        const decisions=policy&&{...state.decisions};
-        if(decisions)delete decisions[row.id];
-        if(O.runnable(row.orders))orders.cancel(row.orders,undefined,row,ctx,'despawned');
-        draft.remove(slot);
-        ctx.emit('agent-despawned',{agent:row.id,entity:row.entity,generation:row.generation,at:row.position});
-        const formationState=formations?.discard(state.formations,row,ctx);
-        return packed(draft.finish(),state.contacts,decisions,state.routeWork,state.crowd,formationState);
-      },
+      despawn:despawnAgent,
       seek(state,args,ctx){
         return replace(state,args,row=>{
           check(!O.holding(row.orders),'Pending orders own this creature destination');
