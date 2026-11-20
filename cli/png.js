@@ -39,30 +39,29 @@ function withAlpha(rgb, alpha) {
   }
   return rgba;
 }
-function image(w, h, pixels, bytesPerPixel, bits, color) {
+function header(w, h, bits, color) {
   const hd = Buffer.alloc(13);
   hd.writeUInt32BE(w, 0);
   hd.writeUInt32BE(h, 4);
   hd[8] = bits;
   hd[9] = color;
-  return Buffer.concat([
-      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-      chunk('IHDR', hd),
-      chunk('IDAT', scanlines(w, h, pixels, bytesPerPixel)),
-      chunk('IEND', Buffer.alloc(0))
-  ]);
+  return hd;
+}
+const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+function image(hd, compressed) {
+  return Buffer.concat([signature, chunk('IHDR', hd), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
 }
 function encode(w, h, pixels, channels = 3) {
   if (![3,4].includes(channels)) throw new Error('PNG pixel count does not match its shape');
-  return image(w, h, pixels, channels, 8, channels === 4 ? 6 : 2);
+  return image(header(w, h, 8, channels === 4 ? 6 : 2), scanlines(w, h, pixels, channels));
 }
 function encodeGray(w, h, values) {
   if (values instanceof Uint16Array) {
     const bytes = Buffer.alloc(values.length * 2);
     for (let i = 0; i < values.length; i++) bytes.writeUInt16BE(values[i], i * 2);
-    return image(w, h, bytes, 2, 16, 0);
+    return image(header(w, h, 16, 0), scanlines(w, h, bytes, 2));
   }
-  return image(w, h, values, 1, 8, 0);
+  return image(header(w, h, 8, 0), scanlines(w, h, values, 1));
 }
 function write(file, w, h, rgb, alpha) {
   fs.writeFileSync(file, alpha ? encode(w, h, withAlpha(rgb, alpha), 4) : encode(w, h, rgb));
@@ -199,32 +198,32 @@ function read(file) {
   for (let i = 0; i < rgb.length; i++) rgb[i] = Math.round(data[Math.floor(i / 3) * 4 + i % 3] * 255 / max);
   return { w, h, rgb };
 }
-// an animated PNG: the first frame is an ordinary picture, the rest ride along as extra chunks. Browsers play it; a plain viewer shows frame one
-function animate(file, frames, fps) {
-  const w = frames[0].w,
-    h = frames[0].h,
-    channels = frames[0].alpha ? 4 : 3;
-  const hd = Buffer.alloc(13);
-  hd.writeUInt32BE(w, 0);
-  hd.writeUInt32BE(h, 4);
-  hd[8] = 8;
-  hd[9] = channels === 4 ? 6 : 2;
+function packFrame({ w, h, rgb, alpha }) {
+  const channels = alpha ? 4 : 3, hd = header(w, h, 8, alpha ? 6 : 2);
+  return { header: hd, compressed: scanlines(w, h, alpha ? withAlpha(rgb, alpha) : rgb, channels) };
+}
+
+function encodeFrame(frame) {
+  return image(frame.header, frame.compressed);
+}
+
+// The numbered PNG frames and APNG share their compressed image data.
+function encodeAnimation(frames, fps) {
+  const hd = frames[0].header;
   const ac = Buffer.alloc(8);
   ac.writeUInt32BE(frames.length, 0);
   ac.writeUInt32BE(0, 4);
-  const out = [Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', hd), chunk('acTL', ac)];
+  const out = [signature, chunk('IHDR', hd), chunk('acTL', ac)];
   let seq = 0;
-  frames.forEach((f, i) => {
+  frames.forEach((frame, i) => {
+    if (!hd.equals(frame.header)) throw new Error('Animated PNG frames need the same dimensions and channels');
     const fc = Buffer.alloc(26);
     fc.writeUInt32BE(seq++, 0);
-    fc.writeUInt32BE(w, 4);
-    fc.writeUInt32BE(h, 8);
+    hd.copy(fc, 4, 0, 8);
     fc.writeUInt16BE(1, 20);
     fc.writeUInt16BE(fps, 22);
     out.push(chunk('fcTL', fc));
-    if (f.w !== w || f.h !== h || Boolean(f.alpha) !== (channels === 4))
-      throw new Error('Animated PNG frames need the same dimensions and channels');
-    const z = scanlines(w, h, f.alpha ? withAlpha(f.rgb, f.alpha) : f.rgb, channels);
+    const z = frame.compressed;
     if (i === 0) out.push(chunk('IDAT', z));
     else {
       const sq = Buffer.alloc(4);
@@ -233,6 +232,9 @@ function animate(file, frames, fps) {
     }
   });
   out.push(chunk('IEND', Buffer.alloc(0)));
-  fs.writeFileSync(file, Buffer.concat(out));
+  return Buffer.concat(out);
 }
-module.exports = { encode, encodeGray, write, writeIndexed, read, raster, animate };
+function animate(file, frames, fps) {
+  fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
+}
+module.exports = { encode, encodeGray, write, writeIndexed, read, raster, animate, packFrame, encodeFrame, encodeAnimation };

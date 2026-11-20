@@ -2592,6 +2592,25 @@ function renderFrame(world, o, preparedPalettes) {
     ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
   }, passes, atmosphere?.fog, effectSignals, effectColor);
 }
+function pixelIndex(w, h, sourceW, sourceH) {
+  if (w === sourceW && h === sourceH) return (x, y) => y * w + x;
+  const columns = Int32Array.from({ length: w }, (_, x) => Math.floor((x + .5) * sourceW / w));
+  const rows = Int32Array.from({ length: h }, (_, y) => Math.floor((y + .5) * sourceH / h) * sourceW);
+  return (x, y) => rows[y] + columns[x];
+}
+
+function resize(img, w, h) {
+  if (img.w === w && img.h === h) return img;
+  const rgb = new Uint8Array(w * h * 3), alpha = img.alpha && new Uint8Array(w * h);
+  const source = pixelIndex(w, h, img.w, img.h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const pixel = y * w + x, sample = source(x, y);
+    for (let channel = 0; channel < 3; channel++) rgb[pixel * 3 + channel] = img.rgb[sample * 3 + channel];
+    if (alpha) alpha[pixel] = img.alpha[sample];
+  }
+  return { w, h, rgb, ...(alpha && { alpha }) };
+}
+
 // make every art pixel k screen pixels wide, the way the page shows it
 function upscale(img, k) {
   const W = img.w * k,
@@ -2668,4 +2687,4 @@ function grid(imgs, cols, labels) {
   });
   return out;
 }
-module.exports = { render, upscale, grid, label, viewMatrix, FOV, cameraCapture };
+module.exports = { render, resize, pixelIndex, upscale, grid, label, viewMatrix, FOV, cameraCapture };

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const { json } = require('./asset-files.js');
-const { render, cameraCapture } = require('./render.js');
+const { render, cameraCapture, pixelIndex } = require('./render.js');
 const { depthRange } = require('./pass-preview.js');
 
 const passes = ['depth', 'normal', 'objectId', 'materialId'];
@@ -15,13 +15,6 @@ const encodings = {
   materialId: { format: 'rgb24-png', decode: '65536 * R + 256 * G + B', empty: 0 },
   materialMasks: { format: 'gray8-png', kind: 'visible-surface', foreground: 255, background: 0 }
 };
-
-function pixelIndex(w, h, sourceW, sourceH) {
-  if (w === sourceW && h === sourceH) return (x, y) => y * w + x;
-  const columns = Int32Array.from({ length: w }, (_, x) => Math.floor((x + .5) * sourceW / w));
-  const rows = Int32Array.from({ length: h }, (_, y) => Math.floor((y + .5) * sourceH / h) * sourceW);
-  return (x, y) => rows[y] + columns[x];
-}
 
 function packId(image, at, id) {
   if (id > 0xffffff) throw new RangeError('Layered export IDs must fit in 24 bits');

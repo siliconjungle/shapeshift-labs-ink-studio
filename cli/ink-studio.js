@@ -162,7 +162,7 @@ function scene(id) {
 }
 const paintDirectory = id => path.resolve(CWD, opt.dir || path.join(cfg.paint || 'studio/paint', id));
 const readPaint = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-function build(id, seedOverride, { paint = true } = {}) {
+function build(id, seedOverride, { paint = true, parameterInputs } = {}) {
   if (opt.focus) {
     const f = list('focus'); // uneven detail: x,y,z then near, far, coarse
     globalThis.INK_FOCUS = { p: [f[0] || 0, f[1] || 0, f[2] || 0], near: f[3], far: f[4], coarse: f[5] };
@@ -195,7 +195,7 @@ function build(id, seedOverride, { paint = true } = {}) {
   const seed = seedOverride ?? (opt.seed === undefined ? snapshot?.seed ?? s.seed : +opt.seed);
   shot?.seed(seed);
   const assemble = () => {
-    const built = s.build(seed, { controls, snapshot });
+    const built = s.build(seed, { controls, snapshot, ...(parameterInputs && { parameterInputs }) });
     return (s.animate && s.animate(built, seed)) || built;
   };
   const w = liveSunOption() ? require('./look-preview.js').withAlbedo(assemble) : assemble();
@@ -813,14 +813,20 @@ const asciiFrame = (image, world) => lib().KIT.ascii.draw(image, {
   pal: image.palette || world.pal
 });
 const displayFrame = (image, world) => opt.text ? asciiFrame(image, world) : R.upscale(image, opt.px1 ? 1 : image.px);
-function buildPreview(id = pos[0]) {
+function buildPreview(id = pos[0], options) {
   const Preview = require('./look-preview.js');
-  const world = opt.look !== undefined && opt.look !== 'off' ? Preview.withAlbedo(() => build(id)) : build(id);
+  const assemble = () => build(id, undefined, options);
+  const world = opt.look !== undefined && opt.look !== 'off' ? Preview.withAlbedo(assemble) : assemble();
   return Preview.override(world, opt, lib());
 }
 const previewPasses = () => require('./look-preview.js').preview(opt);
 const reviewSidecars = diagnostics => [...(diagnostics?.suffixes ?? []), ...(opt.text ? ['.txt'] : [])];
 const textSidecar = file => file.replace(/\.(?:a?png)$/i, '') + '.txt';
+function sceneEmbedConfig() {
+  if (opt['embed-config'] === undefined) return;
+  if (typeof opt['embed-config'] !== 'string') throw new TypeError('--embed-config needs a JSON filename');
+  return JSON.parse(fs.readFileSync(path.resolve(opt['embed-config']), 'utf8'));
+}
 function sequenceHistory() {
   const K = lib().KIT;
   return {
@@ -996,6 +1002,10 @@ const CMD = {
         '  retarget --profiles  show built-in role templates',
         '  passes <id> [--channels coverage,depth,normal,objectId,materialId,emission]  save art-pixel render pass previews',
         '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--out directory]   export aligned RGBA, depth, normals, IDs and material mattes',
+        '  export-scene <id> --out directory [--formats still,loop,replay,embed]   publish one scene in multiple formats',
+        '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
+        '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
+        '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -1767,6 +1777,50 @@ const CMD = {
       out, view: frame, times: ts, native: !!opt.px1, pose, replay: feedbackReplay(world, ts[0], frame)
     });
     console.log('wrote', file, manifest.frames.length, 'frame(s)');
+  },
+  'export-scene'() {
+    if (pos.length !== 1 || typeof opt.out !== 'string')
+      die('Use export-scene <scene> --out directory [--formats still,loop,replay,embed]');
+    if (['w', 'h', 'still-scale', 't', 'from', 'to', 'fps'].some(key => opt[key] === true) || opt.formats === true)
+      die('Scene export flags need values');
+    const settings = sceneEmbedConfig();
+    const transparent = onOffOption('transparent');
+    const { file } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
+      const world = buildPreview(pos[0], { parameterInputs: { time: num('parameter-time', from) } });
+      const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent,
+        ...(opt.px1 && { px: 1 }) });
+      const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
+      return {
+        scene: world.id, title: world.name,
+        duration: Math.max(world.timeline?.duration ?? 0, world.cameraRig?.duration ?? 0),
+        sample(time, lastTime) {
+          function draw(t, resetRenderHistory) {
+            const phase = lastTime > from ? Math.max(0, Math.min(1, (t - from) / (lastTime - from))) : 0;
+            pose(world, t);
+            return R.render(world, { ...frame, ...camera?.(phase), time: t, t, resetRenderHistory });
+          }
+          return replay ? replay.sample(time, draw) : draw(time);
+        }
+      };
+    }, { out: opt.out, formats: opt.formats?.split(',').map(format => format.trim()), embed: settings,
+      width: num('w', 640), height: num('h', 360), fps: num('fps', 12), from: num('from', 0), to: num('to'),
+      stillScale: num('still-scale', 2), stillTime: num('t') });
+    console.log('wrote', file);
+  },
+  'scene-replay'() {
+    if (pos.length !== 1 || typeof opt.out !== 'string' || opt.at === true ||
+        opt.embed !== undefined && opt.embed !== true)
+      die('Use scene-replay <recording.json> [--at seconds | --embed] --out <file>');
+    const api = require('./scene-replay.js'), document = api.readSceneReplay(pos[0]);
+    const file = path.resolve(opt.out);
+    if (path.resolve(pos[0]) === file) die('Choose an output different from the scene replay');
+    if (opt.embed) api.writeSceneEmbed(document, { out: file, settings: sceneEmbedConfig() });
+    else {
+      if (!/\.png$/i.test(file)) die('Choose a .png replay frame filename');
+      const frame = api.sampleSceneReplay(document, num('at', 0));
+      require('./asset-files.js').write(file, frame.png);
+    }
+    console.log('wrote', file);
   },
   /* the ramps a diorama is shaded on, most used first, and what kind each is: one hue darker and lighter, or turning as it darkens.
      For a one-hue ramp a turning one made from the same palette is offered (the diorama is not changed). */

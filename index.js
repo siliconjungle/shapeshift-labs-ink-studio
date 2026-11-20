@@ -104,6 +104,10 @@ module.exports = {
   ...require('./cli/gltf-asset.js'),
   render: require('./cli/render.js').render,
   exportLayers: require('./cli/export-layers.js').exportLayers,
+  exportScene: require('./cli/scene-export.js').exportScene,
+  readSceneReplay: require('./cli/scene-replay.js').readSceneReplay,
+  sampleSceneReplay: require('./cli/scene-replay.js').sampleSceneReplay,
+  writeSceneEmbed: require('./cli/scene-replay.js').writeSceneEmbed,
   describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
   createCameraAtlas(options) {
     return module.exports.load().KIT.cameraAtlas.raster(options, (world, frame) => {
