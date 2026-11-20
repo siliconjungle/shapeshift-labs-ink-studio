@@ -58,6 +58,7 @@
       frame=Object.freeze({route:(from,to,spec)=>route(query,from,to,spec),
         ...(flow&&{flow:(from,to,spec)=>flowSample(query,from,to,spec)}),
         valid:(from,points,cursor,goal,spec)=>valid(query,from,points,cursor,goal,spec),
+        safeEnd:(from,points,cursor,spec)=>safeEnd(query,from,points,cursor,spec),
         report:()=>{
           bind(query);
           return {tileCells:size,cached:[...profiles.values()].reduce((n,row)=>n+row.tiles.size,0),invalidated,
@@ -136,28 +137,39 @@
       return {node,edge,near,lattice,neighbors,pin,sampler,options,touched,built,profile,
         pad:profile.spec.radius+Math.max(dx,dz)};
     }
+    function segment(map,a,b){
+      if(!inDomain(a)||!inDomain(b)||horizontal(a,b)>nearLimit+eps)return 0;
+      const grid=map.lattice(a), next=map.lattice(b);
+      if(Math.abs((grid?.p[1]??map.options.height(a[0],a[2]))-a[1])>eps||
+        Math.abs((next?.p[1]??map.options.height(b[0],b[2]))-b[1])>eps)return 0;
+      if(grid&&next&&Math.abs(grid.i-next.i)<=1&&Math.abs(grid.j-next.j)<=1)
+        return Number.isFinite(map.edge(grid,next))?1:0;
+      return Number.isFinite(map.sampler.edge(a,b))?2:0;
+    }
+    function safeEnd(query,from,points,cursor,spec){
+      if(!points[cursor]||!inDomain(from))return cursor;
+      if(valid(query,from,points,cursor,points.at(-1),spec))return points.length;
+      const map=access(query,spec);
+      let a=map.pin(from), end=cursor;
+      if(!Number.isFinite(map.sampler.pin(a)))return end;
+      while(end<points.length&&segment(map,a,points[end]))a=points[end++];
+      return end;
+    }
     function valid(query,from,points,cursor,goal,spec){
       if(!points[cursor]||horizontal(points.at(-1),goal)>eps||!inDomain(from))return false;
       const map=access(query,spec), start=map.pin(from), last=points.length-1;
-      let latticeOnly=true;
-      function pass(a,b){
-        if(!inDomain(a)||!inDomain(b)||horizontal(a,b)>nearLimit+eps)return false;
-        const grid=map.lattice(a), next=map.lattice(b);
-        if(Math.abs((grid?.p[1]??map.options.height(a[0],a[2]))-a[1])>eps||
-          Math.abs((next?.p[1]??map.options.height(b[0],b[2]))-b[1])>eps)return false;
-        if(grid&&next&&Math.abs(grid.i-next.i)<=1&&Math.abs(grid.j-next.j)<=1)
-          return Number.isFinite(map.edge(grid,next));
-        latticeOnly=false;
-        return Number.isFinite(map.sampler.edge(a,b));
-      }
-      if(!Number.isFinite(map.sampler.pin(start))||!pass(start,points[cursor]))return false;
+      if(!Number.isFinite(map.sampler.pin(start))||!segment(map,start,points[cursor]))return false;
       if(cursor===last)return true;
-      if(!pass(points[last-1],points[last]))return false;
+      if(!segment(map,points[last-1],points[last]))return false;
       const proof=proofs.get(points), cache=map.profile.tiles;
       if(proof?.profile===map.profile.id&&cursor>=proof.cursor&&
         proof.tiles.every(([name,version])=>cache.get(name)?.revision===version))return true;
-      latticeOnly=true;
-      for(let i=cursor+1;i<last;i++)if(!pass(points[i-1],points[i]))return false;
+      let latticeOnly=true;
+      for(let i=cursor+1;i<last;i++){
+        const result=segment(map,points[i-1],points[i]);
+        if(!result)return false;
+        if(result!==1)latticeOnly=false;
+      }
       const tiles=[...map.touched].map(name=>[name,cache.get(name)?.revision]);
       if(latticeOnly&&tiles.every(([,version])=>version!==undefined))
         proofs.set(points,{profile:map.profile.id,cursor,tiles});

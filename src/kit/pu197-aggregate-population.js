@@ -31,7 +31,7 @@
         for(const id of members)memberGroup[id]=index;
         groups.push({species,members,origin,position:origin,goal:V.mul(destination,1/members.length),distance:0});
       }
-      return freeze({roster,...(decisions&&{decisions}),groups,memberGroup});
+      return freeze({roster,...(decisions&&{decisions}),...(state.routeWork&&{routeWork:state.routeWork}),groups,memberGroup});
     }
     function memberPosition(group,position){
       return group.distance?position.map((n,i)=>clamp(n+group.position[i]-group.origin[i],bounds.min[i],bounds.max[i])):position;
@@ -41,7 +41,8 @@
       if(!group.distance)return group.velocity?{...row,velocity:group.velocity}:row;
       const position=memberPosition(group,row.position);
       return {...row,position,direction:V.norm(V.sub(group.position,group.origin),row.direction),
-        velocity:group.velocity??S.zero,mode:profiles[row.species].mode,route:[],cursor:0,retry:0,limbs:[]};
+        velocity:group.velocity??S.zero,mode:profiles[row.species].mode,route:[],cursor:0,retry:0,limbs:[],
+        ...(row.routing&&{routing:row.routing.request?{...row.routing,status:'waiting'}:W.routeRequests.idle})};
     }
     function expand(state){
       const roster=S.get(state), draft=S.edit(roster);
@@ -49,7 +50,8 @@
         const row=S.read(roster,slot);
         draft.update(slot,row,individual(state,row));
       }
-      return freeze({roster:draft.finish(),contacts:[],...(state.decisions&&{decisions:state.decisions})});
+      return freeze({roster:draft.finish(),contacts:[],...(state.decisions&&{decisions:state.decisions}),
+        ...(state.routeWork&&{routeWork:state.routeWork})});
     }
     function totals(state,isAggregate){
       if(!isAggregate)return population(S.get(state),species);

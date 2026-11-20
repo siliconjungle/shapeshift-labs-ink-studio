@@ -24,6 +24,9 @@ short interval. Flight and swimming use their existing spatial planner.
 Use [shared destination fields](navigation-flow.md) when several walkers
 head for the same destination.
 
+Use [budgeted route requests](budgeted-route-requests.md) to spread
+replanning after a local obstruction across multiple ticks.
+
 ## Trace a changing crossing
 
 The [ford example](../examples/world-tiled-ford.json) transfers water into

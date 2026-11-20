@@ -204,6 +204,9 @@
       }
       config={...shared,...config};
     }
+    const RQ=W.routeRequests;
+    const routeQueue=config.routeQueue===undefined?null:RQ.create(config.routeQueue);
+    check(!routeQueue||navigation,'Route queues need a tiled navigation system');
     const materialContacts=config.contactEvents==='material';
     check(config.contactEvents===undefined||typeof config.contactEvents==='boolean'||materialContacts,
       'contactEvents must be boolean or material');
@@ -229,10 +232,12 @@
       check(id(key)&&record(spec)&&own(profiles,spec.species)&&vector(spec.position)&&
         (spec.goal===undefined||vector(spec.goal))&&(spec.entity===undefined||id(spec.entity))&&
         (spec.task==null||id(spec.task))&&(spec.name===undefined||typeof spec.name==='string'&&spec.name.length<=256)&&
+        (!routeQueue||spec.routePriority===undefined||RQ.priority(spec.routePriority))&&
         (spec.metadata===undefined||record(spec.metadata)),'Invalid creature '+key);
     }
     function makeAgent(key,spec){
       return {id:key,entity:spec.entity??key,species:spec.species,position:spec.position,velocity:S.zero,task:spec.task??null,
+        ...(routeQueue&&profiles[spec.species].mode==='walk'&&{routePriority:spec.routePriority??0,routing:RQ.idle}),
         ...(spec.name!==undefined&&{name:spec.name}),...(spec.metadata!==undefined&&{metadata:spec.metadata}),
         goal:spec.goal??spec.position,home:spec.position,direction:east,radius:profiles[spec.species].radius??.15,
         route:emptyList,cursor:0,mode:'idle',retry:0,travel:0,footprints:0,limbs:emptyList,look:profiles[spec.species].look??defaultLook};
@@ -304,26 +309,30 @@
       if(profile.mode!=='walk')return spatialPlan(ctx,config,from,goal,profile);
       return navigation?ctx.query.navigation(navigation).route(from,goal,profile):groundPlan(ctx,config,from,goal,profile);
     }
-    function one(agent,ctx,contacts,dirty,directed=false){
+    function one(agent,ctx,contacts,dirty,directed=false,routes){
+      const finish=(row,status,reason)=>routes?routes.finish(row,status,reason):row;
       const profile=profileFor(agent);
       let position=fit(ctx,profile,agent.position), previous=agent;
       if(!position){
-        if(directed)return {...agent,mode:'blocked',route:[],cursor:0,limbs:[]};
+        if(directed)return finish({...agent,mode:'blocked',route:[],cursor:0,limbs:[]},'blocked','origin-unfit');
         position=choose(ctx,{...agent,goal:agent.position},profile);
         if(!position){
           if(agent.mode!=='dormant')ctx.emit('habitat-lost',{entity:agent.entity,at:agent.position});
-          return {...agent,mode:'dormant',route:[],cursor:0,limbs:[]};
+          return finish({...agent,mode:'dormant',route:[],cursor:0,limbs:[]},'blocked','origin-unfit');
         }
         previous={...agent,route:[],cursor:0,retry:0};
         ctx.emit('habitat-relocate',{entity:agent.entity,at:position});
       }
       let {route,cursor,retry,travel,footprints}=previous;
-      const goal=directed ? fit(ctx,profile,agent.goal) : choose(ctx,agent,profile);
+      const queued=routes?.target&&fit(ctx,profile,routes.target);
+      const goal=directed ? fit(ctx,profile,agent.goal) :
+        queued&&suitable(ctx,agent,queued)?queued:choose(ctx,agent,profile);
       const resting=!goal||directed&&!suitable(ctx,agent,goal)?'waiting':
         V.dist(position,goal)<profile.radius*.65?'rest':null;
       if(resting){
-        return previous.mode===resting&&S.sameVector(position,previous.position)&&!route.length&&!cursor?
+        const row=previous.mode===resting&&S.sameVector(position,previous.position)&&!route.length&&!cursor?
           previous:{...previous,position,mode:resting,route:[],cursor:0};
+        return finish(row,resting==='rest'?'idle':'blocked',resting==='waiting'?'goal-unfit':undefined);
       }
       let corridor;
       const tiles=navigation&&profile.mode==='walk'&&ctx.query.navigation(navigation);
@@ -335,14 +344,28 @@
         const area = P.spatial.expand(envelope,profile.radius);
         if (invalid||ctx.spatial.changes(area).length) corridor=area;
       }
-      if(corridor||(tiles?!route[cursor]&&ctx.tick>=retry:ctx.tick>=retry||!route.length)){
-        const result=plan(ctx,profile,position,goal);
-        route=result.points??[];
-        cursor=route.length>1?1:0;
-        retry=ctx.tick+(route.length?replan:Math.min(6,replan));
-        if (corridor) ctx.spatial.rebuilt('agent-route',{entity:agent.entity,status:result.status},corridor);
+      let status, reason;
+      const canRetry=ctx.tick>=retry||routes&&previous.routing.status==='ready';
+      if(corridor||routes?.target||(tiles?!route[cursor]&&canRetry:ctx.tick>=retry||!route.length)){
+        const result=routes?routes.ask('travel',position,goal):plan(ctx,profile,position,goal);
+        if(result.status==='pending'){
+          const end=tiles.safeEnd(position,route,cursor,profile);
+          if(end<route.length)route=route.slice(0,end);
+          status='waiting';
+        }else{
+          route=result.points??[];
+          cursor=route.length>1?1:0;
+          retry=ctx.tick+(route.length?replan:Math.min(6,replan));
+          if (corridor) ctx.spatial.rebuilt('agent-route',{entity:agent.entity,status:result.status},corridor);
+          status=routes&&result.status==='budget'?'limited':'blocked';
+          reason=result.status;
+        }
       }
-      if(!route[cursor])return {...previous,position,mode:'blocked',route,cursor,retry};
+      if(!route[cursor]){
+        status??=routes?.active?'waiting':previous.routing?.status==='limited'?'limited':'blocked';
+        return finish({...previous,position,mode:status==='waiting'||status==='limited'?'waiting':'blocked',route,cursor,retry},
+          status,reason??previous.routing?.reason);
+      }
       const aim=V.sub(route[cursor],position), distance=V.len(aim), step=Math.min(distance,(profile.speed??1)*ctx.dt);
       const desired=distance>1e-8?V.mad(position,aim,step/distance):position;
       let moved, lastSupports=[];
@@ -361,7 +384,8 @@
         lastSupports=result.contacts;
       }else moved=fit(ctx,profile,desired)??position;
       const delta=V.sub(moved,position), movedBy=V.len(delta);
-      if(movedBy<1e-8&&step>1e-8)return {...previous,position,mode:'blocked',route:[],cursor:0,retry:ctx.tick+1};
+      if(movedBy<1e-8&&step>1e-8)return finish({...previous,position,mode:routes?.active?'waiting':'blocked',
+        route:[],cursor:0,retry:ctx.tick+1},'blocked','segment-blocked');
       if(distance<=step+profile.radius*.35)cursor++;
       const direction=movedBy>1e-8?V.norm(delta):previous.direction;
       const stride=profile.stride??.38;
@@ -396,12 +420,13 @@
         return {point:ground?[desired[0],ground.y+(phase>.57?Math.sin((phase-.57)*Math.PI/.43)*.09:0),desired[2]]:desired,
           planted:!!ground&&phase<=.57,support:ground?.id??null};
       });
-      return {...previous,position:moved,direction,route,cursor,retry,mode:profile.mode,travel,footprints,limbs};
+      return finish({...previous,position:moved,direction,route,cursor,retry,mode:profile.mode,travel,footprints,limbs},'ready');
     }
     function validateRow(key,agent){
       checkAgent(key,agent);
       check(agent.id===key&&vector(agent.goal)&&vector(agent.direction)&&Array.isArray(agent.route)&&
         agent.route.every(p=>vector(p)),'Invalid agent checkpoint');
+      if(routeQueue&&profiles[agent.species].mode==='walk')routeQueue.validateAgent(agent);
     }
     function validateState(state){
       check(record(state)&&Array.isArray(state.contacts),'Invalid agent checkpoint');
@@ -416,6 +441,7 @@
         }
       }
       policy?.validate(state.decisions,names);
+      routeQueue?.validateWork(state.routeWork);
     }
     function requireAgent(roster,{agent,generation}){
       const slot=S.find(roster,agent);
@@ -424,13 +450,19 @@
       check(generation===undefined||generation===row.generation,'Stale agent generation for '+agent);
       return {slot,row};
     }
-    function packed(roster,contacts,decisions){
-      return freeze({roster,contacts,...(policy&&{decisions})});
+    function packed(roster,contacts,decisions,routeWork=RQ.initial){
+      return freeze({roster,contacts,...(policy&&{decisions}),...(routeQueue&&{routeWork})});
+    }
+    function* pendingRows(roster){
+      for(const [p,page] of roster.pages.entries())for(let i=0;i<page.ids.length;i++){
+        const {routing,routePriority}=page.details[i];
+        if(routing?.request)yield {id:page.ids[i],generation:page.generations[i],routing,routePriority,slot:{p,i}};
+      }
     }
     function replace(state,args,update){
       const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
       draft.update(slot,row,update(row));
-      return packed(draft.finish(),state.contacts,state.decisions);
+      return packed(draft.finish(),state.contacts,state.decisions,state.routeWork);
     }
     function byEntity(roster,entity){
       let index=aliases.get(roster);
@@ -478,6 +510,7 @@
         'Invalid agent selector');
       if(type==='seek'){
         check(vector(args.to),'Invalid creature destination');
+        check(args.priority===undefined||routeQueue&&RQ.priority(args.priority),'Invalid route request priority');
         check(!policy?.managed(args.agent),'The activity policy owns this creature destination');
       }
       if(type==='set-task'){
@@ -492,7 +525,7 @@
         const row=makeAgent(agent,args), draft=S.edit(roster), generation=draft.add(row);
         ctx.emit('agent-spawned',{agent,entity:row.entity,generation,at:row.position});
         const decisions=policy?.managed(agent)?{...state.decisions,[agent]:policy.initial[agent]}:state.decisions;
-        return packed(draft.finish(),state.contacts,decisions);
+        return packed(draft.finish(),state.contacts,decisions,state.routeWork);
       },
       despawn(state,args,ctx){
         const roster=S.get(state), {slot,row}=requireAgent(roster,args), draft=S.edit(roster);
@@ -500,12 +533,13 @@
         if(decisions)delete decisions[row.id];
         draft.remove(slot);
         ctx.emit('agent-despawned',{agent:row.id,entity:row.entity,generation:row.generation,at:row.position});
-        return packed(draft.finish(),state.contacts,decisions);
+        return packed(draft.finish(),state.contacts,decisions,state.routeWork);
       },
       seek(state,args,ctx){
         return replace(state,args,row=>{
           ctx.emit('destination',{entity:row.entity,at:args.to});
-          return {...row,goal:args.to,route:[],cursor:0,retry:0};
+        return {...row,goal:args.to,route:[],cursor:0,retry:0,
+          ...(row.routing&&{routing:RQ.idle,routePriority:args.priority??row.routePriority})};
         });
       },
       'set-task'(state,args){
@@ -515,6 +549,11 @@
       const roster=S.get(state), draft=S.edit(roster);
       const contacts=[], decisions=policy?{}:null, dirty=ctx.spatial?.changes().length>0;
       const skipRest=staticFit&&settled.has(roster);
+      const schedule=routeQueue?.begin(pendingRows(roster),ctx.tick,state.routeWork,({slot},job)=>{
+        const agent=S.read(roster,slot);
+        const profile=profileFor(agent), from=fit(ctx,profile,agent.position);
+        return {from,result:from?plan(ctx,profile,from,job.to):{status:'origin-unfit'}};
+      });
       function store(slot,before,next,task=next.task){
         const velocity=S.sameVector(before.position,next.position)?S.zero:
           next.position.map((n,i)=>(n-before.position[i])/ctx.dt);
@@ -525,8 +564,9 @@
         const key=slot.id, managed=policy?.managed(key);
         if(!managed&&skipRest&&S.atRest(roster,slot))continue;
         const agent=S.read(roster,slot);
+        const routes=agent.routing&&schedule?.session(agent);
         if(!managed){
-          store(slot,agent,one(agent,ctx,contacts,dirty));
+          store(slot,agent,one(agent,ctx,contacts,dirty,false,routes));
           continue;
         }
         const profile=profileFor(agent);
@@ -538,28 +578,31 @@
           },
           plan(goal){
             if(origin===undefined)origin=fit(ctx,profile,agent.position);
-            return origin?plan(ctx,profile,origin,goal):{status:'origin-unfit',points:[]};
+            return origin?(routes?routes.ask('activity',origin,goal):plan(ctx,profile,origin,goal)):
+              {status:'origin-unfit',points:[]};
           }
         };
-        const {next,route}=policy.select(state.decisions[key],agent,ctx,movement);
+        const {next,route,pending}=policy.select(state.decisions[key],agent,ctx,movement);
         if(!next.choice){
-          store(slot,agent,{...agent,goal:agent.position,route:[],cursor:0,mode:'rest'},null);
+          const row={...agent,goal:agent.position,route:[],cursor:0,mode:pending?'waiting':'rest'};
+          store(slot,agent,routes?routes.finish(row,'idle'):row,null);
           decisions[key]=next;
           continue;
         }
-        if(next.phase==='blocked'){
-          store(slot,agent,agent,next.choice.activity);
+        if(next.phase==='blocked'&&!pending){
+          store(slot,agent,routes?routes.finish(agent,'blocked','activity-blocked'):agent,next.choice.activity);
           decisions[key]=next;
           continue;
         }
         const directed=route?{...agent,goal:next.choice.point,route,cursor:route.length>1?1:0,retry:ctx.tick+replan}:agent;
-        const moved=one(directed,ctx,contacts,dirty,true);
-        decisions[key]=policy.observe(next,moved,ctx,movement);
+        const moved=one(directed,ctx,contacts,dirty,true,routes);
+        decisions[key]=pending||['waiting','safe-segment','limited'].includes(moved.routing?.status)?
+          next:policy.observe(next,moved,ctx,movement);
         store(slot,agent,moved,decisions[key].choice?.activity??null);
       }
       const next=draft.finish();
       if(staticFit)settled.add(next);
-      return packed(next,contacts,decisions);
+      return packed(next,contacts,decisions,schedule?.work);
     },*poseEntities(state){
       if(state)for(const page of S.get(state).pages)for(const row of page.details)yield row.entity;
     },pose(state,entity){
@@ -570,6 +613,10 @@
       position:agentField('vector',row=>row.position,'world'),
       velocity:agentField('vector',row=>row.velocity,'world/s'),
       task:agentField('categorical',row=>row.task),
+      ...(routeQueue&&{
+        'route-status':agentField('record',row=>row.routing??RQ.idle),
+        'route-queue':{type:'record',qualified:true,read:({state})=>Q.ok(routeQueue.report(pendingRows(S.get(state)),state.routeWork))}
+      }),
       components:{type:'record',qualified:true,read({state,args}){
         const roster=S.get(state), page=args.page;
         if(page!==undefined&&(!Number.isSafeInteger(page)||page<0||page>=roster.pages.length))

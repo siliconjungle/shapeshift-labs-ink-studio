@@ -122,6 +122,7 @@
           }
           routes++;
           const route = movement.plan(point);
+          if(route.status==='pending')return {next:previous,pending:true};
           if (route.status !== 'ok' || !route.points.length) {
             reject({ activity: name, destination, reason: 'route-rejected', status: route.status,
               ...(route.blocked && { obstacle: route.blocked }) });
