@@ -74,9 +74,15 @@ module.exports = ({ KIT: K, SpriteSurface, makeBuilder, makeSculpt }) => ({
         const path = K.curve.create({ ...def, axis, origin, scale });
         const color = palette[colors[i]];
         K.sweep(S, path.points, { shape: 'rect', w: .057, h: .031, round: .54 }, color, { res: .045 });
-        if (def.type === 'cycloid') for (const t of path.breaks) {
-          const p = path.evaluate(t);
-          S.ball([p[0], p[1], .585], .059, screw, { res: .036 });
+        if (def.type === 'cycloid') {
+          for (const t of path.breaks) {
+            const p = path.evaluate(t);
+            S.ball([p[0], p[1], .585], .059, screw, { res: .036 });
+          }
+          const rail = K.curve.path(path.points, { up: [-1, 0, 0] });
+          const text = K.curve.text(rail, 'ONE TURN', { size: .18, lift: .25 });
+          for (const stroke of text.strokes)
+            if (stroke.length > 1) S.tube(stroke, .012, .012, ink, { res: .025 });
         }
       }
     }

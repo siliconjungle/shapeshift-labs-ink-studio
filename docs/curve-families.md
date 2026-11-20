@@ -61,7 +61,7 @@ Torus knots require nonzero coprime integer `p/q`, each magnitude ≤32, and maj
 
 The two spirals accept different nonnegative endpoint radii and optional axial lift through `height`. Both spirals and the cycloid accept signed, nonzero `turns` up to 32 in magnitude. For rolling curves with the pen on the rim, `breaks` includes the cusp parameters and path endpoints. Both uniform and adaptive sampling retain the cusp stations. Motion and cameras sample distance along the resulting path.
 
-The [Rolling Curves gallery](../examples/rolling-curve-gallery.js) compares all five families. [Gear Lantern](../examples/gear-lantern.js) combines two rolling ribbons with a lettered Fermat spiral and an Archimedean camera rail.
+The [Rolling Curves gallery](../examples/rolling-curve-gallery.js) compares all five families and sets lettering along one cycloid arch. [Gear Lantern](../examples/gear-lantern.js) combines two rolling ribbons with a lettered Fermat spiral and an Archimedean camera rail.
 
 ```sh
 node cli/ink-studio.js render examples/rolling-curve-gallery.js --w 1000 --h 630 --out rolling-curves.png
