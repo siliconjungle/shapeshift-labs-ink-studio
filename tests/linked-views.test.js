@@ -178,6 +178,16 @@ try {
   fired.push(session.snapshot().selection.length);
   ui.destroy();
   fired.push(root.childElementCount);
+  const themed=mountLinkedViews(host,{session,panels:['table','chart'],chart:{x:'$time',y:'reading'},
+    controls:{filter:false,time:false,clear:false},labels:{chart:'Readings'},
+    defaultStyles:false,stylesheet:
+      ':host{display:block} [hidden]{display:none} [part=panels]{display:grid} canvas{width:300px;height:150px;--ink-linked-plot-background:#f2e1d0}'});
+  themed.render();
+  const ctx=at('[data-view="chart"]').getContext('2d');
+  fired.push(Array.from(root.querySelectorAll('[data-panel]'),node=>node.dataset.panel).join(','),
+    root.querySelectorAll('style').length,at('[data-label="chart"]').textContent,at('[part=toolbar]').hidden,
+    Array.from(ctx.getImageData(0,0,1,1).data).join(','));
+  themed.destroy();
   result.textContent=JSON.stringify(fired);
 } catch(error) {result.textContent=error.stack;}
 </script>`);
@@ -188,7 +198,8 @@ try {
     const result=output.match(/<pre id="result">([^<]*)<\/pre>/)?.[1];
     const decoded=result?.replaceAll('&gt;','>').replaceAll('&lt;','<').replaceAll('&amp;','&');
     assert(decoded?.startsWith('['),decoded||'Browser did not report linked view results');
-    assert.deepEqual(JSON.parse(decoded),['A','B','true','C','ABC','2 s','B\t50',2,'true',0,0]);
+    assert.deepEqual(JSON.parse(decoded),['A','B','true','C','ABC','2 s','B\t50',2,'true',0,0,
+      'table,chart',1,'Readings',true,'242,225,208,255']);
   } finally {
     fs.rmSync(dir,{recursive:true,force:true});
   }
