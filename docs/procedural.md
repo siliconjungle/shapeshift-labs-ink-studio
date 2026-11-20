@@ -170,6 +170,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `splatCodec.encode(data, count, options)`, `splatCodec.decode(bytes, options)` | Compact, ordered native splat rows for offline delivery |
 | `motion.streamline(field, start, options)`, `motion.obstacleWake(sdf, options)`, `motion.loopTrajectory(points, options)`, `motion.surfaceAdvection(chart, seeds, options)` | Field integration, wake and curl sampling, closed tracks and UV-attached motion |
 | `motion.stableFluid(options)`, `motion.shallowWater(options)` | Persistent density and velocity grids, and conservative terrain-aligned water |
+| `motion.scalarWave(options)` | [Wave propagation through geometry](scalar-wave.md) with reflecting walls, absorbing edges, and retained pressure frames |
 | `motion.surfaceWeather(options)`, `motion.materialStateGraph(machine, entities, options)` | Persistent wetness and thermal fields, and event-driven material changes |
 | `motion.transportSplats(source, target, options)` | Balanced mass correspondences and barycentric splat targets |
 | `contours.march(field, options)` | Bounded marching-squares paths at a scalar level |
