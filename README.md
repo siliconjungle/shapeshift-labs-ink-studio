@@ -997,3 +997,5 @@ Licensed under the [MIT License](LICENSE).
 Surface fragments can detach, follow shared wind, gather into live forms, and rejoin animated parts. See [surface materialisation](docs/materialisation.md) and the [interactive matter relay](examples/materialisation.html).
 
 Named targets can drive shared brackets, labels, glyph ripples, depth visibility and optional magnified views. See [target inspection effects](docs/target-inspection.md) and the [interactive relay observatory](examples/target-inspection.html).
+
+`KIT.palette` adds dependency-free two-color recipes, independent OKLCh channel curves, named material roles, reference-ramp transfer, and seekable palette paths. See [palette recipes](docs/palette-recipes.md) and the [interactive Chromatic garden](examples/palette-recipes.html). Export colors with `ink-studio palette examples/palette-recipe.json`.

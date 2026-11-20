@@ -95,6 +95,7 @@
     return P.data.freeze({ rgb: colors, hex: colors.map(toHex), sample });
   }
 
+  P.materials.perceptual = Object.freeze({ parse, lab, gamut, angle, toHex });
   P.materials.ramp = ramp;
   P.materials.colorCurves = ColorCurves;
 })(KIT);

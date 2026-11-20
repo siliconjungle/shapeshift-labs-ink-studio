@@ -2445,6 +2445,8 @@ triples or hex colors and optional explicit `{at, color}` stops. Use
 OKLab (`lab`) or OKLCh (`lch`) interpolation. It provides normalized
 `rgb`, packed `hex`, and a continuous `sample(t)` function.
 
+For independent OKLCh channel curves, two-color recipes, role assignment, reference transfer and animated palette paths, see [`KIT.palette`](palette-recipes.md).
+
 `geometry.distanceTransform(mask, {size, spacing, signed, indices})`
 finds exact center-to-center Euclidean distances in a 2D or 3D binary
 grid. Store X as the fastest-moving axis. In signed mode occupied
