@@ -103,6 +103,17 @@ function studio({KIT:K,makeBuilder,makeSculpt,SpriteSurface},seed){
     const world=B.finish({cam,spriteSurfaces:sprites.finish(),radius:8,detail:23,dither:.039,
       look:{pixelSize:1,splatCoverage:'continuous'}});
     const stage=K.stage(world);
+    effects.post=(_dt,_time,stage)=>{
+      // Hidden positions still affect WebGL depth quantization. Restore the pool's parked coordinates.
+      const data=stage.D;
+      for(let i=effects.first;i<effects.first+effects.count;i++){
+        const offset=16*i;
+        if(data[offset+3]||!data[offset]&&!data[offset+2])continue;
+        data[offset]=0;
+        data[offset+2]=0;
+        stage.touch(i);
+      }
+    };
     stage.add(effects);
     stage.stateful=false;
     stage.update(0,0);
