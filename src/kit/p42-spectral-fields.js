@@ -262,7 +262,12 @@
           return tuple(point, dimensions) ? sample(name, ...point) : null;
         } });
       }
-      const row = Object.freeze({ time, dimensions, bounds, channels: names, details, sample, gradient, towardNodes, nodalLines, source });
+      function outputs() {
+        const channels = Object.fromEntries(names.map(name =>
+          [name, name === 'phase' ? { units: 'rad', range: [-Math.PI, Math.PI] } : {}]));
+        return K.fieldOutputs.create({ bounds, channels, sample: details, sampleChannel: sample });
+      }
+      const row = Object.freeze({ time, dimensions, bounds, channels: names, details, sample, gradient, towardNodes, nodalLines, source, outputs });
       if (drive === undefined) previous = row;
       return row;
     }

@@ -143,7 +143,11 @@
         const segments = seams(by);
         return clock >= endTime ? segments : Object.freeze(segments.filter(segment => segment.time <= clock));
       }
-      return Object.freeze({ time: clock, data, sample, source, seams: contacts });
+      function outputs() {
+        return K.fieldOutputs.create({ bounds, sampleChannel: sample,
+          channels: { arrival: {}, age: {}, material: { type: 'category' }, seed: { type: 'category' } } });
+      }
+      return Object.freeze({ time: clock, data, sample, source, seams: contacts, outputs });
     }
 
     return Object.freeze({ width, height, bounds, endTime, materials: P.data.freeze(settings), seeds: P.data.freeze(starts),

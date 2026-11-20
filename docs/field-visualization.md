@@ -2,6 +2,8 @@
 
 `KIT.fieldViews` extracts geometry from bounded scalar and vector fields. Render it as native Gaussian splats in the Node and WebGL renderers, or consume the sampled values, paths, triangles, and vectors directly.
 
+[Shared field outputs](shared-field-outputs.md) routes named channels from procedural generators into these same views, as well as pigment, relief, and density.
+
 ## Field sources
 
 - `source({ type, sample, bounds, units, components })` wraps a function of world-space `(x, y, z)`. The bounds give XYZ `min` and `max`. Types are `number`, `vec3`, and `vec2`. Two-component vectors can use `xy`, `xz` (default), or `yz` and are promoted to XYZ.

@@ -136,7 +136,7 @@
           distribute(x, z, (i, w) => {
             for (let c = 0; c < 3; c++) rgb[c] += w * values[3 * i + c];
           });
-          return rgb;
+          return rgb.map(value => clamp(value, 1));
         }
         let result = 0;
         distribute(x, z, (i, w) => { result += w * values[i]; });
@@ -151,7 +151,12 @@
           return vector(local, 2) ? sample(name, ...local) : null;
         } });
       }
-      return Object.freeze({ tick, time, events, sample, source, data: name => buffer(name).slice() });
+      function outputs() {
+        const descriptors = Object.fromEntries(names.map((name, i) => [name, { range: [0, specs[i].capacity] }]));
+        if (finish) Object.assign(descriptors, { color: { type: 'rgb' }, roughness: { range: [0, 1] }, relief: {} });
+        return K.fieldOutputs.create({ bounds, channels: descriptors, sampleChannel: sample });
+      }
+      return Object.freeze({ tick, time, events, sample, source, outputs, data: name => buffer(name).slice() });
     }
 
     const available = () => check(!stepping, 'cannot change the simulation during a step');

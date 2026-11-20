@@ -154,7 +154,28 @@
       if (['phase', 'logMagnitude'].includes(channel)) return (re, im) => domain(re, im)[channel];
       throw new RangeError('Unknown complex field channel or trap ID');
     }
-    return Object.freeze({ family, sample, domain, field });
+    function outputs({ bounds = { min: [-2, -2], max: [2, 2] } } = {}) {
+      const traps = new Map(targets.map(({ id }) => ['trap:' + id, id]));
+      const angle = { units: 'rad', range: [-Math.PI, Math.PI] };
+      const channels = { status: { type: 'category' }, iterations: { range: [0, iterations] },
+        escapeTime: {}, basinId: { type: 'category' }, phase: angle, logMagnitude: {}, rgb: { type: 'rgb' },
+        ...Object.fromEntries(Array.from(traps.keys(), name => [name, {}])) };
+      return K.fieldOutputs.create({
+        bounds: { min: pair(bounds.min), max: pair(bounds.max) },
+        channels,
+        sample(re, im) {
+          const orbit = sample(re, im), { phase, logMagnitude, rgb } = domain(re, im);
+          return { ...orbit, phase, logMagnitude, rgb,
+            ...Object.fromEntries(Array.from(traps, ([name, id]) => [name, orbit.trap[id]])) };
+        },
+        sampleChannel(name, re, im) {
+          if (['phase', 'logMagnitude', 'rgb'].includes(name)) return domain(re, im)[name];
+          const orbit = sample(re, im);
+          return traps.has(name) ? orbit.trap[traps.get(name)] : orbit[name];
+        }
+      });
+    }
+    return Object.freeze({ family, sample, domain, field, outputs });
   }
 
   P.complexPlane = Object.freeze({ compile });

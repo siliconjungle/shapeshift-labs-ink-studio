@@ -180,6 +180,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `sampleVisibility.create(count)`, `splatOrder.compile(indices, depthAt)` | Packed visibility updates and reusable depth buckets for retained samples |
 | `splatCodec.encode(data, count, options)`, `splatCodec.decode(bytes, options)` | Compact, ordered native splat rows for offline delivery |
 | `motion.streamline(field, start, options)`, `motion.obstacleWake(sdf, options)`, `motion.loopTrajectory(points, options)`, `motion.surfaceAdvection(chart, seeds, options)` | Field integration, wake and curl sampling, closed tracks and UV-attached motion |
+| `KIT.fieldOutputs.create(options)` | [Shared field outputs](shared-field-outputs.md) for named pigment, relief, density, contour, splat, and geometry sources |
 | `KIT.fieldViews.lic(field, options)` | [Vector-field painting](vector-field-painting.md) with aligned grain, obstacle masks, and traveling convolution kernels |
 | `motion.stableFluid(options)`, `motion.shallowWater(options)` | Persistent density and velocity grids, and conservative terrain-aligned water |
 | `motion.coupledFluid(options)` | [Bidirectional field–particle coupling](field-particle-coupling.md) for flow, dye, and drag feedback |
