@@ -132,6 +132,7 @@ const mesh = P.geometry.toKitMesh(geometry, (owner, material) => [.6, .64, .61])
 | `tiles.compile(definitions)`, `tiles.solve(model, options)`, `tiles.learn(swatch)`, `tiles.overlap(bank, options)`, `tiles.wang(model, options)`, `tiles.refine(coarse, model, options)` | Weighted matched sockets, example-based synthesis, world-stable patterns and coarse-to-fine layouts |
 | `tiles.quasiperiodic(options)` | [Penrose and Ammann–Beenker substitutions](quasiperiodic-tilings.md) with clipped tile polygons and stable address lineage |
 | `tiles.hyperbolic(options)`, `packing.apollonian(options)` | [Poincaré tilings and tangent circle packings](hyperbolic-mosaics.md) with bounded detail and stable addresses |
+| `complexPlane.compile(options)` | [Mandelbrot, Julia, and Newton fields](complex-plane-fields.md) with independent escape, basin, orbit-trap, and domain coloring outputs |
 | `fields.simplex(options)`, `fields.periodic(options)`, `fields.compile(expression, options)` | Seeded analytic noise and serializable field composition for SDFs, materials and placement |
 | `grammar.expand(scope, rules, options)`, `grammar.children(layout)` | Bounded shape grammar with named partitions, fitted repeats, pinned spans, sockets and retained child specs |
 | `grammar.rewriteGrid(rows, rules)`, `grammar.rewriteGraph(graph, rules)` | Seeded weighted pattern replacement on scalar grids and directed graphs |
