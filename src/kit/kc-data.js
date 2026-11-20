@@ -574,6 +574,11 @@
       bad('finish.look.detailBudgets', error.message);
     }
     try {
+      PassQuality.prepare(look?.passQuality);
+    } catch (error) {
+      bad('finish.look.passQuality', error.message);
+    }
+    try {
       SdfAssist.prepare(look?.sdfAssist);
     } catch (error) {
       bad('finish.look.sdfAssist', error.message);
@@ -1740,6 +1745,7 @@
       )
     );
     if (staticBake && !baked) cache.write('splats', bakeKey, cacheAPI.pack(W));
+    if (pool) W.qualityParticleRanges = [{ first: pool.first, count: pool.n }];
     bindBreakables(W);
     const marksSystem = marks && K.dataMarks.bind(W, marks, dataMarks, { first: firstMark, query: marksQuery });
     if (cameraRig) K.cameraRig.bind(W, cameraRig, {

@@ -84,6 +84,17 @@ async function browserProbe(createRenderer){
   if(first.center[0]<50||first.center[1]>5)throw Error('red reflection behind textured bed: '+first.center);
   if(second.center[1]<50||second.center[0]>5)throw Error('second elevated pool: '+second.center);
   if(disabled.center[1]<50||first.center[1]>5)throw Error('reflection toggle: '+disabled.center);
+  const blit=gl.blitFramebuffer.bind(gl), scaledCaptures=[];
+  gl.blitFramebuffer=(...args)=>{scaledCaptures.push(args.slice(0,8));return blit(...args);};
+  const passQuality={reflections:{primary:['mirror0'],secondaryScale:.5}};
+  const sharp=draw(-2,0,{passQuality}).center, scaled=draw(2,1,{passQuality}).center;
+  const culled=draw(2,1,{passQuality:{reflections:{primary:['mirror0'],maxSecondary:0}}}).center;
+  gl.blitFramebuffer=blit;
+  if(sharp.some((n,i)=>n!==first.center[i])||scaled[1]-Math.max(scaled[0],scaled[2])<50||
+    culled[1]-Math.max(culled[0],culled[2])>10)
+    throw Error('secondary reflection quality changed the primary or lost the fallback: '+[sharp,scaled,culled]);
+  if(scaledCaptures.length!==2||scaledCaptures.some(copy=>copy[2]!==49||copy[3]!==49))
+    throw Error('secondary reflection did not use a half-size framebuffer: '+scaledCaptures);
   world.water=KIT.procedural.waterBodies.scene(volumes(false,true));
   const atlasFirst=draw(-2,0).center,atlasSecond=draw(2,1).center;
   if(atlasFirst.some((v,i)=>Math.abs(v-first.center[i])>1)||atlasSecond.some((v,i)=>Math.abs(v-second.center[i])>1))

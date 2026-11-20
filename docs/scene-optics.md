@@ -414,6 +414,21 @@ planner cannot infer as mutable too. `visibleIndices` writes the original
 indices for each retained group using a column-major view-projection matrix.
 Use its returned count as the instance count for color, ID and mask passes.
 
+## Render pass quality
+
+Set `look.passQuality` on a world or `finish.look.passQuality` in diorama JSON. Override the profile with `render(world, { passQuality })` or `renderer.render(world, { passQuality })`. Pass `false` to use full quality for that frame. The CLI accepts `--pass-quality file.json|off`.
+
+| Control | Work it scales |
+| --- | --- |
+| `background: { select, retain }` | Retain a stable fraction of eligible opaque splats matched by target selectors. The fraction ranges from 0.125 to 1. Select distant detail that can be thinned. Transparent, emissive, and special-purpose rows retain their authored coverage. |
+| `particles: { retain, select }` | Retain a stable fraction of particle rows from 0 to 1. Precipitation, effect pools, and afterimage rows are recognized automatically. Optional selectors include additional rows. Custom worlds can declare `qualityParticleRanges` with `{ first, count }` records. Particle states and identifiers stay intact. |
+| `reflections: { primary, secondaryScale, maxSecondary }` | Preserve the regular capture resolution for named primary planes and probes. Scale the secondary width and height from 0.125 to 1, or cap the number of secondary captures. If `primary` is omitted, the first eligible capture of each type is primary. The headless renderer scales planar captures and local probes. WebGL scales its planar water captures. |
+| `preserve` | List additional target selectors whose original rows remain submitted. Data marks and configured silhouette protection targets are included automatically. |
+
+The scaling changes the render submission while retaining the source world and original splat IDs. An omitted plane or probe uses the existing material fallback. A scaled WebGL capture is rendered to a smaller target before it is copied into the reflection atlas.
+
+Headless `renderStats` includes submitted and omitted rows across raster passes, planar capture pixels, and local probe pixels. A lower particle fraction reduces draw work while the world continues to advance the authored effects.
+
 ## Ordered ink coverage
 
 `InkVeil.footprint(bounds, size, signedDistance, feather)` bakes an R8 mask

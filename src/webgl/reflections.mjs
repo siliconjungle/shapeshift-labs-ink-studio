@@ -1,5 +1,5 @@
 // Existing planar cameras, bounded captures, and source selection for live water.
-export function waterReflectionPlan(world, frame, camera, width, height, reflection, textureLimit = Infinity) {
+export function waterReflectionPlan(world, frame, camera, width, height, reflection, textureLimit = Infinity, levelsFor) {
   const ids = frame.water !== false && frame.reflections !== false && world.water?.reflectionPlanes;
   if (!ids?.length) return null;
   if (!reflection) throw new TypeError('Water captures require KIT.reflection in the toolkit');
@@ -22,7 +22,6 @@ export function waterReflectionPlan(world, frame, camera, width, height, reflect
     heights[slot] = plane.at[1];
     const capture = reflection.captureView(camera.view, plane, camera.eye);
     if (!capture) return null;
-    active[slot] = 1;
     const eye = camera.eye.slice();
     eye[1] = 2 * plane.at[1] - eye[1];
     const equation=capture.equation.slice();
@@ -30,8 +29,16 @@ export function waterReflectionPlan(world, frame, camera, width, height, reflect
     return { slot, plane, equation,
       camera: { ...camera, eye, view: capture.view } };
   }).filter(Boolean);
-  return { captures, active, heights, count: ids.length, width: Math.max(1, Math.round(width * factor)),
-    height: Math.max(1, Math.round(height * factor)), grid: [2, Math.ceil(ids.length / 2)] };
+  const w = Math.max(1, Math.round(width * factor)), h = Math.max(1, Math.round(height * factor));
+  const levels = levelsFor?.(captures.map(capture => capture.plane.id));
+  const retained = [];
+  for (const capture of captures) {
+    const scale = levels?.get(capture.plane.id) ?? 1;
+    if (!scale) continue;
+    active[capture.slot] = 1;
+    retained.push({ ...capture, width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) });
+  }
+  return { captures: retained, active, heights, count: ids.length, width: w, height: h, grid: [2, Math.ceil(ids.length / 2)] };
 }
 
 export function selectReflectionWorld(world, plane, time, toolkit) {

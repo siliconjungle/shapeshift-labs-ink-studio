@@ -745,6 +745,8 @@ reuse measurements across seeds and settings and report aligned results.
 keep terrain, surface, and object edits across saves, travel, and resumed region streams.
 
 [Scene-aware streaming](docs/procedural.md#scene-aware-streaming) prioritizes nearby detail, selected subjects, and visible portal destinations within memory and frame budgets.
+
+[Render pass quality](docs/scene-optics.md#render-pass-quality) scales background splats, particles, and secondary reflections while protecting focal subjects and data marks.
 [Editable water boundaries](docs/headless-worlds.md#editable-water-boundaries)
 define regional sources, sinks, barriers, open edges, and exchange with spatial head fields.
 [Simulation workers](docs/simulation-workers.md) run custom and built-in

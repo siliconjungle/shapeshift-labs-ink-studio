@@ -313,7 +313,14 @@ function skyTransitionsOption() {
   if (typeof value !== 'string') die('--sky-transitions needs a JSON array file or off');
   return skyTransitionsOverride ??= JSON.parse(fs.readFileSync(path.resolve(value),'utf8'));
 }
-let inspectionOverride, shadowArtOverride, compositeOverride, cutawayOverride, renderGraphOverride, afterimagesOverride, reconstructionOverride;
+let inspectionOverride, shadowArtOverride, compositeOverride, cutawayOverride, renderGraphOverride, afterimagesOverride, reconstructionOverride, passQualityOverride;
+function passQualityOption() {
+  const value = opt['pass-quality'];
+  if (value === undefined) return;
+  if (value === 'off') return false;
+  if (typeof value !== 'string') die('--pass-quality needs a JSON file or off');
+  return passQualityOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
+}
 function shadowArtOption() {
   const value = opt['shadow-art'];
   if (value === undefined) return;
@@ -742,6 +749,7 @@ const view = extra =>
       surface: opt.surface === 'off' ? false : undefined,
       water: opt.water === 'off' ? false : undefined,
       reflections: opt.reflections === 'off' ? false : undefined,
+      passQuality: passQualityOption(),
       reflectionProbes: onOffOption('reflection-probes'),
       transmission: onOffOption('transmission'),
       surfaceDetailKits: onOffOption('surface-detail-kits'),
@@ -984,6 +992,7 @@ const CMD = {
         'any command that plays a diorama takes --poke 2:x,y,z (tap it at 2 seconds, toward that point; several with ;)',
         'sun options: --live-sun on|off --sun-direction x,y,z --sun-ambient n --sun-intensity n --shadow-map-size n --shadow-bias n --sun-shadows off',
         'shadow art: --shadow-art file.json|off for baked JSON scenes and live sun',
+        'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
         'detail-preserving relighting: --relighting on|off|file.json --sky-time seconds',
         'bounce options: --sky-bounce color|preset|off --ground-bounce color|preset|off --sky-bounce-intensity n --ground-bounce-intensity n',
         'cloud options: --cloud-field cirrus|coastal-stratus|cumulus|storm-front|file.json|off --cloud-representation auto|card|impostor|volume|off --cloud-shadows on|off --cloud-shadow-strength 0..1 --cloud-shadow-softness units',

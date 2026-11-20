@@ -86,6 +86,12 @@ test('headless material layers sample the scene in both projections and export r
     const on=render(world,options), off=render(world,{...options,reflectionProbes:false});
     assert.equal(on.renderStats.reflectionProbeFaces,6);
     assert.equal(off.renderStats.reflectionProbeFaces,0);
+    const low=render(world,{...options,passQuality:{reflections:{primary:[],secondaryScale:.5}}});
+    assert.equal(low.renderStats.reflectionProbePixels,6*32*32);
+    assert(low.passes.reflections.some(value=>value>.25));
+    const skipped=render(world,{...options,passQuality:{reflections:{primary:[],maxSecondary:0}}});
+    assert.equal(skipped.renderStats.reflectionProbeFaces,0);
+    assert.deepEqual(skipped.rgb,off.rgb);
     assert(on.passes.reflections.some(value=>value>.35));
     assert(!off.passes.reflections.some(Boolean));
     assert.notDeepEqual(on.rgb,off.rgb);

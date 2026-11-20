@@ -30,7 +30,7 @@ function surfacePoint(ray, normal, x, y, z, axialDepth, radius) {
   return origin.map((n, i) => n + distance * direction[i]);
 }
 
-function reflectionSampler(planes, render, view, eye, scale) {
+function reflectionSampler(planes, render, view, eye, scale, { quality, width, height } = {}) {
   const definitions = new Map(),
     captures = new Map();
   for (const value of planes) {
@@ -39,12 +39,16 @@ function reflectionSampler(planes, render, view, eye, scale) {
     if (SceneOptics.planeDistance(plane, ...eye) > plane.bias) definitions.set(plane.id, plane);
     else definitions.set(plane.id, null);
   }
+  const levels = quality?.captures && require('../src/pass-quality.js').reflectionPlan(quality,
+    [...definitions.values()].filter(Boolean).map(plane => plane.id));
+  for (const [id, factor] of levels ?? []) if (!factor) definitions.set(id, null);
   const rgb = [0, 0, 0],
     reflected = { rgb, coverage: 0 };
   function sample(layer, x, y, dx, dy, dz, background) {
     const plane = definitions.get(layer.plane);
     if (!plane) return null;
-    if (!captures.has(plane.id)) captures.set(plane.id, render(plane));
+    const factor = levels?.get(plane.id) ?? 1;
+    if (!captures.has(plane.id)) captures.set(plane.id, render(plane, factor));
     const frame = captures.get(plane.id);
     const distortion = (layer.distortion ?? 5) * scale;
     x += distortion * (view[0] * dx + view[4] * dy + view[8] * dz);
@@ -54,9 +58,10 @@ function reflectionSampler(planes, render, view, eye, scale) {
       green = 0,
       blue = 0,
       alpha = 0;
+    const sx = factor === 1 ? 1 : frame.w / width, sy = factor === 1 ? 1 : frame.h / height;
     function tap(tx, ty, weight) {
-      tx = Math.floor(tx);
-      ty = Math.floor(ty);
+      tx = Math.floor(tx * sx);
+      ty = Math.floor(ty * sy);
       if (tx < 0 || tx >= frame.w || ty < 0 || ty >= frame.h) return;
       const p = ty * frame.w + tx,
         j = p * 3;

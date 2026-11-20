@@ -1,5 +1,6 @@
 const { performance } = require('node:perf_hooks');
 const frameBudget = require('../src/frame-budget.js');
+const PassQuality = require('../src/pass-quality.js');
 // Draws a world without a browser: motion kinds, projection of each splat's covariance to a screen ellipse,
 // blending from far to near, low-resolution sampling, dithering and palette quantization.
 const FOV = (38 * Math.PI) / 180;
@@ -238,6 +239,7 @@ function render(world, o, preparedPalettes) {
   const start = performance.now();
   const counters = {
     rasterPasses:0, reflectionProbeFaces:0, fragments:0, translucentFragments:0, peakDeferredFragments:0, deferredFlushes:0,
+    planarCaptures:0, planarPixels:0, reflectionProbePixels:0, splatRows:0, omittedBackgroundRows:0, omittedParticleRows:0,
     volume:{ traces:0, boundsTests:0, boundsCacheHits:0, mediaQueries:0, mediaCacheHits:0, fullFogCacheHits:0, emptyFogIntervals:0, raySamples:0,
       analyticSegments:0, marchSteps:0, densitySamples:0, skipTests:0, skippedSteps:0, cloudTraces:0, cloudSamples:0 }
   };
@@ -257,6 +259,7 @@ function renderFrame(world, o, preparedPalettes) {
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
   const direction = ArtDirection.prepare(look.artDirection,o.artDirection);
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
+  const passQuality = PassQuality.prepare(o.passQuality ?? look.passQuality);
   const subject = protection?.bind(world);
   const sceneTime = o.t ?? world.lookSnapshot?.time ?? 0;
   const authored = world.cameraRig?.sample(o?.cameraTime ?? world.timeDomains?.read('camera').sampleTime ?? sceneTime, { shot: o.cameraShot }).camera;
@@ -577,6 +580,12 @@ function renderFrame(world, o, preparedPalettes) {
     if (d === world.data) d = d.slice(0, baseCount * 16);
     paint.paint(d, world.pal, paintView);
   }
+  const qualityRows = PassQuality.planRows(world, passQuality, { data: d, count: N, particleStart: baseCount, protection });
+  if (counters) {
+    counters.splatRows += qualityRows?.submitted ?? N;
+    counters.omittedBackgroundRows += qualityRows?.backgroundSkipped ?? 0;
+    counters.omittedParticleRows += qualityRows?.particlesSkipped ?? 0;
+  }
   const mediumLook = medium => optics?.transform(medium) ?? PixelLook.mediumTransform(paletteRules, medium);
   const colorForVolume = volume => mediumLook(TargetSelectors.medium(volume.id, volume.mediumKind ?? volume.type, volume.tags));
   const depthBands = o.atmosphere === false ? [] : AtmosphereDepthBands.settings(
@@ -706,9 +715,10 @@ function renderFrame(world, o, preparedPalettes) {
     o.surface !== false && o.reflections !== false && world.reflections?.length
       ? reflectionSampler(
           world.reflections,
-          plane =>
-            render(world, {
+          (plane, factor) => {
+            const capture = render(world, {
               ...o,
+              ...(factor < 1 && { w: Math.max(1, Math.round(W * factor)), h: Math.max(1, Math.round(H * factor)), px: 1 }),
               samples: false,
               colored: false,
               worked: false,
@@ -725,17 +735,32 @@ function renderFrame(world, o, preparedPalettes) {
               water: false,
               reflections: false,
               edges: false
-            }),
+            });
+            if (counters) {
+              counters.planarCaptures++;
+              counters.planarPixels += capture.w * capture.h;
+            }
+            return capture;
+          },
           V,
           eye,
-          o.reflectionScale ?? 1
+          o.reflectionScale ?? 1,
+          { quality: passQuality, width: W, height: H }
         )
       : null;
-  const definitions = useLocalReflections ? ReflectionProbes.prepare(world.reflectionProbes) : [];
+  let definitions = useLocalReflections ? ReflectionProbes.prepare(world.reflectionProbes) : [];
+  const probeLevels = PassQuality.reflectionPlan(passQuality, definitions.map(probe => probe.id));
+  if (probeLevels) definitions = definitions.filter(probe => probeLevels.get(probe.id)).map(probe => {
+    const factor = probeLevels.get(probe.id);
+    return factor === 1 ? probe : { ...probe, size: Math.max(4, 2 ** Math.floor(Math.log2(probe.size * factor))) };
+  });
   const probeFilters = definitions.length && new Map();
   const localReflection = definitions.length ? ReflectionProbes.sampler(definitions, (probe, face) => {
     if (!probeFilters.has(probe.id)) probeFilters.set(probe.id, ShadowArt.bind({ cast:probe.capture }, captureWorld,'cast'));
-    if (counters) counters.reflectionProbeFaces++;
+    if (counters) {
+      counters.reflectionProbeFaces++;
+      counters.reflectionProbePixels += probe.size ** 2;
+    }
     return render(captureWorld, {
       ...o, [probeCamera]:{ matrix:ReflectionProbes.view(probe.at,face), near:probe.near, allow:probeFilters.get(probe.id) },
       target:probe.at, dist:1, yaw:0, pitch:0, fov:Math.PI/2, lensScale:1, lockCamera:true, ortho:false,
@@ -827,6 +852,7 @@ function renderFrame(world, o, preparedPalettes) {
     wet = new Float32Array(N);
   const sampleWithdrawal = SampleCoverage.amount(o.sampleWithdrawal ?? world.sampleWithdrawal ?? 0);
   for (let i = 0, q = 0; i < N; i++, q += 16) {
+    if (qualityRows && !qualityRows.keep[i]) continue;
     let x = d[q],
       y = d[q + 1],
       z = d[q + 2],
@@ -975,12 +1001,12 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const relight = relative && SplatRelighting.rows(world, relative, sampleFrames(world, t), { x: X, y: Y, z: Z, alpha: AL });
   let mn = Infinity;
-  for (let i = 0; i < N; i++) if ((i < baseCount || AL[i] > 0) && depth[i] < mn) mn = depth[i];
+  for (let i = 0; i < N; i++) if ((!qualityRows || qualityRows.keep[i]) && (i < baseCount || AL[i] > 0) && depth[i] < mn) mn = depth[i];
   const mediumHorizon = aerial ? Math.max(horizon, -mn + R) : horizon;
   const backRows = blendDepth && world.back?.length ? new Set(world.back) : null;
   if (world.back) for (let j = 0; j < world.back.length; j++) depth[world.back[j]] = mn;
-  const order = new Uint32Array(N);
-  for (let i = 0; i < N; i++) order[i] = i;
+  const order = new Uint32Array(qualityRows?.submitted ?? N);
+  for (let i = 0, j = 0; i < N; i++) if (!qualityRows || qualityRows.keep[i]) order[j++] = i;
   order.sort((a, b) => depth[a] - depth[b]);
   if (transparency && !blendDepth) {
     const { depthTolerance: tolerance } = transparency;
@@ -1264,7 +1290,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (blendDepth) countDeferred();
     deferred.set(sample.p,[{sort:sample.z,center:sample.z,index:-1e9,transparent:false,sample:spriteSample(sample)}]);
   }
-  for (let n = 0; n < N; n++) {
+  for (let n = 0; n < order.length; n++) {
     const i = order[n];
     if ((!sortedSurfaces || !deferred) && spriteIndex<sprites.length) playSprites(-depth[i],false);
     const q = i * 16,
