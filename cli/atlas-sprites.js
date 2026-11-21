@@ -13,7 +13,7 @@ function heading(v) {
 
 function rasterize(placements, settings) {
   if (!placements.length) return [];
-  const {eye,V,W,H,focal,ortho,near,rayAt,time:sceneTime,override,sun,visibility,clip,objectDither,subject,captureIds,shutterTime,reconstructed,spriteLOD}=settings;
+  const {eye,V,W,H,focal,ortho,near,rayAt,time:sceneTime,interfaceTime,override,sun,visibility,clip,objectDither,subject,captureIds,shutterTime,reconstructed,spriteLOD}=settings;
   if (override!==undefined&&!['card','impostor','scenery'].includes(override))
     throw new RangeError('Sprite atlas mode must be card, impostor or scenery');
   const results=[];
@@ -25,6 +25,10 @@ function rasterize(placements, settings) {
     return [W*.5+scale*(V[0]*x+V[4]*y+V[8]*z+V[12]),
       H*.5+scale*(V[1]*x+V[5]*y+V[9]*z+V[13]),depth];
   };
+  const frameView = { project(point) {
+    const [x, y, depth] = project(point);
+    return [x, H - y, depth];
+  } };
   const effectColor=[0,0,0];
   function fragmentAt(ray, hit) {
     const z=hit*ray.axial;
@@ -35,7 +39,8 @@ function rasterize(placements, settings) {
   const sample={ color:[0,0,0],normal:[0,0,0],emission:[0,0,0] };
   for (const placement of placements) {
     const lod=reconstructed?.get(placement);
-    const time = lod ? sceneTime : shutterTime?.(placement) ?? sceneTime;
+    const time = lod ? sceneTime :
+      placement.clock === 'interface' ? interfaceTime ?? sceneTime : shutterTime?.(placement) ?? sceneTime;
     const {atlas,opacity}=placement, mode=lod?'impostor':override??placement.mode;
     const protection=subject?.({object:placement.objectId,entity:placement.objectId,material:placement.materialId});
     const ids = captureIds && { objectId: placement.objectId, materialId: placement.materialId };
@@ -48,7 +53,7 @@ function rasterize(placements, settings) {
     const direction=ortho||exact?viewForward:unit(eye.map((n,i)=>n-at[i]));
     if (!direction||(!fixed&&anchorScreen[2]<near)) continue;
     const rotation=basis(placement.yaw,0);
-    const frame=lod?undefined:typeof placement.frame==='function'?placement.frame(time):placement.frame??placement.frameAt?.(time);
+    const frame=lod?undefined:typeof placement.frame==='function'?placement.frame(time,frameView):placement.frame??placement.frameAt?.(time);
     const tile=lod?.view??atlas.select(frame,mode,local(rotation,direction));
     const effect=atlas.effect?.(tile);
     const normalAxes=basis(tile.yaw+placement.yaw,tile.pitch);

@@ -65,8 +65,8 @@ const FrameComposite = (() => {
     record(world, ['resolution', 'filter'], 'world composite');
     if (!Array.isArray(layers)) throw new TypeError('Composite layers must be an ordered list');
     const prepared = Array.from(layers, layer => {
-      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations', 'rect', 'directionDrawing'], 'composite layer');
-      const { opacity = 1, blend = 'over', draw, source, rect, directionDrawing } = layer;
+      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations', 'rect', 'directionDrawing', 'needsCamera'], 'composite layer');
+      const { opacity = 1, blend = 'over', draw, source, rect, directionDrawing, needsCamera = false } = layer;
       if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new RangeError('Layer opacity must be in [0, 1]');
       if (blend !== 'over' && blend !== 'add') throw new TypeError('Layer blend must be over or add');
       const layout = annotations.prepare(layer.annotations);
@@ -76,15 +76,17 @@ const FrameComposite = (() => {
       const hasDrawing = draw !== undefined || layout !== null || directionDrawing !== undefined;
       if (hasDrawing === (source !== undefined) || draw !== undefined && !Array.isArray(draw))
         throw new TypeError('A layer needs drawing commands, annotations or a raster source');
+      if (typeof needsCamera !== 'boolean' || (needsCamera && typeof source !== 'function'))
+        throw new TypeError('A camera-dependent raster layer needs a source function');
       if (rect !== undefined && (hasDrawing || !tuple(rect, 4) || rect[2] <= 0 || rect[3] <= 0 ||
         !Number.isFinite(rect[0] + rect[2]) || !Number.isFinite(rect[1] + rect[3])))
         throw new RangeError('A raster layer rectangle needs finite XY and positive size');
       if (source !== undefined && typeof source !== 'function') image(source);
-      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout, directionDrawing, rect: rect?.slice(),
+      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout, directionDrawing, needsCamera, rect: rect?.slice(),
         draw: draw && Array.from(draw, command) };
     });
     return { world: { resolution: resolution(world.resolution), filter: filter(world.filter) }, layers: prepared,
-      needsCamera: prepared.some(layer => layer.opacity > 0 && (layer.directionDrawing || layer.layout?.needsCamera ||
+      needsCamera: prepared.some(layer => layer.opacity > 0 && (layer.needsCamera || layer.directionDrawing || layer.layout?.needsCamera ||
         layer.draw?.some(draw => draw.needsCamera))) };
   }
 
@@ -279,7 +281,7 @@ const FrameComposite = (() => {
       const gpu = gl && typeof layer.source === 'function' && layer.source[textureSource]?.(gl);
       const result = gpu ? { w: gpu.region[2], h: gpu.region[3], gpu } :
         draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw, false, directions ? 64e6 : undefined, false) : pixels(
-          typeof layer.source === 'function' ? layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time }) : layer.source);
+          typeof layer.source === 'function' ? layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time, camera }) : layer.source);
       if (result.w !== w || result.h !== h) throw new RangeError('Composite raster dimensions must match the layer resolution');
       return { ...result, dest: layer.dest, filter: layer.filter, blend: layer.blend, opacity: layer.opacity };
     });

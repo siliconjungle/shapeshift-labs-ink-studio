@@ -32,3 +32,6 @@ Use `machine.bind({ world, puppet, contacts, sockets, onEvent, onSound })` to ru
 Use `ink-studio animation-graph <graph.json> --at SECONDS` to inspect a portable graph. Supply `--inputs FILE` for an ordered list of rows with a `time` and optional `set` record or `fire` list. Motion advances to each timestamp before its input changes are applied. Use `--out FILE` to save the event trace, final pose, and active blend weights.
 
 Named events can also start action recipes, open contact windows, and advance recovery phases. [Action windows](action-windows.md)
+
+Use a clip marker to play a directional pixel stamp during a held pose.
+[Directional contact marks](contact-marks.md#connect-an-animation-or-material-contact)

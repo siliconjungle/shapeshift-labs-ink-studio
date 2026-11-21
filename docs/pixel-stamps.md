@@ -14,6 +14,8 @@ The built-in studies include the two layers of the Red Spring spell, so
 the ink and the eye can be edited separately.
 The [animated tile library](pixel-tiles.md) uses the same editable cels
 for copper pulses and creeping frost.
+[Directional contact marks](contact-marks.md) add cels for direct hits and
+glancing skids with two authored sizes and diagonal poses.
 
 ## Drawing and timing
 

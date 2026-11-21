@@ -212,10 +212,11 @@ const AtlasSprites = (() => {
   function place(value) {
     if (value?.[placedBrand]) return value;
     const { atlas,at,mode,yaw=0,scale=1,opacity=1,frame,playback,depth=true,lighting=true,emission=true,
-      nativePixels=false,pixelOffset,visibleAt,objectId,materialId }=value??{};
+      nativePixels=false,pixelOffset,visibleAt,objectId,materialId,clock='animation' }=value??{};
     const asset=compile(atlas), placementMode=mode===undefined?(asset.sceneryPlanes?'scenery':'impostor'):mode;
     if (!['card','impostor','scenery'].includes(placementMode)||placementMode==='scenery'&&!asset.sceneryPlanes||!Number.isFinite(opacity)||opacity<0||opacity>1||
         [depth,lighting,emission,nativePixels].some(value=>typeof value!=='boolean')||
+        !['animation','interface'].includes(clock)||
         (visibleAt!==undefined&&typeof visibleAt!=='function')||
         (pixelOffset!==undefined&&(!nativePixels||typeof pixelOffset!=='function'))||
         (frame!==undefined&&(playback!==undefined||typeof frame!=='function'&&!integer(frame,0,32767))))
@@ -231,6 +232,7 @@ const AtlasSprites = (() => {
     return Object.freeze({[placedBrand]:true, atlas:asset, at:anchor, mode:placementMode,
       yaw:finite(yaw,'Sprite placement yaw'), scale:positive(scale,'Sprite placement scale'),
       opacity,frame,depth,lighting,emission,...(nativePixels&&{nativePixels}),...(pixelOffset&&{pixelOffset}),
+      ...(clock==='interface'&&{clock}),
       ...(visibleAt&&{visibleAt}),...(playback!==undefined&&{frameAt:asset.playback(playback)}),
       ...(objectId!==undefined&&{objectId}),...(materialId!==undefined&&{materialId}) });
   }

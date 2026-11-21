@@ -34,6 +34,11 @@ Fixed legends and world-anchored labels can share a layer with drawing commands.
 
 A raster `source` supplies `{ w, h, rgba }` or `{ w, h, rgb, alpha? }` with top-down byte arrays and straight alpha. The JavaScript API also accepts a synchronous source function. It receives `w`, `h`, `outputWidth`, `outputHeight`, `world`, and `time` and returns a raster matching its native dimensions. This lets animated screen effects draw directly on their own grids. The WebGL renderer uploads each layer at its native size and blends it on the GPU. Scene shading and depth-dependent media use the world grid.
 
+Set `needsCamera: true` on a function-backed layer to receive the current
+renderer camera in the source function's `camera` argument. Use it to
+project world anchors into the source grid at the current view. Camera-aware
+sources still draw in the compositor's layer order.
+
 The CPU returns the composed color at output resolution with `px: 1`. `worldSize` records the size of the world raster, and requested diagnostic passes retain their native world dimensions. Existing CPU transparent exports preserve alpha through composition.
 
 The CLI accepts scene-authored composite settings and `--composite file.json` for an override. JSON supports drawing commands. Use `--composite off` to render the scene with its regular world settings.
