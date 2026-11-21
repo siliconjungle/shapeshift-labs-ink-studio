@@ -36,7 +36,7 @@
       inputs:{source:'path',options},outputs:{value:'record'},run({source,options}){return {value:D.ribbon(source,options)};}
     },
     'draw.text': {
-      inputs:{text:'string',options},outputs:{value:'raster',metrics:'record'},run({text,options}){return D.text(text,options);}
+      inputs:{text:'string',options},outputs:{value:'raster',metrics:'record',anchors:'record'},run({text,options}){return D.text(text,options);}
     },
     'layout.boxes': {
       inputs:{width:'number',height:'number',boxes:'array<record>'},outputs:{value:'record'},

@@ -131,6 +131,9 @@ at a time. JSON accepts keys with increasing `at` values from 0 at the top
 to 1 at the bottom. Ink interpolates the keys and holds the nearest value
 outside their span.
 
+The [registered scanline warp](headless-authoring.md#deform-registered-scanlines)
+also supports deforming text and sprite assets ahead of scene compositing.
+
 ```json
 {
   "id": "water-ripple",

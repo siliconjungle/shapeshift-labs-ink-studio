@@ -723,7 +723,10 @@ its width, height, line count and scale. It uses Ink's 6×8 glyphs,
 with integer `scale`, `tracking`, and `leading`, optional `columns`
 for character wrapping, and `align: "left" | "center" | "right"`.
 Supply `customGlyphs` as a map from characters to rows of `#` and
-spaces to draw symbols in the same grid.
+spaces to draw symbols in the same grid. Use `kerning` to add an integer
+pixel adjustment after a specific pair, such as `{ AV: -2 }`. The
+`anchors` output gives the zero-based line and glyph origins on their
+source baselines, using names such as `line:0` and `glyph:0:1`.
 
 ### Tracked drawing anchors
 
@@ -1410,6 +1413,7 @@ either axis with `edgeU` or `edgeV`.
 | Node | Authoring |
 | --- | --- |
 | `warp.mesh` | Set `control.from` and `control.to` to corresponding normalized 2D landmarks. Supply `triangles` as triples of indices or a flat index buffer. Each destination triangle pulls pixels from its source triangle. Later triangles win overlaps. Uncovered pixels are transparent. |
+| `warp.scanlines` | Deform a registered raster in asset space with [source-row offsets and scales](#deform-registered-scanlines). Returns the result, UV field, relocated anchors, and remapped image planes. |
 | `warp.grid` | Set `control.columns`, `rows`, and row-major `points` for the destination lattice. The source is a regular grid. |
 | `warp.polar` | Set `mode: "fromPolar"` to wrap a strip into a disc or annulus. Set `"toPolar"` to unwrap one. Strip X is angle and strip Y is radius. Set `center`, `radii` as fractions of the shorter disc dimension, `angle` in turns, and `clockwise`. |
 | `warp.displace` | Supply a numeric `map` of one channel or an X/Y pair. Subtract `center` and multiply by the two `scale` values in `pixels` or `normalized` units. A positive displacement moves the image toward positive coordinates. |
@@ -1465,6 +1469,49 @@ it. To drive a live scene image, feed the map to the
 [`textureAddress` render pass](render-graph.md#bind-a-programmable-texture-address-field).
 Run `node examples/texture-addressing.cjs helix-signal.html` to compare the
 transforms and change their order.
+
+### Deform registered scanlines
+
+Use `warp.scanlines` or `rasterWarp.scanlines(source, options)` to bend
+bitmap text or sprites before placing them. Each key in `rows` has an integer
+source `row` from 0 through the source height, an optional XY `offset`
+in pixels, and an optional horizontal `scale` around the pivot. Keys need
+increasing source rows and strictly increasing destination rows. Vertical
+offsets interpolate between keys. Set `horizontal: 'step'` for abrupt
+offset and scale changes, or keep the default `'linear'`.
+
+```js
+const { drawing2d, rasterWarp } = KIT.procedural;
+const text = drawing2d.text('AV', { scale: 4, tracking: 3, kerning: { AV: -2 } });
+const warped = rasterWarp.scanlines(text.value, {
+  anchors: text.anchors,
+  pivot: text.anchors['line:0'],
+  pin: true,
+  padding: [16, 0, 16, 0],
+  wave: { amplitude: 7, period: 22, rate: .5 },
+  time
+});
+```
+
+Wave amplitude and period are in pixels. Rate is in turns per second,
+and `phase` is in turns. The graph supplies time unless `options.time`
+overrides it. Connect `draw.text.anchors` to the warp's `anchors` input
+to reuse the bitmap layout. A sprite takes its pivot from the source
+raster unless an explicit `pivot` is provided. The pivot follows the
+deformation by default. Set `pin: true` to maintain its authored position
+within the padded canvas. Named anchor positions follow the same deformation
+as the image. Padding is ordered left, top, right, bottom.
+
+Connect aligned auxiliary rasters through `maps` to carry emission,
+IDs, depth, or other buffers through the same lookup. These planes use
+nearest sampling with their original channel count and numeric values.
+The color sampler defaults to `nearest` and also supports
+premultiplied-alpha `linear`. Reuse `field` with `warp.sample`, or pass the
+deformed color and supported maps to `raster.pack` to retain the new
+pivot in atlas metadata.
+
+Run `node examples/scanline-deformation.cjs registration-drift.html` to
+compare animated text and sprites with reference pivots.
 
 ### Dense optical flow
 

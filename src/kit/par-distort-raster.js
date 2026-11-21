@@ -23,6 +23,12 @@
       inputs:{source:'raster',field:'raster',options},outputs:{value:'raster'},
       run({source,field,options}){return {value:W.sample(source,field,options)};}
     },
+    'warp.scanlines':{
+      description:'Deform source rows while preserving a registered pivot, named anchors and sprite maps.',
+      inputs:{source:'raster',anchors:options,maps:options,options},
+      outputs:{...mapped,anchors:'record',maps:'record'},time:true,
+      run({source,anchors,maps,options},{time}){return W.scanlines(source,{time,...options,anchors,maps});}
+    },
     'warp.opticalFlow':{
       inputs:{before:'raster',after:'raster',options},outputs:{value:'raster',confidence:'raster'},
       run({before,after,options}){return W.opticalFlow(before,after,options);}

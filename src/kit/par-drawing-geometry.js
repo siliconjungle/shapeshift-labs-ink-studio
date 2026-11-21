@@ -5,6 +5,7 @@
   const tuple = (value, n, valid = finite) => Array.isArray(value) && value.length === n && Array.from(value).every(valid);
   const point = value => tuple(value, 2, n => finite(n) && Math.abs(n) <= 1e9);
   const solid = color => DrawingPrimitives.color(color);
+  const record = P.graphTypes.validator('record');
 
   function pathSource(source) {
     const points = Array.isArray(source) ? source : source?.points;
@@ -86,7 +87,7 @@
   }
 
   let glyphs;
-  function text(value, {scale = 1, tracking = 0, leading = 0, align = 'left', columns, color = '#ffffff', customGlyphs} = {}) {
+  function text(value, {scale = 1, tracking = 0, leading = 0, align = 'left', columns, color = '#ffffff', customGlyphs, kerning = {}} = {}) {
     if (typeof value !== 'string' || value.length > 4096 || ![scale,tracking,leading].every(Number.isSafeInteger) ||
         scale < 1 || scale > 32 || tracking < 0 || tracking > 256 || leading < 0 || leading > 256 ||
         !['left','center','right'].includes(align) || columns !== undefined && (!Number.isSafeInteger(columns) || columns < 1))
@@ -101,24 +102,39 @@
       return Array.from({length:Math.ceil(chars.length/columns)},(_,i)=>chars.slice(i*columns,(i+1)*columns));
     });
     const rgba = solid(color), cell = 6*scale + tracking, step = 8*scale + leading;
-    const rowWidth = row => Math.max(0,row.length*cell-tracking);
-    const width = Math.max(1,...rows.map(rowWidth)), height = rows.length*step-leading;
+    if (!record(kerning) || Object.keys(kerning).length > 4096 ||
+        Object.entries(kerning).some(([pair, shift]) => [...pair].length !== 2 ||
+          !Number.isSafeInteger(shift) || shift < -cell || shift > 256))
+      throw new RangeError('Bitmap kerning needs character pairs and bounded pixel adjustments');
+    const runs = rows.map(row => {
+      let x = 0;
+      return row.map((char, i) => {
+        const pair = i && row[i - 1] + char;
+        if (i) x += cell + (Object.hasOwn(kerning, pair) ? kerning[pair] : 0);
+        return {char, x};
+      });
+    });
+    const rowWidth = row => row.length ? row.at(-1).x + 6*scale : 0;
+    const width = Math.max(1,...runs.map(rowWidth)), height = rows.length*step-leading;
     if (width*height > 4e6) throw new RangeError('Bitmap text exceeds its pixel budget');
-    const result = R.canvas({width,height});
+    const result = R.canvas({width,height}), anchors = {};
     const anchor = align === 'left' ? 0 : align === 'center' ? .5 : 1;
-    for (let line = 0; line < rows.length; line++) {
-      const row = rows[line], x = Math.floor((width-rowWidth(row))*anchor), y = line*step;
-      row.forEach((char,index) => {
-        const glyph = font.get(char) ?? font.get('?');
+    for (let line = 0; line < runs.length; line++) {
+      const run = runs[line], x = Math.floor((width-rowWidth(run))*anchor), y = line*step;
+      const baseline = y + 7*scale;
+      anchors['line:' + line] = [x, baseline];
+      run.forEach(({char, x: advance},index) => {
+        const gx = x + advance, glyph = font.get(char) ?? font.get('?');
+        anchors['glyph:' + line + ':' + index] = [gx, baseline];
         if (!glyph) return;
         for (let v=0; v<8; v++) for (let u=0; u<6; u++) if (glyph[v*6+u])
           for (let dy=0; dy<scale; dy++) for (let dx=0; dx<scale; dx++) {
-            const at = ((y+v*scale+dy)*width + x+index*cell+u*scale+dx)*4;
+            const at = ((y+v*scale+dy)*width + gx+u*scale+dx)*4;
             result.data.set(rgba,at);
           }
       });
     }
-    return {value:result,metrics:{width,height,lines:rows.length,scale}};
+    return {value:result,metrics:{width,height,lines:rows.length,scale},anchors};
   }
 
   function shape(draw) {
