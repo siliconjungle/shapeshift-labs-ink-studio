@@ -164,6 +164,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let surfacePipeline,emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let clusterRenderer;
     const clusterAPI = toolkit.KIT?.colorClusters;
+    const clusterHistory = clusterAPI?.history(), portalClusterHistory = clusterAPI?.history();
     let simple, simpleUnavailable = false, keyProgram, damp, copy, spriteProgram, spriteEnvProgram, spriteLayer, spriteTable, anchors;
     let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, lastStaged, fineValues, materials, anchorCount = 0;
     let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousPalette, previousDetailRanges, previousSection, lastQualityKey;
@@ -709,6 +710,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if (clusterDefinition !== undefined && clusterDefinition !== false && !clusterAPI)
         throw new Error('Color clusters need the Ink Studio KIT');
       const clusters = clusterAPI?.prepare(clusterDefinition);
+      const coherenceHistory = plane === zero ? frame.colorClusterHistory ?? clusterHistory : portalClusterHistory;
+      if (!reflectionCapture && !clusters?.coherent) coherenceHistory?.clear();
       const clock = contract?.clock(world, frame);
       const t = clock?.time ?? frame.time ?? world.lookSnapshot?.time ?? 0;
       const time = clock?.scene ?? (frame.stepAnimation !== false && look.pixel ? Math.floor(t * 10) / 10 : t);
@@ -1240,8 +1243,18 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         historyValid = true;
         previousVP = vp;
       }
-      if (clusters) clusterRenderer.finish(world, clusters, owner,
-        cleaning ? cleaned : damping ? finished : clusterRenderer.buffer, output, width, height);
+      if (clusters) {
+        let continuity;
+        if (clusters.coherent) {
+          const sampler = toolkit.KIT.splatFrames.create(world, time, toolkit.KIT.M);
+          continuity = { history:coherenceHistory, source:frame.colorClusterSource ?? frame.renderHistoryKey ?? source,
+            time:t, project:clusterAPI.projector(camera, i => sampler(i).position()), projection:camera.ortho,
+            reset:frame.resetRenderHistory || frame.resetColorClusters, captureLabels:frame.captureColorClusterLabels,
+            palette:Array.from((grade ?? pal).subarray(0,palCount*3)) };
+        }
+        clusterRenderer.finish(world, clusters, owner,
+          cleaning ? cleaned : damping ? finished : clusterRenderer.buffer, output, width, height, continuity, frame.colorClustersFrame);
+      }
       gl.activeTexture(gl.TEXTURE0);
       lastWorld = world;
       lastInstances = group;

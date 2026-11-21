@@ -134,6 +134,7 @@ function sequenceHistory(kit) {
     renderHistory: kit.renderGraph.history(),
     volumeHistory: kit.atmosphere.history(),
     transparencyHistory: kit.stableTransparency.history(),
+    colorClusterHistory: ColorClusters.history(),
     motionalCoverageHistory: MotionalCoverage.history(),
     partMotionHistory: PartMotion.history()
   };
@@ -234,7 +235,7 @@ function render(world, o, preparedPalettes) {
       base.w, base.h, (sample, settings) => render(sample, { ...settings,
         [shutterPlan]: null, [captureCamera]: undefined, [probeCaptures]: undefined, [deepScope]: undefined,
         [reconstructionSource]: undefined, [sampledPresentation]: false, [afterimageRows]: undefined,
-        motionalCoverageHistory: undefined, partMotionHistory: undefined, capturePartMotion: false
+        motionalCoverageHistory: undefined, colorClusterHistory: undefined, partMotionHistory: undefined, capturePartMotion: false
       }, preparedPalettes), kit) : o[Shutter.passImages];
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera,
       (spec,ctx) => kit.annotations.anchor(spec,{ ...ctx,sceneTime:o?.t }),
@@ -270,8 +271,9 @@ function render(world, o, preparedPalettes) {
       render(sample, { ...settings, [shutterPlan]: null, [reconstructionSource]: undefined, [probeCaptures]: undefined,
         motionalCoverageSource: settings.motionalCoverageSource ?? (o[reconstructionSource] ?? world).data,
         partMotionSource: settings.partMotionSource ?? (o[reconstructionSource] ?? world).data,
+        colorClusterSource: settings.colorClusterSource ?? o.renderHistoryKey ?? o[reconstructionSource] ?? world,
         ...(!nominal && { [captureCamera]: undefined, [deepScope]: undefined, [sampledPresentation]: false,
-          motionalCoverageHistory: undefined, partMotionHistory: undefined, capturePartMotion: false })
+          motionalCoverageHistory: undefined, colorClusterHistory: undefined, partMotionHistory: undefined, capturePartMotion: false })
       }, preparedPalettes), kit);
   }
   if (!o?.renderStats) return renderFrame(world, o, preparedPalettes);
@@ -290,6 +292,7 @@ function render(world, o, preparedPalettes) {
 
 function renderFrame(world, o, preparedPalettes) {
   o = o || {};
+  const clusterSource = o.colorClusterSource ?? o.renderHistoryKey ?? o[reconstructionSource] ?? world;
   const counters = o.counters;
   if (counters) counters.rasterPasses++;
   const lensScale = o.lensScale ?? 1;
@@ -355,8 +358,9 @@ function renderFrame(world, o, preparedPalettes) {
   const coverageAware = !o.raw && (o.coverageAware ?? look.coverageAware ?? Boolean(optics || scopedReflection)) === true;
   const retainContributions = coverageAware || Boolean(stages || optics);
   const legacyLook = styled && !retainContributions;
-  const clusters = styled && !o.reflectionPlane && !probeView &&
-    ColorClusters.prepare(o.colorClusters ?? look.colorClusters);
+  const clusterView = !o.samples && !o.captureCoverage && !o.reflectionPlane && !probeView;
+  const clusters = styled && clusterView && ColorClusters.prepare(o.colorClusters ?? look.colorClusters);
+  if (clusterView && !clusters?.coherent) o.colorClusterHistory?.clear();
   const effectPaletteSettings = styled ? EffectPalettes.prepare(
     o.effectPalettes === true ? look.effectPalettes : o.effectPalettes ?? look.effectPalettes, world.pal, world.paletteRoles
   ) : !o.raw && !o.captureCoverage ? o.effectPaletteCapture : null;
@@ -480,8 +484,19 @@ function renderFrame(world, o, preparedPalettes) {
     const unclustered = clusters && captureQuantization && !legacyLook && !graded ? frame.rgb : undefined;
     if (clusters) {
       const before = frame.rgb;
-      const { rgb, ...report } = ColorClusters.apply(frame, passes, clusters, world);
+      let continuity;
+      if (clusters.coherent) {
+        const view = CameraLens.artView(camera, frame.h, stable, undefined, o.artGridScale || 1);
+        const frames = sampleFrames(world, t);
+        const project = ColorClusters.projector({ ...camera, view, tangent: ortho ? dist*tangent : tangent },
+          i => frames(i).position());
+        continuity = { history:o.colorClusterHistory, source:clusterSource, time:sceneTime, project, projection:ortho,
+          palette:frame.palette ?? world.pal, reset:o.resetRenderHistory || o.resetColorClusters,
+          captureLabels:o.captureColorClusterLabels };
+      }
+      const { rgb, ...report } = ColorClusters.apply(frame, passes, clusters, world, continuity);
       frame.colorClusters = report;
+      o.colorClustersFrame?.(report);
       if (rgb !== before) {
         frame = ArtEffects.paletteUse({ ...frame, rgb }, world.pal);
         if (paletteTrace) paletteTrace.cluster(before, rgb);

@@ -8,7 +8,7 @@ export function createColorClusters(gl, { api, target, textureUnit, fullscreen, 
     gl.readBuffer(gl.COLOR_ATTACHMENT0);
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   }
-  function finish(world, plan, owner, detail, output, width, height) {
+  function finish(world, plan, owner, detail, output, width, height, continuity, report) {
     const size = width * height;
     if (splatId?.length !== size) {
       rgba = new Uint8Array(size * 4);
@@ -30,7 +30,11 @@ export function createColorClusters(gl, { api, target, textureUnit, fullscreen, 
     const marked = detail === buffer ? rgba : scratch;
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++)
       protectedPixels[y * width + x] = Number(marked[((height - 1 - y) * width + x) * 4 + 3] < 192);
-    const result = api.apply({ w: width, h: height, rgb }, { splatId, protected: protectedPixels }, plan, world);
+    const result = api.apply({ w: width, h: height, rgb }, { splatId, protected: protectedPixels }, plan, world, continuity);
+    if (report) {
+      const { rgb: pixels, ...summary } = result;
+      report(summary);
+    }
     textureUnit(8, buffer.textures[0]);
     if (result.changedPixels) {
       for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {

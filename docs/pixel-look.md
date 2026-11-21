@@ -975,6 +975,8 @@ node cli/ink-studio.js render examples/review-sheltered-market.js \
 Use `--color-clusters off` or `{ colorClusters: false }` for a matched
 comparison. Raw renders bypass the pass.
 
+[Coherent pixel clusters](cluster-coherence.md) add per-swatch timing and stable connected-region IDs across rendered frames.
+
 ## Shared look selectors
 
 Use `finish.look.targets` in a diorama, `visual.look.targets` on a world,

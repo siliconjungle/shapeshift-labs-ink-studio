@@ -1,6 +1,7 @@
 /* Coalesce connected colors inside a visible material at native art resolution. */
 const ColorClusters = (() => {
   const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
+  const temporal = typeof ClusterCoherence === 'undefined' ? require('./cluster-coherence.js') : ClusterCoherence;
   const directions = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
   function fields(value, keys, name) {
@@ -10,12 +11,14 @@ const ColorClusters = (() => {
 
   function prepare(definition) {
     if (definition === undefined || definition === false) return null;
-    const { targets } = fields(definition, ['targets'], 'color cluster settings');
+    const { targets, maxMotion = 12 } = fields(definition, ['targets', 'maxMotion'], 'color cluster settings');
     if (!Array.isArray(targets) || targets.length < 1 || targets.length > 128)
       throw new RangeError('Color clusters need 1 to 128 target rules');
-    return { rules: Array.from(targets, raw => {
+    if (!Number.isFinite(maxMotion) || maxMotion < .01 || maxMotion > 256)
+      throw new RangeError('Color cluster maxMotion must be in [.01, 256] art pixels');
+    const rules = Array.from(targets, raw => {
       const { select, minPixels = 4, grain = {}, protect = {} } =
-        fields(raw, ['select', 'minPixels', 'grain', 'protect'], 'color cluster target');
+        fields(raw, ['select', 'minPixels', 'grain', 'protect', 'coherence'], 'color cluster target');
       if (!Number.isSafeInteger(minPixels) || minPixels < 1 || minPixels > 4096)
         throw new RangeError('Color cluster minPixels must be an integer from 1 to 4096');
       const { angle = 0, strength = 0 } = fields(grain, ['angle', 'strength'], 'color cluster grain');
@@ -29,22 +32,24 @@ const ColorClusters = (() => {
           !Array.isArray(targets) || targets.length > 128)
         throw new TypeError('Color cluster protection needs boolean switches, #rrggbb swatches and target selectors');
       const theta = (angle % 180) * Math.PI / 180, u = Math.cos(theta), v = Math.sin(theta);
-      return { select: selectors.prepare(select), minPixels, boundaries, details,
+      return { select: selectors.prepare(select), minPixels, boundaries, details, coherence: temporal.prepare(raw.coherence),
         swatches: new Set(swatches.map(hex => parseInt(hex.slice(1), 16))),
         targets: Array.from(targets, selectors.prepare),
         weights: directions.map(([x, y]) => (1 + 4 * strength * (x * u + y * v) ** 2 / (x * x + y * y)) /
           (x && y ? Math.SQRT2 : 1))
       };
-    }) };
+    });
+    const coherent = rules.some(rule => rule.coherence.size);
+    return { rules, ...(coherent && { coherent, maxMotion, key:JSON.stringify(definition) }) };
   }
 
-  function apply(frame, passes, plan, world) {
+  function apply(frame, passes, plan, world, options) {
     const { w, h, rgb, alpha, inkMask, effectsMask } = frame, count = w * h;
     const owners = passes?.splatId;
     const empty = { rgb, changedPixels: 0, mergedClusters: 0 };
     if (!owners || !plan) return empty;
     const { rules } = plan, targetAt = selectors.index(world).row;
-    const { protected: protectedPixels, paletteOwner, emission } = passes;
+    const { protected: protectedPixels, paletteOwner, paletteOwners, emission } = passes;
     const byTarget = new Map(), bySplat = new Map(), profiles = [null];
     const domain = new Uint32Array(count), locked = new Uint8Array(count);
     const colorAt = p => (rgb[3 * p] << 16) | (rgb[3 * p + 1] << 8) | rgb[3 * p + 2];
@@ -56,7 +61,8 @@ const ColorClusters = (() => {
       if (!choices) {
         const rule = rules.findLast(rule => selectors.matches(rule.select, target));
         const blocked = rule && rule.targets.some(filter => selectors.matches(filter, target));
-        byTarget.set(target, choices = { rule: rule?.minPixels > 1 && !target.mediumKind ? rule : null, blocked, slots: new Map() });
+        byTarget.set(target, choices = { rule: rule && (rule.minPixels > 1 || rule.coherence.size) &&
+          !target.mediumKind ? rule : null, blocked, slots: new Map() });
       }
       let id = 0;
       if (choices.rule) {
@@ -64,7 +70,11 @@ const ColorClusters = (() => {
         if (id === undefined) {
           id = profiles.length;
           choices.slots.set(palette, id);
-          profiles.push(choices);
+          const key = choices.rule.coherence.size ? JSON.stringify([
+            Object.entries(target).sort(([a], [b]) => a.localeCompare(b)),
+            paletteOwners?.[palette] ?? [palette, options?.palette]
+          ]) : undefined;
+          profiles.push({ ...choices, target, key });
         }
       }
       bySplat.set(key, id);
@@ -85,7 +95,19 @@ const ColorClusters = (() => {
           (emission && Math.max(emission[i], emission[i + 1], emission[i + 2]) > .12)));
       eligible ||= !locked[p];
     }
-    if (!eligible) return empty;
+    function finish(result) {
+      if (!plan.coherent) return result;
+      const coherent = temporal.apply(frame, result.rgb, { owners, domain, locked, profiles, plan },
+        { ...options, source:options?.source ?? world });
+      let changedPixels = result.changedPixels;
+      if (coherent.rgb !== result.rgb) {
+        changedPixels = 0;
+        for (let q = 0; q < rgb.length; q += 3)
+          changedPixels += Number(rgb[q] !== coherent.rgb[q] || rgb[q+1] !== coherent.rgb[q+1] || rgb[q+2] !== coherent.rgb[q+2]);
+      }
+      return { ...result, ...coherent, changedPixels };
+    }
+    if (!eligible) return finish(empty);
     for (let p = 0; p < count; p++) {
       if (!domain[p] || locked[p] || !profiles[domain[p]].rule.boundaries) continue;
       const x = p % w;
@@ -106,9 +128,11 @@ const ColorClusters = (() => {
         visit(q, d);
       }
     }
+    const spatial = rules.some(rule => rule.minPixels > 1);
+    if (!spatial) return finish(empty);
     const labels = new Uint32Array(count), next = new Int32Array(count).fill(-1), components = [null];
     for (let p = 0; p < count; p++) {
-      if (!domain[p] || locked[p] || labels[p]) continue;
+      if (!domain[p] || locked[p] || labels[p] || profiles[domain[p]].rule.minPixels === 1) continue;
       const id = components.length, color = colorAt(p);
       const component = { parent: id, color, start: p, end: p, size: 1, rule: profiles[domain[p]].rule };
       labels[p] = id;
@@ -168,7 +192,7 @@ const ColorClusters = (() => {
         mergedClusters++;
       }
     }
-    if (!mergedClusters) return empty;
+    if (!mergedClusters) return finish(empty);
     const output = rgb.slice();
     let changedPixels = 0;
     for (let p = 0; p < count; p++) {
@@ -180,9 +204,9 @@ const ColorClusters = (() => {
       output[3 * p + 2] = color & 255;
       changedPixels++;
     }
-    return { rgb: output, changedPixels, mergedClusters };
+    return finish({ rgb: output, changedPixels, mergedClusters });
   }
 
-  return Object.freeze({ prepare, apply });
+  return Object.freeze({ prepare, apply, history:temporal.history, projector:temporal.projector });
 })();
 if (typeof module !== 'undefined') module.exports = ColorClusters;
