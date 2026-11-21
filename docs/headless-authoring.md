@@ -571,7 +571,7 @@ outside the original image.
 | `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
-| `fx.trackRegions` | Track connected regions across a sequence of `frames`. Outputs persistent region records, ID `labels`, source `frame`, and source `time`. |
+| `fx.trackRegions` | Track connected regions across a sequence of `frames`. Outputs persistent region records, ID `labels`, lineage `events`, source `frame`, and source `time`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -884,6 +884,37 @@ Scrub across the missing frames to inspect a reacquired region.
 
 ```sh
 node examples/persistent-region-tracking.cjs region-tracking.html
+```
+
+#### Region events
+
+The tracker and graph node return an `events` array for each source frame.
+Each event has a `type`, source `time` in seconds, stable IDs in `from` and
+`to`, and an area-weighted `center` in pixel coordinates. A disappearance
+uses the last observed center. A reappearance also reports `missedFrames`.
+
+| Type | `from` | `to` |
+| --- | --- | --- |
+| `split` | Parent ID | Descendant IDs |
+| `merge` | Parent IDs | Joined region ID |
+| `disappear` | ID lost on this frame | Empty |
+| `reappear` | Previously missed ID | Reacquired ID |
+
+Split and merge candidates use shared labeled pixels between adjacent
+frames, with the option to align the earlier footprint using its measured
+velocity. `eventOverlap` is the minimum fraction of the smaller region
+that must overlap, from .01 to 1, with a default of .6. A strong branch can
+preserve an eligible ID even when the ordinary matching area gate is
+exceeded. Topology events take precedence over visibility events for
+the regions they describe. `disappear` occurs once, on the first missed
+frame. `reappear` requires an ID retained under `maxMissed`. Graph seeks
+return the selected frame's events, including when replaying the clip.
+
+The [lineage demo](../examples/region-lineage-events.cjs) draws directly from
+the event records. Select an event to inspect its frame and ID changes.
+
+```sh
+node examples/region-lineage-events.cjs region-lineage.html
 ```
 
 ## Raster warps and 3D projection

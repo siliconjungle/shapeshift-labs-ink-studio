@@ -58,7 +58,7 @@
     },
     'fx.trackRegions': {
       inputs: { frames: 'array<raster>', options },
-      outputs: { value: 'array<record>', labels: 'raster', time: 'number', frame: 'number' },
+      outputs: { value: 'array<record>', labels: 'raster', time: 'number', frame: 'number', events: 'array<record>' },
       time: true,
       instantiate() {
         let tracker, priorFrames, priorOptions, last = -1, result;
