@@ -455,7 +455,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   function execution() {
     let executable, previous=new Map();
-    function clear() {
+    function reset() {
       try { executable?.clear(); }
       finally {
         executable=undefined;
@@ -463,27 +463,49 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       }
     }
 
-    function evaluate({inputs,time,seed,take},sequence) {
+    let busy=false;
+    function clear() {
+      if (busy) throw new Error('Cannot clear a graph project during asynchronous evaluation');
+      reset();
+    }
+    function start(inputs) {
+      if (busy) throw new Error('An asynchronous graph project evaluation is already running');
       if (planAssets) throw new Error('Graph loaded for memory preflight. Open it normally to evaluate.');
       const values=Object.fromEntries(Object.entries(inputs).map(([name,value])=>{
         const prior=previous.get(name);
         return [name,sameValue(prior,value) ? prior : value];
       }));
-      try {
-        executable??=graph.create(spec,{operations:ops,groups});
-        const frame=executable.evaluate(values,{time,seed,take,sequence,workers:workerPool});
-        previous=new Map(Object.entries(values));
-        return {frame,report:{...header,time,seed,...(take!==undefined && {take}),cache:cacheReport(frame),
-          inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
-      } catch (error) {
-        try { clear(); } catch { /* Preserve the evaluation error after discarding this instance. */ }
-        throw error;
-      }
+      executable??=graph.create(spec,{operations:ops,groups});
+      return values;
     }
 
-    return {evaluate,clear};
+    function done(frame,values,{time,seed,take}) {
+      previous=new Map(Object.entries(values));
+      return {frame,report:{...header,time,seed,...(take!==undefined && {take}),cache:cacheReport(frame),
+        inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
+    }
+    function failed(error) {
+      try { reset(); } catch { /* Preserve the evaluation error after discarding this instance. */ }
+      throw error;
+    }
+    function evaluate({inputs,...options},sequence) {
+      const values=start(inputs);
+      try {
+        return done(executable.evaluate(values,{...options,sequence,workers:workerPool}),values,options);
+      } catch (error) { return failed(error); }
+    }
+    async function evaluateAsync({inputs,...options},profile) {
+      const values=start(inputs);
+      busy=true;
+      try {
+        return done(await executable.evaluateAsync(values,{...options,profile}),values,options);
+      } catch (error) { return failed(error); }
+      finally { busy=false; }
+    }
+
+    return {evaluate,evaluateAsync,clear};
   }
-  const {evaluate,clear}=execution();
+  const {evaluate,evaluateAsync,clear}=execution();
 
   function encode(name,value,format,settings={}) {
     const result=format==='codec' ? host.encode(settings.codec,value,settings) : undefined;
@@ -506,7 +528,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   function run(prepared) {
     workerPool?.resetStats();
     const {frame,report}=evaluate(prepared);
-    const checks=assertions.map(check=>check(frame)), passed=checks.every(check=>check.passed);
+    const {assertions:checks,passed}=prepareFrameChecks(frame);
     const artifacts=exports.flatMap(({name,output,format,...settings})=>{
       const value=frame.outputs[output], encoded=format==='atlas' ? encodeAtlas(name,value) : [encode(name,value,format,settings)];
       return encoded.map(artifact=>({name,output,...artifact}));
@@ -530,6 +552,34 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       report:{...report,kind:'inspect',target:output!==undefined ? {output} : {node,port},value:describe(value),
         ...(workerPool && {workers:workerPool.stats()}),
         artifacts:bytes ? [{file,format,sha256,bytes:bytes.length}] : []}};
+  }
+
+  async function previewFrame(targets, options, { profile = false } = {}) {
+    const watches=named(targets,'patch previews');
+    if (watches.length>64) throw new RangeError('A patch frame supports up to 64 previews');
+    separateNames(watches.map(([name])=>name),'Patch previews');
+    for (const [,target] of watches) {
+      const {output,node,port}=fields(target,['output','node','port'],'patch preview');
+      if ((output===undefined)===(node===undefined) || output!==undefined && (!id(output) || !Object.hasOwn(rootPlan.outputs,output)) ||
+          node!==undefined && (typeof node!=='string' || !node.split('/').every(id) || port!==undefined && !id(port)))
+        throw new TypeError('Patch preview needs a known output or node and port');
+    }
+    const {frame,report}=await evaluateAsync(request(options),profile);
+    const results=watches.map(([name,{output,node,port}])=>{
+      const value=output!==undefined ? frame.outputs[output] : frame.preview(node,port);
+      const artifact=preview(value);
+      return { name, value, artifact:artifact && {...artifact,file:'previews/'+name+'.'+artifact.format} };
+    });
+    const assertions=prepareFrameChecks(frame);
+    return {outputs:frame.outputs,values:Object.fromEntries(results.map(({name,value})=>[name,value])),
+      artifacts:results.flatMap(({artifact})=>artifact?[artifact]:[]),
+      report:{...report,kind:'patch-frame',...assertions,...(frame.timings && {timingsMs:frame.timings}),
+        previews:Object.fromEntries(results.map(({name,value,artifact})=>[name,{value:describe(value),
+          ...(artifact && {file:artifact.file,sha256:artifact.sha256})}]))}};
+  }
+  function prepareFrameChecks(frame) {
+    const checks=assertions.map(check=>check(frame));
+    return {passed:checks.every(check=>check.passed),assertions:checks};
   }
 
   function preview(value) {
@@ -604,6 +654,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       } finally { runner.clear(); }
     },
     inspect,
+    previewFrame,
     prepareBatch,
     batch(cases,defaults={}) {
       const batch=prepareBatch(cases,defaults);

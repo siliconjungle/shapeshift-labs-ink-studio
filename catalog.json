@@ -60,6 +60,16 @@
       "tags": ["audio", "show", "timecode", "midi", "link", "projection", "lighting", "dmx", "osc"]
     },
     {
+      "id": "studio.patch-tooling",
+      "kind": "cli",
+      "status": "ready",
+      "title": "Wire, bind and preview audiovisual patches from the CLI",
+      "what": "Edit typed graph connections with validated transactions, map controls, stream video through tracking and feedback, and inspect each port while a patch runs. Optional WGSL nodes run through native WebGPU.",
+      "use": "ink-studio patch help",
+      "where": "cli/patch-cli.js, docs/patch-tooling.md, examples/patch-tooling/",
+      "tags": ["patch", "graph", "video", "audio", "tracking", "shader", "preview"]
+    },
+    {
       "id": "studio.webgl",
       "kind": "api",
       "status": "ready",

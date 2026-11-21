@@ -30,6 +30,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Embedding and custom scene collections](#embedding-and-custom-scene-collections)
 - [Browser renderer](#browser-renderer)
 - [Live show control](#live-show-control)
+- [CLI patch tooling](#cli-patch-tooling)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)
@@ -1004,6 +1005,15 @@ Use the [Signal Room demo](docs/show-control.md#run-signal-room) to mix live aud
 
 ```sh
 npx ink-studio show-bridge
+```
+
+## CLI patch tooling
+
+Use `ink-studio patch` to wire typed graph ports, bind signals to parameters, and watch per-stage output from the terminal. The [patch guide](docs/patch-tooling.md) includes two Night Current demos with video, audio, tracking and an optional WGSL finish.
+
+```sh
+npx ink-studio patch plan project.json
+npx ink-studio patch run project.json --watch 'final=$picture' --out previews
 ```
 
 ## Screen transitions

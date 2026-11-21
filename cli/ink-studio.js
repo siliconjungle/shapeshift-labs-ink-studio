@@ -1092,6 +1092,7 @@ const CMD = {
         '  music soundfont <file.sf2> <preset.json> --out directory   sample a SoundFont preset with FluidSynth',
         '  music revise <plan.json> <edits.json> [--out revised.json]   revise unpinned parts and bindings',
         '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
+        '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
@@ -2224,6 +2225,9 @@ const CMD = {
   },
   'render-graph'() {
     return require('./render-graph-plan.js')(pos,opt,lib());
+  },
+  patch() {
+    return require('./patch-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
   },
   graph() {
     return require('./graph-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
