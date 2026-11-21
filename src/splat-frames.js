@@ -121,7 +121,7 @@ const SplatFrames = (() => {
         basis() {
           const orbit = angle ? [c, 0, s, 0, 1, 0, -s, 0, c] : null;
           const posed = transform?.basis;
-          return { anchor: fragment?.rotation ?? (orbit && posed ? M.mul(orbit, posed) : orbit || posed || M.id()),
+          return { anchor: fragment?.rotation ?? (orbit && posed ? M.mul(orbit, posed) : orbit || posed || [1,0,0,0,1,0,0,0,1]),
             covariance: kind === 12 || kind === 13 ? posed : orbit };
 
         },

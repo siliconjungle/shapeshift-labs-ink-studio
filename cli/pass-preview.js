@@ -8,7 +8,7 @@ const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
 const idColor = id => Math.imul(id, 0x9e3779b1) & 0xffffff;
 
 function labels(passes) {
-  return Object.fromEntries(['objects', 'materials', 'targets', 'paletteOwners'].flatMap(key => passes[key] ? [[key,
+  return Object.fromEntries(['objects', 'materials', 'parts', 'targets', 'paletteOwners'].flatMap(key => passes[key] ? [[key,
     passes[key].map((label, index) => ({ label, color: '#' + idColor(index).toString(16).padStart(6, '0') }))
   ]] : []));
 }
@@ -18,11 +18,15 @@ const environmentEncodings = {
   fogTransmittance: 'RGB8 grayscale, white is full transmission',
   precipitation: 'RGBA8 straight alpha',
   reflections: 'RGB8 premultiplied reflected contribution',
-  foregroundCoverage: 'RGB8 grayscale, white is full coverage'
+  foregroundCoverage: 'RGB8 grayscale, white is full coverage',
+  partId: 'RGB8 part legend color',
+  partMotion: 'RGB8 preview, red and green encode signed XY at ±4 art pixels, black means invalid',
+  previousDepth: 'RGB8 depth preview on the current art grid, black means invalid',
+  partMotionValid: 'RGB8 grayscale, white is a valid previous sample'
 };
 
 function environmentEncoding(passes) {
-  const encodings = Object.fromEntries(environment.filter(channel => passes[channel])
+  const encodings = Object.fromEntries([...environment, 'partId', 'partMotion', 'previousDepth', 'partMotionValid'].filter(channel => passes[channel])
     .map(channel => [channel, environmentEncodings[channel]]));
   return Object.keys(encodings).length ? { encodings } : {};
 }
@@ -37,24 +41,27 @@ function depthRange(data) {
 }
 
 function encode(frame, channel) {
-  const { w, h, passes } = frame;
-  if (channel === 'color') return { w, h, rgb: frame.rgb };
+  if (channel === 'color') return { w:frame.w, h:frame.h, rgb: frame.rgb };
+  const { passes } = frame, { w,h } = passes;
   const data = passes[channel];
   if (!data) throw new Error('The renderer did not supply the ' + channel + ' pass');
   const rgb = new Uint8Array(w * h * 3);
   const alpha = channel === 'precipitation' && new Uint8Array(w * h);
-  const depth = ['depth', 'emissionDepth'].includes(channel) && depthRange(data);
+  const isDepth = ['depth', 'emissionDepth', 'previousDepth'].includes(channel);
+  const depth = isDepth && depthRange(data);
   for (let p = 0; p < w * h; p++) {
     const q = p * 3;
     if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage'].includes(channel))
       rgb.fill(byte(data[p]), q, q + 3);
-    else if (channel === 'depth' || channel === 'emissionDepth') {
+    else if (channel === 'partMotionValid') rgb.fill(data[p],q,q+3);
+    else if (isDepth) {
       if (depth && Number.isFinite(data[p]))
         rgb.fill(byte(1 - .85 * (data[p] - depth.near) / (depth.far - depth.near || 1)), q, q + 3);
     } else if (channel === 'normal') {
       if (data[q] || data[q + 1] || data[q + 2])
         for (let c = 0; c < 3; c++) rgb[q + c] = byte(data[q + c] * .5 + .5);
-    } else if (channel === 'motion' || channel === 'emissionMotion') {
+    } else if (channel === 'motion' || channel === 'emissionMotion' || channel === 'partMotion') {
+      if (channel === 'partMotion' && !passes.partMotionValid[p]) continue;
       rgb[q] = byte(.5 + data[p * 2] / 8);
       rgb[q + 1] = byte(.5 + data[p * 2 + 1] / 8);
     } else if (alpha) {
@@ -75,9 +82,12 @@ function encode(frame, channel) {
 
 function writePasses(directory, frame, scale = 1) {
   const passes = frame.passes;
-  const manifest = { width: frame.w, height: frame.h, scale, rows: 'top-down', files: {}, ...environmentEncoding(passes) };
+  const manifest = { width: frame.w, height: frame.h, scale, rows: 'top-down', files: {},
+    ...(passes.w !== frame.w || passes.h !== frame.h ? {surfaceSize:[passes.w,passes.h]} : {}),
+    ...environmentEncoding(passes) };
   if (passes.objects) manifest.objects = passes.objects;
   if (passes.materials) manifest.materials = passes.materials;
+  if (passes.parts) manifest.parts = passes.parts;
   if (passes.targets) manifest.targets = passes.targets;
   if (passes.paletteOwners) manifest.paletteOwners = passes.paletteOwners;
   manifest.legend = labels(passes);

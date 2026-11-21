@@ -3,12 +3,12 @@ const { render, cameraCapture } = require('./render.js');
 const { layer: graphDeepLayer } = require('./deep-composite.js');
 const { history } = require('../src/render-graph.js');
 const { pose } = require('./diarama-pose.js');
-const { select } = require('../src/art-passes.js');
+const { select, needsPartMotion } = require('../src/art-passes.js');
 const { encode, depthRange, labels } = require('./pass-preview.js');
 
 const defaults = ['coverage', 'depth', 'normal', 'objectId', 'materialId', 'emission'];
 const positionPass = new Set(['position', 'objectPosition']);
-const finitePass = new Set(['depth', 'emissionDepth']);
+const finitePass = new Set(['depth', 'emissionDepth', 'previousDepth']);
 
 function renderGraphScene(source, { camera, lights, channels = defaults, options = {}, renderGraphInputs, renderGraphCapture,
   take, time = take?.start ?? 0, kit } = {}) {
@@ -49,12 +49,15 @@ function createSceneSampler(kit) {
     const at = options.time ?? time;
     if (!Number.isFinite(at) || at < 0) throw new RangeError('Graph scene playback needs nonnegative seconds');
     pose(source, at, { kit, artDirection: options.artDirection, maxSteps: 36000 });
-    const motion = select(settings.channels).some(channel => channel === 'motion' || channel === 'emissionMotion');
+    const channels = select(settings.channels);
+    const motion = channels.some(channel => channel === 'motion' || channel === 'emissionMotion');
+    const parts = needsPartMotion(channels);
     const result = renderGraphScene(source, { ...settings, time, take, kit, options: {
-      ...(motion && at > previousTime && { motionFrom: previousMotion }), ...options,
-      ...(motion && { captureMotion: true }), renderHistory: retained, renderHistoryKey: retained
+      ...((motion || parts) && at > previousTime && { motionFrom: previousMotion }), ...options,
+      ...(motion && { captureMotion: true }), ...(parts && { capturePartMotion:true }),
+      renderHistory: retained, renderHistoryKey: retained
     } });
-    previousMotion = motion ? result.motionReference : undefined;
+    previousMotion = motion || parts ? result.motionReference : undefined;
     previousTime = at;
     return result;
   }
@@ -118,7 +121,7 @@ function graphRenderPass(frame, channel, { emptyDepth = 1e9, kit } = {}) {
   const preview = positions ? positionPreview(raw, valid, width, height) :
     { image: api.rasterFrame(encode({ w: width, h: height, passes: frame.passes }, channel)),
       ...(depth && { range: depthRange(raw) }) };
-  const names = { objectId: 'objects', materialId: 'materials', target: 'targets', paletteOwner: 'paletteOwners' }[channel];
+  const names = { objectId: 'objects', materialId: 'materials', partId: 'parts', target: 'targets', paletteOwner: 'paletteOwners' }[channel];
   const legend = names ? labels(frame.passes)[names] : undefined;
   return { value: preview.image, data: { width, height, channels, data: buffer }, valid: { width, height, channels: 1, data: valid },
     report: { channel, width, height, ...(preview.range !== undefined && { range: preview.range }),

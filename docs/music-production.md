@@ -99,6 +99,10 @@ the comparison window and level. For revision documents, an array holds the
 named revisions directly. A suggestion report includes the reference in the
 comparison by default.
 
+[Run a producer audition](music-producer.md) to compare contrasting musical
+decisions, hear focused bars and stems in context, and keep individual
+choices with a reusable listening rationale.
+
 ## Assemble adaptive transitions
 
 Pass the `music-transition` and `music-cue` intents from Ink's

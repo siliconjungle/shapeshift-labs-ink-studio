@@ -56,12 +56,38 @@ function writeTake(folder,value,stems,report,production,paths) {
     fs.writeFileSync(path.join(solos,name+'.wav'),WAV.encode(stem,{encoding:'pcm24'}));
   }
   write(path.join(folder,'report.json'),report);
-  if (production) write(path.join(folder,'production.json'),{production,
+  if (production) writeRecipe(folder,production,paths);
+}
+function writeRecipe(folder,production,paths) {
+  write(path.join(folder,'production.json'),{production,
     assets:Object.fromEntries(Object.entries(paths).map(([name,at])=>[name,path.relative(folder,at)]))});
+}
+function sessionConfig(file) {
+  const data=read(file);
+  if (data?.format==='ink-studio/producer-session') return {session:data};
+  const {session,...settings}=data;
+  return {...settings,session:typeof session==='string' ? read(path.resolve(path.dirname(file),session)) : session};
+}
+function writeReview(folder,result,paths) {
+  fs.mkdirSync(folder,{recursive:true});
+  const takes=result.takes.map((take,index)=>{
+    const at=path.join(folder,take.id), summary=result.report.takes[index];
+    writeTake(at,take.value,{},summary,take.production,paths);
+    const focusFiles={};
+    for (const [id,audio] of Object.entries(take.focus)) {
+      const file='focus-'+id+'.wav';
+      fs.writeFileSync(path.join(at,file),WAV.encode(audio,{encoding:'pcm24'}));
+      focusFiles[id]=take.id+'/'+file;
+    }
+    return {...summary,mix:take.id+'/mix.wav',production:take.id+'/production.json',focusFiles};
+  });
+  const manifest=path.join(folder,'manifest.json');
+  write(manifest,{...result.report,takes});
+  return {manifest,takes:takes.map(take=>take.id)};
 }
 
 module.exports=function command([mode,file,config],opt,kit) {
-  if (!file) throw new TypeError('Use music production performances, themes, analyze, suggest, revise, render, audition or timeline with a recipe');
+  if (!file) throw new TypeError('Use music production with a mode and a recipe. Producer modes are plan-audition, review-audition and keep-audition');
   const recipe=read(file);
   const {sources,paths,timeline}=mode==='timeline' ? timelineBank(recipe,file) : {paths:assetPaths(recipe,file)};
   const assets=Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,WAV.read(file)]));
@@ -74,15 +100,31 @@ module.exports=function command([mode,file,config],opt,kit) {
     value={...P.developThemes(production,read(config),assets),...(recipe.assets && {assets:paths})};
   else if (mode==='analyze') value=P.analyze(production,assets,config ? read(config) : recipe.options);
   else if (mode==='suggest') value=P.suggest(production,config ? read(config) : recipe.options,assets);
+  else if (mode==='plan-audition') value=P.planProducer(production,config ? read(config) : recipe.brief,assets);
   else if (mode==='revise' && config) {
-    const revision=read(config);
+    const document=read(config);
+    const revision=document?.format==='ink-studio/producer-reference' && document.version===1 ? document.revision : document;
     value={production:P.revise(production,revision,assets),...(recipe.assets && {
       assets:paths
     })};
-  } else if (['render','audition','timeline'].includes(mode)) {
+  } else if (['render','audition','timeline','review-audition','keep-audition'].includes(mode)) {
     if (typeof opt.out!=='string') throw new TypeError('Use --out with a production output directory');
     const folder=path.resolve(opt.out);
-    if (mode==='audition') {
+    if (mode==='review-audition' || mode==='keep-audition') {
+      if (!config) throw new TypeError('Use a producer session or selection file');
+      const {session,...settings}=sessionConfig(config);
+      if (mode==='review-audition') {
+        const result=P.reviewProducer(production,session,assets,settings.options ?? recipe.review);
+        value=writeReview(folder,result,paths);
+      } else {
+        const kept=P.keepProducer(production,session,settings,assets);
+        fs.mkdirSync(folder,{recursive:true});
+        const reference=path.join(folder,'reference.json');
+        write(reference,kept.reference);
+        writeRecipe(folder,kept.production,paths);
+        value={reference,production:path.join(folder,'production.json')};
+      }
+    } else if (mode==='audition') {
       const variants=config ? read(config) : recipe.variants;
       const rows=Array.isArray(variants) ? variants : variants?.variants;
       const suggested=!Array.isArray(variants) && Array.isArray(rows) && (!rows.length || rows.some(row=>row?.revision));

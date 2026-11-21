@@ -157,7 +157,7 @@ function preview(opt) {
     settings: { passes: channels, lookPassRegistry },
     suffixes: [...channels.map(channel => '-'+channel+'.png'), '-passes.json'],
     capture(frame, scale) {
-      first ??= { width: frame.w, height: frame.h, scale };
+      first ??= { width: frame.passes.w, height: frame.passes.h, scale };
       last = frame.passes;
       for (const [channel, images] of frames)
         images.push(R.upscale(Palette.encode(frame, channel), scale));

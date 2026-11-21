@@ -7,7 +7,8 @@ const SplatProvenance = (() => {
     ['opticalSplats', 12, Float32Array], ['materialPixelStyles', 4, Float32Array], ['shadowLod', 6, Float32Array]];
   function targetKey(target) {
     const labels = [target.entity, target.surface, target.prefabs, target.tags, target.medium, target.mediumKind];
-    if (target.mark !== undefined || target.markLayer !== undefined) labels.push(target.mark, target.markLayer);
+    if (target.mark !== undefined || target.markLayer !== undefined || target.part !== undefined) labels.push(target.mark, target.markLayer);
+    if (target.part !== undefined) labels.push(target.part);
     return JSON.stringify(labels);
   }
 

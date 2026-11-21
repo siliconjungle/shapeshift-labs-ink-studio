@@ -1100,8 +1100,8 @@ const CMD = {
         '    [--source-map file.json --target-map file.json] [--travel scaled|unscaled|in-place] [--fps rate]',
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
-        '  passes <id> [--channels coverage,depth,normal,objectId,materialId,emission]  save art-pixel render pass previews',
-        '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--out directory]   export aligned RGBA, depth, normals, IDs and material mattes',
+        '  passes <id> [--channels depth,normal,part-motion] [--previous seconds]   save art-pixel render pass previews',
+        '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--part-motion on] [--out directory]   export aligned RGBA, depth, normals, IDs and material mattes',
         '  export-scene <scene|world|take> --out directory [--formats still,loop,replay,embed]',
         '    --audio soundtrack.json [--mux CODEC --adapters host.cjs]   export aligned WAV stems and optional video',
         '    --loop-join   inspect the actual frame join and excluded endpoint on a clip or scene export',
@@ -2304,9 +2304,17 @@ const CMD = {
   },
   passes() {
     const w = buildPreview(), t = num('t', 0);
-    pose(w, t);
     const passes = opt.channels ? String(opt.channels).split(',') : true;
-    const im = R.render(w, view({ t, passes }));
+    const previous = num('previous');
+    if (opt.previous !== undefined && (opt.previous === true || !Number.isFinite(previous) || previous >= t))
+      die('--previous needs a time earlier than --t');
+    let motionFrom;
+    if (previous !== undefined) {
+      pose(w, previous);
+      motionFrom = R.render(w, view({ t:previous, captureMotion:true, capturePartMotion:true })).motionReference;
+    }
+    pose(w, t);
+    const im = R.render(w, view({ t, passes, motionFrom }));
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT, w.id + '-passes');
     require('./pass-preview.js').writePasses(directory, im, opt.px1 ? 1 : im.px);
     console.log('wrote', directory);
@@ -2322,7 +2330,8 @@ const CMD = {
     const frame = view(ts.length > 1 ? sequenceHistory() : {});
     const out = opt.out ?? path.join(OUT, world.id + '-layers');
     const { file, manifest } = require('./export-layers.js').exportLayers(world, {
-      out, view: frame, times: ts, native: !!opt.px1, pose, replay: feedbackReplay(world, ts[0], frame)
+      out, view: frame, times: ts, native: !!opt.px1, pose, replay: feedbackReplay(world, ts[0], frame),
+      partMotion: onOffOption('part-motion') === true
     });
     console.log('wrote', file, manifest.frames.length, 'frame(s)');
   },
@@ -2542,7 +2551,7 @@ const CMD = {
       return R.render(w, view({ ...frame, t, resetRenderHistory }));
     }
     for (const t of ts) {
-      const im = replay ? replay.sample(t, draw) : draw(t);
+      const im = replay ? frame.partMotionHistory.output(()=>replay.sample(t, draw)) : draw(t);
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
       imgs.push(displayFrame(im, w));
     }
@@ -2733,7 +2742,7 @@ const CMD = {
     }
     for (let k = 0; k < n; k++) {
       const t = from + k / fps;
-      const im = replay ? replay.sample(t, draw) : draw(t, undefined, k / (n - 1));
+      const im = replay ? frame.partMotionHistory.output(()=>replay.sample(t, draw)) : draw(t, undefined, k / (n - 1));
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
       ts.push(t);
       frames.push(displayFrame(im, w));

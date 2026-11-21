@@ -13,6 +13,7 @@ const LookInputs = require('../src/look-inputs.js');
 const TargetSelectors = require('../src/target-selectors.js');
 const { createArtPasses, sampleFrames, selectVisibleSubjects } = require('./art-passes.js');
 const ArtPasses = require('../src/art-passes.js');
+const PartMotion = require('./part-motion.js');
 const { createEnvironmentPasses } = require('./environment-passes.js');
 const ArtInk = require('../src/art-ink.js');
 const ArtDirection = require('../src/art-direction.js');
@@ -117,6 +118,7 @@ const deepScope = Symbol('deep capture budget');
 const deepReflection = Symbol('deep reflection plane');
 const shutterPlan = Symbol('shutter plan');
 const coverageLane = Symbol('motional coverage native/oversampled lane');
+const nativePartMotion = Symbol('part motion native capture');
 
 function cameraCapture(options, receive) {
   return { [captureCamera](camera) {
@@ -132,7 +134,8 @@ function sequenceHistory(kit) {
     renderHistory: kit.renderGraph.history(),
     volumeHistory: kit.atmosphere.history(),
     transparencyHistory: kit.stableTransparency.history(),
-    motionalCoverageHistory: MotionalCoverage.history()
+    motionalCoverageHistory: MotionalCoverage.history(),
+    partMotionHistory: PartMotion.history()
   };
 }
 
@@ -230,7 +233,8 @@ function render(world, o, preparedPalettes) {
     const exposedPasses = branches.length ? Shutter.graphPasses(o[reconstructionSource] ?? world, o, o[shutterPlan], branches,
       base.w, base.h, (sample, settings) => render(sample, { ...settings,
         [shutterPlan]: null, [captureCamera]: undefined, [probeCaptures]: undefined, [deepScope]: undefined,
-        [reconstructionSource]: undefined, [sampledPresentation]: false, [afterimageRows]: undefined, motionalCoverageHistory: undefined
+        [reconstructionSource]: undefined, [sampledPresentation]: false, [afterimageRows]: undefined,
+        motionalCoverageHistory: undefined, partMotionHistory: undefined, capturePartMotion: false
       }, preparedPalettes), kit) : o[Shutter.passImages];
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera,
       (spec,ctx) => kit.annotations.anchor(spec,{ ...ctx,sceneTime:o?.t }),
@@ -265,7 +269,9 @@ function render(world, o, preparedPalettes) {
     return Shutter.scene(o[reconstructionSource] ?? world, o, o[shutterPlan], (sample, settings, nominal) =>
       render(sample, { ...settings, [shutterPlan]: null, [reconstructionSource]: undefined, [probeCaptures]: undefined,
         motionalCoverageSource: settings.motionalCoverageSource ?? (o[reconstructionSource] ?? world).data,
-        ...(!nominal && { [captureCamera]: undefined, [deepScope]: undefined, [sampledPresentation]: false, motionalCoverageHistory: undefined })
+        partMotionSource: settings.partMotionSource ?? (o[reconstructionSource] ?? world).data,
+        ...(!nominal && { [captureCamera]: undefined, [deepScope]: undefined, [sampledPresentation]: false,
+          motionalCoverageHistory: undefined, partMotionHistory: undefined, capturePartMotion: false })
       }, preparedPalettes), kit);
   }
   if (!o?.renderStats) return renderFrame(world, o, preparedPalettes);
@@ -530,7 +536,7 @@ function renderFrame(world, o, preparedPalettes) {
       frame.paletteInventory = { base:basePalette, colors:[...declared].filter(Number.isInteger) };
     }
     if (o.captureScenePalette) frame.scenePalette = legacyLook && !tone ? basePalette : null;
-    if (!o.captureMotion) delete frame.motionReference;
+    if (!o.captureMotion && !o.capturePartMotion) delete frame.motionReference;
     if (requestedPasses.length) frame.passes = ArtPasses.subset(passes, requestedPasses);
     if (readabilitySelectors && frame.readabilityMask) o.captureReadabilityFrame?.(frame);
     return frame;
@@ -566,8 +572,11 @@ function renderFrame(world, o, preparedPalettes) {
   });
   const historyFrames = effects?.smear && o.artHistory ? o.artHistory.previous(t, W, H, o[reconstructionSource] ?? world) : [];
   const motionFrame = historyFrames[Math.max(0, historyFrames.length - (effects?.smear?.frames || 1))];
-  const motionFrom = o.motionFrom ?? motionFrame?.motionReference;
+  const motionFrom = o.resetRenderHistory ? undefined : o.motionFrom ?? motionFrame?.motionReference;
   const captureMotion = !!o.captureMotion || passSelection.has('motion') || passSelection.has('emissionMotion');
+  const partView = (!o.samples || o[nativePartMotion]) && !o.captureCoverage && !o.reflectionPlane && !probeView;
+  const captureParts = partView && (!!o.capturePartMotion || ArtPasses.needsPartMotion(requestedPasses));
+  if (partView && !captureParts && (o.resetRenderHistory || o.resetPartMotion)) o.partMotionHistory?.clear();
   const focus = !o.captureCoverage && protection?.focus && (o[subjectFocusPass] !== undefined ? o[subjectFocusPass] :
     SubjectFocus.frame(protection.focus,renderFrame(world,{
       ...o, [subjectFocusPass]:false, px, samples:true, worked:false, artInkActive:!!ink || o.artInkActive,
@@ -579,7 +588,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (legacyLook && (specializedResolve || (o.colored && !tone))) {
     const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], [scopedGlowPass]: trackGlow, [coverageLane]: 'native', artInkActive: !!ink,
       [subjectFocusPass]:focus,
-      captureMotion, motionFrom, maskGrade: !tone && grade, reflectionTint: effects?.reflection,
+      captureMotion, motionFrom, [nativePartMotion]: true, maskGrade: !tone && grade, reflectionTint: effects?.reflection,
       previewPalette: globalPaletteMark, lookAudit: audit,
       effectPaletteCapture: effectPaletteSettings,
       captureFog: o.captureFog || ink?.ramps.has('fog'), resolveDetailCleanup: !!detailBudget?.affectsCleanup }), paletteRules);
@@ -600,7 +609,7 @@ function renderFrame(world, o, preparedPalettes) {
         volumeHistory: null,
         artInkActive: !!ink,
         [subjectFocusPass]:focus,
-        captureMotion: false, motionFrom: undefined, effectPaletteCapture: null, reflectionTint: effects?.reflection,
+        captureMotion: false, capturePartMotion:false, motionFrom: undefined, effectPaletteCapture: null, reflectionTint: effects?.reflection,
         passes: specializedResolve ? ['coverage'] : false,
         lookAudit: false
       })
@@ -759,9 +768,16 @@ function renderFrame(world, o, preparedPalettes) {
   const glassIndex = optics && TargetSelectors.index(world);
   const glassLooks = glassIndex && new Map();
   const centers = captureMotion ? new Float32Array(N * 2).fill(NaN) : null;
-  const motionReference = centers && { w: W, h: H, centers, ...(birthIds && { birthIds, baseCount, splatSource, emitterSource }) };
+  const motionReference = (centers || captureParts) && { w: W, h: H, ...(centers && {centers}),
+    ...(birthIds && { birthIds, baseCount, splatSource, emitterSource }) };
+  const partSource = o[reconstructionSource] ?? captureWorld;
+  const partCapture = captureParts && {
+    source:o.partMotionSource ?? partSource.rest ?? partSource.data,
+    camera:{view:V.slice(),focal,ortho,near}, time:sceneTime, reset:o.resetRenderHistory || o.resetPartMotion,
+    previous:o.motionFrom?.partMotion ?? o.partMotionHistory?.previous()
+  };
   const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' &&
-    !ArtPasses.environment.includes(name)), W, H, trackGlow && emissive?.slots);
+    !ArtPasses.environment.includes(name)), W, H, trackGlow && emissive?.slots, partCapture);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
   const reflectPass = environmentPasses?.passes.reflections;
@@ -2635,8 +2651,8 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const effectSignals = effectRules && { rules: effectRules, sky: showSky && !!sky, backdropCloud, media: effectMedia,
     haze: hazeCoverage, darkAt: EffectPalettes.bindDarks(effectRules,world) };
-  let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, rayAt, span: R,
-    detail, sprM, surfaceGlint, centers, motionFrom:o.surfaceMotionFrom ?? motionFrom,
+  let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, scale:SC, rayAt, span: R,
+    detail, sprM, surfaceGlint, centers, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0 });
   if (lightingEffects) effectSignals.lightAt = (p,bottom)=>PaletteComposition.lighting(passes,bottom,p,{
     live,sun,contact,probes,probeReceiver,cloudShadow,cloudsReceive:i=>!(Math.round(d[i*16+11]) & (32 | 64))
@@ -2716,6 +2732,7 @@ function renderFrame(world, o, preparedPalettes) {
       audit.pixel('interior', (H - 1 - y) * W + x, c2[i], c2[i + 1], c2[i + 2]);
     }
     motionCoverageFrame?.commit();
+    if (partCapture) o.partMotionHistory?.store(motionReference.partMotion, partCapture.reset);
     return {
       w: W, h: H, color: Uint8Array.from(c2, v => Math.round(clamp(v, 0, 1) * 255)), depth: dep, drawn,
       ...(deepFrame && { deep: deepFrame }),
@@ -3065,6 +3082,7 @@ function renderFrame(world, o, preparedPalettes) {
     ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
   }, passes, atmosphere?.fog, effectSignals, effectColor, paletteState,paletteInventory,beforePalette,paintStage);
   motionCoverageFrame?.commit();
+  if (partCapture) o.partMotionHistory?.store(motionReference.partMotion, partCapture.reset);
   return frame;
 }
 function pixelIndex(w, h, sourceW, sourceH) {

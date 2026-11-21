@@ -18,6 +18,13 @@ const arrangement = { score:{key:{root:'C4'},harmonies:{home:{root:'C4',quality:
   motifs:{melody:motif},parts:{lead:{role:'lead',material:'melody'}},
   sections:[{id:'opening',bars:1,harmony:'home'}] };
 const production = {arrangement,patches:{pluck:{type:'fm'}},tracks:{lead:{patch:'pluck',gain:-11,send:.2}}};
+const producerPlan = {op:'music.planProducer',inputs:{source:production,brief:{
+  section:'opening',goal:'Expose the opening echo on the pluck.',strategies:[],takes:[{
+    id:'echo',hypothesis:'More room makes the quiet spaces audible.',components:[
+      {id:'room-send',summary:'Raise the lead send.',revision:{tracks:{lead:{send:.7}}}}
+    ]
+  }]
+}}};
 const transientAudio = { sampleRate: 8000, channels: 1,
   samples: Array.from({ length: 80 }, (_, i) => i === 32 ? .9 : 0) };
 const diorama = { id: 'node-catalog', seed: 1, style: 'slate', solids: [
@@ -213,6 +220,11 @@ const specifications = {
   'music.reviseProduction': { inputs:{source:production,revision:{tracks:{lead:{pan:.28}}}} },
   'music.auditionProduction': { inputs:{source:production,variants:[{id:'dry'},{id:'room',tracks:{lead:{send:.7}}}],
     options:{end:.25,sampleRate:8000}} },
+  'music.planProducer': {inputs:producerPlan.inputs},
+  'music.reviewProducer': {nodes:{plan:producerPlan},inputs:{
+    source:production,session:link('plan'),options:{end:.25,sampleRate:8000,focus:[{id:'lead',tracks:['lead']}]}}},
+  'music.keepProducer': {nodes:{plan:producerPlan},inputs:{source:production,session:link('plan'),
+    selection:{keep:[{take:'echo',component:'room-send'}],reason:'Give the held notes a trailing reflection.'}}},
   'music.renderTransitions': { inputs:{sources:{score:production},
     timeline:{entry:'opening',end:.25,segments:{opening:{source:'score'}}},options:{sampleRate:8000}} },
   'music.arrange': { inputs:{source:arrangement} },

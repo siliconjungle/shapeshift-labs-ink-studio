@@ -216,6 +216,30 @@
           stems:Object.fromEntries(result.takes.map(take=>[take.id,take.stems])),report:result.report};
       }
     },
+    'music.planProducer': {
+      description: 'Plan contrasting, editable orchestration and harmony takes around a musical goal.',
+      inputs:{source:'record',brief:'record',assets:options},outputs:{value:'record'},
+      run({source,brief,assets}) {return {value:P.musicProduction.planProducer(source,brief,assets)};}
+    },
+    'music.reviewProducer': {
+      description: 'Level-match producer takes in context and return aligned listening windows and instrument solos.',
+      inputs:{source:'record',session:'record',assets:options,options},
+      outputs:{value:'record',audio:'record',focus:'record',report:'record'},
+      run({source,session,assets,options}) {
+        const {takes,report}=P.musicProduction.reviewProducer(source,session,assets,options);
+        return {value:report,report,audio:Object.fromEntries(takes.map(take=>[take.id,take.value])),
+          focus:Object.fromEntries(takes.map(take=>[take.id,take.focus]))};
+      }
+    },
+    'music.keepProducer': {
+      description: 'Keep selected audition components and save their reusable revision and listening rationale.',
+      inputs:{source:'record',session:'record',selection:'record',assets:options},
+      outputs:{value:'record',reference:'record',revision:'record'},
+      run({source,session,selection,assets}) {
+        const {production,reference,revision}=P.musicProduction.keepProducer(source,session,selection,assets);
+        return {value:production,reference,revision};
+      }
+    },
     'music.planPerformances': {
       description: 'Prepare patch-gesture alternatives that retain the score for audition.',
       inputs:{source:'record',takes:'array<record>',assets:options},

@@ -1,6 +1,6 @@
 /* Stable names shared by look authors, render ownership, and scene queries. */
 const TargetSelectors = (() => {
-  const keys = ['entity', 'object', 'material', 'surface', 'prefab', 'tag', 'medium', 'mediumKind', 'mark', 'markLayer'];
+  const keys = ['entity', 'object', 'part', 'material', 'surface', 'prefab', 'tag', 'medium', 'mediumKind', 'mark', 'markLayer'];
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const name = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 256;
   function prepare(selector) {
@@ -22,7 +22,7 @@ const TargetSelectors = (() => {
 
   function describe(target) {
     if (!record(target)) throw new TypeError('Expected named target metadata');
-    const keys = ['entity', 'surface', 'prefabs', 'tags', 'medium', 'mediumKind', 'mark', 'markLayer'];
+    const keys = ['entity', 'part', 'surface', 'prefabs', 'tags', 'medium', 'mediumKind', 'mark', 'markLayer'];
     for (const [key, value] of Object.entries(target)) {
       const valid = key === 'tags' || key === 'prefabs' ?
         Array.isArray(value) && Array.from(value).every(name) : name(value) || key === 'entity' && Number.isSafeInteger(value);

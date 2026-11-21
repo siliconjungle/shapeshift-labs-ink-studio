@@ -2,7 +2,9 @@
 const ArtPasses = (() => {
   const surface = Object.freeze(['coverage', 'depth', 'normal', 'objectId', 'materialId', 'emission', 'splatId', 'position', 'objectPosition', 'protected', 'emissionDepth', 'motion', 'emissionMotion', 'target', 'mask']);
   const environment = Object.freeze(['sky', 'fogTransmittance', 'precipitation', 'reflections', 'foregroundCoverage']);
-  const channels = Object.freeze([...surface, ...environment, 'paletteOwner']);
+  const partMotion = Object.freeze(['partId', 'partMotion', 'previousDepth', 'partMotionValid']);
+  const needsPartMotion = selected => selected.some(channel => channel !== 'partId' && partMotion.includes(channel));
+  const channels = Object.freeze([...surface, ...environment, ...partMotion, 'paletteOwner']);
   const cutoff = 0.5;
   const ownsSurface = (alpha, writesDepth, depth, nearest) => writesDepth && alpha > cutoff && depth <= nearest;
   const over = (value, below, alpha) => value * alpha + below * (1 - alpha);
@@ -10,18 +12,20 @@ const ArtPasses = (() => {
   function select(request) {
     if (!request) return [];
     if (request === true) return surface;
-    if (!Array.isArray(request) || request.some(channel => channel !== 'environment' && !channels.includes(channel)))
+    if (!Array.isArray(request) || request.some(channel => !['environment', 'part-motion'].includes(channel) && !channels.includes(channel)))
       throw new RangeError('Unknown art pass. Available passes: ' + channels.join(', '));
-    return [...new Set(request.flatMap(channel => channel === 'environment' ? environment : [channel]))];
+    return [...new Set(request.flatMap(channel => channel === 'environment' ? environment :
+      channel === 'part-motion' ? partMotion : [channel]))];
   }
 
   function subset(passes, selected) {
     const output = { w: passes.w, h: passes.h };
     for (const channel of selected) output[channel] = passes[channel];
-    for (const channel of ['motion', 'emissionMotion'])
+    for (const channel of ['motion', 'emissionMotion', 'partMotion', 'previousDepth'])
       if (output[channel] && passes[channel + 'Valid']) output[channel + 'Valid'] = passes[channel + 'Valid'];
     if (output.objectId) output.objects = passes.objects;
     if (output.materialId) output.materials = passes.materials;
+    if (output.partId) output.parts = passes.parts;
     if (output.target) output.targets = passes.targets;
     if (output.paletteOwner) output.paletteOwners = passes.paletteOwners;
     return output;
@@ -37,6 +41,6 @@ vec3 inkEmissionOver(vec3 emission, vec3 below, float alpha) {
 }
 `;
 
-  return Object.freeze({ channels, environment, select, subset, cutoff, ownsSurface, over, glsl });
+  return Object.freeze({ channels, environment, partMotion, needsPartMotion, select, subset, cutoff, ownsSurface, over, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = ArtPasses;

@@ -7,7 +7,7 @@ In Node, call the library's `render(world, { passes: true })` or supply an array
 | Channel | Data |
 | --- | --- |
 | `coverage` | One float per pixel. The combined opacity of splat and edge-sprite layers, independent of the background. |
-| `depth` | One float per pixel. Camera-axis distance to the owning splat's center, in scene units. Empty pixels use infinity. |
+| `depth` | One float per pixel. Camera-axis depth of the owner in scene units. Center sorting uses splat centers. Surface sorting and traced geometry can supply sampled depths. Empty pixels use infinity. |
 | `normal` | Three floats per pixel. The owning sample's normalized world-space surface normal. Samples with no surface normal use zeros. |
 | `objectId`, `materialId` | Unsigned integers. Zero means unassigned. The `objects` and `materials` arrays give authored labels, where supplied. |
 | `target` | Index into `targets` for the dominant splat or frame look at each pixel. Scoped bindings take precedence over scene-wide grades. Zero means no recorded binding. The table identifies the asset, stage, and selector when available. |
@@ -26,6 +26,38 @@ Pass a solid's `objectId` or `tag` and its material's `materialId` to attach nam
 Browser hosts receive `ArtPasses` in the toolkit bundle, including the channel names and GLSL helpers for ownership and blending. The default [WebGL canvas renderer](browser-renderer.md) draws the image. Node's render API provides the diagnostic buffers described here.
 
 For motion channels, request `captureMotion: true` on the prior frame and pass its `motionReference` as `motionFrom` when rendering the next frame. The two frames must use the same art dimensions and preserve their splat slots. The emission variant also tracks translucent sources.
+
+## Part motion and previous depth
+
+Request `['part-motion']` or individual channels in the headless renderer. Part motion carries a visible point through the owning splat's prior pose and camera, including rotation of rig parts. It checks the prior pixel's part and surface depth before accepting that correspondence.
+
+| Channel | Data |
+| --- | --- |
+| `partId` | One unsigned ID per pixel, with zero for an unassigned part. Index `parts` for the label, owning entity or object when available, and the source of the assignment. |
+| `partMotion` | Two float32 values per pixel, current center minus the prior image position, in native art pixels. Positive X is right and positive Y is down. Subtract the vector from the current pixel center to find its prior position. |
+| `previousDepth` | One float32 value per current pixel. The value is the exported depth at that reprojected pixel of the previous frame, along the previous camera axis in scene units. |
+| `partMotionValid` | A byte per pixel. 255 means the correspondence passed. 0 means invalid. The same mask accompanies `previousDepth` as `previousDepthValid`. |
+
+Invalid vectors use zero. Invalid previous depth uses positive infinity. Use the mask to distinguish disocclusions and cuts from valid stationary pixels. The first frame, a rewind, a new render source, a projection change, and an art-grid resize also invalidate the pair. Depth is checked at the nearest prior sample with a tolerance of 1.25 art-pixel widths measured in scene units at that depth.
+
+Named rig parts and dominant bone assignments are discovered automatically. An explicit `target: { entity: 'tide-dial', part: 'needle' }` in `builder.describeSplats` can name a part and scope it to an entity. Otherwise a named object supplies the group, or an unnamed splat requires a matching splat slot. The pass follows opaque splat owners. Standalone atlas cards, ephemeral effect rows, and transparent layers use their existing color and coverage paths. Preserve splat slots and their meanings across samples. Approximate surface frames and art-grid occlusion checks can reject correspondences at grazing edges.
+
+```js
+const partMotionHistory = ink.createPartMotionHistory();
+const frame = ink.render(world, {
+  t, w: 144, h: 88, px: 1,
+  passes: ['part-motion'], partMotionHistory, resetPartMotion: cut
+});
+```
+
+Use one history per sequence and render in playback order. For an explicit pair, render the prior frame with `capturePartMotion: true` and pass its `motionReference` as `motionFrom`. Keep a stable `partMotionSource` token if your host supplies new render buffers for the same source. `resetRenderHistory`, `resetPartMotion`, or clearing the history starts a new pair. Recipe graphs can request the channels from `scene.render` and read exact data and validity via `scene.pass`.
+
+```sh
+ink-studio passes examples/part-motion.js --previous .25 --t .333333 --channels part-motion --w 144 --h 88 --px 1 --px1 --out tide-check
+ink-studio clip examples/part-motion.js --from 0 --to 2 --fps 12 --feedback-fps 12 --feedback-cuts 1 --passes part-motion --w 144 --h 88 --px 1 --px1 --out tide-dial.png
+```
+
+Clips and sheets use the previous emitted frame and invalidate the first sample after a feedback cut. Preview PNGs visualize depth and vectors. For lossless files use the layered export.
 
 The PNG writer includes a `passes.json` manifest with the art dimensions,
 image scale, and available previews. Read `position` and `objectPosition`
@@ -105,6 +137,8 @@ In Node, use `exportLayers(world, { out, view, times, native, pose })`. The opti
 | Material mattes | One grayscale PNG per visible material ID. White pixels belong to that material. All other pixels are black. A missing matte means the material has no pixels in that frame. |
 
 All files in a frame have the declared dimensions and top-down rows. The manifest records the sampled camera, the original surface grid, and labels. Surface data uses nearest sampling from that grid. Surface ownership follows the render-pass rule above. Color can also include soft coverage, fog, and screen-space overlays. For analysis, read the stored PNG sample values directly.
+
+Add `--part-motion on` or `partMotion: true` in Node to export RGB24 part IDs, interleaved float32 little-endian XY vectors, float32 little-endian previous depth, and a grayscale validity PNG. The vectors remain in native art pixels. The `parts` and `surfaceSize` fields record the frame's labels and art dimensions.
 
 ## Environment passes for compositing
 

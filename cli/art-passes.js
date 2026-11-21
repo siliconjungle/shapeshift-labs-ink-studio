@@ -3,6 +3,7 @@ const EmissiveFinishes = require('../src/emissive-finishes.js');
 const { ditherFootprint } = require('./dither-footprint.js');
 const { surfacePoint } = require('./scene-optics.js');
 const TargetSelectors = require('../src/target-selectors.js');
+const PartMotion = require('./part-motion.js');
 
 const SplatFrames = require('../src/splat-frames.js');
 const { rows: shutterRows } = require('./programmable-exposure.js');
@@ -26,9 +27,9 @@ function sampleFrames(world, time) {
   };
 }
 
-function createArtPasses(request, w, h, emissiveSlots) {
+function createArtPasses(request, w, h, emissiveSlots, capturePartMotion) {
   const selected = new Set(ArtPasses.select(request));
-  if (!selected.size) return null;
+  if (!selected.size && !capturePartMotion) return null;
   const size = w * h;
   const coverage = selected.has('coverage') ? new Float32Array(size) : null;
   const emission = selected.has('emission') ? new Float32Array(size * 3) : null;
@@ -36,7 +37,8 @@ function createArtPasses(request, w, h, emissiveSlots) {
   const scopedOwners = emissiveSlots && new Uint8Array(size);
   const scopedCoverage = emissiveSlots && new Float32Array(size);
   const emissionDepth = selected.has('emissionDepth') || emissionOwner || scopedOwners ? new Float32Array(size).fill(Infinity) : null;
-  const needsOwner = [...selected].some(channel => !['emission', 'emissionDepth', 'emissionMotion', 'coverage', 'protected'].includes(channel));
+  const needsOwner = capturePartMotion ||
+    [...selected].some(channel => !['emission', 'emissionDepth', 'emissionMotion', 'coverage', 'protected'].includes(channel));
   const owner = needsOwner ? new Int32Array(size).fill(-1) : null;
   const depth = needsOwner ? new Float32Array(size).fill(Infinity) : null;
 
@@ -118,11 +120,27 @@ function createArtPasses(request, w, h, emissiveSlots) {
       }
     }
     if (selected.has('depth')) result.depth = topDown(depth, 1);
+    const parts = (capturePartMotion || selected.has('partId')) && PartMotion.catalog(world);
+    if (selected.has('partId')) {
+      result.partId = topDown(Uint32Array.from(owner, i=>parts.rows[i] ?? 0),1);
+      result.parts = parts.parts;
+    }
     const normalOut = selected.has('normal') ? new Float32Array(size * 3) : null;
     const positionOut = selected.has('position') ? new Float32Array(size * 3) : null;
     const objectOut = selected.has('objectPosition') ? new Float32Array(size * 3) : null;
+    const sample = (normalOut || positionOut || objectOut || capturePartMotion) && sampleFrames(world,time);
+    if (capturePartMotion) {
+      const motion = PartMotion.capture(w,h,parts,owner,depth,capturePartMotion,geometry,topDown,sample,atlasOwners,selected);
+      geometry.motionReference.partMotion = motion.snapshot;
+      if (selected.has('partMotion')) result.partMotion = motion.vectors;
+      if (selected.has('partMotion') || selected.has('partMotionValid')) result.partMotionValid = motion.valid;
+      if (selected.has('previousDepth')) {
+        result.previousDepth = motion.previousDepth;
+        result.previousDepthValid = motion.valid;
+      }
+    }
     if (normalOut || positionOut || objectOut) {
-      const frames = new Map(), sample = sampleFrames(world, time);
+      const frames = new Map();
       for (let p = 0; p < size; p++) {
         const atlas=atlasOwners?.get(p);
         if (atlas) {
@@ -167,7 +185,7 @@ function createArtPasses(request, w, h, emissiveSlots) {
       const vectors = new Float32Array(size * 2), valid = new Uint8Array(size);
       const previous = channel === 'motion' ? geometry.motionFrom : geometry.emissionMotionFrom;
       const current = geometry.motionReference;
-      if (previous?.w === w && previous.h === h && previous.centers.length === geometry.centers.length) {
+      if (previous?.w === w && previous.h === h && previous.centers?.length === geometry.centers.length) {
         for (let p = 0; p < size; p++) {
           const i = ids[p] * 2;
           if (i < 0 || !Number.isFinite(previous.centers[i]) || !Number.isFinite(geometry.centers[i])) continue;
