@@ -25,6 +25,10 @@ Feed the aligned WAV files into [per-stem control signals](graph-media.md#per-st
 
 ## Soundtrack file
 
+Use `proceduralScore` for a [shared audiovisual score](procedural-score.md).
+Supply its inline `score` or the name of a world score `system`.
+The soundtrack renders the score on the same absolute sample grid.
+
 All file paths are relative to the soundtrack document.
 
 ```json

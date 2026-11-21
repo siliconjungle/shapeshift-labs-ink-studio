@@ -14,11 +14,11 @@ const token = value => typeof value === 'string' && value.trim() && value.length
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 function createSceneAudio(definition, { kit = require('../index.js').load(), resolveAsset, runtime } = {}) {
-  if (!fields(definition, ['format', 'version', 'sampleRate', 'gain', 'tracks', 'spatial', 'listener', 'music']) ||
+  if (!fields(definition, ['format', 'version', 'sampleRate', 'gain', 'tracks', 'spatial', 'listener', 'music', 'proceduralScore']) ||
       definition.format !== format || definition.version !== 1 || typeof resolveAsset !== 'function')
     throw new TypeError('Expected a version 1 scene soundtrack and audio resolver');
   const { KIT: K } = kit, T = K.procedural.takeTime;
-  const { sampleRate = 48000, gain = 1, tracks = [], spatial, listener = [0, 0, 0], music } = definition;
+  const { sampleRate = 48000, gain = 1, tracks = [], spatial, listener = [0, 0, 0], music, proceduralScore } = definition;
   if (!Number.isSafeInteger(sampleRate) || !finite(sampleRate, 8000, 192000) || !finite(gain, 0, 16) ||
       !Array.isArray(tracks) || tracks.length > 4096)
     throw new RangeError('Invalid scene soundtrack rate, gain, or track count');
@@ -44,18 +44,28 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       !record(music.layers ?? {}) || Object.values(music.layers ?? {}).some(row =>
         !record(row) || !Object.values(row).every(token))))
     throw new TypeError('Invalid soundtrack music binding');
+  if (proceduralScore !== undefined && (!fields(proceduralScore,['system','score','gain']) ||
+      (proceduralScore.system === undefined) === (proceduralScore.score === undefined) ||
+      proceduralScore.system !== undefined && !token(proceduralScore.system) ||
+      !finite(proceduralScore.gain ?? 1,0,1)))
+    throw new TypeError('A procedural soundtrack needs one inline score or world score system');
+  const inline = proceduralScore?.score === undefined ? null : K.music.score.compile(proceduralScore.score);
+  const scoreSystem = proceduralScore?.system, synthAsset = Symbol('procedural score');
 
   function render(sequence, { timeline, runtime: sceneRuntime } = {}) {
     const start = sampleOf(sequence.startPoint), end = sampleOf(sequence.endPoint);
     const factory = runtime ?? sceneRuntime;
-    const run = mixer || music || !timeline ? factory?.() : undefined;
+    const run = mixer || music || scoreSystem || !timeline ? factory?.() : undefined;
     if (music && !run) throw new Error('Adaptive music export needs a native sound world with its score system');
+    if (scoreSystem && run?.view().world.systems[scoreSystem]?.kind !== 'procedural-score')
+      throw new Error('Procedural score export needs the named procedural-score system');
     timeline ??= run?.timeline;
     const voices = bed.map(voice => ({ ...voice }));
     const cues = timeline?.audioSchedule(clock) ?? [];
     const looping = new Map(), resolved = new Map(), positional = [];
-    let next = 0, score = [], knots = 0;
+    let next = 0, score = [], knots = 0, generated;
     function resolve(name) {
+      if (name === synthAsset) return generated;
       if (!resolved.has(name)) {
         const asset = resolveAsset(name);
         if (!asset) throw new RangeError('Missing soundtrack asset ' + name);
@@ -142,7 +152,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         }
       }
     }
-    if (run && (mixer || music)) {
+    if (run && (mixer || music || scoreSystem)) {
       const initial = run.view(), dt = initial.world.dt;
       const period = initial.world.takeClock?.simulationRate === undefined ? T.period(dt) :
         T.div(T.read(1), T.read(initial.world.takeClock.simulationRate));
@@ -159,6 +169,16 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         observe(view.time, at(view.tick), at(view.tick + 1), query, run.events);
       } });
     } else observe(0, 0, end, run?.query());
+    const live = scoreSystem && run.query().probe(scoreSystem+'/schedule');
+    if (live && live.status !== 'ok') throw new Error('Procedural score schedule is unavailable');
+    const program = live ? K.music.score.compile(live.value.score,{requests:live.value.requests}) : inline;
+    if (program) {
+      if (end <= start || (end-start)*2 > WAV.maxSamples)
+        throw new RangeError('Scene soundtrack exceeds its WAV sample budget');
+      generated = program.audio({ sampleRate, start: {numerator:start,denominator:sampleRate},
+        end: {numerator:end,denominator:sampleRate}, gain: proceduralScore.gain ?? 1 }).value;
+      push({ stem: 'music', asset: synthAsset, first: start, end });
+    }
     return mix(voices.filter(row => row.first < end), resolve, { start, end, sampleRate, gain });
   }
   return Object.freeze({ render });
@@ -166,8 +186,9 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
 
 function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOptions } = {}) {
   const source = path.resolve(file), folder = path.dirname(source);
-  const { assets, world, ...definition } = read(source);
-  if (!record(assets) || Object.keys(assets).length > 1024 || !Object.keys(assets).every(token))
+  const { assets = undefined, world, ...definition } = read(source);
+  const assetsByName = assets === undefined && definition.proceduralScore !== undefined ? {} : assets;
+  if (!record(assetsByName) || Object.keys(assetsByName).length > 1024 || !Object.keys(assetsByName).every(token))
     throw new TypeError('Soundtrack needs named audio assets');
   const assetCache = new Map(), graphs = new Map();
   let soundWorld, totalSamples = 0;
@@ -180,7 +201,7 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
   }
   function resolveAsset(name) {
     if (assetCache.has(name)) return assetCache.get(name);
-    const spec = Object.hasOwn(assets, name) ? assets[name] : undefined;
+    const spec = Object.hasOwn(assetsByName, name) ? assetsByName[name] : undefined;
     let audio;
     if (typeof spec === 'string') audio = WAV.read(path.resolve(folder, spec));
     else if (fields(spec, ['graph','output','time','seed','inputs']) && token(spec.graph) && token(spec.output)) {

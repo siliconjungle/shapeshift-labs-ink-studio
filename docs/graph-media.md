@@ -7,6 +7,9 @@ or making a network request.
 
 ## WAV and frame analysis
 
+[Procedural scores](procedural-score.md) can generate the WAV input and
+publish harmony and controls to other branches of the same graph.
+
 Use an asset with `format: "wav"` and reference it by name with `audioAsset`.
 Ink reads little-endian RIFF/WAVE with 8-, 16-, 24- or 32-bit integer PCM
 and 32- or 64-bit IEEE float PCM, including extensible multichannel headers.

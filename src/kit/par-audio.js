@@ -9,6 +9,7 @@
   const media = (outputs, sample) => ({ inputs: { source: 'audio', options }, outputs, time: true,
     run({ source, options }, { time, take }) { return sample(source, mediaTime(time, take, options)); }
   });
+  const scoreRequests = { type: 'array<record>', default: [] };
   A.operations = Object.freeze({
     'audio.buffer': {
       inputs: { sampleRate: 'number', channels: 'number', samples: 'array<number>' }, outputs: { value: 'audio' },
@@ -70,6 +71,78 @@
       description: 'Convert musical addresses on keyframes, markers or edits to seconds.',
       inputs: { map: options, items: 'array<record>' }, outputs: { value: 'array<record>' },
       run({ map, items }) { return { value: P.musicTiming.resolveItems(P.musicTiming.compile(map), items) }; }
+    },
+    'music.score': {
+      description: 'Read a procedural score at a take boundary and expose its voices, harmony, and scene bindings.',
+      inputs: { score: 'record', requests: scoreRequests, options },
+      outputs: { value: 'record', bindings: 'record', voices: 'record', events: 'array<record>', analysis:'record', beat: 'number' },
+      time: true,
+      instantiate() {
+        let prior, updates, program;
+        return ({ score, requests, options }, { time, take }) => {
+          if (score !== prior || requests !== updates) {
+            program = P.musicScore.compile(score,{requests});
+            prior = score;
+            updates = requests;
+          }
+          const value = take && options.time === undefined ? program.frame(take) : program.sample(options.time ?? time);
+          return { value, bindings: value.bindings, voices: value.voices, events: program.events,
+            analysis: value.analysis, beat: value.beat };
+        };
+      }
+    },
+    'music.scoreAudio': {
+      description: 'Synthesize sample-aligned stereo audio and optional voice stems from the procedural score.',
+      inputs: { score: 'record', requests: scoreRequests, options },
+      outputs: { value: 'audio', stems: 'record', report: 'record' },
+      run({ score, requests, options }) { return P.musicScore.compile(score,{requests}).audio(options); }
+    },
+    'music.fifths': {
+      description: 'Find the shortest circle-of-fifths route between two pitch classes.',
+      inputs: { from: 'string', to: 'string' }, outputs: { value: 'record', path: 'array<string>', distance: 'number' },
+      run({ from, to }) {
+        const value = P.musicHarmony.fifths(from,to);
+        return { value, path: value.path, distance: value.distance };
+      }
+    },
+    'music.scale': {
+      description: 'List the notes and semitone steps for a scale or authored mode.',
+      inputs: { root: 'any', options }, outputs: { value:'record', notes:'array<number>', steps:'array<number>' },
+      run({ root,options }) {
+        const value = P.musicHarmony.scale(root,options.mode);
+        return { value,notes:value.notes,steps:value.steps };
+      }
+    },
+    'music.scaleChord': {
+      description: 'Stack scale thirds at a degree to generate a chord and its voicing.',
+      inputs: { root:'any', degree:'number', options }, outputs: { value:'record', notes:'array<number>', root:'number' },
+      run({ root,degree,options }) {
+        const value = P.musicHarmony.scaleChord(root,options.mode,degree,options.size,options.inversion);
+        return { value,notes:value.notes,root:value.root };
+      }
+    },
+    'music.scaleMap': {
+      description: 'Snap a normalized scene parameter to the semitone positions of a scale.',
+      inputs: { value:'number', options }, outputs: { value:'number' },
+      run({ value,options }) { return { value:P.musicHarmony.mapScale(options.mode,options.rounding)(value) }; }
+    },
+    'music.quantizePitch': {
+      description: 'Snap a fractional MIDI pitch into the selected scale while respecting the note range.',
+      inputs: { value:'number', root:'any', options }, outputs: { value:'number' },
+      run({value,root,options}) { return { value:P.musicHarmony.quantizePitch(value,root,options.mode,options.rounding) }; }
+    },
+    'music.interval': {
+      description: 'Measure a frequency pair against simple ratios and report its phase return and partial beat.',
+      inputs: { a:'number', b:'number', options }, outputs: { value:'record', cents:'number', partialBeat:'number', aligned:'boolean' },
+      run({a,b,options}) {
+        const value = P.musicHarmony.interval(a,b,options);
+        return { value,cents:value.cents,partialBeat:value.partialBeat,aligned:value.aligned };
+      }
+    },
+    'music.roughness': {
+      description: 'Estimate normalized sensory roughness between weighted partial spectra.',
+      inputs: { spectra:'array' }, outputs: { value:'number' },
+      run({spectra}) { return {value:P.musicHarmony.roughness(spectra)}; }
     },
     'input.recording': {
       inputs: { initial: options, events: 'array<record>' }, outputs: { value: 'record' },

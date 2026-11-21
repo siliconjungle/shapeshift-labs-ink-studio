@@ -110,6 +110,7 @@
         return { numerator: T.index(n), denominator: T.index(d) };
       },
       sample: raw => samplePoint(checked(raw, -limit, limit, 'time'), typeof raw === 'number' ? raw : undefined),
+      forPosition: position => samplePoint(resolve(position)),
       forTake: frame => samplePoint(T.requireFrame(frame).start)
     });
   }
