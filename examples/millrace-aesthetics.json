@@ -1,0 +1,386 @@
+{
+  "format": "ink-studio/asset-pack",
+  "version": 1,
+  "id": "millrace",
+  "revision": 1,
+  "title": "Millrace aesthetics",
+  "environments": [
+    {
+      "id": "millrace/river-hush",
+      "label": "River Hush",
+      "aesthetic": {
+        "description": "Quiet blue-green water, pale stone and warm lamps held in soft river mist.",
+        "tags": ["calm", "quiet", "contemplative", "mist", "dusk"]
+      },
+      "settings": {
+        "skyEnvironment": {
+          "defaults": {
+            "zenith": "#25455d",
+            "horizon": "#9abcae",
+            "ground": "#294b55",
+            "sunColor": "#e8dac1",
+            "sunStrength": 0
+          }
+        },
+        "skyReflections": "scene",
+        "liveSun": {
+          "direction": [-0.38, 0.81, 0.43],
+          "ambient": 0.43,
+          "intensity": 0.72,
+          "mapSize": 112,
+          "filter": 2,
+          "skyBounce": {
+            "color": "#b1dcd4",
+            "intensity": 0.17
+          }
+        },
+        "atmosphere": [
+          {
+            "id": "river-mist",
+            "type": "sphere",
+            "at": [0, 0.28, -0.75],
+            "radius": 3.45,
+            "color": "#8aafb0",
+            "density": 0.047
+          }
+        ],
+        "look": {
+          "paletteRemap": {
+            "rules": [
+              {"from": "background.0", "to": "#203c50"},
+              {"from": "stone.0", "to": "#213a49"},
+              {"from": "stone.1", "to": "#324d55"},
+              {"from": "stone.2", "to": "#446363"},
+              {"from": "stone.3", "to": "#5b7c76"},
+              {"from": "stone.4", "to": "#77958a"},
+              {"from": "stone.5", "to": "#93ad9a"},
+              {"from": "stone.6", "to": "#b5c5ad"},
+              {"from": "roof.0", "to": "#263345"},
+              {"from": "roof.1", "to": "#354354"},
+              {"from": "roof.2", "to": "#435865"},
+              {"from": "roof.3", "to": "#556b70"},
+              {"from": "roof.4", "to": "#708080"},
+              {"from": "roof.5", "to": "#91948b"},
+              {"from": "water.0", "to": "#133c4c"},
+              {"from": "water.1", "to": "#20566a"},
+              {"from": "water.2", "to": "#2b7280"},
+              {"from": "water.3", "to": "#45878a"},
+              {"from": "water.4", "to": "#6fa59b"},
+              {"from": "foliage.0", "to": "#213c45"},
+              {"from": "foliage.1", "to": "#2c5350"},
+              {"from": "foliage.2", "to": "#3e685a"},
+              {"from": "foliage.3", "to": "#54826b"},
+              {"from": "foliage.4", "to": "#739279"},
+              {"from": "timber.0", "to": "#263d46"},
+              {"from": "timber.1", "to": "#45564f"},
+              {"from": "timber.2", "to": "#636754"},
+              {"from": "timber.3", "to": "#8e785e"},
+              {"from": "lamp.0", "to": "#d19b5b"},
+              {"from": "lamp.1", "to": "#edbf75"},
+              {"from": "lamp.2", "to": "#ffe9b0"},
+              {"from": "wave.0", "to": "#27495a"},
+              {"from": "wave.1", "to": "#396b73"},
+              {"from": "wave.2", "to": "#73a3a1"},
+              {"from": "wave.3", "to": "#acc8b1"}
+            ]
+          },
+          "colorStack": {
+            "name": "River Hush",
+            "steps": [
+              {
+                "type": "saturation",
+                "factor": 0.82
+              }
+            ]
+          },
+          "artDirection": {
+            "atmosphereBands": 0,
+            "foreground": {
+              "contrast": 0.91,
+              "near": 8,
+              "far": 24
+            },
+            "cadence": {
+              "scene": 0,
+              "environment": 0,
+              "water": 0
+            }
+          },
+          "ink": {
+            "silhouette": {
+              "color": "#314957"
+            },
+            "boundary": false,
+            "crease": false
+          },
+          "edgeFilter": {
+            "strength": 0.44
+          },
+          "effects": {
+            "glow": {
+              "radius": 2,
+              "colors": [
+                "#765042",
+                "#be8858"
+              ],
+              "threshold": 0.3
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "millrace/last-crossing",
+      "label": "Last Crossing",
+      "aesthetic": {
+        "description": "A narrow ember signal against blue-black masonry and bands of low fog.",
+        "tags": ["unease", "tension", "danger", "suspense", "nocturnal"]
+      },
+      "settings": {
+        "skyEnvironment": {
+          "defaults": {
+            "zenith": "#1c203a",
+            "horizon": "#6c698a",
+            "ground": "#27354c",
+            "sunColor": "#e3ad89",
+            "sunStrength": 0
+          }
+        },
+        "skyReflections": "scene",
+        "liveSun": {
+          "direction": [0.72, 0.29, 0.48],
+          "ambient": 0.33,
+          "intensity": 0.87,
+          "mapSize": 112,
+          "filter": 0,
+          "skyBounce": {
+            "color": "#7494db",
+            "intensity": 0.22
+          }
+        },
+        "atmosphere": [
+          {
+            "id": "river-mist",
+            "type": "sphere",
+            "at": [0, 0.28, -0.75],
+            "radius": 3.6,
+            "color": "#575e7e",
+            "density": 0.092
+          }
+        ],
+        "look": {
+          "paletteRemap": {
+            "rules": [
+              {"from": "background.0", "to": "#121529"},
+              {"from": "stone.0", "to": "#151a30"},
+              {"from": "stone.1", "to": "#21253b"},
+              {"from": "stone.2", "to": "#2a314b"},
+              {"from": "stone.3", "to": "#39445d"},
+              {"from": "stone.4", "to": "#505975"},
+              {"from": "stone.5", "to": "#687491"},
+              {"from": "stone.6", "to": "#8992aa"},
+              {"from": "roof.0", "to": "#16172b"},
+              {"from": "roof.1", "to": "#272038"},
+              {"from": "roof.2", "to": "#392941"},
+              {"from": "roof.3", "to": "#4e3b54"},
+              {"from": "roof.4", "to": "#69506a"},
+              {"from": "roof.5", "to": "#876574"},
+              {"from": "water.0", "to": "#132339"},
+              {"from": "water.1", "to": "#1b304d"},
+              {"from": "water.2", "to": "#293d61"},
+              {"from": "water.3", "to": "#434f71"},
+              {"from": "water.4", "to": "#586380"},
+              {"from": "foliage.0", "to": "#152731"},
+              {"from": "foliage.1", "to": "#1b303b"},
+              {"from": "foliage.2", "to": "#253e4a"},
+              {"from": "foliage.3", "to": "#324a51"},
+              {"from": "foliage.4", "to": "#475b63"},
+              {"from": "timber.0", "to": "#21192c"},
+              {"from": "timber.1", "to": "#312639"},
+              {"from": "timber.2", "to": "#4c3846"},
+              {"from": "timber.3", "to": "#654856"},
+              {"from": "lamp.0", "to": "#c85b3d"},
+              {"from": "lamp.1", "to": "#f68d4b"},
+              {"from": "lamp.2", "to": "#ffe0a1"},
+              {"from": "wave.0", "to": "#1d2941"},
+              {"from": "wave.1", "to": "#353f60"},
+              {"from": "wave.2", "to": "#697da1"},
+              {"from": "wave.3", "to": "#a5afd5"}
+            ]
+          },
+          "colorStack": {
+            "name": "Last Crossing",
+            "steps": [
+              {
+                "type": "contrast",
+                "factor": 1.06,
+                "pivot": 0.34
+              }
+            ]
+          },
+          "artDirection": {
+            "atmosphereBands": 7,
+            "foreground": {
+              "contrast": 1.19,
+              "pivot": 0.36,
+              "near": 8,
+              "far": 21
+            },
+            "cadence": {
+              "scene": 6,
+              "environment": 8,
+              "water": 6
+            }
+          },
+          "ink": {
+            "silhouette": {
+              "color": "#171628"
+            },
+            "boundary": {
+              "color": "#242136"
+            },
+            "crease": false,
+            "depthGap": 0.14
+          },
+          "edgeFilter": {
+            "strength": 0.68
+          },
+          "effects": {
+            "glow": {
+              "radius": 3,
+              "colors": [
+                "#79433e",
+                "#bb633f"
+              ],
+              "threshold": 0.3
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "millrace/honeylight",
+      "label": "Honeylight",
+      "aesthetic": {
+        "description": "Dusty apricot skies, sun-warmed brick and ochre highlights caught in a late-summer haze.",
+        "tags": ["nostalgia", "warm", "summer", "golden-hour", "storybook"]
+      },
+      "settings": {
+        "skyEnvironment": {
+          "defaults": {
+            "zenith": "#725374",
+            "horizon": "#f1b988",
+            "ground": "#716068",
+            "sunColor": "#ffe0a5",
+            "sunStrength": 0
+          }
+        },
+        "skyReflections": "scene",
+        "liveSun": {
+          "direction": [-0.71, 0.43, 0.49],
+          "ambient": 0.41,
+          "intensity": 0.82,
+          "mapSize": 128,
+          "filter": 1,
+          "groundBounce": {
+            "color": "#efb174",
+            "intensity": 0.22
+          }
+        },
+        "atmosphere": [
+          {
+            "id": "river-mist",
+            "type": "sphere",
+            "at": [0, 0.28, -0.75],
+            "radius": 3.55,
+            "color": "#d58f7c",
+            "density": 0.044
+          }
+        ],
+        "look": {
+          "paletteRemap": {
+            "rules": [
+              {"from": "background.0", "to": "#442e42"},
+              {"from": "stone.0", "to": "#3a2d3e"},
+              {"from": "stone.1", "to": "#514050"},
+              {"from": "stone.2", "to": "#69515b"},
+              {"from": "stone.3", "to": "#866968"},
+              {"from": "stone.4", "to": "#a58273"},
+              {"from": "stone.5", "to": "#c49d81"},
+              {"from": "stone.6", "to": "#e0bd93"},
+              {"from": "roof.0", "to": "#412b41"},
+              {"from": "roof.1", "to": "#5e3848"},
+              {"from": "roof.2", "to": "#78454f"},
+              {"from": "roof.3", "to": "#9a5759"},
+              {"from": "roof.4", "to": "#b87361"},
+              {"from": "roof.5", "to": "#d59772"},
+              {"from": "water.0", "to": "#393746"},
+              {"from": "water.1", "to": "#4b5261"},
+              {"from": "water.2", "to": "#63716f"},
+              {"from": "water.3", "to": "#829184"},
+              {"from": "water.4", "to": "#a6ad8d"},
+              {"from": "foliage.0", "to": "#3f3c3c"},
+              {"from": "foliage.1", "to": "#555343"},
+              {"from": "foliage.2", "to": "#6e6950"},
+              {"from": "foliage.3", "to": "#887d58"},
+              {"from": "foliage.4", "to": "#a29664"},
+              {"from": "timber.0", "to": "#46303b"},
+              {"from": "timber.1", "to": "#67434a"},
+              {"from": "timber.2", "to": "#89564f"},
+              {"from": "timber.3", "to": "#ad7358"},
+              {"from": "lamp.0", "to": "#d99851"},
+              {"from": "lamp.1", "to": "#f6bd65"},
+              {"from": "lamp.2", "to": "#fff0aa"},
+              {"from": "wave.0", "to": "#40394b"},
+              {"from": "wave.1", "to": "#675c66"},
+              {"from": "wave.2", "to": "#af9184"},
+              {"from": "wave.3", "to": "#e2b68e"}
+            ]
+          },
+          "colorStack": {
+            "name": "Honeylight",
+            "steps": [
+              {
+                "type": "saturation",
+                "factor": 1.08
+              }
+            ]
+          },
+          "artDirection": {
+            "atmosphereBands": 12,
+            "foreground": {
+              "contrast": 1.1,
+              "near": 8,
+              "far": 25
+            },
+            "cadence": {
+              "scene": 12,
+              "environment": 8,
+              "water": 12
+            }
+          },
+          "ink": {
+            "silhouette": {
+              "color": "#443041"
+            },
+            "boundary": false,
+            "crease": false
+          },
+          "edgeFilter": {
+            "strength": 0.27
+          },
+          "effects": {
+            "glow": {
+              "radius": 3,
+              "colors": [
+                "#ad6150",
+                "#c18358"
+              ],
+              "threshold": 0.3
+            }
+          }
+        }
+      }
+    }
+  ]
+}

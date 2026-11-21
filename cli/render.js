@@ -816,7 +816,7 @@ function renderFrame(world, o, preparedPalettes) {
     ? Airflow.frame(world.volumeWind).velocity : null;
   const volumeFlow = volumes.some(v => v.type === 'field' || v.depthBand?.wind) && (volumeWind && exposure?.wind
     ? WindField.create(WindField.settings(true), { ambient:() => volumeWind, exposure }) : flow)?.frame(skyTime);
-  const waterWind = windResponse?.water && ((x,y,z) => windGain(windResponse.water,gustTime('water', motion.water),x,y,z));
+  const waterWind = windResponse?.water ? (x,y,z) => windGain(windResponse.water,gustTime('water', motion.water),x,y,z) : undefined;
   const atmosphereOptions = () => {
     const quality = atmosphereQuality({ ...world.volumeQuality, ...o.volumeQuality });
     quality.wind = volumeWind ?? wind.velocity;

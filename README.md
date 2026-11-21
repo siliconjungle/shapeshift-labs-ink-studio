@@ -22,6 +22,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Retained authoring](#retained-authoring)
 - [Editable 3D drawing](#editable-3d-drawing)
 - [Headless world simulation](docs/headless-worlds.md)
+- [Editable starter recipes](examples/starter-recipes/README.md)
 - [Rendering and command reference](#rendering-and-command-reference)
 - [View-dependent surface materials](#view-dependent-surface-materials)
 - [Projected and procedural effects](#projected-and-procedural-effects)

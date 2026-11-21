@@ -27,6 +27,52 @@ const shore = pack('shore',{environments:[{id:asset,label:'Shore',settings}]});
 const art = pack('art',{environmentImages:[{id:texture,width:2,height:1,pixels:[72,106,128,255,104,138,154,255]}]});
 const installed = [shore,art];
 
+test('named aesthetics are searchable and retain their identity through look binding and revision', t => {
+  const profile = {id:'moods/river-hush',label:'River Hush',
+    aesthetic:{description:'Soft light and a cool river.',tags:['calm','blue-green']},
+    settings:{look:{
+      paletteRemap:{rules:[{from:'lamp.highlight',to:'#ffcc88'}]},
+      colorStack:{name:'River Hush',steps:[{type:'saturation',factor:.9}]},
+      effects:{glow:{colors:['#973f28'],radius:2}},
+      artDirection:{cadence:{scene:6}}
+    }}};
+  const looks = pack('moods',{environments:[profile,{id:'moods/plain',label:'Plain',settings:{liveSun:false}}]});
+  const catalog = A.assetPacks.create({packs:[looks]});
+  const find = query => A.environments.findAesthetics(catalog,query);
+  assert.deepEqual(find('CALM blue green').map(row=>row.id),[profile.id]);
+  assert.equal(find('River Hush')[0].description,profile.aesthetic.description);
+  assert.deepEqual(find('calm warm'),[]);
+  assert.equal(find().length,1);
+  assert.throws(()=>A.assetPacks.manifest(pack('moods',{environments:[
+    {...profile,aesthetic:{description:'Duplicate',tags:['calm','calm']}}
+  ]})),/unique lowercase tags/);
+  const next = A.assetPacks.reviseEnvironment(looks,profile.id,{aesthetic:{...profile.aesthetic,tags:['restful']}});
+  assert.equal(next.revision,2);
+  assert.deepEqual(A.environments.bind(profile.id,catalog).aesthetic,profile.aesthetic);
+  assert.deepEqual(A.environments.findAesthetics(A.assetPacks.create({packs:[next]}),'calm'),[]);
+
+  const B = makeBuilder(1,[0x172030,0xead498]);
+  const S = K.sculpt(kit.makeSculpt(B));
+  S.box([0,0,0],[.83,.1,.56],K.surface.preset('rippling-water',{r:[1]}),{res:.14});
+  S.bake();
+  const world = B.finish({cam,environmentPreset:profile.id,assetPacks:[looks],paletteRoles:{lamp:[1]}});
+  assert.deepEqual(world.environmentSource.aesthetic,profile.aesthetic);
+  assert.equal(world.look.artDirection.cadence.scene,6);
+  assert.equal(world.look.effects.glow.radius,2);
+  assert.deepEqual(world.look.paletteRemap,profile.settings.look.paletteRemap);
+  assert.doesNotThrow(()=>ink.render(world,{w:40,h:25,px:1}));
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-aesthetics-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = path.join(dir,'looks.json');
+  fs.writeFileSync(file,JSON.stringify(A.assetPacks.bundle([looks],['moods'])));
+  const cli = path.join(__dirname,'../cli/ink-studio.js');
+  const report = execFileSync(process.execPath,[cli,'environment','aesthetics',file,'quiet','--json'],{encoding:'utf8'});
+  assert.deepEqual(JSON.parse(report),[]);
+  const result = execFileSync(process.execPath,[cli,'environment','aesthetics',file,'calm','--json'],{encoding:'utf8'});
+  assert.deepEqual(JSON.parse(result),find('calm'));
+});
+
 test('environment packs round-trip bundles with image dependencies and the existing revision rules', () => {
   const bundle = A.assetPacks.bundle([art,shore,pack('unused',{environmentImages:[{...art.environmentImages[0],id:'unused/ridge'}]})],['shore']);
   assert.deepEqual(bundle.packs.map(entry=>entry.id),['art','shore']);

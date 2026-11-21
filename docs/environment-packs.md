@@ -43,9 +43,52 @@ A horizon band can set `image` to `{ "asset": "tideline/headland" }`. The owning
 
 Environment `settings.look` can carry horizon bands, effect palettes, art direction, stable dithering, and silhouette protection. Use portable JSON settings and literal swatch colours for presets meant to travel across scene palettes.
 
+## Named aesthetics
+
+Add `aesthetic` metadata to an environment preset to make it discoverable
+by art direction. Give it a short `description` and lowercase `tags` such as
+`calm`, `mist`, or `suspense`. Keep synonyms that you want people to find in
+the tags. Ink searches the asset ID, display label, and tags. A query with
+several words requires every word to match.
+
+```json
+{
+  "id": "millrace/river-hush",
+  "label": "River Hush",
+  "aesthetic": {
+    "description": "Quiet blue-green water, pale stone and warm lamps held in soft river mist.",
+    "tags": ["calm", "quiet", "contemplative", "mist", "dusk"]
+  },
+  "settings": {
+    "look": {"artDirection": {"atmosphereBands": 0, "cadence": {"scene": 0, "environment": 0}}}
+  }
+}
+```
+
+`KIT.authoring.environments.findAesthetics(catalog, query)` lists semantic
+matches in the installed asset packs. Bind one by its asset ID and optional
+revision through the usual `environmentPreset`. The resolved metadata is
+also available in `world.environmentSource` and the environment inspector.
+
+```sh
+ink-studio environment aesthetics examples/millrace-aesthetics.json calm
+ink-studio render examples/raster-millrace.js --params '{"aesthetic":"millrace/river-hush"}' \
+  --w 260 --h 168 --px 1 --t 1.25 --out river-hush.png
+```
+
+[Millrace aesthetics](../examples/millrace-aesthetics.json) authors three
+looks for the same shot. Each specifies role swatches, sky, lighting,
+mist, ink, glow, edge treatment, and motion cadence. Use the existing scene
+overrides to adjust a look locally, or revise the asset to share the edits.
+
 ## Complete looks
 
 An environment preset can also carry a complete look for the Node renderer and CLI. Package [scene color curves](pixel-look.md#color-ramps-and-channel-curves), [selective ink](art-passes.md), [shadow ramps](live-sun.md), [contact shadows](contact-shadows.md), and [edge filters](art-passes.md) as `settings.look.colorCurves`, `ink`, `shadowArt`, `contactShadows`, and `edgeFilter`. Use `settings.liveSun` for light direction and shadow softness, `settings.atmosphere` and `aerialPerspective` for fog, and [`settings.look.artDirection.cadence`](art-direction.md) to hold scene and environment motion at different rates. The camera still samples at the output frame time.
+
+Use `settings.look.paletteRemap` and `colorStack` for [scene colour and
+grading](pixel-look.md#named-color-stacks), and `settings.look.effects` for
+native-pixel effects such as glow. A remap that targets named palette stops
+expects those roles on the receiving scene.
 
 Use `settings.look.surfaceLightRamps` to replace the light ramp on an existing diffuse or highlight layer. Keys first name the surface finish's `id`, then the layer's name. The profile leaves each layer's strength, masks, and other settings in place. Authors can reuse the same names across scenes or omit them on surfaces that should keep their own ramps. Use explicit hex or RGB stops to make the colors independent of each scene's palette.
 

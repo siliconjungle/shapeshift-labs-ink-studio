@@ -170,8 +170,8 @@
     const pack = manifest(input), environments = pack.environments?.slice() ?? [];
     const index = environments.findIndex(environment => environment.id === id);
     if (index === -1) throw Error('Unknown environment preset: '+id);
-    if (!object(changes) || Object.keys(changes).some(key => !['label','settings'].includes(key)))
-      throw Error('Environment revision needs a label or settings');
+    if (!object(changes) || Object.keys(changes).some(key => !['label','settings','aesthetic'].includes(key)))
+      throw Error('Environment revision needs a label, settings or aesthetic');
     const next = A.environments.definition(clone({ ...environments[index], ...changes }),pack.id);
     if (canonical(next) === canonical(environments[index])) return pack;
     environments[index] = next;

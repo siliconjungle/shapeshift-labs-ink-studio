@@ -1,0 +1,11 @@
+{
+  "format": "ink-studio/take",
+  "version": 1,
+  "id": "relightable-sprite",
+  "clock": {
+    "fps": 12,
+    "sampleRate": 48000,
+    "simulationRate": 60
+  },
+  "graph": "graph.json"
+}

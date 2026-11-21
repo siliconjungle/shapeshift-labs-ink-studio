@@ -1,0 +1,207 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "assets": {
+    "beat": {
+      "format": "wav",
+      "file": "beat.wav"
+    }
+  },
+  "inputs": {
+    "text": { "type": "string", "default": "NIGHT" }
+  },
+  "nodes": {
+    "sound": {
+      "op": "audioAsset",
+      "inputs": {
+        "name": "beat"
+      }
+    },
+    "level": {
+      "op": "audio.analyze",
+      "inputs": {
+        "source": { "node": "sound" },
+        "options": {
+          "fps": 12
+        }
+      }
+    },
+    "plateStyle": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 144,
+        "height": 80,
+        "edges": "hard",
+        "commands": [
+          { "type": "rect", "rect": [ 7, 23, 130, 47 ], "color": "#090d19" },
+          { "type": "rect", "rect": [ 11, 13, 122, 51 ], "color": "#423d57" },
+          { "type": "rect", "rect": [ 12, 14, 120, 49 ], "color": "#1d2438" },
+          { "type": "rect", "rect": [ 16, 18, 112, 41 ], "color": "#101829" },
+          { "type": "rect", "rect": [ 18, 20, 108, 1 ], "color": "#34354a" },
+          { "type": "rect", "rect": [ 18, 56, 108, 1 ], "color": "#282d40" },
+          { "type": "rect", "rect": [ 10, 26, 2, 29 ], "color": "#73828f" },
+          { "type": "rect", "rect": [ 132, 26, 2, 29 ], "color": "#73828f" },
+          { "type": "rect", "rect": [ 25, 63, 10, 8 ], "color": "#2d2e45" },
+          { "type": "rect", "rect": [ 109, 63, 10, 8 ], "color": "#2d2e45" },
+          { "type": "text", "text": "RELAY", "at": [ 25, 45 ], "scale": 1, "color": "#523c48" },
+          { "type": "rect", "rect": [ 79, 40, 2, 13 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 82, 44, 2, 9 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 85, 34, 2, 19 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 88, 26, 2, 27 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 91, 36, 2, 17 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 94, 22, 2, 31 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 97, 32, 2, 21 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 100, 42, 2, 11 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 103, 35, 2, 18 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 106, 46, 2, 7 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 109, 40, 2, 13 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 112, 48, 2, 5 ], "color": "#253d4b" },
+          { "type": "rect", "rect": [ 13, 16, 2, 2 ], "color": "#757384" },
+          { "type": "rect", "rect": [ 13, 60, 2, 2 ], "color": "#757384" },
+          { "type": "rect", "rect": [ 128, 16, 2, 2 ], "color": "#757384" },
+          { "type": "rect", "rect": [ 128, 60, 2, 2 ], "color": "#757384" }
+        ]
+      }
+    },
+    "labelCommand": {
+      "op": "data.record",
+      "inputs": {
+        "type": "text",
+        "text": { "input": "text" },
+        "at": [ 25, 24 ],
+        "scale": 2,
+        "color": "#394753"
+      }
+    },
+    "palette": {
+      "op": "data.record",
+      "inputs": {
+        "label": { "node": "labelCommand" }
+      }
+    },
+    "labelList": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "palette" },
+        "keys": [ "label" ]
+      }
+    },
+    "labelOff": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 144,
+        "height": 80,
+        "edges": "hard",
+        "commands": { "node": "labelList" }
+      }
+    },
+    "base": {
+      "op": "raster.blend",
+      "inputs": {
+        "background": { "node": "plateStyle" },
+        "foreground": { "node": "labelOff" }
+      }
+    },
+    "emitters": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 144,
+        "height": 80,
+        "edges": "hard",
+        "commands": [
+          { "type": "text", "text": "RELAY", "at": [ 25, 45 ], "scale": 1, "color": "#ffc491" },
+          { "type": "rect", "rect": [ 79, 40, 2, 13 ], "color": "#ffc18a" },
+          { "type": "rect", "rect": [ 82, 44, 2, 9 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 85, 34, 2, 19 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 88, 26, 2, 27 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 91, 36, 2, 17 ], "color": "#ffc18a" },
+          { "type": "rect", "rect": [ 94, 22, 2, 31 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 97, 32, 2, 21 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 100, 42, 2, 11 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 103, 35, 2, 18 ], "color": "#ffc18a" },
+          { "type": "rect", "rect": [ 106, 46, 2, 7 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 109, 40, 2, 13 ], "color": "#58e9cc" },
+          { "type": "rect", "rect": [ 112, 48, 2, 5 ], "color": "#58e9cc" }
+        ]
+      }
+    },
+    "litCommand": {
+      "op": "data.record",
+      "inputs": {
+        "type": "text",
+        "text": { "input": "text" },
+        "at": [ 25, 24 ],
+        "scale": 2,
+        "color": "#baf9ea"
+      }
+    },
+    "litPalette": {
+      "op": "data.record",
+      "inputs": {
+        "label": { "node": "litCommand" }
+      }
+    },
+    "litList": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "litPalette" },
+        "keys": [ "label" ]
+      }
+    },
+    "labelOn": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 144,
+        "height": 80,
+        "edges": "hard",
+        "commands": { "node": "litList" }
+      }
+    },
+    "lit": {
+      "op": "raster.blend",
+      "inputs": {
+        "background": { "node": "emitters" },
+        "foreground": { "node": "labelOn" }
+      }
+    },
+    "glow": {
+      "op": "fx.glow",
+      "inputs": {
+        "source": { "node": "lit" },
+        "options": {
+          "radius": 6,
+          "strength": 2,
+          "color": "#53cec6"
+        }
+      }
+    },
+    "dimmer": {
+      "op": "data.record",
+      "inputs": {
+        "opacity": { "node": "level", "port": "rms" },
+        "mode": "screen"
+      }
+    },
+    "sign": {
+      "op": "raster.blend",
+      "inputs": {
+        "background": { "node": "base" },
+        "foreground": { "node": "glow" },
+        "options": { "node": "dimmer" }
+      }
+    }
+  },
+  "outputs": {
+    "sign": { "node": "sign" },
+    "level": { "node": "level", "port": "rms" },
+    "sound": { "node": "sound" }
+  },
+  "exports": {
+    "sign": { "output": "sign", "format": "png" },
+    "level": { "output": "level", "format": "json" },
+    "sound": { "output": "sound", "format": "wav" }
+  },
+  "assertions": [
+    { "id": "sign-width", "output": "sign", "path": [ "width" ], "op": "eq", "value": 144 }
+  ]
+}

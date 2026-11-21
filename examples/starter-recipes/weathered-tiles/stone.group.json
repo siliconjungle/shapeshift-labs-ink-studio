@@ -1,0 +1,122 @@
+{
+  "format": "ink-studio/graph-group",
+  "version": 1,
+  "revision": 1,
+  "inputs": {
+    "ramp": "array<string>",
+    "jointRamp": "array<string>",
+    "textureSeed": "number"
+  },
+  "nodes": {
+    "stoneSeed": {
+      "op": "data.record",
+      "inputs": {
+        "seed": { "input": "textureSeed" }
+      }
+    },
+    "stoneField": {
+      "op": "proc.noise",
+      "inputs": {
+        "definition": {
+          "type": "add",
+          "inputs": [
+            {
+              "type": "multiply",
+              "inputs": [
+                0.62,
+                { "type": "periodic", "axes": [ "x", "y" ], "period": [ 1, 1, null ], "scale": 0.23 }
+              ]
+            },
+            {
+              "type": "multiply",
+              "inputs": [
+                0.27,
+                { "type": "periodic", "axes": [ "x", "y" ], "period": [ 1, 1, null ], "scale": 0.08 }
+              ]
+            },
+            {
+              "type": "multiply",
+              "inputs": [
+                0.11,
+                { "type": "periodic", "axes": [ "x", "y" ], "period": [ 1, 1, null ], "scale": 0.026 }
+              ]
+            }
+          ]
+        },
+        "options": { "node": "stoneSeed" }
+      }
+    },
+    "stone": {
+      "op": "proc.sample",
+      "inputs": {
+        "source": { "node": "stoneField" },
+        "options": {
+          "width": 64,
+          "height": 64
+        }
+      }
+    },
+    "faces": {
+      "op": "color.gradient",
+      "inputs": {
+        "source": { "node": "stone" },
+        "ramp": { "input": "ramp" },
+        "options": {
+          "channel": 0,
+          "range": [ -0.43, 0.43 ]
+        }
+      }
+    },
+    "grout": {
+      "op": "color.gradient",
+      "inputs": {
+        "source": { "node": "stone" },
+        "ramp": { "input": "jointRamp" },
+        "options": {
+          "channel": 0,
+          "range": [ -0.43, 0.43 ]
+        }
+      }
+    },
+    "courses": {
+      "op": "proc.pattern",
+      "inputs": {
+        "options": {
+          "kind": "brick",
+          "size": [ 0.5, 0.25 ],
+          "fill": 0.934
+        }
+      }
+    },
+    "mask": {
+      "op": "proc.sample",
+      "inputs": {
+        "source": { "node": "courses" },
+        "options": {
+          "width": 64,
+          "height": 64
+        }
+      }
+    },
+    "facesOnly": {
+      "op": "raster.mask",
+      "inputs": {
+        "source": { "node": "faces" },
+        "mask": { "node": "mask" },
+        "options": {
+          "scale": 1
+        }
+      }
+    },
+    "tile": {
+      "op": "raster.blend",
+      "inputs": {
+        "background": { "node": "grout" },
+        "foreground": { "node": "facesOnly" }
+      }
+    }
+  },
+  "outputs": {
+    "value": { "node": "tile" }
+  }
+}

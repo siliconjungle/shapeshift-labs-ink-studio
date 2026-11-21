@@ -1,0 +1,263 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "inputs": {
+    "copper": { "type": "string", "default": "#ca7743" },
+    "lightDirection": { "type": "vec3", "default": [ -0.75, 0.68, 0.58 ] }
+  },
+  "nodes": {
+    "housing": {
+      "op": "sdf.shape",
+      "inputs": {
+        "kind": "box",
+        "options": {
+          "half": [ 0.64, 0.62, 0.24 ],
+          "round": 0.17,
+          "rotation": [ 0, 0, 0.7853981633974483 ]
+        }
+      }
+    },
+    "lensRim": {
+      "op": "sdf.shape",
+      "inputs": {
+        "kind": "torus",
+        "options": {
+          "center": [ 0, 0.03, 0.24 ],
+          "major": 0.41,
+          "minor": 0.1,
+          "rotation": [ 1.5707963267948966, 0, 0 ]
+        }
+      }
+    },
+    "lens": {
+      "op": "sdf.shape",
+      "inputs": {
+        "kind": "sphere",
+        "options": {
+          "center": [ 0, 0.03, 0.11 ],
+          "radius": 0.37
+        }
+      }
+    },
+    "crown": {
+      "op": "sdf.shape",
+      "inputs": {
+        "kind": "torus",
+        "options": {
+          "center": [ 0, 0.82, 0 ],
+          "major": 0.18,
+          "minor": 0.047,
+          "rotation": [ 1.5707963267948966, 0, 0 ]
+        }
+      }
+    },
+    "mountingStem": {
+      "op": "sdf.shape",
+      "inputs": {
+        "kind": "box",
+        "options": {
+          "center": [ 0, -0.8, 0 ],
+          "half": [ 0.15, 0.17, 0.15 ],
+          "round": 0.06
+        }
+      }
+    },
+    "mountingFoot": {
+      "op": "sdf.shape",
+      "inputs": {
+        "kind": "box",
+        "options": {
+          "center": [ 0, -0.95, 0 ],
+          "half": [ 0.32, 0.07, 0.22 ],
+          "round": 0.035
+        }
+      }
+    },
+    "shapes": {
+      "op": "data.record",
+      "inputs": {
+        "housing": { "node": "housing" },
+        "lensRim": { "node": "lensRim" },
+        "lens": { "node": "lens" },
+        "crown": { "node": "crown" },
+        "mountingStem": { "node": "mountingStem" },
+        "mountingFoot": { "node": "mountingFoot" }
+      }
+    },
+    "parts": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "shapes" },
+        "keys": [ "housing", "lensRim", "lens", "crown", "mountingStem", "mountingFoot" ]
+      }
+    },
+    "beacon": {
+      "op": "sdf.combine",
+      "inputs": {
+        "sources": { "node": "parts" }
+      }
+    },
+    "flatOptions": {
+      "op": "data.record",
+      "inputs": {
+        "width": 104,
+        "height": 104,
+        "color": { "input": "copper" },
+        "transparent": true,
+        "shades": 0,
+        "shadows": false
+      }
+    },
+    "albedo": {
+      "op": "sdf.render",
+      "inputs": {
+        "source": { "node": "beacon" },
+        "camera": {
+          "target": [ 0, 0.07, 0 ],
+          "dist": 3.65,
+          "yaw": 0,
+          "pitch": 0,
+          "projection": "orthographic"
+        },
+        "lights": [
+          {
+            "kind": "sun",
+            "id": "flat-fill",
+            "settings": {
+              "direction": [ 0, 0, 1 ],
+              "ambient": 0.7333333333333333,
+              "intensity": 0,
+              "shadows": false
+            }
+          }
+        ],
+        "options": { "node": "flatOptions" }
+      }
+    },
+    "normalPass": {
+      "op": "scene.pass",
+      "inputs": {
+        "frame": { "node": "albedo", "port": "frame" },
+        "channel": "normal"
+      }
+    },
+    "normal": {
+      "op": "raster.mask",
+      "inputs": {
+        "source": { "node": "normalPass" },
+        "mask": { "node": "normalPass", "port": "valid" }
+      }
+    },
+    "maps": {
+      "op": "data.record",
+      "inputs": {
+        "normal": { "node": "normal" }
+      }
+    },
+    "sprite": {
+      "op": "data.record",
+      "inputs": {
+        "id": "copper-beacon",
+        "source": { "node": "albedo" },
+        "maps": { "node": "maps" },
+        "pivot": [ 52, 81 ],
+        "unitsPerPixel": 0.04
+      }
+    },
+    "spritesById": {
+      "op": "data.record",
+      "inputs": {
+        "beacon": { "node": "sprite" }
+      }
+    },
+    "sprites": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "spritesById" },
+        "keys": [ "beacon" ]
+      }
+    },
+    "atlas": {
+      "op": "raster.pack",
+      "inputs": {
+        "sprites": { "node": "sprites" },
+        "options": {
+          "maxWidth": 128,
+          "maxHeight": 128,
+          "trim": true,
+          "padding": 2,
+          "extrude": 1
+        }
+      }
+    },
+    "keyOptions": {
+      "op": "data.record",
+      "inputs": {
+        "direction": { "input": "lightDirection" },
+        "ambient": 0.27,
+        "intensity": 0.81,
+        "shadows": true
+      }
+    },
+    "key": {
+      "op": "scene.light",
+      "inputs": {
+        "kind": "sun",
+        "options": { "node": "keyOptions" }
+      }
+    },
+    "lightsByName": {
+      "op": "data.record",
+      "inputs": {
+        "key": { "node": "key" }
+      }
+    },
+    "lights": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "lightsByName" },
+        "keys": [ "key" ]
+      }
+    },
+    "litOptions": {
+      "op": "data.record",
+      "inputs": {
+        "width": 104,
+        "height": 104,
+        "color": { "input": "copper" },
+        "transparent": true,
+        "shades": 9
+      }
+    },
+    "preview": {
+      "op": "sdf.render",
+      "inputs": {
+        "source": { "node": "beacon" },
+        "camera": {
+          "target": [ 0, 0.07, 0 ],
+          "dist": 3.65,
+          "yaw": 0,
+          "pitch": 0,
+          "projection": "orthographic"
+        },
+        "lights": { "node": "lights" },
+        "options": { "node": "litOptions" }
+      }
+    }
+  },
+  "outputs": {
+    "preview": { "node": "preview" },
+    "albedo": { "node": "albedo" },
+    "normal": { "node": "normal" },
+    "atlas": { "node": "atlas", "port": "atlas" }
+  },
+  "exports": {
+    "preview": { "output": "preview", "format": "png" },
+    "albedo": { "output": "albedo", "format": "png" },
+    "normal": { "output": "normal", "format": "png" },
+    "atlas": { "output": "atlas", "format": "atlas" }
+  },
+  "assertions": [
+    { "id": "preview-width", "output": "preview", "path": [ "width" ], "op": "eq", "value": 104 }
+  ]
+}

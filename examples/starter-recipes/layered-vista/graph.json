@@ -1,0 +1,360 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "inputs": {
+    "yawOffset": { "type": "number", "default": 0 },
+    "distance": { "type": "number", "default": 6.5 }
+  },
+  "nodes": {
+    "sky": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 176,
+        "height": 72,
+        "edges": "hard",
+        "commands": [
+          { "type": "rect", "rect": [ 0, 0, 176, 8 ], "color": "#151f3f" },
+          { "type": "rect", "rect": [ 0, 8, 176, 8 ], "color": "#252c52" },
+          { "type": "rect", "rect": [ 0, 16, 176, 8 ], "color": "#39395a" },
+          { "type": "rect", "rect": [ 0, 24, 176, 8 ], "color": "#554465" },
+          { "type": "rect", "rect": [ 0, 32, 176, 8 ], "color": "#795371" },
+          { "type": "rect", "rect": [ 0, 40, 176, 8 ], "color": "#9d6479" },
+          { "type": "rect", "rect": [ 0, 48, 176, 8 ], "color": "#c87b7e" },
+          { "type": "rect", "rect": [ 0, 56, 176, 8 ], "color": "#eb9d86" },
+          { "type": "rect", "rect": [ 0, 64, 176, 8 ], "color": "#e3ac8d" },
+          { "type": "ellipse", "rect": [ 64, 31, 22, 17 ], "fill": "#ffdc9a" },
+          { "type": "rect", "rect": [ 0, 0, 1, 1 ], "color": "#ffe4a8" },
+          { "type": "rect", "rect": [ 53, 23, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 106, 22, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 159, 21, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 36, 21, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 89, 20, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 142, 19, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 19, 18, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 72, 18, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 125, 17, 1, 1 ], "color": "#ffe4a8" },
+          { "type": "rect", "rect": [ 2, 16, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 55, 15, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 108, 15, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 161, 14, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 38, 13, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 91, 12, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 144, 12, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 21, 11, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 74, 10, 1, 1 ], "color": "#ffe4a8" },
+          { "type": "rect", "rect": [ 127, 9, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 4, 9, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 57, 8, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 110, 7, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 163, 6, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 40, 6, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 93, 5, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 146, 4, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 23, 3, 1, 1 ], "color": "#ffe4a8" },
+          { "type": "rect", "rect": [ 76, 3, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 129, 2, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 6, 1, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 59, 0, 1, 1 ], "color": "#a093b3" },
+          { "type": "rect", "rect": [ 33, 31, 43, 1 ], "color": "#bd7c86" },
+          { "type": "rect", "rect": [ 91, 36, 48, 1 ], "color": "#bd7c86" },
+          { "type": "rect", "rect": [ 17, 38, 53, 1 ], "color": "#e4a68a" },
+          { "type": "rect", "rect": [ 96, 41, 59, 1 ], "color": "#e4a68a" },
+          { "type": "rect", "rect": [ 5, 49, 49, 1 ], "color": "#e4a68a" },
+          { "type": "rect", "rect": [ 128, 48, 26, 1 ], "color": "#e4a68a" }
+        ]
+      }
+    },
+    "mountains": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 176,
+        "height": 72,
+        "edges": "hard",
+        "commands": [
+          {
+            "type": "polygon",
+            "points": [
+              [ 0, 51 ],
+              [ 15, 44 ],
+              [ 37, 24 ],
+              [ 55, 39 ],
+              [ 69, 36 ],
+              [ 91, 14 ],
+              [ 121, 41 ],
+              [ 147, 19 ],
+              [ 176, 45 ],
+              [ 176, 72 ],
+              [ 0, 72 ]
+            ],
+            "fill": "#745c78"
+          },
+          { "type": "polygon", "points": [ [ 12, 48 ], [ 37, 24 ], [ 57, 40 ], [ 44, 35 ], [ 42, 40 ], [ 34, 33 ], [ 27, 44 ] ], "fill": "#c38e92" },
+          { "type": "polygon", "points": [ [ 65, 39 ], [ 91, 14 ], [ 112, 32 ], [ 101, 30 ], [ 97, 24 ], [ 91, 28 ], [ 83, 26 ], [ 77, 37 ] ], "fill": "#d5a097" },
+          { "type": "polygon", "points": [ [ 127, 36 ], [ 147, 19 ], [ 164, 33 ], [ 153, 30 ], [ 147, 32 ], [ 143, 27 ], [ 136, 35 ] ], "fill": "#be8790" },
+          {
+            "type": "polygon",
+            "points": [
+              [ 0, 58 ],
+              [ 24, 61 ],
+              [ 63, 51 ],
+              [ 84, 54 ],
+              [ 108, 47 ],
+              [ 123, 47 ],
+              [ 156, 53 ],
+              [ 176, 50 ],
+              [ 176, 72 ],
+              [ 0, 72 ]
+            ],
+            "fill": "#675c7d"
+          }
+        ]
+      }
+    },
+    "woods": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 176,
+        "height": 72,
+        "edges": "hard",
+        "commands": [
+          {
+            "type": "polygon",
+            "points": [
+              [ 0, 57 ],
+              [ 22, 49 ],
+              [ 37, 38 ],
+              [ 45, 40 ],
+              [ 70, 46 ],
+              [ 83, 61 ],
+              [ 105, 60 ],
+              [ 129, 45 ],
+              [ 155, 38 ],
+              [ 176, 42 ],
+              [ 176, 72 ],
+              [ 0, 72 ]
+            ],
+            "fill": "#354d62"
+          },
+          { "type": "polygon", "points": [ [ 0, 57 ], [ 22, 49 ], [ 37, 38 ], [ 45, 40 ], [ 70, 46 ], [ 50, 45 ], [ 34, 47 ], [ 28, 52 ] ], "fill": "#516779" },
+          {
+            "type": "polygon",
+            "points": [
+              [ 0, 67 ],
+              [ 31, 60 ],
+              [ 58, 62 ],
+              [ 87, 67 ],
+              [ 103, 66 ],
+              [ 119, 60 ],
+              [ 148, 59 ],
+              [ 176, 65 ],
+              [ 176, 72 ],
+              [ 0, 72 ]
+            ],
+            "fill": "#273d52"
+          },
+          { "type": "polygon", "points": [ [ 17, 53 ], [ 19, 48 ], [ 22, 53 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 22, 51 ], [ 24, 44 ], [ 27, 51 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 29, 48 ], [ 31, 40 ], [ 34, 48 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 36, 45 ], [ 38, 37 ], [ 41, 45 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 40, 46 ], [ 42, 40 ], [ 45, 46 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 51, 47 ], [ 53, 42 ], [ 56, 47 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 131, 46 ], [ 133, 41 ], [ 136, 46 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 141, 43 ], [ 143, 36 ], [ 146, 43 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 146, 43 ], [ 148, 36 ], [ 151, 43 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 153, 42 ], [ 155, 33 ], [ 158, 42 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 160, 44 ], [ 162, 38 ], [ 165, 44 ] ], "fill": "#3a5963" },
+          { "type": "polygon", "points": [ [ 163, 45 ], [ 165, 40 ], [ 168, 45 ] ], "fill": "#3a5963" }
+        ]
+      }
+    },
+    "skyBand": {
+      "op": "data.record",
+      "inputs": {
+        "id": "twilight",
+        "source": { "node": "sky" },
+        "radius": 140,
+        "height": [ -111, 110 ],
+        "azimuth": [ 122, 238 ]
+      }
+    },
+    "mountainBand": {
+      "op": "data.record",
+      "inputs": {
+        "id": "snow-line",
+        "source": { "node": "mountains" },
+        "radius": 80,
+        "height": [ -47, 23 ],
+        "azimuth": [ 122, 238 ]
+      }
+    },
+    "woodsBand": {
+      "op": "data.record",
+      "inputs": {
+        "id": "wooded-shore",
+        "source": { "node": "woods" },
+        "radius": 20,
+        "height": [ -13, 8 ],
+        "azimuth": [ 122, 238 ]
+      }
+    },
+    "bandRecords": {
+      "op": "data.record",
+      "inputs": {
+        "sky": { "node": "skyBand" },
+        "mountains": { "node": "mountainBand" },
+        "woods": { "node": "woodsBand" }
+      }
+    },
+    "bands": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "bandRecords" },
+        "keys": [ "sky", "mountains", "woods" ]
+      }
+    },
+    "horizon": {
+      "op": "proc.horizon",
+      "inputs": {
+        "bands": { "node": "bands" },
+        "options": {
+          "camera": {
+            "yaw": [ -30, 30 ],
+            "pitch": [ -16, 25 ]
+          }
+        }
+      }
+    },
+    "lookout": {
+      "op": "scene.diorama",
+      "inputs": {
+        "definition": {
+          "id": "ridge-lookout",
+          "name": "Ridge lookout",
+          "seed": 11,
+          "style": "slate",
+          "solids": [
+            {
+              "kind": "rock",
+              "at": [ -0.82, -0.77, 0.52 ],
+              "r": [ 2.63, 0.82, 1.9 ],
+              "mat": "stone",
+              "res": 0.096
+            },
+            {
+              "kind": "rock",
+              "at": [ 1.05, -0.64, 0.39 ],
+              "r": [ 0.84, 0.43, 0.92 ],
+              "mat": "stone",
+              "res": 0.092
+            },
+            {
+              "kind": "arch",
+              "at": [ -0.72, 0.02, 0.05 ],
+              "span": 1.45,
+              "height": 1.71,
+              "depth": 0.56,
+              "thick": 0.25,
+              "block": 0.27,
+              "mat": "stone",
+              "res": 0.063
+            },
+            {
+              "kind": "pillar",
+              "at": [ 0.64, 0.04, -0.45 ],
+              "h": 1.12,
+              "r": 0.17,
+              "bay": 0.21,
+              "mat": "metal",
+              "res": 0.048
+            },
+            {
+              "kind": "ball",
+              "at": [ 0.64, 1.2, -0.45 ],
+              "r": 0.16,
+              "mat": {
+                "role": "glow",
+                "glow": true
+              },
+              "res": 0.038
+            },
+            {
+              "kind": "torus",
+              "at": [ 0.64, 1.2, -0.45 ],
+              "R": 0.225,
+              "r": 0.031,
+              "turn": [ 1.57, 0, 0 ],
+              "mat": "accent",
+              "res": 0.035
+            },
+            {
+              "kind": "box",
+              "at": [ -0.35, -0.015, 1.08 ],
+              "half": [ 0.77, 0.09, 0.27 ],
+              "round": 0.07,
+              "mat": "stone",
+              "res": 0.066
+            },
+            {
+              "kind": "rock",
+              "at": [ -1.58, 0.015, 0.48 ],
+              "r": [ 0.35, 0.23, 0.31 ],
+              "mat": "moss",
+              "res": 0.066
+            }
+          ]
+        }
+      }
+    },
+    "orbit": {
+      "op": "add",
+      "inputs": {
+        "a": {
+          "keys": [
+            { "time": 0, "value": -0.19, "ease": "linear" },
+            { "time": 1.5, "value": 0.22, "ease": "linear" },
+            { "time": 3, "value": -0.19, "ease": "linear" }
+          ]
+        },
+        "b": { "input": "yawOffset" }
+      }
+    },
+    "camera": {
+      "op": "data.record",
+      "inputs": {
+        "target": [ 0, 0.94, 0 ],
+        "dist": { "input": "distance" },
+        "pitch": 0.11,
+        "yaw": { "node": "orbit" },
+        "projection": "perspective"
+      }
+    },
+    "renderSettings": {
+      "op": "data.record",
+      "inputs": {
+        "width": 192,
+        "height": 108,
+        "horizonBands": { "node": "horizon" },
+        "raw": true
+      }
+    },
+    "vista": {
+      "op": "scene.render",
+      "inputs": {
+        "source": { "node": "lookout" },
+        "camera": { "node": "camera" },
+        "channels": [],
+        "options": { "node": "renderSettings" }
+      }
+    }
+  },
+  "outputs": {
+    "vista": { "node": "vista" },
+    "horizon": { "node": "horizon" }
+  },
+  "exports": {
+    "vista": { "output": "vista", "format": "png" }
+  },
+  "assertions": [
+    { "id": "vista-width", "output": "vista", "path": [ "width" ], "op": "eq", "value": 192 }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "groups": {
+    "Stone": {
+      "file": "stone.group.json",
+      "revision": 1
+    }
+  },
+  "inputs": {
+    "textureSeed": { "type": "number", "default": 227 },
+    "mossRamp": { "type": "array<string>", "default": [ "#18252b", "#30403d", "#51644a", "#7d8960", "#beaa76", "#dec583" ] }
+  },
+  "nodes": {
+    "dry": {
+      "op": "Stone",
+      "inputs": {
+        "textureSeed": { "input": "textureSeed" },
+        "ramp": [ "#2f2835", "#534254", "#785a61", "#a2766c", "#cf9b79", "#edbe8b" ],
+        "jointRamp": [ "#211f2c", "#292536", "#473a46" ]
+      }
+    },
+    "moss": {
+      "op": "Stone",
+      "inputs": {
+        "textureSeed": { "input": "textureSeed" },
+        "ramp": { "input": "mossRamp" },
+        "jointRamp": [ "#1c252b", "#28352f", "#536043" ]
+      }
+    },
+    "frost": {
+      "op": "Stone",
+      "inputs": {
+        "textureSeed": { "input": "textureSeed" },
+        "ramp": [ "#2c3350", "#444c69", "#656f85", "#92a8b7", "#c1d7da", "#e7eeee" ],
+        "jointRamp": [ "#1d273e", "#2f3c51", "#546981" ]
+      }
+    },
+    "dryTile": {
+      "op": "data.record",
+      "inputs": {
+        "id": "dry",
+        "source": { "node": "dry" }
+      }
+    },
+    "mossTile": {
+      "op": "data.record",
+      "inputs": {
+        "id": "moss",
+        "source": { "node": "moss" }
+      }
+    },
+    "frostTile": {
+      "op": "data.record",
+      "inputs": {
+        "id": "frost",
+        "source": { "node": "frost" }
+      }
+    },
+    "variants": {
+      "op": "data.record",
+      "inputs": {
+        "dry": { "node": "dryTile" },
+        "moss": { "node": "mossTile" },
+        "frost": { "node": "frostTile" }
+      }
+    },
+    "sprites": {
+      "op": "data.collect",
+      "inputs": {
+        "source": { "node": "variants" },
+        "keys": [ "dry", "moss", "frost" ]
+      }
+    },
+    "atlas": {
+      "op": "raster.pack",
+      "inputs": {
+        "sprites": { "node": "sprites" },
+        "options": {
+          "maxWidth": 216,
+          "maxHeight": 72,
+          "padding": 2,
+          "extrude": 1
+        }
+      }
+    },
+    "repeated": {
+      "op": "proc.repeat",
+      "inputs": {
+        "source": { "node": "moss" },
+        "options": {
+          "width": 192,
+          "height": 128
+        }
+      }
+    }
+  },
+  "outputs": {
+    "atlas": { "node": "atlas", "port": "atlas" },
+    "repeated": { "node": "repeated" },
+    "dry": { "node": "dry" },
+    "moss": { "node": "moss" },
+    "frost": { "node": "frost" }
+  },
+  "exports": {
+    "atlas": { "output": "atlas", "format": "atlas" },
+    "repeated": { "output": "repeated", "format": "png" },
+    "dry": { "output": "dry", "format": "png" },
+    "moss": { "output": "moss", "format": "png" },
+    "frost": { "output": "frost", "format": "png" }
+  },
+  "assertions": [
+    { "id": "repeated-width", "output": "repeated", "path": [ "width" ], "op": "eq", "value": 192 }
+  ]
+}

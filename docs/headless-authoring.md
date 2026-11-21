@@ -4,6 +4,14 @@ These APIs are available through `KIT.procedural` in Node and the browser bundle
 
 For image review and export, pass the finished world to Node's CPU `render()`. For interactive review, pass the world and authoring toolkit to the [WebGL canvas renderer](browser-renderer.md).
 
+## Start from an editable recipe
+
+The [starter recipes](../examples/starter-recipes/README.md) ship five small
+projects for a relightable sprite, an audio-driven sign, a weathered tile
+set, a looping spell, and a layered 3D vista. Copy a recipe folder, run
+its graph, and edit its named inputs or nodes. Each recipe includes a
+take clock and can be archived with the existing project bundler.
+
 ## Edit generated parts from the CLI
 
 From the checkout, inspect the [editable passage](../examples/editable-passage.js)

@@ -9,7 +9,7 @@
     'atmosphere','shapedAtmosphere','atmosphereDepthBands','volumeCutouts','volumeLighting','volumeQuality','splatFields','atmosphereEmitters'
   ];
   const lookFields = ['horizonBands','effectPalettes','artDirection','stable','silhouetteProtection',
-    'surfaceLightRamps','colorCurves','shadowArt','ink','contactShadows','edgeFilter'];
+    'surfaceLightRamps','colorCurves','colorStack','paletteRemap','effects','shadowArt','ink','contactShadows','edgeFilter'];
   const parts = (value, allowed) => Object.fromEntries(allowed.filter(name => value?.[name] !== undefined).map(name => [name,value[name]]));
   const claims = (value, allowed) => object(value) && Object.keys(value).every(name => allowed.includes(name));
   const namespaced = (value, pack) => typeof value === 'string' && key.test(value) && (pack === undefined || value.startsWith(pack+'/'));
@@ -21,14 +21,35 @@
       throw new TypeError('Environment settings must use the portable environment or look fields');
     return source;
   }
+  function aesthetic(value) {
+    if (!claims(value,['description','tags']) || typeof value.description !== 'string' ||
+        !value.description.trim() || value.description.length > 400 ||
+        !Array.isArray(value.tags) || !value.tags.length || value.tags.length > 24 ||
+        !Array.from(value.tags).every(tag => typeof tag === 'string' && /^[a-z][a-z0-9-]{0,47}$/.test(tag)) ||
+        new Set(value.tags).size !== value.tags.length)
+      throw new TypeError('An aesthetic needs a description and unique lowercase tags');
+    return { description:value.description.trim(), tags:value.tags.slice() };
+  }
   function definition(value, pack) {
-    if (!claims(value,['id','label','settings']) || !namespaced(value.id,pack) ||
+    if (!claims(value,['id','label','settings','aesthetic']) || !namespaced(value.id,pack) ||
         typeof value.label !== 'string' || !value.label.trim() || value.label.length > 100)
       throw new TypeError('An environment needs a namespaced ID, label and settings');
     const authored = settings(value.settings);
     if (!Object.keys(authored).length) throw new TypeError('Environment settings cannot be empty');
     references(authored);
-    return freeze({ id:value.id, label:value.label.trim(), settings:authored });
+    return freeze({ id:value.id, label:value.label.trim(), settings:authored,
+      ...(value.aesthetic !== undefined && { aesthetic:aesthetic(value.aesthetic) }) });
+  }
+  const terms = value => value.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  function findAesthetics(catalog, query = '') {
+    if (typeof query !== 'string') throw new TypeError('An aesthetic query must be text');
+    const required = terms(query);
+    return catalog.environments.flatMap(({environment,pack,revision}) => {
+      if (!environment.aesthetic) return [];
+      const {id,label,aesthetic:{description,tags}} = environment;
+      const words = new Set(terms([id,label,...tags].join(' ')));
+      return required.every(term=>words.has(term)) ? [{ id,label,description,tags,pack,revision }] : [];
+    });
   }
   function image(value, pack) {
     if (!claims(value,['id','width','height','pixels']) || !namespaced(value.id,pack))
@@ -105,6 +126,10 @@
     SilhouetteProtection.prepare(look?.silhouetteProtection);
     SurfaceLook.lightRamps(look?.surfaceLightRamps);
     ColorCurves.prepare(look?.colorCurves);
+    const remap = (definition, color) => PixelLook.prepareRemap(definition,palette,{},color,{deferTargets:true});
+    remap(look?.paletteRemap);
+    ColorStack.prepare(look?.colorStack,{paletteRemap:remap});
+    ArtEffects.prepare(look?.effects,palette);
     ShadowArt.prepare(look?.shadowArt);
     ArtInk.prepare(look?.ink,palette);
     ContactShadows.prepare(look?.contactShadows);
@@ -122,7 +147,8 @@
     if (value.revision !== undefined && value.revision !== installed)
       throw new Error('Environment preset '+value.asset+' requires pack revision '+value.revision+', installed '+installed);
     const authored = value.overrides === undefined ? environment.settings : merge(environment.settings,settings(value.overrides));
-    return { id:environment.id, pack, revision:installed, settings:authored };
+    return { id:environment.id, pack, revision:installed, settings:authored,
+      ...(environment.aesthetic && { label:environment.label, aesthetic:environment.aesthetic }) };
   }
 
   function bind(binding, catalog) {
@@ -142,6 +168,6 @@
     validate(source,palette);
     return { ...target, ...source, environmentSource:freeze({ ...identity, images }) };
   }
-  A.environments = Object.freeze({ definition, image, references, requireImage, bind, apply,
+  A.environments = Object.freeze({ definition, image, references, requireImage, bind, apply, findAesthetics,
     rendererSettings: source => parts(source,fields) });
 })(KIT);

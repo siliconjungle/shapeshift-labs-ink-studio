@@ -1,0 +1,177 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "inputs": {
+    "clockwise": { "type": "boolean", "default": true }
+  },
+  "nodes": {
+    "orbit": {
+      "op": "anim.clock",
+      "inputs": {
+        "options": {
+          "range": [ 0, 2 ],
+          "mode": "loop"
+        }
+      }
+    },
+    "counter": {
+      "op": "multiply",
+      "inputs": {
+        "a": { "node": "orbit", "port": "progress" },
+        "b": -1
+      }
+    },
+    "strip": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 144,
+        "height": 28,
+        "edges": "hard",
+        "commands": [
+          { "type": "rect", "rect": [ 0, 8, 144, 1 ], "color": "#326784" },
+          { "type": "rect", "rect": [ 0, 21, 144, 1 ], "color": "#386780" },
+          { "type": "rect", "rect": [ 1, 2, 7, 4 ], "color": "#fff0a7" },
+          { "type": "rect", "rect": [ 2, 10, 8, 3 ], "color": "#ffd68a" },
+          { "type": "rect", "rect": [ 7, 16, 3, 3 ], "color": "#f9e6bb" },
+          { "type": "path", "points": [ [ 3, 25 ], [ 5, 23 ], [ 7, 25 ], [ 5, 26 ], [ 3, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 13, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 14, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 19, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 15, 25 ], [ 17, 23 ], [ 19, 25 ], [ 17, 26 ], [ 15, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 25, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 26, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 31, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 27, 25 ], [ 29, 23 ], [ 31, 25 ], [ 29, 26 ], [ 27, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 37, 2, 7, 4 ], "color": "#ffbd7e" },
+          { "type": "rect", "rect": [ 38, 10, 8, 3 ], "color": "#d6fff2" },
+          { "type": "rect", "rect": [ 43, 16, 3, 3 ], "color": "#f9e6bb" },
+          { "type": "path", "points": [ [ 39, 25 ], [ 41, 23 ], [ 43, 25 ], [ 41, 26 ], [ 39, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 49, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 50, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 55, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 51, 25 ], [ 53, 23 ], [ 55, 25 ], [ 53, 26 ], [ 51, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 61, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 62, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 67, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 63, 25 ], [ 65, 23 ], [ 67, 25 ], [ 65, 26 ], [ 63, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 73, 2, 7, 4 ], "color": "#ffbd7e" },
+          { "type": "rect", "rect": [ 74, 10, 8, 3 ], "color": "#d6fff2" },
+          { "type": "rect", "rect": [ 79, 16, 3, 3 ], "color": "#f9e6bb" },
+          { "type": "path", "points": [ [ 75, 25 ], [ 77, 23 ], [ 79, 25 ], [ 77, 26 ], [ 75, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 85, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 86, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 91, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 87, 25 ], [ 89, 23 ], [ 91, 25 ], [ 89, 26 ], [ 87, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 97, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 98, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 103, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 99, 25 ], [ 101, 23 ], [ 103, 25 ], [ 101, 26 ], [ 99, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 109, 2, 7, 4 ], "color": "#ffbd7e" },
+          { "type": "rect", "rect": [ 110, 10, 8, 3 ], "color": "#d6fff2" },
+          { "type": "rect", "rect": [ 115, 16, 3, 3 ], "color": "#f9e6bb" },
+          { "type": "path", "points": [ [ 111, 25 ], [ 113, 23 ], [ 115, 25 ], [ 113, 26 ], [ 111, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 121, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 122, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 127, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 123, 25 ], [ 125, 23 ], [ 127, 25 ], [ 125, 26 ], [ 123, 25 ] ], "color": "#6e9fc0", "width": 1 },
+          { "type": "rect", "rect": [ 133, 2, 3, 2 ], "color": "#5a9fad" },
+          { "type": "rect", "rect": [ 134, 10, 5, 3 ], "color": "#5dd7c8" },
+          { "type": "rect", "rect": [ 139, 16, 3, 3 ], "color": "#499099" },
+          { "type": "path", "points": [ [ 135, 25 ], [ 137, 23 ], [ 139, 25 ], [ 137, 26 ], [ 135, 25 ] ], "color": "#6e9fc0", "width": 1 }
+        ]
+      }
+    },
+    "outerOptions": {
+      "op": "data.record",
+      "inputs": {
+        "width": 112,
+        "height": 112,
+        "radii": [ 0.34, 0.43 ],
+        "filter": "nearest",
+        "clockwise": { "input": "clockwise" },
+        "angle": { "node": "orbit", "port": "progress" }
+      }
+    },
+    "innerOptions": {
+      "op": "data.record",
+      "inputs": {
+        "width": 112,
+        "height": 112,
+        "radii": [ 0.23, 0.31 ],
+        "filter": "nearest",
+        "clockwise": { "input": "clockwise" },
+        "angle": { "node": "counter" }
+      }
+    },
+    "outer": {
+      "op": "warp.polar",
+      "inputs": {
+        "source": { "node": "strip" },
+        "options": { "node": "outerOptions" }
+      }
+    },
+    "inner": {
+      "op": "warp.polar",
+      "inputs": {
+        "source": { "node": "strip" },
+        "options": { "node": "innerOptions" }
+      }
+    },
+    "rings": {
+      "op": "raster.blend",
+      "inputs": {
+        "background": { "node": "outer" },
+        "foreground": { "node": "inner" }
+      }
+    },
+    "gem": {
+      "op": "draw.render",
+      "inputs": {
+        "width": 112,
+        "height": 112,
+        "edges": "hard",
+        "commands": [
+          { "type": "path", "points": [ [ 35, 50 ], [ 35, 62 ] ], "color": "#497086", "width": 1 },
+          { "type": "path", "points": [ [ 50, 35 ], [ 62, 35 ] ], "color": "#497086", "width": 1 },
+          { "type": "path", "points": [ [ 77, 50 ], [ 77, 62 ] ], "color": "#497086", "width": 1 },
+          { "type": "path", "points": [ [ 50, 77 ], [ 62, 77 ] ], "color": "#497086", "width": 1 },
+          { "type": "ellipse", "rect": [ 31, 31, 50, 50 ], "fill": false, "stroke": "#366681", "width": 1 },
+          { "type": "ellipse", "rect": [ 36, 36, 40, 40 ], "fill": false, "stroke": "#559ca0", "width": 1 },
+          { "type": "polygon", "points": [ [ 56, 39 ], [ 65, 55 ], [ 56, 73 ], [ 47, 55 ] ], "fill": "#214258", "stroke": "#85dfd0", "width": 1 },
+          { "type": "polygon", "points": [ [ 56, 44 ], [ 62, 55 ], [ 56, 60 ], [ 50, 55 ] ], "fill": "#b9f6e6" },
+          { "type": "polygon", "points": [ [ 56, 60 ], [ 62, 55 ], [ 56, 69 ] ], "fill": "#48889b" },
+          { "type": "rect", "rect": [ 54, 53, 4, 4 ], "color": "#edfff0" }
+        ]
+      }
+    },
+    "rune": {
+      "op": "raster.blend",
+      "inputs": {
+        "background": { "node": "rings" },
+        "foreground": { "node": "gem" }
+      }
+    },
+    "spell": {
+      "op": "fx.glow",
+      "inputs": {
+        "source": { "node": "rune" },
+        "options": {
+          "radius": 4,
+          "strength": 1.45,
+          "color": "#4bb4ba"
+        }
+      }
+    }
+  },
+  "outputs": {
+    "spell": { "node": "spell" },
+    "core": { "node": "rune" }
+  },
+  "exports": {
+    "spell": { "output": "spell", "format": "png" },
+    "core": { "output": "core", "format": "png" }
+  },
+  "assertions": [
+    { "id": "spell-width", "output": "spell", "path": [ "width" ], "op": "eq", "value": 112 }
+  ]
+}

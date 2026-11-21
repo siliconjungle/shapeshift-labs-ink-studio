@@ -1,0 +1,11 @@
+{
+  "format": "ink-studio/take",
+  "version": 1,
+  "id": "audio-driven-sign",
+  "clock": {
+    "fps": 12,
+    "sampleRate": 8000,
+    "simulationRate": 60
+  },
+  "graph": "graph.json"
+}

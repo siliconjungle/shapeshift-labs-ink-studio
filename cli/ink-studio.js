@@ -883,6 +883,7 @@ const CMD = {
         '  palette <recipe.json> [--t seconds] [--out palette.json]   sample palette recipes, paths and animation',
         '  inspect <scene|run>         discover fields, actions, ports and entities',
         '  environment inspect <scene|run> --at x,y,z [--t seconds] [--out report.json]   explain sky and local weather',
+        '  environment aesthetics <pack-or-bundle.json> [query] [--json]   discover named aesthetics',
         '  probe <scene|run> --field name [--at x,y,z | --entity id] [--explain]  sample world state',
         '  probe <scene|run> --field world/spatial-batch --spec queries.json   proximity, occupancy and sockets',
         '  inspect|validate|probe <scene|run> --select JSON   inspect, check, or sample a look target',
@@ -1502,6 +1503,18 @@ const CMD = {
     console.log('baked',data.probes.length,'bounce probes to',file);
   },
   environment() {
+    if (pos[0] === 'aesthetics') {
+      if (pos.length < 2 || pos.length > 3)
+        die('Usage: ink-studio environment aesthetics <pack-or-bundle.json> [query] [--json]');
+      const {assetPacks,environments} = lib().KIT.authoring;
+      const packs = require('./asset-pack.js').install(assetPacks,[],pos[1]);
+      const found = environments.findAesthetics(assetPacks.create({packs}),pos[2]);
+      if (opt.json) process.stdout.write(JSON.stringify(found,null,2)+'\n');
+      else if (!found.length) console.log('No matching aesthetics');
+      else for (const {id,label,description,tags} of found)
+        console.log(id+'  '+label+'  ['+tags.join(', ')+']\n  '+description);
+      return;
+    }
     if (pos[0] !== 'inspect' || pos.length !== 2)
       die('Usage: ink-studio environment inspect <scene|run> --at x,y,z [--t seconds]');
     if (typeof opt.at !== 'string' || opt.at.split(',').length !== 3 || opt.at.split(',').some(value=>!value.trim()) ||

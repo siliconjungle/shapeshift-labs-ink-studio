@@ -1,16 +1,35 @@
-module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
+module.exports = ({ KIT: K, makeBuilder, makeSculpt, PixelLook, ArtDirection }) => ({
   id: 'raster-millrace',
   name: 'Evening at the millrace',
   seed: 53,
   build(seed, { controls } = {}) {
-    const B = makeBuilder(seed, [
+    const aesthetic = controls?.aesthetic;
+    const environment = aesthetic === undefined ? {
+      skyEnvironment:{defaults:{zenith:'#454e78',horizon:'#d8a096',ground:'#354865',sunStrength:0}}
+    } : {
+      environmentPreset:aesthetic,
+      assetPacks:[require('./millrace-aesthetics.json')]
+    };
+    const palette = [
       0x182636,0x233747,0x344755,0x4a5762,0x64686d,0x827d77,0xa29486,0xbbae97,
       0x302e3c,0x48394a,0x634958,0x855c64,0xab7773,0xce9686,
       0x1f3f49,0x2b5660,0x386d72,0x588983,0x79a396,
       0x283d35,0x364f41,0x4b6550,0x64805c,0x84916a,
       0x3e343a,0x654448,0x874f4d,0xb36a53,0xe49963,0xffc677,0xffe6a9,
       0x314c64,0x466984,0x79a2ac,0xa4bdb4
-    ]);
+    ];
+    const paletteRoles = {
+      background:[0], stone:[1,2,3,4,5,6,7], roof:[8,9,10,11,12,13],
+      water:[14,15,16,17,18], foliage:[19,20,21,22,23], timber:[24,25,26,27],
+      lamp:[28,29,30], wave:[31,32,33,34]
+    };
+    const preset = aesthetic !== undefined && aesthetic !== false ?
+      K.authoring.environments.bind(aesthetic,K.authoring.assetPacks.create({packs:environment.assetPacks})) : null;
+    const motion = preset && ArtDirection.prepare(preset.settings.look.artDirection);
+    // Indexed paint supplies its own output palette, so take the wave stops directly.
+    const remap = preset && PixelLook.prepareRemap(preset.settings.look.paletteRemap,palette,paletteRoles);
+    const wavePalette = remap && paletteRoles.wave.map(index=>remap.target(index));
+    const B = makeBuilder(seed, palette);
     const S = K.sculpt(makeSculpt(B));
     Object.assign(S,{pixel:true,amb:.42,sky:.19,sunK:.61,shLen:0,sun:K.V.norm([-.56,.67,.55])});
     const stone = {r:[1,2,3,4,5]}, trim = {r:[2,3,4,5,6,7]};
@@ -122,7 +141,8 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
     });
     const water=K.surface.material(reflection,{layers:{sheen:{
       type:'projected',pattern:'indexed',projection:{origin:[-2.38,0,-5.51]},
-      raster:{width,height,size:span,slots}
+      raster:{width,height,size:span,...(wavePalette ?
+        {slots:slots.map(slot=>slot === null ? null : slot-31),palette:wavePalette} : {slots})}
     }}});
     box([0,-.043,1.57],[2.38,.043,7.08],water,.141,.018);
     S.bake();
@@ -130,12 +150,14 @@ module.exports = ({ KIT: K, makeBuilder, makeSculpt }) => ({
     return B.finish({
       cam:{target:[-.25,.53,.95],dist:11.4,yaw:.12,pitch:.323,ortho:true,sway:0},
       radius:18, detail:25, dither:0, reflections:[plane],
-      skyEnvironment:{defaults:{zenith:'#454e78',horizon:'#d8a096',ground:'#354865',sunStrength:0}},
+      ...environment,
+      ...(preset && {paletteRoles}),
       look:{splatCoverage:'continuous',renderGraph:{passes:[{
         id:'water-scanlines',type:'distortion',enabled:controls?.raster !== false,
         select:{material:'millrace-water'},depthThreshold:controls?.depth === false ? undefined : .26,
         rows:({y,v,width,height,time})=>{
-          const t=(time%6)*Math.PI/3, near=K.clamp((v-.43)/.57,0,1);
+          const seconds=motion ? ArtDirection.time(motion,time,'water') : time;
+          const t=(seconds%6)*Math.PI/3, near=K.clamp((v-.43)/.57,0,1);
           const wave=Math.sin(y*145/height-t*4)+.47*Math.sin(y*228/height-t*7);
           return {offset:[wave*width*(.008+.018*near),0],scale:[1+.044*near*Math.sin(y*113/height-t*2),1],
             tint:[1-5*near,3+7*near,7+16*near]};
