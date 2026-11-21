@@ -96,3 +96,42 @@ test('rendered wind, rain, local fog and wet finishes follow the scene binding',
   const sunny = ink.render(world,{ ...view, skyTime:2.5, skyProfiles:{ weather:'clear' } });
   assert.deepEqual(sunny.rgb, clear.rgb);
 });
+
+test('profile and regional wear drives a shared finish and can be inspected, replayed and disabled', () => {
+  const skyEnvironment = { sky:false, defaults:{windX:4,pigmentFall:.18},
+    profiles:{footpath:{surfaceAbrasion:.8}} };
+  const weatherBinding = JSON.parse(JSON.stringify({
+    channels:{pigmentRate:'pigmentFall'},
+    fronts:[{id:'footpath',profile:'footpath',radius:.85,route:[{at:0,xz:[-.5,-.5]}]}],
+    surface:{...surface,history:{abrasionLoss:2,windLoss:.08}}
+  }));
+  const B=makeBuilder(78,[0x131f2b,0x8e8173]);
+  const S=K.sculpt(makeSculpt(B));
+  const stone=K.surface.material({r:[1]},{
+    signals:{use:{type:'weather',channel:'abrasion',range:[0,2]}},
+    layers:{
+      wear:{type:'tint',color:'#e3dfd7',strength:0,drive:{strength:{signal:'use',to:1}}},
+      dust:{type:'tint',color:'#6e4830',mask:{type:'weather',channel:'pigment',low:.05,high:.65}}
+    }
+  });
+  for (const x of [-.5,.5]) S.box([x,0,-.5],[.43,.15,.43],stone,{res:.07});
+  S.bake();
+  const world=B.finish({skyEnvironment,weatherBinding,radius:4,
+    cam:{target:[0,0,-.5],dist:4,pitch:.61,yaw:0,sway:0}});
+  const options={w:88,h:65,px:1,raw:true};
+  const fresh=ink.render(world,{...options,t:0});
+  const worn=ink.render(world,{...options,t:4});
+  const patch={surface:{history:false}};
+  const disabled=ink.render(world,{...options,t:4,weatherBinding:patch});
+  assert.notDeepEqual(worn.rgb,fresh.rgb);
+  assert.deepEqual(disabled.rgb,fresh.rgb);
+  assert.deepEqual(ink.render(world,{...options,t:0}).rgb,fresh.rgb);
+  assert.deepEqual(ink.render(world,{...options,t:4}).rgb,worn.rgb);
+  const stair=ink.inspectEnvironment(world,{t:4,at:[-.5,.1,-.5]}).weather;
+  const wall=ink.inspectEnvironment(world,{t:4,at:[.5,.1,-.5]}).weather;
+  assert.equal(stair.local.abrasionRate,.8);
+  assert(stair.surface.abrasion>3 && wall.surface.abrasion===0);
+  assert(stair.surface.pigment<.15 && wall.surface.pigment>.5);
+  assert.equal(stair.surface.windExposure,wall.surface.windExposure);
+  assert.equal(ink.inspectEnvironment(world,{t:4,at:[-.5,.1,-.5],weatherBinding:patch}).weather.surface.pigment,undefined);
+});

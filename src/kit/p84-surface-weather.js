@@ -1,4 +1,4 @@
-/* Persistent wetness, standing water, temperature and phase deposits on an XZ grid. */
+/* Persistent moisture, temperature, deposits and material history on an XZ grid. */
 (function (K) {
   const P=K.procedural,M=P.motion,V=K.V,
     integer=(n,a,b)=>Number.isSafeInteger(n)&&n>=a&&n<=b,
@@ -26,11 +26,16 @@
     if ((typeof basinCapacity !== 'function' && !between(basinCapacity,0,1e4)) ||
         !between(drainage,0,1e4) || !between(waterEvaporation,0,1e4))
       throw new RangeError('Invalid standing water capacity, drainage or evaporation');
+    const history = MaterialHistory.settings(options.history);
+    const historyKeys = history ? [...MaterialHistory.channels,'wetPhase'] : [];
+    const { dryThreshold,wetThreshold,pigmentCapacity,wash,windLoss,abrasionLoss } = history ?? {};
+    const dryAt = capacity*dryThreshold, wetAt = capacity*wetThreshold;
     const basins = water && new Float64Array(size);
     const solar=clock===undefined?null:P.data.freeze(P.data.clone(clock)), normals=[],
       fields={wetness:new Float64Array(size),temperature:new Float64Array(size),
         snow:new Float64Array(size),frost:new Float64Array(size),exposure:new Float64Array(size)};
     if (basins) fields.standingWater = new Float64Array(size);
+    for (const key of historyKeys) fields[key] = new Float64Array(size);
     if(solar)P.environmentFields.evaluate(solar,0);
     for(let i=0;i<size;i++){
       if(!open[i])continue;
@@ -54,13 +59,23 @@
       fields.snow[i]=snow;
       fields.frost[i]=frost;
       fields.exposure[i]=exposure;
+      if (history) {
+        for (const key of MaterialHistory.channels) {
+          const value = state[key] ?? 0;
+          if (!MaterialHistory.valid(key,value,pigmentCapacity))
+            throw new RangeError('Invalid initial material history field '+key);
+          fields[key][i] = value;
+        }
+        fields.wetPhase[i] = Number(wetness+frost+(fields.standingWater?.[i] ?? 0)>=wetAt);
+      }
     }
     const X=1/(dx*dx),Z=1/(dz*dz),
       stability=2*Math.max(wetDiffusion,heatDiffusion)*(X+Z)+maxRunoff*(1/dx+1/dz),
       timeStep=Math.min(maxDt,stability?0.47/stability:Infinity);
     let time=0;
     function snapshot(substeps=0){
-      const data=Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,value.slice()]));
+      const data=Object.fromEntries(Object.entries(fields).filter(([key])=>key!=='wetPhase')
+        .map(([key,value])=>[key,value.slice()]));
       return Object.freeze({time,width,height,bounds:d.bounds,...data,substeps,
         sample(x,z){
           if(!inside(x,z))return null;
@@ -83,8 +98,10 @@
         throw new TypeError('Invalid surface weather checkpoint for this grid');
       const restored={};
       for(const key of Object.keys(fields)){
-        if(!vector(state.fields[key],size))throw new TypeError('Invalid surface weather checkpoint field '+key);
-        restored[key]=Float64Array.from(state.fields[key]);
+        const values=state.fields[key];
+        if(!vector(values,size) || historyKeys.includes(key) && Array.from(values).some(n=>!MaterialHistory.valid(key,n,pigmentCapacity)))
+          throw new TypeError('Invalid surface weather checkpoint field '+key);
+        restored[key]=Float64Array.from(values);
       }
       Object.assign(fields,restored);
       time=state.time;
@@ -94,10 +111,12 @@
       if(!between(duration,0,120)||typeof forcing!=='function')throw new Error('Surface weather needs a bounded interval and forcing field');
       if(!duration)return snapshot();
       const steps=Math.ceil(duration/timeStep),dt=duration/steps;
-      if(steps>16000||steps*size*22>maxWork)throw new Error('Surface weather exceeds its integration budget');
+      if(steps>16000||steps*size*(history?30:22)>maxWork)throw new Error('Surface weather exceeds its integration budget');
       const wet=fields.wetness.slice(),temperature=fields.temperature.slice(),snow=fields.snow.slice(),
         frost=fields.frost.slice(),exposure=fields.exposure.slice(), pool=fields.standingWater?.slice(),
         dw=new Float64Array(size),dT=new Float64Array(size),records=new Array(size);
+      const wear=Object.fromEntries(historyKeys.map(key=>[key,fields[key].slice()]));
+      const { wetCycles,wetPhase,windExposure,abrasion,pigment } = wear;
       function transfer(i,j,axis,coefficient,spacing){
         const flow=(records[i].runoff[axis]+records[j].runoff[axis])*0.5,
           move=(wet[i]-wet[j])*wetDiffusion*coefficient+
@@ -114,14 +133,18 @@
           if(!open[i])continue;
           const state={wetness:wet[i],temperature:temperature[i],snow:snow[i],frost:frost[i],
             exposure:exposure[i],normal:normals[i].slice(), ...(pool && { standingWater:pool[i] })};
+          if (history) Object.assign(state,{ wetCycles:wetCycles[i],windExposure:windExposure[i],abrasion:abrasion[i],pigment:pigment[i] });
           const {rain=0,snowfall=0,precipitationExposure=1,air=10,humidity=0.44,wind=0.35,shelter=0,heat=0,runoff=[0,0],
-            light=sun?clamp(V.dot(sun,normals[i]),0,1):0}=forcing(...center(i),t,state)??{};
+            light=sun?clamp(V.dot(sun,normals[i]),0,1):0,abrasionRate=0,pigmentRate=0}=forcing(...center(i),t,state)??{};
           if(!between(rain,0,1000)||!between(snowfall,0,1000)||!between(air,-240,500)||
             ![humidity,wind,shelter,light,precipitationExposure].every(unit)||!between(heat,-240,250)||!vector(runoff,2)||
             Math.hypot(...runoff)>maxRunoff+1e-10)
             throw new Error('Surface forcing values must be finite and within their configured limits');
+          if (history && ![abrasionRate,pigmentRate].every(n=>between(n,0,MaterialHistory.maxRate)))
+            throw new RangeError('Material history forcing needs nonnegative abrasion and pigment rates');
           records[i]={rain:rain*precipitationExposure,snowfall:snowfall*precipitationExposure,
-            air,humidity,wind,shelter,heat,light:light*(1-shelter),runoff:runoff.slice()};
+            air,humidity,wind,shelter,heat,light:light*(1-shelter),runoff:runoff.slice(),
+            ...(history && { abrasionRate,pigmentRate })};
         }
         dw.fill(0);dT.fill(0);
         for(let z=0,i=0;z<height;z++)for(let x=0;x<width;x++,i++){
@@ -161,9 +184,26 @@
           snow[i]=packed-snowMelt;
           frost[i]=ice;
           exposure[i]+=light*dt;
+          if (history) {
+            const moisture=wet[i]+ice+(pool?.[i] ?? 0);
+            if (wetPhase[i] && moisture<=dryAt) {
+              wetCycles[i]=Math.min(MaterialHistory.maxTotal,wetCycles[i]+1);
+              wetPhase[i]=0;
+            } else if (moisture>=wetAt) wetPhase[i]=1;
+            const { abrasionRate,pigmentRate } = records[i];
+            const exposedWind=wind*(1-shelter);
+            windExposure[i]=Math.min(MaterialHistory.maxTotal,windExposure[i]+exposedWind*dt);
+            abrasion[i]=Math.min(MaterialHistory.maxTotal,abrasion[i]+abrasionRate*dt);
+            // Integrate deposition and proportional wash, scour and rubbing in the same substep.
+            const loss=wash*rain+windLoss*exposedWind+abrasionLoss*abrasionRate;
+            const removed=-Math.expm1(-loss*dt);
+            const deposited=pigmentRate*(loss>0 ? removed/loss : dt);
+            pigment[i]=Math.min(pigmentCapacity,pigment[i]*(1-removed)+deposited);
+          }
         }
       }
       Object.assign(fields,{wetness:wet,temperature,snow,frost,exposure});
+      if (history) Object.assign(fields,wear);
       if (pool) fields.standingWater = pool;
       time+=duration;
       return snapshot(steps);

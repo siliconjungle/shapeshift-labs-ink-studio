@@ -2757,6 +2757,8 @@ Wetness
 moves across the grid and dries as the surface warms. Ice and snow
 release moisture as they melt. Enable [standing water](retained-weather.md)
 to store overflow in local basins and feed puddle finishes from the retained depth.
+Enable [material histories](material-histories.md) to retain wet–dry cycles,
+wind exposure, abrasion, and deposited pigment for material finishes.
 
 `motion.materialStateGraph({initial, states, transitions}, entities)`
 tracks the state and material data of each named entity. Transitions

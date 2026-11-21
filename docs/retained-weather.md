@@ -2,6 +2,8 @@
 
 A [weather-bound](weather-binding.md) surface grid remembers wetness, snow, and frost after the weather changes. Enable `standingWater` on that grid to retain excess rain and meltwater in low areas. Pools keep the underlying stone wet, can freeze in cold conditions, and release their water again when they thaw.
 
+Enable [material histories](material-histories.md) on the same grid to retain wet–dry cycles, wind exposure, abrasion, and pigment.
+
 ```js
 const weatherBinding = {
   surface: {

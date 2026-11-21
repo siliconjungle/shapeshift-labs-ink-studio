@@ -50,6 +50,50 @@ test('weather transports wetness downslope without leaking through closed cells 
   assert.deepEqual(weather.snapshot().wetness,after.wetness);
 });
 
+test('material histories count wet and dry cycles and retain localized wear and pigment across checkpoints',()=>{
+  const grid={width:2,height:1,cell:1,maxDt:.125,maxRunoff:0,wetDiffusion:0,heatDiffusion:0,evaporation:4};
+  const options={...grid,history:{pigmentCapacity:.9}};
+  const solver=motion.surfaceWeather(options);
+  const forcing=wet=>x=>({
+    rain:wet?1:0,humidity:wet?.99:0,wind:.8,air:18,shelter:x<1?0:1,
+    precipitationExposure:x<1?1:0,abrasionRate:x<1?.4:0,pigmentRate:.16
+  });
+  solver.step(1,{forcing:forcing(true)});
+  const dry=solver.step(2,{forcing:forcing(false)});
+  assert.equal(dry.wetCycles[0],1);
+  assert.equal(dry.wetCycles[1],0);
+  solver.step(1,{forcing:forcing(true)});
+  const checkpoint=JSON.parse(JSON.stringify(solver.checkpoint()));
+  assert.deepEqual(checkpoint.fields.wetPhase,[1,0]);
+  const final=solver.step(2,{forcing:forcing(false)});
+  assert.deepEqual([...final.wetCycles],[2,0]);
+  assert(final.windExposure[0]>4.7 && final.windExposure[1]===0);
+  assert(final.abrasion[0]>2.3 && final.abrasion[1]===0);
+  assert(final.pigment[0]<.45 && final.pigment[1]===.9);
+  assert.equal(final.sample(.5,.5).wetPhase,undefined);
+  const resumed=motion.surfaceWeather(options);
+  resumed.restore(checkpoint);
+  resumed.step(2,{forcing:forcing(false)});
+  assert.deepEqual(resumed.checkpoint(),solver.checkpoint());
+  assert.throws(()=>resumed.step(1,{forcing:x=>({pigmentRate:x<1?1:-1})}),/history forcing/);
+  const tampered=structuredClone(checkpoint);
+  tampered.fields.wetPhase[0]=.5;
+  assert.throws(()=>resumed.restore(tampered),/checkpoint field wetPhase/);
+  assert.deepEqual(resumed.checkpoint(),solver.checkpoint());
+  assert.equal(motion.surfaceWeather(grid).snapshot().pigment,undefined);
+  assert.throws(()=>motion.surfaceWeather({...grid,history:{dryThreshold:.8,wetThreshold:.4}}),/thresholds/);
+});
+
+test('freezing retained moisture keeps the wet phase armed until the material actually dries',()=>{
+  const solver=motion.surfaceWeather({width:1,height:1,cell:1,history:true,
+    initial:()=>({temperature:-15,wetness:.8}),maxRunoff:0,freezeRate:2,meltRate:2,exchange:5,evaporation:2});
+  const frozen=solver.step(1,{forcing:()=>({air:-15,humidity:1})});
+  assert(frozen.wetness[0]===0 && frozen.frost[0]>.75);
+  assert.equal(frozen.wetCycles[0],0);
+  const dry=solver.step(3,{forcing:()=>({air:24,humidity:0,wind:1})});
+  assert.equal(dry.wetCycles[0],1);
+});
+
 test('material events advance individual retained states in order and can resume from a snapshot',()=>{
   const spec={initial:'dry',states:{
     dry:{shade:'sand'},wet:{shade:'blue'},muddy:{shade:'umber'},cracked:{shade:'pale'}

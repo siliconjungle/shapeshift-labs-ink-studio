@@ -7,6 +7,7 @@ const SurfaceLook = (() => {
   const effects = typeof SplatEffects === 'undefined' ? require('./splat-effects.js') : SplatEffects;
   const stages = typeof RenderStages === 'undefined' ? require('./render-stages.js') : RenderStages;
   const pixelLook = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
+  const history = typeof MaterialHistory === 'undefined' ? require('./material-history.js') : MaterialHistory;
   let curves, luts, stacks, colorSpace, reflectionDetail;
   try {
     curves = ColorCurves;
@@ -217,11 +218,13 @@ const SurfaceLook = (() => {
     return mask.invert ? 1 - weight : weight;
   }
 
+  const weatherMasks = ['wetness','standingWater','snow','frost',...history.channels];
+  const weatherSignals = [...weatherMasks,'temperature','exposure'];
   function weatherMask(mask) {
     const { channel = 'wetness', low = 0, high = 1, invert = false } = mask;
-    if (!['wetness', 'standingWater', 'snow', 'frost'].includes(channel) || !Number.isFinite(low) || !Number.isFinite(high) ||
+    if (!weatherMasks.includes(channel) || !Number.isFinite(low) || !Number.isFinite(high) ||
         low < 0 || high <= low || typeof invert !== 'boolean')
-      throw new RangeError('Weather masks need wetness, standingWater, snow or frost and increasing nonnegative bounds');
+      throw new RangeError('Weather masks need a moisture or material history channel and increasing nonnegative bounds');
     return weather => {
       const value = weather?.[channel];
       if (!Number.isFinite(value)) return 0;
@@ -237,7 +240,7 @@ const SurfaceLook = (() => {
       if (!isRecord(source)) throw new TypeError('Surface signal ' + id + ' needs a source');
       const { type, channel, range = [0, 1], interpolation = 'smooth' } = source;
       if (['weather','time','light'].includes(type)) {
-        if (type === 'weather' && !['wetness', 'standingWater', 'snow', 'frost', 'temperature', 'exposure'].includes(channel))
+        if (type === 'weather' && !weatherSignals.includes(channel))
           throw new RangeError('Unknown weather channel on surface signal ' + id);
         if (Object.keys(source).some(key => !['type', 'range', 'interpolation', ...(type === 'weather' ? ['channel'] : [])].includes(key)) ||
             !Array.isArray(range) || range.length !== 2)

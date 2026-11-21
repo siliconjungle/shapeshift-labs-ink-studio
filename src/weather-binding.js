@@ -1,16 +1,20 @@
 /* Environment tracks drive both rendered weather and retained surface forcing. */
 const WeatherBinding = (() => {
   const Front = typeof WeatherFront === 'undefined' ? require('./weather-front.js') : WeatherFront;
-  const outside = { rain:0, snowfall:0, air:10, humidity:.44, windX:0, windZ:0, windGust:1, fogDensity:1, wetness:0, light:0 };
+  const history = typeof MaterialHistory === 'undefined' ? require('./material-history.js') : MaterialHistory;
+  const outside = { rain:0, snowfall:0, air:10, humidity:.44, windX:0, windZ:0, windGust:1, fogDensity:1, wetness:0, light:0,
+    abrasionRate:0,pigmentRate:0 };
   const velocity = ({ windX, windZ }) =>
     windX === undefined && windZ === undefined ? undefined : [windX ?? 0, windZ ?? 0];
   const defaults = {
     rain: 'rain', snowfall: 'snowfall', air: 'airTemperature', humidity: 'humidity',
-    windX: 'windX', windZ: 'windZ', windGust: 'windGust', fogDensity: 'fogDensity', wetness: 'surfaceWetness', light: 'daylight'
+    windX: 'windX', windZ: 'windZ', windGust: 'windGust', fogDensity: 'fogDensity', wetness: 'surfaceWetness', light: 'daylight',
+    abrasionRate: 'surfaceAbrasion', pigmentRate: 'surfacePigment'
   };
   const ranges = {
     rain: [0,1000], snowfall: [0,1000], air: [-240,500], humidity: [0,1],
-    windX: [-20,20], windZ: [-20,20], windGust: [0,3], fogDensity: [0,64], wetness: [0,1], light: [0,1]
+    windX: [-20,20], windZ: [-20,20], windGust: [0,3], fogDensity: [0,64], wetness: [0,1], light: [0,1],
+    abrasionRate: [0,history.maxRate], pigmentRate: [0,history.maxRate]
   };
   function record(value, name) {
     if (!value || ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
@@ -35,6 +39,8 @@ const WeatherBinding = (() => {
           typeof modified.standingWater === 'object')
         surface.standingWater = { ...record(original.standingWater, 'Standing water'),
           ...record(modified.standingWater, 'Standing water') };
+      if (original.history && modified.history && typeof original.history === 'object' && typeof modified.history === 'object')
+        surface.history = { ...record(original.history, 'Material history'), ...record(modified.history, 'Material history') };
     }
     const { rainFull = 1, snowFull = 1, windDryingSpeed = 5, fogVolumes, fronts } = { ...base, ...edits };
     const channels = { ...base.channels, ...edits.channels };
@@ -59,6 +65,7 @@ const WeatherBinding = (() => {
       number(step, .001, 3, 'Weather surface step');
       if (forcing !== undefined && typeof forcing !== 'function')
         throw new TypeError('Weather surface forcing must be a function');
+      history.settings(options.history);
       retained = { step, forcing, options };
     }
     return { channels, rainFull, snowFull, windDryingSpeed, fogVolumes: fogVolumes && new Set(fogVolumes), fronts: Front.compile(fronts), surface: retained };
@@ -123,8 +130,9 @@ const WeatherBinding = (() => {
       return spatial(time).at(x,z);
     }
 
-    const forcingValues = ({ rain, snowfall, air, humidity, light, wind }) => ({
-      rain, snowfall, air, humidity, light, wind:wind && Math.min(1, Math.hypot(...wind)/windDryingSpeed)
+    const forcingValues = ({ rain, snowfall, air, humidity, light, wind, abrasionRate, pigmentRate }) => ({
+      rain, snowfall, air, humidity, light, wind:wind && Math.min(1, Math.hypot(...wind)/windDryingSpeed),
+      ...(abrasionRate !== undefined && { abrasionRate }), ...(pigmentRate !== undefined && { pigmentRate })
     });
 
     function forcing(local) {

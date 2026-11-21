@@ -11,6 +11,7 @@ Enable `weatherBinding: true` on a scene with a [sky environment](shared-sky-ref
 | `snowfall` | Deposition rate for retained snow and opacity for profile-bound [world-space flakes](world-precipitation.md). |
 | `fogDensity` | Multiplier on the authored densities of local atmosphere volumes. |
 | `surfaceWetness` | Optional minimum wetness for weather-masked finishes, combined with any retained wetness. |
+| `surfaceAbrasion`, `surfacePigment` | Abrasion and pigment deposition rates for [material histories](material-histories.md). Use `abrasionRate` and `pigmentRate` as the channel mapping keys. |
 
 For a numeric channel that’s absent, the matching subsystem uses its ordinary defaults. Rain tagged with `profile: true` appears in the CPU renderer when the binding provides a positive rain rate. An explicit render `wind` value overrides the profile velocity for that render.
 
