@@ -137,6 +137,12 @@ const specifications = {
   'music.resolve': { inputs: { map: { tempo: 120, barsPerPhrase: 2, swing: .625 },
     items: [{ time: { phrase: 1 }, value: { glow: 1 } }, { time: { bar: 2, beat: .5, offset: .05 }, value: { glow: 0 } }] } },
   'audio.buffer': { inputs: audio },
+  'audio.stemControls': { inputs: {
+    stems: { drums: transientAudio, synth: audio },
+    settings: { drums: { envelope: { measure: 'peak', attack: 0, threshold: .4 } },
+      synth: { bands: { high: { hz: [1800, 2800], attack: .03, release: .2 } } } },
+    options: { time: .02 }
+  } },
   'audio.detectTransients': { inputs: { source: transientAudio } },
   'audio.editEvents': {
     nodes: { detected: { op: 'audio.detectTransients', inputs: { source: transientAudio } } },

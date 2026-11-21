@@ -143,6 +143,8 @@ const options = {
   'anim.retime': clock,
   'anim.frame': { fps: sampleRate, mode,
     first: property('number', { unit: 'frame', constraints: { integer: true, min: 0 } }, 0) },
+  'audio.stemControls': { rate: property('number', { unit: 'samples/second', ...limit(1, 240, true) }, 60),
+    time: sampleTime },
   'audio.detectTransients': { size: property('number', { unit: 'samples', ...limit(16, 8192, true) }),
     hop: property('number', { unit: 'samples', constraints: { integer: true, min: 1 } }),
     minGap: property('number', { ...seconds, ...limit(0, 10) }, .075),

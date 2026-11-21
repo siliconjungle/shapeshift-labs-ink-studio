@@ -46,6 +46,68 @@ These tools cover waveform windowing and FFT workflows comparable to
 Pixel Composer’s audio analyzer and transform nodes.
 [Audio Window](https://docs.pixel-composer.com/nodes/animation/audio/analyzer/audio_window.html) · [FFT](https://docs.pixel-composer.com/nodes/values/number/operator/fft.html)
 
+## Per-stem control signals
+
+Connect separate WAV assets or audio buffers to a `data.record` node
+whose input names identify the stems. Pass that record to
+`audio.stemControls.stems`. Each stem can have its own sample rate,
+channel selection and seconds offset. Offsets also accept an exact
+`{ "numerator": n, "denominator": d }` value. The node analyzes each stem
+independently before it samples the graph clock.
+
+Set `settings` by stem name. The `envelope` uses `measure: "rms"`
+by default or `"peak"` for the highest absolute waveform value.
+Every named band in `bands` specifies a `hz: [low, high]` range.
+Bands use the strongest FFT bin in that range. The optional `fft`
+record selects the window and size using the same settings as
+`audio.fft`. With `channel: "all"`, RMS uses all samples, peak
+uses the largest absolute sample, and each band uses the largest
+value across channels. Set an index to analyze a single channel
+or `"mix"` to analyze their arithmetic mean.
+
+```json
+{
+  "drums": {
+    "envelope": { "measure": "peak", "attack": 0, "release": 0.06, "threshold": 0.4, "resetThreshold": 0.2 }
+  },
+  "bass": {
+    "bands": { "body": { "hz": [38, 140], "attack": 0.035, "release": 0.18, "threshold": 0.22 } }
+  }
+}
+```
+
+Attack and release are exponential time constants in seconds
+(defaults 0.01 and 0.12). Zero follows the measurement immediately.
+A positive `threshold` arms a trigger on a rising crossing of the
+smoothed value. The gate stays open until it falls below
+`resetThreshold`, which defaults to the same threshold.
+Omit the threshold to use the level without a trigger.
+
+| Output | Value |
+| --- | --- |
+| `value` | Each stem's numeric `envelope`, named `bands` and boolean `gates`. Use `data.get` to route a value to a visual control. |
+| `events` | Trigger pulses in the current frame's half-open time window or in `(options.from, time]` if supplied. |
+| `recording` | The whole trigger track as an input recording. Each pulse uses a `stem:<stem>:<signal>` channel and carries `stem`, `signal`, and `level`. Export it as JSON or connect to `input.replay`. |
+| `report` | The playback frame and time, plus the configured analysis rate. |
+
+`options.rate` sets the fixed analysis steps per second (default 60,
+up to each stem's sample rate). Measurements use completed waveform
+blocks and trailing FFT windows so a seek never reads ahead into
+the audio. Between analysis steps the previous level holds. After
+the clip the level decays on its configured release. A negative
+stem offset prerolls its followers into time zero. Playback uses the
+take frame or the normal graph clock and honors the usual
+`input.replay` timing overrides.
+
+JavaScript hosts can call
+`KIT.procedural.mediaGraph.stemControls(stems, settings, { rate }).sample(options)`.
+
+[Browser demo](../examples/per-stem-controls.cjs)
+
+```sh
+node examples/per-stem-controls.cjs stem-controls.html
+```
+
 ## Editable musical event tracks
 
 Feed a decoded WAV or an audio buffer into `audio.detectTransients`.

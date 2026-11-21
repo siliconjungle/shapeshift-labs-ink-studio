@@ -21,6 +21,24 @@
       inputs: { source: 'audio', options }, outputs: { value: 'array<record>' },
       run({ source, options }) { return { value: A.series(source, options) }; }
     },
+    'audio.stemControls': {
+      description: 'Drive named controls and replayable triggers from independent audio stems.',
+      inputs: { stems: 'record', settings: options, options },
+      outputs: { value: 'record', events: 'array<record>', recording: 'record', report: 'record' },
+      time: true,
+      instantiate() {
+        let controls, sources, configuration, rate;
+        const run = ({ stems, settings, options }, { time, take }) => {
+          if (stems !== sources || settings !== configuration || options.rate !== rate) {
+            controls = A.stemControls(stems, settings, options);
+            [sources, configuration, rate] = [stems, settings, options.rate];
+          }
+          return controls.sample(mediaTime(time, take, options));
+        };
+        run.clear = () => { controls = sources = configuration = rate = undefined; };
+        return run;
+      }
+    },
     'audio.detectTransients': {
       description: 'Detect percussive attacks and write sample-aligned named cues.',
       inputs: { source: 'audio', options }, outputs: { value: 'record', events: 'array<record>', report: 'record' },

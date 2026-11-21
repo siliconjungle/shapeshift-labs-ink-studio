@@ -21,6 +21,8 @@ and playback rate. Sound world events use their committed simulation tick.
 Adaptive cues use the score's authored musical onset, including cues
 delivered between picture frames.
 
+Feed the aligned WAV files into [per-stem control signals](graph-media.md#per-stem-control-signals) to drive visuals from independent envelopes, bands, and triggers.
+
 ## Soundtrack file
 
 All file paths are relative to the soundtrack document.

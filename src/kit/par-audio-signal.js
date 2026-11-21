@@ -125,26 +125,32 @@
     return { n, window, transform, weights, total: weights.reduce((sum, v) => sum + v, 0), bandRows };
   }
 
+  function spectrumFrom(sample, channel, begin, { n, transform, weights, total }, real, imag, spectrum) {
+    imag.fill(0);
+    for (let i = 0; i < n; i++) real[i] = sample(begin + i, channel) * weights[i];
+    transform(real, imag, 0, 1, -1);
+    for (let k = 0; k < spectrum.length; k++)
+      spectrum[k] = Math.hypot(real[k], imag[k]) * (k > 0 && k < spectrum.length - 1 ? 2 : 1) / total;
+  }
+
+  function bandPeak(spectrum, { lo, hi }) {
+    let peak = 0;
+    for (let i = lo; i < hi; i++) peak = Math.max(peak, spectrum[i]);
+    return peak;
+  }
+
   function measure(source, info, channels, plan) {
-    const { n, transform, weights, total, bandRows, window } = plan, count = n / 2 + 1;
+    const { n, bandRows, window } = plan, count = n / 2 + 1;
     const sample = sampler(source), data = new Float64Array(count * channels.length);
     const begin = info.firstSample + Math.floor((info.sampleCount - n) / 2), binHz = source.sampleRate / n;
     let channelIndex = 0;
     const perChannel = channels.map(channel => {
       const real = new Float64Array(n), imag = new Float64Array(n);
-      for (let i = 0; i < n; i++) real[i] = sample(begin + i, channel) * weights[i];
-      transform(real, imag, 0, 1, -1);
       const spectrum = data.subarray(channelIndex * count, ++channelIndex * count);
+      spectrumFrom(sample, channel, begin, plan, real, imag, spectrum);
       let strongest = 0;
-      for (let k = 0; k < count; k++) {
-        spectrum[k] = Math.hypot(real[k], imag[k]) * (k > 0 && k < count - 1 ? 2 : 1) / total;
-        if (k && spectrum[k] > spectrum[strongest]) strongest = k;
-      }
-      const bands = Object.fromEntries(bandRows.map(({ name, lo, hi }) => {
-        let peak = 0;
-        for (let i = lo; i < hi; i++) peak = Math.max(peak, spectrum[i]);
-        return [name, peak];
-      }));
+      for (let k = 1; k < count; k++) if (spectrum[k] > spectrum[strongest]) strongest = k;
+      const bands = Object.fromEntries(bandRows.map(band => [band.name, bandPeak(spectrum, band)]));
       return { channel, dominantHz: strongest * binHz, bands };
     });
     const bands = Object.fromEntries(bandRows.map(({ name }) => [name, Math.max(...perChannel.map(row => row.bands[name]))]));
@@ -176,6 +182,6 @@
     });
   }
 
-  Object.assign(P.mediaGraphSupport, { layout, sampler, fftSetup });
+  Object.assign(P.mediaGraphSupport, { layout, sampler, fftSetup, spectrumFrom, bandPeak });
   Object.assign(A, { audio, audioWindow, analyze, fft, series });
 })(KIT.procedural);
