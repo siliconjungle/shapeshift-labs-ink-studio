@@ -60,15 +60,20 @@
       run({source,options}){return W.frames(source,options);}
     },
     'warp.timeRemap':{
-      inputs:{frames:'array<raster>',map:'raster',options},outputs:{value:'raster'},time:true,
+      inputs:{frames:{type:'array<raster>',default:[]},history:{type:'any',default:null},map:'raster',
+        mask:{type:'any',default:null},valid:{type:'any',default:null},options},outputs:{value:'raster'},time:true,
       instantiate(){
-        let prepared,priorFrames,priorOptions;
-        return ({frames,map,options},{time})=>{
-          if (!prepared || priorFrames!==frames || priorOptions!==options) {
-            prepared=prepareTime(frames,options);
-            priorFrames=frames; priorOptions=options;
+        let prepared,priorSource,priorOptions,cache;
+        return ({frames,history,map,mask,valid,options},{time})=>{
+          if (history!=null && frames.length) throw new TypeError('Time remap needs frames or bank history');
+          const source=history ?? frames;
+          if (!prepared || priorSource!==source || priorOptions!==options) {
+            if (priorOptions!==options) cache=new WeakMap();
+            // Bank snapshots share immutable frames as the window advances.
+            prepared=prepareTime(source,options,history!=null && Object.isFrozen(history) ? cache : undefined);
+            priorSource=source; priorOptions=options;
           }
-          return {value:prepared(map,time)};
+          return {value:prepared(map,time,{mask,valid})};
         };
       }
     },

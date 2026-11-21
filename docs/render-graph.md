@@ -389,7 +389,8 @@ change starts a new bank. Use `budget.scale` or `budget.maxPixels` to
 store at a lower resolution and `budget.filter` to control playback sampling.
 
 Use [the graph raster node](headless-authoring.md#selectively-refresh-a-frame-bank)
-for image inputs outside the scene renderer. Run
+for image inputs outside the scene renderer. Its optional history feeds
+[per-pixel time remapping](headless-authoring.md#per-pixel-time). Run
 `node examples/frame-banks.cjs signal-loom.html` to try the tile,
 mask, and tracked-region modes.
 

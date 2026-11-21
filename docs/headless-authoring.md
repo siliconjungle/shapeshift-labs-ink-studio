@@ -1421,6 +1421,32 @@ Choose `interpolation: "step" | "nearest" | "linear"` and
 `duration` after the last frame, with a final interval back to the
 first frame.
 
+For live input, enable `options.history` on [`anim.frameBank`](#selectively-refresh-a-frame-bank)
+and connect its `history` output to `warp.timeRemap.history` in place
+of the frame array. The oldest retained observation defines zero for
+absolute maps. Offset maps still follow the graph clock. With the default
+`hold` playback, times beyond the retained window use the nearest endpoint.
+
+Use an aligned one-channel `mask` in byte coverage units. Zero keeps the
+clock's time, 255 uses the mapped time, and intermediate values interpolate
+between those times before reading the image. A zero in the optional
+`valid` plane also keeps the clock's time. Both planes align with the map's
+grid, which defines the output size.
+
+- A mask can be the map itself. Set `scale` to the desired delay in seconds
+  divided by 255. Use a negative delay for earlier frames.
+- Connect native `scene.pass` `depth` through its raw `data` port and connect
+  `valid` so empty depth reads the clock's time. Use `scale` and `bias` to convert
+  scene depth to seconds.
+- Connect a numeric field or use `channel: "magnitude"` to convert a
+  two-channel motion field into a delay proportional to its length.
+  Choose channel 0 or 1 for signed X or Y. Mask the field with a tracked
+  region by comparing the region’s label raster to its ID and multiplying
+  the result by 255.
+
+Run `node examples/masked-time-maps.cjs tidal-delay.html` for a browser
+demo with mask, depth, field, and tracked motion controls.
+
 ### Project on 3D surfaces
 
 - `warp.surface` turns the raster into a native `SpriteSurface` batch
@@ -1548,7 +1574,7 @@ port to hide a layer during that hold.
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
 | `anim.visualSample` | Replay a [captured visual span](graph-clips.md#capture-a-reusable-visual-span) with independent timing, alpha, raw data, depth and motion. |
-| `anim.frameBank` | Retain and selectively refresh raster pixels. Outputs the banked image, the refresh mask, and the capture tick. |
+| `anim.frameBank` | Retain and selectively refresh raster pixels. Outputs the banked image, refresh mask, capture tick, and optional history for [per-pixel time](#per-pixel-time). |
 | `anim.datamosh` | Pull the previous image through signed motion and blend it with the current image. Outputs the image and retained weight. |
 | `anim.subjectFeedback` | Retain marks in a [subject’s UV or rest-space chart](motion-afterimages.md#subject-attached-feedback). Outputs the retained texture and deposit mask. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
@@ -1618,6 +1644,22 @@ const bank = KIT.procedural.frameBanks.create({
   regions: [{ mask: 'subject', every: 3 }]
 });
 const { value, refreshed, tick } = bank.sample(source, time, { masks: { subject } });
+```
+
+Set `options.history` to a capacity from 1 to 512 to retain observations
+of the banked image, including sub-tick mask refreshes. Skipped ticks
+leave gaps in the sample times. The capacity multiplied by the number
+of pixels per frame may be at most 16 million. Omit `history` or set it
+to zero to keep just the current image. History shares the bank’s reset
+rules. In JavaScript, pass the returned history and the current clock
+time to the remapper.
+
+```js
+const bank = KIT.procedural.frameBanks.create({ fps: 12, regions: [{}], history: 24 });
+const { history } = bank.sample(source, time);
+const image = KIT.procedural.rasterWarp.timeRemap(history, delayMap, {
+  time, mask, valid, interpolation: 'linear'
+});
 ```
 
 For an exact tracked ID, compare the labels with `raster.math` and
