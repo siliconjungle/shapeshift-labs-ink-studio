@@ -82,6 +82,9 @@ const SplatProvenance = (() => {
       throw new RangeError('Joined splat chunks must share a palette');
     const count = parts.reduce((n, part) => n + part.count, 0);
     const result = { ...meta, ...(pal && { pal }), count };
+    const footprintAPI = typeof SplatFootprints === 'undefined' ? require('./splat-footprints.js') : SplatFootprints;
+    const footprints = footprintAPI.join(parts);
+    if (footprints) result.splatFootprints = footprints;
     for (const [key, stride, Type] of perSplat) {
       if (key !== 'data' && !parts.some(part => part[key])) continue;
       const out = result[key] = new Type(count * stride);
@@ -143,6 +146,10 @@ const SplatProvenance = (() => {
     if (indices.some(i => !Number.isSafeInteger(i) || i < 0 || i >= world.count) || new Set(indices).size !== indices.length)
       throw new RangeError('A splat subset needs distinct indices from the world');
     const result = { ...world, count: indices.length };
+    if (world.splatFootprints) {
+      const api = typeof SplatFootprints === 'undefined' ? require('./splat-footprints.js') : SplatFootprints;
+      result.splatFootprints = api.subset(world,indices);
+    }
     if (result.renderSdfs && (indices.length !== world.count || indices.some((index,i)=>index !== i)))
       delete result.renderSdfs;
     const remap = new Map(indices.map((source, i) => [source, i]));

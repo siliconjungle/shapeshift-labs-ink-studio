@@ -24,7 +24,7 @@
       // samples. They can overlap nearby opaque samples with different roles.
       if ((flags & 15) || data[at + 3] < 1 || y < -30 ||
           protectedSlots[owner] || fine?.[i * 12 + 11] > .5 ||
-          (materialPixelStyles?.[i * 4 + 1] & MaterialPixelStyle.PAIR) || ordered[i] || back.has(i)) continue;
+          world.splatFootprints?.indices[i] || (materialPixelStyles?.[i * 4 + 1] & MaterialPixelStyle.PAIR) || world.splatFootprints?.indices[i] || ordered[i] || back.has(i)) continue;
       const nx = Math.round((surfaceNormals?.[normal] || 0) * 2),
         ny = Math.round((surfaceNormals?.[normal + 1] || 0) * 2),
         nz = Math.round((surfaceNormals?.[normal + 2] || 0) * 2);

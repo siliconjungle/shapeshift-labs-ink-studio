@@ -69,7 +69,7 @@
         return poseCache.get(i);
       }
 
-      const rows = [];
+      const rows = [], footprints = [];
       for (const [r, rule] of rules.entries()) {
         if (!rule.opacity) continue;
         const state = states[r], sourceIds = [];
@@ -121,7 +121,7 @@
             shape = M.mul(M.mul(inverse, shape), inverseTranspose);
           }
           current.set(world.splatIds?.[index] ?? index, { position, shape, alpha: Math.min(1, alpha),
-            color: rule.tint ?? data[q + 7] });
+            color: rule.tint ?? data[q + 7], footprint: world.splatFootprints?.styles[(world.splatFootprints.indices[index]??0)-1] });
         }
         state.frames = state.frames.filter(prior => time - prior.time < rule.duration);
         for (const prior of state.frames.filter(prior => prior.time < time).slice(-rule.copies)) {
@@ -133,6 +133,7 @@
                 matrixSlots.every(k => Math.abs(now.shape[k] - dab.shape[k]) <= rule.motionThreshold ** 2)) continue;
             const position = guide ? V.add(guide.position, M.app(guide.anchor, dab.position)) : dab.position;
             const cov = guide ? M.mul(M.mul(guide.anchor, dab.shape), transpose) : dab.shape;
+            footprints.push(dab.footprint);
             rows.push(...position, fade * dab.alpha, cov[0], cov[1], cov[2], dab.color, cov[4], cov[5], cov[8], noDepth, 0, 0, 0, 0);
           }
         }
@@ -143,7 +144,9 @@
         // draw at the same time produces the same trail.
         if (state.frames.length > rule.copies + 1) state.frames.shift();
       }
-      return Float32Array.from(rows);
+      const packed = Float32Array.from(rows);
+      if (footprints.some(Boolean)) packed.splatFootprints = footprints;
+      return packed;
     }
 
     return Object.freeze({ frame, clear });
@@ -187,6 +190,12 @@
     data.set(world.data.subarray(0, world.count * stride));
     data.set(rows, world.count * stride);
     const result = { ...world, count, data };
+    if (world.splatFootprints || rows.splatFootprints) {
+      const marks = SplatFootprints.recorder();
+      for (let i=0;i<world.count;i++) { const id=world.splatFootprints?.indices[i]??0; if(id) marks.record(i,i+1,world.splatFootprints.styles[id-1]); }
+      rows.splatFootprints?.forEach((style,i)=>{if(style)marks.record(world.count+i,world.count+i+1,style)});
+      result.splatFootprints=marks.finish(count);
+    }
     // These fixed-stride tables are uploaded for the whole draw stream.
     for (const [key, width] of [['pix', 8], ['fine', 12], ['opticalSplats', 12], ['materialPixelStyles', 4]]) {
       if (!world[key]) continue;

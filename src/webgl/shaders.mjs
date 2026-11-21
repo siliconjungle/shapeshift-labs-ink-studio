@@ -28,8 +28,9 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL
 } = {}) {
+  if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
   const continuousMode = coverageRules?.continuousCoverage ?? 1, softMode = coverageRules?.softCoverage ?? 2;
   const nonSurface = coverageRules?.nonSurface ?? 2559;
@@ -74,6 +75,7 @@ uniform vec4 u_fogp;   // haze start, haze max, depth range near, depth range fa
 layout(location=0) in vec2 a_corner;
 layout(location=1) in int a_index;
 ${instances ? 'layout(location=2) in int a_instance; uniform highp sampler2D u_instances;' : ''}
+${footprints ? 'uniform highp sampler2D u_footprintRows,u_footprintParams; flat out vec4 v_footprintMap; flat out vec2 v_footprintStyle;' : ''}
 out vec2 v_d; out vec3 v_conic; out vec4 v_color; out float v_depth;
 ${portal ? 'flat out vec3 v_portalDepth;' : 'flat out float v_ownerDepth;'}
 ${cutaway ? 'flat out vec4 v_sectionSample;' : ''}
@@ -106,6 +108,13 @@ void main(){
   v_paint = (u_paintMarker != 0.0 && t3.z == u_paintMarker ||
     u_afterimageStart > 0 && a_index >= u_afterimageStart) ? 1 : 0;
   ${materialStyles ? 'v_pixelStyle = texelFetch(u_materialStyles, ivec2(record & 511, row), 0);' : ''}
+  ${footprints ? `
+  float footprintId=texelFetch(u_footprintRows,ivec2(record & 511,row),0).x;
+  bool hasFootprint=footprintId>0.0;
+  vec4 footprintMap=hasFootprint?texelFetch(u_footprintParams,ivec2(int(footprintId)-1,0),0):vec4(0.0);
+  vec4 footprintSettings=hasFootprint?texelFetch(u_footprintParams,ivec2(int(footprintId)-1,1),0):vec4(0.0);
+  v_footprintStyle=vec2(footprintId,footprintSettings.x);
+  ` : ''}
   vec3 pos = t0.xyz; float alpha = t0.w;
   if (alpha <= 0.0 || pos.y < -30.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }   // (what is put away is put far below: it is not drawn from there)
   mat3 cov = mat3(t1.x, t1.y, t1.z,  t1.y, t2.x, t2.y,  t1.z, t2.y, t2.z);
@@ -285,7 +294,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   v_pixelStyle.x = mod(v_pixelStyle.x, ${coverageStride}.0);
   if (!u_materialStylesOn) v_pixelStyle.xy = vec2(0.0);` : ''}
   bool continuous = coverage == ${continuousMode} && alpha >= 1.0 && (kraw & ${nonSurface}) == 0 && v_paint == 0
-    ${optical ? '&& v_optical.w < 0.5' : ''};
+    ${optical ? '&& v_optical.w < 0.5' : ''}${footprints ? ' && !hasFootprint' : ''};
   v_coverage = continuous ? ${continuousMode} : (coverage == ${softMode} ? ${softMode} : 0);
   v_depth = coverage == ${softMode} || (flags & 1) != 0 ${optical ? '|| v_optical.w > 0.5' : ''} ? -1.0 : dn;
   float iz = -1.0 / cam.z;
@@ -309,6 +318,14 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   float det = A * C - B * B;
   if (det <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   v_conic = vec3(C, -B, A) / det;
+  ${footprints ? `
+  if(hasFootprint){
+    float root=sqrt(det),den=1.1774100225154747*root*sqrt(A+C+2.0*root);
+    vec3 inv=vec3(C+root,-B,A+root)/den;
+    v_footprintMap=vec4(footprintMap.x*inv.x+footprintMap.y*inv.y,footprintMap.x*inv.y+footprintMap.y*inv.z,
+      footprintMap.z*inv.x+footprintMap.w*inv.y,footprintMap.z*inv.y+footprintMap.w*inv.z);
+  }else v_footprintMap=vec4(0.0);
+  ` : ''}
   ${portal || cutaway ? `
   // Condition axial depth on pixel offset using projected Gaussian covariance.
   vec3 back = vec3(u_view[0].z, u_view[1].z, u_view[2].z);
@@ -323,7 +340,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   vec2 sectionSlope = mat2(sectionConic.x, sectionConic.y, sectionConic.y, sectionConic.z) * depthCov;
   v_sectionSample = vec4(-cam.z, sectionSlope, 3.0 * sqrt(max(0.0, dot(back, crossDepth))));
   ` : ''}
-  vec2 ext = min(3.0 * sqrt(vec2(A, C)), vec2(2048.0));
+  vec2 ext = min(${footprints ? '(hasFootprint?footprintSettings.y:3.0)' : '3.0'} * sqrt(vec2(A, C)), vec2(2048.0));
   vec2 ndc = clip.xy / clip.w;
   if (snap) { vec2 px = floor((ndc * 0.5 + 0.5) * u_viewport) + 0.5; ndc = px / u_viewport * 2.0 - 1.0; }
   vec2 extN = ext * 2.0 / u_viewport;
@@ -353,6 +370,7 @@ ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geomet
 }`;
   const SPLAT_FS = `#version 300 es
 precision highp float; precision highp int;
+${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footprintColumns; flat in vec4 v_footprintMap; flat in vec2 v_footprintStyle;' : ''}
 in vec2 v_d; in vec3 v_conic; in vec4 v_color; in float v_depth; flat in int v_coverage;
 ${stableDetail ? 'flat in float v_detailGeometry, v_detailTexture;' : ''}
 ${portal ? 'flat in vec3 v_portalDepth; uniform vec4 u_splatPlane;' : 'flat in float v_ownerDepth;'}
@@ -385,6 +403,7 @@ float glassDepth(vec4 sampleDepth) {
 ${water || portal || environment || cutaway ? 'uniform vec2 u_viewport;' : ''}
 ${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
+${footprints ? footprintGLSL : ''}
 ${coverageSource(coverageRules)}
 ${contributions || masked ? `${policyUniforms}flat in int v_policySlot;` : ''}
 ${contributions ? `uniform vec3 u_pal[64], u_out[64]; uniform int u_n;
@@ -395,8 +414,17 @@ ${masked ? maskUniforms + maskVaryings(textured).replaceAll('LOOK_IO','in') + ma
 ${water ? waterGLSL(airPockets, layered, atlas) + (portal ? '' : 'flat in float v_waterAxial;') : ''}
 void main(){
 ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + v_conic.z * v_d.y * v_d.y) - v_conic.y * v_d.x * v_d.y;
-  if (power > 0.0 || power < -4.5) discard;
-  float g = v_color.a * exp(power);
+  ${footprints ? `
+  bool shaped=v_footprintStyle.x>0.0;
+  float profile;
+  if(shaped){
+    vec2 point=vec2(dot(v_footprintMap.xy,v_d),dot(v_footprintMap.zw,v_d));
+    float distance=footprintDistance(u_footprintAtlas,v_footprintStyle.x,u_footprintColumns,point);
+    profile=footprintCoverage(distance,v_footprintStyle.y);
+  }else {if(power>0.0||power < -4.5)discard;profile=exp(power);}
+  float g=v_color.a*profile;
+  ` : `if (power > 0.0 || power < -4.5) discard;
+  float g = v_color.a * exp(power);`}
   bool continuous = v_coverage == ${continuousMode};
   float surfaceAlpha = continuous ? smoothstep(${continuousLow}, ${continuousHigh.toFixed(2)}, g) : 0.0;
   ${optical ? 'bool hasOptical = v_optical.w > 0.5; if (hasOptical && v_optical.x == 0.0) discard;' : ''}
@@ -460,6 +488,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     float width = 0.36 * (2.0 - v_pixelStyle.x);
     a = 0.99 * (width > 0.0 ? smoothstep(0.5 - width, 0.5 + width, g) : step(0.5, g));
   }` : ''}
+  ${footprints ? 'if(shaped) a=min(.99,g);' : ''}
   ${stableDetail ? 'a *= v_detailGeometry;' : ''}
   if (a < 0.004) discard;
   vec3 rgb = v_color.rgb;

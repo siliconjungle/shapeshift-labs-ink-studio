@@ -1753,11 +1753,12 @@ function makeSculpt(B, rest) {
     const preview = typeof globalThis !== 'undefined' && globalThis.INK_LOOK_ALBEDO;
     const capture = B.describeAlbedo && (preview || S.captureAlbedo || stagedAlbedo(material.surface) || stagedAlbedo(material.top?.surface));
     const fine = owner?.detailBudget?.fine;
+    const collectFootprint = B.describeFootprint && (material.footprint !== undefined || material.top?.footprint !== undefined);
     const collectStyle = B.describePixelStyle && (material.pixelStyle || material.top?.pixelStyle);
-    if (!renderSdf && !capture && !B.describeSplats && !collectStyle && !material.optical && !material.top?.optical) return light(material, ...sample, undefined, fine);
+    if (!renderSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !material.optical && !material.top?.optical) return light(material, ...sample, undefined, fine);
     const first = B.count();
     let effective = material, style, pair;
-    if (material.top || collectStyle) light(material, ...sample, (used, settings, shades) => {
+    if (material.top || collectStyle || collectFootprint) light(material, ...sample, (used, settings, shades) => {
       effective = used;
       style = settings;
       pair = shades;
@@ -1770,6 +1771,8 @@ function makeSculpt(B, rest) {
       if (ranges.at(-1)?.[1] === first) ranges.at(-1)[1] = end;
       else ranges.push([first,end]);
     }
+    if (effective.footprint !== undefined) B.describeFootprint?.(first,end,effective.footprint);
+    if (collectFootprint) B.describeFootprint?.(first, end, effective.footprint ?? material.footprint);
     if (effective.optical !== undefined) B.describeOptical?.(first, end, effective.optical);
     if (style) B.describePixelStyle?.(first, end, style, pair);
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;

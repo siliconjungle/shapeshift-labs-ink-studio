@@ -1,3 +1,4 @@
+import { createFootprintBinding } from './footprints.mjs';
 import { createRenderGrid } from './render-grid.mjs';
 import { createMaterialControls } from './material-controls.mjs';
 import { createLightEmitters } from './light-emitters.mjs';
@@ -111,8 +112,10 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     // Rebirth hosts can opt into geometry specialization through the lower
     // level pipeline. The canvas path specializes its own fullscreen resolve.
     const motionAPI = toolkit.ArtDirection ?? toolkit.KIT?.artDirection;
+    const footprintAPI = toolkit.KIT?.splatFootprints;
+    let footprintBinding;
     const airflow = toolkit.KIT?.procedural?.airflow, climateAPI = toolkit.KIT?.environmentFrame;
-    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow });
+    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow, footprintGLSL:footprintAPI?.glsl });
     const emptyVao = resources.allocate('VertexArray');
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
@@ -549,6 +552,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         gl.depthMask(false);
         if(!options.u_idx){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);}
       }else if(options.u_idx!==3)gl.disable(gl.DEPTH_TEST);
+      if (shader.footprints) footprintBinding.rebind();
       gl.useProgram(shader.p);
       shader.set({
         ...options,u_geometryDepth:+hasSurfaces,
@@ -722,7 +726,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const rules = trails ? afterimagesAPI.prepare(afterimageDefinition) : [];
       const normalCaptures = rules.length ? null : captureWater(world, frame, camera, width, height, 0, quality);
       // Per-pixel material, palette, and detail rules index the expanded world.
-      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsEmitters || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
+      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsEmitters || world.splatFootprints || instancePlan(group).hasSplatFootprints || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
           needsDetailFlags || budget?.fineOn || budget?.fineOff))) {
         expandInstances ??= createExpandedInstances();
         const expanded = expandInstances(world,group,frame.changedRows);
@@ -879,6 +883,13 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if (env || lastEnvironment) historyValid = false;
       lastEnvironment = !!env;
       const wet = water && wetVariant(water,!!env?.media);
+      const footprints = (frame.splatFootprints ?? look.splatFootprints) !== false && !!world.splatFootprints;
+      let footprintUniforms;
+      if (footprints) {
+        if (!footprintAPI) throw new Error('Splat footprints need the Ink Studio KIT');
+        footprintBinding ??= createFootprintBinding(gl,footprintAPI,resources,targets,maxSize);
+        footprintUniforms=footprintBinding(world);
+      }
       const opticalMaterials = !!world.opticalSplats;
       if (opticalMaterials) {
         const K = toolkit.KIT;
@@ -973,8 +984,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
-        materialStyles, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section
+        footprints, materialStyles, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section
       });
+      shader.footprints=footprints;
       gl.useProgram(shader.p);
       const growth = world.grow ?? {};
       shader.set({
@@ -997,6 +1009,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         u_detailTexture: detailTexture, u_detailGeometry: detailGeometry,
         u_crisp: +!raw, u_splatCoverage: splatCoverage, u_dilate: raw ? 0.3 : 0.15, u_near: camera.clipNear,
         u_paintMarker: paint?.marker ?? 0, u_afterimageStart: trailStart,
+        ...footprintUniforms,
         ...(opticalMaterials && { u_optical: opticalUnit }),
         ...(relighting && { u_relight: relightUnit }),
         u_fog: rgb(world.pal[fog.c ?? 0] ?? 0),
@@ -1441,19 +1454,20 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       const withdrawal = frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0;
       const splatCoverage = frame.splatCoverage ?? world.look?.splatCoverage;
       const materialStyles = world.materialPixelStyles;
+      const footprintEnabled=(frame.splatFootprints??world.look?.splatFootprints)!==false;
       const marks = world.dataMarks?.snapshot();
       const definition = frame.reconstruction ?? world.look?.reconstruction;
       const reconstruction = definition === undefined || definition === false ? undefined : JSON.stringify(definition);
       if (picking?.world !== world || picking.data !== world.data || picking.count !== world.count || picking.opticalSplats !== world.opticalSplats ||
           picking.group !== group || picking.revision !== revision || picking.withdrawal !== withdrawal ||
-          picking.splatCoverage !== splatCoverage || picking.materialStyles !== materialStyles || picking.marks !== marks ||
+          picking.footprintEnabled !== footprintEnabled || picking.footprints !== world.splatFootprints || picking.splatCoverage !== splatCoverage || picking.materialStyles !== materialStyles || picking.marks !== marks ||
           picking.reconstruction !== reconstruction || picking.time !== time &&
             (reconstruction !== undefined || world.moving?.length || world.grow || world.anim?.bones)) {
         let posed = group ? pickInstances(world, group, frame.changedRows).world : world;
         if (reconstruction !== undefined) posed = reconstruct(toolkit, posed, frame, definition);
-        const picker = create(posed, { time, sampleWithdrawal: withdrawal, splatCoverage, cutaway:false });
+        const picker = create(posed, { time, sampleWithdrawal: withdrawal, splatCoverage, cutaway:false, splatFootprints:footprintEnabled });
         picking = { world, data: world.data, count: world.count, opticalSplats: world.opticalSplats,
-          group, revision, time, withdrawal, reconstruction, splatCoverage, materialStyles, marks, picker };
+          group, revision, time, withdrawal, reconstruction, splatCoverage, materialStyles, marks, footprints:world.splatFootprints, footprintEnabled, picker };
       }
       const section = toolkit.KIT.cutaway?.prepare(ray?.cutaway ?? frame.cutaway ?? world.look?.cutaway);
       let camera = ray?.camera;
@@ -1462,7 +1476,12 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
           frame.height ?? frame.target?.height ?? canvas.height);
         camera = { ...cameraPose(view),setback:view.setback };
       }
-      return picking.picker.ray({ water:frame.water !== false,...ray,cutaway:section,camera });
+      let footprintView=ray?.footprintView;
+      if(footprintEnabled&&!footprintView&&(world.splatFootprints||group&&instancePlan(group).hasSplatFootprints)){
+        const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
+        footprintView={...makeCamera(world,frame,width,height),width,height,variance:frame.raw?.3:.15,snap:!frame.raw&&!frame.colored};
+      }
+      return picking.picker.ray({ water:frame.water !== false,...ray,cutaway:section,camera,footprintView });
     },
     dispose() {
       if (disposed) return;

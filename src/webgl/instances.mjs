@@ -76,6 +76,15 @@ function placement(raw, prototypes, old) {
     swatches:swatches.map(([a,b])=>[hex(a),hex(b)]), mask:damage&&Float32Array.from([...damage.center,damage.radius ** 2]) };
 }
 
+function joinFootprints(parts){
+  if(!parts.some(p=>p.splatFootprints))return undefined;
+  const styles=[],dictionary=new Map(),indices=new Uint16Array(parts.reduce((n,p)=>n+p.count,0));let offset=0;
+  for(const p of parts){const b=p.splatFootprints;if(b){
+    const remap=b.styles.map(style=>{const key=JSON.stringify(style);if(!dictionary.has(key)){if(styles.length>=64)throw new RangeError('Instances exceed 64 footprint styles');dictionary.set(key,styles.push(style));}return dictionary.get(key)});
+    for(let i=0;i<p.count;i++){const id=b.indices[i]??0;indices[offset+i]=id?remap[id-1]:0;}
+  }offset+=p.count;}
+  return Object.freeze({version:1,styles:Object.freeze(styles),indices});
+}
 export function instancePlan(group) {
   const plan = plans.get(group);
   if (!plan) throw new TypeError('Expected instances from createSplatInstances');
@@ -105,6 +114,7 @@ export function createSplatInstances(prototypes, instances) {
         throw new TypeError('Instance optical materials must match the prototype splat count');
       asset = { offset:sharedCount, count:world.count, data,
         opticalSplats: world.opticalSplats?.slice(0, world.count * 12),
+        splatFootprints: world.splatFootprints && {version:1,styles:world.splatFootprints.styles.map(v=>JSON.parse(JSON.stringify(v))),indices:world.splatFootprints.indices.slice()},
         normals: world.renderMetadata?.normals?.slice(0, world.count * 3),
         materialPixelStyles: sourceStyles?.slice(0, world.count * 4), ...bounds(data,world.count) };
       sharedCount += asset.count;
@@ -126,6 +136,7 @@ export function createSplatInstances(prototypes, instances) {
   }
   const plan = { rows, assets:[...unique.values()], count, sharedCount, revision:0, orderRevision:0,
     hasOpticalSplats: rows.some(row => row.asset.opticalSplats),
+    hasSplatFootprints: rows.some(row=>row.asset.splatFootprints),
     hasMaterialPixelStyles: rows.some(row => row.asset.materialPixelStyles) };
   const api = Object.freeze({
     count:instances.length, splats:count, sharedSplats:sharedCount,
@@ -239,6 +250,8 @@ function flattened(base, plan) {
     for (const row of plan.rows) stampInstanceNormals(normals, row, base.count + row.start);
   }
   const result = { ...base, count, data, renderMetadata };
+  const footprints=joinFootprints([base,...plan.rows.map(row=>row.asset)]);
+  if(footprints)result.splatFootprints=footprints;
   if (base.opticalSplats || plan.hasOpticalSplats) {
     const profiles = result.opticalSplats = new Float32Array(count * 12);
     if (base.opticalSplats) profiles.set(base.opticalSplats.subarray(0, base.count * 12));

@@ -142,6 +142,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     cidx = [],
     nrms = [];
   let curN = null;
+  let footprintRecorder;
   let ownerRows, materialRows, targetRows, muteEmission, materialAlbedo, materialPixelStyles, opticalSplats;
   let unnamedOwners = new WeakMap(), unnamedMaterials = new WeakMap();
   const ownerIds = new Map(), materialIds = new Map();
@@ -171,6 +172,11 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       materialAlbedo = next;
     }
     materialAlbedo.fill(rgb + 1, first, end);
+  }
+  function describeFootprint(first, end, definition) {
+    if (first >= end || definition === undefined) return;
+    footprintRecorder ??= SplatFootprints.recorder();
+    footprintRecorder.record(first,end,definition);
   }
   function describePixelStyle(first, end, style, pair) {
     if (first === end || !style.edge && !style.mode && !style.steps) return;
@@ -1067,6 +1073,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
             Float32Array.from({ length: n * OpticalMaterials.STRIDE }, (_, i) => opticalSplats[i] ?? 0) :
             opticalSplats.slice(0, n * OpticalMaterials.STRIDE)
         }),
+        ...(footprintRecorder && { splatFootprints: footprintRecorder.finish(n) }),
         ...(materialPixelStyles && { materialPixelStyles: materialPixelStyles.slice(0, n * 4) }),
         ...(shadowLod && { shadowLod: shadowLod.length >= n * ShadowArt.stride ? shadowLod.slice(0, n * ShadowArt.stride) :
           Float32Array.from({ length: n * ShadowArt.stride }, (_, i) => shadowLod[i] || 0) }),
@@ -1134,6 +1141,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     bounced = 0;
     cidx.length = 0;
     nrms.length = 0;
+    footprintRecorder = undefined;
     ownerRows = materialRows = muteEmission = materialAlbedo = materialPixelStyles = opticalSplats = undefined;
     unnamedOwners = new WeakMap();
     unnamedMaterials = new WeakMap();
@@ -1184,6 +1192,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     describeSplats: renderMetadata ? describeSplats : undefined,
     describeAlbedo,
     describePixelStyle,
+    describeFootprint,
     describePrecipitation,
     born: v => (bornV = v === undefined || v === null || !isFinite(v) ? null : v),
     wet: v => (wetV = v === undefined || v === null || !isFinite(v) ? null : v),

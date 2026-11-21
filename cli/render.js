@@ -5,6 +5,7 @@ const PassQuality = require('../src/pass-quality.js');
 // blending from far to near, low-resolution sampling, dithering and palette quantization.
 const FOV = (38 * Math.PI) / 180;
 const RenderGrid = require('../src/render-grid.js');
+const SplatFootprints = require('../src/splat-footprints.js');
 const PixelLook = require('../src/pixel-look.js');
 const RenderStages = require('../src/render-stages.js');
 const LookInputs = require('../src/look-inputs.js');
@@ -1172,6 +1173,7 @@ function renderFrame(world, o, preparedPalettes) {
     for(let i=0;i<baseCount;i++)if(Math.round(d[i*16+11])&32768){if(!copy){PIX=PIX.slice();copy=true;}PIX[i*8]=0;}
   }
   const win = PIX ? new Int32Array(W * H).fill(-1) : null;
+  const footprintPlan = (o.splatFootprints ?? world.look?.splatFootprints) === false ? null : SplatFootprints.plan(world);
   const materialStyles = o.raw ? null : world.materialPixelStyles;
   const artScale = o.artGridScale || 1;
   // Keep later translucent coats when the opaque receiver is recoloured per pixel.
@@ -1447,7 +1449,8 @@ function renderFrame(world, o, preparedPalettes) {
     const edgeStyle = o.raw ? 0 : ContributionRules.materialEdge(packedEdge);
     const mode = ContributionRules.materialCoverage(packedEdge, coverageMode);
     const softCoverage = o.soft || mode === ContributionRules.softCoverage;
-    const continuousCoverage = !softCoverage && !fieldParticle &&
+    const shaped = footprintPlan?.styles[(world.splatFootprints.indices[i]??0)-1];
+    const continuousCoverage = !shaped && !softCoverage && !fieldParticle &&
       ContributionRules.continuous(mode, al, kraw, opticalActive || surface?.reveals(i));
     const filterVariance = continuousCoverage ? ContributionRules.continuousVariance * artScale * artScale : .15;
     const styleKey = (kraw & 32768) ? 0 : materialStyles?.[jStyle + 1] || 0;
@@ -1541,8 +1544,9 @@ function renderFrame(world, o, preparedPalettes) {
     const k0 = C / det,
       k1 = -Bq / det,
       k2 = A / det,
-      ex = Math.min(3 * Math.sqrt(A) + footprintMargin, 2048),
-      ey = Math.min(3 * Math.sqrt(C) + footprintMargin, 2048);
+      ex = Math.min((shaped ? shaped.reach : 3) * Math.sqrt(A) + footprintMargin, 2048),
+      ey = Math.min((shaped ? shaped.reach : 3) * Math.sqrt(C) + footprintMargin, 2048);
+    const shapeMap = shaped && SplatFootprints.transform(shaped,A,Bq,C);
     let cutDx, cutDy, cutReach;
     if (cutaway) {
       // Condition the splat's axial depth on its screen position before testing the world-space boundary.
@@ -1665,10 +1669,10 @@ function renderFrame(world, o, preparedPalettes) {
       for (let ix = x0; ix <= x1; ix++) {
         const dx = ix + 0.5 - sx,
           pw = -0.5 * (k0 * dx * dx + k2 * dy * dy) - k1 * dx * dy;
-        const centerAlpha = ContributionRules.alpha(pw, al, solid && !softCoverage, edgeStyle, continuousCoverage);
+        const centerAlpha = shaped ? Math.min(.99,al*SplatFootprints.sample(shaped,shapeMap,dx,dy)) : ContributionRules.alpha(pw, al, solid && !softCoverage, edgeStyle, continuousCoverage);
         let a = centerAlpha;
-        if (integrateFootprint) a = footprint(dx, dy, k0, k1, k2, al, solid && !softCoverage, edgeStyle, continuousCoverage);
-        else if (edgeStrength > 0) {
+        if (!shaped && integrateFootprint) a = footprint(dx, dy, k0, k1, k2, al, solid && !softCoverage, edgeStyle, continuousCoverage);
+        else if (!shaped && edgeStrength > 0) {
           const average = footprint(dx, dy, k0, k1, k2, al, solid && !softCoverage, edgeStyle, continuousCoverage, exportOffsets);
           a += (average - a) * edgeStrength;
         }

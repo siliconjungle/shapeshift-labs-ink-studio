@@ -435,7 +435,7 @@
         owner: metadata.object ?? '', material: metadata.material ?? '', surface: metadata.surface ?? '',
         [nativePartition]: [meta?.objectIds?.[i] || 0, meta?.materialIds?.[i] || 0, meta?.targetIds?.[i] || 0,
           materialAlbedo?.[i] || 0, materialPixelStyles?.[i * 4] || 0, shadeSteps, shadeSteps ? color : 0].join('/'),
-        protect: !validNormal || data[q + 3] < 1 || Boolean(data[q + 11] || opticalSplats?.[i * OpticalMaterials.STRIDE + 3] || surfaceData?.[i * 8] ||
+        protect: Boolean(world.splatFootprints?.indices[i]) || !validNormal || data[q + 3] < 1 || Boolean(data[q + 11] || opticalSplats?.[i * OpticalMaterials.STRIDE + 3] || surfaceData?.[i * 8] ||
           pix?.[i * 8] || fine?.[i * 12 + 11] || (styleCode & MaterialPixelStyle.PAIR) ||
           attr?.subarray(i * 4, i * 4 + 4).some(Boolean)) };
     });

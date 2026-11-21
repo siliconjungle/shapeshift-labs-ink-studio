@@ -55,21 +55,21 @@
       D*s2,(c*E-s*B)*s2,(s*s*A-2*c*s*C+c*c*F)*s2];
   }
   const tensor=([a,b,c,d,e,f],u,v)=>u[0]*(a*v[0]+b*v[1]+c*v[2])+u[1]*(b*v[0]+d*v[1]+e*v[2])+u[2]*(c*v[0]+e*v[1]+f*v[2]);
-  function box(rows,indices,first,end){
+  function box(rows,indices,first,end,support=3){
     const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];
     for(let i=first;i<end;i++){
       const o=indices[i]*10;
       for(let k=0;k<3;k++){
-        const extent=3*Math.sqrt(rows[o+(k===0?4:k===1?7:9)]);
+        const extent=support*Math.sqrt(rows[o+(k===0?4:k===1?7:9)]);
         min[k]=Math.min(min[k],rows[o+k]-extent);
         max[k]=Math.max(max[k],rows[o+k]+extent);
       }
     }
     return {min,max};
   }
-  function orderedTree(rows,indices){
+  function orderedTree(rows,indices,support=3){
     if(!indices.length)return null;
-    const full=box(rows,indices,0,indices.length), span=V.sub(full.max,full.min);
+    const full=box(rows,indices,0,indices.length,support), span=V.sub(full.max,full.min);
     const codes=new Uint32Array(rows.length/10);
     function mortonBits(v){
       v=(v|(v<<16))&0x030000ff;v=(v|(v<<8))&0x0300f00f;
@@ -81,7 +81,7 @@
     }
     indices.sort((a,b)=>codes[a]-codes[b]||a-b);
     function branch(first,end){
-      if(end-first<=12)return {...box(rows,indices,first,end),first,end};
+      if(end-first<=12)return {...box(rows,indices,first,end,support),first,end};
       const mid=(first+end)>>>1,a=branch(first,mid),b=branch(mid,end);
       return {min:a.min.map((v,i)=>Math.min(v,b.min[i])),max:a.max.map((v,i)=>Math.max(v,b.max[i])),a,b};
     }
@@ -89,7 +89,7 @@
   }
 
   function picker(world,{time=world.lookSnapshot?.time??0,sampleWithdrawal=world.sampleWithdrawal??0,
-    splatCoverage=world.look?.splatCoverage,cutaway=world.look?.cutaway,camera}={}){
+    splatCoverage=world.look?.splatCoverage,cutaway=world.look?.cutaway,camera,splatFootprints=world.look?.splatFootprints}={}){
     const coverageMode=R.coverageMode(splatCoverage), defaultCutaway=Cutaway.prepare(cutaway);
     const {count,renderMetadata,opticalSplats}=world, marks=world.dataMarks?.snapshot();
     if(!(world.data instanceof Float32Array)||!Number.isSafeInteger(count)||count<0||world.data.length<count*16||!Number.isFinite(time))
@@ -107,10 +107,11 @@
       if(!cov.every(Number.isFinite)||cov[0]<0||cov[3]<0||cov[5]<0)continue;
       rows.set([x,y,z,a,...cov],i*10);selected.push(i);
     }
-    const indices=Uint32Array.from(selected),tree=orderedTree(rows,indices);
+    const footprintPlan=splatFootprints===false?null:SplatFootprints.plan(world);
+    const indices=Uint32Array.from(selected),tree=orderedTree(rows,indices,footprintPlan?.reach??3);
     let provenance;
     function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true,accept,
-      cutaway=defaultCutaway,camera:sectionCamera=camera}={}){
+      cutaway=defaultCutaway,camera:sectionCamera=camera,footprintView}={}){
       if(!valid(origin)||!valid(direction)||V.len(direction)<=1e-8||!Number.isFinite(maxDistance)||maxDistance<=0||
           !Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(limit)||limit<1||limit>256||
           accept!==undefined&&typeof accept!=='function')
@@ -143,6 +144,13 @@
           const mode=R.materialCoverage(packedEdge,coverageMode), softCoverage=mode===R.softCoverage;
           let alpha=R.alpha(-.5*(C*x*x-2*B*x*y+A*y*y)/det,density,!soft&&!softCoverage&&density>=1,
             R.materialEdge(packedEdge),!soft&&R.continuous(mode,density,raw,optical));
+          const styleId=footprintPlan?(world.splatFootprints?.indices[i]??0):0;
+          if(styleId){
+            const style=footprintPlan.styles[styleId-1];
+            const shape=footprintView?SplatFootprints.rayCoverage(style,cov,[rows[o],rows[o+1],rows[o+2]],origin,d,footprintView):
+              SplatFootprints.sample(style,SplatFootprints.transform(style,A,B,C),-x,-y);
+            alpha=Math.min(.99,density*shape);
+          }
           if(optical)alpha*=OpticalMaterials.slabOpacity(opticalSplats,opt,normal?f:1);
           if(alpha<R.minimum)continue;
           const target=(provenance??=TargetSelectors.index(world)).row(i);

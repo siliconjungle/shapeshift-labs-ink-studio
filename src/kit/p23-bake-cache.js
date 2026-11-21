@@ -2,7 +2,7 @@
   const revision = 1;
   const channels = ['data', 'count', 'renderMetadata', 'attr', 'pix', 'ramps', 'rampOff', 'pats',
     'surfaceData', 'surfaces', 'fine', 'moving', 'back', 'materialAlbedo', 'opticalSplats',
-    'materialPixelStyles', 'shadowLod', 'precipitationRanges', 'fallingSnowRanges'];
+    'materialPixelStyles', 'splatFootprints', 'shadowLod', 'precipitationRanges', 'fallingSnowRanges'];
   const globals = ['INK_FINE', 'INK_PIXEL', 'INK_BOUNCE', 'INK_FOCUS', 'INK_FOLLOW', 'INK_ADAPTIVE_SAMPLING', 'INK_LOOK_ALBEDO'];
 
   // Entry order affects sculpt grouping and palette recipes. Preserve it in the key.

@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>
+    The Mark Foundry · Ink Studio
+  </title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    [hidden] {
+      display: none !important;
+    }
+    [hidden] {
+      display: none !important;
+    }
+    body {
+      margin: 0;
+      background: #081c29;
+      color: #d9e5d5;
+      font:
+        14px/1.55 system-ui,
+        sans-serif;
+    }
+    main {
+      max-width: 1520px;
+      margin: auto;
+      padding: 30px 36px;
+    }
+    .eyebrow {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #2e4852;
+      padding-bottom: 15px;
+      color: #89a7a8;
+      font: 10px monospace;
+      letter-spacing: 2px;
+    }
+    h1 {
+      font:
+        normal 58px/1.1 Georgia,
+        serif;
+      letter-spacing: -2px;
+      margin: 24px 0 9px;
+    }
+    h1 em {
+      color: #ffd58b;
+    }
+    p.intro {
+      max-width: 900px;
+      color: #8fabab;
+      margin: 0 0 23px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 25px;
+    }
+    .stage {
+      background: #071923;
+      border: 1px solid #2b4651;
+      position: relative;
+    }
+    .stage canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      touch-action: none;
+    }
+    .bar,
+    .tabs {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 15px;
+      border-bottom: 1px solid #2b4651;
+      gap: 7px;
+    }
+    .bar {
+      border-bottom: 0;
+      border-top: 1px solid #2b4651;
+      font: 9px monospace;
+      color: #8caaaa;
+    }
+    button {
+      background: #12313d;
+      color: #c9d9cb;
+      border: 1px solid #34505a;
+      padding: 9px 10px;
+      font: 11px monospace;
+      cursor: pointer;
+    }
+    button.active {
+      background: #e7bc76;
+      border-color: #e7bc76;
+      color: #0b2634;
+    }
+    .tabs button {
+      border: 0;
+      background: transparent;
+    }
+    .tabs button.active {
+      color: #ffd58b;
+      background: #19323b;
+    }
+    .tabs .hint {
+      font: 9px monospace;
+      color: #799c9e;
+      align-self: center;
+      margin-left: auto;
+    }
+    .panel {
+      border-top: 2px solid #d2a55f;
+      padding-top: 13px;
+    }
+    .panel h2 {
+      font:
+        normal 24px Georgia,
+        serif;
+      margin: 0 0 16px;
+    }
+    .shapes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .shapes button {
+      text-align: left;
+    }
+    .control {
+      display: block;
+      margin: 16px 0;
+    }
+    .control span {
+      display: flex;
+      justify-content: space-between;
+      font: 11px monospace;
+      color: #b9cec7;
+      margin-bottom: 7px;
+    }
+    input[type='range'] {
+      width: 100%;
+      accent-color: #e7bc76;
+    }
+    .toggle {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: #abc1bb;
+      font-size: 12px;
+      margin: 12px 0;
+    }
+    input[type='checkbox'] {
+      accent-color: #e7bc76;
+    }
+    #reset {
+      width: 100%;
+      margin-top: 12px;
+    }
+    .editor {
+      margin-top: 19px;
+      padding-top: 15px;
+      border-top: 1px solid #2b4651;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+    .editor canvas {
+      width: 112px;
+      height: 112px;
+      image-rendering: pixelated;
+      border: 1px solid #527579;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    .editor p {
+      font-size: 11px;
+      color: #8babaa;
+      margin: 0;
+      max-width: 160px;
+    }
+    .editor b {
+      display: block;
+      color: #e8c589;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    .note {
+      color: #6e969a;
+      font: 10px/1.6 monospace;
+      margin: 16px 0 0;
+    }
+    .labels {
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      top: 43%;
+      height: 35%;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: 1fr 1fr;
+      align-items: end;
+      text-align: center;
+      pointer-events: none;
+      font: 10px monospace;
+      color: #88aaa9;
+    }
+    .labels span {
+      align-self: start;
+    }
+    .labels span:nth-child(n + 5) {
+      align-self: end;
+    }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      color: #74989a;
+      font-size: 11px;
+      margin-top: 17px;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #081c29;
+      color: #ffd58b;
+    }
+    .error {
+      color: #ff9b76 !important;
+    }
+    @media (max-width: 900px) {
+      main {
+        padding: 20px;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 45px;
+      }
+      .panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 25px;
+      }
+      .shapes,
+      h2,
+      .editor,
+      .note,
+      #reset {
+        grid-column: 1/-1;
+      }
+      .tabs .hint {
+        display: none;
+      }
+    }
+  </style>
+  <main>
+    <div class="eyebrow"><span>INK STUDIO / REPRESENTATIONS 02</span><span>NATIVE SPLAT FOOTPRINTS</span></div>
+    <h1>The Mark <em>Foundry</em></h1>
+    <p class="intro">
+      Squares, wedges, stars, crosses and fractured chips. Give each material its own mark—or draw a silhouette
+      yourself. The shape participates in colour, visibility and depth.
+    </p>
+    <div class="layout">
+      <section class="stage">
+        <div class="tabs">
+          <button data-view="gallery" class="active">Silhouette press</button
+          ><button data-view="harbour">Prism Harbour</button
+          ><span class="hint">DRAG TO ORBIT · SHIFT–DRAG TO PAN · SCROLL TO ZOOM</span>
+        </div>
+        <canvas id="view" width="1100" height="680" aria-label="Interactive native splat footprint scene"></canvas>
+        <div class="labels" id="labels">
+          <span>01 / SQUARE</span><span>02 / WEDGE</span><span>03 / STAR</span><span>04 / CROSS</span
+          ><span>05 / CHIP</span><span>06 / DRAWN POLYGON</span><span>07 / PAINTED MASK</span><span>08 / CIRCLE</span>
+        </div>
+        <div class="bar">
+          <span id="caption">EIGHT SINGLE SPLATS · PRINTED BACKPLATE SHOWS THROUGH THE CUTOUTS</span
+          ><span id="stats">—</span>
+        </div>
+        <div id="loading">Preparing the press…</div>
+      </section>
+      <aside class="panel">
+        <h2>Choose a material mark</h2>
+        <div class="shapes">
+          <button data-shape="0" class="active">01 Square</button><button data-shape="1">02 Wedge</button
+          ><button data-shape="2">03 Star</button><button data-shape="3">04 Cross</button
+          ><button data-shape="4">05 Chip</button><button data-shape="5">06 Polygon</button
+          ><button data-shape="6">07 Your silhouette</button><button data-shape="7">08 Circle</button>
+        </div>
+        <label class="control"
+          ><span>Rotation <output id="rotation-value">0°</output></span
+          ><input id="rotation" type="range" min="-180" max="180" step="1" value="0" /></label
+        ><label class="control"
+          ><span>Width <output id="x-value">1.00×</output></span
+          ><input id="x" type="range" min=".1" max="4" step=".05" value="1" /></label
+        ><label class="control"
+          ><span>Height <output id="y-value">1.00×</output></span
+          ><input id="y" type="range" min=".1" max="4" step=".05" value="1" /></label
+        ><label class="control"
+          ><span>Edge softness <output id="softness-value">8%</output></span
+          ><input id="softness" type="range" min="0" max=".5" step=".01" value=".08"
+        /></label>
+        <label class="toggle"><input type="checkbox" id="spin" />Animate selected mark</label
+        ><label class="toggle"><input type="checkbox" id="native" />Compare original Gaussians</label
+        ><label class="toggle"><input type="checkbox" id="pause" />Pause scene animation</label
+        ><button id="reset">Reset marks & camera</button>
+        <div class="editor">
+          <canvas id="paint" width="16" height="16" aria-label="Draw a custom 16 by 16 footprint mask"></canvas>
+          <p><b>Draw a silhouette</b>Drag to paint. Right-drag to erase. Holes remain transparent in both scenes.</p>
+        </div>
+        <p class="note">
+          SDFs & splats underneath. Shared distance tiles keep transform animation cheap. Footprints can vary
+          independently by material.
+        </p>
+      </aside>
+    </div>
+    <footer>
+      <span>Sea glass & brass · Live 3D geometry · No runtime dependencies</span
+      ><span>Eight shapes · Transparent cutouts · CPU & WebGL</span>
+    </footer>
+  </main>
+  <script src="../dist/ink-studio.browser.js"></script>
+  <script src="./render-grid.js"></script>
+  <script src="./splat-footprints.js"></script>
+  <script type="module">
+    import { createRenderer } from '../webgl.mjs';
+    const $ = id => document.getElementById(id),
+      canvas = $('view');
+    try {
+      const kit = {
+        KIT,
+        PixelLook,
+        makeBuilder,
+        makeSculpt,
+        SpriteSurface,
+        ContributionRules,
+        RenderStages,
+        TargetSelectors,
+        SplatProvenance
+      };
+      const demo = splatFootprintsDemo(kit),
+        renderer = createRenderer(canvas, { toolkit: kit });
+      demo.state.view = 'gallery';
+      const alpha = Uint8Array.from(demo.leaf.alpha),
+        paint = $('paint'),
+        ctx = paint.getContext('2d');
+      function paintPreview() {
+        const image = ctx.createImageData(16, 16);
+        for (let i = 0; i < 256; i++) image.data.set(alpha[i] ? [255, 213, 139, 255] : [18, 56, 68, 255], i * 4);
+        ctx.putImageData(image, 0, 0);
+      }
+      function sync() {
+        const p = demo.gallery.splatFootprints.styles[demo.state.selected];
+        $('rotation').value = (p.rotation * 180) / Math.PI;
+        $('x').value = p.stretch[0];
+        $('y').value = p.stretch[1];
+        $('softness').value = p.softness;
+        values();
+        document.querySelectorAll('[data-shape]').forEach(b => {
+          b.classList.toggle('active', +b.dataset.shape === demo.state.selected);
+          b.setAttribute('aria-pressed', +b.dataset.shape === demo.state.selected);
+        });
+        document
+          .querySelectorAll('[data-view]')
+          .forEach(b => b.classList.toggle('active', b.dataset.view === demo.state.view));
+        $('labels').hidden = demo.state.view !== 'gallery';
+        $('caption').textContent =
+          demo.state.view === 'gallery'
+            ? 'EIGHT SINGLE SPLATS · PRINTED BACKPLATE SHOWS THROUGH THE CUTOUTS'
+            : '32K SDF SPLATS · EIGHT INDEPENDENT MATERIAL FOOTPRINTS';
+      }
+      function values() {
+        $('rotation-value').value = Math.round(+$('rotation').value) + '°';
+        $('x-value').value = (+$('x').value).toFixed(2) + '×';
+        $('y-value').value = (+$('y').value).toFixed(2) + '×';
+        $('softness-value').value = Math.round(+$('softness').value * 100) + '%';
+      }
+      for (const b of document.querySelectorAll('[data-shape]'))
+        b.onclick = () => {
+          demo.state.selected = +b.dataset.shape;
+          sync();
+        };
+      for (const b of document.querySelectorAll('[data-view]'))
+        b.onclick = () => {
+          demo.state.view = b.dataset.view;
+          sync();
+        };
+      for (const id of ['rotation', 'x', 'y', 'softness'])
+        $(id).oninput = () => {
+          demo.edit({
+            rotation: (+$('rotation').value * Math.PI) / 180,
+            stretch: [+$('x').value, +$('y').value],
+            softness: +$('softness').value
+          });
+          values();
+        };
+      $('spin').onchange = e => (demo.state.spin = e.target.checked);
+      $('native').onchange = e => (demo.state.native = e.target.checked);
+      $('pause').onchange = e => (demo.state.paused = e.target.checked);
+      $('reset').onclick = () => {
+        demo.reset();
+        $('spin').checked = $('native').checked = false;
+        alpha.set(demo.leaf.alpha);
+        paintPreview();
+        sync();
+      };
+      let brush,
+        dirty = false;
+      function dab(e) {
+        const r = paint.getBoundingClientRect(),
+          x = Math.max(0, Math.min(15, Math.floor(((e.clientX - r.left) * 16) / r.width))),
+          y = Math.max(0, Math.min(15, Math.floor(((e.clientY - r.top) * 16) / r.height)));
+        alpha[y * 16 + x] = brush;
+        dirty = true;
+        paintPreview();
+      }
+      paint.oncontextmenu = e => e.preventDefault();
+      paint.onpointerdown = e => {
+        const r = paint.getBoundingClientRect(),
+          x = Math.max(0, Math.min(15, Math.floor(((e.clientX - r.left) * 16) / r.width))),
+          y = Math.max(0, Math.min(15, Math.floor(((e.clientY - r.top) * 16) / r.height)));
+        brush = e.button === 2 ? 0 : alpha[y * 16 + x] ? 0 : 255;
+        paint.setPointerCapture(e.pointerId);
+        demo.state.selected = 6;
+        dab(e);
+        sync();
+      };
+      paint.onpointermove = e => {
+        if (brush !== undefined) dab(e);
+      };
+      paint.onpointerup = paint.onpointercancel = () => (brush = undefined);
+      let drag,
+        last,
+        stamp,
+        frames = 0,
+        fps = 60;
+      canvas.onpointerdown = e => {
+        drag = [e.clientX, e.clientY];
+        canvas.setPointerCapture(e.pointerId);
+        demo.control.take();
+        $('labels').hidden = true;
+      };
+      canvas.onpointermove = e => {
+        if (!drag) return;
+        const dx = e.clientX - drag[0],
+          dy = e.clientY - drag[1];
+        drag = [e.clientX, e.clientY];
+        demo.control.input(e.shiftKey ? { pan: [-dx * 0.012, dy * 0.012] } : { yaw: -dx * 0.004, pitch: dy * 0.004 });
+      };
+      canvas.onpointerup = canvas.onpointercancel = () => (drag = null);
+      canvas.addEventListener(
+        'wheel',
+        e => {
+          e.preventDefault();
+          demo.control.input({ dolly: e.deltaY * 0.001 });
+          $('labels').hidden = true;
+        },
+        { passive: false }
+      );
+      window.footprintQA = { demo, renderer, kit, sync, alpha };
+      sync();
+      paintPreview();
+      $('loading').remove();
+      function tick(now) {
+        const dt = last === undefined ? 0 : Math.min(0.05, (now - last) / 1000);
+        last = now;
+        if (dirty) {
+          demo.paint(alpha);
+          dirty = false;
+        }
+        demo.update(dt);
+        const world = demo.world;
+        renderer.render(world, {
+          width: canvas.width,
+          height: canvas.height,
+          time: demo.state.view === 'gallery' ? demo.state.time : demo.harbour.state.time,
+          camera: demo.control.read().camera,
+          splatFootprints: !demo.state.native,
+          changedRows: []
+        });
+        frames++;
+        stamp ??= now;
+        if (now - stamp > 700) {
+          fps = (frames * 1000) / (now - stamp);
+          frames = 0;
+          stamp = now;
+        }
+        $('stats').textContent = Math.round(fps) + ' FPS · ' + world.count.toLocaleString() + ' SPLATS';
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    } catch (error) {
+      $('loading').classList.add('error');
+      $('loading').textContent = error.message;
+      throw error;
+    }
+  </script>
+</html>

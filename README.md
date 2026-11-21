@@ -1110,3 +1110,5 @@ Camera rigs support dependency-free dolly zoom, tracked orbit, keyed crane moves
 `KIT.random` / `KIT.procedural.random` adds independent named streams, stable object/property keys, controlled distributions, correlated channels, coherent variation and replay checkpoints. See [randomness authoring](docs/randomness.md) and the interactive [seeded courtyard](examples/randomness.html).
 
 Use [tessellated render grids](docs/render-grids.md) to resolve SDF/splat scenes into connected hexagons, alternating triangles or isometric diamonds. See the interactive [Prism Harbour demo](examples/render-grid.html).
+
+Use [custom splat footprints](docs/splat-footprints.md) for square, wedge, star, cross, chipped, polygonal or painted marks on individual materials. Explore the [Mark Foundry](examples/splat-footprints.html), including a live silhouette editor.

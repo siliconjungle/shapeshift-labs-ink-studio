@@ -45,16 +45,16 @@ function baseDirtyRows(world, rows) {
 
 export function createExpandedInstances() {
   let source, placementGroup, storage, revision;
-  let sourceData, sourceCount, sourceFine, sourcePix, sourceMetadata, sourceStyles, sourceOptical;
+  let sourceData, sourceCount, sourceFine, sourcePix, sourceMetadata, sourceStyles, sourceOptical, sourceFootprints;
   let packed;
   return function expand(world, group, changedRows) {
     const plan = instancePlan(group);
     if (world !== source || group !== placementGroup || world.data !== sourceData || world.count !== sourceCount ||
         world.fine !== sourceFine || world.pix !== sourcePix || world.renderMetadata !== sourceMetadata ||
-        world.materialPixelStyles !== sourceStyles || world.opticalSplats !== sourceOptical) {
+        world.materialPixelStyles !== sourceStyles || world.opticalSplats !== sourceOptical || world.splatFootprints !== sourceFootprints) {
       storage = group.flatten(world);
-      const { data, count, fine, pix, renderMetadata, materialPixelStyles, opticalSplats } = storage;
-      packed = { data, count, fine, pix, renderMetadata, materialPixelStyles, opticalSplats };
+      const { data, count, fine, pix, renderMetadata, materialPixelStyles, opticalSplats, splatFootprints } = storage;
+      packed = { data, count, fine, pix, renderMetadata, materialPixelStyles, opticalSplats, splatFootprints };
       source = world;
       placementGroup = group;
       sourceData = world.data;
@@ -64,6 +64,7 @@ export function createExpandedInstances() {
       sourceMetadata = world.renderMetadata;
       sourceStyles = world.materialPixelStyles;
       sourceOptical = world.opticalSplats;
+      sourceFootprints = world.splatFootprints;
       revision = plan.revision;
       return { world:storage };
     }
