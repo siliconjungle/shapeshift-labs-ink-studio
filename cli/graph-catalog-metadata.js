@@ -162,7 +162,7 @@ const options = {
   'fx.paletteFault': { swaps: property('array', { constraints: { entries: 'Nonoverlapping pairs of distinct palette slots' } }, []) },
   'warp.address': { time: sampleTime },
   'warp.compose': { ...size, filter: warpFilter, edge: address, edgeU: address, edgeV: address },
-  'warp.scanlines': { time: sampleTime, filter: warpFilter,
+  'warp.scanlines': { time: sampleTime, filter: { ...warpFilter, default: 'nearest' },
     rows: property('array<record>', { description: 'Increasing source rows with XY offset and horizontal scale.' }, []),
     wave: property('record', { description: 'Horizontal wave amplitude and period in pixels, phase in turns, and rate in turns per second.' }),
     padding: property('array<number>', { description: 'Transparent left, top, right and bottom output padding.' }, [0, 0, 0, 0]),
