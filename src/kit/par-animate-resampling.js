@@ -183,5 +183,5 @@
       }
     }
   };
-  P.visualResampling = Object.freeze({ create, compile, maxFrames, operations });
+  P.visualResampling = Object.freeze({ create, compile, maxFrames, operations: Object.freeze(operations) });
 })(KIT.procedural);

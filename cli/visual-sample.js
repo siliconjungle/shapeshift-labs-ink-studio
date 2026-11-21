@@ -23,9 +23,10 @@ function createCapture(settings, { fps, from, to, kit, plan, type }) {
   for (const key of [depth, motion]) if (typeof key !== 'boolean') named(key, 'raster');
   if ((labels !== undefined || mask !== undefined || tracking !== undefined) && region === undefined ||
       labels !== undefined && (mask !== undefined || tracking !== undefined) ||
-      tracking !== undefined && !record(tracking) || depth === false && depthValid !== undefined ||
-      motion === false && motionValid !== undefined)
+      tracking !== undefined && !record(tracking))
     throw new TypeError('Region capture needs a region ID and either labels or tracking settings');
+  if (depth === false && depthValid !== undefined || motion === false && motionValid !== undefined)
+    throw new TypeError('Visual sample validity needs its enabled auxiliary plane');
   const recorder = V.create({ fps, startFrame: from, crop, region });
   const tracker = region !== undefined && labels === undefined ? P.pixelEffects.createRegionTracker(tracking) : null;
   const isFrame = P.graphTypes.validator('renderFrame'), isScene = P.graphTypes.validator('world');
@@ -59,7 +60,8 @@ function createCapture(settings, { fps, from, to, kit, plan, type }) {
     if (!keep) return;
     const auxiliary = (channel, choice, validName) => {
       if (choice === false) return {};
-      if (typeof choice === 'string') return { [channel]: outputs[choice], [channel + 'Valid']: outputs[validName] };
+      if (typeof choice === 'string') return { [channel]: outputs[choice],
+        ...(validName !== undefined && { [channel + 'Valid']: outputs[validName] }) };
       const passes = frame?.passes;
       const alignedPass = passes?.[channel] && passes.w === image.width && passes.h === image.height;
       if (!alignedPass) {
