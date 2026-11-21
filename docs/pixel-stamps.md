@@ -12,6 +12,8 @@ the same JSON the renderer reads. The star, glint, and bubble studies let you
 open each separately drawn size.
 The built-in studies include the two layers of the Red Spring spell, so
 the ink and the eye can be edited separately.
+The [animated tile library](pixel-tiles.md) uses the same editable cels
+for copper pulses and creeping frost.
 
 ## Drawing and timing
 
