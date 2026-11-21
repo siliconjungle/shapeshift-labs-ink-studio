@@ -43,6 +43,10 @@
     return { index: clamp(first + frame, first, end - 1), time: sampled.value };
   }
 
+  function spriteDesync(source, settings) {
+    return P.graph.raster(source).spriteDesync(settings);
+  }
+
   const options = { type: 'record', default: {} };
   function groupOp(spec, groups) {
     const group = Object.hasOwn(groups, spec.group) && groups[spec.group];
@@ -60,7 +64,7 @@
     };
   }
 
-  Object.assign(A, { clock, stagger, track, frameIndex, operations: {
+  Object.assign(A, { clock, stagger, track, frameIndex, spriteDesync, operations: {
     'anim.clock': {
       inputs: { options }, outputs: { value: 'number', progress: 'number', direction: 'number', active: 'boolean' }, time: true,
       run({ options }, { time }) { return clock(options.time ?? time, options); }
@@ -88,6 +92,19 @@
       run({ frames, options }, { time }) {
         const sample = frameIndex(frames.length, options.time ?? time, options);
         return { index: sample.index, time: sample.time, value: frames[sample.index] };
+      }
+    },
+    'anim.spriteDesync': {
+      inputs: { source: 'any', options }, outputs: { value: 'raster', frames: 'record' }, time: true,
+      instantiate() {
+        let asset, previous;
+        return ({ source, options }, { time }) => {
+          if (!asset || source !== previous) {
+            asset = P.graph.raster(source);
+            previous = source;
+          }
+          return asset.spriteDesync({ ...options, time: options.time ?? time });
+        };
       }
     },
     'anim.retime': { specialize: groupOp }

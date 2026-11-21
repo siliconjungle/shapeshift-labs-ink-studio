@@ -980,8 +980,45 @@ port to hide a layer during that hold.
 | `anim.clock` | Map the project clock to `options.range`, with `delay`, `rate`, `reverse` and `mode` of `hold`, `loop` or `pingpong`. Returns mapped time, progress, playback direction and activity. |
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
+| `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
 | `anim.feedback` | Evolve an input array of raster `frames` at a fixed simulation `dt`. Set source `fps` and playback `mode`, signal `halfLife`, `gain`, optional `threshold`, `warp`, `filter`, and timed reset `cuts`. Returns an isolated RGBA signal to composite using existing raster nodes. |
+
+### Desynchronize sprite fragments
+
+Provide a layered raster with each named part registered on the same pixel
+canvas. The graph accepts either the layered raster definition or a compiled
+`graph.raster` asset. For a flattened animation, put the frame sequence in one
+layer and use rectangular strips.
+
+```js
+const { value, frames } = animationGraph.spriteDesync(sprite, {
+  time: 0.5,
+  tag: 'walk',
+  parts: { head: { hold: 2 }, arm: { offset: 4 }, boot: { offset: -3 } },
+  strips: [{ rect: [20, 14, 44, 6], offset: -2 }]
+})
+```
+
+`hold` is a zero-based frame slot within the selected tag. `offset` is a
+signed integer in frames and can lead or lag the current clock. Use one per
+fragment. Offsets wrap in looping tags and clamp in non-looping tags.
+The node uses the graph clock unless you supply `options.time`. Direct
+sampling defaults to time zero, and the default tag is `all`.
+
+Named parts replace their own layer's cel before compositing. Use `layers`
+to choose which layers draw and in what order. Strips then copy RGBA,
+including transparency, from the synchronized stack at their own sampled
+frames. Rectangles use upper-left pixel coordinates `[x, y, width, height]`
+and clip to the sprite. Later strips take precedence in overlaps.
+
+`frames.base` and `frames.strips` report absolute clip frame indices.
+`frames.parts` reports the cel index drawn for each selected layer. A short
+layer holds its last cel. Sampling depends only on the requested time, so a
+direct seek and sequential playback produce the same frame.
+
+Run `node examples/sprite-fragment-desync.cjs fragment-review` to render
+[the side-by-side sprite study](../examples/sprite-fragment-desync.cjs).
 
 ### Planar simulation recipes
 

@@ -63,24 +63,33 @@
       return clip;
     }
     function clipInfo(tag = 'all') { return { ...getClip(tag) }; }
-    function frameAt(time, tag = 'all') {
+    function frameTick(time, clip) {
       if (!Number.isFinite(time)) throw new RangeError('Raster time must be finite');
+      return Math.max(0, Math.floor(time * clip.fps + 1e-8));
+    }
+    function frameAt(time, tag = 'all') {
       const clip = getClip(tag);
-      const i = Math.max(0, Math.floor(time * clip.fps + 1e-8)), length = clip.end - clip.start;
+      const i = frameTick(time, clip), length = clip.end - clip.start;
       return clip.start + (clip.loop ? i % length : Math.min(length - 1, i));
     }
     function layer(name, time = 0, tag = 'all') {
+      return layerFrame(name, frameAt(time, tag));
+    }
+    function layerFrame(name, frame) {
       if (!planes.has(name)) throw new RangeError('Unknown raster layer ' + name);
-      const { opacity, images, parent, material, pivot } = planes.get(name), frame = frameAt(time, tag);
+      const { opacity, images, parent, material, pivot } = planes.get(name);
       const image = images[Math.min(frame, images.length - 1)], data = image.data.slice(), at = image.pivot ?? pivot ?? origin;
       if (opacity < 1) for (let i = 3; i < size; i += 4) data[i] = Math.round(data[i] * opacity);
       return { width, height, frame, data, ...(at && { pivot: at.slice() }),
         ...(parent !== undefined && { parent }), ...(material !== undefined && { material }) };
     }
     function composite(time = 0, { tag = 'all', layers: names = [...planes.keys()] } = {}) {
-      const frame = frameAt(time, tag), data = new Uint8Array(size), accum = new Float32Array(size);
+      return compositeFrames(frameAt(time, tag), names);
+    }
+    function compositeFrames(frame, names, partFrames) {
+      const data = new Uint8Array(size), accum = new Float32Array(size);
       for (const name of names) {
-        const image = layer(name, time, tag).data;
+        const image = layerFrame(name, partFrames?.get(name) ?? frame).data;
         for (let i = 0; i < size; i += 4) {
           const a = image[i + 3] / 255, keep = 1 - a;
           for (let c = 0; c < 3; c++) accum[i + c] = image[i + c] * a + accum[i + c] * keep;
@@ -95,6 +104,59 @@
       }
       return { width, height, frame, data };
     }
+    function spriteDesync({ time = 0, tag = 'all', layers: names = [...planes.keys()], parts = {}, strips = [] } = {}) {
+      const record = P.graphTypes.validator('record');
+      if (!Array.isArray(names) || !Array.from(names).every(name => planes.has(name)) ||
+          !record(parts) || !Array.isArray(strips) || strips.length > 64)
+        throw new TypeError('Sprite desync needs named layers and up to 64 strips');
+      const clip = getClip(tag), length = clip.end - clip.start;
+      const tick = frameTick(time, clip);
+      if (!Number.isSafeInteger(tick) || tick > Number.MAX_SAFE_INTEGER - 2147483647)
+        throw new RangeError('Sprite desync time exceeds its frame range');
+      function select(position) {
+        return clip.start + (clip.loop
+          ? ((position % length) + length) % length
+          : Math.max(0, Math.min(length - 1, position)));
+      }
+      function timed({ offset, hold }) {
+        if ((offset !== undefined && (!Number.isSafeInteger(offset) || Math.abs(offset) > 2147483647)) ||
+            (hold !== undefined && (offset !== undefined || !Number.isSafeInteger(hold) || hold < 0 || hold >= length)))
+          throw new RangeError('Sprite fragment needs a signed frame offset or an in-tag hold frame');
+        return hold === undefined ? select(tick + (offset ?? 0)) : clip.start + hold;
+      }
+      const base = select(tick), partFrames = new Map();
+      for (const [name, part] of Object.entries(parts)) {
+        if (!planes.has(name) || !record(part) || Object.keys(part).some(key => key !== 'offset' && key !== 'hold'))
+          throw new TypeError('Invalid sprite fragment ' + name);
+        partFrames.set(name, timed(part));
+      }
+      const blocks = [], stripFrames = [], distinct = new Set();
+      for (const strip of strips) {
+        if (!record(strip) || Object.keys(strip).some(key => !['rect', 'hold', 'offset'].includes(key)) ||
+            !Array.isArray(strip.rect) || strip.rect.length !== 4 ||
+            !Array.from(strip.rect).every(n => Number.isSafeInteger(n) && n >= -2147483648 && n <= 2147483647) ||
+            strip.rect[2] <= 0 || strip.rect[3] <= 0)
+          throw new TypeError('Sprite strips need an integer rectangle with positive dimensions');
+        const frame = timed(strip);
+        stripFrames.push(frame);
+        distinct.add(frame);
+        blocks.push({ rect: strip.rect, bank: String(frame) });
+      }
+      if (width * height * Math.max(1, names.length) * (1 + distinct.size) > 64e6)
+        throw new RangeError('Sprite desync exceeds its composition visit budget');
+      const { data } = compositeFrames(base, names, partFrames);
+      let value = { width, height, channels: 4, data, ...(origin && { pivot: origin.slice() }) };
+      if (blocks.length) {
+        const banks = Object.fromEntries([...distinct].map(frame => [frame, compositeFrames(frame, names)]));
+        value = P.pixelEffects.blockSubstitute(value, { blocks, banks }).value;
+      }
+      return { value, frames: { base,
+        parts: Object.fromEntries(names.map(name => [
+          name, Math.min(partFrames.get(name) ?? base, planes.get(name).images.length - 1)
+        ])),
+        strips: stripFrames
+      } };
+    }
     function snapshot() {
       return {
         width, height, fps, ...(origin && { pivot: origin.slice() }),
@@ -107,7 +169,7 @@
       };
     }
     return Object.freeze({ [rasterBrand]: true, width, height, frameCount, layers: [...planes.keys()], tags: [...clips.keys()],
-      clipInfo, frameAt, layer, composite, snapshot });
+      clipInfo, frameAt, layer, composite, spriteDesync, snapshot });
   }
 
   function material({ height = 0, wetness = 0, ink = 0, palette = 'stone', spacing = .005, normalStrength = 1 } = {}) {
