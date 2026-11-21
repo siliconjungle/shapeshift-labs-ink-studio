@@ -1210,7 +1210,7 @@ in a low-level `KIT.procedural.graph.create` graph, pass
 | `geo.triangulate` | Triangulate planar `rings` at `options.z`. The first ring is the outline and subsequent rings are holes. |
 | `geo.transform`, `geo.merge` | Apply XYZ `position`, radians `rotation`, and scalar or XYZ `scale`, or combine an array of indexed meshes. Mirroring reverses winding. |
 | `geo.clip` | Crop a mesh with face materials to `dot(normal, point) <= offset` for each plane. Set `options.cap` to close a convex shell. UVs and normals remain available on the clipped triangles. |
-| `geo.scrambleIndices` | Redirect one corner per selected triangle to an existing vertex within a world-space distance limit. Returns an indexed mesh, the individual redirects, and a report. |
+| `geo.scrambleIndices` | Redirect one corner per selected triangle to an existing vertex within a mesh-space distance limit. Returns an indexed mesh, the individual redirects, and a report. |
 | `geo.extrudeImage` | Expand an XY raster mask along Z. Set `pixelSize`, `depth`, `center`, `channel`, `alphaThreshold` and optional `edgeColor`. Holes pass through the part. The main mesh retains per-cell colors on the caps. The `front` port is a UV-mapped front cap for `warp.surface`. |
 | `geo.sliceStack` | Build the exterior of a stack of aligned raster `slices` in list order. Set world `axis`, `spacing`, `center`, `pixelSize` and mask controls. Neighboring occupied cells share their boundary and omit their internal faces. |
 
@@ -1225,9 +1225,9 @@ as separate ports. Feed mesh results to other graph operators such as
 
 Use `geo.scrambleIndices` or `KIT.procedural.sceneGraph.scrambleIndices`
 on an indexed triangle mesh. In the default seeded mode, set the share
-of eligible faces with `amount` (default .12) and cap the number attempted
-with `maxFaces` (default 128). A face stays as authored when the bounded
-search finds no suitable replacement.
+of eligible faces with `amount` (default .12). Ink rounds the attempted
+count up and caps it at `maxFaces` (default 128). A face stays as authored
+when the bounded search finds no suitable replacement.
 
 ```js
 const { value, changes, report } = KIT.procedural.sceneGraph.scrambleIndices(mesh, {
