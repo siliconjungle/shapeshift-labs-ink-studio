@@ -547,9 +547,9 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 
 These graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
-effects return straight-alpha RGBA8 at the source dimensions. Tile and
-scanline remaps preserve the source channel count and sample values. Bitplane
-effects also expose the edited palette indices. Add
+effects return straight-alpha RGBA8 at the source dimensions. Tile remaps,
+scanline remaps, and block substitution preserve the source channel count
+and sample values. Bitplane effects also expose the edited palette indices. Add
 transparent canvas margin before an effect when its coverage needs room
 outside the original image.
 
@@ -567,6 +567,7 @@ outside the original image.
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
 | `fx.scanlineRemap` | Repeat, skip, or blank whole rows with `options.edits`. The `addresses` output shows the source row for each destination row. |
+| `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
 
@@ -722,6 +723,43 @@ samples. `addresses` is a one-channel raster, one sample wide, with
 to apply the same operations to a live scene.
 The [scanline study](../examples/scanline-repeat-dropout.cjs) compares
 each mode side by side.
+
+### Substitute blocks from a frame or feed
+
+```js
+const { value, mask } = KIT.procedural.pixelEffects.blockSubstitute(current, {
+  banks: { replay: earlierFrame, alternate: otherFeed },
+  blocks: [
+    { rect: [24, 8, 20, 12], from: [4, 8] },
+    { rect: [50, 30, 32, 16], bank: 'replay' },
+    { rect: [84, 13, 15, 22], from: [0, 4], bank: 'alternate' }
+  ]
+});
+```
+
+Each `rect: [x, y, width, height]` is in destination pixels from the top
+left. `from: [x, y]` is the source rectangle's top-left corner and defaults
+to the destination origin. The source rectangle uses the same size.
+Omit `bank` to read from the original input raster. Banks can have
+different dimensions and must share the input's channel count.
+The operation copies whole samples, including alpha, at integer coordinates.
+
+Source and destination rectangles clip together at their image bounds.
+Overlapping blocks apply in order and read from the original inputs.
+An optional aligned `options.mask` restricts writes, using
+`maskChannel` (default `"luma"`) and `maskThreshold` (default 128).
+`value` preserves the input dimensions and pivot. The output `mask`
+is 255 wherever a pixel was copied and zero elsewhere.
+
+In a graph, link a `data.record` of named rasters to `banks` and put
+rectangles in `options.blocks`. To get earlier frames, read the same
+sequence with two `anim.frame` nodes and give the bank node a positive
+`delay`. This makes the result seekable and keeps playback and export in
+sync. In a live host, pass captured rasters such as camera atlas reads to
+the same function, then send its result to a
+[mixed-resolution layer](mixed-resolution.md#rasters-and-screen-effects).
+The [block substitution study](../examples/block-substitution.cjs) shows
+a neighboring rectangle, a delayed frame, and an alternate feed.
 
 ### Corrupt a palette bitplane
 

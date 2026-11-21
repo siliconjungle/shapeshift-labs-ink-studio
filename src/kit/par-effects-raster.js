@@ -26,6 +26,10 @@
     },
     'fx.tileStrideSlip':raster(E.tileStrideSlip,{value:'raster',addresses:'raster'}),
     'fx.scanlineRemap':raster(E.scanlineRemap,{value:'raster',addresses:'raster'}),
+    'fx.blockSubstitute':{
+      inputs:{source:'raster',banks:options,options},outputs:{value:'raster',mask:'raster'},
+      run({source,banks,options}){return E.blockSubstitute(source,{...options,banks});}
+    },
     'fx.bitplane':{
       inputs:{source:'raster',palette:'palette',bank:{type:'any',default:null},options},
       outputs:{value:'raster',indices:'raster'},
