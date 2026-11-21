@@ -524,6 +524,11 @@
       }
     }
     try {
+      bakedShadowMarch(st.finish.shadowMarch);
+    } catch (error) {
+      bad('finish.shadowMarch', error.message);
+    }
+    try {
       SculptSampling.prepare(st.finish.adaptiveSampling);
     } catch (error) {
       bad('finish.adaptiveSampling', error.message);
@@ -1397,6 +1402,7 @@
     const keepLightCasters = AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
       EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity) ||
       st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
+    const shadowMarch = st0.finish.shadowMarch === undefined ? null : bakedShadowMarch(st0.finish.shadowMarch);
     let S, grp;
     function startSculpt() {
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));
@@ -1407,6 +1413,10 @@
         Array.isArray(st0.finish.look?.renderStages) && st0.finish.look.renderStages.some(rule => rule.stage === 'material');
       if (st0.amb !== undefined) S.amb = st0.amb;
       if (st0.sky !== undefined) S.sky = st0.sky;
+      if (shadowMarch) {
+        S.shSteps = shadowMarch.steps;
+        S.shLen = shadowMarch.distance;
+      }
       if (st0.finish.res) S.res = st0.finish.res;
       if (st0.finish.adaptiveSampling !== undefined) S.adaptiveSampling = st0.finish.adaptiveSampling;
       grp = {};

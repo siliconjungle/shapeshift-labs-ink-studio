@@ -141,7 +141,6 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     back = [],
     cidx = [],
     nrms = [];
-  let curN = null;
   let footprintRecorder;
   let ownerRows, materialRows, targetRows, muteEmission, materialAlbedo, materialPixelStyles, opticalSplats;
   let unnamedOwners = new WeakMap(), unnamedMaterials = new WeakMap();
@@ -402,7 +401,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     fine[o + 10] = vz;
     fine[o + 11] = 1;
   };
-  function push(x, y, z, c00, c01, c02, c11, c12, c22, col, a, an) {
+  function push(x, y, z, c00, c01, c02, c11, c12, c22, col, a, an, normal = null) {
     reserveRow();
     if (attrN) {
       if (!attr || attr.length < cap * 4) {
@@ -448,7 +447,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     data[o + 9] = c12;
     data[o + 10] = c22;
     cidx.push(P.indexOf(col));
-    nrms.push(curN);
+    nrms.push(normal);
     if (an) {
       if (renderMetadata && an.em && an.emission === false) {
         if (!muteEmission || muteEmission.length < cap) {
@@ -494,29 +493,42 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     const v = s * s;
     push(x, y, z, v, 0, 0, v, 0, v, col, a, an);
   }
-  function axial(x, y, z, ax, sa, sp, col, a, an) {
+  function axial(x, y, z, ax, sa, sp, col, a, an, recordNormal = false) {
+    if (ax?.length !== 3 || !Number.isFinite(ax[0]) || !Number.isFinite(ax[1]) || !Number.isFinite(ax[2]))
+      throw new TypeError('Splat axis needs three finite numeric components');
+    let u = ax[0], v = ax[1], w = ax[2];
+    const lengthSquared = u * u + v * v + w * w;
+    if (Math.abs(lengthSquared - 1) > 4 * Number.EPSILON) {
+      // Scale before taking the norm so finite axes also work at extreme magnitudes.
+      const scale = Math.max(Math.abs(u), Math.abs(v), Math.abs(w));
+      if (scale === 0) throw new RangeError('Splat axis must be nonzero');
+      u /= scale;
+      v /= scale;
+      w /= scale;
+      const inverseLength = 1 / Math.sqrt(u * u + v * v + w * w);
+      u *= inverseLength;
+      v *= inverseLength;
+      w *= inverseLength;
+    }
     const p = sp * sp,
       d = sa * sa - p;
     push(
       x,
       y,
       z,
-      p + d * ax[0] * ax[0],
-      d * ax[0] * ax[1],
-      d * ax[0] * ax[2],
-      p + d * ax[1] * ax[1],
-      d * ax[1] * ax[2],
-      p + d * ax[2] * ax[2],
+      p + d * u * u,
+      d * u * v,
+      d * u * w,
+      p + d * v * v,
+      d * v * w,
+      p + d * w * w,
       col,
       a,
-      an
+      an,
+      recordNormal ? [u, v, w] : null
     );
   }
-  const disc = (x, y, z, nrm, st, sn, col, a, an) => {
-    curN = nrm;
-    axial(x, y, z, nrm, sn, st, col, a, an);
-    curN = null;
-  };
+  const disc = (x, y, z, nrm, st, sn, col, a, an) => axial(x, y, z, nrm, sn, st, col, a, an, true);
   const stick = (x, y, z, ax, sl, sw, col, a, an) => axial(x, y, z, ax, sl, sw, col, a, an);
   /* a dab that is longer one way across the surface than the other (S.follow lays these along the form): nrm the way the surface
      faces, e the long way (across the surface), sa and sb its two half-widths, sn its thickness */
@@ -527,7 +539,6 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       A = sa * sa,
       Bq = sb * sb,
       C = sn * sn;
-    curN = nrm;
     push(
       x,
       y,
@@ -540,9 +551,9 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       A * e[2] * e[2] + Bq * fz * fz + C * nrm[2] * nrm[2],
       col,
       a,
-      an
+      an,
+      nrm
     );
-    curN = null;
   };
 
   let Lv = norm([-0.45, 0.75, 0.5]);

@@ -95,3 +95,18 @@ ink.render(world, {
 The same fields can live in `world.liveSun`. To animate them, supply a function of render seconds for either field. It can return a preset, a settings object, or `false`. Omit both to use the original neutral ambient light. Set `intensity: 0` on the sun to use hemisphere fill without direct sunlight.
 
 Bounce follows each posed world normal. Upward faces receive the upper fill, undersides receive the lower fill, and vertical faces receive a mix. Bounce adds diffuse light in shadows independently of the directional shadow map. Pixel materials read their normal ramp brightness and carry the bounce tint into colour resolution. A fixed export palette limits the available tints, so use `--raw` to preview a new colour choice.
+
+
+## Baked shadow march
+
+For a JSON scene, set `finish.shadowMarch` before baking. For example,
+`"shadowMarch": { "steps": 128, "distance": 42 }` lets the sculpt trace a sun
+shadow farther across a large set. `steps` is the maximum number of samples
+per baked directional or point-light shadow ray and defaults to 20.
+Use an integer from 0 to 4096. Zero turns off baked shadow marching.
+`distance` is the maximum directional ray length in world units and defaults
+to 16. A point light's shadow ray ends at the light.
+
+When programming a sculpt directly, set `S.shSteps` and `S.shLen` before
+`S.bake()`. A long directional shadow needs enough steps and enough distance
+to reach its caster. Higher step counts can increase bake time.

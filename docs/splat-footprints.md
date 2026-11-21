@@ -35,6 +35,7 @@ const world = B.finish();
 All profiles accept `rotation` (radians, −2π through 2π), `stretch: [x,y]` (each .1–4), and `softness` (0–.5). Defaults are 0, `[1,1]` and .08. Positive rotation is counterclockwise in the projected mark plane, whose +Y points up. Masks map their full raster onto the normalized square; alpha ≥128 is inside. Transparent holes and an entirely empty mask are supported. Softness adds a signed-distance feather around the silhouette.
 
 A unit footprint fits the original Gaussian's half-density radius. Stretch transforms the footprint independently of the splat's geometry. A symmetric covariance square root supplies a continuous projected basis, avoiding sudden axis flips when covariance eigenvalues become equal. These are individual projected marks; they do not impose a shared tile grid on a scene.
+
 ## Existing worlds and animation
 
 ```js

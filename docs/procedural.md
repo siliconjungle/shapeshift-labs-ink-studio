@@ -3681,6 +3681,12 @@ a known affine fragment in one prism. Otherwise `step` controls tessellation.
 and fragment perimeter as `exterior`. Triangulation seams stay unmarked
 so callers can add contact clearance without widening the seams.
 
+### Oriented builder splats
+
+`B.axial`, `B.disc`, and `B.stick` accept a nonzero axis with three finite numeric
+components. They normalize it before computing the splat covariance. A disc's
+stored normal uses the same unit direction. Use `B.iso` for round splats.
+
 ### Captured lighting for a host renderer
 
 Call `KIT.light.capture(B, S)` before baking and `KIT.light.pack(stage, capture,
@@ -3696,7 +3702,8 @@ row and a palette ramp table. Both arrays are interleaved float32 vectors:
 the lighting calculation selects, or −1 for an uncaptured row. Supply the
 current position and a unit normal matching that pose. A host using the stage
 rig's convention applies the normal's part matrix and normalizes the result.
-Part IDs are those of the bound stage rig. Repack after changing part ownership,
+Part IDs are those of the bound stage rig. Both `KIT.light.pack` and
+`KIT.light.system` check `sun.parts` against its bound part names. Repack after changing part ownership,
 the capture, the baked reference lighting, or the selected sun parts.
 
 Include `KIT.light.glsl` in a high-precision GLSL shader. Start with the stored

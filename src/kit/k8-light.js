@@ -46,7 +46,17 @@
     if (!(keep >= 0) || typeof keep !== 'number') throw new RangeError('Sun keep must be nonnegative');
     const delta = keep === Infinity;
     const parts = new Set();
-    if (sun && st.rig) for (const name of sun.parts ?? []) parts.add(st.rig.part(name));
+    const names = sun?.parts ?? [], rig = st.rig;
+    if (typeof names === 'string' || typeof names[Symbol.iterator] !== 'function')
+      throw new TypeError('Sun parts must be a list of rig part names');
+    for (const name of names) {
+      if (typeof name !== 'string' || !name.trim()) throw new TypeError('Sun parts need nonempty rig part names');
+      // rig.part() declares a part on a miss. Guard the lookup so typos cannot change a bound rig.
+      const id = rig?.has?.(name) === false ? undefined : rig?.part?.(name);
+      if (!Number.isSafeInteger(id) || id <= 0 || rig.M && id >= rig.M.length / 12)
+        throw new RangeError('Unknown bound rig part in sun.parts: ' + name);
+      parts.add(id);
+    }
     return { keep, delta, parts };
   }
 
@@ -202,7 +212,7 @@ bool capturedAtRest(float baked, float base, float additional) {
       return cap;
     },
     system(st, cap, lights, o) {
-      o = o || {};
+      const sun = o?.sun ?? null, settings = sunSettings(st, sun);
       const N = st.N,
         D = st.D,
         has = new Uint8Array(N),
@@ -238,9 +248,7 @@ bool capturedAtRest(float baked, float base, float additional) {
         work = [],
         wasFlash = false;
       if (st.rig) for (const i of list) if (st.rig.bid[i]) movers.push(i);
-      const sun = o.sun || null,
-        settings = sunSettings(st, sun),
-        live = new Uint8Array(N),
+      const live = new Uint8Array(N),
         fine = new Float32Array(N),
         baked = settings.delta ? new Int32Array(N).fill(-1) : null,
         palette = baked ? bakedPalette(st) : null;

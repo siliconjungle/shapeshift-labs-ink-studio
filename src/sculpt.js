@@ -5,8 +5,25 @@
    the combined surface, and coloured from a material ramp using the
    surface normal, a cast shadow, ambient occlusion and nearby lamps.
    ------------------------------------------------------------------ */
+function bakedShadowMarch(settings = {}) {
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings) ||
+      Object.keys(settings).some(key => key !== 'steps' && key !== 'distance'))
+    throw new TypeError('Shadow march accepts steps and distance');
+  const { steps = 20, distance = 16 } = settings;
+  if (!Number.isSafeInteger(steps) || steps < 0 || steps > 4096)
+    throw new RangeError('Shadow march steps must be an integer from 0 to 4096');
+  if (!Number.isFinite(distance) || distance < 0)
+    throw new RangeError('Shadow march distance must be finite and nonnegative');
+  return { steps, distance };
+}
+
 function makeSculpt(B, rest) {
-  const { P, n3, fbm, disc, stick, fib, TAU, clamp, norm, R } = B;
+  const { P, n3, fbm, stick, fib, TAU, clamp, norm, R } = B;
+  // A flat field sample supplies no normal. Its bake has round coverage.
+  const disc = (x, y, z, axis, radius, thickness, color, alpha, animation) =>
+    axis[0] === 0 && axis[1] === 0 && axis[2] === 0
+      ? B.iso(x, y, z, radius, color, alpha, animation)
+      : B.disc(x, y, z, axis, radius, thickness, color, alpha, animation);
   const detailBudget = B.detailBudget;
   const controlledMaterials = new WeakMap();
   function controlled(material) {
@@ -54,7 +71,8 @@ function makeSculpt(B, rest) {
   let gid = 1,
     own = null,
     ownNeg = null,
-    L = null;
+    L = null,
+    shadowMarch = bakedShadowMarch();
   const S = {
     res: 0.09,
     adaptiveSampling: false,
@@ -66,7 +84,8 @@ function makeSculpt(B, rest) {
     aoR: 0.14,
     aoK: 1.5,
     shK: 9,
-    shLen: 16,
+    shLen: shadowMarch.distance,
+    shSteps: shadowMarch.steps,
     wob: 0.05,
     fat: 0.46,
     /* inked detail: 0 is off. Set to 1 and every plain dab also carries a 4 by 4 picture of the surface under it (its pattern, the
@@ -933,7 +952,7 @@ function makeSculpt(B, rest) {
             sh = 1;
           if (coarse || PRB && (LSH === 0 || LSH === 1)) sh = LSH;
           else
-            for (let i = 0; i < 20 && tt < S.shLen; i++) {
+            for (let i = 0; i < shadowMarch.steps && tt < shadowMarch.distance; i++) {
               const h = shadowDistance(x + nx * 0.05 + L[0] * tt, y + ny * 0.05 + L[1] * tt, z + nz * 0.05 + L[2] * tt);
               if (h < 0.004) {
                 sh = 0;
@@ -970,7 +989,7 @@ function makeSculpt(B, rest) {
           if (probe && LLS[i] !== undefined) k2 = LLS[i];
           else {
             let tt = 0.08;
-            for (let k = 0; k < 20 && tt < dist - 0.12; k++) {
+            for (let k = 0; k < shadowMarch.steps && tt < dist - 0.12; k++) {
               const h = shadowDistance(
                 x + nx * 0.05 + (lx / dist) * tt,
                 y + ny * 0.05 + (ly / dist) * tt,
@@ -1913,6 +1932,7 @@ function makeSculpt(B, rest) {
     });
   }
   S.bake = () => {
+    shadowMarch = bakedShadowMarch({ steps: S.shSteps, distance: S.shLen });
     const override = typeof globalThis !== 'undefined' ? globalThis.INK_ADAPTIVE_SAMPLING : undefined;
     const sampling = !S.capture && SculptSampling.prepare(override ?? S.adaptiveSampling);
     const keepSdf = S.keepRenderSdf || (typeof globalThis !== 'undefined' && globalThis.INK_RETAIN_RENDER_SDF);
