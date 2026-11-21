@@ -30,6 +30,10 @@
       outputs:{value:'raster',indices:'raster'},
       run({source,palette,bank,options}){return E.bitplane(source,palette,{...options,bank:bank ?? options.bank});}
     },
+    'fx.paletteFault':{
+      inputs:{source:'raster',palette:'palette',options},outputs:{value:'raster',indices:'raster'},
+      run({source,palette,options}){return E.paletteFault(source,palette,options);}
+    },
     'fx.analyze':raster(E.analyze,{paths:'array<path>',points:'array<vec2>',regions:'array<record>',mask:'raster'})
   });
   delete P.pixelEffectSupport;

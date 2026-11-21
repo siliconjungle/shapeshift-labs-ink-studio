@@ -567,6 +567,7 @@ outside the original image.
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
+| `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -721,6 +722,33 @@ const { value, indices } = KIT.procedural.pixelEffects.bitplane(spriteIndices, p
 
 The [bitplane study](../examples/bitplane-corruption.cjs) compares all three
 modes on the same four-color sprite.
+
+### Apply a local palette fault
+
+```js
+const { value, indices } = KIT.procedural.pixelEffects.paletteFault(spriteIndices, palette, {
+  swaps: [[0, 3]],
+  stuck: { from: [1, 2], to: 0 },
+  mask: damagedArea
+});
+```
+
+Each pair in `swaps` exchanges the two original slot numbers. A `stuck`
+rule maps every listed `from` slot to `to`. Omit `from` to pin every
+slot under the mask to the same color. Source slots can appear in only
+one rule. Rules read the original index, so a stuck rule can land on a
+swapped slot without triggering the swap.
+
+Use the same one-channel indices, palette order, aligned `mask`,
+`maskChannel`, `maskThreshold`, and optional byte `alpha` raster as for a
+bitplane. Without a mask, the rules apply across the whole raster.
+Unlisted slots and transparent pixels keep their indices. Duplicate
+swatch colors retain their separate slot identities.
+
+In a graph, connect `source` and `palette` from `indexedPngAsset` or
+`palette.resolve`, and use `data.record` to pass the mask and alpha into
+`options`. The [palette fault study](../examples/local-palette-fault.cjs)
+compares a regional shade inversion with selected shades stuck on one slot.
 
 ### Trace paths and points
 
