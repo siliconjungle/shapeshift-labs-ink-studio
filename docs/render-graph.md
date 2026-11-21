@@ -275,6 +275,9 @@ Pass `resetRenderHistory: true` on a cut. Use `cameraMotion: "keep"` when
 camera movement should carry the screen-space trails through the shot.
 Live graph edits and presentation tracks can animate warp, gain and decay.
 
+Use [subject-attached feedback](motion-afterimages.md#subject-attached-feedback)
+to retain and resample marks in the receiver’s surface coordinates.
+
 ## Frame-age masks
 
 Each `frameAge` pass captures its image input at up to `fps` (default 12).

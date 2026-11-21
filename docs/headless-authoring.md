@@ -1550,6 +1550,7 @@ port to hide a layer during that hold.
 | `anim.visualSample` | Replay a [captured visual span](graph-clips.md#capture-a-reusable-visual-span) with independent timing, alpha, raw data, depth and motion. |
 | `anim.frameBank` | Retain and selectively refresh raster pixels. Outputs the banked image, the refresh mask, and the capture tick. |
 | `anim.datamosh` | Pull the previous image through signed motion and blend it with the current image. Outputs the image and retained weight. |
+| `anim.subjectFeedback` | Retain marks in a [subject’s UV or rest-space chart](motion-afterimages.md#subject-attached-feedback). Outputs the retained texture and deposit mask. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
 | `anim.captureTransforms` | Snapshot the pose channels of a `source` array of instance records with stable IDs. |
 | `anim.staleTransforms` | Patch independent pose channels on a `source` array using `edits` and optional named `snapshots`. Returns the edited array and an applied/skipped count. |
