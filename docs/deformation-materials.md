@@ -22,6 +22,8 @@ The editor's `setSurfaceState(state, keys)` retains the charts in the scene and 
 
 Procedural sculpts can compile the same projection with `KIT.procedural.surfaceState.projection(state)` and attach it to a material with `surfaceState.bind(material, locator, builder.P)`.
 
+For deformation driven by tracked points or raster silhouettes, wire the same rest geometry and surface marks into [motion-driven deformation](headless-authoring.md#motion-driven-deformation).
+
 ## Simulated bodies and cloth
 
 Mechanics bodies use named face charts. `surface-stamp` addresses a body and local face UV. A reshaped body keeps its original chart, and fracture pieces keep only their exterior chart windows. Fresh interior faces start dry and unmarked.

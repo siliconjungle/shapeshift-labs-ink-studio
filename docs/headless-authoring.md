@@ -1512,6 +1512,52 @@ read the original buffers. To request motion, use a prior
 `scene.render` with `captureMotion: true` in its options and connect its
 `motionReference` to the next render’s `options.motionFrom`.
 
+### Motion-driven deformation
+
+Feed `fx.regionObservations` into `motion.landmarks` to turn tracked
+features into paired `{from, to}` XY landmarks. Host tracking can supply
+the same timestamped point records described in [tracked drawing anchors](#tracked-drawing-anchors).
+
+A binding has a unique `id`, a `rest: [x,y]` point, and the stable
+`track` ID to follow. It can use the region's center, `boundsAnchor`,
+or `silhouetteDirection: [dx,dy]`. A silhouette direction finds the
+outermost intersection of a ray from the region center with its contour.
+Set `options.contours: true` on `fx.regionObservations` when using silhouette
+directions. Rays are expressed in image axes, with positive Y down.
+
+Bindings support the same `offset`, `smoothing`, `lag`, `hold`, and
+`minConfidence` settings as drawing anchors. A missing landmark holds for
+its configured duration and then uses its rest point. Omit `track` from
+a binding to pin its rest point throughout the shot. The graph clock or
+`options.time` samples the clip. The `landmarks` port reports each
+position and its `tracked`, `held`, `hidden`, or `pinned` status.
+
+| Consumer | Connect the landmark output to |
+| --- | --- |
+| `geo.motionMesh` | `control`. Mesh positions deform in a planar chart. UVs, vertex colors, material slots and indices stay bound to the same vertices and faces, and authored normals follow the local deformation. |
+| `rig.skinSprite` | `motion`. The bound sprite vertices and joints are first posed by their bones, then deformed in output pixels. The source artwork is sampled through the resulting mesh in one pass. |
+| `scene.motionSplats` | `control`. Select baked rows with `ids`. The node returns a new world and carries each selected row's covariance and authored brush axes along with its center. |
+
+The mesh and splat nodes use XY by default. Set
+`options.chart: {origin, u, v}` to place the landmarks on a different plane.
+The XYZ vectors `u` and `v` are one tracking pixel wide and tall. Depth out
+of the chart plane is retained. Interpolation reaches the authored controls
+and blends their displacement in between. Large offsets between nearby
+handles can fold a surface.
+
+For live hosts that already own a rig or splat world, sample
+`KIT.procedural.motionDeformation.track(observations, bindings)` and pass
+the sampled control to `KIT.deform.motion(control, {chart})`. Use the
+resulting map with the native `deform.rest` and `deform.apply` APIs or
+the stage's deformation skin. Keep one rest snapshot per selected group
+so repeated samples start from the authored shape.
+
+[Browser demo](../examples/motion-driven-deformation.cjs)
+
+```sh
+node examples/motion-driven-deformation.cjs motion-deformation.html
+```
+
 ### 2D skeletal sprites
 
 Bind a `source` raster with `rig.bindSprite`. Bones use named `id`, optional

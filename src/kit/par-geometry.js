@@ -103,9 +103,12 @@
       ...value('record', ({ tracks, options }, { time }) => A.spritePose(tracks, options.time ?? time))
     },
     'rig.skinSprite': {
-      inputs: { source: 'raster', bind: 'record', pose: options, options },
+      inputs: { source: 'raster', bind: 'record', pose: options,
+        motion: { type: 'record', default: {}, description: 'Optional rest and posed XY landmarks in output pixels.' },
+        options },
       outputs: { value: 'raster', field: 'raster', points: 'points', joints: 'record' },
-      run: ({ source, bind, pose, options }) => A.skinSprite(source, bind, pose, options)
+      run: ({ source, bind, pose, motion, options }) => A.skinSprite(source, bind, pose,
+        Object.keys(motion).length ? { ...options, motion } : options)
     }
   });
   delete P.sceneGraphSupport;

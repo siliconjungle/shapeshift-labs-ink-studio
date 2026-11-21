@@ -14,12 +14,14 @@
     const seen = new Set();
     let total = 0;
     return P.data.freeze(P.data.clone(input)).map(binding => {
-      const { id: name, track, offset = [0, 0], boundsAnchor, smoothing = 0, lag = 0, hold = 0, minConfidence = 0,
+      const { id: name, track, offset = [0, 0], boundsAnchor, silhouetteDirection, smoothing = 0, lag = 0, hold = 0, minConfidence = 0,
         commands = [], masks = [] } = binding ?? {};
       if (!id(name) || !id(track) || seen.has(name) || !point(offset) ||
           boundsAnchor !== undefined && !pair(boundsAnchor, 0, 1) ||
+          silhouetteDirection !== undefined && (boundsAnchor !== undefined || !point(silhouetteDirection) ||
+            Math.hypot(...silhouetteDirection) < 1e-9) ||
           ![smoothing, lag, hold].every(n => number(n, 0, 60)) || !number(minConfidence, 0, 1))
-        throw new RangeError('Invalid drawing anchor ID, offset, or timing settings');
+        throw new RangeError('Invalid drawing anchor ID, position, or timing settings');
       for (const list of [commands, masks]) {
         if (!Array.isArray(list) || !list.every(draw => record(draw) &&
             (draw.translate === undefined || point(draw.translate))))
@@ -28,24 +30,35 @@
       }
       if (total > 8192) throw new RangeError('Tracked anchors exceed the drawing command budget');
       seen.add(name);
-      return { name, track, offset, boundsAnchor, smoothing, lag, hold, minConfidence, commands, masks };
+      const direction = silhouetteDirection?.map(n => n / Math.hypot(...silhouetteDirection));
+      return { name, track, offset, boundsAnchor, direction, smoothing, lag, hold, minConfidence, commands, masks };
     });
   }
 
   function prepareObservations(observations) {
-    let previous = -Infinity, count = 0;
+    let previous = -Infinity, count = 0, vertices = 0;
     return Array.from(observations, entry => {
       const { time, regions } = entry ?? {};
       if (!number(time, -1e9, 1e9) || time - previous < 1e-6 || !Array.isArray(regions) || regions.length > 128)
         throw new RangeError('Anchor observations need increasing times and bounded feature records');
       const features = new Map();
       for (const region of regions) {
-        const { id: key, center, confidence = 1, bounds } = region ?? {};
+        const { id: key, center, confidence = 1, bounds, contours } = region ?? {};
         if (!id(key) || features.has(key) || !point(center) || !number(confidence, 0, 1) ||
             bounds !== undefined && (!point([bounds?.x, bounds?.y]) ||
               !number(bounds.width, 0, 1e9) || !number(bounds.height, 0, 1e9)))
           throw new RangeError('Invalid or duplicate anchor feature');
-        features.set(key, { center, bounds, confidence });
+        if (contours !== undefined) {
+          if (!Array.isArray(contours) || contours.length > 65536) throw new RangeError('Invalid anchor feature contours');
+          for (const ring of contours) {
+            const { points, closed } = ring ?? {};
+            if (!Array.isArray(points) || points.length < 3 || closed !== true || !Array.from(points).every(point))
+              throw new RangeError('Anchor feature contours need closed XY rings');
+            vertices += points.length;
+            if (vertices > 262144) throw new RangeError('Anchor observations exceed the contour vertex budget');
+          }
+        }
+        features.set(key, { center, bounds, confidence, contours });
       }
       count += regions.length;
       if (count > 262144) throw new RangeError('Anchor observations exceed the feature record budget');
@@ -54,8 +67,21 @@
     });
   }
 
+  function silhouette({ center: [x, y], contours }, [u, v]) {
+    let distance = -Infinity;
+    for (const { points } of contours ?? []) for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length], dx = b[0] - a[0], dy = b[1] - a[1];
+      const cross = u * dy - v * dx;
+      if (Math.abs(cross) < 1e-12) continue;
+      const ax = a[0] - x, ay = a[1] - y, fraction = (ax * v - ay * u) / cross;
+      if (fraction >= -1e-9 && fraction <= 1 + 1e-9) distance = Math.max(distance, (ax * dy - ay * dx) / cross);
+    }
+    return distance >= 0 ? [x + u * distance, y + v * distance] : null;
+  }
+
   function measured(feature, anchor) {
     if (!feature || feature.confidence < anchor.minConfidence) return null;
+    if (anchor.direction) return silhouette(feature, anchor.direction);
     if (!anchor.boundsAnchor) return feature.center;
     if (!feature.bounds) return null;
     const { x, y, width, height } = feature.bounds;

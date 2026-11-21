@@ -113,9 +113,11 @@
   function skinSprite(source, bind, pose = {}, options = {}) {
     if (!valid(source) || source.width !== bind?.width || source.height !== bind?.height || !record(pose))
       throw new TypeError('Sprite skin needs the original raster dimensions, a bind and a pose');
-    const { width = source.width, height = source.height, filter = 'nearest', ...settings } = options;
+    const { width = source.width, height = source.height, filter = 'nearest', motion, ...settings } = options;
     pixels(width, height);
     const geometry = bindSprite(source, bind.bones, { mesh: { points: bind.points, triangles: bind.triangles }, weights: bind.weights });
+    const deform = motion === undefined ? point => point : P.motionDeformation.map2D(motion);
+    if (motion !== undefined) P.motionDeformation.visitBudget(geometry.points.length + 2 * geometry.bones.length, deform);
     const bones = new Map(), ids = new Set(geometry.bones.map(bone => bone.id));
     if (Object.keys(pose).some(id => !ids.has(id))) throw new RangeError('Sprite pose references an unknown bone');
     for (const { id, pivot, parent } of geometry.bones) {
@@ -131,16 +133,17 @@
         out[0] += x * weight;
         out[1] += y * weight;
       }
-      if (!vector(out, 2)) throw new RangeError('Sprite deformation exceeds coordinate limits');
-      return out;
+      const moved = deform(out);
+      if (!vector(moved, 2)) throw new RangeError('Sprite deformation exceeds coordinate limits');
+      return moved;
     });
     const from = geometry.points.map(([x, y]) => [x / source.width, y / source.height]);
     const to = points.map(([x, y]) => [x / width, y / height]);
     const result = P.rasterWarp.mesh(source, { from, to, triangles: geometry.triangles },
       { ...settings, width, height, filter, edge: settings.edge ?? 'transparent' });
     const joints = Object.fromEntries(geometry.bones.map(({ id, pivot, tip }) => [id, {
-      pivot: T.point(bones.get(id), restVector(pivot)).slice(0, 2),
-      tip: T.point(bones.get(id), restVector(tip)).slice(0, 2)
+      pivot: deform(T.point(bones.get(id), restVector(pivot)).slice(0, 2)),
+      tip: deform(T.point(bones.get(id), restVector(tip)).slice(0, 2))
     }]));
     return { ...result, points, joints };
   }

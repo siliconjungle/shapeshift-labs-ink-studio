@@ -15,16 +15,23 @@
       throw new RangeError('Region tracking needs same-size frames within its sequence pixel budget');
   }
 
-  E.regionObservations = function regionObservations(frames, { fps = 12, ...settings } = {}) {
+  E.regionObservations = function regionObservations(frames, { fps = 12, contours = false, ...settings } = {}) {
+    if (typeof contours !== 'boolean') throw new TypeError('Region observation contours must be a boolean');
     trackSequence(frames);
     P.animationGraph.frameIndex(frames.length, 0, { fps });
     const tracker = E.createRegionTracker(settings);
-    let regions = 0;
+    let regions = 0, vertices = 0;
     return P.data.freeze(frames.map((source, frame) => {
       const time = frame / fps, { value } = tracker.update(source, time);
       regions += value.length;
       if (regions > 262144) throw new RangeError('Region observations exceed the tracking record budget');
-      return { time, regions: value.map(({ id, center, bounds, confidence }) => ({ id, center, bounds, confidence })) };
+      return { time, regions: value.map(({ id, center, bounds, confidence, contours: outline }) => {
+        if (contours) {
+          for (const ring of outline) vertices += ring.points.length;
+          if (vertices > 262144) throw new RangeError('Region observations exceed the contour vertex budget');
+        }
+        return { id, center, bounds, confidence, ...(contours && { contours: outline }) };
+      }) };
     }));
   };
 

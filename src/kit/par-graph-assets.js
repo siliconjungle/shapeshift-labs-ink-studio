@@ -228,6 +228,7 @@
     ...P.graph.arrays.operations,
     ...P.raster.operations,
     ...P.drawing2d.operations,
+    ...P.motionDeformation.operations,
     ...P.rasterColor.operations,
     ...P.pixelEffects.operations,
     ...P.rasterWarp.operations,

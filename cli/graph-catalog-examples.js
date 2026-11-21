@@ -7,6 +7,7 @@ const palette = ['#102032', '#3c87be', '#f2be6e'];
 const slots = { ...mask, data: mask.data.map(value => value ? 1 : 0) };
 const motion = { width: 4, height: 4, channels: 2, data: Array.from({ length: 16 }, () => [.5, 0]).flat() };
 const bone = { id: 'root', pivot: [0, 0], tip: [3, 3] };
+const motionControl = { from: [[0, 0], [3, 2]], to: [[0, 0], [3, 3]] };
 const triangle = [[0, 0], [1, 0], [0, 1]], quad = [[0, 0], [1, 0], [0, 1], [1, 1]];
 const mesh = { points: [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], faces: [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]] };
 const clip = { width: 4, height: 4, fps: 8, layers: { ink: { frames: [rgba.data, rgba.data] } } };
@@ -97,6 +98,13 @@ const specifications = {
   'proc.horizon': { inputs: { bands: [{ id: 'shore', radius: 20, height: [0, 4], source: rgba }] } },
   'geo.triangulate': { inputs: { rings: [triangle] } },
   'geo.clip': { inputs: { planes: [{ normal: [1, 0, 0], offset: .3 }] } },
+  'motion.landmarks': {
+    nodes: { observations: { op: 'fx.regionObservations', inputs: { frames: [mask, mask], options: { contours: true } } } },
+    inputs: { observations: link('observations'),
+      bindings: [{ id: 'edge', track: 1, rest: [2, 2], silhouetteDirection: [1, 0] }] }
+  },
+  'geo.motionMesh': { inputs: { control: motionControl } },
+  'scene.motionSplats': { inputs: { ids: [0], control: motionControl } },
   'geo.scrambleIndices': { inputs: { options: { maxDisplacement: 1.5, amount: .5 } } },
   'sdf.bound': { inputs: { bounds: { min: [-1, -1, -1], max: [1, 1, 1] } } },
   'sdf.combine': { nodes: {
