@@ -9,6 +9,7 @@
     "index.js",
     "webgl.mjs",
     "webgpu.mjs",
+    "show-control.mjs",
     "src/",
     "cli/",
     "scripts/",

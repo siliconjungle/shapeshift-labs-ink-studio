@@ -914,6 +914,25 @@ const worldCLI = () => require('./world.js')({kit:lib(),build,pose,dataScene,opt
   weatherTracksOption:() => onOffOption('weather-tracks'),skyOptions,cameraOptions,compositeOption,colorClustersOption,shot,shotReplay,shotRender});
 const worldCommands = new Set(['inspect','probe','trace','field','data-inputs','scene','sim']);
 const CMD = {
+  async 'show-bridge'() {
+    const dmxHost = opt['dmx-host'], protocol = opt['dmx-protocol'] ?? 'artnet', oscHost = opt['osc-host'];
+    if (pos.length || !Object.keys(opt).every(name => [
+      'port', 'osc-in', 'input-host', 'art-timecode-in', 'dmx-host', 'dmx-protocol', 'dmx-port', 'universe', 'osc-host', 'osc-port'
+    ].includes(name)) || Object.values(opt).some(value => value === true))
+      die('Usage: ink-studio show-bridge [--port 8181] [--dmx-host IP] [--dmx-protocol artnet|sacn]');
+    const bridge = await require('./show-bridge.js').createShowBridge({
+      port: num('port', 8181), oscInput: num('osc-in', 9002), inputHost: opt['input-host'],
+      artTimecodeInput: num('art-timecode-in'),
+      dmx: dmxHost && { host: dmxHost, protocol, universe: num('universe', protocol === 'artnet' ? 0 : 1), port: num('dmx-port') },
+      oscOutput: oscHost && { host: oscHost, port: num('osc-port', 9000) }
+    });
+    console.log('Ink Show Control ' + bridge.url);
+    console.log('OSC input UDP ' + bridge.oscPort + (bridge.artTimecodePort ? ' · ArtTimeCode UDP ' + bridge.artTimecodePort : ''));
+    if (dmxHost) console.log('Stage output configured and disarmed');
+    const stop = () => { void bridge.close().catch(error => { console.error(error.message); process.exitCode = 1; }); };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+  },
   help() {
     console.log(
       [
@@ -998,6 +1017,8 @@ const CMD = {
         '    --input-out-of-range preserve|clamp|error --output-out-of-range preserve|clamp|error --domain-policy clamp|error|extrapolate',
         '',
         '  scenes                      list every diorama',
+        '  show-bridge [--port 8181] [--osc-in 9002]   open live audio, timecode, stage and projection control',
+        '    --dmx-host IP --dmx-protocol artnet|sacn --universe N   configure a physical lighting destination',
         '  catalog [words]             what the toolkit can do, searchable',
         '  stats <id>                  splat counts, colours used, size, cost per frame, warnings',
         '  render <id> [--t 1.5]       one PNG rendered on the CPU',

@@ -50,6 +50,16 @@
       ]
     },
     {
+      "id": "studio.show-control",
+      "kind": "api",
+      "status": "ready",
+      "title": "Route live audio, sync show clocks, map projectors and control lighting",
+      "what": "Mix and meter Web Audio buses, follow MIDI Clock and optional Ableton Link, decode MTC, LTC and ArtTimeCode, warp overlapping projection surfaces, and route OSC and DMX through a local bridge.",
+      "use": "ink-studio show-bridge",
+      "where": "show-control.mjs, cli/show-bridge.js, docs/show-control.md, examples/live-show/",
+      "tags": ["audio", "show", "timecode", "midi", "link", "projection", "lighting", "dmx", "osc"]
+    },
+    {
       "id": "studio.webgl",
       "kind": "api",
       "status": "ready",

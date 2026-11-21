@@ -29,6 +29,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Reflections, ripples and atmosphere](#reflections-ripples-and-atmosphere)
 - [Embedding and custom scene collections](#embedding-and-custom-scene-collections)
 - [Browser renderer](#browser-renderer)
+- [Live show control](#live-show-control)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)
@@ -995,6 +996,14 @@ Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable 
 
 ```sh
 npx ink-studio render scan.spz --raw --out preview.png
+```
+
+## Live show control
+
+Use the [Signal Room demo](docs/show-control.md#run-signal-room) to mix live audio, follow MIDI Clock or Ableton Link, decode SMPTE timecode, map a projection, and preview DMX fixtures. The [show control guide](docs/show-control.md) covers the browser API, the local bridge, and optional Art-Net, sACN and OSC hardware connections.
+
+```sh
+npx ink-studio show-bridge
 ```
 
 ## Screen transitions

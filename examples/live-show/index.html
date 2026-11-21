@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Ink Studio Signal Room</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <p class="studio">SHAPESHIFT LABS / INK STUDIO</p>
+  <h1>Signal Room</h1>
+  <p>Audio, clock, projection and lights in one live patch.</p>
+  <div class="toolbar">
+    <button type="button" id="play" class="primary">Start audio demo</button>
+    <label class="switch"><input type="checkbox" id="monitor"> Monitor mix</label>
+    <span id="audio-status" role="status">Audio stopped</span>
+  </div>
+</header>
+<main>
+  <section class="projection" aria-labelledby="projection-title">
+    <div class="heading"><h2 id="projection-title">Projection</h2><button type="button" id="project">Open projector</button></div>
+    <div class="screen">
+      <canvas id="mapped" width="920" height="504" aria-label="Live visuals projected on two editable surfaces"></canvas>
+      <svg id="guides" viewBox="0 0 920 504" aria-label="Draggable projection corners"></svg>
+    </div>
+    <div class="tools">
+      <label>Surface <select id="surface"><option value="0">Left</option><option value="1">Right</option></select></label>
+      <label>Edge blend <input type="range" id="blend" min="0" max=".45" step=".01" value=".23"></label>
+      <label class="switch"><input type="checkbox" id="guide-toggle" checked> Guides</label>
+      <button type="button" id="reset-map">Reset corners</button>
+      <button type="button" id="save-map">Save mapping</button>
+      <label class="file-button">Load mapping <input type="file" id="load-map" accept=".json,application/json"></label>
+    </div>
+    <p id="map-status" class="status" role="status">Drag the corners to fit a surface.</p>
+  </section>
+  <div class="panels">
+    <section aria-labelledby="mix-title">
+      <div class="heading"><h2 id="mix-title">Audio mixer</h2><output id="rms">— dBFS</output></div>
+      <canvas id="wave" width="420" height="100" aria-label="Main bus waveform"></canvas>
+      <label class="channel"><span>Pulse</span><input id="pulse-gain" type="range" min="0" max="1" step=".01" value=".75"><meter id="pulse-meter" min="0" max="1" value="0"></meter></label>
+      <label class="channel"><span>Harmonics</span><input id="tone-gain" type="range" min="0" max="1" step=".01" value=".6"><meter id="tone-meter" min="0" max="1" value="0"></meter></label>
+      <div class="tools">
+        <label class="file-button">Open audio <input type="file" id="audio-file" accept="audio/*"></label>
+        <button type="button" id="mic">Add microphone</button>
+        <button type="button" id="stop-file" hidden>Stop audio file</button>
+      </div>
+    </section>
+    <section aria-labelledby="clock-title">
+      <div class="heading"><h2 id="clock-title">Clock</h2><output id="bpm">120.0 BPM</output></div>
+      <div class="clock-face">
+        <output id="timecode">01:00:00:00</output>
+        <div id="beats" aria-label="Four-beat phase"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="tools">
+        <label class="visually-hidden" for="clock-source">Clock source</label>
+        <select id="clock-source">
+          <option value="demo">Demo MIDI Clock</option>
+          <option value="midi">MIDI Clock / MTC input</option>
+          <option value="link">Ableton Link</option>
+          <option value="ltc-demo">Demo LTC waveform</option>
+          <option value="ltc">LTC microphone / line input</option>
+          <option value="art">ArtTimeCode input</option>
+        </select>
+        <label>LTC rate <select id="fps"><option value="23.976">23.976</option><option>24</option><option>25</option><option value="29.97">29.97 DF</option><option selected>30</option></select></label>
+      </div>
+      <div class="tools"><button type="button" id="midi-connect">Connect MIDI</button><select aria-label="MIDI input" id="midi-input" disabled></select></div>
+      <p id="clock-status" class="status" role="status">Simulated MIDI ticks and frame count.</p>
+    </section>
+  </div>
+  <section class="stage" aria-labelledby="stage-title">
+    <div class="heading"><h2 id="stage-title">Stage</h2><output id="stage-mode">Simulation</output></div>
+    <div id="fixtures" class="fixtures"></div>
+    <div class="tools">
+      <button type="button" class="cue" data-cue="0" aria-pressed="true">Cobalt</button>
+      <button type="button" class="cue" data-cue="1" aria-pressed="false">Ember</button>
+      <button type="button" class="cue" data-cue="2" aria-pressed="false">Violet</button>
+      <label>Master <input type="range" id="master" min="0" max="1" step=".01" value=".75"></label>
+      <button type="button" id="blackout" aria-pressed="false">Blackout</button>
+      <button type="button" id="arm" disabled>Arm hardware</button>
+    </div>
+    <p id="stage-status" class="status" role="status">Three RGB fixtures · 12 DMX channels</p>
+  </section>
+</main>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

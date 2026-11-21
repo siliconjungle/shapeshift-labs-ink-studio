@@ -21,3 +21,7 @@ export { mountCausalInspection } from './src/webgl/causal-inspection-view.mjs';
 export { createBrowserSimulationWorkers } from './src/webgl/simulation-workers.mjs';
 export { createWebGPUGraph, planWebGPUGraph } from './webgpu.mjs';
 export { decodeGaussianSplat, decodeGaussianPly, decodeGaussianSpz, gaussianSplatWorld } from './src/gaussian-splats.mjs';
+export {
+  createLiveAudioRouter, readTimecode, timecodeAt, createMidiTimecode, createMidiBeatClock, sampleLinkClock,
+  createLtcDecoder, projectionHomography, projectionPoint, createProjectionMapper, patchDmx, connectShowBridge
+} from './show-control.mjs';
