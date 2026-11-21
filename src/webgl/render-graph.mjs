@@ -157,8 +157,10 @@ void main() {
     vec2 donor = pixel - velocity * u_smearElapsed;
     if (strength <= 0.0 || any(lessThan(donor, vec2(0.0))) || any(greaterThanEqual(donor, u_size))) return;
     vec4 old = layerAt(u_history, u_captureHistory ? donor : pixel, u_size, false, u_budgetLinear);
-    float amount = u_captureHistory ? u_decay * strength : weight * u_opacity;
-    color = floor(mix(inputColor, old, amount) * 255.0 + .50001) / 255.0;
+    if (u_captureHistory) {
+      vec4 delta = (old - inputColor) * (u_decay * strength * 255.0);
+      color = inputColor + sign(delta) * floor(abs(delta) + .00001) / 255.0;
+    } else color = floor(mix(inputColor, old, weight * u_opacity) * 255.0 + .50001) / 255.0;
     return;
   }
   weight *= u_opacity;

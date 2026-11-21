@@ -115,7 +115,7 @@ module.exports = ({ KIT: K, makeBuilder }) => ({
       { id: 'corruptible', type: 'composite', isolated: true, layer: { rect: right, resolution: [w, h], source: feed } },
       { id: 'telemetry', type: 'mask', rect: [right[0], right[1], w, 13] },
       { id: 'decoder', type: 'motionSmear', input: 'corruptible', field: 'flow', refresh: 'telemetry',
-        blockSize: [12, 6], fieldScale: flowRange, halfLife: .54, cameraMotion: 'keep' },
+        blockSize: [12, 6], fieldScale: flowRange, halfLife: .4, cameraMotion: 'keep' },
       { id: 'compare', type: 'composite', input: 'clean', source: 'decoder' }
     ];
     return makeBuilder(seed, [0x151d31]).finish({

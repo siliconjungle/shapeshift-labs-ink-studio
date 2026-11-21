@@ -48,7 +48,11 @@ function smearFrame(node, work, input, field, refresh, output, weightAt, memory,
       const from = (Math.floor(y) * w + Math.floor(x)) * 4;
       const amount = decay && address(x, y) * decay;
       if (amount) FrameComposite.sample(old, donor[0] * W / w, donor[1] * H / h, color);
-      for (let c = 0; c < 4; c++) stamp[q + c] = Math.round(input[from + c] * (1 - amount) + color[c] * amount);
+      // Quantize the residual toward the clean sample so it can reach zero.
+      for (let c = 0; c < 4; c++) {
+        const clean = input[from + c], delta = (color[c] - clean) * amount;
+        stamp[q + c] = clean + Math.sign(delta) * Math.floor(Math.abs(delta) + 1e-5);
+      }
     }
     memory.save(stamp);
   }

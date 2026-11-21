@@ -18,7 +18,7 @@ function fixture({ makeBuilder }) {
   } });
   const graph = { passes: [
     colorLayer('flow', (x, time) => [time >= 2 || x % 2 === 0 ? 128 : x < 4 ? 255 : 0, 128, x < 8 ? 255 : 0, 255]),
-    colorLayer('clean', (x, time) => [time === 0 ? x * 20 : 200, 40, 90, 255]),
+    colorLayer('clean', (x, time) => [time === 0 ? x * 20 : 200, time === 0 ? 44 : 40, 90, 255]),
     { id: 'intra', type: 'mask', rect: [5, 0, 1, h] },
     { id: 'smear', type: 'motionSmear', field: 'flow', input: 'clean', refresh: 'intra',
       halfLife: 1, fieldScale: [1, 1], blockSize: [2, 1], cameraMotion: 'keep' }
@@ -53,13 +53,18 @@ test('smear transports premultiplied alpha and can keep an explicit display mask
   ];
   const plan = KIT.renderGraph.prepare({ passes });
   const world = {};
-  const draw = (time, rgba) => runGraph(plan, {
+  const draw = (time, rgba, active = plan) => runGraph(active, {
     w: 3, h: 1, rgba: Uint8Array.from(rgba), alpha: Uint8Array.of(rgba[3], rgba[7], rgba[11])
   }, world, time, null, null, null, { renderHistory });
   draw(0, [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 0]);
   const result = draw(1, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255]);
   assert.deepEqual([...result.rgb], [0, 0, 0, 255, 0, 0, 0, 0, 255]);
-  assert.deepEqual([...result.alpha], [0, 128, 255]);
+  assert.deepEqual([...result.alpha], [0, 127, 255]);
+  const stationary = KIT.renderGraph.prepare({ passes: [passes[0], { ...passes[1], velocity: [0, 0] }] });
+  for (let time = 2; time <= 8; time++) {
+    const recovered = draw(time, Array(12).fill(0), stationary);
+    if (time === 8) assert.deepEqual([...recovered.alpha], [0, 0, 0]);
+  }
 });
 
 test('history budgets and ordered dependencies include the motion and refresh maps', () => {
@@ -87,12 +92,13 @@ test('WebGL matches CPU block transport, clean refresh, duplicate times and a re
     const { world, graph, w, h } = makeFixture(kit);
     const draw = backend(w, h, { raw: true, offscreen: true });
     const row = Object.fromEntries(Array.from({ length: w }, (_, x) => [x, [x, 0]]));
-    const values = times.map(time => {
+    const colors = times.map(time => {
       draw.draw(world, { renderGraph: graph, time });
-      return Object.values(draw.sample(row)).map(color => color[0]);
+      return Object.values(draw.sample(row));
     });
     draw.close();
-    return { values };
+    return { values: colors.map(row => row.map(color => color[0])), recovered: colors[5].map(color => color[1]) };
   }, times);
   assert.deepEqual(result.values, expected);
+  assert.deepEqual(result.recovered, Array(10).fill(40));
 });
