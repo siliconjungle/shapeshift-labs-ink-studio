@@ -545,7 +545,7 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 
 ## Pixel effects and raster analysis
 
-These graph nodes take a typed `source` raster. The library exposes the
+Most of these graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
 effects return straight-alpha RGBA8 at the source dimensions. Tile remaps,
 scanline remaps, and block substitution preserve the source channel count
@@ -571,6 +571,7 @@ outside the original image.
 | `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
+| `fx.trackRegions` | Track connected regions across a sequence of `frames`. Outputs persistent region records, ID `labels`, source `frame`, and source `time`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -843,6 +844,46 @@ the traced paths and marks the component centroids.
 ```sh
 node examples/pixel-effects.cjs pixel-effects-review
 ink-studio graph run pixel-effects-review/pixel-effects.json --out pixel-effects-review/graph
+```
+
+### Track regions across frames
+
+`pixelEffects.createRegionTracker(options)` creates a tracker for a stream of
+same-size rasters. Call `tracker.update(source, timestamp)` with increasing
+timestamps in seconds, at least one microsecond apart. Call `tracker.reset()`
+when starting a new stream.
+
+The result's `value` array contains visible regions ordered by persistent ID.
+Each record contains `id`, `area`, pixel `bounds`, `center` in pixel
+coordinates, `velocity` in pixels per second, closed `contours` including
+holes, and a `confidence` score from zero to one. The numeric `labels`
+raster stores persistent IDs, with zero for the background. A new track
+starts with zero velocity and confidence of 0.5. Later scores reflect motion
+prediction, area similarity, and bounding-box overlap. Reacquired regions
+carry a score penalty for missed observations.
+
+Use the same `channel`, `threshold`, `connectivity`, `minArea`, and
+`invert` settings as `raster.components`. Set `maxDistance` (24 pixels by
+default) to bound the distance from the predicted center per frame.
+`minAreaRatio` (0.3) gates changes in region area. `maxMissed` (2) retains
+unseen tracks for that many frames so brief occlusions can preserve identity.
+`maxRegions` (32) caps the live pool, giving visible and most recently
+observed tracks priority. Each frame has a 500,000-pixel budget and a
+500,000-cell budget across the contour searches.
+
+For seekable clips, feed the frame array into `fx.trackRegions` and set
+`options.fps` to the source rate. It samples the graph clock, or
+`options.time` if supplied, with `hold` playback by default. Backward seeks
+replay associations from the start of the sequence, so the same source
+frame has the same labels after seeking or looping. The sequence has a
+64-million-pixel budget across its frames.
+
+The [browser example](../examples/persistent-region-tracking.cjs) overlays
+outlines, motion histories, and velocity arrows on three moving regions.
+Scrub across the missing frames to inspect a reacquired region.
+
+```sh
+node examples/persistent-region-tracking.cjs region-tracking.html
 ```
 
 ## Raster warps and 3D projection

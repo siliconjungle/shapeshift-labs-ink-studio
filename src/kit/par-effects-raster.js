@@ -56,6 +56,34 @@
       inputs:{source:'raster',palette:'palette',options},outputs:{value:'raster',indices:'raster'},
       run({source,palette,options}){return E.paletteFault(source,palette,options);}
     },
+    'fx.trackRegions': {
+      inputs: { frames: 'array<raster>', options },
+      outputs: { value: 'array<record>', labels: 'raster', time: 'number', frame: 'number' },
+      time: true,
+      instantiate() {
+        let tracker, priorFrames, priorOptions, last = -1, result;
+        const run = ({ frames, options }, { time }) => {
+          const { fps = 12, time: localTime = time, mode, ...settings } = options;
+          const { index } = P.animationGraph.frameIndex(frames.length, localTime, { fps, mode });
+          if (frames !== priorFrames || options !== priorOptions || index < last) {
+            const { width, height } = frames[0];
+            if (frames.length * width * height > 64e6 ||
+                frames.some(frame => frame.width !== width || frame.height !== height))
+              throw new RangeError('Region tracking needs same-size frames within its sequence pixel budget');
+            tracker = E.createRegionTracker(settings);
+            [priorFrames, priorOptions, last] = [frames, options, -1];
+          }
+          while (last < index) {
+            const frame = last + 1;
+            result = { ...tracker.update(frames[frame], frame / fps), frame };
+            last = frame;
+          }
+          return result;
+        };
+        run.clear = () => { tracker = priorFrames = priorOptions = result = undefined; last = -1; };
+        return run;
+      }
+    },
     'fx.analyze':raster(E.analyze,{paths:'array<path>',points:'array<vec2>',regions:'array<record>',mask:'raster'})
   });
   delete P.pixelEffectSupport;
