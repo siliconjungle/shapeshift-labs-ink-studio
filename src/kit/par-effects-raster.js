@@ -25,6 +25,7 @@
       run({source,bank,options},{seed,time}){return E.tileBleed(source,bank,{seed,time,...options});}
     },
     'fx.tileStrideSlip':raster(E.tileStrideSlip,{value:'raster',addresses:'raster'}),
+    'fx.scanlineRemap':raster(E.scanlineRemap,{value:'raster',addresses:'raster'}),
     'fx.bitplane':{
       inputs:{source:'raster',palette:'palette',bank:{type:'any',default:null},options},
       outputs:{value:'raster',indices:'raster'},

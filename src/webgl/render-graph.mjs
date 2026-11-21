@@ -149,9 +149,15 @@ void main() {
     } else {
       if (u_scanlines) {
         vec4 transform = texelFetch(u_rows, ivec2(0, int(pixel.y)), 0);
+        vec4 signal = texelFetch(u_rows, ivec2(1, int(pixel.y)), 0);
+        if (signal.a < 0.0) {
+          if (!u_over) color = inputColor * (1.0 - weight);
+          return;
+        }
+        if (signal.a > 0.0) sourcePixel.y = signal.a - 0.5;
         vec2 pivot = u_size * 0.5;
         sourcePixel = (sourcePixel - pivot) * transform.zw + pivot + transform.xy;
-        tint = texelFetch(u_rows, ivec2(1, int(pixel.y)), 0).rgb / 255.0;
+        tint = signal.rgb / 255.0;
       }
       sourcePixel += u_offset + u_amplitude * sin(pixel.yx * u_frequency + u_phase);
       if (u_wrap) sourcePixel = mod(sourcePixel, u_size);
@@ -281,7 +287,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           table = node.type === 'grade' && api.cube(node);
         const layer =
           node.layer && (!feedback || memory.capture) && api.layer(node, w, h, world, time, camera, gl, frame.time);
-        const scanlines = api.rowTable(node.rows, w, h, time);
+        const scanlines = api.rowTable(node.rows, w, h, time, node.rowEdits);
         const select = node.enabled && ownership && node.select && JSON.stringify(node.select);
         const opacity = node.opacity * (node.layer && !feedback ? (layer?.opacity ?? 0) : 1);
         if (layer?.gpu) textureUnit(1, layer.gpu.texture);

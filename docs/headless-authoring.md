@@ -547,8 +547,8 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 
 These graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
-effects return straight-alpha RGBA8 at the source dimensions. Tile
-scrambling preserves the source channel count and sample values. Bitplane
+effects return straight-alpha RGBA8 at the source dimensions. Tile and
+scanline remaps preserve the source channel count and sample values. Bitplane
 effects also expose the edited palette indices. Add
 transparent canvas margin before an effect when its coverage needs room
 outside the original image.
@@ -566,6 +566,7 @@ outside the original image.
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
+| `fx.scanlineRemap` | Repeat, skip, or blank whole rows with `options.edits`. The `addresses` output shows the source row for each destination row. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
 
@@ -692,6 +693,35 @@ For `fx.tileStrideSlip`, connect controls through `data.record`. Set
 changes on a chosen frame. The
 [tile stride study](../examples/tile-stride-slip.cjs) compares both controls
 and shows the actual source address of each sampled row start.
+
+### Repeat, skip, and blank scanlines
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.scanlineRemap(feed, {
+  edits: [
+    { mode: 'skip', start: 10, count: 2 },
+    { mode: 'repeat', start: 24, count: 4, source: 23 },
+    { mode: 'blank', start: 40 }
+  ]
+});
+```
+
+Each edit uses zero-based rows from the top of the raster. The default
+`count` is one. Skip ranges remove source rows and compact what remains
+upward. Any unfilled rows at the bottom are blank. Repeat and blank
+then override destination rows in the listed order. Repeat reads a
+single original source row, defaulting to the row above `start` or the
+first row when starting at zero. Blank rows are all zeros. Ranges clip
+at the frame edge, and a repeat from beyond the source produces a blank.
+
+`value` preserves dimensions, pivot, channels, and copied pixel
+samples. `addresses` is a one-channel raster, one sample wide, with
+`-1` for a blank row. In graphs, pass edits through the
+`fx.scanlineRemap` node's `options` input. Use
+[render graph row edits](render-graph.md#repeat-skip-and-blank-rows)
+to apply the same operations to a live scene.
+The [scanline study](../examples/scanline-repeat-dropout.cjs) compares
+each mode side by side.
 
 ### Corrupt a palette bitplane
 
