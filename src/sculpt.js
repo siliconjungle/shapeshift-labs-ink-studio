@@ -1799,11 +1799,12 @@ function makeSculpt(B, rest) {
     const fine = owner?.detailBudget?.fine;
     const collectFootprint = B.describeFootprint && (material.footprint !== undefined || material.top?.footprint !== undefined);
     const collectEngraving=material.engraving!==undefined||material.top?.engraving!==undefined||S.engraving!==undefined;
+    const collectPrint=material.screenPrint!==undefined||material.top?.screenPrint!==undefined||S.screenPrint!==undefined;
     const collectStyle = B.describePixelStyle && (material.pixelStyle || material.top?.pixelStyle);
-    if (!renderSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !material.optical && !material.top?.optical) return light(material, ...sample, undefined, fine);
+    if (!renderSdf && !capture && !B.describeSplats && !collectStyle && !collectFootprint && !collectEngraving && !collectPrint && !material.optical && !material.top?.optical) return light(material, ...sample, undefined, fine);
     const first = B.count();
     let effective = material, style, pair;
-    if (material.top || collectStyle || collectFootprint || collectEngraving) light(material, ...sample, (used, settings, shades) => {
+    if (material.top || collectStyle || collectFootprint || collectEngraving || collectPrint) light(material, ...sample, (used, settings, shades) => {
       effective = used;
       style = settings;
       pair = shades;
@@ -1819,6 +1820,7 @@ function makeSculpt(B, rest) {
     if (effective.footprint !== undefined) B.describeFootprint?.(first,end,effective.footprint);
     if (collectFootprint) B.describeFootprint?.(first, end, effective.footprint ?? material.footprint);
     if(collectEngraving)B.describeEngraving?.(first,end,effective.engraving??material.engraving??S.engraving);
+    if(collectPrint)B.describeScreenPrint?.(first,end,effective.screenPrint??material.screenPrint??S.screenPrint);
     if (effective.optical !== undefined) B.describeOptical?.(first, end, effective.optical);
     if (style) B.describePixelStyle?.(first, end, style, pair);
     const surfaceId = effective.surfaceId ?? (effective === material ? undefined : effective.surface?.id) ?? material.surfaceId;

@@ -101,6 +101,9 @@ const clockControls = { time: sampleTime, rate: property('number', {
   cues: property('array<record>', { constraints: { maxItems: 4096 },
     description: 'Parent-clock time and a new rate, source seek offset, or seek to parent time' }) };
 const clock = { ...clockControls, range: property('vec2', seconds, [0, 1]) };
+const blurTile = property('number|vec2|boolean', {unit: 'pixels', constraints: {
+  integer: true, min: 1, max: 1024, allowedBoolean: false, automaticAbovePixels: 1048576, automaticSize: 256
+}});
 const options = {
   'raster.channel': { channel: property('number|string', {}, 0) },
   'raster.crop': { x: property('number', pixelOffset), y: property('number', pixelOffset), ...size },
@@ -117,7 +120,13 @@ const options = {
   'draw.trackedAnchors': { time: sampleTime },
   'fx.regionObservations': { fps: sampleRate, contours: property('boolean', {}, false) },
   'motion.landmarks': { time: sampleTime },
-  'fx.pathBlur': { samples: property('number', limit(2, 128, true), 13),
+  'fx.kernelBlur': { tileSize: blurTile, kind: property('string', oneOf('gaussian', 'box'), 'gaussian'),
+    radius: property('number', pixelRange(0, 64), 2),
+    sigma: property('number', {unit: 'pixels', constraints: {exclusiveMin: 0}}),
+    kernel: property('array', {constraints: {entries: 'Odd dimensions up to 31 and nonnegative weights'}}),
+    edge: property('string', oneOf('clamp', 'transparent', 'wrap'), 'clamp') },
+  'fx.pathBlur': { tileSize: blurTile, edge: property('string', oneOf('clamp', 'transparent', 'wrap'), 'transparent'),
+    samples: property('number', limit(2, 128, true), 13),
     anchor: property('string', oneOf('start', 'center', 'end'), 'start'),
     falloff: property('string', oneOf('uniform', 'start', 'end'), 'uniform'), filter: warpFilter },
   'fx.outline': { outer: property('number', pixelRange(0, 128), 1), inner: property('number', pixelRange(0, 128), 0),

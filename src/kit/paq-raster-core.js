@@ -35,17 +35,28 @@
     const i = alphaIndex(source.channels);
     return i < 0 ? 1 : unit(source.data[at + i] / 255);
   };
+  function rgbaPixel(raster, pixel, out, offset) {
+    const src = pixel * raster.channels;
+    for (let c = 0; c < 3; c++) out[offset + c] = byte(readColor(raster, src, c));
+    out[offset + 3] = byte(255 * readAlpha(raster, src));
+  }
+  function rgbaReader(source) {
+    const raster = view(source), { width, height, pivot, channels, data } = raster;
+    const direct = channels === 4 && isByte(data);
+    return { width, height, pivot,
+      alpha: pixel => byte(255 * readAlpha(raster, pixel * channels)),
+      read: direct ? (pixel, out, offset = 0) => {
+        const at = pixel * 4;
+        for (let c = 0; c < 4; c++) out[offset + c] = data[at + c];
+      } : (pixel, out, offset = 0) => rgbaPixel(raster, pixel, out, offset) };
+  }
 
   function rgba(source) {
     const raster = view(source);
     const {width, height, channels, data, pivot} = raster;
     if (channels === 4 && isByte(data)) return image(width, height, 4, Uint8Array.from(data), pivot?.slice());
     const out = new Uint8Array(width * height * 4);
-    for (let i = 0; i < width * height; i++) {
-      const src = i * channels, dst = i * 4;
-      for (let c = 0; c < 3; c++) out[dst + c] = byte(readColor(raster, src, c));
-      out[dst + 3] = byte(255 * readAlpha(raster, src));
-    }
+    for (let i = 0; i < width * height; i++) rgbaPixel(raster, i, out, i * 4);
     return image(width, height, 4, out, pivot?.slice());
   }
 
@@ -230,6 +241,6 @@
     return remap(input, width, height, (x, y) => ys[y] * input.width + xs[x], pivot);
   }
 
-  P.raster = {canvas, rgba, channel, channels, math, mask, crop, resize, nineSlice};
+  P.raster = {canvas, rgba, rgbaReader, channel, channels, math, mask, crop, resize, nineSlice};
   P.rasterSupport = {dimensions, view, image, pair, byte, unit, clamp, aligned, readColor, readAlpha, coverage, remap};
 })(KIT.procedural);

@@ -118,7 +118,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let footprintBinding,engravingBinding;
     const engravingAPI=toolkit.KIT?.engraving;
     const airflow = toolkit.KIT?.procedural?.airflow, climateAPI = toolkit.KIT?.environmentFrame;
-    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow, footprintGLSL:footprintAPI?.glsl });
+    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow, footprintGLSL:footprintAPI?.glsl,screenPrintGLSL:engravingAPI?.print?.glsl });
     const emptyVao = resources.allocate('VertexArray');
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
@@ -1046,6 +1046,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         u_crisp: +!raw, u_splatCoverage: splatCoverage, u_dilate: raw ? 0.3 : 0.15, u_near: camera.clipNear,
         u_paintMarker: paint?.marker ?? 0, u_afterimageStart: trailStart,
         ...footprintUniforms,...engravingUniforms,
+        u_screenPrintOn:frame.screenPrint!==false,
         ...(opticalMaterials && { u_optical: opticalUnit }),
         ...(relighting && { u_relight: relightUnit }),
         u_fog: rgb(world.pal[fog.c ?? 0] ?? 0),

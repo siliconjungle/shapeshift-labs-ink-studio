@@ -997,6 +997,7 @@ const CMD = {
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
+        '    graph plan --memory   estimate peak raster buffers before execution',
         '  graph dependencies <project.json> [--json]   list direct and nested group files and pins',
         '  graph impact <group.json> [--root folder] [--json]   find consumers of a shared group',
         '  graph snapshot <project.json> [--inputs values.json] [--seed N] [--at T]   capture graph bindings and asset hashes',

@@ -1,6 +1,11 @@
 /* Nested tonal art maps over retained native-splat coordinates. No frame-time raster generation. */
 const Engraving = (() => {
-  let F;
+  let F, Print;
+  try {
+    Print = ScreenPrint;
+  } catch {
+    Print = require('./screen-print.js');
+  }
   try {
     F = SplatFootprints;
   } catch {
@@ -65,7 +70,8 @@ const Engraving = (() => {
       'jitter',
       'seed',
       'resolution',
-      'lodBias'
+      'lodBias',
+      'screenPrint'
     ];
     if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(k => !keys.includes(k)))
       throw new TypeError('Engraving: invalid settings');
@@ -133,7 +139,9 @@ const Engraving = (() => {
       jitter,
       seed,
       resolution,
-      lodBias
+      lodBias,
+      ...(value.screenPrint !== undefined &&
+        value.screenPrint !== false && { screenPrint: Print.prepare(value.screenPrint) })
     });
     prepared.add(p);
     if (input && typeof input === 'object') objects.set(input, p);
@@ -310,7 +318,7 @@ const Engraving = (() => {
     point,
     normal,
     rgb,
-    { light = [-0.45, 0.8, 0.55], visibility = 1, footprint = 0, restNormal = normal } = {}
+    { light = [-0.45, 0.8, 0.55], visibility = 1, footprint = 0, restNormal = normal, screen } = {}
   ) {
     const p = prepare(definition);
     if (!p) return rgb;
@@ -320,6 +328,26 @@ const Engraving = (() => {
     const lum = 1 - clamp(rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722),
       tone = p.tone === 'normal' ? lit : p.tone === 'luminance' ? lum : lit * 0.65 + lum * 0.35;
     const uv = coordinates(p, point);
+    if (p.screenPrint) {
+      if (p.screenPrint.strength === 0) return rgb;
+      const print = (a, b) =>
+        Print.shade(
+          p.screenPrint,
+          [a, b],
+          rgb.map(v => clamp(v)),
+          { footprint, screen, light: 1 - lit }
+        );
+      if (p.screenPrint.space === 'screen' || p.projection !== 'triplanar') return print(uv[0], uv[1]);
+      const w = restNormal.map(n => Math.abs(n) ** 8),
+        sum = w.reduce((a, b) => a + b, 0) || 1,
+        out = [0, 0, 0];
+      for (let axis = 0; axis < 3; axis++)
+        if (w[axis] / sum > 0.001) {
+          const c = print(uv[(axis + 1) % 3], uv[(axis + 2) % 3]);
+          for (let i = 0; i < 3; i++) out[i] += (c[i] * w[axis]) / sum;
+        }
+      return out;
+    }
     let ink;
     if (p.projection === 'triplanar') {
       const w = restNormal.map(n => Math.abs(n) ** 8),
@@ -512,6 +540,7 @@ const Engraving = (() => {
   }
   return Object.freeze({
     styles,
+    print: Print,
     maxStyles,
     tones,
     prepare,

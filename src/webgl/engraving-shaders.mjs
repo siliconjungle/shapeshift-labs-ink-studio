@@ -20,11 +20,13 @@ export const engravingVertex = `
  }
 `;
 export const engravingFragment = `
-uniform highp sampler2D u_data;uniform int u_engravingSettings;uniform vec3 u_engravingLight;
+uniform highp sampler2D u_data;uniform int u_engravingSettings;uniform vec3 u_engravingLight;uniform bool u_screenPrintOn;
 flat in vec4 v_engravingAnchor,v_engravingX,v_engravingY,v_engravingRestNormal;
 #define v_engravingSlot int(v_engravingAnchor.w)
 #define v_engravingFog v_engravingRestNormal.w
 vec4 engravingFetch(int texel){return texelFetch(u_data,ivec2(texel%2048,texel/2048),0);}
+vec4 screenPrintFetch(int texel){return engravingFetch(texel);}
+/*SCREEN_PRINT*/
 vec4 engravingSetting(int slot,int row){return engravingFetch(u_engravingSettings*2048+(slot-1)*9+row);}
 vec4 engravingTile(int start,int n,int group,vec2 uv){
  vec2 q=fract(uv)*float(n)-.5;ivec2 at=ivec2(floor(q));vec2 f=fract(q);
@@ -48,6 +50,14 @@ vec3 engravingShade(vec3 rgb,vec2 offset){
  if(ink.w<=0.)return rgb;
  vec3 p=v_engravingAnchor.xyz+v_engravingX.xyz*offset.x+v_engravingY.xyz*offset.y-origin.xyz;
  float fogAmount=clamp(v_engravingFog,0.,1.);vec3 litRGB=fogAmount<.999?clamp((rgb-u_fog*fogAmount)/(1.-fogAmount),0.,1.):rgb;
+ if(info.x<0.){
+  if(!u_screenPrintOn)return rgb;
+  int start=int(-info.x)*2048;float footprint=max(length(v_engravingX.xyz),length(v_engravingY.xyz));vec3 printed=vec3(0.);
+  if(info.y>.5)printed=screenPrintShade(start,vec2(0.),litRGB,footprint,1.-v_engravingY.w);
+  else if(info.z>2.5){vec3 w=v_engravingRestNormal.xyz;if(w.x>.001)printed+=w.x*screenPrintShade(start,p.yz,litRGB,footprint,1.-v_engravingY.w);if(w.y>.001)printed+=w.y*screenPrintShade(start,p.zx,litRGB,footprint,1.-v_engravingY.w);if(w.z>.001)printed+=w.z*screenPrintShade(start,p.xy,litRGB,footprint,1.-v_engravingY.w);}
+  else{vec3 along=engravingSetting(slot,5).xyz,across=engravingSetting(slot,6).xyz;float x=dot(p,along),y=dot(p,across),z=dot(p,cross(along,across));vec2 uv=vec2(x,y);if(info.z>.5)uv=vec2(atan(z,x)*origin.w,info.z>1.5?atan(y,length(vec2(x,z)))*origin.w:y);printed=screenPrintShade(start,uv,litRGB,footprint,1.-v_engravingY.w);}
+  return mix(printed,u_fog,fogAmount);
+ }
  float lit=v_engravingY.w,lum=1.-clamp(dot(litRGB,vec3(.2126,.7152,.0722)),0.,1.);
  float darkness=info.w<.5?lit:info.w<1.5?lum:lit*.65+lum*.35;
  float tone=clamp(clamp((darkness-.5)*settings.z+.5+settings.w,0.,1.)*settings.y,0.,1.)*7.,lod=v_engravingX.w,coverage=0.;

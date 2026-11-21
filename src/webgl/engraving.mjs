@@ -1,6 +1,7 @@
 import { createAttachedData } from './attached-data.mjs';
 export function createEngravingBinding(api) {
   const pack = createAttachedData();
+  const emptyMeans = new Float32Array(8);
   let bag, frames, count, metadata, params, fields, styles;
   return (world, base, dirty, light) => {
     const b = api.validate(world),
@@ -41,7 +42,7 @@ export function createEngravingBinding(api) {
         }
       }
       if (styles !== b.styles || count !== world.count) {
-        fields = [...new Set(b.styles.map(s => api.maps(s).data))];
+        fields = [...new Set(b.styles.map(s => (s.screenPrint ? api.print.pack(s.screenPrint) : api.maps(s).data)))];
         params = new Float32Array(16 * 9 * 4);
         let row =
           Math.ceil((world.count * 16) / 8192) + Math.ceil(metadata.length / 8192) + Math.ceil(params.length / 8192);
@@ -51,11 +52,12 @@ export function createEngravingBinding(api) {
           row += Math.ceil(field.length / 8192);
         }
         b.styles.forEach((s, i) => {
-          const m = api.maps(s);
+          const field = s.screenPrint ? api.print.pack(s.screenPrint) : api.maps(s).data,
+            means = s.screenPrint ? emptyMeans : api.maps(s).levels[2].means;
           params.set(
             [
-              fieldRows.get(m.data),
-              s.resolution,
+              fieldRows.get(field) * (s.screenPrint ? -1 : 1),
+              s.screenPrint ? +(s.screenPrint.space === 'screen') : s.resolution,
               ['plane', 'cylinder', 'sphere', 'triplanar'].indexOf(s.projection),
               ['normal', 'luminance', 'hybrid'].indexOf(s.tone),
               s.scale,
@@ -72,7 +74,7 @@ export function createEngravingBinding(api) {
               s.lodBias,
               ...s.across,
               0,
-              ...m.levels[2].means
+              ...means
             ],
             i * 36
           );

@@ -1457,6 +1457,24 @@
         "optics",
         "animation"
       ]
+    },
+    {
+      "id": "kit.screenPrint",
+      "kind": "api",
+      "status": "ready",
+      "title": "Halftone and layered screen printing on native surfaces",
+      "what": "Area-calibrated circle, diamond and line screens, separately registered ink plates, mono/duotone/CMYK recipes, paper grain, overprint and knockout. Surface-attached or art-pixel coordinates share existing retained charts, native animation and CPU/WebGL sampling.",
+      "use": "K.screenPrint.bind(world, 'all', {...K.screenPrint.preset('duotone'), spacing:.2})",
+      "where": "src/screen-print.js, src/kit/p49-screen-print.js",
+      "example": "docs/screen-print.md, examples/screen-print.html",
+      "tags": [
+        "halftone",
+        "screen-print",
+        "color-separation",
+        "splat",
+        "render",
+        "animation"
+      ]
     }
   ]
 }

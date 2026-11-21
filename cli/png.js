@@ -100,7 +100,7 @@ function writeIndexed(file, w, h, slots, palette) {
   out.push(chunk('IDAT',scanlines(w,h,pixels,1)),chunk('IEND',Buffer.alloc(0)));
   fs.writeFileSync(file,Buffer.concat(out));
 }
-function decode(file, capturePalette) {
+function decode(file, capturePalette, layoutOnly = false) {
   const b = Buffer.isBuffer(file) ? file : fs.readFileSync(file);
   if (b.length < 33 || !b.subarray(0, 8).equals(signature)) throw new Error('Not a PNG file');
   let p = 8, w = 0, h = 0, bits, color, interlace, table, transparency;
@@ -131,6 +131,7 @@ function decode(file, capturePalette) {
     throw new Error('Invalid indexed PNG palette');
   const readIndices = capturePalette === 'indices';
   if (readIndices && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
+  if (layoutOnly) return { w, h };
   const slots = readIndices ? new Uint8Array(w * h) : null;
   const counts = capturePalette === true && color === 3 ? new Uint32Array(entries) : null;
   const out = counts || slots ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);
@@ -205,6 +206,7 @@ function decode(file, capturePalette) {
   return { w, h, data: out, max, ...(capturePalette && { bitDepth: bits }) };
 }
 function raster(file) { return decode(file, false); }
+function layout(file, indexed = false) { return decode(file, indexed ? 'indices' : false, true); }
 function indexedRaster(file) { return decode(file, 'indices'); }
 function paletteSource(file) { return decode(file, true); }
 function read(file) {
@@ -264,4 +266,4 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { encode, encodeGray, write, writeIndexed, read, raster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+module.exports = { encode, encodeGray, write, writeIndexed, read, raster, layout, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };

@@ -1119,4 +1119,6 @@ Use [engraving and tonal art maps](docs/engraving.md) for light-responsive hatch
 
 Use [irregular mosaics and stained glass](docs/mosaic-surfaces.md) for fitted polygon pieces on flat or curved carriers, with real seams, bevels and optical transmission. Explore the [Tessera Collection](examples/mosaic-surfaces.html), featuring an animated lapis koi and glass pavilion.
 
+Use [halftone and layered screen printing](docs/screen-print.md) for analytic circle, diamond and line screens with registered ink plates, paper grain, overprint and knockout. Explore [The Moonflower Press](examples/screen-print.html), with free camera controls and live plate proofs.
+
 Use [irregular mosaics and stained glass](docs/mosaic-surfaces.md) for fitted polygon pieces on planar or curved carriers, opaque grout, geometric bevels and native optical transmission. Explore [The Tessera Collection](examples/mosaic-surfaces.html).

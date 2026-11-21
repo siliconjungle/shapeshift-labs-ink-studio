@@ -15,7 +15,7 @@ const catalog = require('./graph-catalog.js');
 const cacheFlags=['cache','cache-bytes','cache-entries'];
 const executionFlags=['workers',...cacheFlags];
 const flags = {
-  validate:['inputs','json'], plan:['inputs','json'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
+  validate:['inputs','json'], plan:['inputs','json','memory'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
   inspect:['inputs','at','seed','out','output','node','port','json',...executionFlags],
   run:['inputs','at','seed','out','json',...executionFlags],
   batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
@@ -139,7 +139,7 @@ async function graphCommand(pos,opt,settings) {
   if (Object.hasOwn(host.commands,mode)) return send(await host.execute(pos,opt,settings),opt.json);
   if (!Object.hasOwn(flags,mode) || pos.length!==(mode==='batch'?3:2) ||
       Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) ||
-        (['json','resume'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
+        (['json','resume','memory'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
           typeof value!=='string' || !value.trim())) ||
       opt.port!==undefined && opt.node===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
     throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
@@ -153,7 +153,7 @@ async function graphCommand(pos,opt,settings) {
 }
 
 async function projectCommand(mode,file,caseFile,opt,settings) {
-  const project=readGraphProject(file,settings), sources=project.sourceFiles();
+  const project=readGraphProject(file,{...settings,planAssets:opt.memory===true}), sources=project.sourceFiles();
   if (settings.adapterFile) sources.push(settings.adapterFile);
   let inputs, result;
   if (opt.inputs!==undefined) {
@@ -165,7 +165,7 @@ async function projectCommand(mode,file,caseFile,opt,settings) {
     ...(opt.seed!==undefined && {seed:Number(opt.seed)})};
   const output=opt.out===undefined ? undefined : path.resolve(opt.out);
   if (mode==='validate') return send(project.validate(inputs),opt.json);
-  if (mode==='plan') return send(project.plan(inputs),opt.json);
+  if (mode==='plan') return send(project.plan(inputs,{memory:opt.memory===true}),opt.json);
   if (mode==='dependencies') return send(project.dependencies(),opt.json);
   if (mode==='snapshot') return send(project.snapshot(run),opt.json);
   if (mode==='session') return session(project,output,sources);

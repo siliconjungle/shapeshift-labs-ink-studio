@@ -10,6 +10,7 @@ const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { loadGraphGroups, groupFor, groupUsage, groupDependencies } = require('./graph-groups.js');
 const { snapshotFormat } = require('./graph-diff.js');
 const { fingerprint } = require('./graph-artifact-cache.js');
+const { estimateGraphMemory } = require('./graph-memory.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -253,7 +254,7 @@ function cacheReport(frame) {
 }
 
 function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={},
-  sourceFile, workerPool }={}) {
+  sourceFile, workerPool, planAssets=false }={}) {
   if (workerPool && !workerPool.matches(kit)) throw new TypeError('Graph worker pool and project need the same toolkit');
   const {graph,data,mediaGraph,takeTime}=kit.KIT.procedural;
   const host=createGraphHost(adapters,{kit});
@@ -280,11 +281,15 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const bytes=fs.readFileSync(full);
     let value, kind;
     if (format==='png') {
-      const {w,h,data,max}=PNG.raster(bytes);
-      value={width:w,height:h,data:max===255 ? data : Uint8Array.from(data,n=>Math.round(n*255/max))};
+      const {w,h,data,max}=planAssets ? PNG.layout(bytes) : PNG.raster(bytes);
+      value=planAssets ? {width:w,height:h} : {width:w,height:h,
+        data:max===255 ? data : Uint8Array.from(data,n=>Math.round(n*255/max))};
       kind='raster';
     } else if (format==='indexed-png') {
-      value=PNG.indexedRaster(bytes);
+      if (planAssets) {
+        const {w,h}=PNG.layout(bytes,true);
+        value={value:{width:w,height:h}};
+      } else value=PNG.indexedRaster(bytes);
     } else if (format==='wav') {
       value=WAV.decode(bytes);
       kind='audio';
@@ -407,6 +412,18 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       ...(usesCodec ? {reason:'host-codec'} : unversioned.length ? {reason:'unversioned-operation',operations:unversioned} : {})};
   }
 
+  function describeScope(compiled,scope,overrides={}) {
+    const {inputs,nodes,outputs}=compiled.plan({bindings:true});
+    for (const [name,value] of Object.entries(overrides)) inputs[name].default=value;
+    return {inputs,nodes:Object.fromEntries(nodes.map(({id,...node})=>{
+      const group=groupFor(scope,node);
+      return [id,{...node,...(group && {groupPath:group.alias}),
+        ...(node.seed===undefined && Object.hasOwn(operations,node.op) && {seed:true})}];
+    })),outputs,order:nodes.map(node=>node.id)};
+  }
+
+  const groupDetails=()=>Object.fromEntries([...preparedGroups].map(([name,{compiled,scope}])=>[name,describeScope(compiled,scope)]));
+
   function snapshot(options={}) {
     const {inputs={},time:at=time,seed:sampleSeed=seed}=fields(options,['inputs','time','seed'],'graph snapshot options');
     clock(at,sampleSeed);
@@ -417,18 +434,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         throw new TypeError('Wrong input value for graph socket '+name+': expected '+types.description(type));
       return [name,value];
     }));
-    function describeScope(compiled,scope,overrides={}) {
-      const {inputs,nodes,outputs}=compiled.plan({bindings:true});
-      for (const [name,value] of Object.entries(overrides)) inputs[name].default=value;
-      return {inputs,nodes:Object.fromEntries(nodes.map(({id,...node})=>{
-        const group=groupFor(scope,node);
-        return [id,{...node,...(group && {groupPath:group.alias}),
-          ...(node.seed===undefined && Object.hasOwn(operations,node.op) && {seed:true})}];
-      })),outputs,order:nodes.map(node=>node.id)};
-    }
     return JSON.parse(jsonBytes({format:snapshotFormat,version,projectHash,settings:{seed:sampleSeed,time:at},
       graph:describeScope(compiled,groupTree.scope,values),
-      groups:Object.fromEntries([...preparedGroups].map(([name,{compiled,scope}])=>[name,describeScope(compiled,scope)])),
+      groups:groupDetails(),
       assets:assetInfo, references:Object.fromEntries(dependencyRows.map(({group,used,...reference})=>[group,reference])),
       exports:exportsSpec,assertions:assertionSpecs}));
   }
@@ -456,6 +464,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     }
 
     function evaluate({inputs,time,seed,take},sequence) {
+      if (planAssets) throw new Error('Graph loaded for memory preflight. Open it normally to evaluate.');
       const values=Object.fromEntries(Object.entries(inputs).map(([name,value])=>{
         const prior=previous.get(name);
         return [name,sameValue(prior,value) ? prior : value];
@@ -564,11 +573,13 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   return Object.freeze({
     sockets: compiled.sockets,
-    plan:inputs=>({
-      ...data.clone(projectPlan),
-      ...(inputs!==undefined && {resolvedInputs:Object.fromEntries(Object.entries(request({inputs}).inputs)
-        .map(([name,value])=>[name,planValue(value)]))})
-    }),
+    plan(inputs,{memory=false}={}) {
+      const resolved=inputs===undefined ? undefined : request({inputs}).inputs;
+      return {...data.clone(projectPlan),
+        ...(resolved && {resolvedInputs:Object.fromEntries(Object.entries(resolved).map(([name,value])=>[name,planValue(value)]))}),
+        ...(memory && {memory:estimateGraphMemory({graph:describeScope(compiled,groupTree.scope),
+          groups:groupDetails(),assets,overrides:resolved??{},kit,hostOperations:projectPlan.hostOperations})})};
+    },
     validate(inputs) {
       if (inputs!==undefined) request({inputs});
       return {...header,kind:'validate',valid:true,nodes:rootPlan.expandedNodes,groups:preparedGroups.size};

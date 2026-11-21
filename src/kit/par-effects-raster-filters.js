@@ -102,16 +102,104 @@
     return value;
   }
 
-  function kernelBlur(source,{kind='gaussian',radius=2,sigma,kernel,edge='clamp'}={}) {
-    validateEdge(edge);
-    const value=image(source), {width,height}=value;
-    if (kernel!==undefined) {
-      const taps=customKernel(kernel);
-      checkWork(width,height,taps.length);
-      return resolve(value,convolve(premultiply(value),width,height,4,taps,edge));
+  function layout({width,height}, size, taps, row, count) {
+    const pixels=width*height;
+    if (!int(width,1,8192) || !int(height,1,8192) || pixels>16777216)
+      throw new RangeError('Tiled filters need a raster within the canvas budget');
+    size ??= pixels>1048576 ? 256 : false;
+    if (size!==false && !int(size,1,1024) && !tuple(size,2,n=>int(n,1,1024)))
+      throw new TypeError('Filter tileSize needs an integer or two integers from 1 to 1024, or false');
+    const radius=row ? (row.length-1)/2 : 0;
+    let left=radius,right=radius,top=radius,bottom=radius;
+    for (const [dx,dy] of taps ?? []) {
+      left=Math.max(left,-dx); right=Math.max(right,dx);
+      top=Math.max(top,-dy); bottom=Math.max(bottom,dy);
     }
-    const row=weights(radius,kind,sigma);
-    return radius ? resolve(value,separable(premultiply(value),width,height,4,row,edge)) : value;
+    const halo={left,right,top,bottom}, resultBytes=pixels*4;
+    if (size===false || count===0) {
+      if (size===false && pixels>4e6) throw new RangeError('Pixel effects need tiling above four million pixels');
+      checkWork(width,height,count);
+      return {width,height,halo,tileSize:null,tiles:1,strategy:'whole',resultBytes,
+        scratchBytes:pixels*(count===0 ? 0 : row ? 48 : 32)+(count ? 32 : 0),samples:pixels*count};
+    }
+    const [sx,sy]=Array.isArray(size) ? size : [size,size];
+    const tw=Math.min(sx,width), th=Math.min(sy,height), columns=Math.ceil(width/tw), rows=Math.ceil(height/th);
+    const extended=(tw+left+right)*(th+top+bottom);
+    // A sparse path can jump millions of pixels. In that case, gather its taps directly.
+    const gather=!row && extended>Math.max(262144,4*tw*th);
+    const samples=row ? (2*pixels+width*rows*2*radius)*row.length : pixels*count;
+    if (samples>512e6) throw new RangeError('Tiled filter exceeds its total sample budget');
+    return {width,height,halo,tileSize:[tw,th],tiles:columns*rows,strategy:gather?'gather':'halo',resultBytes,samples,
+      scratchBytes:(gather ? 0 : extended*16)+(row ? tw*(th+top+bottom)*16 : 0)+52};
+  }
+
+  function tiled(source, {plan,taps,row,edge}) {
+    const {width,height,pivot,read}=R.rgbaReader(source), bound=boundary(edge);
+    const {tileSize:[tw,th],halo:{left,right,top,bottom},strategy}=plan;
+    const data=new Uint8Array(plan.resultBytes), rgba=new Uint8Array(4), sum=new Float64Array(4), sample=new Float32Array(4);
+    const gathered=strategy==='gather', loaded=gathered ? null : new Float32Array((tw+left+right)*(th+top+bottom)*4);
+    const first=row ? new Float32Array(tw*(th+top+bottom)*4) : null;
+
+    function load(x,y,out,dst) {
+      const u=bound(x,width), v=bound(y,height);
+      if (u<0 || v<0) { out.fill(0,dst,dst+4); return; }
+      read(v*width+u,rgba);
+      for (let c=0;c<3;c++) out[dst+c]=rgba[c]*rgba[3]/255;
+      out[dst+3]=rgba[3];
+    }
+    function store(dst) {
+      const a=Math.fround(sum[3]);
+      data[dst+3]=byte(a);
+      for (let c=0;c<3;c++) data[dst+c]=data[dst+3] ? byte(255*Math.fround(sum[c])/a) : 0;
+    }
+
+    for (let oy=0;oy<height;oy+=th) for (let ox=0;ox<width;ox+=tw) {
+      const w=Math.min(tw,width-ox), h=Math.min(th,height-oy), stride=w+left+right, rows=h+top+bottom;
+      if (loaded) for (let y=0;y<rows;y++) for (let x=0;x<stride;x++)
+        load(ox+x-left,oy+y-top,loaded,(y*stride+x)*4);
+      if (row) for (let y=0;y<rows;y++) for (let x=0;x<w;x++) {
+        sum.fill(0);
+        for (let k=0;k<row.length;k++) {
+          const from=(y*stride+x+k)*4;
+          for (let c=0;c<4;c++) sum[c]+=loaded[from+c]*row[k];
+        }
+        first.set(sum,(y*w+x)*4);
+      }
+      for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
+        sum.fill(0);
+        if (row) for (let k=0;k<row.length;k++) {
+          const from=((y+k)*w+x)*4;
+          for (let c=0;c<4;c++) sum[c]+=first[from+c]*row[k];
+        }
+        else for (const [dx,dy,gain] of taps) {
+          if (gathered) {
+            load(ox+x+dx,oy+y+dy,sample,0);
+            for (let c=0;c<4;c++) sum[c]+=sample[c]*gain;
+          } else {
+            const from=((y+top+dy)*stride+x+left+dx)*4;
+            for (let c=0;c<4;c++) sum[c]+=loaded[from+c]*gain;
+          }
+        }
+        store(((oy+y)*width+ox+x)*4);
+      }
+    }
+    return {width,height,channels:4,data,...(pivot && {pivot:pivot.slice()})};
+  }
+
+  function prepareKernel(size,{kind='gaussian',radius=2,sigma,kernel,edge='clamp',tileSize}={}) {
+    validateEdge(edge);
+    const taps=kernel===undefined ? null : customKernel(kernel);
+    const row=taps ? null : weights(radius,kind,sigma);
+    const count=taps?.length ?? (radius ? row.length*2 : 0);
+    return {edge,taps,row,plan:layout(size,tileSize,taps,row,count)};
+  }
+  function kernelBlur(source,options) {
+    const job=prepareKernel(source,options);
+    if (job.plan.strategy!=='whole') return tiled(source,job);
+    const value=R.rgba(source), {width,height}=value;
+    if (!job.plan.samples) return value;
+    return resolve(value,job.row ? separable(premultiply(value),width,height,4,job.row,job.edge) :
+      convolve(premultiply(value),width,height,4,job.taps,job.edge));
   }
 
   function pathTaps(path,samples,anchor,falloff) {
@@ -147,13 +235,12 @@
     return taps.filter(t=>t[2]).map(([u,v,w])=>[u,v,w/sum]);
   }
 
-  function pathBlur(source,path,{samples=13,anchor='start',falloff='uniform',filter='linear',edge='transparent'}={}) {
+  function preparePath(size,path,{samples=13,anchor='start',falloff='uniform',filter='linear',edge='transparent',tileSize}={}) {
     validateEdge(edge);
     if (!int(samples,2,128) || !['start','center','end'].includes(anchor) ||
         !['uniform','start','end'].includes(falloff) || !['linear','nearest'].includes(filter))
       throw new TypeError('Invalid path blur sample count, anchor or filter');
-    const value=image(source), {width,height}=value, taps=pathTaps(path,samples,anchor,falloff);
-    checkWork(width,height,taps.length*(filter==='linear' ? 4 : 1));
+    const taps=pathTaps(path,samples,anchor,falloff);
     const effective=[];
     for (const [x,y,w] of taps) {
       if (filter==='nearest') effective.push([Math.round(x),Math.round(y),w]);
@@ -165,9 +252,18 @@
         }
       }
     }
-    return resolve(value,convolve(premultiply(value),width,height,4,effective,edge));
+    const plan=layout(size,tileSize,effective,null,taps.length*(filter==='linear' ? 4 : 1));
+    return {edge,taps:effective,plan};
+  }
+  function pathBlur(source,path,options) {
+    const job=preparePath(source,path,options);
+    if (job.plan.strategy!=='whole') return tiled(source,job);
+    const value=R.rgba(source);
+    return resolve(value,convolve(premultiply(value),value.width,value.height,4,job.taps,job.edge));
   }
 
-  P.pixelEffects={kernelBlur,pathBlur};
+  P.pixelEffects={kernelBlur,pathBlur,
+    planKernelBlur:(size,options)=>prepareKernel(size,options).plan,
+    planPathBlur:(size,path,options)=>preparePath(size,path,options).plan};
   P.pixelEffectSupport={view,image,channel,alpha,unit,byte,int,tuple,plane,weights,separable};
 })(KIT.procedural);

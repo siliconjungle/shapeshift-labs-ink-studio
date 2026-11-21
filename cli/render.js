@@ -1589,7 +1589,7 @@ function renderFrame(world, o, preparedPalettes) {
     if(projectedFrame){const reach=shaped.reach/SplatFootprints.half;ex=Math.min(2048,Math.max(ex,(Math.abs(projectedFrame[0])+Math.abs(projectedFrame[2]))*reach));ey=Math.min(2048,Math.max(ey,(Math.abs(projectedFrame[1])+Math.abs(projectedFrame[3]))*reach));}
     const engravingId=(kraw&(32|256|32768))?0:(engraved?.indices[i]??0),engravingStyle=engravingId&&engraved.styles[engravingId-1];
     let engrave;
-    if(engravingStyle){
+    if(engravingStyle&&(!engravingStyle.screenPrint||o.screenPrint!==false)){
       const f=SplatFootprints.posedFrame(world,i,t,SC[i]);
       if(f){const map=SplatFootprints.frameTransform({matrix:[1,0,0,1]},a0*f[0]+a1*f[1]+a2*f[2],b0*f[0]+b1*f[1]+b2*f[2],a0*f[3]+a1*f[4]+a2*f[5],b0*f[3]+b1*f[4]+b2*f[5]);
         if(map){const at=i*6,ru=engraved.restFrames.subarray(at,at+3),rv=engraved.restFrames.subarray(at+3,at+6),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],ex=Array.from(ru,(n,j)=>n*map[0]+rv[j]*map[2]),ey=Array.from(ru,(n,j)=>n*map[1]+rv[j]*map[3]);
@@ -1851,7 +1851,7 @@ function renderFrame(world, o, preparedPalettes) {
           pb = (tint ? optical[opt + 6] : pb) * scatter + optical[opt + 10] * reflection;
           a *= optical[opt];
         }
-        if(engrave){const point=Array.from(engrave.point,(n,j)=>n+engrave.ex[j]*dx+engrave.ey[j]*dy);[pr,pg,pb]=Engraving.shade(engravingStyle,point,engrave.normal,[pr,pg,pb],{light:o.engravingLight??[-.45,.8,.55],footprint:engrave.footprint,restNormal:engrave.restNormal});}
+        if(engrave){const point=Array.from(engrave.point,(n,j)=>n+engrave.ex[j]*dx+engrave.ey[j]*dy);[pr,pg,pb]=Engraving.shade(engravingStyle,point,engrave.normal,[pr,pg,pb],{light:o.engravingLight??[-.45,.8,.55],footprint:engrave.footprint,restNormal:engrave.restNormal,screen:[ix+.5,iy+.5]});}
         const claim = paletteClaim?.(p,i,paletteId,pr,pg,pb,materialChoices);
         if (staged?.lit || scoped || glassLook) {
           let sample;

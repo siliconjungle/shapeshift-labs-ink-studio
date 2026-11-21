@@ -913,6 +913,33 @@ Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
 Path blur defaults to transparent edges.
 
+For kernel and path blur, set `options.tileSize` to a tile width or
+`[width, height]` from 1 to 1024 pixels per axis. Rasters above 1,048,576
+pixels use 256 × 256 tiles by default. Use `false` for a whole-raster
+comparison within the original blur limits. Each tile reads the overlap
+needed by the filter, using the same image-wide edge rules. Very wide,
+sparse paths read only their sampled pixels. Atlas packing copies each
+sprite and registered map into its destination plane without creating
+full-size RGBA copies of the sources.
+
+```sh
+ink-studio graph plan project.json --memory
+```
+
+The memory report estimates raster backing buffers for one cold serial
+evaluation, including source rasters, retained results, and filter scratch.
+Each blur lists its tile count, four overlap widths, and working bytes.
+PNG inputs are inspected without inflating their pixels. For an atlas with
+`trim: true`, the report uses the configured atlas limits and marks the result
+as an upper bound. When a node's memory or dimensions cannot be modeled,
+`peakBytes` is null and `unresolved` identifies the node. `knownPeakBytes`
+reports the modeled allocations. The estimate excludes JavaScript object
+overhead, worker transfers, and export encoding. Native scene rendering
+reports its known image allocations and marks its other costs unresolved.
+Library callers can request `project.plan(inputs, {memory: true})` or use
+`pixelEffects.planKernelBlur`, `pixelEffects.planPathBlur`, and `raster.planPack`
+to size individual operations.
+
 Outline, bevel, erosion, repair, and analysis take an optional
 `channel`, `threshold` (default 128) and `invert`. They select visible
 pixels from alpha for alpha-bearing rasters or luma otherwise. Choose a

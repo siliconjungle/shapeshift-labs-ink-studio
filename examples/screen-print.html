@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>The Moonflower Press · Ink Studio</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #e9dfc8;
+      color: #183f59;
+      font-family: system-ui, sans-serif;
+    }
+    main {
+      max-width: 1500px;
+      margin: auto;
+      padding: 30px 40px;
+    }
+    .eyebrow {
+      display: flex;
+      justify-content: space-between;
+      font: 10px monospace;
+      letter-spacing: 1.8px;
+      color: #7998a8;
+      border-bottom: 1px solid #2d4756;
+      padding-bottom: 16px;
+    }
+    h1 {
+      font:
+        58px Georgia,
+        serif;
+      letter-spacing: -1.5px;
+      font-weight: 400;
+      color: #183f59;
+      margin: 22px 0 12px;
+    }
+    h1 em {
+      font-weight: 400;
+      color: #c45338;
+    }
+    .intro {
+      color: #91a6ac;
+      font: 13px/1.7 system-ui;
+      max-width: 790px;
+      margin-bottom: 25px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 244px;
+      gap: 26px;
+    }
+    .stage {
+      position: relative;
+      min-width: 0;
+      border: 1px solid #2d4756;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 9px;
+      border-bottom: 1px solid #2d4756;
+    }
+    button,
+    select {
+      background: #142b3b;
+      border: 1px solid #2d4756;
+      color: #cddcde;
+      padding: 10px;
+      font: 11px monospace;
+      cursor: pointer;
+    }
+    button.active {
+      background: #233c46;
+      border-color: #43b7c2;
+      color: #80d7d9;
+    }
+    .hint {
+      margin-left: auto;
+      color: #718c9d;
+      font: 9px monospace;
+    }
+    #view {
+      width: 100%;
+      aspect-ratio: 1.6;
+      display: block;
+      touch-action: none;
+    }
+    .bar {
+      border-top: 1px solid #2d4756;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 13px;
+      color: #7b9aaa;
+      font: 9px monospace;
+    }
+    .panel h2 {
+      font:
+        19px Georgia,
+        serif;
+      color: #183f59;
+      margin: 4px 0 20px;
+    }
+    .label {
+      font: 10px monospace;
+      letter-spacing: 1px;
+      color: #7796a8;
+      margin: 18px 0 8px;
+    }
+    select {
+      width: 100%;
+    }
+    label {
+      display: block;
+      font: 11px monospace;
+      color: #a4b8bc;
+      margin: 18px 0;
+    }
+    label input[type='range'] {
+      width: 100%;
+      display: block;
+      accent-color: #c45338;
+      margin-top: 11px;
+    }
+    label.check {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    input[type='checkbox'] {
+      accent-color: #c45338;
+    }
+    .note {
+      border-top: 1px solid #2d4756;
+      padding-top: 17px;
+      margin-top: 22px;
+      color: #7895a5;
+      font: 10px/1.8 monospace;
+    }
+    .swatches {
+      display: flex;
+      gap: 7px;
+      margin: 12px 0 20px;
+    }
+    .swatches span {
+      flex: 1;
+      height: 12px;
+      background: var(--c);
+    }
+    #reset {
+      width: 100%;
+      margin-top: 14px;
+    }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+      color: #6e8fa0;
+      font: 10px monospace;
+    }
+    #loading {
+      position: absolute;
+      inset: 50px 0 0;
+      display: grid;
+      place-items: center;
+      background: #e9dfc8;
+      color: #183f59;
+      font: 12px monospace;
+    }
+    @media (max-width: 900px) {
+      main {
+        padding: 20px;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 40px;
+      }
+      .hint {
+        display: none;
+      }
+    }
+
+    body {
+      color: #183f59;
+    }
+    .intro {
+      color: #64736d;
+    }
+    .eyebrow,
+    .label,
+    .hint,
+    .note,
+    footer,
+    .bar {
+      color: #6d7d76;
+    }
+    .stage {
+      border-color: #9aab9e;
+    }
+    .tabs,
+    .bar {
+      border-color: #9aab9e;
+    }
+    button,
+    select {
+      background: #f1e6ce;
+      color: #294958;
+      border-color: #a6b1a2;
+    }
+    button.active {
+      background: #e7bea0;
+      color: #9f432f;
+      border-color: #bd7050;
+    }
+    label {
+      color: #425d5e;
+      margin: 12px 0;
+    }
+    .label {
+      margin: 13px 0 7px;
+    }
+    .check {
+      margin: 9px 0 !important;
+      font-size: 10px !important;
+    }
+    .note {
+      border-color: #a8b5a4;
+      font-size: 9px;
+      margin-top: 16px;
+      padding-top: 12px;
+    }
+    #reset {
+      margin-top: 10px;
+    }
+    #loading {
+      color: #294958;
+    }
+    h1 em {
+      color: #c45338 !important;
+    }</style
+  ><style>
+    body {
+      background: #efe4ce;
+      color: #294958;
+    }
+    h1,
+    .panel h2 {
+      color: #294958;
+    }
+    .intro {
+      color: #607c79;
+    }
+    .eyebrow {
+      color: #587976;
+      border-color: #a6b1a2;
+    }
+    .hint {
+      color: #79918a;
+    }
+  </style>
+  <main>
+    <div class="eyebrow"><span>INK STUDIO / REPRESENTATIONS 06</span><span>SEPARATE · REGISTER · OVERPRINT</span></div>
+    <h1>The <em>Moonflower</em> Press</h1>
+    <p class="intro">
+      A botanical specimen and a tiny cosmic courier, printed in midnight blue and vermilion. Turn the sculptures, pull
+      an individual ink plate, and let the screens follow their forms.
+    </p>
+    <div class="layout">
+      <section class="stage">
+        <div class="tabs">
+          <button data-view="flower" class="active">01 / Moonflower</button
+          ><button data-view="rocket">02 / Comet courier</button
+          ><span class="hint">DRAG · ORBIT &nbsp; SHIFT–DRAG · PAN &nbsp; SCROLL · ZOOM</span>
+        </div>
+        <canvas
+          id="view"
+          width="1120"
+          height="700"
+          aria-label="Interactive native splat screen-print sculptures"
+        ></canvas>
+        <div class="bar">
+          <span id="caption">TWO INKS · ATTACHED SCREENS · LIVE LIGHT</span><span id="stats">—</span>
+        </div>
+        <div id="loading">Preparing the ink plates…</div>
+      </section>
+      <aside class="panel">
+        <h2>At the printing bench</h2>
+        <div class="label">INK RECIPE</div>
+        <select id="recipe">
+          <option value="duotone">Midnight × vermilion</option>
+          <option value="mono">Single blue plate</option>
+          <option value="cmyk">Four-color CMYK</option>
+        </select>
+        <div class="label">SCREEN / COORDINATES</div>
+        <div style="display: flex; gap: 7px">
+          <select id="shape">
+            <option value="circle">Circles</option>
+            <option value="diamond">Diamonds</option>
+            <option value="line">Lines</option></select
+          ><select id="space">
+            <option value="surface">On the surface</option>
+            <option value="screen">On the screen</option>
+          </select>
+        </div>
+        <div class="label">PLATE PROOF</div>
+        <select id="proof">
+          <option value="all">All inks / composite</option>
+        </select>
+        <canvas
+          id="proof-strip"
+          width="240"
+          height="48"
+          style="width: 100%; margin: 10px 0; image-rendering: pixelated"
+          aria-label="Ink density proof"
+        ></canvas>
+        <label
+          >Screen spacing <span id="spacingValue">1.00×</span
+          ><input id="spacing" type="range" min=".12" max=".42" step=".01" value=".22"
+        /></label>
+        <label
+          >Dot gain <span id="dotGainValue">+2%</span
+          ><input id="dotGain" type="range" min="-.18" max=".18" step=".01" value=".02"
+        /></label>
+        <label
+          >Registration shift <span id="registrationValue">2.5%</span
+          ><input id="registration" type="range" min="0" max=".2" step=".005" value=".025"
+        /></label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr">
+          <label class="check"><input id="knockout" type="checkbox" />Knockout</label
+          ><label class="check"><input id="reverse" type="checkbox" />Reverse order</label
+          ><label class="check"><input id="grain" type="checkbox" checked />Paper grain</label
+          ><label class="check"><input id="light" type="checkbox" checked />Moving light</label
+          ><label class="check"><input id="pause" type="checkbox" />Pause motion</label
+          ><label class="check"><input id="native" type="checkbox" />Native colors</label
+          ><label class="check"><input id="turntable" type="checkbox" />Camera orbit</label>
+        </div>
+        <button id="reset">Reset plates & camera</button>
+        <p class="note">
+          Analytic screens preserve ink coverage as the marks change size. Fine screens blend into their average at a
+          distance.<br /><br />Surface coordinates follow native bones. Editing ink, spacing or registration keeps the
+          baked geometry and charts.
+        </p>
+      </aside>
+    </div>
+    <footer><span>ANALYTIC HALFTONES / NATIVE SDFs + SPLATS</span><span>MIDNIGHT × VERMILION</span></footer>
+  </main>
+  <script src="../dist/ink-studio.browser.js"></script>
+  <script src="./screen-print.js"></script>
+  <script type="module">
+    import { createRenderer } from '../webgl.mjs';
+    const $ = id => document.getElementById(id),
+      canvas = $('view');
+    try {
+      const kit = {
+          KIT,
+          PixelLook,
+          makeBuilder,
+          makeSculpt,
+          SpriteSurface,
+          ContributionRules,
+          RenderStages,
+          TargetSelectors,
+          SplatProvenance
+        },
+        demo = screenPrintDemo(kit),
+        renderer = createRenderer(canvas, { toolkit: kit });
+      demo.state.view = 'flower';
+      function proof() {
+        const { chart, ...settings } = demo.recipe(),
+          p = KIT.screenPrint.prepare({ ...settings, space: 'screen', spacing: 9 }),
+          c = $('proof-strip').getContext('2d'),
+          im = c.createImageData(240, 48);
+        for (let y = 0; y < 48; y++)
+          for (let x = 0; x < 240; x++) {
+            const gray = 1 - x / 239,
+              rgb = KIT.screenPrint.shade(p, [0, 0], [gray, gray, gray], { screen: [x, y] });
+            for (let k = 0; k < 3; k++) im.data[(y * 240 + x) * 4 + k] = rgb[k] * 255;
+            im.data[(y * 240 + x) * 4 + 3] = 255;
+          }
+        c.putImageData(im, 0, 0);
+      }
+      function sync() {
+        proof();
+        document
+          .querySelectorAll('[data-view]')
+          .forEach(b => b.classList.toggle('active', b.dataset.view === demo.state.view));
+        for (const id of ['recipe', 'shape', 'space']) $(id).value = demo.state[id];
+        const ids = KIT.screenPrint.preset(demo.state.recipe).plates.map(p => p.id);
+        $('proof').replaceChildren(
+          ...['all', ...ids].map(id => {
+            const o = document.createElement('option');
+            o.value = id;
+            o.textContent = id === 'all' ? 'All inks / composite' : id + ' plate only';
+            return o;
+          })
+        );
+        $('proof').value = demo.state.proof;
+        for (const id of ['spacing', 'dotGain', 'registration']) $(id).value = demo.state[id];
+        $('spacingValue').textContent = (demo.state.spacing / 0.22).toFixed(2) + '×';
+        $('dotGainValue').textContent =
+          (demo.state.dotGain >= 0 ? '+' : '') + Math.round(demo.state.dotGain * 100) + '%';
+        $('registrationValue').textContent = (demo.state.registration * 100).toFixed(1) + '%';
+        for (const [id, key] of [
+          ['pause', 'paused'],
+          ['light', 'movingLight'],
+          ['native', 'native'],
+          ['grain', 'grain'],
+          ['knockout', 'knockout'],
+          ['reverse', 'reverse'],
+          ['turntable', 'turntable']
+        ])
+          $(id).checked = demo.state[key];
+        $('caption').textContent =
+          demo.state.space === 'surface'
+            ? 'ATTACHED SCREENS · RETAINED COORDINATES · LIVE LIGHT'
+            : 'FIXED PRINT SCREENS · COLORED INK SEPARATIONS';
+      }
+      document.querySelectorAll('[data-view]').forEach(
+        b =>
+          (b.onclick = () => {
+            demo.state.view = b.dataset.view;
+            sync();
+          })
+      );
+      for (const id of ['recipe', 'shape', 'space', 'proof'])
+        $(id).onchange = e => {
+          demo.state[id] = e.target.value;
+          if (id === 'recipe') demo.state.proof = 'all';
+          demo.edit();
+          sync();
+        };
+      for (const id of ['spacing', 'dotGain', 'registration'])
+        $(id).oninput = e => {
+          demo.state[id] = +e.target.value;
+          demo.edit();
+          sync();
+        };
+      for (const [id, key, edit] of [
+        ['pause', 'paused'],
+        ['light', 'movingLight'],
+        ['native', 'native'],
+        ['grain', 'grain', true],
+        ['knockout', 'knockout', true],
+        ['reverse', 'reverse', true],
+        ['turntable', 'turntable']
+      ])
+        $(id).onchange = e => {
+          demo.state[key] = e.target.checked;
+          if (edit) demo.edit();
+        };
+      $('reset').onclick = () => {
+        demo.reset();
+        sync();
+      };
+      let drag,
+        last,
+        stamp,
+        frames = 0;
+      canvas.onpointerdown = e => {
+        drag = [e.clientX, e.clientY];
+        canvas.setPointerCapture(e.pointerId);
+        demo.control.take();
+      };
+      canvas.onpointermove = e => {
+        if (!drag) return;
+        const dx = e.clientX - drag[0],
+          dy = e.clientY - drag[1];
+        drag = [e.clientX, e.clientY];
+        demo.control.input(e.shiftKey ? { pan: [-dx * 0.012, dy * 0.012] } : { yaw: -dx * 0.004, pitch: dy * 0.004 });
+      };
+      canvas.onpointerup = canvas.onpointercancel = () => (drag = null);
+      canvas.addEventListener(
+        'wheel',
+        e => {
+          e.preventDefault();
+          demo.control.input({ dolly: e.deltaY * 0.001 });
+        },
+        { passive: false }
+      );
+      window.screenPrintQA = { demo, renderer, kit, sync };
+      sync();
+      $('loading').remove();
+      function tick(now) {
+        const dt = last === undefined ? 0 : Math.min(0.05, (now - last) / 1000);
+        last = now;
+        demo.update(dt);
+        renderer.render(demo.world, {
+          width: canvas.width,
+          height: canvas.height,
+          raw: true,
+          time: demo.state.time,
+          camera: demo.control.read().camera,
+          engravingLight: demo.light,
+          screenPrint: !demo.state.native,
+          changedRows: []
+        });
+        frames++;
+        stamp ??= now;
+        if (now - stamp > 700) {
+          $('stats').textContent =
+            Math.round((frames * 1000) / (now - stamp)) + ' FPS · ' + demo.world.count.toLocaleString() + ' SPLATS';
+          frames = 0;
+          stamp = now;
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    } catch (error) {
+      $('loading').textContent = error.message;
+      throw error;
+    }
+  </script>
+</html>

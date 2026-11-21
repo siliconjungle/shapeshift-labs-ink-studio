@@ -8,7 +8,7 @@ function plainVertex(source) {
     .replace('if (i >= u_azn) break;', 'break;');
 }
 
-export function createSplatPipeline(gl, { ascii, specialize = true, sampleCoverage, coverageRules, stableDetail, cutaway, airflow, footprintGLSL } = {}) {
+export function createSplatPipeline(gl, { ascii, specialize = true, sampleCoverage, coverageRules, stableDetail, cutaway, airflow, footprintGLSL, screenPrintGLSL } = {}) {
   const resources = createResources(gl);
   try {
     const { vertex, fragment } = splatShaderSources(ascii, sampleCoverage, { coverageRules, stableDetail, airflow });
@@ -56,7 +56,7 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
             2048 * environment + 4096 * relighting + 8192 * optical + 16384 * Boolean(features.cutaway)+32768*emitterFog+65536*footprints+131072*engraving;
           if (!variants.has(key)) {
             const shader = splatShaderSources(ascii, sampleCoverage, { water, airPockets, layered, atlas, portal, instances,
-              contributions, masked, textured, layeredGlass, coverageRules, materialStyles, environment,emitterFog, relighting, optical, stableDetail, airflow, footprints, footprintGLSL, engraving, cutaway:features.cutaway ? cutaway : undefined });
+              contributions, masked, textured, layeredGlass, coverageRules, materialStyles, environment,emitterFog, relighting, optical, stableDetail, airflow, footprints, footprintGLSL, screenPrintGLSL, engraving, cutaway:features.cutaway ? cutaway : undefined });
             variants.set(key, resources.program(shader.vertex, shader.fragment));
           }
           return variants.get(key);

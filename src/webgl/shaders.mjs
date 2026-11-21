@@ -31,7 +31,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -441,7 +441,7 @@ ${water || portal || environment || cutaway || footprints ? 'uniform vec2 u_view
 ${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
 ${footprints ? footprintGLSL : ''}
-${engraving ? engravingFragment : ''}
+${engraving ? engravingFragment.replace('/*SCREEN_PRINT*/', screenPrintGLSL??'vec3 screenPrintShade(int start,vec2 uv,vec3 rgb,float footprint,float light){return rgb;}') : ''}
 ${coverageSource(coverageRules)}
 ${contributions || masked ? `${policyUniforms}flat in int v_policySlot;` : ''}
 ${contributions ? `uniform vec3 u_pal[${scenePaletteSize}], u_out[${scenePaletteSize}]; uniform int u_n;

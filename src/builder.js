@@ -1117,8 +1117,9 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       },
       meta
     );
-    if(engravingRanges||world.look?.engraving!==undefined&&world.look.engraving!==false){
+    if(engravingRanges||world.look?.screenPrint!==undefined&&world.look.screenPrint!==false||world.look?.engraving!==undefined&&world.look.engraving!==false){
       const assignments=[];if(world.look?.engraving!==undefined&&world.look.engraving!==false)assignments.push(['all',world.look.engraving]);
+      if(world.look?.screenPrint!==undefined&&world.look.screenPrint!==false)assignments.push(['all',KIT.screenPrint.chart(world.look.screenPrint)]);
       if(engravingRanges)for(const [first,end,spec]of engravingRanges)assignments.push([Array.from({length:end-first},(_,i)=>first+i),spec??false]);
       Engraving.bindMany(world,assignments);
     }
@@ -1216,6 +1217,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     describePixelStyle,
     describeFootprint,
     describeEngraving,
+    describeScreenPrint:(first,end,spec)=>describeEngraving(first,end,KIT.screenPrint.chart(spec)),
     describePrecipitation,
     born: v => (bornV = v === undefined || v === null || !isFinite(v) ? null : v),
     wet: v => (wetV = v === undefined || v === null || !isFinite(v) ? null : v),
