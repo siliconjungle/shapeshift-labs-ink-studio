@@ -45,7 +45,7 @@ const RenderGraph = (() => {
     reflection: ['source', 'axis', 'line'],
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'rowEdits', 'depthThreshold', 'blend', 'wrap'],
     composite: ['source', 'layer', 'blend', 'isolated'],
-    rasterSchedule: ['source', 'indices', 'schedule', 'palette', 'blend', 'wrap'],
+    rasterSchedule: ['source', 'indices', 'schedule', 'palette', 'cycles', 'blend', 'wrap'],
     history: ['mode', 'halfLife', 'cameraMotion'],
     frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
     frameBank: ['fps', 'tiles', 'regions', 'refresh', 'source', 'cameraMotion'],
@@ -375,12 +375,12 @@ const RenderGraph = (() => {
           break;
         }
         case 'rasterSchedule': {
-          const { indices, palette, schedule, wrap, blend = 'replace' } = pass;
+          const { indices, palette, cycles, schedule, wrap, blend = 'replace' } = pass;
           if (!['replace', 'over'].includes(blend) || (indices !== undefined) !== (palette !== undefined) ||
               indices !== undefined && pass.source !== undefined)
             throw new TypeError('Raster schedule needs an image or an index slot with a palette, plus replace or over blending');
           Object.assign(node, {
-            schedule: schedules.prepare({ schedule, palette, wrap }), blend,
+            schedule: schedules.prepare({ schedule, palette, cycles, wrap }), blend,
             ...(indices === undefined ? { source: reference(pass.source ?? input, 'image') } : { indices: slot(indices).name })
           });
           break;

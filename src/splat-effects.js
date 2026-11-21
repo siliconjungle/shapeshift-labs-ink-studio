@@ -13,6 +13,7 @@ const SplatEffects = (() => {
     paletteFields = require('./palette-fields.js');
   }
   const contribution = typeof ContributionRules === 'undefined' ? require('./contribution-rules.js') : ContributionRules;
+  const cycling = typeof PaletteCycles === 'undefined' ? require('./palette-cycles.js') : PaletteCycles;
   const fieldBands = typeof FieldBands === 'undefined' ? require('./field-bands.js') : FieldBands;
   const clamp = x => Math.min(1, Math.max(0, x));
   const fract = x => x - Math.floor(x);
@@ -126,8 +127,6 @@ const SplatEffects = (() => {
         !vector(size, 2) || size.some(value => value <= 0) || typeof wrap !== 'boolean' ||
         !['top-left','bottom-left'].includes(origin))
       throw new TypeError('Indexed rasters need bounded dimensions, one slot per texel, a valid origin and a positive size');
-    if (!cycles || Object.getPrototypeOf(cycles) !== Object.prototype)
-      throw new TypeError('Palette cycles must be named in an object');
     const local = outputColors(palette,resolveColor), swatches = new Map();
     const add = slot => {
       if (!Number.isInteger(slot) || slot < 0 || slot >= (local?.length ?? 0xffffffff))
@@ -137,27 +136,7 @@ const SplatEffects = (() => {
     };
     // Null paint leaves the underlying surface visible. Zero is a palette slot.
     const texels = Uint32Array.from(slots, slot => slot === null ? 0 : add(slot) + 1);
-    const claimed = new Set();
-    const groups = Object.entries(cycles).map(([name, cycle]) => {
-      if (!name.trim() || !cycle || Object.getPrototypeOf(cycle) !== Object.prototype ||
-          Object.keys(cycle).some(key => !['role', 'slots', 'period', 'direction', 'phase'].includes(key)))
-        throw new TypeError('Each palette cycle needs a name and cycle settings');
-      const { role, slots, period, direction = 'forward', phase = 0 } = cycle;
-      if (role !== undefined && local) throw new TypeError('Palette cycles with a local palette need explicit slots');
-      if ((role === undefined) === (slots === undefined))
-        throw new TypeError('Palette cycle ' + name + ' needs either a role or a list of slots');
-      const order = role === undefined ? slots :
-        typeof role === 'string' && Object.hasOwn(roles, role) && roles[role];
-      if (!Array.isArray(order) || order.length < 2 || !Number.isFinite(period) || period <= 0 ||
-          !['forward', 'reverse'].includes(direction) || !Number.isFinite(phase))
-        throw new RangeError('Palette cycle ' + name + ' needs two or more slots, a positive period and valid direction and phase');
-      const indices = Array.from(order, add);
-      for (const slot of indices) {
-        if (claimed.has(slot)) throw new RangeError('Palette cycles cannot share a slot within one raster');
-        claimed.add(slot);
-      }
-      return { indices, period, direction: direction === 'forward' ? 1 : -1, phase: fract(phase) };
-    });
+    const groups = cycling.prepare(cycles, add, local ? undefined : roles ?? {});
     const active = new Map(swatches);
     const [spanU, spanV] = size;
     let lastTime;
@@ -174,14 +153,7 @@ const SplatEffects = (() => {
         if (slot === -1) return 0;
         if (!Number.isFinite(time)) time = 0;
         if (lastTime !== time) {
-          for (const { indices, period, direction, phase } of groups) {
-            const length = indices.length;
-            const position = fract((time % period) / period + phase) * length;
-            // A decimal period can land just below the step when sampled on its loop boundary.
-            const step = Math.floor(position + 4 * Number.EPSILON * length);
-            const offset = length + direction * step;
-            indices.forEach((index, i) => active.set(index, swatches.get(indices[(i + offset) % length])));
-          }
+          cycling.visit(groups, time, (index, source) => active.set(index, swatches.get(source)));
           lastTime = time;
         }
         const rgb = active.get(slot);

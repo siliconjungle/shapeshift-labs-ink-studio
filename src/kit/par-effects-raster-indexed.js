@@ -96,5 +96,18 @@
     return editIndices(source, swatches, options, 'Palette fault', index => destinations[index]);
   }
 
-  Object.assign(P.pixelEffects, {bitplane, paletteFault});
+  function paletteCycle(source, palette, {cycles = {}, time = 0, alpha} = {}) {
+    if (!Number.isFinite(time)) throw new RangeError('Palette cycle time must be finite');
+    const label = 'Palette cycle', swatches = paletteBytes(palette, label);
+    const groups = PaletteCycles.prepare(cycles, index => {
+      if (!int(index, 0, swatches.length - 1)) throw new RangeError('Palette cycle slot is out of range');
+      return index;
+    }, palette.roles ?? undefined);
+    const active = swatches.slice();
+    PaletteCycles.visit(groups, time, (index, donor) => { active[index] = swatches[donor]; });
+    const result = editIndices(source, active, {alpha: alpha ?? undefined}, label, index => index);
+    return { ...result, palette: active.map(color => '#' + color.map(byte => byte.toString(16).padStart(2, '0')).join('')) };
+  }
+
+  Object.assign(P.pixelEffects, {bitplane, paletteFault, paletteCycle});
 })(KIT.procedural);

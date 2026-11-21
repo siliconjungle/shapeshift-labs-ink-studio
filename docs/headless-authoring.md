@@ -916,6 +916,7 @@ outside the original image.
 | `fx.signalRecovery` | [Hold the last usable raster after a fault and relock](#recover-from-signal-loss). Outputs the raster, receiver status, and stage transition events. |
 | `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
+| `fx.paletteCycle` | [Rotate named palette ranges](#cycle-an-indexed-palette) independently. Outputs the display image, unchanged indices, and rotated palette. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
 | `fx.trackRegions` | Track connected regions across a sequence of `frames`. Outputs persistent region records, ID `labels`, lineage `events`, source `frame`, and source `time`. |
 
@@ -1098,6 +1099,40 @@ samples. `addresses` is a one-channel raster, one sample wide, with
 to apply the same operations to a live scene.
 The [scanline study](../examples/scanline-repeat-dropout.cjs) compares
 each mode side by side.
+
+### Cycle an indexed palette
+
+Use `fx.paletteCycle` with a one-channel index raster and a `palette`.
+Give each named cycle an inclusive `range: [first, last]` or an ordered
+`slots` list. A palette record with `roles` also supports selecting
+a named `role`. Groups must use distinct slots.
+
+```js
+const { value, indices, palette: activePalette } = KIT.procedural.pixelEffects.paletteCycle(indexedArt, palette, {
+  alpha: coverage,
+  time,
+  cycles: {
+    water: { range: [3, 7], period: 2.5 },
+    lights: { slots: [9, 11, 10], period: 4, direction: 'reverse', phase: .25 }
+  }
+});
+```
+
+`period` is the number of seconds in a full turn. `direction` is
+`forward` by default. `phase` is a fraction of a turn. The graph uses its
+clock unless `options.time` overrides it. Samples are deterministic when
+seeking or rendering out of order.
+
+The node returns straight RGBA `value`, an `indices` raster with
+the original slot values, and a `palette` with the current swatches.
+Index `-1` is transparent. An aligned one-channel `alpha` input supplies
+coverage in byte levels. Slots outside the cycle keep their colors, even
+when they share a base swatch with a cycled slot.
+
+Use the same cycle definitions on an [indexed surface](projected-effects.md#indexed-rasters-and-palette-cycling)
+or the [Copper render pass](render-graph.md#copper-style-raster-schedules).
+Run `node examples/palette-cycling.cjs chromatic-current.html` to see two
+cycles advance at different speeds over one fixed index grid.
 
 ### Schedule raster register writes
 

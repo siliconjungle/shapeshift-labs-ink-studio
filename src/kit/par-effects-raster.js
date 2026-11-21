@@ -89,6 +89,14 @@
       outputs:{value:'raster',indices:'raster'},
       run({source,palette,bank,options}){return E.bitplane(source,palette,{...options,bank:bank ?? options.bank});}
     },
+    'fx.paletteCycle':{
+      description:'Rotate independently timed palette slots while preserving the index raster.',
+      inputs:{source:'raster',palette:'palette',cycles:options,alpha:{type:'any',default:null},options},
+      outputs:{value:'displayRaster',indices:'raster',palette:'palette'},time:true,
+      run({source,palette,cycles,alpha,options},{time}){
+        return E.paletteCycle(source,palette,{time,...options,cycles,alpha:alpha ?? options.alpha});
+      }
+    },
     'fx.paletteFault':{
       inputs:{source:'raster',palette:'palette',options},outputs:{value:'raster',indices:'raster'},
       run({source,palette,options}){return E.paletteFault(source,palette,options);}

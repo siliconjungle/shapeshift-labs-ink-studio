@@ -99,6 +99,7 @@ const specifications = {
   'color.key': { inputs: { options: { color: '#3c87be' } } },
   'fx.bitplane': { inputs: { source: slots } },
   'fx.rasterSchedule': { inputs: { source: rgba, options: { schedule: [{ row: 2, pixelScale: [2, 1] }] } } },
+  'fx.paletteCycle': { inputs: { source: slots, cycles: { shimmer: { range: [0, 1], period: 2 } } } },
   'fx.paletteFault': { inputs: { source: slots, options: { swaps: [[0, 1]] } } },
   'fx.regionObservations': { inputs: { frames: [mask, mask] } },
   'fx.analyze': { output: 'paths' },

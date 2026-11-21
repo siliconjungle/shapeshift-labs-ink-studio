@@ -1,5 +1,6 @@
 /* Output-row registers for indexed color, source addressing and pixel size. */
 const RasterSchedule = (() => {
+  const cycling = typeof PaletteCycles === 'undefined' ? require('./palette-cycles.js') : PaletteCycles;
   const drawing = typeof DrawingPrimitives === 'undefined' ? require('./drawing-primitives.js') : DrawingPrimitives;
   const integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
   const pair = (value, min, max) => Array.isArray(value) && value.length === 2 &&
@@ -11,13 +12,11 @@ const RasterSchedule = (() => {
     return drawing.color(value);
   }
 
-  function entries(schedule, palette) {
+  function entries(schedule, paletteSize) {
     if (!Array.isArray(schedule) || schedule.length > 1024)
       throw new TypeError('Raster schedule needs an array of up to 1024 entries');
-    const paletteSize = (palette?.length ?? 0) / 4;
-    const colors = paletteSize ? [palette] : [];
-    let previous = -1;
-    const rows = Array.from(schedule, entry => {
+    let previous = -1, paletteRow = 0;
+    return Array.from(schedule, entry => {
       if (!entry || Object.getPrototypeOf(entry) !== Object.prototype ||
           Object.keys(entry).some(key => !['row', 'offset', 'pixelScale', 'palette'].includes(key)))
         throw new TypeError('Invalid raster schedule entry');
@@ -28,39 +27,55 @@ const RasterSchedule = (() => {
           pixelScale !== undefined && !pair(pixelScale, 1, 1024))
         throw new RangeError('Raster schedule needs integer XY offsets and positive XY pixel sizes');
       previous = row;
-      let paletteRow = colors.length - 1;
+      let edits;
       if (writes !== undefined) {
         if (!paletteSize || !Array.isArray(writes) || writes.length < 1 || writes.length > paletteSize)
           throw new RangeError('Raster schedule palette writes need an indexed palette and a list of slots');
-        const next = colors[paletteRow].slice(), seen = new Set();
-        for (const write of writes) {
+        const seen = new Set();
+        edits = Array.from(writes, write => {
           if (!Array.isArray(write) || write.length !== 2 || !integer(write[0], 0, paletteSize - 1) || seen.has(write[0]))
             throw new RangeError('Raster schedule palette writes need distinct in-range slots');
-          next.set(color(write[1]), write[0] * 4);
           seen.add(write[0]);
-        }
-        paletteRow = colors.push(next) - 1;
+          return [write[0] * 4, color(write[1])];
+        });
+        paletteRow++;
       }
-      return { row, offset: offset?.slice(), pixelScale: pixelScale?.slice(), paletteRow };
+      return { row, offset: offset?.slice(), pixelScale: pixelScale?.slice(), paletteRow, edits };
     });
-    const paletteData = new Uint8Array(colors.length * paletteSize * 4);
-    colors.forEach((swatches, row) => paletteData.set(swatches, row * paletteSize * 4));
-    return { rows, paletteSize, paletteData };
   }
 
-  function prepare({ schedule = [], palette, wrap = false } = {}) {
+  function palettes(rows, base, groups, time) {
+    if (!base) return new Uint8Array(0);
+    const step = base.length, data = new Uint8Array(step * ((rows.at(-1)?.paletteRow ?? 0) + 1));
+    data.set(base);
+    cycling.visit(groups, time, (index, source) => data.set(base.subarray(source * 4, source * 4 + 4), index * 4));
+    for (const { paletteRow, edits } of rows) if (edits) {
+      const at = paletteRow * step;
+      data.copyWithin(at, at - step, at);
+      for (const [offset, rgba] of edits) data.set(rgba, at + offset);
+    }
+    return data;
+  }
+
+  function prepare({ schedule = [], palette, cycles = {}, wrap = false } = {}) {
     if (typeof wrap !== 'boolean') throw new TypeError('Raster schedule wrap must be a boolean');
     if (palette !== undefined && (!Array.isArray(palette) || !integer(palette.length, 1, 256)))
       throw new RangeError('Raster schedule needs a palette of 1 to 256 colors');
     const base = palette === undefined ? null : Uint8Array.from(Array.from(palette, color).flat());
-    const program = typeof schedule === 'function' ? schedule : entries(schedule, base);
-    return { program, base, wrap };
+    const paletteSize = (base?.length ?? 0) / 4;
+    const groups = cycling.prepare(cycles, index => {
+      if (!integer(index, 0, paletteSize - 1)) throw new RangeError('Raster schedule cycle needs an in-range indexed palette slot');
+      return index;
+    });
+    const program = typeof schedule === 'function' ? schedule : entries(schedule, paletteSize);
+    const staticColors = typeof program !== 'function' && !groups.length ? palettes(program, base, groups, 0) : undefined;
+    return { program, base, paletteSize, groups, staticColors, wrap };
   }
 
   function table(plan, width, height, time = 0) {
-    const { program, base } = plan;
-    const { rows, paletteSize, paletteData } = typeof program === 'function'
-      ? entries(program({ width, height, time }) ?? [], base) : program;
+    const { program, base, paletteSize, groups, staticColors } = plan;
+    const rows = typeof program === 'function' ? entries(program({ width, height, time }) ?? [], paletteSize) : program;
+    const paletteData = staticColors ?? palettes(rows, base, groups, time);
     const registers = new Float32Array(height * 8);
     let offset = [0, 0], scale = [1, 1], anchor = 0, bank = 0, next = 0;
     for (let y = 0; y < height; y++) {

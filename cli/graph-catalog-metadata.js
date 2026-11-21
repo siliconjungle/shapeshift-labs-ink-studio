@@ -150,7 +150,9 @@ const options = {
   'fx.bitplane': { bit: property('number', limit(0, 7, true), 0), mode: property('string', oneOf('flip', 'clear', 'borrow'), 'flip') },
   'fx.rasterSchedule': { ...size, time: sampleTime, wrap: property('boolean', {}, false),
     palette: property('array<string>', { description: 'Base palette of 1 to 256 hex RGB or RGBA swatches.' }),
+    cycles: property('record', { description: 'Named palette cycles applied before row writes.' }),
     schedule: property('array<record>', { description: 'Increasing output rows with persistent offset, pixelScale or palette writes.' }, []) },
+  'fx.paletteCycle': { time: sampleTime },
   'fx.paletteFault': { swaps: property('array', { constraints: { entries: 'Nonoverlapping pairs of distinct palette slots' } }, []) },
   'warp.sample': { filter: warpFilter, edge: address }, 'warp.mesh': warp, 'warp.grid': warp, 'warp.morph': warp,
   'warp.opticalFlow': { direction: property('string', oneOf('forward', 'backward'), 'forward'),
@@ -274,6 +276,8 @@ const notes = {
   'music.scoreAudio': ['Start and end are absolute score seconds. Omitted end uses the score duration.'],
   'music.roughness': ['Spectra are grouped by voice. Each partial is a pair of frequency in hertz and linear amplitude.'],
   'fx.bitplane': ['Source carries one palette slot per pixel. Borrow mode requires an aligned donor bank.'],
+  'fx.paletteCycle': ['Each named cycle uses an inclusive range, ordered slots or palette role with a period in seconds.',
+    'Cycles cannot overlap. Optional aligned alpha is in byte levels. The output index values never change.'],
   'fx.paletteFault': ['Source carries one palette slot per pixel. Swap rules and stuck rules may not overlap.'],
   'data.get': ['The key must exist in the input record.'],
   'data.collect': ['All requested keys must exist in the input record.']

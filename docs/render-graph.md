@@ -228,6 +228,12 @@ const renderGraphInputs = { indexedArt };
   through them. The ordinary mask, selection, depth, and opacity controls
   also apply.
 
+An indexed pass can also set `cycles` to [rotate palette slots](headless-authoring.md#cycle-an-indexed-palette)
+using the frame clock. Use an inclusive range or explicit list for each
+cycle. The pass rotates its starting palette once per frame, then applies
+the authored row writes. A row write replaces its slot for subsequent
+rows until another write changes it.
+
 The CPU and WebGL use the same row registers. In a procedural graph or
 JavaScript raster pipeline, use [`fx.rasterSchedule`](headless-authoring.md#schedule-raster-register-writes).
 Run `node examples/raster-schedule.cjs raster-relay.html` to compare the
