@@ -118,6 +118,41 @@ Open the original, difference, raw mask, clean mask and colored ID PNGs from the
 
 The example exposes `threshold`, `maxDrift`, `minArea` and `halfLife` as named inputs. Pass `--controls controls.json` to adjust them during playback.
 
+## Run a patch as a show
+
+`patch show` runs a patch at wall-clock speed and sends a named picture output to a dedicated projector page. The cue file sets the patch, sources, frame rate, projector mapping, presets and controls. This example reuses the tabletop patch.
+
+```sh
+node examples/patch-tooling/footage.cjs ./tabletop
+cp examples/patch-tooling/show.cues.json tabletop/show.cues.json
+node cli/ink-studio.js patch show tabletop/show.cues.json --report tabletop/show-report.json
+```
+
+Open the `projector` URL from the `show-ready` line in Chrome on the computer running Ink. Move the window onto the projector display, then click **Start in full screen**. This releases the show clock. Chrome asks for MIDI device access if the cue file configures MIDI. The projector server listens on loopback and feeds one active window. Omit `projector.surfaces` for a picture that fits the window, or set corners, crop, edge blends and gain using the [projection surface settings](show-control.md#map-projector-surfaces). Every surface uses the selected patch output, so the cue file can omit the surface's `source` field.
+
+| Cue field | Behavior |
+| --- | --- |
+| `format`, `version`, `patch`, `output` | Use `ink-studio/patch-show`, `1`, a patch project file relative to the cue file, and the name of its display raster output. |
+| `fps`, `size`, `frames` | Default to 30 fps and 320×180 media input. FPS accepts a number or ratio such as `30000/1001`. `frames` bounds the show to 1–36,000 slots. With no bound, a live show runs until interrupted and a rehearsal runs for 120 slots. |
+| `video`, `audio`, `videoTimeoutMs` | Video accepts a local clip or `-` for a **paced** stream of tightly packed RGBA8 frames. Audio accepts a WAV, or `video` for the soundtrack of a local clip with a finite show length. Paths resolve from the cue file. Audio feeds patch nodes. Video holds the last available frame during an outage and uses black before the first frame. Failed audio loads use silence and appear in the report. `videoTimeoutMs` defaults to 1000. |
+| `inputs`, `presets`, `initial`, `cues` | Each preset contains named graph input overrides applied on top of `inputs`. `initial` selects the starting preset. Each cue has a zero-based `frame` and a `preset`. If a deadline skips a scheduled cue, the latest due preset applies on the next rendered slot. The last valid MIDI or OSC selection received before that slot takes precedence. |
+| `projector` | `port` defaults to `0` for an available loopback port. `wait` defaults to `true` in show mode and `false` in rehearsal mode. Use `wait: true` when rehearsing with a connected display. |
+| `osc` | Optional IPv4 UDP input. Defaults are host `127.0.0.1`, port `9102` and address `/ink/preset`. Send one string argument containing a preset name. `idleMs` flags silence after the configured interval when a sender is expected to keep sending. Use the assigned `oscPort` from `show-ready` when the configured port is `0`. |
+| `midi` | Optional input via the projector's Web MIDI connection. Use `input` for an exact device name or omit it to use the first connected input. `channel` is 1–16 and defaults to 1. `notes` and `programs` map numbers 0–127 to preset names. Note-on requires positive velocity. |
+
+For example, add `"midi": { "channel": 1, "notes": { "60": "steady", "62": "responsive" }, "programs": { "4": "steady" } }` to the tabletop cue file. Use the [Web MIDI API](https://www.w3.org/TR/webmidi/) on the projector computer or send `/ink/preset` with the string `responsive` from an OSC controller.
+
+### Rehearse and diagnose
+
+```sh
+node cli/ink-studio.js patch show tabletop/show.cues.json \
+  --rehearse --report tabletop/rehearsal.json
+```
+
+The final `show-report` line is the same JSON written by `--report`. A rehearsal returns exit status `2` for missed frames, slow stages, input outages, or failed graph assertions. `dropped.schedule` counts wall-clock slots missed by evaluation, `dropped.projector` counts published frames skipped between the viewer's draw acknowledgements, and `dropped.video` counts incoming frames superseded before the patch could use them. A headless rehearsal can measure the graph and inputs. Attach the projector page to measure viewer drops and MIDI.
+
+`stages` gives per-stage timing for the graph, each evaluated node, and projector image preparation. `slowMs` sets the threshold in the cue file and defaults to one frame interval. `sourceEvents` includes the frame index, elapsed time and reason for input outages and recoveries. `presets` shows each applied preset and where it came from. Press Ctrl-C to end a live show and write the report.
+
 ## Author a WGSL node
 
 `patch.shader` accepts a raster, the WGSL source as a string, and an optional numeric `amount`. Insert the shader text into the graph with a JSON edit or by generating an edit journal from a `.wgsl` file. The runtime reuses a compiled pipeline for a shader and set of dimensions within the run.

@@ -556,7 +556,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         artifacts:bytes ? [{file,format,sha256,bytes:bytes.length}] : []}};
   }
 
-  async function previewFrame(targets, options, { profile = false } = {}) {
+  async function previewFrame(targets, options, { profile = false, encodeArtifacts = true } = {}) {
     const watches=named(targets,'patch previews');
     if (watches.length>64) throw new RangeError('A patch frame supports up to 64 previews');
     separateNames(watches.map(([name])=>name),'Patch previews');
@@ -569,7 +569,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {frame,report}=await evaluateAsync(request(options),profile);
     const results=watches.map(([name,{output,node,port}])=>{
       const value=output!==undefined ? frame.outputs[output] : frame.preview(node,port);
-      const artifact=preview(value,{grayscale:true});
+      const artifact=encodeArtifacts && preview(value,{grayscale:true});
       return { name, value, artifact:artifact && {...artifact,file:'previews/'+name+'.'+artifact.format} };
     });
     const assertions=prepareFrameChecks(frame);

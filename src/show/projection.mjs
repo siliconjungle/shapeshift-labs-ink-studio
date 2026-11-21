@@ -31,7 +31,7 @@ export function projectionPoint(matrix, [x, y]) {
   return [(matrix[0] * x + matrix[1] * y + matrix[2]) / w, (matrix[3] * x + matrix[4] * y + matrix[5]) / w];
 }
 
-function prepare(surfaces) {
+export function prepareProjectionSurfaces(surfaces) {
   if (!Array.isArray(surfaces) || surfaces.length > 32) throw new RangeError('Projection takes up to 32 surfaces');
   const ids = new Set();
   return surfaces.map(({ id, source, corners, crop = [0, 0, 1, 1], edges = [0, 0, 0, 0], gain = 1, gamma = 1 }) => {
@@ -75,7 +75,7 @@ void main() {
 }`;
 
 export function createProjectionMapper(canvas, definition = []) {
-  let surfaces = prepare(definition);
+  let surfaces = prepareProjectionSurfaces(definition);
   const gl = canvas?.getContext?.('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer: true });
   if (!gl) throw new Error('Projection mapping requires a WebGL 2 canvas');
   const textures = new Map(), shaders = [];
@@ -115,7 +115,7 @@ export function createProjectionMapper(canvas, definition = []) {
   return {
     setSurfaces(values) {
       if (disposed) throw new Error('Projection mapper is disposed');
-      surfaces = prepare(values);
+      surfaces = prepareProjectionSurfaces(values);
       const active = new Set(surfaces.map(surface => surface.source));
       for (const [id, handle] of textures) if (!active.has(id)) {
         gl.deleteTexture(handle);

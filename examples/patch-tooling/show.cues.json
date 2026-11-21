@@ -1,0 +1,26 @@
+{
+  "format": "ink-studio/patch-show",
+  "version": 1,
+  "patch": "tracking.json",
+  "output": "picture",
+  "video": "tabletop.mkv",
+  "size": "320x180",
+  "fps": 15,
+  "frames": 60,
+  "presets": {
+    "steady": { "halfLife": 0.18, "threshold": 26 },
+    "responsive": { "halfLife": 0.025, "threshold": 26 }
+  },
+  "initial": "steady",
+  "cues": [
+    { "frame": 20, "preset": "responsive" },
+    { "frame": 42, "preset": "steady" }
+  ],
+  "projector": {
+    "port": 0,
+    "surfaces": [
+      { "id": "screen", "corners": [[0.06, 0.12], [0.95, 0.08], [0.93, 0.9], [0.09, 0.94]] }
+    ]
+  },
+  "osc": { "port": 0, "address": "/ink/preset" }
+}

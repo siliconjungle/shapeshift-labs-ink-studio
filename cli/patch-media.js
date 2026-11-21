@@ -3,6 +3,19 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const WAV = require('./wav.js');
 
+function parseRate(text = '12') {
+  if (!/^\d+(?:\.\d+|\/\d+)?$/.test(text)) throw new TypeError('Patch FPS needs a number or ratio');
+  const [a,b='1']=String(text).split('/'), fps=Number(a)/Number(b);
+  if (!Number.isFinite(fps)||fps<1||fps>120) throw new RangeError('Patch FPS must be 1–120');
+  return fps;
+}
+
+function parseSize(text = '320x180') {
+  const match=/^(\d+)x(\d+)$/.exec(text), width=Number(match?.[1]),height=Number(match?.[2]);
+  if (!width||!height||width*height>1048576||width>4096||height>4096) throw new RangeError('Patch size needs WIDTHxHEIGHT within 1,048,576 pixels');
+  return {width,height};
+}
+
 function localFile(input) {
   const file = path.resolve(input);
   if (!fs.statSync(file).isFile()) throw new TypeError('Expected a local media file: ' + input);
@@ -89,4 +102,4 @@ async function audioSource(input, {video,executable='ffmpeg',duration,signal}) {
   }
   return {sampleRate,channels,samples};
 }
-module.exports={videoFrames,audioSource};
+module.exports={videoFrames,audioSource,parseRate,parseSize};

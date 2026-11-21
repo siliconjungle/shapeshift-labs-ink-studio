@@ -5,7 +5,7 @@ const { readGraphProject } = require('./graph-project.js');
 const { graphOutputs } = require('./graph-outputs.js');
 const { patchNodes } = require('./patch-nodes.js');
 const { createPatchGpu } = require('./patch-gpu.js');
-const { videoFrames, audioSource } = require('./patch-media.js');
+const { videoFrames, audioSource, parseRate, parseSize } = require('./patch-media.js');
 const edit = require('./patch-edit.js');
 const { describeGraphNode, listGraphNodes, nodeText, listText } = require('./graph-catalog.js');
 
@@ -17,30 +17,21 @@ const usage = [
   'ink-studio patch plan <project.json> [--json | --dot]',
   'ink-studio patch nodes [--json] | patch describe <operation>',
   'ink-studio patch run <project.json> [--video file|-] [--audio file.wav|video] [--watch name=node:port,...]',
-  '  [--frames 120] [--fps 12] [--size 320x180] [--controls controls.json] [--out folder] [--keep] [--progress]'
+  '  [--frames 120] [--fps 12] [--size 320x180] [--controls controls.json] [--out folder] [--keep] [--progress]',
+  'ink-studio patch show <cues.json> [--rehearse] [--report rehearsal.json] [--ffmpeg path] [--gpu-module path]'
 ].join('\n');
 
-const booleanOptions = new Set(['json','dot','keep','progress']);
+const booleanOptions = new Set(['json','dot','keep','progress','rehearse']);
 const flags = {
   init:[], apply:['out'], wire:['out'], bind:['id','from','to','out'], plan:['json','dot'], nodes:['json'], describe:['json'],
-  run:['video','audio','frames','fps','size','controls','out','keep','progress','ffmpeg','gpu-module','watch']
+  run:['video','audio','frames','fps','size','controls','out','keep','progress','ffmpeg','gpu-module','watch'],
+  show:['rehearse','report','ffmpeg','gpu-module']
 };
-const counts = { init:2, apply:3, wire:4, bind:4, plan:2, nodes:1, describe:2, run:2 };
+const counts = { init:2, apply:3, wire:4, bind:4, plan:2, nodes:1, describe:2, run:2, show:2 };
 
 async function print(value, compact=false) {
   const text=typeof value==='string' ? value : JSON.stringify(value,null,compact ? undefined : 2);
   if (!process.stdout.write(text+'\n')) await once(process.stdout,'drain');
-}
-function parseRate(text='12') {
-  if (!/^\d+(?:\.\d+|\/\d+)?$/.test(text)) throw new TypeError('Patch FPS needs a number or ratio');
-  const [a,b='1']=text.split('/'), fps=Number(a)/Number(b);
-  if (!Number.isFinite(fps)||fps<1||fps>120) throw new RangeError('Patch FPS must be 1–120');
-  return fps;
-}
-function parseSize(text='320x180') {
-  const match=/^(\d+)x(\d+)$/.exec(text), width=Number(match?.[1]),height=Number(match?.[2]);
-  if (!width||!height||width*height>1048576||width>4096||height>4096) throw new RangeError('Patch size needs WIDTHxHEIGHT within 1,048,576 pixels');
-  return {width,height};
 }
 function range(text) {
   return text?.split(',').map(s=>s.trim() ? Number(s) : NaN);
@@ -144,6 +135,7 @@ async function patchCommand(pos,opt,settings) {
   if (!Object.hasOwn(flags,mode)||pos.length!==counts[mode]||
       Object.entries(opt).some(([key,value])=>!flags[mode].includes(key)||(booleanOptions.has(key) ? value!==true : typeof value!=='string'))||
       opt.json&&opt.dot) throw new TypeError(usage);
+  if (mode==='show') return require('./patch-show.js').runShow(file,opt,settings,value=>print(value,true));
   const context={...settings,operations:{...settings.operations,...patchNodes(settings.kit)}};
   if (mode==='run') return run(file,opt,settings);
   if (mode==='init') return print(edit.init(file));

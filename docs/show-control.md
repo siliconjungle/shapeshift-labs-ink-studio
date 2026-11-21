@@ -2,6 +2,8 @@
 
 Ink's browser entry `show-control.mjs` exposes live Web Audio routing, beat and timecode readers, projective texture mapping and DMX fixture patching. The local `show-bridge` command provides the browser interface to OSC, ArtTimeCode, Art-Net and sACN. The included Ableton Link companion is optional.
 
+Use [`ink-studio patch show`](patch-tooling.md#run-a-patch-as-a-show) to run a graph from a cue file, send its output to a projector, switch presets from MIDI or OSC, and write a rehearsal report.
+
 ## Run Signal Room
 
 ```sh
