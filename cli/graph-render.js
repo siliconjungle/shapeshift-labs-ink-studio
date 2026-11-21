@@ -1,5 +1,7 @@
 /* Host the CPU splat renderer and pass previews in headless recipe graphs. */
 const { render, cameraCapture } = require('./render.js');
+const { history } = require('../src/render-graph.js');
+const { pose } = require('./diarama-pose.js');
 const { select } = require('../src/art-passes.js');
 const { encode, depthRange, labels } = require('./pass-preview.js');
 
@@ -26,6 +28,29 @@ function renderGraphScene(source, { camera, lights, channels = defaults, options
     report: { width: frame.w, height: frame.h, time: at, splats: source.count,
       ...(sampledCamera && { camera: sampledCamera }),
       passes: requested.filter(name => frame.passes?.[name]) } };
+}
+
+function createSceneSampler(kit) {
+  let retained, active;
+  function sample(source, { sequence, take, time = take?.start ?? 0, options = {}, ...settings }) {
+    if (sequence === undefined) return renderGraphScene(source, { ...settings, options, time, take, kit });
+    if (active !== sequence) {
+      retained?.clear();
+      retained = history();
+      active = sequence;
+    }
+    const at = options.time ?? time;
+    if (!Number.isFinite(at) || at < 0) throw new RangeError('Graph scene playback needs nonnegative seconds');
+    pose(source, at, { kit, artDirection: options.artDirection, maxSteps: 36000 });
+    return renderGraphScene(source, { ...settings, time, take, kit, options: {
+      ...options, renderHistory: retained, renderHistoryKey: retained
+    } });
+  }
+  sample.clear = () => {
+    retained?.clear();
+    retained = active = undefined;
+  };
+  return sample;
 }
 
 function positionPreview(samples, valid, width, height) {
@@ -83,8 +108,12 @@ function graph3DOperations(kit) {
       inputs: { source: 'world', camera: options, lights: { type: 'array<record>', default: [] },
         channels: { type: 'array<string>', default: defaults }, options },
       outputs: { value: 'raster', frame: 'renderFrame', motionReference: 'any', report: 'record' }, time: true,
-      run({ source, options, ...inputs }, { time, take }) {
-        return renderGraphScene(source, { ...inputs, options, time, kit, ...(options.time === undefined && { take }) });
+      instantiate() {
+        const sample = createSceneSampler(kit);
+        const run = ({ source, options, ...inputs }, { time, take, sequence }) =>
+          sample(source, { ...inputs, options, time, sequence, ...(options.time === undefined && { take }) });
+        run.clear = sample.clear;
+        return run;
       }
     },
     'scene.pass': {
@@ -95,4 +124,4 @@ function graph3DOperations(kit) {
   };
 }
 
-module.exports = { renderGraphScene, graphRenderPass, graph3DOperations };
+module.exports = { renderGraphScene, graphRenderPass, graph3DOperations, createSceneSampler };

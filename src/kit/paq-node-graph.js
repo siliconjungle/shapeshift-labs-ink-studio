@@ -106,7 +106,7 @@
       }));
     }
 
-    function evaluate(input = {}, { take, time = take?.start ?? 0, seed = 0 } = {}) {
+    function evaluate(input = {}, { take, sequence, time = take?.start ?? 0, seed = 0 } = {}) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
         if (time !== take.start) throw new RangeError('Graph seconds must match the take frame start');
@@ -124,7 +124,7 @@
           return [key, value];
         });
         const previous = marks.get(name), comparable = entries.map(([, value]) => value);
-        const reused = previous?.seed === seed && (!clock || previous.time === time && previous.take === take) &&
+        const reused = previous?.seed === seed && (!clock || previous.time === time && previous.take === take && previous.sequence === sequence) &&
           comparable.every((value, i) => {
             const prior = previous.values[i];
             return Object.is(value, prior) || bindings[i][2].kind === 'track' && Array.isArray(value) &&
@@ -132,12 +132,12 @@
           });
         if (reused) pending.set(name, previous);
         else {
-          const produced = run(Object.fromEntries(entries), { time, ...(take !== undefined && { take }), seed: P.data.hash(name, seed), node: name });
+          const produced = run(Object.fromEntries(entries), { time, ...(take !== undefined && { take }), ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name });
           if (!record(produced)) throw new TypeError('Graph node must return named outputs: ' + name);
           for (const [key, socket] of Object.entries(outputs))
             if (!Object.hasOwn(produced, key) || !validator(socket.type)(produced[key]))
               throw new TypeError('Wrong output from graph node ' + name + '.' + key);
-          pending.set(name, { seed, time, take, values: comparable, outputs: produced, subgraph: run.inspect?.() });
+          pending.set(name, { seed, time, take, sequence, values: comparable, outputs: produced, subgraph: run.inspect?.() });
         }
         status[name] = reused ? 'cached' : 'evaluated';
       }

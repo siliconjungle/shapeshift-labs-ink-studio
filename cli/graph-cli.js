@@ -10,7 +10,8 @@ const flags = {
   validate:['inputs','json'], plan:['inputs','json'],
   inspect:['inputs','at','seed','out','output','node','port','json'],
   run:['inputs','at','seed','out','json'], batch:['inputs','at','seed','out','json'],
-  session:['protocol','out']
+  session:['protocol','out'],
+  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','json']
 };
 
 async function send(value, compact=false) {
@@ -79,13 +80,43 @@ async function session(project, directory, inputs) {
   }
 }
 
+function clipOptions(opt, sources) {
+  if (!opt.out) throw new TypeError('Graph clip needs --out directory');
+  const read = key => {
+    if (opt[key] === undefined) return undefined;
+    const file = path.resolve(opt[key]);
+    sources.push(file);
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  };
+  const document = read('clock');
+  const settings = document?.format === 'ink-studio/take' && document.version === 1 ? document.clock ?? {} : document ?? {};
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new TypeError('Graph clip clock needs a settings object');
+  const clock = { ...settings };
+  if (opt.fps !== undefined) {
+    const parts = /^(\d+)\/(\d+)$/.exec(opt.fps.trim());
+    clock.fps = parts ? { numerator: Number(parts[1]), denominator: Number(parts[2]) } : Number(opt.fps);
+  }
+  if (opt.cuts !== undefined) {
+    const cuts = opt.cuts.split(',').map(item => {
+      if (!/^\d+$/.test(item.trim())) throw new TypeError('Graph clip cuts need comma-separated integer frame indices');
+      const frame = Number(item);
+      return { frame, id: 'cut-' + frame };
+    });
+    if (clock.cuts !== undefined && !Array.isArray(clock.cuts)) throw new TypeError('Graph clip clock cuts must be an array');
+    clock.cuts = [...(clock.cuts ?? []), ...cuts];
+  }
+  return { output: opt.output, from: opt.from === undefined ? undefined : Number(opt.from),
+    to: opt.to === undefined ? undefined : Number(opt.to), warmup: opt.warmup === undefined ? undefined : Number(opt.warmup),
+    format: opt.format, clock, renderOptions: read('render-options') };
+}
+
 module.exports = async function graphCommand(pos,opt,settings) {
   const [mode,file,caseFile]=pos;
   if (Object.hasOwn(host.commands,mode)) return send(await host.execute(pos,opt,settings),opt.json);
   if (!Object.hasOwn(flags,mode) || pos.length!==(mode==='batch'?3:2) ||
       Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) || (key==='json' ? value!==true : typeof value!=='string' || !value.trim())) ||
       opt.port!==undefined && opt.node===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
-    throw new TypeError('Use graph validate|plan|inspect|run|batch|session <project.json> [cases-or-sweep.json]. See ink-studio help');
+    throw new TypeError('Use graph validate|plan|inspect|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
   settings=await host.adapters(opt.adapters,settings);
   const project=readGraphProject(file,settings), sources=project.sourceFiles();
   if (settings.adapterFile) sources.push(settings.adapterFile);
@@ -101,7 +132,8 @@ module.exports = async function graphCommand(pos,opt,settings) {
   if (mode==='validate') return send(project.validate(inputs),opt.json);
   if (mode==='plan') return send(project.plan(inputs),opt.json);
   if (mode==='session') return session(project,output,sources);
-  if (mode==='inspect') result=project.inspect({output:opt.output,node:opt.node,port:opt.port},run);
+  if (mode==='clip') result=project.clip({...run,...clipOptions(opt,sources)});
+  else if (mode==='inspect') result=project.inspect({output:opt.output,node:opt.node,port:opt.port},run);
   else if (mode==='batch') {
     const cases=path.resolve(caseFile);
     sources.push(cases);

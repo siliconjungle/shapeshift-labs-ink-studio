@@ -267,51 +267,9 @@ function tap(w, t0, t1) {
     );
   }
 }
-// put the world at time t. A diorama that says it remembers the past (anim.stateful) is walked there a sixtieth of a second at a time
 function pose(w, t) {
   if (!w.anim) return;
-  const direction = ArtDirection.prepare(w.look?.artDirection,artDirectionOption());
-  if (w.anim.motionSettings) w.anim.motionDirection = direction;
-  const sceneTime = ArtDirection.time(direction,t);
-  if (w.anim.stateful) {
-    if (sceneTime < w.clock) die('this diorama cannot be run backwards: ask for times in order');
-    const separateCloth = direction?.cadence.scene && direction.cadence.cloth !== undefined && w.anim.hasIndependentCloth?.();
-    function advanceScene(to) {
-      while (w.clock < to - 1e-9) {
-        const dt = Math.min(1 / 60, to - w.clock), before = w.clock;
-        w.clock += dt;
-        tap(w, before, w.clock);
-        if (separateCloth) w.anim.update(dt,w.clock,{ separateCloth });
-        else w.anim.update(dt,w.clock);
-      }
-    }
-    if (separateCloth) {
-      // Interleave fixed steps so cloth sees the held scene pose at each step.
-      let at = w.clothClock ?? w.clock;
-      while (at < t - 1e-9) {
-        const dt = Math.min(1 / 60,t-at);
-        at += dt;
-        advanceScene(ArtDirection.time(direction,at));
-        w.anim.advanceCloth(dt,at);
-      }
-      w.clothClock = t;
-    } else advanceScene(sceneTime);
-  } else w.anim.update(1 / 60, sceneTime);
-  w.clock = sceneTime;
-  /* splats carried by bones on the graphics card stay at rest in the data: the tools look at a copy with them put in place */
-  if (w.anim.bones) {
-    if (!w.rest) w.rest = w.data;
-    w.data = lib().KIT.bones.posed({
-      data: w.rest,
-      anim: w.anim,
-      get posedBuf() {
-        return w.posedBuf;
-      },
-      set posedBuf(v) {
-        w.posedBuf = v;
-      }
-    });
-  }
+  return require('./diarama-pose.js').pose(w, t, { kit: lib(), artDirection: artDirectionOption(), tap });
 }
 const artPixelSize = cmd === 'compare' || cmd === 'review' ? undefined : num('px', undefined);
 if (artPixelSize !== undefined && (!Number.isSafeInteger(artPixelSize) || artPixelSize < 1))
@@ -1034,6 +992,8 @@ const CMD = {
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
         '  graph inspect <project.json> [--output NAME | --node PATH --port NAME] [--out directory]',
         '  graph run <project.json> [--inputs values.json --at seconds --seed N --out directory]',
+        '  graph clip <project.json> --output NAME --from FRAME --to FRAME --out directory',
+        '    [--fps N|N/D --warmup FRAMES --cuts FRAME,FRAME --format frames|apng|both --clock file.json --render-options file.json]',
         '  graph batch <project.json> <cases-or-sweep.json> [--out directory]   run named cases or a Cartesian sweep',
         '  graph capture <request.json> [--adapters host.cjs --out file]   capture or send via a registered host adapter',
         '  graph inspect-pxc <project.pxc> [--out info.json]   inspect a Pixel Composer container',

@@ -1,7 +1,7 @@
 /* Raster feedback uses the render graph's premultiplied sampling and decay rules. */
 (function (P) {
   const { kinds, size, int, range, clamp, buffer, raster } = P.rasterSimSupport;
-  kinds.feedback = (settings, recipe) => {
+  kinds.feedback = (settings, recipe, firstTick) => {
     const { frames, fps = 1 / recipe.dt, mode = 'hold', cuts = [], ...pass } = settings;
     if (Object.keys(pass).some(key => !['halfLife', 'filter', 'warp', 'gain', 'threshold', 'opacity'].includes(key)))
       throw new TypeError('Unknown raster feedback setting');
@@ -38,7 +38,7 @@
       }
       state = out;
     }
-    step(0, recipe.dt);
+    step(firstTick, recipe.dt);
     return { work: w * h * 4, step, capture: () => ({ signal: state }),
       restore(saved) { state = Uint8Array.from(buffer(saved?.signal, length, 0, 255)); },
       frame() {

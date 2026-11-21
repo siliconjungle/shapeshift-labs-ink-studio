@@ -27,20 +27,22 @@
     return P.data.freeze({ format: formats.recipe, version: 1, kind, seed, dt, maxTicks, settings: portable(settings) });
   }
 
-  function session(source, { checkpoint, every = 16, cache = 12 } = {}) {
+  function session(source, { checkpoint, every = 16, cache = 12, firstTick = checkpoint?.firstTick ?? 0 } = {}) {
     const raw = source ?? checkpoint?.recipe;
     if (raw?.format !== formats.recipe || raw.version !== 1 || !int(every, 1, 12000) || !int(cache, 1, 64))
       throw new TypeError('Expected a version 1 raster simulation recipe and bounded cache settings');
     const recipe = define(raw.kind, raw.settings, raw);
-    const engine = kinds[recipe.kind](recipe.settings, recipe);
+    if (!int(firstTick, 0, recipe.maxTicks) || firstTick !== 0 && recipe.kind !== 'feedback')
+      throw new RangeError('Only feedback can start at a nonzero raster simulation tick');
+    const engine = kinds[recipe.kind](recipe.settings, recipe, firstTick);
     const at = new Map();
-    let tick = 0, savedTick = 0;
+    let tick = firstTick, savedTick = firstTick;
     const capture = () => P.data.freeze(portable(engine.capture()));
     const initial = capture();
-    at.set(0, initial);
+    at.set(firstTick, initial);
     if (checkpoint) {
       if (checkpoint.format !== formats.checkpoint || checkpoint.version !== 1 ||
-          !int(checkpoint.tick, 0, recipe.maxTicks) ||
+          !int(checkpoint.tick, firstTick, recipe.maxTicks) || (checkpoint.firstTick ?? 0) !== firstTick ||
           !checkpoint.recipe || JSON.stringify(recipe) !== JSON.stringify(define(
             checkpoint.recipe.kind, checkpoint.recipe.settings, checkpoint.recipe)))
         throw new RangeError('Checkpoint does not match this raster simulation recipe');
@@ -50,14 +52,12 @@
     }
 
     function seek(time) {
-      if (!Number.isFinite(time) || time < 0)
-        throw new RangeError('Raster simulation time is outside its fixed-tick range');
-      return seekTick(Math.floor(time / recipe.dt + 1e-8));
+      return seekTick(tickAt(time, recipe.dt));
     }
     function seekTick(target) {
-      if (!int(target, 0, recipe.maxTicks))
+      if (!int(target, firstTick, recipe.maxTicks))
         throw new RangeError('Raster simulation time is outside its fixed-tick range');
-      let start = tick <= target ? tick : 0;
+      let start = tick <= target ? tick : firstTick;
       for (const cached of at.keys()) if (cached <= target && cached > start) start = cached;
       if ((target - start) * (engine.work ?? 1) > 260e6)
         throw new RangeError('Raster replay exceeds its per-seek work budget');
@@ -77,9 +77,9 @@
         }
         const frame = engine.frame(tick), state = newlySaved.get(tick) ?? capture();
         for (const [key, value] of newlySaved) at.set(key, value);
-        while (at.size > cache + (savedTick ? 2 : 1)) at.delete([...at.keys()].find(n => n !== 0 && n !== savedTick));
+        while (at.size > cache + (savedTick !== firstTick ? 2 : 1)) at.delete([...at.keys()].find(n => n !== firstTick && n !== savedTick));
         const { value, field = coverage(value), points = [], ...metrics } = frame;
-        return { value, field, points, checkpoint: { format: formats.checkpoint, version: 1, recipe, tick, state },
+        return { value, field, points, checkpoint: { format: formats.checkpoint, version: 1, recipe, tick, state, ...(firstTick && { firstTick }) },
           report: { kind: recipe.kind, time: tick * recipe.dt, tick, from: start, replayed: tick - start,
             cached: [...at.keys()].sort((a, b) => a - b), ...metrics } };
       } catch (error) {
@@ -89,6 +89,12 @@
       }
     }
     return Object.freeze({ recipe, seek, seekTick });
+  }
+
+  function tickAt(time, dt) {
+    if (!Number.isFinite(time) || time < 0)
+      throw new RangeError('Raster simulation time is outside its fixed-tick range');
+    return Math.floor(time / dt + 1e-8);
   }
 
   function size({ width = 96, height = 64 } = {}, limit = 65536) {
@@ -149,7 +155,7 @@
     return clamp(1 - Math.hypot(x - spec.at[0], y - spec.at[1]) / spec.radius);
   }
 
-  Object.assign(A, { define, session });
+  Object.assign(A, { define, session, tickAt });
   P.rasterSimSupport = { kinds, formats, portable, int, range, vector, record, clamp, wrap, size, raster, draw, rect, dot, line,
     color, opacity, obstacles, move, buffer, disc };
 })(KIT);

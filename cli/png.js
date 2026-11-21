@@ -129,8 +129,11 @@ function decode(file, capturePalette) {
   const entries = table?.length / 3;
   if (color === 3 && (!Number.isInteger(entries) || entries < 1 || entries > 2 ** bits || transparency?.length > entries))
     throw new Error('Invalid indexed PNG palette');
-  const counts = capturePalette && color === 3 ? new Uint32Array(entries) : null;
-  const out = counts ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);
+  const readIndices = capturePalette === 'indices';
+  if (readIndices && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
+  const slots = readIndices ? new Uint8Array(w * h) : null;
+  const counts = capturePalette === true && color === 3 ? new Uint32Array(entries) : null;
+  const out = counts || slots ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);
   const sampleMask = (1 << bits) - 1, max = color === 3 ? 255 : sampleMask;
   const bpp = Math.ceil(ch * bits / 8);
   const passLayouts = interlace ? [[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]] : [[0,0,1,1]];
@@ -172,6 +175,7 @@ function decode(file, capturePalette) {
           const index = sample(src);
           if (index >= entries) throw new Error('PNG references a colour outside its palette');
           if (counts) counts[index]++;
+          else if (slots) slots[dst / 4] = index;
           else {
             out[dst] = table[index*3]; out[dst+1] = table[index*3+1]; out[dst+2] = table[index*3+2];
             out[dst+3] = transparency?.[index] ?? 255;
@@ -189,10 +193,19 @@ function decode(file, capturePalette) {
       prev.set(row);
     }
   }
+  if (slots) {
+    const dimensions = {width:w,height:h,channels:1};
+    return {
+      value: {...dimensions,data:slots},
+      alpha: {...dimensions,data:Uint8Array.from(slots,index=>transparency?.[index] ?? 255)},
+      palette: Array.from({length:entries},(_,index)=>table.readUIntBE(index*3,3))
+    };
+  }
   if (counts) return { w, h, bitDepth: bits, indexed: { table, transparency, counts } };
   return { w, h, data: out, max, ...(capturePalette && { bitDepth: bits }) };
 }
 function raster(file) { return decode(file, false); }
+function indexedRaster(file) { return decode(file, 'indices'); }
 function paletteSource(file) { return decode(file, true); }
 function read(file) {
   const { w, h, data, max } = raster(file);
@@ -205,13 +218,25 @@ function packFrame({ w, h, rgb, alpha }) {
   return { header: hd, compressed: scanlines(w, h, alpha ? withAlpha(rgb, alpha) : rgb, channels) };
 }
 
+function packRGBA({ width, height, data }) {
+  return { header: header(width, height, 8, 6), compressed: scanlines(width, height, data, 4) };
+}
+
 function encodeFrame(frame) {
   return image(frame.header, frame.compressed);
 }
 
+function animationDelay(fps) {
+  if (typeof fps === 'number') return { numerator: 1, denominator: fps };
+  const { numerator, denominator } = fps;
+  if (![numerator, denominator].every(n => Number.isSafeInteger(n) && n >= 1 && n <= 65535))
+    throw new RangeError('APNG frame delay needs positive 16-bit integers. Choose a representable rate or export numbered frames.');
+  return { numerator: denominator, denominator: numerator };
+}
+
 // The numbered PNG frames and APNG share their compressed image data.
 function encodeAnimation(frames, fps) {
-  const hd = frames[0].header;
+  const hd = frames[0].header, delay = animationDelay(fps);
   const ac = Buffer.alloc(8);
   ac.writeUInt32BE(frames.length, 0);
   ac.writeUInt32BE(0, 4);
@@ -222,8 +247,8 @@ function encodeAnimation(frames, fps) {
     const fc = Buffer.alloc(26);
     fc.writeUInt32BE(seq++, 0);
     hd.copy(fc, 4, 0, 8);
-    fc.writeUInt16BE(1, 20);
-    fc.writeUInt16BE(fps, 22);
+    fc.writeUInt16BE(delay.numerator, 20);
+    fc.writeUInt16BE(delay.denominator, 22);
     out.push(chunk('fcTL', fc));
     const z = frame.compressed;
     if (i === 0) out.push(chunk('IDAT', z));
@@ -239,4 +264,4 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { encode, encodeGray, write, writeIndexed, read, raster, paletteSource, animate, packFrame, encodeFrame, encodeAnimation };
+module.exports = { encode, encodeGray, write, writeIndexed, read, raster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };

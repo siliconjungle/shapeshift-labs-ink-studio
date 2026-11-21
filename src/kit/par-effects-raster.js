@@ -20,6 +20,16 @@
       inputs:{source:'raster',options},outputs:{value:'raster',addresses:'raster'},time:true,
       run({source,options},{seed,time}){return E.tileScramble(source,{seed,time,...options});}
     },
+    'fx.tileBleed':{
+      inputs:{source:'raster',bank:'raster',options},outputs:{value:'raster',addresses:'raster'},time:true,
+      run({source,bank,options},{seed,time}){return E.tileBleed(source,bank,{seed,time,...options});}
+    },
+    'fx.tileStrideSlip':raster(E.tileStrideSlip,{value:'raster',addresses:'raster'}),
+    'fx.bitplane':{
+      inputs:{source:'raster',palette:'palette',bank:{type:'any',default:null},options},
+      outputs:{value:'raster',indices:'raster'},
+      run({source,palette,bank,options}){return E.bitplane(source,palette,{...options,bank:bank ?? options.bank});}
+    },
     'fx.analyze':raster(E.analyze,{paths:'array<path>',points:'array<vec2>',regions:'array<record>',mask:'raster'})
   });
   delete P.pixelEffectSupport;

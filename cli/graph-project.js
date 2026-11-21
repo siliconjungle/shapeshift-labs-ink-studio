@@ -5,6 +5,7 @@ const { isDeepStrictEqual } = require('node:util');
 const PNG = require('./png.js');
 const WAV = require('./wav.js');
 const { createGraphHost } = require('./graph-host.js');
+const { clip } = require('./graph-clip.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -172,6 +173,14 @@ function nativeOperations(kit, assets) {
     random:{outputs:{value:'number'},run(_,ctx){return {value:kit.KIT.grow.dice(ctx.seed)()};}},
     ...require('./graph-render.js').graph3DOperations(kit),
     pngAsset:asset('image', entry => entry.format==='png'),
+    indexedPngAsset:{
+      inputs:{name:'string'},outputs:{value:'raster',palette:'palette',alpha:'raster'},
+      run({name}) {
+        const entry=assets.get(name);
+        if (entry?.format!=='indexed-png') throw new RangeError('Unknown indexed PNG graph asset '+name);
+        return entry.value;
+      }
+    },
     jsonAsset:asset('any', entry => entry.format==='json'),
     audioAsset:asset('audio', entry => entry.type==='audio'),
     rasterAsset:asset('raster', entry => entry.type==='raster'),
@@ -257,7 +266,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
     const {format,file,type,codec,options}=fields(definition,
       definition?.format==='codec' ? ['format','file','type','codec','options'] : ['format','file'],'graph asset '+name);
-    if (!['png','json','wav','inputs','codec'].includes(format) || typeof file!=='string' || !file)
+    if (!['png','indexed-png','json','wav','inputs','codec'].includes(format) || typeof file!=='string' || !file)
       throw new TypeError('Graph assets need a PNG, JSON, WAV, input recording or hosted codec file');
     const full=path.resolve(baseDir,file);
     paths.add(full);
@@ -269,6 +278,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       const {w,h,data,max}=PNG.raster(bytes);
       value={width:w,height:h,data:max===255 ? data : Uint8Array.from(data,n=>Math.round(n*255/max))};
       kind='raster';
+    } else if (format==='indexed-png') {
+      value=PNG.indexedRaster(bytes);
     } else if (format==='wav') {
       value=WAV.decode(bytes);
       kind='audio';
@@ -294,7 +305,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (expandedNodes>maxNodes) throw new RangeError('Expanded graph exceeds its '+maxNodes+' node budget');
     const compiled=graph.create(spec,{operations:ops,groups,planOnly:true}), plan=compiled.plan();
     for (const {id,op,inputs} of plan.nodes) {
-      if (ops[op]!==stock[op] || !['pngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset'].includes(op) ||
+      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset'].includes(op) ||
           inputs.name.source.kind!=='value') continue;
       const node=spec.nodes[id], definition=node.inputs?.name ?? node.params?.name;
       const name=record(definition) ? definition.value : definition;
@@ -352,7 +363,6 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   clock(time,seed);
   const projectPlan={...header,kind:'plan',...rootPlan,time,seed,assets:assetInfo,exports,assertions:assertionSpecs,
     groups:Object.fromEntries(preparedGroups),hostOperations:Object.keys(operations).sort()};
-  let executable, previous=new Map();
 
   function request(options={}) {
     const {inputs={},take,time:t=take?.start ?? time,seed:s=seed}=fields(options,['inputs','time','seed','take'],'graph run options');
@@ -366,30 +376,36 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     return {...resolved,take,inputs:compiled.parameters(snapshotInputs(inputs,data.clone))};
   }
 
-  function clear() {
-    try { executable?.clear(); }
-    finally {
-      executable=undefined;
-      previous=new Map();
+  function execution() {
+    let executable, previous=new Map();
+    function clear() {
+      try { executable?.clear(); }
+      finally {
+        executable=undefined;
+        previous=new Map();
+      }
     }
-  }
 
-  function evaluate({inputs,time,seed,take}) {
-    const values=Object.fromEntries(Object.entries(inputs).map(([name,value])=>{
-      const prior=previous.get(name);
-      return [name,sameValue(prior,value) ? prior : value];
-    }));
-    try {
-      executable??=graph.create(spec,{operations:ops,groups});
-      const frame=executable.evaluate(values,{time,seed,take});
-      previous=new Map(Object.entries(values));
-      return {frame,report:{...header,time,seed,...(take!==undefined && {take}),cache:cacheReport(frame),
-        inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
-    } catch (error) {
-      try { clear(); } catch { /* Preserve the evaluation error after discarding this instance. */ }
-      throw error;
+    function evaluate({inputs,time,seed,take},sequence) {
+      const values=Object.fromEntries(Object.entries(inputs).map(([name,value])=>{
+        const prior=previous.get(name);
+        return [name,sameValue(prior,value) ? prior : value];
+      }));
+      try {
+        executable??=graph.create(spec,{operations:ops,groups});
+        const frame=executable.evaluate(values,{time,seed,take,sequence});
+        previous=new Map(Object.entries(values));
+        return {frame,report:{...header,time,seed,...(take!==undefined && {take}),cache:cacheReport(frame),
+          inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
+      } catch (error) {
+        try { clear(); } catch { /* Preserve the evaluation error after discarding this instance. */ }
+        throw error;
+      }
     }
+
+    return {evaluate,clear};
   }
+  const {evaluate,clear}=execution();
 
   function encode(name,value,format,settings={}) {
     const result=format==='codec' ? host.encode(settings.codec,value,settings) : undefined;
@@ -463,6 +479,18 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       return {...header,kind:'validate',valid:true,nodes:rootPlan.expandedNodes,groups:preparedGroups.size};
     },
     run:options=>run(request(options)),
+    clip(options) {
+      const { inputs, seed, ...settings } = fields(options,
+        ['output','from','to','warmup','format','clock','renderOptions','inputs','seed'], 'graph clip options');
+      const requestOptions = request({inputs,seed});
+      const runner = execution();
+      try {
+        return clip(settings,{kit,plan:projectPlan,checks:assertions,seed:requestOptions.seed,
+          sample(take,sequence) {
+            return runner.evaluate({...requestOptions,time:take.start,take},sequence).frame;
+          }});
+      } finally { runner.clear(); }
+    },
     inspect,
     batch(cases,defaults={}) {
       fields(defaults,['inputs','time','seed'],'graph batch defaults');

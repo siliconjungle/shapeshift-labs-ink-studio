@@ -159,6 +159,12 @@ project and held as a snapshot for the life of the session. The plan and runs
 share a hash of the project, resolved group definitions, and asset bytes.
 Host operation implementations are supplied separately.
 
+Use `{"format":"indexed-png","file":"sprite.png"}` with
+`indexedPngAsset` to keep the PNG's original palette slot numbers,
+including duplicate swatches. The node returns the one-channel slot
+raster as `value`, the ordered swatches as `palette`, and per-pixel
+opacity bytes as `alpha`.
+
 ### Outputs and CI
 
 Declare `exports` as a map of artifact names to `{ "output": "name", "format": "json" }`,
@@ -197,6 +203,9 @@ them. The CLI writes one report and artifact set per case under
 Exit status is 0 on success, 2 when any assertion fails, and 1 for invalid
 input or execution errors. Assertion failures still write the declared
 artifacts and report.
+
+Use [graph clips](graph-clips.md) to export a named raster or scene output at
+an exact frame rate with warm-up and cuts.
 
 ### Persistent sessions
 
@@ -539,7 +548,8 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 These graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
 effects return straight-alpha RGBA8 at the source dimensions. Tile
-scrambling preserves the source channel count and sample values. Add
+scrambling preserves the source channel count and sample values. Bitplane
+effects also expose the edited palette indices. Add
 transparent canvas margin before an effect when its coverage needs room
 outside the original image.
 
@@ -554,6 +564,9 @@ outside the original image.
 | `fx.repair` | Use `method: "close"` and a Euclidean `radius` for holes and narrow gaps, or `"bridge"` and `maxGap` for breaks along rows, columns or diagonals. New pixels take the nearest selected source colour or an explicit `color`. Inspect them in the separate `added` mask. |
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
+| `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
+| `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
+| `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -611,6 +624,103 @@ For a [camera atlas](camera-atlas.md), convert `atlas.read(id)` from
 then send `value` to a raster layer or sprite surface. The
 [tile address study](../examples/tile-address-scrambling.cjs) renders the
 same effect on original sprite art and a moving camera feed.
+
+### Bleed tiles from a separate bank
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.tileBleed(sign, glyphSheet, {
+  tileSize: [8, 8], amount: .35, mask: signArea, seed: 12, rate: 4, time
+});
+```
+
+Use any raster as the separate bank, including a sprite sheet, a font
+render, or a camera capture. Both inputs use the same tile size and
+channel count. The source and bank can have different dimensions. Each
+grid starts at its own top-left pixel. Incomplete source cells stay
+intact and incomplete donor cells are excluded. Use `raster.rgba` to
+normalize inputs with different color channel counts.
+
+`amount`, `mask`, `maskChannel`, `maskThreshold`, `seed`, and `rate`
+have the same meaning as in tile scrambling. An optional `bankMask`
+restricts donor tiles independently with `bankMaskChannel` (default
+`"luma"`) and `bankMaskThreshold` (default 128). If there are no eligible
+donor tiles, the source is kept. Each affected tile reads from a seeded
+donor address, which can repeat. The current bank pixels are copied
+with all channels, including alpha. A changing camera feed can move
+inside a tile even while the mapping holds.
+
+`addresses` is a one-channel raster in the destination grid. Each sample
+gives the zero-based, row-major tile index in the bank grid, whose column
+count is rounded up. A value of `-1` marks an unchanged destination cell.
+In a graph, connect the `source` and `bank` raster sockets. The node uses
+the graph time and seed unless overridden in `options`.
+
+The [cross-bank tile study](../examples/cross-bank-tile-bleed.cjs) shows
+independent banks made from sprite art and an animated camera atlas.
+
+### Slip tile row addresses
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.tileStrideSlip(art, {
+  tileSize: [8, 8], stride: 19, wrapAt: 96
+});
+```
+
+The effect lays the source's complete tiles into a row-major read buffer.
+A destination tile at column `x`, row `y` reads from
+`offset + y * stride + x`, with all controls measured in whole tiles.
+
+- The default `stride` is the number of full tiles in one source row.
+  Add one to shift each successive row's read by one more tile. A stride
+  of zero repeats one row and a negative stride reads rows in reverse.
+- The default `offset` is zero. `wrapAt` defaults to the number of full
+  source tiles and can be lowered to repeat the buffer early.
+- At negative addresses or addresses at or beyond `wrapAt`,
+  `boundary: "wrap"` (default) takes the positive remainder,
+  `"keep"` keeps the destination, and `"omit"` fills it with zeros.
+- An optional `mask` restricts writes using `maskChannel` (default
+  `"luma"`) and `maskThreshold` (default 128). Reads can reach any complete
+  source tile. Partial edge tiles stay intact and are excluded from reads.
+- `value` preserves source dimensions, pivot, channels and copied samples.
+  As with tile scrambling, `addresses` reports source indices on the
+  destination grid, including any partial edge cells. A sample of
+  `-1` means the tile was cleared.
+
+For `fx.tileStrideSlip`, connect controls through `data.record`. Set
+`ease: "step"` on integer control keyframes so a stride or wrap point
+changes on a chosen frame. The
+[tile stride study](../examples/tile-stride-slip.cjs) compares both controls
+and shows the actual source address of each sampled row start.
+
+### Corrupt a palette bitplane
+
+```js
+const { value, indices } = KIT.procedural.pixelEffects.bitplane(spriteIndices, palette, {
+  mode: 'borrow', bit: 1, bank: donorIndices, bankBit: 0, mask: damagedArea
+});
+```
+
+- Slots use the supplied palette order, from zero through the last
+  swatch. A `-1` sentinel stays transparent. Both `bit` and `bankBit`
+  range from 0 (least significant) to 7. The default mode is `"flip"` on
+  bit zero. `"clear"` forces the selected bit to zero. `"borrow"` copies
+  `bankBit` (default `bit`) from the matching pixel in the aligned,
+  one-channel bank. A donor sample of `-1` keeps the source bit.
+- The optional aligned `mask` uses `maskChannel` (default `"luma"`) and
+  `maskThreshold` (default 128) for a binary selection. A bit change that
+  references a slot outside the supplied palette keeps the original slot.
+- Supply an aligned, one-channel `alpha` raster of bytes to carry source
+  opacity through the effect. Fully transparent samples are excluded
+  from corruption. The RGBA output uses exact swatches and the original
+  pixel grid.
+- In a graph, link `palette.resolve.indices` and `palette.resolve.palette`
+  into `fx.bitplane` to start from RGB art, or use `indexedPngAsset` for
+  existing indexed art. Link its `alpha` output into `options` through
+  `data.record` to preserve partial transparency. Use the node's `bank`
+  socket for borrowing.
+
+The [bitplane study](../examples/bitplane-corruption.cjs) compares all three
+modes on the same four-color sprite.
 
 ### Trace paths and points
 

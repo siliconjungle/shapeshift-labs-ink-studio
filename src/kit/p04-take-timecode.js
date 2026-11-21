@@ -61,7 +61,7 @@
     if (hz < .001 || hz > 1000 || ticks < 1 / 60 || ticks > 1000000 || !integer(sampleRate, 1, 768000))
       throw new RangeError('Invalid take frame, simulation or sample rate');
     const step = div([1n, 1n], simulation);
-    const dt = seconds(step);
+    const dt = seconds(step), frameDt = seconds(div([1n, 1n], picture));
     if (!Array.isArray(cuts) || cuts.length > 10000 || Array.from(cuts).some(row =>
       !integer(row?.frame, 0, 1000000000) || typeof row.id !== 'string' || !row.id || row.id.length > 96 || Object.keys(row).some(key => key !== 'frame' && key !== 'id')))
       throw new RangeError('Take cuts need bounded frame indices and named shots');
@@ -101,7 +101,7 @@
         sampleRate, firstSample: coordinate(start, audio), endSample: coordinate(end, audio),
         cut: cut?.frame === frame, shot: cut?.id ?? null
       });
-      frames.set(snapshot, { start, end, dt, locate: locateExact });
+      frames.set(snapshot, { start, end, dt, frameDt, locate: locateExact });
       latest = snapshot;
       return snapshot;
     }
