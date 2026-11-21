@@ -32,6 +32,27 @@
       outputs: { value: 'record', events: 'array<record>', timeline: 'record', recording: 'record' },
       run({ source, edits, options }) { return A.editMusicalEvents(source, edits, options); }
     },
+    'music.clock': {
+      description: 'Sample the beat, bar and phrase on an authored tempo and swing map.',
+      inputs: { map: options, options }, outputs: { value: 'record', beat: 'number', bar: 'number', phrase: 'number' },
+      time: true,
+      instantiate() {
+        let clock, previous;
+        return ({ map, options }, { time, take }) => {
+          if (map !== previous) {
+            clock = P.musicTiming.compile(map);
+            previous = map;
+          }
+          const value = take && options.time === undefined ? clock.forTake(take) : clock.sample(options.time ?? time);
+          return { value, beat: value.beat, bar: value.bar, phrase: value.phrase };
+        };
+      }
+    },
+    'music.resolve': {
+      description: 'Convert musical addresses on keyframes, markers or edits to seconds.',
+      inputs: { map: options, items: 'array<record>' }, outputs: { value: 'array<record>' },
+      run({ map, items }) { return { value: P.musicTiming.resolveItems(P.musicTiming.compile(map), items) }; }
+    },
     'input.recording': {
       inputs: { initial: options, events: 'array<record>' }, outputs: { value: 'record' },
       run(inputs) { return { value: A.recording(inputs) }; }

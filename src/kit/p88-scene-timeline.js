@@ -26,14 +26,18 @@
     const min = (a, b) => compare(a, b) <= 0 ? a : b;
     const max = (a, b) => compare(a, b) >= 0 ? a : b;
     const valid = value => timeOK(seconds(value));
-    function point(raw) {
-      const value = read(raw);
+    const timing = K.procedural.musicTiming;
+    function point(raw, clock) {
+      const musical = timing.isPosition(raw);
+      if (musical && !clock) throw new TypeError('A musical timeline position needs a tempo map');
+      const value = !musical ? read(raw) : exact ? clock.resolve(raw) : clock.timeAt(raw);
       check(valid(value), 'Invalid timeline time');
       return value;
     }
     const { record, check, id, selector } = K.world.data;
     const root = clone(definition);
     const catalog = root?.sequences ?? {};
+    const rootClock = root?.tempoMap === undefined ? undefined : timing.compile(root.tempoMap);
     check(record(catalog) && Object.keys(catalog).length <= 1024, 'Expected a bounded timeline sequence catalog');
     const compiled = new Map(), visiting = new Set(), points = [], sounds = [], lanes = [], targets = new Map();
     let budget = 0;
@@ -45,15 +49,15 @@
       check(value === undefined || Array.isArray(value) && value.length <= maxItems, 'Expected a bounded timeline ' + name + ' array');
       return value ?? [];
     }
-    function items(input, type, parse) {
+    function items(input, type, clock, parse) {
       const ids = new Set();
       return list(input, type).map(row => {
         check(record(row) && id(row.id) && !ids.has(row.id), 'Invalid or duplicate timeline ' + type + ' ID or time');
         ids.add(row.id);
-        return { type, ...parse(row), id: row.id, time: point(row.time) };
+        return { type, ...parse(row), id: row.id, time: point(row.time, clock) };
       });
     }
-    function track(row) {
+    function track(row, clock) {
       check(record(row) && has(row, ['target', 'keys', 'mode']), 'Invalid timeline track');
       const target = freeze(selector(row.target).map(String));
       const settings = channel ? channel(target) : {};
@@ -72,7 +76,7 @@
       check(size <= 64, 'Timeline vectors support up to 64 components');
       const components = split ? Array.from({ length: size }, (_, i) => String(i)) : [];
       const schema = split ? Object.fromEntries(components.map(i => [i, mode])) : { value: discrete ? 'number' : mode };
-      const times = raw.map(key => point(key.time));
+      const times = raw.map(key => point(key.time, clock));
       const keys = raw.map(({ value, ease }, index) => {
         check((size ? vector(value) && value.length === size : discrete || Number.isFinite(value)) &&
           (mode !== 'step' || ease === undefined || ease === 'step') &&
@@ -88,21 +92,22 @@
     }
     function sequence(input, name, depth) {
       check(depth <= 32 && record(input) && has(input, name === null ?
-        ['duration', 'tracks', 'markers', 'audio', 'events', 'clips', 'sequences'] :
-        ['duration', 'tracks', 'markers', 'audio', 'events', 'clips']), 'Invalid timeline sequence ' + (name ?? '(root)'));
-      const tracks = list(input.tracks, 'tracks').map(track);
+        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'clips', 'sequences'] :
+        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'clips']), 'Invalid timeline sequence ' + (name ?? '(root)'));
+      const clock = name === null || input.tempoMap === undefined ? rootClock : timing.compile(input.tempoMap);
+      const tracks = list(input.tracks, 'tracks').map(row => track(row, clock));
       check(new Set(tracks.map(({ target }) => JSON.stringify(target))).size === tracks.length,
         'A timeline sequence needs one track per target');
-      const markers = items(input.markers, 'marker', row => {
+      const markers = items(input.markers, 'marker', clock, row => {
         check(has(row, ['id', 'time', 'label']) && (row.label === undefined || typeof row.label === 'string'),
           'Invalid timeline marker label');
         return row.label === undefined ? {} : { label: row.label };
       });
-      const events = items(input.events, 'event', row => {
+      const events = items(input.events, 'event', clock, row => {
         check(has(row, ['id', 'time', 'kind', 'detail']) && id(row.kind) && record(row.detail ?? {}), 'Invalid timeline world event');
         return { kind: row.kind, detail: row.detail ?? {} };
       });
-      const audio = items(input.audio, 'audio', row => {
+      const audio = items(input.audio, 'audio', clock, row => {
         const { cue, duration: rawDuration = 0, offset: rawOffset = 0, gain = 1 } = row;
         const duration = point(rawDuration), offset = point(rawOffset);
         check(has(row, ['id', 'time', 'cue', 'duration', 'offset', 'gain']) &&
@@ -110,11 +115,12 @@
           timeOK(gain) && valid(add(offset, duration)), 'Invalid timeline audio cue');
         return { cue, duration, offset, gain };
       });
-      const clips = items(input.clips, 'clip', row => {
+      const clips = items(input.clips, 'clip', clock, row => {
         check(has(row, ['id', 'time', 'sequence', 'in', 'out', 'duration']) &&
           id(row.sequence) && own(catalog, row.sequence), 'Unknown timeline sequence ' + row.sequence);
         const source = named(row.sequence, depth + 1);
-        const start = point(row.in === undefined ? 0 : row.in), end = row.out === undefined ? source.duration : point(row.out);
+        const start = point(row.in === undefined ? 0 : row.in, source.clock);
+        const end = row.out === undefined ? source.duration : point(row.out, source.clock);
         const duration = row.duration === undefined ? sub(end, start) : point(row.duration);
         check(valid(duration) && compare(start, end) < 0 && compare(end, source.duration) <= 0 && compare(duration, zero) > 0,
           'Invalid trim or duration on timeline clip ' + row.id);
@@ -123,9 +129,9 @@
       const content = [...markers, ...audio, ...events];
       let end = tracks.reduce((end, track) => max(end, track.duration), zero);
       for (const item of [...content, ...clips]) end = max(end, add(item.time, item.duration ?? zero));
-      const duration = input.duration == null ? end : point(input.duration);
+      const duration = input.duration == null ? end : point(input.duration, clock);
       check(valid(duration) && compare(duration, end) >= 0, 'Timeline duration must contain its keys, cues and clips');
-      return { duration, tracks, content, clips };
+      return { duration, tracks, content, clips, clock };
     }
     function named(name, depth) {
       check(depth <= 32 && !visiting.has(name), 'Timeline sequence cycle or depth limit at ' + name);

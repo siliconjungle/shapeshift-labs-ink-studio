@@ -132,6 +132,10 @@ const specifications = {
   'sim.define': { inputs: { kind: 'particles' } },
   'sim.run': { nodes: { recipe: { op: 'sim.define', inputs: { kind: 'particles' } } }, inputs: { recipe: link('recipe') } },
   'anim.feedback': { inputs: { frames: [rgba, rgba] } },
+  'music.clock': { inputs: { map: { tempo: 120, swing: .625, changes: [{ beat: 4, tempo: 150 }] },
+    options: { time: 2.4 } } },
+  'music.resolve': { inputs: { map: { tempo: 120, barsPerPhrase: 2, swing: .625 },
+    items: [{ time: { phrase: 1 }, value: { glow: 1 } }, { time: { bar: 2, beat: .5, offset: .05 }, value: { glow: 0 } }] } },
   'audio.buffer': { inputs: audio },
   'audio.detectTransients': { inputs: { source: transientAudio } },
   'audio.editEvents': {
