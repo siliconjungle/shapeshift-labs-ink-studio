@@ -38,6 +38,8 @@ const num = (k, d) => (opt[k] === undefined ? d : +opt[k]),
   list = (k, d) => (opt[k] === undefined ? d : String(opt[k]).split(',').map(Number));
 let A = null;
 const importedAssets = new Map();
+const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
+const gaussianScenes = new Map();
 const lib = () => A || (A = cfg.load ? cfg.load() : require('../index.js').load());
 // a diorama by its id, or a file in lab/ that exports (kit) => ({ id, name, seed, build })
 /* a mesh file is a diorama too: fitted to --size, coloured from its own materials, baked and looked at like the rest */
@@ -161,6 +163,11 @@ function scene(id) {
   if (!id) die('which diorama? try: ink-studio scenes');
   if (opt['environment-preset'] !== undefined && !id.endsWith('.json'))
     die('--environment-preset selects a preset for a JSON diorama');
+  if (gaussianFile(id)) {
+    const descriptor = gaussianScenes.get(id);
+    if (!descriptor) throw new Error('Gaussian input is supported by render, turn, sheet, clip and snap');
+    return descriptor;
+  }
   if (/\.(obj|gltf|glb)$/i.test(id)) return meshScene(id);
   if (id.endsWith('.json')) return dataScene(id);
   if (id.endsWith('.js')) return require(path.resolve(id))(lib());
@@ -830,6 +837,7 @@ const view = extra =>
       spriteAtlases: spriteAtlasOption(),
       scalePreviews: onOffOption('scale-previews'),
       spriteAtlasMode: opt['sprite-atlas-mode'],
+      spriteReconstruction: opt['sprite-reconstruction'],
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),
       volumeLocalShadows: onOffOption('volume-local-shadows'),
@@ -1011,6 +1019,7 @@ const CMD = {
         '  ghost <id> [--t 2 --spacing 0.12 --n 2 | --ghosts 1.6,1.8]   one moment with those either side laid faintly over it',
         '  acts                        the ready clips, reactions, easings and cues, by name',
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
+        '  render <file.ply|.spz> --raw   render a Gaussian splat cloud without palette quantization',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
@@ -1143,7 +1152,7 @@ const CMD = {
         'view options: --surface off (no finish layers) --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
-        'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery',
+        'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite',
         '                --sprite-cels edits.json|off --sprite-playback once|loop',
         'shaped fog options: --shaped-atmosphere on|off|file.json --volume-cutouts on|off|file.json',
         'atmosphere bands: --atmosphere-depth-bands on|off|file.json',
@@ -3528,6 +3537,20 @@ async function run() {
     await worldCLI().execute(cmd,pos);
     shotReplay?.verify();
     return;
+  }
+  const splatFiles = cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip'].includes(cmd)
+    ? pos.slice(0, 1).filter(gaussianFile) : [];
+  if (splatFiles.length) {
+    const ink = require('../index.js');
+    const { gaussianSplatWorld } = await import('../src/gaussian-splats.mjs');
+    for (const file of new Set(splatFiles)) {
+      const cloud = await ink.readGaussianSplat(path.resolve(file));
+      const name = path.basename(file), id = name.replace(/\W+/g, '-');
+      gaussianScenes.set(file, {
+        id, name, seed: 1,
+        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up })
+      });
+    }
   }
   if (/\.glb$/i.test(pos[0] || '') && opt.uv !== 'off') {
     try {

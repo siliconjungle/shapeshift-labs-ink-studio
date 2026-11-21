@@ -665,8 +665,6 @@ function renderFrame(world, o, preparedPalettes) {
       o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color,
       native.paletteState,native.paletteInventory,reference,native.paintStage);
   }
-  const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);
-  const deep = DeepComposite.capture(W, H, deepPlan, world.renderMetadata, o[deepReflection], spriteAtlases);
   const paintStage = o.captureColorStages===true && !o.raw && !o.captureCoverage &&
     (!o.samples || o.worked) && o[subjectFocusPass]!==false ? new Uint32Array(W*H) : undefined;
   function baseReference(i) {
@@ -707,6 +705,17 @@ function renderFrame(world, o, preparedPalettes) {
     -(V[8] * V[12] + V[9] * V[13] + V[10] * V[14])
   ];
   const nominalEye = ortho ? eye.map((value, i) => value - depthOffset * V[2 + i * 4]) : eye;
+  const spriteLOD = world.spriteReconstruction && require('../index.js').load().KIT.sprite.reconstruction;
+  const spritePlan = spriteLOD && spriteLOD.resolve(world, {
+    eye, back:[V[2],V[6],V[10]], ortho, setback:depthOffset, time:t, mode:o.spriteReconstruction,
+    atlasTime:shutterRows?.atlasTime
+  });
+  const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);
+  const reconstructed = spritePlan?.rows.length ? new Map(spritePlan.rows.map(row => [row.placement,row])) : null;
+  if (reconstructed) spriteAtlases.push(...reconstructed.keys());
+  const geometryMask = spritePlan?.mask;
+  if (spriteLOD && !reflectionPlane && !probeView) o.spriteReconstructionFrame?.(spritePlan ?? { geometryRows:world.count, states:[] });
+  const deep = DeepComposite.capture(W, H, deepPlan, world.renderMetadata, o[deepReflection], spriteAtlases);
   const paintView = { direction: [V[2], V[6], V[10]], ...(ortho ? {} : { eye }) };
   const paint = o.paintCorrections === false ? null : world.paintCorrections;
   const climate = resolveEnvironment(world,o,sceneTime,direction);
@@ -830,6 +839,7 @@ function renderFrame(world, o, preparedPalettes) {
     surfaceDepth[sample.p] = Math.min(surfaceDepth[sample.p], sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,override:o.spriteAtlasMode,sun,
+    reconstructed, spriteLOD,
     objectDither: anchorSpaces.has('object'), shutterTime: shutterRows?.atlasTime,
     subject: protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
@@ -1081,7 +1091,7 @@ function renderFrame(world, o, preparedPalettes) {
   const sampleWithdrawal = SampleCoverage.amount(o.sampleWithdrawal ?? world.sampleWithdrawal ?? 0);
   const sceneMotion = motion;
   for (let i = 0, q = 0; i < N; i++, q += 16) {
-    if (qualityRows && !qualityRows.keep[i]) continue;
+    if (qualityRows && !qualityRows.keep[i] || geometryMask && spriteLOD.hidden(geometryMask.codes[i])) continue;
     const motion = shutterRows?.clock(i) ?? sceneMotion, t = motion.scene;
     let x = d[q],
       y = d[q + 1],
@@ -1235,8 +1245,11 @@ function renderFrame(world, o, preparedPalettes) {
   const mediumHorizon = aerial ? Math.max(horizon, -mn + R) : horizon;
   const backRows = (deep || blendDepth) && world.back?.length ? new Set(world.back) : null;
   if (world.back) for (let j = 0; j < world.back.length; j++) depth[world.back[j]] = mn;
-  const order = new Uint32Array(qualityRows?.submitted ?? N);
-  for (let i = 0, j = 0; i < N; i++) if (!qualityRows || qualityRows.keep[i]) order[j++] = i;
+  const orderRows = new Uint32Array(qualityRows?.submitted ?? N);
+  let orderCount = 0;
+  for (let i = 0; i < N; i++)
+    if ((!qualityRows || qualityRows.keep[i]) && !(geometryMask && spriteLOD.hidden(geometryMask.codes[i]))) orderRows[orderCount++] = i;
+  const order = orderRows.subarray(0,orderCount);
   order.sort((a, b) => depth[a] - depth[b]);
   if (transparency && !blendDepth && !deep) {
     const { depthTolerance: tolerance } = transparency;
@@ -1880,9 +1893,11 @@ function renderFrame(world, o, preparedPalettes) {
       const [u,v]=sample.uv, m=shaped.matrix;
       return SplatFootprints.coverage(shaped,m[0]*u+m[1]*v,m[2]*u+m[3]*v);
     }
+    const geometryCode = geometryMask?.codes[i];
     for (let iy = y0; iy <= y1; iy++) {
       const dy = iy + 0.5 - sy;
       for (let ix = x0; ix <= x1; ix++) {
+        if (geometryCode && !spriteLOD.geometry(geometryCode,ix,iy)) continue;
         const dx = ix + 0.5 - sx,
           pw = -0.5 * (k0 * dx * dx + k2 * dy * dy) - k1 * dx * dy;
         const planeRay=planeFrame&&rayAt(ix+.5,iy+.5);

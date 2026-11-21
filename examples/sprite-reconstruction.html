@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Transit · Ink Studio</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #10141e;
+        color: #e1e9df;
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+        --edge: #334352;
+        --dim: #a5b9bb;
+        --accent: #9ceccc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        max-width: 1410px;
+        margin: auto;
+        padding: 28px clamp(16px, 3.5vw, 52px) 38px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px 28px;
+      }
+      h1 {
+        font:
+          500 clamp(38px, 5.5vw, 66px)/1.06 Georgia,
+          serif;
+        letter-spacing: -0.032em;
+        margin: 0;
+      }
+      header p {
+        margin: 0;
+        color: var(--dim);
+      }
+      nav {
+        margin-top: 22px;
+        display: flex;
+        gap: 27px;
+        border-bottom: 1px solid var(--edge);
+      }
+      button,
+      select {
+        font: inherit;
+        color: #d7e2db;
+        background: #172231;
+        border: 1px solid var(--edge);
+        padding: 7px 12px;
+        cursor: pointer;
+      }
+      nav button {
+        background: none;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        padding: 8px 0 10px;
+      }
+      nav button[aria-pressed='true'] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      button:hover,
+      select:hover {
+        color: var(--accent);
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      canvas:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+      }
+      .stage {
+        border: 1px solid var(--edge);
+        border-top: 0;
+        background: #101421;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1096/646;
+        touch-action: none;
+        cursor: grab;
+        image-rendering: pixelated;
+      }
+      canvas:active {
+        cursor: grabbing;
+      }
+      .controls {
+        display: flex;
+        gap: 13px 20px;
+        align-items: end;
+        flex-wrap: wrap;
+        margin: 17px 0 0;
+      }
+      label {
+        display: grid;
+        gap: 5px;
+      }
+      label span,
+      .summary {
+        color: var(--dim);
+        font-size: 13px;
+      }
+      .distance {
+        flex: 1;
+        min-width: 170px;
+      }
+      input[type='range'] {
+        width: 100%;
+        min-height: 36px;
+        margin: 0;
+        accent-color: var(--accent);
+      }
+      .summary {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 5px 20px;
+        margin: 14px 0 0;
+      }
+      #pass {
+        color: #c0e9d7;
+      }
+      #message {
+        color: #f3c8ad;
+        min-height: 1.4em;
+        margin: 7px 0 0;
+      }
+      @media (max-width: 620px) {
+        main {
+          padding-top: 21px;
+        }
+        .distance {
+          flex-basis: 100%;
+        }
+        .summary {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Signal Transit</h1>
+        <p>Directional sprites and native geometry</p>
+      </header>
+      <nav aria-label="Demo scenes">
+        <button type="button" data-study="approach" aria-pressed="true">Signal Approach</button>
+        <button type="button" data-study="bay" aria-pressed="false">Courier Bay</button>
+      </nav>
+      <div class="stage">
+        <canvas
+          id="view"
+          width="1096"
+          height="646"
+          tabindex="0"
+          aria-label="Interactive sprite reconstruction scene"
+          aria-describedby="camera-help"
+        ></canvas>
+      </div>
+      <div class="controls">
+        <label class="distance"
+          ><span>Camera approach</span><input id="approach" type="range" min="0" max="1000" value="240"
+        /></label>
+        <label
+          ><span>Representation</span
+          ><select id="mode">
+            <option value="auto">Automatic</option>
+            <option value="sprite">Sprites</option>
+            <option value="geometry">Geometry</option>
+          </select></label
+        >
+        <button type="button" id="motion" aria-pressed="false">Play approach</button>
+        <button type="button" id="reset">Reset view</button>
+      </div>
+      <div class="summary">
+        <span id="pass" role="status"></span>
+        <span id="camera-help">Drag or use the arrow keys to orbit. Scroll to move closer.</span>
+      </div>
+      <p id="message" role="alert">Loading atlas views…</p>
+    </main>
+    <script src="../dist/ink-studio.browser.js"></script>
+    <script src="./sprite-reconstruction.js"></script>
+    <script src="../dist/sprite-reconstruction-atlases.js"></script>
+    <script type="module">
+      import { createRenderer } from '../webgl.mjs';
+      const canvas = document.querySelector('#view'),
+        approach = document.querySelector('#approach'),
+        mode = document.querySelector('#mode'),
+        motion = document.querySelector('#motion'),
+        message = document.querySelector('#message'),
+        pass = document.querySelector('#pass');
+      const buttons = [...document.querySelectorAll('[data-study]')];
+      const toolkit = { KIT, PixelLook, RenderStages, SpriteSurface, makeBuilder, makeSculpt };
+      const studies = makeSpriteReconstructionStudies(toolkit);
+      const cache = new Map(),
+        defaults = { approach: 0.24, bay: 0.52 };
+      let atlases,
+        renderer,
+        scene,
+        current = 'approach',
+        orbit = 0,
+        playing = false,
+        started = 0,
+        lastKey = '',
+        drag;
+      const limit = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      async function unpack(packed) {
+        const maps = await Promise.all(
+          Object.entries(packed.images).map(async ([name, value]) => {
+            const bytes = Uint8Array.from(atob(value), x => x.charCodeAt(0));
+            const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+            return [name, new Uint8Array(await new Response(stream).arrayBuffer())];
+          })
+        );
+        return KIT.sprite.atlas({ metadata: packed.metadata, images: Object.fromEntries(maps) });
+      }
+      function error(problem) {
+        message.textContent = problem instanceof Error ? problem.message : String(problem);
+      }
+      function play(next) {
+        playing = next;
+        started = performance.now();
+        motion.setAttribute('aria-pressed', String(next));
+        motion.textContent = next ? 'Pause approach' : 'Play approach';
+      }
+      function choose(id) {
+        if (!cache.has(id)) cache.set(id, studies.scene(id, atlases));
+        scene = cache.get(id);
+        current = id;
+        orbit = 0;
+        approach.value = Math.round(defaults[id] * 1000);
+        play(false);
+        lastKey = '';
+        for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.study === current));
+      }
+      function describe({ states, geometryRows }) {
+        const focus = states.find(row => row.object === scene.focus);
+        const sprites = states.filter(row => row.sprite > 0).length;
+        const near =
+          mode.value === 'geometry'
+            ? 'Full geometry'
+            : focus?.geometry === 0
+              ? 'Directional sprite'
+              : focus?.geometry === 1
+                ? 'Full geometry'
+                : Math.round(100 * (focus?.geometry ?? 1)) + '% geometry';
+        pass.textContent =
+          near +
+          ' · ' +
+          sprites +
+          ' sprite ' +
+          (sprites === 1 ? 'object' : 'objects') +
+          ' · ' +
+          geometryRows.toLocaleString() +
+          ' native rows';
+      }
+      function tick(now) {
+        if (playing) approach.value = Math.round(500 - 500 * Math.cos(((now - started) * Math.PI) / 4700));
+        const time = Math.floor(now / 250) / 4;
+        const key = [current, approach.value, orbit, mode.value, time].join('/');
+        try {
+          if (key !== lastKey) {
+            scene.pose(time);
+            renderer.render(scene.world, {
+              time,
+              camera: scene.camera(Number(approach.value) / 1000, orbit),
+              raw: true,
+              damp: false,
+              changedRows: scene.changedRows(),
+              spriteReconstruction: mode.value,
+              spriteReconstructionFrame: describe
+            });
+            lastKey = key;
+          }
+          requestAnimationFrame(tick);
+        } catch (problem) {
+          error(problem);
+        }
+      }
+      const turn = next => {
+        const arc = current === 'bay' ? 1.28 : 0.24;
+        orbit = limit(next, -arc, arc);
+      };
+      try {
+        if (typeof spriteReconstructionAtlases === 'undefined')
+          throw new Error('Build the demo atlases with node examples/bake-sprite-reconstruction.cjs.');
+        const inputs = await Promise.all(
+          Object.entries(spriteReconstructionAtlases).map(async ([name, packed]) => [name, await unpack(packed)])
+        );
+        atlases = Object.fromEntries(inputs);
+        renderer = createRenderer(canvas, { toolkit });
+        choose('approach');
+        message.textContent = '';
+        for (const button of buttons)
+          button.onclick = () => {
+            try {
+              choose(button.dataset.study);
+            } catch (problem) {
+              error(problem);
+            }
+          };
+        approach.oninput = () => play(false);
+        motion.onclick = () => play(!playing);
+        document.querySelector('#reset').onclick = () => {
+          mode.value = 'auto';
+          choose(current);
+        };
+        canvas.onpointerdown = event => {
+          canvas.setPointerCapture(event.pointerId);
+          drag = { x: event.clientX, orbit };
+        };
+        canvas.onpointermove = event => {
+          if (drag) turn(drag.orbit + (drag.x - event.clientX) * 0.006);
+        };
+        canvas.onlostpointercapture = () => {
+          drag = undefined;
+        };
+        canvas.addEventListener(
+          'wheel',
+          event => {
+            event.preventDefault();
+            play(false);
+            approach.value = limit(Number(approach.value) - Math.sign(event.deltaY) * 40, 0, 1000);
+          },
+          { passive: false }
+        );
+        canvas.onkeydown = event => {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+            turn(orbit + (event.key === 'ArrowLeft' ? -0.06 : 0.06));
+          else return;
+          event.preventDefault();
+        };
+        requestAnimationFrame(tick);
+      } catch (problem) {
+        error(problem);
+      }
+    </script>
+  </body>
+</html>

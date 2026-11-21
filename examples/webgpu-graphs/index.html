@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ink Studio GPU Studies</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <p class="brand">SHAPESHIFT LABS <span> / </span> INK STUDIO</p>
+  <h1>GPU Studies</h1>
+  <p class="intro">Live texture synthesis, mesh deformation, and Gaussian splat import.</p>
+</header>
+<main>
+  <div class="gpu-bar">
+    <p id="gpu-status" role="status">Opening WebGPU…</p>
+    <button id="pause" type="button" aria-pressed="false" disabled>Pause motion</button>
+  </div>
+  <div class="pair">
+    <section aria-labelledby="texture-title">
+      <div class="heading"><h2 id="texture-title">Refraction</h2><span>Texture graph</span></div>
+      <canvas id="texture" width="480" height="324" aria-label="Animated cyan and amber interference patterns"></canvas>
+      <div class="controls">
+        <label for="shift">Channel shift</label><input type="range" id="shift" min="0" max="1" step=".01" value=".38" disabled>
+      </div>
+      <details>
+        <summary>Edit the compute shader</summary>
+        <label for="shader" class="visually-hidden">Refraction WGSL source</label>
+        <textarea id="shader" spellcheck="false" disabled></textarea>
+        <div class="actions">
+          <button id="compile" type="button" disabled>Apply shader</button>
+          <button id="reset" type="button" disabled>Restore original</button>
+        </div>
+        <p id="compile-status" role="status"></p>
+      </details>
+    </section>
+    <section aria-labelledby="mesh-title">
+      <div class="heading"><h2 id="mesh-title">Fold</h2><span>Geometry graph</span></div>
+      <canvas id="mesh" width="480" height="324" aria-label="Rotating, blue-green mesh deformed on the GPU"></canvas>
+      <div class="controls">
+        <label for="deform">Deformation</label><input type="range" id="deform" min="0" max="1" step=".01" value=".44" disabled>
+      </div>
+      <p class="footnote">16,641 vertices shaded with the live Refraction texture.</p>
+    </section>
+  </div>
+  <section class="import" aria-labelledby="splat-title">
+    <canvas id="splat" width="672" height="460" aria-label="Orbiting an imported blue jellyfish made of Gaussian splats"></canvas>
+    <div class="import-controls">
+      <div class="heading"><h2 id="splat-title">Pelagic</h2><span>Splat import</span></div>
+      <p>Orbit a sample cloud or preview your own Gaussian PLY or SPZ.</p>
+      <div class="actions sample-buttons">
+        <button id="ply" type="button">Sample PLY</button>
+        <button id="spz" type="button">Sample SPZ</button>
+      </div>
+      <label class="file-label" for="file">Open a splat file</label>
+      <input type="file" id="file" accept=".ply,.spz,.gsz">
+      <label for="orbit" class="orbit-label">Orbit angle</label>
+      <input type="range" id="orbit" min="-180" max="180" step="1" value="18">
+      <p id="splat-status" role="status">Loading sample…</p>
+    </div>
+  </section>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

@@ -60,7 +60,7 @@ function spriteAtlas(world, options = {}) {
     for (let angle=0;angle<views;angle++) {
       const {direction,yaw,pitch}=angles[angle];
       const i = f * views + angle, ox = i % cols * width, oy = Math.floor(i / cols) * height;
-      const image = render(world, { ...view, t: sourceTime, w: width, h: height, px: 1,
+      const image = render(world, { spriteReconstruction: false, ...view, t: sourceTime, w: width, h: height, px: 1,
         yaw, pitch, ortho: true, target: pivot,
         transparent: true, passes, artHistory: history[angle], volumeHistory: volumes[angle] });
       const data = image.passes;

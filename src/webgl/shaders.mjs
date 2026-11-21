@@ -31,7 +31,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -42,6 +42,7 @@ export function splatShaderSources(ascii, sampleCoverage, {
   const SPLAT_VS = `#version 300 es
 precision highp float; precision highp int;
 uniform highp sampler2D u_data;
+${spriteReconstruction ? 'uniform highp sampler2D u_spriteLod; uniform int u_spriteLodCount; flat out int v_spriteLod;' : ''}
 uniform mat4 u_view, u_proj;
 uniform bool u_geometryDepth;
 uniform vec2 u_viewport;
@@ -105,6 +106,8 @@ void main(){
     record += int(meta.x);
   }` : ''}
   int row = record >> 9, col = (record & 511) << 2; v_ix = float(a_index);
+  ${spriteReconstruction ? `v_spriteLod=a_index<u_spriteLodCount
+    ? int(texelFetch(u_spriteLod,ivec2((a_index&511)>>2,a_index>>9),0)[a_index&3]) : 0;` : ''}
   vec4 t0 = texelFetch(u_data, ivec2(col, row), 0);
   vec4 t1 = texelFetch(u_data, ivec2(col + 1, row), 0);
   vec4 t2 = texelFetch(u_data, ivec2(col + 2, row), 0);
@@ -406,6 +409,8 @@ ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geomet
 }`;
   const SPLAT_FS = `#version 300 es
 precision highp float; precision highp int;
+${spriteReconstruction ? `flat in int v_spriteLod; uniform vec2 u_spriteLodGrid;
+${spriteReconstruction}` : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footprintColumns; flat in vec4 v_footprintMap; flat in vec2 v_footprintStyle, v_footprintZ; flat in vec4 v_footprintPlane;' : ''}
 in vec2 v_d; in vec3 v_conic; in vec4 v_color; in float v_depth; flat in int v_coverage;
 ${stableDetail ? 'flat in float v_detailGeometry, v_detailTexture;' : ''}
@@ -451,6 +456,7 @@ ${paletteRowGlsl}` : ''}
 ${masked ? maskUniforms + maskVaryings(textured).replaceAll('LOOK_IO','in') + maskFragment(textured) : ''}
 ${water ? waterGLSL(airPockets, layered, atlas) + (portal ? '' : 'flat in float v_waterAxial;') : ''}
 void main(){
+  ${spriteReconstruction ? 'if(!spriteGeometry(v_spriteLod,gl_FragCoord.xy*u_spriteLodGrid))discard;' : ''}
 ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + v_conic.z * v_d.y * v_d.y) - v_conic.y * v_d.x * v_d.y;
   ${footprints ? `
   bool shaped=v_footprintStyle.x>0.0;

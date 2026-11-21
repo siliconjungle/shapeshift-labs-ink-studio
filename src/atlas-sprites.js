@@ -133,7 +133,7 @@ const AtlasSprites = (() => {
       const view={
         rect:{x,y,width:w,height:h}, pivot:{x:finite(pivot.x,'Sprite pivot X'),y:finite(pivot.y,'Sprite pivot Y')},
         unitsPerPixel:positive(unitsPerPixel,'Sprite units per pixel'), depthOrigin:finite(depthOrigin,'Sprite depth origin'),
-        yaw:finite(yaw,'Sprite yaw'), pitch:finite(pitch,'Sprite pitch'), direction
+        frame, yaw:finite(yaw,'Sprite yaw'), pitch:finite(pitch,'Sprite pitch'), direction
       };
       view.basis=basis(view.yaw,view.pitch);
       if (!groups.has(frame)) groups.set(frame,[]);
@@ -206,7 +206,7 @@ const AtlasSprites = (() => {
     const editedDepth=edits&&Array.from(edits.edited.values()).some(edit=>edit.maps.depth||edit.extensionDepth!==undefined);
     return Object.freeze({[assetBrand]:true,select,sample,effect,playback:mode=>cels.playback(timing,fps,mode),
       snapshot:()=>({metadata:structuredClone(metadata),images:structuredClone(sourceMaps)}),
-      normalSpace,emissionMode,swatches,hasDepth:Boolean(maps.depth||scenery||editedDepth),sceneryPlanes:scenery?.planes});
+      normalSpace,emissionMode,swatches,largestView:frames.reduce((max,{rect})=>Math.max(max,rect.width*rect.height),0),hasDepth:Boolean(maps.depth||scenery||editedDepth),sceneryPlanes:scenery?.planes});
   }
 
   function place(value) {

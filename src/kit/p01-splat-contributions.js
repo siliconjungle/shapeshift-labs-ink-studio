@@ -111,7 +111,7 @@
     const indices=Uint32Array.from(selected),tree=orderedTree(rows,indices,footprintPlan?.reach??3);
     let provenance;
     function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true,accept,
-      cutaway=defaultCutaway,camera:sectionCamera=camera,footprintView}={}){
+      cutaway=defaultCutaway,camera:sectionCamera=camera,footprintView,extraHits}={}){
       if(!valid(origin)||!valid(direction)||V.len(direction)<=1e-8||!Number.isFinite(maxDistance)||maxDistance<=0||
           !Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(limit)||limit<1||limit>256||
           accept!==undefined&&typeof accept!=='function')
@@ -176,6 +176,7 @@
         }
       }
       visit(tree);
+      if(extraHits)for(const hit of extraHits({origin,direction:d,maxDistance}))if(!accept||accept(hit))hits.push(hit);
       hits.sort((a,b)=>a.distance-b.distance||b.index-a.index);
       const layers=[], segments=[], media=[];
       if(water)for(const segment of world.water?.raySegments?.(origin,d,maxDistance,{mediumIds:true})??[]){

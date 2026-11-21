@@ -193,6 +193,7 @@
   K.sprite = {
     atlas: AtlasSprites.compile,
     placeAtlas: AtlasSprites.place,
+    reconstruction: SpriteReconstruction,
     art,
     show,
     gen,

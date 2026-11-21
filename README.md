@@ -29,6 +29,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Reflections, ripples and atmosphere](#reflections-ripples-and-atmosphere)
 - [Embedding and custom scene collections](#embedding-and-custom-scene-collections)
 - [Browser renderer](#browser-renderer)
+- [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)
 - [Validation and development](#validation-and-development)
@@ -986,6 +987,14 @@ The following module can run after `ink-studio.browser.js` loads as a classic sc
 See the [browser renderer guide](docs/browser-renderer.md) for supported effects,
 frame options, texture updates, and the lower-level integration API.
 
+## WebGPU graphs and Gaussian splat import
+
+Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable buffers, textures and custom WGSL compute passes. The [GPU Studies gallery](examples/webgpu-graphs/index.html) includes a live shader editor, a deformed mesh, and a Gaussian splat viewer for Graphdeco PLY and Niantic SPZ. The same formats can be rendered from the CLI. Run the gallery with a [local server](docs/webgpu-graphs.md#run-the-gallery).
+
+```sh
+npx ink-studio render scan.spz --raw --out preview.png
+```
+
 ## Screen transitions
 
 The browser package includes 49 preset transitions, from blackouts and eyelid
@@ -1144,3 +1153,5 @@ Use [layered cut paper and relief](docs/paper-relief.md) for real apertures, pap
 Use [voxel and relief-pixel surfaces](docs/voxel-surface.md) to sample selected signed fields into cubes, columns, slabs or shallow relief. [Solid Signals](examples/voxel-surface.html) includes a breakable tower and a sculpt that scatters into rigid blocks.
 
 Use [thread, stitch and woven surfaces](docs/textile-rendering.md) for raised embroidery, interlocking knit loops and patterned warp and weft on curved charts. [Thread Studies](examples/thread-studies.html) includes an embroidered garden, a knitted moth and a woven harbor.
+
+Use [sprite-based object reconstruction](docs/sprite-reconstruction.md) to switch named native geometry to a shared directional atlas at distance, with depth-tested texels and a camera-driven handoff. [Signal Transit](examples/sprite-reconstruction.html) includes a fleet approach and a close inspection bay.

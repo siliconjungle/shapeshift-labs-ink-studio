@@ -9,6 +9,7 @@ import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { createRenderGraph, graphOwner, graphCapture } from './render-graph.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
+import { createSpriteReconstructionPipeline } from './sprite-reconstruction.mjs';
 import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
 import { createSplatPipeline } from './pipeline.mjs';
@@ -115,10 +116,13 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     // level pipeline. The canvas path specializes its own fullscreen resolve.
     const motionAPI = toolkit.ArtDirection ?? toolkit.KIT?.artDirection;
     const footprintAPI = toolkit.KIT?.splatFootprints;
+    const spriteLOD = toolkit.KIT?.sprite?.reconstruction;
+    const spriteLodUnit = 28;
+    let spriteLodTable, uploadedSpriteMask, spriteReconstructionPipeline;
     let footprintBinding,engravingBinding;
     const engravingAPI=toolkit.KIT?.engraving;
     const airflow = toolkit.KIT?.procedural?.airflow, climateAPI = toolkit.KIT?.environmentFrame;
-    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow, footprintGLSL:footprintAPI?.glsl,screenPrintGLSL:engravingAPI?.print?.glsl });
+    pipeline = createSplatPipeline(gl, { specialize: false, sampleCoverage, coverageRules, stableDetail: stableDetailAPI, cutaway:cutawayAPI?.glsl, airflow, footprintGLSL:footprintAPI?.glsl,screenPrintGLSL:engravingAPI?.print?.glsl, spriteReconstructionGLSL:spriteLOD?.glsl });
     const emptyVao = resources.allocate('VertexArray');
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
@@ -171,7 +175,20 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let toneKey, tone, uploadedTone, sorted, instanceDraw, expandInstances, lastInstances;
 
     function orderFor(world, frame, camera, time, isNew, plan, width, height, scale,
-      tolerance, histories, source, rainClocks, rainWind, quality) {
+      tolerance, histories, source, rainClocks, rainWind, quality, spriteMask) {
+      const far = spriteMask?.hasFar ? spriteMask : null;
+      const keep = i => (!quality || quality.keep[i]) && !spriteLOD?.hidden(far?.codes[i]);
+      function submitted(indices, references) {
+        if (!quality && !far) return indices;
+        if (!references) return indices.filter(keep);
+        let count=0;
+        const visible=new Int32Array(indices.length);
+        for(let i=0;i<indices.length;i+=2) if (keep(indices[i])) {
+          visible[count++]=indices[i];
+          visible[count++]=indices[i+1];
+        }
+        return visible.subarray(0,count);
+      }
       const sceneTime = frame.time ?? world.lookSnapshot?.time ?? 0;
       const seeking = tolerance && sorted?.source === source && sorted.histories === histories && sceneTime < sorted.sceneTime;
       let history = histories.get(source);
@@ -181,7 +198,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         if (frame.resetTransparency || seeking) history.reset();
       }
       if (frame.order) {
-        pipeline.setOrder(quality ? frame.order.filter(i => quality.keep[i]) : frame.order);
+        pipeline.setOrder(submitted(frame.order,false));
         sorted = null;
         return;
       }
@@ -192,7 +209,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if (canReuse && !isNew && (frame.changedRows?.length === 0 || plan && !world.count && !frame.changedRows) &&
           !frame.resetTransparency && !seeking && sorted?.tolerance === tolerance && sameValues(sorted.clock,clock) &&
           (!tolerance || sorted.histories === histories) &&
-          sorted.quality === quality && sorted.revision === plan?.orderRevision && sameValues(sorted.viewport,viewport) &&
+          sorted.quality === quality && sorted.far === far && sorted.revision === plan?.orderRevision && sameValues(sorted.viewport,viewport) &&
           sameValues(sorted.view, camera.view) && sameValues(sorted.moving, moving) && sameValues(sorted.back, back)) {
         sorted.sceneTime = sceneTime;
         return;
@@ -205,9 +222,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         transparentAt: i => transparencyAPI.isTransparent(data, i, data[i * 16 + 3], opticalSplats?.[i * 12 + 3], backRows)
       }) : undefined;
       const order = sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind);
-      pipeline.setOrder(quality ? order.filter(i => quality.keep[i]) : order, !!plan);
+      pipeline.setOrder(submitted(order,!!plan), !!plan);
       sorted = canReuse ? { view: camera.view, moving: Int32Array.from(moving), back: Int32Array.from(back),
-        clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality } : null;
+        clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality, far } : null;
     }
 
     function prepareDetail(world, budget) {
@@ -532,8 +549,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       }
-      const surfaces = options.surfaces, previews = options.scaleSurfaces;
-      const hasSurfaces = Boolean(surfaces || previews?.some(Boolean));
+      const surfaces = options.surfaces, previews = options.scaleSurfaces, spriteRows = options.spriteRows;
+      const hasSurfaces = Boolean(surfaces || previews?.some(Boolean) || spriteRows?.length);
       const hasPlanes = !!shader.footprints && footprintBinding.hasPlanes && options.u_idx!==3;
       if (hasSurfaces || hasPlanes || options.surfaceFrame?.lighting?.display) {
         const surfaceOptions = { geometryUpdatesSince: toolkit.SpriteSurface?.geometryUpdatesSince,
@@ -554,6 +571,12 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           }
           gl.depthFunc(gl.LEQUAL);
         }
+        if(spriteRows?.length){
+          spriteReconstructionPipeline ??= createSpriteReconstructionPipeline(gl, spriteLOD, cutawayAPI?.glsl);
+          spriteReconstructionPipeline.draw(spriteRows, {
+            ...options.surfaceFrame, water, wet, width, height, artScale:options.spriteGrid??[1,1]
+          });
+        }
         if(options.surfaceFrame?.lighting?.display){emitterSurfacePipeline??=createSurfacePipeline(gl,{cutaway:cutawayAPI?.glsl});emitterSurfacePipeline.draw(options.surfaceFrame.lighting.display,{...options.surfaceFrame,lighting:null,water,wet,width,height});}
         data.bind();
         gl.depthMask(false);
@@ -565,6 +588,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         ...options,u_geometryDepth:+(hasSurfaces||hasPlanes),
         u_paintPass: !!options.u_paintPass,
         u_materialGridScale: options.u_materialGridScale ?? 1,
+        u_spriteLodGrid: options.spriteGrid ?? [1,1],
         u_viewport: [width, height], u_lookViewport: [width,height],
         ...(options.lookGrid && { u_lookViewportScale: [options.lookGrid[0]/width,options.lookGrid[1]/height] }),
         u_focal: height / 2 / options.tangent
@@ -997,7 +1021,22 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       uploadBones(world.anim?.bones);
       relighting=materialControls.compose(world,frame,camera,time,relighting);
       if(materialControls.has(world))historyValid=false;
-      orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind, selection);
+      const back = [camera.view[2],camera.view[6],camera.view[10]];
+      if (source.spriteReconstruction && !spriteLOD) throw new Error('Sprite reconstruction needs the Ink Studio KIT');
+      const spritePlan = source.spriteReconstruction && spriteLOD.resolve(source, {
+        eye:camera.eye,back,ortho:camera.ortho,setback:camera.setback,time:t,mode:frame.spriteReconstruction
+      });
+      const spriteMask = spritePlan?.mask, spriteRows = spritePlan?.rows;
+      if (spriteMask) {
+        spriteLodTable ??= table(128,spriteLodUnit,maxSize);
+        if (uploadedSpriteMask !== spriteMask) spriteLodTable.upload(Float32Array.from(spriteMask.codes));
+        else spriteLodTable.bind();
+        if (spriteMask !== uploadedSpriteMask) historyValid=false;
+      } else if (uploadedSpriteMask) historyValid=false;
+      uploadedSpriteMask=spriteMask;
+      if(source.spriteReconstruction&&!reflectionCapture&&plane===zero)
+        frame.spriteReconstructionFrame?.(spritePlan??{geometryRows:source.count,states:[]});
+      orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind, selection, spriteMask);
       if (patterned) {
         if (isNew || materials?.world !== world || materials.values !== world.pix ||
             materials.ramps !== world.ramps || materials.rampOff !== world.rampOff || materials.patterns !== world.pats) {
@@ -1038,13 +1077,13 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
-        engraving:engraved, footprints, materialStyles, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section
+        engraving:engraved, footprints, materialStyles, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section, spriteReconstruction:!!spriteMask
       });
       shader.footprints=footprints;
       gl.useProgram(shader.p);
       const growth = world.grow ?? {};
       shader.set({
-        u_data: 0, u_bones: 4, u_fine: 7, ...(plan && { u_instances: 15 }), u_fineOn: +hasFine, u_fpal: pal, u_view: camera.view,
+        u_data: 0, u_bones: 4, u_fine: 7, ...(spriteMask && {u_spriteLod:spriteLodUnit,u_spriteLodCount:spriteMask.codes.length}), ...(plan && { u_instances: 15 }), u_fineOn: +hasFine, u_fpal: pal, u_view: camera.view,
         ...(materialStyles && { u_materialStyles: 16, u_materialPatterned: patterned, u_materialStylesOn: !raw }),
         u_proj: camera.projection, u_time: time, u_scale: scale, u_ortho: +camera.ortho,
         u_motionCadence: hasCadence, u_rainWind:rainWind,
@@ -1081,7 +1120,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         near: camera.clipNear, far: camera.clipFar
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
       const surfaceFrame={lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
-        fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling};
+        fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,eye:camera.eye,back,ortho:camera.ortho,
+        sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
       if(layeredGlass){
         textureUnit(13,null);
         const indices = selection ? glassIndices.filter(i => selection.keep[i]) : glassIndices;
@@ -1089,19 +1129,19 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         textureUnit(13,glassBoundary.textures[0]);
       }
       drawGeometry(shader, geometry, rw, rh, { u_idx: 0, u_snap: +(!raw && !colored), u_hard: 0,
-        u_materialGridScale: samples, background, tangent, lookGrid:coverage&&[width,height],layeredGlass,surfaces,scaleSurfaces,surfaceFrame }, water, wet, env);
+        u_materialGridScale: samples, background, tangent, lookGrid:coverage&&[width,height],layeredGlass,surfaces,scaleSurfaces,spriteRows,spriteGrid:[width/rw,height/rh],surfaceFrame }, water, wet, env);
       if (colored)
-        drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, background, tangent,surfaces,scaleSurfaces,surfaceFrame }, water, wet, env);
+        drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, background, tangent,surfaces,scaleSurfaces,spriteRows,surfaceFrame }, water, wet, env);
       if (paintOnPatterns) {
         drawGeometry(shader, paintOverlay, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, u_paintPass: true,
           tangent, lookGrid: coverage && [width, height] }, water, wet, env);
       }
       if (ownsPixels)
-        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,surfaces,scaleSurfaces,surfaceFrame:{...surfaceFrame,index:true,graphDepth:Boolean(frame[graphOwner]?.depth)} });
+        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,surfaces,scaleSurfaces,spriteRows,surfaceFrame:{...surfaceFrame,index:true,graphDepth:Boolean(frame[graphOwner]?.depth)} });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (cover)
         drawGeometry(shader, cover.buffer, width, height,
-          { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_splatPlane: cover.plane, tangent, surfaces, scaleSurfaces, surfaceFrame:{...surfaceFrame,index:true,clip:cover.plane} });
+          { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_splatPlane: cover.plane, tangent, surfaces, scaleSurfaces, spriteRows, surfaceFrame:{...surfaceFrame,index:true,clip:cover.plane} });
       gl.disable(gl.BLEND);
       textureUnit(1, geometry.textures[0]);
       textureUnit(2, geometry.textures[1]);
@@ -1392,6 +1432,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     }
     return { render: presentFrame, dispose() {
       surfacePipeline?.dispose();
+      spriteReconstructionPipeline?.dispose();
       for (const preview of previewPipelines) preview?.dispose();
       emitterSurfacePipeline?.dispose();
       pipeline.dispose();
@@ -1560,7 +1601,33 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
         footprintView={...makeCamera(world,frame,width,height),width,height,variance:frame.raw?.3:.15,snap:!frame.raw&&!frame.colored};
       }
-      return picking.picker.ray({ water:frame.water !== false,...ray,cutaway:section,camera,footprintView });
+      const spriteLOD=toolkit.KIT?.sprite?.reconstruction;
+      const pickFrame={water:frame.water!==false,...ray,cutaway:section,camera,footprintView};
+      if(world.spriteReconstruction&&spriteLOD){
+        const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
+        const view=makeCamera(world,frame,width,height);
+        const {eye,back}=cameraPose(view);
+        const plan=spriteLOD.resolve(world,{eye,back,ortho:view.ortho,setback:view.setback,time,mode:frame.spriteReconstruction});
+        if(plan?.mask){
+          const {projection,view:m}=view;
+          const axial=([x,y,z])=>-(m[2]*x+m[6]*y+m[10]*z+m[14]);
+          const pixelAt=([x,y,z])=>{
+            const w=view.ortho?1:axial([x,y,z]);
+            if(w<=0)return null;
+            return [(m[0]*x+m[4]*y+m[8]*z+m[12])*projection[0]/w*width*.5+width*.5,
+              (m[1]*x+m[5]*y+m[9]*z+m[13])*projection[5]/w*height*.5+height*.5];
+          };
+          const clip=point=>axial(point)>=view.clipNear&&(!section||
+            toolkit.KIT.cutaway.margin(section,...point,axial(point)-view.setback)>=0);
+          const accept=ray?.accept;
+          pickFrame.accept=hit=>{
+            const code=plan.mask.codes[hit.index], pixel=code&&pixelAt(hit.point);
+            return (!code||pixel&&spriteLOD.geometry(code,...pixel))&&(!accept||accept(hit));
+          };
+          pickFrame.extraHits=ray=>spriteLOD.hits(plan,{...ray,pixelAt,clip});
+        }
+      }
+      return picking.picker.ray(pickFrame);
     },
     dispose() {
       if (disposed) return;

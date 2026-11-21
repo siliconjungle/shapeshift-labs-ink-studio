@@ -16,6 +16,8 @@ return B.finish({ ...sceneSettings, spriteAtlases: [sprite] });
 
 Use `K.sprite.atlas({ metadata, images })` with decoded RGBA byte buffers. `images.color` is required. `depth`, `normal`, and `emission` are optional and use the same dimensions and view rectangles. `at` and `frame` can be functions of scene time in JavaScript. Each placement can disable depth, relighting, or emission with `depth: false`, `lighting: false`, or `emission: false`.
 
+Use [sprite-based object reconstruction](sprite-reconstruction.md) when one atlas should stand in for named native geometry at a distance in the headless or WebGL renderer.
+
 ## Map and view conventions
 
 | Channel | Encoding |

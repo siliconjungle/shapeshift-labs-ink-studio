@@ -19,3 +19,5 @@ export { mountSimulationBranches } from './src/webgl/simulation-branches-view.mj
 export { createCameraAtlas } from './src/webgl/camera-atlas.mjs';
 export { mountCausalInspection } from './src/webgl/causal-inspection-view.mjs';
 export { createBrowserSimulationWorkers } from './src/webgl/simulation-workers.mjs';
+export { createWebGPUGraph, planWebGPUGraph } from './webgpu.mjs';
+export { decodeGaussianSplat, decodeGaussianPly, decodeGaussianSpz, gaussianSplatWorld } from './src/gaussian-splats.mjs';
