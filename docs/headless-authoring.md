@@ -912,6 +912,7 @@ outside the original image.
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
 | `fx.scanlineRemap` | Repeat, skip, or blank whole rows with `options.edits`. The `addresses` output shows the source row for each destination row. |
+| `fx.signalRecovery` | [Hold the last usable raster after a fault and relock](#recover-from-signal-loss). Outputs the raster, receiver status, and stage transition events. |
 | `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
@@ -1096,6 +1097,57 @@ samples. `addresses` is a one-channel raster, one sample wide, with
 to apply the same operations to a live scene.
 The [scanline study](../examples/scanline-repeat-dropout.cjs) compares
 each mode side by side.
+
+### Recover from signal loss
+
+Use `fx.signalRecovery` to make a feed's response to dropout observable
+and reusable. Connect a display raster to `source`, and report a missing
+carrier with `available: false` or a null source. Feed a signal measure
+from zero to one through `quality` when the carrier is present but
+unreliable. An input below `loseBelow` counts toward loss. After a full
+dropout, the stronger `lockAbove` threshold governs reacquisition.
+
+| Stage | Receiver output |
+| --- | --- |
+| `locked` | The current usable raster. It replaces the saved image. |
+| `losing` | The last usable image during the grace period before `lossFrames` misses. A usable observation can restore the lock immediately. |
+| `holding` | The saved image while the carrier is absent, weak, or a relock attempt has failed. |
+| `relocking` | The same saved image during `lockFrames` consecutive qualifying observations. After confirmation the output blends to the current feed over `blendSeconds`. Set that duration to zero for a hard switch. |
+
+Set `options.trackId` and connect `fx.trackRegions.value` to `tracks`
+to use a specific region as the lock target. Its confidence caps the
+input quality. A missing ID makes the feed unavailable to the receiver,
+even while other regions remain visible. Set the tracker's `maxMissed`
+for the expected gap so the same ID can come back. The tracking and
+recovery state remain independent.
+
+```js
+const receiver = KIT.procedural.signalRecovery.create({
+  loseBelow: .4, lockAbove: .65, lossFrames: 2, lockFrames: 3, blendSeconds: .2
+});
+const { value, status, events } = receiver.sample(sourceOrNull, time, { available, quality, fallback });
+```
+
+A strong first observation starts locked. Without a saved image, the
+receiver uses `fallback` if provided, transparent pixels on a known
+grid, or null when it has no grid. A fallback must match the source
+dimensions. An interrupted relock discards its progress and returns to
+the saved image.
+
+`status` reports the stage and when it began, consecutive miss and
+confirmation counts, effective quality and availability, the retained
+frame's `lastUsableTime`, and the live image's `mix` from zero to one.
+On a stage change `events` contains the new stage as `type`, the
+previous stage in `from`, and `time`. Use these to drive effects such
+as scanline slips on loss or an authored cue on lock.
+
+Repeated timestamps return the same observation without increasing
+counts. A rewind, grid change, explicit `reset`, or `receiver.clear()`
+starts fresh. Graph cuts also restart recovery. For a clip that begins
+mid-outage, use graph clip warm-up to capture the last usable image.
+
+Run `node examples/signal-recovery.cjs carrier-return.html` for a browser
+demo of a hard dropout and a moving track that disappears and returns.
 
 ### Substitute blocks from a frame or feed
 

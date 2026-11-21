@@ -242,6 +242,7 @@
     ...P.motionDeformation.operations,
     ...P.rasterColor.operations,
     ...P.pixelEffects.operations,
+    ...P.signalRecovery.operations,
     ...P.rasterWarp.operations,
     ...P.generator.operations,
     ...P.sceneGraph.operations,

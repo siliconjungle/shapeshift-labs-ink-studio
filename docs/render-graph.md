@@ -174,6 +174,11 @@ In `"over"`, blank rows leave the current image visible. A JavaScript
 `rowEdits({ width, height, time })` callback can return a new array each
 frame or return `undefined` to leave the rows alone.
 
+For a held image and stage changes across a fault, use
+[signal recovery](headless-authoring.md#recover-from-signal-loss) in the raster
+graph and bind its output to an image slot. Use the stage to drive row edits
+or other fault effects.
+
 ## Moving world reveals
 
 For a `mask` pass, set `volume: { at, extent, feather }`. The first two fields

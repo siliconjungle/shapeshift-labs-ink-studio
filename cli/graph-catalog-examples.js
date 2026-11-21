@@ -148,6 +148,7 @@ const specifications = {
   'anim.keyframes': { inputs: { channels: { x: 'number' }, keys: [{ time: 0, value: { x: 2 } }] } },
   'anim.spriteDesync': { inputs: { source: clip } },
   'anim.subjectFeedback': { inputs: { source: rgba, options: { width: 4, height: 4 } } },
+  'fx.signalRecovery': { inputs: { source: rgba, options: { lossFrames: 2, lockFrames: 3 } } },
   'anim.datamosh': { inputs: { source: rgba, motion, options: { halfLife: 1 } } },
   'anim.frameBank': { inputs: { source: rgba, options: { tiles: { size: [2, 2], every: 4 } } } },
   'sim.define': { inputs: { kind: 'particles' } },
