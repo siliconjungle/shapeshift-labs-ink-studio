@@ -565,6 +565,7 @@ outside the original image.
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
+| `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
@@ -656,6 +657,40 @@ the graph time and seed unless overridden in `options`.
 
 The [cross-bank tile study](../examples/cross-bank-tile-bleed.cjs) shows
 independent banks made from sprite art and an animated camera atlas.
+
+### Slip tile row addresses
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.tileStrideSlip(art, {
+  tileSize: [8, 8], stride: 19, wrapAt: 96
+});
+```
+
+The effect lays the source's complete tiles into a row-major read buffer.
+A destination tile at column `x`, row `y` reads from
+`offset + y * stride + x`, with all controls measured in whole tiles.
+
+- The default `stride` is the number of full tiles in one source row.
+  Add one to shift each successive row's read by one more tile. A stride
+  of zero repeats one row and a negative stride reads rows in reverse.
+- The default `offset` is zero. `wrapAt` defaults to the number of full
+  source tiles and can be lowered to repeat the buffer early.
+- At negative addresses or addresses at or beyond `wrapAt`,
+  `boundary: "wrap"` (default) takes the positive remainder,
+  `"keep"` keeps the destination, and `"omit"` fills it with zeros.
+- An optional `mask` restricts writes using `maskChannel` (default
+  `"luma"`) and `maskThreshold` (default 128). Reads can reach any complete
+  source tile. Partial edge tiles stay intact and are excluded from reads.
+- `value` preserves source dimensions, pivot, channels and copied samples.
+  As with tile scrambling, `addresses` reports source indices on the
+  destination grid, including any partial edge cells. A sample of
+  `-1` means the tile was cleared.
+
+For `fx.tileStrideSlip`, connect controls through `data.record`. Set
+`ease: "step"` on integer control keyframes so a stride or wrap point
+changes on a chosen frame. The
+[tile stride study](../examples/tile-stride-slip.cjs) compares both controls
+and shows the actual source address of each sampled row start.
 
 ### Corrupt a palette bitplane
 

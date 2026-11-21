@@ -3,17 +3,20 @@
   const P = K.procedural;
   const {view, channel, int, tuple, plane} = P.pixelEffectSupport;
 
-  function tileSettings({
-    tileSize = [8, 8], amount = .25, seed = 1, rate = 0, time = 0,
-    maskChannel = 'luma', maskThreshold = 128
-  }) {
-    if (!tuple(tileSize, 2, n => int(n, 1, 8192)) ||
-        !Number.isFinite(amount) || amount < 0 || amount > 1 || !Number.isSafeInteger(seed) ||
-        !Number.isFinite(rate) || rate < 0 || !Number.isFinite(time) || !Number.isFinite(maskThreshold))
+  function tileGridSettings({tileSize = [8, 8], maskChannel = 'luma', maskThreshold = 128}) {
+    if (!tuple(tileSize, 2, n => int(n, 1, 8192)) || !Number.isFinite(maskThreshold))
+      throw new RangeError('Invalid tile effect settings');
+    return {tileSize, maskChannel, maskThreshold};
+  }
+
+  function tileSettings(options) {
+    const {amount = .25, seed = 1, rate = 0, time = 0} = options;
+    if (!Number.isFinite(amount) || amount < 0 || amount > 1 || !Number.isSafeInteger(seed) ||
+        !Number.isFinite(rate) || rate < 0 || !Number.isFinite(time))
       throw new RangeError('Invalid tile effect settings');
     const tick = Math.floor(time * rate);
     if (!Number.isSafeInteger(tick)) throw new RangeError('Tile effect time exceeds its tick range');
-    return { tileSize, amount, seed, tick, maskChannel, maskThreshold };
+    return {...tileGridSettings(options), amount, seed, tick};
   }
 
   function tileGrid(source, [tileWidth, tileHeight]) {
@@ -138,5 +141,38 @@
     };
   }
 
-  Object.assign(P.pixelEffects, {tileScramble, tileBleed});
+  function tileStrideSlip(source, options = {}) {
+    const {tileSize, maskChannel, maskThreshold} = tileGridSettings(options);
+    const target = tileGrid(source, tileSize);
+    const {columns, rows, fullColumns, fullRows} = target;
+    const capacity = fullColumns * fullRows;
+    const {stride = fullColumns, offset = 0, wrapAt = capacity, boundary = 'wrap', mask} = options;
+    const signed = value => int(value, -2147483648, 2147483647);
+    if (!signed(stride) || !signed(offset) || !['wrap', 'keep', 'omit'].includes(boundary) ||
+        !int(wrapAt, capacity ? 1 : 0, capacity))
+      throw new RangeError('Invalid tile stride, offset, wrap point or boundary');
+
+    const addresses = Int32Array.from({length: columns * rows}, (_, index) => index);
+    const eligible = eligibleTiles(target, mask, maskChannel, maskThreshold);
+    let count = 0;
+    for (const address of eligible) {
+      const row = Math.floor(address / columns), col = address % columns;
+      let read = offset + row * stride + col;
+      if (read < 0 || read >= wrapAt) {
+        if (boundary === 'keep') continue;
+        read = boundary === 'wrap' ? ((read % wrapAt) + wrapAt) % wrapAt : -1;
+      }
+      const from = read < 0 ? -1 : Math.floor(read / fullColumns) * columns + read % fullColumns;
+      if (from === address) continue;
+      addresses[address] = from;
+      // Compact changed tiles in place. The write never passes the current read.
+      eligible[count++] = address;
+    }
+    return {
+      value: paintTiles(target, target, addresses, eligible.subarray(0, count)),
+      addresses: plane(columns, rows, addresses)
+    };
+  }
+
+  Object.assign(P.pixelEffects, {tileScramble, tileBleed, tileStrideSlip});
 })(KIT);
