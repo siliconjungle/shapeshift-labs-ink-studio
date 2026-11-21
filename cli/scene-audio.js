@@ -39,18 +39,24 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     return { stem: 'tracks', asset, offset, rate, gain, loop, first: sampleOf(time),
       ...(duration && { end: sampleOf(T.add(time, duration)) }) };
   });
-  if (music !== undefined && (!fields(music, ['system','gain','fade','layers']) || !token(music.system) ||
+  if (music !== undefined && (!fields(music, ['system','gain','fade','layers','production']) || !token(music.system) ||
       !finite(music.gain ?? 1, 0, 16) || !finite(music.fade ?? .03, 0, 5) ||
       !record(music.layers ?? {}) || Object.values(music.layers ?? {}).some(row =>
         !record(row) || !Object.values(row).every(token))))
     throw new TypeError('Invalid soundtrack music binding');
+  const production=music?.production;
+  if (production!==undefined && (!fields(production,['sources','timeline','assets']) ||
+      !record(production.sources) || !record(production.timeline) ||
+      !finite(production.timeline.end,.001,300) ||
+      !record(production.assets ?? {}) || !Object.values(production.assets ?? {}).every(token)))
+    throw new TypeError('An adaptive production needs named sources, an authored timeline, and optional sample assets');
   if (proceduralScore !== undefined && (!fields(proceduralScore,['system','score','gain']) ||
       (proceduralScore.system === undefined) === (proceduralScore.score === undefined) ||
       proceduralScore.system !== undefined && !token(proceduralScore.system) ||
       !finite(proceduralScore.gain ?? 1,0,1)))
     throw new TypeError('A procedural soundtrack needs one inline score or world score system');
   const inline = proceduralScore?.score === undefined ? null : K.music.score.compile(proceduralScore.score);
-  const scoreSystem = proceduralScore?.system, synthAsset = Symbol('procedural score');
+  const scoreSystem = proceduralScore?.system, synthAsset = Symbol('procedural score'), productionAsset=Symbol('music production');
 
   function render(sequence, { timeline, runtime: sceneRuntime } = {}) {
     const start = sampleOf(sequence.startPoint), end = sampleOf(sequence.endPoint);
@@ -63,9 +69,11 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     const voices = bed.map(voice => ({ ...voice }));
     const cues = timeline?.audioSchedule(clock) ?? [];
     const looping = new Map(), resolved = new Map(), positional = [];
-    let next = 0, score = [], knots = 0, generated;
+    let next = 0, score = [], knots = 0, generated, produced, entry;
+    const productionIntents=[];
     function resolve(name) {
       if (name === synthAsset) return generated;
+      if (name === productionAsset) return produced;
       if (!resolved.has(name)) {
         const asset = resolveAsset(name);
         if (!asset) throw new RangeError('Missing soundtrack asset ' + name);
@@ -143,6 +151,10 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         for (const voice of state.cues) shot(voice, state.listener, sample, 'spatial');
       }
       for (const event of events) if (music && event.system === music.system) {
+        if (production && (event.kind==='music-transition' || event.kind==='music-cue')) {
+          productionIntents.push({ ...event,time:event.time ?? time });
+          continue;
+        }
         const at = event.time === time ? sample : stamp(event.time ?? time);
         if (event.kind === 'music-transition') section(event, at);
         if (event.kind === 'music-cue') {
@@ -157,12 +169,15 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       const period = initial.world.takeClock?.simulationRate === undefined ? T.period(dt) :
         T.div(T.read(1), T.read(initial.world.takeClock.simulationRate));
       const at = tick => sampleOf(T.mul(T.read(tick), period));
-      const limit = -T.index(T.roundDown(T.div(T.sub(T.read(0), sequence.endPoint), period)));
+      const replayEnd=production && production.timeline.end>T.seconds(sequence.endPoint) ?
+        T.read(production.timeline.end) : sequence.endPoint;
+      const limit = -T.index(T.roundDown(T.div(T.sub(T.read(0), replayEnd), period)));
       if (initial.tick !== 0 || limit > 120000) throw new RangeError('Sound world needs tick zero and a bounded replay range');
       if (music) {
         const state = run.query().probe(music.system + '/state');
         if (state.status !== 'ok') throw new Error('Unknown soundtrack score ' + music.system);
-        section(state.value, 0);
+        if (production) entry=state.value;
+        else section(state.value, 0);
       }
       observe(0, 0, at(1), run.query());
       run.advance(limit, { onTick(view, query) {
@@ -179,6 +194,23 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         end: {numerator:end,denominator:sampleRate}, gain: proceduralScore.gain ?? 1 }).value;
       push({ stem: 'music', asset: synthAsset, first: start, end });
     }
+    if (production) {
+      const {timeline,sources}=production;
+      const initial=timeline.segments?.[timeline.entry];
+      if (entry.section!==timeline.entry || !initial)
+        throw new RangeError('Production entry must match the adaptive music state');
+      const stop=Math.min(end,stamp(timeline.end));
+      if (stop>start) {
+        const sourcesByName=Object.fromEntries(Object.entries(production.assets ?? {}).map(([key,asset])=>[key,resolve(asset)]));
+        const liveLayers=Object.fromEntries(Object.entries(entry.layers ?? {}).filter(([name])=>
+          Object.hasOwn(sources[initial.source]?.tracks ?? {},name)));
+        const liveTimeline={...timeline,segments:{...timeline.segments,
+          [timeline.entry]:{...initial,layers:{...initial.layers,...liveLayers}}}};
+        produced=K.music.production.renderTimeline(sources,liveTimeline,productionIntents,sourcesByName,
+          {sampleRate,start:{numerator:start,denominator:sampleRate},end:{numerator:stop,denominator:sampleRate}}).value;
+        push({stem:'music',asset:productionAsset,first:start,end:stop,gain:music.gain});
+      }
+    }
     return mix(voices.filter(row => row.first < end), resolve, { start, end, sampleRate, gain });
   }
   return Object.freeze({ render });
@@ -187,7 +219,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
 function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOptions } = {}) {
   const source = path.resolve(file), folder = path.dirname(source);
   const { assets = undefined, world, ...definition } = read(source);
-  const assetsByName = assets === undefined && definition.proceduralScore !== undefined ? {} : assets;
+  const assetsByName = assets === undefined && (definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
   if (!record(assetsByName) || Object.keys(assetsByName).length > 1024 || !Object.keys(assetsByName).every(token))
     throw new TypeError('Soundtrack needs named audio assets');
   const assetCache = new Map(), graphs = new Map();

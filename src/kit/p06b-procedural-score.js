@@ -429,6 +429,19 @@
     }
     return Object.freeze({
       duration: end, events: P.data.freeze(events), sample: time => sampleTiming(clock.sample(time)), schedule,
+      pitch(id,time) {
+        const i=voices.findIndex(voice=>voice.id===id);
+        require(i>=0 && finite(time,0,1e9),'Choose a score voice and pitch time');
+        const segment=tracks[i][Math.max(0,floorIndex(tracks[i],time+1e-9))];
+        return {midi:segment.midi,frequency:segment.midi===null ? 0 : segment.hz};
+      },
+      chordPitch(midi,time) {
+        H.midi(midi);
+        require(finite(time,0,1e9),'Choose a nonnegative pitch time');
+        const event=events[floorIndex(events,time+1e-9)];
+        const form=event && chords.get(event.harmony);
+        return form ? hzOf(form.root)*form.pitchRatio(midi) : referenceHz*H.ratio(midi-69,tuning);
+      },
       frame(take) { return sampleTiming(clock.forTake(take)); },
       audio(options) { return P.musicScoreSynth.render({ voices,tracks,end,fadeEnd,voiceAt,windows,hitLevel },options); }
     });

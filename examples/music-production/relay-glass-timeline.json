@@ -1,0 +1,178 @@
+{
+  "sources": {
+    "score": "relay-glass.json"
+  },
+  "timeline": {
+    "entry": "coil",
+    "end": 17.5,
+    "segments": {
+      "coil": {
+        "source": "score",
+        "start": {
+          "beat": 0
+        },
+        "end": {
+          "beat": 8
+        }
+      },
+      "pressure": {
+        "source": "score",
+        "start": {
+          "beat": 8
+        },
+        "end": {
+          "beat": 24
+        },
+        "loop": false
+      },
+      "clear": {
+        "source": "score",
+        "start": {
+          "beat": 24
+        },
+        "end": {
+          "beat": 32
+        },
+        "loop": false
+      },
+      "pickup": {
+        "source": "score",
+        "start": {
+          "beat": 23.7
+        },
+        "end": {
+          "beat": 24
+        },
+        "loop": false,
+        "layers": {
+          "kick": 0,
+          "snare": 0,
+          "hat": 0,
+          "bass": 0,
+          "lead": 0,
+          "pad": 0
+        },
+        "gain": -3
+      },
+      "mark": {
+        "source": "score",
+        "start": {
+          "beat": 24
+        },
+        "end": {
+          "beat": 24.9
+        },
+        "loop": false,
+        "layers": {
+          "kick": 0,
+          "snare": 0,
+          "hat": 0,
+          "bass": 0,
+          "lead": 0,
+          "pad": 0
+        },
+        "gain": -4
+      }
+    },
+    "transitions": [
+      {
+        "from": "coil",
+        "to": "pressure",
+        "tail": 0.12,
+        "fadeIn": 0.06
+      },
+      {
+        "from": "pressure",
+        "to": "clear",
+        "exit": {
+          "beat": 24
+        },
+        "entry": {
+          "beat": 24
+        },
+        "tail": 0.2,
+        "fadeIn": 0.07,
+        "bridge": "pickup",
+        "pickup": 0.22
+      }
+    ],
+    "stingers": {
+      "arrival": "mark"
+    }
+  },
+  "adaptive": {
+    "score": {
+      "tempo": 116,
+      "entry": "coil",
+      "sections": {
+        "coil": {
+          "resource": "coil"
+        },
+        "pressure": {
+          "resource": "pressure",
+          "layers": {
+            "pad": 0.8
+          }
+        },
+        "clear": {
+          "resource": "clear",
+          "layers": {
+            "pad": 1
+          }
+        }
+      },
+      "parameters": {
+        "intensity": {
+          "default": 0
+        }
+      },
+      "cues": {
+        "arrival": {
+          "resource": "arrival"
+        }
+      },
+      "transitions": [
+        {
+          "id": "load",
+          "from": "coil",
+          "to": "pressure",
+          "quantize": "bar",
+          "when": {
+            "path": "/parameters/intensity",
+            "op": "gte",
+            "value": 0.8
+          }
+        },
+        {
+          "id": "release",
+          "from": "pressure",
+          "to": "clear",
+          "quantize": "bar",
+          "cue": "arrival",
+          "when": {
+            "path": "/parameters/intensity",
+            "op": "lte",
+            "value": 0.2
+          }
+        }
+      ]
+    },
+    "updates": [
+      {
+        "time": 2.2,
+        "parameters": {
+          "intensity": 1
+        }
+      },
+      {
+        "time": 10.5,
+        "parameters": {
+          "intensity": 0
+        }
+      }
+    ]
+  },
+  "options": {
+    "sampleRate": 48000
+  }
+}

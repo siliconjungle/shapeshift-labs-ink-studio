@@ -12,18 +12,30 @@
   const real = raw => T.seconds(T.read(raw));
   const mod = (x,n) => (x%n+n)%n;
 
+  function expression(raw) {
+    require(fields(raw,['delay','gate','bend','glide','vibrato','retrigger','offset','articulation','brightness']) &&
+      [['delay',-.125,.125],['gate',.05,2],['bend',-1200,1200],['glide',0,2],['vibrato',0,100],
+        ['offset',0,5],['brightness',0,1]].every(([key,lo,hi]) => raw[key]===undefined || finite(raw[key],lo,hi)) &&
+      (raw.retrigger===undefined || integer(raw.retrigger,1,8)) &&
+      (raw.articulation===undefined || id(raw.articulation)), 'Invalid note expression');
+    return {...raw};
+  }
+
   function motif(raw) {
     require(fields(raw,['id','length','events']) && (raw.id === undefined || id(raw.id)) &&
       Array.isArray(raw.events) && raw.events.length <= 512,'A motif needs a length and up to 512 events');
     const length = real(raw.length);
     require(finite(length,.0625,256),'Motif length must be .0625 to 256 beats');
     const events = Array.from(raw.events,(row,index) => {
-      require(fields(row,['id','beat','duration','degree','velocity']) &&
+      require(fields(row,['id','beat','duration','degree','velocity','play','midi']) &&
         (row.id === undefined || id(row.id)),'Invalid motif event');
       const beat = real(row.beat), duration = real(row.duration), degree = row.degree ?? 1, velocity = row.velocity ?? .8;
       require(finite(beat,0,length) && finite(duration,1e-5,length) && beat+duration <= length+1e-9 &&
-        integer(degree,-35,36) && finite(velocity,0,1),'Motif event falls outside its length, degree, or velocity range');
-      return { id:row.id ?? 'note-'+index,beat,duration,degree,velocity };
+        integer(degree,-35,36) && finite(velocity,0,1) && (row.midi===undefined || integer(row.midi,0,127)),
+        'Motif event falls outside its length, degree, pitch, or velocity range');
+      return { id:row.id ?? 'note-'+index,beat,duration,degree,velocity,
+        ...(row.midi!==undefined && {midi:row.midi}),
+        ...(row.play!==undefined && {play:expression(row.play)}) };
     }).sort((a,b) => a.beat-b.beat);
     require(new Set(events.map(event => event.id)).size === events.length &&
       events.every((event,i) => i === 0 || event.beat >= events[i-1].beat+events[i-1].duration-1e-9),

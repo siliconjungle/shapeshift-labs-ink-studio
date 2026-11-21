@@ -3,6 +3,8 @@
 Use Ink's phrase tools to develop a motif, arrange parts, audition alternatives,
 and carry an idea from one take into another. `KIT.music.composer` is available
 in Node and the browser. Its graph operations appear in `ink-studio graph nodes`.
+Use [music production](music-production.md) when a cue needs a sampler,
+arranged groove, polyphonic accompaniment, mixing, or adaptive playback.
 
 ## Motifs and variation
 
@@ -15,6 +17,12 @@ play a melody, trigger percussion, or shape a light or camera sweep.
 Use `music.makeMotif` to generate from a beat grid, allowed scale degrees,
 count, gate, optional first and last degree, and seed. Use `music.motif` to
 validate a hand-authored motif or vary one with ordered operations.
+
+`music.makePhrase` (`composer.makePhrase`) creates an editable two- or
+four-bar melody. Four-bar phrases quote the opening gesture, change the
+density between bars, and end on a longer landing. Choose a `lyrical` or
+`syncopated` shape, and optionally set `beatsPerBar`, `degrees`, `start`
+and `end` degrees, and a reproducible `seed`.
 
 | Operation | Effect |
 | --- | --- |
@@ -71,10 +79,46 @@ Pins use `part:<id>` or `binding:<id>` and persist in the next arrangement.
 A directly bound voice is also protected by its pinned binding. A part
 edit can replace its material, run operations with a seed, or specialize
 one section by naming `section`. Section overrides carry forward until
-that part receives another override. A binding edit uses
+that part receives another override. Use `scope: "section"` to play an edit
+only during that section. The inherited material resumes at its original
+motif position afterward. Notes that straddle an override may be clipped
+at the boundary. In a raw definition, use the section's `localParts` table
+for these temporary overrides. A binding edit uses
 `{binding, value}`. A harmony edit uses `{harmony, voicing}` or
 `{harmony, notes}` and can set `inversion`. Edits that would change a
 pinned sustained part's note assignments are rejected.
+
+## Diagnose and propose changes
+
+`music.analyzeArrangement` (`composer.analyze`) reports repeated bars by
+relative scale degrees and beat positions, as well as narrow velocity and
+gate ranges. Per-section part metrics include onset count, note occupancy,
+and the longest rest. Results use one-based bar numbers. Set
+`options.audio: {start, end, sampleRate}` to measure the rendered mix and
+each voice's RMS and peak by bar over a window of up to thirty seconds.
+Score metrics describe the written material. Audio metrics describe the
+rendered mix, including its envelopes and levels.
+
+`music.suggest` (`composer.suggest`) returns `proposals`, `blocked`, and
+`variants`. Each proposal cites a finding, identifies a part and bar
+range, and shows measured differences after applying the edit. Lead
+proposals quote or answer a repeated hook. Percussion and bass proposals
+can open space for a fill or a pickup, and articulation proposals can
+retain pitches and timing while shaping accents and note lengths.
+Options include `part`, `section`, `seed`, `limit` (1–8), and a list of
+existing pins to explicitly `unpin`. A proposal blocked by a part or
+binding pin identifies the pin. When `variants` contains alternatives,
+feed it into `music.audition`, or pass a chosen variant as the edit
+document to `music revise`. These are arrangement heuristics suitable for
+audition. Replacement sections follow the motif limit of 256 beats and
+512 events.
+
+```sh
+ink-studio music analyze examples/lock-signal-audition.json --out findings.json
+ink-studio music suggest examples/lock-signal-audition.json --out suggestions.json
+```
+
+## Audition takes
 
 `music.audition` evaluates each named edit list against the same baseline.
 Pass a common start/end window and sample rate. It returns takes with

@@ -1,0 +1,980 @@
+{
+  "production": {
+    "arrangement": {
+      "seed": 819,
+      "score": {
+        "tempoMap": {
+          "tempo": 116,
+          "beatsPerBar": 4,
+          "swing": 0.543
+        },
+        "key": {
+          "root": "F#3",
+          "mode": "minor"
+        },
+        "harmonies": {
+          "home": {
+            "root": "F#3",
+            "quality": "minor7",
+            "voicing": {
+              "pad": "E4"
+            },
+            "fade": 0.06
+          },
+          "sub": {
+            "root": "B2",
+            "quality": "minor7",
+            "voicing": {
+              "pad": "A3"
+            },
+            "fade": 0.06
+          },
+          "lift": {
+            "root": "D3",
+            "quality": "major7",
+            "voicing": {
+              "pad": "C#4"
+            },
+            "fade": 0.06
+          },
+          "turn": {
+            "root": "C#3",
+            "quality": "dominant7",
+            "voicing": {
+              "pad": "B3"
+            },
+            "fade": 0.06
+          },
+          "clear": {
+            "root": "F#3",
+            "quality": "minor",
+            "voicing": {
+              "pad": "C#4"
+            },
+            "fade": 0.06
+          }
+        },
+        "changes": [
+          {
+            "id": "bloom",
+            "time": {
+              "bar": 4
+            },
+            "harmony": "lift"
+          },
+          {
+            "id": "held-breath",
+            "time": {
+              "bar": 5
+            },
+            "harmony": "turn"
+          }
+        ],
+        "endFade": 0.3
+      },
+      "motifs": {
+        "kick": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.98
+            },
+            {
+              "beat": 1.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.85
+            },
+            {
+              "beat": 2.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.79
+            },
+            {
+              "beat": 4,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.97
+            },
+            {
+              "beat": 5.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.87
+            },
+            {
+              "beat": 6.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.76
+            },
+            {
+              "beat": 7.25,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.65
+            }
+          ]
+        },
+        "cross-stick": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 1,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.79,
+              "play": {
+                "articulation": "rim"
+              }
+            },
+            {
+              "beat": 2.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.38,
+              "play": {
+                "articulation": "ghost"
+              }
+            },
+            {
+              "beat": 3,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.88
+            },
+            {
+              "beat": 5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.79,
+              "play": {
+                "articulation": "rim"
+              }
+            },
+            {
+              "beat": 7,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.93
+            },
+            {
+              "beat": 7.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.29,
+              "play": {
+                "articulation": "ghost"
+              }
+            }
+          ]
+        },
+        "backbeat": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 1,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.91
+            },
+            {
+              "beat": 2.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.4,
+              "play": {
+                "articulation": "ghost"
+              }
+            },
+            {
+              "beat": 3,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.99
+            },
+            {
+              "beat": 4.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.36,
+              "play": {
+                "articulation": "ghost"
+              }
+            },
+            {
+              "beat": 5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.93
+            },
+            {
+              "beat": 7,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.97
+            }
+          ]
+        },
+        "hats": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.78
+            },
+            {
+              "beat": 1.25,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.46
+            },
+            {
+              "beat": 1.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.52
+            },
+            {
+              "beat": 2.25,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.66
+            },
+            {
+              "beat": 3.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.83,
+              "play": {
+                "articulation": "open"
+              }
+            },
+            {
+              "beat": 3.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.45
+            },
+            {
+              "beat": 4.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.78
+            },
+            {
+              "beat": 5.25,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.48
+            },
+            {
+              "beat": 5.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.57
+            },
+            {
+              "beat": 6.25,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.6,
+              "play": {
+                "articulation": "open"
+              }
+            },
+            {
+              "beat": 6.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.71
+            },
+            {
+              "beat": 7.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.88
+            }
+          ]
+        },
+        "metal": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.61
+            },
+            {
+              "beat": 3.25,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.38
+            },
+            {
+              "beat": 4.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.72
+            },
+            {
+              "beat": 7.75,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.47
+            }
+          ]
+        },
+        "metal-clear": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.87
+            },
+            {
+              "beat": 3.625,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.47
+            },
+            {
+              "beat": 6.5,
+              "duration": 0.07,
+              "degree": 1,
+              "velocity": 0.41
+            }
+          ]
+        },
+        "bass": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0,
+              "duration": 0.78,
+              "degree": 1,
+              "velocity": 0.86
+            },
+            {
+              "beat": 1.5,
+              "duration": 0.48,
+              "degree": 1,
+              "velocity": 0.72
+            },
+            {
+              "beat": 2.75,
+              "duration": 0.42,
+              "degree": 5,
+              "velocity": 0.74
+            },
+            {
+              "beat": 3.5,
+              "duration": 0.27,
+              "degree": 1,
+              "velocity": 0.66,
+              "play": {
+                "glide": 0.028
+              }
+            },
+            {
+              "beat": 4,
+              "duration": 0.9,
+              "degree": 1,
+              "velocity": 0.9
+            },
+            {
+              "beat": 5.5,
+              "duration": 0.54,
+              "degree": 1,
+              "velocity": 0.81
+            },
+            {
+              "beat": 6.5,
+              "duration": 0.38,
+              "degree": 5,
+              "velocity": 0.73
+            },
+            {
+              "beat": 7.375,
+              "duration": 0.32,
+              "degree": 6,
+              "velocity": 0.62
+            }
+          ]
+        },
+        "hook": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0.75,
+              "duration": 0.17,
+              "degree": 1,
+              "velocity": 0.85,
+              "midi": 73,
+              "play": {
+                "brightness": 0.81
+              }
+            },
+            {
+              "beat": 1.25,
+              "duration": 0.23,
+              "degree": 1,
+              "velocity": 0.69,
+              "midi": 76
+            },
+            {
+              "beat": 2.25,
+              "duration": 0.42,
+              "degree": 1,
+              "velocity": 0.92,
+              "midi": 78,
+              "play": {
+                "vibrato": 13
+              }
+            },
+            {
+              "beat": 4.25,
+              "duration": 0.18,
+              "degree": 1,
+              "velocity": 0.73,
+              "midi": 73
+            },
+            {
+              "beat": 5.5,
+              "duration": 0.45,
+              "degree": 1,
+              "velocity": 0.82,
+              "midi": 71
+            },
+            {
+              "beat": 6.125,
+              "duration": 0.28,
+              "degree": 1,
+              "velocity": 0.59,
+              "midi": 69
+            },
+            {
+              "beat": 7.125,
+              "duration": 0.23,
+              "degree": 1,
+              "velocity": 0.7,
+              "midi": 68,
+              "play": {
+                "glide": 0.026
+              }
+            }
+          ]
+        },
+        "pressure": {
+          "length": 16,
+          "events": [
+            {
+              "beat": 0.75,
+              "duration": 0.22,
+              "degree": 1,
+              "velocity": 0.8,
+              "midi": 73
+            },
+            {
+              "beat": 1.25,
+              "duration": 0.18,
+              "degree": 1,
+              "velocity": 0.76,
+              "midi": 69
+            },
+            {
+              "beat": 2.25,
+              "duration": 0.39,
+              "degree": 1,
+              "velocity": 0.87,
+              "midi": 76
+            },
+            {
+              "beat": 4.75,
+              "duration": 0.13,
+              "degree": 1,
+              "velocity": 0.63,
+              "midi": 71
+            },
+            {
+              "beat": 5.25,
+              "duration": 0.18,
+              "degree": 1,
+              "velocity": 0.79,
+              "midi": 76
+            },
+            {
+              "beat": 6.5,
+              "duration": 0.51,
+              "degree": 1,
+              "velocity": 0.86,
+              "midi": 74
+            },
+            {
+              "beat": 8.75,
+              "duration": 0.21,
+              "degree": 1,
+              "velocity": 0.83,
+              "midi": 73
+            },
+            {
+              "beat": 9.25,
+              "duration": 0.31,
+              "degree": 1,
+              "velocity": 0.74,
+              "midi": 76
+            },
+            {
+              "beat": 10.25,
+              "duration": 0.51,
+              "degree": 1,
+              "velocity": 0.91,
+              "midi": 80,
+              "play": {
+                "brightness": 0.92
+              }
+            },
+            {
+              "beat": 12.5,
+              "duration": 0.26,
+              "degree": 1,
+              "velocity": 0.69,
+              "midi": 78
+            },
+            {
+              "beat": 13.5,
+              "duration": 0.27,
+              "degree": 1,
+              "velocity": 0.8,
+              "midi": 77
+            },
+            {
+              "beat": 14.5,
+              "duration": 0.72,
+              "degree": 1,
+              "velocity": 0.76,
+              "midi": 71,
+              "play": {
+                "vibrato": 12
+              }
+            }
+          ]
+        },
+        "release": {
+          "length": 8,
+          "events": [
+            {
+              "beat": 0.75,
+              "duration": 0.18,
+              "degree": 1,
+              "velocity": 0.85,
+              "midi": 73
+            },
+            {
+              "beat": 1.25,
+              "duration": 0.21,
+              "degree": 1,
+              "velocity": 0.73,
+              "midi": 76
+            },
+            {
+              "beat": 2.25,
+              "duration": 0.95,
+              "degree": 1,
+              "velocity": 0.92,
+              "midi": 78,
+              "play": {
+                "vibrato": 15
+              }
+            },
+            {
+              "beat": 4.75,
+              "duration": 0.18,
+              "degree": 1,
+              "velocity": 0.59,
+              "midi": 76
+            },
+            {
+              "beat": 5.25,
+              "duration": 0.26,
+              "degree": 1,
+              "velocity": 0.69,
+              "midi": 73
+            },
+            {
+              "beat": 6.5,
+              "duration": 1.25,
+              "degree": 1,
+              "velocity": 0.79,
+              "midi": 66,
+              "play": {
+                "brightness": 0.54,
+                "vibrato": 8
+              }
+            }
+          ]
+        }
+      },
+      "parts": {
+        "kick": {
+          "role": "percussion",
+          "material": "kick",
+          "voice": {
+            "instrument": "kick"
+          }
+        },
+        "snare": {
+          "role": "percussion",
+          "material": "cross-stick",
+          "voice": {
+            "instrument": "snare"
+          }
+        },
+        "hat": {
+          "role": "percussion",
+          "material": "hats",
+          "voice": {
+            "instrument": "hat"
+          }
+        },
+        "metal": {
+          "role": "percussion",
+          "material": "metal",
+          "voice": {
+            "instrument": "hat"
+          }
+        },
+        "bass": {
+          "role": "bass",
+          "material": "bass",
+          "register": -12
+        },
+        "lead": {
+          "role": "lead",
+          "material": "hook"
+        },
+        "pad": {
+          "role": "pad",
+          "material": {
+            "sustain": true
+          }
+        }
+      },
+      "sections": [
+        {
+          "id": "coil",
+          "bars": 2,
+          "harmony": "home"
+        },
+        {
+          "id": "pressure",
+          "bars": 4,
+          "harmony": "sub",
+          "parts": {
+            "lead": "pressure",
+            "snare": "backbeat"
+          }
+        },
+        {
+          "id": "clear",
+          "bars": 2,
+          "harmony": "clear",
+          "parts": {
+            "lead": "release",
+            "snare": "cross-stick",
+            "metal": "metal-clear"
+          }
+        }
+      ]
+    },
+    "patches": {
+      "kick": {
+        "type": "drum",
+        "kind": "kick",
+        "tune": 43,
+        "decay": 0.238,
+        "sweep": 142,
+        "click": 0.195,
+        "color": 0.66
+      },
+      "snare": {
+        "type": "sample",
+        "zones": [
+          {
+            "samples": [
+              "snare-ghost"
+            ],
+            "velocity": [
+              0,
+              0.55
+            ],
+            "gain": 7
+          },
+          {
+            "samples": [
+              "snare-main",
+              "snare-alt"
+            ],
+            "velocity": [
+              0.55,
+              1
+            ],
+            "gain": 1
+          },
+          {
+            "samples": [
+              "snare-ghost"
+            ],
+            "articulation": "ghost",
+            "gain": 6.5
+          },
+          {
+            "samples": [
+              "snare-rim"
+            ],
+            "articulation": "rim",
+            "gain": 1.5
+          }
+        ]
+      },
+      "hat": {
+        "type": "sample",
+        "zones": [
+          {
+            "samples": [
+              "hat-closed",
+              "hat-closed-alt"
+            ],
+            "gain": 11
+          },
+          {
+            "samples": [
+              "hat-open"
+            ],
+            "articulation": "open",
+            "gain": -3
+          }
+        ]
+      },
+      "iron": {
+        "type": "sample",
+        "zones": [
+          {
+            "samples": [
+              "metal-soft"
+            ],
+            "velocity": [
+              0,
+              0.52
+            ],
+            "gain": 11
+          },
+          {
+            "samples": [
+              "metal-hit",
+              "metal-alt"
+            ],
+            "velocity": [
+              0.52,
+              1
+            ],
+            "gain": -2,
+            "levels": [
+              0,
+              7.5
+            ]
+          }
+        ]
+      },
+      "bass": {
+        "type": "analog",
+        "body": 0.64,
+        "color": 0.68,
+        "drive": 1.9,
+        "env": {
+          "attack": 0.008,
+          "decay": 0.19,
+          "sustain": 0.63,
+          "release": 0.088
+        }
+      },
+      "glass": {
+        "type": "fm",
+        "ratio": 2.005,
+        "index": 2.65,
+        "indexDecay": 0.098,
+        "body": 0.08,
+        "width": 3,
+        "color": 0.7,
+        "drive": 1.18,
+        "env": {
+          "attack": 0.003,
+          "decay": 0.145,
+          "sustain": 0.23,
+          "release": 0.195
+        },
+        "articulations": {
+          "pluck": {
+            "index": 3.15,
+            "env": {
+              "attack": 0.002,
+              "decay": 0.11,
+              "release": 0.16
+            }
+          },
+          "hold": {
+            "index": 1.75,
+            "env": {
+              "sustain": 0.36,
+              "release": 0.27
+            }
+          }
+        }
+      },
+      "veil": {
+        "type": "fm",
+        "ratio": 1.002,
+        "index": 1.06,
+        "indexDecay": 0.62,
+        "body": 0.13,
+        "width": 13,
+        "grain": 0.15,
+        "color": 0.39,
+        "drive": 0.94,
+        "env": {
+          "attack": 0.144,
+          "decay": 0.55,
+          "sustain": 0.6,
+          "release": 0.29
+        }
+      }
+    },
+    "tracks": {
+      "kick": {
+        "patch": "kick",
+        "gain": -9.5,
+        "lowpass": 14000
+      },
+      "snare": {
+        "patch": "snare",
+        "gain": -1,
+        "pan": 0.04,
+        "highpass": 142,
+        "send": 0.28,
+        "groove": {
+          "offset": 0.013
+        }
+      },
+      "hat": {
+        "patch": "hat",
+        "gain": -10.5,
+        "pan": 0.35,
+        "highpass": 490,
+        "send": 0.115,
+        "choke": "hats",
+        "groove": {
+          "timing": [
+            0,
+            0.012,
+            -0.004,
+            0.007
+          ],
+          "accents": [
+            1,
+            0.86,
+            0.94,
+            0.9
+          ]
+        }
+      },
+      "metal": {
+        "patch": "iron",
+        "gain": -8,
+        "pan": -0.38,
+        "highpass": 232,
+        "lowpass": 7200,
+        "send": 0.52
+      },
+      "bass": {
+        "patch": "bass",
+        "gain": -13.5,
+        "lowpass": 940,
+        "duck": {
+          "from": "kick",
+          "depth": 6,
+          "release": 0.108
+        }
+      },
+      "lead": {
+        "patch": "glass",
+        "gain": -11,
+        "pan": -0.19,
+        "highpass": 156,
+        "lowpass": 11000,
+        "send": 0.46
+      },
+      "pad": {
+        "patch": "veil",
+        "gain": -22,
+        "pan": 0.13,
+        "highpass": 224,
+        "lowpass": 5400,
+        "send": 0.54,
+        "pad": {
+          "voices": 3,
+          "low": "Ab3",
+          "high": "F#5",
+          "anchor": "E5",
+          "spread": 0.021,
+          "tie": true,
+          "rhythm": {
+            "every": 4,
+            "length": 2.9,
+            "offset": 0.25
+          },
+          "sections": {
+            "clear": {
+              "rhythm": {
+                "every": 4,
+                "length": 3.6,
+                "offset": 0.125
+              },
+              "anchor": "F#5",
+              "brightness": 0.57
+            }
+          },
+          "brightness": 0.34
+        }
+      }
+    },
+    "room": {
+      "gain": -2.5,
+      "size": 1.24,
+      "decay": 0.62,
+      "damping": 0.45
+    },
+    "gain": -2.5,
+    "seed": 611
+  },
+  "assets": {
+    "hat-closed": "samples/hat-closed.wav",
+    "hat-closed-alt": "samples/hat-closed-alt.wav",
+    "hat-open": "samples/hat-open.wav",
+    "metal-alt": "samples/metal-alt.wav",
+    "metal-hit": "samples/metal-hit.wav",
+    "metal-soft": "samples/metal-soft.wav",
+    "snare-alt": "samples/snare-alt.wav",
+    "snare-ghost": "samples/snare-ghost.wav",
+    "snare-main": "samples/snare-main.wav",
+    "snare-rim": "samples/snare-rim.wav"
+  }
+}

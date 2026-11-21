@@ -114,6 +114,31 @@
         return {value,traits:P.musicComposer.motif.inspect(value)};
       }
     },
+    'music.makePhrase': {
+      description: 'Generate a seeded melodic call, answer and cadence with deliberate gaps and articulation.',
+      inputs: { options }, outputs: { value:'record', traits:'record' },
+      run({options}) {
+        const value=P.musicComposer.makePhrase(options);
+        return {value,traits:P.musicComposer.motif.inspect(value)};
+      }
+    },
+    'music.analyzeArrangement': {
+      description: 'Measure bar repetition, articulation, gaps, and optional rendered mix and stem dynamics.',
+      inputs: { source:'record', options }, outputs: { value:'record', findings:'array<record>' },
+      run({source,options}) {
+        const value=P.musicComposer.analyze(source,options);
+        return {value,findings:value.findings};
+      }
+    },
+    'music.suggest': {
+      description: 'Propose editable calls, answers, fills and accents with measured changes and pin awareness.',
+      inputs: { source:'record', options },
+      outputs: { value:'record', variants:'array<record>', proposals:'array<record>' },
+      run({source,options}) {
+        const value=P.musicComposer.suggest(source,options);
+        return {value,variants:value.variants,proposals:value.proposals};
+      }
+    },
     'music.arrange': {
       description: 'Build a native score and scene cues from roles, motifs and inheriting sections.',
       inputs: { source:'record' }, outputs: { value:'record', score:'record', cues:'array<record>', report:'record' },
@@ -146,6 +171,57 @@
         const {takes,report}=P.musicComposer.audition(source,variants,options);
         const audio=Object.fromEntries(takes.filter(take=>take.audio).map(take=>[take.id,take.audio]));
         return {value:takes.map(({audio,...rest})=>rest),audio,report};
+      }
+    },
+    'music.renderProduction': {
+      description: 'Render an editable score through sampler and synth patches, groove, track processing and a shared room.',
+      inputs:{source:'record',assets:options,options},
+      outputs:{value:'audio',stems:'record',report:'record'},
+      run({source,assets,options}) {return P.musicProduction.render(source,assets,options);}
+    },
+    'music.inspectProduction': {
+      description: 'Expose performed note times, pitches, articulations and gates for scene bindings.',
+      inputs:{source:'record',assets:options},outputs:{value:'record',events:'record'},
+      run({source,assets}) {
+        const value=P.musicProduction.inspect(source,assets);
+        return {value,events:value.events};
+      }
+    },
+    'music.analyzeProduction': {
+      description: 'Measure performed accent overlaps, orchestration and harmonic transitions across parts.',
+      inputs:{source:'record',assets:options,options},outputs:{value:'record'},
+      run({source,assets,options}) {return {value:P.musicProduction.analyze(source,assets,options)};}
+    },
+    'music.suggestProduction': {
+      description: 'Propose coordinated and editable lead, groove or pad alternatives conditioned on the arrangement.',
+      inputs:{source:'record',assets:options,options},outputs:{value:'record',variants:'array<record>'},
+      run({source,assets,options}) {
+        const value=P.musicProduction.suggest(source,options,assets);
+        return {value,variants:value.variants.map(row=>row.revision)};
+      }
+    },
+    'music.reviseProduction': {
+      description: 'Apply note, instrumentation, mixing and harmony edits with pin checks.',
+      inputs:{source:'record',revision:options,assets:options},outputs:{value:'record'},
+      run({source,revision,assets}) {return {value:P.musicProduction.revise(source,revision,assets)};}
+    },
+    'music.auditionProduction': {
+      description: 'Render comparable production alternatives with matched loudness and soloable stems.',
+      inputs:{source:'record',variants:'array<record>',assets:options,options},
+      outputs:{value:'array<record>',audio:'record',stems:'record',report:'record'},
+      run({source,variants,assets,options}) {
+        const result=P.musicProduction.audition(source,variants,assets,options);
+        return {value:result.takes.map(({id,production,report})=>({id,production,report})),
+          audio:Object.fromEntries(result.takes.map(take=>[take.id,take.value])),
+          stems:Object.fromEntries(result.takes.map(take=>[take.id,take.stems])),report:result.report};
+      }
+    },
+    'music.renderTransitions': {
+      description: 'Render timed adaptive music intents with entry and exit markers, layered cues, bridges and stingers.',
+      inputs:{sources:'record',timeline:'record',intents:scoreRequests,assets:options,options},
+      outputs:{value:'audio',stems:'record',report:'record'},
+      run({sources,timeline,intents,assets,options}) {
+        return P.musicProduction.renderTimeline(sources,timeline,intents,assets,options);
       }
     },
     'music.fifths': {

@@ -18,6 +18,21 @@
   };
   const blank = value => value === null || value === undefined;
 
+  function partLocks(definition, pins) {
+    const held = new Map();
+    const add = (part,pin) => held.set(part,[...(held.get(part) ?? []),pin]);
+    for (const pin of pins) {
+      if (pin.startsWith('part:')) add(pin.slice(5),pin);
+      if (!pin.startsWith('binding:')) continue;
+      const binding = definition.score.bindings?.[pin.slice(8)];
+      if (binding?.voice) add(binding.voice,pin);
+      if (['roughness','ratioFit'].includes(binding?.from))
+        for (const part of binding.pair ?? Object.keys(definition.parts))
+          if (part !== binding.voice) add(part,pin);
+    }
+    return held;
+  }
+
   function compose(raw) {
     require(fields(raw,['score','motifs','parts','sections','seed','pins']) && record(raw.score) &&
       raw.score.voices === undefined && raw.score.duration === undefined &&
@@ -48,16 +63,18 @@
     const sections = [], names = new Set();
     let bars = 0;
     for (const section of Array.from(raw.sections)) {
-      require(fields(section,['id','bars','harmony','parts']) && id(section.id) && !names.has(section.id) &&
+      require(fields(section,['id','bars','harmony','parts','localParts']) && id(section.id) && !names.has(section.id) &&
         integer(section.bars,1,64) && (section.harmony === undefined || id(section.harmony)),
         'A section needs a unique ID and bounded bar count');
       names.add(section.id);
-      const overrides = object(section.parts ?? {},8,(raw,key)=>{
+      const partMaterial = (raw,key)=>{
         require(Object.hasOwn(parts,key),'Section overrides must name a part');
         return material(raw);
-      });
+      };
+      const overrides = object(section.parts ?? {},8,partMaterial);
+      const local = object(section.localParts ?? {},8,partMaterial);
       sections.push({id:section.id,bar:bars,bars:section.bars,beat:bars*beatsPerBar,
-        end:(bars+section.bars)*beatsPerBar,harmony:section.harmony,overrides});
+        end:(bars+section.bars)*beatsPerBar,harmony:section.harmony,overrides,local});
       bars += section.bars;
     }
     const pins = Array.from(new Set(raw.pins ?? []));
@@ -73,46 +90,54 @@
     const cues=[], written={}, sectionMaterials={};
     for (const [key,part] of Object.entries(parts)) {
       const spans = [], entries=[];
-      let current, slot = part.material;
-      function addSpan(section) {
+      let underlying, current;
+      function resolve(section,slot) {
         const name = slot?.motif;
         const motif = name ? M.vary(motifs[name],slot.operations,P.data.hash(JSON.stringify([seed,key,section.id,slot.seed ?? 0]))) : null;
-        current = { start:section.beat,end:section.end,slot,motif,section:section.id,name };
-        spans.push(current);
+        return { origin:section.beat,slot,motif,section:section.id,name };
       }
       for (const section of sections) {
-        if (Object.hasOwn(section.overrides,key)) {
-          slot = section.overrides[key];
-          addSpan(section);
-        } else if (!current) addSpan(section);
-        else current.end = section.end;
-        entries.push({section:section.id,sourceSection:current.section,
-         ...(current.motif && {motif:current.name,value:current.motif,traits:M.inspect(current.motif)}),
-          sustain:Boolean(current.slot?.sustain)});
+        if (!underlying || Object.hasOwn(section.overrides,key))
+          underlying = resolve(section,Object.hasOwn(section.overrides,key) ? section.overrides[key] : part.material);
+        const active = Object.hasOwn(section.local,key) ? resolve(section,section.local[key]) : underlying;
+        if (current?.active !== active) {
+          current = { active,start:section.beat,end:section.end };
+          spans.push(current);
+        } else current.end = section.end;
+        entries.push({section:section.id,sourceSection:active.section,
+         ...(active.motif && {motif:active.name,value:active.motif,traits:M.inspect(active.motif)}),
+          sustain:Boolean(active.slot?.sustain)});
       }
       const sequence=[];
       for (const span of spans) {
-        if (!span.motif) {
-          if (span.slot?.sustain) sequence.push({beat:span.start,duration:span.end-span.start});
+        const {origin,motif,slot,name} = span.active;
+        if (!motif) {
+          if (slot?.sustain) sequence.push({beat:span.start,duration:span.end-span.start});
           continue;
         }
-        const {length,events} = span.motif;
+        const {length,events} = motif;
         if (!events.length) continue;
-        const repeats = Math.ceil((span.end-span.start)/length);
-        require(repeats*events.length+sequence.length <= 4608,'Part exceeds its note expansion budget');
-        for (let repeat = 0; repeat < repeats; repeat++) for (const event of events) {
-          const beat = roundBeat(span.start+repeat*length+event.beat);
-          const duration = roundBeat(Math.min(event.duration,span.end-beat));
+        const first = Math.floor((span.start-origin)/length);
+        const repeats = Math.ceil((span.end-origin)/length);
+        require((repeats-first)*events.length+sequence.length <= 4608+(first>0 ? events.length : 0),
+          'Part exceeds its note expansion budget');
+        for (let repeat = first; repeat < repeats; repeat++) for (const event of events) {
+          const at = roundBeat(origin+repeat*length+event.beat);
+          const beat = Math.max(at,span.start);
+          const duration = roundBeat(Math.min(event.duration-(beat-at),span.end-beat));
           if (duration < 1e-5) continue;
           const index = event.degree-1;
           const step = part.mode[mod(index,part.mode.length)]+12*Math.floor(index/part.mode.length)+part.register;
           const fixed = part.pitch === 'key' || part.role === 'percussion';
           const task = part.role === 'percussion' ? 36 : H.midi(score.key?.root ?? 'C4')+step;
-          sequence.push({beat,duration,level:event.velocity,...(fixed ? {midi:task} : {offset:step})});
+          const pitch=event.midi!==undefined && part.role!=='percussion' ? {midi:event.midi} :
+            fixed ? {midi:task} : {offset:step};
+          sequence.push({beat,duration,level:event.velocity,...pitch});
           const section = sections.findLast(row=>row.beat <= beat);
           cues.push({id:key+'-'+sequence.length,part:key,role:part.role,section:section.id,
-            motif:span.name,event:event.id,beat,time:clock.timeAt({beat}),duration,
-            endTime:clock.timeAt({beat:roundBeat(beat+duration)}),degree:event.degree,velocity:event.velocity});
+            motif:name,event:event.id,beat,time:clock.timeAt({beat}),duration,
+            endTime:clock.timeAt({beat:roundBeat(beat+duration)}),degree:event.degree,velocity:event.velocity,
+            ...(event.midi!==undefined && {midi:event.midi}),...(event.play && {play:event.play})});
         }
       }
       require(sequence.length <= 4096,'Part exceeds its score note budget');
@@ -156,13 +181,7 @@
     for (const key of unpin) active.delete(key);
     for (const key of pin) active.add(key);
     next.pins = [...active];
-    const held = new Set(next.pins.filter(key=>typeof key==='string' && key.startsWith('part:')).map(key=>key.slice(5)));
-    for (const key of next.pins.filter(key=>typeof key==='string' && key.startsWith('binding:'))) {
-      const binding = next.score.bindings?.[key.slice(8)];
-      if (binding?.voice) held.add(binding.voice);
-      if (['roughness','ratioFit'].includes(binding?.from))
-        for (const name of binding.pair ?? Object.keys(next.parts)) held.add(name);
-    }
+    const held = partLocks(next,next.pins.filter(key=>typeof key==='string'));
     const report = [];
     function registerMotif(prefix, motif) {
       const json = JSON.stringify(motif), base = prefix+'-'+P.data.hash(json).toString(36);
@@ -199,10 +218,11 @@
         report.push(clone(edit));
         continue;
       }
-      require(fields(edit,['part','section','material','adopt','operations','seed']) && Object.hasOwn(next.parts,edit.part) &&
+      require(fields(edit,['part','section','scope','material','adopt','operations','seed']) && Object.hasOwn(next.parts,edit.part) &&
         !held.has(edit.part),'Unknown or pinned arrangement part');
       const section = edit.section === undefined ? undefined : next.sections.find(row=>row.id===edit.section);
       require(edit.section === undefined || section,'Unknown section in arrangement edit');
+      require(edit.scope === undefined || (edit.scope === 'section' && section),'Section scope needs a named section');
       require(edit.adopt === undefined || edit.material === undefined,'Adopt a motif or set a part material');
       const onlyVariations = edit.material === undefined && edit.adopt === undefined;
       let value = edit.material;
@@ -225,9 +245,14 @@
           ...(edit.seed !== undefined && {seed:edit.seed})};
       }
       require(value !== undefined,'Arrangement edit needs part material');
-      if (section) (section.parts ??= {})[edit.part] = clone(value);
+      if (edit.scope === 'section') (section.localParts ??= {})[edit.part] = clone(value);
+      else if (section) {
+        (section.parts ??= {})[edit.part] = clone(value);
+        if (section.localParts) delete section.localParts[edit.part];
+      }
       else next.parts[edit.part].material = clone(value);
       report.push({part:edit.part,...(section && {section:section.id}),
+        ...(edit.scope && {scope:edit.scope}),
         ...(edit.seed !== undefined && {seed:edit.seed}),
         ...(edit.operations !== undefined && {operations:clone(edit.operations)}),
         ...(edit.material !== undefined && {material:clone(edit.material)}),
@@ -237,7 +262,7 @@
     const value=compose(next);
     if (held.size && report.some(row=>row.harmony)) {
       const before=P.musicScore.compile(plan.score).events, after=P.musicScore.compile(value.score).events;
-      for (const key of held) {
+      for (const key of held.keys()) {
         if (!value.parts[key]?.voice.sequence.some(note=>note.offset===undefined && note.midi===undefined)) continue;
         const select = events => events.map(event=>event.voices.find(voice=>voice.id===key));
         require(JSON.stringify(select(before))===JSON.stringify(select(after)),'Voicing edit changes a pinned part: '+key);
@@ -266,6 +291,10 @@
     return { takes,report:{start,end,sampleRate,variants:takes.map(take=>({id:take.id,edits:take.edits,delta:take.report.delta}))} };
   }
 
-  P.musicComposer = Object.freeze({compose,revise,reference,audition,motif:M});
-  delete P.composerSupport;
+  P.musicComposer = Object.freeze({compose,revise,reference,audition,motif:M,
+    locks(source,unpin=[]) {
+      const plan=unpack(source);
+      return Object.fromEntries(partLocks(plan.definition,plan.pins.filter(pin=>!unpin.includes(pin))));
+    }});
+  Object.assign(P.composerSupport,{partLocks,unpack});
 })(KIT.procedural);

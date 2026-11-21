@@ -8,6 +8,84 @@ const studio = require('..');
 const { KIT: K } = studio.load(), C = K.music.composer;
 const recipe = require('../examples/lock-signal-audition.json');
 
+test('generated phrases quote their opening, make space, and land on an authored degree', () => {
+  const options={beatsPerBar:5,bars:4,style:'syncopated',degrees:[1,2,4,6],end:4,seed:51};
+  const motif=C.makePhrase(options);
+  assert.deepEqual(motif,C.makePhrase(options));
+  assert.equal(motif.length,20);
+  const signature = event=>[event.beat%5,event.duration,event.degree,event.velocity];
+  assert.deepEqual(motif.events.slice(0,2).map(signature),motif.events.slice(5,7).map(signature));
+  assert.equal(motif.events.at(-1).degree,4);
+  assert(motif.events.at(-1).duration>motif.events[0].duration);
+  assert(motif.events[3].beat>5);
+});
+
+test('analysis uses relative written notes and exact rendered windows for mix and stems', () => {
+  const plan=C.compose(recipe.arrangement);
+  const report=C.analyze(plan,{audio:{start:3.5,end:6,sampleRate:8000}});
+  assert.deepEqual(report.findings.find(row=>row.id==='lead-repeat-1').bars,[1,8]);
+  assert.equal(report.parts.pad.sections[0].material,'sustain');
+  assert.equal(report.parts.pad.sections[0].occupied,1);
+  assert.equal(report.parts.snare.sections[0].material,'none');
+  assert.deepEqual(report.audio.bars.map(({bar,start,end})=>[bar,start,end]),[[2,3.5,4],[3,4,6]]);
+  const [idle,jam]=report.audio.bars;
+  assert.equal(idle.stems.snare.rms,0);
+  assert(jam.stems.snare.rms>0 && jam.mix.peak>jam.mix.rms);
+  assert.equal(jam.stems.beam.peak,0);
+});
+
+test('critique proposes audible section edits, keeps protected roles, and names blocked pins', () => {
+  const plan=C.compose(recipe.arrangement);
+  const options={part:'lead',section:'jam',seed:81};
+  const pinned=C.suggest(plan,options);
+  assert.equal(pinned.variants.length,0);
+  assert(pinned.blocked.every(row=>row.blockedBy.includes('part:lead')));
+  assert(pinned.blocked.length>0);
+  const bound=structuredClone(recipe.arrangement);
+  bound.score.bindings.camera.voice='lead';
+  const bindingPin=C.suggest(bound,{...options,unpin:['part:lead']});
+  assert.equal(bindingPin.variants.length,0);
+  assert(bindingPin.blocked.some(row=>row.blockedBy.includes('binding:camera')));
+  const reply=C.suggest(plan,{...options,unpin:['part:lead']});
+  const index=reply.proposals.findIndex(row=>row.kind==='call-and-answer');
+  const proposal=reply.proposals[index];
+  assert.deepEqual(proposal.bars,[5,6]);
+  assert(proposal.after.onsets<proposal.before.onsets);
+  assert(proposal.after.longestRest>proposal.before.longestRest);
+  const {takes:[before,after]}=C.audition(plan,[{id:'baseline'},reply.variants[index]],{start:8,end:12,sampleRate:8000});
+  assert.notDeepEqual(before.audio.samples,after.audio.samples);
+  const outside = value=>value.parts.lead.voice.sequence.filter(note=>note.beat<16 || note.beat>=24);
+  assert.deepEqual(outside(plan),outside(after.arrangement));
+  for (const part of ['bass','kick','snare','hat','pad','beam'])
+    assert.deepEqual(plan.parts[part],after.arrangement.parts[part]);
+  assert.deepEqual(plan.score.bindings,after.arrangement.score.bindings);
+});
+
+test('section edits resume a seeded inherited motif at its original phase', () => {
+  const arrangement=structuredClone(recipe.arrangement);
+  arrangement.motifs.cycle={length:3,events:[{beat:.5,duration:.23,degree:3},{beat:1.75,duration:.22,degree:5}]};
+  arrangement.parts.hat.material={motif:'cycle',operations:[{type:'thin',keep:.9}],seed:12};
+  for (const section of arrangement.sections) delete section.parts?.hat;
+  const base=C.compose(arrangement);
+  const changed=C.revise(base,{edits:[{part:'hat',section:'jam',scope:'section',material:null}]}).value;
+  assert(changed.parts.hat.notes<base.parts.hat.notes);
+  const beforeOrAfter=plan=>plan.parts.hat.voice.sequence.filter(note=>note.beat<8 || note.beat>=24);
+  assert.deepEqual(beforeOrAfter(base),beforeOrAfter(changed));
+  assert.deepEqual(C.reference(base,{part:'hat',section:'clear'}).motif,
+    C.reference(changed,{part:'hat',section:'clear'}).motif);
+});
+
+test('a fill that would exceed motif capacity leaves its finding available for inspection', () => {
+  const events=Array.from({length:508},(_,i)=>({
+    beat:i/16+Math.floor(i/64)*.001,duration:.03,degree:1,velocity:i%2===0?.35:.9
+  }));
+  for (const beat of [32,33,36,37]) events.push({beat,duration:.15,degree:1,velocity:.75});
+  const source={score:{harmonies:{home:{root:'C4',quality:'unison'}}},motifs:{grid:{length:40,events}},
+    parts:{drum:{role:'percussion',material:'grid'}},sections:[{id:'build',bars:10,harmony:'home'}]};
+  assert.deepEqual(C.analyze(source).findings.find(row=>row.kind==='repeated-bar').bars,[9,10]);
+  assert.deepEqual(C.suggest(source).variants,[]);
+});
+
 test('motifs vary deterministically, keeping timing, note IDs or contour where requested', () => {
   const seed = {length:4,events:[{id:'first',beat:0,duration:.25,degree:1,velocity:.96},
     {id:'up',beat:1,duration:.3,degree:3,velocity:.45},{id:'land',beat:2.5,duration:.4,degree:2,velocity:.8}]};
@@ -81,11 +159,19 @@ test('stock graph operations pass generated ideas into an arrangement and synth'
     arrange:{op:'music.arrange',inputs:{source:recipe.arrangement}},
     audio:{op:'music.scoreAudio',inputs:{score:{node:'arrange',port:'score'},options:{end:.125,sampleRate:8000}}},
     reference:{op:'music.reference',inputs:{source:{node:'arrange'},part:'lead',section:'idle'}},
-    vary:{op:'music.motif',inputs:{source:{node:'reference',port:'motif'},operations:[{type:'answer'}]}}
-  },outputs:{audio:{node:'audio'},varied:{node:'vary'},original:{node:'reference',port:'motif'}}});
+    vary:{op:'music.motif',inputs:{source:{node:'reference',port:'motif'},operations:[{type:'answer'}]}},
+    analysis:{op:'music.analyzeArrangement',inputs:{source:{node:'arrange'}}},
+    suggestions:{op:'music.suggest',inputs:{source:{node:'arrange'},options:{part:'lead',unpin:['part:lead'],limit:1}}},
+    audition:{op:'music.audition',inputs:{source:{node:'arrange'},variants:{node:'suggestions',port:'variants'},
+      options:{start:8,end:12,audio:false}}}
+  },outputs:{audio:{node:'audio'},varied:{node:'vary'},original:{node:'reference',port:'motif'},
+    analysis:{node:'analysis',port:'findings'},takes:{node:'audition'}}});
   const {outputs}=graph.evaluate({});
   assert.equal(outputs.audio.samples.length,2000);
   assert.notDeepEqual(outputs.varied.events.map(row=>row.degree),outputs.original.events.map(row=>row.degree));
+  assert(outputs.analysis.some(row=>row.id==='lead-repeat-1'));
+  assert.equal(outputs.takes.length,1);
+  assert.equal(outputs.takes[0].report.delta.lead,-5);
 });
 
 test('CLI audition exports editable takes, stereo audio and a native still', t => {

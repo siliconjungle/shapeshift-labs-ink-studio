@@ -146,14 +146,20 @@ function audition(file,opt,kit) {
 
 module.exports=function musicCommand(pos,opt,kit) {
   const [mode,file,editFile]=pos;
-  if (!file) throw new TypeError('Use music arrange, revise, reference, or audition with a JSON file');
+  if (mode==='production') return require('./music-production.js')(pos.slice(1),opt,kit);
+  if (mode==='soundfont') return require('./music-soundfont.js')(file,editFile,opt);
+  if (!file) throw new TypeError('Use music with a JSON file for arrange, revise, reference, audition, analyze, suggest, or phrase');
   if (mode==='audition') return audition(file,opt,kit);
-  const {compose,revise,reference}=kit.KIT.music.composer;
+  const {compose,revise,reference,analyze,suggest,makePhrase}=kit.KIT.music.composer;
+  const input=read(file);
   let output;
-  if (mode==='arrange') output=compose(read(file));
-  else if (mode==='revise' && editFile) output=revise(read(file),read(editFile)).value;
-  else if (mode==='reference') output=reference(read(file),{part:opt.part,section:opt.section});
-  else throw new TypeError('Use music arrange, revise, reference, or audition');
+  if (mode==='arrange') output=compose(input);
+  else if (mode==='revise' && editFile) output=revise(input,read(editFile)).value;
+  else if (mode==='reference') output=reference(input,{part:opt.part,section:opt.section});
+  else if (mode==='phrase') output=makePhrase(input);
+  else if (mode==='analyze') output=analyze(input.arrangement ?? input,editFile && read(editFile));
+  else if (mode==='suggest') output=suggest(input.arrangement ?? input,editFile && read(editFile));
+  else throw new TypeError('Use music arrange, revise, reference, audition, analyze, suggest, or phrase');
   if (typeof opt.out==='string') json(opt.out,output);
   else process.stdout.write(JSON.stringify(output,null,2)+'\n');
   return output;

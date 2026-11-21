@@ -17,6 +17,7 @@ const motif = { length: 2, events: [{beat:0,duration:.35,degree:1}, {beat:.75,du
 const arrangement = { score:{key:{root:'C4'},harmonies:{home:{root:'C4',quality:'unison'}}},
   motifs:{melody:motif},parts:{lead:{role:'lead',material:'melody'}},
   sections:[{id:'opening',bars:1,harmony:'home'}] };
+const production = {arrangement,patches:{pluck:{type:'fm'}},tracks:{lead:{patch:'pluck',gain:-11,send:.2}}};
 const transientAudio = { sampleRate: 8000, channels: 1,
   samples: Array.from({ length: 80 }, (_, i) => i === 32 ? .9 : 0) };
 const diorama = { id: 'node-catalog', seed: 1, style: 'slate', solids: [
@@ -182,6 +183,18 @@ const specifications = {
   'music.fifths': { inputs: { from:'C',to:'A' } },
   'music.motif': { inputs:{source:motif,operations:[{type:'answer'}]} },
   'music.makeMotif': { inputs:{options:{length:2,count:3,seed:42}} },
+  'music.makePhrase': { inputs:{options:{beatsPerBar:4,bars:4,style:'syncopated',seed:42}} },
+  'music.analyzeArrangement': { inputs:{source:arrangement,options:{audio:{end:2,sampleRate:8000}}} },
+  'music.suggest': { inputs:{source:{...arrangement,sections:[{id:'opening',bars:4,harmony:'home'}]},options:{limit:2}} },
+  'music.renderProduction': { inputs:{source:production,options:{end:.25,sampleRate:8000,stems:true}} },
+  'music.inspectProduction': { inputs:{source:production} },
+  'music.analyzeProduction': { inputs:{source:production} },
+  'music.suggestProduction': { inputs:{source:production,options:{section:'opening'}} },
+  'music.reviseProduction': { inputs:{source:production,revision:{tracks:{lead:{pan:.28}}}} },
+  'music.auditionProduction': { inputs:{source:production,variants:[{id:'dry'},{id:'room',tracks:{lead:{send:.7}}}],
+    options:{end:.25,sampleRate:8000}} },
+  'music.renderTransitions': { inputs:{sources:{score:production},
+    timeline:{entry:'opening',end:.25,segments:{opening:{source:'score'}}},options:{sampleRate:8000}} },
   'music.arrange': { inputs:{source:arrangement} },
   'music.revise': { inputs:{source:arrangement,options:{edits:[{part:'lead',operations:[{type:'answer'}]}]}} },
   'music.reference': { inputs:{source:arrangement,part:'lead',section:'opening'} },
