@@ -84,6 +84,11 @@
     return K.sdf.toMesh(sampler(source, time), { ...options, bounds: extent(source, explicitBounds), color: color(tint) });
   }
 
+  function facetedSDF(source,{bounds:explicitBounds,time=0,appearance={},...options}={}) {
+    const plan=K.facets.fromSdf(sampler(source,time),{...options,bounds:extent(source,explicitBounds)});
+    return {value:plan,mesh:K.facets.toMesh(plan,appearance)};
+  }
+
   function slices(source, { width = 32, height = 32, count = 20, axis = 'z', bounds: explicitBounds, time = 0,
     level = 0, color: tint = '#b7bccb' } = {}) {
     const size = pixels(width, height, 131072);
@@ -113,6 +118,6 @@
     }, domain);
   }
 
-  Object.assign(A, { shape, boundSDF, transformSDF, combineSDF: combine, sdfMesh, sdfSlices: slices });
+  Object.assign(A, { shape, boundSDF, transformSDF, combineSDF: combine, sdfMesh, facetedSDF, sdfSlices: slices });
   Object.assign(P.sceneGraphSupport, { sdfExtent: extent, sdfSampler: sampler, boundedSDF: field });
 })(KIT);

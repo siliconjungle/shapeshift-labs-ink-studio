@@ -112,6 +112,7 @@ const blurTile = property('number|vec2|boolean', {unit: 'pixels', constraints: {
   integer: true, min: 1, max: 1024, allowedBoolean: false, automaticAbovePixels: 1048576, automaticSize: 256
 }});
 const options = {
+  'sdf.facets': {size:property('number|vec3',{unit:'world units',constraints:{exclusiveMin:0}},.3),orientation:property('vec3',{unit:'radians'},[0,0,0]),method:property('string',oneOf('dualContour','surfaceNets'),'dualContour'),maxCells:property('number',limit(1,1000000,true),150000),maxFacets:property('number',limit(1,500000,true),50000)},
   'raster.channel': { channel: property('number|string', {}, 0) },
   'raster.crop': { x: property('number', pixelOffset), y: property('number', pixelOffset), ...size },
   'raster.resize': { ...size, filter: property('string', oneOf('nearest', 'bilinear'), 'nearest'),

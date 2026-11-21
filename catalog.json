@@ -1510,6 +1510,24 @@
       "kind": "api",
       "status": "ready",
       "use": "K.contour.heightfield / slices / surface / ribbons / draw / bands"
+    },
+    {
+      "id": "kit.facets",
+      "kind": "api",
+      "status": "ready",
+      "title": "Faceted native surface reconstruction",
+      "what": "Optional sized, oriented, flat-shaded SDF patches with per-object colour grouping, exact native triangle silhouettes and graph tooling.",
+      "use": "K.facets.fromSdf / fromMesh / appearance / draw / toMesh; sdf.facets; scene.object.options.facets",
+      "where": "src/kit/p76-faceted-surfaces.js, src/kit/p46-native-patches.js",
+      "example": "docs/faceted-surfaces.md, examples/faceted-surfaces.html, examples/faceted-surfaces.json",
+      "tags": [
+        "facets",
+        "low-poly",
+        "sdf",
+        "splat",
+        "flat-shading",
+        "graph"
+      ]
     }
   ]
 }

@@ -62,6 +62,10 @@
       inputs: { source: 'field', options }, time: true,
       ...value('mesh', ({ source, options }, ctx) => A.sdfMesh(source, clock(options, ctx)))
     },
+    'sdf.facets': {
+      inputs:{source:'field',options},outputs:{value:'record',mesh:'mesh'},time:true,
+      run:({source,options},ctx)=>A.facetedSDF(source,clock(options,ctx))
+    },
     'sdf.slices': {
       inputs: { source: 'field', options }, outputs: { value: 'array<raster>', layout: 'record' }, time: true,
       run: ({ source, options }, ctx) => A.sdfSlices(source, clock(options, ctx))

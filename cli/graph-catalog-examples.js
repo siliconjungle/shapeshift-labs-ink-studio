@@ -132,6 +132,7 @@ const specifications = {
     shape: { op: 'sdf.shape' }, fields: { op: 'data.record', inputs: { first: link('shape') } },
     sources: { op: 'data.collect', inputs: { source: link('fields'), keys: ['first'] } }
   }, inputs: { sources: link('sources') } },
+  'sdf.facets': { inputs: { options: { size: .3 } } },
   'sdf.render': { inputs: { options: { width: 16, height: 16 } } },
   'scene.diorama': { inputs: { definition: diorama } },
   'scene.cameraTrack': { inputs: { definition: { shots: { main: { yaw: 0, dist: 4 } },

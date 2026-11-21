@@ -3,8 +3,7 @@
 (function (K) {
   const P = K.procedural,
     V = K.V,
-    EPS = 1e-9,
-    HALF = Math.sqrt(2 * Math.log(2));
+    EPS = 1e-9;
   const meshes = new WeakSet();
   const V2dot = (a, b) => a[0] * b[0] + a[1] * b[1];
   const finite = x => Number.isFinite(x) && Math.abs(x) <= 1e6;
@@ -347,16 +346,6 @@
     meshes.add(result);
     return result;
   }
-  const triangleProfile = SplatFootprints.prepare({
-    shape: 'polygon',
-    depth: 'plane',
-    vertices: [
-      [-1, -1],
-      [1, -1],
-      [-1, 1]
-    ],
-    softness: 0
-  });
   function emit(
     B,
     surface,
@@ -382,40 +371,12 @@
       const start = B.count(),
         target = { entity: object, surface: piece.key };
       for (let i = piece.first; i < piece.end; i++) {
-        const t = surface.triangles[i],
-          [a, b, c] = t.vertices.map(v => v.point),
-          U = V.mul(V.sub(b, a), 0.5),
-          W = V.mul(V.sub(c, a), 0.5),
-          n = t.normal,
-          e = V.norm(U),
-          f = V.cross(n, e),
-          x = V.dot(W, e),
-          y = V.dot(W, f),
-          u = V.len(U),
-          A = u * u + x * x,
-          D = y * y,
-          C = x * y,
-          angle = 0.5 * Math.atan2(2 * C, A - D),
-          delta = Math.hypot(A - D, 2 * C),
-          tangent = V.add(V.mul(e, Math.cos(angle)), V.mul(f, Math.sin(angle))),
-          center = V.add(a, V.add(U, W)),
-          brightness = ambient + (1 - ambient) * Math.max(0, V.dot(n, L)),
-          row = B.count();
-        if (t.finish) B.surfaceNext(t.finish, ...n, L, 1, tangent);
-        B.dab(
-          ...center,
-          n,
-          tangent,
-          Math.sqrt((A + D + delta) / 2) / HALF,
-          Math.sqrt(Math.max(1e-12, (A + D - delta) / 2)) / HALF,
-          0.00001,
-          t.color.map(v => Math.round(v * brightness)),
-          opacity,
-          animation
-        );
-        B.describeFootprint(row, row + 1, triangleProfile, [...U, ...W]);
-        B.describeSplats?.(row, row + 1, { object, material: t.part, target });
-        if (t.optical) B.describeOptical(row, row + 1, t.optical);
+        const t=surface.triangles[i], n=t.normal,
+          brightness=ambient+(1-ambient)*Math.max(0,V.dot(n,L));
+        K.surfacePatches.triangle(B,t.vertices.map(v=>v.point),{
+          normal:n,color:t.color.map(v=>Math.round(v*brightness)),opacity,animation,
+          finish:t.finish,light:L,optical:t.optical,object,material:t.part,target
+        });
       }
       ranges.push({ key: piece.key, first: start, end: B.count() });
     }

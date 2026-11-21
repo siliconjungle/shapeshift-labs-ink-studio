@@ -53,18 +53,19 @@
   }
 
   function object(source, { id = 'object', material = id, color: tint, resolution = .075, cells = 52, thickness,
-    emissive = false } = {}) {
+    emissive = false, facets = false } = {}) {
     if (typeof id !== 'string' || !id.trim() || typeof material !== 'string' || !material.trim() ||
         !range(resolution, .0001, 1e3) || !integer(cells, 8, 112) ||
         thickness !== undefined && !range(thickness, 0, 1000) || typeof emissive !== 'boolean')
       throw new RangeError('Invalid scene object resolution, thickness, cells or labels');
+    if(facets!==false&&facets!==true&&!record(facets))throw new RangeError('Invalid faceted representation');
     const mesh = indexed(source);
     if (tint !== undefined) {
       mesh.vcol = null;
       mesh.tmat.fill(0);
       mesh.mats = [{ name: material, rgb: color(tint) }];
     }
-    return { mesh, id, material, resolution, cells, ...(thickness !== undefined && { thickness }), emissive };
+    return { mesh, id, material, resolution, cells, ...(thickness !== undefined && { thickness }), emissive, ...(facets!==false&&{facets:facets===true?{}:facets}) };
   }
 
   function area(mesh) {
@@ -99,8 +100,8 @@
     }
     const views = rows.map(row => {
       const { mesh, resolution, cells } = row, { lo, hi } = K.mesh.box(mesh), surface = area(mesh);
-      if (!(surface > 0) || (work += surface / (.8 * resolution ** 2)) > 220000 ||
-          (triangles += mesh.tri.length / 3) > 180000 || (fieldCells += (cells + 7) ** 3) > 12000000)
+      if (!(surface > 0) || (work += row.facets?mesh.tri.length/3:surface / (.8 * resolution ** 2)) > 220000 ||
+          (triangles += mesh.tri.length / 3) > 180000 || (fieldCells += row.facets?0:(cells + 7) ** 3) > 12000000)
         throw new RangeError('Scene mesh bake exceeds its surface or field budget');
       for (let axis = 0; axis < 3; axis++) {
         min[axis] = Math.min(lo[axis], min[axis]);
@@ -124,6 +125,14 @@
     S.sky = sky;
     S.sunK = sunStrength;
     for (const [i, row] of rows.entries()) {
+      if(row.facets){
+        const mesh=row.mesh;
+        const color=f=>{const j=Number(f.id),indices=Array.from(mesh.tri.subarray(j*3,j*3+3));
+          if(mesh.vcol)return [0,1,2].map(k=>indices.reduce((s,i)=>s+mesh.vcol[i*3+k],0)*255/3);
+          return (mesh.mats[mesh.tmat[j]??0]?.rgb??[.5,.5,.5]).map(x=>x*255);};
+        K.facets.draw(B,K.facets.fromMesh(mesh),{...(!row.facets.palette&&{color}),light:direction,ambient:Math.min(1,ambient),...row.facets,object:row.id,material:row.material,emissive:row.emissive});
+        continue;
+      }
       const field = K.mesh.field(row.mesh, { cells: row.cells, thick: row.thickness });
       // Resolve the sampled face hue into the world palette while retaining object and material ownership.
       const baked = views[i];
