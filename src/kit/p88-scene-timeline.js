@@ -40,7 +40,7 @@
     const rootClock = root?.tempoMap === undefined ? undefined : timing.compile(root.tempoMap);
     check(record(catalog) && Object.keys(catalog).length <= 1024, 'Expected a bounded timeline sequence catalog');
     const compiled = new Map(), visiting = new Set(), points = [], sounds = [], lanes = [], targets = new Map();
-    let budget = 0;
+    let budget = 0, importCueTracks;
     function spend(count = 1) {
       budget += count;
       check(budget <= maxItems, 'Timeline exceeds its expanded item budget');
@@ -92,8 +92,8 @@
     }
     function sequence(input, name, depth) {
       check(depth <= 32 && record(input) && has(input, name === null ?
-        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'clips', 'sequences'] :
-        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'clips']), 'Invalid timeline sequence ' + (name ?? '(root)'));
+        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'cueTracks', 'clips', 'sequences'] :
+        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'cueTracks', 'clips']), 'Invalid timeline sequence ' + (name ?? '(root)'));
       const clock = name === null || input.tempoMap === undefined ? rootClock : timing.compile(input.tempoMap);
       const tracks = list(input.tracks, 'tracks').map(row => track(row, clock));
       check(new Set(tracks.map(({ target }) => JSON.stringify(target))).size === tracks.length,
@@ -126,7 +126,12 @@
           'Invalid trim or duration on timeline clip ' + row.id);
         return { source, start, end, duration };
       });
-      const content = [...markers, ...audio, ...events];
+      const cueTracks = input.cueTracks;
+      const imported = cueTracks === undefined ? [] : (importCueTracks ??= K.procedural.mediaGraph.cueTrackCompiler(maxItems))(cueTracks)
+        .map(row => exact ? row : { ...row, time: T.seconds(row.time) });
+      check(cueTracks === undefined || clips.every(clip => !own(cueTracks, clip.id)),
+        'Timeline clips and cue tracks need distinct names within a sequence');
+      const content = [...markers, ...audio, ...events, ...imported];
       let end = tracks.reduce((end, track) => max(end, track.duration), zero);
       for (const item of [...content, ...clips]) end = max(end, add(item.time, item.duration ?? zero));
       const duration = input.duration == null ? end : point(input.duration, clock);
@@ -149,7 +154,8 @@
     const graph = sequence(root, null, 0);
 
     function mappedPoint(item, path, time, fields) {
-      const row = { ...item, ...fields, path, time: seconds(time) };
+      const { cueTrack, ...entry } = item;
+      const row = { ...entry, ...fields, path: cueTrack === undefined ? path : [...path, cueTrack], time: seconds(time) };
       if (exact) precise.set(row, time);
       points.push(row);
     }

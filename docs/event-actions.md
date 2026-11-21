@@ -63,6 +63,67 @@ scripted impacts accumulate in order, including when the system updates
 less often than the rest of the world. Cloth detach events include the last
 committed attachment point.
 
+## Route audio cue tracks
+
+Add a named `cueTracks` table to a world or scene timeline. Put the
+portable track document in each entry's `source`. You can embed the
+`value` from [`audio.editEvents`](graph-media.md#editable-musical-event-tracks)
+or the `recording` from [`audio.stemControls`](graph-media.md#per-stem-control-signals).
+Both documents travel with the world, including when it is saved as a
+checkpoint or recorded run.
+
+| Source format | Event published by the world |
+| --- | --- |
+| `ink-studio/musical-events` | `music-cue`, with `cueId`, `name`, and any original `detected` data. |
+| `ink-studio/input-recording` | `audio-trigger` for each pulse, with its `channel` and payload in `value`. Held input changes are skipped. |
+
+For a pulse source, set `channels` to select named channels such as
+`stem:drums:envelope`. A signed `offset` moves the track in seconds.
+It accepts a numeric or exact rational value. Cues shifted before the
+sequence starts are skipped. A nested sequence retimes these cues with
+its other point events. Exact take clocks retain the cue's fractional
+time through offsets and trims.
+
+Each publication includes `cueTrack`, `sourceTime`, and any supplied
+`sourceTimecode`. The existing `timeline` field holds the cue's ID,
+path, and resolved time. Its path ends with the track name. Match the
+track and cue in an event-action rule. For instance, this rule starts a
+native timer that controls the length of a growing form.
+
+```json
+{
+  "timeline": {
+    "cueTracks": {
+      "score": {
+        "source": {
+          "format": "ink-studio/musical-events", "version": 1,
+          "events": [{ "id": "seed", "name": "Grow", "time": 0.8 }]
+        }
+      }
+    }
+  },
+  "eventActions": {
+    "grow": {
+      "on": { "kind": "music-cue", "system": "world",
+        "where": { "all": [{ "path": "/cueTrack", "value": "score" }, { "path": "/name", "value": "Grow" }] }
+      },
+      "actions": [{ "action": "world/input", "args": { "port": "growth/enabled", "value": true } }]
+    }
+  }
+}
+```
+
+A trigger rule can bind `/value/level` to an action argument such as
+`/linear/1` for an impulse. The existing rule delay and validation apply.
+World recordings retain the inputs and pending actions, so replay uses
+the embedded snapshot of the cues.
+
+[Resonant Terrarium browser demo](../examples/audio-world-events.cjs)
+
+```sh
+node examples/audio-world-events.cjs audio-world-events.html
+```
+
 ## Review the storm canopy
 
 The [storm canopy](../examples/world-storm-canopy.json) uses a timeline cue

@@ -161,6 +161,8 @@ authored cues.
 node examples/editable-musical-events.cjs musical-events.html
 ```
 
+Embed an edited musical track or stem recording in a world using [audio cue tracks](event-actions.md#route-audio-cue-tracks).
+
 ## Recorded control events
 
 An `ink-studio/input-recording` version 1 document has `initial` channel

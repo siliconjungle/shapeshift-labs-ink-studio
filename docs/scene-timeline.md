@@ -7,6 +7,7 @@ Add `timeline` to a JSON diorama, an authored simulation world, or a scene built
 | `tracks` | `target` is a JSON Pointer or path array. Each key has `time`, `value`, and optional `ease`. |
 | `markers` | A unique `id`, a `time`, and an optional `label`. |
 | `audio` | A unique `id`, a `time`, and a `cue` resolved by the host. Optional `duration`, source `offset`, and `gain` default to zero, zero, and one. |
+| `cueTracks` | Named portable musical tracks or pulse recordings, with optional offsets and channel filters. [Audio cue routing](event-actions.md#route-audio-cue-tracks) |
 | `events` | A unique `id`, a `time`, a world event `kind`, and optional JSON object `detail`. |
 | `sequences` | A catalog of named reusable timelines with their own tracks, markers, audio, events, and clips. |
 | `clips` | A unique instance `id`, a `sequence`, and a start `time`. Optional `in` and `out` trim source seconds. Optional `duration` scales the retained range in the parent. |
