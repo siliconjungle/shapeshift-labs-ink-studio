@@ -464,6 +464,7 @@ const SurfaceLook = (() => {
       }
       const reflected = q.reflection?.(layer, q.n, q.geometricNormal, captureDetail);
       if (!reflected) return 0;
+      if (q.planarMatte) q.planarSample = reflected;
       for (let i = 0; i < 3; i++) col[i] *= reflected.rgb[i];
       return reflected.coverage * fresnel(q.nv, layer.f0 ?? 0.04, layer.power ?? 5);
     },
@@ -822,6 +823,7 @@ const SurfaceLook = (() => {
       transmissionSun: sample.transmissionSun,
       transmissionLights: sample.transmissionLights,
       reflection: sample.reflection,
+      planarMatte: sample.planarMatte,
       localReflection: sample.localReflection,
       reflectionTangent: sample.reflectionTangent,
       reflectionDepth:sample.reflectionDepth, reflectionPixelAngle:sample.reflectionPixelAngle,
@@ -839,6 +841,8 @@ const SurfaceLook = (() => {
       bl = dot(b, sun);
     const rgb = [0, 0, 0];
     reflected?.fill(0);
+    const planarMatte = sample.planarMatte;
+    planarMatte?.fill(0);
     let unlit = prepared.paintsBase;
     const shaded = unlit && output === base ? Array.from(base).slice(0,3) : base;
     const albedo = unlit && (sample.albedo ?? shaded);
@@ -925,6 +929,10 @@ const SurfaceLook = (() => {
           if (reflected && layer.blend !== 'add') reflected[i] *= mix(1, layer.blend === 'multiply' ? result[i] : 0, amount);
         }
         if (clipped) onClip(...clipped);
+        if (planarMatte && layer.blend !== 'add') {
+          const retention = mix(1,layer.blend === 'multiply' ? (result[0]+result[1]+result[2])/3 : 0,amount);
+          for (let k=0;k<planarMatte.length;k++) planarMatte[k] *= retention;
+        }
         if (step) Object.assign(step, { applied: amount > 0, effectiveWeight: amount, output: output.slice(0, 3) });
         if (amount && visit) visit(layer, layer.mask ? maskWeight : null, amount, settings);
         continue;
@@ -938,6 +946,7 @@ const SurfaceLook = (() => {
       shading.lb = bl * c - tl * s;
       shading.light = layer.shadow === false ? 1 : visibility;
       for (let i = 0; i < 3; i++) rgb[i] = layer.color[i];
+      if (planarMatte) shading.planarSample = undefined;
       let response = layer.model(layer, shading, rgb);
       if (layer.lightingRamp) {
         const level = clamp(response);
@@ -964,6 +973,11 @@ const SurfaceLook = (() => {
         continue;
       }
       for (let i = 0; i < 3; i++) output[i] = mix(output[i], rgb[i], amount);
+      if (planarMatte && amount) {
+        const sampled = shading.planarSample;
+        for (let k=0;k<planarMatte.length;k++)
+          planarMatte[k] = planarMatte[k]*(1-amount) + (sampled?.matte && sampled.coverage ? sampled.matte[k]*amount/sampled.coverage : 0);
+      }
       if (reflected && amount) {
         const reflection = layer.type === 'reflection' || layer.type === 'planarReflection' || layer.type === 'localReflection';
         for (let i = 0; i < 3; i++) reflected[i] = mix(reflected[i], reflection ? rgb[i] : 0, amount);

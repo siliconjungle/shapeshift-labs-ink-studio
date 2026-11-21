@@ -45,7 +45,7 @@ function contributionLook(palettes, policies, targets, targetOffset, fallback, s
   return { shade, applies: slot, needsSample };
 }
 
-function contributionLayers(col, alpha, w, h, patterned, bend) {
+function contributionLayers(col, alpha, w, h, patterned, bend, transport) {
   // Pattern RGB and its surviving alpha. Later fragments attenuate only this contribution.
   const pattern = patterned ? new Float32Array(w * h * 4) : null;
   // Captured backdrop RGB, transmission, backdrop alpha, pattern coverage, pane depth and refraction weight.
@@ -57,6 +57,7 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
     if (glass && bend) {
       backdrop ??= new Float32Array(w * h * REAR);
       if (!backdrop[j + 3]) {
+        transport?.save(p);
         for (let c = 0; c < 3; c++) backdrop[j + c] = col[k + c];
         backdrop[j + 3] = 1;
         backdrop[j + 4] = alpha?.[p] ?? 1;
@@ -89,6 +90,7 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
 
   function refract(glass, depth, linear = false, observe) {
     if (!backdrop) return;
+    transport?.begin(linear);
     const at = (x, y) => Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x));
     const colors = linear ? col.slice() : col, coverage = linear && alpha ? alpha.slice() : alpha;
     function tap(p, j, source, weight, interpolation = 1) {
@@ -96,6 +98,7 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
       const sourceRear = backdrop[source * REAR + 3] > 0;
       if (!sourceRear && depth[source] < backdrop[j + 6]) return;
       observe?.(p, source, backdrop[j + 6], sourceRear ? backdrop[source * REAR + 6] : NaN, interpolation);
+      transport?.tap(p,source,weight,sourceRear);
       const from = source * (sourceRear ? REAR : 3), samples = sourceRear ? backdrop : colors;
       for (let c = 0; c < 3; c++) col[p * 3 + c] += (samples[from + c] - backdrop[j + c]) * weight;
       if (alpha) alpha[p] += ((sourceRear ? backdrop[from + 4] : coverage[source]) - backdrop[j + 4]) * weight;
@@ -119,7 +122,8 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
     }
   }
 
-  return { before, replacePattern, refract, weight: pixel => pattern?.[pixel * 4 + 3] || 0 };
+  return { before, replacePattern, refract, weight: pixel => pattern?.[pixel * 4 + 3] || 0,
+    rearWeight: pixel => backdrop?.[pixel * REAR + 5] || 0 };
 }
 
 module.exports = { contributionLook, contributionLayers };

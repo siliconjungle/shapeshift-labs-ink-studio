@@ -1,0 +1,7 @@
+{
+  "objectMattes": ["harbor-signal", "window-frame"],
+  "lightGroups": [
+    { "id": "amber", "lights": ["area:amber-window"] },
+    { "id": "blue", "lights": ["area:blue-pier"] }
+  ]
+}

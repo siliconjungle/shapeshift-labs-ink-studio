@@ -1,6 +1,7 @@
 /* Host the CPU splat renderer and pass previews in headless recipe graphs. */
 const { render, cameraCapture } = require('./render.js');
 const { layer: graphDeepLayer } = require('./deep-composite.js');
+const { objectMatte } = require('./object-mattes.js');
 const { history } = require('../src/render-graph.js');
 const { pose } = require('./diarama-pose.js');
 const { select, needsPartMotion } = require('../src/art-passes.js');
@@ -150,6 +151,12 @@ function graph3DOperations(kit) {
       outputs: { value: 'raster', surface: 'raster', depth: 'raster', mask: 'raster', valid: 'raster', ids: 'raster',
         scatter: 'raster', transmission: 'raster', report: 'record' },
       run({ frame, options }) { return graphDeepLayer(frame, options); }
+    },
+    'scene.objectMatte': {
+      description: 'Read all visible coverage for a captured object, including through glass and planar reflections.',
+      inputs: { frame:'renderFrame', options },
+      outputs: { value:'raster' },
+      run({ frame, options }) { return { value:objectMatte(frame,options) }; }
     },
     'scene.pass': {
       inputs: { frame: 'renderFrame', channel: 'string', options },

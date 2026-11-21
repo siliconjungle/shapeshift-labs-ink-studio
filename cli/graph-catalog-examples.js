@@ -171,6 +171,10 @@ const specifications = {
     source: { op: 'scene.diorama', inputs: { definition: diorama } },
     captured: { op: 'scene.render', inputs: { source: link('source'), options: { width: 16, height: 16, deepComposite: true } } }
   }, inputs: { frame: link('captured', 'frame') } },
+  'scene.objectMatte': { nodes: {
+    source: { op:'scene.diorama', inputs:{definition:diorama} },
+    captured: { op:'scene.render', inputs:{source:link('source'), options:{width:16,height:16,objectMattes:[1]}} }
+  }, inputs:{frame:link('captured','frame'),options:{object:1}} },
   'scene.pass': { inputs: { channel: 'color' } },
   'rig.bindSprite': { inputs: { bones: [bone] } },
   'rig.skinSprite': { nodes: { binding: { op: 'rig.bindSprite', inputs: { source: rgba,

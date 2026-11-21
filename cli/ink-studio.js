@@ -1110,7 +1110,7 @@ const CMD = {
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
         '  passes <id> [--channels depth,normal,part-motion] [--previous seconds]   save art-pixel render pass previews',
-        '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--part-motion on] [--out directory]   export aligned RGBA, depth, normals, IDs and material mattes',
+        '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--part-motion on] [--compositing file.json] [--out directory]   export RGBA and compositing layers',
         '  export-scene <scene|world|take> --out directory [--formats still,loop,replay,embed]',
         '    --audio soundtrack.json [--mux CODEC --adapters host.cjs]   export aligned WAV stems and optional video',
         '    --loop-join   inspect the actual frame join and excluded endpoint on a clip or scene export',
@@ -2336,11 +2336,13 @@ const CMD = {
     if (['from', 'to', 'n'].some(key => opt[key] === true) || !Number.isSafeInteger(num('n', 1)) || num('n', 1) < 1)
       die('Layered exports need numeric range endpoints and a positive frame count');
     const world = buildPreview(), ts = ['t', 'from', 'to', 'n'].some(key => opt[key] !== undefined) ? times() : [0];
+    if (opt.compositing !== undefined && typeof opt.compositing !== 'string') die('--compositing needs a JSON file');
+    const compositing = opt.compositing && JSON.parse(fs.readFileSync(path.resolve(opt.compositing),'utf8'));
     const frame = view(ts.length > 1 ? sequenceHistory() : {});
     const out = opt.out ?? path.join(OUT, world.id + '-layers');
     const { file, manifest } = require('./export-layers.js').exportLayers(world, {
       out, view: frame, times: ts, native: !!opt.px1, pose, replay: feedbackReplay(world, ts[0], frame),
-      partMotion: onOffOption('part-motion') === true
+      partMotion: onOffOption('part-motion') === true, compositing
     });
     console.log('wrote', file, manifest.frames.length, 'frame(s)');
   },

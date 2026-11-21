@@ -140,6 +140,40 @@ All files in a frame have the declared dimensions and top-down rows. The manifes
 
 Add `--part-motion on` or `partMotion: true` in Node to export RGB24 part IDs, interleaved float32 little-endian XY vectors, float32 little-endian previous depth, and a grayscale validity PNG. The vectors remain in native art pixels. The `parts` and `surfaceSize` fields record the frame's labels and art dimensions.
 
+### Object mattes and light groups
+
+Pass `--compositing file.json` or `compositing` to `exportLayers`. Either field can be omitted:
+
+```json
+{
+  "objectMattes": ["harbor-signal", "window-frame"],
+  "lightGroups": [
+    { "id": "amber", "lights": ["area:amber-window"] },
+    { "id": "blue", "lights": ["area:blue-pier"] }
+  ]
+}
+```
+
+An object matte can target an authored name or a positive numeric object ID. The exporter writes three grayscale 16-bit PNGs for every requested object:
+
+| Matte | Sample |
+| --- | --- |
+| `camera` | Visible source-over coverage of all matching fragments, including transparent fragments. Occlusion, scalar transmission through ray-traced media, and glass refraction affect this matte. |
+| `reflected` | Coverage delivered through named planar captures, including water and surface finishes. It follows the reflection filter and is attenuated by reflecting strength and foreground occlusion. |
+| `combined` | Camera and reflected coverage summed and clamped to one. |
+
+The compositor accumulates coverage as it draws, independently of the retained deep rank. It uses the renderer's actual glass and planar reflection taps, including the wider footprints used by rough reflections. Reflections from sky and cube probes supply lighting and use their existing color paths. Palette steps, screen effects, and mixed-resolution overlays are applied after the native matte capture.
+
+In Node, pass `objectMattes: ['harbor-signal']` to `render` and read it with `objectMatte(frame, {object: 'harbor-signal', view: 'combined'})`. In recipe graphs use the same option on `scene.render`, then pass its frame to `scene.objectMatte`. The raster contains one float per native art pixel. Requesting a matte activates deep ordering. The main and planar views share a budget of two million object samples across up to eight selected objects.
+
+Light members use the scene's authored IDs with a source prefix. Use `area:`, `spot:`, `point:`, `spill:` for emissive spills, or `shot:key`, `shot:fill`, `shot:rim`, and `shot:negativeFill` for shot roles. Assign each light to one group. Unlisted lights and baked lighting stay in the base. The renderer evaluates matched lighting plates with the groups enabled in list order. Each group records the signed difference from the preceding evaluation, including any alpha change from a visible emitter. Interactions such as clipping are assigned to the group enabled at that step.
+
+The base, reference, and group files use interleaved little-endian float32 RGBA in linear sRGB with premultiplied RGB and top-down rows. Add the group files to the base to rebuild the raw reference to floating-point precision. Apply gain to RGB and alpha together, then unpremultiply for a straight-alpha image. The reference captures surface and optical lighting before final palette, screen effects, and temporal feedback. It has its own native dimensions in the manifest. In Node, `captureLightGroups(world, {groups, view})` returns the same rasters. Use up to eight groups and a one-million-pixel art grid.
+
+```sh
+ink-studio export-layers examples/harbor-compositing.js --w 192 --h 128 --px 1 --px1 --raw --t .35,.85,1.35 --compositing examples/harbor-compositing.json --out harbor-layers
+```
+
 ## Environment passes for compositing
 
 ```sh

@@ -210,6 +210,7 @@ const options = {
   'scene.render': { width: property('number', { ...positivePixels, ...limit(1, 2048, true) }, 128),
     height: property('number', { ...positivePixels, ...limit(1, 2048, true) }, 128), time: sampleTime,
     deepComposite: property('boolean|record', { description: 'Retain bounded per-pixel layers and selected planar reflection captures.' }),
+    objectMattes: property('array<string|number>', { description: 'Capture all camera and planar reflection coverage for up to eight selected objects.' }),
     shutter: property('boolean|record', { description: 'Accumulate weighted subframes with object, material, pass and rolling shutter options.' }) },
   'scene.deepLayer': {
     view: property('string', oneOf('camera', 'transmitted', 'reflection', 'reflected'), 'camera'),
@@ -219,6 +220,9 @@ const options = {
     object: property('string|number', { description: 'Object name or numeric ID.' }),
     material: property('string|number', { description: 'Material name or numeric ID.' }),
     emptyDepth: property('number', unit('world units'), 1e9) },
+  'scene.objectMatte': {
+    object: property('string|number', { description:'An object captured by scene.render.options.objectMattes.' }),
+    view: property('string', oneOf('camera','reflected','combined'), 'combined') },
   'anim.clock': clock,
   'anim.stagger': { ...clock, interval: property('number', { ...seconds, ...limit(0, 1200) }, .1) },
   'anim.retime': clock,

@@ -174,6 +174,8 @@ module.exports = {
   checkPaletteShot: require('./cli/palette-checks.js').checkPaletteShot,
   approveShot: require('./cli/shot-approval.js').approveShot,
   exportLayers: require('./cli/export-layers.js').exportLayers,
+  objectMatte: require('./cli/object-mattes.js').objectMatte,
+  captureLightGroups: require('./cli/light-groups.js').captureLightGroups,
   exportScene: require('./cli/scene-export.js').exportScene,
   ...require('./cli/scene-audio.js'),
   readSceneReplay: require('./cli/scene-replay.js').readSceneReplay,

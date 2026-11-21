@@ -124,7 +124,7 @@ function surfaceShading(world, options, camera) {
   const sampleSky = sky && ((direction, out) => sky(direction, out, sample.worldPosition));
   const sampleLocal = localReflection && ((layer, ray, axis, detail) =>
     localReflection(layer.probe, sample.worldPosition, ray, layer.roughness, axis, detail));
-  function shade(i, x, y, z, centerX, centerY, centerZ, r, g, b, sx, sy, visit, reflected, paintedAlbedo, stagePaint) {
+  function shade(i, x, y, z, centerX, centerY, centerZ, r, g, b, sx, sy, visit, reflected, paintedAlbedo, stagePaint, planarMatte) {
     const offset = i * STRIDE;
     const { position, normal, view } = sample;
     const prepared = materials[surfaceData[offset] - 1];
@@ -225,6 +225,7 @@ function surfaceShading(world, options, camera) {
             return reflection(layer, sx, sy, c * dx + s * dz, n[1] - original[1], c * dz - s * dx, undefined, detail);
           }
         : undefined;
+    sample.planarMatte = planarMatte;
     sample.transmissionSun = prepared.thin ? {
       direction: prepared.sun,
       intensity: camera.sunIntensity ?? 1,
