@@ -423,6 +423,40 @@ The report adds `artifactCache.status` (`hit`, `miss`, or `bypass`).
 On a hit, the `cache` counters describe the original graph evaluation.
 Persistent sessions continue to serve their own in-process evaluator cache.
 
+### Schedule independent raster branches
+
+```sh
+ink-studio graph run project.json --workers 2 --out review
+ink-studio graph run project.json --workers 1 --out serial-review
+```
+
+`--workers` is available for `run`, `inspect`, `batch`, `clip`, and
+`session`. Choose 1–8. A count of 1 measures the serial baseline. Workers
+start when a ready set contains at least two eligible uncached blur jobs.
+The current kernels are `fx.pathBlur` and `fx.kernelBlur`. Their work
+threshold is 12 million estimated sample taps on a cold pool and 5 million
+on a warm pool. Jobs with inputs above the 16 MiB payload budget run locally.
+
+The coordinator keeps the graph's inputs and cached values. Workers receive
+copies of their inputs and transfer back the buffers they produce. Named
+outputs, artifacts, and batch cases retain their declared order. Host
+operations and stateful nodes run in the coordinator in dependency order.
+An unavailable worker falls back to serial execution of the affected pure
+block. Reusable groups can use the same pool.
+
+The report's `workers` record counts jobs, peak concurrency, estimated
+input payload bytes, transferred output buffer bytes, and fallbacks.
+`postMs` measures the coordinator's message submission time.
+`waitMs` measures time blocked while collecting results.
+`computeMs` sums kernel time across workers. A clip reports totals across
+its frames. Node callers can pass `createGraphWorkers(2)` as the project's
+`workerPool` and close the pool when finished.
+
+Run `node scripts/benchmark-graph-workers.js` after building to compare
+cold and warm wall times on two independent branches. The benchmark checks
+serial and parallel output hashes and measures raster round trips from
+256 KiB through 16 MiB with both output-copy and output-transfer paths.
+
 ### Persistent sessions
 
 Send one JSON request per line. The response echoes the optional request

@@ -163,7 +163,7 @@ function prepareAssertions(rows, plan) {
 function nativeOperations(kit, assets) {
   const binary = (fn, type='number') => ({inputs:{a:'number',b:'number'},outputs:{value:type},run(args){return {value:fn(args)};}});
   function asset(type, accepts) {
-    return {inputs:{name:'string'},outputs:{value:type},asset:'name',run({name}){
+    return {inputs:{name:'string'},outputs:{value:type},asset:'name',workerLocal:true,run({name}){
       const entry=assets.get(name);
       if (!entry || !accepts(entry)) throw new RangeError('Unknown '+type+' graph asset '+name);
       return {value:entry.value};
@@ -178,7 +178,7 @@ function nativeOperations(kit, assets) {
     ...require('./graph-render.js').graph3DOperations(kit),
     pngAsset:asset('image', entry => entry.format==='png'),
     indexedPngAsset:{
-      inputs:{name:'string'},outputs:{value:'raster',palette:'palette',alpha:'raster'},asset:'name',
+      inputs:{name:'string'},outputs:{value:'raster',palette:'palette',alpha:'raster'},asset:'name',workerLocal:true,
       run({name}) {
         const entry=assets.get(name);
         if (entry?.format!=='indexed-png') throw new RangeError('Unknown indexed PNG graph asset '+name);
@@ -250,7 +250,9 @@ function cacheReport(frame) {
   return {hits,misses:Object.keys(nodes).length-hits,nodes};
 }
 
-function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={}, sourceFile }={}) {
+function createGraphProject(source, { kit=require('../index.js').load(), baseDir=process.cwd(), operations={}, adapters={},
+  sourceFile, workerPool }={}) {
+  if (workerPool && !workerPool.matches(kit)) throw new TypeError('Graph worker pool and project need the same toolkit');
   const {graph,data,mediaGraph,takeTime}=kit.KIT.procedural;
   const host=createGraphHost(adapters,{kit});
   const {broadcast}=graph.arrays;
@@ -455,7 +457,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       }));
       try {
         executable??=graph.create(spec,{operations:ops,groups});
-        const frame=executable.evaluate(values,{time,seed,take,sequence});
+        const frame=executable.evaluate(values,{time,seed,take,sequence,workers:workerPool});
         previous=new Map(Object.entries(values));
         return {frame,report:{...header,time,seed,...(take!==undefined && {take}),cache:cacheReport(frame),
           inputs:Object.fromEntries(Object.entries(values).map(([name,value])=>[name,describe(value)]))}};
@@ -488,6 +490,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   }
 
   function run(prepared) {
+    workerPool?.resetStats();
     const {frame,report}=evaluate(prepared);
     const checks=assertions.map(check=>check(frame)), passed=checks.every(check=>check.passed);
     const artifacts=exports.flatMap(({name,output,format,...settings})=>{
@@ -495,6 +498,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       return encoded.map(artifact=>({name,output,...artifact}));
     });
     return {outputs:frame.outputs,artifacts,report:{...report,kind:'run',passed,assertions:checks,
+      ...(workerPool && {workers:workerPool.stats()}),
       outputs:Object.fromEntries(Object.entries(frame.outputs).map(([name,value])=>[name,describe(value)])),
       artifacts:artifacts.map(({bytes,...entry})=>({...entry,bytes:bytes.length}))}};
   }
@@ -504,11 +508,13 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if ((output===undefined)===(node===undefined) || output!==undefined && !id(output) ||
         node!==undefined && (typeof node!=='string' || !node.split('/').every(id) || !id(port)))
       throw new TypeError('Inspect one named graph output or one node and port');
+    workerPool?.resetStats();
     const {frame,report}=evaluate(request(options));
     const value=output!==undefined ? select(frame,output,[]).value : frame.preview(node,port);
     const {file,format,sha256,bytes}=preview(value)??{};
     return {value,artifacts:bytes ? [{file,format,sha256,bytes}] : [],
       report:{...report,kind:'inspect',target:output!==undefined ? {output} : {node,port},value:describe(value),
+        ...(workerPool && {workers:workerPool.stats()}),
         artifacts:bytes ? [{file,format,sha256,bytes:bytes.length}] : []}};
   }
 
@@ -571,11 +577,14 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         ['output','from','to','warmup','format','clock','renderOptions','inputs','seed'], 'graph clip options');
       const requestOptions = request({inputs,seed});
       const runner = execution();
+      workerPool?.resetStats();
       try {
-        return clip(settings,{kit,plan:projectPlan,checks:assertions,seed:requestOptions.seed,
+        const result=clip(settings,{kit,plan:projectPlan,checks:assertions,seed:requestOptions.seed,
           sample(take,sequence) {
             return runner.evaluate({...requestOptions,time:take.start,take},sequence).frame;
           }});
+        if (workerPool) result.report.workers=workerPool.stats();
+        return result;
       } finally { runner.clear(); }
     },
     inspect,

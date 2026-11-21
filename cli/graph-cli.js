@@ -8,16 +8,19 @@ const { findGraphGroupUsers } = require('./graph-groups.js');
 const { snapshotFormat, diffGraphs } = require('./graph-diff.js');
 const { openGraphArtifactCache, engineFingerprint, fingerprint } = require('./graph-artifact-cache.js');
 const { runBatch } = require('./graph-batch.js');
+const { createGraphWorkers } = require('./graph-workers.js');
 const host = require('./graph-host-command.js');
 const catalog = require('./graph-catalog.js');
 
 const cacheFlags=['cache','cache-bytes','cache-entries'];
+const executionFlags=['workers',...cacheFlags];
 const flags = {
   validate:['inputs','json'], plan:['inputs','json'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
-  inspect:['inputs','at','seed','out','output','node','port','json',...cacheFlags],
-  run:['inputs','at','seed','out','json',...cacheFlags], batch:['inputs','at','seed','out','json','resume','progress',...cacheFlags],
-  session:['protocol','out'],
-  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','json',...cacheFlags]
+  inspect:['inputs','at','seed','out','output','node','port','json',...executionFlags],
+  run:['inputs','at','seed','out','json',...executionFlags],
+  batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
+  session:['protocol','out','workers'],
+  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','json',...executionFlags]
 };
 
 async function sendText(text) {
@@ -101,7 +104,7 @@ function clipOptions(opt, sources, defaultClock) {
     format: opt.format, clock, renderOptions: read('render-options') };
 }
 
-module.exports = async function graphCommand(pos,opt,settings) {
+async function graphCommand(pos,opt,settings) {
   const [mode,file,caseFile]=pos;
   if (mode==='nodes' || mode==='describe') {
     const listing=mode==='nodes';
@@ -144,6 +147,12 @@ module.exports = async function graphCommand(pos,opt,settings) {
     throw new TypeError('Graph cache limits need --cache directory');
   if (opt.resume && opt.out===undefined) throw new TypeError('Graph batch --resume needs --out directory');
   settings=await host.adapters(opt.adapters,settings);
+  const workerPool=opt.workers===undefined ? undefined : createGraphWorkers(Number(opt.workers), {kit:settings.kit});
+  try { return await projectCommand(mode,file,caseFile,opt,{...settings,workerPool}); }
+  finally { workerPool?.close(); }
+}
+
+async function projectCommand(mode,file,caseFile,opt,settings) {
   const project=readGraphProject(file,settings), sources=project.sourceFiles();
   if (settings.adapterFile) sources.push(settings.adapterFile);
   let inputs, result;
@@ -160,10 +169,12 @@ module.exports = async function graphCommand(pos,opt,settings) {
   if (mode==='dependencies') return send(project.dependencies(),opt.json);
   if (mode==='snapshot') return send(project.snapshot(run),opt.json);
   if (mode==='session') return session(project,output,sources);
-  const cache=opt.cache===undefined ? undefined : openGraphArtifactCache(opt.cache,{
+  const artifactCache=opt.cache===undefined ? undefined : openGraphArtifactCache(opt.cache,{
     kit:settings.kit, maxBytes:opt['cache-bytes']===undefined ? undefined : Number(opt['cache-bytes']),
     maxEntries:opt['cache-entries']===undefined ? undefined : Number(opt['cache-entries'])
   });
+  const cache=artifactCache && ((kind,identity,request,...rest)=>artifactCache(kind,identity,
+    settings.workerPool ? {request,workers:Number(opt.workers)} : request,...rest));
   const execute=(settings,work)=>cache ? cache(mode,project.artifactIdentity(),settings,work) : work();
   if (mode==='clip') {
     const options={...run,...clipOptions(opt,sources,project.takeClock)};
@@ -197,4 +208,6 @@ module.exports = async function graphCommand(pos,opt,settings) {
   if (output) save(output,result,sources);
   await send(result.report,opt.json);
   if (result.report.passed===false) process.exitCode=2;
-};
+}
+
+module.exports=graphCommand;

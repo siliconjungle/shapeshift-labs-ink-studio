@@ -88,7 +88,7 @@
     const type='array<'+item+'>';
     const inputs={items:type,...extra,...(reducing && {initial:accumulator}),
       ...(sorting && {direction:{type:'string',default:'asc'}})};
-    return {inputs,outputs:{value:reducing ? accumulator : 'array<'+(sorting || filtering ? item : value)+'>'},time:true,
+    return {inputs,outputs:{value:reducing ? accumulator : 'array<'+(sorting || filtering ? item : value)+'>'},time:true,workerGroup:true,
       instantiate() {
         let segment;
         const lanes=[];
@@ -96,7 +96,7 @@
           for (let i=length; i<lanes.length; i++) lanes[i]?.clear?.();
           if (lanes.length>length) lanes.length=length;
         }
-        function run({items,...args},{time,seed,take,sequence}) {
+        function run({items,...args},{time,seed,take,sequence},workers) {
           const cost=Math.max(1,group.expandedNodes??1);
           if (items.length*cost>maxRows) throw new RangeError('Array operation exceeds its '+maxRows+' node visit budget');
           if (segment!==sequence) {
@@ -111,7 +111,7 @@
           const apply=(item,i,accumulator)=>{
             const evaluate=transient ?? (lanes[i]??=group.instantiate());
             return evaluate({...args,item,...(index && {index:i}),...(reducing && {accumulator})},
-              {time,take,sequence,seed:P.data.hash(String(i),seed)}).value;
+              {time,take,sequence,seed:P.data.hash(String(i),seed)},workers).value;
           };
           try {
             if (reducing) return {value:items.reduce((acc,item,i)=>apply(item,i,acc),start)};

@@ -52,11 +52,11 @@
     const group = Object.hasOwn(groups, spec.group) && groups[spec.group];
     if (!group?.instantiate || Object.hasOwn(group.inputs, 'timing'))
       throw new TypeError('anim.retime needs a reusable group without an input named timing');
-    return { inputs: { ...group.inputs, timing: options }, outputs: group.outputs, time: true,
+    return { inputs: { ...group.inputs, timing: options }, outputs: group.outputs, time: true, workerGroup: true,
       instantiate() {
         const evaluate = group.instantiate();
-        const run = ({ timing, ...inputs }, { time, take: _take, ...ctx }) =>
-          evaluate(inputs, { ...ctx, time: clock(timing.time ?? time, timing).value });
+        const run = ({ timing, ...inputs }, { time, take: _take, ...ctx }, workers) =>
+          evaluate(inputs, { ...ctx, time: clock(timing.time ?? time, timing).value }, workers);
         run.clear = () => evaluate.clear?.();
         run.inspect = () => evaluate.inspect?.();
         return run;

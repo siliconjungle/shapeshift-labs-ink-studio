@@ -140,6 +140,7 @@ module.exports = {
   ...require('./cli/gltf-asset.js'),
   render: require('./cli/render.js').render,
   createGraphProject: require('./cli/graph-project.js').createGraphProject,
+  createGraphWorkers: require('./cli/graph-workers.js').createGraphWorkers,
   readGraphProject: require('./cli/graph-project.js').readGraphProject,
   findGraphGroupUsers: require('./cli/graph-groups.js').findGraphGroupUsers,
   diffGraphs: require('./cli/graph-diff.js').diffGraphs,

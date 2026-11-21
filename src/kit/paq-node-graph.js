@@ -29,6 +29,7 @@
       throw new RangeError('A graph needs named nodes and outputs within its node budget');
     const specs = stored.nodes, configs = new Map(), stack = new Set(), order = [];
     const pending = new Map(), marks = new Map();
+    let placement, schedule;
 
     function binding(value) {
       function literal(value) {
@@ -86,7 +87,10 @@
       stack.delete(name);
       const run = planOnly ? undefined : operation.instantiate ? operation.instantiate() : operation.run;
       configs.set(name, { name, op: spec.op, group:spec.group, type:spec.type, run, outputs, bindings,
-        clock: !!operation.time, seed: operation.seed, asset: operation.asset });
+        clock: !!operation.time, seed: operation.seed, asset: operation.asset,
+        stock: template === P.graph.operations?.[spec.op] && !operation.instantiate,
+        local: operation.workerLocal === true && !operation.instantiate,
+        nested: Object.hasOwn(groups, spec.op) && groups[spec.op] === template || operation.workerGroup === true });
       order.push(name);
     }
     for (const name of Object.keys(specs)) visit(name);
@@ -111,7 +115,34 @@
       }));
     }
 
-    function evaluate(input = {}, { take, sequence, time = take?.start ?? 0, seed = 0 } = {}) {
+    function layout(workers) {
+      if (placement === workers) return schedule;
+      placement = workers;
+      schedule = [];
+      let block, depth;
+      for (const name of order) {
+        const config = configs.get(name);
+        if (!workers.permits(config)) {
+          schedule.push(name);
+          block = undefined;
+          continue;
+        }
+        if (!block) {
+          block = { nodes: [], waves: [] };
+          depth = new Map();
+          schedule.push(block);
+        }
+        let level = 0;
+        for (const [, , link] of config.bindings) if (link.kind === 'node' && depth.has(link.id))
+          level = Math.max(level, depth.get(link.id) + 1);
+        depth.set(name, level);
+        block.nodes.push(name);
+        (block.waves[level] ??= []).push(name);
+      }
+      return schedule;
+    }
+
+    function evaluate(input = {}, { take, sequence, time = take?.start ?? 0, seed = 0, workers } = {}) {
       if (take !== undefined) {
         P.takeTime.requireFrame(take);
         if (time !== take.start) throw new RangeError('Graph seconds must match the take frame start');
@@ -120,9 +151,8 @@
       if (!Number.isFinite(time) || !Number.isSafeInteger(seed)) throw new TypeError('Invalid graph run options');
       const values = parameters(input);
       pending.clear();
-      const status = {};
-      for (const name of order) {
-        const { bindings, run, outputs, clock } = configs.get(name);
+      function prepare(name) {
+        const config = configs.get(name), { bindings, clock } = config;
         const entries = bindings.map(([key, , link, valid]) => {
           const value = resolve(link, values, time);
           if (!valid(value)) throw new TypeError('Wrong linked value for graph socket ' + name + '.' + key);
@@ -135,17 +165,38 @@
             return Object.is(value, prior) || bindings[i][2].kind === 'track' && Array.isArray(value) &&
               Array.isArray(prior) && value.length === prior.length && value.every((n, k) => Object.is(n, prior[k]));
           });
+        const context = reused ? undefined : { time, ...(take !== undefined && { take }),
+          ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name };
+        return { config, inputs: reused ? undefined : Object.fromEntries(entries), context, comparable, reused, previous };
+      }
+      function complete(row, answer) {
+        const { config: { name, run, outputs, nested }, inputs, context, comparable, reused, previous } = row;
         if (reused) pending.set(name, previous);
         else {
-          const produced = run(Object.fromEntries(entries), { time, ...(take !== undefined && { take }), ...(sequence !== undefined && { sequence }), seed: P.data.hash(name, seed), node: name });
+          const produced = answer ?? (nested && workers ? run(inputs, context, workers) : run(inputs, context));
           if (!record(produced)) throw new TypeError('Graph node must return named outputs: ' + name);
           for (const [key, socket] of Object.entries(outputs))
             if (!Object.hasOwn(produced, key) || !validator(socket.type)(produced[key]))
               throw new TypeError('Wrong output from graph node ' + name + '.' + key);
           pending.set(name, { seed, time, take, sequence, values: comparable, outputs: produced, subgraph: run.inspect?.() });
         }
-        status[name] = reused ? 'cached' : 'evaluated';
       }
+      if (!workers || !workers.enabled) for (const name of order) complete(prepare(name));
+      else for (const item of layout(workers)) {
+        if (typeof item === 'string') complete(prepare(item));
+        else try {
+          for (const wave of item.waves) {
+            if (wave.length < 2) complete(prepare(wave[0]));
+            else workers.runWave(wave.map(prepare), complete);
+          }
+        } catch {
+          // Pure nodes can be replayed in serial order to surface the original graph error.
+          workers.cancel();
+          for (const name of item.nodes) pending.delete(name);
+          for (const name of item.nodes) complete(prepare(name));
+        }
+      }
+      const status = Object.fromEntries(order.map(name => [name, pending.get(name) === marks.get(name) ? 'cached' : 'evaluated']));
       const outputs = Object.fromEntries(results.map(([key, link]) => [key, resolve(link, values, time)]));
       const snapshot = new Map(pending);
       for (const [name, item] of snapshot) marks.set(name, item);
@@ -198,8 +249,8 @@
     return { inputs: inputTypes, outputs: outputTypes, expandedNodes:Object.keys(spec.nodes ?? {}).length, time: true, instantiate() {
       const graph = create(spec, { operations, groups });
       let latest;
-      const run = (inputs, context) => {
-        latest = graph.evaluate(inputs, context);
+      const run = (inputs, context, workers) => {
+        latest = graph.evaluate(inputs, workers ? { ...context, workers } : context);
         return latest.outputs;
       };
       run.inspect = () => latest;

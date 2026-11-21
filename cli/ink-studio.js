@@ -1003,6 +1003,7 @@ const CMD = {
         '  graph diff <before.json> <after.json> [--json]   explain node, port and named output changes',
         '  graph inspect <project.json> [--output NAME | --node PATH --port NAME] [--out directory]',
         '  graph run <project.json> [--inputs values.json --at seconds --seed N --out directory]',
+        '    run, inspect, batch, clip, session: --workers N   schedule eligible branches on 1–8 workers',
         '    run, inspect, batch, clip: --cache DIR [--cache-bytes N --cache-entries N]   reuse graph artifacts on disk',
         '  graph clip <project.json> --output NAME --from FRAME --to FRAME --out directory',
         '    [--fps N|N/D --warmup FRAMES --cuts FRAME,FRAME --format frames|apng|both --clock file.json --render-options file.json]',
