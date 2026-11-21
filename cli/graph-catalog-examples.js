@@ -98,6 +98,7 @@ const specifications = {
   'color.stack': { inputs: { stack: { name: 'Sample', steps: [] } } },
   'color.key': { inputs: { options: { color: '#3c87be' } } },
   'fx.bitplane': { inputs: { source: slots } },
+  'fx.rasterSchedule': { inputs: { source: rgba, options: { schedule: [{ row: 2, pixelScale: [2, 1] }] } } },
   'fx.paletteFault': { inputs: { source: slots, options: { swaps: [[0, 1]] } } },
   'fx.regionObservations': { inputs: { frames: [mask, mask] } },
   'fx.analyze': { output: 'paths' },

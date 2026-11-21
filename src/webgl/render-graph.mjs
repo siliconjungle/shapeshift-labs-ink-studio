@@ -10,7 +10,8 @@ precision highp float;
 precision highp int;
 uniform sampler2D u_input, u_mask, u_owner, u_selected, u_depth, u_history, u_auxMask;
 uniform highp sampler2D u_source;
-uniform highp sampler2D u_rows;
+uniform highp sampler2D u_rows, u_schedulePalette;
+uniform bool u_scheduleIndexed;
 uniform highp sampler3D u_cube;
 uniform vec2 u_size, u_passSize, u_offset, u_amplitude;
 uniform bool u_packedDepth, u_depthMask, u_depthInvert, u_background, u_displayMask, u_budgetLinear;
@@ -92,6 +93,35 @@ void main() {
       weight *= u_feather > 0.0 ? clamp(edge / u_feather, 0.0, 1.0) : step(0.0, edge);
     }
     color = vec4(u_enabled ? (u_invert ? 1.0 - weight : weight) * u_opacity : 0.0);
+    return;
+  }
+  if (u_operation == 17) {
+    ivec2 site = ivec2(pixel), size = ivec2(u_size);
+    ivec4 row = ivec4(texelFetch(u_rows, ivec2(0, site.y), 0));
+    ivec2 state = ivec2(texelFetch(u_rows, ivec2(1, site.y), 0).xy);
+    ivec2 local = site - ivec2(0, state.x);
+    ivec2 donor = (local / row.zw) * row.zw + ivec2(0, state.x) + row.xy;
+    if (u_wrap) donor = ivec2(mod(vec2(donor), u_size));
+    vec4 scheduled = vec4(0.0);
+    if (all(greaterThanEqual(donor, ivec2(0))) && all(lessThan(donor, size))) {
+      ivec2 extent = textureSize(u_source, 0);
+      ivec2 at = ((2 * donor + 1) * extent) / (2 * size);
+      if (!u_scheduleIndexed) at.y = extent.y - 1 - at.y;
+      scheduled = texelFetch(u_source, at, 0);
+      if (u_scheduleIndexed) {
+        int slot = int(floor(scheduled.r * 255.0 + 0.5));
+        int coverage = int(floor(scheduled.a * 255.0 + 0.5));
+        ivec4 swatch = ivec4(floor(texelFetch(u_schedulePalette, ivec2(slot, state.y), 0) * 255.0 + 0.5));
+        int alpha = (coverage * swatch.a + 127) / 255;
+        scheduled = vec4(vec3((swatch.rgb * alpha + 127) / 255), float(alpha)) / 255.0;
+      }
+    }
+    weight *= u_opacity;
+    if (u_over) {
+      scheduled *= weight;
+      color = scheduled + inputColor * (1.0 - scheduled.a);
+    } else color = mix(inputColor, scheduled, weight);
+    color = floor(color * 255.0 + .50001) / 255.0;
     return;
   }
   if (u_operation == 6) {
@@ -267,7 +297,8 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
     scene = target();
   const selected = resources.texture(),
     raster = resources.texture(),
-    rows = resources.texture();
+    rows = resources.texture(),
+    schedulePalette = resources.texture();
   const cube = resources.allocate('Texture');
   const pool = [],
     historyFree = [];
@@ -423,6 +454,8 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           node.enabled && node.layer && (!feedback || memory.capture) &&
           api.layer(node, w, h, world, time, camera, gl, frame.time, frame.renderGraphInputs);
         const scanlines = api.rowTable(node.rows, w, h, time, node.rowEdits);
+        const schedule = node.schedule && api.scheduleTable(node.schedule, w, h, time);
+        const indexed = node.indices !== undefined && api.indexedSchedule(node, frame.renderGraphInputs, schedule);
         const select = node.enabled && ownership && node.select && JSON.stringify(node.select);
         const opacity = node.opacity * (node.layer && !feedback ? (layer?.opacity ?? 0) : 1);
         if (layer?.gpu) textureUnit(1, layer.gpu.texture);
@@ -431,6 +464,15 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             throw new RangeError('Render graph layer exceeds the WebGL texture size limit');
           textureUnit(1, raster);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, layer.w, layer.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, layer.data);
+        } else if (indexed) {
+          if (indexed.w > maxSize || indexed.h > maxSize)
+            throw new RangeError('Raster schedule indices exceed the WebGL texture size limit');
+          textureUnit(1, raster);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, indexed.w, indexed.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, indexed.data);
+          textureUnit(10, schedulePalette);
+          const slots = schedule.paletteSize;
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, slots, schedule.paletteData.length / (slots * 4),
+            0, gl.RGBA, gl.UNSIGNED_BYTE, schedule.paletteData);
         } else if (rawMotion) {
           textureUnit(1, raster);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, rawMotion);
@@ -470,8 +512,9 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         textureUnit(3, ownership?.texture ?? scene.textures[0]);
         textureUnit(5, select ? selected : scene.textures[0]);
         textureUnit(6, depth ?? scene.textures[0]);
-        textureUnit(8, scanlines ? rows : scene.textures[0]);
-        if (scanlines) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, h, 0, gl.RGBA, gl.FLOAT, scanlines);
+        const registers = schedule?.registers ?? scanlines;
+        textureUnit(8, registers ? rows : scene.textures[0]);
+        if (registers) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, h, 0, gl.RGBA, gl.FLOAT, registers);
         const values = {
           u_input: 0,
           u_source: 1,
@@ -504,8 +547,10 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           u_rows: 8,
           u_scanlines: Boolean(scanlines),
           u_isolated: node.isolated ?? false,
-          u_wrap: node.wrap ?? false,
-          u_over: node.type === 'distortion' && node.blend === 'over',
+          u_wrap: node.schedule?.wrap ?? node.wrap ?? false,
+          u_over: (node.type === 'distortion' || node.type === 'rasterSchedule') && node.blend === 'over',
+          u_scheduleIndexed: Boolean(indexed),
+          u_schedulePalette: indexed ? 10 : 0,
           u_rejectDepth: node.depthThreshold !== undefined,
           u_hasDepth: Boolean(depth),
           u_depthThreshold: node.depthThreshold ?? 0,

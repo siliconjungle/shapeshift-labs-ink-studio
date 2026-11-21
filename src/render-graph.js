@@ -1,6 +1,6 @@
 /* Ordered screen-space passes and named image and mask dependencies. */
 const RenderGraph = (() => {
-  let stacks, luts, targets, compositor, effects, banks, smear;
+  let stacks, luts, targets, compositor, effects, banks, smear, schedules;
   try {
     stacks = ColorStack;
     luts = ColorLUT;
@@ -9,6 +9,7 @@ const RenderGraph = (() => {
     effects = RenderEffects;
     banks = FrameBank;
     smear = MotionSmear;
+    schedules = RasterSchedule;
   } catch {
     stacks = require('./color-stack.js');
     luts = require('./color-lut.js');
@@ -17,6 +18,7 @@ const RenderGraph = (() => {
     effects = require('./render-effects.js');
     banks = require('./frame-bank.js');
     smear = require('./motion-smear.js');
+    schedules = require('./raster-schedule.js');
   }
   const operations = Object.freeze({
     mask: 1,
@@ -34,7 +36,8 @@ const RenderGraph = (() => {
     pixelSort: 13,
     frameAge: 14,
     motionSmear: 15,
-    frameBank: 16
+    frameBank: 16,
+    rasterSchedule: 17
   });
   const fields = {
     mask: ['rect', 'feather', 'invert', 'volume', 'raster'],
@@ -42,6 +45,7 @@ const RenderGraph = (() => {
     reflection: ['source', 'axis', 'line'],
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'rowEdits', 'depthThreshold', 'blend', 'wrap'],
     composite: ['source', 'layer', 'blend', 'isolated'],
+    rasterSchedule: ['source', 'indices', 'schedule', 'palette', 'blend', 'wrap'],
     history: ['mode', 'halfLife', 'cameraMotion'],
     frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
     frameBank: ['fps', 'tiles', 'regions', 'refresh', 'source', 'cameraMotion'],
@@ -367,6 +371,17 @@ const RenderGraph = (() => {
             depthThreshold,
             blend,
             wrap
+          });
+          break;
+        }
+        case 'rasterSchedule': {
+          const { indices, palette, schedule, wrap, blend = 'replace' } = pass;
+          if (!['replace', 'over'].includes(blend) || (indices !== undefined) !== (palette !== undefined) ||
+              indices !== undefined && pass.source !== undefined)
+            throw new TypeError('Raster schedule needs an image or an index slot with a palette, plus replace or over blending');
+          Object.assign(node, {
+            schedule: schedules.prepare({ schedule, palette, wrap }), blend,
+            ...(indices === undefined ? { source: reference(pass.source ?? input, 'image') } : { indices: slot(indices).name })
           });
           break;
         }
@@ -773,6 +788,12 @@ const RenderGraph = (() => {
     return smear.raw(read(name), { width, height, confidence: read(confidence), valid: read(valid), minConfidence });
   }
 
+  function indexedSchedule(node, sources, packet) {
+    const name = node.indices;
+    if (!sources || !Object.hasOwn(sources, name)) throw new RangeError('Missing render graph raster slot: ' + name);
+    return schedules.indexed(sources[name], packet.paletteSize);
+  }
+
   function slotPixels(node, sources, raster) {
     const { name, channel, range, match } = node.slot;
     if (!sources || !Object.hasOwn(sources, name)) throw new RangeError('Missing render graph raster slot: ' + name);
@@ -1038,6 +1059,8 @@ const RenderGraph = (() => {
     selection,
     layer,
     motionRaster,
+    scheduleTable: schedules.table,
+    indexedSchedule,
     history,
     feedbackMotion,
     replay,

@@ -1,6 +1,7 @@
 const FrameComposite = require('../src/frame-composite.js');
 const MotionSmear = require('../src/motion-smear.js');
 const FrameBank = require('../src/frame-bank.js');
+const RasterSchedule = require('../src/raster-schedule.js');
 const {
   cube,
   selection,
@@ -9,6 +10,8 @@ const {
   feedbackMotion,
   volumeCoverage,
   rowTable,
+  scheduleTable,
+  indexedSchedule,
   resources,
   ownerGroups,
   motionRaster,
@@ -239,6 +242,9 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
       const line = node.line ?? (node.axis === 'x' ? w : h) * 0.5;
       const isReflection = node.type === 'reflection';
       const scanlines = rowTable(node.rows, w, h, time, node.rowEdits);
+      const packet = node.schedule && scheduleTable(node.schedule, w, h, time);
+      const scheduled = packet && RasterSchedule.sampler(packet, node.indices === undefined ? { w, h, data: source } :
+        indexedSchedule(node, options.renderGraphInputs, packet), w, h, node.schedule.wrap);
       const theta = node.type === 'distortion' ? 2 * Math.PI * ((node.phase + time * node.rate) % 1) : 0;
       const frequency = (2 * Math.PI) / node.period;
       if (!node.effect && !budgetedMemory && !age && !smear && !node.bank)
@@ -341,6 +347,11 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
               table.sample(rgb, graded);
               for (let c = 0; c < 3; c++)
                 output[q + c] = Math.round(input[q + c] * (1 - weight) + graded[c] * alpha * weight);
+            } else if (scheduled) {
+              scheduled(Math.floor(x), Math.floor(y), color);
+              if (node.blend === 'over') FrameComposite.blend(output, q, color, weight, false);
+              else for (let c = 0; c < 4; c++)
+                output[q + c] = Math.round(input[q + c] * (1 - weight) + color[c] * weight);
             } else if (node.type === 'composite') {
               if (node.layer && !raster) continue;
               if (raster) {

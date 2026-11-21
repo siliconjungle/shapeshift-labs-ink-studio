@@ -10,6 +10,7 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 | `grade` | Applies an RGB `stack` to the input. CPU and WebGL use the same sampled color cube. `cubeSize` defaults to 33 and accepts 2–65. |
 | `reflection` | Mirrors the current image or a named `source` along `axis` (`x` or `y`). `line` sets the reflection line in output pixels and defaults to the midpoint. |
 | `distortion` | Samples the input or a named `source` using an XY `offset`, wave `amplitude`, or [scanline controls](#scanline-distortion). `period` is in pixels, and `phase` and `rate` are in cycles and cycles per second. |
+| `rasterSchedule` | Applies [discrete register writes](#copper-style-raster-schedules) for indexed palette entries, source offsets, and pixel size. |
 | `composite` | Blends a named `source` image using `over` or `add`, or draws a single [mixed-resolution layer](mixed-resolution.md) from `layer` using its own resolution, filtering and blend settings. Use `isolated: true` to start this pass on transparent pixels. |
 | `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
 | `feedback` | Warps and decays the previous signal and composites new emission into it. Accepts an earlier image or a mixed-resolution emission layer. |
@@ -178,6 +179,59 @@ For a held image and stage changes across a fault, use
 [signal recovery](headless-authoring.md#recover-from-signal-loss) in the raster
 graph and bind its output to an image slot. Use the stage to drive row edits
 or other fault effects.
+
+## Copper-style raster schedules
+
+A `rasterSchedule` pass writes registers at authored output rows. The new
+values take effect on that row and persist until the next write to that
+register. Each row is a zero-based integer measured from the top of the
+final output, independent of art resolution or source size.
+
+```js
+const renderGraph = { passes: [{
+  id: 'raster',
+  type: 'rasterSchedule',
+  indices: { slot: 'indexedArt' },
+  palette: ['#152137', '#6aa6a1', '#f4bb82'],
+  schedule: [
+    { row: 34, palette: [[1, '#e89e83']] },
+    { row: 60, offset: [-12, 0], pixelScale: [3, 2] },
+    { row: 92, offset: [0, 0], pixelScale: [1, 1], palette: [[1, '#6aa6a1']] }
+  ],
+  blend: 'replace',
+  wrap: true
+}] };
+const renderGraphInputs = { indexedArt };
+```
+
+- `schedule` contains up to 1,024 entries at strictly increasing rows.
+  Include all writes for a given row in one entry. Rows beyond the frame
+  have no visible effect. In JavaScript, a callback can return this list
+  per frame using `{ width, height, time }`.
+- `offset: [x, y]` reads from a different source address in whole output
+  pixels. Positive values read right and down. The default is `[0, 0]`.
+- `pixelScale: [w, h]` repeats one sample across a block of output pixels.
+  Each block samples its top left. The horizontal grid starts at the left
+  edge. The vertical grid restarts only on a pixel-size write. The default
+  is `[1, 1]`.
+- `palette` writes replace individual slots with hex RGB or RGBA colors.
+  Use a base palette of up to 256 entries and an `indices` slot containing
+  a one-channel index raster or a two-channel raster with index and byte
+  alpha. Index `-1` always produces transparency. Slots with the same base
+  color retain separate identities. Palette writes use the output row even
+  when the source address has shifted.
+- For a full-color scene or an earlier image pass, omit `indices` and the
+  palette. `source` then names the earlier image and defaults to `input`.
+  Offsets and pixel-size writes operate on the same output grid.
+- `wrap: true` repeats the source at both edges. Outside samples are
+  transparent by default. Use `blend: 'over'` to show the underlying image
+  through them. The ordinary mask, selection, depth, and opacity controls
+  also apply.
+
+The CPU and WebGL use the same row registers. In a procedural graph or
+JavaScript raster pipeline, use [`fx.rasterSchedule`](headless-authoring.md#schedule-raster-register-writes).
+Run `node examples/raster-schedule.cjs raster-relay.html` to compare the
+three register types in the browser.
 
 ## Moving world reveals
 

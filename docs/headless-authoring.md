@@ -912,6 +912,7 @@ outside the original image.
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
 | `fx.scanlineRemap` | Repeat, skip, or blank whole rows with `options.edits`. The `addresses` output shows the source row for each destination row. |
+| `fx.rasterSchedule` | [Write indexed palette slots, source offsets, and pixel sizes](#schedule-raster-register-writes) on authored output rows. |
 | `fx.signalRecovery` | [Hold the last usable raster after a fault and relock](#recover-from-signal-loss). Outputs the raster, receiver status, and stage transition events. |
 | `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
@@ -1097,6 +1098,20 @@ samples. `addresses` is a one-channel raster, one sample wide, with
 to apply the same operations to a live scene.
 The [scanline study](../examples/scanline-repeat-dropout.cjs) compares
 each mode side by side.
+
+### Schedule raster register writes
+
+Use `fx.rasterSchedule` or `KIT.procedural.pixelEffects.rasterSchedule(source, options)`
+to run the same [Copper-style schedules](render-graph.md#copper-style-raster-schedules)
+on a standalone raster. Pass `options.schedule` with increasing output
+rows. The input is a display raster unless `options.palette` supplies
+RGB or RGBA swatches for an indexed raster. An optional second index
+channel carries byte alpha. `options.width` and `options.height` set the
+output grid and default to the input dimensions.
+
+The graph supplies the clock unless `options.time` overrides it. In
+JavaScript, a schedule callback can use that time and the output
+dimensions to place register writes. The result is straight RGBA.
 
 ### Recover from signal loss
 

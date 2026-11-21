@@ -75,6 +75,11 @@
     },
     'fx.tileStrideSlip':raster(E.tileStrideSlip,{value:'raster',addresses:'raster'}),
     'fx.scanlineRemap':raster(E.scanlineRemap,{value:'raster',addresses:'raster'}),
+    'fx.rasterSchedule':{
+      description:'Write palette slots, source offsets and pixel sizes on specified output rows.',
+      inputs:{source:'raster',options},outputs:{value:'displayRaster'},time:true,
+      run({source,options},{time}){return {value:E.rasterSchedule(source,{time,...options})};}
+    },
     'fx.blockSubstitute':{
       inputs:{source:'raster',banks:options,options},outputs:{value:'raster',mask:'raster'},
       run({source,banks,options}){return E.blockSubstitute(source,{...options,banks});}
