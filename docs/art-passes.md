@@ -33,6 +33,62 @@ directly from Node's typed arrays for floating-point coordinates.
 
 With [mixed-resolution compositing](mixed-resolution.md), the color export uses the output grid and diagnostic passes retain their own `w` and `h` on the world grid.
 
+## Deep compositing
+
+Use `render(world, { deepComposite: true })` to retain four fragments per
+art pixel in the headless renderer. The scene composites splats and world
+sprites at their sampled surface depths and evaluates the intervening media
+at each depth. Read a layer with `graphDeepLayer(frame, options)` in Node,
+or pass `scene.render.frame` into `scene.deepLayer` in a recipe graph.
+
+```js
+const frame = ink.render(world, {
+  w: 256, h: 144, px: 1,
+  deepComposite: { layers: 8, reflections: ['basin'] }
+});
+const lettering = ink.graphDeepLayer(frame, { view: 'transmitted', kind: 'sprite' });
+const reflected = ink.graphDeepLayer(frame, {
+  view: 'reflected', plane: 'basin', object: 'buoy'
+});
+```
+
+| View | Address |
+| --- | --- |
+| `camera` | The main camera ray. Uses front-to-back order and includes retained fragments with zero visible coverage. |
+| `transmitted` | Behind the first visible glass pane. Uses the dominant valid refraction tap where the compositor bends the view. |
+| `reflection` | The native mirrored camera grid for a named planar capture. |
+| `reflected` | The main camera grid where water samples the named plane. Uses the strongest contributing sample of the reflection filter and the water's visibility. |
+
+Use a zero-based `rank` after filtering by optional `kind`, `object`,
+and `material`. Kinds are `splat`, `glass`, `sprite`, and `ink` for
+cutaway ink and legacy edge sprites. Baked drawing strokes retain their
+splat object and material identities. Select a named ID or its number.
+A missing fragment yields zero coverage and an invalid sample.
+
+| Output | Data |
+| --- | --- |
+| `value`, `surface` | Straight RGBA8 in the selected view. `value` includes the medium between that sample and its camera. `surface` contains the shaded fragment before the medium. Both carry the fragment's own alpha. |
+| `mask`, `valid` | Floating-point visible coverage in [0, 1] and a byte validity mask. Visibility includes nearer layers and the optical receiver in transmitted and reflected views. |
+| `depth` | Camera-axis depth in world units. An empty sample uses `emptyDepth`, defaulting to 1e9. Reflected samples retain the mirrored camera's depth. |
+| `ids` | Four unsigned channels for kind, one-based splat index, object ID, and material ID. The report includes the kind and label tables. |
+| `scatter`, `transmission` | RGB in-scattering and transmission accumulated to the selected fragment. The media stage evaluates each channel as `scatter + transmission * surface` before color quantization. |
+
+Capture is opt-in. Set `layers` from 1 to 16 and request up to four
+`reflections` by name. The main image and rendered reflection captures
+share a two-million-slot limit. The usual `fragmentBudget` also applies to
+the sort. The retained-layer cap leaves final compositing intact.
+`frame.deep.count` reports the number of layers encountered per pixel,
+including layers beyond the cap. Coincident contributions from the same
+named object and material share a layer. Set `coalesce: false` to retain
+those contributions individually. Color is captured at the fragment stage
+ahead of final screen effects. With mixed resolutions, the capture remains
+on its native art grid.
+
+The headless renderer provides deep scene captures. A browser graph can
+consume the resulting rasters as regular input slots. Run
+`node examples/deep-composite.cjs tide-archive.html` for a preview of the
+transmission, reflection and fog rasters from one scene.
+
 ## Layered exports
 
 `ink-studio export-layers <scene> --t 0,1,2 --out directory` writes numbered image sequences and a `layers.json` manifest. Use the usual camera and render options and set `--w` and `--h` for the output size. Use `--px1` to keep the renderer's native color grid. A single frame at time zero is the default. Use `--from`, `--to`, and `--n` for evenly spaced samples.

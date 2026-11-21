@@ -38,11 +38,17 @@ function reflectionSampler(planes, render, view, eye, scale, { quality, width, h
     const shiftX = distortion * (view[0] * dx + view[4] * dy + view[8] * dz);
     const shiftY = distortion * (view[1] * dx + view[5] * dy + view[9] * dz);
     const blur = (layer.blur ?? 0) * scale;
+    let address = -1, strength = 0;
     let red = 0,
       green = 0,
       blue = 0,
       alpha = 0;
     const sx = factor === 1 ? 1 : frame.w / width, sy = factor === 1 ? 1 : frame.h / height;
+    function pick(p, weight) {
+      if (!frame.deep || weight <= strength) return;
+      strength = weight;
+      address = (frame.h - 1 - Math.floor(p / frame.w)) * frame.w + p % frame.w;
+    }
     function tap(tx, ty, weight) {
       tx = Math.floor(tx * sx);
       ty = Math.floor(ty * sy);
@@ -53,6 +59,7 @@ function reflectionSampler(planes, render, view, eye, scale, { quality, width, h
       green += frame.rgb[j + 1] * weight;
       blue += frame.rgb[j + 2] * weight;
       alpha += frame.coverage[p] * weight;
+      pick(p, frame.coverage[p] * weight);
     }
     function block(tx,ty,cell,weight) {
       const ix=Math.floor(tx/cell), iy=Math.floor(ty/cell), key=cell+'/'+ix+'/'+iy;
@@ -61,16 +68,20 @@ function reflectionSampler(planes, render, view, eye, scale, { quality, width, h
       if (!cache.has(key)) {
         const x0=ix*cell*sx, x1=(ix+1)*cell*sx, y0=iy*cell*sy, y1=(iy+1)*cell*sy;
         const color=[0,0,0,0], area=(x1-x0)*(y1-y0);
+        let blockPixel = -1, blockWeight = 0;
         for (let y=Math.max(0,Math.floor(y0));y<Math.min(frame.h,Math.ceil(y1));y++)
           for (let x=Math.max(0,Math.floor(x0));x<Math.min(frame.w,Math.ceil(x1));x++) {
             const amount=(Math.min(x+1,x1)-Math.max(x,x0))*(Math.min(y+1,y1)-Math.max(y,y0))/area;
             const i=y*frame.w+x;
             for (let c=0;c<3;c++) color[c]+=frame.rgb[i*3+c]*amount;
-            color[3]+=frame.coverage[i]*amount;
+            const coverage = frame.coverage[i] * amount;
+            color[3] += coverage;
+            if (frame.deep && coverage > blockWeight) { blockPixel = i; blockWeight = coverage; }
           }
-        cache.set(key,color);
+        cache.set(key,{ color, blockPixel, blockWeight });
       }
-      const color=cache.get(key);
+      const { color, blockPixel, blockWeight } = cache.get(key);
+      pick(blockPixel, blockWeight * weight);
       red+=color[0]*weight; green+=color[1]*weight; blue+=color[2]*weight; alpha+=color[3]*weight;
     }
     if (detail && layer.detail && detailSample) {
@@ -90,6 +101,7 @@ function reflectionSampler(planes, render, view, eye, scale, { quality, width, h
         tap(x, y + blur, 0.15);
       }
     }
+    reflected.address = address < 0 ? undefined : { plane: plane.id, pixel: address, amount: alpha };
     if (background) {
       rgb[0]=red+background[0]*(1-alpha);
       rgb[1]=green+background[1]*(1-alpha);
@@ -209,6 +221,9 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
       reflected = options.reflection(style.reflection, options.reflectionX, options.reflectionY, dx, 0, dz,
         options.reflectionBackground, detail);
     }
+    if (reflected?.address) options.observeReflection?.({
+      ...reflected.address, amount: reflected.address.amount * reflection * remaining()
+    });
     for (let channel = 0; channel < 3; channel++) {
       result[channel] += result[channel + 3] * reflection * style.surfaceColor[channel] * (reflected?.rgb[channel] ?? 1);
       result[channel + 3] *= 1 - reflection;
@@ -247,6 +262,11 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
   const tile = fields && options.jitter !== 'off' ? volumeNoise(options.seed) : null;
   const samples = fields ? options.samples : 1;
   const query = { ...options, reflectionCurrent:water?.mediumAt, jitter: .5 };
+  const transfer = options.deep && new Float64Array(6);
+  let reflected;
+  if (options.deep) query.observeReflection = address => {
+    if (!reflected || address.amount > reflected.amount) reflected = address;
+  };
   let opacity = 0, fogCoverage = 0, cloudCoverage = 0, fogThrough = 1;
   const stats = { rays: 0, fallbackRays: 0, depthSamples: 0 };
   function shade(pixel, depth, rgb, geometry = true, fogScale = 1) {
@@ -270,6 +290,11 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     const useAerial = geometry && aerial && Number.isFinite(depth) && stop > aerial.start;
     fogCoverage = cloudCoverage = 0;
     fogThrough = 1;
+    reflected = undefined;
+    if (transfer) {
+      transfer.fill(0, 0, 3);
+      transfer.fill(1, 3, 6);
+    }
     if (!useAerial && !ray.segments.length && !volumes.length && !options.cloud) {
       opacity = 0;
       return rgb;
@@ -282,6 +307,10 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
       const remaining = options.bands ? 1-options.bands(1-raw) : raw;
       opacity = fogCoverage = 1 - remaining;
       fogThrough = remaining;
+      if (transfer) for (let c = 0; c < 3; c++) {
+        transfer[c] = opacity * ray.aerial.color[c];
+        transfer[c + 3] = remaining;
+      }
       return [0, 1, 2].map(i => remaining * rgb[i] + opacity * ray.aerial.color[i]);
     }
     const { values } = ray;
@@ -303,7 +332,10 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
         traceMedia(volumes, ray.segments, ray.origin, ray.direction, stop, result, sample, query, mode ? ray.aerial : null);
         for (let c = 0; c < size; c++) values[c] += result[c] / samples;
       }
+      ray.reflected = reflected;
     } else if (options.counters) options.counters.mediaCacheHits++;
+    reflected = ray.reflected;
+    if (transfer) for (let c = 0; c < 6; c++) transfer[c] = values[c];
     opacity = 1 - (values[3] + values[4] + values[5]) / 3;
     if (size > 6) {
       fogCoverage = values[6];
@@ -317,7 +349,8 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     out[p+1] = cloudCoverage;
     out[p+2] = 1-opacity;
   }
-  return { shade, opacity: () => opacity, fogThrough: () => fogThrough, contributions, stats };
+  return { shade, opacity: () => opacity, fogThrough: () => fogThrough, contributions, stats,
+    transfer, reflected: () => reflected };
 }
 
 function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, time, media, capture, history, viewKey, fogScales) {

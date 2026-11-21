@@ -87,14 +87,15 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
     }
   }
 
-  function refract(glass, depth, linear = false) {
+  function refract(glass, depth, linear = false, observe) {
     if (!backdrop) return;
     const at = (x, y) => Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x));
     const colors = linear ? col.slice() : col, coverage = linear && alpha ? alpha.slice() : alpha;
-    function tap(p, j, source, weight) {
+    function tap(p, j, source, weight, interpolation = 1) {
       if (!weight || source === p) return;
       const sourceRear = backdrop[source * REAR + 3] > 0;
       if (!sourceRear && depth[source] < backdrop[j + 6]) return;
+      observe?.(p, source, backdrop[j + 6], sourceRear ? backdrop[source * REAR + 6] : NaN, interpolation);
       const from = source * (sourceRear ? REAR : 3), samples = sourceRear ? backdrop : colors;
       for (let c = 0; c < 3; c++) col[p * 3 + c] += (samples[from + c] - backdrop[j + c]) * weight;
       if (alpha) alpha[p] += ((sourceRear ? backdrop[from + 4] : coverage[source]) - backdrop[j + 4]) * weight;
@@ -110,10 +111,11 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
         continue;
       }
       const ix = Math.floor(dx), iy = Math.floor(dy), fx = dx - ix, fy = dy - iy;
-      tap(p, j, at(x + ix, y + iy), weight * (1 - fx) * (1 - fy));
-      tap(p, j, at(x + ix + 1, y + iy), weight * fx * (1 - fy));
-      tap(p, j, at(x + ix, y + iy + 1), weight * (1 - fx) * fy);
-      tap(p, j, at(x + ix + 1, y + iy + 1), weight * fx * fy);
+      const a = (1 - fx) * (1 - fy), b = fx * (1 - fy), c = (1 - fx) * fy, d = fx * fy;
+      tap(p, j, at(x + ix, y + iy), weight * a, a);
+      tap(p, j, at(x + ix + 1, y + iy), weight * b, b);
+      tap(p, j, at(x + ix, y + iy + 1), weight * c, c);
+      tap(p, j, at(x + ix + 1, y + iy + 1), weight * d, d);
     }
   }
 

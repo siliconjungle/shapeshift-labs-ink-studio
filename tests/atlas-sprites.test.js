@@ -63,6 +63,17 @@ test('per-texel depth interleaves the atlas with opaque geometry in both project
   }
 });
 
+test('deep capture retains the named identity of translucent atlas fragments', () => {
+  const source = atlas([[250, 24, 24, 144]]);
+  const scene = world({ atlas:source, at:[0,0,0], objectId:'signal', materialId:'painted glass' });
+  const frame = ink.render(scene, { ...view, deepComposite:true });
+  const layer = ink.graphDeepLayer(frame, { kind:'sprite', object:'signal', material:'painted glass' });
+  const p = 36 * frame.w + 48;
+  assert.equal(layer.valid.data[p], 255);
+  assert.equal(layer.value.data[p * 4 + 3], 144);
+  assert.equal(layer.report.objects[layer.ids.data[p * 4 + 2]], 'signal');
+});
+
 test('map-based normals relight the atlas and emission is separately captured with color alpha', () => {
   const source=atlas([[132,92,44,255],[132,92,44,255]],{
     normal:[[127,127,255,255],[127,127,0,255]],

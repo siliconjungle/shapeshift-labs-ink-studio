@@ -13,7 +13,7 @@ function heading(v) {
 
 function rasterize(placements, settings) {
   if (!placements.length) return [];
-  const {eye,V,W,H,focal,ortho,near,rayAt,time,override,sun,visibility,clip,objectDither,subject}=settings;
+  const {eye,V,W,H,focal,ortho,near,rayAt,time,override,sun,visibility,clip,objectDither,subject,captureIds}=settings;
   if (override!==undefined&&!['card','impostor','scenery'].includes(override))
     throw new RangeError('Sprite atlas mode must be card, impostor or scenery');
   const results=[];
@@ -36,6 +36,7 @@ function rasterize(placements, settings) {
   for (const placement of placements) {
     const {atlas,opacity}=placement, mode=override??placement.mode;
     const protection=subject?.({object:placement.objectId,entity:placement.objectId,material:placement.materialId});
+    const ids = captureIds && { objectId: placement.objectId, materialId: placement.materialId };
     if (!opacity || placement.visibleAt && !placement.visibleAt(time)) continue;
     const at=typeof placement.at==='function'?vector(placement.at(time),'Sprite atlas anchor'):placement.at;
     const fixed=mode==='scenery';
@@ -104,7 +105,7 @@ function rasterize(placements, settings) {
               if (atlas.emissionMode==='add') return clamp(value*gain+glow,0,1);
               return gain===1 ? value : clamp(Math.max(0,value-glow)*gain+glow,0,1);
             });
-            results.push({p,...hit,alpha:sample.alpha*opacity,color,normal,emission,protection,swatches:atlas.swatches,
+            results.push({p,...hit,...ids,alpha:sample.alpha*opacity,color,normal,emission,protection,swatches:atlas.swatches,
               objectPosition:local(rotation,position.map((n,i)=>(n-at[i])/placement.scale)), objectScale:placement.scale,
               ...(objectDither && mode==='card' && { patternPosition:[(uAt-px)*tile.unitsPerPixel,(py-vAt)*tile.unitsPerPixel,0] })});
           }
@@ -112,7 +113,7 @@ function rasterize(placements, settings) {
         const alpha=effect?.sample(u,v,effectColor);
         if (alpha) {
           const hit=fragmentAt(ray,plane+(placement.depth?placement.scale*effect.depth/facing:0));
-          if (hit) results.push({p,...hit,alpha:alpha*opacity,color:effectColor.slice(),protection,effect:true});
+          if (hit) results.push({p,...hit,...ids,alpha:alpha*opacity,color:effectColor.slice(),protection,effect:true});
         }
       }
     }

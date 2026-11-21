@@ -1,5 +1,6 @@
 /* Host the CPU splat renderer and pass previews in headless recipe graphs. */
 const { render, cameraCapture } = require('./render.js');
+const { layer: graphDeepLayer } = require('./deep-composite.js');
 const { history } = require('../src/render-graph.js');
 const { pose } = require('./diarama-pose.js');
 const { select } = require('../src/art-passes.js');
@@ -30,7 +31,8 @@ function renderGraphScene(source, { camera, lights, channels = defaults, options
     report: { width: frame.w, height: frame.h, time: at, splats: source.count,
       ...(sampledCamera && { camera: sampledCamera }),
       passes: requested.filter(name => frame.passes?.[name]),
-      ...(frame.renderGraphPasses && { graphPasses: Object.keys(frame.renderGraphPasses) }) } };
+      ...(frame.renderGraphPasses && { graphPasses: Object.keys(frame.renderGraphPasses) }),
+      ...(frame.deep && { deepLayers: frame.deep.layers, deepReflections: Object.keys(frame.deep.reflections) }) } };
 }
 
 function createSceneSampler(kit) {
@@ -138,6 +140,13 @@ function graph3DOperations(kit) {
         return run;
       }
     },
+    'scene.deepLayer': {
+      description: 'Read an isolated depth fragment from the camera, through glass, or in a planar reflection.',
+      inputs: { frame: 'renderFrame', options },
+      outputs: { value: 'raster', surface: 'raster', depth: 'raster', mask: 'raster', valid: 'raster', ids: 'raster',
+        scatter: 'raster', transmission: 'raster', report: 'record' },
+      run({ frame, options }) { return graphDeepLayer(frame, options); }
+    },
     'scene.pass': {
       inputs: { frame: 'renderFrame', channel: 'string', options },
       outputs: { value: 'raster', data: 'raster', valid: 'raster', report: 'record' },
@@ -146,4 +155,4 @@ function graph3DOperations(kit) {
   };
 }
 
-module.exports = { renderGraphScene, graphRenderPass, graph3DOperations, createSceneSampler };
+module.exports = { renderGraphScene, graphRenderPass, graphDeepLayer, graph3DOperations, createSceneSampler };

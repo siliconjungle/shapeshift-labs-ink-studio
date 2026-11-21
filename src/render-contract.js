@@ -56,6 +56,7 @@ const RenderContract = (() => {
     const look = world.look ?? {};
     const rules = stageRules(world, frame);
     const issues = [];
+    if (frame.deepComposite ?? look.deepComposite) issues.push('deep-compositing');
     if (!frame.raw && world.pal?.length > 64) issues.push('palette-limit');
     if (!rules.length && !hasSurfacePaint(world, frame)) return issues;
     if (rules.some(rule => rule.stage === 'frame' || rule.stage === 'palette')) issues.push('post-stage');

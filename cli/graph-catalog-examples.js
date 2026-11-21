@@ -152,6 +152,10 @@ const specifications = {
     objects: { op: 'data.collect', inputs: { source: link('props'), keys: ['prop'] } }
   }, inputs: { objects: link('objects') } },
   'scene.render': { inputs: { options: { width: 16, height: 16 } } },
+  'scene.deepLayer': { nodes: {
+    source: { op: 'scene.diorama', inputs: { definition: diorama } },
+    captured: { op: 'scene.render', inputs: { source: link('source'), options: { width: 16, height: 16, deepComposite: true } } }
+  }, inputs: { frame: link('captured', 'frame') } },
   'scene.pass': { inputs: { channel: 'color' } },
   'rig.bindSprite': { inputs: { bones: [bone] } },
   'rig.skinSprite': { nodes: { binding: { op: 'rig.bindSprite', inputs: { source: rgba,

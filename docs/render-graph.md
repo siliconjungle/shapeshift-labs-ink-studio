@@ -124,6 +124,37 @@ on wet paving. A second procedural raster supplies the puddle mask. The
 example exports the final scene, the native rain pass, and the puddle mask
 captured from the render graph and resized by an ordinary raster node.
 
+## Bind deep layers to a pass
+
+In the headless renderer, use `deepComposite.slots` to read
+[depth-ordered fragments](art-passes.md#deep-compositing) from the frame
+being rendered. Each slot takes the same selectors as `scene.deepLayer`
+plus the output `channel`, which defaults to `value`.
+
+```js
+const deepComposite = {
+  layers: 8,
+  reflections: ['basin'],
+  slots: {
+    underGlass: { view: 'transmitted', object: 'lettering', channel: 'mask' },
+    buoyInWater: { view: 'reflected', plane: 'basin', object: 'buoy', channel: 'mask' }
+  }
+};
+const renderGraph = { passes: [
+  { id: 'lettering-matte', type: 'mask', raster: { slot: 'underGlass', range: [0, 1] } },
+  { id: 'buoy-matte', type: 'mask', raster: { slot: 'buoyInWater', range: [0, 1] } }
+] };
+const frame = ink.render(world, {
+  w: 256, h: 144, px: 1, deepComposite, renderGraph,
+  renderGraphCapture: ['lettering-matte', 'buoy-matte']
+});
+```
+
+Use the matte IDs as masks on later screen passes, or read `value` or
+`surface` into an isolated composite. The numeric `mask` output uses the
+[0, 1] range. Ordinary `renderGraphInputs` can supply other slots in the
+same frame.
+
 ## Scanline distortion
 
 Give a distortion pass `rows` to change its source sampling one output row

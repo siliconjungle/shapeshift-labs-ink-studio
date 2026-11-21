@@ -32,6 +32,7 @@ const CameraImpulses = require('../src/camera-impulses.js');
 const SplatOrder = require('../src/splat-order.js');
 const Cutaway = require('../src/cutaway.js');
 const { blendLayers } = require('./translucent-layers.js');
+const DeepComposite = require('./deep-composite.js');
 const OpticalMaterials = require('../src/optical-materials.js');
 const SplatRelighting = require('../src/splat-relighting.js');
 const ColorClusters = require('../src/color-clusters.js');
@@ -108,6 +109,8 @@ const scopedGlowPass = Symbol('emissive glow pass');
 const subjectFocusPass = Symbol('subject focus pass');
 const probeCamera = Symbol('reflection probe camera');
 const probeCaptures = Symbol('reflection probe captures');
+const deepScope = Symbol('deep capture budget');
+const deepReflection = Symbol('deep reflection plane');
 
 function cameraCapture(options, receive) {
   return { [captureCamera](camera) {
@@ -129,6 +132,9 @@ function sequenceHistory(kit) {
 function render(world, o, preparedPalettes) {
   o = RenderContract.options(world, o, (w, frame) => require('../index.js').load().KIT.timeDomains.frame(w, frame));
   if (o.strictContract) RenderContract.requirePortable(world, o);
+  if (o[deepScope] === undefined && (o.deepComposite ?? world.look?.deepComposite) !== undefined) {
+    o[deepScope] = DeepComposite.settings(o.deepComposite ?? world.look?.deepComposite);
+  }
   if (o?.cameraGuides && !o.samples && !o.captureCoverage) {
     const staging = o.cameraStaging ?? world.look?.cameraStaging;
     return CameraStaging.overlay(render(world, { ...o, cameraGuides: false, cameraStaging: staging || true }, preparedPalettes));
@@ -203,9 +209,14 @@ function render(world, o, preparedPalettes) {
       ...(graph.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
     const time = o?.interfaceTime ?? o?.t ?? world.lookSnapshot?.time ?? 0;
     const kit = require('../index.js').load().KIT;
+    const bindings = o[deepScope]?.bindings;
+    const renderGraphInputs = bindings?.length ? {
+      ...o.renderGraphInputs,
+      ...Object.fromEntries(bindings.map(([slot, channel, query]) => [slot, DeepComposite.layer(base, query, channel)]))
+    } : o.renderGraphInputs;
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera,
       (spec,ctx) => kit.annotations.anchor(spec,{ ...ctx,sceneTime:o?.t }),
-      { ...o, renderHistoryKey: o?.renderHistoryKey ?? o?.[reconstructionSource] }, kit.procedural) };
+      { ...o, renderGraphInputs, renderHistoryKey: o?.renderHistoryKey ?? o?.[reconstructionSource] }, kit.procedural) };
     if (base.passes && diagnostic) {
       if (requested.length) frame.passes = ArtPasses.subset(base.passes, requested);
       else delete frame.passes;
@@ -283,7 +294,8 @@ function renderFrame(world, o, preparedPalettes) {
   const transparency = SplatOrder.transparency(o.stableTransparency ?? look.stableTransparency);
   const blendDepth = transparency?.mode === 'blend' ? transparency.depthTolerance : 0;
   const planarFootprints=(o.splatFootprints??look.splatFootprints)!==false&&world.splatFootprints?.styles?.some(p=>p.depth==='plane');
-  const sortedSurfaces = orderMode === 'surface' || blendDepth > 0 || planarFootprints;
+  const deepPlan = o[deepScope];
+  const sortedSurfaces = Boolean(deepPlan) || orderMode === 'surface' || blendDepth > 0 || planarFootprints;
   const fragmentBudget = o.fragmentBudget ?? 500000;
   if (!['center', 'surface'].includes(orderMode) ||
       ((sortedSurfaces || useSdf || areaLights.length) && (!Number.isSafeInteger(fragmentBudget) || fragmentBudget < 1 || fragmentBudget > 2e6)))
@@ -530,7 +542,7 @@ function renderFrame(world, o, preparedPalettes) {
       passes:['depth','emission',...(protection.focus.detail < 1 ? ['objectId','materialId'] : [])],
       captureSilhouetteProtection:true, captureMotion:false, lookAudit:false, fragmentProbe:undefined, pick:undefined,
       reflections:false, atmosphere:false, precipitation:false, rainImpacts:false, captureFog:false, volumeHistory:null,
-      [captureCamera]:undefined
+      [captureCamera]:undefined, [deepScope]:null
     })));
   if (legacyLook && (specializedResolve || (o.colored && !tone))) {
     const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], [scopedGlowPass]: trackGlow, artInkActive: !!ink,
@@ -551,6 +563,7 @@ function renderFrame(world, o, preparedPalettes) {
         h: H * px,
         reflectionScale: 2,
         artGridScale: 2,
+        [deepScope]: null,
         volumeHistory: null,
         artInkActive: !!ink,
         [subjectFocusPass]:focus,
@@ -587,6 +600,7 @@ function renderFrame(world, o, preparedPalettes) {
       evaluatedPalette && !local && { palette: evaluatedPalette },
       !specializedResolve && native.detail && { detail: native.detail },
       native.motionReference && { motionReference: native.motionReference },
+      native.deep && { deep: native.deep },
       native.silhouetteMask && { silhouetteMask:native.silhouetteMask },
       native.alpha && { alpha: native.alpha },
       (native.orderFallback || samples.orderFallback) && { orderFallback: true },
@@ -594,6 +608,8 @@ function renderFrame(world, o, preparedPalettes) {
       o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color,
       native.paletteState,native.paletteInventory,reference,native.paintStage);
   }
+  const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);
+  const deep = DeepComposite.capture(W, H, deepPlan, world.renderMetadata, o[deepReflection], spriteAtlases);
   const paintStage = o.captureColorStages===true && !o.raw && !o.captureCoverage &&
     (!o.samples || o.worked) && o[subjectFocusPass]!==false ? new Uint32Array(W*H) : undefined;
   function baseReference(i) {
@@ -723,7 +739,6 @@ function renderFrame(world, o, preparedPalettes) {
   const aerial = o.atmosphere !== false && !o.captureCoverage ?
     SkyEnvironment.aerial(world.aerialPerspective, o.aerialPerspective, environment?.parameters) : null;
   const cloudShadow = clouds?.shadow;
-  const spriteAtlases=AtlasSprites.placements(world.spriteAtlases,o.spriteAtlases);
   const planeClip = reflectionPlane && (p=>SceneOptics.planeDistance(reflectionPlane,...p)>reflectionPlane.bias);
   const cutoffDepth = eyeD-dist;
   const sectionAt = cutaway && (p => Cutaway.margin(cutaway,...p,
@@ -746,13 +761,14 @@ function renderFrame(world, o, preparedPalettes) {
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
   const surfaceDepth=surfaceFragments.length?new Float32Array(W*H).fill(Infinity):null;
-  for(const sample of surfaceFragments)surfaceDepth[sample.p]=Math.min(surfaceDepth[sample.p],sample.z);
+  for (const sample of surfaceFragments) if (!deep || sample.alpha >= 1)
+    surfaceDepth[sample.p] = Math.min(surfaceDepth[sample.p], sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,override:o.spriteAtlasMode,sun,
     objectDither: anchorSpaces.has('object'),
     subject: protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
-    clip:geometryClip
+    clip:geometryClip, captureIds:Boolean(deep)
   });
   for(const sample of surfaceFragments)if(!sample.sdf)sprites.push(sample);
   sprites.sort((a,b)=>b.z-a.z);
@@ -849,6 +865,8 @@ function renderFrame(world, o, preparedPalettes) {
               pick: undefined,
               lookInputSession: lookInputs,
               reflectionPlane: plane,
+              [deepScope]: deepPlan?.reflections.has(plane.id) ? deepPlan : null,
+              [deepReflection]: plane.id,
               captureCoverage: true,
               passes: reflectionTint ? ['emission'] : false,
               reflectionTint,
@@ -860,6 +878,7 @@ function renderFrame(world, o, preparedPalettes) {
               reflections: false,
               edges: false
             });
+            deep?.route(plane.id, capture.deep);
             if (counters) {
               counters.planarCaptures++;
               counters.planarPixels += capture.w * capture.h;
@@ -890,7 +909,7 @@ function renderFrame(world, o, preparedPalettes) {
       target:probe.at, dist:1, yaw:0, pitch:0, fov:Math.PI/2, lensScale:1, lockCamera:true, ortho:false,
       w:probe.size, h:probe.size, px:1, artGridScale:1, raw:false, samples:false, worked:false, colored:false,
       captureCoverage:true, lookInputSession:lookInputs, pick:undefined, passes:false, lookAudit:false,
-      fragmentProbe:undefined, captureMotion:false, cutaway:false, reflectionPlane:undefined,
+      fragmentProbe:undefined, captureMotion:false, cutaway:false, reflectionPlane:undefined, [deepScope]:null,
       atmosphere:false, water:false, reflections:false, edges:false, transparencyHistory:undefined
     });
   }, o[probeCaptures]) : null;
@@ -1147,12 +1166,12 @@ function renderFrame(world, o, preparedPalettes) {
   let mn = Infinity;
   for (let i = 0; i < N; i++) if ((!qualityRows || qualityRows.keep[i]) && (i < baseCount || AL[i] > 0) && depth[i] < mn) mn = depth[i];
   const mediumHorizon = aerial ? Math.max(horizon, -mn + R) : horizon;
-  const backRows = blendDepth && world.back?.length ? new Set(world.back) : null;
+  const backRows = (deep || blendDepth) && world.back?.length ? new Set(world.back) : null;
   if (world.back) for (let j = 0; j < world.back.length; j++) depth[world.back[j]] = mn;
   const order = new Uint32Array(qualityRows?.submitted ?? N);
   for (let i = 0, j = 0; i < N; i++) if (!qualityRows || qualityRows.keep[i]) order[j++] = i;
   order.sort((a, b) => depth[a] - depth[b]);
-  if (transparency && !blendDepth) {
+  if (transparency && !blendDepth && !deep) {
     const { depthTolerance: tolerance } = transparency;
     const depthAt = i => depth[i];
     const back = world.back?.length ? new Set(world.back) : null;
@@ -1175,12 +1194,12 @@ function renderFrame(world, o, preparedPalettes) {
         sameSpan });
     } else SplatOrder.stabilize(order, tolerance, depthAt, transparentAt, undefined, sameSpan);
   }
-  const mediaOptions = (water || aerial || cloudView || blendDepth && volumes.length) && atmosphereOptions();
+  const mediaOptions = (water || aerial || cloudView || (deep || blendDepth) && volumes.length) && atmosphereOptions();
   const hazeCoverage = effectRules?.ramps.get('fog')?.geometry && world.fog.max > 0 && new Float32Array(W * H);
-  const rayMedia = mediaOptions && mediaSampler(volumes, water, rayAt, W, mediumHorizon, {
-    ...mediaOptions, reflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth
-  }, air);
-  const retainLayers = retainContributions || Boolean(rayMedia);
+  const rayMedia = mediaOptions ? mediaSampler(volumes, water, rayAt, W, mediumHorizon, {
+    ...mediaOptions, reflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth, deep: Boolean(deep)
+  }, air) : null;
+  const retainLayers = retainContributions || Boolean(rayMedia || deep);
   const col = new Float32Array(W * H * 3),
     dep = new Float32Array(W * H),
     gls = new Float32Array(W * H);
@@ -1198,6 +1217,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (backdropCloud) backdropCloud[i] = cloudSignal[0];
     const backdrop = rayMedia ? rayMedia.shade(i, horizon, background, false) : background;
+    if (deep && rayMedia) deep.reflect(i, rayMedia.reflected(), 1);
     col[i * 3] = backdrop[0];
     col[i * 3 + 1] = backdrop[1];
     col[i * 3 + 2] = backdrop[2];
@@ -1274,6 +1294,8 @@ function renderFrame(world, o, preparedPalettes) {
   let deferred = sortedSurfaces || sdf || emitterHits ? new Map() : null, deferredCount = 0, orderFallback = false;
   function countDeferred() {
     if(planarFootprints&&deferredCount>=fragmentBudget)throw new RangeError('Surface-plane rendering exceeded the fragment budget. Raise fragmentBudget or reduce resolution.');
+    if (deep && deferredCount >= fragmentBudget)
+      throw new RangeError('Deep compositing exceeded the fragment budget. Raise fragmentBudget or reduce resolution.');
     if (blendDepth && deferredCount >= fragmentBudget)
       throw new RangeError('Layered transparency exceeded the fragment budget. Raise it or reduce the art resolution.');
     deferredCount++;
@@ -1307,7 +1329,13 @@ function renderFrame(world, o, preparedPalettes) {
     if (rule && rule.contrast !== 1 && (i < 0 ? !sprite?.emission : !(d[i*16+11] & 32)))
       [pr,pg,pb] = subjectColor(rule,pr,pg,pb);
     environmentPasses?.fragment?.(p, i, a, pr, pg, pb, reflected, wd && a > .5);
-    if (rayMedia) [pr, pg, pb] = rayMedia.shade(p, opticalDepth, [pr, pg, pb], true, rule?.fogScale);
+    if (deep) {
+      const kind = glass ? 'glass' : sprite?.sdf ? 'splat' : sprite ? 'sprite' : sectionEdge ? 'ink' : 'splat';
+      const shaded = rayMedia?.shade(p, opticalDepth, [pr, pg, pb], true, rule?.fogScale);
+      deep.fragment(p, opticalDepth, a, pr, pg, pb, i, kind, rayMedia?.transfer, sprite);
+      deep.reflect(p, rayMedia?.reflected(), a);
+      if (shaded) [pr, pg, pb] = shaded;
+    } else if (rayMedia) [pr, pg, pb] = rayMedia.shade(p, opticalDepth, [pr, pg, pb], true, rule?.fogScale);
     if (retainLayers && glass && bend && !contributions) contributions = contributionLayers(col, captured, W, H, false, bend);
     if (contributions) contributions.before(p, pr, pg, pb, a, wd && a > .5, glass && !wd, dn, refraction);
     edgePatterns?.before(p, pr, pg, pb, a, wd && a > .5, false, dn);
@@ -1419,7 +1447,7 @@ function renderFrame(world, o, preparedPalettes) {
     while (spriteIndex<sprites.length && sprites[spriteIndex].z>=through) {
       const sprite=sprites[spriteIndex++], sample=spriteSample(sprite);
       if (deferred && (queued || sdf?.hits[sprite.p] || emitterHits?.[sprite.p])) {
-        if (blendDepth) countDeferred();
+        if (deep || blendDepth) countDeferred();
         if (!deferred.has(sprite.p)) deferred.set(sprite.p,[]);
         deferred.get(sprite.p).push({ sort:sprite.z,index:spriteIndex-sprites.length-1,center:sprite.z,sample });
       } else composite(sprite.p,...sample);
@@ -1432,7 +1460,7 @@ function renderFrame(world, o, preparedPalettes) {
       if (sort) {
         layers.sort((a, b) => b.sort - a.sort || a.index - b.index);
         if (blendDepth) blendLayers(layers, blendDepth);
-        else if (transparency) SplatOrder.stabilize(layers, transparency.depthTolerance, entry => -entry.sort,
+        else if (transparency && !deep) SplatOrder.stabilize(layers, transparency.depthTolerance, entry => -entry.sort,
           entry => entry.transparent, entry => entry.index);
       } else if (sprites.length || sdf) {
         layers.sort((a,b)=>b.center-a.center || a.index-b.index);
@@ -1457,7 +1485,7 @@ function renderFrame(world, o, preparedPalettes) {
   // Carriers are below the original color fragments at the same traced depth.
   for (const sample of sdf?.samples ?? []) {
     if (sample.z > surfaceDepth[sample.p]+1e-5) continue;
-    if (blendDepth) countDeferred();
+    if (deep || blendDepth) countDeferred();
     deferred.set(sample.p,[{sort:sample.z,center:sample.z,index:-1e9,transparent:false,sample:spriteSample(sample)}]);
   }
   for (let n = 0; n < order.length; n++) {
@@ -1920,13 +1948,13 @@ function renderFrame(world, o, preparedPalettes) {
           sampledDepth(rayAt(ix + .5, iy + .5), probeNormal, probeCenter, -cz, probeReach) : -cz);
         if (preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) continue;
         if (probe) probe(p, i, -cz, surfaceZ, pr, pg, pb, a);
-        if (!blendDepth && !planarFootprints && deferred && deferredCount >= fragmentBudget) {
+        if (!deep && !blendDepth && !planarFootprints && deferred && deferredCount >= fragmentBudget) {
           playFragments(false,-cz);
           orderFallback = true;
         }
-        const opticalDepth = planeHit || cutaway || blendDepth || aerial || cloudView || preciseDepth ? surfaceZ : undefined;
+        const opticalDepth = planeHit || cutaway || deep || blendDepth || aerial || cloudView || preciseDepth ? surfaceZ : undefined;
         if (deferred && (sortedSurfaces || preciseDepth)) {
-          const entry = { sort: (flags & 4 || blendDepth && backRows?.has(i)) ? Infinity : surfaceZ, index: n, center: exact?.z ?? -cz,
+          const entry = { sort: (flags & 4 || (deep || blendDepth) && backRows?.has(i)) ? Infinity : surfaceZ, index: n, center: exact?.z ?? -cz,
             transparent: !wd && !exact && !(flags & 4) && !(blendDepth && backRows?.has(i)), opacity: a,
             pane: blendDepth && glass && bend ? renderMeta?.objectIds?.[i] || -pk - 1 : 0,
             sample: [i, surfaceZ, normalizedDepth(surfaceZ), a, pr, pg, pb,
@@ -2338,7 +2366,7 @@ function renderFrame(world, o, preparedPalettes) {
         A = AN.data,
         sprD = new Float32Array(W * H).fill(9),
         sprC = new Int16Array(W * H).fill(-1),
-        sprOwner = art || foreground || subject || relight ? new Int32Array(W * H) : null;
+        sprOwner = art || foreground || subject || relight || deep ? new Int32Array(W * H) : null;
       for (let a = 0; a < AN.n; a++) {
         const q0 = a * 12,
           ed = EP[A[q0 + 8]];
@@ -2446,6 +2474,12 @@ function renderFrame(world, o, preparedPalettes) {
         if (edgePixels) edgePixels[q] = 0;
         if (axialDepth) axialDepth[q] = eyeD - R + sprD[q] * 2 * R;
         if (art) art.sprite(q, sprOwner[q], eyeD - R + sprD[q] * 2 * R);
+        if (deep) {
+          const depth = eyeD - R + sprD[q] * 2 * R;
+          rayMedia?.shade(q, depth, c, true, rule?.fogScale);
+          deep.fragment(q, depth, 1, ...c, sprOwner[q], 'ink', rayMedia?.transfer);
+          deep.reflect(q, rayMedia?.reflected(), 1);
+        }
         if (paintStage) paintStage[q]=paintColor(baseReference(sprOwner[q]));
         if (q === paletteTrace?.bottom) paletteTrace.fragment = [];
         if (counters) counters.fragments++;
@@ -2462,7 +2496,9 @@ function renderFrame(world, o, preparedPalettes) {
       }
     }
   }
-  contributions?.refract(gls, dep, blendDepth > 0);
+  contributions?.refract(gls, dep, blendDepth > 0, deep && ((p, source, depth, sourceDepth, weight) =>
+    deep.transmit(p, source, eyeD - R + depth * 2 * R, eyeD - R + sourceDepth * 2 * R, weight)));
+  const deepFrame = deep?.finish();
   let atmosphere, volumeStats = mediaOptions?.stats ? rayMedia.stats : undefined;
   const captureFog = ink?.ramps.has('fog') || o.captureFog;
   const effectMedia = trackMedia && axialDepth && new Float32Array(W * H * 3);
@@ -2508,7 +2544,7 @@ function renderFrame(world, o, preparedPalettes) {
       const rgb = reflectionLook([col[q] / coverage, col[q + 1] / coverage, col[q + 2] / coverage]);
       for (let channel = 0; channel < 3; channel++) col[q + channel] = rgb[channel] * coverage;
     }
-    return { w: W, h: H, rgb: col, coverage: captured };
+    return { w: W, h: H, rgb: col, coverage: captured, ...(deepFrame && { deep: deepFrame }) };
   }
   const alpha = transparent ? new Uint8Array(W * H) : null;
   if (alpha) {
@@ -2573,6 +2609,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     return {
       w: W, h: H, color: Uint8Array.from(c2, v => Math.round(clamp(v, 0, 1) * 255)), depth: dep, drawn,
+      ...(deepFrame && { deep: deepFrame }),
       ...(o.resolveDetailCleanup && pixelBudgets && { cleanDetail: cleanPixels }),
       ...(localAt && { localAt, localPalettes, localConstraints }), ...(detail && { detail }), ...(passes && { passes }), ...(motionReference && { motionReference }),
       ...(paletteState && {paletteState}),
@@ -2912,6 +2949,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (paletteTrace) paletteTrace.steps.push(...paletteTrace.mask);
   return finishLook({
     w: W, h: H, px, rgb: out, drawn, use,
+    ...(deepFrame && { deep: deepFrame }),
     ...((localOutput || tone || evaluatedPalette) && { palette: localOutput?.packed || tone?.palette || evaluatedPalette }),
     ...(detail && { detail }), ...(motionReference && { motionReference }),
     ...(volumeStats && { volumeStats }), ...(silhouetteMask && {silhouetteMask}), ...(o.captureFog && atmosphere?.fog && { fog: atmosphere.fog }),
