@@ -19,3 +19,5 @@ The layer's `avoid` list reserves pixel rectangles as `[x,y,width,height]`. Use 
 A `density` list starts at distance zero and supplies increasing `distance` thresholds with a `maxLabels` and optional `gap` for each band. It uses the camera's nominal distance, including zoom. The defaults allow 32 world labels at distance 0, 16 at distance 14, and 8 at distance 28. Legends and screen labels are outside the world-label budget. Set `minDistance` or `maxDistance` on individual world labels to limit their visible view depth.
 
 Use `KIT.annotations.prepare(definition)` with `KIT.annotations.layout(settings, { world, time, camera, width, height })` to inspect the chosen boxes, leader routes, effective budget, and reasons for suppressed labels. The normal CLI `--composite` override works with annotation layers.
+
+For labels and artwork that follow features measured in raster frames, use [tracked drawing anchors](headless-authoring.md#tracked-drawing-anchors).

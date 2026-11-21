@@ -90,6 +90,8 @@ const options = {
     minArea: property('number', { unit: 'pixels', constraints: { integer: true, min: 1 } }, 1), invert: property('boolean', {}, false) },
   'layout.place': { fit: property('string', oneOf('contain', 'cover', 'stretch', 'none'), 'contain'),
     align: property('vec2', limit(0, 1), [.5, .5]), clip: property('boolean', {}, true) },
+  'draw.trackedAnchors': { time: sampleTime },
+  'fx.regionObservations': { fps: sampleRate },
   'fx.pathBlur': { samples: property('number', limit(2, 128, true), 13),
     anchor: property('string', oneOf('start', 'center', 'end'), 'start'),
     falloff: property('string', oneOf('uniform', 'start', 'end'), 'uniform'), filter: warpFilter },

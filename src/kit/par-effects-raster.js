@@ -6,6 +6,28 @@
     inputs:{source:'raster',options},outputs,run({source,options}){return apply(source,options);}
   });
 
+  function trackSequence(frames) {
+    if (!Array.isArray(frames) || !frames.length || frames.length > 8192)
+      throw new RangeError('Region tracking needs 1 to 8192 frames');
+    const { width, height } = frames[0] ?? {};
+    if (frames.length * width * height > 64e6 ||
+        Array.from(frames).some(frame => !frame || frame.width !== width || frame.height !== height))
+      throw new RangeError('Region tracking needs same-size frames within its sequence pixel budget');
+  }
+
+  E.regionObservations = function regionObservations(frames, { fps = 12, ...settings } = {}) {
+    trackSequence(frames);
+    P.animationGraph.frameIndex(frames.length, 0, { fps });
+    const tracker = E.createRegionTracker(settings);
+    let regions = 0;
+    return P.data.freeze(frames.map((source, frame) => {
+      const time = frame / fps, { value } = tracker.update(source, time);
+      regions += value.length;
+      if (regions > 262144) throw new RangeError('Region observations exceed the tracking record budget');
+      return { time, regions: value.map(({ id, center, bounds, confidence }) => ({ id, center, bounds, confidence })) };
+    }));
+  };
+
   E.tvStatic = function tvStatic(source, options = {}) {
     const value = image(source), { width, height, data } = value;
     const { data: noise } = P.generator.tvStatic({ ...options, width, height });
@@ -66,10 +88,7 @@
           const { fps = 12, time: localTime = time, mode, ...settings } = options;
           const { index } = P.animationGraph.frameIndex(frames.length, localTime, { fps, mode });
           if (frames !== priorFrames || options !== priorOptions || index < last) {
-            const { width, height } = frames[0];
-            if (frames.length * width * height > 64e6 ||
-                frames.some(frame => frame.width !== width || frame.height !== height))
-              throw new RangeError('Region tracking needs same-size frames within its sequence pixel budget');
+            trackSequence(frames);
             tracker = E.createRegionTracker(settings);
             [priorFrames, priorOptions, last] = [frames, options, -1];
           }
@@ -83,6 +102,11 @@
         run.clear = () => { tracker = priorFrames = priorOptions = result = undefined; last = -1; };
         return run;
       }
+    },
+    'fx.regionObservations': {
+      description: 'Measure timestamped region centers, bounds, and confidence across raster frames.',
+      inputs: { frames: 'array<raster>', options }, outputs: { value: 'array<record>' },
+      run({ frames, options }) { return { value: E.regionObservations(frames, options) }; }
     },
     'fx.analyze':raster(E.analyze,{paths:'array<path>',points:'array<vec2>',regions:'array<record>',mask:'raster'})
   });

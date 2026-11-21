@@ -58,6 +58,11 @@ const specifications = {
   'raster.pack': { inputs: { sprites: [{ id: 'tile', source: rgba }] } },
   'raster.frame': { inputs: { source: clip } },
   'draw.render': { inputs: { commands: [{ type: 'rect', rect: [0, 0, 3, 2], fill: '#3c87be' }], edges: 'hard' } },
+  'draw.trackedAnchors': {
+    nodes: { observations: { op: 'fx.regionObservations', inputs: { frames: [mask, mask] } } },
+    inputs: { observations: link('observations'), bindings: [{ id: 'signal', track: 1, hold: .2,
+      commands: [{ type: 'rect', rect: [-1, -1, 2, 2], fill: '#3c87be' }] }] }
+  },
   'draw.path': { inputs: { d: 'M0 0 L2 1 L3 0' } },
   'layout.boxes': { inputs: { boxes: [{ id: 'tile', rect: [0, 0, 3, 3] }] } },
   'layout.place': { inputs: { box: { content: [0, 0, 4, 4] } } },
@@ -73,6 +78,7 @@ const specifications = {
   'color.key': { inputs: { options: { color: '#3c87be' } } },
   'fx.bitplane': { inputs: { source: slots } },
   'fx.paletteFault': { inputs: { source: slots, options: { swaps: [[0, 1]] } } },
+  'fx.regionObservations': { inputs: { frames: [mask, mask] } },
   'fx.analyze': { output: 'paths' },
   'warp.sample': { nodes: { mapping: { op: 'warp.field', inputs: { width: 4, height: 4 } } },
     inputs: { field: link('mapping') } },

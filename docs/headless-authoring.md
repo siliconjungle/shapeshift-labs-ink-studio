@@ -466,6 +466,46 @@ for character wrapping, and `align: "left" | "center" | "right"`.
 Supply `customGlyphs` as a map from characters to rows of `#` and
 spaces to draw symbols in the same grid.
 
+### Tracked drawing anchors
+
+Connect `fx.regionObservations` to `draw.trackedAnchors.observations`
+to attach screen-space drawing commands to persistent region IDs.
+`fx.regionObservations` takes the same raster frames and segmentation
+settings as [region tracking](#track-regions-across-frames), with
+`options.fps` set to the source rate. Custom trackers can supply
+`{time, regions: [{id, center: [x,y], bounds, confidence}]}` records at
+increasing times in seconds. Bounds and confidence are optional. Omitted
+confidence is treated as 1.
+
+Each entry in `bindings` has its own `id`, a `track` ID, and local
+`commands` and/or `masks` arrays. Draw around the local origin. The
+anchor uses the tracked center, or a normalized `boundsAnchor: [u,v]`
+within the region's pixel bounds. Add an `offset: [x,y]` in pixels as needed.
+
+| Setting | Effect |
+| --- | --- |
+| `smoothing` | Position smoothing half-life in seconds. Set to zero for unsmoothed positions. |
+| `lag` | Delay the anchor in seconds. |
+| `hold` | Keep the last position for this many seconds after the first missed observation. |
+| `minConfidence` | Treat observations below this threshold as missing. |
+
+All four settings default to zero. Adjacent visible positions interpolate
+between observations. During a gap the position holds still until expiry.
+A track returning after expiry starts at its measured position.
+
+Feed the node's `value` to `draw.render.commands`. Render `masks`
+separately and pass the resulting raster as a layer's alpha mask in
+`raster.stack`. The `anchors` output reports each binding's position,
+last observation time and confidence, and its `tracked`, `held`, or
+`hidden` status. Sampling uses the graph clock or `options.time`.
+For direct use, call `drawing2d.trackedAnchors(observations, bindings).sample(time)`.
+
+[Browser demo](../examples/tracked-drawing-anchors.cjs)
+
+```sh
+node examples/tracked-drawing-anchors.cjs tracked-drawing-anchors.html
+```
+
 ### Relative boxes
 
 `layout.boxes` takes the canvas `width`, `height`, and a `boxes` array.

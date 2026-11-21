@@ -162,6 +162,29 @@
     return output;
   }
 
+  function translate(draw, [x, y]) {
+    const at = value => {
+      if (!point(value)) throw new TypeError('Drawing translation needs screen-space XY coordinates');
+      return [value[0] + x, value[1] + y];
+    };
+    const result = { ...draw };
+    if (draw.rect) {
+      const [u, v, w, h] = draw.rect;
+      result.rect = [u + x, v + y, w, h];
+    }
+    if (draw.points) result.points = draw.points.map(at);
+    if (draw.rings) result.rings = draw.rings.map(ring => ring.map(at));
+    if (draw.from) result.from = at(draw.from);
+    if (draw.to) result.to = at(draw.to);
+    if (draw.origin) result.origin = at(draw.origin);
+    if (draw.type === 'text') {
+      const origin = draw.at ?? [0, 0];
+      if (!point(origin) || !origin.every(Number.isSafeInteger)) throw new TypeError('Bitmap text needs an integer XY anchor');
+      result.at = at(origin).map(Math.round);
+    }
+    return result;
+  }
+
   function render({width, height, commands, edges = 'smooth'} = {}) {
     if (!Array.isArray(commands) || commands.length > 8192) throw new RangeError('Expected a bounded drawing command array');
     function compile(draw) {
@@ -173,11 +196,15 @@
     }
     const shapes = [];
     let vertices = 0;
-    for (const draw of commands) for (const shape of compile(draw)) {
-      vertices += shape.points?.length ?? 0;
-      if (Array.isArray(shape.rings)) for (const ring of shape.rings) vertices += ring?.length ?? 0;
-      if (vertices > 262144 || shapes.length >= 8192) throw new RangeError('Drawing exceeds its geometry budget');
-      shapes.push(shape);
+    for (const draw of commands) {
+      const { translate: offset, ...source } = draw ?? {};
+      if (offset !== undefined && !point(offset)) throw new TypeError('Drawing translation needs a finite XY offset');
+      for (const shape of compile(offset === undefined ? draw : source)) {
+        vertices += shape.points?.length ?? 0;
+        if (Array.isArray(shape.rings)) for (const ring of shape.rings) vertices += ring?.length ?? 0;
+        if (vertices > 262144 || shapes.length >= 8192) throw new RangeError('Drawing exceeds its geometry budget');
+        shapes.push(offset === undefined ? shape : translate(shape, offset));
+      }
     }
     return FrameComposite.screenDrawing(width,height,shapes,{edges,bitmap(draw) {
       const {at = [0,0], color = '#ffffff'} = draw;
