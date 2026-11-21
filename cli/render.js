@@ -235,7 +235,7 @@ function render(world, o, preparedPalettes) {
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera,
       (spec,ctx) => kit.annotations.anchor(spec,{ ...ctx,sceneTime:o?.t }),
       { ...o, renderGraphInputs, [Shutter.passImages]: exposedPasses,
-        renderHistoryKey: o.renderHistoryKey ?? o[reconstructionSource] }, kit.procedural) };
+        renderHistoryKey: o.renderHistoryKey ?? o[reconstructionSource] }, kit.procedural, kit.directionDrawing.extract) };
     if (base.passes && diagnostic) {
       if (requested.length) frame.passes = ArtPasses.subset(base.passes, requested);
       else delete frame.passes;

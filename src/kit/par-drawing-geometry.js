@@ -165,7 +165,7 @@
   }
 
   function drawingPath(draw) {
-    const {source, d, points, closed, fill, color, stroke, width, steps, falloff, fillFalloff, strokeFalloff} = draw;
+    const {source, d, points, closed, fill, color, stroke, width, weights, steps, falloff, fillFalloff, strokeFalloff} = draw;
     const vertices = source === undefined ? points : Array.isArray(source) ? source : source?.points;
     const paths = d === undefined ? [pathSource({points:vertices,closed:closed ?? source?.closed})] : contours(d,steps);
     const lines = stroke ?? (fill ? false : color ?? '#ffffff');
@@ -175,7 +175,8 @@
       if (!paths.every(p => p.closed)) throw new TypeError('A filled path needs closed contours');
       output.push({type:'polygon',rings:paths.map(p=>p.points),fill,falloff:fillFalloff === undefined ? falloff : fillFalloff,...size});
     }
-    if (lines) for (const p of paths) output.push({type:'path',...p,color:lines,falloff:strokeFalloff === undefined ? falloff : strokeFalloff,...size});
+    if (lines) for (const p of paths) output.push({type:'path',...p,color:lines,falloff:strokeFalloff === undefined ? falloff : strokeFalloff,
+      ...size,...(weights !== undefined && {weights})});
     return output;
   }
 

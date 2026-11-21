@@ -10,7 +10,7 @@ Stroke widths default to output pixels. Set `widthUnits: "world"` on a world pri
 
 | Command | Geometry |
 | --- | --- |
-| `path` | `points`, stroke `width`, and optional `closed`. Segments join with round caps and share coverage at their intersections. |
+| `path` | `points`, stroke `width`, optional `closed`, and optional `weights` with one width multiplier per point. Segments join with round caps and share coverage at their intersections. |
 | `arrow` | `from` and `to`. Set `headLength` and `headWidth` for the filled arrowhead. When a world arrow's tip is clipped, its shaft remains visible up to the depth plane. |
 | `polygon` | `points` for one ring, or `rings` for multiple contours. Uses even-odd fill so nested rings make holes regardless of winding. Set `fill` and optional `stroke` independently. A false fill leaves the outline. |
 | `grid` | `origin`, perpendicular `u` and `v` directions, `step` per axis, and two cell `counts`. The default directions are X and Y. Set `majorEvery`, `majorColor`, and `majorWidth` for major lines. |
@@ -41,6 +41,8 @@ Use `--composite <file.json>` with the CLI render commands or `sim render` to su
 [Ray fans](drawing-ray-fan.md) and [registration grids](drawing-registration-grid.md)
 can use the same drawing falloff. The [drawing studies](../examples/drawing-falloff-studies.cjs)
 show the three controls independently and in one composition.
+
+[Direction-aware drawing](direction-drawing.md) extracts editable paths from mesh silhouettes, creases, and occlusion boundaries.
 
 ```sh
 node examples/drawing-falloff-studies.cjs drawing-studies

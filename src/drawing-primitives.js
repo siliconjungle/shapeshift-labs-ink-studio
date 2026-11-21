@@ -104,10 +104,13 @@ const DrawingPrimitives = (() => {
     const draw = { type, space, style, needsCamera: space === 'world', falloff: falloff(raw.falloff) };
     switch (type) {
       case 'path': {
-        keys(raw, [...baseKeys, 'points', 'closed'], 'path command');
+        keys(raw, [...baseKeys, 'points', 'closed', 'weights'], 'path command');
         const closed = raw.closed ?? false;
         check(typeof closed === 'boolean', 'Path closed flag must be boolean');
-        return { ...draw, points: points(raw.points, n, 2, 'Path'), closed };
+        const path = points(raw.points, n, 2, 'Path'), weights = raw.weights;
+        check(weights === undefined || tuple(weights, path.length) && weights.every(value => bounded(value,0,16)),
+          'Path weights need one multiplier in [0, 16] per point');
+        return { ...draw, points: path, closed, weights: weights?.slice() };
       }
       case 'arrow': {
         keys(raw, [...baseKeys, ...headKeys, 'from', 'to'], 'arrow command');
@@ -284,17 +287,23 @@ const DrawingPrimitives = (() => {
       units === 'world' ? n*project.pixelsPerUnit(p,direction) : n;
     const batch = (color, falloff = draw.falloff) => ({ color, falloff, lines: [], fills: [], labels: [] });
     const result = [];
-    function stroke(out, a, b, style = draw.style) {
+    function stroke(out, a, b, style = draw.style, first = 1, last = 1) {
       const pair = world ? project.line(a,b) : [a,b];
       if (!pair) return;
       const [start, end] = pair.map(xy);
       const direction = style.units === 'world' && directionBetween(start,end);
       const side = direction ? perpendicular(direction.axis) : undefined;
-      out.lines.push([start, end, scaled(style.width,style.units,pair[0],side),
-        scaled(style.width,style.units,pair[1],side)]);
+      const weight = (p, endpoint) => world && first !== last && a[2] !== b[2] ?
+        first+(last-first)*(p[2]-a[2])/(b[2]-a[2]) : endpoint;
+      const startWidth = scaled(style.width*weight(pair[0],first),style.units,pair[0],side);
+      const endWidth = scaled(style.width*weight(pair[1],last),style.units,pair[1],side);
+      if (startWidth || endWidth) out.lines.push([start, end, startWidth, endWidth]);
     }
-    function polyline(out, points, closed) {
-      for (let i = 1; i < points.length + Number(closed); i++) stroke(out,points[i-1],points[i%points.length]);
+    function polyline(out, points, closed, weights) {
+      for (let i = 1; i < points.length + Number(closed); i++) {
+        const j = i%points.length;
+        stroke(out,points[i-1],points[j],draw.style,weights?.[i-1],weights?.[j]);
+      }
     }
     function arrow(out, a, b) {
       const segment = world ? project.line(a,b) : [a,b];
@@ -333,7 +342,7 @@ const DrawingPrimitives = (() => {
       return vector ? { dir: vector.axis, side: perpendicular(vector.axis) } : null;
     }
     const out = batch(draw.style.color);
-    if (draw.type === 'path') polyline(out,draw.points.map(view),draw.closed);
+    if (draw.type === 'path') polyline(out,draw.points.map(view),draw.closed,draw.weights);
     if (draw.type === 'arrow') arrow(out,view(draw.from),view(draw.to));
     if (draw.type === 'polygon') {
       const rings = draw.rings.map(ring => ring.map(view));

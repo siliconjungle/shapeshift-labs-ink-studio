@@ -27,7 +27,8 @@
         (spec, ctx) => K.annotations.anchor(spec, { ...ctx, sceneTime }),
         gl,
         inputs,
-        K.procedural.raster
+        K.procedural.raster,
+        K.directionDrawing.extract
       )
   });
 })(KIT);
