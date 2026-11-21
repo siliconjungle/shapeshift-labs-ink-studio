@@ -139,6 +139,16 @@ export function createSplatInstances(prototypes, instances) {
     hasOpticalSplats: rows.some(row => row.asset.opticalSplats),
     hasSplatFootprints: rows.some(row=>row.asset.splatFootprints),
     hasMaterialPixelStyles: rows.some(row => row.asset.materialPixelStyles) };
+  function commit(i, next) {
+    const old = rows[i];
+    next.start = old.start;
+    next.index = old.index;
+    next.version = ++plan.revision;
+    if (next.authored.visible !== old.authored.visible || !!next.authored.opacity !== !!old.authored.opacity ||
+        next.at.some((n,j)=>n!==old.at[j]) || next.matrix.some((n,j)=>n!==old.matrix[j])) plan.orderRevision++;
+    rows[i] = next;
+    return next.authored;
+  }
   const api = Object.freeze({
     count:instances.length, splats:count, sharedSplats:sharedCount,
     get(id) { return rows[ids.get(id)]?.authored; },
@@ -147,14 +157,28 @@ export function createSplatInstances(prototypes, instances) {
       if (!old || !patch || typeof patch !== 'object' || Array.isArray(patch) ||
           Object.hasOwn(patch, 'id') || Object.hasOwn(patch, 'prototype'))
         throw new TypeError('Updates need an existing instance and editable placement fields');
-      const next = placement(patch, assets, old);
-      next.start = old.start;
-      next.index = old.index;
-      next.version = ++plan.revision;
-      if (next.authored.visible !== old.authored.visible || !!next.authored.opacity !== !!old.authored.opacity ||
-          next.at.some((n,i)=>n!==old.at[i]) || next.matrix.some((n,i)=>n!==old.matrix[i])) plan.orderRevision++;
-      rows[i] = next;
-      return next.authored;
+      return commit(i, placement(patch, assets, old));
+    },
+    updateTransforms(poses) {
+      if (!Array.isArray(poses) || poses.length > rows.length)
+        throw new TypeError('Expected a bounded list of instance transforms');
+      const selected = new Set(), changed = [];
+      for (const pose of poses) {
+        const i = ids.get(pose?.id);
+        if (i === undefined || selected.has(i)) throw new TypeError('Instance transforms need distinct existing IDs');
+        selected.add(i);
+        const old = rows[i], patch = {};
+        for (const key of ['position', 'rotation', 'scale']) {
+          if (!Object.hasOwn(pose, key) || pose[key] === undefined || pose[key] === old.authored[key]) continue;
+          const value = pose[key], previous = old.authored[key];
+          if (Array.isArray(previous) && Array.isArray(value) && value.length === previous.length &&
+              previous.every((n,j) => n === value[j])) continue;
+          patch[key] = value;
+        }
+        if (Object.keys(patch).length) changed.push([i, placement(patch, assets, old)]);
+      }
+      for (const [i, row] of changed) commit(i, row);
+      return changed.length;
     },
     owner(logicalIndex, baseCount = 0) {
       const local = logicalIndex - baseCount;

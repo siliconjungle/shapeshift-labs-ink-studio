@@ -1141,6 +1141,8 @@ port to hide a layer during that hold.
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
+| `anim.captureTransforms` | Snapshot the pose channels of a `source` array of instance records with stable IDs. |
+| `anim.staleTransforms` | Patch independent pose channels on a `source` array using `edits` and optional named `snapshots`. Returns the edited array and an applied/skipped count. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
 | `anim.feedback` | Evolve raster `frames` at a fixed simulation `dt`. Set source `fps` and `mode`, signal `halfLife` and `gain`, and optional `threshold`, `warp`, `filter`, and `cuts`. Feed [backward motion](#dense-optical-flow) into `flow` to advect the retained signal. |
 
@@ -1179,6 +1181,52 @@ direct seek and sequential playback produce the same frame.
 
 Run `node examples/sprite-fragment-desync.cjs fragment-review` to render
 [the side-by-side sprite study](../examples/sprite-fragment-desync.cjs).
+
+### Hold or duplicate instance transforms
+
+`KIT.procedural.animationGraph.staleTransforms` reads instance records
+with unique string `id` values. Each edit selects `position`, `rotation`,
+`scale`, or any combination. Use `snapshot` to hold a recorded pose
+and `from` to read a different instance. Both can appear in one edit.
+Each edit reads the original input or snapshot, so a pair of live copies
+can exchange channels.
+
+```js
+const A = KIT.procedural.animationGraph;
+const held = A.captureTransforms(sampleAt(0.75));
+const { value: poses } = A.staleTransforms(sampleAt(time), [
+  { id: 'courier', snapshot: 'held', channels: ['position'] },
+  { id: 'scanner', from: 'guide', channels: ['rotation', 'scale'] }
+], { snapshots: { held } });
+```
+
+- A pose uses XYZ `position`, a right-handed row-major 3×3 `rotation`,
+  and positive uniform or XYZ `scale`. The defaults are the origin, identity
+  rotation and unit scale. Omit `channels` to copy all three.
+- Assign each target channel at most once. The default missing-ID policy is
+  `"error"`. Use `{ missing: "skip" }` with changing populations to skip
+  edits whose target or donor is absent.
+- `captureTransforms` copies pose channels into a serializable snapshot.
+  For deterministic seeking, capture from an authored time sample or use
+  `anim.retime` to sample a fixed time before `anim.captureTransforms`.
+  Pass the snapshot through `data.record` to the `snapshots` input.
+- Pass the result to `copies.updateTransforms(poses)` for shared baked
+  splat instances. This adapter uses uniform scale. Use
+  `A.instanceMatrix(pose)` to get the rotation-and-scale matrix for
+  `K.frameSplats` or for `sceneGraph.setLocal(pose.id, { position, matrix })`
+  when driving repeated geometry.
+- For native particles, supply `renderTransforms({ time, instances })`
+  in `K.particles` options. Return the same live IDs with uniform scales.
+  The hook runs on display poses after simulation. A newly emitted particle
+  gets a fresh ID even when it takes over a pool slot.
+
+[Phase Register](../examples/stale-instance-transforms.js) compares live
+flight markers with a position hold, a rotation hold and a copied scale.
+
+```sh
+node cli/ink-studio.js clip examples/stale-instance-transforms.js --w 464 --h 230 \
+  --to 5.333333333333333 --fps 12 --out phase-register.png
+```
 
 ### Planar simulation recipes
 

@@ -126,6 +126,11 @@ with `damage: null`. Transforms update only the placement table and draw order.
 Palette and damage edits preserve the order when the camera stays still.
 `changedRows` still describes rows edited in the **base** world.
 
+Use `copies.updateTransforms(poses)` for a batch of ID-addressed position,
+rotation and uniform scale patches. It applies the validated batch atomically
+and returns the number of changed placements. Poses can come from the
+[stale transform sampler](headless-authoring.md#hold-or-duplicate-instance-transforms).
+
 `copies.get(id)` returns the authored placement. `copies.owner(index, terrain.count)`
 maps a logical renderer splat index to the stable placement ID, prototype ID,
 and local splat index. Placement IDs and logical ranges stay fixed while you

@@ -6,7 +6,7 @@
      K.flow.wind(v)  K.flow.curl(scale, speed)  K.flow.vortex(c, axis, strength, radius)  K.flow.sink(c, strength)  K.flow.sum(a, b, ...)
      K.flow.around(sdf, margin)   wraps the others: near a surface the current is turned along it, so nothing is carried through a solid */
 (function (K) {
-  const V = K.V;
+  const { V, M } = K;
   const spatialFields = new WeakSet(),
     spatial = field => {
       spatialFields.add(field);
@@ -232,12 +232,15 @@
   };
   K.particles = (st, pool, o) => {
     o = o || {};
+    const { renderTransforms } = o;
+    if (renderTransforms !== undefined && typeof renderTransforms !== 'function')
+      throw new TypeError('Particle renderTransforms needs a pose callback');
     const n = pool.n,
       P = [],
       fl = [0, 0, 0],
       palP = st.W.pal.map(h => ((h >> 16) & 255) + (h & 0xff00) + ((h & 255) << 16));
     for (let i = 0; i < n; i++) P.push({ life: 0 });
-    let next = 0;
+    let next = 0, generation = 0;
     const ps = {
       live: 0,
       flow: o.flow || null,
@@ -246,6 +249,7 @@
           i = pool.first + next;
         next = (next + 1) % n;
         q.i = i;
+        if (renderTransforms) q.id = 'particle-' + pool.first + '-' + generation++;
         q.p = e.p.slice();
         q.v = (e.v || [0, 0, 0]).slice();
         q.life = q.max = e.life || 1;
@@ -266,6 +270,7 @@
       },
       update(dt, t) {
         let live = 0;
+        const pending = renderTransforms && [];
         for (let k = 0; k < n; k++) {
           const q = P[k];
           if (q.life <= 0) continue;
@@ -309,22 +314,33 @@
           }
           const size = q.size * (1 + q.grow * u) * (q.fade > 0 && u > 1 - q.fade ? (1 - u) / q.fade : 1),
             col = palP[q.cols[Math.min(q.cols.length - 1, Math.floor(u * q.cols.length))]];
-          if (q.ax) pool.put(st, q.i, q.p[0], q.p[1], q.p[2], size, col, q.alpha, q.ax, q.len);
-          else if (q.streak) {
+          let axis = q.ax, length = q.len;
+          if (!axis && q.streak) {
             const sp = V.len(q.v);
-            pool.put(
-              st,
-              q.i,
-              q.p[0],
-              q.p[1],
-              q.p[2],
-              size,
-              col,
-              q.alpha,
-              sp > 1e-3 ? V.mul(q.v, 1 / sp) : [0, 1, 0],
-              size + sp * q.streak
-            );
-          } else pool.put(st, q.i, q.p[0], q.p[1], q.p[2], size, col, q.alpha);
+            axis = sp > 1e-3 ? V.mul(q.v, 1 / sp) : [0, 1, 0];
+            length = size + sp * q.streak;
+          }
+          if (!pending) pool.put(st, q.i, q.p[0], q.p[1], q.p[2], size, col, q.alpha, axis, length);
+          else {
+            const axisLength = axis ? V.len(axis) : 0, along = axisLength ? V.mul(axis, 1 / axisLength) : [0, 1, 0];
+            const across = V.perp(along);
+            const pose = { id: q.id, position: q.p.slice(), rotation: M.cols(across, along, V.cross(across, along)),
+              scale: Math.abs(size) || 1 };
+            pending.push({ pose, i: q.i, alpha: q.alpha, col, axis, axisLength, length, size, scale: pose.scale });
+          }
+        }
+        if (pending) {
+          const instances = pending.map(row => row.pose);
+          const poses = K.procedural.animationGraph.captureTransforms(renderTransforms({ time: t, instances }) ?? instances);
+          const rows = new Map(poses.map(pose => [pose.id, pose]));
+          if (rows.size !== pending.length || pending.some(({ pose }) => !Number.isFinite(rows.get(pose.id)?.scale)))
+            throw new TypeError('Particle render transforms need the same IDs and uniform scales');
+          for (const particle of pending) {
+            const { position, rotation, scale } = rows.get(particle.pose.id);
+            const ratio = scale / particle.scale;
+            const axis = particle.axis && V.mul([rotation[1], rotation[4], rotation[7]], particle.axisLength);
+            pool.put(st, particle.i, ...position, particle.size * ratio, particle.col, particle.alpha, axis, particle.length * ratio);
+          }
         }
         ps.live = live;
       }

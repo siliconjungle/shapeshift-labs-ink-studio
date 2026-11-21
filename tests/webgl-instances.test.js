@@ -158,6 +158,13 @@ function browserParity(createRenderer,createSplatInstances) {
   copies.update('right',{position:[.17,.05,0],palette:{'#e09259':'#238544'}});
   const updated=pair({raw:true});
   if(same(remembered,updated))throw Error('Authored edits did not change the frame');
+  const animation=KIT.procedural.animationGraph;
+  const held=animation.captureTransforms([copies.get('left'),copies.get('right')]);
+  const moving=[copies.get('left'),{...copies.get('right'),position:[.8,.2,0],scale:1.2}];
+  const {value}=animation.staleTransforms(moving,[{id:'right',snapshot:'held',channels:['position']}],
+    {snapshots:{held}});
+  if(copies.updateTransforms(value)!==1||copies.get('right').position[0]!==.17)throw Error('Selective batch did not hold the position');
+  if(same(updated,pair({raw:true})))throw Error('The live scale did not reach the shader');
   const { waterBodies }=KIT.procedural;
   const water=waterBodies.scene([waterBodies.create({
     id:'pond',bounds:{min:[-2,-2],max:[2,2]},resolution:[2,2],sample:()=>({bed:-1.4,surface:0})
