@@ -103,6 +103,7 @@ const specifications = {
   'fx.paletteFault': { inputs: { source: slots, options: { swaps: [[0, 1]] } } },
   'fx.regionObservations': { inputs: { frames: [mask, mask] } },
   'fx.analyze': { output: 'paths' },
+  'proc.plasma': { inputs: { options: { width: 16, height: 12 }, motion: { rings: { rate: .25 } } } },
   'warp.address': { inputs: { width: 4, height: 4, transforms: [{ type: 'zoom', scale: 1.5 }] } },
   'warp.compose': { inputs: { fields: [{ width: 1, height: 1, channels: 2, data: [.5, .5] }] } },
   'warp.sample': { nodes: { mapping: { op: 'warp.field', inputs: { width: 4, height: 4 } } },

@@ -18,6 +18,15 @@
       inputs: { source: 'field', options }, time: true,
       ...value('raster', ({ source, options }, { time }) => G.sample(source, { time, ...options }))
     },
+    'proc.plasma': {
+      description: 'Combine independently animated oscillators and map the result to indexed color.',
+      inputs: { geometry: input('array<record>', P.generatorSupport.plasmaGeometry), motion: options,
+        palette: input('palette', P.generatorSupport.plasmaPalette), options },
+      outputs: { value: 'displayRaster', indices: 'raster', palette: 'palette', field: 'raster' }, time: true,
+      run({ geometry, motion, palette, options }, { time }) {
+        return G.plasma({ time, ...options, geometry, motion, palette });
+      }
+    },
     'proc.scatter': {
       seed: 'options',
       inputs: { options }, outputs: { value: 'points', samples: 'array<record>', report: 'record' }, time: true,

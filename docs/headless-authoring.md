@@ -1614,7 +1614,7 @@ ink-studio graph run raster-warps-review/raster-warps.json --out raster-warps-re
 
 ## Procedural generation and recipes
 
-The stock graph runner includes 15 `proc.*` operations. The same generators
+The stock graph runner includes `proc.*` operations. The same generators
 are available in the library as `KIT.procedural.generator`. Build reusable
 graph groups around these nodes to expose the settings a scene or shot needs.
 The graph seed is mixed with each node ID. Set `options.seed` on a seeded node
@@ -1627,6 +1627,7 @@ the graph clock in seconds. Set `options.time` to hold a specific sample.
 | `proc.pattern` | Produce a 0–1 field. Set `kind` to `checker`, `stripes`, `dots`, `rings`, `brick` or `chevrons`. Set `size` in world units, `axes` to `xy`, `xz` or `yz`, `angle` in radians, `offset` and `velocity` as pairs, and `fill` as a fraction. |
 | `proc.smpteColorBars` | Generate [SMPTE SD or HD color bars](#broadcast-patterns-and-tv-static) as an RGBA8 raster. |
 | `proc.tvStatic` | Generate [TV static](#broadcast-patterns-and-tv-static) as a seekable RGBA8 raster. |
+| `proc.plasma` | [Combine oscillating fields into indexed art](#generate-indexed-plasma). Outputs a display raster, slot indices, palette and signed field. |
 | `proc.sample` | Rasterize a scalar `source` field at pixel centers across `origin` plus the plane vectors `u` and `v`. The one-channel raster retains signed and fractional values. Feed it to `color.gradient` with `channel: 0` and an explicit `range` to make artwork. |
 | `proc.repeat` | Repeat a raster at an explicit output size with pixel `offset` and two-axis `scale`. Channel counts and numeric values are retained. |
 | `proc.tiles` | Lay out weighted `definitions` with north, east, south and west sockets. `mode: "solve"` accepts `pins`, `ports`, `boundary` and `wrap`. `mode: "wang"` uses `labels` and a world-cell `origin` for independently generated chunks. Returns a layout with a status and, on success, row-major IDs. |
@@ -1659,6 +1660,44 @@ ink-studio graph run procedural-review/storm-relay.json --at 1.22 --out procedur
 
 Use a [take clock](take-clock.md) to sample a graph, world, timeline, and
 recorded media against one rational picture frame.
+
+### Generate indexed plasma
+
+Use `proc.plasma` or `KIT.procedural.generator.plasma()` to combine
+1–16 oscillators. Pass their shapes in `geometry` and their clocks in
+`motion`, keyed by field name.
+
+```js
+const { value, indices, palette, field } = KIT.procedural.generator.plasma({
+  width: 240, height: 144, time,
+  geometry: [
+    { id: 'ripple', type: 'radial', center: [.4, .5], frequency: 3 },
+    { id: 'curl', type: 'spiral', arms: 2, frequency: 1.4, weight: .7 },
+    { id: 'cross', type: 'plane', angle: .125, frequency: 2, weight: .45 }
+  ],
+  motion: { ripple: { rate: .25 }, curl: { phase: .125, rate: -.4, velocity: [.06, 0] } },
+  palette: ['#161c35', '#554978', '#aa6587', '#f7b588', '#fff2c2']
+});
+```
+
+- `center` is normalized XY. `frequency` counts cycles per shorter-side
+  length. Plane waves use `angle` in turns. Spiral waves add a signed
+  integer number of angular `arms`. `wave` is `sine` by default or
+  `triangle` for a linear rise and fall.
+- `phase` is in turns and signed `rate` is in turns per second. `velocity`
+  shifts the center in shorter-side lengths per second. Unlisted fields
+  hold their phase and position. Graph clips use their clock unless
+  `options.time` overrides it.
+- Signed `weight` values sum the contributions. The result is divided by
+  the sum of absolute weights and returned in `field`. `range` maps a
+  field interval onto the index ramp, clamping outside it.
+- The palette length sets the number of bands. Swapping the colors at the
+  same length keeps `field` and `indices` intact. Feed those indices and the
+  returned palette into [palette cycling](#cycle-an-indexed-palette) or
+  [Copper row schedules](render-graph.md#copper-style-raster-schedules).
+
+Run `node examples/indexed-plasma.cjs phase-garden.html` to compare the
+same index grid across palettes and inspect changes in the underlying field.
 
 ### Broadcast patterns and TV static
 
