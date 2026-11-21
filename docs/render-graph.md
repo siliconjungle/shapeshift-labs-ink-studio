@@ -124,6 +124,66 @@ on wet paving. A second procedural raster supplies the puddle mask. The
 example exports the final scene, the native rain pass, and the puddle mask
 captured from the render graph and resized by an ordinary raster node.
 
+## Programmable exposure
+
+The headless renderer integrates subframes with `shutter`. Set it in
+render options, in `world.look.shutter`, or in a procedural
+`scene.render.options` record. Use `--shutter shutter.json` with the CLI
+render and clip commands. `--shutter on` uses the defaults and
+`--shutter off` disables a scene's authored shutter.
+
+```js
+const shutter = {
+  duration: .12,
+  samples: 12,
+  curve: [[0, 0], [.22, 1], [.64, .8], [1, 0]],
+  targets: [
+    { select: { material: 'brass' }, shutter: { steps: 4 } },
+    { select: { object: 'courier' }, shutter: false }
+  ],
+  rolling: { duration: .06, bands: 8, direction: 'down' },
+  passes: {
+    'screen-trace': { duration: .18, curve: 'triangle', scan: false }
+  }
+};
+const frame = ink.render(world, { shutter, renderGraph, t: 3 });
+```
+
+| Control | Behavior |
+| --- | --- |
+| `duration`, `offset` | Seconds around the requested frame time, with a signed offset. The default duration is 1/30 second. Earlier-than-zero samples use time zero. |
+| `curve` | Use `box`, `triangle`, `hold`, or two to 32 increasing `[phase, weight]` knots from zero through one. Weights are nonnegative. Sampling distributes the subframes by integrated curve weight. |
+| `samples`, `steps` | Use 1–32 integration samples. Default is eight. Optional `steps` snaps exposure times to 1–32 discrete poses across the curve window. |
+| `rolling` | Offset 1–16 bands across the frame by the given duration. Directions are `down`, `up`, `right`, or `left`. Set `scan: false` on a profile to lock its scan time while other layers roll. |
+| `targets` | Assign profiles to named objects, materials, or other scene selectors. Later matches take precedence. A profile inherits unspecified camera shutter settings. `shutter: false` pins the target to the requested frame time. |
+| `passes` | Give a named render-graph pass its own exposure. The pass and its inputs are sampled on its clock, then the accumulated raster feeds later passes. Downstream shutter passes can read the already integrated output of upstream shutter passes. |
+| `space` | Accumulate premultiplied linear light by default. Use `display` to average the display RGB values directly. |
+
+Selected splats and atlas placements share the scene depth buffer at every
+subframe. A pinned opaque subject can hold a sharp silhouette and hide
+motion behind it. Depth, motion references, deep fragments, and other
+diagnostic captures are read at the nominal frame time. The screen graph
+runs on the exposed scene at the nominal time. Named pass shutters can
+sample stateless branches, and retained graph history can consume their
+outputs downstream. Fixed artwork in a mixed-resolution interface is
+composited at its authored resolution on the nominal frame.
+
+Dioramas with seekable animations are sampled through their ordinary pose
+function. For fixed-step worlds, supply an independent
+`shutterWorld(time)` function that returns a world sampled from a take or
+checkpoint. The renderer leaves the caller's simulation at its original
+time. Selected pose sampling requires stable splat slots. Camera-level
+exposure can sample a changing scene through the same function.
+
+Each frame has a shared budget of 128 sampled subframes and 64 million
+sampled art pixels. Coincident times within a scan band use one sample.
+Browser hosts can use `KIT.programmableExposure.prepare`, `schedule`,
+and `accumulate` with their own captured rasters. Native scene shutter
+rendering is available through the headless backend.
+
+Run `node examples/programmable-exposure.cjs shutter-relay.html` to compare
+weighted, stepped, rolling, and graph-pass exposures.
+
 ## Bind deep layers to a pass
 
 In the headless renderer, use `deepComposite.slots` to read

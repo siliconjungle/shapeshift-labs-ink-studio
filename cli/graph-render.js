@@ -30,6 +30,7 @@ function renderGraphScene(source, { camera, lights, channels = defaults, options
   return { value: api.rasterFrame(frame), frame, motionReference: frame.motionReference ?? null,
     report: { width: frame.w, height: frame.h, time: at, splats: source.count,
       ...(sampledCamera && { camera: sampledCamera }),
+      ...(frame.shutter && { shutter: frame.shutter }),
       passes: requested.filter(name => frame.passes?.[name]),
       ...(frame.renderGraphPasses && { graphPasses: Object.keys(frame.renderGraphPasses) }),
       ...(frame.deep && { deepLayers: frame.deep.layers, deepReflections: Object.keys(frame.deep.reflections) }) } };

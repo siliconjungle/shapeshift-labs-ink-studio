@@ -24,6 +24,8 @@ const ContactShadows = require('../src/contact-shadows.js');
 const ContactDepth = require('./contact-shadows.js');
 const RenderGraph = require('../src/render-graph.js');
 const runGraph = require('./render-graph.js');
+const Exposure = require('../src/programmable-exposure.js');
+const Shutter = require('./programmable-exposure.js');
 const FrameComposite = require('../src/frame-composite.js');
 const CameraStaging = require('../src/camera-staging.js');
 const CameraLens = require('../src/camera-lens.js');
@@ -111,6 +113,7 @@ const probeCamera = Symbol('reflection probe camera');
 const probeCaptures = Symbol('reflection probe captures');
 const deepScope = Symbol('deep capture budget');
 const deepReflection = Symbol('deep reflection plane');
+const shutterPlan = Symbol('shutter plan');
 
 function cameraCapture(options, receive) {
   return { [captureCamera](camera) {
@@ -132,6 +135,11 @@ function sequenceHistory(kit) {
 function render(world, o, preparedPalettes) {
   o = RenderContract.options(world, o, (w, frame) => require('../index.js').load().KIT.timeDomains.frame(w, frame));
   if (o.strictContract) RenderContract.requirePortable(world, o);
+  if (o[shutterPlan] === undefined && (o.shutter ?? world.look?.shutter) !== undefined) {
+    o[shutterPlan] = Exposure.prepare(o.shutter ?? world.look?.shutter);
+    if (o[shutterPlan]?.passes.size && !(o.renderGraph ?? world.look?.renderGraph))
+      throw new RangeError('Pass shutters need a render graph');
+  }
   if (o[deepScope] === undefined && (o.deepComposite ?? world.look?.deepComposite) !== undefined) {
     o[deepScope] = DeepComposite.settings(o.deepComposite ?? world.look?.deepComposite);
   }
@@ -195,8 +203,9 @@ function render(world, o, preparedPalettes) {
     if (result.renderStats) result.renderStats.frameMs = performance.now() - start;
     return result;
   }
-  const graph = o?.samples || o?.captureCoverage ? null :
-    RenderGraph.prepare(o?.renderGraph ?? world.look?.renderGraph, o?.renderGraphCapture);
+  const graphDefinition = o.renderGraph ?? world.look?.renderGraph;
+  const graph = o.samples || o.captureCoverage ? null : RenderGraph.prepare(graphDefinition, o.renderGraphCapture);
+  const branches = graph && Shutter.graphBranches(o[shutterPlan], graph, graphDefinition);
   if (graph?.passes.length || graph?.captures.size) {
     RenderGraph.resources(graph, o.w ?? o.width ?? 900, o.h ?? o.height ?? 620);
     const start = o?.renderStats ? performance.now() : 0;
@@ -214,9 +223,15 @@ function render(world, o, preparedPalettes) {
       ...o.renderGraphInputs,
       ...Object.fromEntries(bindings.map(([slot, channel, query]) => [slot, DeepComposite.layer(base, query, channel)]))
     } : o.renderGraphInputs;
+    const exposedPasses = branches.length ? Shutter.graphPasses(o[reconstructionSource] ?? world, o, o[shutterPlan], branches,
+      base.w, base.h, (sample, settings) => render(sample, { ...settings,
+        [shutterPlan]: null, [captureCamera]: undefined, [probeCaptures]: undefined, [deepScope]: undefined,
+        [reconstructionSource]: undefined, [sampledPresentation]: false, [afterimageRows]: undefined
+      }, preparedPalettes), kit) : o[Shutter.passImages];
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera,
       (spec,ctx) => kit.annotations.anchor(spec,{ ...ctx,sceneTime:o?.t }),
-      { ...o, renderGraphInputs, renderHistoryKey: o?.renderHistoryKey ?? o?.[reconstructionSource] }, kit.procedural) };
+      { ...o, renderGraphInputs, [Shutter.passImages]: exposedPasses,
+        renderHistoryKey: o.renderHistoryKey ?? o[reconstructionSource] }, kit.procedural) };
     if (base.passes && diagnostic) {
       if (requested.length) frame.passes = ArtPasses.subset(base.passes, requested);
       else delete frame.passes;
@@ -240,6 +255,13 @@ function render(world, o, preparedPalettes) {
       px: 1, worldSize: [base.w, base.h] };
     if (frame.renderStats) frame.renderStats.frameMs = performance.now() - start;
     return frame;
+  }
+  if (o[shutterPlan] && !o.samples && !o.captureCoverage) {
+    const kit = require('../index.js').load();
+    return Shutter.scene(o[reconstructionSource] ?? world, o, o[shutterPlan], (sample, settings, nominal) =>
+      render(sample, { ...settings, [shutterPlan]: null, [reconstructionSource]: undefined, [probeCaptures]: undefined,
+        ...(!nominal && { [captureCamera]: undefined, [deepScope]: undefined, [sampledPresentation]: false })
+      }, preparedPalettes), kit);
   }
   if (!o?.renderStats) return renderFrame(world, o, preparedPalettes);
   const start = performance.now();
@@ -265,6 +287,7 @@ function renderFrame(world, o, preparedPalettes) {
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
   const motion = RenderContract.clock(world, o), { direction, time: sceneTime, scene: t } = motion;
+  const shutterRows = world[Shutter.rows];
   const protection = SilhouetteProtection.prepare(look.silhouetteProtection,o.silhouetteProtection);
   const passQuality = PassQuality.prepare(o.passQuality ?? look.passQuality);
   const subject = protection?.bind(world);
@@ -765,7 +788,7 @@ function renderFrame(world, o, preparedPalettes) {
     surfaceDepth[sample.p] = Math.min(surfaceDepth[sample.p], sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,override:o.spriteAtlasMode,sun,
-    objectDither: anchorSpaces.has('object'),
+    objectDither: anchorSpaces.has('object'), shutterTime: shutterRows?.atlasTime,
     subject: protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
     clip:geometryClip, captureIds:Boolean(deep)
@@ -1014,8 +1037,10 @@ function renderFrame(world, o, preparedPalettes) {
     add = new Float32Array(N),
     wet = new Float32Array(N);
   const sampleWithdrawal = SampleCoverage.amount(o.sampleWithdrawal ?? world.sampleWithdrawal ?? 0);
+  const sceneMotion = motion;
   for (let i = 0, q = 0; i < N; i++, q += 16) {
     if (qualityRows && !qualityRows.keep[i]) continue;
+    const motion = shutterRows?.clock(i) ?? sceneMotion, t = motion.scene;
     let x = d[q],
       y = d[q + 1],
       z = d[q + 2],
@@ -1490,6 +1515,7 @@ function renderFrame(world, o, preparedPalettes) {
   }
   for (let n = 0; n < order.length; n++) {
     const i = order[n];
+    const motion = shutterRows?.clock(i) ?? sceneMotion, t = motion.scene;
     if ((!sortedSurfaces || !deferred) && spriteIndex<sprites.length) playSprites(-depth[i],false);
     const q = i * 16,
       al = AL[i],
@@ -1614,7 +1640,7 @@ function renderFrame(world, o, preparedPalettes) {
     const geometryWeight = geometryDetail ? StableDetail.weight(stableDetail.geometry,
       StableDetail.geometryPixels(projectedA,Bq,projectedC,artScale)) : 1;
     if (!geometryWeight) continue;
-    const frame=shaped&&SplatFootprints.posedFrame(world,i,t,SC[i]);
+    const frame=shaped&&SplatFootprints.posedFrame(shutterRows?.pose(i) ?? world,i,t,SC[i]);
     const planeFrame=shaped?.depth==='plane'&&frame;
     const projectedFrame=frame&&[a0*frame[0]+a1*frame[1]+a2*frame[2],b0*frame[0]+b1*frame[1]+b2*frame[2],a0*frame[3]+a1*frame[4]+a2*frame[5],b0*frame[3]+b1*frame[4]+b2*frame[5]];
     // Scale has already been applied in posedFrame for native particle kinds.
@@ -1629,7 +1655,7 @@ function renderFrame(world, o, preparedPalettes) {
     const engravingId=(kraw&(32|256|32768))?0:(engraved?.indices[i]??0),engravingStyle=engravingId&&engraved.styles[engravingId-1];
     let engrave;
     if(engravingStyle&&(!engravingStyle.screenPrint||o.screenPrint!==false)&&(!engravingStyle.brushwork||o.brushwork!==false)){
-      const f=SplatFootprints.posedFrame(world,i,t,SC[i]);
+      const f=SplatFootprints.posedFrame(shutterRows?.pose(i) ?? world,i,t,SC[i]);
       if(f){const map=SplatFootprints.frameTransform({matrix:[1,0,0,1]},a0*f[0]+a1*f[1]+a2*f[2],b0*f[0]+b1*f[1]+b2*f[2],a0*f[3]+a1*f[4]+a2*f[5],b0*f[3]+b1*f[4]+b2*f[5]);
         if(map){const at=i*6,ru=engraved.restFrames.subarray(at,at+3),rv=engraved.restFrames.subarray(at+3,at+6),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],ex=Array.from(ru,(n,j)=>n*map[0]+rv[j]*map[2]),ey=Array.from(ru,(n,j)=>n*map[1]+rv[j]*map[3]);
           engrave={point:engraved.anchors.subarray(i*3,i*3+3),ex,ey,normal:cross(f.slice(0,3),f.slice(3)),restNormal:cross(ru,rv),

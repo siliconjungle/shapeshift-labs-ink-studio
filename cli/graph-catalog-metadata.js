@@ -199,7 +199,8 @@ const options = {
     yaw: property('number', unit('radians')), pitch: property('number', unit('radians')), dist: property('number', unit('world units')) },
   'scene.render': { width: property('number', { ...positivePixels, ...limit(1, 2048, true) }, 128),
     height: property('number', { ...positivePixels, ...limit(1, 2048, true) }, 128), time: sampleTime,
-    deepComposite: property('boolean|record', { description: 'Retain bounded per-pixel layers and selected planar reflection captures.' }) },
+    deepComposite: property('boolean|record', { description: 'Retain bounded per-pixel layers and selected planar reflection captures.' }),
+    shutter: property('boolean|record', { description: 'Accumulate weighted subframes with object, material, pass and rolling shutter options.' }) },
   'scene.deepLayer': {
     view: property('string', oneOf('camera', 'transmitted', 'reflection', 'reflected'), 'camera'),
     rank: property('number', limit(0, 15, true), 0),

@@ -5,10 +5,25 @@ const { surfacePoint } = require('./scene-optics.js');
 const TargetSelectors = require('../src/target-selectors.js');
 
 const SplatFrames = require('../src/splat-frames.js');
+const { rows: shutterRows } = require('./programmable-exposure.js');
 let matrices;
 function sampleFrames(world, time) {
   if (!matrices && (world.anim?.rig || world.anim?.bones)) matrices = require('../index.js').load().KIT.M;
-  return SplatFrames.create(world, time, matrices);
+  const exposure = world[shutterRows];
+  const base = SplatFrames.create(world, time, matrices);
+  if (!exposure) return base;
+  const sources = new Map();
+  return index => {
+    const alternate = exposure.pose(index), clock = exposure.clock(index);
+    if (!clock || !alternate && clock.scene === time) return base(index);
+    const source = alternate ?? world;
+    const key = alternate ?? clock;
+    if (!sources.has(key)) {
+      if (!matrices && (source.anim?.rig || source.anim?.bones)) matrices = require('../index.js').load().KIT.M;
+      sources.set(key, SplatFrames.create(source, clock.scene, matrices));
+    }
+    return sources.get(key)(index);
+  };
 }
 
 function createArtPasses(request, w, h, emissiveSlots) {

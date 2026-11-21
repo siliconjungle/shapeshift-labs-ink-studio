@@ -1,4 +1,5 @@
 const FrameComposite = require('../src/frame-composite.js');
+const { passImages } = require('./programmable-exposure.js');
 const MotionSmear = require('../src/motion-smear.js');
 const FrameBank = require('../src/frame-bank.js');
 const RasterSchedule = require('../src/raster-schedule.js');
@@ -79,7 +80,8 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
     const input = outputs.get(node.input);
     const maskPass = node.type === 'mask';
     let output;
-    if (!node.enabled) output = maskPass ? new Uint8Array(w * h) : input;
+    if (options[passImages]?.has(node.id)) output = options[passImages].get(node.id);
+    else if (!node.enabled) output = maskPass ? new Uint8Array(w * h) : input;
     else {
       const rows = selected(node.select),
         mask = outputs.get(node.mask),

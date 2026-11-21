@@ -13,7 +13,7 @@ function heading(v) {
 
 function rasterize(placements, settings) {
   if (!placements.length) return [];
-  const {eye,V,W,H,focal,ortho,near,rayAt,time,override,sun,visibility,clip,objectDither,subject,captureIds}=settings;
+  const {eye,V,W,H,focal,ortho,near,rayAt,time:sceneTime,override,sun,visibility,clip,objectDither,subject,captureIds,shutterTime}=settings;
   if (override!==undefined&&!['card','impostor','scenery'].includes(override))
     throw new RangeError('Sprite atlas mode must be card, impostor or scenery');
   const results=[];
@@ -34,6 +34,7 @@ function rasterize(placements, settings) {
   }
   const sample={ color:[0,0,0],normal:[0,0,0],emission:[0,0,0] };
   for (const placement of placements) {
+    const time = shutterTime?.(placement) ?? sceneTime;
     const {atlas,opacity}=placement, mode=override??placement.mode;
     const protection=subject?.({object:placement.objectId,entity:placement.objectId,material:placement.materialId});
     const ids = captureIds && { objectId: placement.objectId, materialId: placement.materialId };
