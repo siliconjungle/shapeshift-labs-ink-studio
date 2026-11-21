@@ -16,6 +16,10 @@
     'fx.erode':raster(E.erode,{value:'raster',mask:'raster'}),
     'fx.repair':raster(E.repair,{value:'raster',mask:'raster',added:'raster'}),
     'fx.pixelSort':raster((source,options)=>({value:E.pixelSort(source,options)})),
+    'fx.tileScramble':{
+      inputs:{source:'raster',options},outputs:{value:'raster',addresses:'raster'},time:true,
+      run({source,options},{seed,time}){return E.tileScramble(source,{seed,time,...options});}
+    },
     'fx.analyze':raster(E.analyze,{paths:'array<path>',points:'array<vec2>',regions:'array<record>',mask:'raster'})
   });
   delete P.pixelEffectSupport;

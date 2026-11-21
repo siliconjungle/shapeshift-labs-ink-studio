@@ -538,7 +538,8 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 
 These graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
-effects return straight-alpha RGBA8 at the source dimensions. Add
+effects return straight-alpha RGBA8 at the source dimensions. Tile
+scrambling preserves the source channel count and sample values. Add
 transparent canvas margin before an effect when its coverage needs room
 outside the original image.
 
@@ -552,6 +553,7 @@ outside the original image.
 | `fx.erode` | Recede from exposed edges by a Euclidean `radius` in pixels. Returns the edited raster and its surviving byte `mask`. |
 | `fx.repair` | Use `method: "close"` and a Euclidean `radius` for holes and narrow gaps, or `"bridge"` and `maxGap` for breaks along rows, columns or diagonals. New pixels take the nearest selected source colour or an explicit `color`. Inspect them in the separate `added` mask. |
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
+| `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -570,6 +572,45 @@ the source channel's units. Transparent or excluded pixels break runs.
 Equal keys retain input order, and each pixel carries its colour and alpha.
 Mask eligibility uses `maskChannel` (default luma) and `maskThreshold`
 (default 128).
+
+### Scramble tile addresses
+
+`tileScramble(source, options)` supports either color rasters or numeric
+planes, such as a rasterized tile grid or palette indices. It reads the
+original tile at integer coordinates and copies all channels, including
+alpha, without resampling. The grid starts at the source's top-left pixel.
+Incomplete tiles at the right and bottom keep their original pixels.
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.tileScramble(sprite, {
+  tileSize: [8, 8], mode: 'repeat', amount: .4, seed: 12, rate: 6, time
+});
+```
+
+- `tileSize` defaults to `[8, 8]` native pixels. Set `amount` between zero
+  and one (default `.25`). The operator rounds to a whole number of tiles.
+- `mode: "swap"` (default) exchanges pairs and rounds the affected count
+  down to an even number. `"repeat"` copies from unchanged eligible
+  tiles with replacement, leaving at least one tile to read from.
+  `"omit"` fills selected tiles with zeros, including alpha when present.
+- An aligned `mask` restricts both source and destination tiles. Every
+  pixel within a tile must meet or exceed `maskThreshold` (default 128)
+  on `maskChannel` (default `"luma"`). In graphs, use `data.record` to
+  link a raster mask into `options`.
+- `rate` is the number of address updates per second. The default zero
+  holds one mapping. At a positive rate the same `seed` and
+  `floor(time * rate)` produce the same map, including on direct seeks.
+  Direct calls default to seed 1 and time 0. The `fx.tileScramble` node
+  inherits the graph clock and node seed unless overridden in `options`.
+- `value` keeps the source dimensions and pivot. `addresses` is a
+  one-channel raster with one sample per grid cell. A sample is the
+  zero-based, row-major source tile index, or `-1` for an omitted tile.
+
+For a [camera atlas](camera-atlas.md), convert `atlas.read(id)` from
+`{ w, h, rgba }` to `{ width: w, height: h, channels: 4, data: rgba }`,
+then send `value` to a raster layer or sprite surface. The
+[tile address study](../examples/tile-address-scrambling.cjs) renders the
+same effect on original sprite art and a moving camera feed.
 
 ### Trace paths and points
 
