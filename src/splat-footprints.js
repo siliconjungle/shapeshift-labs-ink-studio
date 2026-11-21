@@ -341,7 +341,11 @@ const SplatFootprints = (() => {
   function plan(world) {
     const b = validate(world);
     if (!b) return null;
-    if (plans.has(b) && plans.get(b).count === world.count) return plans.get(b);
+    if (plans.has(b) && plans.get(b).count === world.count) {
+      const cached = plans.get(b);
+      indexPlans.set(b.indices, cached);
+      return cached;
+    }
     const styles = b.styles.map(prepare),
       n = resolution,
       cols = Math.min(columns, Math.max(1, styles.length)),

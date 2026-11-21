@@ -112,6 +112,14 @@ test('transform-only animation reuses atlas fields, packed slots and bounded GPU
     assert.equal(b.indices, a.indices);
     assert.notDeepEqual(b.params, a.params);
   }
+  const saved = w.splatFootprints,
+    old = F.plan(w);
+  F.update(w, slot, { shape: 'cross' });
+  F.plan(w);
+  w.splatFootprints = saved;
+  assert.equal(F.plan(w).atlas, old.atlas);
+  F.setTransform(w, slot, { rotation: 0.2 });
+  assert.equal(F.plan(w).atlas, old.atlas);
   F.update(w, slot, { shape: 'star' });
   assert.notEqual(F.plan(w).atlas, a.atlas);
   const grown = { ...w, count: 120 };
