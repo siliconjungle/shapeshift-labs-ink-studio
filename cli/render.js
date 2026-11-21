@@ -4,6 +4,7 @@ const PassQuality = require('../src/pass-quality.js');
 // Draws a world without a browser: motion kinds, projection of each splat's covariance to a screen ellipse,
 // blending from far to near, low-resolution sampling, dithering and palette quantization.
 const FOV = (38 * Math.PI) / 180;
+const RenderGrid = require('../src/render-grid.js');
 const PixelLook = require('../src/pixel-look.js');
 const RenderStages = require('../src/render-stages.js');
 const LookInputs = require('../src/look-inputs.js');
@@ -162,6 +163,15 @@ function render(world, o, preparedPalettes) {
     const result = api.compose(base, plan, settings, depthAt);
     if (requested.length) result.passes = ArtPasses.subset(passes, requested);
     else delete result.passes;
+    if (result.renderStats) result.renderStats.frameMs = performance.now() - start;
+    return result;
+  }
+  const grid = o?.samples || o?.captureCoverage ? null : RenderGrid.prepare(o?.renderGrid ?? world.look?.renderGrid);
+  if (grid) {
+    const start = o?.renderStats ? performance.now() : 0;
+    RenderGrid.dimensions(grid, o?.w ?? o?.width ?? 900, o?.h ?? o?.height ?? 620);
+    const base = render(world, { ...o, renderGrid: false }, preparedPalettes);
+    const result = RenderGrid.apply(base, grid);
     if (result.renderStats) result.renderStats.frameMs = performance.now() - start;
     return result;
   }

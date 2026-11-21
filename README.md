@@ -1108,3 +1108,5 @@ Camera rigs support dependency-free dolly zoom, tracked orbit, keyed crane moves
 `KIT.procedural.mathFields` supplies finite complex-plane, polar and logarithmic charts; analytic deformation/flow/mask adapters; and bounded fixed-step attractor integration. It shares existing field-expression, streamline and trace tooling. See [procedural math fields](docs/math-fields.md) and the [strange garden](examples/math-fields.html).
 
 `KIT.random` / `KIT.procedural.random` adds independent named streams, stable object/property keys, controlled distributions, correlated channels, coherent variation and replay checkpoints. See [randomness authoring](docs/randomness.md) and the interactive [seeded courtyard](examples/randomness.html).
+
+Use [tessellated render grids](docs/render-grids.md) to resolve SDF/splat scenes into connected hexagons, alternating triangles or isometric diamonds. See the interactive [Prism Harbour demo](examples/render-grid.html).

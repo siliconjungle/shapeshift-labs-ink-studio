@@ -1,3 +1,4 @@
+import { createRenderGrid } from './render-grid.mjs';
 import { createMaterialControls } from './material-controls.mjs';
 import { createLightEmitters } from './light-emitters.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
@@ -1250,6 +1251,20 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
       composite(world, drawFrame, plan, layers, output, present);
     }
+    let gridRenderer;
+    function presentGrid(world, frame, width, height, output) {
+      const definition = frame.renderGrid ?? world.look?.renderGrid;
+      if (definition === undefined || definition === false) return presentGraph(world, frame, width, height, output);
+      const api = toolkit.KIT?.renderGrid;
+      if (!api) throw new Error('Tessellated grids need the Ink Studio KIT');
+      // Immutable prepared plans are recommended for a host's animation loop.
+      const plan = api.prepare(definition);
+      api.dimensions(plan, width, height);
+      if (width > Math.min(maxSize, viewportLimit[0]) || height > Math.min(maxSize, viewportLimit[1]))
+        throw new RangeError('Render grid exceeds the WebGL viewport or texture size limit');
+      gridRenderer ??= createRenderGrid(gl, { api, program, target, textureUnit, fullscreen });
+      gridRenderer(world, frame, plan, width, height, output, presentGraph);
+    }
     let renderGraph;
     function presentGraph(world, frame, width, height, output) {
       const definition = frame.renderGraph ?? world.look?.renderGraph;
@@ -1279,13 +1294,13 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const presentation = toolkit.KIT?.presentationTimeline?.sample(world, frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0, frame);
       if (presentation) frame = { ...frame, ...presentation };
       const definition = frame.inspection ?? world.look?.inspection;
-      if (definition === undefined || definition === false) return presentGraph(world, frame, width, height, output);
+      if (definition === undefined || definition === false) return presentGrid(world, frame, width, height, output);
       const api = toolkit.KIT?.inspection;
       if (!api) throw new Error('Target inspection needs the Ink Studio KIT');
       const settings = api.prepare(definition);
-      if (!settings.targets.length) return presentGraph(world, frame, width, height, output);
+      if (!settings.targets.length) return presentGrid(world, frame, width, height, output);
       inspection ??= createInspection(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize, viewportLimit });
-      inspection(world, frame, settings, width, height, output, presentGraph);
+      inspection(world, frame, settings, width, height, output, presentGrid);
     }
     return { render: presentFrame, dispose() {
       surfacePipeline?.dispose();

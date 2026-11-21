@@ -4,6 +4,7 @@ const RenderContract = (() => {
   const lenses = typeof CameraLens === 'undefined' ? require('./camera-lens.js') : CameraLens;
   const impulses = typeof CameraImpulses === 'undefined' ? require('./camera-impulses.js') : CameraImpulses;
   const staging = typeof CameraStaging === 'undefined' ? require('./camera-staging.js') : CameraStaging;
+  const grids = typeof RenderGrid === 'undefined' ? require('./render-grid.js') : RenderGrid;
   const pixels = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
   const stages = typeof RenderStages === 'undefined' ? require('./render-stages.js') : RenderStages;
   const inputs = typeof LookInputs === 'undefined' ? require('./look-inputs.js') : LookInputs;
@@ -109,7 +110,10 @@ const RenderContract = (() => {
     const stageNames = new Set(stageRules(world, frame).map(rule => rule.stage));
     if (hasSurfacePaint(world, frame)) stageNames.add('material');
     const paletteMode = frame.raw ? 'raw' : stageNames.size ? 'stages' : toneDefinition ? 'tone' : 'palette';
-    return { version: 1, width, height, clocks, camera: { pose, time, ortho, tangent, clipNear, clipFar, setback },
+    const grid = grids.prepare(frame.renderGrid ?? world.look?.renderGrid);
+    return { version: 1, width, height, clocks,
+      ...(grid && { representation: { type: 'grid', mode: grid.mode, size: grid.size, angle: grid.angle,
+        origin: grid.origin, aspect: grid.aspect, gap: grid.gap, resources: grids.dimensions(grid, width, height) } }), camera: { pose, time, ortho, tangent, clipNear, clipFar, setback },
       paletteMode, palette: !frame.raw && grade ? pixels.gradePalette(grade) : world.pal?.slice(),
       stages: [...stageNames], issues: compatibility(world, frame) };
   }

@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Prism Harbour · Hexels, Trixels & Diamonds</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #091b25;
+      color: #e0eadb;
+      font:
+        14px/1.5 system-ui,
+        sans-serif;
+    }
+    main {
+      max-width: 1560px;
+      margin: auto;
+      padding: 28px 36px;
+    }
+    .eyebrow {
+      display: flex;
+      justify-content: space-between;
+      color: #8ba7a7;
+      font: 10px monospace;
+      letter-spacing: 2px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #29414a;
+    }
+    h1 {
+      font:
+        normal 54px/1.05 Georgia,
+        serif;
+      letter-spacing: -1.7px;
+      margin: 25px 0 10px;
+    }
+    h1 em {
+      color: #edc078;
+      font-weight: normal;
+    }
+    .intro {
+      color: #9db5b3;
+      margin: 0 0 24px;
+      max-width: 820px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 268px;
+      gap: 22px;
+    }
+    .view {
+      position: relative;
+      min-width: 0;
+      border: 1px solid #29434c;
+      background: #071822;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1.48;
+      image-rendering: pixelated;
+      touch-action: none;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #091b25;
+    }
+    .bar {
+      padding: 11px 14px;
+      font: 10px monospace;
+      color: #8eaaa9;
+      border-top: 1px solid #29434c;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .mode {
+      position: absolute;
+      left: 20px;
+      top: 18px;
+      pointer-events: none;
+      color: #d6b775;
+      font: 10px monospace;
+      letter-spacing: 2px;
+    }
+    .panel {
+      border-top: 2px solid #cba15f;
+      padding-top: 17px;
+    }
+    h2 {
+      font:
+        normal 22px Georgia,
+        serif;
+      margin: 0 0 14px;
+    }
+    .choices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-bottom: 22px;
+    }
+    button,
+    select {
+      color: #bfcebe;
+      background: #142e37;
+      border: 1px solid #35535a;
+      padding: 10px 9px;
+      font: 11px monospace;
+      cursor: pointer;
+    }
+    button:hover {
+      border-color: #b8b78b;
+    }
+    button.active {
+      color: #102936;
+      background: #e6bc78;
+      border-color: #e6bc78;
+    }
+    .control {
+      display: block;
+      margin: 17px 0;
+    }
+    .control span {
+      display: flex;
+      justify-content: space-between;
+      font: 11px monospace;
+      color: #b3c8c0;
+      margin-bottom: 8px;
+    }
+    input[type='range'] {
+      width: 100%;
+      accent-color: #e3b974;
+    }
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 13px 0;
+      color: #acbfb9;
+      font-size: 12px;
+    }
+    input[type='checkbox'] {
+      accent-color: #e3b974;
+    }
+    #reset {
+      width: 100%;
+      margin-top: 17px;
+    }
+    .note {
+      font-size: 12px;
+      color: #789897;
+      border-top: 1px solid #2c454a;
+      padding-top: 15px;
+      margin-top: 20px;
+    }
+    .swatches {
+      display: flex;
+      gap: 5px;
+      margin: 20px 0 5px;
+    }
+    .swatches i {
+      width: 23px;
+      height: 9px;
+      background: var(--c);
+    }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 25px;
+      margin-top: 20px;
+      color: #789897;
+      font-size: 11px;
+    }
+    #cell {
+      font: 10px monospace;
+      color: #d3b779;
+      min-height: 30px;
+    }
+    .error {
+      color: #ffac83;
+    }
+    @media (max-width: 850px) {
+      main {
+        padding: 20px;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 42px;
+      }
+      .panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 25px;
+      }
+      .choices,
+      h2,
+      .note {
+        grid-column: 1/-1;
+      }
+      footer {
+        display: block;
+      }
+    }
+  </style>
+  <main>
+    <div class="eyebrow"><span>INK STUDIO / REPRESENTATIONS 01</span><span>LIVE SDF DIORAMA</span></div>
+    <h1>Prism <em>Harbour</em></h1>
+    <p class="intro">
+      One small world, three geometric languages. Explore connected hexagons, alternating triangles and isometric
+      diamonds—each cell carries one colour from the living scene.
+    </p>
+    <div class="layout">
+      <section class="view">
+        <canvas id="view" width="1100" height="744" aria-label="Interactive Prism Harbour diorama"></canvas>
+        <div id="loading">Building the harbour…</div>
+        <div class="mode" id="mode-label">HEXAGONAL / CONNECTED CELLS</div>
+        <div class="bar"><span>DRAG TO ORBIT · SHIFT–DRAG TO PAN · SCROLL TO ZOOM</span><span id="stats">—</span></div>
+      </section>
+      <aside class="panel">
+        <h2>Choose the lattice</h2>
+        <div class="choices">
+          <button data-mode="hex" class="active">Hexels</button><button data-mode="triangle">Trixels</button
+          ><button data-mode="diamond">Diamonds</button><button data-mode="off">Original</button>
+        </div>
+        <label class="control"
+          ><span>Cell width <output id="size-value">9 px</output></span
+          ><input id="size" type="range" min="3" max="30" step=".5" value="9"
+        /></label>
+        <label class="control"
+          ><span>Grid rotation <output id="angle-value">0°</output></span
+          ><input id="angle" type="range" min="-45" max="45" step="1" value="0"
+        /></label>
+        <label class="control"
+          ><span>Vertical stretch <output id="aspect-value">1.00×</output></span
+          ><input id="aspect" type="range" min=".5" max="2" step=".05" value="1"
+        /></label>
+        <label class="control"
+          ><span>Cell seams <output id="gap-value">0%</output></span
+          ><input id="gap" type="range" min="0" max=".2" step=".01" value="0"
+        /></label>
+        <label class="toggle"><input type="checkbox" id="animate" checked />Animate the beacon</label
+        ><label class="toggle"><input type="checkbox" id="orbit" />Slow turntable</label
+        ><label class="toggle"><input type="checkbox" id="inspect" />Inspect cell under pointer</label>
+        <div id="cell"></div>
+        <button id="reset">Reset view & lattice</button>
+        <div class="swatches">
+          <i style="--c: #123844"></i><i style="--c: #3a7880"></i><i style="--c: #a1d1bd"></i
+          ><i style="--c: #a5743f"></i><i style="--c: #ffd98c"></i>
+        </div>
+        <p class="note">
+          Sea glass & brass. The grid stays anchored to the canvas while the camera moves. Switch to Original to compare
+          the same splats and printed quay.
+        </p>
+      </aside>
+    </div>
+    <footer>
+      <span>Native signed-distance geometry · 3 lattices · WebGL 2 · No runtime dependencies</span
+      ><span>Cell size is measured in canvas pixels. Inspection labels stay crisp.</span>
+    </footer>
+  </main>
+  <script src="../dist/ink-studio.browser.js"></script>
+  <script src="./render-grid.js"></script>
+  <script type="module">
+    import { createRenderer } from '../webgl.mjs';
+    const $ = id => document.getElementById(id),
+      canvas = $('view');
+    try {
+      const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages };
+      const demo = renderGridScene(kit),
+        renderer = createRenderer(canvas, { toolkit: kit }),
+        state = { mode: 'hex', plan: null };
+      const labels = {
+        hex: 'HEXAGONAL / CONNECTED CELLS',
+        triangle: 'TRIANGULAR / ALTERNATING CELLS',
+        diamond: 'ISOMETRIC / DIAMOND CELLS',
+        off: 'ORIGINAL / NATIVE SPLATS'
+      };
+      function sync() {
+        state.plan =
+          state.mode === 'off'
+            ? false
+            : KIT.renderGrid.prepare({
+                mode: state.mode,
+                size: +$('size').value,
+                angle: (+$('angle').value * Math.PI) / 180,
+                aspect: +$('aspect').value,
+                gap: +$('gap').value,
+                gapColor: [8, 28, 41],
+                origin: [0.173, 0.291]
+              });
+        document.querySelectorAll('[data-mode]').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === state.mode);
+          b.setAttribute('aria-pressed', b.dataset.mode === state.mode);
+        });
+        $('mode-label').textContent = labels[state.mode];
+        $('size-value').value = $('size').value + ' px';
+        $('angle-value').value = $('angle').value + '°';
+        $('aspect-value').value = (+$('aspect').value).toFixed(2) + '×';
+        $('gap-value').value = Math.round(+$('gap').value * 100) + '%';
+      }
+      for (const b of document.querySelectorAll('[data-mode]'))
+        b.onclick = () => {
+          state.mode = b.dataset.mode;
+          if (demo.presets[state.mode]) $('size').value = demo.presets[state.mode].size;
+          sync();
+        };
+      for (const id of ['size', 'angle', 'aspect', 'gap']) $(id).oninput = sync;
+      $('animate').onchange = e => (demo.state.paused = !e.target.checked);
+      $('orbit').onchange = e => (demo.state.turntable = e.target.checked);
+      $('reset').onclick = () => {
+        state.mode = 'hex';
+        $('size').value = 9;
+        $('angle').value = 0;
+        $('aspect').value = 1;
+        $('gap').value = 0;
+        $('orbit').checked = false;
+        demo.state.turntable = false;
+        demo.control.release();
+        sync();
+      };
+      let drag,
+        last,
+        stamp,
+        frames = 0,
+        fps = 60;
+      canvas.onpointerdown = e => {
+        drag = [e.clientX, e.clientY];
+        canvas.setPointerCapture(e.pointerId);
+        $('orbit').checked = false;
+        demo.state.turntable = false;
+        demo.control.take();
+      };
+      canvas.onpointermove = e => {
+        if (drag) {
+          const dx = e.clientX - drag[0],
+            dy = e.clientY - drag[1];
+          drag = [e.clientX, e.clientY];
+          demo.control.input(e.shiftKey ? { pan: [-dx * 0.012, dy * 0.012] } : { yaw: -dx * 0.004, pitch: dy * 0.004 });
+        }
+        if ($('inspect').checked && state.plan) {
+          const r = canvas.getBoundingClientRect(),
+            c = KIT.renderGrid.cellAt(
+              state.plan,
+              ((e.clientX - r.left) * canvas.width) / r.width,
+              ((e.clientY - r.top) * canvas.height) / r.height
+            );
+          $('cell').textContent = c.id + ' · ' + c.vertices.length + ' sides';
+        }
+      };
+      canvas.onpointerup = canvas.onpointercancel = () => (drag = null);
+      canvas.addEventListener(
+        'wheel',
+        e => {
+          e.preventDefault();
+          demo.control.input({ dolly: e.deltaY * 0.001 });
+        },
+        { passive: false }
+      );
+      window.gridQA = { demo, renderer, state, sync };
+      sync();
+      $('loading').remove();
+      function tick(now) {
+        const dt = last === undefined ? 0 : Math.min(0.05, (now - last) / 1000);
+        last = now;
+        demo.update(dt);
+        renderer.render(demo.world, {
+          width: canvas.width,
+          height: canvas.height,
+          camera: demo.control.read().camera,
+          time: demo.state.time,
+          renderGrid: state.plan,
+          changedRows: []
+        });
+        frames++;
+        stamp ??= now;
+        if (now - stamp > 700) {
+          fps = (frames * 1000) / (now - stamp);
+          stamp = now;
+          frames = 0;
+        }
+        $('stats').textContent = Math.round(fps) + ' FPS · ' + (demo.world.count / 1000).toFixed(1) + 'K SPLATS';
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    } catch (error) {
+      $('loading').classList.add('error');
+      $('loading').textContent = error.message;
+      throw error;
+    }
+  </script>
+</html>
