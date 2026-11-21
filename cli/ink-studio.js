@@ -1015,7 +1015,7 @@ const CMD = {
         '    --progress ndjson   stream case and batch records',
         '  graph capture <request.json> [--adapters host.cjs --out file]   capture or send via a registered host adapter',
         '  graph inspect-pxc <project.pxc> [--out info.json]   inspect a Pixel Composer container',
-        '  graph import-pxc <project.pxc> --out graph.json [--adapters host.cjs --using ID]   import saved art or use a translator',
+        '  graph import-pxc <project.pxc> --out graph.json [--translate | --adapters host.cjs --using ID]   import saved art or translate editable nodes',
         '  graph session <project.json> [--protocol ndjson --out directory]   serve requests using a warm graph',
         '  material-controls <material.json> [--palette colors.json --out report.json]  inspect shared material controls',
         '  light-emitters <lights.json> [--at seconds --out report.json]  inspect shaped lights and cookies',

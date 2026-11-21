@@ -41,7 +41,7 @@ function savedArt(value, thumbnail) {
   return null;
 }
 
-function inspectPxc(source, { image = false } = {}) {
+function inspectPxc(source, { image = false, tolerateArt = false } = {}) {
   if (!(source instanceof Uint8Array) || source.length < 8 || source.length > MAX_FILE)
     throw new TypeError('Expected a bounded PXCX project');
   const bytes = Buffer.from(source.buffer, source.byteOffset, source.byteLength);
@@ -68,19 +68,34 @@ function inspectPxc(source, { image = false } = {}) {
     ...(Number.isSafeInteger(project.version) && { saveVersion: project.version }),
     ...(typeof project.versions === 'string' && { version: project.versions }),
     fields: Object.keys(project).sort(), hasPreview: Boolean(project.preview), hasThumbnail: Boolean(thumbnail) };
-  return { project, report, ...(image && { art: savedArt(project, thumbnail) }) };
+  if (!image) return { project, report };
+  let art;
+  try { art = savedArt(project, thumbnail); }
+  catch (error) {
+    if (!tolerateArt) throw error;
+    report.artError = error.message;
+    if (project.preview && thumbnail) {
+      try { art = savedArt({}, thumbnail); }
+      catch { /* The original preview error remains in the receipt. */ }
+    }
+  }
+  return { project, report, art: art ?? null };
+}
+
+function rasterLiteral({ width, height, channels = 4, data }) {
+  return { op: 'data.typed', type: 'raster', inputs: { value: { width, height, channels, data: Array.from(data) } } };
 }
 
 function previewProject(bytes) {
   const { report, art } = inspectPxc(bytes, { image: true });
   if (!art) throw new RangeError('PXC needs a saved RGBA8 preview or thumbnail for the native raster import');
-  const { width, height, channels, data } = art.image;
+  const { width, height } = art.image;
   const project = {
     format: 'ink-studio/graph-project', version: 1,
-    nodes: { image: { op: 'data.typed', type: 'raster', inputs: { value: { width, height, channels, data: Array.from(data) } } } },
+    nodes: { image: rasterLiteral(art.image) },
     outputs: { image: { node: 'image' } }, exports: { image: { output: 'image', format: 'png' } }
   };
   return { project, report: { ...report, mode: art.kind, width, height } };
 }
 
-module.exports = { inspectPxc, previewProject, maxPxcBytes: MAX_FILE };
+module.exports = { inspectPxc, previewProject, rasterLiteral, maxPxcBytes: MAX_FILE };

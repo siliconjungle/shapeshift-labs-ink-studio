@@ -1,5 +1,6 @@
 /* Explicit capture, codec and PXC extension points for trusted Node hosts. */
 const { inspectPxc, previewProject } = require('./pxc.js');
+const { translatePxc } = require('./pxc-translate.js');
 const bytesLimit = 8 * 32000000 + 65536;
 const plain = value => value !== null && typeof value === 'object' &&
   [Object.prototype, null].includes(Object.getPrototypeOf(value));
@@ -104,8 +105,11 @@ function createGraphHost(config = {}, { kit = require('../index.js').load() } = 
     return codecOutput(sync(method('codec', name, 'mux')({ ...sequence, options: P.data.clone(options) })));
   }
 
-  async function importPxc(source, { using, file, options = {} } = {}) {
+  async function importPxc(source, { using, translate = false, file, options = {} } = {}) {
     source = bytes(source, 'PXC input', 64 * 1024 * 1024);
+    if (typeof translate !== 'boolean' || translate && using !== undefined)
+      throw new TypeError('Choose native PXC translation or a host adapter');
+    if (translate) return translatePxc(source, { file });
     if (using === undefined) return previewProject(source);
     const call = method('pxc', using, 'import');
     const result = await call({ bytes: source, file, options: P.data.clone(options), inspect: settings => inspectPxc(source, settings) });

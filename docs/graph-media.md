@@ -303,21 +303,50 @@ ink-studio graph run automation.json --out review
 
 ## Pixel Composer projects
 
-`graph inspect-pxc` reads the PXCX container metadata. `graph import-pxc`
-imports saved RGBA8 preview art or the thumbnail as a raster graph. The
-native importer preserves those pixels. Editable node conversion uses
-a registered translator with `--using`, and reports the adapter’s name.
-The resulting Ink graph is validated before writing.
-
-The native preview path follows the documented role of project output
-as a compositable surface and the publicly described PXCX save structure.
-[Pixel Composer PXC node](https://docs.pixel-composer.com/nodes/io/pxc/pxc.html) · [PXCX container and preview format](https://github.com/Stovoy/pixel-composer-tools#container)
+Use `graph inspect-pxc` to inspect the PXCX container. The default
+`graph import-pxc` writes a graph containing the exact saved RGBA8
+preview or thumbnail. Add `--translate` to write editable Ink nodes
+from the tested Pixel Composer 1.22.10.2 save layout (121092).
 
 ```sh
 ink-studio graph inspect-pxc source.pxc
+ink-studio graph import-pxc source.pxc --translate --out editable.json --json > conversion.json
+ink-studio graph run editable.json --out review
+```
+
+| Pixel Composer node | Editable Ink translation |
+| --- | --- |
+| Image | A relative PNG beside the project or in a subdirectory, embedded as RGBA8. The source must stay inside that directory tree during import. |
+| Solid, Color | An unmasked solid or empty canvas, and packed RGBA colour values. |
+| Scale, Crop, Flip | Fixed nearest or bilinear scaling, whole-pixel crop margins, and axis flips. |
+| Transform | Pixel or relative translation with a fixed anchor on the source canvas or an explicit output canvas with pixel sampling. The position can be keyframed. |
+| Invert, Blend | Channel inversion and normal compositing with whole-pixel placement. Blend opacity can use a key track or a compatible number node. |
+| Number, Counter | Unitless numbers with linear and incoming-hold keys, and synchronous frame or progress counters. The import receipt includes the source frame rate and frame count. |
+| Export | A named image output. Use Ink's export directory and `graph clip` controls for frame ranges, codecs, and file names. |
+
+The conversion receipt keeps original node IDs. `unsupported` identifies
+unmapped classes, settings, contexts, and connections. `blocked` records
+nodes that depend on an untranslated input. When an export or selected
+preview translates, it becomes an Ink output. If none translates, the
+graph exposes the usable endpoints as `partial-*` outputs. Saved art stays
+available as `saved-preview` in the same graph. This makes it possible to
+run the editable branches and compare against the original while filling
+gaps manually. Pixel Composer's groups, driver expressions, shaders,
+nonlinear key curves, and non-hold track endings require manual conversion.
+
+A host can call `createGraphHost().importPxc(bytes, {translate: true, file})`
+with the original source filename for local image resolution. The CLI
+validates the resulting graph before writing it. The existing adapter
+path is also available.
+
+```sh
 ink-studio graph import-pxc source.pxc --out preview.json
 ink-studio graph import-pxc source.pxc --adapters host.cjs --using translate --out editable.json
 ```
+
+[Pixel Composer node documentation](https://docs.pixel-composer.com/nodes/).
+[Pixel Composer source and bundled projects](https://github.com/Ttanasart-pt/Pixel-Composer/tree/3045d4f49b0c59926784f59efc1728d528a337cb).
+[PXCX container and preview format](https://github.com/Stovoy/pixel-composer-tools#container).
 
 ## Spectral Relay
 

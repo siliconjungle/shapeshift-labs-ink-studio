@@ -13,7 +13,7 @@ const { createGraphProject } = require('./graph-project.js');
 const commands = Object.freeze({
   capture: ['out', 'adapters', 'json'],
   'inspect-pxc': ['out', 'json'],
-  'import-pxc': ['out', 'adapters', 'using', 'json']
+  'import-pxc': ['out', 'adapters', 'using', 'translate', 'json']
 });
 const hash = raw => createHash('sha256').update(raw).digest('hex');
 const json = value => Buffer.from(JSON.stringify(value, null, 2) + '\n');
@@ -58,8 +58,8 @@ function encodeValue(value, type) {
 async function execute(pos, opt, settings) {
   const [mode, source] = pos;
   if (pos.length !== 2 || Object.entries(opt).some(([key, value]) => !commands[mode].includes(key) ||
-      (key === 'json' ? value !== true : typeof value !== 'string' || !value.trim())) ||
-      mode === 'import-pxc' && opt.out === undefined)
+      (['json', 'translate'].includes(key) ? value !== true : typeof value !== 'string' || !value.trim())) ||
+      mode === 'import-pxc' && opt.out === undefined || opt.translate && opt.using !== undefined)
     throw new TypeError('Use graph capture|inspect-pxc|import-pxc <file> with the corresponding output and adapter options');
   const file = path.resolve(source), output = opt.out && path.resolve(opt.out);
   settings = await adapters(opt.adapters, settings);
@@ -75,9 +75,9 @@ async function execute(pos, opt, settings) {
   const host = createGraphHost(settings.adapters, { kit: settings.kit });
   if (mode === 'import-pxc') {
     const data = readPxc(file);
-    const { project, report } = await host.importPxc(data, { using: opt.using, file });
+    const { project, report, sourceFiles = [] } = await host.importPxc(data, { using: opt.using, translate: opt.translate, file });
     const graph = createGraphProject(project, { ...settings, baseDir: path.dirname(output) });
-    distinct(output, [...sources, ...graph.sourceFiles()]);
+    distinct(output, [...sources, ...sourceFiles, ...graph.sourceFiles()]);
     files.json(output, project);
     return { ...report, kind: 'import-pxc', output, sourceHash: hash(data), projectHash: graph.validate().projectHash };
   }
