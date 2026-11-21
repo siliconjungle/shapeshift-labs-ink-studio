@@ -97,6 +97,57 @@
       outputs: { value: 'audio', stems: 'record', report: 'record' },
       run({ score, requests, options }) { return P.musicScore.compile(score,{requests}).audio(options); }
     },
+    'music.motif': {
+      description: 'Validate a motif and apply repeat, accent shifts, answers and seeded rhythmic variation.',
+      inputs: { source:'record', operations:scoreRequests, options },
+      outputs: { value:'record', traits:'record' },
+      run({source,operations,options}) {
+        const value=P.musicComposer.motif.vary(source,operations,options.seed);
+        return {value,traits:P.musicComposer.motif.inspect(value)};
+      }
+    },
+    'music.makeMotif': {
+      description: 'Generate a seeded motif from allowed scale degrees, cadence notes, density, and a beat grid.',
+      inputs: { options }, outputs: { value:'record', traits:'record' },
+      run({options}) {
+        const value=P.musicComposer.motif.generate(options);
+        return {value,traits:P.musicComposer.motif.inspect(value)};
+      }
+    },
+    'music.arrange': {
+      description: 'Build a native score and scene cues from roles, motifs and inheriting sections.',
+      inputs: { source:'record' }, outputs: { value:'record', score:'record', cues:'array<record>', report:'record' },
+      run({source}) {
+        const value=P.musicComposer.compose(source);
+        return {value,score:value.score,cues:value.cues,report:value.report};
+      }
+    },
+    'music.revise': {
+      description: 'Carry an audition idea into a new arrangement and enforce pinned parts or score bindings.',
+      inputs: { source:'record', options }, outputs: { value:'record', score:'record', report:'array<record>' },
+      run({source,options}) {
+        const {value,report}=P.musicComposer.revise(source,options);
+        return {value,score:value.score,report};
+      }
+    },
+    'music.reference': {
+      description: 'Recover the editable motif, traits, and timed cues from one part of an auditioned arrangement.',
+      inputs: { source:'record', part:'string', section:'string' }, outputs: { value:'record', motif:'record', traits:'record' },
+      run({source,part,section}) {
+        const value=P.musicComposer.reference(source,{part,section});
+        return {value,motif:value.motif,traits:value.traits};
+      }
+    },
+    'music.audition': {
+      description: 'Render comparable revisions of an arrangement with reports, source scores, and optional stereo audio.',
+      inputs: { source:'record', variants:'array<record>', options },
+      outputs: { value:'array<record>', audio:'record', report:'record' },
+      run({source,variants,options}) {
+        const {takes,report}=P.musicComposer.audition(source,variants,options);
+        const audio=Object.fromEntries(takes.filter(take=>take.audio).map(take=>[take.id,take.audio]));
+        return {value:takes.map(({audio,...rest})=>rest),audio,report};
+      }
+    },
     'music.fifths': {
       description: 'Find the shortest circle-of-fifths route between two pitch classes.',
       inputs: { from: 'string', to: 'string' }, outputs: { value: 'record', path: 'array<string>', distance: 'number' },

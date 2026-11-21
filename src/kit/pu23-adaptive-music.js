@@ -310,6 +310,6 @@
 
   }
 
-  K.music = Object.freeze({ create, acoustics, score: K.procedural.musicScore });
+  K.music = Object.freeze({ create, acoustics, score: K.procedural.musicScore, composer: K.procedural.musicComposer });
   W.runtime.register('adaptive-music', adaptiveMusic);
 })(KIT);

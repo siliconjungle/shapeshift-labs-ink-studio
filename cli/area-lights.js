@@ -3,7 +3,7 @@ const ColorSpace = require('../src/color-space.js');
 const { spotWeight } = require('../src/volume-light.js');
 const { slab } = require('../src/scene-optics.js');
 const linear = ColorSpace.prepare('srgb','srgb-linear');
-const srgb = ColorSpace.prepare('srgb-linear','srgb');
+const ShotLighting = require('../src/shot-lighting.js');
 const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const clamp = n => Math.max(0,Math.min(1,n));
 const spotBias = .025;
@@ -39,17 +39,18 @@ function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
 
 const {staticSources,occludes}=AreaLights;
 
-function createLighting(lights, world, data, alpha, { spots = [], shadow } = {}) {
+function createLighting(lights, world, data, alpha, { spots = [], shadow, shot } = {}) {
   const active = lights.filter(light=>light.intensity>0).map(light=>({
     ...light, extent:Math.hypot(...light.half), tint:linear(light.rgb)
   }));
   const projectors = spots.map(light => ({ ...light, tint:linear(light.rgb) }));
-  if (!active.length && !projectors.length) return null;
+  const rig = ShotLighting.bind(shot, world, data, alpha);
+  if (!active.length && !projectors.length && !rig) return null;
   const sources = active.some(light=>light.shadows) || (!shadow && spots.some(light=>light.castsShadow))
     ? staticSources(world,data,alpha) : [];
   const cache = [];
 
-  function evaluate(point, normal) {
+  function evaluate(point, normal, row) {
     const rgb=[0,0,0];
     AreaLights.evaluate(active,point,normal,rgb,{shadow:sources.length?(o,d,s)=>occludes(sources,o,d,s):null});
     for (const light of projectors) {
@@ -72,23 +73,28 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow } = {})
       const projected=light.cookie?.rgb?light.cookie.rgb(direction):[1,1,1];
       for (let c=0;c<3;c++) rgb[c]+=light.tint[c]*level*projected[c];
     }
-    return rgb;
+    if (!rig) return rgb.map(n => 1 + n);
+    const additional = [0, 0, 0];
+    const retention = rig.sample(row, point, normal, additional);
+    return rgb.map((n, c) => n + additional[c] + retention);
   }
 
-  return function shade(pixel, point, normal, rgb, fog, fogMix = 0) {
+  function shade(pixel, point, normal, rgb, fog, fogMix = 0, row) {
     const previous = cache[pixel];
     let light;
-    if (previous && point.every((n,k)=>Math.abs(n-previous.point[k])<1e-6) &&
+    if (previous && previous.row === row && point.every((n,k)=>Math.abs(n-previous.point[k])<1e-6) &&
         normal.every((n,k)=>Math.abs(n-previous.normal[k])<1e-6)) light=previous.light;
     else {
-      light=evaluate(point,normal);
-      cache[pixel]={point,normal,light};
+      light=evaluate(point,normal,row);
+      cache[pixel]={point,normal,light,row};
     }
-    if (!light.some(Boolean) || fogMix>=1) return rgb;
+    if (light.every(n => n === 1) || fogMix>=1) return rgb;
     const surface = fogMix ? rgb.map((n,k)=>clamp((n-fog[k]*fogMix)/(1-fogMix))) : rgb;
-    const shaded = srgb(linear(surface).map((n,k)=>Math.min(1,n*(1+light[k]))));
+    const shaded = ShotLighting.shade(surface, light);
     return fogMix ? shaded.map((n,k)=>n+(fog[k]-n)*fogMix) : shaded;
-  };
+  }
+  shade.receives = row => active.length > 0 || projectors.length > 0 || rig.receives(row);
+  return shade;
 }
 
 function sceneOccluder(world, data, alpha) {

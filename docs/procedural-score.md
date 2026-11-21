@@ -1,5 +1,8 @@
 # Procedural audiovisual scores
 
+Use the [phrase composer](phrase-composer.md) to build, revise, and audition
+these scores from motifs and section roles.
+
 Use one portable score to synthesize music and drive rendering or simulation.
 `KIT.music.score.compile(score)` and `KIT.procedural.musicScore.compile(score)`
 return the same program. A program supports independent sampling, exact take

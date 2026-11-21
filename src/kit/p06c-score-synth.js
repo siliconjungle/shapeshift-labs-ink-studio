@@ -32,6 +32,20 @@
     return value;
   }
 
+  function noise(index,salt) {
+    let n = (index ^ salt) >>> 0;
+    n = Math.imul(n ^ n >>> 16, 0x21f0aaad);
+    n = Math.imul(n ^ n >>> 15, 0x735a2d97);
+    return ((n ^ n >>> 15) >>> 0)/2147483648-1;
+  }
+  function strike(instrument,time,index,salt) {
+    if (instrument === 'kick')
+      return Math.sin(TAU*(48*time+119*(1-Math.exp(-52*time))/52))*Math.exp(-13*time);
+    const grain = noise(index,salt), edge = grain-noise(index-1,salt);
+    if (instrument === 'hat') return edge*.47*Math.exp(-33*time);
+    return (.56*grain+.18*edge+.23*Math.sin(TAU*178*time)*Math.exp(-21*time))*Math.exp(-16*time);
+  }
+
   function render(score, options = {}) {
     if (!options || ![Object.prototype,null].includes(Object.getPrototypeOf(options)) ||
       Object.keys(options).some(key => !['start','end','sampleRate','gain','stems'].includes(key)))
@@ -56,21 +70,26 @@
       const dry = stems ? new Float32Array(samples.length) : null;
       if (dry) buffers[id] = { sampleRate, channels: 2, samples: dry };
       const gainL = headroom*voice.gain*Math.sqrt((1-pan)/2), gainR = headroom*voice.gain*Math.sqrt((1+pan)/2);
+      const salt = voice.id.split('').reduce((hash,char) => Math.imul(hash^char.charCodeAt(0),0x01000193),0x811c9dc5);
       const scratch = {};
       let segment = 0, hit = 0;
       for (let index = begin; index < finalSample; index++) {
         const time = index/sampleRate;
         while (segment+1 < track.length && track[segment+1].time <= time) segment++;
         let level = fadeEnd(time);
+        let onset = track[segment].onset;
         if (hitWindows) {
           while (hit < hitWindows.length && hitWindows[hit].end <= time) hit++;
           const window = hitWindows[hit];
           if (!window || time < window.start) continue;
           level *= hitLevel(window,time);
+          onset = window.start;
         }
         const state = voiceAt(track[segment],time,scratch);
         if (state.frequency <= 0 || state.level <= 0) continue;
-        const sound = oscillator(voice,state.phase,state.frequency,sampleRate)*level*state.level;
+        const wave = voice.instrument === 'tone' ? oscillator(voice,state.phase,state.frequency,sampleRate) :
+          strike(voice.instrument,time-onset,index,salt);
+        const sound = wave*level*state.level;
         const at = (index-begin)*2, l = sound*gainL, r = sound*gainR;
         samples[at] += l;
         samples[at+1] += r;

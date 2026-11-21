@@ -1,0 +1,341 @@
+{
+  "arrangement": {
+    "seed": 764,
+    "score": {
+      "tempoMap": {
+        "tempo": 120,
+        "beatsPerBar": 4,
+        "barsPerPhrase": 2,
+        "swing": 0.56
+      },
+      "key": {
+        "root": "C4",
+        "mode": "minor"
+      },
+      "tuning": "just",
+      "endFade": 0.48,
+      "harmonies": {
+        "home": {
+          "root": "C4",
+          "quality": "minor",
+          "voicing": {
+            "pad": "G3"
+          },
+          "fade": 0.35
+        },
+        "fault": {
+          "root": "Ab3",
+          "quality": "major7",
+          "voicing": {
+            "pad": "G3"
+          },
+          "fade": 0.35
+        },
+        "tension": {
+          "root": "G3",
+          "quality": "dominant7",
+          "voicing": {
+            "pad": "F3"
+          },
+          "fade": 0.35
+        },
+        "open": {
+          "root": "C4",
+          "quality": "minor",
+          "voicing": {
+            "pad": "G3"
+          },
+          "fade": 0.4
+        }
+      },
+      "bindings": {
+        "palette": {
+          "voice": "pad",
+          "from": "pitch",
+          "fallback": "#425f95",
+          "colors": {
+            "G": "#68d2cd",
+            "F": "#f5aa82"
+          }
+        },
+        "camera": {
+          "voice": "beam",
+          "from": "signal",
+          "range": [
+            0.25,
+            0.85
+          ]
+        }
+      },
+      "changes": [
+        {
+          "id": "tension",
+          "time": {
+            "bar": 4
+          },
+          "harmony": "tension"
+        }
+      ]
+    },
+    "motifs": {
+      "beacon": {
+        "length": 4,
+        "events": [
+          {"beat": 0, "duration": 0.38, "degree": 1, "velocity": 0.92},
+          {"beat": 0.75, "duration": 0.31, "degree": 3, "velocity": 0.73},
+          {"beat": 1.5, "duration": 0.46, "degree": 5, "velocity": 0.85},
+          {"beat": 2.75, "duration": 0.42, "degree": 3, "velocity": 0.67},
+          {"beat": 3.5, "duration": 0.22, "degree": 2, "velocity": 0.54}
+        ]
+      },
+      "lowline": {
+        "length": 4,
+        "events": [
+          {"beat": 0, "duration": 0.66, "degree": 1, "velocity": 1},
+          {"beat": 1, "duration": 0.47, "degree": 1, "velocity": 0.87},
+          {"beat": 2, "duration": 0.62, "degree": 5, "velocity": 0.82},
+          {"beat": 3.25, "duration": 0.48, "degree": 1, "velocity": 0.72}
+        ]
+      },
+      "thump": {
+        "length": 4,
+        "events": [
+          {"beat": 0, "duration": 0.18, "degree": 1, "velocity": 1},
+          {"beat": 1.5, "duration": 0.18, "degree": 1, "velocity": 0.72},
+          {"beat": 2, "duration": 0.18, "degree": 1, "velocity": 0.87},
+          {"beat": 3.25, "duration": 0.14, "degree": 1, "velocity": 0.72}
+        ]
+      },
+      "backbeat": {
+        "length": 4,
+        "events": [
+          {"beat": 1, "duration": 0.19, "degree": 1, "velocity": 0.87},
+          {"beat": 3, "duration": 0.22, "degree": 1, "velocity": 0.91},
+          {"beat": 3.75, "duration": 0.1, "degree": 1, "velocity": 0.43}
+        ]
+      },
+      "hats": {
+        "length": 4,
+        "events": [
+          {"beat": 0, "duration": 0.13, "degree": 1, "velocity": 0.53},
+          {"beat": 0.5, "duration": 0.13, "degree": 1, "velocity": 0.78},
+          {"beat": 1, "duration": 0.13, "degree": 1, "velocity": 0.53},
+          {"beat": 1.5, "duration": 0.13, "degree": 1, "velocity": 0.78},
+          {"beat": 2, "duration": 0.13, "degree": 1, "velocity": 0.53},
+          {"beat": 2.5, "duration": 0.13, "degree": 1, "velocity": 0.78},
+          {"beat": 3, "duration": 0.13, "degree": 1, "velocity": 0.53},
+          {"beat": 3.5, "duration": 0.13, "degree": 1, "velocity": 0.78}
+        ]
+      },
+      "sparks": {
+        "length": 4,
+        "events": [
+          {"beat": 0.5, "duration": 0.14, "degree": 1, "velocity": 0.71},
+          {"beat": 1, "duration": 0.13, "degree": 1, "velocity": 0.53},
+          {"beat": 1.75, "duration": 0.13, "degree": 1, "velocity": 0.82},
+          {"beat": 2.25, "duration": 0.12, "degree": 1, "velocity": 0.64},
+          {"beat": 2.75, "duration": 0.12, "degree": 1, "velocity": 0.77},
+          {"beat": 3, "duration": 0.12, "degree": 1, "velocity": 0.52},
+          {"beat": 3.5, "duration": 0.15, "degree": 1, "velocity": 0.83},
+          {"beat": 3.75, "duration": 0.09, "degree": 1, "velocity": 0.56}
+        ]
+      }
+    },
+    "parts": {
+      "bass": {
+        "role": "bass",
+        "material": "lowline",
+        "voice": {
+          "gain": 0.29
+        }
+      },
+      "kick": {
+        "role": "percussion",
+        "material": "thump",
+        "voice": {
+          "instrument": "kick",
+          "gain": 0.28
+        }
+      },
+      "snare": {
+        "role": "percussion",
+        "voice": {
+          "instrument": "snare",
+          "gain": 0.16,
+          "pan": -0.16
+        }
+      },
+      "hat": {
+        "role": "percussion",
+        "material": "hats",
+        "voice": {
+          "instrument": "hat",
+          "gain": 0.11,
+          "pan": 0.28
+        }
+      },
+      "pad": {
+        "role": "pad",
+        "material": {
+          "sustain": true
+        },
+        "voice": {
+          "gain": 0.125,
+          "pan": 0.3,
+          "partials": [
+            [
+              2,
+              0.17
+            ],
+            [
+              5,
+              0.08
+            ]
+          ]
+        }
+      },
+      "lead": {
+        "role": "lead",
+        "material": "beacon",
+        "mode": "minorPentatonic",
+        "voice": {
+          "gain": 0.24,
+          "pan": -0.22
+        }
+      },
+      "beam": {
+        "role": "visual",
+        "material": "beacon",
+        "voice": {
+          "motion": {
+            "follow": "fixed",
+            "cyclesPerBar": 0.75
+          }
+        }
+      }
+    },
+    "sections": [
+      {
+        "id": "idle",
+        "bars": 2,
+        "harmony": "home"
+      },
+      {
+        "id": "jam",
+        "bars": 4,
+        "harmony": "fault",
+        "parts": {
+          "snare": "backbeat",
+          "hat": "sparks"
+        }
+      },
+      {
+        "id": "clear",
+        "bars": 2,
+        "harmony": "open",
+        "parts": {
+          "snare": null,
+          "hat": "hats",
+          "kick": "thump"
+        }
+      }
+    ],
+    "pins": [
+      "part:lead",
+      "part:bass",
+      "binding:palette",
+      "binding:camera"
+    ]
+  },
+  "variants": [
+    {
+      "id": "lock-signal"
+    },
+    {
+      "id": "broken-grid",
+      "edits": [
+        {
+          "part": "kick",
+          "section": "jam",
+          "seed": 512,
+          "operations": [
+            {
+              "type": "syncopate",
+              "amount": 0.24,
+              "chance": 0.76
+            },
+            {
+              "type": "accentShift",
+              "steps": 1
+            }
+          ]
+        },
+        {
+          "part": "hat",
+          "section": "jam",
+          "seed": 292,
+          "operations": [
+            {
+              "type": "thin",
+              "keep": 0.65
+            },
+            {
+              "type": "accentShift",
+              "steps": -2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "after-hours",
+      "edits": [
+        {
+          "part": "kick",
+          "section": "jam",
+          "seed": 14,
+          "operations": [
+            {
+              "type": "thin",
+              "keep": 0.5
+            }
+          ]
+        },
+        {
+          "part": "hat",
+          "section": "jam",
+          "seed": 480,
+          "operations": [
+            {
+              "type": "reverse"
+            },
+            {
+              "type": "thin",
+              "keep": 0.49
+            }
+          ]
+        },
+        {
+          "part": "snare",
+          "section": "jam",
+          "seed": 22,
+          "operations": [
+            {
+              "type": "syncopate",
+              "amount": 0.24,
+              "chance": 0.8
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "options": {
+    "start": 0,
+    "end": 16,
+    "fps": 12,
+    "width": 720,
+    "height": 404,
+    "sampleRate": 48000
+  }
+}

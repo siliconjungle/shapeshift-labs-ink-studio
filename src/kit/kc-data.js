@@ -423,6 +423,11 @@
     } catch (error) {
       bad('finish.areaLights', error.message);
     }
+    try {
+      ShotLighting.prepare(st.finish.shotLighting);
+    } catch (error) {
+      bad('finish.shotLighting', error.message);
+    }
     if (st.finish.volumeLighting) {
       try {
         SceneOptics.lighting(st.finish.volumeLighting, st.palette);
@@ -1405,7 +1410,8 @@
     const { detailBudgets, shadowArt } = st0.finish.look ?? {};
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
       undefined : { detailBudgets, shadowArt });
-    const keepLightCasters = AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
+    const keepLightCasters = ShotLighting.needsCasters(st0.finish.shotLighting) ||
+      AreaLights.prepare(st0.finish.areaLights).some(light => light.shadows && light.intensity) ||
       EmissiveFinishes.prepare(st0.finish.emissiveFinishes, pal).some(({spill}) => spill?.shadows && spill.intensity) ||
       st0.finish.volumeLighting?.spots?.some(light => light.surfaceIntensity && light.castsShadow !== false);
     const shadowMarch = st0.finish.shadowMarch === undefined ? null : bakedShadowMarch(st0.finish.shadowMarch);

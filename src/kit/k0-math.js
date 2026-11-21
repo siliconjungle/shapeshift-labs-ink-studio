@@ -7,6 +7,7 @@ KIT.passQuality = PassQuality;
 KIT.renderContract = RenderContract;
 KIT.colorClusters = ColorClusters;
 KIT.shadowArt = ShadowArt;
+KIT.shotLighting = ShotLighting;
 KIT.splatFrames = SplatFrames;
 KIT.splatRelighting = SplatRelighting;
 KIT.areaLights = AreaLights;

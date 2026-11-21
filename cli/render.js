@@ -70,6 +70,7 @@ const LightSchedule = require('../src/light-schedule.js');
 const LiveSun = require('./live-sun.js');
 const ProbeLighting = require('./bounce-probes.js');
 const AreaLights = require('../src/area-lights.js');
+const ShotLighting = require('../src/shot-lighting.js');
 const EmissiveFinishes = require('../src/emissive-finishes.js');
 const AreaRaster = require('./area-lights.js');
 const surfaceShading = require('./surface-shading.js');
@@ -275,6 +276,7 @@ function renderFrame(world, o, preparedPalettes) {
   const orderMode = o.splatOrder ?? look.splatOrder ?? 'center';
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
+  const shotLighting = ShotLighting.frame(world.shotLighting, o.shotLighting, t);
   const probeView = o[probeCamera];
   const useSdf = sdfSettings && world.renderSdfs?.length && !o.reflectionPlane?.select && !probeView?.allow;
   const transparency = SplatOrder.transparency(o.stableTransparency ?? look.stableTransparency);
@@ -1120,8 +1122,8 @@ function renderFrame(world, o, preparedPalettes) {
   const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, { x:X, y:Y, z:Z, alpha:AL });
   const spotLighting = Array.isArray(volumeLighting?.spots) && volumeLighting.spots.some(light => light?.surfaceIntensity !== undefined)
     ? prepareVolumeLight() : undefined;
-  const directLight = (areaLights.length || spillLights.length || spotLighting?.surfaceSpots.length) &&
-    AreaRaster.createLighting([...areaLights,...spillLights],world,d,AL,{ spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow });
+  const directLight = AreaRaster.createLighting([...areaLights,...spillLights],world,d,AL,
+      { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, shot:shotLighting });
   const diffuseFrames = (directLight || probes) && sampleFrames(world,t), diffuseNormals = [];
   function diffuseNormal(i) {
     return diffuseNormals[i] ?? (diffuseNormals[i] = receivesDiffuse(i) && diffuseFrames(i).normal || false);
@@ -1370,7 +1372,7 @@ function renderFrame(world, o, preparedPalettes) {
         live.gains(i,...position,sunGains);
         color=color.map((v,k)=>v*sunGains[k]);
       }
-      if (directLight && diffuseNormal(i)) color = directLight(sprite.p, position, sprite.normal, color);
+      if (directLight?.receives(i) && diffuseNormal(i)) color = directLight(sprite.p, position, sprite.normal, color, undefined, 0, i);
       if (!live?.normal(i) && probeReceiver(i))
         color = probes.shade(position,sprite.normal,color,undefined,0,probeAlbedo(i));
       if (surface?.has(i) && !PIX?.[i*8]) {
@@ -1394,7 +1396,7 @@ function renderFrame(world, o, preparedPalettes) {
       }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample,undefined,claim?.[4] && paletteTrace.forStage(claim[4]));
     }
-    if(i<0&&sprite.surface&&!sprite.emission&&directLight&&sprite.normal)color=directLight(sprite.p,position,sprite.normal,color);
+    if(i<0&&sprite.surface&&!sprite.emission&&directLight?.receives(-1)&&sprite.normal)color=directLight(sprite.p,position,sprite.normal,color);
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
       const shaded=value+(fog[c]-value)*fogMix;
@@ -1650,7 +1652,7 @@ function renderFrame(world, o, preparedPalettes) {
       .24 + .76 * exposure.light(x,y,z) : 1;
     const rule = subject?.(i);
     const contactReceiver = contact?.at(i);
-    const directReceiver = directLight && diffuseNormal(i);
+    const directReceiver = directLight?.receives(i) && diffuseNormal(i);
     const localProbe = !liveNormal && probeReceiver(i) && diffuseNormal(i);
     const localAlbedo = localProbe && probeAlbedo(i);
     const fogMix = !(flags & 2) && world.fog.max > 0 && world.fog.start < 1
@@ -1840,7 +1842,7 @@ function renderFrame(world, o, preparedPalettes) {
         if (directReceiver || localProbe) {
           const n = exact?.normal ?? (directReceiver || localProbe);
           const point = exact?.position ?? surfacePoint(rayAt(ix+.5,iy+.5),n,x,y,z,-cz,3*Math.sqrt(c00+c11+c22));
-          if (directReceiver) [pr,pg,pb] = directLight(p,point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0);
+          if (directReceiver) [pr,pg,pb] = directLight(p,point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0,i);
           if (localProbe) [pr,pg,pb] = probes.shade(point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0,localAlbedo);
         }
         const scoped = contribution?.applies(i, paletteId);
@@ -2209,10 +2211,11 @@ function renderFrame(world, o, preparedPalettes) {
           if (gain < 1) base = base.map(value => value * gain);
         }
         if (bounceTints && live.normal(i)) base = base.map((value, channel) => value * bounceTints[p * 3 + channel]);
-        const receiverNormal = (directLight || !live?.normal(i) && probeReceiver(i)) && diffuseNormal(i);
+        const receivesDirect = directLight?.receives(i);
+        const receiverNormal = (receivesDirect || !live?.normal(i) && probeReceiver(i)) && diffuseNormal(i);
         if (receiverNormal) {
           const exact = sdf?.hits[p], point = exact?.position ?? [HX[p],HY[p],HZ[p]], n = exact?.normal ?? receiverNormal;
-          if (directLight) base = directLight(p,point,n,base);
+          if (receivesDirect) base = directLight(p,point,n,base,undefined,0,i);
           if (!live?.normal(i) && probeReceiver(i)) base = probes.shade(point,n,base,undefined,0,probeAlbedo(i));
         }
         const finishedSurface = surface?.has(i);

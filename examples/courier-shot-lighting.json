@@ -1,0 +1,27 @@
+{
+  "format": "ink-studio/shot-lighting",
+  "version": 1,
+  "key": {
+    "at": [0.6, 1.30, 0.85], "normal": [-0.8, 0.47, -0.34],
+    "shape": "disk", "size": [0.26, 0.30], "color": "#ffd1a2",
+    "intensity": 16, "radius": 2.8, "sampleGrid": 3, "shadowSteps": 4,
+    "receive": { "include": [{ "surface": "courier-face" }] },
+    "cast": { "exclude": [{ "object": "lantern" }] }
+  },
+  "fill": {
+    "at": [-1.9, 2.4, 1.95], "normal": [0.63, -0.38, -0.67],
+    "shape": "rectangle", "size": [1.35, 1.1], "color": "#a1bdff",
+    "intensity": 2.0, "radius": 4.6, "sampleGrid": 2,
+    "receive": { "include": [{ "object": "courier" }] }
+  },
+  "rim": {
+    "at": [-1.67, 2.2, -0.43], "normal": [0.84, -0.22, 0.49],
+    "shape": "rectangle", "size": [0.32, 1.25], "color": "#69cbe8",
+    "intensity": 7.0, "radius": 3.4, "sampleGrid": 2,
+    "receive": { "include": [{ "object": "courier" }] }
+  },
+  "negativeFill": {
+    "at": [1.85, 1.42, 0.71], "radius": 5.0, "strength": 0.75,
+    "receive": { "include": [{ "object": "wall" }] }
+  }
+}

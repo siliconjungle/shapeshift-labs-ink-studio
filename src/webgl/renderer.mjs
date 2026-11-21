@@ -138,9 +138,9 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     const detailAPI = toolkit.DetailBudgets ?? toolkit.KIT?.detailBudgets;
     const qualityAPI = toolkit.KIT?.passQuality;
     const contract = toolkit.KIT?.renderContract;
-    const lighting = toolkit.KIT?.splatRelighting, relightUnit = 21;
+    const lighting = toolkit.KIT?.splatRelighting, shotLighting = toolkit.KIT?.shotLighting, relightUnit = 21;
     const relitSprites = new Map();
-    let relightData, relightRows, lastRelighting;
+    let relightData, relightRows, shotRows, lastRelighting;
     const opticalUnit = 22;
     let opticalData, opticalRows, lastOptical;
     const detailPlans = new WeakMap();
@@ -744,6 +744,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const constraintDefinition = frame.paletteConstraints ?? look.paletteConstraints;
       const wantsEmitters=frame.areaLights!==false&&world.areaLights?.length||Array.isArray(frame.areaLights)&&frame.areaLights.length||(frame.volumeLighting??world.volumeLighting)?.spots?.length;
       const wantsRelight = lighting && (frame.relighting ?? world.relighting);
+      const wantsShot = frame.shotLighting ?? world.shotLighting;
+      if (wantsShot && !shotLighting) throw new Error('Shot lighting needs the Ink Studio KIT');
       let group = frame.instances;
       const afterimageDefinition = frame.afterimages ?? look.afterimages;
       const trails = !reflectionCapture && !frame.order && afterimageDefinition !== undefined && afterimageDefinition !== false;
@@ -751,7 +753,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const rules = trails ? afterimagesAPI.prepare(afterimageDefinition) : [];
       const normalCaptures = rules.length ? null : captureWater(world, frame, camera, width, height, 0, quality);
       // Per-pixel material, palette, and detail rules index the expanded world.
-      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || clusters || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsEmitters || world.engraving || world.splatFootprints || instancePlan(group).hasSplatFootprints || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
+      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || clusters || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsShot || wantsEmitters || world.engraving || world.splatFootprints || instancePlan(group).hasSplatFootprints || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
           needsDetailFlags || budget?.fineOn || budget?.fineOff))) {
         expandInstances ??= createExpandedInstances();
         const expanded = expandInstances(world,group,frame.changedRows);
@@ -925,24 +927,28 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       }
       if (opticalMaterials || lastOptical) historyValid = false;
       lastOptical = opticalMaterials;
-      let relighting = false;
+      const K = toolkit.KIT;
+      const sample = (wantsRelight || wantsShot) && K.splatFrames.create(world, time, K.M);
+      let lightRows;
       if (wantsRelight) {
-        const K = toolkit.KIT;
         const timeline = K.environmentFrame.timeline(world, frame, t,
           K.artDirection.prepare(look.artDirection, frame.artDirection), K.weather?.tracks);
-        const active = lighting.frame(world, frame, timeline);
-        if (active) {
-          const next = lighting.rows(world, active, K.splatFrames.create(world, time, K.M), null, relightRows);
-          if (next) {
-            relightRows = next;
-            relightData ??= table(512, relightUnit, maxSize);
-            relightData.upload(next);
-            relighting = true;
-          }
-        }
+        lightRows = lighting.rows(world, lighting.frame(world, frame, timeline), sample, null, relightRows);
+        if (lightRows) relightRows = lightRows;
+      }
+      if (wantsShot) {
+        const rig = shotLighting.frame(world.shotLighting, frame.shotLighting, t);
+        const joined = shotLighting.rows(world, rig, sample, lightRows, shotRows);
+        if (joined && joined !== lightRows) shotRows = joined;
+        lightRows = joined;
+      }
+      let relighting = !!lightRows;
+      if (relighting) {
+        relightData ??= table(512, relightUnit, maxSize);
+        relightData.upload(lightRows);
       }
       const emitterFrame=emitterLighting.prepare(world,frame,t,reflectionCapture,camera);
-      relighting=emitterLighting.compose(emitterFrame,world,time,relightRows,relighting);
+      relighting=emitterLighting.compose(emitterFrame,world,time,lightRows,relighting);
       emitterLighting.fog(emitterFrame,world,frame);
       if(emitterFrame){historyValid=false;if(env){env.emitters=emitterFrame;env.uniforms={...env.uniforms,...emitterFrame.uniforms};}}
       if(env)env.lit=!!(env.lit&&emitterFrame);

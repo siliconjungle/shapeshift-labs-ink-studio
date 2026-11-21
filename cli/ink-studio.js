@@ -96,6 +96,8 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   if (opt.style) spec.style = opt.style;
   const area = areaLightsOption();
   if (Array.isArray(area)) spec.finish = { ...spec.finish, areaLights:area };
+  const shotLights = shotLightingOption();
+  if (shotLights !== undefined && shotLights !== true) spec.finish = { ...spec.finish, shotLighting:shotLights };
   if (opt['shadow-art'] !== undefined)
     spec.finish = { ...spec.finish, look: { ...K.diorama.sceneLook(spec), shadowArt: shadowArtOption() } };
   if (!installedPacks && opt['asset-pack'] !== undefined)
@@ -668,6 +670,17 @@ function areaLightsOption() {
   return areaLightsOverride;
 }
 
+let shotLightingOverride;
+function shotLightingOption() {
+  const value = opt['shot-lighting'];
+  if (value === undefined) return undefined;
+  if (value === 'off') return false;
+  if (value === true || value === 'on') return true;
+  shotLightingOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
+  require('../src/shot-lighting.js').prepare(shotLightingOverride);
+  return shotLightingOverride;
+}
+
 let bounceProbesOverride;
 function bounceProbesOption() {
   const value = opt['bounce-probes'];
@@ -762,6 +775,7 @@ const view = extra =>
       skyTransitions: skyTransitionsOption(),
       liveSun: liveSunOption(),
       areaLights: areaLightsOption(),
+      shotLighting: shotLightingOption(),
       bounceProbes: bounceProbesOption(),
       relighting: relightingOption(),
       shadowArt: shadowArtOption(),
@@ -995,6 +1009,10 @@ const CMD = {
         '  splat-footprints <shape|profile.json> [--rotation n --stretch x,y --softness n --point x,y --preview file.png --out report.json]  inspect native splat silhouettes',
         '  render-grid <hex|triangle|diamond|settings.json> [--size 8 --point x,y --bounds x,y,w,h --out report.json]  inspect tessellating cells',
         '  render-graph <graph.json> [--w 900 --h 620 --out report.json]  inspect effect resolution and memory/work budgets',
+        '  music audition <recipe.json> --out directory   compare audiovisual phrase variations',
+        '  music arrange <arrangement.json> [--out plan.json]   compile motifs and roles into a score',
+        '  music revise <plan.json> <edits.json> [--out revised.json]   revise unpinned parts and bindings',
+        '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
@@ -1059,6 +1077,7 @@ const CMD = {
         'shadow art: --shadow-art file.json|off for baked JSON scenes and live sun',
         'color clusters: --color-clusters file.json|off for material-specific cluster size, grain and protection',
         'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
+        'shot lighting: --shot-lighting on|off|file.json   scope key, fill, rim and negative fill',
         'detail-preserving relighting: --relighting on|off|file.json --sky-time seconds',
         'bounce options: --sky-bounce color|preset|off --ground-bounce color|preset|off --sky-bounce-intensity n --ground-bounce-intensity n',
         'cloud options: --cloud-field cirrus|coastal-stratus|cumulus|storm-front|file.json|off --cloud-representation auto|card|impostor|volume|off --cloud-shadows on|off --cloud-shadow-strength 0..1 --cloud-shadow-softness units',
@@ -2124,6 +2143,9 @@ const CMD = {
   },
   graph() {
     return require('./graph-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
+  },
+  music() {
+    return require('./music-composer.js')(pos,opt,lib());
   },
   'material-controls'() {
     return require('./material-controls.js')(pos,opt,lib());

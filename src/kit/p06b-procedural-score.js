@@ -45,13 +45,14 @@
   }
 
   function voice(raw) {
-    require(only(raw,['id','waveform','phase','duty','gain','pan','attack','release','glide','cents','motion','rhythm','partials']) &&
+    require(only(raw,['id','waveform','phase','duty','gain','pan','attack','release','glide','cents','motion','rhythm','partials',
+      'sequence','instrument']) &&
       id(raw.id),'A score voice needs a safe ID and named settings');
     const { id: name, waveform: shape = 'sine', phase = 0, duty = .5, gain = .16, pan = 0,
-      attack = .025, release = .14, glide = .045, cents = 0, motion = {}, partials = [] } = raw;
+      attack = .025, release = .14, glide = .045, cents = 0, motion = {}, partials = [], instrument = 'tone' } = raw;
     require(waveforms.includes(shape) && finite(phase,-1e6,1e6) && finite(duty,.02,.98) &&
       finite(gain,0,1) && finite(pan,-1,1) && [attack,release,glide].every(v => finite(v,.001,30)) &&
-      finite(cents,-1200,1200),'Invalid score voice oscillator or envelope');
+      finite(cents,-1200,1200) && ['tone','kick','snare','hat'].includes(instrument),'Invalid score voice oscillator or envelope');
     require(only(motion,['cyclesPerBar','follow','amplitude']),'Invalid score motion settings');
     const { cyclesPerBar: rate = 1, follow = 'chord', amplitude = 1 } = motion;
     const cyclesPerBar = real(rate);
@@ -70,8 +71,26 @@
       if (weight > 1e-6) spectrum.set(n,weight);
     }
     for (const [n,weight] of harmonics) spectrum.set(n,(spectrum.get(n) ?? 0)+weight);
-    return { id: name, shape, phase: wrap(phase), duty, gain, pan, attack, release, glide,
-      cents, cyclesPerBar, follow, amplitude, rhythm: rhythm(raw.rhythm), harmonics, spectrum:[...spectrum] };
+    require(raw.rhythm === undefined || raw.sequence === undefined,'Choose a score rhythm or note sequence');
+    return { id: name, shape, phase: wrap(phase), duty, gain, pan, attack, release, glide, instrument,
+      cents, cyclesPerBar, follow, amplitude, rhythm: rhythm(raw.rhythm), sequence: noteSequence(raw.sequence),
+      harmonics, spectrum:[...spectrum] };
+  }
+
+  function noteSequence(raw) {
+    if (raw === undefined) return null;
+    require(Array.isArray(raw) && raw.length <= 4096,'Score sequences allow up to 4096 notes per voice');
+    let last = 0;
+    return Array.from(raw,row => {
+      require(only(row,['beat','duration','midi','offset','level']) && !(row.midi !== undefined && row.offset !== undefined),
+        'A sequence note needs beat, duration, and at most one of MIDI pitch or chord offset');
+      const beat = real(row.beat), duration = real(row.duration), level = row.level ?? 1;
+      require(finite(beat,0,1e6) && finite(duration,1e-5,1e6) && beat >= last-1e-9 &&
+        finite(level,0,1) && (row.offset === undefined || Number.isSafeInteger(row.offset) && finite(row.offset,-127,127)),
+        'Score sequence notes must be nonoverlapping, increasing, and bounded');
+      last = beat+duration;
+      return { beat,end:last,level,midi:row.midi === undefined ? undefined : H.midi(row.midi),offset:row.offset };
+    });
   }
 
   function musicalKey(raw) {
@@ -235,7 +254,7 @@
   }
 
   function analyze(frame, voices) {
-    const active = voices.filter(v => v.gain > 0 && frame.voices[v.id].level > 1e-5 &&
+    const active = voices.filter(v => v.gain > 0 && v.instrument === 'tone' && frame.voices[v.id].level > 1e-5 &&
       frame.voices[v.id].frequency > 0);
     const spectra = active.map(v => {
       const { frequency,level } = frame.voices[v.id];
@@ -302,44 +321,72 @@
       if (row.time < end) rows.push({ id: 'request:'+i, ...row });
     }
     const ordered = [...new Map(rows.map(row => [row.time,row])).values()].sort((a,b) => a.time-b.time);
-    const tracks = voices.map(v => [{
+    const initialTrack = v => [{
       time: 0, beat: clock.sample(0).beat, midi: null, fromMidi: null,
       fromHz: 0, hz: 0, fromLevel: 0, level: 0, glide: v.glide, envelope: v.release,
-      audioPhase: v.phase, motionPhase: v.phase, rate: v.cyclesPerBar, fade: 0
-    }]);
+      audioPhase: v.phase, motionPhase: v.phase, rate: v.cyclesPerBar, fade: 0, onset: 0
+    }];
+    const tracks = voices.map(initialTrack);
     const hzOf = pitch => referenceHz*2**((pitch-69)/12);
+    function advanceVoice(track,v,row,form,midi,targetLevel = 1,restart = false) {
+      const previous = track.at(-1), same = midi === previous.midi, sample = voiceAt(previous,row.time);
+      const pitchRatio = note => form ? form.pitchRatio(note) : H.ratio(note-69,tuning);
+      const desired = midi === null ? previous.hz : (form ? hzOf(form.root) : referenceHz)*pitchRatio(midi)*2**(v.cents/1200);
+      const hz = same && retainPitch && midi !== null ? previous.hz : desired;
+      const targetRate = v.follow === 'chord' && midi !== null ? v.cyclesPerBar*pitchRatio(midi)*2**(v.cents/1200) :
+        v.cyclesPerBar;
+      const rate = midi === null || same && retainMotion ? previous.rate : targetRate;
+      const silent = sample.frequency === 0 || sample.level === 0;
+      const level = midi === null ? 0 : targetLevel, elapsed = row.time-previous.time;
+      const hit = midi !== null && (restart || previous.midi === null);
+      track.push({
+        time: row.time, beat: row.beat, midi, fromMidi: same ? midi : previous.midi,
+        fromHz: silent ? hz : sample.frequency, hz, audioPhase: sample.phase,
+        glide: hz === previous.hz ? Math.max(.001,previous.glide-elapsed) : v.glide,
+        fromLevel: hit && v.instrument !== 'tone' ? 0 : sample.level, level,
+        envelope: level === previous.level && !hit ? Math.max(.001,previous.envelope-elapsed) : midi === null ? v.release : v.attack,
+        motionPhase: wrap(previous.motionPhase + previous.rate*(row.beat-previous.beat)/beatsPerBar),
+        rate, fade: same ? 0 : form?.fade ?? 0, onset: hit ? row.time : previous.onset
+      });
+      return { id:v.id,midi,note:midi === null ? null : H.pitchName(midi),hz:midi === null ? 0 : hz,
+        retained:same && midi !== null,rate };
+    }
     let started = false;
     const events = ordered.map((row,index) => {
-      const form = chords.get(row.harmony), rootHz = hzOf(form.root);
+      const form = chords.get(row.harmony);
       const prior = tracks.map(track => track.at(-1));
       const next = started && form.leading ? H.lead(prior.map(v => v.midi),form.notes) : form.notes;
       started = true;
-      const assignments = next.map((midi,i) => {
-        const previous = prior[i], v = voices[i], same = midi === previous.midi, sample = voiceAt(previous,row.time);
-        const desired = midi === null ? previous.hz : rootHz*form.pitchRatio(midi)*2**(v.cents/1200);
-        const hz = same && retainPitch && midi !== null ? previous.hz : desired;
-        const targetRate = v.follow === 'chord' && midi !== null ? v.cyclesPerBar*form.pitchRatio(midi)*2**(v.cents/1200) :
-          v.cyclesPerBar;
-        const rate = midi === null || same && retainMotion ? previous.rate : targetRate;
-        const silent = sample.frequency === 0 || sample.level === 0;
-        const level = midi === null ? 0 : 1, elapsed = row.time-previous.time;
-        tracks[i].push({
-          time: row.time, beat: row.beat, midi, fromMidi: same ? midi : previous.midi,
-          fromHz: silent ? hz : sample.frequency, hz, audioPhase: sample.phase,
-          glide: hz === previous.hz ? Math.max(.001,previous.glide-elapsed) : v.glide,
-          fromLevel: sample.level, level,
-          envelope: level === previous.level ? Math.max(.001,previous.envelope-elapsed) : midi === null ? v.release : v.attack,
-          motionPhase: wrap(previous.motionPhase + previous.rate*(row.beat-previous.beat)/beatsPerBar),
-          rate, fade: same ? 0 : form.fade
-        });
-        return { id: v.id, midi, note: midi === null ? null : H.pitchName(midi), hz: midi === null ? 0 : hz,
-          retained: same && midi !== null, rate };
-      });
+      const assignments = next.map((midi,i) => advanceVoice(tracks[i],voices[i],row,form,midi));
       const priorEvent = ordered[index-1];
       const travel = priorEvent ? H.fifths(chords.get(priorEvent.harmony).root,form.root) : H.fifths(form.root,form.root);
       return { ...row, root: H.pitchName(form.root), quality: form.quality, tuning: form.tuning, travel, voices: assignments,
         ...(form.key !== undefined && { key:form.key, degree:form.degree }) };
     });
+    for (const [i,v] of voices.entries()) {
+      if (!v.sequence) continue;
+      const timeline = events.map(({beat,time}) => ({beat,time}));
+      for (const note of v.sequence) for (const beat of [note.beat,note.end]) {
+        const time = clock.timeAt({beat});
+        if (time >= 0 && time < end) timeline.push({time,beat});
+      }
+      const performance = initialTrack(v);
+      let previousTime = -Infinity, active;
+      for (const row of timeline.sort((a,b) => a.time-b.time)) {
+        if (row.time-previousTime < 1e-9) continue;
+        previousTime = row.time;
+        const harmony = events[floorIndex(events,row.time+1e-9)];
+        const form = harmony && chords.get(harmony.harmony);
+        const note = v.sequence[floorIndex(v.sequence,row.beat+1e-9,'beat')];
+        const hold = note && row.beat < note.end-1e-9 ? note : null;
+        const pitch = hold ? hold.midi ?? (hold.offset === undefined ? harmony?.voices[i].midi :
+          (form?.root ?? key?.root ?? 60)+hold.offset) : null;
+        if (pitch != null) H.midi(pitch);
+        advanceVoice(performance,v,row,form,pitch ?? null,hold?.level,hold !== active);
+        active = hold;
+      }
+      tracks[i] = performance;
+    }
     const routes = compileBindings(bindings,voices,tracks);
 
     const fadeEnd = time => time < 0 || time >= end ? 0 : endFade === 0 ? 1 : clamp((end-time)/endFade);

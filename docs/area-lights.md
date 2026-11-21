@@ -58,3 +58,5 @@ geometry for reflections. For the analytical polygonal-light technique that
 informed the feature, see [Real-Time Polygonal-Light Shading](https://eheitzresearch.wordpress.com/415-2/).
 
 See [additional light emitters](light-emitters.md) for line lights, colored cookies, animated settings and native browser rendering.
+
+For per-shot key, fill, rim and negative fill with receiver and caster masks, see [shot lighting](shot-lighting.md).
