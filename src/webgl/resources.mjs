@@ -1,9 +1,9 @@
 export function createResources(gl) {
-  const release = [];
+  const release = new Map();
   function allocate(kind) {
     const resource = gl['create' + kind]();
     if (!resource) throw new Error('Could not allocate WebGL ' + kind);
-    release.push(() => gl['delete' + kind](resource));
+    release.set(resource, () => gl['delete' + kind](resource));
     return resource;
   }
 
@@ -59,7 +59,7 @@ export function createResources(gl) {
         if (method?.startsWith('uniformMatrix')) setters[name] = value => gl[method](location, false, value);
         else if (method) setters[name] = value => gl[method](location, value);
       }
-      release.push(() => gl.deleteProgram(p));
+      release.set(p, () => gl.deleteProgram(p));
       return {
         p, u,
         set(values) {
@@ -76,8 +76,13 @@ export function createResources(gl) {
 
   return {
     allocate, texture, program,
+    free(resource) {
+      release.get(resource)?.();
+      release.delete(resource);
+    },
     dispose() {
-      for (const remove of release.splice(0).reverse()) remove();
+      for (const remove of [...release.values()].reverse()) remove();
+      release.clear();
     }
   };
 }

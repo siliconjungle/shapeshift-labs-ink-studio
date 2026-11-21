@@ -27,7 +27,8 @@ const RenderGraph = (() => {
     outline: 10,
     chromatic: 11,
     blocks: 12,
-    pixelSort: 13
+    pixelSort: 13,
+    frameAge: 14
   });
   const fields = {
     mask: ['rect', 'feather', 'invert', 'volume'],
@@ -36,6 +37,7 @@ const RenderGraph = (() => {
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'rowEdits', 'depthThreshold', 'blend', 'wrap'],
     composite: ['source', 'layer', 'blend', 'isolated'],
     history: ['mode', 'halfLife', 'cameraMotion'],
+    frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
     ...Object.fromEntries(
       effects.types.map(type => [type, [...effects.fields[type], 'maskMode', 'depthThreshold', 'protectObjects']])
     ),
@@ -57,6 +59,7 @@ const RenderGraph = (() => {
     cubes = new WeakMap();
   const maxHistoryPasses = 4,
     maxHistoryPixels = 8388608;
+  const retainedTypes = ['history', 'feedback', 'frameAge'];
   const plain = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const tuple = (value, len) =>
     Array.isArray(value) && value.length === len && Array.from(value).every(Number.isFinite);
@@ -69,6 +72,40 @@ const RenderGraph = (() => {
   function finite(value, field) {
     if (!Number.isFinite(value)) throw new RangeError(field + ' must be finite');
     return value;
+  }
+
+  function prepareFrameAge(pass, reference, input, select) {
+    const { fps = 12, regions, cameraMotion = 'reset' } = pass;
+    if (!Number.isFinite(fps) || fps < 1 || fps > 120 || !['reset', 'keep'].includes(cameraMotion) ||
+        !Array.isArray(regions) || regions.length < 1 || regions.length > 8)
+      throw new RangeError('Frame age needs 1 to 8 regions, a capture rate in [1, 120], and a camera policy');
+    const pins = new Set();
+    let lag = 0;
+    const timed = Array.from(regions, region => {
+      const mode = region?.mode;
+      if (!['delay', 'hold', 'replay'].includes(mode)) throw new TypeError('Invalid frame age mode');
+      record(region, ['mask', 'mode', ...(mode !== 'delay' ? ['start'] : []), ...(mode !== 'hold' ? ['frames'] : [])],
+        'frame age region');
+      const { start = 0, frames = 1 } = region;
+      if (!Number.isInteger(start) || start < 0 || start > 1e6 ||
+          !Number.isInteger(frames) || frames < 1 || frames > 64)
+        throw new RangeError('Frame age needs a start tick in [0, 1000000] and a length in [1, 64]');
+      if (mode === 'delay') lag = Math.max(lag, frames);
+      else for (let i = 0; i < frames; i++) pins.add(start + i);
+      const mask = region.mask === undefined ? undefined : reference(region.mask, 'mask');
+      return { mode, start, frames, mask };
+    });
+    const slots = pins.size + lag + 2;
+    if (slots > 128) throw new RangeError('Frame age exceeds 128 retained frame slots');
+    const source = reference(pass.source ?? input, 'image');
+    return {
+      fps, regions: timed, cameraMotion, source, lag, pins: [...pins], slots,
+      budget: effects.budget({ maxPixels: 262144, filter: 'nearest', ...pass.budget }),
+      needsCamera: cameraMotion === 'reset',
+      historyKey: JSON.stringify([
+        'frameAge', source, cameraMotion, select && Object.entries(select).sort(), fps, lag, [...pins].sort((a, b) => a - b)
+      ])
+    };
   }
 
   const identityRow = [0, 0, 1, 1, 0, 0, 0, 0];
@@ -183,7 +220,7 @@ const RenderGraph = (() => {
           'select',
           'mask',
           'depth',
-          ...(['history', 'feedback', ...effects.types].includes(type) ? ['budget'] : []),
+          ...([...retainedTypes, ...effects.types].includes(type) ? ['budget'] : []),
           ...(type === 'mask' ? [] : ['input']),
           ...fields[type]
         ],
@@ -311,6 +348,9 @@ const RenderGraph = (() => {
           });
           break;
         }
+        case 'frameAge':
+          Object.assign(node, prepareFrameAge(pass, reference, input, select));
+          break;
         case 'feedback': {
           const {
             halfLife = 0.55,
@@ -386,7 +426,7 @@ const RenderGraph = (() => {
       node.dependencies = [
         ...new Set(
           node.enabled
-            ? [node.isolated ? undefined : input, mask, node.source].filter(Boolean)
+            ? [node.isolated ? undefined : input, mask, node.source, ...(node.regions?.map(region => region.mask) ?? [])].filter(Boolean)
             : [input].filter(Boolean)
         )
       ];
@@ -401,7 +441,7 @@ const RenderGraph = (() => {
     const passes = nodes.filter(node => live.has(node.id)),
       lastUse = new Map();
     passes.forEach((node, i) => node.dependencies.forEach(id => lastUse.set(id, i)));
-    const historyPasses = passes.filter(node => node.enabled && (node.type === 'history' || node.type === 'feedback'));
+    const historyPasses = passes.filter(node => node.enabled && retainedTypes.includes(node.type));
     if (historyPasses.length > maxHistoryPasses)
       throw new RangeError('A graph supports up to four live screen history passes');
     const plan = {
@@ -438,6 +478,7 @@ const RenderGraph = (() => {
       rows = [];
     let peak = full,
       historyPixels = 0,
+      historyBytes = 0,
       allocated = 1,
       scratchPeak = 0,
       work = 0;
@@ -456,6 +497,7 @@ const RenderGraph = (() => {
           : node.type === 'pixelSort'
             ? Math.min(node.span, budget.maxSamples)
             : (budget?.maxSamples ?? 1);
+      const age = node.type === 'frameAge';
       const cost =
         !node.enabled && node.type !== 'mask'
           ? 0
@@ -468,14 +510,18 @@ const RenderGraph = (() => {
                     ? samples
                     : 3) +
               full * 5
-            : full;
+            : age ? width * height + full * node.regions.length : full;
       work += cost;
       if (node.enabled || node.type === 'mask') {
         const buffer = free.length ? free.pop() : allocated++;
         live.set(node.id, buffer);
-        scratchPeak = Math.max(scratchPeak, node.effect ? width * height : 0);
+        scratchPeak = Math.max(scratchPeak, node.effect ? width * height : age && node.regions.length > 1 ? full : 0);
         peak = Math.max(peak, allocated * full + scratchPeak);
-        if (node.enabled && (node.type === 'history' || node.type === 'feedback')) historyPixels += width * height;
+        if (node.enabled && retainedTypes.includes(node.type)) {
+          const pixels = width * height * (age ? node.slots : 1);
+          historyPixels += pixels;
+          historyBytes += pixels * (age ? 4 : 8);
+        }
       } else live.set(node.id, live.get(node.input) ?? 0);
       rows.push({
         id: node.id,
@@ -505,7 +551,7 @@ const RenderGraph = (() => {
       transientPixels: peak,
       transientBytes: peak * 4,
       historyPixels,
-      historyBytes: historyPixels * 8,
+      historyBytes,
       work,
       limits
     };
@@ -635,13 +681,53 @@ const RenderGraph = (() => {
     return compositor.layers(plan, world, time, text, camera, resolve, gl)[0];
   }
 
-  function history({ release = () => {} } = {}) {
+  function frameAgeClock(state, node, time, release) {
+    const tick = Math.floor((time - state.origin) * node.fps + 1e-8);
+    if (!Number.isSafeInteger(tick)) throw new RangeError('Frame age exceeds its capture tick range');
+    return {
+      capture: tick > state.tick,
+      spare: state.spare,
+      save(value) {
+        const before = state.frames;
+        const next = new Map();
+        const previous = before.get(state.tick);
+        // Missing capture ticks hold the latest observed image. Store only
+        // ticks reachable by the delay ring or an authored hold/replay.
+        function retain(at) {
+          if (at <= tick) next.set(at, at === tick ? value : before.get(at) ?? previous);
+        }
+        for (let at = Math.max(0, tick - node.lag); at <= tick; at++) retain(at);
+        for (const at of node.pins) retain(at);
+        const live = new Set(next.values());
+        const retired = new Set(before.values());
+        if (state.spare !== undefined) retired.add(state.spare);
+        state.spare = undefined;
+        for (const image of retired) if (!live.has(image)) {
+          if (state.spare === undefined) state.spare = image;
+          else release(image);
+        }
+        state.frames = next;
+        state.tick = tick;
+      },
+      sample({ mode, start, frames }) {
+        if (mode === 'delay') return state.frames.get(tick - frames);
+        if (mode === 'hold') return state.frames.get(start);
+        const elapsed = tick - start - frames;
+        if (elapsed >= 0) return state.frames.get(start + elapsed % frames);
+      }
+    };
+  }
+
+  function history({ release = () => {}, releaseAge = release } = {}) {
     const entries = new Map();
     let previousFrame;
     function drop(id) {
       const entry = entries.get(id);
       entries.delete(id);
-      if (entry) release(entry.value);
+      if (entry?.age) {
+        for (const image of new Set(entry.age.frames.values())) releaseAge(image);
+        if (entry.age.spare !== undefined) releaseAge(entry.age.spare);
+      } else if (entry) release(entry.value);
     }
     function clear() {
       for (const id of entries.keys()) drop(id);
@@ -671,6 +757,11 @@ const RenderGraph = (() => {
       previousFrame = { source, w, h, time, signature };
       return node => {
         const prior = entries.get(node.id);
+        if (node.type === 'frameAge') {
+          const age = prior?.age ?? { origin: time, tick: -1, frames: new Map(), spare: undefined };
+          if (!prior) entries.set(node.id, { key: keys.get(node.id), age });
+          return frameAgeClock(age, node, time, releaseAge);
+        }
         return {
           value: prior?.value,
           capture: !prior || prior.time < time,

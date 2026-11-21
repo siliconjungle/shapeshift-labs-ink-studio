@@ -7,7 +7,7 @@ export const graphOwner = Symbol('render graph owner capture');
 const fragment = `#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D u_input, u_source, u_mask, u_owner, u_selected, u_depth, u_history;
+uniform sampler2D u_input, u_source, u_mask, u_owner, u_selected, u_depth, u_history, u_ageMask;
 uniform highp sampler2D u_rows;
 uniform highp sampler3D u_cube;
 uniform vec2 u_size, u_passSize, u_offset, u_amplitude;
@@ -23,7 +23,7 @@ uniform bool u_layerTopDown;
 uniform vec3 u_volumeAt, u_extent, u_eye;
 uniform vec2 u_depthRange, u_projectionScale;
 uniform mat4 u_view;
-uniform bool u_volume, u_ortho, u_captureHistory, u_hasHistory, u_hold;
+uniform bool u_volume, u_ortho, u_captureHistory, u_hasHistory, u_hold, u_hasAgeMask;
 uniform float u_volumeFeather, u_decay;
 uniform vec2 u_feedbackPivot, u_feedbackTransform, u_threshold;
 uniform float u_blockSize, u_gain;
@@ -128,6 +128,16 @@ void main() {
     }
     return;
   }
+  if (u_operation == 14) {
+    if (u_captureHistory) {
+      color = inputColor * chosen;
+    } else {
+      vec4 donor = layerAt(u_history, pixel, u_size, false, u_budgetLinear);
+      if (u_hasAgeMask) weight *= layerAt(u_ageMask, pixel, u_size, false, false).r;
+      color = u_hasSelect && donor.a <= 0.0 ? inputColor : mix(inputColor, donor, weight * u_opacity);
+    }
+    return;
+  }
   weight *= u_opacity;
   color = inputColor;
   if (weight <= 0.0) return;
@@ -189,8 +199,8 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
     historyFree = [];
   const groupsTexture = resources.texture();
   const effects = createRenderEffects(gl, { program, target, textureUnit, fullscreen });
-  const history = api.history({ release: buffer => historyFree.push(buffer) });
-  let lastCube;
+  const history = api.history({ release: buffer => historyFree.push(buffer), releaseAge: buffer => buffer.dispose() });
+  let lastCube, ageScratch;
   gl.activeTexture(gl.TEXTURE4);
   gl.bindTexture(gl.TEXTURE_3D, cube);
   gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -275,7 +285,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
     let lastSelect;
     for (const [index, node] of plan.passes.entries()) {
       const input = outputs.get(node.input) ?? scene;
-      if ((!node.enabled || (node.type === 'history' && !ownership)) && node.type !== 'mask')
+      if ((!node.enabled || (!ownership && (node.type === 'history' || node.type === 'frameAge' && node.select))) && node.type !== 'mask')
         outputs.set(node.id, input);
       else {
         const out = free.pop() ?? target();
@@ -403,6 +413,46 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         if (node.effect) {
           textureUnit(9, hasGroups ? groupsTexture : scene.textures[0]);
           effects(node, layout.passes[index], out, values, w, h, time, input.textures[0]);
+        } else if (node.type === 'frameAge') {
+          const age = openHistory(node);
+          if (age.capture) {
+            const work = layout.passes[index];
+            gl.activeTexture(gl.TEXTURE0);
+            const stamp = age.spare ?? target();
+            stamp.resize(work.width, work.height);
+            textureUnit(0, outputs.get(node.source).textures[0]);
+            textureUnit(7, scene.textures[0]);
+            fullscreen(shader, stamp.framebuffer, work.width, work.height, {
+              ...values, u_passSize: [work.width, work.height], u_captureHistory: true,
+              u_hasMask: false, u_depthMask: false, u_hasAgeMask: false, u_ageMask: 8
+            });
+            age.save(stamp);
+          }
+          const ready = node.regions.flatMap(region => {
+            const stamp = age.sample(region);
+            return stamp ? [{ stamp, mask: outputs.get(region.mask) }] : [];
+          });
+          if (ready.length > 1) {
+            gl.activeTexture(gl.TEXTURE0);
+            ageScratch ??= target();
+            ageScratch.resize(w, h);
+          }
+          let prior = input;
+          for (const [i, { stamp, mask }] of ready.entries()) {
+            const next = (ready.length - i) % 2 ? out : ageScratch;
+            textureUnit(0, prior.textures[0]);
+            textureUnit(7, stamp.textures[0]);
+            textureUnit(8, (mask ?? scene).textures[0]);
+            fullscreen(shader, next.framebuffer, w, h, {
+              ...values, u_captureHistory: false, u_hasAgeMask: Boolean(mask), u_ageMask: 8
+            });
+            prior = next;
+          }
+          if (!ready.length) {
+            textureUnit(0, input.textures[0]);
+            textureUnit(7, scene.textures[0]);
+            fullscreen(shader, out.framebuffer, w, h, { ...values, u_operation: 0 });
+          }
         } else if (memory) {
           let stamp = memory.value;
           if (memory.capture) {

@@ -823,7 +823,7 @@ function feedbackReplay(world, start, frame) {
   const definition = graph?.snapshot?.() ?? graph;
   const cuts = opt['feedback-cuts'];
   if (opt['feedback-fps'] === undefined && cuts === undefined &&
-      !definition?.passes?.some(pass => pass.type === 'feedback')) return null;
+      !definition?.passes?.some(pass => ['feedback', 'frameAge'].includes(pass.type))) return null;
   if (opt['feedback-fps'] === true) die('--feedback-fps needs a rate in (0, 240]');
   if (cuts !== undefined && (typeof cuts !== 'string' && typeof cuts !== 'number' ||
       String(cuts).split(',').some(cut => !cut.trim())))

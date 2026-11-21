@@ -13,6 +13,7 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 | `composite` | Blends a named `source` image using `over` or `add`, or draws a single [mixed-resolution layer](mixed-resolution.md) from `layer` using its own resolution, filtering and blend settings. Use `isolated: true` to start this pass on transparent pixels. |
 | `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
 | `feedback` | Warps and decays the previous signal and composites new emission into it. Accepts an earlier image or a mixed-resolution emission layer. |
+| `frameAge` | Replaces regions of an image from a shared frame history. Each region can delay, hold, or replay captured frames. |
 
 Screen coordinates are in final output pixels from the top left. Reflected and distorted samples outside the image leave the input pixel unchanged. Graph reflection and distortion work on screen images. Scene-space planar capture, glass refraction and depth-dependent media use the scene renderer.
 
@@ -201,14 +202,74 @@ Pass `resetRenderHistory: true` on a cut. Use `cameraMotion: "keep"` when
 camera movement should carry the screen-space trails through the shot.
 Live graph edits and presentation tracks can animate warp, gain and decay.
 
-### Fixed-step playback and exports
+## Frame-age masks
 
-The CLI runs `clip` and `sheet` exports containing feedback at 24 feedback
-steps per second by default. `--feedback-fps` sets that rate independently
-of output `--fps`. Feedback is replayed from scene time zero before a
-trimmed export; an output between feedback ticks holds the latest completed
-frame. Use `--feedback-cuts 2.5,4` to clear history at the first feedback
-tick at or after each scene time.
+Each `frameAge` pass captures its image input at up to `fps` (default 12).
+Give it one to eight regions and connect each region's `mask` to an
+earlier mask pass. A region without a mask uses the whole pass coverage.
+The pass-level `mask`, `select`, `depth`, and `opacity` apply to all regions.
+Where the regions overlap, Ink applies them in declaration order.
+
+```js
+const graph = { passes: [
+  { id: 'camera', type: 'composite', isolated: true,
+    layer: atlas.layer('drone', { rect: [24, 24, 144, 96] }) },
+  { id: 'upper', type: 'mask', rect: [24, 24, 144, 32] },
+  { id: 'middle', type: 'mask', rect: [24, 56, 144, 32] },
+  { id: 'lower', type: 'mask', rect: [24, 88, 144, 32] },
+  { id: 'corrupt', type: 'frameAge', input: 'camera', fps: 12,
+    cameraMotion: 'keep', regions: [
+      { mask: 'upper', mode: 'delay', frames: 6 },
+      { mask: 'middle', mode: 'hold', start: 8 },
+      { mask: 'lower', mode: 'replay', start: 9, frames: 9 }
+    ] },
+  { id: 'screen', type: 'composite', input: 'scene', source: 'corrupt' }
+] };
+```
+
+Tick zero is the first rendered frame after a reset. `delay` reads
+`frames` ticks back. `hold` pins the frame at `start`. `replay` captures
+`frames` consecutive ticks starting at `start`, then loops forward through
+that interval. The region stays live while it waits for its samples.
+`start` defaults to zero and `frames` to one. Lengths are whole ticks
+from 1 to 64. If the host skips ticks, the last observed image fills the
+gap. Rendering twice at the same tick preserves its original capture.
+
+Use a named image as `source` to capture it separately from the destination
+`input`. Isolate a sprite, screen layer, or camera-atlas feed to retain its
+transparency through the effect. For scene objects, set `select` on the
+pass. The current selected surface gates the display, and empty historical
+samples leave it live. A nearer occluder stays visible.
+
+Frame age shares the screen-history resets and uses the same CPU
+`renderHistory` session. WebGL retains the frames on the GPU. The default
+`cameraMotion: "reset"` starts a fresh history on a camera move. Choose
+`"keep"` for a monitor or a deliberate screen-space glitch. The history
+budget includes the delay buffer, pinned ticks and a reusable capture
+target. Each pass can reserve up to 128 frame slots. The default capture
+budget is 262,144 pixels per slot with nearest sampling. Use
+`budget.scale`, `budget.maxPixels`, or `budget.filter: "linear"` to tune
+history resolution and filtering. Coverage masks still resolve at output
+resolution.
+
+[Tideline Repeater](../examples/frame-age-mask.js) applies all three modes
+to a live camera-atlas tile next to the clean feed.
+
+```sh
+node cli/ink-studio.js clip examples/frame-age-mask.js --w 452 --h 215 \
+  --to 5 --fps 12 --feedback-fps 12 --out tideline-repeater.png
+```
+
+## Fixed-step playback and exports
+
+The CLI runs `clip` and `sheet` exports containing feedback or frame age
+at 24 history steps per second by default. `--feedback-fps` sets that rate
+independently of output `--fps`. Choose a history step rate that matches
+or is a multiple of the frame-age capture rate to sample every tick.
+The CLI replays history from scene time zero before a trimmed export.
+An output between history steps holds the latest completed frame.
+Use `--feedback-cuts 2.5,4` to clear history at the first step at or after
+each scene time.
 
 ```sh
 node cli/ink-studio.js clip examples/render-feedback.js --w 408 --h 216 --to 7.2 --fps 16 --feedback-fps 24 --out phosphor-relay.png

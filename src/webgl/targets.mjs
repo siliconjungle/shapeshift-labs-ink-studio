@@ -25,6 +25,11 @@ export function createTargets(gl, resources) {
       framebuffer, textures,
       get width() { return w; },
       get height() { return h; },
+      dispose() {
+        resources.free(framebuffer);
+        for (const texture of textures) resources.free(texture);
+        if (depthBuffer) resources.free(depthBuffer);
+      },
       ensureDepth() {
         if(depthBuffer)return;
         depthBuffer=resources.allocate('Renderbuffer');

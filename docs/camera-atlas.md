@@ -68,6 +68,11 @@ renderer.render(world, { composite: { layers: [inset] } });
 const feedPass = { id: 'inset', type: 'composite', layer: inset };
 ```
 
+Set `isolated: true` on the composite pass to give a downstream
+[frame-age pass](render-graph.md#frame-age-masks) its own feed image.
+Each masked region can hold, delay or replay while the other tiles keep
+their normal cadence.
+
 `layer(id, options)` selects one feed. Omit the ID to show the whole atlas,
 including spacing. Options are the normal raster layer controls, including
 placement, filter, opacity and blend. The WebGL renderer samples these layers
