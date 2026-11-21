@@ -2,6 +2,7 @@ import { layerSamplingGLSL, captureFrameCamera } from './frame-composite.mjs';
 import { createRenderEffects } from './render-effects.mjs';
 import { inspectionDepth } from './inspection.mjs';
 
+export const graphCapture = Symbol('render graph raster capture');
 export const graphOwner = Symbol('render graph owner capture');
 
 const fragment = `#version 300 es
@@ -236,7 +237,29 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
   gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, 1, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
   gl.activeTexture(gl.TEXTURE0);
 
+  function capture(plan, outputs, width, height) {
+    const pixels = width * height, bottomUp = new Uint8Array(pixels * 4);
+    return Object.fromEntries([...plan.captures].map(([id, kind]) => {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, outputs.get(id).framebuffer);
+      gl.readBuffer(gl.COLOR_ATTACHMENT0);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bottomUp);
+      const channels = kind === 'mask' ? 1 : 4, data = new Uint8Array(pixels * channels);
+      for (let y = 0, p = 0; y < height; y++) for (let x = 0; x < width; x++, p++) {
+        const from = ((height - 1 - y) * width + x) * 4;
+        if (kind === 'mask') data[p] = bottomUp[from];
+        else {
+          const alpha = bottomUp[from + 3];
+          data[p * 4 + 3] = alpha;
+          if (alpha) for (let c = 0; c < 3; c++)
+            data[p * 4 + c] = Math.min(255, Math.round(255 * bottomUp[from + c] / alpha));
+        }
+      }
+      return [id, { kind, width, height, channels, data }];
+    }));
+  }
+
   function execute(world, frame, plan, w, h, destination, present) {
+    if (plan.captures.size * w * h > 4194304) throw new RangeError('WebGL render graph capture exceeds its readback budget');
     const layout = api.resources?.(plan, w, h);
     scene.resize(w, h);
     let ownership, camera, depth, depthRange;
@@ -544,6 +567,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           if (used !== scene && ![...outputs.values()].includes(used)) free.push(used);
         }
     }
+    if (plan.captures.size) frame[graphCapture](capture(plan, outputs, w, h));
     textureUnit(0, outputs.get(plan.output).textures[0]);
     fullscreen(shader, destination, w, h, { u_operation: 0, u_cube: 4, u_size: [w, h], u_passSize: [w, h] });
   }

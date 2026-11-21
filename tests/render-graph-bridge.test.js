@@ -112,3 +112,30 @@ test('WebGL imports the same typed image and mask with CPU-equivalent placement'
     outside: [24, 40, 60], half: [128, 64, 46], upper: [232, 88, 32], lower: [32, 180, 228], clipped: [24, 40, 60]
   });
 });
+
+test('WebGL captures isolated graph images and masks as top-down rasters without changing the output', {
+  skip: !process.env.INK_TEST_CHROME
+}, () => {
+  const { browser: _browser, ...result } = runWebGL({}, fixture, (toolkit, build, backend) => {
+    const { world, ...settings } = build(toolkit);
+    const draw = backend(8, 4, { raw: true });
+    try {
+      const noCapture = draw.draw(world, settings);
+      const plain = draw.image();
+      const passes = draw.draw(world, { ...settings, renderGraphCapture: ['artwork', 'coverage'] });
+      const same = draw.image() === plain;
+      const { artwork, coverage } = passes;
+      const recorder = toolkit.KIT.procedural.visualResampling.create({ fps: 8 });
+      recorder.append(artwork);
+      const clip = toolkit.KIT.procedural.visualResampling.compile(recorder.snapshot());
+      const { value } = clip.sample(0);
+      const pixel = (x, y) => Array.from(value.data.slice((y * 8 + x) * 4, (y * 8 + x + 1) * 4));
+      return { noCapture: noCapture === undefined, same, upper: pixel(4, 0), lower: pixel(4, 3),
+        half: pixel(2, 0), clear: pixel(0, 0), mask: Array.from(coverage.data.slice(0, 8)) };
+    } finally { draw.close(); }
+  });
+  assert.deepEqual(result, {
+    noCapture: true, same: true, upper: [232, 88, 32, 255], lower: [32, 180, 228, 255],
+    half: [231, 88, 32, 128], clear: [0, 0, 0, 0], mask: [0, 0, 128, 128, 255, 0, 0, 0]
+  });
+});

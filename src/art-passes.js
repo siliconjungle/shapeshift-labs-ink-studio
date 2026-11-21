@@ -18,6 +18,8 @@ const ArtPasses = (() => {
   function subset(passes, selected) {
     const output = { w: passes.w, h: passes.h };
     for (const channel of selected) output[channel] = passes[channel];
+    for (const channel of ['motion', 'emissionMotion'])
+      if (output[channel] && passes[channel + 'Valid']) output[channel + 'Valid'] = passes[channel + 'Valid'];
     if (output.objectId) output.objects = passes.objects;
     if (output.materialId) output.materials = passes.materials;
     if (output.target) output.targets = passes.targets;

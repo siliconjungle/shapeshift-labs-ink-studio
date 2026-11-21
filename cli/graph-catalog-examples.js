@@ -211,7 +211,11 @@ function exampleFor(id, operation, kit) {
   }
   if (operation.specialize) return;
   const { inputs: specified = {}, nodes: earlier, output = Object.keys(operation.outputs ?? { value: 'any' })[0] } =
-    id === 'color.look' ? { inputs: { pack: kit.KIT.authoring.assetPacks.savePaletteLook({ id: 'catalog/ink', label: 'Catalog ink', palette }),
+    id === 'anim.visualSample' ? (() => {
+      const capture = kit.KIT.procedural.visualResampling.create();
+      capture.append(rgba, { motion });
+      return { inputs: { source: capture.snapshot() } };
+    })() : id === 'color.look' ? { inputs: { pack: kit.KIT.authoring.assetPacks.savePaletteLook({ id: 'catalog/ink', label: 'Catalog ink', palette }),
       binding: { asset: 'catalog/ink' } } } : specifications[id] ?? {};
   const nodes = { ...earlier };
   const field = { op: 'sdf.shape' }, world = { op: 'scene.diorama', inputs: { definition: diorama } };

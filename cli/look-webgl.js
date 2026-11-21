@@ -80,7 +80,7 @@ function browserBackend(kit, createRenderer, createCameraAtlas) {
     return {
       driver,
       cameraAtlas(definition) { return createCameraAtlas(canvas, { toolkit: kit, ...definition }); },
-      draw(world, overrides) { renderer.render(world, { changedRows:[], target, ...view,...overrides }); },
+      draw(world, overrides) { return renderer.render(world, { changedRows:[], target, ...view,...overrides }); },
       fence() { gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel); },
       pick(world, ray, frame) { return renderer.pick(world,ray,frame); },
       sample(points) {

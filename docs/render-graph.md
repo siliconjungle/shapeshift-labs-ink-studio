@@ -70,6 +70,13 @@ render graph grid. The `value` port is an RGBA preview. You can capture
 the original `scene` image or a branch outside the final image. The chosen
 final output remains the same.
 
+For WebGL, pass the same `renderGraphCapture` list to
+`renderer.render(world, settings)`. The call returns a record keyed by
+the requested pass IDs with top-down straight RGBA or single-channel
+mask bytes. Only the requested passes are read back. A regular render
+returns as usual. Use [visual span capture](graph-clips.md#capture-a-reusable-visual-span)
+to retain multiple frames for independent playback.
+
 Native scene channels such as `depth` and `precipitation` use the existing
 `scene.render.channels` and `scene.pass` ports. They retain their native
 art grid and units. A procedural node can consume either kind of pass.

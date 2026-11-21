@@ -78,3 +78,87 @@ const { report, artifacts } = project.clip({
 Artifact entries contain names relative to the output directory and encoded
 PNG bytes. An in-process `clip` runs independently of the project's normal
 `run` and `inspect` sessions.
+
+## Capture a reusable visual span
+
+Use `--format sample` to retain a short span as `sample.json`. The file
+contains straight RGBA, the raw pass when it differs from the preview, and
+aligned depth and motion planes with their own validity masks. It keeps the
+exact source frame rate and the original first frame index. This format
+supports up to 512 frames on a common grid and 64 MiB of decoded pixels.
+
+```sh
+ink-studio graph clip relay.json --output frame --from 12 --to 48 \
+  --fps 30000/1001 --warmup 12 --format sample \
+  --capture-options capture.json --out recorded
+```
+
+The optional capture settings work with `project.clip({ format: 'sample',
+capture, ... })` as well as the CLI.
+
+| Setting | Behavior |
+| --- | --- |
+| `pass` | For a scene or render-frame output, defaults to `color`. Choose a native pass such as `normal` or a screen branch such as `graph:signals`. When sampling an existing `scene.render.frame`, request those channels or graph passes on its render node. |
+| `crop` | An optional fixed `[x, y, width, height]` rectangle on the source grid. All planes share the crop. Replay reports its top-left origin in source pixels. |
+| `region` | Only keep pixels with this persistent numeric region ID. Outside the region and on missing frames, the image is transparent and the auxiliary masks are empty. |
+| `labels` | Read one-channel stable IDs from this named graph output, for instance the `labels` port of `fx.trackRegions`. |
+| `mask`, `tracking` | When selecting a region without a labels output, track the captured pass or use a named `mask` output as the tracking signal. The `tracking` record accepts the same settings as the region tracker. Warm-up advances tracking and an authored cut starts a new tracking segment. Supply your own labels for IDs that span cuts. |
+| `depth`, `motion` | With no setting, retain available native planes on the sampled grid. For baked worlds the exporter requests both. Use `true` to require the native pass, `false` to omit it, or a named output for an aligned one-channel depth or two-channel motion raster. |
+| `depthValid`, `motionValid` | Named one-channel outputs override the validity masks. Positive input values are valid. For an explicit depth or motion output, covered pixels are valid by default. |
+
+Captures preserve valid numeric samples in source units. Invalid samples in
+the auxiliary planes are zero with a zero validity byte. Native motion
+compares the current rendered position to the preceding sampled frame in the
+same segment. The first frame of a segment has no prior native motion
+reference unless supplied by the caller. Warm-up can provide that reference
+before the first stored frame. When a screen effect changes pixel
+correspondence, provide aligned auxiliary outputs for that effect's grid.
+
+### Replay the span
+
+Load the sample using a normal `json` graph asset and pass it to
+`anim.visualSample`. Use any number of copies, each with its own
+rate, phase, holds, restarts, and [sync cues](headless-authoring.md#author-layer-clocks).
+
+```json
+{
+  "assets": { "relay": { "format": "json", "file": "recorded/sample.json" } },
+  "nodes": {
+    "recording": { "op": "jsonAsset", "inputs": { "name": "relay" } },
+    "echo": { "op": "anim.visualSample", "inputs": {
+      "source": { "node": "recording" },
+      "options": { "mode": "loop", "rate": 0.5, "phase": 0.15 }
+    } }
+  }
+}
+```
+
+The `value` port is the display image. `data` retains the raw pass,
+including linear RGB when supplied. `depth`, `motion`, `depthValid`, and
+`motionValid` return rasters, or `null` if a frame lacks that plane.
+`frame` is the zero-based clip index. `info` gives the original frame
+and timestamp, local sample time, origin, and any region ID. Replaying
+at a new speed or direction preserves the recorded displacement values
+and their source pixel units.
+
+### Capture and sample from JavaScript
+
+```js
+const visual = KIT.procedural.visualResampling;
+const recorder = visual.create({ fps: 24, region: 7 });
+for (const { color, depth, motion, labels } of sourceFrames)
+  recorder.append(color, { depth, motion, labels });
+
+const document = recorder.snapshot(); // JSON-compatible
+const clip = visual.compile(document);
+const copy = clip.sample(0.4, { rate: 0.5, mode: 'loop' });
+```
+
+Append frames in source order on a uniform picture clock. Use
+`KIT.procedural.pixelEffects.createRegionTracker` to make the labels in
+a browser or supply any aligned region IDs. WebGL can return selected
+[screen passes](render-graph.md#read-screen-and-scene-passes) to this
+recorder. A host can attach its own aligned depth and motion rasters.
+
+Run `node examples/visual-resampling.cjs relay.html` to build the interactive
+comparison and two reusable sample files.

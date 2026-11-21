@@ -579,7 +579,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     run:options=>run(request(options)),
     clip(options) {
       const { inputs, seed, ...settings } = fields(options,
-        ['output','from','to','warmup','format','clock','renderOptions','inputs','seed'], 'graph clip options');
+        ['output','from','to','warmup','format','clock','renderOptions','capture','inputs','seed'], 'graph clip options');
       const requestOptions = request({inputs,seed});
       const runner = execution();
       workerPool?.resetStats();

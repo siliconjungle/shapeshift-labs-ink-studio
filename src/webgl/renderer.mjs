@@ -6,7 +6,7 @@ import { createMaterialControls } from './material-controls.mjs';
 import { createLightEmitters } from './light-emitters.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
-import { createRenderGraph, graphOwner } from './render-graph.mjs';
+import { createRenderGraph, graphOwner, graphCapture } from './render-graph.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
 import { createResources } from './resources.mjs';
@@ -1325,14 +1325,15 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let renderGraph;
     function presentGraph(world, frame, width, height, output) {
       const definition = frame.renderGraph ?? world.look?.renderGraph;
-      if (definition === false || definition === undefined) {
+      const capture = frame.renderGraphCapture;
+      if ((definition === false || definition === undefined) && capture === undefined) {
         renderGraph?.reset();
         return presentMixed(world, frame, width, height, output);
       }
       const api = toolkit.KIT?.renderGraph;
       if (!api) throw new Error('Render graphs need the Ink Studio KIT');
-      const plan = api.prepare(definition);
-      if (!plan?.passes.length) {
+      const plan = api.prepare(definition, capture);
+      if (!plan || !plan.passes.length && !plan.captures.size) {
         renderGraph?.reset();
         return presentMixed(world, frame, width, height, output);
       }
@@ -1485,8 +1486,12 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1)
         throw new RangeError('Ink Studio frame width and height must be positive integers');
       backend ??= createBackend(gl, toolkit, specialize, reuseOrder);
-      backend.render(world, frame, width, height, output);
+      let captures;
+      const settings = frame.renderGraphCapture === undefined ? frame :
+        { ...frame, [graphCapture]: value => { captures = value; } };
+      backend.render(world, settings, width, height, output);
       if (picking?.world === world && (frame.changedRows?.length !== 0 || world.anim?.bones?.length)) picking = undefined;
+      return captures;
     },
     pick(world, ray, frame = {}) {
       if (disposed) throw new Error('The Ink Studio renderer has been disposed');

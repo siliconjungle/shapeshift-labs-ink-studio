@@ -124,12 +124,14 @@
   }
 
   function frameIndex(length, time, { fps = 12, mode = 'hold', first = 0, end = length, ...timing } = {}, exact) {
-    if (!int(length, 1, 8192) || !range(fps, .01, 1000) || !int(first, 0, length - 1) || !int(end, first + 1, length))
+    const rate = typeof fps === 'object' ? T.seconds(T.read(fps)) : fps;
+    if (!int(length, 1, 8192) || !range(rate, .01, 1000) || !int(first, 0, length - 1) || !int(end, first + 1, length))
       throw new RangeError('Invalid raster frame range or rate');
-    const exactEnd = timing.phase !== undefined || timing.cues !== undefined
-      ? T.div(T.read(end - first), T.read(fps)) : undefined;
-    const sampled = compile({ ...timing, range: [0, (end - first) / fps], mode }, { end: exactEnd })(time, exact);
-    const frame = sampled.direction < 0 ? Math.ceil(sampled.value * fps - 1e-8) - 1 : Math.floor(sampled.value * fps + 1e-8);
+    const authored = timing.phase !== undefined || timing.cues !== undefined || typeof fps === 'object';
+    const exactEnd = authored ? T.div(T.read(end - first), T.read(fps)) : undefined;
+    const sampled = compile({ ...timing, ...(authored && { phase: timing.phase === undefined ? 0 : timing.phase }),
+      range: [0, (end - first) / rate], mode }, { end: exactEnd })(time, exact);
+    const frame = sampled.direction < 0 ? Math.ceil(sampled.value * rate - 1e-8) - 1 : Math.floor(sampled.value * rate + 1e-8);
     return { index: clamp(first + frame, first, end - 1), time: sampled.value };
   }
 

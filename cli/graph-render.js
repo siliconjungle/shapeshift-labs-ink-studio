@@ -34,24 +34,30 @@ function renderGraphScene(source, { camera, lights, channels = defaults, options
 }
 
 function createSceneSampler(kit) {
-  let retained, active;
+  let retained, active, previousMotion, previousTime;
   function sample(source, { sequence, take, time = take?.start ?? 0, options = {}, ...settings }) {
     if (sequence === undefined) return renderGraphScene(source, { ...settings, options, time, take, kit });
     if (active !== sequence) {
       retained?.clear();
       retained = history();
       active = sequence;
+      previousMotion = previousTime = undefined;
     }
     const at = options.time ?? time;
     if (!Number.isFinite(at) || at < 0) throw new RangeError('Graph scene playback needs nonnegative seconds');
     pose(source, at, { kit, artDirection: options.artDirection, maxSteps: 36000 });
-    return renderGraphScene(source, { ...settings, time, take, kit, options: {
-      ...options, renderHistory: retained, renderHistoryKey: retained
+    const motion = select(settings.channels).some(channel => channel === 'motion' || channel === 'emissionMotion');
+    const result = renderGraphScene(source, { ...settings, time, take, kit, options: {
+      ...(motion && at > previousTime && { motionFrom: previousMotion }), ...options,
+      ...(motion && { captureMotion: true }), renderHistory: retained, renderHistoryKey: retained
     } });
+    previousMotion = motion ? result.motionReference : undefined;
+    previousTime = at;
+    return result;
   }
   sample.clear = () => {
     retained?.clear();
-    retained = active = undefined;
+    retained = active = previousMotion = previousTime = undefined;
   };
   return sample;
 }
@@ -100,7 +106,7 @@ function graphRenderPass(frame, channel, { emptyDepth = 1e9, kit } = {}) {
     throw new RangeError('Render did not capture pass ' + channel);
   const depth = finitePass.has(channel), positions = positionPass.has(channel);
   const buffer = depth ? Float64Array.from(raw, n => Number.isFinite(n) ? n : emptyDepth) : raw.slice();
-  const valid = new Uint8Array(size).fill(255);
+  const valid = frame.passes[channel + 'Valid']?.slice() ?? new Uint8Array(size).fill(255);
   if (depth || positions) {
     const owner = depth ? raw : frame.passes.depth;
     if (!owner) throw new RangeError('Position preview needs its matching depth pass');

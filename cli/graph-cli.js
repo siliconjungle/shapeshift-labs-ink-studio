@@ -20,7 +20,7 @@ const flags = {
   run:['inputs','at','seed','out','json',...executionFlags],
   batch:['inputs','at','seed','out','json','resume','progress',...executionFlags],
   session:['protocol','out','workers'],
-  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','json',...executionFlags]
+  clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','capture-options','json',...executionFlags]
 };
 
 async function sendText(text) {
@@ -101,7 +101,7 @@ function clipOptions(opt, sources, defaultClock) {
   }
   return { output: opt.output, from: opt.from === undefined ? undefined : Number(opt.from),
     to: opt.to === undefined ? undefined : Number(opt.to), warmup: opt.warmup === undefined ? undefined : Number(opt.warmup),
-    format: opt.format, clock, renderOptions: read('render-options') };
+    format: opt.format, clock, renderOptions: read('render-options'), capture: read('capture-options') };
 }
 
 async function graphCommand(pos,opt,settings) {
