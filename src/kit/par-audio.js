@@ -75,6 +75,15 @@
       inputs: { initial: options, events: 'array<record>' }, outputs: { value: 'record' },
       run(inputs) { return { value: A.recording(inputs) }; }
     },
+    'input.editRecording': {
+      description: 'Move, change, delete, or insert timestamped samples in a portable input recording.',
+      inputs: { source: 'record', edits: { type: 'array<record>', default: [] } },
+      outputs: { value: 'record', events: 'array<record>' },
+      run({ source, edits }) {
+        const value = A.editRecording(source, edits);
+        return { value, events: value.events };
+      }
+    },
     'input.replay': {
       inputs: { source: 'record', options }, outputs: { value: 'record', events: 'array<record>', pulses: 'array<record>', report: 'record' },
       time: true, instantiate() {

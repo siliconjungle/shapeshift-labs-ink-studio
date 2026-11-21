@@ -195,6 +195,76 @@ event APIs. Node hosts can append timestamped rows to `mediaGraph.recorder`
 or call `ink.recordInputEvents(iterable, { initial, signal })` for a device
 source that provides a finite event stream.
 
+## Recordable live modulation
+
+Create `KIT.procedural.mediaGraph.modulationCapture(options)` when
+a host starts a take. It writes the same portable **input recording**
+that `input.replay` and take projects already read. Capture can name
+an initial held state. All sources share a seconds clock. By default
+the clock is `performance.now() / 1000` and the take starts at the
+time of creation. Set `now` and `origin` to supply another common clock.
+Explicit timestamps and the origin can use rational timecodes.
+Equal-time samples keep their arrival order.
+
+| Method | Captured controls |
+| --- | --- |
+| `capture.write(rows, at)` | Atomically records a packet of named `{channel, kind, value}` samples. Use `kind: "pulse"` for a one-shot or omit it for a held value. `at` defaults to the capture clock. |
+| `capture.midi(bytes, {prefix, at})` | Reads controller and pressure values in 0–1, pitch bend in −1–1, note velocity and the note-on pulse. A release sets note velocity to zero. Channels are numbered 1–16. |
+| `capture.gesture({phase, x, y, pressure}, {prefix, at})` | Records finite XY, normalized pressure, held active state, and start, end or cancel pulses. Use `start`, `move`, `end`, and `cancel` as phases. |
+| `capture.microphone(analyser, {prefix, bands})` | Returns a sampler to call on the host's clock. It records RMS, peak and optional named Hz bands. Each band takes the highest bin in the range and converts it from dB to linear amplitude. Only feature values enter the take. |
+| `capture.attachMIDI(input, {prefix, time})` | Attaches to a supplied MIDI input. The default event timestamp is `timeStamp / 1000`. Returns a detach function. |
+| `capture.attachPointer(element, {prefix, time, project})` | Attaches to a supplied element and follows one primary pointer at a time. The default maps its XY into 0–1 within the element. Supply `project(event, element)` for other coordinates. Detaching cancels an active gesture. |
+
+The host decides when to request microphone or MIDI access, which
+handles to attach, and when to stop them. The capture session itself
+only writes samples from the supplied sources. A browser host can
+connect a microphone stream to its own analyser and call the sampler
+from its preferred update loop.
+
+```js
+const capture = KIT.procedural.mediaGraph.modulationCapture();
+const detachPointer = capture.attachPointer(canvas);
+const detachMIDI = capture.attachMIDI(selectedMidiInput);
+const readMic = capture.microphone(micAnalyser, { bands: { low: [80, 260] } });
+
+// Call on a scheduled update while recording.
+readMic();
+
+// Stop the host's microphone update loop, then detach inputs and save.
+detachMIDI();
+detachPointer();
+const recorded = capture.snapshot();
+```
+
+The default prefixes are `midi`, `gesture`, `pointer`, and `mic`
+for the corresponding methods. For example, access
+`midi:ch1:cc74`, `midi:ch1:note60:on`, `pointer:pressure`,
+or `mic:band:low`. Give each attached source its own prefix
+when recording several devices. The host owns its analyser,
+microphone stream, and MIDI input handle. [Web Audio](https://www.w3.org/TR/webaudio/#AnalyserNode) · [Web MIDI](https://www.w3.org/TR/webmidi/#MIDIMessageEvent) · [Pointer Events](https://www.w3.org/TR/pointerevents3/)
+
+Use `input.editRecording` or `mediaGraph.editRecording(recorded, edits)`
+to edit a snapshot. Move an event with `time` or a `timecode`, set its
+`value`, delete it, or add a full native event record. Row indices are
+zero-based in the original time-ordered snapshot for the entire edit list.
+Distinct rows at the same time retain their order, followed by newly
+added rows. The result is a new recording ready for `input.replay`.
+
+```json
+[
+  {"op":"move","index":4,"time":0.55},
+  {"op":"set","index":4,"value":0.74},
+  {"op":"delete","index":7},
+  {"op":"add","event":{"time":0.9,"channel":"manual:accent","kind":"pulse","value":true}}
+]
+```
+
+[Browser demo](../examples/live-modulation.cjs)
+
+```sh
+node examples/live-modulation.cjs live-modulation.html
+```
+
 ## Optional host adapters
 
 Register the adapter object through the Node graph API’s `adapters`

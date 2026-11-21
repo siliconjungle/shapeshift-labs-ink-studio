@@ -150,6 +150,8 @@ const specifications = {
       { op: 'add', id: 'blackout', name: 'Blackout', time: .25 }] }
   },
   'input.recording': { inputs: { events: [event] } },
+  'input.editRecording': { inputs: { source: { events: [event] },
+    edits: [{ op: 'move', index: 0, time: .25 }, { op: 'set', index: 0, value: .7 }] } },
   'input.replay': { inputs: { source: { events: [event] } } },
   'input.actions': { inputs: { state: { 'key:space': true }, context: 'main', contexts: { main: { select: ['key:space'] } } } },
   meshPaths: { inputs: { sources: [0], targets: [1] }, output: 'curves' },

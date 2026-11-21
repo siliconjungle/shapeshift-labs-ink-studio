@@ -43,15 +43,42 @@
 
   function recorder(initial = {}) {
     const state = initialState(initial), events = [], channels = new Set(Object.keys(state));
-    function append(value) {
-      if (events.length >= maxEvents) throw new RangeError('Input recording exceeds its event budget');
-      const row = event(value);
-      if (channels.size >= 1024 && !channels.has(row.channel)) throw new RangeError('Input recording exceeds its channel budget');
-      channels.add(row.channel);
-      events.push(row);
-      return row;
+    function appendBatch(values) {
+      if (!Array.isArray(values) || events.length + values.length > maxEvents)
+        throw new RangeError('Input recording exceeds its event budget');
+      const rows = Array.from(values, event);
+      const added = new Set(rows.map(row => row.channel).filter(channel => !channels.has(channel)));
+      if (channels.size + added.size > 1024) throw new RangeError('Input recording exceeds its channel budget');
+      for (const channel of added) channels.add(channel);
+      for (const row of rows) events.push(row);
+      return rows;
     }
-    return Object.freeze({ append, snapshot: () => recording({ initial: state, events }) });
+    return Object.freeze({ append: value => appendBatch([value])[0], appendBatch,
+      snapshot: () => recording({ initial: state, events }) });
+  }
+
+  function editRecording(source, edits = []) {
+    if (!Array.isArray(edits) || edits.length > maxEvents) throw new RangeError('Expected a bounded input edit list');
+    const baseline = recording(source);
+    const events = baseline.events.slice(), added = [];
+    const only = (row, keys) => Object.keys(row).every(key => keys.includes(key));
+    for (const edit of edits) {
+      if (!plain(edit)) throw new TypeError('Input edits need named operation records');
+      const { op, index, ...changes } = edit;
+      const current = Number.isSafeInteger(index) && index >= 0 && index < events.length ? events[index] : null;
+      if (op === 'add' && index === undefined && only(changes, ['event']) && plain(changes.event)) {
+        added.push(event(changes.event));
+      } else if (op === 'move' && current && only(changes, ['time', 'timecode'])) {
+        const { time, timecode, ...retained } = current;
+        const at = changes.time === undefined && changes.timecode !== undefined ? T.seconds(T.read(changes.timecode)) : changes.time;
+        events[index] = event({ ...retained, ...changes, time: at });
+      } else if (op === 'set' && current && only(changes, ['value']) && Object.hasOwn(changes, 'value')) {
+        events[index] = event({ ...current, value: changes.value });
+      } else if (op === 'delete' && current && only(changes, [])) {
+        events[index] = null;
+      } else throw new RangeError('Invalid input recording edit or row index');
+    }
+    return recording({ initial: baseline.initial, events: events.filter(Boolean).concat(added) });
   }
 
   function seek(rows, time, inclusive = false, aligned = false, exact = false) {
@@ -103,5 +130,5 @@
       Number.isFinite(value) || typeof value === 'boolean' ? [[key, Number(value)]] : []))]);
   }
 
-  Object.assign(A, { recording, recorder, inputReplay, actions });
+  Object.assign(A, { recording, recorder, editRecording, inputReplay, actions });
 })(KIT.procedural);
