@@ -28,6 +28,11 @@
       inputs: { source: 'mesh', planes: 'array<record>', options },
       ...value('mesh', ({ source, planes, options }) => A.clip(source, planes, options))
     },
+    'geo.scrambleIndices': {
+      inputs: { source: 'mesh', options },
+      outputs: { value: 'mesh', changes: 'array<record>', report: 'record' },
+      run: ({ source, options }, { seed }) => A.scrambleIndices(source, { seed, ...options })
+    },
     'geo.extrudeImage': {
       inputs: { source: 'raster', options }, outputs: { ...slices, front: 'mesh' },
       run: ({ source, options }) => A.extrudeImage(source, options)

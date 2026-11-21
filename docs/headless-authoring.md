@@ -1210,6 +1210,7 @@ in a low-level `KIT.procedural.graph.create` graph, pass
 | `geo.triangulate` | Triangulate planar `rings` at `options.z`. The first ring is the outline and subsequent rings are holes. |
 | `geo.transform`, `geo.merge` | Apply XYZ `position`, radians `rotation`, and scalar or XYZ `scale`, or combine an array of indexed meshes. Mirroring reverses winding. |
 | `geo.clip` | Crop a mesh with face materials to `dot(normal, point) <= offset` for each plane. Set `options.cap` to close a convex shell. UVs and normals remain available on the clipped triangles. |
+| `geo.scrambleIndices` | Redirect one corner per selected triangle to an existing vertex within a world-space distance limit. Returns an indexed mesh, the individual redirects, and a report. |
 | `geo.extrudeImage` | Expand an XY raster mask along Z. Set `pixelSize`, `depth`, `center`, `channel`, `alphaThreshold` and optional `edgeColor`. Holes pass through the part. The main mesh retains per-cell colors on the caps. The `front` port is a UV-mapped front cap for `warp.surface`. |
 | `geo.sliceStack` | Build the exterior of a stack of aligned raster `slices` in list order. Set world `axis`, `spacing`, `center`, `pixelSize` and mask controls. Neighboring occupied cells share their boundary and omit their internal faces. |
 
@@ -1219,6 +1220,53 @@ XY maps to world XY for a Z stack, to −ZY for an X stack, and to X−Z for a Y
 stack. The extrusion and slice operations return bounds and triangle counts
 as separate ports. Feed mesh results to other graph operators such as
 `meshPaths`, export them as JSON, or add them to a scene.
+
+#### Bounded mesh index scrambling
+
+Use `geo.scrambleIndices` or `KIT.procedural.sceneGraph.scrambleIndices`
+on an indexed triangle mesh. In the default seeded mode, set the share
+of eligible faces with `amount` (default .12) and cap the number attempted
+with `maxFaces` (default 128). A face stays as authored when the bounded
+search finds no suitable replacement.
+
+```js
+const { value, changes, report } = KIT.procedural.sceneGraph.scrambleIndices(mesh, {
+  seed: 29,
+  faces: [12, 13, 14, 15],
+  donors: [24, 27, 31],
+  bounds: { min: [-1, -.5, -.2], max: [1, .8, 1] },
+  amount: .5,
+  maxFaces: 2,
+  minDisplacement: .16,
+  maxDisplacement: .8
+})
+```
+
+- `maxDisplacement` is required and measures the distance from the original
+  corner to its replacement in mesh units. Use `minDisplacement` to make
+  small redirects ineligible. All three original vertices and the donor
+  must lie inside `bounds` when supplied.
+- `faces` and `donors` are optional lists of zero-based triangle and vertex
+  IDs. The graph uses its seed unless `options.seed` overrides it.
+  To author exact redirects, pass `edits: [{ face, corner, vertex }]`.
+  `corner` is 0–2 in the triangle's stored order. Authored edits use the
+  same face cap, region and displacement limits. Each face accepts one
+  edit. A redirect that would collapse its triangle is rejected.
+- `value` retains the source positions and face materials. Each new corner
+  reads the donor vertex's UV, normal and color where those channels exist.
+  `changes` lists `face`, `corner`, `from`, `to` and `displacement`.
+  The `report` counts eligible, attempted and changed faces and gives the
+  largest applied displacement.
+
+Connect the mesh output to `warp.surface` for depth-tested textured
+geometry. [Lacuna Relay](../examples/mesh-index-scramble.js) uses seeded
+redirects across a segmented shell and authored redirects to nearby
+contact points.
+
+```sh
+node cli/ink-studio.js clip examples/mesh-index-scramble.js --w 432 --h 224 \
+  --to 5.333333333333333 --fps 12 --out lacuna-relay.png
+```
 
 ### Signed fields and render passes
 
