@@ -554,6 +554,7 @@ outside the original image.
 | `fx.repair` | Use `method: "close"` and a Euclidean `radius` for holes and narrow gaps, or `"bridge"` and `maxGap` for breaks along rows, columns or diagonals. New pixels take the nearest selected source colour or an explicit `color`. Inspect them in the separate `added` mask. |
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
+| `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -611,6 +612,39 @@ For a [camera atlas](camera-atlas.md), convert `atlas.read(id)` from
 then send `value` to a raster layer or sprite surface. The
 [tile address study](../examples/tile-address-scrambling.cjs) renders the
 same effect on original sprite art and a moving camera feed.
+
+### Bleed tiles from a separate bank
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.tileBleed(sign, glyphSheet, {
+  tileSize: [8, 8], amount: .35, mask: signArea, seed: 12, rate: 4, time
+});
+```
+
+Use any raster as the separate bank, including a sprite sheet, a font
+render, or a camera capture. Both inputs use the same tile size and
+channel count. The source and bank can have different dimensions. Each
+grid starts at its own top-left pixel. Incomplete source cells stay
+intact and incomplete donor cells are excluded. Use `raster.rgba` to
+normalize inputs with different color channel counts.
+
+`amount`, `mask`, `maskChannel`, `maskThreshold`, `seed`, and `rate`
+have the same meaning as in tile scrambling. An optional `bankMask`
+restricts donor tiles independently with `bankMaskChannel` (default
+`"luma"`) and `bankMaskThreshold` (default 128). If there are no eligible
+donor tiles, the source is kept. Each affected tile reads from a seeded
+donor address, which can repeat. The current bank pixels are copied
+with all channels, including alpha. A changing camera feed can move
+inside a tile even while the mapping holds.
+
+`addresses` is a one-channel raster in the destination grid. Each sample
+gives the zero-based, row-major tile index in the bank grid, whose column
+count is rounded up. A value of `-1` marks an unchanged destination cell.
+In a graph, connect the `source` and `bank` raster sockets. The node uses
+the graph time and seed unless overridden in `options`.
+
+The [cross-bank tile study](../examples/cross-bank-tile-bleed.cjs) shows
+independent banks made from sprite art and an animated camera atlas.
 
 ### Trace paths and points
 

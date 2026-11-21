@@ -3,27 +3,36 @@
   const P = K.procedural;
   const {view, channel, int, tuple, plane} = P.pixelEffectSupport;
 
-  function tileScramble(source, {
-    tileSize = [8, 8], mode = 'swap', amount = .25, seed = 1, rate = 0, time = 0,
-    mask, maskChannel = 'luma', maskThreshold = 128
-  } = {}) {
-    if (!['swap', 'repeat', 'omit'].includes(mode) || !tuple(tileSize, 2, n => int(n, 1, 8192)) ||
+  function tileSettings({
+    tileSize = [8, 8], amount = .25, seed = 1, rate = 0, time = 0,
+    maskChannel = 'luma', maskThreshold = 128
+  }) {
+    if (!tuple(tileSize, 2, n => int(n, 1, 8192)) ||
         !Number.isFinite(amount) || amount < 0 || amount > 1 || !Number.isSafeInteger(seed) ||
         !Number.isFinite(rate) || rate < 0 || !Number.isFinite(time) || !Number.isFinite(maskThreshold))
-      throw new RangeError('Invalid tile scramble settings');
+      throw new RangeError('Invalid tile effect settings');
     const tick = Math.floor(time * rate);
-    if (!Number.isSafeInteger(tick)) throw new RangeError('Tile scramble time exceeds its tick range');
+    if (!Number.isSafeInteger(tick)) throw new RangeError('Tile effect time exceeds its tick range');
+    return { tileSize, amount, seed, tick, maskChannel, maskThreshold };
+  }
 
+  function tileGrid(source, [tileWidth, tileHeight]) {
     const {width, height, data, pivot} = view(source);
     if (pivot !== undefined && !tuple(pivot, 2)) throw new TypeError('Raster pivot needs two finite coordinates');
     const channels = source.channels ?? data.length / (width * height);
-    const [tileWidth, tileHeight] = tileSize;
-    const columns = Math.ceil(width / tileWidth), rows = Math.ceil(height / tileHeight);
-    const fullColumns = Math.floor(width / tileWidth), fullRows = Math.floor(height / tileHeight);
+    return {
+      width, height, data, pivot, channels, tileWidth, tileHeight,
+      columns: Math.ceil(width / tileWidth), rows: Math.ceil(height / tileHeight),
+      fullColumns: Math.floor(width / tileWidth), fullRows: Math.floor(height / tileHeight)
+    };
+  }
+
+  function eligibleTiles(grid, mask, maskChannel, maskThreshold, enabled = true) {
+    const {width, height, tileWidth, tileHeight, columns, fullColumns, fullRows} = grid;
     if (mask !== undefined && (mask?.width !== width || mask?.height !== height))
-      throw new RangeError('Tile scramble mask must align to the source');
+      throw new RangeError('Tile effect mask must align to its raster');
     const gate = mask === undefined ? null : channel(mask, maskChannel);
-    const addresses = Int32Array.from({length: columns * rows}, (_, index) => index);
+    if (!enabled) return new Int32Array(0);
     const eligible = new Int32Array(fullColumns * fullRows);
     let size = 0;
 
@@ -38,24 +47,59 @@
       return true;
     }
 
-    if (amount > 0) {
-      for (let row = 0; row < fullRows; row++) {
-        for (let col = 0; col < fullColumns; col++) {
-          if (containsTile(col, row)) eligible[size++] = row * columns + col;
-        }
+    for (let row = 0; row < fullRows; row++) {
+      for (let col = 0; col < fullColumns; col++) {
+        if (containsTile(col, row)) eligible[size++] = row * columns + col;
       }
     }
+    return eligible.subarray(0, size);
+  }
 
-    const random = K.grow.dice(P.data.hash(`tile-scramble/${seed}/${tick}`));
-    let count = Math.round(size * amount);
-    if (mode === 'swap') count -= count % 2;
-    if (mode === 'repeat' && count === size && size > 0) count--;
+  function pickTiles(eligible, count, random) {
     for (let i = 0; i < count; i++) {
-      const next = i + Math.floor(random() * (size - i));
+      const next = i + Math.floor(random() * (eligible.length - i));
       const address = eligible[next];
       eligible[next] = eligible[i];
       eligible[i] = address;
     }
+  }
+
+  const isByte = data => data instanceof Uint8Array || data instanceof Uint8ClampedArray;
+  const tileStart = ({columns, tileHeight, tileWidth, width, channels}, address) =>
+    (Math.floor(address / columns) * tileHeight * width + address % columns * tileWidth) * channels;
+
+  function paintTiles(target, donor, addresses, selected) {
+    const {width, height, channels, pivot, tileWidth, tileHeight, data} = target;
+    const bytes = isByte(data) && (!selected.length || isByte(donor.data));
+    const result = bytes ? Uint8Array.from(data) : Float64Array.from(data);
+    const original = ArrayBuffer.isView(donor.data) ? donor.data : Float64Array.from(donor.data);
+    const span = tileWidth * channels, stride = width * channels, donorStride = donor.width * channels;
+    for (const address of selected) {
+      const from = addresses[address], toStart = tileStart(target, address);
+      const fromStart = from < 0 ? 0 : tileStart(donor, from);
+      for (let y = 0; y < tileHeight; y++) {
+        const to = toStart + y * stride, offset = fromStart + y * donorStride;
+        if (from < 0) result.fill(0, to, to + span);
+        else result.set(original.subarray(offset, offset + span), to);
+      }
+    }
+    return {width, height, channels, data: result, ...(pivot !== undefined && {pivot: [...pivot]})};
+  }
+
+  function tileScramble(source, options = {}) {
+    const {mode = 'swap', mask} = options;
+    if (!['swap', 'repeat', 'omit'].includes(mode)) throw new RangeError('Invalid tile scramble mode');
+    const {tileSize, amount, seed, tick, maskChannel, maskThreshold} = tileSettings(options);
+    const target = tileGrid(source, tileSize);
+    const {columns, rows} = target;
+    const addresses = Int32Array.from({length: columns * rows}, (_, index) => index);
+    const eligible = eligibleTiles(target, mask, maskChannel, maskThreshold, amount > 0);
+    const size = eligible.length;
+    const random = K.grow.dice(P.data.hash(`tile-scramble/${seed}/${tick}`));
+    let count = Math.round(size * amount);
+    if (mode === 'swap') count -= count % 2;
+    if (mode === 'repeat' && count === size && size > 0) count--;
+    pickTiles(eligible, count, random);
 
     if (mode === 'swap') {
       for (let i = 0; i < count; i += 2) {
@@ -69,27 +113,30 @@
       }
     }
 
-    const bytes = data instanceof Uint8Array || data instanceof Uint8ClampedArray;
-    const original = ArrayBuffer.isView(data) ? data : Float64Array.from(data);
-    const result = bytes ? Uint8Array.from(original) : Float64Array.from(original);
-    const span = tileWidth * channels;
-    const start = address => (Math.floor(address / columns) * tileHeight * width + address % columns * tileWidth) * channels;
-    const stride = width * channels;
-    for (let i = 0; i < count; i++) {
-      const address = eligible[i], from = addresses[address], toStart = start(address);
-      const fromStart = from < 0 ? 0 : start(from);
-      for (let y = 0; y < tileHeight; y++) {
-        const offset = y * stride, to = toStart + offset;
-        if (from < 0) result.fill(0, to, to + span);
-        else result.set(original.subarray(fromStart + offset, fromStart + offset + span), to);
-      }
-    }
-
     return {
-      value: {width, height, channels, data: result, ...(pivot !== undefined && {pivot: [...pivot]})},
+      value: paintTiles(target, target, addresses, eligible.subarray(0, count)),
       addresses: plane(columns, rows, addresses)
     };
   }
 
-  P.pixelEffects.tileScramble = tileScramble;
+  function tileBleed(source, bank, options = {}) {
+    const {mask, bankMask, bankMaskChannel = 'luma', bankMaskThreshold = 128} = options;
+    if (!Number.isFinite(bankMaskThreshold)) throw new RangeError('Invalid tile bank mask threshold');
+    const {tileSize, amount, seed, tick, maskChannel, maskThreshold} = tileSettings(options);
+    const target = tileGrid(source, tileSize), donor = tileGrid(bank, tileSize);
+    if (donor.channels !== target.channels) throw new RangeError('Tile bleed needs matching channel counts');
+    const targets = eligibleTiles(target, mask, maskChannel, maskThreshold, amount > 0);
+    const donors = eligibleTiles(donor, bankMask, bankMaskChannel, bankMaskThreshold, amount > 0);
+    const selected = targets.subarray(0, donors.length ? Math.round(targets.length * amount) : 0);
+    const random = K.grow.dice(P.data.hash(`tile-bleed/${seed}/${tick}`));
+    pickTiles(targets, selected.length, random);
+    const {columns, rows} = target, addresses = new Int32Array(columns * rows).fill(-1);
+    for (const address of selected) addresses[address] = donors[Math.floor(random() * donors.length)];
+    return {
+      value: paintTiles(target, donor, addresses, selected),
+      addresses: plane(columns, rows, addresses)
+    };
+  }
+
+  Object.assign(P.pixelEffects, {tileScramble, tileBleed});
 })(KIT);
