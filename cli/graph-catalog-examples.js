@@ -13,6 +13,8 @@ const mesh = { points: [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], faces: [[0,
 const clip = { width: 4, height: 4, fps: 8, layers: { ink: { frames: [rgba.data, rgba.data] } } };
 const audio = { sampleRate: 8000, channels: 1, samples: Array.from({ length: 128 }, (_, i) => i % 4 === 1 ? .5 : i % 4 === 3 ? -.5 : 0) };
 const event = { time: 0, channel: 'held', value: true };
+const transientAudio = { sampleRate: 8000, channels: 1,
+  samples: Array.from({ length: 80 }, (_, i) => i === 32 ? .9 : 0) };
 const diorama = { id: 'node-catalog', seed: 1, style: 'slate', solids: [
   { id: 'block', kind: 'box', at: [0, 0, 0], half: [.45, .45, .45], mat: { role: 'stone' }, res: .22 }
 ] };
@@ -131,6 +133,12 @@ const specifications = {
   'sim.run': { nodes: { recipe: { op: 'sim.define', inputs: { kind: 'particles' } } }, inputs: { recipe: link('recipe') } },
   'anim.feedback': { inputs: { frames: [rgba, rgba] } },
   'audio.buffer': { inputs: audio },
+  'audio.detectTransients': { inputs: { source: transientAudio } },
+  'audio.editEvents': {
+    nodes: { detected: { op: 'audio.detectTransients', inputs: { source: transientAudio } } },
+    inputs: { source: link('detected'), edits: [{ op: 'rename', id: 'hit-32', name: 'Opening' },
+      { op: 'add', id: 'blackout', name: 'Blackout', time: .25 }] }
+  },
   'input.recording': { inputs: { events: [event] } },
   'input.replay': { inputs: { source: { events: [event] } } },
   'input.actions': { inputs: { state: { 'key:space': true }, context: 'main', contexts: { main: { select: ['key:space'] } } } },

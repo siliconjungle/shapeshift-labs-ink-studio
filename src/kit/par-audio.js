@@ -21,6 +21,17 @@
       inputs: { source: 'audio', options }, outputs: { value: 'array<record>' },
       run({ source, options }) { return { value: A.series(source, options) }; }
     },
+    'audio.detectTransients': {
+      description: 'Detect percussive attacks and write sample-aligned named cues.',
+      inputs: { source: 'audio', options }, outputs: { value: 'record', events: 'array<record>', report: 'record' },
+      run({ source, options }) { return A.detectTransients(source, options); }
+    },
+    'audio.editEvents': {
+      description: 'Apply cue edits by ID and expose the musical event track, timeline, and replay pulses.',
+      inputs: { source: 'record', edits: { type: 'array<record>', default: [] }, options },
+      outputs: { value: 'record', events: 'array<record>', timeline: 'record', recording: 'record' },
+      run({ source, edits, options }) { return A.editMusicalEvents(source, edits, options); }
+    },
     'input.recording': {
       inputs: { initial: options, events: 'array<record>' }, outputs: { value: 'record' },
       run(inputs) { return { value: A.recording(inputs) }; }

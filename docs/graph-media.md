@@ -46,6 +46,59 @@ These tools cover waveform windowing and FFT workflows comparable to
 Pixel Composer’s audio analyzer and transform nodes.
 [Audio Window](https://docs.pixel-composer.com/nodes/animation/audio/analyzer/audio_window.html) · [FFT](https://docs.pixel-composer.com/nodes/values/number/operator/fft.html)
 
+## Editable musical event tracks
+
+Feed a decoded WAV or an audio buffer into `audio.detectTransients`.
+It looks for sudden rises in spectral energy and refines each detected
+attack against the source waveform. By default it analyzes channels
+independently, so stereo phase cancellation does not hide an attack.
+Choose one channel by index or use `channel: "mix"` to detect against the
+mono mix. Set `minGap` in seconds (default 0.075) to group nearby
+attacks. Increase `minStrength` to reject quiet detections or increase
+`sensitivity` to require a larger rise over the local background.
+`size` and `hop` override the FFT window and step in samples.
+
+The `value` port is an `ink-studio/musical-events` version 1 JSON
+document. Each cue has a stable `id`, a `name`, and `time` in seconds.
+Detected cues start with the name in `options.name` (default `Hit`).
+They carry an exact `timecode` and a `detected` record with the original
+sample index, sample rate, analysis strength, and channel. Editing the
+cue preserves that detection record.
+
+Connect the detected track, or a saved track loaded through `jsonAsset`,
+to `audio.editEvents.source`. Its `edits` input applies operations in
+order and returns a new time-sorted track.
+
+```json
+[
+  {"op":"move","id":"hit-4800","time":0.105},
+  {"op":"rename","id":"hit-4800","name":"Open iris"},
+  {"op":"delete","id":"hit-19200"},
+  {"op":"add","id":"freeze","name":"Freeze frame","time":0.625}
+]
+```
+
+Use an integer `timecode: {"numerator":1001,"denominator":30000}`
+instead of `time` for an exact move or insertion. The `timeline` port
+provides scene markers and `music-cue` events with the cue name in
+`detail.name`. It uses seconds by default. Set `options.exact: true`
+when importing both arrays into an exact timeline.
+Connect the `recording` port to `input.replay` for `music:cue` pulses
+on the graph clock. Each pulse carries the cue's ID and name, and
+preserves exact timecodes for takes. Export the `value` port as JSON
+to continue editing the same track later.
+
+Hosts can call `KIT.procedural.mediaGraph.detectTransients(source, options)`
+and `mediaGraph.editMusicalEvents(track, edits, options)` directly.
+`mediaGraph.makeMusicalEvents(events)` creates a track from manually
+authored cues.
+
+[Browser demo](../examples/editable-musical-events.cjs)
+
+```sh
+node examples/editable-musical-events.cjs musical-events.html
+```
+
 ## Recorded control events
 
 An `ink-studio/input-recording` version 1 document has `initial` channel

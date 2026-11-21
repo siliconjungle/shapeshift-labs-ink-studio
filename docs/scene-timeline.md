@@ -15,6 +15,8 @@ Keys hold their first and last values within the sequence. The easing on a key c
 
 Each clip maps track samples, cue ranges, and point events through the same trim and rate. Nested clips can reuse the same source under different instance IDs. Cue records carry the instance IDs in `path`. A clip overrides a parent track while its range is active. If sibling clips overlap on a target, the later-listed clip takes precedence. Point events at either trim boundary are included.
 
+Use [editable musical event tracks](graph-media.md#editable-musical-event-tracks) to place named markers and world events at detected or edited times in a soundtrack.
+
 ## Dioramas
 
 - `/camera/<field>` keys `target`, `dist`, `yaw`, `pitch`, or `sway`. Camera angles use radians.

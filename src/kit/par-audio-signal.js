@@ -176,5 +176,6 @@
     });
   }
 
+  Object.assign(P.mediaGraphSupport, { layout, sampler, fftSetup });
   Object.assign(A, { audio, audioWindow, analyze, fft, series });
 })(KIT.procedural);
