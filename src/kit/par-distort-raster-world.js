@@ -14,7 +14,7 @@
     return flat;
   }
 
-  function surface(source,mesh,{alphaThreshold=128}={}) {
+  function surface(source,mesh,{alphaThreshold=128,sampling}={}) {
     view(source);
     if (!int(alphaThreshold,1,255)) throw new RangeError('Mesh projection alpha threshold must be in [1,255]');
     const geometry={
@@ -27,7 +27,7 @@
       const i=(y*width+x)*4;
       if (data[i+3]<alphaThreshold) return;
       return (data[i]<<16)|(data[i+1]<<8)|data[i+2];
-    });
+    }, sampling === undefined ? undefined : { sampling });
     const value=atlas.finish();
     if (!value.vertices.every(finite)) throw new RangeError('Projected vertices exceed finite geometry storage');
     return value;

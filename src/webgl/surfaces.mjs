@@ -6,11 +6,11 @@ import { createResources } from './resources.mjs';
 const uvSlip = Symbol.for('ink-studio.spriteSurface.uvSlip');
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
-export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway } = {}) {
+export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL } = {}) {
   const resources = createResources(gl);
   try {
     const shaders = new Map();
-    function shaderFor(wet, section, lighting, environment) {
+    function shaderFor(wet, section, lighting, environment, paletteSampling) {
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -19,7 +19,8 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         !!section,
         !!lighting,
         !!environment?.media,
-        !!environment?.lit
+        !!environment?.lit,
+        paletteSampling
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = resources.program(
@@ -49,6 +50,8 @@ uniform vec3 u_fog;
 uniform bool u_index, u_graphDepth;
 uniform bool u_uvSlip;
 uniform vec4 u_uvTransform, u_uvBounds;
+${paletteSampling ? `uniform float u_samplingScale;
+${samplingGLSL}` : ''}
 ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
@@ -61,8 +64,20 @@ layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
 layout(location=2) out vec4 water;
 void main(){
-  vec2 texel=u_uvSlip?clamp(v_texel*u_uvTransform.xy+u_uvTransform.zw,u_uvBounds.xy,u_uvBounds.zw):v_texel;
+  vec2 rawTexel=u_uvSlip?v_texel*u_uvTransform.xy+u_uvTransform.zw:v_texel;
+  vec2 texel=u_uvSlip?clamp(rawTexel,u_uvBounds.xy,u_uvBounds.zw):rawTexel;
+  ${paletteSampling ? `
+  if(u_paletteSampling)texel=clamp(texel,u_sampleRegion.xy,u_sampleRegion.xy+u_sampleRegion.zw-1.0);
+  ` : ''}
   vec4 ink=texelFetch(u_atlas,ivec2(texel),0);
+  ${paletteSampling ? `
+  float q=gl_FragCoord.w;
+  vec2 numerator=v_texel*q;
+  vec2 scale=u_samplingScale*(u_uvSlip?u_uvTransform.xy:vec2(1.0));
+  vec2 dx=(dFdx(numerator)-v_texel*dFdx(q))*scale/q;
+  vec2 dy=(dFdy(numerator)-v_texel*dFdy(q))*scale/q;
+  if(u_paletteSampling)ink=samplePalette(rawTexel,dx,dy,ink);
+  ` : ''}
   if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
   ${section ? 'float margin=sectionMargin(v_world,v_depth); if(margin<0.0)discard;' : ''}
   float d=clamp((v_depth-u_range.x)/(u_range.y-u_range.x),0.0,1.0);
@@ -338,6 +353,30 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, lightCount);
       }
     }
+    const integralTextures = new Map();
+    const prefixUnits = [1, 2];
+    function bindFilter(filter) {
+      let entry = integralTextures.get(filter);
+      if (!entry) {
+        const { width, height } = filter.rect;
+        function upload(unit, data) {
+          gl.activeTexture(gl.TEXTURE0 + unit);
+          const table = resources.texture();
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, width + 1, height + 1, 0, gl.RGBA_INTEGER, gl.UNSIGNED_INT, data);
+          stats.textureBytes += data.byteLength;
+          return table;
+        }
+        const totals = upload(prefixUnits[0], filter.totals);
+        const accents = filter.accents ? upload(prefixUnits[1], filter.accents) : totals;
+        entry = [totals, accents];
+        integralTextures.set(filter, entry);
+      }
+      for (let i = 0; i < prefixUnits.length; i++) {
+        gl.activeTexture(gl.TEXTURE0 + prefixUnits[i]);
+        gl.bindTexture(gl.TEXTURE_2D, entry[i]);
+      }
+    }
+
     function draw(
       atlas,
       {
@@ -355,10 +394,21 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         wet,
         width = 1,
         height = 1,
+        paletteSampling,
+        samplingScale = 1,
         section
       }
     ) {
       upload(atlas);
+      if (paletteSampling !== false && atlas.paletteSampling !== undefined && (!samplingPlan || !samplingGLSL))
+        throw new TypeError('Palette-filtered surfaces need SpriteSurface.samplingPlan and samplingGLSL');
+      const rangesWithFilters = paletteSampling === false ? null : samplingPlan?.(atlas);
+      const filters = new Set((rangesWithFilters ?? []).map(range => range.filter).filter(Boolean));
+      for (const [filter, entry] of integralTextures) if (!filters.has(filter)) {
+        for (const table of new Set(entry)) resources.free(table);
+        integralTextures.delete(filter);
+      }
+      const useSampling = filters.size > 0;
       if (lighting?.active && !index) {
         const framebuffer = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING),
           viewport = gl.getParameter(gl.VIEWPORT),
@@ -374,7 +424,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      const shader = shaderFor(wet, section, !index && lighting?.active, environment);
+      const shader = shaderFor(wet, section, !index && lighting?.active, environment, useSampling);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -382,6 +432,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_range: range,
         u_fog: fog,
         u_atlas: 6,
+        ...(useSampling && { u_sampleTotals: prefixUnits[0], u_sampleAccents: prefixUnits[1], u_samplingScale: samplingScale }),
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
         u_index: +index,
@@ -397,6 +448,40 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       gl.bindVertexArray(vao);
       if (!index && lighting?.active) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);
+      if (useSampling) {
+        const previous = prefixUnits.map(unit => {
+          gl.activeTexture(gl.TEXTURE0 + unit);
+          return gl.getParameter(gl.TEXTURE_BINDING_2D);
+        });
+        try {
+          let bound = filters.values().next().value;
+          bindFilter(bound);
+          for (const { first, end, shift, filter } of rangesWithFilters) {
+            if (filter && filter !== bound) {
+              bindFilter(filter);
+              bound = filter;
+            }
+            shader.set({
+              u_uvSlip: Boolean(shift), ...(shift && { u_uvTransform: shift.transform, u_uvBounds: shift.bounds }),
+              u_paletteSampling: Boolean(filter),
+              ...(filter && { u_sampleRegion: [filter.rect.x, filter.rect.y, filter.rect.width, filter.rect.height],
+                u_sampleRule: [filter.rule.alphaCoverage, filter.rule.protectCoverage, filter.rule.tieTolerance],
+                u_sampleCount: filter.colors.length,
+                ...(filter.swatches.length && { u_sampleSwatches: filter.swatches }),
+                u_protectCount: filter.rule.protect.length,
+                ...(filter.highlights.length && { u_sampleProtected: filter.highlights }) })
+            });
+            gl.drawArrays(gl.TRIANGLES, first, end - first);
+          }
+        } finally {
+          for (let i = 0; i < prefixUnits.length; i++) {
+            gl.activeTexture(gl.TEXTURE0 + prefixUnits[i]);
+            gl.bindTexture(gl.TEXTURE_2D, previous[i]);
+          }
+          gl.activeTexture(gl.TEXTURE0);
+        }
+        return;
+      }
       const plan = atlas[uvSlip];
       const ranges = plan?.vertices === atlas.vertices && plan.width === atlas.width && plan.height === atlas.height
         ? plan.ranges : [];

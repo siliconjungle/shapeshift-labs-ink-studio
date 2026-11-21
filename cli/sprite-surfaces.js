@@ -1,6 +1,7 @@
 // Rasterize opaque, cutout atlas triangles into the existing scene compositor.
+const SpriteSurface = require('../src/sprite-surface.js');
 const uvSlip=Symbol.for('ink-studio.spriteSurface.uvSlip');
-function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,artScale=1}) {
   if(!atlas)return [];
   const fragments=new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
   const transform=(v)=>({p:v.slice(0,3),uv:v.slice(3),x:V[0]*v[0]+V[4]*v[1]+V[8]*v[2]+V[12],
@@ -17,12 +18,15 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
       !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
     const plan=layer[uvSlip];
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
-    let rangeIndex=0;
+    const filtered = paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
+    let rangeIndex=0, filterIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
       const first=offset/5;
       while(ranges[rangeIndex]?.end<=first)rangeIndex++;
       const range=ranges[rangeIndex];
       const shifted=range&&range.first<=first;
+      while(filtered?.[filterIndex]?.end<=first)filterIndex++;
+      const filter = filtered?.[filterIndex]?.filter;
       const input=[0,1,2].map(i=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5))));
       const polygon=[];
       for(let i=0;i<3;i++){
@@ -38,25 +42,44 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
         const u=b.p.map((n,k)=>n-a.p[k]),v=c.p.map((n,k)=>n-a.p[k]);
         const normal=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],len=Math.hypot(...normal)||1;
         if(normal.reduce((sum,n,k)=>sum+n*(eye[k]-a.p[k]),0)<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
+        const row=[a,b,c], transform = shifted ? range.transform : [1,1,0,0];
+        const bounds = shifted ? range.bounds : filter ? [filter.rect.x,filter.rect.y,
+          filter.rect.x + filter.rect.width - 1,filter.rect.y + filter.rect.height - 1] : [0,0,width-1,height-1];
+        let gradients;
+        if (filter) {
+          const weighted = (vx, vy, vz) => {
+            const dw = [vx,vy,vz].map((n,k) => n * artScale / (area * (ortho ? 1 : row[k].z)));
+            return [dw.reduce((n,v,k) => n + v * row[k].uv[0], 0),
+              dw.reduce((n,v,k) => n + v * row[k].uv[1], 0), ortho ? 0 : dw[0] + dw[1] + dw[2]];
+          };
+          gradients = [weighted(b.sy-c.sy,c.sy-a.sy,a.sy-b.sy), weighted(c.sx-b.sx,a.sx-c.sx,b.sx-a.sx)];
+        }
         for(let y=loY;y<=hiY;y++)for(let x=loX;x<=hiX;x++){
           const weights=[edge(b,c,x+.5,y+.5)/area,edge(c,a,x+.5,y+.5)/area,edge(a,b,x+.5,y+.5)/area];
           if(weights.some(n=>n < -1e-7))continue;
-          const row=[a,b,c],w=weights.map((n,k)=>ortho?n:n/row[k].z),sum=w[0]+w[1]+w[2];
+          const w=weights.map((n,k)=>ortho?n:n/row[k].z),sum=w[0]+w[1]+w[2];
           const z=ortho?weights.reduce((s,n,k)=>s+n*row[k].z,0):1/sum,p=y*W+x;
           if(fragments[p]&&z>=fragments[p].z)continue;
           const sample=k=>row.reduce((s,n,i)=>s+n.uv[k]*w[i]/sum,0);
           const s=sample(0),t=sample(1);
-          const tx=shifted ?
-            Math.max(range.bounds[0],Math.min(range.bounds[2],Math.floor(s*range.transform[0]+range.transform[2]))) :
-            Math.max(0,Math.min(width-1,Math.floor(s)));
-          const ty=shifted ?
-            Math.max(range.bounds[1],Math.min(range.bounds[3],Math.floor(t*range.transform[1]+range.transform[3]))) :
-            Math.max(0,Math.min(height-1,Math.floor(t)));
-          const texel=(ty*width+tx)*4;
-          if(pixels[texel+3]<128)continue;
+          const S = s * transform[0] + transform[2], T = t * transform[1] + transform[3];
+          let ink;
+          if (filter) {
+            const [[dxU, dxV, dxZ], [dyU, dyV, dyZ]] = gradients;
+            ink = filter.sample(S, T, transform[0] * (dxU - s * dxZ) / sum, transform[1] * (dxV - t * dxZ) / sum,
+              transform[0] * (dyU - s * dyZ) / sum, transform[1] * (dyV - t * dyZ) / sum);
+            if (ink === null) continue;
+          }
+          if (ink === undefined) {
+            const tx = Math.max(bounds[0], Math.min(bounds[2], Math.floor(S)));
+            const ty = Math.max(bounds[1], Math.min(bounds[3], Math.floor(T)));
+            const texel = (ty * width + tx) * 4;
+            if (pixels[texel+3] < 128) continue;
+            ink = (pixels[texel] << 16) | (pixels[texel + 1] << 8) | pixels[texel + 2];
+          }
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
           if(clip&&!clip(position))continue;
-          fragments[p]={p,z,alpha:1,color:Array.from(pixels.subarray(texel,texel+3),n=>n/255),position,
+          fragments[p]={p,z,alpha:1,color:[ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
             normal:normal.map(n=>n/len),objectPosition:position,surface:true};
         }
       }

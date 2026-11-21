@@ -788,7 +788,8 @@ function renderFrame(world, o, preparedPalettes) {
     if (active.length) spriteSurfaces = [spriteSurfaces, ...active];
   }
   const surfaceFragments = o.spriteSurfaces === false ? [] :
-    SurfaceRaster.rasterize(spriteSurfaces, { V, W, H, focal, ortho, near, clip: geometryClip });
+    SurfaceRaster.rasterize(spriteSurfaces, { V, W, H, focal, ortho, near, clip: geometryClip,
+      paletteSampling: o.paletteSampling, artScale: o.artGridScale || 1 });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });

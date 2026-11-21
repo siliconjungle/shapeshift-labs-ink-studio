@@ -44,7 +44,7 @@ For an arbitrary façade, skirt, or parameterized patch use `TexturedSurface.gri
 
 The native WebGL renderer and software renderer read `world.spriteSurfaces`. Set `spriteSurfaces: false` in render options to bypass the optional surfaces. A custom browser host may use `createSurfacePipeline` from the WebGL entry point with a depth attachment shared with the splat pass. The Rebirth host uses the same atlas representation.
 
-Paint returns a 24-bit RGB integer or `undefined` for a transparent cutout. Sampling uses nearest texels. Fractional alpha is reserved for splats and the existing sprite-atlas effects. Texture RGB is authored surface color, so bake surface shading into the paint when desired. The software renderer's resolved-frame looks also affect the result. Surface color is baked. Material-selector and live-relighting channels continue to use SDF splats.
+Paint returns a 24-bit RGB integer or `undefined` for a transparent cutout. Sampling uses nearest texels by default. Fractional alpha is reserved for splats and the existing sprite-atlas effects. Texture RGB is authored surface color, so bake surface shading into the paint when desired. The software renderer's resolved-frame looks also affect the result. Surface color is baked. Material-selector and live-relighting channels continue to use SDF splats.
 
 Grids default to a 200,000-triangle budget. Raise `maxTriangles` explicitly up to 2,000,000. The atlas has its existing configurable width and maximum height. Invalid geometry or paint leaves the atlas allocation unchanged.
 
@@ -55,6 +55,54 @@ writes a matching top-down RGBA raster into the region and marks those pixels
 dirty. [Camera feeds on textured panels](camera-atlas.md#route-a-feed-to-the-world)
 
 Run `ink-studio render examples/textured-surfaces.js` for a mixed example. Its `build(seed,{textured:false})` also exercises the SDF and splat rendering path.
+
+## Palette-preserving minification
+
+Pass a `sampling` rule to `face`, `mesh`, `faceRegion`, or
+`meshRegion`. The rule applies to both the headless and WebGL renderers.
+Procedural graphs can set the same rule in `warp.surface.options.sampling`.
+
+```js
+atlas.mesh(terrain, 256, 192, paint, {
+  id: 'panel',
+  sampling: {
+    palette: ['#6e7480', '#364456', '#a6a4a5', '#ff9957'],
+    protect: ['#ff9957'],
+    protectCoverage: .12
+  }
+});
+```
+
+When a projected art pixel covers multiple texels, the filter uses the
+perspective-correct UV gradients to integrate that footprint. Aligned
+footprints use exact fractional texel areas. Oblique footprints use
+four strips along the longer screen derivative. The resolved RGB is one
+authored swatch. A magnified surface keeps its original nearest texels.
+Coverage and color both use the face's own atlas region, including after
+a UV slip or a marked pixel update.
+
+| Setting | Behavior |
+| --- | --- |
+| `palette` | Up to 32 RGB24 integers or six-digit hex swatches in priority order. Omit to infer an ascending RGB24 palette from occupied texels. Use an explicit palette for regions with more than 32 colors. |
+| `protect` | Up to four swatches that may win based on their footprint coverage. In an explicit palette, each protected swatch must appear in the palette. |
+| `protectCoverage` | Minimum fraction of the occupied footprint for a protected swatch to win. Defaults to .10. The largest qualifying swatch wins, with earlier entries breaking ties. |
+| `alphaCoverage` | Minimum occupied fraction needed to draw a cutout pixel. Defaults to .5. Source texels with alpha at least 128 count as occupied. |
+| `tieTolerance` | How close the squared display-RGB distances can be before the earlier palette entry wins. Defaults to .004. |
+
+Use `sampling: true` for an inferred palette with default settings.
+Set `paletteSampling: false` on a render frame or
+`--palette-sampling off` in the CLI to compare with nearest sampling.
+One atlas can use up to 1,048,576 prefix-table positions across the
+distinct sampled regions, including their one-texel borders. The
+prefix tables are reused until the atlas pixels or UV mapping change.
+Lighting, fog, and frame grading still operate on the sampled color.
+
+Custom WebGL hosts can pass `SpriteSurface.samplingPlan` and
+`SpriteSurface.samplingGLSL` as the `samplingPlan` and `samplingGLSL`
+options of `createSurfacePipeline`.
+
+Run `node examples/palette-resampling.cjs signal-weave.html` to compare
+a shallow-angle pan and a camera pullback.
 
 ## UV and atlas slip
 
@@ -89,7 +137,7 @@ SpriteSurface.uvSlip(atlas, []);
   in-bounds rectangles. An empty list restores the authored mapping.
   Apply a list from a scene update to animate the effect at exact frame times.
 
-CPU and WebGL apply the same nearest-texel rules at draw time. Positions,
+CPU and WebGL apply the same sampling rules at draw time. Positions,
 the atlas image, and its update and geometry revisions are preserved.
 Samples stay inside their destination region, and transparent texels
 reveal the geometry behind them through the normal cutout rules. Edits

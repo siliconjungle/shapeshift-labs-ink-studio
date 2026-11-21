@@ -536,19 +536,20 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const hasPlanes = !!shader.footprints && footprintBinding.hasPlanes && options.u_idx!==3;
       if (hasSurfaces || hasPlanes || options.surfaceFrame?.lighting?.display) {
         const surfaceOptions = { geometryUpdatesSince: toolkit.SpriteSurface?.geometryUpdatesSince,
-          updatesSince: toolkit.SpriteSurface?.updatesSince ?? toolkit.KIT?.ecology?.atlasUpdates, cutaway: cutawayAPI?.glsl };
+          updatesSince: toolkit.SpriteSurface?.updatesSince ?? toolkit.KIT?.ecology?.atlasUpdates, cutaway: cutawayAPI?.glsl,
+          samplingPlan: toolkit.SpriteSurface?.samplingPlan, samplingGLSL: toolkit.SpriteSurface?.samplingGLSL };
         buffer.ensureDepth();
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
         gl.clearBufferfv(gl.DEPTH,0,[1]);gl.disable(gl.BLEND);
         if (surfaces) {
           surfacePipeline ??= createSurfacePipeline(gl, surfaceOptions);
-          surfacePipeline.draw(surfaces, { ...options.surfaceFrame, water, wet, width, height });
+          surfacePipeline.draw(surfaces, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
         }
         if (previews) {
           gl.depthFunc(gl.LESS);
           for (const [i, atlas] of previews.entries()) if (atlas) {
             previewPipelines[i] ??= createSurfacePipeline(gl, surfaceOptions);
-            previewPipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height });
+            previewPipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
           }
           gl.depthFunc(gl.LEQUAL);
         }
@@ -1077,7 +1078,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         near: camera.clipNear, far: camera.clipFar
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
       const surfaceFrame={lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
-        fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section};
+        fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling};
       if(layeredGlass){
         textureUnit(13,null);
         const indices = selection ? glassIndices.filter(i => selection.keep[i]) : glassIndices;
