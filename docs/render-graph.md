@@ -14,6 +14,7 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 | `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
 | `feedback` | Warps and decays the previous signal and composites new emission into it. Accepts an earlier image or a mixed-resolution emission layer. |
 | `frameAge` | Replaces regions of an image from a shared frame history. Each region can delay, hold, or replay captured frames. |
+| `frameBank` | Retains one assembled frame and independently refreshes tiles, masked regions, or explicit refresh pulses. |
 | `motionSmear` | Moves pixels from the retained frame through a motion field and blends in the clean input. A refresh mask can restore specific regions. |
 
 Screen coordinates are in final output pixels from the top left. Reflected and distorted samples outside the image leave the input pixel unchanged. Graph reflection and distortion work on screen images. Scene-space planar capture, glass refraction and depth-dependent media use the scene renderer.
@@ -331,6 +332,63 @@ to a live camera-atlas tile next to the clean feed.
 node cli/ink-studio.js clip examples/frame-age-mask.js --w 452 --h 215 \
   --to 5 --fps 12 --feedback-fps 12 --out tideline-repeater.png
 ```
+
+## Frame banks with selective refresh
+
+A `frameBank` starts with its current source. Each later frame replaces
+only the pixels whose refresh rule is due. All other pixels keep their
+last stored image. Use one bank for multiple independent rules.
+
+```js
+const graph = { passes: [
+  { id: 'subject', type: 'mask', raster: { slot: 'labels', match: 7 } },
+  { id: 'manual', type: 'mask', raster: { slot: 'refresh' } },
+  { id: 'bank', type: 'frameBank', fps: 12, cameraMotion: 'keep',
+    tiles: { size: [24, 16], every: 8, step: 1 },
+    regions: [{ mask: 'subject', every: 3 }, { rect: [0, 92, 150, 12], every: 1 }],
+    refresh: 'manual' }
+] };
+```
+
+- `fps` sets the bank's tick rate, from 1 to 120. The first observation
+  initializes the whole bank and starts the clock at tick zero. Repeating
+  a timestamp keeps the last contents. When a host skips a tick, any
+  elapsed refreshes write the newest observed frame.
+- `tiles.size` sets width and height in output pixels. Tiles at the right
+  and bottom edges can be partial. `every` is the period in ticks and
+  `phase` is the base offset. `step` advances the phase per tile in
+  row-major order, wrapping at the period. Defaults are 4, 0, and 1
+  respectively, with step zero for a period of one tick.
+- Add up to eight `regions` with independent `every` and `phase`.
+  A rule can use a rectangle, an earlier `mask` pass, or both. A rule
+  with neither refreshes the entire bank. Region schedules default to
+  every tick. Periods are 1 to 4096 whole ticks.
+- A `refresh` mask applies on every new observed timestamp, including
+  between scheduled ticks. An empty mask writes nothing. Where
+  refreshes overlap, the strongest coverage wins. Partial coverage
+  mixes premultiplied RGBA and full coverage can replace pixels with
+  transparency.
+
+To use a tracked region, connect `fx.trackRegions.labels` to a named
+`renderGraphInputs` slot. Use `raster.match` on a mask pass to select
+that exact numeric ID, including IDs above 255. This is a screen-space
+bank. As the tracked footprint moves, older pixels stay where they were
+written until a refresh reaches them. Add a whole-frame rule for
+periodic cleanup. A rule with a missing tracked ID writes nothing.
+
+`source` can be an earlier image pass and defaults to `input`. The
+pass-level `mask`, `select`, `depth`, and `opacity` gate where the stored
+image is displayed. The bank and its source still cover the frame.
+CPU and WebGL share the same schedule and screen-history reset rules.
+By default a camera move starts a fresh bank. Set `cameraMotion: "keep"`
+for screen-space continuity during camera motion. A cut, rewind, or size
+change starts a new bank. Use `budget.scale` or `budget.maxPixels` to
+store at a lower resolution and `budget.filter` to control playback sampling.
+
+Use [the graph raster node](headless-authoring.md#selectively-refresh-a-frame-bank)
+for image inputs outside the scene renderer. Run
+`node examples/frame-banks.cjs signal-loom.html` to try the tile,
+mask, and tracked-region modes.
 
 ## Motion-smeared frame history
 

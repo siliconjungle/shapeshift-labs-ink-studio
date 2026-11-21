@@ -1,4 +1,5 @@
 const FrameComposite = require('../src/frame-composite.js');
+const FrameBank = require('../src/frame-bank.js');
 const {
   cube,
   selection,
@@ -132,6 +133,19 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
         effects.depthWeight(node.depth, depth?.[at(x, y)]);
       if (smear)
         smearFrame(node, work, input, outputs.get(node.field), outputs.get(node.refresh), output, weightAt, openHistory(node), w, h);
+      if (node.bank) {
+        const bank = openHistory(node);
+        const { width: W, height: H } = work;
+        const stamp = bank.capture ? FrameBank.write(bank, source, bank.value, w, h, W, H, name => outputs.get(name)) : bank.value;
+        bank.save(stamp);
+        const retained = { data: stamp, w: W, h: H, filter: node.budget.filter };
+        for (let y = .5, p = 0; y < h; y++) for (let x = .5; x < w; x++, p += 4) {
+          const weight = weightAt(x, y) * opacity;
+          if (!weight) continue;
+          FrameComposite.sample(retained, x * W / w, y * H / h, color);
+          for (let c = 0; c < 4; c++) output[p + c] = Math.round(input[p + c] * (1 - weight) + color[c] * weight);
+        }
+      }
       if (age) {
         const { width: W, height: H } = work;
         if (age.capture) {
@@ -255,7 +269,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
       const scanlines = rowTable(node.rows, w, h, time, node.rowEdits);
       const theta = node.type === 'distortion' ? 2 * Math.PI * ((node.phase + time * node.rate) % 1) : 0;
       const frequency = (2 * Math.PI) / node.period;
-      if (!node.effect && !budgetedMemory && !age && !smear)
+      if (!node.effect && !budgetedMemory && !age && !smear && !node.bank)
         for (let y = 0.5, p = 0; y < h; y++)
           for (let x = 0.5; x < w; x++, p++) {
             const native = nativeIndex(x, y, p);

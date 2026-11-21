@@ -1548,11 +1548,43 @@ port to hide a layer during that hold.
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
 | `anim.visualSample` | Replay a [captured visual span](graph-clips.md#capture-a-reusable-visual-span) with independent timing, alpha, raw data, depth and motion. |
+| `anim.frameBank` | Retain and selectively refresh raster pixels. Outputs the banked image, the refresh mask, and the capture tick. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
 | `anim.captureTransforms` | Snapshot the pose channels of a `source` array of instance records with stable IDs. |
 | `anim.staleTransforms` | Patch independent pose channels on a `source` array using `edits` and optional named `snapshots`. Returns the edited array and an applied/skipped count. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
 | `anim.feedback` | Evolve raster `frames` at a fixed simulation `dt`. Set source `fps` and `mode`, signal `halfLife` and `gain`, and optional `threshold`, `warp`, `filter`, and `cuts`. Feed [backward motion](#dense-optical-flow) into `flow` to advect the retained signal. |
+
+### Selectively refresh a frame bank
+
+Use `anim.frameBank` with a live or replayed raster and a record of named,
+aligned one-channel `masks` in byte coverage units from 0 to 255.
+`options` accepts `fps`, `tiles`, `regions`, and `refresh` with the
+[same timing as the render pass](render-graph.md#frame-banks-with-selective-refresh).
+Its `refreshed` output records the pixels that refreshed at this
+timestamp, including fractional coverage. An explicit `reset` boolean,
+a cut, a backward seek, or a source size change reinitializes the bank
+from the current image. Advance in source order or use `graph clip` with
+warm-up to build history before the first output frame. Each group
+instance keeps its own bank.
+
+In JavaScript, retain a session and call `sample` with the source raster
+and time in seconds. Pass `{ masks, reset }` as the optional third
+argument, or call `clear()` to start a new history.
+
+```js
+const bank = KIT.procedural.frameBanks.create({
+  fps: 12,
+  tiles: { size: [24, 16], every: 8 },
+  regions: [{ mask: 'subject', every: 3 }]
+});
+const { value, refreshed, tick } = bank.sample(source, time, { masks: { subject } });
+```
+
+For an exact tracked ID, compare the labels with `raster.math` and
+`op: "equal"`, then multiply the result by 255 to make the coverage mask.
+The renderer's `raster.match` mask binding performs both operations in
+one pass.
 
 ### Author layer clocks
 

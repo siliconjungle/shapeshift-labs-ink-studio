@@ -165,6 +165,11 @@ void main() {
     } else color = floor(mix(inputColor, old, weight * u_opacity) * 255.0 + .50001) / 255.0;
     return;
   }
+  if (u_operation == 16) {
+    vec4 bank = layerAt(u_history, pixel, u_size, false, u_budgetLinear);
+    color = floor(mix(inputColor, bank, weight * u_opacity) * 255.0 + .50001) / 255.0;
+    return;
+  }
   weight *= u_opacity;
   color = inputColor;
   if (weight <= 0.0) return;
@@ -215,6 +220,41 @@ void main() {
   }
 }`;
 
+const bankFragment = `#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D u_current, u_previous, u_pulse, u_masks[8];
+uniform vec2 u_size, u_work;
+uniform bool u_first, u_hasPulse;
+uniform int u_rules, u_masked[8];
+uniform vec4 u_rects[8];
+uniform ivec4 u_cycle;
+uniform ivec3 u_tiles;
+out vec4 color;
+${layerSamplingGLSL}
+
+bool inside(vec2 p, vec4 rect) {
+  return all(greaterThanEqual(p, rect.xy)) && all(lessThan(p, rect.xy + rect.zw));
+}
+
+void main() {
+  vec2 pixel = vec2(gl_FragCoord.x, u_work.y - gl_FragCoord.y) * u_size / u_work;
+  vec4 fresh = layerAt(u_current, pixel, u_size, false, false);
+  if (u_first) { color = fresh; return; }
+  float weight = u_hasPulse ? layerAt(u_pulse, pixel, u_size, false, false).r : 0.0;
+  if (u_cycle.w > 0) {
+    ivec2 tile = ivec2(pixel) / u_tiles.xy;
+    int index = tile.y * u_tiles.z + tile.x, period = u_cycle.x;
+    int offset = ((index % period) * u_cycle.y) % period;
+    if ((u_cycle.z + period - offset) % period < u_cycle.w) weight = 1.0;
+  }
+  ${Array.from({ length: 8 }, (_, i) => `
+  if (u_rules > ${i} && weight < 1.0 && inside(pixel, u_rects[${i}]))
+    weight = max(weight, u_masked[${i}] != 0 ? layerAt(u_masks[${i}], pixel, u_size, false, false).r : 1.0);`).join('')}
+  vec4 old = layerAt(u_previous, pixel, u_size, false, false);
+  color = floor(mix(old, fresh, weight) * 255.0 + .50001) / 255.0;
+}`;
+
 export function createRenderGraph(gl, { api, program, resources, target, textureUnit, fullscreen, maxSize }) {
   const shader = program(fragment),
     scene = target();
@@ -227,7 +267,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
   const groupsTexture = resources.texture();
   const effects = createRenderEffects(gl, { program, target, textureUnit, fullscreen });
   const history = api.history({ release: buffer => historyFree.push(buffer), releaseAge: buffer => buffer.dispose() });
-  let lastCube, ageScratch;
+  let lastCube, ageScratch, bankShader;
   gl.activeTexture(gl.TEXTURE4);
   gl.bindTexture(gl.TEXTURE_3D, cube);
   gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -256,6 +296,32 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
       }
       return [id, { kind, width, height, channels, data }];
     }));
+  }
+
+  function refreshBank(bank, source, outputs, { width, height }, w, h) {
+    bankShader ??= program(bankFragment);
+    gl.activeTexture(gl.TEXTURE0);
+    const stamp = historyFree.pop() ?? target();
+    stamp.resize(width, height);
+    textureUnit(0, source.textures[0]);
+    textureUnit(1, (bank.value ?? source).textures[0]);
+    textureUnit(10, (outputs.get(bank.pulse) ?? source).textures[0]);
+    const units = new Int32Array(8), masked = new Int32Array(8), rects = new Float32Array(8 * 4);
+    for (let i = 0; i < units.length; i++) {
+      const rule = bank.regions[i], mask = outputs.get(rule?.mask);
+      units[i] = i + 2;
+      textureUnit(units[i], (mask ?? source).textures[0]);
+      masked[i] = Number(Boolean(mask));
+      rects.set(rule?.rect ?? [0, 0, w, h], i * 4);
+    }
+    const grid = bank.grid;
+    fullscreen(bankShader, stamp.framebuffer, width, height, {
+      u_current: 0, u_previous: 1, u_pulse: 10, u_masks: units, u_size: [w, h], u_work: [width, height],
+      u_first: bank.first, u_hasPulse: Boolean(bank.pulse), u_rules: bank.regions.length, u_masked: masked, u_rects: rects,
+      u_cycle: grid ? [grid.every, grid.step, (grid.head - grid.phase + grid.every) % grid.every, grid.span] : [1, 0, 0, 0],
+      u_tiles: grid ? [...grid.size, Math.ceil(w / grid.size[0])] : [1, 1, w]
+    });
+    return stamp;
   }
 
   function execute(world, frame, plan, w, h, destination, present) {
@@ -334,7 +400,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
     let lastSelect;
     for (const [index, node] of plan.passes.entries()) {
       const input = outputs.get(node.input) ?? scene;
-      if ((!node.enabled || (!ownership && (node.type === 'history' || node.type === 'frameAge' && node.select))) && node.type !== 'mask')
+      if ((!node.enabled || (!ownership && (node.type === 'history' || (node.type === 'frameAge' || node.bank) && node.select))) && node.type !== 'mask')
         outputs.set(node.id, input);
       else {
         const out = free.pop() ?? target();
@@ -464,6 +530,18 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         if (node.effect) {
           textureUnit(9, hasGroups ? groupsTexture : scene.textures[0]);
           effects(node, layout.passes[index], out, values, w, h, time, input.textures[0]);
+        } else if (node.bank) {
+          const bank = openHistory(node);
+          const stamp = bank.capture ? refreshBank(bank, outputs.get(node.source), outputs, layout.passes[index], w, h) : bank.value;
+          bank.save(stamp);
+          // The capture program uses units 0-10, so restore the display pass inputs.
+          textureUnit(0, input.textures[0]);
+          textureUnit(2, (mask ?? scene).textures[0]);
+          textureUnit(3, ownership?.texture ?? scene.textures[0]);
+          textureUnit(5, select ? selected : scene.textures[0]);
+          textureUnit(6, depth ?? scene.textures[0]);
+          textureUnit(7, stamp.textures[0]);
+          fullscreen(shader, out.framebuffer, w, h, values);
         } else if (node.type === 'frameAge') {
           const age = openHistory(node);
           if (age.capture) {

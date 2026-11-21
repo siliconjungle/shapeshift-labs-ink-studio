@@ -1,18 +1,20 @@
 /* Ordered screen-space passes and named image and mask dependencies. */
 const RenderGraph = (() => {
-  let stacks, luts, targets, compositor, effects;
+  let stacks, luts, targets, compositor, effects, banks;
   try {
     stacks = ColorStack;
     luts = ColorLUT;
     targets = TargetSelectors;
     compositor = FrameComposite;
     effects = RenderEffects;
+    banks = FrameBank;
   } catch {
     stacks = require('./color-stack.js');
     luts = require('./color-lut.js');
     targets = require('./target-selectors.js');
     compositor = require('./frame-composite.js');
     effects = require('./render-effects.js');
+    banks = require('./frame-bank.js');
   }
   const operations = Object.freeze({
     mask: 1,
@@ -29,7 +31,8 @@ const RenderGraph = (() => {
     blocks: 12,
     pixelSort: 13,
     frameAge: 14,
-    motionSmear: 15
+    motionSmear: 15,
+    frameBank: 16
   });
   const fields = {
     mask: ['rect', 'feather', 'invert', 'volume', 'raster'],
@@ -39,6 +42,7 @@ const RenderGraph = (() => {
     composite: ['source', 'layer', 'blend', 'isolated'],
     history: ['mode', 'halfLife', 'cameraMotion'],
     frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
+    frameBank: ['fps', 'tiles', 'regions', 'refresh', 'source', 'cameraMotion'],
     motionSmear: ['field', 'fieldScale', 'velocity', 'blockSize', 'halfLife', 'refresh', 'cameraMotion'],
     ...Object.fromEntries(
       effects.types.map(type => [type, [...effects.fields[type], 'maskMode', 'depthThreshold', 'protectObjects']])
@@ -61,7 +65,7 @@ const RenderGraph = (() => {
     cubes = new WeakMap();
   const maxHistoryPasses = 4,
     maxHistoryPixels = 8388608;
-  const retainedTypes = ['history', 'feedback', 'frameAge', 'motionSmear'];
+  const retainedTypes = ['history', 'feedback', 'frameAge', 'motionSmear', 'frameBank'];
   const plain = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const tuple = (value, len) =>
     Array.isArray(value) && value.length === len && Array.from(value).every(Number.isFinite);
@@ -77,14 +81,15 @@ const RenderGraph = (() => {
   }
 
   function slot(value, mask = false) {
-    record(value, mask ? ['slot', 'channel', 'range'] : ['slot'], 'render graph raster binding');
-    const { slot: name, channel, range = [0, 255] } = value;
+    record(value, mask ? ['slot', 'channel', 'range', 'match'] : ['slot'], 'render graph raster binding');
+    const { slot: name, channel, range = [0, 255], match } = value;
     if (typeof name !== 'string' || !name.trim() ||
         (channel !== undefined && !['alpha', 'luma', 'r', 'g', 'b'].includes(channel) &&
           !(Number.isInteger(channel) && channel >= 0 && channel <= 3)) ||
-        !tuple(range, 2) || range[0] >= range[1] || !Number.isFinite(range[1] - range[0]))
+        !tuple(range, 2) || range[0] >= range[1] || !Number.isFinite(range[1] - range[0]) ||
+        (match !== undefined && (!Number.isSafeInteger(match) || match < 0 || match > 0xffffffff || value.range !== undefined)))
       throw new TypeError('A raster binding needs a named slot, an optional channel, and an increasing finite range');
-    return { name, ...(mask && { channel, range: range.slice() }) };
+    return { name, ...(mask && { channel, range: range.slice(), match }) };
   }
 
   function attachLayer(node, value) {
@@ -288,7 +293,7 @@ const RenderGraph = (() => {
             throw new TypeError('A mask needs a positive rectangle, nonnegative feather and boolean invert');
           Object.assign(node, { rect: rect?.slice(), feather, invert });
           if (raster !== undefined) {
-            record(raster, ['slot', 'channel', 'range', 'rect', 'filter'], 'render graph raster mask');
+            record(raster, ['slot', 'channel', 'range', 'match', 'rect', 'filter'], 'render graph raster mask');
             const { rect, filter, ...binding } = raster;
             node.slot = slot(binding, true);
             attachLayer(node, { ...(rect !== undefined && { rect }), ...(filter !== undefined && { filter }) });
@@ -387,6 +392,17 @@ const RenderGraph = (() => {
         case 'frameAge':
           Object.assign(node, prepareFrameAge(pass, reference, input, select));
           break;
+        case 'frameBank': {
+          const { fps, tiles, regions, refresh, cameraMotion = 'reset' } = pass;
+          const bank = banks.prepare({ fps, tiles, regions, refresh });
+          for (const mask of bank.masks) reference(mask, 'mask');
+          if (cameraMotion !== 'reset' && cameraMotion !== 'keep') throw new RangeError('Invalid frame bank camera policy');
+          const source = reference(pass.source ?? input, 'image');
+          Object.assign(node, { bank, source, cameraMotion, needsCamera: cameraMotion === 'reset',
+            budget: effects.budget({ maxPixels: 262144, filter: 'nearest', ...pass.budget }),
+            historyKey: JSON.stringify([type, source, cameraMotion, bank.fps]) });
+          break;
+        }
         case 'motionSmear': {
           const { halfLife = .45, velocity = [0, 0], fieldScale = [120, 120],
             blockSize = [1, 1], cameraMotion = 'reset' } = pass;
@@ -480,7 +496,7 @@ const RenderGraph = (() => {
         ...new Set(
           node.enabled
             ? [node.isolated ? undefined : input, mask, node.source, node.field, node.refresh,
-                ...(node.regions?.map(region => region.mask) ?? [])].filter(Boolean)
+                ...(node.regions?.map(region => region.mask) ?? []), ...(node.bank?.masks ?? [])].filter(Boolean)
             : [input].filter(Boolean)
         )
       ];
@@ -571,6 +587,8 @@ const RenderGraph = (() => {
                     : 3) +
               full * 5
             : age ? width * height + full * node.regions.length
+              : node.bank ? width * height * (1 + Number(Boolean(node.bank.grid)) + node.bank.rules.length +
+                Number(Boolean(node.bank.refresh))) + full
               : node.type === 'motionSmear' ? width * height * 4 + full * 4 : full;
       work += cost;
       if (node.enabled || node.type === 'mask') {
@@ -738,7 +756,7 @@ const RenderGraph = (() => {
   }
 
   function slotPixels(node, sources, raster) {
-    const { name, channel, range } = node.slot;
+    const { name, channel, range, match } = node.slot;
     if (!sources || !Object.hasOwn(sources, name)) throw new RangeError('Missing render graph raster slot: ' + name);
     const source = sources[name];
     if (!range) {
@@ -748,7 +766,8 @@ const RenderGraph = (() => {
     const channels = source?.channels ?? source?.data?.length / (source?.width * source?.height);
     const { width, height, data } = raster.channel(source, { channel: channel ?? (channels % 2 === 0 ? 'alpha' : 'luma') });
     const rgba = new Uint8Array(width * height * 4);
-    for (let p = 0; p < data.length; p++) rgba[p * 4 + 3] = byte(clamp((data[p] - range[0]) / (range[1] - range[0])));
+    for (let p = 0; p < data.length; p++)
+      rgba[p * 4 + 3] = match === undefined ? byte(clamp((data[p] - range[0]) / (range[1] - range[0]))) : data[p] === match ? 255 : 0;
     return { w: width, h: height, rgba };
   }
 
@@ -835,6 +854,13 @@ const RenderGraph = (() => {
       previousFrame = { source, w, h, time, signature };
       return node => {
         const prior = entries.get(node.id);
+        if (node.bank) {
+          const step = banks.schedule(node.bank, time, prior?.clock);
+          return { ...step, value: prior?.value, save(value) {
+            if (prior && prior.value !== value) drop(node.id);
+            entries.set(node.id, { key: keys.get(node.id), clock: step.clock, value });
+          } };
+        }
         if (node.type === 'frameAge') {
           const age = prior?.age ?? { origin: time, tick: -1, frames: new Map(), spare: undefined };
           if (!prior) entries.set(node.id, { key: keys.get(node.id), age });

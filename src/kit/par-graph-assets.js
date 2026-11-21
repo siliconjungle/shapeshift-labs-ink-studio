@@ -246,6 +246,7 @@
     ...P.generator.operations,
     ...P.sceneGraph.operations,
     ...P.animationGraph.operations,
+    ...P.frameBanks.operations,
     ...P.visualResampling.operations,
     ...P.rasterSimulation.operations,
     ...P.mediaGraph.operations,
