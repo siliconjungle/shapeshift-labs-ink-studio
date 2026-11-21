@@ -1,4 +1,5 @@
 const FrameComposite = require('../src/frame-composite.js');
+const MotionSmear = require('../src/motion-smear.js');
 const FrameBank = require('../src/frame-bank.js');
 const {
   cube,
@@ -10,58 +11,27 @@ const {
   rowTable,
   resources,
   ownerGroups,
+  motionRaster,
   effects
 } = require('../src/render-graph.js');
 const wrap = (n, size) => n - Math.floor(n / size) * size;
 
 function smearFrame(node, work, input, field, refresh, output, weightAt, memory, w, h) {
   const { width: W, height: H } = work;
-  const [bx, by] = node.blockSize, [vx, vy] = node.velocity, [sx, sy] = node.fieldScale;
   const elapsed = memory.sampleElapsed;
   const decay = elapsed > 0 ? 2 ** (-elapsed / node.halfLife) : 0;
-  const donor = new Float64Array(2), color = new Float64Array(4);
-  const filter = node.budget.filter;
-  function address(x, y) {
-    let dx = vx, dy = vy, strength = 1;
-    if (field) {
-      const left = Math.floor(x / bx) * bx, top = Math.floor(y / by) * by;
-      const fx = Math.floor(left + Math.min(bx, w - left) * .5);
-      const fy = Math.floor(top + Math.min(by, h - top) * .5);
-      const p = (fy * w + fx) * 4, alpha = field[p + 3];
-      if (!alpha || !field[p + 2]) return 0;
-      const straight = 255 / alpha;
-      dx += sx * Math.max(-1, (Math.round(field[p] * straight) - 128) / 127);
-      dy += sy * Math.max(-1, (Math.round(field[p + 1] * straight) - 128) / 127);
-      strength = field[p + 2] / 255;
-    }
-    donor[0] = x - dx * elapsed;
-    donor[1] = y - dy * elapsed;
-    if (!(donor[0] >= 0 && donor[0] < w && donor[1] >= 0 && donor[1] < h)) return 0;
-    const clean = refresh?.[Math.floor(y) * w + Math.floor(x)] ?? 0;
-    return strength * (1 - clean / 255);
-  }
+  const donor = [0, 0], color = new Float64Array(4), filter = node.budget.filter;
+  const locate = MotionSmear.address(node, { width: w, height: h, elapsed, field, raw: Boolean(node.motion), refresh });
   let stamp = memory.value;
   if (memory.capture) {
-    const old = { data: stamp, w: W, h: H, filter };
-    stamp = new Uint8Array(W * H * 4);
-    for (let j = 0, q = 0; j < H; j++) for (let i = 0; i < W; i++, q += 4) {
-      const x = ((i + .5) * w) / W, y = ((j + .5) * h) / H;
-      const from = (Math.floor(y) * w + Math.floor(x)) * 4;
-      const amount = decay && address(x, y) * decay;
-      if (amount) FrameComposite.sample(old, donor[0] * W / w, donor[1] * H / h, color);
-      // Quantize the residual toward the clean sample so it can reach zero.
-      for (let c = 0; c < 4; c++) {
-        const clean = input[from + c], delta = (color[c] - clean) * amount;
-        stamp[q + c] = clean + Math.sign(delta) * Math.floor(Math.abs(delta) + 1e-5);
-      }
-    }
+    stamp = MotionSmear.write(input, stamp, { w, h, width: W, height: H, filter, decay, locate });
     memory.save(stamp);
   }
   if (!decay || !node.opacity) return;
   const retained = { data: stamp, w: W, h: H, filter };
   for (let y = .5, q = 0; y < h; y++) for (let x = .5; x < w; x++, q += 4) {
     const weight = weightAt(x, y) * node.opacity;
-    if (!weight || !address(x, y)) continue;
+    if (!weight || !locate(x, y, donor)) continue;
     FrameComposite.sample(retained, x * W / w, y * H / h, color);
     for (let c = 0; c < 4; c++) output[q + c] = Math.round(input[q + c] * (1 - weight) + color[c] * weight);
   }
@@ -131,8 +101,10 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
         Number(chosenAt(x, y)) *
         (mask ? mask[Math.floor(y) * w + Math.floor(x)] / 255 : 1) *
         effects.depthWeight(node.depth, depth?.[at(x, y)]);
-      if (smear)
-        smearFrame(node, work, input, outputs.get(node.field), outputs.get(node.refresh), output, weightAt, openHistory(node), w, h);
+      if (smear) {
+        const field = node.motion ? motionRaster(node, options.renderGraphInputs, w, h) : outputs.get(node.field);
+        smearFrame(node, work, input, field, outputs.get(node.refresh), output, weightAt, openHistory(node), w, h);
+      }
       if (node.bank) {
         const bank = openHistory(node);
         const { width: W, height: H } = work;

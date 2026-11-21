@@ -8,6 +8,7 @@
     cube: RenderGraph.cube,
     selection: RenderGraph.selection,
     history: RenderGraph.history,
+    motionRaster: RenderGraph.motionRaster,
     replay: RenderGraph.replay,
     feedbackMotion: RenderGraph.feedbackMotion,
     rowTable: RenderGraph.rowTable,

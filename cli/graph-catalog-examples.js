@@ -143,6 +143,7 @@ const specifications = {
     bones: [bone] } } }, inputs: { bind: link('binding') } },
   'anim.keyframes': { inputs: { channels: { x: 'number' }, keys: [{ time: 0, value: { x: 2 } }] } },
   'anim.spriteDesync': { inputs: { source: clip } },
+  'anim.datamosh': { inputs: { source: rgba, motion, options: { halfLife: 1 } } },
   'anim.frameBank': { inputs: { source: rgba, options: { tiles: { size: [2, 2], every: 4 } } } },
   'sim.define': { inputs: { kind: 'particles' } },
   'sim.run': { nodes: { recipe: { op: 'sim.define', inputs: { kind: 'particles' } } }, inputs: { recipe: link('recipe') } },

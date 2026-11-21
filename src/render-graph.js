@@ -1,6 +1,6 @@
 /* Ordered screen-space passes and named image and mask dependencies. */
 const RenderGraph = (() => {
-  let stacks, luts, targets, compositor, effects, banks;
+  let stacks, luts, targets, compositor, effects, banks, smear;
   try {
     stacks = ColorStack;
     luts = ColorLUT;
@@ -8,6 +8,7 @@ const RenderGraph = (() => {
     compositor = FrameComposite;
     effects = RenderEffects;
     banks = FrameBank;
+    smear = MotionSmear;
   } catch {
     stacks = require('./color-stack.js');
     luts = require('./color-lut.js');
@@ -15,6 +16,7 @@ const RenderGraph = (() => {
     compositor = require('./frame-composite.js');
     effects = require('./render-effects.js');
     banks = require('./frame-bank.js');
+    smear = require('./motion-smear.js');
   }
   const operations = Object.freeze({
     mask: 1,
@@ -43,7 +45,7 @@ const RenderGraph = (() => {
     history: ['mode', 'halfLife', 'cameraMotion'],
     frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
     frameBank: ['fps', 'tiles', 'regions', 'refresh', 'source', 'cameraMotion'],
-    motionSmear: ['field', 'fieldScale', 'velocity', 'blockSize', 'halfLife', 'refresh', 'cameraMotion'],
+    motionSmear: ['field', 'motion', 'fieldScale', 'velocity', 'blockSize', 'halfLife', 'refresh', 'cameraMotion'],
     ...Object.fromEntries(
       effects.types.map(type => [type, [...effects.fields[type], 'maskMode', 'depthThreshold', 'protectObjects']])
     ),
@@ -404,21 +406,26 @@ const RenderGraph = (() => {
           break;
         }
         case 'motionSmear': {
-          const { halfLife = .45, velocity = [0, 0], fieldScale = [120, 120],
-            blockSize = [1, 1], cameraMotion = 'reset' } = pass;
-          const bounded = vector => tuple(vector, 2) && vector.every(n => Math.abs(n) <= 4096);
-          if (!Number.isFinite(halfLife) || halfLife <= 0 || halfLife > 60 ||
-              !bounded(velocity) || !bounded(fieldScale) ||
-              !tuple(blockSize, 2) || !blockSize.every(n => Number.isInteger(n) && n >= 1 && n <= 4096) ||
-              !['reset', 'keep'].includes(cameraMotion))
-            throw new RangeError('Motion smear needs bounded XY velocity, field range, block size, halfLife and camera policy');
+          const { motion, cameraMotion = 'reset' } = pass;
+          if (!['reset', 'keep'].includes(cameraMotion)) throw new RangeError('Invalid motion smear camera policy');
+          const raw = motion !== undefined;
+          if (raw && pass.field !== undefined) throw new TypeError('Motion smear accepts an image field or a raw motion slot');
+          let binding;
+          if (raw) {
+            record(motion, ['slot', 'confidence', 'valid', 'direction', 'units', 'minConfidence'], 'raw motion binding');
+            const { slot: name, confidence, valid } = motion;
+            for (const key of [name, confidence, valid].filter((value, index) => index === 0 || value !== undefined))
+              if (typeof key !== 'string' || !key.trim()) throw new TypeError('Raw motion needs named raster slots');
+            binding = { name, confidence, valid, ...smear.convention(motion) };
+          }
           const field = pass.field === undefined ? undefined : reference(pass.field, 'image');
           const refresh = pass.refresh === undefined ? undefined : reference(pass.refresh, 'mask');
+          const controls = smear.settings({ ...pass, fieldScale: pass.fieldScale === undefined ? (raw ? [1, 1] : [120, 120]) : pass.fieldScale });
           Object.assign(node, {
-            halfLife, velocity: velocity.slice(), fieldScale: fieldScale.slice(), blockSize: blockSize.slice(),
+            ...controls, ...(binding && { motion: binding, direction: binding.direction, units: binding.units }),
             field, refresh, cameraMotion, needsCamera: cameraMotion === 'reset',
             budget: effects.budget({ filter: 'nearest', ...pass.budget }),
-            historyKey: JSON.stringify([type, input, field, cameraMotion])
+            historyKey: JSON.stringify([type, input, field, binding, cameraMotion])
           });
           break;
         }
@@ -594,7 +601,8 @@ const RenderGraph = (() => {
       if (node.enabled || node.type === 'mask') {
         const buffer = free.length ? free.pop() : allocated++;
         live.set(node.id, buffer);
-        scratchPeak = Math.max(scratchPeak, node.effect ? width * height : age && node.regions.length > 1 ? full : 0);
+        scratchPeak = Math.max(scratchPeak, node.effect ? width * height :
+          node.motion ? 4 * full : age && node.regions.length > 1 ? full : 0);
         peak = Math.max(peak, allocated * full + scratchPeak);
         if (node.enabled && retainedTypes.includes(node.type)) {
           const pixels = width * height * (age ? node.slots : 1);
@@ -753,6 +761,16 @@ const RenderGraph = (() => {
       data[i + 1] = found.get(target);
     }
     return data;
+  }
+
+  function motionRaster(node, sources, width, height) {
+    const { name, confidence, valid, minConfidence } = node.motion;
+    function read(key) {
+      if (key === undefined) return null;
+      if (!sources || !Object.hasOwn(sources, key)) throw new RangeError('Missing render graph raster slot: ' + key);
+      return sources[key];
+    }
+    return smear.raw(read(name), { width, height, confidence: read(confidence), valid: read(valid), minConfidence });
   }
 
   function slotPixels(node, sources, raster) {
@@ -1019,6 +1037,7 @@ const RenderGraph = (() => {
     cube,
     selection,
     layer,
+    motionRaster,
     history,
     feedbackMotion,
     replay,

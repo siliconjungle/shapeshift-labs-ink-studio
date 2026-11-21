@@ -436,6 +436,45 @@ const smear = {
   Camera motion resets the pass by default. Use `"keep"` to carry the
   screen-space history through a camera move.
 
+### Feed signed motion
+
+Use `motion` to bind a raw, two-channel raster through
+`renderGraphInputs`. Its XY samples align with the current image,
+including when it comes from a render pass captured on an earlier take.
+The encoded image `field` remains available for authored velocity maps.
+
+```js
+{
+  id: 'mosh', type: 'motionSmear', input: 'camera',
+  motion: { slot: 'vectors', valid: 'visibleMotion' },
+  blockSize: [8, 4], halfLife: 0.8, refresh: 'intra'
+}
+```
+
+- Native `scene.pass` motion `data` and `anim.visualSample.motion`
+  describe current minus previous position. This is the default.
+  Connect their corresponding `valid` or `motionValid` outputs to the
+  validity slot. Zero validity replaces the affected history with the
+  current image.
+- To use `warp.opticalFlow`, estimate `direction: "backward"` and set
+  that same direction in the motion binding. Backward vectors point
+  from the current pixel to its donor in the previous image.
+  Add its optional `confidence` raster by naming another slot.
+  Confidence in [0, 1] weights carry. `minConfidence` cuts off weak samples.
+- Raw motion is in `pixels/frame` by default. Each new observation
+  applies the supplied displacement once. Use `units: "pixels/second"`
+  to scale vectors by elapsed time. Raw vectors default to
+  `fieldScale: [1, 1]`. `velocity` stays in pixels per second.
+- A `null` vector slot restores the clean frame. Supply a refresh mask
+  to clear only selected pixels, or adjust `halfLife` to control how
+  long history survives elsewhere. A clip cut starts a fresh history.
+
+Use [`anim.datamosh`](headless-authoring.md#transport-image-history-with-signed-motion)
+to combine raw motion and live or recorded images outside the scene renderer.
+
+Run `node examples/datamosh.cjs crosswind.html` to try the signed-motion
+study with adjustable half-life and selective refresh.
+
 [Packet Drift](../examples/motion-smear.js) runs the same animated feed
 through clean and motion-smeared image branches. The motion field follows
 the probe's movement with different offsets in neighboring blocks.

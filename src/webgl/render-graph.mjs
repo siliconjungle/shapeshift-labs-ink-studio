@@ -8,7 +8,8 @@ export const graphOwner = Symbol('render graph owner capture');
 const fragment = `#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D u_input, u_source, u_mask, u_owner, u_selected, u_depth, u_history, u_auxMask;
+uniform sampler2D u_input, u_mask, u_owner, u_selected, u_depth, u_history, u_auxMask;
+uniform highp sampler2D u_source;
 uniform highp sampler2D u_rows;
 uniform highp sampler3D u_cube;
 uniform vec2 u_size, u_passSize, u_offset, u_amplitude;
@@ -30,6 +31,7 @@ uniform vec2 u_feedbackPivot, u_feedbackTransform, u_threshold;
 uniform float u_blockSize, u_gain;
 uniform bool u_feedbackLinear, u_hasThreshold;
 uniform bool u_scanlines, u_rejectDepth, u_hasDepth, u_isolated, u_over, u_wrap;
+uniform bool u_rawMotion, u_motionPerFrame;
 uniform float u_depthThreshold;
 uniform vec2 u_flowScale, u_flowVelocity, u_flowBlock;
 uniform float u_smearElapsed;
@@ -145,18 +147,23 @@ void main() {
   if (u_operation == 15) {
     color = inputColor;
     if (!u_hasHistory) return;
-    vec2 velocity = u_flowVelocity;
+    vec2 offset = u_flowVelocity * u_smearElapsed;
     float strength = 1.0;
     if (u_hasFlow) {
       vec2 block = floor(pixel / u_flowBlock) * u_flowBlock;
-      vec4 flow = layerAt(u_source, block + min(u_flowBlock, u_size - block) * .5, u_size, false, false);
+      vec4 flow = layerAt(u_source, block + min(u_flowBlock, u_size - block) * .5, u_size, u_rawMotion, false);
       if (flow.a <= 0.0 || flow.b <= 0.0) return;
-      vec2 bytes = floor(flow.rg / flow.a * 255.0 + .5);
-      velocity += max(vec2(-1.0), (bytes - 128.0) / 127.0) * u_flowScale;
+      if (u_rawMotion) {
+        offset += flow.rg * u_flowScale * (u_motionPerFrame ? 1.0 : u_smearElapsed);
+      } else {
+        vec2 bytes = floor(flow.rg / flow.a * 255.0 + .5);
+        vec2 velocity = u_flowVelocity + max(vec2(-1.0), (bytes - 128.0) / 127.0) * u_flowScale;
+        offset = velocity * u_smearElapsed;
+      }
       strength = flow.b;
     }
     if (u_hasAuxMask) strength *= 1.0 - layerAt(u_auxMask, pixel, u_size, false, false).r;
-    vec2 donor = pixel - velocity * u_smearElapsed;
+    vec2 donor = pixel - offset;
     if (strength <= 0.0 || any(lessThan(donor, vec2(0.0))) || any(greaterThanEqual(donor, u_size))) return;
     vec4 old = layerAt(u_history, u_captureHistory ? donor : pixel, u_size, false, u_budgetLinear);
     if (u_captureHistory) {
@@ -409,6 +416,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         const feedback = node.type === 'feedback';
         const smear = node.type === 'motionSmear';
         const memory = feedback || smear || node.type === 'history' ? openHistory(node) : null;
+        const rawMotion = node.motion && api.motionRaster(node, frame.renderGraphInputs, w, h);
         const mask = outputs.get(node.mask),
           table = node.type === 'grade' && api.cube(node);
         const layer =
@@ -423,6 +431,9 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             throw new RangeError('Render graph layer exceeds the WebGL texture size limit');
           textureUnit(1, raster);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, layer.w, layer.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, layer.data);
+        } else if (rawMotion) {
+          textureUnit(1, raster);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, rawMotion);
         } else textureUnit(1, (outputs.get(node.source ?? node.field) ?? scene).textures[0]);
         if (table && table !== lastCube) {
           gl.activeTexture(gl.TEXTURE4);
@@ -584,13 +595,15 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           }
         } else if (memory) {
           const elapsed = smear ? memory.sampleElapsed : 0;
-          const smearDecay = elapsed > 0 ? 2 ** (-elapsed / node.halfLife) : 0;
+          const smearDecay = elapsed > 0 && (!node.motion || rawMotion) ? 2 ** (-elapsed / node.halfLife) : 0;
           if (smear) {
             const refresh = outputs.get(node.refresh);
             textureUnit(8, (refresh ?? scene).textures[0]);
             Object.assign(values, {
-              u_auxMask: 8, u_hasAuxMask: Boolean(refresh), u_hasFlow: Boolean(node.field),
-              u_flowScale: node.fieldScale, u_flowVelocity: node.velocity, u_flowBlock: node.blockSize,
+              u_auxMask: 8, u_hasAuxMask: Boolean(refresh), u_hasFlow: Boolean(node.field || rawMotion),
+              u_rawMotion: Boolean(rawMotion), u_motionPerFrame: node.units === 'pixels/frame',
+              u_flowScale: node.direction === 'backward' ? node.fieldScale.map(value => -value) : node.fieldScale,
+              u_flowVelocity: node.velocity, u_flowBlock: node.blockSize,
               u_smearElapsed: elapsed, u_decay: smearDecay
             });
           }

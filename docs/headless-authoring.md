@@ -1549,11 +1549,49 @@ port to hide a layer during that hold.
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
 | `anim.visualSample` | Replay a [captured visual span](graph-clips.md#capture-a-reusable-visual-span) with independent timing, alpha, raw data, depth and motion. |
 | `anim.frameBank` | Retain and selectively refresh raster pixels. Outputs the banked image, the refresh mask, and the capture tick. |
+| `anim.datamosh` | Pull the previous image through signed motion and blend it with the current image. Outputs the image and retained weight. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
 | `anim.captureTransforms` | Snapshot the pose channels of a `source` array of instance records with stable IDs. |
 | `anim.staleTransforms` | Patch independent pose channels on a `source` array using `edits` and optional named `snapshots`. Returns the edited array and an applied/skipped count. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
 | `anim.feedback` | Evolve raster `frames` at a fixed simulation `dt`. Set source `fps` and `mode`, signal `halfLife` and `gain`, and optional `threshold`, `warp`, `filter`, and `cuts`. Feed [backward motion](#dense-optical-flow) into `flow` to advect the retained signal. |
+
+### Transport image history with signed motion
+
+Use `anim.datamosh` on a display raster and a two-channel `motion`
+raster on the current image grid. The first sample initializes the
+history from `source`. Each later sample looks up the displaced pixel
+in the previous result and retains its contribution according to the
+elapsed time and `options.halfLife`. Output `carry` reports that
+contribution as a 0–1 raster.
+
+Connect [captured motion](graph-clips.md#capture-a-reusable-visual-span)
+through `anim.visualSample.motion` and `motionValid`, or connect
+[backward optical flow](#dense-optical-flow) and its confidence.
+Use `options.direction: "backward"` for the latter. Native captured
+motion uses `"current-minus-previous"`, the default direction. Both
+use pixels per observed frame unless units are explicitly set to
+`"pixels/second"`.
+
+The optional aligned `refresh` raster has byte coverage from 0 to 255.
+Connect a frame bank's `refreshed` output or a separately authored
+mask. Full refresh copies the current pixel, including alpha. Optional
+`confidence` (0–1) weights history and `valid` (0–255) excludes
+unreliable motion at zero. Use `options.blockSize` to share vectors
+across blocks and `filter: "linear"` for interpolated donors.
+
+Advance in observation order, with warm-up for exported clips that
+start midway through a shot. A repeated timestamp reuses the stored
+result. A backward seek, size change, cut, or explicit `reset`
+starts clean. A `null` motion sample also copies the current image.
+
+```js
+const datamosh = KIT.procedural.datamosh.create({ halfLife: 0.8 });
+const { value, carry } = datamosh.sample(image, motion, time, { valid, refresh });
+```
+
+Use the same settings with a [screen pass](render-graph.md#feed-signed-motion)
+for CPU or WebGL scene rendering.
 
 ### Selectively refresh a frame bank
 
