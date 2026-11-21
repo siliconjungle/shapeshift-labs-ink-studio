@@ -826,6 +826,37 @@ In Node, call `ink.reviewSubjectReadability(world, { plan, width, height,
 view, pose })` for the image and report. Use `view.px` just as in a
 normal render. A stateful world needs a `pose(world, time)` callback.
 
+## Review shadow readability
+
+```sh
+ink-studio palette darks examples/shadow-readability.js --w 184 --h 104 --px 1 --cols 2 --out low-tide
+```
+
+The review pairs horizontal and vertical neighbours on visible
+geometry at the export's art resolution. Both pixels must be at or
+below `maxLightness` in OKLab L, which defaults to 0.40. It reports
+adjacent shapes sharing the same swatch, weak OKLab colour separation,
+and weak OKLab lightness separation. `review.json` gives contact counts,
+dark sample counts, and the weakest pair's coordinates and swatches.
+`comparison.png` shows the render and marks the measured edges.
+
+The default plan groups contacts by visible material. Use
+`groupBy: "object"` to identify adjacent objects with the same material.
+For exact areas, use the readability plan's named `subjects` and
+optional `pairs` of subject IDs. `views`, `states`, and transparent
+`matte` work as in the subject review. A state can set
+`look: { "effectPalettes": false }` for a matched baseline.
+
+`thresholds.color` defaults to 0.06, `thresholds.lightness` to 0.035,
+and `thresholds.weakShare` to 0.25. A contact with zero dark samples
+reports its sample count and receives a **No dark contacts** label when
+the whole view is unmeasured. Add an authored
+[material dark ramp](effect-palettes.md#reserve-dark-ramps-by-material)
+to reserve swatches for a specific shadow shape.
+
+In Node, use `ink.reviewShadowReadability(world, {plan, width, height,
+view, pose})`. Pass the scene's usual pixel size in `view.px`.
+
 ## Compare palettes through lighting and weather
 
 ```sh

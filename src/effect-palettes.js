@@ -1,9 +1,17 @@
 /* Per-effect output ramps, selected by visible coverage on the native art grid. */
 const EffectPalettes = (() => {
   const pixel = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
-  const kinds = Object.freeze(['fog', 'clouds', 'sky', 'emission', 'bounce', 'shadow']);
+  let colorSpace, targets;
+  try {
+    colorSpace = ColorSpace;
+    targets = TargetSelectors;
+  } catch {
+    colorSpace = require('./color-space.js');
+    targets = require('./target-selectors.js');
+  }
+  const kinds = Object.freeze(['fog', 'clouds', 'sky', 'emission', 'bounce', 'shadow', 'darks']);
   const floors = { fog: .58, clouds: .46, sky: .48, emission: .24, bounce: .12, shadow: .30 };
-  const order = ['emission', 'fog', 'clouds', 'shadow', 'bounce', 'sky'];
+  const order = ['emission', 'fog', 'clouds', 'darks', 'shadow', 'bounce', 'sky'];
   const lighting = kind => kind === 'shadow' || kind === 'bounce';
   const symbols = Object.freeze(Object.fromEntries(kinds.map((name, i) => [name, i + 1])));
   const list = (value, label) => {
@@ -33,19 +41,7 @@ const EffectPalettes = (() => {
     const objects = list(protect.objects ?? [], 'Protected objects'), materials = list(protect.materials ?? [], 'Protected materials');
     const ramps = new Map();
     const select = pixel.paletteSelector(palette, roles);
-    for (const kind of kinds) {
-      const raw = source[kind];
-      if (raw === undefined || raw === false) continue;
-      const rule = Array.isArray(raw) ? { colors: raw } :
-        record(raw, ['colors', 'threshold', 'geometry', 'mode', 'range', 'dither', 'when', 'combine'], kind + ' palette');
-      const { colors, combine, geometry = lighting(kind) || combine === 'material',
-        mode = combine === 'material' ? 'nearest' : 'luma', dither = 0, when } = rule;
-      if (typeof geometry !== 'boolean' || !['luma','nearest'].includes(mode) || (combine !== undefined && combine !== 'material'))
-        throw new TypeError('Invalid ' + kind + ' palette mode, geometry or combine setting');
-      const threshold = unit(rule.threshold ?? floors[kind], kind + ' coverage threshold');
-      const amount = unit(dither, kind + ' palette dither');
-      const range = limits(rule.range ?? [0,1], kind + ' tone range');
-      range.forEach(n => unit(n, kind + ' tone range'));
+    function swatches(colors) {
       if (!Array.isArray(colors) || !colors.length || colors.length > 64)
         throw new RangeError('Effect palettes need 1 to 64 colors');
       const packed = Array.from(colors).flatMap(color => {
@@ -58,6 +54,34 @@ const EffectPalettes = (() => {
         throw new TypeError('Effect colors need #rrggbb, a scene palette index or a scene role');
       });
       if (packed.length > 64) throw new RangeError('Expanded effect palette cannot exceed 64 colors');
+      return packed;
+    }
+    for (const kind of kinds) {
+      const raw = source[kind];
+      if (raw === undefined || raw === false) continue;
+      if (kind === 'darks') {
+        if (!Array.isArray(raw) || raw.length > 64) throw new TypeError('Darks need an array of up to 64 target ramps');
+        const scoped = Array.from(raw, (entry, slot) => {
+          const rule = record(entry, ['select','colors','range','dither'], 'dark palette target');
+          const range = limits(rule.range ?? [0,.4], 'Dark palette lightness range');
+          range.forEach(n => unit(n, 'Dark palette lightness range'));
+          return { select:targets.prepare(rule.select), packed:swatches(rule.colors), range, slot,
+            amount:unit(rule.dither ?? 0, 'Dark palette dither') };
+        });
+        if (scoped.length) ramps.set(kind, { scoped, packed:[...new Set(scoped.flatMap(row=>row.packed))] });
+        continue;
+      }
+      const rule = Array.isArray(raw) ? { colors: raw } :
+        record(raw, ['colors', 'threshold', 'geometry', 'mode', 'range', 'dither', 'when', 'combine'], kind + ' palette');
+      const { colors, combine, geometry = lighting(kind) || combine === 'material',
+        mode = combine === 'material' ? 'nearest' : 'luma', dither = 0, when } = rule;
+      if (typeof geometry !== 'boolean' || !['luma','nearest'].includes(mode) || (combine !== undefined && combine !== 'material'))
+        throw new TypeError('Invalid ' + kind + ' palette mode, geometry or combine setting');
+      const threshold = unit(rule.threshold ?? floors[kind], kind + ' coverage threshold');
+      const amount = unit(dither, kind + ' palette dither');
+      const range = limits(rule.range ?? [0,1], kind + ' tone range');
+      range.forEach(n => unit(n, kind + ' tone range'));
+      const packed = swatches(colors);
       let gate;
       if (when !== undefined) {
         const { channel, min = -Infinity, max = Infinity } = record(when,['channel','min','max'],'effect palette profile gate');
@@ -70,6 +94,18 @@ const EffectPalettes = (() => {
       ramps.set(kind, { packed, rgb, geometry, mode, amount, range, threshold, gate, combine });
     }
     return ramps.size ? { ramps, objects, materials } : null;
+  }
+
+  function bindDarks(settings, world) {
+    const scoped = settings?.ramps.get('darks')?.scoped;
+    if (!scoped) return;
+    const index = targets.index(world), cache = new WeakMap();
+    return i => {
+      if (i < 0 || i >= world.count) return;
+      const entry = index.row(i);
+      if (!cache.has(entry)) cache.set(entry, scoped.findLast(rule=>targets.matches(rule.select, entry)));
+      return cache.get(entry);
+    };
   }
 
   function activate(settings, parameters) {
@@ -91,6 +127,7 @@ const EffectPalettes = (() => {
     const protectedObjects = new Set(passes.objects?.flatMap((name,id) => objects.has(name) ? [id] : []));
     const protectedMaterials = new Set(passes.materials?.flatMap((name,id) => materials.has(name) ? [id] : []));
     const sample = [0,0,0];
+    const darkLightness = ramps.has('darks') ? new Map() : null;
     let changed = false;
     for (let p=0; p<w*h; p++) {
       if (frame.alpha && !frame.alpha[p] || protectedObjects.has(passes.objectId?.[p]) ||
@@ -110,11 +147,16 @@ const EffectPalettes = (() => {
       let light;
       for (const kind of active) {
         if (lighting(kind) && geometry && signals.lightAt) light ??= signals.lightAt(p,bottom) ?? {};
-        const ramp = ramps.get(kind), weight = light?.[kind] ?? weights[kind];
-        if (!(weight > 0 && weight >= ramp.threshold) ||
+        const dark = kind === 'darks';
+        const ramp = dark ? geometry && signals.darkAt?.((passes.splatId?.[p] ?? 0)-1) : ramps.get(kind);
+        if (!ramp) continue;
+        const weight = dark ? 1 : light?.[kind] ?? weights[kind];
+        if (dark) {
+          if (weights.emission > 0 || frame.inkMask?.[p] === 4 || frame.alpha && frame.alpha[p] < 255) continue;
+        } else if (!(weight > 0 && weight >= ramp.threshold) ||
             (geometry && !ramp.geometry && (kind === 'fog' || kind === 'clouds' || lighting(kind)))) continue;
-        if (ramp.combine && ownership?.outlined?.[bottom]) break;
-        const local = geometry && ramp.combine && ownership?.material(p,bottom);
+        if ((dark || ramp.combine) && ownership?.outlined?.[bottom]) break;
+        const local = geometry && (dark || ramp.combine) && ownership?.material(p,bottom);
         if (local?.reserved) break;
         const lit = lighting(kind) && ownership?.lit;
         for (let c=0;c<3;c++) sample[c] = kind === 'emission' ? emission[q+c] :
@@ -123,23 +165,33 @@ const EffectPalettes = (() => {
         let index;
         if (ramp.mode === 'nearest') index = pixel.nearest(sample, ramp.rgb, false);
         else {
-          const luma = sample[0]*.30 + sample[1]*.55 + sample[2]*.15;
+          let luma;
+          if (dark) {
+            const start = bottom*3, color = source[start]*65536 + source[start+1]*256 + source[start+2];
+            luma = darkLightness.get(color);
+            if (luma === undefined) {
+              luma = colorSpace.toOKLab(sample)[0];
+              if (darkLightness.size < 8192) darkLightness.set(color,luma);
+            }
+            if (luma < ramp.range[0] || luma > ramp.range[1]) continue;
+          } else luma = sample[0]*.30 + sample[1]*.55 + sample[2]*.15;
           const [lo,hi] = ramp.range, span = ramp.packed.length-1;
           const step = Math.min(1, Math.max(0,(luma-lo)/(hi-lo)))*span;
           const [dx,dy] = ramp.amount && ditherAt ? ditherAt(x,y) : [x,y];
           const rank = pixel.bayerRank(dx,dy);
           index = Math.min(span, Math.max(0,Math.round(step + (rank-.5)*ramp.amount)));
           if (trace) {
-            trace.method = 'luma';
+            trace.method = dark ? 'oklab-lightness' : 'luma';
             const low = Math.floor(step), high = Math.ceil(step);
             if (ramp.amount && low !== high) trace.dither = { mode:'tone', pattern:'bayer', coordinates:[dx,dy],
               pair:[ramp.packed[low],ramp.packed[high]],rank,strength:ramp.amount,share:step-low };
           }
         }
         let color = ramp.packed[index], winner = 'shared';
-        const localTrace = trace && local ? {} : undefined;
-        if (local) {
-          const swatch = ownership.pick(local, sample, x, y, p, localTrace);
+        const competing = dark ? undefined : local;
+        const localTrace = trace && competing ? {} : undefined;
+        if (competing) {
+          const swatch = ownership.pick(competing, sample, x, y, p, localTrace);
           if (distance(sample,swatch) <= distance(sample,ramp.rgb[index])) {
             color = (Math.round(swatch[0]*255)<<16) | (Math.round(swatch[1]*255)<<8) | Math.round(swatch[2]*255);
             winner = 'material';
@@ -149,8 +201,8 @@ const EffectPalettes = (() => {
         rgb[q+1] = (color>>8)&255;
         rgb[q+2] = color&255;
         if (mask) mask[p] = symbols[kind];
-        ownership?.mark(p,{kind,ramp,local,winner,weight});
-        if (trace) inspect.effect(kind,ramp,local,winner,sample,index,winner === 'material' ? localTrace : trace,weight);
+        ownership?.mark(p,{kind,ramp,local:competing,winner,weight});
+        if (trace) inspect.effect(kind,ramp,competing,winner,sample,index,winner === 'material' ? localTrace : trace,weight);
         changed = true;
         break;
       }
@@ -164,6 +216,6 @@ const EffectPalettes = (() => {
     }
     return { ...frame, palette:[...counts.keys()], use:Uint32Array.from(counts.values()) };
   }
-  return Object.freeze({ prepare, activate, apply, kinds });
+  return Object.freeze({ prepare, activate, apply, bindDarks, kinds });
 })();
 if (typeof module !== 'undefined') module.exports = EffectPalettes;

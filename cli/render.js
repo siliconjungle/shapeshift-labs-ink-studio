@@ -344,7 +344,8 @@ function renderFrame(world, o, preparedPalettes) {
   if (ink) for (const channel of ArtInk.channels) passSelection.add(channel);
   if (effectPaletteSettings) {
     for (const channel of ['coverage', 'depth']) passSelection.add(channel);
-    if (effectPaletteSettings.ramps.has('emission')) passSelection.add('emission');
+    if (effectPaletteSettings.ramps.has('emission') || effectPaletteSettings.ramps.has('darks')) passSelection.add('emission');
+    if (effectPaletteSettings.ramps.has('darks')) passSelection.add('splatId');
     if (effectPaletteSettings.objects.size) passSelection.add('objectId');
     if (effectPaletteSettings.materials.size) passSelection.add('materialId');
     if (effectPaletteSettings.ramps.has('bounce') || effectPaletteSettings.ramps.has('shadow'))
@@ -951,7 +952,7 @@ function renderFrame(world, o, preparedPalettes) {
     layerPalettes.length, fallbackSlot, Array.from(world.pal, (_, i) => hex(i)), grade) : null;
   const composedEffects = effectRules && [...effectRules.ramps.values()].some(ramp=>ramp.combine);
   const lightingEffects = effectRules && (effectRules.ramps.has('shadow') || effectRules.ramps.has('bounce'));
-  const paletteCapture = !o.raw && (paletteDiagnostic || composedEffects) && PaletteComposition.capture(
+  const paletteCapture = !o.raw && (paletteDiagnostic || composedEffects || effectRules?.ramps.has('darks')) && PaletteComposition.capture(
     W,H,localPalettes,localConstraints,Array.from(world.pal,(_,i)=>hex(i)),!tone && grade,
     {diagnostic:paletteDiagnostic,lit:composedEffects && lightingEffects});
   const paletteClaim = (paletteCapture || paletteTrace) ? (p,i,layer,r,g,b,steps) => {
@@ -2480,7 +2481,8 @@ function renderFrame(world, o, preparedPalettes) {
     if (fogPass) for (let p = 0; p < W*H; p++) fogPass[p] = 1 - atmosphere.fog[p];
     if (quality.stats) volumeStats = atmosphere.stats;
   }
-  const effectSignals = effectRules && { rules: effectRules, sky: showSky && !!sky, backdropCloud, media: effectMedia, haze: hazeCoverage };
+  const effectSignals = effectRules && { rules: effectRules, sky: showSky && !!sky, backdropCloud, media: effectMedia,
+    haze: hazeCoverage, darkAt: EffectPalettes.bindDarks(effectRules,world) };
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, motionFrom:o.surfaceMotionFrom ?? motionFrom,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0 });

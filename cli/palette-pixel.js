@@ -42,7 +42,8 @@ function create(at, w, h) {
       if (winner === 'material') {
         policyChoice(steps,local.policy,input,trace.slot,trace,weight,
           {stage:'effect',effect:kind,colors:local.policy?.packed ?? local.swatches.map(pack)});
-      } else choice(steps,{domain:'effect',stage:'effect',effect:kind,colors:ramp.packed},
+      } else choice(steps,{domain:'effect',stage:'effect',effect:kind,colors:ramp.packed,
+        ...(ramp.select && {select:ramp.select})},
         input,index,trace,weight);
     },
     cluster(before, after) {

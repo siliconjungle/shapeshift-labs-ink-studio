@@ -161,6 +161,7 @@ module.exports = {
   inspectPalettePixel: require('./cli/palette-pixel.js').inspectPalettePixel,
   reviewPaletteShimmer: require('./cli/palette-shimmer.js').reviewPaletteShimmer,
   reviewSubjectReadability: require('./cli/readability-review.js').reviewSubjectReadability,
+  reviewShadowReadability: require('./cli/shadow-readability.js').reviewShadowReadability,
   reviewPaletteWeather: require('./cli/palette-weather.js').reviewPaletteWeather,
   reviewPaletteStages: require('./cli/palette-stages.js').reviewPaletteStages,
   compareShotPalettes: require('./cli/palette-compare.js').compareShotPalettes,

@@ -35,9 +35,9 @@ function list(rows, limit, validate, label) {
   });
 }
 
-function prepareReview(plan, time) {
+function prepareReview(plan, time, { optionalSubjects = false, lookFields = [] } = {}) {
   fields(plan,['subjects','views','states','thresholds','matte'],'readability review plan');
-  const subjects=list(plan.subjects,8,row=>{
+  const subjects=optionalSubjects && plan.subjects===undefined ? [] : list(plan.subjects,8,row=>{
     const {id,select}=fields(row,['id','select'],'readability subject');
     return {id,select:TargetSelectors.prepare(select)};
   },'subjects');
@@ -52,12 +52,14 @@ function prepareReview(plan, time) {
     return {id,camera};
   },'views');
   const states=list(plan.states??[{id:'Current lighting',time}],24,row=>{
-    const {id,time:t=time,lighting={},weather}=fields(row,['id','time','lighting','weather'],'readability state');
+    const {id,time:t=time,lighting={},weather,look}=fields(row,
+      ['id','time','lighting','weather',...(lookFields.length ? ['look'] : [])],'readability state');
     fields(lighting,lightFields,'readability lighting overrides');
     if (weather!==undefined) fields(weather,weatherFields,'review weather overrides');
+    if (look!==undefined) fields(look,lookFields,'review look overrides');
     if (!Number.isFinite(t) || t<0 || lighting.skyTime!==undefined && !Number.isFinite(lighting.skyTime))
       throw new RangeError('Readability states need finite scene and sky times');
-    return {id,time:t,lighting,...(weather!==undefined && {weather})};
+    return {id,time:t,lighting,...(weather!==undefined && {weather}),...(look!==undefined && {look})};
   },'states');
   const thresholds={...defaults,...fields(plan.thresholds??{},Object.keys(defaults),'readability thresholds')};
   const {color,lightness,weakShare,depthBias}=thresholds, {matte}=plan;
@@ -85,16 +87,29 @@ const percentile = values => {
   return {min:values[0],p10:values[Math.floor((values.length-1)*.1)],mean:sum/values.length};
 };
 
-function measure(frame, subjects, thresholds, matte, indices=subjects.map((_,i)=>i)) {
-  const sample=compositeMatte(frame,matte), {w,h,rgb,alpha}=sample;
-  const {readabilityMask,passes:{depth}}=frame, cache=new Map();
-  const count=w*h, overlay=new Uint8Array(count);
-  function lab(color) {
+function labCache() {
+  const cache=new Map();
+  return color=>{
     if (cache.has(color)) return cache.get(color);
     const value=Color.toOKLab(bytes(color).map(n=>n/255));
     if (cache.size<8192) cache.set(color,value);
     return value;
+  };
+}
+
+function markEdges({w,h,rgb,alpha}, overlay) {
+  const marked=rgb.slice(), colors=tones.map(tone=>bytes(parseInt(tone.slice(1),16)));
+  for (let p=0;p<w*h;p++) {
+    if (overlay[p]) marked.set(colors[overlay[p]-1],p*3);
+    else for (let k=0;k<3;k++) marked[p*3+k]=Math.round(14+marked[p*3+k]*.49);
   }
+  return {w,h,rgb:marked,alpha};
+}
+
+function measure(frame, subjects, thresholds, matte, indices=subjects.map((_,i)=>i)) {
+  const sample=compositeMatte(frame,matte), {w,h,rgb,alpha}=sample;
+  const {readabilityMask,passes:{depth}}=frame, lab=labCache();
+  const overlay=new Uint8Array(w*h);
   const point=(p,color)=>({x:p%w,y:Math.floor(p/w),swatch:hex(color)});
   const rows=indices.map(index=>{
     const subject=subjects[index];
@@ -154,12 +169,7 @@ function measure(frame, subjects, thresholds, matte, indices=subjects.map((_,i)=
       color:percentile(colorDistances),lightness:percentile(lightnessDistances),
       weakColor,weakLightness,weakColorShare,weakLightnessShare,lighter,darker,worstColor,worstLightness,flags };
   });
-  const marked=rgb.slice(), colors=tones.map(tone=>bytes(parseInt(tone.slice(1),16)));
-  for (let p=0;p<count;p++) {
-    if (overlay[p]) marked.set(colors[overlay[p]-1],p*3);
-    else for (let k=0;k<3;k++) marked[p*3+k]=Math.round(14+marked[p*3+k]*.49);
-  }
-  return {subjects:rows,frame:{w,h,rgb,alpha},marked:{w,h,rgb:marked,alpha}};
+  return {subjects:rows,frame:{w,h,rgb,alpha},marked:markEdges(sample,overlay)};
 }
 
 function dimensions(w,h,samples,columns) {
@@ -214,7 +224,7 @@ function overview(subjects, samples) {
 }
 
 function captureReview(world,{subjects,views,states,thresholds,matte},
-  {width=160,height=96,view={},columns,pose,fixedCameraAt},
+  {width=160,height=96,view={},columns,pose,fixedCameraAt,channels=['depth']},
   analyze=(frame,subjects,thresholds,matte)=>measure(frame,subjects,thresholds,matte)) {
   const px=view.px??1, w=Math.ceil(width/px), h=Math.ceil(height/px), count=views.length*states.length;
   columns??=Math.min(views.length,4);
@@ -239,9 +249,9 @@ function captureReview(world,{subjects,views,states,thresholds,matte},
     }
     for (const [i,shot] of views.entries()) {
       let captured;
-      const frame=render(world,{...view,...fixed,...state.lighting,...state.weather,...shot.camera,t:time,time,w:width,h:height,px,
+      const frame=render(world,{...view,...fixed,...state.lighting,...state.weather,...state.look,...shot.camera,t:time,time,w:width,h:height,px,
         composite:false,renderGraph:false,renderHistory:undefined,inspection:false,cameraGuides:false,
-        samples:false,captureCoverage:false,readabilitySelectors:selectors,passes:['depth'],
+        samples:false,captureCoverage:false,readabilitySelectors:selectors.length ? selectors : undefined,passes:channels,
         shotFrame(info) { captured=info; view.shotFrame?.(info); }});
       const sample={view:shot.id,state:state.id,time,camera:captured.camera,skyTime:captured.skyTime};
       const {frame:scene,marked,...evidence}=analyze(frame,subjects,thresholds,matte,kit,sample);
@@ -261,4 +271,4 @@ function reviewSubjectReadability(world,options={}) {
     legend:{clear:tones[0],weakColor:tones[1],weakLightness:tones[2],weakBoth:tones[3]}}};
 }
 
-module.exports = { reviewSubjectReadability,measure,prepareReview,captureReview,compositeMatte,sheet,edgeLegend };
+module.exports = { reviewSubjectReadability,measure,prepareReview,captureReview,compositeMatte,sheet,edgeLegend,markEdges,labCache };

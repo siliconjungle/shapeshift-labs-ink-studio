@@ -146,4 +146,4 @@ function reviewPaletteWeather(world,options={}) {
       legend:{edges:Object.fromEntries(edgeLegend),sameSwatch:contactColor}}};
 }
 
-module.exports = { reviewPaletteWeather,measureContacts,compareSample };
+module.exports = { reviewPaletteWeather,preparePairs,measureContacts,compareSample };

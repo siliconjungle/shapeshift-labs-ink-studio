@@ -40,7 +40,46 @@ Set `look.effectPalettes` on the world, `finish.look.effectPalettes` in a dioram
 - Fog and clouds default to backdrop pixels. Set `geometry: true` on either ramp to include opaque surfaces they cover. Add object or material names to `protect` so those visible surfaces keep the scene’s original colors. Selective ink outlines are preserved.
 - A `when` gate reads a numeric sky profile channel at the active sky time. Supply `min`, `max`, or both. A missing channel leaves the ramp inactive.
 
-The ramps run after scene palette and art styling. Set `captureEffectPalettes: true` when rendering from the library to receive an `effectPaletteMask` for an active set. Its top-down pixel values are 0 for unassigned, 1 fog, 2 clouds, 3 sky, 4 emission, 5 bounce, and 6 shadow. The returned palette and usage counts include the selected swatches.
+The ramps run after scene palette and art styling. Set `captureEffectPalettes: true` when rendering from the library to receive an `effectPaletteMask` for an active set. Its top-down pixel values are 0 for unassigned, 1 fog, 2 clouds, 3 sky, 4 emission, 5 bounce, 6 shadow, and 7 material darks. The returned palette and usage counts include the selected swatches.
+
+## Reserve dark ramps by material
+
+Put a `darks` array in `finish.look.effectPalettes`, or supply it through
+the usual effect palette override. Each target claims the visible dark
+pixels on its material, surface, object, or tag.
+
+```json
+{
+  "darks": [
+    {
+      "select": { "material": "watchcoat" },
+      "colors": ["#251927", "#3c2742", "#503449"],
+      "range": [0.12, 0.39]
+    },
+    {
+      "select": { "material": "iron-post" },
+      "colors": ["#101b22", "#14252e", "#233741"],
+      "range": [0.12, 0.39]
+    }
+  ]
+}
+```
+
+`range` is the eligible OKLab lightness interval in the **rendered
+colour before palette resolve**. It defaults to `[0, 0.4]`. This makes
+the same rule usable with baked and live lighting. Colours run from
+dark to light, and can use hex, palette indices, or named scene roles.
+Set `dither` from 0 to 1 for ordered transitions between stops. The
+last matching selector supplies the ramp. The selected swatches
+belong to that target's dark region.
+
+The headless renderer applies emission, fog, and cloud palettes first,
+then dark ramps before shared lighting palettes. Emissive pixels, ink
+outlines, and exact reserved material swatches retain priority. Explicit
+frame and final palette render stages can still grade the result.
+`palette inspect` shows the active selector and swatch. Use
+[`palette darks`](palette-recipes.md#review-shadow-readability) to verify
+separation at export size.
 
 ## Share scene swatches with materials
 

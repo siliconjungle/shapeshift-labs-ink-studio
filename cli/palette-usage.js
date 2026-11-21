@@ -52,14 +52,17 @@ function inventory(world, select, { surface, paletteRules, targetSlots, stages, 
     add(stages?.palettes);
     add(optics?.palettes);
     for (const rule of effects?.ramps.values() ?? []) add(rule.packed);
-  } else if (effect) add(effect.packed);
+  } else if (effect && !(subject && select.effect === 'darks')) add(effect.packed);
 
+  const darkAt = subject && (select.effect === undefined || select.effect === 'darks') && EffectPalettes.bindDarks(effects,world);
   let usesBase = full;
-  if (subject && (select.effect === undefined || effect?.combine)) {
+  if (subject && (select.effect === undefined || effect?.combine || darkAt)) {
     const metadata = world.renderMetadata ?? {};
     const surfaces = new Set(), policies = new Set(), stageGroups = new Set(), ramps = new Set();
     for (let i=0; i<world.count; i++) {
       if (!matchesLabels(select,metadata,(channel)=>metadata[channel+'s']?.[i])) continue;
+      if (darkAt) add(darkAt(i)?.packed);
+      if (select.effect === 'darks') continue;
       const slot = world.surfaceData?.[i*SurfaceLook.STRIDE] ?? 0;
       const policy = targetSlots?.[i] || paletteRules?.defaultSlot || 0;
       const stageGroup = stages?.at(i);

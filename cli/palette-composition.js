@@ -68,11 +68,12 @@ function capture(w,h,palettes,policies,scene,grade,{diagnostic,lit}) {
     }
     function mark(p,{kind,ramp,local,winner}) {
       if (!ids) return;
-      const key = kind+'/'+(local?.slot ?? 0)+'/'+winner+'/'+(local ? idAt(p) : 0);
+      const key = kind+'/'+(ramp.slot ?? local?.slot ?? 0)+'/'+winner+'/'+(local ? idAt(p) : 0);
       ids[p] = row(key,()=>{
         const previous = local && describe(p,local.slot);
         return { ...(previous ? {...previous,baseDomain:previous.domain} : {colors:[]}),
-          domain:local ? 'combined' : 'effect',effect:kind,winner,sharedColors:ramp.packed };
+          domain:local ? 'combined' : 'effect',effect:kind,winner,sharedColors:ramp.packed,
+          ...(ramp.select && {select:ramp.select}) };
       });
     }
     function stage(p,rule) {

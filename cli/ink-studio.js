@@ -887,6 +887,7 @@ const CMD = {
         '  palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture',
         '  palette shimmer <scene> [--from 0 --to 3 --fps 12] [--camera-pan x,y,z --camera-orbit degrees] [--animate] [--out directory]',
         '  palette readability <scene> [--select JSON | --plan file.json] [--directions N --times t1,t2] [--out directory]',
+        '  palette darks <scene> [--plan file.json] [--directions N --times t1,t2] [--out directory]',
         '  palette weather <scene> [--plan file.json | --select JSON --times t1,t2] [--out directory]',
         '  palette stages <scene> [--select JSON] [--allowed JSON] [--out directory]   review paint, lighting, grade and resolve',
         '  palette compare <scene|checkpoint> <palettes.json> [--out directory]   apply alternatives to one captured shot',
@@ -1232,13 +1233,14 @@ const CMD = {
       console.log('wrote render-stage palette review to',directory);
       return;
     }
-    if (pos[0] === 'readability' || pos[0] === 'weather') {
-      const weather=pos[0]==='weather';
+    if (['readability','weather','darks'].includes(pos[0])) {
+      const weather=pos[0]==='weather', darks=pos[0]==='darks';
       if (pos.length!==2 || ['plan','select','directions','pitches','t','times','w','h','cols','out']
-        .some(key=>opt[key]===true))
-        die('Use palette '+pos[0]+' <scene> [--select JSON | --plan file.json] [--directions N --times t1,t2] [--out directory]');
+        .some(key=>opt[key]===true) || darks && opt.select!==undefined)
+        die('Use palette '+pos[0]+' <scene> '+(darks ? '[--plan file.json]' : '[--select JSON | --plan file.json]')+
+          ' [--directions N --times t1,t2] [--out directory]');
       const world=buildPreview(pos[1]), settings=view({t:num('t',0),transparent:onOffOption('transparent')});
-      const authored=weather ? world.paletteWeatherReview : world.readabilityReview;
+      const authored=weather ? world.paletteWeatherReview : darks ? world.shadowReadability : world.readabilityReview;
       const source=opt.plan===undefined ? authored??{} : JSON.parse(fs.readFileSync(path.resolve(opt.plan),'utf8'));
       if (!source || Object.getPrototypeOf(source)!==Object.prototype) die('Review plan needs a JSON object');
       const plan={...source};
@@ -1253,11 +1255,11 @@ const CMD = {
         plan.views=angles.map(({yaw,pitch},i)=>({id:'View '+(i+1),yaw,pitch}));
       }
       const run=weather ? require('./palette-weather.js').reviewPaletteWeather :
-        require('./readability-review.js').reviewSubjectReadability;
+        darks ? require('./shadow-readability.js').reviewShadowReadability : require('./readability-review.js').reviewSubjectReadability;
       const {image,report}=run(world,{
         plan,view:settings,pose,width:num('w',160),height:num('h',96),columns:num('cols')
       });
-      const directory=outputFile(weather ? 'palette-weather' : 'readability-review');
+      const directory=outputFile(weather ? 'palette-weather' : darks ? 'shadow-readability' : 'readability-review');
       const files={comparison:'comparison.png',report:'review.json'};
       const sources=[pos[1],opt.plan].filter(Boolean).map(name=>fs.statSync(path.resolve(name),{throwIfNoEntry:false}));
       for (const name of Object.values(files)) {
@@ -1268,7 +1270,7 @@ const CMD = {
       fs.mkdirSync(directory,{recursive:true});
       PNG.write(path.join(directory,files.comparison),image.w,image.h,image.rgb);
       fs.writeFileSync(path.join(directory,files.report),JSON.stringify({...report,files},null,2)+'\n');
-      console.log('wrote',weather ? 'palette weather review to' : 'subject readability review to',directory);
+      console.log('wrote',weather ? 'palette weather review to' : darks ? 'shadow readability review to' : 'subject readability review to',directory);
       return;
     }
     if (pos[0] === 'shimmer') {
