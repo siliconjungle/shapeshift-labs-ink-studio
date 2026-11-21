@@ -10,6 +10,7 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 | `grade` | Applies an RGB `stack` to the input. CPU and WebGL use the same sampled color cube. `cubeSize` defaults to 33 and accepts 2–65. |
 | `reflection` | Mirrors the current image or a named `source` along `axis` (`x` or `y`). `line` sets the reflection line in output pixels and defaults to the midpoint. |
 | `distortion` | Samples the input or a named `source` using an XY `offset`, wave `amplitude`, or [scanline controls](#scanline-distortion). `period` is in pixels, and `phase` and `rate` are in cycles and cycles per second. |
+| `textureAddress` | [Sample an image through a signed UV field](#bind-a-programmable-texture-address-field) with independent edge and filter policies. |
 | `rasterSchedule` | Applies [discrete register writes](#copper-style-raster-schedules) for indexed palette entries, source offsets, and pixel size. |
 | `composite` | Blends a named `source` image using `over` or `add`, or draws a single [mixed-resolution layer](mixed-resolution.md) from `layer` using its own resolution, filtering and blend settings. Use `isolated: true` to start this pass on transparent pixels. |
 | `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
@@ -60,6 +61,36 @@ to the graph definition. The two graphs sample the scene at the same take
 time. Screen-space layers composite after scene optics. Use
 `warp.surface` to place a procedural texture on a depth-tested world
 surface when glass or rain should cover it.
+
+## Bind a programmable texture address field
+
+A `textureAddress` pass reads an earlier image through a named slot of raw
+UV values. Use a raster aligned with the final output grid, with two finite
+channels for U and V or a third channel for coverage in [0, 1]. UVs use the
+top-left origin and can extend outside [0, 1]. Supply the field in
+`renderGraphInputs` or link a procedural graph output through a slot record.
+
+```js
+const renderGraph = { passes: [{
+  id: 'mapped',
+  type: 'textureAddress',
+  source: 'scene',
+  field: { slot: 'uv' },
+  filter: 'nearest',
+  edgeU: 'wrap',
+  edgeV: 'mirror',
+  blend: 'replace'
+}] };
+const renderGraphInputs = { uv: field };
+```
+
+Choose `nearest` or `linear` and `clamp`, `transparent`, `wrap`, or
+`mirror` for each axis. The defaults are nearest and clamp. The pass
+samples premultiplied color in both renderers. Coverage changes the
+sample's opacity. Use `blend: 'over'` to keep the input visible through
+holes. Masks, opacity, depth, and selection apply to the destination.
+The field has a 1,048,576-pixel budget and UVs in [−16384, 16384].
+Build fields with [programmable texture addresses](headless-authoring.md#program-texture-addresses).
 
 ## Read screen and scene passes
 

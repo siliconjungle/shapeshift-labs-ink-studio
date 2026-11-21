@@ -28,22 +28,11 @@
 
   function output(source,{width=source.width,height=source.height}={}) { return size(width,height); }
 
-  function address(edge) {
-    if (edge==='transparent') return (n,span)=>n>=0 && n<span ? n : -1;
-    if (edge==='clamp') return (n,span)=>clamp(n,0,span-1);
-    if (edge==='wrap') return (n,span)=>wrap(n,span);
-    if (edge==='mirror') return (n,span)=>{
-      const p=wrap(n,span*2);
-      return p<span ? p : span*2-1-p;
-    };
-    throw new RangeError('Warp edges need transparent, clamp, wrap or mirror addressing');
-  }
-
   function sampler(source,{filter='linear',edge='clamp',edgeU=edge,edgeV=edge}={}) {
     view(source);
     if (!['nearest','linear'].includes(filter)) throw new TypeError('Warp sampling needs nearest or linear filtering');
     const {width,height,data}=R.rgba(source);
-    const ax=address(edgeU), ay=address(edgeV);
+    const ax=TextureAddress.axis(edgeU), ay=TextureAddress.axis(edgeV);
     function add(x,y,w,out) {
       const u=ax(x,width),v=ay(y,height);
       if (u<0 || v<0 || !w) return;

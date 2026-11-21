@@ -1,6 +1,6 @@
 /* Ordered screen-space passes and named image and mask dependencies. */
 const RenderGraph = (() => {
-  let stacks, luts, targets, compositor, effects, banks, smear, schedules;
+  let stacks, luts, targets, compositor, effects, banks, smear, schedules, addressing;
   try {
     stacks = ColorStack;
     luts = ColorLUT;
@@ -10,6 +10,7 @@ const RenderGraph = (() => {
     banks = FrameBank;
     smear = MotionSmear;
     schedules = RasterSchedule;
+    addressing = TextureAddress;
   } catch {
     stacks = require('./color-stack.js');
     luts = require('./color-lut.js');
@@ -19,6 +20,7 @@ const RenderGraph = (() => {
     banks = require('./frame-bank.js');
     smear = require('./motion-smear.js');
     schedules = require('./raster-schedule.js');
+    addressing = require('./texture-address.js');
   }
   const operations = Object.freeze({
     mask: 1,
@@ -37,7 +39,8 @@ const RenderGraph = (() => {
     frameAge: 14,
     motionSmear: 15,
     frameBank: 16,
-    rasterSchedule: 17
+    rasterSchedule: 17,
+    textureAddress: 18
   });
   const fields = {
     mask: ['rect', 'feather', 'invert', 'volume', 'raster'],
@@ -46,6 +49,7 @@ const RenderGraph = (() => {
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'rowEdits', 'depthThreshold', 'blend', 'wrap'],
     composite: ['source', 'layer', 'blend', 'isolated'],
     rasterSchedule: ['source', 'indices', 'schedule', 'palette', 'cycles', 'blend', 'wrap'],
+    textureAddress: ['source', 'field', 'filter', 'edge', 'edgeU', 'edgeV', 'blend'],
     history: ['mode', 'halfLife', 'cameraMotion'],
     frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
     frameBank: ['fps', 'tiles', 'regions', 'refresh', 'source', 'cameraMotion'],
@@ -385,6 +389,13 @@ const RenderGraph = (() => {
           });
           break;
         }
+        case 'textureAddress': {
+          const { field, filter, edge, edgeU, edgeV, blend = 'replace' } = pass;
+          if (!['replace', 'over'].includes(blend)) throw new TypeError('Texture addressing needs replace or over blending');
+          Object.assign(node, { source: reference(pass.source ?? input, 'image'), addressSlot: slot(field).name,
+            address: addressing.settings({ filter, edge, edgeU, edgeV }), blend });
+          break;
+        }
         case 'history': {
           const { mode = 'persistence', halfLife = 0.45, cameraMotion = 'reset' } = pass;
           if (
@@ -611,13 +622,14 @@ const RenderGraph = (() => {
             : age ? width * height + full * node.regions.length
               : node.bank ? width * height * (1 + Number(Boolean(node.bank.grid)) + node.bank.rules.length +
                 Number(Boolean(node.bank.refresh))) + full
-              : node.type === 'motionSmear' ? width * height * 4 + full * 4 : full;
+              : node.type === 'motionSmear' ? width * height * 4 + full * 4 :
+                node.address ? full * (node.address.filter === 'linear' ? 5 : 2) : full;
       work += cost;
       if (node.enabled || node.type === 'mask') {
         const buffer = free.length ? free.pop() : allocated++;
         live.set(node.id, buffer);
         scratchPeak = Math.max(scratchPeak, node.effect ? width * height :
-          node.motion ? 4 * full : age && node.regions.length > 1 ? full : 0);
+          (node.motion || node.address) ? 4 * full : age && node.regions.length > 1 ? full : 0);
         peak = Math.max(peak, allocated * full + scratchPeak);
         if (node.enabled && retainedTypes.includes(node.type)) {
           const pixels = width * height * (age ? node.slots : 1);
@@ -786,6 +798,12 @@ const RenderGraph = (() => {
       return sources[key];
     }
     return smear.raw(read(name), { width, height, confidence: read(confidence), valid: read(valid), minConfidence });
+  }
+
+  function addressRaster(node, sources, width, height) {
+    const name = node.addressSlot;
+    if (!sources || !Object.hasOwn(sources, name)) throw new RangeError('Missing render graph raster slot: ' + name);
+    return addressing.raster(sources[name], width, height);
   }
 
   function indexedSchedule(node, sources, packet) {
@@ -1059,6 +1077,7 @@ const RenderGraph = (() => {
     selection,
     layer,
     motionRaster,
+    addressRaster,
     scheduleTable: schedules.table,
     indexedSchedule,
     history,

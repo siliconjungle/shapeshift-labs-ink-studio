@@ -8,6 +8,17 @@
       inputs:{width:'number',height:'number',matrix:{type:'array<vec3>',default:[[1,0,0],[0,1,0]]}},
       outputs:{value:'raster'},run(input){return {value:W.field(input)};}
     },
+    'warp.address':{
+      description:'Compose rotation, zoom, polar tunnel and Copper row transforms into one UV field.',
+      inputs:{width:'number',height:'number',transforms:{type:'array<record>',default:[]},options},
+      outputs:{value:'raster'},time:true,
+      run({width,height,transforms,options},{time}){return {value:W.addressField({width,height,transforms,time:options.time ?? time})};}
+    },
+    'warp.compose':{
+      description:'Chain authored or generated UV fields before sampling the source image.',
+      inputs:{fields:'array<raster>',options},outputs:{value:'raster'},
+      run({fields,options}){return {value:W.composeFields(fields,options)};}
+    },
     'warp.sample':{
       inputs:{source:'raster',field:'raster',options},outputs:{value:'raster'},
       run({source,field,options}){return {value:W.sample(source,field,options)};}

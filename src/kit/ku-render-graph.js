@@ -12,6 +12,7 @@
     replay: RenderGraph.replay,
     feedbackMotion: RenderGraph.feedbackMotion,
     rowTable: RenderGraph.rowTable,
+    addressRaster: RenderGraph.addressRaster,
     scheduleTable: RenderGraph.scheduleTable,
     indexedSchedule: RenderGraph.indexedSchedule,
     layer: (node, w, h, world, time, camera, gl, sceneTime, inputs) =>

@@ -2,6 +2,7 @@ const FrameComposite = require('../src/frame-composite.js');
 const MotionSmear = require('../src/motion-smear.js');
 const FrameBank = require('../src/frame-bank.js');
 const RasterSchedule = require('../src/raster-schedule.js');
+const TextureAddress = require('../src/texture-address.js');
 const {
   cube,
   selection,
@@ -12,6 +13,7 @@ const {
   rowTable,
   scheduleTable,
   indexedSchedule,
+  addressRaster,
   resources,
   ownerGroups,
   motionRaster,
@@ -245,6 +247,8 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
       const packet = node.schedule && scheduleTable(node.schedule, w, h, time);
       const scheduled = packet && RasterSchedule.sampler(packet, node.indices === undefined ? { w, h, data: source } :
         indexedSchedule(node, options.renderGraphInputs, packet), w, h, node.schedule.wrap);
+      const addresses = node.address && addressRaster(node, options.renderGraphInputs, w, h);
+      const readAddress = addresses && TextureAddress.sampler(source, w, h, node.address);
       const theta = node.type === 'distortion' ? 2 * Math.PI * ((node.phase + time * node.rate) % 1) : 0;
       const frequency = (2 * Math.PI) / node.period;
       if (!node.effect && !budgetedMemory && !age && !smear && !node.bank)
@@ -347,8 +351,14 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
               table.sample(rgb, graded);
               for (let c = 0; c < 3; c++)
                 output[q + c] = Math.round(input[q + c] * (1 - weight) + graded[c] * alpha * weight);
-            } else if (scheduled) {
-              scheduled(Math.floor(x), Math.floor(y), color);
+            } else if (scheduled || readAddress) {
+              if (scheduled) scheduled(Math.floor(x), Math.floor(y), color);
+              else {
+                const coverage = addresses[q + 2];
+                if (coverage) readAddress(addresses[q], addresses[q + 1], color);
+                else color.fill(0);
+                for (let c = 0; c < 4; c++) color[c] *= coverage;
+              }
               if (node.blend === 'over') FrameComposite.blend(output, q, color, weight, false);
               else for (let c = 0; c < 4; c++)
                 output[q + c] = Math.round(input[q + c] * (1 - weight) + color[c] * weight);

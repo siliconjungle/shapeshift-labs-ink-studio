@@ -1426,6 +1426,46 @@ raster, or export it as JSON. For mesh, grid, polar, and morph set
 `options.width` and `height` to change output dimensions. Displacement
 and refraction use the map's dimensions.
 
+### Program texture addresses
+
+Build a UV field with `warp.address` or
+`KIT.procedural.rasterWarp.addressField({ width, height, transforms, time })`.
+Each output pixel starts at its center. The transforms run in list order,
+moving from the output coordinate toward the final source coordinate.
+Send the result to `warp.sample` to sample the texture once.
+
+```js
+const warp = KIT.procedural.rasterWarp;
+const field = warp.addressField({ width: 320, height: 180, time, transforms: [
+  { type: 'rows', schedule: [{ row: 45, offset: [12, 0] }, { row: 98, offset: [0, 0], pixelScale: [2, 2] }] },
+  { type: 'rotate', turns: .04, rate: .1 },
+  { type: 'zoom', scale: 1.3 },
+  { type: 'tunnel', depth: .22, inner: .035, travelRate: .4, spinRate: -.03 }
+] });
+const image = warp.sample(texture, field, { filter: 'nearest', edge: 'wrap' });
+```
+
+| Transform | Controls |
+| --- | --- |
+| `rotate` | Clockwise `turns` and `rate` in turns per second. The normalized `pivot` defaults to the center. Rotation accounts for the output aspect ratio. |
+| `zoom` | A positive `scale` or XY pair. A factor above one magnifies the texture around `pivot`, which defaults to the center. |
+| `tunnel` | U is angle and V is `depth / radius`. The `center` is normalized and `inner` and optional `outer` radii clip coverage in units of the shorter output side. Use `turns` and `spinRate` for rotation, and `scroll` and `travelRate` in texture repeats for travel. Set `clockwise: false` to reverse the angle. Use wrap edges at the final sampler for repeating tunnel walls. |
+| `rows` | Use [Copper-style offset and pixel-size writes](render-graph.md#copper-style-raster-schedules). Lookup uses the Y coordinate at this point in the chain, on the program's output grid. Only axes enlarged by a pixel-size write snap to blocks. |
+
+To combine existing UV rasters, connect them to `warp.compose.fields` in
+the same pull order, or call `warp.composeFields(fields, options)`. It can
+chain a procedural field with a mesh, flow, or custom map. Composition
+multiplies coverage. With `filter: 'linear'`, covered samples contribute
+their weighted coordinates. The default `nearest` keeps hard seams.
+Intermediate map edges default to transparent and accept the same policies
+as `warp.sample`. The final image sampler controls its own edges.
+
+The graph supplies time to `warp.address` unless `options.time` overrides
+it. To drive a live scene image, feed the map to the
+[`textureAddress` render pass](render-graph.md#bind-a-programmable-texture-address-field).
+Run `node examples/texture-addressing.cjs helix-signal.html` to compare the
+transforms and change their order.
+
 ### Dense optical flow
 
 `rasterWarp.opticalFlow(before, after, options)` estimates motion for

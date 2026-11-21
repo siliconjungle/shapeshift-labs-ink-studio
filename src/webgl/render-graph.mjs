@@ -11,7 +11,8 @@ precision highp int;
 uniform sampler2D u_input, u_mask, u_owner, u_selected, u_depth, u_history, u_auxMask;
 uniform highp sampler2D u_source;
 uniform highp sampler2D u_rows, u_schedulePalette;
-uniform bool u_scheduleIndexed;
+uniform bool u_scheduleIndexed, u_addressLinear;
+uniform ivec2 u_addressEdges;
 uniform highp sampler3D u_cube;
 uniform vec2 u_size, u_passSize, u_offset, u_amplitude;
 uniform bool u_packedDepth, u_depthMask, u_depthInvert, u_background, u_displayMask, u_budgetLinear;
@@ -45,6 +46,32 @@ float depthAt(vec2 pixel) {
   ivec2 site = min(ivec2(pixel / u_size * vec2(size)), size - 1);
   vec4 value=texelFetch(u_depth, ivec2(site.x, size.y - 1 - site.y), 0);
   return u_packedDepth ? (value.a<.5 ? 1.0 : dot(round(value.rgb*255.0),vec3(1.0,256.0,65536.0))/16777215.0) : value.r;
+}
+
+int addressAxis(int n, int size, int edge) {
+  if (edge == 0) return clamp(n, 0, size - 1);
+  if (edge == 1) return n >= 0 && n < size ? n : -1;
+  int span = edge == 3 ? size * 2 : size;
+  int at = n - (n / span) * span;
+  if (at < 0) at += span;
+  return at < size ? at : span - 1 - at;
+}
+
+vec4 addressedColor(ivec2 site, ivec2 size) {
+  int x = addressAxis(site.x, size.x, u_addressEdges.x);
+  int y = addressAxis(site.y, size.y, u_addressEdges.y);
+  return x < 0 || y < 0 ? vec4(0.0) : texelFetch(u_source, ivec2(x, size.y - 1 - y), 0);
+}
+
+vec4 textureAddress(vec2 uv) {
+  ivec2 size = textureSize(u_source, 0);
+  vec2 at = uv * vec2(size);
+  if (!u_addressLinear) return addressedColor(ivec2(floor(at)), size);
+  at -= .5;
+  ivec2 p = ivec2(floor(at));
+  vec2 f = fract(at);
+  return mix(mix(addressedColor(p, size), addressedColor(p + ivec2(1, 0), size), f.x),
+    mix(addressedColor(p + ivec2(0, 1), size), addressedColor(p + ivec2(1), size), f.x), f.y);
 }
 
 void main() {
@@ -121,6 +148,17 @@ void main() {
       scheduled *= weight;
       color = scheduled + inputColor * (1.0 - scheduled.a);
     } else color = mix(inputColor, scheduled, weight);
+    color = floor(color * 255.0 + .50001) / 255.0;
+    return;
+  }
+  if (u_operation == 18) {
+    vec3 uv = texelFetch(u_rows, ivec2(pixel), 0).rgb;
+    vec4 addressed = uv.z > 0.0 ? textureAddress(uv.xy) * uv.z : vec4(0.0);
+    weight *= u_opacity;
+    if (u_over) {
+      addressed *= weight;
+      color = addressed + inputColor * (1.0 - addressed.a);
+    } else color = mix(inputColor, addressed, weight);
     color = floor(color * 255.0 + .50001) / 255.0;
     return;
   }
@@ -512,9 +550,10 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         textureUnit(3, ownership?.texture ?? scene.textures[0]);
         textureUnit(5, select ? selected : scene.textures[0]);
         textureUnit(6, depth ?? scene.textures[0]);
-        const registers = schedule?.registers ?? scanlines;
+        const addresses = node.address && api.addressRaster(node, frame.renderGraphInputs, w, h);
+        const registers = addresses || (schedule?.registers ?? scanlines);
         textureUnit(8, registers ? rows : scene.textures[0]);
-        if (registers) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, h, 0, gl.RGBA, gl.FLOAT, registers);
+        if (registers) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, addresses ? w : 2, h, 0, gl.RGBA, gl.FLOAT, registers);
         const values = {
           u_input: 0,
           u_source: 1,
@@ -548,7 +587,9 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           u_scanlines: Boolean(scanlines),
           u_isolated: node.isolated ?? false,
           u_wrap: node.schedule?.wrap ?? node.wrap ?? false,
-          u_over: (node.type === 'distortion' || node.type === 'rasterSchedule') && node.blend === 'over',
+          u_over: node.blend === 'over',
+          u_addressLinear: node.address?.filter === 'linear',
+          u_addressEdges: node.address?.edges ?? [0, 0],
           u_scheduleIndexed: Boolean(indexed),
           u_schedulePalette: indexed ? 10 : 0,
           u_rejectDepth: node.depthThreshold !== undefined,
