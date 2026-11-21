@@ -37,7 +37,7 @@ function capture(w, h, scope, metadata, view, sprites) {
   const top = p => (h - 1 - Math.floor(p / w)) * w + p % w;
   const count = new Uint32Array(size), colors = new Float32Array(slots * stride), ids = new Uint32Array(slots * idStride);
   const depthGate = view ? null : new Float32Array(size);
-  const donorGate = view ? null : new Float32Array(size).fill(NaN);
+  const donorGate = view ? null : new Float32Array(size).fill(-1);
   const donor = view ? null : new Int32Array(size).fill(-1);
   const donorWeight = view ? null : new Float32Array(size), localWeight = view ? null : new Float32Array(size).fill(1);
   const reflections = Object.create(null), routes = [];
@@ -99,7 +99,7 @@ function capture(w, h, scope, metadata, view, sprites) {
       donorWeight[p] = weight;
       donor[p] = top(source);
       depthGate[p] = receiverDepth;
-      donorGate[p] = sourceDepth;
+      donorGate[p] = Number.isFinite(sourceDepth) ? sourceDepth : -1;
     }
   }
 
@@ -151,7 +151,7 @@ function layer(frame, options = {}, channel) {
   const { w: width, h: height } = view === 'reflection' ? source : root;
   const size = width * height, output = {};
   for (const key of channel ? [channel] : Object.keys(channels)) {
-    const Count = storage[key], data = new Count(size * channels[key]);
+    const Type = storage[key], data = new Type(size * channels[key]);
     if (key === 'depth') data.fill(emptyDepth);
     output[key] = { width, height, channels: channels[key], data };
   }
@@ -186,7 +186,7 @@ function layer(frame, options = {}, channel) {
         donor = route;
         const gate = root.donorGate[p];
         const base = donor * root.layers;
-        if (Number.isFinite(gate)) {
+        if (gate >= 0) {
           while (minimum < Math.min(root.count[donor], root.layers) &&
                  root.colors[(base + minimum) * stride] <= gate + 1e-4) minimum++;
         }

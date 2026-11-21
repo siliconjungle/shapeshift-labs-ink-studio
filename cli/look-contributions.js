@@ -112,10 +112,10 @@ function contributionLayers(col, alpha, w, h, patterned, bend) {
       }
       const ix = Math.floor(dx), iy = Math.floor(dy), fx = dx - ix, fy = dy - iy;
       const a = (1 - fx) * (1 - fy), b = fx * (1 - fy), c = (1 - fx) * fy, d = fx * fy;
-      tap(p, j, at(x + ix, y + iy), weight * a, a);
-      tap(p, j, at(x + ix + 1, y + iy), weight * b, b);
-      tap(p, j, at(x + ix, y + iy + 1), weight * c, c);
-      tap(p, j, at(x + ix + 1, y + iy + 1), weight * d, d);
+      tap(p, j, at(x + ix, y + iy), weight * (1 - fx) * (1 - fy), a);
+      tap(p, j, at(x + ix + 1, y + iy), weight * fx * (1 - fy), b);
+      tap(p, j, at(x + ix, y + iy + 1), weight * (1 - fx) * fy, c);
+      tap(p, j, at(x + ix + 1, y + iy + 1), weight * fx * fy, d);
     }
   }
 

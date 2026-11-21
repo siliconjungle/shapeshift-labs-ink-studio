@@ -53,7 +53,7 @@ function archive() {
 
   const { value: sign } = drawing2d.text('ARCHIVE', { scale:3, tracking:1,
     kerning:{ AR:-2, CH:-1 }, color:'#f9df9a' });
-  const mesh = TexturedSurface.grid({ point:(u,v)=>[-1.53+3.06*u,1.66-.57*v,-.82] });
+  const mesh = TexturedSurface.grid({ point:(u,v)=>[-1.53+3.06*u,1.44-.57*v,-.82] });
   const art = SpriteSurface.make();
   art.mesh(mesh,sign.width,sign.height,(x,y) => {
     const p=(y*sign.width+x)*4,[r,g,b,a]=sign.data.subarray(p,p+4);

@@ -5,7 +5,7 @@ const { KIT: K, makeBuilder, SpriteSurface, TexturedSurface } = ink.load();
 
 const w = 49, h = 37, center = Math.floor(h / 2) * w + Math.floor(w / 2);
 const view = { w, h, px: 1, raw: true, deepComposite: { layers: 6 } };
-function stack({ blocker = false, fog = true } = {}) {
+function stack({ blocker = false, fog = true, panes = 1 } = {}) {
   const B = makeBuilder(1, [0x142638, 0xe7ba6c, 0x3ebedb, 0xea613f, 0xffffff]);
   function disc(z, palette, opacity, object, flags = {}, radius = 1.1) {
     const first = B.count();
@@ -13,7 +13,7 @@ function stack({ blocker = false, fog = true } = {}) {
     B.describeSplats(first, B.count(), { object, material: object + '-material' });
   }
   disc(-1, 1, 2, 'dial', {}, 2.1);
-  disc(.6, 2, .55, 'pane', { gl: true, nd: true });
+  for (let i = 0; i < panes; i++) disc(.6, 2, .55, 'pane', { gl: true, nd: true });
   disc(1.1, 3, .35, 'fleck');
   if (blocker) disc(1.7, 4, 2, 'shutter');
   const atmosphere = fog ? [K.atmosphere.box({ min: [-2,-2,-.9], max: [2,2,.3], density: .55, color: '#eef1df' })] : [];
@@ -46,6 +46,18 @@ test('sorted fragment IDs, depth, and volume transfer survive behind glass', () 
   assert.deepEqual(limited.rgb, frame.rgb);
   assert.throws(() => ink.render(world, { ...view, fragmentBudget: 2 }), /fragment budget/);
   assert.throws(() => ink.render(world, { ...view, w: 500, h: 500, deepComposite: { layers: 16 } }), /slot budget/);
+});
+
+test('coincident dabs retain the rear hit without changing surface coverage', () => {
+  const world = stack({ fog:false, panes:5 });
+  const options = { ...view, deepComposite:{ layers:3 } };
+  const grouped = ink.render(world, options);
+  const individual = ink.render(world, { ...options, deepComposite:{ layers:3, coalesce:false } });
+  assert.equal(grouped.deep.count[center], 3);
+  assert.equal(individual.deep.count[center], 7);
+  assert.equal(at(ink.graphDeepLayer(grouped, { view:'transmitted' }).valid)[0], 255);
+  assert.equal(at(ink.graphDeepLayer(individual, { view:'transmitted' }).valid)[0], 0);
+  assert.deepEqual(grouped.rgb, individual.rgb);
 });
 
 test('glass addressing follows the eligible refracted donor at pane edges', () => {
