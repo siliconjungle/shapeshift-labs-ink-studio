@@ -248,6 +248,7 @@
     ...P.animationGraph.operations,
     ...P.frameBanks.operations,
     ...P.datamosh.operations,
+    ...P.subjectFeedback.operations,
     ...P.visualResampling.operations,
     ...P.rasterSimulation.operations,
     ...P.mediaGraph.operations,
