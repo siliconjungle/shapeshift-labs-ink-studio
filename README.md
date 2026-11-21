@@ -1129,3 +1129,5 @@ Use [irregular mosaics and stained glass](docs/mosaic-surfaces.md) for fitted po
 Use [contour ribbons and topographic rendering](docs/contour-ribbons.md) to trace heightfields, SDF slices and curved-surface isolines into native marks. Explore [Lines of Matter](examples/contour-ribbons.html), including ribbons peeling into particles.
 
 Use [faceted surface reconstruction](docs/faceted-surfaces.md) for optional flat SDF patches with per-object size, lattice orientation and colour grouping. Explore [Amethyst Quarry / Copperworks](examples/faceted-surfaces.html), including a rigged native flywheel and pixel-art façade decals.
+
+Use [layered cut paper and relief](docs/paper-relief.md) for real apertures, paper thickness, parallax, native geometry and optional crisp front paint with baked soft shadows. Explore [The Quiet Orchard / Tidal Atlas](examples/paper-relief.html).

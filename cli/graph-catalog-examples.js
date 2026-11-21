@@ -131,6 +131,9 @@ const specifications = {
   'geo.motionMesh': { inputs: { control: motionControl } },
   'scene.motionSplats': { inputs: { ids: [0], control: motionControl } },
   'geo.scrambleIndices': { inputs: { options: { maxDisplacement: 1.5, amount: .5 } } },
+  'paper.stack': {inputs:{layers:[{id:'sheet',profile:[[0,0],[1,0],[1,1],[0,1]],color:'#d9b07a'}]}},
+  'paper.relief': {inputs:{options:{levels:[.1,.3],cell:.12}}},
+  'paper.world': {nodes:{sheet:{op:'paper.stack',inputs:{layers:[{profile:[[-1,-1],[1,-1],[1,1],[-1,1]],color:'#d9b07a'}]}}},inputs:{source:link('sheet'),options:{draw:{shadowSamples:1}}}},
   'sdf.bound': { inputs: { bounds: { min: [-1, -1, -1], max: [1, 1, 1] } } },
   'sdf.combine': { nodes: {
     shape: { op: 'sdf.shape' }, fields: { op: 'data.record', inputs: { first: link('shape') } },

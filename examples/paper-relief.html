@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>
+    Between the Sheets · Ink Studio
+  </title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      background: #07131d;
+      color: #c6ddcd;
+      font: 14px system-ui;
+      margin: 0;
+    }
+    main {
+      max-width: 1280px;
+      margin: auto;
+      padding: 30px;
+    }
+    header {
+      font: 10px monospace;
+      letter-spacing: 3px;
+      color: #77a59c;
+      border-bottom: 1px solid #28434b;
+      padding-bottom: 18px;
+    }
+    h1 {
+      font: 44px Georgia;
+      margin: 25px 0 8px;
+      color: #f1cc8a;
+    }
+    p {
+      color: #88aba8;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 20px 0 12px;
+    }
+    button {
+      background: #102b35;
+      border: 1px solid #355a60;
+      color: #c9e4cf;
+      padding: 10px 16px;
+      cursor: pointer;
+      font: 11px monospace;
+    }
+    button.active {
+      border-color: #d1a767;
+      color: #ffd99a;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      image-rendering: pixelated;
+      touch-action: none;
+      background: #071b27;
+      border: 1px solid #28434b;
+    }
+    footer {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      color: #69928f;
+      font: 11px monospace;
+      margin-top: 15px;
+    }
+    .hint {
+      margin-left: auto;
+      align-self: center;
+      color: #77a59c;
+      font: 10px monospace;
+    }
+  </style>
+  <main>
+    <header>INK STUDIO / REPRESENTATIONS 10</header>
+    <h1>Between the Sheets</h1>
+    <p>Cut silhouettes, warm paper edges and shadows between the layers. Drag to discover the depth.</p>
+    <nav>
+      <button data-view="orchard" class="active">01 / The quiet orchard</button
+      ><button data-view="tides">02 / Tidal atlas</button><span class="hint">DRAG TO ORBIT · SCROLL TO ZOOM</span>
+    </nav>
+    <canvas id="view" width="1200" height="720"></canvas>
+    <nav>
+      <button id="depth">Explode the layers</button><button id="shadows">Shadows on</button
+      ><button id="grain">Paper grain on</button>
+    </nav>
+    <footer><span id="status">Tracing the fields…</span><span>CUT PROFILES / PAPER STOCK / CAST SHADOWS</span></footer>
+  </main>
+  <script src="../dist/ink-studio.browser.js"></script>
+  <script src="./paper-relief.js"></script>
+  <script type="module">
+    import { createRenderer } from '../webgl.mjs';
+    const kit = {
+        KIT,
+        makeBuilder,
+        makeSculpt,
+        PixelLook,
+        SpriteSurface,
+        TexturedSurface,
+        RenderStages,
+        TargetSelectors,
+        SplatProvenance
+      },
+      demo = paperReliefDemo(kit),
+      canvas = document.querySelector('#view'),
+      renderer = createRenderer(canvas, { toolkit: kit });
+    demo.state.view = 'orchard';
+    const refresh = () =>
+      document
+        .querySelectorAll('[data-view]')
+        .forEach(b => b.classList.toggle('active', demo.state.view === b.dataset.view));
+    document.querySelectorAll('[data-view]').forEach(
+      b =>
+        (b.onclick = () => {
+          demo.state.view = b.dataset.view;
+          refresh();
+        })
+    );
+    for (const id of ['depth', 'shadows', 'grain'])
+      document.querySelector('#' + id).onclick = e => {
+        if (id === 'depth') {
+          demo.state.separation = demo.state.separation === 1 ? 2.3 : 1;
+          e.target.textContent = demo.state.separation === 1 ? 'Explode the layers' : 'Close the layers';
+        }
+        if (id === 'shadows') {
+          demo.state.shadows = !demo.state.shadows;
+          e.target.textContent = demo.state.shadows ? 'Shadows on' : 'Shadows off';
+        }
+        if (id === 'grain') {
+          demo.state.grain = !demo.state.grain;
+          e.target.textContent = demo.state.grain ? 'Paper grain on' : 'Paper grain off';
+        }
+        demo.rebuild();
+      };
+    let drag,
+      last,
+      stamp,
+      frames = 0,
+      fps = 60;
+    canvas.onpointerdown = e => {
+      drag = [e.clientX, e.clientY, demo.camera.yaw, demo.camera.pitch];
+      canvas.setPointerCapture(e.pointerId);
+    };
+    canvas.onpointermove = e => {
+      if (drag) {
+        demo.camera.yaw = drag[2] - (e.clientX - drag[0]) * 0.005;
+        demo.camera.pitch = Math.max(-0.6, Math.min(1.4, drag[3] + (e.clientY - drag[1]) * 0.005));
+      }
+    };
+    canvas.onpointerup = canvas.onpointercancel = () => (drag = null);
+    canvas.addEventListener(
+      'wheel',
+      e => {
+        e.preventDefault();
+        demo.camera.dist = Math.max(3, Math.min(24, demo.camera.dist * Math.exp(e.deltaY * 0.001)));
+      },
+      { passive: false }
+    );
+    refresh();
+    window.paperQA = { demo, renderer, kit };
+    function tick(t) {
+      const dt = last === undefined ? 0 : Math.min(0.05, (t - last) / 1000);
+      last = t;
+      demo.update(dt);
+      renderer.render(demo.world, {
+        time: demo.state.time,
+        camera: demo.camera,
+        changedRows: [],
+        width: 1200,
+        height: 720,
+        damp: false,
+        stepAnimation: false,
+        raw: true
+      });
+      stamp ??= t;
+      frames++;
+      if (t - stamp > 800) {
+        fps = Math.round((frames * 1000) / (t - stamp));
+        frames = 0;
+        stamp = t;
+      }
+      document.querySelector('#status').textContent = `${demo.world.count.toLocaleString()} native splats / ${fps} fps`;
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  </script>
+</html>

@@ -1,6 +1,7 @@
 /* Stock typed geometry, signed-field, camera, light and sprite rig nodes. */
 (function (K) {
   const P = K.procedural, A = P.sceneGraph;
+  const {sdfExtent,sdfSampler}=P.sceneGraphSupport;
   const param = (type, value) => ({ type, default: value });
   const options = param('record', {});
   const lights = param('array<record>', []);
@@ -42,6 +43,14 @@
       inputs: { slices: 'array<raster>', options }, outputs: slices,
       run: ({ slices, options }) => A.sliceStack(slices, options)
     },
+    'paper.stack': {inputs:{layers:'array<record>',options},...value('record',({layers,options})=>K.paper.stack(layers,options))},
+    'paper.relief': {inputs:{source:'field',options},time:true,...value('record',({source,options},ctx)=>{
+      const {levels=[.1,.3,.5],bounds,slice=0,...rest}=options;
+      if(!Number.isFinite(slice))throw new RangeError('Paper relief slice must be finite');
+      const box=sdfExtent(source),sample=sdfSampler(source,options.time??ctx.time);
+      return K.paper.relief((x,y)=>-sample(x,y,slice),{...rest,levels,bounds:bounds??{min:box.min.slice(0,2),max:box.max.slice(0,2)}});
+    })},
+    'paper.world': {inputs:{source:'record',options},...value('world',({source,options})=>K.paper.world(source,options))},
     'sdf.shape': {
       inputs: { kind: param('string', 'sphere'), options },
       ...value('field', ({ kind, options }) => A.shape(kind, options))

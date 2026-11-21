@@ -1528,6 +1528,25 @@
         "flat-shading",
         "graph"
       ]
+    },
+    {
+      "id": "kit.paper",
+      "kind": "api",
+      "status": "ready",
+      "title": "Layered cut paper and relief",
+      "what": "Physical cutout sheets with holes, thickness, depth, coloured edges, SDF/ray queries, native bodies and optional crisp front paint with baked soft shadows.",
+      "use": "K.paper.stack / cut / relief / draw / world / shadows / raycast / sdf",
+      "where": "src/kit/p78-paper-relief.js",
+      "example": "docs/paper-relief.md, examples/paper-relief.html, examples/paper-relief.json",
+      "tags": [
+        "paper",
+        "cutout",
+        "relief",
+        "layers",
+        "shadows",
+        "sdf",
+        "splat"
+      ]
     }
   ]
 }
