@@ -563,6 +563,7 @@ outside the original image.
 | `fx.erode` | Recede from exposed edges by a Euclidean `radius` in pixels. Returns the edited raster and its surviving byte `mask`. |
 | `fx.repair` | Use `method: "close"` and a Euclidean `radius` for holes and narrow gaps, or `"bridge"` and `maxGap` for breaks along rows, columns or diagonals. New pixels take the nearest selected source colour or an explicit `color`. Inspect them in the separate `added` mask. |
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
+| `fx.tvStatic` | Blend [seekable TV static](#broadcast-patterns-and-tv-static) into the source RGB. Keeps the source's dimensions, pivot, and alpha. |
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
@@ -928,6 +929,8 @@ the graph clock in seconds. Set `options.time` to hold a specific sample.
 | --- | --- |
 | `proc.noise` | Compile a native [field expression](procedural.md#composable-procedural-fields) in `definition`. The `value` field works with simplex, periodic and time-loop noise, fractal stacks, masks and domain warps. |
 | `proc.pattern` | Produce a 0–1 field. Set `kind` to `checker`, `stripes`, `dots`, `rings`, `brick` or `chevrons`. Set `size` in world units, `axes` to `xy`, `xz` or `yz`, `angle` in radians, `offset` and `velocity` as pairs, and `fill` as a fraction. |
+| `proc.smpteColorBars` | Generate [SMPTE SD or HD color bars](#broadcast-patterns-and-tv-static) as an RGBA8 raster. |
+| `proc.tvStatic` | Generate [TV static](#broadcast-patterns-and-tv-static) as a seekable RGBA8 raster. |
 | `proc.sample` | Rasterize a scalar `source` field at pixel centers across `origin` plus the plane vectors `u` and `v`. The one-channel raster retains signed and fractional values. Feed it to `color.gradient` with `channel: 0` and an explicit `range` to make artwork. |
 | `proc.repeat` | Repeat a raster at an explicit output size with pixel `offset` and two-axis `scale`. Channel counts and numeric values are retained. |
 | `proc.tiles` | Lay out weighted `definitions` with north, east, south and west sockets. `mode: "solve"` accepts `pins`, `ports`, `boundary` and `wrap`. `mode: "wang"` uses `labels` and a world-cell `origin` for independently generated chunks. Returns a layout with a status and, on success, row-major IDs. |
@@ -960,6 +963,42 @@ ink-studio graph run procedural-review/storm-relay.json --at 1.22 --out procedur
 
 Use a [take clock](take-clock.md) to sample a graph, world, timeline, and
 recorded media against one rational picture frame.
+
+### Broadcast patterns and TV static
+
+`generator.smpteColorBars({ pattern, width, height, levels, blueOnly })`
+creates an RGB rendition of `eg1` (the default) or `rp219`. EG 1 has a
+reverse-blue strip and near-black PLUGE steps. RP 219 uses the default
+reference patches, a luminance ramp, gray side panels, and five PLUGE
+steps. Width defaults to 128 pixels. Height follows the pattern's 4:3 or
+16:9 aspect ratio unless supplied. Use `blueOnly: true` to isolate the
+blue channel. The default `levels: "full"` clips below-black values at
+zero for display. `levels: "limited"` maps reference black and white
+to RGB bytes 16 and 235 and preserves the below-black patch. Both modes
+return RGB artwork with alpha. The source standards describe video
+signal encoding and timing. [SMPTE EG 1](https://pub.smpte.org/pub/eg1/eg0001-1990_stable2004.pdf) · [SMPTE RP 219-1](https://pub.smpte.org/latest/rp219-1/rp0219-1-2014.pdf)
+
+`generator.tvStatic(options)` creates a standalone layer. Use
+`pixelEffects.tvStatic(source, options)` to blend it into an existing
+raster. Both accept the same appearance controls. The standalone layer
+defaults to 128 × 96. The effect takes its dimensions from the source.
+
+| Option | Behavior |
+| --- | --- |
+| `preset` | `snow` for fine monochrome grain, `chroma` for color noise, `weak-signal` for horizontal streaks, or `tracking` for a rolling band. |
+| `time`, `seed`, `rate` | Time in seconds, integer seed, and noise frames per second from 0.01 to 240. Use zero rate to hold a frame. The graph nodes inherit the graph clock and node seed unless overridden. |
+| `grain` | Integer noise cell size `[width, height]` in pixels. |
+| `contrast`, `chroma`, `rowNoise`, `scanlines` | Grain contrast from 0 to 2, color separation, independent row brightness, and alternating-row dimming. The last three range from 0 to 1. |
+| `band` | Override `height` as a fraction of the image, `speed` in screen heights per second, and `strength` from 0 to 1. Negative speed reverses direction. |
+| `opacity`, `density` | Set the alpha of active noise cells and the fraction of cells that are active, both from 0 to 1. |
+
+Run the [broadcast patterns demo](../examples/broadcast-patterns.cjs) to
+compare the test patterns, play or scrub the static presets, and see
+tracking interference applied to a pixel-art feed.
+
+```sh
+node examples/broadcast-patterns.cjs broadcast-demo.html
+```
 
 ## Audio and automation
 

@@ -42,6 +42,11 @@
       inputs: { points: 'points', options }, outputs: { value: 'path', points: 'points', length: 'number' },
       run: ({ points, options }) => G.path(points, options)
     },
+    'proc.smpteColorBars': { inputs: { options }, ...value('raster', ({ options }) => G.smpteColorBars(options)) },
+    'proc.tvStatic': {
+      inputs: { options }, time: true,
+      ...value('raster', ({ options }, context) => G.tvStatic(timed(options, context)))
+    },
     'proc.rain': {
       inputs: { options }, outputs: { value: 'raster', particles: 'array<record>' }, time: true,
       run: ({ options }, context) => G.rain(timed(options, context))
