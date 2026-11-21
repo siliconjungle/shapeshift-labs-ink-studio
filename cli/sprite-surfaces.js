@@ -1,4 +1,5 @@
 // Rasterize opaque, cutout atlas triangles into the existing scene compositor.
+const uvSlip=Symbol.for('ink-studio.spriteSurface.uvSlip');
 function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
   if(!atlas)return [];
   const fragments=new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -14,7 +15,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
     if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
       !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
       !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
+    const plan=layer[uvSlip];
+    const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
+    let rangeIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
+      const first=offset/5;
+      while(ranges[rangeIndex]?.end<=first)rangeIndex++;
+      const range=ranges[rangeIndex];
+      const shifted=range&&range.first<=first;
       const input=[0,1,2].map(i=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5))));
       const polygon=[];
       for(let i=0;i<3;i++){
@@ -37,7 +45,13 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip}) {
           const z=ortho?weights.reduce((s,n,k)=>s+n*row[k].z,0):1/sum,p=y*W+x;
           if(fragments[p]&&z>=fragments[p].z)continue;
           const sample=k=>row.reduce((s,n,i)=>s+n.uv[k]*w[i]/sum,0);
-          const tx=Math.max(0,Math.min(width-1,Math.floor(sample(0)))),ty=Math.max(0,Math.min(height-1,Math.floor(sample(1))));
+          const s=sample(0),t=sample(1);
+          const tx=shifted ?
+            Math.max(range.bounds[0],Math.min(range.bounds[2],Math.floor(s*range.transform[0]+range.transform[2]))) :
+            Math.max(0,Math.min(width-1,Math.floor(s)));
+          const ty=shifted ?
+            Math.max(range.bounds[1],Math.min(range.bounds[3],Math.floor(t*range.transform[1]+range.transform[3]))) :
+            Math.max(0,Math.min(height-1,Math.floor(t)));
           const texel=(ty*width+tx)*4;
           if(pixels[texel+3]<128)continue;
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));

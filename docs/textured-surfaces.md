@@ -46,7 +46,7 @@ The native WebGL renderer and software renderer read `world.spriteSurfaces`. Set
 
 Paint returns a 24-bit RGB integer or `undefined` for a transparent cutout. Sampling uses nearest texels. Fractional alpha is reserved for splats and the existing sprite-atlas effects. Texture RGB is authored surface color, so bake surface shading into the paint when desired. The software renderer's resolved-frame looks also affect the result. Surface color is baked. Material-selector and live-relighting channels continue to use SDF splats.
 
-Grids default to a 200,000-triangle budget. Raise `maxTriangles` explicitly up to 2,000,000. The atlas has its existing configurable width and maximum height. Invalid geometry or paint leaves the atlas allocation unchanged. Treat finished geometry and atlas data as immutable and create a new atlas when editing them.
+Grids default to a 200,000-triangle budget. Raise `maxTriangles` explicitly up to 2,000,000. The atlas has its existing configurable width and maximum height. Invalid geometry or paint leaves the atlas allocation unchanged.
 
 To share an updateable texture region among faces, call `atlas.reserve(width, height)`
 and attach it with `atlas.faceRegion(origin, right, up, region)` or
@@ -55,3 +55,52 @@ writes a matching top-down RGBA raster into the region and marks those pixels
 dirty. [Camera feeds on textured panels](camera-atlas.md#route-a-feed-to-the-world)
 
 Run `ink-studio render examples/textured-surfaces.js` for a mixed example. Its `build(seed,{textured:false})` also exercises the SDF and splat rendering path.
+
+## UV and atlas slip
+
+Give faces or meshes an optional final `{ id }` argument when adding them
+to a builder. On the finished atlas, use `SpriteSurface.uvSlip` to change
+which texels any of those faces sample.
+
+```js
+const pack = SpriteSurface.make(160);
+const navigation = pack.reserve(80, 30, paintNavigation);
+const alarm = pack.reserve(80, 30, paintAlarm);
+pack.faceRegion([-1, 0, 0], [2, 0, 0], [0, 1, 0], navigation, { id: 'screen' });
+const atlas = pack.finish();
+
+SpriteSurface.uvSlip(atlas, [{ face: 'screen', to: alarm, flipU: true }]);
+SpriteSurface.uvSlip(atlas, [{ face: 'screen', cells: [1, 0] }]);
+SpriteSurface.uvSlip(atlas, []);
+```
+
+- `to` accepts a reserved region or a top-down atlas rectangle
+  `{ x, y, width, height }`, including cropped or differently sized regions.
+  `cells: [columns, rows]` shifts the source rectangle by integer multiples
+  of its width and height. Use either `to` or `cells`. Omit both for an
+  in-place flip. `flipU` and `flipV` reflect the local horizontal and
+  vertical coordinates and can be combined.
+- For an existing atlas or an individual triangle, specify
+  `{ first, count, from }` in place of `face`. The two indices count
+  vertices, in multiples of three. `from` names the authored atlas rectangle.
+  With a one-texel source axis, the corresponding sample stays at the
+  destination midpoint along that axis.
+- Each call replaces the active edits. Use nonoverlapping ranges and
+  in-bounds rectangles. An empty list restores the authored mapping.
+  Apply a list from a scene update to animate the effect at exact frame times.
+
+CPU and WebGL apply the same nearest-texel rules at draw time. Positions,
+the atlas image, and its update and geometry revisions are preserved.
+Samples stay inside their destination region, and transparent texels
+reveal the geometry behind them through the normal cutout rules. Edits
+also sample any subsequent pixel updates in that destination, including
+live camera feeds.
+
+[Atlas Address Fault](../examples/uv-atlas-slip.js) compares identical
+receivers while one reads an adjacent cell, mirrors its middle screen,
+and reads a crop from another part of the atlas.
+
+```sh
+node cli/ink-studio.js clip examples/uv-atlas-slip.js --w 424 --h 218 \
+  --to 5.333333333333333 --fps 12 --out atlas-address-fault.png
+```

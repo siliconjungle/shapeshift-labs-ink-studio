@@ -3,6 +3,8 @@ import { emitterGLSL } from './light-emitters.mjs';
 import { waterGLSL } from './water-optics.mjs';
 import { createResources } from './resources.mjs';
 
+const uvSlip = Symbol.for('ink-studio.spriteSurface.uvSlip');
+
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
 export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway } = {}) {
   const resources = createResources(gl);
@@ -45,6 +47,8 @@ ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arri
 uniform vec2 u_surfaceViewport;
 uniform vec3 u_fog;
 uniform bool u_index, u_graphDepth;
+uniform bool u_uvSlip;
+uniform vec4 u_uvTransform, u_uvBounds;
 ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
@@ -57,7 +61,8 @@ layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
 layout(location=2) out vec4 water;
 void main(){
-  vec4 ink=texelFetch(u_atlas,ivec2(v_texel),0);
+  vec2 texel=u_uvSlip?clamp(v_texel*u_uvTransform.xy+u_uvTransform.zw,u_uvBounds.xy,u_uvBounds.zw):v_texel;
+  vec4 ink=texelFetch(u_atlas,ivec2(texel),0);
   if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
   ${section ? 'float margin=sectionMargin(v_world,v_depth); if(margin<0.0)discard;' : ''}
   float d=clamp((v_depth-u_range.x)/(u_range.y-u_range.x),0.0,1.0);
@@ -392,7 +397,24 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       gl.bindVertexArray(vao);
       if (!index && lighting?.active) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);
-      gl.drawArrays(gl.TRIANGLES, 0, active.vertices.length / 5);
+      const plan = atlas[uvSlip];
+      const ranges = plan?.vertices === atlas.vertices && plan.width === atlas.width && plan.height === atlas.height
+        ? plan.ranges : [];
+      let first = 0;
+      for (const { first: start, end, transform, bounds } of ranges) {
+        if (start > first) {
+          shader.set({ u_uvSlip: false });
+          gl.drawArrays(gl.TRIANGLES, first, start - first);
+        }
+        shader.set({ u_uvSlip: true, u_uvTransform: transform, u_uvBounds: bounds });
+        gl.drawArrays(gl.TRIANGLES, start, end - start);
+        first = end;
+      }
+      const count = active.vertices.length / 5;
+      if (first < count) {
+        shader.set({ u_uvSlip: false });
+        gl.drawArrays(gl.TRIANGLES, first, count - first);
+      }
       gl.activeTexture(gl.TEXTURE0);
     }
     return {
