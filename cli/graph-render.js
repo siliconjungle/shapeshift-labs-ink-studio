@@ -123,7 +123,7 @@ function graph3DOperations(kit) {
       inputs: { source: 'world', camera: options, lights: { type: 'array<record>', default: [] },
         channels: { type: 'array<string>', default: defaults }, options,
         renderGraphInputs: options, renderGraphCapture: { type: 'array<string>', default: [] } },
-      outputs: { value: 'raster', frame: 'renderFrame', motionReference: 'any', report: 'record' }, time: true,
+      outputs: { value: 'displayRaster', frame: 'renderFrame', motionReference: 'any', report: 'record' }, time: true,
       instantiate() {
         const sample = createSceneSampler(kit);
         const run = ({ source, options, ...inputs }, { time, take, sequence }) =>

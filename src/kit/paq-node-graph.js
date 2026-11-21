@@ -4,7 +4,7 @@
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
   const id = value => typeof value === 'string' && /^[a-zA-Z][\w.-]{0,99}$/.test(value) &&
     !['constructor', 'prototype', '__proto__'].includes(value);
-  const {validator, compatible} = P.graphTypes;
+  const {validator, compatible, description, conversion} = P.graphTypes;
   function schema(value) {
     if (!record(value)) throw new TypeError('Expected named graph sockets');
     return Object.fromEntries(Object.entries(value).map(([name, spec]) => {
@@ -78,10 +78,15 @@
         if (!Object.hasOwn(given, key) && !Object.hasOwn(socket, 'default'))
           throw new RangeError('Missing graph socket ' + name + '.' + key);
         const link = binding(Object.hasOwn(given, key) ? given[key] : { value: socket.default });
-        if (link.kind !== 'value' && (link.kind !== 'track' || planOnly) && !compatible(link.type,socket.type))
-          throw new TypeError('Incompatible graph socket ' + name + '.' + key);
+        if (link.kind !== 'value' && (link.kind !== 'track' || planOnly) && !compatible(link.type,socket.type)) {
+          const source = link.kind === 'node' ? link.id + '.' + link.port : link.kind === 'input' ? 'input ' + link.id : 'keyframes';
+          const convert = conversion(link.type, socket.type);
+          throw new TypeError('Incompatible graph socket ' + name + '.' + key + ': ' + source + ' provides ' +
+            description(link.type) + ', expected ' + description(socket.type) + (convert ? '. Use ' + convert + '.' : '.'));
+        }
         const valid=validator(socket.type);
-        if (link.kind === 'value' && !valid(link.value)) throw new TypeError('Wrong value for graph socket ' + name + '.' + key);
+        if (link.kind === 'value' && !valid(link.value))
+          throw new TypeError('Wrong value for graph socket ' + name + '.' + key + ': expected ' + description(socket.type));
         return [key, socket, link, valid];
       });
       stack.delete(name);
@@ -110,7 +115,8 @@
       if (!record(input)) throw new TypeError('Graph inputs must be named values');
       return Object.fromEntries(Object.entries(specInputs).map(([name, socket]) => {
         const value = Object.hasOwn(input, name) ? input[name] : socket.default;
-        if (!validator(socket.type)(value)) throw new TypeError('Wrong input value for graph socket ' + name);
+        if (!validator(socket.type)(value))
+          throw new TypeError('Wrong input value for graph socket ' + name + ': expected ' + description(socket.type));
         return [name, value];
       }));
     }
@@ -153,9 +159,10 @@
       pending.clear();
       function prepare(name) {
         const config = configs.get(name), { bindings, clock } = config;
-        const entries = bindings.map(([key, , link, valid]) => {
+        const entries = bindings.map(([key, socket, link, valid]) => {
           const value = resolve(link, values, time);
-          if (!valid(value)) throw new TypeError('Wrong linked value for graph socket ' + name + '.' + key);
+          if (!valid(value))
+            throw new TypeError('Wrong linked value for graph socket ' + name + '.' + key + ': expected ' + description(socket.type));
           return [key, value];
         });
         const previous = marks.get(name), comparable = entries.map(([, value]) => value);

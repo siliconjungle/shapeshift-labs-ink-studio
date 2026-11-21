@@ -486,6 +486,52 @@ evaluator caches them.
 
 Declare these types on project inputs, group ports, or library operations.
 
+### Convert coordinates, time and colour explicitly
+
+`graph validate` and `graph plan` identify incompatible typed links by
+source and destination port and suggest a conversion when one is available.
+The named types describe ordinary arrays, numbers and raster records.
+Legacy `vec2`, `vec3`, `number`, and `raster` sockets can still carry these
+values. Declare semantic types on graph inputs and group ports to keep the
+unit checks across the graph. Raw literals use the destination's type.
+
+| From and to | Graph operations |
+| --- | --- |
+| `pixels` and `uv` | `coord.pixelToUV`, `coord.uvToPixel` |
+| `worldPosition` and projected `pixels` | `coord.project`, `coord.unproject` |
+| `seconds` and `frames` | `time.toFrames`, `time.toSeconds` |
+| Display RGB(A) byte levels and normalized sRGB | `color.fromRGB8`, `color.toRGB8` |
+| Normalized display sRGB and linear sRGB | `color.toLinear`, `color.toDisplay` |
+| RGB or RGBA rasters | `color.rasterToLinear`, `color.rasterToDisplay` |
+
+Pixel and UV coordinates start at the top-left edge. The first pixel
+center is `[0.5, 0.5]`. Divide by the viewport's full width and height
+to obtain UV. Values can extend beyond the viewport for offscreen work.
+`coord.project` returns the pixel point, UV, axial camera depth, and a
+`visible` flag for viewport and clip-plane coverage. Unprojection
+requires axial camera depth, measured along the forward axis.
+
+Use `coord.renderGrid` on the `report` output of `scene.render` or
+`sdf.render` to use the actual camera and native art grid. This includes
+orthographic setback and any view offset captured by the renderer.
+Use `coord.cameraGrid` for a standalone authored camera and viewport.
+
+Give the time nodes an explicit frame rate. They accept a number or an
+integer ratio such as `{"numerator":30000,"denominator":1001}`. Frames
+are signed integer indices. Seconds-to-frames uses `floor` by default
+and accepts `ceil`, `nearest` with ties toward +∞, and `exact` to reject
+times between frames.
+
+The colour nodes preserve straight alpha. For a linear raster, RGB
+uses floating-point linear sRGB and alpha uses `[0,1]`. Convert it to
+display RGB before PNG or clip export. Encoding clamps out-of-range RGB
+by default and supports `outOfRange: "error"` to diagnose clipping.
+
+Use `ink-studio graph describe coord.project` for a runnable example or
+`KIT.procedural.conversions` for the same operations in the library.
+
+### Legacy and shared port shapes
+
 | Port type | Value |
 | --- | --- |
 | `raster` | `{width, height, data, channels?}` with 1–4 interleaved channels of finite samples. Omit `channels` to infer it from the buffer length. PNG export requires RGB8 or RGBA8. |

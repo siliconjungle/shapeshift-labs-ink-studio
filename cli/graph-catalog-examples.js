@@ -20,6 +20,7 @@ const diorama = { id: 'node-catalog', seed: 1, style: 'slate', solids: [
 ] };
 
 const link = (node, port = 'value') => ({ node, port });
+const cameraGrid = { op: 'coord.cameraGrid', inputs: { width: 64, height: 48, camera: { dist: 4 } } };
 const param = input => ({ input });
 const group = (inputs, op, values) => ({
   inputs, nodes: { step: { op, inputs: values } }, outputs: { value: link('step') }
@@ -41,6 +42,19 @@ const dynamic = {
     callback: group({}, 'time', {}) }
 };
 const specifications = {
+  'coord.pixelToUV': { inputs: { point: [.5, .5], width: 64, height: 48 } },
+  'coord.uvToPixel': { inputs: { point: [.5, .5], width: 64, height: 48 } },
+  'coord.renderGrid': { nodes: { field: { op: 'sdf.shape' },
+    render: { op: 'sdf.render', inputs: { source: link('field'), options: { width: 16, height: 12 } } } },
+  inputs: { report: link('render', 'report') } },
+  'coord.project': { nodes: { grid: cameraGrid }, inputs: { point: [.3, .2, 0], grid: link('grid') } },
+  'coord.unproject': { nodes: { grid: cameraGrid,
+    projected: { op: 'coord.project', inputs: { point: [.3, .2, 0], grid: link('grid') } } },
+  inputs: { point: link('projected'), depth: link('projected', 'depth'), grid: link('grid') } },
+  'time.toFrames': { inputs: { time: 1.001, fps: { numerator: 30000, denominator: 1001 }, rounding: 'exact' } },
+  'time.toSeconds': { inputs: { frame: 30, fps: { numerator: 30000, denominator: 1001 } } },
+  'color.rasterToDisplay': { nodes: { linear: { op: 'color.rasterToLinear', inputs: { source: rgba } } },
+    inputs: { source: link('linear') } },
   lessThan: { inputs: { a: 1, b: 2 } },
   'array.broadcast': { inputs: { arrays: { x: [1, 2], y: [3, 4] }, mode: 'cartesian' } },
   'data.get': { inputs: { record: { hue: 4 }, key: 'hue' } },
@@ -203,16 +217,18 @@ function exampleFor(id, operation, kit) {
   const field = { op: 'sdf.shape' }, world = { op: 'scene.diorama', inputs: { definition: diorama } };
   function sample(type, name) {
     switch (type) {
-      case 'number': return 4;
+      case 'number': case 'pixelCount': case 'frames': case 'seconds': return 4;
       case 'boolean': return true;
       case 'string': return 'Ink';
-      case 'raster': case 'image': return name === 'mask' ? mask : name === 'motion' ? motion : rgba;
+      case 'raster': case 'image': case 'displayRaster': return name === 'mask' ? mask : name === 'motion' ? motion : rgba;
       case 'palette': return palette;
       case 'path': return { points: triangle };
       case 'points': return triangle;
       case 'mesh': case 'geometry': return mesh;
-      case 'vec2': return [.3, .5];
-      case 'vec3': return name === 'end' ? [1, 1, 0] : [0, 0, 0];
+      case 'vec2': case 'pixels': case 'uv': return [.3, .5];
+      case 'vec3': case 'worldPosition': return name === 'end' ? [1, 1, 0] : [0, 0, 0];
+      case 'rgb8': return [60, 135, 190, 255];
+      case 'srgb': case 'srgb-linear': return [.25, .5, .75, 1];
       case 'field': nodes.field ??= field; return link('field');
       case 'world': nodes.world ??= world; return link('world');
       case 'renderFrame': return { w: 1, h: 1, rgb: [60, 135, 190] };

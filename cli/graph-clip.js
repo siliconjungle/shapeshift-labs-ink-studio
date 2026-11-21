@@ -4,7 +4,7 @@ const PNG = require('./png.js');
 const { createSceneSampler } = require('./graph-render.js');
 
 const formats = ['frames', 'apng', 'both'];
-const supportedOutputs = ['raster', 'image', 'world', 'renderFrame', 'any'];
+const supportedOutputs = ['raster', 'displayRaster', 'image', 'world', 'renderFrame', 'any'];
 const maxEvaluations = 14400, maxBytes = 256 * 1024 * 1024;
 const index = n => Number.isSafeInteger(n) && n >= 0 && n <= 1000000000;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -12,6 +12,7 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function clip({ output, from = 0, to, warmup = 0, format = 'both', clock: settings = {}, renderOptions = {} },
   { kit, sample, plan, checks, seed }) {
   const type = typeof output === 'string' && Object.hasOwn(plan.outputs, output) && plan.outputs[output].type;
+  if (type === 'linearRaster') throw new TypeError('Graph clip needs display RGB. Use color.rasterToDisplay first.');
   if (!supportedOutputs.includes(type))
     throw new TypeError('Choose a named raster, render frame or scene output for the graph clip');
   const start = Math.max(0, from - warmup);
@@ -48,6 +49,7 @@ function clip({ output, from = 0, to, warmup = 0, format = 'both', clock: settin
       const result = evaluated.outputs[output];
       const image = isScene(result) ? render(result, { take, sequence, camera, lights, options, channels: [] }).value : result;
       if (i < from) continue;
+      if (image?.colorSpace === 'srgb-linear') throw new TypeError('Graph clip needs display RGB. Use color.rasterToDisplay first.');
       const raster = isFrame(image) ? P.sceneGraph.rasterFrame(image) : P.raster.rgba(image);
       const row = { frame: i, time: take.start, tick: take.tick, firstSample: take.firstSample,
         cut: take.cut, shot: take.shot, width: raster.width, height: raster.height };

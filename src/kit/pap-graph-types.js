@@ -38,6 +38,29 @@
   }
   const vertex = (index,count) => Number.isSafeInteger(index) && index >= 0 && index < count;
   const unit = value => Number.isFinite(value) && value>=0 && value<=1;
+  const byteLevel = value => Number.isFinite(value) && value >= 0 && value <= 255;
+  const ratio = value => record(value) && Number.isSafeInteger(value.numerator) &&
+    Number.isSafeInteger(value.denominator) && value.denominator > 0 &&
+    Object.keys(value).every(key => key === 'numerator' || key === 'denominator');
+  const rgb = (value, valid) => Array.isArray(value) && [3, 4].includes(value.length) && all(value, valid);
+  const byteData = data => data instanceof Uint8Array || data instanceof Uint8ClampedArray;
+  function frameRate(value) {
+    const rate = ratio(value) ? value.numerator / value.denominator : value;
+    return Number.isFinite(rate) && rate >= .001 && rate <= 1000;
+  }
+  function linearRaster(value) {
+    if (!raster(value) || byteData(value.data) || value.colorSpace === 'srgb') return false;
+    const channels = value.channels ?? value.data.length / (value.width * value.height);
+    if (channels !== 3 && channels !== 4) return false;
+    if (channels === 4) for (let i = 3; i < value.data.length; i += 4) if (!unit(value.data[i])) return false;
+    return true;
+  }
+  function cameraGrid(value) {
+    return dimensions(value) && list(value.view) && value.view.length === 16 && all(value.view, Number.isFinite) &&
+      Number.isFinite(value.tangent) && value.tangent > 0 && typeof value.ortho === 'boolean' &&
+      Number.isFinite(value.clipNear) && value.clipNear > 0 &&
+      Number.isFinite(value.clipFar) && value.clipFar > value.clipNear;
+  }
   function palette(value) {
     const colors = list(value) ? value : value?.palette;
     return list(colors) && colors.length >= 1 && colors.length <= 256 && all(colors, color =>
@@ -86,8 +109,51 @@
     renderFrame: value => record(value) && Number.isSafeInteger(value.w) && value.w > 0 &&
       Number.isSafeInteger(value.h) && value.h > 0 && list(value.rgb) && value.rgb.length === value.w * value.h * 3,
     image: value => record(value) && Number.isSafeInteger(value.width) && Number.isSafeInteger(value.height) && value.data,
-    raster, path, mesh, palette, atlas, audio
+    raster, path, mesh, palette, atlas, audio, cameraGrid, frameRate, linearRaster,
+    pixels: value => vector(value, 2),
+    uv: value => vector(value, 2),
+    worldPosition: value => vector(value, 3),
+    pixelCount: value => Number.isSafeInteger(value) && value > 0,
+    axialDepth: value => Number.isFinite(value) && value > 0,
+    seconds: Number.isFinite,
+    frames: Number.isSafeInteger,
+    rgb8: value => rgb(value, byteLevel),
+    srgb: value => rgb(value, unit),
+    'srgb-linear': value => rgb(value, Number.isFinite) && (value.length === 3 || unit(value[3])),
+    displayRaster: value => raster(value) && value.colorSpace !== 'srgb-linear' &&
+      (byteData(value.data) || all(value.data, byteLevel))
   };
+  // Semantic ports retain compatibility with legacy numeric and raster sockets.
+  const semantics = {
+    pixels: ['top-left pixel coordinates', 'vec2'],
+    uv: ['normalized top-left UV coordinates', 'vec2'],
+    worldPosition: ['world XYZ position', 'vec3'],
+    pixelCount: ['positive integer pixel count', 'number'],
+    axialDepth: ['positive axial camera depth', 'number'],
+    seconds: ['seconds', 'number'],
+    frames: ['integer frame index', 'number'],
+    frameRate: ['frame rate in frames per second', 'number'],
+    rgb8: ['display RGB(A) in byte levels [0,255]', 'array<number>', 'vec3'],
+    srgb: ['display sRGB(A) in [0,1]', 'vec3', 'array<number>'],
+    'srgb-linear': ['linear sRGB(A)', 'vec3', 'array<number>'],
+    displayRaster: ['display RGB(A) raster in byte levels', 'raster', 'image'],
+    linearRaster: ['linear RGB(A) raster with unit alpha', 'raster', 'image'],
+    cameraGrid: ['camera grid with view and viewport', 'record']
+  };
+  const description = type => Object.hasOwn(semantics, type) ? semantics[type][0] : type;
+  const conversions = {
+    'pixels/uv': 'coord.pixelToUV', 'uv/pixels': 'coord.uvToPixel',
+    'worldPosition/pixels': 'coord.project', 'worldPosition/uv': 'coord.project (uv output)',
+    'pixels/worldPosition': 'coord.unproject with axial depth',
+    'uv/worldPosition': 'coord.uvToPixel, then coord.unproject with axial depth',
+    'seconds/frames': 'time.toFrames', 'frames/seconds': 'time.toSeconds',
+    'rgb8/srgb': 'color.fromRGB8', 'srgb/rgb8': 'color.toRGB8',
+    'srgb/srgb-linear': 'color.toLinear', 'srgb-linear/srgb': 'color.toDisplay',
+    'rgb8/srgb-linear': 'color.fromRGB8, then color.toLinear',
+    'srgb-linear/rgb8': 'color.toDisplay, then color.toRGB8',
+    'displayRaster/linearRaster': 'color.rasterToLinear', 'linearRaster/displayRaster': 'color.rasterToDisplay'
+  };
+  const conversion = (from, to) => conversions[from + '/' + to];
   function element(type) {
     if (type === 'array' || type === 'points') return 'any';
     return typeof type === 'string' && type.startsWith('array<') && type.endsWith('>') ? type.slice(6,-1) : undefined;
@@ -100,10 +166,14 @@
   }
   function compatible(from,to) {
     if (from === to || from === 'any' || to === 'any') return true;
+    const source = Object.hasOwn(semantics, from) ? semantics[from] : null;
+    const target = Object.hasOwn(semantics, to) ? semantics[to] : null;
+    if (source || target) return !(source && target) &&
+      (source ?? target).some((base, index) => index > 0 && compatible(base, source ? to : from));
     const alias = type => type === 'image' ? 'raster' : type === 'geometry' ? 'mesh' : type;
     if (alias(from) === alias(to)) return true;
     const a = element(from), b = element(to);
     return Boolean(a && b && compatible(a,b));
   }
-  K.procedural.graphTypes = Object.freeze({validator,compatible});
+  K.procedural.graphTypes = Object.freeze({validator,compatible,description,conversion});
 })(KIT);

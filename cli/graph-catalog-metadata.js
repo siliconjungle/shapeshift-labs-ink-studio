@@ -2,6 +2,20 @@ const types = {
   number: { finite: true },
   vec2: { dimensions: 2, finite: true },
   vec3: { dimensions: 3, finite: true },
+  pixels: { dimensions: 2, finite: true, origin: 'top-left edge' },
+  uv: { dimensions: 2, finite: true, origin: 'top-left edge', nominalRange: [0, 1] },
+  worldPosition: { dimensions: 3, finite: true, axes: 'XYZ' },
+  pixelCount: { integer: true, min: 1 },
+  axialDepth: { exclusiveMin: 0 },
+  seconds: { finite: true },
+  frames: { integer: true, signed: true },
+  frameRate: { min: .001, max: 1000, accepts: ['number', 'numerator/denominator record'] },
+  rgb8: { lengths: [3, 4], min: 0, max: 255 },
+  srgb: { lengths: [3, 4], min: 0, max: 1 },
+  'srgb-linear': { lengths: [3, 4], finite: true, alpha: [0, 1] },
+  displayRaster: { channels: [1, 4], samples: [0, 255] },
+  linearRaster: { channels: [3, 4], finite: true, alpha: [0, 1] },
+  cameraGrid: { layout: 'Art-grid dimensions, view matrix, vertical scale, projection and clipping planes' },
   raster: { layout: 'Interleaved samples on a positive integer grid', channels: [1, 4], finite: true },
   image: { layout: 'Width, height and image data' },
   palette: { minItems: 1, maxItems: 256, entries: 'RGB integer, #rrggbb or normalized RGB triple' },
@@ -15,6 +29,9 @@ const types = {
   world: { layout: 'Native world with 16 samples per splat row' },
   renderFrame: { layout: 'Headless frame with width, height and RGB buffer' }
 };
+const semanticUnits = { pixels: 'pixels', uv: 'normalized UV', worldPosition: 'world units', pixelCount: 'pixels',
+  axialDepth: 'world units', seconds: 'seconds', frames: 'frames', frameRate: 'frames/second', rgb8: 'byte levels',
+  srgb: 'display sRGB', 'srgb-linear': 'linear sRGB', displayRaster: 'display byte levels', linearRaster: 'linear sRGB' };
 const positivePixels = { unit: 'pixels', constraints: { integer: true, min: 1 } };
 const pixelOffset = { unit: 'pixels', constraints: { integer: true, min: 0 } };
 const seconds = { unit: 'seconds' };
@@ -197,7 +214,7 @@ function socketDetails(id, name, type, input) {
   const details = Object.hasOwn(ports, id) && Object.hasOwn(ports[id], name) ? ports[id][name] : {};
   const properties = !input ? undefined : id === 'sim.define' && name === 'clock' ? simulationClock :
     (name === 'options' || name === 'timing') && Object.hasOwn(options, id) ? options[id] : undefined;
-  return { unit: details.unit ?? dimension.unit ?? null,
+  return { unit: details.unit ?? dimension.unit ?? semanticUnits[type] ?? null,
     constraints: { ...base, ...dimension.constraints, ...details.constraints }, ...(properties && { properties }) };
 }
 

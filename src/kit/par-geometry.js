@@ -12,7 +12,7 @@
     'geo.mesh': { inputs: { source: 'mesh' }, ...value('mesh', ({ source }) => A.mesh(source)) },
     'geo.box': { inputs: { options }, ...value('mesh', ({ options }) => A.box(options)) },
     'geo.tube': {
-      inputs: { start: 'vec3', end: 'vec3', options },
+      inputs: { start: 'worldPosition', end: 'worldPosition', options },
       ...value('mesh', ({ start, end, options }) => A.tube(start, end, options))
     },
     'geo.triangulate': {
@@ -68,7 +68,7 @@
     },
     'sdf.render': {
       inputs: { source: 'field', camera: options, lights, options },
-      outputs: { value: 'raster', frame: 'renderFrame', report: 'record' }, time: true,
+      outputs: { value: 'displayRaster', frame: 'renderFrame', report: 'record' }, time: true,
       run: ({ source, camera, lights, options }, ctx) => A.renderSDF(source, { ...clock(options, ctx), camera, lights })
     },
     'scene.camera': { inputs: { options }, ...value('record', ({ options }) => A.camera(options)) },

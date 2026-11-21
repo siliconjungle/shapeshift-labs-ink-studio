@@ -225,6 +225,7 @@
   P.graph.material = material;
   P.graph.tiles = tiles;
   P.graph.operations = Object.freeze({
+    ...P.conversions.operations,
     ...P.graph.arrays.operations,
     ...P.raster.operations,
     ...P.drawing2d.operations,
@@ -270,7 +271,7 @@
       run({ source, layer, tag }, { time }) { return { value: source.layer(layer, time, tag) }; }
     },
     materialSample: {
-      inputs: { source: 'field', uv: 'vec2' },
+      inputs: { source: 'field', uv: 'uv' },
       outputs: { height: 'number', normal: 'vec3', wetness: 'number', ink: 'number', palette: 'string' },
       time: true,
       run({ source, uv }, { time }) { return source.sample(...uv, time); }

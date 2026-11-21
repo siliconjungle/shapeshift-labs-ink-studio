@@ -98,7 +98,8 @@
     const frame = { w: width, h: height, rgb, ...(alpha && { alpha }), passes: {
       w: width, h: height, coverage, depth, normal, position, objectPosition: position, objectId, materialId, objects, materials
     } };
-    return { value: rasterFrame(frame), frame, report: { width, height, hits, queries, projection: view.ortho ? 'orthographic' : 'perspective' } };
+    return { value: rasterFrame(frame), frame, report: { width, height, hits, queries,
+      projection: view.ortho ? 'orthographic' : 'perspective', camera: P.conversions.fromCameraFrame(view, width, height) } };
   }
 
   Object.assign(A, { renderSDF: sdfRender, rasterFrame });

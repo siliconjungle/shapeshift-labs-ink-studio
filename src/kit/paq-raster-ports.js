@@ -13,8 +13,8 @@
   });
   R.operations = Object.freeze({
     'raster.canvas': {
-      inputs: {width: 'number', height: 'number', color: {type: 'array<number>', default: [0, 0, 0, 0]}},
-      outputs: {value: 'raster'}, run(inputs) { return {value: R.canvas(inputs)}; }
+      inputs: {width: 'pixelCount', height: 'pixelCount', color: {type: 'rgb8', default: [0, 0, 0, 0]}},
+      outputs: {value: 'displayRaster'}, run(inputs) { return {value: R.canvas(inputs)}; }
     },
     'raster.rgba': unary(R.rgba, {}),
     'raster.channel': unary(R.channel),

@@ -39,6 +39,7 @@ function separateNames(names, label) {
 }
 
 function imageBytes(value) {
+  if (value?.colorSpace==='srgb-linear') throw new TypeError('Graph PNG output needs display RGB. Use color.rasterToDisplay first.');
   const { width, height, data } = value ?? {};
   const size = width * height;
   const bytes = data instanceof Uint8Array || data instanceof Uint8ClampedArray;
@@ -75,7 +76,8 @@ function describe(value, depth = 0) {
       typeof value === 'number' && !Number.isFinite(value)) return {kind:'runtime',type:typeof value};
   if (!value || typeof value !== 'object') return value;
   if (Number.isSafeInteger(value.width) && Number.isSafeInteger(value.height) && value.data)
-    return {kind:'image',width:value.width,height:value.height,samples:value.data.length};
+    return {kind:'image',width:value.width,height:value.height,samples:value.data.length,
+      ...(typeof value.colorSpace==='string' && {colorSpace:value.colorSpace})};
   if (Number.isSafeInteger(value.sampleRate) && value.sampleRate > 0 && Number.isSafeInteger(value.channels) &&
       value.channels > 0 && (Array.isArray(value.samples) || ArrayBuffer.isView(value.samples))) {
     const frames=value.samples.length / value.channels;
@@ -173,7 +175,7 @@ function nativeOperations(kit, assets) {
     add:binary(({a,b})=>a+b),
     multiply:binary(({a,b})=>a*b),
     lessThan:binary(({a,b})=>a<b,'boolean'),
-    time:{time:true,outputs:{value:'number'},run(_,ctx){return {value:ctx.time};}},
+    time:{time:true,outputs:{value:'seconds'},run(_,ctx){return {value:ctx.time};}},
     random:{outputs:{value:'number'},seed:true,run(_,ctx){return {value:kit.KIT.grow.dice(ctx.seed)()};}},
     ...require('./graph-render.js').graph3DOperations(kit),
     pngAsset:asset('image', entry => entry.format==='png'),
@@ -348,6 +350,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (!id(output) || !Object.hasOwn(rootPlan.outputs,output) || !['png','json','atlas','wav','codec'].includes(format))
       throw new TypeError('Graph export '+name+' needs a known output and png, json, atlas, wav or codec format');
     const port=rootPlan.outputs[output].type, compatible=kit.KIT.procedural.graphTypes.compatible;
+    if ((format==='png' || format==='codec' && type==='raster') && port==='linearRaster')
+      throw new TypeError('Graph image export '+name+' needs display RGB. Use color.rasterToDisplay first.');
     if (format==='png' && !compatible(port,'raster')) throw new TypeError('Graph PNG export '+name+' needs an image output');
     if (format==='atlas' && !compatible(port,'atlas')) throw new TypeError('Graph atlas export '+name+' needs an atlas output');
     if (format==='wav' && (!compatible(port,'audio') || encoding!==undefined && !WAV.encodings.includes(encoding)))
@@ -408,8 +412,9 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     clock(at,sampleSeed);
     const values=Object.fromEntries(named(inputs,'input values').map(([name,value])=>{
       if (!Object.hasOwn(rootPlan.inputs,name)) throw new RangeError('Unknown graph input '+name);
-      if (!kit.KIT.procedural.graphTypes.validator(rootPlan.inputs[name].type)(value))
-        throw new TypeError('Wrong input value for graph socket '+name);
+      const type=rootPlan.inputs[name].type, types=kit.KIT.procedural.graphTypes;
+      if (!types.validator(type)(value))
+        throw new TypeError('Wrong input value for graph socket '+name+': expected '+types.description(type));
       return [name,value];
     }));
     function describeScope(compiled,scope,overrides={}) {

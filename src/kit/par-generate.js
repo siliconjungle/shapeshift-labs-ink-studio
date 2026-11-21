@@ -73,7 +73,7 @@
       run: ({ options }, context) => G.tree(seeded(options, context))
     },
     'proc.cable': {
-      inputs: { start: 'vec3', end: 'vec3', options },
+      inputs: { start: 'worldPosition', end: 'worldPosition', options },
       outputs: { value: 'raster', path: 'path', length: 'number' },
       run: ({ start, end, options }) => G.cable(start, end, options)
     },

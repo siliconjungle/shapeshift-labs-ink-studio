@@ -66,7 +66,7 @@
 
   Object.assign(A, { clock, stagger, track, frameIndex, spriteDesync, operations: {
     'anim.clock': {
-      inputs: { options }, outputs: { value: 'number', progress: 'number', direction: 'number', active: 'boolean' }, time: true,
+      inputs: { options }, outputs: { value: 'seconds', progress: 'number', direction: 'number', active: 'boolean' }, time: true,
       run({ options }, { time }) { return clock(options.time ?? time, options); }
     },
     'anim.stagger': {
@@ -88,7 +88,7 @@
       }
     },
     'anim.frame': {
-      inputs: { frames: 'array<raster>', options }, outputs: { value: 'raster', index: 'number', time: 'number' }, time: true,
+      inputs: { frames: 'array<raster>', options }, outputs: { value: 'raster', index: 'frames', time: 'seconds' }, time: true,
       run({ frames, options }, { time }) {
         const sample = frameIndex(frames.length, options.time ?? time, options);
         return { index: sample.index, time: sample.time, value: frames[sample.index] };
