@@ -170,7 +170,7 @@ function scene(id) {
 }
 const paintDirectory = id => path.resolve(CWD, opt.dir || path.join(cfg.paint || 'studio/paint', id));
 const readPaint = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-function build(id, seedOverride, { paint = true, parameterInputs, controls: suppliedControls } = {}) {
+function build(id, seedOverride, { paint = true, retainSdf = false, parameterInputs, controls: suppliedControls } = {}) {
   if (opt.focus) {
     const f = list('focus'); // uneven detail: x,y,z then near, far, coarse
     globalThis.INK_FOCUS = { p: [f[0] || 0, f[1] || 0, f[2] || 0], near: f[3], far: f[4], coarse: f[5] };
@@ -212,7 +212,14 @@ function build(id, seedOverride, { paint = true, parameterInputs, controls: supp
       ...(parameterInputs && { parameterInputs }) });
     return (s.animate && s.animate(built, seed)) || built;
   };
-  const w = liveSunOption() ? require('./look-preview.js').withAlbedo(assemble) : assemble();
+  const previousSdf = globalThis.INK_RETAIN_RENDER_SDF;
+  let w;
+  try {
+    if (retainSdf) globalThis.INK_RETAIN_RENDER_SDF = true;
+    w = liveSunOption() ? require('./look-preview.js').withAlbedo(assemble) : assemble();
+  } finally {
+    if (retainSdf) globalThis.INK_RETAIN_RENDER_SDF = previousSdf;
+  }
   if (inputs) {
     const actual = w.simulationInputs && lib().KIT.simulationInputs.tracks(w.simulationInputs);
     if (!actual || Object.entries(inputs).some(([id, track]) => JSON.stringify(actual[id]) !== JSON.stringify(track)))
@@ -999,6 +1006,7 @@ const CMD = {
         '  paint export <id> [--layer name] [view options]  capture a view and the surface under each pixel',
         '  paint absorb <id> [--layer name] [--png file] [--paint-mask file]  pin the painted pixels to the surface',
         '  paint layers|tune|clear <id> [--layer name]  list, adjust or clear corrections',
+        '  paint cause <id> <recipe.json> [--replace]   bake solid edges, contacts and shelter into paint layers',
         '    layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
@@ -3048,16 +3056,19 @@ const CMD = {
   paint() {
     if (['mix', 'ramp', 'table', 'swatches'].includes(pos[0])) return require('./paint.js')(pos, opt, lib());
     const [sub, id] = pos;
-    if (!['export', 'absorb', 'clear', 'layers', 'tune'].includes(sub) || !id)
+    if (!['export', 'absorb', 'clear', 'layers', 'tune', 'cause'].includes(sub) || !id)
       die(
-        'paint export|absorb|layers|tune|clear <id> [--layer name] [--dir studio/paint/<id>]'
+        'paint export|absorb|layers|tune|clear <id> [--layer name] [--dir studio/paint/<id>], or paint cause <id> <recipe.json> [--replace]'
       );
     const Paint = require('../src/paint-corrections.js'), name = opt.layer;
     if (name !== undefined && !Paint.idOK(name)) die('Paint layer needs a lowercase ID');
+    if (sub === 'cause' && (pos.length !== 3 || name !== undefined || opt.replace !== undefined && opt.replace !== true))
+      die('paint cause <scene> <recipe.json> [--dir path] [--replace]');
     if (sub === 'tune' && name === undefined) die('Paint tune needs --layer name');
     if (sub === 'absorb' && !name && ['angle', 'feather', 'opacity', 'region'].some(key => opt[key] !== undefined))
       die('Paint controls need a named layer');
-    const world = sub === 'export' ? build(id, undefined, { paint: name === undefined }) : null,
+    const world = sub === 'cause' ? build(id, undefined, { paint:false,retainSdf:true }) :
+      sub === 'export' ? build(id, undefined, { paint: name === undefined }) : null,
       dir = paintDirectory(opt.dir ? id : world ? world.id : scene(id).id),
       dfile = path.join(dir, 'decals.json'),
       capture = name ? path.join(dir, 'layers', name) : dir;
@@ -3075,8 +3086,10 @@ const CMD = {
         if (opt[option] === true) throw Error('--' + option + ' needs a number');
         return num(option);
       };
+      if (prior?.type === 'surface' && (opt.angle !== undefined || opt.feather !== undefined))
+        die('Surface paint uses opacity and region. Angle and feather belong to camera captures.');
       const angle = value('angle') ?? prior?.angle;
-      const feather = value('feather') ?? (prior && Math.min(prior.feather, angle));
+      const feather = value('feather') ?? (prior?.feather === undefined ? undefined : Math.min(prior.feather, angle));
       const opacity = value('opacity') ?? prior?.opacity;
       let region = prior?.region;
       if (opt.region !== undefined) {
@@ -3085,6 +3098,23 @@ const CMD = {
           JSON.parse(fs.existsSync(opt.region) ? fs.readFileSync(opt.region, 'utf8') : opt.region);
       }
       return { angle, feather, opacity, region };
+    }
+    if (sub === 'cause') {
+      const recipe = JSON.parse(fs.readFileSync(path.resolve(pos[2]),'utf8'));
+      const generated = lib().KIT.surfaceMarks.bake(world,recipe);
+      const existing = readPaint(dfile);
+      const doc = Array.isArray(existing) ? {decals:existing} : existing;
+      const layers = Paint.layers(doc);
+      for (const layer of generated.layers) {
+        const slot=layers.findIndex(entry=>entry.id===layer.id);
+        if (slot<0) layers.push(layer);
+        else if (opt.replace) layers[slot]=layer;
+        else die('Paint layer '+layer.id+' already exists. Use --replace to rebake it.');
+      }
+      fs.mkdirSync(dir,{recursive:true});
+      save({ ...doc,id:world.id,detail:world.detail,layers });
+      console.log(JSON.stringify({file:dfile,layers:generated.layers.map(layer=>({id:layer.id,samples:layer.decals.length}))},null,2));
+      return;
     }
     if (sub === 'layers') {
       const { decals = [], ...doc } = readPaint(dfile);
@@ -3244,13 +3274,16 @@ const CMD = {
       }
     const doc = readPaint(dfile), layers = name && Paint.layers(doc),
       slot = name ? layers.findIndex(layer => layer.id === name) : -1,
-      prior = name && layers[slot], source = name && Paint.view(meta.camera),
-      old = name ? prior && prior.time === meta.t && Paint.sameView(prior.view, source) ? prior.decals : [] : doc.decals ?? [],
+      prior = name && layers[slot], surface = prior?.type === 'surface',
+      source = name && !surface && Paint.view(meta.camera),
+      captureMatches = prior && (surface || prior.time === meta.t && Paint.sameView(prior.view, source)),
+      old = name ? (captureMatches ? prior.decals : []) : doc.decals ?? [],
       near = (d, e) => Math.hypot(d[0] - e[0], d[1] - e[1], d[2] - e[2]) < px * 0.45,
       kept = old.filter(d => !fresh.some(e => near(d, e)) && !erase.some(e => near(d, e))),
       decals = kept.concat(fresh);
     if (name) {
-      const correction = Paint.layer({ id: name, view: source, time: meta.t, ...controls(prior), decals });
+      const placement = surface ? {type:'surface'} : {view:source,time:meta.t};
+      const correction = Paint.layer({ id: name, ...placement, ...controls(prior), decals });
       if (slot < 0) layers.push(correction);
       else layers[slot] = correction;
       save({ ...doc, id, detail: meta.detail, layers });

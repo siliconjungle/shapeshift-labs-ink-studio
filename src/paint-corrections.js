@@ -1,4 +1,4 @@
-/* View-weighted paint on retained world-space surface samples. */
+/* Paint and view-weighted corrections on retained world-space surface samples. */
 const PaintCorrections = (() => {
   const colors = typeof ColorSpace === 'undefined' ? require('./color-space.js') : ColorSpace;
   const linear = colors.prepare('srgb', 'srgb-linear'), display = colors.prepare('srgb-linear', 'srgb');
@@ -41,7 +41,11 @@ const PaintCorrections = (() => {
 
   function layer(raw) {
     if (!record(raw) || !idOK(raw.id)) throw new TypeError('A paint layer needs a lowercase ID');
-    const { id, time, angle = 65, feather = Math.min(35, angle), opacity = 1, decals = [] } = raw;
+    const { id, type, time, angle = 65, feather = Math.min(35, angle), opacity = 1, decals = [] } = raw;
+    if (type !== undefined && type !== 'surface') throw new TypeError('Unknown paint layer type');
+    const surface = type === 'surface';
+    if (surface && ['view','time','angle','feather'].some(key=>raw[key] !== undefined))
+      throw new TypeError('Surface paint uses opacity and region without a camera capture');
     if (time !== undefined && !Number.isFinite(time)) throw new RangeError('Paint capture time must be finite');
     if (!Number.isFinite(angle) || angle <= 0 || angle > 180 ||
         !Number.isFinite(feather) || feather < 0 || feather > angle)
@@ -54,7 +58,8 @@ const PaintCorrections = (() => {
       (row.length === 7 || row[7] >= 0 && row[7] <= 1)))
       throw new TypeError('A correction sample needs XYZ, a nonzero normal, a palette index and optional opacity');
     const box = region(raw.region);
-    return { id, view: view(raw.view), ...(time !== undefined && { time }), angle, feather, opacity,
+    const capture = surface ? {type} : {view:view(raw.view), ...(time !== undefined && {time}),angle,feather};
+    return { id, ...capture, opacity,
       ...(box && { region: box }), decals };
   }
 
@@ -82,7 +87,9 @@ const PaintCorrections = (() => {
     const descriptions = layers(raw), reach = spacing * .65;
     const cells = new Map(), result = [];
     for (const entry of descriptions) {
-      const inner = Math.cos((entry.angle - entry.feather) * rad), outer = Math.cos(entry.angle * rad);
+      const surface = entry.type === 'surface';
+      const inner = surface ? -1 : Math.cos((entry.angle - entry.feather) * rad);
+      const outer = surface ? -1 : Math.cos(entry.angle * rad);
       for (const [x, y, z, nx, ny, nz, color, mask = 1] of entry.decals) {
         const at = [x, y, z], n = normal([nx, ny, nz]);
         const opacity = mask * entry.opacity * regionWeight(entry.region, at);
@@ -107,7 +114,7 @@ const PaintCorrections = (() => {
           cells.get(key).push(best);
           result.push(best);
         }
-        best.samples.push({ layer: entry.id, toward: ray(entry.view, at), opacity, inner, outer, color });
+        best.samples.push({ layer: entry.id, toward: surface ? n : ray(entry.view, at), opacity, inner, outer, color });
       }
     }
     return result;

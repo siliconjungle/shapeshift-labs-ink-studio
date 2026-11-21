@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "seed": 42,
+  "layers": [
+    {
+      "id": "sill-drips",
+      "kind": "drips",
+      "bounds": {"min": [-4.36, 2.45, 0.1], "max": [-0.62, 3.02, 0.65]},
+      "direction": [0, 0, 1],
+      "edge": {"object": "sill"},
+      "select": {"object": "wash-wall"},
+      "interval": 0.36,
+      "length": 1.86,
+      "width": 0.115,
+      "startDrop": 0.36,
+      "reach": 0.86,
+      "color": [9, 10, 11, 12, 12],
+      "spacing": 0.028,
+      "opacity": 0.76
+    },
+    {
+      "id": "foot-scuffs",
+      "kind": "scuffs",
+      "select": {"object": "quay"},
+      "contacts": [
+        {"point": [-0.67, 0.095, 2.28], "heading": [0.18, 0, -1], "weight": 0.65},
+        {"point": [-0.34, 0.095, 1.98], "heading": [0.24, 0, -1]},
+        {"point": [-0.70, 0.095, 1.44], "heading": [0.11, 0, -1], "weight": 0.9},
+        {"point": [-0.22, 0.095, 1.17], "heading": [0.13, 0, -1]},
+        {"point": [-0.52, 0.095, 0.70], "heading": [0.18, 0, -1]},
+        {"point": [0.02, 0.095, 0.80], "heading": [0.03, 0, -1], "weight": 0.72}
+      ],
+      "length": 0.52,
+      "width": 0.29,
+      "color": [8, 9, 10, 11, 12],
+      "spacing": 0.029,
+      "opacity": 0.78
+    },
+    {
+      "id": "hand-scuffs",
+      "kind": "scuffs",
+      "select": {"object": "gate-jamb"},
+      "contacts": [
+        {"point": [0.48, 1.20, 0.125], "normal": [0, 0, 1], "heading": [0.1, 1, 0]},
+        {"point": [0.51, 1.37, 0.125], "normal": [0, 0, 1], "heading": [-0.2, 1, 0], "weight": 0.71}
+      ],
+      "length": 0.45,
+      "width": 0.18,
+      "color": [12, 13, 14, 15],
+      "spacing": 0.028
+    },
+    {
+      "id": "sheltered-lichen",
+      "kind": "lichen",
+      "bounds": {"min": [0.64, 0.32, -0.12], "max": [3.92, 2.37, 0.29]},
+      "direction": [0, 0, 1],
+      "select": {"object": "covered-wall"},
+      "interval": 0.33,
+      "radius": 0.26,
+      "shelterReach": 2.6,
+      "density": 0.64,
+      "color": [16, 17, 18, 18, 19, 20, 21],
+      "spacing": 0.033,
+      "opacity": 0.85
+    }
+  ]
+}

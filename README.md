@@ -896,7 +896,9 @@ Add `--layer name` to export and absorb an angle-specific correction. Each named
 
 Use the first three controls with `paint absorb` or `paint tune`. The CPU and WebGL renderers blend overlapping samples by their visibility from the current camera before resolving the scene palette. Corrections are pinned to the captured world-space surface positions. Use `--paint-corrections off` when rendering an uncorrected comparison.
 
-For programmatic scenes, pass the saved paint document as `paint` in `B.finish()`, or embed it under `finish.paint` in a JSON diorama. Each layer retains `view.direction` toward the capture camera. Perspective captures also retain `view.eye`. A decal row contains its XYZ position, XYZ normal, palette index, and optional opacity. Pass `paintCorrections: false` to either renderer to hide the view corrections.
+For programmatic scenes, pass the saved paint document as `paint` in `B.finish()`, or embed it under `finish.paint` in a JSON diorama. A camera correction retains `view.direction` toward the capture camera. Perspective captures also retain `view.eye`. A decal row contains its XYZ position, XYZ normal, palette index, and optional opacity. Pass `paintCorrections: false` to either renderer to hide named paint.
+
+Use [`paint cause`](docs/caused-marks.md) to bake drips, scuffs, and lichen from solid edges, contact records, and overhead shelter into editable surface layers.
 
 The [art-pixel rendering guide](docs/art-passes.md) describes the selectable
 render passes, selective ink, camera snapping, stable dithering, art-pixel
