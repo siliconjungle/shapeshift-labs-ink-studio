@@ -25,6 +25,10 @@
       }
       if (subfield !== undefined) return null;
       if (field === 'gain' && node.type === 'feedback') return unit;
+      if (node.type === 'motionSmear') {
+        if (['velocity', 'fieldScale'].includes(field)) return { size: 2, validate: v => v.every(n => Math.abs(n) <= 4096) };
+        if (field === 'halfLife') return { ...positive, validate: n => n > 0 && n <= 60 };
+      }
       if (['bloom','halation'].includes(node.type) && field==='intensity') return {mode:'number',validate:n=>n>=0&&n<=8};
       if (['bloom','halation'].includes(node.type) && field==='radius') return {mode:'positive',validate:n=>n>=.1&&n<=512};
       if (node.type==='blocks' && field==='probability') return unit;

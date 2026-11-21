@@ -13,6 +13,55 @@ const {
 } = require('../src/render-graph.js');
 const wrap = (n, size) => n - Math.floor(n / size) * size;
 
+function smearFrame(node, work, input, field, refresh, output, weightAt, memory, w, h) {
+  const { width: W, height: H } = work;
+  const [bx, by] = node.blockSize, [vx, vy] = node.velocity, [sx, sy] = node.fieldScale;
+  const elapsed = memory.sampleElapsed;
+  const decay = elapsed > 0 ? 2 ** (-elapsed / node.halfLife) : 0;
+  const donor = new Float64Array(2), color = new Float64Array(4);
+  const filter = node.budget.filter;
+  function address(x, y) {
+    let dx = vx, dy = vy, strength = 1;
+    if (field) {
+      const left = Math.floor(x / bx) * bx, top = Math.floor(y / by) * by;
+      const fx = Math.floor(left + Math.min(bx, w - left) * .5);
+      const fy = Math.floor(top + Math.min(by, h - top) * .5);
+      const p = (fy * w + fx) * 4, alpha = field[p + 3];
+      if (!alpha || !field[p + 2]) return 0;
+      const straight = 255 / alpha;
+      dx += sx * Math.max(-1, (Math.round(field[p] * straight) - 128) / 127);
+      dy += sy * Math.max(-1, (Math.round(field[p + 1] * straight) - 128) / 127);
+      strength = field[p + 2] / 255;
+    }
+    donor[0] = x - dx * elapsed;
+    donor[1] = y - dy * elapsed;
+    if (!(donor[0] >= 0 && donor[0] < w && donor[1] >= 0 && donor[1] < h)) return 0;
+    const clean = refresh?.[Math.floor(y) * w + Math.floor(x)] ?? 0;
+    return strength * (1 - clean / 255);
+  }
+  let stamp = memory.value;
+  if (memory.capture) {
+    const old = { data: stamp, w: W, h: H, filter };
+    stamp = new Uint8Array(W * H * 4);
+    for (let j = 0, q = 0; j < H; j++) for (let i = 0; i < W; i++, q += 4) {
+      const x = ((i + .5) * w) / W, y = ((j + .5) * h) / H;
+      const from = (Math.floor(y) * w + Math.floor(x)) * 4;
+      const amount = decay && address(x, y) * decay;
+      if (amount) FrameComposite.sample(old, donor[0] * W / w, donor[1] * H / h, color);
+      for (let c = 0; c < 4; c++) stamp[q + c] = Math.round(input[from + c] * (1 - amount) + color[c] * amount);
+    }
+    memory.save(stamp);
+  }
+  if (!decay || !node.opacity) return;
+  const retained = { data: stamp, w: W, h: H, filter };
+  for (let y = .5, q = 0; y < h; y++) for (let x = .5; x < w; x++, q += 4) {
+    const weight = weightAt(x, y) * node.opacity;
+    if (!weight || !address(x, y)) continue;
+    FrameComposite.sample(retained, x * W / w, y * H / h, color);
+    for (let c = 0; c < 4; c++) output[q + c] = Math.round(input[q + c] * (1 - weight) + color[c] * weight);
+  }
+}
+
 function runGraph(plan, frame, world, time, text, camera, resolve, options) {
   const { w, h, passes } = frame;
   const layout = resources(plan, w, h),
@@ -59,6 +108,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
       const feedback = node.type === 'feedback';
       const memory = node.type === 'history' || feedback ? openHistory(node) : null;
       const age = node.type === 'frameAge' && openHistory(node);
+      const smear = node.type === 'motionSmear';
       const work = layout.passes[index];
       const held = memory && (memory.capture ? new Uint8Array(work.width * work.height * 4) : memory.value);
       const raster =
@@ -75,6 +125,8 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
         Number(chosenAt(x, y)) *
         (mask ? mask[Math.floor(y) * w + Math.floor(x)] / 255 : 1) *
         effects.depthWeight(node.depth, depth?.[at(x, y)]);
+      if (smear)
+        smearFrame(node, work, input, outputs.get(node.field), outputs.get(node.refresh), output, weightAt, openHistory(node), w, h);
       if (age) {
         const { width: W, height: H } = work;
         if (age.capture) {
@@ -198,7 +250,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
       const scanlines = rowTable(node.rows, w, h, time, node.rowEdits);
       const theta = node.type === 'distortion' ? 2 * Math.PI * ((node.phase + time * node.rate) % 1) : 0;
       const frequency = (2 * Math.PI) / node.period;
-      if (!node.effect && !budgetedMemory && !age)
+      if (!node.effect && !budgetedMemory && !age && !smear)
         for (let y = 0.5, p = 0; y < h; y++)
           for (let x = 0.5; x < w; x++, p++) {
             const native = nativeIndex(x, y, p);

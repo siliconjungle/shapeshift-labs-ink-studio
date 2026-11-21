@@ -7,7 +7,7 @@ export const graphOwner = Symbol('render graph owner capture');
 const fragment = `#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D u_input, u_source, u_mask, u_owner, u_selected, u_depth, u_history, u_ageMask;
+uniform sampler2D u_input, u_source, u_mask, u_owner, u_selected, u_depth, u_history, u_auxMask;
 uniform highp sampler2D u_rows;
 uniform highp sampler3D u_cube;
 uniform vec2 u_size, u_passSize, u_offset, u_amplitude;
@@ -23,13 +23,15 @@ uniform bool u_layerTopDown;
 uniform vec3 u_volumeAt, u_extent, u_eye;
 uniform vec2 u_depthRange, u_projectionScale;
 uniform mat4 u_view;
-uniform bool u_volume, u_ortho, u_captureHistory, u_hasHistory, u_hold, u_hasAgeMask;
+uniform bool u_volume, u_ortho, u_captureHistory, u_hasHistory, u_hold, u_hasAuxMask, u_hasFlow;
 uniform float u_volumeFeather, u_decay;
 uniform vec2 u_feedbackPivot, u_feedbackTransform, u_threshold;
 uniform float u_blockSize, u_gain;
 uniform bool u_feedbackLinear, u_hasThreshold;
 uniform bool u_scanlines, u_rejectDepth, u_hasDepth, u_isolated, u_over, u_wrap;
 uniform float u_depthThreshold;
+uniform vec2 u_flowScale, u_flowVelocity, u_flowBlock;
+uniform float u_smearElapsed;
 out vec4 color;
 
 ${layerSamplingGLSL}
@@ -133,9 +135,30 @@ void main() {
       color = inputColor * chosen;
     } else {
       vec4 donor = layerAt(u_history, pixel, u_size, false, u_budgetLinear);
-      if (u_hasAgeMask) weight *= layerAt(u_ageMask, pixel, u_size, false, false).r;
+      if (u_hasAuxMask) weight *= layerAt(u_auxMask, pixel, u_size, false, false).r;
       color = u_hasSelect && donor.a <= 0.0 ? inputColor : mix(inputColor, donor, weight * u_opacity);
     }
+    return;
+  }
+  if (u_operation == 15) {
+    color = inputColor;
+    if (!u_hasHistory) return;
+    vec2 velocity = u_flowVelocity;
+    float strength = 1.0;
+    if (u_hasFlow) {
+      vec2 block = floor(pixel / u_flowBlock) * u_flowBlock;
+      vec4 flow = layerAt(u_source, block + min(u_flowBlock, u_size - block) * .5, u_size, false, false);
+      if (flow.a <= 0.0 || flow.b <= 0.0) return;
+      vec2 bytes = floor(flow.rg / flow.a * 255.0 + .5);
+      velocity += max(vec2(-1.0), (bytes - 128.0) / 127.0) * u_flowScale;
+      strength = flow.b;
+    }
+    if (u_hasAuxMask) strength *= 1.0 - layerAt(u_auxMask, pixel, u_size, false, false).r;
+    vec2 donor = pixel - velocity * u_smearElapsed;
+    if (strength <= 0.0 || any(lessThan(donor, vec2(0.0))) || any(greaterThanEqual(donor, u_size))) return;
+    vec4 old = layerAt(u_history, u_captureHistory ? donor : pixel, u_size, false, u_budgetLinear);
+    float amount = u_captureHistory ? u_decay * strength : weight * u_opacity;
+    color = floor(mix(inputColor, old, amount) * 255.0 + .50001) / 255.0;
     return;
   }
   weight *= u_opacity;
@@ -292,7 +315,8 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         if (!pool.includes(out)) pool.push(out);
         out.resize(w, h);
         const feedback = node.type === 'feedback';
-        const memory = feedback || node.type === 'history' ? openHistory(node) : null;
+        const smear = node.type === 'motionSmear';
+        const memory = feedback || smear || node.type === 'history' ? openHistory(node) : null;
         const mask = outputs.get(node.mask),
           table = node.type === 'grade' && api.cube(node);
         const layer =
@@ -306,7 +330,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             throw new RangeError('Render graph layer exceeds the WebGL texture size limit');
           textureUnit(1, raster);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, layer.w, layer.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, layer.data);
-        } else textureUnit(1, (outputs.get(node.source) ?? scene).textures[0]);
+        } else textureUnit(1, (outputs.get(node.source ?? node.field) ?? scene).textures[0]);
         if (table && table !== lastCube) {
           gl.activeTexture(gl.TEXTURE4);
           gl.texImage3D(
@@ -424,7 +448,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             textureUnit(7, scene.textures[0]);
             fullscreen(shader, stamp.framebuffer, work.width, work.height, {
               ...values, u_passSize: [work.width, work.height], u_captureHistory: true,
-              u_hasMask: false, u_depthMask: false, u_hasAgeMask: false, u_ageMask: 8
+              u_hasMask: false, u_depthMask: false, u_hasAuxMask: false, u_auxMask: 8
             });
             age.save(stamp);
           }
@@ -444,7 +468,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             textureUnit(7, stamp.textures[0]);
             textureUnit(8, (mask ?? scene).textures[0]);
             fullscreen(shader, next.framebuffer, w, h, {
-              ...values, u_captureHistory: false, u_hasAgeMask: Boolean(mask), u_ageMask: 8
+              ...values, u_captureHistory: false, u_hasAuxMask: Boolean(mask), u_auxMask: 8
             });
             prior = next;
           }
@@ -454,6 +478,17 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             fullscreen(shader, out.framebuffer, w, h, { ...values, u_operation: 0 });
           }
         } else if (memory) {
+          const elapsed = smear ? memory.sampleElapsed : 0;
+          const smearDecay = elapsed > 0 ? 2 ** (-elapsed / node.halfLife) : 0;
+          if (smear) {
+            const refresh = outputs.get(node.refresh);
+            textureUnit(8, (refresh ?? scene).textures[0]);
+            Object.assign(values, {
+              u_auxMask: 8, u_hasAuxMask: Boolean(refresh), u_hasFlow: Boolean(node.field),
+              u_flowScale: node.fieldScale, u_flowVelocity: node.velocity, u_flowBlock: node.blockSize,
+              u_smearElapsed: elapsed, u_decay: smearDecay
+            });
+          }
           let stamp = memory.value;
           if (memory.capture) {
             // Target allocation binds a texture on the active unit.
@@ -469,9 +504,9 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
               ...values,
               u_passSize: [work.width, work.height],
               u_captureHistory: true,
-              u_hasHistory: Boolean(memory.value) && (!feedback || memory.decay > 0),
+              u_hasHistory: smear ? smearDecay > 0 : Boolean(memory.value) && (!feedback || memory.decay > 0),
               u_hold: node.mode === 'hold',
-              u_decay: feedback || node.mode === 'persistence' ? memory.decay : 0,
+              u_decay: smear ? smearDecay : feedback || node.mode === 'persistence' ? memory.decay : 0,
               ...(motion && {
                 u_feedbackTransform: motion.transform,
                 u_feedbackPivot: motion.pivot,
@@ -489,7 +524,9 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
             memory.save(stamp);
           }
           textureUnit(7, stamp.textures[0]);
-          fullscreen(shader, out.framebuffer, w, h, { ...values, u_captureHistory: false, u_hasHistory: true });
+          fullscreen(shader, out.framebuffer, w, h, {
+            ...values, u_captureHistory: false, u_hasHistory: !smear || smearDecay > 0
+          });
         } else {
           textureUnit(7, scene.textures[0]);
           fullscreen(shader, out.framebuffer, w, h, values);

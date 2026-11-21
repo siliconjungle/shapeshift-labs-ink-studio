@@ -28,7 +28,8 @@ const RenderGraph = (() => {
     chromatic: 11,
     blocks: 12,
     pixelSort: 13,
-    frameAge: 14
+    frameAge: 14,
+    motionSmear: 15
   });
   const fields = {
     mask: ['rect', 'feather', 'invert', 'volume'],
@@ -38,6 +39,7 @@ const RenderGraph = (() => {
     composite: ['source', 'layer', 'blend', 'isolated'],
     history: ['mode', 'halfLife', 'cameraMotion'],
     frameAge: ['fps', 'regions', 'source', 'cameraMotion'],
+    motionSmear: ['field', 'fieldScale', 'velocity', 'blockSize', 'halfLife', 'refresh', 'cameraMotion'],
     ...Object.fromEntries(
       effects.types.map(type => [type, [...effects.fields[type], 'maskMode', 'depthThreshold', 'protectObjects']])
     ),
@@ -59,7 +61,7 @@ const RenderGraph = (() => {
     cubes = new WeakMap();
   const maxHistoryPasses = 4,
     maxHistoryPixels = 8388608;
-  const retainedTypes = ['history', 'feedback', 'frameAge'];
+  const retainedTypes = ['history', 'feedback', 'frameAge', 'motionSmear'];
   const plain = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const tuple = (value, len) =>
     Array.isArray(value) && value.length === len && Array.from(value).every(Number.isFinite);
@@ -351,6 +353,25 @@ const RenderGraph = (() => {
         case 'frameAge':
           Object.assign(node, prepareFrameAge(pass, reference, input, select));
           break;
+        case 'motionSmear': {
+          const { halfLife = .45, velocity = [0, 0], fieldScale = [120, 120],
+            blockSize = [1, 1], cameraMotion = 'reset' } = pass;
+          const bounded = vector => tuple(vector, 2) && vector.every(n => Math.abs(n) <= 4096);
+          if (!Number.isFinite(halfLife) || halfLife <= 0 || halfLife > 60 ||
+              !bounded(velocity) || !bounded(fieldScale) ||
+              !tuple(blockSize, 2) || !blockSize.every(n => Number.isInteger(n) && n >= 1 && n <= 4096) ||
+              !['reset', 'keep'].includes(cameraMotion))
+            throw new RangeError('Motion smear needs bounded XY velocity, field range, block size, halfLife and camera policy');
+          const field = pass.field === undefined ? undefined : reference(pass.field, 'image');
+          const refresh = pass.refresh === undefined ? undefined : reference(pass.refresh, 'mask');
+          Object.assign(node, {
+            halfLife, velocity: velocity.slice(), fieldScale: fieldScale.slice(), blockSize: blockSize.slice(),
+            field, refresh, cameraMotion, needsCamera: cameraMotion === 'reset',
+            budget: effects.budget({ filter: 'nearest', ...pass.budget }),
+            historyKey: JSON.stringify([type, input, field, cameraMotion])
+          });
+          break;
+        }
         case 'feedback': {
           const {
             halfLife = 0.55,
@@ -426,7 +447,8 @@ const RenderGraph = (() => {
       node.dependencies = [
         ...new Set(
           node.enabled
-            ? [node.isolated ? undefined : input, mask, node.source, ...(node.regions?.map(region => region.mask) ?? [])].filter(Boolean)
+            ? [node.isolated ? undefined : input, mask, node.source, node.field, node.refresh,
+                ...(node.regions?.map(region => region.mask) ?? [])].filter(Boolean)
             : [input].filter(Boolean)
         )
       ];
@@ -510,7 +532,8 @@ const RenderGraph = (() => {
                     ? samples
                     : 3) +
               full * 5
-            : age ? width * height + full * node.regions.length : full;
+            : age ? width * height + full * node.regions.length
+              : node.type === 'motionSmear' ? width * height * 4 + full * 4 : full;
       work += cost;
       if (node.enabled || node.type === 'mask') {
         const buffer = free.length ? free.pop() : allocated++;
@@ -762,16 +785,19 @@ const RenderGraph = (() => {
           if (!prior) entries.set(node.id, { key: keys.get(node.id), age });
           return frameAgeClock(age, node, time, releaseAge);
         }
+        const elapsed = prior ? time - prior.time : 0;
         return {
           value: prior?.value,
           capture: !prior || prior.time < time,
-          elapsed: prior ? time - prior.time : 0,
-          decay: prior ? 2 ** (-(time - prior.time) / node.halfLife) : 0,
+          elapsed,
+          sampleElapsed: elapsed || prior?.elapsed || 0,
+          decay: prior ? 2 ** (-elapsed / node.halfLife) : 0,
           save(value) {
             drop(node.id);
             entries.set(node.id, {
               key: keys.get(node.id),
               time,
+              elapsed,
               value
             });
           }

@@ -14,6 +14,7 @@ The graph contains an ordered `passes` list of up to 32 entries and an optional 
 | `history` | Captures the visible pixels of a required target selector. Choose `hold` or `persistence`. An optional mask controls capture coverage. The current depth owner scopes the history overlay. |
 | `feedback` | Warps and decays the previous signal and composites new emission into it. Accepts an earlier image or a mixed-resolution emission layer. |
 | `frameAge` | Replaces regions of an image from a shared frame history. Each region can delay, hold, or replay captured frames. |
+| `motionSmear` | Moves pixels from the retained frame through a motion field and blends in the clean input. A refresh mask can restore specific regions. |
 
 Screen coordinates are in final output pixels from the top left. Reflected and distorted samples outside the image leave the input pixel unchanged. Graph reflection and distortion work on screen images. Scene-space planar capture, glass refraction and depth-dependent media use the scene renderer.
 
@@ -260,10 +261,65 @@ node cli/ink-studio.js clip examples/frame-age-mask.js --w 452 --h 215 \
   --to 5 --fps 12 --feedback-fps 12 --out tideline-repeater.png
 ```
 
+## Motion-smeared frame history
+
+`motionSmear` starts with the clean image. Each following step samples
+the retained image upstream along the local motion vector, mixes that
+sample with the current clean pixel, and retains the result for the next
+step. A longer `halfLife` keeps old fragments visible through more steps.
+Stop the motion while leaving the field active to let displaced pixels
+recover in place.
+
+```js
+const smear = {
+  id: 'signal-breakup',
+  type: 'motionSmear',
+  input: 'camera',
+  field: 'block-vectors',
+  fieldScale: [180, 90],
+  blockSize: [12, 6],
+  halfLife: .45,
+  refresh: 'telemetry',
+  cameraMotion: 'keep'
+};
+```
+
+- Set `field` to an earlier image pass such as an isolated raster layer.
+  Its red and green bytes encode signed X and Y motion, with 128 neutral,
+  1 or 0 fully negative, and 255 fully positive. Multiply by
+  `fieldScale` (default `[120, 120]`) for screen pixels per second.
+  Positive Y moves down. The blue byte and alpha control the fraction
+  of history retained at that pixel. For example, `[255, 128, 255, 255]`
+  applies full positive X motion and allows the normal half-life.
+- `blockSize` sets the width and height in output pixels. Each block
+  samples the field at its center. Use `[1, 1]` (the default) for
+  per-pixel vectors. Set `velocity` to a uniform XY bias in pixels per
+  second. A pass with just `velocity` uses that vector everywhere.
+- Use `refresh` to reference an earlier mask. Full coverage replaces
+  the retained pixel with the clean pixel immediately, including its
+  alpha. Outside-image samples also use the clean pixel. The regular
+  `mask`, `select`, `depth`, and `opacity` control where the smear appears.
+- The history budget controls the retained resolution. Full-resolution
+  nearest sampling is the default within the budget. Set
+  `budget.filter: "linear"` for interpolated history samples.
+  Captures use the existing CPU `renderHistory` session or the WebGL
+  renderer's GPU history. A cut or rewind restores the clean input.
+  Camera motion resets the pass by default. Use `"keep"` to carry the
+  screen-space history through a camera move.
+
+[Packet Drift](../examples/motion-smear.js) runs the same animated feed
+through clean and motion-smeared image branches. The motion field follows
+the probe's movement with different offsets in neighboring blocks.
+
+```sh
+node cli/ink-studio.js clip examples/motion-smear.js --w 420 --h 204 \
+  --to 6.5 --fps 12 --feedback-fps 12 --out packet-drift.png
+```
+
 ## Fixed-step playback and exports
 
-The CLI runs `clip` and `sheet` exports containing feedback or frame age
-at 24 history steps per second by default. `--feedback-fps` sets that rate
+The CLI runs `clip` and `sheet` exports containing feedback, frame age, or
+motion smear at 24 history steps per second by default. `--feedback-fps` sets that rate
 independently of output `--fps`. Choose a history step rate that matches
 or is a multiple of the frame-age capture rate to sample every tick.
 The CLI replays history from scene time zero before a trimmed export.
