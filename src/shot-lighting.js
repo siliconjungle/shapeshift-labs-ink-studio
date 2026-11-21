@@ -1,10 +1,15 @@
 /* Surface lighting roles with independent receivers and shadow casters. */
 const ShotLighting = (() => {
-  const Area = typeof AreaLights === 'undefined' ? require('./area-lights.js') : AreaLights;
-  const Target = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
-  const Shadow = typeof ShadowArt === 'undefined' ? require('./shadow-art.js') : ShadowArt;
-  const Optics = typeof OpticalMaterials === 'undefined' ? require('./optical-materials.js') : OpticalMaterials;
-  const Color = typeof ColorSpace === 'undefined' ? require('./color-space.js') : ColorSpace;
+  let Area, Target, Shadow, Optics, Color;
+  try {
+    [Area, Target, Shadow, Optics, Color] = [AreaLights, TargetSelectors, ShadowArt, OpticalMaterials, ColorSpace];
+  } catch {
+    Area = require('./area-lights.js');
+    Target = require('./target-selectors.js');
+    Shadow = require('./shadow-art.js');
+    Optics = require('./optical-materials.js');
+    Color = require('./color-space.js');
+  }
   const linear = Color.prepare('srgb', 'srgb-linear'), srgb = Color.prepare('srgb-linear', 'srgb');
   const format = 'ink-studio/shot-lighting', roles = ['key', 'fill', 'rim'];
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
