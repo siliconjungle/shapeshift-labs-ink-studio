@@ -14,4 +14,57 @@ Use `--attachments <files.json>` to carry host-managed resources such as audio c
 - **Editor.** In Node, use `readProjectBundle(file)` and call `project.editor()`. Edit the scene with the usual [scene editor](scene-editor.md) operations. Pass its snapshot to `project.withScene(editor.snapshot())` and save the returned revision with `writeProjectBundle(project, { out })`.
 - **Browser.** Load the JSON and call `KIT.authoring.projectBundles.open(json)` from the toolkit bundle. Pass the result of `project.build()` to the [WebGL renderer](browser-renderer.md), or call `project.editor()` for edits. Opening and building resolve resources from the file table.
 
-`project.scene()` returns editable scene data with typed data sources ready to use. `project.snapshot()` returns the portable file document. Use `project.files()`, `project.readFile(path)`, and `project.attachment(id)` to access retained files. The bundle contains declarative dioramas. JavaScript scene factories, simulation recordings, and the application runtime retain their existing distribution formats.
+`project.scene()` returns editable scene data with typed data sources ready to use. `project.snapshot()` returns the portable file document. Use `project.files()`, `project.readFile(path)`, and `project.attachment(id)` to access retained files. A version 1 bundle opens as a diorama in the CLI, editor, and browser.
+
+## Bundle a whole take
+
+A native [take](take-clock.md) is the entry in a version 2 project bundle.
+Declare the parts of the take relative to its JSON file. The world and graph
+are optional. A take can include a soundtrack, an asset pack for its world,
+a saved resume point, and named review shots.
+
+```json
+{
+  "format": "ink-studio/take",
+  "version": 1,
+  "id": "harbour-take",
+  "clock": { "fps": 24, "simulationRate": 60, "sampleRate": 48000 },
+  "world": "../world/harbour.json",
+  "graph": "../graphs/caption.json",
+  "audio": "../sound/score.json",
+  "assetPack": "../looks/coastal.json",
+  "checkpoint": "../checkpoints/intermission.json",
+  "shots": { "cover": "../shots/cover.shot.json" }
+}
+```
+
+Packing follows external graph groups and graph assets, including WAVs and input
+recordings. It also follows soundtrack WAVs and graphs, world data tables, and
+the original inputs recorded by each shot recipe. An asset pack retains its
+existing schema and revision. The bundle preserves the directory layout so
+references and shot input fingerprints survive relocation.
+
+A default take checkpoint can be an inline checkpoint file saved by
+`take sample --checkpoint` or a reference to a content-addressed checkpoint
+store. Packing verifies the digests and includes the blocks reachable from each
+reference. An explicit `take sample --resume` can select a different checkpoint.
+`export-scene` renders from the authored world and uses the take's soundtrack
+unless `--audio` supplies a replacement.
+
+```sh
+ink-studio project pack takes/harbour.json --root . --out harbour-take.json
+ink-studio project inspect harbour-take.json
+ink-studio take sample harbour-take.json --frame 48
+ink-studio graph clip harbour-take.json --output caption --from 0 --to 48 --out captions
+ink-studio export-scene harbour-take.json --to 2 --out review
+ink-studio shot replay harbour-take.json --shot cover --out cover.png
+ink-studio project unpack harbour-take.json --out unpacked
+```
+
+`project unpack` writes to a new directory. Move that folder and use its
+`takes/harbour.json` with the ordinary take commands to continue editing.
+The Node API exposes the same extraction via
+`unpackProject('harbour-take.json', { out: 'unpacked' })`.
+Portable shots use declarative scenes and local inputs. A project that uses
+custom graph operations or a codec adapter can still supply those through its
+host. The take commands and shot replay use the Node library and CLI.

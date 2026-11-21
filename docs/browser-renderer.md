@@ -79,6 +79,16 @@ Sampling is continuous by default. Authored cadence and live time domains determ
 
 The shared palette pipeline resolves tone and palette overrides, animation grades, curves, LUTs, and color stacks. `ignoreLookGrade` bypasses the animation grade. WebGL also evaluates ordered `material` and `lit` color stacks and uniform palette policies on baked splat colors with the same target selectors, albedo references, and look inputs used headlessly.
 
+An active tone uses the single-sample art grid, takes precedence over
+`colored`, and leaves the tone dots out of palette history damping. Tone colors
+come from its own output ramp. Set `tone: false` to restore the scene palette.
+
+WebGL's scene palette includes slots 0–63 across contour resolve, material
+ramps, carried-light lookup, and palette history. When an authored scene
+palette is larger, the renderer warns once per palette and uses its first 64
+swatches for resolve. For oversized palettes, `raw: true` draws the baked
+colors directly. Tone ramps and local palette policies have their own limits.
+
 Use `studio.describeRenderFrame(world, frame)` in Node or `renderer.describeFrame(world, frame)` in WebGL to inspect the versioned camera, clock samples, palette input under `palette`, palette mode, and stage issues. The description samples the scene without advancing simulation. Describe and draw at the same native art size for framing comparisons.
 
 `strictContract: true` or CLI `--strict-contract` rejects an incompatible staged frame or a palette above WebGL's 64-swatch limit. The portable staged path covers baked RGB with uniform material and lit rules. Spatial stage masks, frame and palette stages, per-pixel material colors, live lighting, and advanced surface composition use backend-specific paths. The ordinary rendering mode preserves the backend's existing fallback for unsupported combinations. Raster edges, coverage, and precision can still differ with matched inputs.

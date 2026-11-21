@@ -547,9 +547,9 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 
 These graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
-effects return straight-alpha RGBA8 at the source dimensions. Tile
-scrambling preserves the source channel count and sample values. Bitplane
-effects also expose the edited palette indices. Add
+effects return straight-alpha RGBA8 at the source dimensions. Tile remaps,
+scanline remaps, and block substitution preserve the source channel count
+and sample values. Bitplane effects also expose the edited palette indices. Add
 transparent canvas margin before an effect when its coverage needs room
 outside the original image.
 
@@ -563,10 +563,14 @@ outside the original image.
 | `fx.erode` | Recede from exposed edges by a Euclidean `radius` in pixels. Returns the edited raster and its surviving byte `mask`. |
 | `fx.repair` | Use `method: "close"` and a Euclidean `radius` for holes and narrow gaps, or `"bridge"` and `maxGap` for breaks along rows, columns or diagonals. New pixels take the nearest selected source colour or an explicit `color`. Inspect them in the separate `added` mask. |
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
+| `fx.tvStatic` | Blend [seekable TV static](#broadcast-patterns-and-tv-static) into the source RGB. Keeps the source's dimensions, pivot, and alpha. |
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
 | `fx.tileStrideSlip` | Read successive tile rows using an authored `stride`, `offset`, and `wrapAt`. The `addresses` output shows where each whole tile reads from. |
+| `fx.scanlineRemap` | Repeat, skip, or blank whole rows with `options.edits`. The `addresses` output shows the source row for each destination row. |
+| `fx.blockSubstitute` | Replace rectangles with samples from the original `source` or the named rasters in `banks`. The `mask` output marks copied pixels. |
 | `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
+| `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -692,6 +696,72 @@ changes on a chosen frame. The
 [tile stride study](../examples/tile-stride-slip.cjs) compares both controls
 and shows the actual source address of each sampled row start.
 
+### Repeat, skip, and blank scanlines
+
+```js
+const { value, addresses } = KIT.procedural.pixelEffects.scanlineRemap(feed, {
+  edits: [
+    { mode: 'skip', start: 10, count: 2 },
+    { mode: 'repeat', start: 24, count: 4, source: 23 },
+    { mode: 'blank', start: 40 }
+  ]
+});
+```
+
+Each edit uses zero-based rows from the top of the raster. The default
+`count` is one. Skip ranges remove source rows and compact what remains
+upward. Any unfilled rows at the bottom are blank. Repeat and blank
+then override destination rows in the listed order. Repeat reads a
+single original source row, defaulting to the row above `start` or the
+first row when starting at zero. Blank rows are all zeros. Ranges clip
+at the frame edge, and a repeat from beyond the source produces a blank.
+
+`value` preserves dimensions, pivot, channels, and copied pixel
+samples. `addresses` is a one-channel raster, one sample wide, with
+`-1` for a blank row. In graphs, pass edits through the
+`fx.scanlineRemap` node's `options` input. Use
+[render graph row edits](render-graph.md#repeat-skip-and-blank-rows)
+to apply the same operations to a live scene.
+The [scanline study](../examples/scanline-repeat-dropout.cjs) compares
+each mode side by side.
+
+### Substitute blocks from a frame or feed
+
+```js
+const { value, mask } = KIT.procedural.pixelEffects.blockSubstitute(current, {
+  banks: { replay: earlierFrame, alternate: otherFeed },
+  blocks: [
+    { rect: [24, 8, 20, 12], from: [4, 8] },
+    { rect: [50, 30, 32, 16], bank: 'replay' },
+    { rect: [84, 13, 15, 22], from: [0, 4], bank: 'alternate' }
+  ]
+});
+```
+
+Each `rect: [x, y, width, height]` is in destination pixels from the top
+left. `from: [x, y]` is the source rectangle's top-left corner and defaults
+to the destination origin. The source rectangle uses the same size.
+Omit `bank` to read from the original input raster. Banks can have
+different dimensions and must share the input's channel count.
+The operation copies whole samples, including alpha, at integer coordinates.
+
+Source and destination rectangles clip together at their image bounds.
+Overlapping blocks apply in order and read from the original inputs.
+An optional aligned `options.mask` restricts writes, using
+`maskChannel` (default `"luma"`) and `maskThreshold` (default 128).
+`value` preserves the input dimensions and pivot. The output `mask`
+is 255 wherever a pixel was copied and zero elsewhere.
+
+In a graph, link a `data.record` of named rasters to `banks` and put
+rectangles in `options.blocks`. To get earlier frames, read the same
+sequence with two `anim.frame` nodes and give the bank node a positive
+`delay`. This makes the result seekable and keeps playback and export in
+sync. In a live host, pass captured rasters such as camera atlas reads to
+the same function, then send its result to a
+[mixed-resolution layer](mixed-resolution.md#rasters-and-screen-effects).
+The [block substitution study](../examples/block-substitution.cjs) shows
+a neighboring rectangle, a delayed frame, and an alternate feed.
+
 ### Corrupt a palette bitplane
 
 ```js
@@ -721,6 +791,33 @@ const { value, indices } = KIT.procedural.pixelEffects.bitplane(spriteIndices, p
 
 The [bitplane study](../examples/bitplane-corruption.cjs) compares all three
 modes on the same four-color sprite.
+
+### Apply a local palette fault
+
+```js
+const { value, indices } = KIT.procedural.pixelEffects.paletteFault(spriteIndices, palette, {
+  swaps: [[0, 3]],
+  stuck: { from: [1, 2], to: 0 },
+  mask: damagedArea
+});
+```
+
+Each pair in `swaps` exchanges the two original slot numbers. A `stuck`
+rule maps every listed `from` slot to `to`. Omit `from` to pin every
+slot under the mask to the same color. Source slots can appear in only
+one rule. Rules read the original index, so a stuck rule can land on a
+swapped slot without triggering the swap.
+
+Use the same one-channel indices, palette order, aligned `mask`,
+`maskChannel`, `maskThreshold`, and optional byte `alpha` raster as for a
+bitplane. Without a mask, the rules apply across the whole raster.
+Unlisted slots and transparent pixels keep their indices. Duplicate
+swatch colors retain their separate slot identities.
+
+In a graph, connect `source` and `palette` from `indexedPngAsset` or
+`palette.resolve`, and use `data.record` to pass the mask and alpha into
+`options`. The [palette fault study](../examples/local-palette-fault.cjs)
+compares a regional shade inversion with selected shades stuck on one slot.
 
 ### Trace paths and points
 
@@ -832,6 +929,8 @@ the graph clock in seconds. Set `options.time` to hold a specific sample.
 | --- | --- |
 | `proc.noise` | Compile a native [field expression](procedural.md#composable-procedural-fields) in `definition`. The `value` field works with simplex, periodic and time-loop noise, fractal stacks, masks and domain warps. |
 | `proc.pattern` | Produce a 0–1 field. Set `kind` to `checker`, `stripes`, `dots`, `rings`, `brick` or `chevrons`. Set `size` in world units, `axes` to `xy`, `xz` or `yz`, `angle` in radians, `offset` and `velocity` as pairs, and `fill` as a fraction. |
+| `proc.smpteColorBars` | Generate [SMPTE SD or HD color bars](#broadcast-patterns-and-tv-static) as an RGBA8 raster. |
+| `proc.tvStatic` | Generate [TV static](#broadcast-patterns-and-tv-static) as a seekable RGBA8 raster. |
 | `proc.sample` | Rasterize a scalar `source` field at pixel centers across `origin` plus the plane vectors `u` and `v`. The one-channel raster retains signed and fractional values. Feed it to `color.gradient` with `channel: 0` and an explicit `range` to make artwork. |
 | `proc.repeat` | Repeat a raster at an explicit output size with pixel `offset` and two-axis `scale`. Channel counts and numeric values are retained. |
 | `proc.tiles` | Lay out weighted `definitions` with north, east, south and west sockets. `mode: "solve"` accepts `pins`, `ports`, `boundary` and `wrap`. `mode: "wang"` uses `labels` and a world-cell `origin` for independently generated chunks. Returns a layout with a status and, on success, row-major IDs. |
@@ -865,6 +964,42 @@ ink-studio graph run procedural-review/storm-relay.json --at 1.22 --out procedur
 Use a [take clock](take-clock.md) to sample a graph, world, timeline, and
 recorded media against one rational picture frame.
 
+### Broadcast patterns and TV static
+
+`generator.smpteColorBars({ pattern, width, height, levels, blueOnly })`
+creates an RGB rendition of `eg1` (the default) or `rp219`. EG 1 has a
+reverse-blue strip and near-black PLUGE steps. RP 219 uses the default
+reference patches, a luminance ramp, gray side panels, and five PLUGE
+steps. Width defaults to 128 pixels. Height follows the pattern's 4:3 or
+16:9 aspect ratio unless supplied. Use `blueOnly: true` to isolate the
+blue channel. The default `levels: "full"` clips below-black values at
+zero for display. `levels: "limited"` maps reference black and white
+to RGB bytes 16 and 235 and preserves the below-black patch. Both modes
+return RGB artwork with alpha. The source standards describe video
+signal encoding and timing. [SMPTE EG 1](https://pub.smpte.org/pub/eg1/eg0001-1990_stable2004.pdf) · [SMPTE RP 219-1](https://pub.smpte.org/latest/rp219-1/rp0219-1-2014.pdf)
+
+`generator.tvStatic(options)` creates a standalone layer. Use
+`pixelEffects.tvStatic(source, options)` to blend it into an existing
+raster. Both accept the same appearance controls. The standalone layer
+defaults to 128 × 96. The effect takes its dimensions from the source.
+
+| Option | Behavior |
+| --- | --- |
+| `preset` | `snow` for fine monochrome grain, `chroma` for color noise, `weak-signal` for horizontal streaks, or `tracking` for a rolling band. |
+| `time`, `seed`, `rate` | Time in seconds, integer seed, and noise frames per second from 0.01 to 240. Use zero rate to hold a frame. The graph nodes inherit the graph clock and node seed unless overridden. |
+| `grain` | Integer noise cell size `[width, height]` in pixels. |
+| `contrast`, `chroma`, `rowNoise`, `scanlines` | Grain contrast from 0 to 2, color separation, independent row brightness, and alternating-row dimming. The last three range from 0 to 1. |
+| `band` | Override `height` as a fraction of the image, `speed` in screen heights per second, and `strength` from 0 to 1. Negative speed reverses direction. |
+| `opacity`, `density` | Set the alpha of active noise cells and the fraction of cells that are active, both from 0 to 1. |
+
+Run the [broadcast patterns demo](../examples/broadcast-patterns.cjs) to
+compare the test patterns, play or scrub the static presets, and see
+tracking interference applied to a pixel-art feed.
+
+```sh
+node examples/broadcast-patterns.cjs broadcast-demo.html
+```
+
 ## Audio and automation
 
 See [Audio, recorded inputs and host adapters](graph-media.md) for native
@@ -884,8 +1019,45 @@ port to hide a layer during that hold.
 | `anim.clock` | Map the project clock to `options.range`, with `delay`, `rate`, `reverse` and `mode` of `hold`, `loop` or `pingpong`. Returns mapped time, progress, playback direction and activity. |
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
+| `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
 | `anim.feedback` | Evolve an input array of raster `frames` at a fixed simulation `dt`. Set source `fps` and playback `mode`, signal `halfLife`, `gain`, optional `threshold`, `warp`, `filter`, and timed reset `cuts`. Returns an isolated RGBA signal to composite using existing raster nodes. |
+
+### Desynchronize sprite fragments
+
+Provide a layered raster with each named part registered on the same pixel
+canvas. The graph accepts either the layered raster definition or a compiled
+`graph.raster` asset. For a flattened animation, put the frame sequence in one
+layer and use rectangular strips.
+
+```js
+const { value, frames } = animationGraph.spriteDesync(sprite, {
+  time: 0.5,
+  tag: 'walk',
+  parts: { head: { hold: 2 }, arm: { offset: 4 }, boot: { offset: -3 } },
+  strips: [{ rect: [20, 14, 44, 6], offset: -2 }]
+})
+```
+
+`hold` is a zero-based frame slot within the selected tag. `offset` is a
+signed integer in frames and can lead or lag the current clock. Use one per
+fragment. Offsets wrap in looping tags and clamp in non-looping tags.
+The node uses the graph clock unless you supply `options.time`. Direct
+sampling defaults to time zero, and the default tag is `all`.
+
+Named parts replace their own layer's cel before compositing. Use `layers`
+to choose which layers draw and in what order. Strips then copy RGBA,
+including transparency, from the synchronized stack at their own sampled
+frames. Rectangles use upper-left pixel coordinates `[x, y, width, height]`
+and clip to the sprite. Later strips take precedence in overlaps.
+
+`frames.base` and `frames.strips` report absolute clip frame indices.
+`frames.parts` reports the cel index drawn for each selected layer. A short
+layer holds its last cel. Sampling depends only on the requested time, so a
+direct seek and sequential playback produce the same frame.
+
+Run `node examples/sprite-fragment-desync.cjs fragment-review` to render
+[the side-by-side sprite study](../examples/sprite-fragment-desync.cjs).
 
 ### Planar simulation recipes
 

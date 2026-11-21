@@ -9,7 +9,8 @@ audio DSP still receive seconds or samples through their existing APIs.
 
 Save a version 1 take beside its source files. The world and graph are optional
 and paths are relative to the take. The graph uses its normal asset declarations
-for WAV files and recorded inputs.
+for WAV files and recorded inputs. Use a [project bundle](project-bundles.md#bundle-a-whole-take)
+to move a take with its graph, audio, looks, shot recipes, and checkpoints.
 
 ```json
 {

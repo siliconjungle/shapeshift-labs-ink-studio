@@ -11,9 +11,9 @@ const commands = new Map([
 ]);
 const validSidecar = suffix => /^(?:\.(?:json|txt)|-(?:passes|join)\.json|-[a-zA-Z][a-zA-Z0-9]*\.png)$/.test(suffix);
 const fileOptions = new Set([
-  'actions','adaptive-sampling','area-lights','art-direction','asset-pack','atmosphere-depth-bands','atmosphere-emitters','authoring','bounce-probes','camera-staging','celestial-tracks','cloud-field',
-  'color-stack','composite','contact-shadows','cutaway','edge-filter','effect-palettes','horizon-bands','ink','lightning','look','lut','palette-constraints','plan','precipitation',
-  'rain-impacts','relighting','scene-exposure','sdf-assist','shadow-art','shaped-atmosphere','silhouette-protection','sky-environment','sky-transitions',
+  'actions','adaptive-sampling','afterimages','area-lights','art-direction','asset-pack','atmosphere-depth-bands','atmosphere-emitters','authoring','bounce-probes','camera-staging','celestial-tracks','cloud-field',
+  'color-stack','composite','contact-shadows','cutaway','edge-filter','effect-palettes','horizon-bands','ink','inspection','lightning','look','lut','palette-constraints','pass-quality','plan','precipitation',
+  'rain-impacts','reconstruction','relighting','render-graph','scene-exposure','sdf-assist','shadow-art','shaped-atmosphere','silhouette-protection','sky-environment','sky-transitions',
   'splat-fields','sprite-atlas','sprite-cels','stable','stable-detail','volume-cutouts','weather-binding','wind-field'
 ]);
 const omitted = new Set(['recipe','out','fail-on-flags']);
@@ -112,8 +112,7 @@ function createRecorder(filename, {mode,scene,options,root}) {
 const sidecar = (output,suffix) => suffix ? output.replace(/\.(?:a?png)$/i,'')+suffix : output;
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const digest = value => typeof value === 'string' && /^[a-f\d]{64}$/.test(value);
-function load(filename) {
-  const recipe = read(filename);
+function validate(recipe) {
   requireValue(recipe?.format === format && recipe.version === 1 && commands.has(recipe.mode),'Unsupported shot recipe format or version');
   requireValue(typeof recipe.scene === 'string' && recipe.scene.length && !recipe.scene.startsWith('--') &&
     typeof recipe.project === 'string' && isObject(recipe.options) &&
@@ -135,21 +134,24 @@ function load(filename) {
 }
 
 const replayEnvironment = 'INK_STUDIO_SHOT_REPLAY';
-function replay(filename,{out,root,entry}) {
+function replay(filename,{out,root,entry,portable = false,protect = []}) {
   requireValue(typeof filename === 'string','Use shot replay <recipe.json> --out <image.png>');
   requireValue(typeof out === 'string' && /\.(?:a?png)$/i.test(out),'Shot replay needs --out <image.png>');
   requireValue(root === undefined || typeof root === 'string','--root needs a project directory');
-  const file = path.resolve(filename), output = path.resolve(out), recipe = load(file);
+  const file = path.resolve(filename), output = path.resolve(out), recipe = validate(read(file));
   const project = root ? path.resolve(root) : path.resolve(fs.realpathSync(path.dirname(file)),recipe.project);
-  const protectedPaths = new Set([file]);
+  const protectedPaths = new Set([file, ...protect.map(input => path.resolve(input))]);
   for (const input of recipe.inputs) {
     const source = path.resolve(project,input.file);
     requireValue(isFile(source) && fileDigest(source) === input.sha256,'Shot input is missing or changed: '+input.file);
     protectedPaths.add(source);
   }
   const suffixes = Object.keys(recipe.output.sidecars);
-  requireValue(['',...suffixes].every(suffix=>!protectedPaths.has(sidecar(output,suffix))),
-    'Use a replay output path separate from the recipe and its inputs');
+  const protectedFiles = Array.from(protectedPaths, source => fs.statSync(source));
+  requireValue(['',...suffixes].every(suffix=>{
+    const file = sidecar(output,suffix), stat = fs.statSync(file, { throwIfNoEntry:false });
+    return !protectedPaths.has(file) && (!stat || !protectedFiles.some(source=>source.dev===stat.dev && source.ino===stat.ino));
+  }), 'Use a replay output path separate from the recipe and its inputs');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-shot-'));
   try {
     const staged = path.join(directory,recipe.output.name);
@@ -157,7 +159,7 @@ function replay(filename,{out,root,entry}) {
     fs.writeFileSync(state,JSON.stringify(recipe));
     const flags = Object.entries(recipe.options).flatMap(([key,value])=>value===true?['--'+key]:['--'+key,value]);
     const worker = spawnSync(process.execPath,[entry,...commands.get(recipe.mode),recipe.scene,...flags,'--out',staged],
-      {cwd:project,env:{...process.env,[replayEnvironment]:state},stdio:'inherit'});
+      {cwd:project,env:{...process.env,[replayEnvironment]:state,...(portable && { INK_STUDIO_PORTABLE_SHOT: '1' })},stdio:'inherit'});
     if (worker.error) throw worker.error;
     requireValue(worker.status === 0,'Shot replay render failed');
     const outputs = {'':recipe.output.sha256,...recipe.output.sidecars};
@@ -182,7 +184,7 @@ function replay(filename,{out,root,entry}) {
 function replayState(mode) {
   const file = process.env[replayEnvironment];
   if (!file) return;
-  const recipe = load(file);
+  const recipe = validate(read(file));
   requireValue(mode === recipe.mode,'Shot replay mode does not match the recipe');
   let frame = 0, weather = recipe.weather;
   return {
@@ -206,4 +208,4 @@ function replayState(mode) {
     }
   };
 }
-module.exports = { modeFor, createRecorder, replay, replayState };
+module.exports = { modeFor, createRecorder, replay, replayState, validate, fileOption: name => fileOptions.has(name) };

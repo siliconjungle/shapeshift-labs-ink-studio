@@ -80,7 +80,7 @@ async function session(project, directory, inputs) {
   }
 }
 
-function clipOptions(opt, sources) {
+function clipOptions(opt, sources, defaultClock) {
   if (!opt.out) throw new TypeError('Graph clip needs --out directory');
   const read = key => {
     if (opt[key] === undefined) return undefined;
@@ -89,7 +89,7 @@ function clipOptions(opt, sources) {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
   };
   const document = read('clock');
-  const settings = document?.format === 'ink-studio/take' && document.version === 1 ? document.clock ?? {} : document ?? {};
+  const settings = document?.format === 'ink-studio/take' && document.version === 1 ? document.clock ?? {} : document ?? defaultClock ?? {};
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new TypeError('Graph clip clock needs a settings object');
   const clock = { ...settings };
   if (opt.fps !== undefined) {
@@ -132,7 +132,7 @@ module.exports = async function graphCommand(pos,opt,settings) {
   if (mode==='validate') return send(project.validate(inputs),opt.json);
   if (mode==='plan') return send(project.plan(inputs),opt.json);
   if (mode==='session') return session(project,output,sources);
-  if (mode==='clip') result=project.clip({...run,...clipOptions(opt,sources)});
+  if (mode==='clip') result=project.clip({...run,...clipOptions(opt,sources,project.takeClock)});
   else if (mode==='inspect') result=project.inspect({output:opt.output,node:opt.node,port:opt.port},run);
   else if (mode==='batch') {
     const cases=path.resolve(caseFile);

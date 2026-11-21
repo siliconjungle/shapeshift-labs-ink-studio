@@ -75,6 +75,31 @@ ink-studio clip examples/raster-tidal-flats.js --from 0 --to 6 --fps 12 \
   --w 240 --h 144 --px 1 --out tidal-flats.png
 ```
 
+### Repeat, skip, and blank rows
+
+Use `rowEdits` on a distortion pass to apply whole-row edits before its
+continuous `rows`, offset, or wave transforms. Row numbers count from
+zero at the top of the final output image.
+
+```json
+{
+  "id": "signal-fault",
+  "type": "distortion",
+  "rowEdits": [
+    {"mode": "skip", "start": 8, "count": 3},
+    {"mode": "repeat", "start": 24, "count": 5, "source": 23},
+    {"mode": "blank", "start": 40, "count": 2}
+  ]
+}
+```
+
+The pass shares the [standalone scanline rules](headless-authoring.md#repeat-skip-and-blank-scanlines).
+The visible selection, mask, and opacity still control where it writes.
+In the default `"replace"` blend a blank clears the covered pixel.
+In `"over"`, blank rows leave the current image visible. A JavaScript
+`rowEdits({ width, height, time })` callback can return a new array each
+frame or return `undefined` to leave the rows alone.
+
 ## Moving world reveals
 
 For a `mask` pass, set `volume: { at, extent, feather }`. The first two fields

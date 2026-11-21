@@ -3,10 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { readGraphProject } = require('./graph-project.js');
-const { embed } = require('./data-inputs.js');
+const { validateTake, readTakeWorld } = require('./take-document.js');
+const { readCheckpoint } = require('./checkpoint-file.js');
 const files = require('./asset-files.js');
 
-const format = 'ink-studio/take', checkpointFormat = 'ink-studio/take-checkpoint';
+const checkpointFormat = 'ink-studio/take-checkpoint';
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 function createTake({ clock: definition = {}, world, graph } = {}, {
@@ -73,29 +74,26 @@ function createTake({ clock: definition = {}, world, graph } = {}, {
 }
 
 function readTake(file, { kit = require('../index.js').load(), checkpoint, ...options } = {}) {
-  const source = path.resolve(file), root = path.dirname(source), spec = read(source);
-  if (spec?.format !== format || spec.version !== 1 ||
-      Object.keys(spec).some(key => !['format', 'version', 'clock', 'world', 'graph'].includes(key)))
-    throw new TypeError('Expected ink-studio/take version 1');
-  const paths = [source];
-  const resolve = name => {
-    if (typeof name !== 'string' || !name) throw new TypeError('Take paths must name JSON files');
-    const resolved = path.resolve(root, name);
-    paths.push(resolved);
-    return resolved;
-  };
-  let world, graph;
-  if (spec.world !== undefined) {
-    const worldFile = resolve(spec.world);
-    world = read(worldFile);
-    if (world.dataInputs !== undefined)
-      world.dataInputs = embed(kit.KIT.dataInputs, world.dataInputs, worldFile, file => paths.push(file));
+  const source = path.resolve(file), root = path.dirname(source), raw = read(source);
+  if (raw?.format === 'ink-studio/project-bundle') {
+    const bundles = require('./project-bundle.js'), project = bundles.readProjectBundle(source);
+    if (project.metadata.kind !== 'take') throw new TypeError('Expected a project bundle with a take entry');
+    const result = bundles.mountProject(project, entry => readTake(entry, { kit, checkpoint, ...options }));
+    return { ...result, paths: [source] };
   }
+  const spec = validateTake(raw), paths = new Set([source]);
+  const world = readTakeWorld(source, spec, kit, file => paths.add(file));
+  let graph;
   if (spec.graph !== undefined) {
-    graph = readGraphProject(resolve(spec.graph), { kit, ...options });
-    paths.push(...graph.sourceFiles());
+    graph = readGraphProject(path.resolve(root, spec.graph), { kit, ...options });
+    for (const file of graph.sourceFiles()) paths.add(file);
   }
-  return { take: createTake({ clock: spec.clock, world, graph }, { kit, checkpoint }), paths };
+  if (checkpoint === undefined && spec.checkpoint !== undefined) {
+    const file = path.resolve(root, spec.checkpoint);
+    paths.add(file);
+    checkpoint = readCheckpoint(file, { onBlock: block => paths.add(block) });
+  }
+  return { take: createTake({ clock: spec.clock, world, graph }, { kit, checkpoint }), paths: [...paths] };
 }
 
 function command(pos, opt, settings) {
@@ -103,9 +101,11 @@ function command(pos, opt, settings) {
   if (pos.length !== 2 || pos[0] !== 'sample' ||
       Object.entries(opt).some(([key, value]) => !['frame', 'resume', 'checkpoint', 'out'].includes(key) ||
         typeof value !== 'string' || !value.trim()) || !/^\d+$/.test(opt.frame ?? '')) throw new TypeError(usage);
-  const checkpoint = opt.resume === undefined ? undefined : read(opt.resume);
+  const dependencies = [];
+  const checkpoint = opt.resume === undefined ? undefined :
+    readCheckpoint(opt.resume, { onBlock: block => dependencies.push(block) });
   const { take, paths } = readTake(pos[1], { ...settings, checkpoint });
-  if (opt.resume !== undefined) paths.push(path.resolve(opt.resume));
+  if (opt.resume !== undefined) paths.push(path.resolve(opt.resume), ...dependencies);
   const destinations = [opt.checkpoint, opt.out].filter(Boolean).map(file => path.resolve(file));
   const existing = [...paths, ...destinations].map(file => fs.statSync(file, { throwIfNoEntry: false }));
   if (new Set(destinations).size !== destinations.length || destinations.some((file, i) =>

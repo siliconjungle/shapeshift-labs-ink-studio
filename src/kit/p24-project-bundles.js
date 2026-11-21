@@ -1,7 +1,7 @@
 /* A JSON diorama and its local dependencies, mounted without a host filesystem. */
 (function(K) {
   const A = K.authoring, DIO = K.diorama;
-  const format = 'ink-studio/project-bundle', version = 1;
+  const format = 'ink-studio/project-bundle', version = 1, takeVersion = 2;
   const maxBytes = 128 * 1024 * 1024, maxFiles = 4096;
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   const meshExtension = /\.(obj|gltf|glb)$/i;
@@ -115,7 +115,7 @@
     return { metadata: next, images: map(images) };
   }
 
-  function loadScene(entry, io, source, cache = new Map(), readAtlas) {
+  function loadScene(entry, io, source, cache = new Map(), readAtlas, validate = true) {
     const spec = structuredClone(contents(source ?? io.text(entry)));
     const assets = Object.create(null);
     function mesh(solid, owner, scoped = false) {
@@ -160,7 +160,7 @@
       }
     }
     const env = { assets, prefabs, resolveSpriteAtlas };
-    const problems = DIO.check(spec, env);
+    const problems = validate ? DIO.check(spec, env) : [];
     if (problems.some(problem => problem.level === 'error')) {
       const error = new Error(DIO.report(problems));
       error.problems = problems;
@@ -171,7 +171,7 @@
 
   function open(input) {
     const document = contents(input), { entry, project, toolkit, files, attachments = {}, atlases = {} } = document;
-    if (document.format !== format || document.version !== version)
+    if (document.format !== format || ![version, takeVersion].includes(document.version))
       throw new TypeError('Unsupported Ink Studio project bundle version');
     if (!object(project) || typeof project.id !== 'string' || !Number.isSafeInteger(project.revision) ||
         project.revision < 1 || !object(toolkit) || typeof toolkit.version !== 'string' ||
@@ -216,6 +216,28 @@
       return compiledAtlases.get(file);
     }
     const authored = contents(io.text(entry));
+    if (document.version === takeVersion) {
+      if (authored.format !== 'ink-studio/take' || authored.version !== 1 ||
+          authored.id !== undefined && authored.id !== project.id)
+        throw new TypeError('Version 2 project bundles need a matching take entry');
+      const metadata = Object.freeze({ id: project.id, revision: project.revision, entry, kind: 'take',
+        toolkit: Object.freeze({ version: toolkit.version, sourceHash: toolkit.sourceHash }) });
+      return Object.freeze({
+        metadata,
+        snapshot: () => ({ format, version: takeVersion, project: { ...project }, toolkit: { ...metadata.toolkit },
+          entry, files: Object.fromEntries([...table].map(([name, record]) => [name, { ...record }])),
+          attachments: Object.fromEntries(lookup),
+          ...(atlasSources.size && { atlases: structuredClone(Object.fromEntries(atlasSources)) }) }),
+        takeDocument: () => structuredClone(authored),
+        files: () => [...table.keys()],
+        readFile: name => io.bytes(resolvePath('', name)),
+        attachment(id) {
+          if (!lookup.has(id)) throw new RangeError('Unknown project attachment: ' + id);
+          const name = lookup.get(id);
+          return { path: name, bytes: io.bytes(name) };
+        }
+      });
+    }
     const cached = new Map(), resolve = (source = authored) => loadScene(entry, io, source, cached, readAtlas);
     const initial = resolve();
     if (initial.spec.id !== project.id) throw new TypeError('Project ID must match the scene entry');
@@ -256,10 +278,13 @@
     });
   }
 
-  A.projectBundles = Object.freeze({ format, version, maxBytes, maxFiles, resolvePath, open, mapAtlasImages,
-    collect(entry, get, attachments) {
+  A.projectBundles = Object.freeze({ format, version, takeVersion, maxBytes, maxFiles, resolvePath, open, mapAtlasImages,
+    collectAttachment(file, get) {
+      visitAttachment(file, reader(get), new Set());
+    },
+    collect(entry, get, attachments, { validate = true } = {}) {
       const io = reader(get), visited = new Set();
       for (const file of Object.values(attachments)) visitAttachment(file, io, visited);
-      return loadScene(entry, io);
+      return loadScene(entry, io, undefined, undefined, undefined, validate);
     } });
 })(KIT);

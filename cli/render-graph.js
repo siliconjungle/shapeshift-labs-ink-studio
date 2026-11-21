@@ -162,7 +162,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
 
       const line = node.line ?? (node.axis === 'x' ? w : h) * 0.5;
       const isReflection = node.type === 'reflection';
-      const scanlines = rowTable(node.rows, w, h, time);
+      const scanlines = rowTable(node.rows, w, h, time, node.rowEdits);
       const theta = node.type === 'distortion' ? 2 * Math.PI * ((node.phase + time * node.rate) % 1) : 0;
       const frequency = (2 * Math.PI) / node.period;
       if (!node.effect && !budgetedMemory)
@@ -285,8 +285,15 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options) {
               } else {
                 if (scanlines) {
                   row = Math.floor(y) * 8;
+                  const address = scanlines[row + 7];
+                  if (address < 0) {
+                    if (node.blend !== 'over')
+                      for (let c = 0; c < 4; c++) output[q + c] = Math.round(input[q + c] * (1 - weight));
+                    continue;
+                  }
+                  if (address > 0) Y = address - .5;
                   X = (x - w * 0.5) * scanlines[row + 2] + w * 0.5 + scanlines[row];
-                  Y = (y - h * 0.5) * scanlines[row + 3] + h * 0.5 + scanlines[row + 1];
+                  Y = (Y - h * 0.5) * scanlines[row + 3] + h * 0.5 + scanlines[row + 1];
                 }
                 X += node.offset[0] + node.amplitude[0] * Math.sin(y * frequency + theta);
                 Y += node.offset[1] + node.amplitude[1] * Math.sin(x * frequency + theta);

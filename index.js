@@ -130,7 +130,10 @@ module.exports = {
   readSceneReplay: require('./cli/scene-replay.js').readSceneReplay,
   sampleSceneReplay: require('./cli/scene-replay.js').sampleSceneReplay,
   writeSceneEmbed: require('./cli/scene-replay.js').writeSceneEmbed,
-  ...require('./cli/project-bundle.js'),
+  packProject: require('./cli/project-bundle.js').packProject,
+  readProjectBundle: require('./cli/project-bundle.js').readProjectBundle,
+  writeProjectBundle: require('./cli/project-bundle.js').writeProjectBundle,
+  unpackProject: require('./cli/project-bundle.js').unpackProject,
   describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
   createCameraAtlas(options) {
     return module.exports.load().KIT.cameraAtlas.raster(options, (world, frame) => {

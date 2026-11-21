@@ -731,7 +731,7 @@ const PixelLook = (() => {
   const glsl = `
 int pixelNearest(vec3 c, bool solid) {
   int best = solid && u_n > 1 ? 1 : 0; float bd = 1e9;
-  for (int i = 0; i < 48; i++) {
+  for (int i = 0; i < u_pal.length(); i++) {
     if (i >= u_n) break; if (solid && i == 0 && u_n > 1) continue;
     vec3 df = c - u_pal[i]; float d = dot(df * df, vec3(0.30, 0.55, 0.15));
     if (d < bd) { bd = d; best = i; }

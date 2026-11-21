@@ -33,7 +33,7 @@ const RenderGraph = (() => {
     mask: ['rect', 'feather', 'invert', 'volume'],
     grade: ['stack', 'cubeSize'],
     reflection: ['source', 'axis', 'line'],
-    distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'depthThreshold', 'blend', 'wrap'],
+    distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'rowEdits', 'depthThreshold', 'blend', 'wrap'],
     composite: ['source', 'layer', 'blend', 'isolated'],
     history: ['mode', 'halfLife', 'cameraMotion'],
     ...Object.fromEntries(
@@ -101,10 +101,40 @@ const RenderGraph = (() => {
     });
   }
 
-  function rowTable(rows, width, height, time) {
-    if (!rows) return;
+  function prepareRowEdits(edits = []) {
+    if (!Array.isArray(edits) || edits.length > 4096)
+      throw new TypeError('Scanline edits need an array of up to 4096 ranges');
+    const coordinate = n => Number.isSafeInteger(n) && n >= 0 && n <= 65536;
+    return Array.from(edits, edit => {
+      record(edit, ['mode', 'start', 'count', 'source'], 'scanline edit');
+      const {mode, start, count = 1, source} = edit;
+      if (!['repeat', 'skip', 'blank'].includes(mode) || !coordinate(start) ||
+          !coordinate(count) || count === 0 || source !== undefined && (mode !== 'repeat' || !coordinate(source)))
+        throw new RangeError('Scanline edit needs a valid mode, start, count and optional repeat source');
+      return {mode, start, count, source: mode === 'repeat' ? source ?? Math.max(0, start - 1) : undefined};
+    });
+  }
+
+  function scanlineMap(edits, height) {
+    const skipped = new Uint8Array(height), addresses = new Int32Array(height).fill(-1);
+    for (const {mode, start, count} of edits) {
+      if (mode === 'skip') skipped.fill(1, start, start + count);
+    }
+    for (let row = 0, next = 0; row < height; row++) {
+      if (!skipped[row]) addresses[next++] = row;
+    }
+    for (const {mode, start, count, source} of edits) {
+      if (mode !== 'skip') addresses.fill(mode === 'repeat' && source < height ? source : -1, start, start + count);
+    }
+    return addresses;
+  }
+
+  function rowTable(rows, width, height, time, rowEdits) {
+    const edits = typeof rowEdits === 'function' ? prepareRowEdits(rowEdits({width, height, time})) : rowEdits;
+    if (!rows && !edits?.length) return;
     const table = new Float32Array(height * 8),
-      dynamic = typeof rows === 'function';
+      dynamic = typeof rows === 'function',
+      addresses = edits?.length && scanlineMap(edits, height);
     let left = 0;
     for (let y = 0; y < height; y++) {
       const v = height === 1 ? 0 : y / (height - 1),
@@ -112,13 +142,15 @@ const RenderGraph = (() => {
       if (dynamic) {
         const row = rows({ y, v, width, height, time });
         table.set(row === undefined ? identityRow : rowValues(row, ['offset', 'scale', 'tint']), index);
-      } else {
+      } else if (rows) {
         while (left + 1 < rows.length && v >= rows[left + 1].at) left++;
         const a = rows[left],
           b = rows[Math.min(left + 1, rows.length - 1)];
         const t = a === b ? 0 : clamp((v - a.at) / (b.at - a.at));
         for (let k = 0; k < 7; k++) table[index + k] = a.values[k] * (1 - t) + b.values[k] * t;
-      }
+      } else table.set(identityRow, index);
+      // Zero leaves the sample at the current row. Negative values blank it.
+      if (addresses && addresses[y] !== y) table[index + 7] = addresses[y] < 0 ? -1 : addresses[y] + 1;
     }
     return table;
   }
@@ -228,6 +260,7 @@ const RenderGraph = (() => {
             rate = 0,
             phase = 0,
             rows,
+            rowEdits,
             depthThreshold,
             blend = 'replace',
             wrap = false
@@ -250,6 +283,7 @@ const RenderGraph = (() => {
             phase: finite(phase, 'Distortion phase'),
             source: reference(pass.source ?? input, 'image'),
             rows: prepareRows(rows),
+            rowEdits: typeof rowEdits === 'function' ? rowEdits : prepareRowEdits(rowEdits),
             depthThreshold,
             blend,
             wrap
@@ -791,7 +825,9 @@ const RenderGraph = (() => {
     feedbackMotion,
     replay,
     volumeCoverage,
-    rowTable
+    rowTable,
+    prepareRowEdits,
+    scanlineMap
   });
 })();
 if (typeof module !== 'undefined') module.exports = RenderGraph;

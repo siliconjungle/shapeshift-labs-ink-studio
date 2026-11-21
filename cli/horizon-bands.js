@@ -14,13 +14,16 @@ function readEnvironmentImage(id, file) {
   return KIT.authoring.environments.image({ id, width, height, pixels:Array.from(pixels) });
 }
 
-function readHorizonBands(file) {
+function readHorizonBands(file, dependency) {
   const folder = path.dirname(path.resolve(file));
   const source = JSON.parse(fs.readFileSync(file, 'utf8'));
   const images = new Map();
   return HorizonBands.compile(source, { readImage(filename) {
     const full = path.resolve(folder, filename);
-    if (!images.has(full)) images.set(full, readImage(full));
+    if (!images.has(full)) {
+      dependency?.(full);
+      images.set(full, readImage(full));
+    }
     return images.get(full);
   } }) ?? false;
 }

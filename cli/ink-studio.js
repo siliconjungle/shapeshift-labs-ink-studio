@@ -9,7 +9,7 @@ const fs = require('fs'),
 const CWD = process.cwd();
 let cfg = {};
 try {
-  cfg = require(path.join(CWD, 'ink-studio.config.js'));
+  if (process.env.INK_STUDIO_PORTABLE_SHOT !== '1') cfg = require(path.join(CWD, 'ink-studio.config.js'));
 } catch (e) {
   if (e.code !== 'MODULE_NOT_FOUND' || !/ink-studio\.config/.test(e.message)) throw e;
 }
@@ -510,7 +510,7 @@ function horizonOption() {
   if (value === undefined) return;
   if (value === 'off') return false;
   if (value === true || value === 'on') return true;
-  return horizonOverride ??= require('./horizon-bands.js').readHorizonBands(value);
+  return horizonOverride ??= require('./horizon-bands.js').readHorizonBands(value, shot?.dependency);
 }
 
 function silhouetteOption() {
@@ -939,7 +939,7 @@ const CMD = {
         '  render <id> --coverage-aware on|off   grade target contributions before compositing',
         '  render <id> --look-masks off   bypass masked look bindings',
         '  render, clip, transition-review, sim render: --recipe <shot.json>   save reproducible review inputs',
-        '  shot replay <shot.json> --out <image.png> [--root project]   verify and recreate the review render',
+        '  shot replay <shot-or-bundle.json> --out <image.png> [--root project | --shot ID]   verify the saved render',
         '  render <scene.json> --asset-pack <pack-or-bundle.json> [--environment-preset pack/preset]   install and select a reusable look',
         '  ramps <id> [--n 12]         the ramps it is shaded on, and which only get darker without turning; a turning one is offered from the same palette',
         '  values <id> [--t 1.5]       the value check: the picture sorted into dark, middle and light, and whether it reads in three tones',
@@ -1026,8 +1026,9 @@ const CMD = {
         '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
         '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
-        '  project pack <scene.json> --out <bundle.json> [--root directory --revision n --asset-pack file --paint file --attachments file]',
-        '  project inspect <bundle.json>   show the bundle version, scene path and retained files',
+        '  project pack <scene-or-take.json> --out <bundle.json> [--root directory --revision n --asset-pack file --paint file --attachments file]',
+        '  project inspect <bundle.json>   show the bundle version, entry path and retained files',
+        '  project unpack <bundle.json> --out new-directory   extract a portable project',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -1748,6 +1749,10 @@ const CMD = {
   },
   shot() {
     if (pos[0] !== 'replay') die('Use shot replay <recipe.json> --out <image.png>');
+    if (opt.shot !== undefined) {
+      if (opt.root !== undefined) die('A bundled shot uses its packaged project root');
+      return require('./project-bundle.js').replayProjectShot(pos[1], opt.shot, { out:opt.out, entry:__filename });
+    }
     Shot.replay(pos[1],{out:opt.out,root:opt.root,entry:__filename});
   },
   render() {
@@ -2201,44 +2206,48 @@ const CMD = {
       die('Scene export flags need values');
     const settings = sceneEmbedConfig(), kit = lib();
     const transparent = onOffOption('transparent');
-    if ([opt.audio, opt.mux, opt.adapters].includes(true) || opt.mux !== undefined && opt.audio === undefined)
+    if ([opt.audio, opt.mux, opt.adapters].includes(true))
       die('Use --audio soundtrack.json with an optional --mux codec ID and --adapters module');
     const host = await require('./graph-host-command.js').adapters(opt.adapters, {
       kit, operations: cfg.graphOperations, adapters: cfg.graphAdapters
     });
-    const audio = opt.audio === undefined ? undefined : require('./scene-audio.js').readSceneAudio(opt.audio, host);
-    const video = opt.mux === undefined ? undefined : require('./graph-host.js').createGraphHost(host.adapters, { kit });
-    video?.requireCodec(opt.mux, 'mux');
-    const native = require('./scene-export-world.js').readExportWorld(pos[0], kit);
-    const fpsText = opt.fps, fraction = typeof fpsText === 'string' && /^(\d+)\/(\d+)$/.exec(fpsText);
-    const fps = fraction ? { numerator: Number(fraction[1]), denominator: Number(fraction[2]) } :
-      fpsText === undefined ? native?.fps ?? 12 : Number(fpsText);
-    const { file } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
-      if (native) return native.capture({ width, height, from, render: R.render,
-        options: view({ ...(moving && sequenceHistory()), transparent, ...(opt.px1 && { px: 1 }) }) });
-      const world = buildPreview(pos[0], { parameterInputs: { time: num('parameter-time', from) } });
-      const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent,
-        ...(opt.px1 && { px: 1 }) });
-      const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
-      return {
-        scene: world.id, title: world.name, timeline: world.timeline,
-        ...(world.simulationInputs && { seed: world.simulationInputSeed,
-          simulationInputs: lib().KIT.simulationInputs.tracks(world.simulationInputs) }),
-        duration: Math.max(world.timeline?.duration ?? 0, world.cameraRig?.duration ?? 0),
-        sample(time, lastTime) {
-          function draw(t, resetRenderHistory) {
-            const phase = lastTime > from ? Math.max(0, Math.min(1, (t - from) / (lastTime - from))) : 0;
-            pose(world, t);
-            return R.render(world, { ...frame, ...camera?.(phase), time: t, t, resetRenderHistory });
+    return require('./project-bundle.js').withTakeSource(pos[0], source => {
+      const native = require('./scene-export-world.js').readExportWorld(source, kit);
+      const soundtrack = opt.audio ?? native?.audio;
+      if (opt.mux !== undefined && soundtrack === undefined) die('A review mux needs a take soundtrack or --audio');
+      const audio = soundtrack === undefined ? undefined : require('./scene-audio.js').readSceneAudio(soundtrack, host);
+      const video = opt.mux === undefined ? undefined : require('./graph-host.js').createGraphHost(host.adapters, { kit });
+      video?.requireCodec(opt.mux, 'mux');
+      const fpsText = opt.fps, fraction = typeof fpsText === 'string' && /^(\d+)\/(\d+)$/.exec(fpsText);
+      const fps = fraction ? { numerator: Number(fraction[1]), denominator: Number(fraction[2]) } :
+        fpsText === undefined ? native?.fps ?? 12 : Number(fpsText);
+      const { file } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
+        if (native) return native.capture({ width, height, from, render: R.render,
+          options: view({ ...(moving && sequenceHistory()), transparent, ...(opt.px1 && { px: 1 }) }) });
+        const world = buildPreview(source, { parameterInputs: { time: num('parameter-time', from) } });
+        const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent,
+          ...(opt.px1 && { px: 1 }) });
+        const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
+        return {
+          scene: world.id, title: world.name, timeline: world.timeline,
+          ...(world.simulationInputs && { seed: world.simulationInputSeed,
+            simulationInputs: lib().KIT.simulationInputs.tracks(world.simulationInputs) }),
+          duration: Math.max(world.timeline?.duration ?? 0, world.cameraRig?.duration ?? 0),
+          sample(time, lastTime) {
+            function draw(t, resetRenderHistory) {
+              const phase = lastTime > from ? Math.max(0, Math.min(1, (t - from) / (lastTime - from))) : 0;
+              pose(world, t);
+              return R.render(world, { ...frame, ...camera?.(phase), time: t, t, resetRenderHistory });
+            }
+            return replay ? replay.sample(time, draw) : draw(time);
           }
-          return replay ? replay.sample(time, draw) : draw(time);
-        }
-      };
-    }, { out: opt.out, formats: opt.formats?.split(',').map(format => format.trim()), embed: settings,
-      width: num('w', 640), height: num('h', 360), fps, from: num('from', 0), to: num('to'),
-      stillScale: num('still-scale', 2), stillTime: num('t'), loopJoin: onOffOption('loop-join'), kit, audio,
-      ...(video && { mux: payload => video.mux(opt.mux, payload) }) });
-    console.log('wrote', file);
+        };
+      }, { out: opt.out, formats: opt.formats?.split(',').map(format => format.trim()), embed: settings,
+        width: num('w', 640), height: num('h', 360), fps, from: num('from', 0), to: num('to'),
+        stillScale: num('still-scale', 2), stillTime: num('t'), loopJoin: onOffOption('loop-join'), kit, audio,
+        ...(video && { mux: payload => video.mux(opt.mux, payload) }) });
+      console.log('wrote', file);
+    });
   },
   'scene-replay'() {
     if (pos.length !== 1 || typeof opt.out !== 'string' || opt.at === true ||
@@ -2257,11 +2266,16 @@ const CMD = {
   },
   project() {
     const [mode, input] = pos, api = require('./project-bundle.js');
-    if (pos.length !== 2 || !['pack', 'inspect'].includes(mode))
-      die('Use project pack <scene.json> --out <bundle.json> or project inspect <bundle.json>');
+    if (pos.length !== 2 || !['pack', 'inspect', 'unpack'].includes(mode))
+      die('Use project pack <scene-or-take.json>, inspect <bundle.json>, or unpack <bundle.json> --out new-directory');
+    if (mode === 'unpack') {
+      const { entry } = api.unpackProject(input, { out: opt.out });
+      console.log('unpacked', entry);
+      return;
+    }
     if (mode === 'inspect') {
       const project = api.readProjectBundle(input), { format, version, attachments } = project.snapshot();
-      process.stdout.write(JSON.stringify({ format, version, ...project.metadata, files: project.files(), attachments }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ format, version, ...project.metadata, files: project.files(), attachments, take: project.takeDocument?.() }, null, 2) + '\n');
       return;
     }
     if ([opt.root, opt.revision].includes(true)) die('--root and --revision need values');

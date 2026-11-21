@@ -2,27 +2,30 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { embed } = require('./data-inputs.js');
+const { validateTake, readTakeWorld } = require('./take-document.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 function readExportWorld(file, kit) {
   if (!/\.json$/i.test(file)) return;
-  let location = path.resolve(file), source = read(location), settings = source?.takeClock;
+  const location = path.resolve(file), spec = read(location);
+  let source = spec, settings = spec?.takeClock, audio;
   const { KIT: K } = kit, T = K.procedural.takeTime;
-  if (source?.format === 'ink-studio/take') {
-    if (source.version !== 1 || typeof source.world !== 'string' || !source.world)
-      throw new TypeError('Scene export needs a take with a native world');
-    const { clock, world } = source;
-    settings = clock ?? {};
-    location = path.resolve(path.dirname(location), world);
-    source = { ...read(location), takeClock: settings };
+  if (spec?.format === 'ink-studio/take') {
+    validateTake(spec);
+    if (spec.world === undefined) throw new TypeError('Scene export needs a take with a native world');
+    settings = spec.clock ?? {};
+    source = readTakeWorld(location, spec, kit);
+    source.takeClock = settings;
     source.dt ??= K.timeDomains.take(settings).dt;
-  } else if (source?.format !== K.world.format) return;
-  if (source.dataInputs !== undefined)
-    source.dataInputs = embed(K.dataInputs, source.dataInputs, location);
+    audio = spec.audio === undefined ? undefined : path.resolve(path.dirname(location), spec.audio);
+  } else {
+    if (spec?.format !== K.world.format) return;
+    if (source.dataInputs !== undefined) source.dataInputs = embed(K.dataInputs, source.dataInputs, location);
+  }
   const create = () => K.world.runtime.create(source);
   return {
-    fps: settings?.fps,
+    fps: settings?.fps, audio,
     capture({ width, height, options, render }) {
       const run = create(), original = run.view(), { dt } = original.world;
       const period = settings?.simulationRate === undefined ? T.period(dt) : T.div(T.read(1), T.read(settings.simulationRate));

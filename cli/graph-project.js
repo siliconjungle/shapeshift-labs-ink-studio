@@ -6,6 +6,7 @@ const PNG = require('./png.js');
 const WAV = require('./wav.js');
 const { createGraphHost } = require('./graph-host.js');
 const { clip } = require('./graph-clip.js');
+const { resolveCheckpoint } = require('./checkpoint-file.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -288,7 +289,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       kind=type;
     } else {
       const parsed=JSON.parse(bytes.toString('utf8'));
-      value=format==='inputs' ? mediaGraph.recording(parsed) : data.freeze(data.clone(parsed));
+      value=format==='inputs' ? mediaGraph.recording(parsed) :
+        data.freeze(data.clone(resolveCheckpoint(full,parsed,{onBlock:block=>paths.add(block)})));
     }
     return [name,{format,file,sha256:sha256(bytes),value,...(kind && {type:kind}),...(codec && {codec})}];
   }));
@@ -516,9 +518,15 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 }
 
 function readGraphProject(file, options={}) {
-  const sourceFile=path.resolve(file);
-  return createGraphProject(JSON.parse(fs.readFileSync(sourceFile,'utf8')),
-    {...options,baseDir:path.dirname(sourceFile),sourceFile});
+  const sourceFile=path.resolve(file), document=JSON.parse(fs.readFileSync(sourceFile,'utf8'));
+  if (document?.format==='ink-studio/project-bundle') {
+    const bundles=require('./project-bundle.js'), project=bundles.readProjectBundle(sourceFile);
+    const take=project.takeDocument?.(), graph=take?.graph;
+    if (!graph) throw new TypeError('Project bundle needs a take with a graph');
+    const mounted=bundles.mountProject(project,entry=>readGraphProject(path.resolve(path.dirname(entry),graph),options));
+    return Object.freeze({...mounted,takeClock:take.clock,sourceFiles:()=>[sourceFile]});
+  }
+  return createGraphProject(document,{...options,baseDir:path.dirname(sourceFile),sourceFile});
 }
 
 module.exports = { createGraphProject, readGraphProject };

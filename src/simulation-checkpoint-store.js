@@ -4,7 +4,7 @@ const { createHash, randomUUID } = require('node:crypto');
 
 const format = 'ink-studio/checkpoint-ref';
 const checkpoint = 'ink-studio/checkpoint', run = 'ink-studio/run';
-const kinds = new Set([checkpoint, run, 'ink-studio/raster-checkpoint']);
+const kinds = new Set([checkpoint, run, 'ink-studio/raster-checkpoint', 'ink-studio/take-checkpoint']);
 const pageSize = 1024, tableThreshold = 128, bucketCount = 32;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => Buffer.from(JSON.stringify(value));
@@ -21,7 +21,7 @@ function bucket(key) {
   return (hash >>> 0) % bucketCount;
 }
 
-function openCheckpointStore(directory) {
+function openCheckpointStore(directory, { readBlock = file => fs.readFileSync(file) } = {}) {
   check(typeof directory === 'string' && directory.length > 0, 'Expected a checkpoint store directory');
   const root = path.resolve(directory);
   const location = hash => path.join(root, hash.slice(0, 2), hash.slice(2));
@@ -122,7 +122,7 @@ function openCheckpointStore(directory) {
       if (!blocks.has(hash)) {
         let value;
         try {
-          value = fs.readFileSync(location(hash));
+          value = readBlock(location(hash));
         } catch (error) {
           if (error.code !== 'ENOENT') throw error;
           throw Error('Missing checkpoint block ' + hash, { cause: error });

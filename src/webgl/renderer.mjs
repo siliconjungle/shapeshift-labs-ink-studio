@@ -10,7 +10,7 @@ import { createSurfacePipeline } from './surfaces.mjs';
 import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
 import { createSplatPipeline } from './pipeline.mjs';
-import { pixelShaderSources } from './shaders.mjs';
+import { pixelShaderSources, scenePaletteSize } from './shaders.mjs';
 import { createDepthSorter, makeCamera, cameraPose, withCameraPose, captureStreamingCamera } from './view.mjs';
 import { waterBackgroundShader } from './water-optics.mjs';
 import { createEnvironment } from './environment.mjs';
@@ -32,7 +32,7 @@ function reconstruct(toolkit, world, frame, definition) {
 }
 const rgb = hex => [(hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255];
 
-function palette(values, max = 64) {
+function palette(values, max = scenePaletteSize) {
   const result = new Float32Array(max * 3);
   for (let i = 0; i < Math.min(max, values.length); i++) result.set(rgb(values[i]), i * 3);
   return result;
@@ -151,7 +151,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let constraintRows, constraintSlots, constraintPlan, constraintKey, constraintWorld, constraintMetadata, constraintCount, constraintMap, maskAt, constraintLab, constraintPairs;
     const contributionPost = new Map(), constrainedPosts = new Map();
     let maskSites, siteState, maskTexture, glassWorld, glassData, glassIndices;
-    const rasterKeys = new WeakMap();
+    const rasterKeys = new WeakMap(), warnedPalettes = new WeakSet();
     let rasterKey = 0;
     const sort = createDepthSorter(), transparencyAPI = toolkit.KIT?.procedural?.splatOrder;
     const afterimagesAPI = toolkit.KIT?.afterimages;
@@ -161,8 +161,8 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     let surfacePipeline,emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let simple, simpleUnavailable = false, keyProgram, damp, copy, spriteProgram, spriteEnvProgram, spriteLayer, spriteTable, anchors;
     let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, lastStaged, fineValues, materials, anchorCount = 0;
-    let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousColorGrade, previousDetailRanges, previousSection, lastQualityKey;
-    let toneKey, tone, sorted, instanceDraw, expandInstances, lastInstances;
+    let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousPalette, previousDetailRanges, previousSection, lastQualityKey;
+    let toneKey, tone, uploadedTone, sorted, instanceDraw, expandInstances, lastInstances;
 
     function orderFor(world, frame, camera, time, isNew, plan, width, height, scale,
       tolerance, histories, source, rainClocks, rainWind, quality) {
@@ -286,32 +286,30 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
     }
 
     function prepareTone(definition) {
+      if (!definition) return null;
       const next = JSON.stringify(definition);
       if (toneKey !== next) {
-        const prepared = definition ? toolkit.PixelLook.prepareTone(definition,
-          toolkit.KIT?.procedural?.materials?.blueNoise
-            ? ({ seed }) => toolkit.KIT.procedural.materials.blueNoise({ seed })
-            : undefined) : null;
-        if (prepared) {
-          // Reserve the first row for palette stops so the resolve needs only
-          // one texture for tone mapping, including in water and fog frames.
-          const width = Math.max(48, prepared.width), height = prepared.height + 1;
-          const table = new Float32Array(width * height * 4);
-          prepared.stops.forEach(([at, hex], i) => table.set([...rgb(parseInt(hex.slice(1), 16)), at], i * 4));
-          for (let y = 0; y < prepared.height; y++) for (let x = 0; x < prepared.width; x++)
-            table[((y + 1) * width + x) * 4] = prepared.thresholds[y * prepared.width + x];
-          textureUnit(12, toneStops);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, table);
-        }
+        tone = toolkit.PixelLook.prepareTone(definition, toolkit.KIT?.procedural?.materials?.blueNoise);
         toneKey = next;
-        tone = prepared;
       }
-      if (tone) {
-        textureUnit(12, toneStops);
-        return { u_toneOn: 1, u_toneCut: tone.cutoff, u_toneAmt: tone.amount, u_toneN: tone.stops.length,
-          u_toneStops: 12, u_toneThSize: [tone.width, tone.height] };
+      return tone;
+    }
+
+    function bindTone(prepared) {
+      if (!prepared) return { u_toneOn: 0 };
+      textureUnit(12, toneStops);
+      if (uploadedTone !== prepared) {
+        // The first row holds the stops and the rest hold the threshold tile.
+        const width = Math.max(prepared.stops.length, prepared.width), height = prepared.height + 1;
+        const table = new Float32Array(width * height * 4);
+        prepared.stops.forEach(([at, hex], i) => table.set([...rgb(parseInt(hex.slice(1), 16)), at], i * 4));
+        for (let y = 0; y < prepared.height; y++) for (let x = 0; x < prepared.width; x++)
+          table[((y + 1) * width + x) * 4] = prepared.thresholds[y * prepared.width + x];
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, table);
+        uploadedTone = prepared;
       }
-      return { u_toneOn: 0 };
+      return { u_toneOn: 1, u_toneCut: prepared.cutoff, u_toneAmt: prepared.amount, u_toneN: prepared.stops.length,
+        u_toneStops: 12, u_toneThSize: [prepared.width, prepared.height] };
     }
 
     function prepareConstraints(world, definition, skipMasks) {
@@ -691,6 +689,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         if (!contract) throw new Error('Strict frame validation needs the Ink Studio KIT');
         contract.requirePortable(world, frame);
       }
+      if (!raw && world.pal.length > scenePaletteSize && !warnedPalettes.has(world.pal)) {
+        warnedPalettes.add(world.pal);
+        console.warn('Ink Studio WebGL resolves the first ' + scenePaletteSize + ' of ' + world.pal.length +
+          ' scene swatches. Use raw: true to draw baked colors without palette resolve.');
+      }
       const canStage = contract?.hasStages(world, frame) && !contract.compatibility(world, frame).length;
       const qualityDefinition = frame.passQuality ?? look.passQuality;
       if (qualityDefinition && !qualityAPI) throw new Error('Pass quality needs the Ink Studio KIT');
@@ -714,7 +717,10 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       previousDetailRanges = detailRanges;
       const tolerance = transparencyAPI?.transparency(frame.stableTransparency ?? look.stableTransparency)?.depthTolerance ?? 0;
       const budget = raw ? null : detailAPI?.prepare(look.detailBudgets);
-      const globalCleanup = !raw && (frame.clean ?? !!look.clean);
+      const coverage = !raw && (frame.coverageAware ?? look.coverageAware) === true;
+      const toneDefinition = raw || coverage ? undefined : frame.tone ?? look.tone;
+      const frameTone = prepareTone(toneDefinition);
+      const globalCleanup = !raw && (frame.clean ?? (!!look.clean && !frameTone?.preserveDots));
       const needsDetailFlags = budget?.affectsCleanup && (globalCleanup || budget?.enablesCleanup);
       const constraintDefinition = frame.paletteConstraints ?? look.paletteConstraints;
       const wantsEmitters=frame.areaLights!==false&&world.areaLights?.length||Array.isArray(frame.areaLights)&&frame.areaLights.length||(frame.volumeLighting??world.volumeLighting)?.spots?.length;
@@ -752,7 +758,6 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         query: () => toolkit.KIT.world.query.fromScene(world, time) });
       const selection = prepareQualityRows(world, frame, quality, qualityKey, trailStart || world.count);
       const constraints = !raw && prepareConstraints(world, constraintDefinition, frame.lookMasks === false);
-      const coverage = !raw && (frame.coverageAware ?? look.coverageAware) === true;
       const masked = Boolean(constraints?.masked);
       if (masked && !coverage) maskOwner ??= target(2);
       const owner = frame[graphOwner]?.depth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
@@ -808,11 +813,11 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const coverageSetting = frame.splatCoverage ?? look.splatCoverage ?? 'legacy';
       const splatCoverage = coverageRules?.coverageMode?.(coverageSetting) ?? ['legacy', 'continuous', 'soft'].indexOf(coverageSetting);
       if (splatCoverage < 0) throw new RangeError('Splat coverage must be legacy, continuous or soft');
-      const colored = !raw && !portableStages && !patterned && !coverage && (frame.colored ?? true);
+      const colored = !raw && !portableStages && !frameTone && !patterned && !coverage && (frame.colored ?? true);
       const detail = prepareDetail(world, budget);
       const scopedCleanup = !!needsDetailFlags && !!detail?.flags;
       const cleaning = globalCleanup || scopedCleanup;
-      const damping = !raw && !portableStages && !coverage && !colored && !constraints && !!look.pixel && frame.damp !== false;
+      const damping = !raw && !portableStages && !frameTone && !coverage && !colored && !constraints && !!look.pixel && frame.damp !== false;
       const samples = colored ? 2 : 1, rw = width * samples, rh = height * samples;
       if (rw > maxSize || rh > maxSize ||
           rw > viewportLimit[0] || rh > viewportLimit[1])
@@ -925,7 +930,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       const fineTiles = detail?.fine ?? world.fine;
       const hasFine = !raw && !!fineTiles;
       const pal = palette(world.pal);
-      const palCount = Math.min(world.pal.length, 64);
+      const palCount = Math.min(world.pal.length, scenePaletteSize);
       const fog = world.fog ?? {};
       // An editor may provide a row diff against the exact bake currently on the GPU.
       const incremental = frame.previousWorld && frame.previousWorld === lastWorld &&
@@ -965,9 +970,14 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       }
 
       const paletteFrame = toolkit.PixelLook.framePalette?.(world, frame, { grading: !raw && !portableStages, tone: !raw && !coverage }) ??
-        { toneDefinition: raw || coverage ? null : frame.tone ?? look.tone, grade: frame.ignoreLookGrade ? undefined : world.anim?.grade };
-      const { toneDefinition: definition, colorGrade } = paletteFrame;
-      const grade = reflectionCapture ? null : paletteFrame.grade;
+        { grade: frame.ignoreLookGrade ? undefined : world.anim?.grade };
+      const { colorGrade } = paletteFrame;
+      let grade = null;
+      if (!raw && !portableStages && !reflectionCapture && !frameTone && paletteFrame.grade) {
+        grade = pal.slice();
+        for (let i = 0, n = Math.min(palCount * 3, paletteFrame.grade.length); i < n; i++)
+          grade[i] = paletteFrame.grade[i];
+      }
       if (masked) bindMaskSites(world,dirty);
       if (constraints?.textured) textureUnit(14,maskTexture);
       if (constraints && (coverage || masked)) {
@@ -1108,7 +1118,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
           textureUnit(8,constraintRows);
           if (masked) textureUnit(7, owner.textures[1]);
         }
-      } else resolve = wet ? (wet.post ??= program(wet.sources.POST_FS)) : resolveProgram(patterned, glass, world.ao, definition, grade);
+      } else resolve = wet ? (wet.post ??= program(wet.sources.POST_FS)) : resolveProgram(patterned, glass, world.ao, frameTone, grade);
       if (water) textureUnit(11, (colored ? contours : geometry).textures[2]);
       if (layeredGlass) {
         const at = geometry.textures.length - 2;
@@ -1117,7 +1127,7 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
         textureUnit(8, glassBoundary.textures[0]);
       }
       fullscreen(resolve, cleaning ? cleaned.framebuffer : destination, width, height, {
-        ...patternedUniforms, ...glassUniforms, ...prepareTone(definition), ...water, ...env?.uniforms, u_waterMask: 11,
+        ...patternedUniforms, ...glassUniforms, ...bindTone(frameTone), ...water, ...env?.uniforms, u_waterMask: 11,
         ...(layeredGlass&&{u_glassBoundary:8,u_glassBack:4,u_glassThrough:7,
           u_glassRange:camera.depthRange,u_glassProjection:camera.projection}),
         ...(constraints ? { u_constraintSlots: 4, u_constraintRows: 8, u_constraintDefault: constraints.defaultSlot,
@@ -1161,16 +1171,16 @@ function createBackend(gl, toolkit, specialize, reuseOrder) {
       if (damping) {
         damp ??= program(sources.DAMP_FS);
         copy ??= program(sources.COPY_FS);
-        const activeColorGrade = colorGrade || empty;
-        if (!sameValues(previousColorGrade, activeColorGrade)) historyValid = false;
-        previousColorGrade = activeColorGrade;
+        const activePalette = (grade ?? pal).subarray(0, palCount * 3);
+        if (!sameValues(previousPalette, activePalette)) historyValid = false;
+        previousPalette = activePalette;
         const next = 1 - historyIndex, vp = viewProjection(camera.projection, camera.view);
         const still = previousVP && vp.every((v, i) => Math.abs(v - previousVP[i]) < 1e-6);
         textureUnit(8, finished.textures[0]);
         textureUnit(11, history[historyIndex].textures[0]);
         textureUnit(6, geometry.textures[1]);
         fullscreen(damp, history[next].framebuffer, width, height, {
-          u_cur: 8, u_hist: 11, u_dep: 6, u_pal: colorGrade || pal, u_n: palCount,
+          u_cur: 8, u_hist: 11, u_dep: 6, u_pal: activePalette, u_n: palCount,
           u_have: +(historyValid && !!still), u_iview: inverseView(camera.view, camera.eye),
           u_pvp: previousVP ?? vp, u_cam: [tangent, camera.aspect, +camera.ortho, 0],
           u_rng: camera.depthRange
