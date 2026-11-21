@@ -1509,7 +1509,7 @@ port to hide a layer during that hold.
 | Operation | Inputs and outputs |
 | --- | --- |
 | `anim.keyframes` | Sample named `channels` from `keys`. A key has `time`, a named `value` for each channel, and optional `ease`. Uses Ink’s scalar, vector, angle, positive, quaternion and orientation interpolation. Returns the channel record and track duration. |
-| `anim.clock` | Map the project clock to `options.range`, with `delay`, `rate`, `reverse` and `mode` of `hold`, `loop` or `pingpong`. Returns mapped time, progress, playback direction and activity. |
+| `anim.clock` | Map the project clock to `options.range`, with `delay`, `rate`, `reverse`, and a `mode` of `hold`, `loop` or `pingpong`. Add `phase` and `cues` for authored layer clocks. Returns mapped time, progress, playback direction and activity. |
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
@@ -1517,6 +1517,60 @@ port to hide a layer during that hold.
 | `anim.staleTransforms` | Patch independent pose channels on a `source` array using `edits` and optional named `snapshots`. Returns the edited array and an applied/skipped count. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
 | `anim.feedback` | Evolve raster `frames` at a fixed simulation `dt`. Set source `fps` and `mode`, signal `halfLife` and `gain`, and optional `threshold`, `warp`, `filter`, and `cuts`. Feed [backward motion](#dense-optical-flow) into `flow` to advect the retained signal. |
+
+### Author layer clocks
+
+Add timing to an `anim.retime` group instance to drive a distinct render layer,
+or use the same settings with `anim.clock`, `anim.frame` or `anim.stagger`.
+Each instance reads its own source time. Composite the results in the usual
+layer order. Use [motion layer clocks](motion-layers.md#clock-a-layer) to
+drive individual pose layers.
+
+```json
+{
+  "range": [0, 8],
+  "mode": "loop",
+  "rate": 0.65,
+  "phase": 1.3,
+  "cues": [
+    { "time": 1.6, "rate": 0 },
+    { "time": 3.5, "seek": 0, "rate": 1.4 },
+    { "time": 5.5, "seek": "parent", "rate": 1 }
+  ]
+}
+```
+
+This clock starts 1.3 source seconds into its range. It holds from 1.6
+parent seconds, restarts at 3.5, and follows the parent clock at 5.5.
+
+- `phase` and numeric `seek` are signed seconds measured from the start
+  of the source range, before applying loop, clamp, pingpong or reverse.
+- Cue `time` is in parent seconds. Times must be unique. A cue applies
+  at its timestamp and can set `rate`, `seek`, or both. Rate zero holds
+  the current phase. A later rate change resumes from that same phase.
+  Before `delay`, cues can change rate or phase while the clock is inactive.
+- Set `seek: 0` to restart according to the current direction.
+  `seek: "parent"` copies the parent seconds into the phase at the cue.
+  Set `rate: 1` with it to keep following the parent. To align multiple
+  layers at a specific source offset, give them identical numeric seeks
+  and rates at the same parent time. Layers with the same range,
+  direction and playback mode then sample the same source time.
+- Cue times, phase offsets and numeric seeks accept decimal seconds or
+  exact `{ "numerator": n, "denominator": d }` records. A graph layer
+  driven directly by a [take frame](take-clock.md) respects exact cue
+  comparisons. A nested group receives the mapped local seconds.
+- During sequential graph clip export, an authored seek starts a new
+  feedback segment for that group. Holds keep sampling the same local
+  frame. Checkpoint-backed simulations seek through their usual sampler.
+
+Use `KIT.procedural.animationGraph.compileClock(settings)` in JavaScript.
+Call `sample(parentSeconds)` or `forTake(frame)` on the compiled clock.
+The phase at any requested time is independent of the order of sampling.
+For interactive stage clocks and fixed ticks, see
+[shared time domains](shared-time-domains.md).
+
+Run `node examples/layer-clocks.cjs layer-clocks.html` for the
+[interactive sprite study](../examples/layer-clocks.cjs).
 
 ### Desynchronize sprite fragments
 
@@ -1537,6 +1591,11 @@ const { value, frames } = animationGraph.spriteDesync(sprite, {
 `hold` is a zero-based frame slot within the selected tag. `offset` is a
 signed integer in frames and can lead or lag the current clock. Use one per
 fragment. Offsets wrap in looping tags and clamp in non-looping tags.
+A part or strip can use a `clock` record in place of either field. A
+fragment clock accepts `rate`, `phase`, `cues`, `delay`, `reverse`, and
+`mode`, and uses the selected tag's frame rate and source range. Its
+default mode follows the tag's looping setting.
+
 The node uses the graph clock unless you supply `options.time`. Direct
 sampling defaults to time zero, and the default tag is `all`.
 

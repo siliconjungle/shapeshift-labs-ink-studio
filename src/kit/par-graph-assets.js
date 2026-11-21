@@ -104,7 +104,7 @@
       }
       return { width, height, frame, data };
     }
-    function spriteDesync({ time = 0, tag = 'all', layers: names = [...planes.keys()], parts = {}, strips = [] } = {}) {
+    function spriteDesync({ time = 0, tag = 'all', layers: names = [...planes.keys()], parts = {}, strips = [] } = {}, exact) {
       const record = P.graphTypes.validator('record');
       if (!Array.isArray(names) || !Array.from(names).every(name => planes.has(name)) ||
           !record(parts) || !Array.isArray(strips) || strips.length > 64)
@@ -118,7 +118,17 @@
           ? ((position % length) + length) % length
           : Math.max(0, Math.min(length - 1, position)));
       }
-      function timed({ offset, hold }) {
+      let cueCount = 0;
+      function timed({ offset, hold, clock }) {
+        if (clock !== undefined) {
+          if (offset !== undefined || hold !== undefined || !record(clock) ||
+              Object.keys(clock).some(key => !['rate', 'phase', 'cues', 'delay', 'reverse', 'mode'].includes(key)))
+            throw new TypeError('Sprite fragment clock needs playback settings without a frame hold or offset');
+          cueCount += Array.isArray(clock.cues) ? clock.cues.length : 0;
+          if (cueCount > 32768) throw new RangeError('Sprite desync exceeds its layer clock cue budget');
+          const { phase = 0, mode = clip.loop ? 'loop' : 'hold', ...settings } = clock;
+          return clip.start + P.animationGraph.frameIndex(length, time, { ...settings, phase, mode, fps: clip.fps }, exact).index;
+        }
         if ((offset !== undefined && (!Number.isSafeInteger(offset) || Math.abs(offset) > 2147483647)) ||
             (hold !== undefined && (offset !== undefined || !Number.isSafeInteger(hold) || hold < 0 || hold >= length)))
           throw new RangeError('Sprite fragment needs a signed frame offset or an in-tag hold frame');
@@ -126,13 +136,13 @@
       }
       const base = select(tick), partFrames = new Map();
       for (const [name, part] of Object.entries(parts)) {
-        if (!planes.has(name) || !record(part) || Object.keys(part).some(key => key !== 'offset' && key !== 'hold'))
+        if (!planes.has(name) || !record(part) || Object.keys(part).some(key => !['hold', 'offset', 'clock'].includes(key)))
           throw new TypeError('Invalid sprite fragment ' + name);
         partFrames.set(name, timed(part));
       }
       const blocks = [], stripFrames = [], distinct = new Set();
       for (const strip of strips) {
-        if (!record(strip) || Object.keys(strip).some(key => !['rect', 'hold', 'offset'].includes(key)) ||
+        if (!record(strip) || Object.keys(strip).some(key => !['rect', 'hold', 'offset', 'clock'].includes(key)) ||
             !Array.isArray(strip.rect) || strip.rect.length !== 4 ||
             !Array.from(strip.rect).every(n => Number.isSafeInteger(n) && n >= -2147483648 && n <= 2147483647) ||
             strip.rect[2] <= 0 || strip.rect[3] <= 0)

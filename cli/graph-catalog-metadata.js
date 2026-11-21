@@ -94,9 +94,13 @@ const ports = {
   random: { value: { constraints: { min: 0, exclusiveMax: 1 } } }
 };
 
-const clock = { time: sampleTime, range: property('vec2', seconds, [0, 1]),
-  rate: property('number', limit(1e-5, 1e5), 1), delay: property('number', seconds, 0),
-  reverse: property('boolean', {}, false), mode };
+const clockControls = { time: sampleTime, rate: property('number', {
+  ...limit(0, 1e5), description: 'Zero holds; positive rates start at 0.00001.'
+}, 1), delay: property('number', seconds, 0), reverse: property('boolean', {}, false), mode,
+  phase: property('number|record', { ...seconds, description: 'Initial source offset from the start of the range' }, 0),
+  cues: property('array<record>', { constraints: { maxItems: 4096 },
+    description: 'Parent-clock time and a new rate, source seek offset, or seek to parent time' }) };
+const clock = { ...clockControls, range: property('vec2', seconds, [0, 1]) };
 const options = {
   'raster.channel': { channel: property('number|string', {}, 0) },
   'raster.crop': { x: property('number', pixelOffset), y: property('number', pixelOffset), ...size },
@@ -158,7 +162,7 @@ const options = {
   'anim.clock': clock,
   'anim.stagger': { ...clock, interval: property('number', { ...seconds, ...limit(0, 1200) }, .1) },
   'anim.retime': clock,
-  'anim.frame': { fps: sampleRate, mode,
+  'anim.frame': { ...clockControls, fps: sampleRate,
     first: property('number', { unit: 'frame', constraints: { integer: true, min: 0 } }, 0) },
   'audio.stemControls': { rate: property('number', { unit: 'samples/second', ...limit(1, 240, true) }, 60),
     time: sampleTime },

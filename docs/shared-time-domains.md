@@ -4,6 +4,9 @@
 
 Try [Clockwork pavilion](../examples/shared-time-domains.html): an articulated courier at 12 fps, a mechanism at 24 fps, a native simulation at 60 ticks per second, a continuously moving camera and an independent target ripple. Freeze any clock, freeze their animation parent, change pose cadence or trigger a one-second hit-stop. Drag to orbit.
 
+For seekable per-layer phase, hold, restart, and sync cues, use
+[authored layer clocks](headless-authoring.md#author-layer-clocks).
+
 For authored picture frames with exact offsets into simulation ticks, recorded
 inputs, and audio samples, use the [take clock](take-clock.md).
 

@@ -74,6 +74,25 @@ The same stack is also usable outside a timeline. Call
 `motionLayers.native` beside additive layers in a clip's `tools.layers`
 array. Both use Ink's native layer evaluator.
 
+## Clock a layer
+
+Set a layer's optional `clock` to add a starting phase and authored cues.
+The layer's `speed` or fitted rate sets its initial playback rate. Phase
+and seeks are source seconds from the layer's trim start. Cue times are
+shot seconds, on the same clock as the layer's start, end and blend weights.
+
+```js
+motionLayers = motionLayers.edit('lift', { clock: {
+  phase: 0.15,
+  cues: [{ time: 0.7, rate: 0 }, { time: 1.2, seek: 0, rate: 1 }]
+} });
+```
+
+This holds the lift at 0.7 seconds and restarts it at its trim start at
+1.2 seconds. The layer's placement and weight curve continue to follow
+the shot. See [authored layer clocks](headless-authoring.md#author-layer-clocks)
+for sync cues and exact cue times.
+
 ## CLI
 
 Preview two strides with the lantern lift and overlapping glance.

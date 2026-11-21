@@ -38,7 +38,7 @@ const dynamic = {
   'array.sort': { inputs: { items: [3, 1, 2] } },
   'data.typed': { type: 'number', inputs: { value: 7 } },
   'data.record': { inputs: { label: 'Ink', count: 3 } },
-  'anim.retime': { inputs: { timing: { offset: .1 } },
+  'anim.retime': { inputs: { timing: { phase: .1, cues: [{ time: .5, rate: 0 }, { time: 1, seek: 'parent', rate: 1 }] } },
     callback: group({}, 'time', {}) }
 };
 const specifications = {

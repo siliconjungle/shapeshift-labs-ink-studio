@@ -12,6 +12,7 @@
   };
 
   function sourceTime(layer, time, duration) {
+    if (layer.sourceClock) return layer.sourceClock.sample(time).value;
     const { source, start = 0, end = duration, in: from = 0, out = source.dur, loop = false } = layer;
     const span = out - from;
     if (time === end && layer.speed === undefined) return loop ? from : out;
@@ -85,10 +86,10 @@
     const library = Object.freeze({ ...sources });
     const allowed = parts && Object.freeze([...new Set(parts)]);
     const allowedParts = new Set(allowed);
-    const ids = new Set();
+    const ids = new Set(), clocks = new Map();
     const specs = Object.freeze(Array.from(layers, entry => {
       const { id, label = id, clip, parts, start = 0, end = duration, in: from = 0, out,
-        speed, loop = false, enabled = true, weight = 1 } = entry ?? {};
+        speed, loop = false, enabled = true, weight = 1, clock } = entry ?? {};
       const source = Object.hasOwn(library, clip) && library[clip], last = out ?? source?.dur;
       if (!name(id) || ids.has(id) || typeof label !== 'string' || !label.trim() ||
           !name(clip) || typeof source?.sample !== 'function' || !Number.isFinite(source.dur) || source.dur <= 0 ||
@@ -99,13 +100,27 @@
           (parts !== undefined && (!Array.isArray(parts) ||
             Array.from(parts).some(part => !name(part) || (allowed && !allowedParts.has(part))))))
         throw new TypeError('Invalid motion layer or part mask: ' + id);
+      let clockSpec;
+      if (clock !== undefined) {
+        const P = K.procedural;
+        if (!P.graphTypes.validator('record')(clock) || Object.keys(clock).some(key => key !== 'phase' && key !== 'cues'))
+          throw new TypeError('Motion layer clocks accept phase and cues: ' + id);
+        const T = P.takeTime;
+        const fitted = speed === undefined ? T.div(T.sub(T.read(last), T.read(from)), T.sub(T.read(end), T.read(start))) : undefined;
+        const sourceClock = P.animationGraph.compileClock({ ...clock, phase: clock.phase === undefined ? 0 : clock.phase,
+          range: [from, last], rate: speed ?? T.seconds(fitted), delay: start, mode: loop ? 'loop' : 'hold' }, { rate: fitted });
+        clocks.set(id, sourceClock);
+        clockSpec = P.data.freeze(P.data.clone(clock));
+      }
       ids.add(id);
       return Object.freeze({ id, label, clip, start, end, in: from, out: last,
         ...(speed !== undefined && { speed }), loop, enabled, weight: curve(weight, start, end),
+        ...(clockSpec && { clock: clockSpec }),
         ...(parts !== undefined && { parts: Object.freeze([...new Set(parts)]) }) });
     }));
     const native = Object.freeze(specs.map(spec => Object.freeze({ ...spec, parts: spec.parts ?? allowed,
-      source: library[spec.clip], mode: 'override' })));
+      source: library[spec.clip], mode: 'override',
+      ...(spec.clock && { sourceClock: clocks.get(spec.id) }) })));
     const rebuild = next => create({ duration, sources: library, layers: next, parts: allowed });
     function finiteTime(time) {
       if (!Number.isFinite(time)) throw new TypeError('Motion layer time must be finite');
