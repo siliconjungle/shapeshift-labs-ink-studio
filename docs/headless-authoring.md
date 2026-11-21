@@ -941,6 +941,7 @@ either axis with `edgeU` or `edgeV`.
 | `warp.polar` | Set `mode: "fromPolar"` to wrap a strip into a disc or annulus. Set `"toPolar"` to unwrap one. Strip X is angle and strip Y is radius. Set `center`, `radii` as fractions of the shorter disc dimension, `angle` in turns, and `clockwise`. |
 | `warp.displace` | Supply a numeric `map` of one channel or an X/Y pair. Subtract `center` and multiply by the two `scale` values in `pixels` or `normalized` units. A positive displacement moves the image toward positive coordinates. |
 | `warp.opticalFlow` | Estimate [dense motion](#dense-optical-flow) between aligned `before` and `after` rasters. Returns signed XY displacement and a separate `confidence` raster. |
+| `warp.cameraMotion` | Separate [camera and subject motion](#camera-motion-compensation) from a forward `motion` field, with optional `confidence` and a background `mask`. |
 | `warp.flow` | Pull a `source` raster through a backward `motion` field, with optional `confidence`. Returns the result and its inverse UV `field`. |
 | `warp.flowPoints` | Advance an `array<vec2>` of `points` through a forward `motion` field, with optional `confidence`. |
 | `warp.refract` | Supply a height raster in `map`. Choose its `channel`, `heightScale`, refractive `index`, and ray `depth` in pixels. Local height gradients bend the sampling ray. |
@@ -996,6 +997,41 @@ fixed and flow-driven feedback.
 
 ```sh
 node examples/dense-optical-flow.cjs optical-flow.html
+```
+
+### Camera motion compensation
+
+`rasterWarp.cameraMotion(motion, options)` fits the dominant camera
+transform to a forward displacement raster. The default `similarity`
+model estimates pan, uniform zoom, and roll. Use `model: "translation"`
+for pan alone. The fit uses spatially distributed correspondences and
+[random sample consensus](https://www.cs.cmu.edu/~motionplanning/papers/sbp_papers/f/p381-fischler.pdf)
+to reject independently moving regions. Pass the optical-flow
+`confidence` plane and optionally a single-channel background `mask`
+to restrict the fit to pixels you choose.
+
+| Output | Meaning |
+| --- | --- |
+| `value` | Signed XY motion in pixels per frame pair, expressed in the earlier frame's stabilized axes. Use it with `warp.flowPoints` to move subject-attached effects. |
+| `camera` | The signed XY motion attributed to the camera at each earlier-frame pixel. |
+| `field` | Normalized UV coordinates for `warp.sample`. Pass the later frame as `source` to stabilize it against the earlier frame. Use `edge: "transparent"` to show uncovered edges. |
+| `inliers` | Byte mask of eligible pixels that agree with the camera transform. |
+| `transform` | Forward and inverse two-row pixel matrices, center-relative `pan`, uniform `scale`, `rotation` in radians, and fit diagnostics. Apply the forward matrix to a stabilized anchor to draw it in the later frame. |
+
+`threshold` is the pixel error allowed for camera inliers (1.35 by
+default). `minConfidence` defaults to .2, and `maskThreshold` defaults
+to .5 for masks with samples in 0–255. `minInliers` (6) and
+`minInlierRatio` (.55) control fit acceptance. `maxSamples`,
+`iterations`, and `seed` tune the bounded, deterministic fit.
+When the fit lacks support, `transform.valid` is false, both
+transforms are identity, and `value` preserves the input motion.
+
+The [browser example](../examples/camera-motion-compensation.cjs)
+compares a panning, zooming raster with its stabilized result and
+draws a subject anchor in both coordinate spaces.
+
+```sh
+node examples/camera-motion-compensation.cjs camera-motion.html
 ```
 
 ### Per-pixel time

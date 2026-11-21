@@ -16,6 +16,13 @@
       inputs:{before:'raster',after:'raster',options},outputs:{value:'raster',confidence:'raster'},
       run({before,after,options}){return W.opticalFlow(before,after,options);}
     },
+    'warp.cameraMotion':{
+      inputs:{motion:'raster',confidence,mask:{type:'any',default:null},options},
+      outputs:{value:'raster',camera:'raster',field:'raster',inliers:'raster',transform:'record'},
+      run({motion,confidence,mask,options}){
+        return W.cameraMotion(motion,{...options,confidence:confidence ?? options.confidence,mask:mask ?? options.mask});
+      }
+    },
     'warp.flow':{
       inputs:{source:'raster',motion:'raster',confidence,options},outputs:mapped,
       run({source,motion,confidence,options}){return W.flow(source,motion,{...options,confidence:confidence ?? options.confidence});}
