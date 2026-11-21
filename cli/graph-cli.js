@@ -2,11 +2,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { once } = require('node:events');
 const { createInterface } = require('node:readline');
-const files = require('./asset-files.js');
+const { save, graphOutputs } = require('./graph-outputs.js');
 const { readGraphProject } = require('./graph-project.js');
 const { findGraphGroupUsers } = require('./graph-groups.js');
 const { snapshotFormat, diffGraphs } = require('./graph-diff.js');
-const { openGraphArtifactCache } = require('./graph-artifact-cache.js');
+const { openGraphArtifactCache, engineFingerprint, fingerprint } = require('./graph-artifact-cache.js');
+const { runBatch } = require('./graph-batch.js');
 const host = require('./graph-host-command.js');
 const catalog = require('./graph-catalog.js');
 
@@ -14,7 +15,7 @@ const cacheFlags=['cache','cache-bytes','cache-entries'];
 const flags = {
   validate:['inputs','json'], plan:['inputs','json'], dependencies:['json'], snapshot:['inputs','at','seed','json'],
   inspect:['inputs','at','seed','out','output','node','port','json',...cacheFlags],
-  run:['inputs','at','seed','out','json',...cacheFlags], batch:['inputs','at','seed','out','json',...cacheFlags],
+  run:['inputs','at','seed','out','json',...cacheFlags], batch:['inputs','at','seed','out','json','resume','progress',...cacheFlags],
   session:['protocol','out'],
   clip:['inputs','seed','out','output','from','to','fps','warmup','cuts','clock','format','render-options','json',...cacheFlags]
 };
@@ -25,25 +26,6 @@ async function sendText(text) {
 
 function send(value, compact=false) {
   return sendText(JSON.stringify(value,null,compact ? undefined : 2));
-}
-
-function save(directory, result, inputs) {
-  const artifacts=result.results ? result.results.flatMap(row=>[
-    ...row.artifacts.map(artifact=>({...artifact,file:path.join('cases',row.id,artifact.file)})),
-    {file:path.join('cases',row.id,'report.json'),document:row.report}
-  ]) : result.artifacts;
-  const output=[...artifacts,{file:'report.json',document:result.report}];
-  const sources=inputs.map(file=>fs.statSync(file));
-  const locations=output.map(entry=>{
-    const file=path.resolve(directory,entry.file), stat=fs.statSync(file,{throwIfNoEntry:false});
-    if (stat && sources.some(source=>source.dev===stat.dev && source.ino===stat.ino))
-      throw new Error('Graph outputs must be separate from source files');
-    return {file,entry};
-  });
-  for (const {file,entry} of locations) {
-    if (entry.bytes) files.write(file,entry.bytes);
-    else files.json(file,entry.document);
-  }
 }
 
 async function session(project, directory, inputs) {
@@ -153,11 +135,14 @@ module.exports = async function graphCommand(pos,opt,settings) {
   }
   if (Object.hasOwn(host.commands,mode)) return send(await host.execute(pos,opt,settings),opt.json);
   if (!Object.hasOwn(flags,mode) || pos.length!==(mode==='batch'?3:2) ||
-      Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) || (key==='json' ? value!==true : typeof value!=='string' || !value.trim())) ||
+      Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) ||
+        (['json','resume'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :
+          typeof value!=='string' || !value.trim())) ||
       opt.port!==undefined && opt.node===undefined || opt.protocol!==undefined && opt.protocol!=='ndjson')
     throw new TypeError('Use graph validate|plan|dependencies|snapshot|inspect|run|batch|session|clip <project.json> [cases-or-sweep.json]. See ink-studio help');
   if (opt.cache===undefined && cacheFlags.slice(1).some(flag=>opt[flag]!==undefined))
     throw new TypeError('Graph cache limits need --cache directory');
+  if (opt.resume && opt.out===undefined) throw new TypeError('Graph batch --resume needs --out directory');
   settings=await host.adapters(opt.adapters,settings);
   const project=readGraphProject(file,settings), sources=project.sourceFiles();
   if (settings.adapterFile) sources.push(settings.adapterFile);
@@ -190,6 +175,23 @@ module.exports = async function graphCommand(pos,opt,settings) {
     const cases=path.resolve(caseFile);
     sources.push(cases);
     const definition=JSON.parse(fs.readFileSync(cases,'utf8'));
+    if (opt.resume || opt.progress) {
+      const config=path.resolve('ink-studio.config.js');
+      const hostFiles=[settings.adapterFile];
+      if (process.env.INK_STUDIO_PORTABLE_SHOT!=='1' && fs.existsSync(config)) {
+        hostFiles.push(config);
+        sources.push(config);
+      }
+      const runtime=fingerprint([engineFingerprint(settings.kit,{allowCustom:true}),
+        hostFiles.filter(Boolean).map(file=>fs.readFileSync(file))]);
+      const {code,report}=await runBatch(project,project.prepareBatch(definition,run),{
+        output, resume:opt.resume, stream:opt.progress && sendText, writer:output && graphOutputs(sources),
+        identity:project.artifactIdentity(), runtime, cache
+      });
+      if (code) process.exitCode=code;
+      if (!opt.progress) await send(report,opt.json);
+      return;
+    }
     result=execute([definition,run],()=>project.batch(definition,run));
   } else result=execute(run,()=>project.run(run));
   if (output) save(output,result,sources);

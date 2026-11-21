@@ -383,8 +383,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     groupDependencies:dependencyRows,hostOperations:Object.keys(operations).sort()};
 
   function artifactIdentity() {
-    if ([...assets.values()].some(asset=>asset.format==='codec') || exports.some(entry=>entry.format==='codec'))
-      return {reason:'host-codec'};
+    const usesCodec=[...assets.values()].some(asset=>asset.format==='codec') || exports.some(entry=>entry.format==='codec');
     const used=groupUsage(groupTree.scope,spec.nodes);
     const names=new Set();
     for (const body of [spec,...[...used].map(group=>groupSpecs.get(group))])
@@ -392,14 +391,14 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const versions=[...names].sort().map(name=>[name,operations[name].cacheVersion]);
     const unversioned=versions.filter(([,id])=>!(typeof id==='string' && id.trim()) &&
       !(Number.isSafeInteger(id) && id>0)).map(([name])=>name);
-    if (unversioned.length) return {reason:'unversioned-operation',operations:unversioned};
-    const registered=versions.map(([name,id])=>[name,id,...['run','instantiate','specialize'].map(method=>{
+    const registered=versions.map(([name,id])=>[name,unversioned.includes(name) ? null : id,...['run','instantiate','specialize'].map(method=>{
       const implementation=operations[name][method];
       return typeof implementation==='function' ? Function.prototype.toString.call(implementation) : null;
     })]);
     // Include declaration order and exact numbers alongside the existing project hash.
     return {fingerprint:fingerprint([projectHash,project,[...groupSpecs].map(([group,body])=>[group.alias,body]),
-      dependencyRows,registered])};
+      dependencyRows,registered]),
+      ...(usesCodec ? {reason:'host-codec'} : unversioned.length ? {reason:'unversioned-operation',operations:unversioned} : {})};
   }
 
   function snapshot(options={}) {
@@ -531,6 +530,27 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     catch { return describe(value); }
   }
 
+  function prepareBatch(cases,defaults={}) {
+    fields(defaults,['inputs','time','seed'],'graph batch defaults');
+    if (defaults.inputs!==undefined) named(defaults.inputs,'batch input values');
+    const sweep=Array.isArray(cases) ? null : sweepCases(cases,broadcast);
+    const rows=sweep?.cases ?? cases;
+    if (!rows.length) throw new TypeError('Graph batch needs a nonempty case array');
+    const prepared=Array.from(rows,row=>{
+      const {id:name,inputs={},...options}=fields(row,['id','inputs','time','seed'],'graph batch case');
+      if (!id(name)) throw new TypeError('Graph batch case needs an ID');
+      named(inputs,'case input values');
+      const settings=request({...defaults,...options,inputs:{...defaults.inputs,...inputs}});
+      return {id:name, requestKey:()=>fingerprint(settings), run:()=>run(settings)};
+    });
+    separateNames(prepared.map(row=>row.id),'Graph batch cases');
+    return { cases:prepared, summarize(results) {
+      return {...header,kind:'batch',passed:results.every(row=>row.report.passed),
+        ...(sweep && {sweep:sweep.report}),
+        cases:results.map(({id,report})=>({id,directory:'cases/'+id,...report}))};
+    }};
+  }
+
   return Object.freeze({
     sockets: compiled.sockets,
     plan:inputs=>({
@@ -559,23 +579,11 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       } finally { runner.clear(); }
     },
     inspect,
+    prepareBatch,
     batch(cases,defaults={}) {
-      fields(defaults,['inputs','time','seed'],'graph batch defaults');
-      if (defaults.inputs!==undefined) named(defaults.inputs,'batch input values');
-      const sweep=Array.isArray(cases) ? null : sweepCases(cases,broadcast);
-      const rows=sweep?.cases ?? cases;
-      if (!rows.length) throw new TypeError('Graph batch needs a nonempty case array');
-      const prepared=Array.from(rows,row=>{
-        const {id:name,inputs={},...options}=fields(row,['id','inputs','time','seed'],'graph batch case');
-        if (!id(name)) throw new TypeError('Graph batch case needs an ID');
-        named(inputs,'case input values');
-        return {name,request:request({...defaults,...options,inputs:{...defaults.inputs,...inputs}})};
-      });
-      separateNames(prepared.map(row=>row.name),'Graph batch cases');
-      const results=prepared.map(row=>({id:row.name,...run(row.request)}));
-      return {results,report:{...header,kind:'batch',passed:results.every(row=>row.report.passed),
-        ...(sweep && {sweep:sweep.report}),
-        cases:results.map(({id,report})=>({id,directory:'cases/'+id,...report}))}};
+      const batch=prepareBatch(cases,defaults);
+      const results=batch.cases.map(row=>({id:row.id,...row.run()}));
+      return {results,report:batch.summarize(results)};
     },
     clear,
     sourceFiles:()=>[...paths]

@@ -1007,6 +1007,8 @@ const CMD = {
         '  graph clip <project.json> --output NAME --from FRAME --to FRAME --out directory',
         '    [--fps N|N/D --warmup FRAMES --cuts FRAME,FRAME --format frames|apng|both --clock file.json --render-options file.json]',
         '  graph batch <project.json> <cases-or-sweep.json> [--out directory]   run named cases or a Cartesian sweep',
+        '    --resume --out directory   keep verified cases and retry failures',
+        '    --progress ndjson   stream case and batch records',
         '  graph capture <request.json> [--adapters host.cjs --out file]   capture or send via a registered host adapter',
         '  graph inspect-pxc <project.pxc> [--out info.json]   inspect a Pixel Composer container',
         '  graph import-pxc <project.pxc> --out graph.json [--adapters host.cjs --using ID]   import saved art or use a translator',

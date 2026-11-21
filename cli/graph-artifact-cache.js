@@ -13,10 +13,12 @@ const fingerprint = value => hash().update(serialize(value)).digest('hex');
 const entryName = /^[a-f0-9]{64}\.bin$/;
 const artifactPath = /^(?!.*(?:^|\/)\.{1,2}(?:\/|$))[\w.-]+(?:\/[\w.-]+)*$/;
 
-function engineFingerprint(kit) {
+function engineFingerprint(kit, { allowCustom = false } = {}) {
   const studio = require('../index.js'), build = studio.toolkitBuildHash(kit);
-  if (!build) return undefined;
-  const runtime = hash().update(serialize([build, process.versions, process.platform, process.arch,
+  if (!build && !allowCustom) return undefined;
+  const custom = !build && Object.values(require.cache).find(module => module.exports === kit);
+  const source = custom ? hash().update(fs.readFileSync(custom.filename)).digest('hex') : build ?? 'custom-toolkit';
+  const runtime = hash().update(serialize([source, process.versions, process.platform, process.arch,
     Intl.DateTimeFormat().resolvedOptions()]));
   for (const directory of ['cli', 'src']) {
     const root = path.join(__dirname, '..', directory);
@@ -134,17 +136,17 @@ function openGraphArtifactCache(directory, { kit, maxBytes = defaultBytes, maxEn
     return { ...result, report: { ...result.report, artifactCache } };
   }
 
-  return (mode, identity, settings, evaluate) => {
+  return (mode, identity, settings, evaluate, { reuse = true, accept } = {}) => {
     const reason = identity.reason ?? engineError ?? (!engine && 'custom-toolkit');
     if (reason) return report(evaluate(), { status: 'bypass', reason, ...(identity.operations && { operations: identity.operations }) });
     const key = fingerprint([engine, mode, identity.fingerprint, settings]);
     try { prune(); } catch { /* Publishing will create the cache on the first miss. */ }
-    const cached = read(key, mode);
-    if (cached) return report(cached, { status: 'hit', key });
+    const cached = reuse && read(key, mode);
+    if (cached && (!accept || accept(cached))) return report(cached, { status: 'hit', key });
     const result = evaluate();
     const unavailable = write(key, result, mode);
     return report(result, { status: 'miss', key, stored: !unavailable, ...(unavailable && { reason: unavailable }) });
   };
 }
 
-module.exports = { openGraphArtifactCache, fingerprint };
+module.exports = { openGraphArtifactCache, fingerprint, engineFingerprint };

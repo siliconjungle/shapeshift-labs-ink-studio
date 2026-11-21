@@ -347,6 +347,41 @@ Exit status is 0 on success, 2 when any assertion fails, and 1 for invalid
 input or execution errors. Assertion failures still write the declared
 artifacts and report.
 
+### Resume a batch and stream progress
+
+```sh
+ink-studio graph batch project.json cases.json --out review --resume --progress ndjson
+```
+
+Use the same command to start a resumable batch or continue it. Each case
+evaluates independently. After publishing its artifacts and report, the
+runner saves a receipt under `cases/<id>/receipt.json` with the case key
+and report SHA-256. Resume verifies the report and each artifact's size and
+SHA-256 before reusing a successful case. It retries unfinished cases,
+assertion failures, and execution errors. Damaged or missing artifacts are
+rebuilt or restored from a matching artifact cache entry.
+
+Case keys cover the compiled graph, assets, operation and runner versions,
+and the case's resolved inputs, time, and seed. Changing a case reruns that
+case. A new graph, asset, or runner revision can invalidate earlier
+receipts. Give a host operation a new `cacheVersion` when its external
+dependencies change. A resumable batch can also use `--cache` for completed
+case artifacts. Failed cases still evaluate again on resume.
+
+`--progress ndjson` writes `batch-started`, `case-started`,
+`case-finished`, and `batch-finished` records to standard output. Each
+record carries an attempt ID and a sequence number. Case results report
+`completed`, `reused`, `failed`, or `error`, with artifact hashes when
+available. The final record includes the aggregate report and exit code.
+With `--out`, the same records are appended to `progress.ndjson`, even
+when standard output carries only the final report.
+
+You can start with `--progress ndjson --out review` and add `--resume`
+on the next invocation. A resumable batch allows one live writer per
+output directory. Its aggregate `report.json` is published when that
+attempt finishes. Case-level execution errors leave other cases runnable
+and return exit code 1. Assertion-only failures return exit code 2.
+
 Use [graph clips](graph-clips.md) to export a named raster or scene output at
 an exact frame rate with warm-up and cuts.
 
