@@ -39,14 +39,16 @@ function separateNames(names, label) {
     throw new TypeError(label + ' need distinct names on case-insensitive filesystems');
 }
 
-function imageBytes(value) {
+function imageBytes(value, grayscale = false) {
   if (value?.colorSpace==='srgb-linear') throw new TypeError('Graph PNG output needs display RGB. Use color.rasterToDisplay first.');
   const { width, height, data } = value ?? {};
   const size = width * height;
   const bytes = data instanceof Uint8Array || data instanceof Uint8ClampedArray;
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 ||
-      size > 2**24 || ![size*3,size*4].includes(data?.length) ||
-      !(Array.isArray(data) || ArrayBuffer.isView(data)))
+      size > 2**24) throw new TypeError('Graph PNG output needs valid image dimensions');
+  if (grayscale && bytes && data.length === size && (value.channels ?? 1) === 1)
+    return PNG.encodeGray(width,height,data);
+  if (![size*3,size*4].includes(data?.length) || !(Array.isArray(data) || ArrayBuffer.isView(data)))
     throw new TypeError('Graph PNG output needs an RGB8 or RGBA8 image');
   if (!bytes) for (let i=0; i<data.length; i++) {
     const n=data[i];
@@ -509,7 +511,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
 
   function encode(name,value,format,settings={}) {
     const result=format==='codec' ? host.encode(settings.codec,value,settings) : undefined;
-    const bytes=result?.bytes ?? (format==='png' ? imageBytes(value) :
+    const bytes=result?.bytes ?? (format==='png' ? imageBytes(value,settings.grayscale) :
       format==='wav' ? WAV.encode(value,settings) : jsonBytes(value));
     return {file:'artifacts/'+name+'.'+(result?.extension ?? format),format,sha256:sha256(bytes),bytes};
   }
@@ -567,7 +569,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const {frame,report}=await evaluateAsync(request(options),profile);
     const results=watches.map(([name,{output,node,port}])=>{
       const value=output!==undefined ? frame.outputs[output] : frame.preview(node,port);
-      const artifact=preview(value);
+      const artifact=preview(value,{grayscale:true});
       return { name, value, artifact:artifact && {...artifact,file:'previews/'+name+'.'+artifact.format} };
     });
     const assertions=prepareFrameChecks(frame);
@@ -582,13 +584,13 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     return {passed:checks.every(check=>check.passed),assertions:checks};
   }
 
-  function preview(value) {
+  function preview(value, settings) {
     if (Number.isSafeInteger(value?.sampleRate) && value.samples) {
       try { return encode('preview',value,'wav'); }
       catch { /* Fall through to the generic data preview. */ }
     }
     if (Number.isSafeInteger(value?.width) && value.data) {
-      try { return encode('preview',value,'png'); }
+      try { return encode('preview',value,'png',settings); }
       catch { /* Numeric raster channels can be inspected as JSON. */ }
     }
     try { return encode('preview',value,'json'); }

@@ -92,6 +92,32 @@ ffmpeg -re -i night-current/night-current-input.mp4 -an \
     --out night-current/live --progress
 ```
 
+## Track fixed-camera footage
+
+Capture a clean plate of the empty scene in the same framing, crop and resolution as the processing frame. Save it as a PNG and load it through `pngAsset`. Keep the camera locked and avoid moving backgrounds. The region tracker supports up to 500,000 pixels per frame, so a 640×360 working frame leaves room for its contour budget. Match the plate to `--size` when processing at a lower resolution.
+
+Run the bundled synthetic tabletop example to see the effects of lighting drift, speckle, holes and a brief occlusion.
+
+```sh
+node examples/patch-tooling/footage.cjs ./tabletop
+node cli/ink-studio.js patch run tabletop/tracking.json \
+  --video tabletop/tabletop.mkv --size 320x180 --fps 15 --frames 60 \
+  --watch 'original=original:value,difference=subtract:difference,raw=subtract:value,mask=cleanup:value,ids=ids:value,key=ids:key,raw-tracks=tracking:value,tracks=$tracks,events=tracking:events,picture=$picture' \
+  --out tabletop/take --keep
+```
+
+Open the original, difference, raw mask, clean mask and colored ID PNGs from the same `frames/<index>/previews/` directory. White pixels in a mask are foreground. `key.json` maps each ID color to a number, and the overlay writes those numbers over the footage. Compare `raw-tracks.json` with `tracks.json` to see how much smoothing moved a center or bounding box. `events.json` shows disappearances, reappearances, splits and merges. For exact per-pixel IDs, watch `labels=tracking:labels` to save a numeric JSON raster with `0` for background. That watch can substantially increase the size of a frame archive.
+
+| Node | Settings and ports |
+| --- | --- |
+| `patch.cleanPlate` | `source` and `plate` must have matching dimensions. `difference` is the maximum absolute difference across RGB and alpha coverage in byte levels. `value` thresholds it to a binary mask. Increase `threshold` (1–255, default 30) to suppress small changes. Set `maxDrift` (0–64, default 0) to compensate for a bounded per-channel median offset where most of the opaque frame is background. |
+| `patch.cleanMask` | `source` is thresholded by luma at `threshold` (default 128). `open` removes narrow details and `close` fills small gaps and pinholes. Both are square kernel radii (integer pixels 0–32, defaults 0 and 1). The kernel clips at the image edge. After morphology, `minArea` (default 8) drops smaller foreground regions using `connectivity` (4 or 8, default 4). `value` is the cleaned mask. |
+| `patch.track` | Wire the cleaned mask to `source`. The default luma threshold detects its white pixels. `labels` contains the per-pixel IDs, while `value` contains the raw tracks. Match the `options.connectivity` setting to cleanup if using 8-connected regions. |
+| `patch.trackIds` | Wire in `tracking:labels`. `value` paints each visible ID with a consistent color, and `key` lists the colors and full numeric IDs. |
+| `patch.smoothTracks` | Wire in `tracking:value` and `tracking:generation`. It smooths centers, bounds and velocity for each visible ID, preserving measured area, confidence and contours. Set `halfLife` in seconds (0–10, default 0.1, with 0 passing tracks through) and `snapDistance` in pixels (default 24, with 0 disabling distance-based snaps). The filter starts fresh after an absent track, a tracker reset or a time reset. |
+
+The example exposes `threshold`, `maxDrift`, `minArea` and `halfLife` as named inputs. Pass `--controls controls.json` to adjust them during playback.
+
 ## Author a WGSL node
 
 `patch.shader` accepts a raster, the WGSL source as a string, and an optional numeric `amount`. Insert the shader text into the graph with a JSON edit or by generating an edit journal from a `.wgsl` file. The runtime reuses a compiled pipeline for a shader and set of dimensions within the run.

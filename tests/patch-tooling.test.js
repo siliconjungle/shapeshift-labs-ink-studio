@@ -9,6 +9,7 @@ const {createInterface}=require('node:readline');
 const ink=require('..');
 const PNG=require('../cli/png.js');
 const WAV=require('../cli/wav.js');
+const {patchNodes}=require('../cli/patch-nodes.js');
 
 const cli=path.join(__dirname,'../cli/ink-studio.js');
 function room(t) {
@@ -119,6 +120,102 @@ test('raw-video stdin, WAV FFT, streaming tracking and multiple file previews wo
   assert.equal(read('previews/report.json').frame,2);
   assert.equal(PNG.raster(path.join(dir,'previews/previews/output.png')).w,18);
   assert.notEqual(reports[2].previews.video.sha256,reports[2].previews.output.sha256);
+});
+
+test('footage watches expose the original, subtraction, mask cleanup, IDs and smoothed tracks',t=>{
+  const {dir,write,read,run}=room(t), width=24,height=14;
+  const link=(node,port='value')=>({node,port});
+  write('patch.json',{format:'ink-studio/graph-project',version:1,assets:{plate:{format:'png',file:'plate.png'}},nodes:{
+    original:{op:'patch.video'},
+    reference:{op:'pngAsset',inputs:{name:'plate'}},
+    subtract:{op:'patch.cleanPlate',inputs:{source:link('original'),plate:link('reference'),threshold:10,maxDrift:16}},
+    clean:{op:'patch.cleanMask',inputs:{source:link('subtract')}},
+    tracker:{op:'patch.track',inputs:{source:link('clean')}},
+    ids:{op:'patch.trackIds',inputs:{labels:link('tracker','labels')}},
+    smooth:{op:'patch.smoothTracks',inputs:{tracks:link('tracker'),generation:link('tracker','generation'),halfLife:.1}}
+  },outputs:{tracks:link('smooth')}});
+  const pixel=(x,y)=>(y*width+x)*4;
+  const plate=Buffer.alloc(width*height*4);
+  for (let y=0;y<height;y++) for (let x=0;x<width;x++)
+    plate.set([60+x*4,40+y*6,40+(x+y)%5*22,255],pixel(x,y));
+  plate.set([253,2,65,255],pixel(0,0));
+  fs.writeFileSync(path.join(dir,'plate.png'),PNG.encode(width,height,plate,4));
+  const lit=Buffer.from(plate);
+  for (let p=0;p<lit.length;p+=4) {
+    lit[p]=Math.min(255,lit[p]+11);
+    lit[p+1]=Math.max(0,lit[p+1]-7);
+    lit[p+2]+=6;
+  }
+  const frames=[4,6,null,10].map(left=>{
+    const frame=Buffer.from(lit);
+    frame.set([255,250,230,255],pixel(20,2));
+    if (left!==null) for (let y=4;y<10;y++) for (let x=left;x<left+5;x++) {
+      if (x===left+2 && y===6) continue;
+      frame.set([245,222,44,255],pixel(x,y));
+    }
+    return frame;
+  });
+  run(['run','patch.json','--video','-','--size','24x14','--fps','10','--frames','4','--out','take','--keep',
+    '--watch','original=original:value,delta=subtract:difference,raw=subtract:value,mask=clean:value,ids=ids:value,'+
+      'key=ids:key,labels=tracker:labels,rawTracks=tracker:value,events=tracker:events,smooth=$tracks'],Buffer.concat(frames));
+  const watch=(n,name)=>'take/frames/'+String(n).padStart(6,'0')+'/previews/'+name;
+  const image=(n,name)=>PNG.raster(path.join(dir,watch(n,name+'.png'))).data;
+  const data=(n,name)=>read(watch(n,name+'.json'));
+  assert.deepEqual([...image(0,'original')],[...frames[0]]);
+  assert.equal(image(0,'delta')[pixel(0,0)],0);
+  assert(image(0,'delta')[pixel(4,4)]>=10);
+  assert.equal(image(0,'raw')[pixel(20,2)],255);
+  assert.equal(image(0,'mask')[pixel(20,2)],0);
+  assert.equal(image(0,'raw')[pixel(6,6)],0);
+  assert.equal(image(0,'mask')[pixel(6,6)],255);
+  const [first]=data(0,'smooth'), [raw]=data(1,'rawTracks'), [smooth]=data(1,'smooth');
+  assert.equal(raw.id,first.id);
+  assert.equal(smooth.id,first.id);
+  assert(Math.abs(smooth.center[0] - first.center[0] - 1) < 1e-9);
+  assert.equal(smooth.center[1],first.center[1]);
+  assert(Math.abs(smooth.bounds.x - first.bounds.x - 1) < 1e-9);
+  assert(Math.abs(smooth.velocity[0] - 10) < 1e-9);
+  assert.deepEqual(smooth.contours,raw.contours);
+  const [entry]=data(1,'key');
+  assert.equal(entry.id,smooth.id);
+  assert.deepEqual([...image(1,'ids').slice(pixel(8,6),pixel(8,6)+3)],entry.rgb);
+  assert.equal(data(1,'labels').data[6*width+8],entry.id);
+  assert.deepEqual(data(2,'smooth'),[]);
+  assert.equal(data(2,'events')[0].type,'disappear');
+  assert.equal(data(3,'events')[0].type,'reappear');
+  assert.equal(data(3,'smooth')[0].id,first.id);
+  assert.deepEqual(data(3,'smooth'),data(3,'rawTracks'));
+  assert.deepEqual(data(3,'key'),data(1,'key'));
+});
+
+test('mask opening clips its kernel at the edge and label colors keep full IDs',()=>{
+  const nodes=patchNodes(ink.load());
+  const width=7,height=5;
+  const data=Uint8Array.from({length:width*height},(_,p)=>p%width<3 || p===2*width+3 || p%width===6 ? 255 : 0);
+  const mask=nodes['patch.cleanMask'].run({source:{width,height,channels:1,data},
+    threshold:128,open:1,close:0,minArea:1,connectivity:4}).value;
+  assert.deepEqual([...mask.data],[...Uint8Array.from(data,(_,p)=>p%width<3 ? 255 : 0)]);
+  const input={width:4,height:1,channels:1,data:Uint32Array.of(0,1,257,0xffffffff)};
+  const {value,key}=nodes['patch.trackIds'].run({labels:input});
+  assert.deepEqual(key.map(entry=>entry.id),[1,257,0xffffffff]);
+  assert.equal(new Set(key.map(entry=>entry.rgb.join(','))).size,3);
+  assert.deepEqual([...value.data],[0,0,0,...key.flatMap(entry=>entry.rgb)]);
+  assert.throws(()=>nodes['patch.cleanPlate'].run({source:input,plate:{...input,height:2},threshold:30,maxDrift:0}),
+    /matching dimensions/);
+});
+
+test('track smoothing snaps on jumps, generation changes, and a reset clock',()=>{
+  const run=patchNodes(ink.load())['patch.smoothTracks'].instantiate();
+  const track=x=>({id:1,center:[x+1,1],bounds:{x,y:0,width:2,height:2},velocity:[0,0]});
+  const update=(x,time,generation=0,halfLife=1)=>run({tracks:[track(x)],halfLife,snapDistance:10,generation},{time}).value[0];
+  assert.deepEqual(update(0,0),track(0));
+  assert.deepEqual(update(2,1),track(1));
+  assert.deepEqual(update(16,2),track(16));
+  assert.deepEqual(update(18,3,1),track(18));
+  assert.deepEqual(update(19,4,1,0),track(19));
+  assert.deepEqual(update(20,0,1),track(20));
+  run.clear();
+  assert.deepEqual(update(21,1,1),track(21));
 });
 
 test('controls update at a frame boundary and invalid changes keep the last valid value',async t=>{

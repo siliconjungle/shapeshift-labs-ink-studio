@@ -1,3 +1,5 @@
+const { footageNodes } = require('./patch-footage.js');
+
 const options = { type: 'record', default: {} };
 const scalar = value => ({ type: 'number', default: value });
 const raster = { value: 'raster' };
@@ -7,6 +9,7 @@ function patchNodes(kit, media = {}, gpu) {
   const P = kit.KIT.procedural;
   const after = (source, accent, opacity = 1) => P.raster.blend(source, accent, { opacity });
   return {
+    ...footageNodes(P),
     'patch.video': {
       inputs: {}, outputs: raster, time: true, description: 'Read the current RGBA frame from the patch video source.',
       run() {
@@ -39,19 +42,22 @@ function patchNodes(kit, media = {}, gpu) {
       }
     },
     'patch.track': {
-      inputs: { source: 'raster', options }, outputs: { value: 'array<record>', labels: 'raster', events: 'array<record>' },
+      inputs: { source: 'raster', options },
+      outputs: { value: 'array<record>', labels: 'raster', events: 'array<record>', generation: 'number' },
       time: true, description: 'Track regions from successive raster frames with persistent IDs.',
       instantiate() {
-        let tracker, last = -Infinity, shape, settings;
+        let tracker, last = -Infinity, shape, settings, generation = 0;
         const run = ({ source, options }, { time }) => {
           const size = source.width + 'x' + source.height;
-          if (!tracker || time <= last || shape !== size || settings !== options)
-            tracker = P.pixelEffects.createRegionTracker(options);
+          const reset = !tracker || time <= last || shape !== size || settings !== options;
+          const active = reset ? P.pixelEffects.createRegionTracker(options) : tracker;
+          const { value, labels, events } = active.update(source, time);
+          if (tracker && reset) generation++;
+          tracker = active;
           last = time; shape = size; settings = options;
-          const { value, labels, events } = tracker.update(source, time);
-          return { value, labels, events };
+          return { value, labels, events, generation };
         };
-        run.clear = () => { tracker = undefined; };
+        run.clear = () => { tracker = undefined; generation = 0; };
         return run;
       }
     },
