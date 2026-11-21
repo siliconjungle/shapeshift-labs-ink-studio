@@ -159,6 +159,12 @@ project and held as a snapshot for the life of the session. The plan and runs
 share a hash of the project, resolved group definitions, and asset bytes.
 Host operation implementations are supplied separately.
 
+Use `{"format":"indexed-png","file":"sprite.png"}` with
+`indexedPngAsset` to keep the PNG's original palette slot numbers,
+including duplicate swatches. The node returns the one-channel slot
+raster as `value`, the ordered swatches as `palette`, and per-pixel
+opacity bytes as `alpha`.
+
 ### Outputs and CI
 
 Declare `exports` as a map of artifact names to `{ "output": "name", "format": "json" }`,
@@ -542,7 +548,8 @@ ink-studio graph run raster-palette-review/raster-palette.json --out raster-pale
 These graph nodes take a typed `source` raster. The library exposes the
 same operations under `ink.load().KIT.procedural.pixelEffects`. Colour
 effects return straight-alpha RGBA8 at the source dimensions. Tile
-scrambling preserves the source channel count and sample values. Add
+scrambling preserves the source channel count and sample values. Bitplane
+effects also expose the edited palette indices. Add
 transparent canvas margin before an effect when its coverage needs room
 outside the original image.
 
@@ -558,6 +565,7 @@ outside the original image.
 | `fx.pixelSort` | Sort contiguous eligible pixels along a horizontal, vertical, diagonal, or antidiagonal `axis`. Choose a `key`, optional inclusive `range`, `order`, and `minLength`. An aligned raster `mask` can limit sorting further. |
 | `fx.tileScramble` | Copy, omit, or swap whole tiles on a fixed grid. Set `tileSize`, `mode`, `amount`, `seed`, `rate`, and an optional `mask`. The `addresses` output shows where each destination tile reads from. |
 | `fx.tileBleed` | Replace selected whole tiles with tiles from a separate `bank` raster. Set `tileSize`, `amount`, `seed`, `rate`, and optional `mask` and `bankMask`. The `addresses` output identifies donor tiles. |
+| `fx.bitplane` | Flip a bit, clear a bit, or borrow a bit from an aligned `bank` of palette indices. Connect a one-channel `source` and its ordered `palette`. Outputs RGBA `value` and edited `indices`. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
@@ -648,6 +656,36 @@ the graph time and seed unless overridden in `options`.
 
 The [cross-bank tile study](../examples/cross-bank-tile-bleed.cjs) shows
 independent banks made from sprite art and an animated camera atlas.
+
+### Corrupt a palette bitplane
+
+```js
+const { value, indices } = KIT.procedural.pixelEffects.bitplane(spriteIndices, palette, {
+  mode: 'borrow', bit: 1, bank: donorIndices, bankBit: 0, mask: damagedArea
+});
+```
+
+- Slots use the supplied palette order, from zero through the last
+  swatch. A `-1` sentinel stays transparent. Both `bit` and `bankBit`
+  range from 0 (least significant) to 7. The default mode is `"flip"` on
+  bit zero. `"clear"` forces the selected bit to zero. `"borrow"` copies
+  `bankBit` (default `bit`) from the matching pixel in the aligned,
+  one-channel bank. A donor sample of `-1` keeps the source bit.
+- The optional aligned `mask` uses `maskChannel` (default `"luma"`) and
+  `maskThreshold` (default 128) for a binary selection. A bit change that
+  references a slot outside the supplied palette keeps the original slot.
+- Supply an aligned, one-channel `alpha` raster of bytes to carry source
+  opacity through the effect. Fully transparent samples are excluded
+  from corruption. The RGBA output uses exact swatches and the original
+  pixel grid.
+- In a graph, link `palette.resolve.indices` and `palette.resolve.palette`
+  into `fx.bitplane` to start from RGB art, or use `indexedPngAsset` for
+  existing indexed art. Link its `alpha` output into `options` through
+  `data.record` to preserve partial transparency. Use the node's `bank`
+  socket for borrowing.
+
+The [bitplane study](../examples/bitplane-corruption.cjs) compares all three
+modes on the same four-color sprite.
 
 ### Trace paths and points
 

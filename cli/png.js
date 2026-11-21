@@ -129,8 +129,11 @@ function decode(file, capturePalette) {
   const entries = table?.length / 3;
   if (color === 3 && (!Number.isInteger(entries) || entries < 1 || entries > 2 ** bits || transparency?.length > entries))
     throw new Error('Invalid indexed PNG palette');
-  const counts = capturePalette && color === 3 ? new Uint32Array(entries) : null;
-  const out = counts ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);
+  const readIndices = capturePalette === 'indices';
+  if (readIndices && color !== 3) throw new Error('Indexed PNG asset needs a palette-indexed PNG');
+  const slots = readIndices ? new Uint8Array(w * h) : null;
+  const counts = capturePalette === true && color === 3 ? new Uint32Array(entries) : null;
+  const out = counts || slots ? null : bits === 16 ? new Uint16Array(w * h * 4) : new Uint8Array(w * h * 4);
   const sampleMask = (1 << bits) - 1, max = color === 3 ? 255 : sampleMask;
   const bpp = Math.ceil(ch * bits / 8);
   const passLayouts = interlace ? [[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]] : [[0,0,1,1]];
@@ -172,6 +175,7 @@ function decode(file, capturePalette) {
           const index = sample(src);
           if (index >= entries) throw new Error('PNG references a colour outside its palette');
           if (counts) counts[index]++;
+          else if (slots) slots[dst / 4] = index;
           else {
             out[dst] = table[index*3]; out[dst+1] = table[index*3+1]; out[dst+2] = table[index*3+2];
             out[dst+3] = transparency?.[index] ?? 255;
@@ -189,10 +193,19 @@ function decode(file, capturePalette) {
       prev.set(row);
     }
   }
+  if (slots) {
+    const dimensions = {width:w,height:h,channels:1};
+    return {
+      value: {...dimensions,data:slots},
+      alpha: {...dimensions,data:Uint8Array.from(slots,index=>transparency?.[index] ?? 255)},
+      palette: Array.from({length:entries},(_,index)=>table.readUIntBE(index*3,3))
+    };
+  }
   if (counts) return { w, h, bitDepth: bits, indexed: { table, transparency, counts } };
   return { w, h, data: out, max, ...(capturePalette && { bitDepth: bits }) };
 }
 function raster(file) { return decode(file, false); }
+function indexedRaster(file) { return decode(file, 'indices'); }
 function paletteSource(file) { return decode(file, true); }
 function read(file) {
   const { w, h, data, max } = raster(file);
@@ -251,4 +264,4 @@ function encodeAnimation(frames, fps) {
 function animate(file, frames, fps) {
   fs.writeFileSync(file, encodeAnimation(frames.map(packFrame), fps));
 }
-module.exports = { encode, encodeGray, write, writeIndexed, read, raster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };
+module.exports = { encode, encodeGray, write, writeIndexed, read, raster, indexedRaster, paletteSource, animate, packFrame, packRGBA, encodeFrame, encodeAnimation, animationDelay };

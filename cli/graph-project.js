@@ -173,6 +173,14 @@ function nativeOperations(kit, assets) {
     random:{outputs:{value:'number'},run(_,ctx){return {value:kit.KIT.grow.dice(ctx.seed)()};}},
     ...require('./graph-render.js').graph3DOperations(kit),
     pngAsset:asset('image', entry => entry.format==='png'),
+    indexedPngAsset:{
+      inputs:{name:'string'},outputs:{value:'raster',palette:'palette',alpha:'raster'},
+      run({name}) {
+        const entry=assets.get(name);
+        if (entry?.format!=='indexed-png') throw new RangeError('Unknown indexed PNG graph asset '+name);
+        return entry.value;
+      }
+    },
     jsonAsset:asset('any', entry => entry.format==='json'),
     audioAsset:asset('audio', entry => entry.type==='audio'),
     rasterAsset:asset('raster', entry => entry.type==='raster'),
@@ -258,7 +266,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
     const {format,file,type,codec,options}=fields(definition,
       definition?.format==='codec' ? ['format','file','type','codec','options'] : ['format','file'],'graph asset '+name);
-    if (!['png','json','wav','inputs','codec'].includes(format) || typeof file!=='string' || !file)
+    if (!['png','indexed-png','json','wav','inputs','codec'].includes(format) || typeof file!=='string' || !file)
       throw new TypeError('Graph assets need a PNG, JSON, WAV, input recording or hosted codec file');
     const full=path.resolve(baseDir,file);
     paths.add(full);
@@ -270,6 +278,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
       const {w,h,data,max}=PNG.raster(bytes);
       value={width:w,height:h,data:max===255 ? data : Uint8Array.from(data,n=>Math.round(n*255/max))};
       kind='raster';
+    } else if (format==='indexed-png') {
+      value=PNG.indexedRaster(bytes);
     } else if (format==='wav') {
       value=WAV.decode(bytes);
       kind='audio';
@@ -295,7 +305,7 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     if (expandedNodes>maxNodes) throw new RangeError('Expanded graph exceeds its '+maxNodes+' node budget');
     const compiled=graph.create(spec,{operations:ops,groups,planOnly:true}), plan=compiled.plan();
     for (const {id,op,inputs} of plan.nodes) {
-      if (ops[op]!==stock[op] || !['pngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset'].includes(op) ||
+      if (ops[op]!==stock[op] || !['pngAsset','indexedPngAsset','jsonAsset','audioAsset','rasterAsset','inputAsset'].includes(op) ||
           inputs.name.source.kind!=='value') continue;
       const node=spec.nodes[id], definition=node.inputs?.name ?? node.params?.name;
       const name=record(definition) ? definition.value : definition;
