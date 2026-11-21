@@ -235,10 +235,12 @@
       }
     },
     'music.renderTransitions': {
-      description: 'Render timed adaptive music intents with entry and exit markers, layered cues, bridges and stingers.',
-      inputs:{sources:'record',timeline:'record',intents:scoreRequests,assets:options,options},
+      description: 'Render adaptive score transitions, layered cues and stingers, with optional world cue rhythms and space.',
+      inputs:{sources:'record',timeline:'record',intents:scoreRequests,assets:options,options,worldEvents:scoreRequests},
       outputs:{value:'audio',stems:'record',report:'record'},
-      run({sources,timeline,intents,assets,options}) {
+      run({sources,timeline,intents,assets,options,worldEvents}) {
+        if (worldEvents.length) options={...options,world:{...options.world,
+          events:[...(options.world?.events ?? []),...worldEvents]}};
         return P.musicProduction.renderTimeline(sources,timeline,intents,assets,options);
       }
     },

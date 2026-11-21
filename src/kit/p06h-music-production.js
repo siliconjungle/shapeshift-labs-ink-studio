@@ -232,6 +232,11 @@
       notes.sort((a,b)=>a.time-b.time);
       events[name]=notes;
     }
+    applyChokes(tracks,events);
+    return {arrangement:plan,events,end,program,clock,tracks,room,gain};
+  }
+
+  function applyChokes(tracks,events) {
     const chokeGroups=new Map();
     for (const [name,track] of Object.entries(tracks)) if (track.mix.choke) {
       const group=track.mix.choke, rows=chokeGroups.get(group) ?? [];
@@ -247,7 +252,6 @@
         if (next!==Infinity) rows[i].choke=Math.min(rows[i].choke ?? next,next);
       }
     }
-    return {arrangement:plan,events,end,program,clock,tracks,room,gain};
   }
 
   function sampleAt(time,rate) {
@@ -367,5 +371,5 @@
       [name,track.gestures.map(({curves,mixers,...placement})=>placement)]));
     return P.data.freeze({arrangement,events:json(events),duration:end,...(Object.keys(gestures).length && {gestures})});
   }
-  P.musicProduction=Object.freeze({compile,renderCompiled,render,inspect,grooveAt});
+  P.musicProduction=Object.freeze({compile,renderCompiled,render,inspect,grooveAt,applyChokes});
 })(KIT.procedural);

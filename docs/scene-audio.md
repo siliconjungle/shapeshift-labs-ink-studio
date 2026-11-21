@@ -77,7 +77,9 @@ All file paths are relative to the soundtrack document.
   maps a section's authored layer level to an additional loop. The section
   `fade` sets transition fades in seconds. Cue intents play the resource
   as a one-shot. A cue resource also defined as a spatial cue can use the
-  intent's emitter.
+  intent's emitter. For an instrument production, `music.production.world`
+  lets named scene cues trigger percussion phrases and make room for effects
+  or silence. [Arrange scene sound with the score](music-world-score.md)
 - **Tracks.** Place a WAV or a named `audio` port from a graph. A graph asset
   can set `time`, `seed`, and `inputs`. Tracks accept `time`, `duration`,
   source `offset`, `gain`, playback `rate`, and `loop`. A looping track

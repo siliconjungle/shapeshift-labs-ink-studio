@@ -45,11 +45,13 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         !record(row) || !Object.values(row).every(token))))
     throw new TypeError('Invalid soundtrack music binding');
   const production=music?.production;
-  if (production!==undefined && (!fields(production,['sources','timeline','assets']) ||
+  if (production!==undefined && (!fields(production,['sources','timeline','assets','world']) ||
       !record(production.sources) || !record(production.timeline) ||
       !finite(production.timeline.end,.001,300) ||
+      production.world!==undefined && !fields(production.world,['rhythms','space']) ||
       !record(production.assets ?? {}) || !Object.values(production.assets ?? {}).every(token)))
     throw new TypeError('An adaptive production needs named sources, an authored timeline, and optional sample assets');
+  const captureWorld=production?.world===undefined ? null : K.procedural.musicWorldScore.captureSettings(production.world);
   if (proceduralScore !== undefined && (!fields(proceduralScore,['system','score','gain']) ||
       (proceduralScore.system === undefined) === (proceduralScore.score === undefined) ||
       proceduralScore.system !== undefined && !token(proceduralScore.system) ||
@@ -69,8 +71,9 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     const voices = bed.map(voice => ({ ...voice }));
     const cues = timeline?.audioSchedule(clock) ?? [];
     const looping = new Map(), resolved = new Map(), positional = [];
-    let next = 0, score = [], knots = 0, generated, produced, entry;
-    const productionIntents=[];
+    let next = 0, score = [], knots = 0, generated, produced, entry, worldReport;
+    const productionIntents=[], worldEvents=[];
+    const cueLimit=captureWorld ? Math.max(end,Math.ceil((production.timeline.end+captureWorld.lookAhead)*sampleRate)) : end;
     function resolve(name) {
       if (name === synthAsset) return generated;
       if (name === productionAsset) return produced;
@@ -98,25 +101,46 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       if (target.at(-1)?.sample === row.sample) target.pop();
       target.push(row);
     }
+    function capture(cue, row, level = 1) {
+      const rule=captureWorld?.cues.get(cue), time=row.first/sampleRate;
+      if (!rule || level<=0 || time-rule.attack>=production.timeline.end) return;
+      if (worldEvents.length>=8192) throw new RangeError('World score exceeds its cue budget');
+      let duration;
+      if (rule.duration) {
+        const source=resolve(row.asset);
+        const available=(source.samples.length/source.channels/source.sampleRate-(row.offset ?? 0))/(row.rate ?? 1);
+        duration=Math.max(0,Math.min(available,row.end===undefined ? Infinity : (row.end-row.first)/sampleRate));
+        if (!duration) return;
+      }
+      worldEvents.push({cue,time:{numerator:row.first,denominator:sampleRate},strength:Math.min(1,level),
+        ...(duration!==undefined && {duration})});
+    }
     function shot(voice, ear, sample, stem) {
       const time = sample + Math.round(voice.delay * sampleRate);
-      if (voice.gain > 0) push({ stem, asset: voice.asset, first: time, offset: voice.offset, rate: voice.rate,
-        points: [point(voice, ear, time, true)] });
+      if (voice.gain<=0) return;
+      const row={stem,asset:voice.asset,first:time,offset:voice.offset,rate:voice.rate};
+      if (stem!=='music') capture(voice.cue,row,voice.gain);
+      if (time<end) push({...row,points:[point(voice,ear,time,true)]});
     }
     function cueFrame(query, sample, nextSample, ear) {
-      while (next < cues.length && cues[next].firstSample < nextSample && cues[next].firstSample < end) {
+      while (next < cues.length && cues[next].firstSample < nextSample && cues[next].firstSample < cueLimit) {
         const row = cues[next++], { cue, firstSample: first, endSample } = row;
         const configured = mixer?.cue({ query, listener, cue, gain: row.gain, pitch: row.rate });
         if (!configured) {
-          push({ stem: 'timeline', asset: cue, first, end: endSample, offset: row.offset,
-            gain: row.gain, rate: row.rate });
+          const voice={stem:'timeline',asset:cue,first,end:endSample,offset:row.offset,gain:row.gain,rate:row.rate};
+          capture(cue,voice,row.gain);
+          if (first<end) push(voice);
         } else if (endSample === undefined) {
           shot({ ...configured, offset: row.offset }, ear, first, 'timeline');
         } else {
           const delay = Math.round(configured.delay * sampleRate);
-          const voice = push({ stem: 'timeline', asset: configured.asset, first: first + delay, end: endSample + delay,
-            offset: row.offset, rate: configured.rate, points: [] });
-          positional.push({ cue, gain: row.gain, pitch: row.rate, voice });
+          const voice={stem:'timeline',asset:configured.asset,first:first+delay,end:endSample+delay,
+            offset:row.offset,rate:configured.rate,points:[]};
+          capture(cue,voice,configured.gain);
+          if (voice.first<end) {
+            push(voice);
+            positional.push({cue,gain:row.gain,pitch:row.rate,voice});
+          }
         }
       }
       for (let i = positional.length - 1; i >= 0; i--) {
@@ -148,11 +172,11 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
           }
           append(track.points, point(voice, state.listener, sample));
         }
-        for (const voice of state.cues) shot(voice, state.listener, sample, 'spatial');
       }
+      for (const voice of state?.cues ?? []) shot(voice,state.listener,sample,'spatial');
       for (const event of events) if (music && event.system === music.system) {
         if (production && (event.kind==='music-transition' || event.kind==='music-cue')) {
-          productionIntents.push({ ...event,time:event.time ?? time });
+          if ((event.time ?? time)<production.timeline.end) productionIntents.push({...event,time:event.time ?? time});
           continue;
         }
         const at = event.time === time ? sample : stamp(event.time ?? time);
@@ -169,8 +193,8 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       const period = initial.world.takeClock?.simulationRate === undefined ? T.period(dt) :
         T.div(T.read(1), T.read(initial.world.takeClock.simulationRate));
       const at = tick => sampleOf(T.mul(T.read(tick), period));
-      const replayEnd=production && production.timeline.end>T.seconds(sequence.endPoint) ?
-        T.read(production.timeline.end) : sequence.endPoint;
+      const scoreEnd=production && production.timeline.end+(captureWorld?.lookAhead ?? 0);
+      const replayEnd=scoreEnd>T.seconds(sequence.endPoint) ? T.read(scoreEnd) : sequence.endPoint;
       const limit = -T.index(T.roundDown(T.div(T.sub(T.read(0), replayEnd), period)));
       if (initial.tick !== 0 || limit > 120000) throw new RangeError('Sound world needs tick zero and a bounded replay range');
       if (music) {
@@ -206,12 +230,17 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
           Object.hasOwn(sources[initial.source]?.tracks ?? {},name)));
         const liveTimeline={...timeline,segments:{...timeline.segments,
           [timeline.entry]:{...initial,layers:{...initial.layers,...liveLayers}}}};
-        produced=K.music.production.renderTimeline(sources,liveTimeline,productionIntents,sourcesByName,
-          {sampleRate,start:{numerator:start,denominator:sampleRate},end:{numerator:stop,denominator:sampleRate}}).value;
+        const result=K.music.production.renderTimeline(sources,liveTimeline,productionIntents,sourcesByName,
+          {sampleRate,start:{numerator:start,denominator:sampleRate},end:{numerator:stop,denominator:sampleRate},
+            ...(captureWorld && {world:{...production.world,events:worldEvents}})});
+        produced=result.value;
+        worldReport=result.report.world;
         push({stem:'music',asset:productionAsset,first:start,end:stop,gain:music.gain});
       }
     }
-    return mix(voices.filter(row => row.first < end), resolve, { start, end, sampleRate, gain });
+    const result=mix(voices.filter(row => row.first < end), resolve, { start, end, sampleRate, gain });
+    if (worldReport) result.report.worldScore=worldReport;
+    return result;
   }
   return Object.freeze({ render });
 }

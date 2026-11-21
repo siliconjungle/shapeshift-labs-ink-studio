@@ -161,7 +161,7 @@
   }
 
   function renderTimeline(sources,spec,intents,assets={},options={}) {
-    check(fields(options,['sampleRate','start','end','stems']),'Invalid production timeline render options');
+    check(fields(options,['sampleRate','start','end','stems','world']),'Invalid production timeline render options');
     const timeline=schedule(sources,spec,intents,assets);
     const {sampleRate=48000,start:beginPoint=0,end:endPoint=timeline.duration,stems=false}=options;
     const start=T.seconds(T.read(beginPoint)),end=T.seconds(T.read(endPoint));
@@ -169,20 +169,36 @@
       finite(end,start,timeline.duration) && end>start && typeof stems==='boolean','Invalid production timeline range');
     const begin=sample(beginPoint,sampleRate),last=sample(endPoint,sampleRate),count=last-begin;
     check(count>0 && count<=16e6,'Production timeline exceeds its sample budget');
+    const world=options.world===undefined ? null : P.musicWorldScore.prepare(options.world,timeline,spec,sampleRate,begin,last);
     const value={sampleRate,channels:2,samples:new Float32Array(count*2)}, buffers={}, cache=new Map();
+    const envelopes=new Map();
     let cached=0, work=0;
     for (const clip of timeline.placements) {
       const first=sample(clip.at,sampleRate), span=sample(clip.to,sampleRate)-sample(clip.from,sampleRate);
       if (first>=last || first+span+Math.ceil(clip.tail*sampleRate)<=begin) continue;
+      const additions=world?.additions.get(clip);
       const key=JSON.stringify([clip.source,clip.from,clip.to,clip.tail,clip.layers]);
-      if (!cache.has(key)) {
-        const music=timeline.compiled[clip.source];
+      let tracks=additions ? undefined : cache.get(key);
+      if (!tracks) {
+        let music=timeline.compiled[clip.source];
+        if (additions) {
+          const events=Object.fromEntries(Object.entries(music.events).map(([name,notes])=>{
+            const response=additions[name] ?? [];
+            return [name,[...notes.map(note=>({...note})),...response.map((note,i)=>({...note,roundRobin:notes.length+i}))]
+              .sort((a,b)=>a.time-b.time)];
+          }));
+          A.applyChokes(music.tracks,events);
+          music={...music,events};
+        }
         const render=A.renderCompiled(music,{start:clip.from,end:clip.to,sampleRate,tail:clip.tail,stems:true,layers:clip.layers});
-        cached+=Object.values(render.stems).reduce((sum,stem)=>sum+stem.samples.length,0);
+        tracks=render.stems;
+        cached+=Object.values(tracks).reduce((sum,stem)=>sum+stem.samples.length,0);
         check(cached<=48e6,'Production timeline exceeds its source audio budget');
-        cache.set(key,render.stems);
+        if (!additions) cache.set(key,tracks);
       }
-      for (const [part,stem] of Object.entries(cache.get(key))) {
+      for (const [part,stem] of Object.entries(tracks)) {
+        if (world && !envelopes.has(part)) envelopes.set(part,world.envelope(part));
+        const envelope=envelopes.get(part);
         const level=clip.gain;
         if (!level) continue;
         if (stems && !Object.hasOwn(buffers,part)) {
@@ -196,6 +212,7 @@
           let gain=level;
           if (clip.fadeIn) gain*=Math.sin(Math.PI*.5*clamp(i/(clip.fadeIn*sampleRate)));
           if (i>=span && clip.tail) gain*=Math.cos(Math.PI*.5*clamp((i-span)/(clip.tail*sampleRate)));
+          if (envelope) gain*=envelope.values[i+first-envelope.first] ?? 1;
           const at=(i+first-begin)*2, l=stem.samples[2*i]*gain, r=stem.samples[2*i+1]*gain;
           value.samples[at]+=l; value.samples[at+1]+=r;
           if (dry) {dry[at]+=l;dry[at+1]+=r;}
@@ -204,6 +221,7 @@
     }
     return {value,stems:buffers,report:{start,end,sampleRate,placements:timeline.placements,markers:timeline.markers,
       ...(timeline.themes && {themes:timeline.themes}),
+      ...(world && {world:world.report}),
       ...(A.meters(value))}};
   }
   P.musicProduction=Object.freeze({...A,renderTimeline});

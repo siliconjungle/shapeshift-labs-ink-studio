@@ -121,6 +121,10 @@ instrument keys to named soundtrack assets. The score is replayed through
 the end of the production timeline so that a trimmed take includes any
 bridge scheduled just after its endpoint.
 
+[Arrange scene sound with the score](music-world-score.md) to turn world
+cues into percussion phrases and reserve space in the music for effects
+or silence.
+
 ## Import a SoundFont patch
 
 ```sh
