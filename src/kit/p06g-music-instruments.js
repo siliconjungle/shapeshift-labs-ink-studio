@@ -73,9 +73,30 @@
     }};
   }
 
+  function keys(raw) {
+    const {type,env,...settings}=raw;
+    const e=envelope(env);
+    const p=options(settings,{tine:[.5,0,1],bite:[.5,0,1],dust:[.07,0,.25],wear:[.16,0,1],
+      color:[.5,0,1],drive:[1.3,.2,6]});
+    return {prepare(note,rate,gate) {
+      const color=note.play.brightness ?? p.color, velocity=note.velocity, salt=note.salt;
+      const brightness=(.35+.65*color)*(.35+.65*velocity);
+      const partial=(ratio,gain)=>gain*clamp((.5-note.frequency*ratio/rate)*12);
+      const second=partial(1.999,.20*p.tine), third=partial(3.998,.38*p.bite*brightness);
+      const strike=partial(6.84,.26*p.bite*brightness);
+      return {duration:gate+e.release,signal(t,frame) {
+        const turn=phase(note,t)+p.wear*.042*(1-Math.cos(tau*.84*t));
+        const body=.8*sin(turn)+second*sin(turn*1.999+.063)*Math.exp(-t*3.4);
+        const hammer=strike*sin(turn*6.84)*Math.exp(-t*35)+third*sin(turn*3.998)*Math.exp(-t*10);
+        const dust=(noise(frame,salt)+noise(frame-1,salt))*p.dust*.5*Math.exp(-t*45);
+        return Math.tanh(p.drive*(body+hammer+dust))*velocity**.82*level(e,t,gate);
+      }};
+    }};
+  }
+
   function drum(raw) {
     const {type,kind, ...settings}=raw;
-    check(['kick','snare','hat','rim','metal'].includes(kind),'Unknown synthetic drum');
+    check(['kick','snare','hat','rim','metal','brush'].includes(kind),'Unknown synthetic drum');
     const p=options(settings,{tune:[kind==='kick'?49:184,20,1600],decay:[.19,.02,2],
       click:[kind==='kick'?.12:.61,0,1],color:[.55,0,1],sweep:[80,0,500]});
     return {prepare(note,rate) {
@@ -93,6 +114,14 @@
           case 'snare': value=(.38*body*Math.exp(-19*t)+p.click*hiss*(.7+.3*velocity))*Math.exp(-4*t/duration); break;
           case 'rim': value=(ring*.73+edge*p.click)*Math.exp(-8*t/duration); break;
           case 'metal': value=(ring*.66+hiss*p.click)*Math.exp(-3.6*t/duration); break;
+          case 'brush': {
+            const sweep=Math.sin(Math.PI*clamp(t/duration))**.72;
+            const grains=(.66+.24*sin(t*79+velocity)+.1*sin(t*137))*.92;
+            const scrape=(n1+n2)*.19+edge*(.16+.32*hardness);
+            value=scrape*(sweep*grains+p.click*Math.exp(-t*29))+
+              ring*.22*velocity*Math.exp(-t*23);
+            break;
+          }
           default: value=(edge*.72+ring*.18)*Math.exp(-4*t/duration);
         }
         return value*amp*clamp(t*(kind==='kick'?660:1800))*clamp((duration-t)*250);
@@ -153,6 +182,7 @@
     check(record(raw),'Expected a music instrument');
     if (raw.type==='sample') return sampler(raw,assets);
     if (raw.type==='drum') return drum(raw);
+    if (raw.type==='keys') return keys(raw);
     check(['fm','analog'].includes(raw.type),'Unknown music instrument type');
     return synth(raw);
   }

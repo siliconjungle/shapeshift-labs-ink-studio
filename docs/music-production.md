@@ -8,6 +8,8 @@ and an eight-bar arc. Its recorded drum assets are credited with their source
 and license in the [sample directory](../examples/music-production/samples/CREDITS.md).
 Use [theme development](music-themes.md) to carry a motif between roles
 and make adaptive returns depend on what has already played.
+Use [patch gestures](music-gestures.md) to rehearse different performances
+of the written notes.
 
 ## Instruments and performance
 
@@ -20,7 +22,8 @@ Degree-based events still follow the part's pitch mapping.
 | --- | --- |
 | `analog` | Harmonic body, color, detuned width in cents, grain, drive, and an attack/decay/sustain/release envelope |
 | `fm` | The same envelope and texture controls, plus modulator ratio, index, and index decay |
-| `drum` | Kick, snare, hat, rim, or metal synthesis with pitch, decay, sweep, and transient controls |
+| `keys` | Tine and strike synthesis with velocity-dependent bite, dust, wear, and an amplitude envelope |
+| `drum` | Kick, snare, hat, rim, metal, or brush synthesis with pitch, decay, and transient controls |
 | `sample` | Ordered zones with list of asset names, optional root pitch and key range, velocity interval, named articulation, gain in dB, tuning in cents, one-shot playback or a gated loop |
 
 Pass WAV assets by name in the CLI recipe's `assets` record. Graph and JavaScript

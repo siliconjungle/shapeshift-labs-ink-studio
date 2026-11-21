@@ -61,7 +61,7 @@ function writeTake(folder,value,stems,report,production,paths) {
 }
 
 module.exports=function command([mode,file,config],opt,kit) {
-  if (!file) throw new TypeError('Use music production themes, analyze, suggest, revise, render, audition or timeline with a recipe');
+  if (!file) throw new TypeError('Use music production performances, themes, analyze, suggest, revise, render, audition or timeline with a recipe');
   const recipe=read(file);
   const {sources,paths,timeline}=mode==='timeline' ? timelineBank(recipe,file) : {paths:assetPaths(recipe,file)};
   const assets=Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,WAV.read(file)]));
@@ -69,6 +69,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.music.production;
   let value;
   if (mode==='inspect') value=P.inspect(production,assets);
+  else if (mode==='performances') value=P.planPerformances(production,config ? read(config) : recipe.performances,assets);
   else if (mode==='themes' && config)
     value={...P.developThemes(production,read(config),assets),...(recipe.assets && {assets:paths})};
   else if (mode==='analyze') value=P.analyze(production,assets,config ? read(config) : recipe.options);
@@ -83,9 +84,10 @@ module.exports=function command([mode,file,config],opt,kit) {
     const folder=path.resolve(opt.out);
     if (mode==='audition') {
       const variants=config ? read(config) : recipe.variants;
-      const normalized=Array.isArray(variants) ? variants : variants?.variants && [
-        {id:'reference'},...variants.variants.map(row=>row.revision)
-      ];
+      const rows=Array.isArray(variants) ? variants : variants?.variants;
+      const suggested=!Array.isArray(variants) && Array.isArray(rows) && (!rows.length || rows.some(row=>row?.revision));
+      const normalized=suggested ?
+        [{id:'reference'},...rows.map(row=>row.revision)] : rows;
       const result=P.audition(production,normalized,assets,recipe.options);
       const entries=result.takes.map(take=>{
         writeTake(path.join(folder,take.id),take.value,take.stems,take.report,take.production,paths);

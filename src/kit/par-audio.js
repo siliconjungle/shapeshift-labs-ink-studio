@@ -216,6 +216,15 @@
           stems:Object.fromEntries(result.takes.map(take=>[take.id,take.stems])),report:result.report};
       }
     },
+    'music.planPerformances': {
+      description: 'Prepare patch-gesture alternatives that retain the score for audition.',
+      inputs:{source:'record',takes:'array<record>',assets:options},
+      outputs:{value:'record',variants:'array<record>',report:'record'},
+      run({source,takes,assets}) {
+        const value=P.musicProduction.planPerformances(source,takes,assets);
+        return {value,variants:value.variants,report:value.report};
+      }
+    },
     'music.developThemes': {
       description: 'Place related theme fragments, developments and statements across a production and report their performed events.',
       inputs:{source:'record',plan:'record',assets:options},

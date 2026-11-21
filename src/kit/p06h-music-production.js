@@ -1,6 +1,6 @@
 /* An arranged cue with independent performance, instrumentation and mix. */
 (function (P) {
-  const C=P.musicComposer, H=P.musicHarmony, T=P.takeTime, I=P.musicInstruments;
+  const C=P.musicComposer, H=P.musicHarmony, T=P.takeTime, I=P.musicInstruments, G=P.musicGestures;
   const {record,fields,finite,integer,id,check,clamp,db,hash}=I;
   const epsilon=1e-8;
   const number=(raw,key,fallback,low,high)=>{
@@ -170,7 +170,7 @@
       return [name,audio];
     }));
     check(Object.values(assetMap).reduce((sum,asset)=>sum+asset.samples.length,0)<=32e6,'Instrument samples exceed their budget');
-    const patches=Object.fromEntries(table(source.patches,64,'patch').map(([name,patch])=>[name,I.compile(patch,assetMap)]));
+    const patches=Object.fromEntries(table(source.patches,64,'patch').map(([name,patch])=>[name,G.patch(patch,assetMap)]));
     const gain=db(number(source,'gain',0,-48,12));
     const roomSpec=source.room ?? {};
     check(fields(roomSpec,['gain','size','decay','damping']),'Invalid production room');
@@ -178,7 +178,7 @@
       decay:number(roomSpec,'decay',.42,.05,2),damping:number(roomSpec,'damping',.65,0,1)};
     const tracks=Object.fromEntries(table(source.tracks,8,'production track').map(([name,raw])=>{
       check(name!=='room' && Object.hasOwn(plan.parts,name) &&
-        fields(raw,['patch','gain','pan','highpass','lowpass','send','groove','pad','choke','duck']) &&
+        fields(raw,['patch','gain','pan','highpass','lowpass','send','groove','pad','choke','duck','gestures']) &&
         Object.hasOwn(patches,raw.patch) && (raw.choke===undefined || id(raw.choke)), 'Track needs a score part and an instrument patch');
       check(raw.duck===undefined || fields(raw.duck,['from','depth','release']),'Invalid ducking settings');
       const duck=raw.duck && {from:raw.duck.from,depth:number(raw.duck,'depth',4,0,18),
@@ -187,7 +187,9 @@
       const mix={gain:db(number(raw,'gain',0,-60,18)), pan:number(raw,'pan',0,-1,1),
         highpass:number(raw,'highpass',0,0,4000),lowpass:number(raw,'lowpass',20000,80,24000),
         send:number(raw,'send',0,0,1),choke:raw.choke,duck};
-      return [name,{patch:raw.patch,play:patches[raw.patch],mix,
+      const patch=patches[raw.patch];
+      return [name,{patch:raw.patch,play:patch.player,mix,echo:patch.echo,color:patch.color,
+        gestures:G.score(raw.gestures,patch,plan,clock),
         groove:groove(raw.groove),pad:raw.pad===undefined ? null : pad(raw.pad,plan.sections)}];
     }));
     check(Object.keys(tracks).length>0,'A production needs at least one track');
@@ -195,20 +197,35 @@
     let eventCount=0;
     for (const [name,track] of Object.entries(tracks)) {
       const rows=scoreRows(plan,program,clock,name,track.pad), g=track.groove;
-      const notes=[], last=new Map();
+      const notes=[], last=new Map(), lastNotes=new Map();
       for (const row of rows) {
         if (row.midi===null || !row.frequency || !row.velocity) continue;
-        const beatStyle=grooveAt(g,row.beat), play=row.play;
-        const time=Math.max(0,row.time+beatStyle.delay+(play.delay ?? 0)), velocity=clamp(row.velocity*beatStyle.accent);
+        const beatStyle=grooveAt(g,row.beat), style=G.perform(track.gestures,row.beat,row.play,track.color);
+        let play=style.play;
+        const time=Math.max(0,row.time+beatStyle.delay+(play.delay ?? 0));
+        const connection=round(time);
+        const velocity=clamp(row.velocity*beatStyle.accent*style.accent);
         const gate=Math.max(.001,(row.end-row.time)*(play.gate ?? 1));
         const voice=row.voice ?? 0, retrigger=play.retrigger ?? 1, fromFrequency=last.get(voice);
+        const previous=lastNotes.get(voice);
+        const connected=style.legato && velocity>0 && plan.parts[name].role!=='percussion' &&
+          !track.pad && previous?.velocity>0 && connection<end && connection>previous.time+.005 &&
+          connection-previous.time-previous.gate<=.14;
+        if (connected) {
+          previous.gate=connection-previous.time;
+          previous.choke=connection+.012;
+          if (play.glide===undefined) play={...play,glide:.05};
+        }
         last.set(voice,row.frequency);
         for (let r=0;r<retrigger;r++) {
           const onset=round(time+r*gate/retrigger);
           if (onset>=end) continue;
           const salt=hash([source.seed ?? 0,name,round(row.beat),voice,r]);
-          notes.push({part:name,beat:round(row.beat),time:onset,gate:gate/retrigger,midi:row.midi,
-            frequency:row.frequency,velocity,play,fromFrequency,salt,roundRobin:notes.length});
+          const note={part:name,beat:round(row.beat),time:onset,gate:gate/retrigger,midi:row.midi,
+            frequency:row.frequency,velocity,play,fromFrequency,salt,roundRobin:notes.length,
+            ...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
+          notes.push(note);
+          lastNotes.set(voice,note);
           check(++eventCount<=32768,'Production exceeds its event budget');
         }
       }
@@ -227,7 +244,7 @@
       for (let i=rows.length-1;i>=0;i--) {
         const at=rows[i].time;
         if (rows[i+1]?.time>at) next=rows[i+1].time;
-        if (next!==Infinity) rows[i].choke=next;
+        if (next!==Infinity) rows[i].choke=Math.min(rows[i].choke ?? next,next);
       }
     }
     return {arrangement:plan,events,end,program,clock,tracks,room,gain};
@@ -267,6 +284,8 @@
         }
       }
       const desk=track.mix, panL=Math.sqrt((1-desk.pan)/2), panR=Math.sqrt((1+desk.pan)/2);
+      const automation=G.automate(track.gestures,{gain:0,pan:desk.pan,cutoff:desk.lowpass,echo:track.echo?.send ?? 0},sampleRate);
+      const echo=G.tapeEcho(track.echo,sampleRate);
       const coefficient=frequency=>1-Math.exp(-2*Math.PI*Math.min(sampleRate*.49,frequency)/sampleRate);
       const high=coefficient(desk.highpass), low=coefficient(desk.lowpass);
       const dry=stems ? new Float32Array(n*2) : null;
@@ -275,16 +294,27 @@
       const gain=desk.gain*music.gain*(layers[name] ?? 1);
       for (let i=0;i<stop;i++) {
         const index=2*i, time=i/sampleRate;
+        const settings=automation?.(time), cutoff=settings ? coefficient(settings.cutoff) : low;
         let l=data[index],r=data[index+1], volume=gain;
         highL+=(l-highL)*high; highR+=(r-highR)*high;
-        lowL+=(l-highL-lowL)*low; lowR+=(r-highR-lowR)*low;
+        lowL+=(l-highL-lowL)*cutoff; lowR+=(r-highR-lowR)*cutoff;
         if (anchors?.length) {
           while (hit+1<anchors.length && anchors[hit+1].time<=time) hit++;
           const dt=time-anchors[hit].time;
           if (dt>=0 && dt<6*desk.duck.release)
             volume*=db(-desk.duck.depth*anchors[hit].velocity*clamp(dt/.005)*Math.exp(-dt/desk.duck.release));
         }
-        l=lowL*volume*panL; r=lowR*volume*panR;
+        if (settings) {
+          volume*=db(settings.gain);
+          l=lowL*volume*Math.sqrt((1-settings.pan)/2);
+          r=lowR*volume*Math.sqrt((1+settings.pan)/2);
+        } else {
+          l=lowL*volume*panL; r=lowR*volume*panR;
+        }
+        if (echo) {
+          const wet=echo(i,l,r,settings?.echo ?? track.echo.send);
+          l+=wet[0]; r+=wet[1];
+        }
         feed[index]+=l*desk.send; feed[index+1]+=r*desk.send;
         if (i<begin) continue;
         const at=2*(i-begin);
@@ -332,8 +362,10 @@
 
   function render(source,assets,options) {return renderCompiled(compile(source,assets),options);}
   function inspect(source,assets) {
-    const {arrangement,events,end}=compile(source,assets);
-    return P.data.freeze({arrangement,events:json(events),duration:end});
+    const {arrangement,events,end,tracks}=compile(source,assets);
+    const gestures=Object.fromEntries(Object.entries(tracks).filter(([,track])=>track.gestures.length).map(([name,track])=>
+      [name,track.gestures.map(({curves,mixers,...placement})=>placement)]));
+    return P.data.freeze({arrangement,events:json(events),duration:end,...(Object.keys(gestures).length && {gestures})});
   }
   P.musicProduction=Object.freeze({compile,renderCompiled,render,inspect,grooveAt});
 })(KIT.procedural);

@@ -1,0 +1,858 @@
+{
+  "brittle": {
+    "id": "brittle",
+    "patches": {
+      "relay-pluck": {
+        "type": "fm",
+        "ratio": 2.015,
+        "index": 2.2,
+        "indexDecay": 0.095,
+        "color": 0.66,
+        "body": 0.1,
+        "width": 2,
+        "drive": 1.22,
+        "env": {
+          "attack": 0.004,
+          "decay": 0.13,
+          "sustain": 0.29,
+          "release": 0.16
+        },
+        "articulations": {
+          "muted": {
+            "index": 1.25,
+            "env": {
+              "decay": 0.075,
+              "sustain": 0.19,
+              "release": 0.066
+            }
+          },
+          "ring": {
+            "index": 3.04,
+            "env": {
+              "decay": 0.19,
+              "sustain": 0.32,
+              "release": 0.185
+            }
+          },
+          "drift": {
+            "index": 1.43,
+            "width": 12,
+            "env": {
+              "attack": 0.009,
+              "sustain": 0.41,
+              "release": 0.27
+            }
+          }
+        },
+        "echo": {
+          "delay": 0.276,
+          "feedback": 0.48,
+          "damping": 0.56,
+          "wow": 0.34,
+          "flutter": 0.19,
+          "width": 0.64
+        },
+        "gestures": {
+          "strike-and-dissolve": {
+            "articulation": [
+              [
+                0,
+                "muted"
+              ],
+              [
+                0.48,
+                "ring"
+              ],
+              [
+                0.81,
+                "drift"
+              ]
+            ],
+            "cutoff": [
+              [
+                0,
+                780
+              ],
+              [
+                0.28,
+                1140
+              ],
+              [
+                0.46,
+                2100
+              ],
+              [
+                0.55,
+                9900
+              ],
+              [
+                0.76,
+                12400
+              ],
+              [
+                1,
+                2600
+              ]
+            ],
+            "gate": [
+              [
+                0,
+                0.61
+              ],
+              [
+                0.34,
+                0.66
+              ],
+              [
+                0.52,
+                1.07
+              ],
+              [
+                0.86,
+                1.25
+              ],
+              [
+                1,
+                1.19
+              ]
+            ],
+            "brightness": [
+              [
+                0,
+                0.32
+              ],
+              [
+                0.34,
+                0.49
+              ],
+              [
+                0.53,
+                0.87
+              ],
+              [
+                0.73,
+                0.86
+              ],
+              [
+                1,
+                0.5
+              ]
+            ],
+            "vibrato": [
+              [
+                0,
+                0
+              ],
+              [
+                0.53,
+                0
+              ],
+              [
+                0.78,
+                12
+              ],
+              [
+                1,
+                22
+              ]
+            ],
+            "gain": [
+              [
+                0,
+                -2.4
+              ],
+              [
+                0.41,
+                -1.2
+              ],
+              [
+                0.55,
+                0.85
+              ],
+              [
+                0.76,
+                0
+              ],
+              [
+                1,
+                -3
+              ]
+            ],
+            "pan": [
+              [
+                0,
+                -0.22
+              ],
+              [
+                0.45,
+                -0.14
+              ],
+              [
+                0.79,
+                0.24
+              ],
+              [
+                1,
+                0.36
+              ]
+            ],
+            "echo": [
+              [
+                0,
+                0
+              ],
+              [
+                0.49,
+                0
+              ],
+              [
+                0.62,
+                0.11
+              ],
+              [
+                0.77,
+                0.36
+              ],
+              [
+                1,
+                0.73
+              ]
+            ]
+          }
+        }
+      },
+      "relay-bass": {
+        "type": "analog",
+        "body": 0.64,
+        "color": 0.68,
+        "drive": 1.9,
+        "env": {
+          "attack": 0.008,
+          "decay": 0.19,
+          "sustain": 0.63,
+          "release": 0.088
+        },
+        "gestures": {
+          "clip-and-slide": {
+            "legato": [
+              [
+                0,
+                false
+              ],
+              [
+                0.5,
+                true
+              ]
+            ],
+            "gate": [
+              [
+                0,
+                0.39
+              ],
+              [
+                0.36,
+                0.51
+              ],
+              [
+                0.5,
+                1.34
+              ],
+              [
+                0.76,
+                1.28
+              ],
+              [
+                1,
+                1.1
+              ]
+            ],
+            "glide": [
+              [
+                0,
+                0
+              ],
+              [
+                0.47,
+                0
+              ],
+              [
+                0.53,
+                0.107
+              ],
+              [
+                1,
+                0.07918
+              ]
+            ],
+            "cutoff": [
+              [
+                0,
+                768
+              ],
+              [
+                0.48,
+                960
+              ],
+              [
+                0.7,
+                1392
+              ],
+              [
+                1,
+                922
+              ]
+            ],
+            "accent": [
+              [
+                0,
+                0.9
+              ],
+              [
+                0.45,
+                1
+              ],
+              [
+                0.6,
+                1.05
+              ],
+              [
+                1,
+                0.89
+              ]
+            ]
+          }
+        }
+      },
+      "relay-metal": {
+        "type": "sample",
+        "zones": [
+          {
+            "samples": [
+              "metal-soft"
+            ],
+            "velocity": [
+              0,
+              0.52
+            ],
+            "gain": 11
+          },
+          {
+            "samples": [
+              "metal-hit",
+              "metal-alt"
+            ],
+            "velocity": [
+              0.52,
+              1
+            ],
+            "gain": -2,
+            "levels": [
+              0,
+              7.5
+            ]
+          }
+        ]
+      }
+    },
+    "tracks": {
+      "lead": {
+        "patch": "relay-pluck",
+        "gain": -12,
+        "lowpass": 11500,
+        "highpass": 140,
+        "pan": -0.2,
+        "send": 0.26
+      },
+      "bass": {
+        "patch": "relay-bass",
+        "gain": -12.5
+      },
+      "metal": {
+        "patch": "relay-metal"
+      }
+    }
+  },
+  "dust": {
+    "id": "dusty",
+    "patches": {
+      "felt-tines": {
+        "type": "keys",
+        "tine": 0.69,
+        "bite": 0.57,
+        "dust": 0.145,
+        "wear": 0.53,
+        "color": 0.45,
+        "drive": 1.29,
+        "env": {
+          "attack": 0.008,
+          "decay": 0.32,
+          "sustain": 0.35,
+          "release": 0.34
+        },
+        "articulations": {
+          "soft": {
+            "bite": 0.22,
+            "dust": 0.09,
+            "env": {
+              "decay": 0.15,
+              "sustain": 0.24,
+              "release": 0.115
+            }
+          },
+          "struck": {
+            "bite": 0.85,
+            "tine": 0.76,
+            "env": {
+              "decay": 0.35,
+              "sustain": 0.32,
+              "release": 0.31
+            }
+          },
+          "float": {
+            "wear": 0.65,
+            "bite": 0.39,
+            "env": {
+              "attack": 0.017,
+              "decay": 0.43,
+              "release": 0.44
+            }
+          }
+        },
+        "echo": {
+          "delay": 0.351,
+          "feedback": 0.35,
+          "damping": 0.84,
+          "wow": 0.57,
+          "flutter": 0.11,
+          "width": 0.52
+        },
+        "gestures": {
+          "lean-and-release": {
+            "articulation": [
+              [
+                0,
+                "soft"
+              ],
+              [
+                0.44,
+                "struck"
+              ],
+              [
+                0.77,
+                "float"
+              ]
+            ],
+            "cutoff": [
+              [
+                0,
+                1130
+              ],
+              [
+                0.43,
+                1620
+              ],
+              [
+                0.52,
+                6500
+              ],
+              [
+                0.73,
+                4100
+              ],
+              [
+                1,
+                1830
+              ]
+            ],
+            "gate": [
+              [
+                0,
+                0.71
+              ],
+              [
+                0.4,
+                0.8
+              ],
+              [
+                0.51,
+                1.12
+              ],
+              [
+                1,
+                1.27
+              ]
+            ],
+            "brightness": [
+              [
+                0,
+                0.38
+              ],
+              [
+                0.4,
+                0.54
+              ],
+              [
+                0.53,
+                0.82
+              ],
+              [
+                1,
+                0.34
+              ]
+            ],
+            "gain": [
+              [
+                0,
+                -1.5
+              ],
+              [
+                0.34,
+                -0.75
+              ],
+              [
+                0.5,
+                0.6
+              ],
+              [
+                1,
+                -2
+              ]
+            ],
+            "pan": [
+              [
+                0,
+                -0.28
+              ],
+              [
+                0.49,
+                -0.08
+              ],
+              [
+                0.73,
+                0.12
+              ],
+              [
+                1,
+                0.29
+              ]
+            ],
+            "echo": [
+              [
+                0,
+                0
+              ],
+              [
+                0.49,
+                0.02
+              ],
+              [
+                0.7,
+                0.18
+              ],
+              [
+                0.91,
+                0.43
+              ],
+              [
+                1,
+                0.56
+              ]
+            ]
+          }
+        }
+      },
+      "round-bass": {
+        "type": "analog",
+        "body": 0.37,
+        "color": 0.5,
+        "drive": 1.22,
+        "env": {
+          "attack": 0.009,
+          "decay": 0.22,
+          "sustain": 0.56,
+          "release": 0.11
+        },
+        "gestures": {
+          "soft-slide": {
+            "legato": [
+              [
+                0,
+                false
+              ],
+              [
+                0.5,
+                true
+              ]
+            ],
+            "gate": [
+              [
+                0,
+                0.39
+              ],
+              [
+                0.36,
+                0.51
+              ],
+              [
+                0.5,
+                1.34
+              ],
+              [
+                0.76,
+                1.28
+              ],
+              [
+                1,
+                1.1
+              ]
+            ],
+            "glide": [
+              [
+                0,
+                0
+              ],
+              [
+                0.47,
+                0
+              ],
+              [
+                0.53,
+                0.079
+              ],
+              [
+                1,
+                0.05846
+              ]
+            ],
+            "cutoff": [
+              [
+                0,
+                576
+              ],
+              [
+                0.48,
+                720
+              ],
+              [
+                0.7,
+                1044
+              ],
+              [
+                1,
+                691
+              ]
+            ],
+            "accent": [
+              [
+                0,
+                0.9
+              ],
+              [
+                0.45,
+                1
+              ],
+              [
+                0.6,
+                1.05
+              ],
+              [
+                1,
+                0.89
+              ]
+            ]
+          }
+        }
+      },
+      "brush-drum": {
+        "type": "drum",
+        "kind": "brush",
+        "tune": 167,
+        "decay": 0.28,
+        "click": 0.85,
+        "color": 0.48,
+        "articulations": {
+          "short": {
+            "decay": 0.13,
+            "click": 0.87
+          },
+          "sweep": {
+            "decay": 0.35,
+            "click": 0.52,
+            "color": 0.63
+          }
+        },
+        "gestures": {
+          "push-pull": {
+            "articulation": [
+              [
+                0,
+                "short"
+              ],
+              [
+                0.48,
+                "sweep"
+              ],
+              [
+                0.82,
+                "short"
+              ]
+            ],
+            "cutoff": [
+              [
+                0,
+                3200
+              ],
+              [
+                0.51,
+                7200
+              ],
+              [
+                1,
+                2800
+              ]
+            ],
+            "accent": [
+              [
+                0,
+                0.81
+              ],
+              [
+                0.62,
+                1.06
+              ],
+              [
+                1,
+                0.84
+              ]
+            ],
+            "pan": [
+              [
+                0,
+                0.12
+              ],
+              [
+                1,
+                0.32
+              ]
+            ]
+          }
+        }
+      },
+      "brush-tick": {
+        "type": "drum",
+        "kind": "brush",
+        "tune": 224,
+        "decay": 0.088,
+        "click": 0.67,
+        "color": 0.64
+      },
+      "brush-sweep": {
+        "type": "drum",
+        "kind": "brush",
+        "tune": 216,
+        "decay": 0.43,
+        "click": 0.3,
+        "color": 0.44
+      },
+      "felt-kick": {
+        "type": "drum",
+        "kind": "kick",
+        "tune": 45,
+        "decay": 0.194,
+        "click": 0.089,
+        "color": 0.35,
+        "sweep": 87
+      },
+      "dust-bed": {
+        "type": "analog",
+        "body": 0.24,
+        "width": 19,
+        "grain": 0.17,
+        "color": 0.35,
+        "drive": 0.75,
+        "env": {
+          "attack": 0.24,
+          "decay": 0.53,
+          "sustain": 0.38,
+          "release": 0.37
+        }
+      }
+    },
+    "tracks": {
+      "lead": {
+        "patch": "felt-tines",
+        "gain": -10,
+        "pan": -0.2,
+        "lowpass": 6300,
+        "highpass": 142,
+        "send": 0.38,
+        "gestures": [
+          {
+            "gesture": "lean-and-release",
+            "from": 0,
+            "to": 16
+          }
+        ]
+      },
+      "bass": {
+        "patch": "round-bass",
+        "gain": -12,
+        "lowpass": 1300,
+        "gestures": [
+          {
+            "gesture": "soft-slide",
+            "from": 0,
+            "to": 16
+          }
+        ]
+      },
+      "snare": {
+        "patch": "brush-drum",
+        "gain": -5,
+        "pan": 0.15,
+        "highpass": 143,
+        "lowpass": 6400,
+        "send": 0.31,
+        "gestures": [
+          {
+            "gesture": "push-pull",
+            "from": 0,
+            "to": 16
+          }
+        ]
+      },
+      "hat": {
+        "patch": "brush-tick",
+        "gain": -14,
+        "lowpass": 5300,
+        "highpass": 590,
+        "pan": 0.36
+      },
+      "metal": {
+        "patch": "brush-sweep",
+        "gain": -13,
+        "pan": -0.36,
+        "highpass": 360,
+        "lowpass": 5700,
+        "send": 0.5
+      },
+      "kick": {
+        "patch": "felt-kick",
+        "gain": -9,
+        "lowpass": 3900
+      },
+      "pad": {
+        "patch": "dust-bed",
+        "gain": -22,
+        "lowpass": 2100,
+        "send": 0.58
+      }
+    },
+    "room": {
+      "gain": -3.8,
+      "size": 1.26,
+      "decay": 0.78,
+      "damping": 0.6
+    }
+  }
+}
