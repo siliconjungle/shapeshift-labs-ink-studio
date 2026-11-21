@@ -16,6 +16,40 @@
       ]
     },
     {
+      "id": "studio.webgpu-graph",
+      "kind": "api",
+      "status": "ready",
+      "title": "Run WebGPU texture and geometry graphs with WGSL",
+      "what": "Compile a dependency graph of GPU texture and buffer passes, dispatch selected outputs, and use the resulting resources in WebGPU draw pipelines or read them back for inspection.",
+      "use": "createWebGPUGraph(device, { resources, nodes })",
+      "where": "webgpu.mjs, docs/webgpu-graphs.md, examples/webgpu-graphs/",
+      "tags": [
+        "gpu",
+        "webgpu",
+        "compute",
+        "wgsl",
+        "texture",
+        "geometry"
+      ]
+    },
+    {
+      "id": "studio.gaussian-import",
+      "kind": "api",
+      "status": "ready",
+      "title": "Import Gaussian PLY and SPZ splat clouds",
+      "what": "Read coordinates, covariance inputs, opacity and spherical harmonics from Graphdeco PLY or Niantic SPZ, then preview the cloud in Ink's existing browser or headless renderer.",
+      "use": "ink-studio render <cloud.ply|cloud.spz> --raw --out preview.png",
+      "where": "src/gaussian-splats.mjs, docs/webgpu-graphs.md",
+      "tags": [
+        "splat",
+        "gaussian",
+        "point cloud",
+        "ply",
+        "spz",
+        "import"
+      ]
+    },
+    {
       "id": "studio.webgl",
       "kind": "api",
       "status": "ready",

@@ -38,6 +38,8 @@ const num = (k, d) => (opt[k] === undefined ? d : +opt[k]),
   list = (k, d) => (opt[k] === undefined ? d : String(opt[k]).split(',').map(Number));
 let A = null;
 const importedAssets = new Map();
+const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
+const gaussianScenes = new Map();
 const lib = () => A || (A = cfg.load ? cfg.load() : require('../index.js').load());
 // a diorama by its id, or a file in lab/ that exports (kit) => ({ id, name, seed, build })
 /* a mesh file is a diorama too: fitted to --size, coloured from its own materials, baked and looked at like the rest */
@@ -161,6 +163,11 @@ function scene(id) {
   if (!id) die('which diorama? try: ink-studio scenes');
   if (opt['environment-preset'] !== undefined && !id.endsWith('.json'))
     die('--environment-preset selects a preset for a JSON diorama');
+  if (gaussianFile(id)) {
+    const descriptor = gaussianScenes.get(id);
+    if (!descriptor) throw new Error('Gaussian input is supported by render, turn, sheet, clip and snap');
+    return descriptor;
+  }
   if (/\.(obj|gltf|glb)$/i.test(id)) return meshScene(id);
   if (id.endsWith('.json')) return dataScene(id);
   if (id.endsWith('.js')) return require(path.resolve(id))(lib());
@@ -1012,6 +1019,7 @@ const CMD = {
         '  ghost <id> [--t 2 --spacing 0.12 --n 2 | --ghosts 1.6,1.8]   one moment with those either side laid faintly over it',
         '  acts                        the ready clips, reactions, easings and cues, by name',
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
+        '  render <file.ply|.spz> --raw   render a Gaussian splat cloud without palette quantization',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
@@ -3529,6 +3537,20 @@ async function run() {
     await worldCLI().execute(cmd,pos);
     shotReplay?.verify();
     return;
+  }
+  const splatFiles = cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip'].includes(cmd)
+    ? pos.slice(0, 1).filter(gaussianFile) : [];
+  if (splatFiles.length) {
+    const ink = require('../index.js');
+    const { gaussianSplatWorld } = await import('../src/gaussian-splats.mjs');
+    for (const file of new Set(splatFiles)) {
+      const cloud = await ink.readGaussianSplat(path.resolve(file));
+      const name = path.basename(file), id = name.replace(/\W+/g, '-');
+      gaussianScenes.set(file, {
+        id, name, seed: 1,
+        build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up })
+      });
+    }
   }
   if (/\.glb$/i.test(pos[0] || '') && opt.uv !== 'off') {
     try {

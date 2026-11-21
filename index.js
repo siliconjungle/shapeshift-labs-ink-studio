@@ -79,6 +79,10 @@ module.exports = {
   // refuse-to-build check: code written after a // comment on the same line never runs. Returns the offending lines
   lint: require('./scripts/lint.js'),
   // a mesh file from disk, by its ending: .obj (with the .mtl beside it), .gltf (with its .bin files), .glb
+  readGaussianSplat: require('./cli/gaussian-splats.js').readGaussianSplat,
+  async gaussianSplatWorld(cloud, options) {
+    return (await import('./src/gaussian-splats.mjs')).gaussianSplatWorld(cloud, options);
+  },
   readMesh(file, { attributes = false } = {}) {
     const K = module.exports.load().KIT,
       ext = path.extname(file).toLowerCase(),

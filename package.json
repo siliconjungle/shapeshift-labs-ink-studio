@@ -8,6 +8,7 @@
   "files": [
     "index.js",
     "webgl.mjs",
+    "webgpu.mjs",
     "src/",
     "cli/",
     "scripts/",
