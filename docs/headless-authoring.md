@@ -940,6 +940,9 @@ either axis with `edgeU` or `edgeV`.
 | `warp.grid` | Set `control.columns`, `rows`, and row-major `points` for the destination lattice. The source is a regular grid. |
 | `warp.polar` | Set `mode: "fromPolar"` to wrap a strip into a disc or annulus. Set `"toPolar"` to unwrap one. Strip X is angle and strip Y is radius. Set `center`, `radii` as fractions of the shorter disc dimension, `angle` in turns, and `clockwise`. |
 | `warp.displace` | Supply a numeric `map` of one channel or an X/Y pair. Subtract `center` and multiply by the two `scale` values in `pixels` or `normalized` units. A positive displacement moves the image toward positive coordinates. |
+| `warp.opticalFlow` | Estimate [dense motion](#dense-optical-flow) between aligned `before` and `after` rasters. Returns signed XY displacement and a separate `confidence` raster. |
+| `warp.flow` | Pull a `source` raster through a backward `motion` field, with optional `confidence`. Returns the result and its inverse UV `field`. |
+| `warp.flowPoints` | Advance an `array<vec2>` of `points` through a forward `motion` field, with optional `confidence`. |
 | `warp.refract` | Supply a height raster in `map`. Choose its `channel`, `heightScale`, refractive `index`, and ray `depth` in pixels. Local height gradients bend the sampling ray. |
 | `warp.morph` | Supply rasters `a` and `b` and a mesh `control` with landmarks for both. `amount` moves the landmarks and blends the aligned images. Use a named parameter or keyframed value to animate it. |
 
@@ -948,6 +951,52 @@ Mesh, grid, polar, displacement, and refraction nodes expose their
 raster, or export it as JSON. For mesh, grid, polar, and morph set
 `options.width` and `height` to change output dimensions. Displacement
 and refraction use the map's dimensions.
+
+### Dense optical flow
+
+`rasterWarp.opticalFlow(before, after, options)` estimates motion for
+each pixel from image intensity. It uses coarse-to-fine matching and
+subpixel refinement based on the [Lucas–Kanade method](https://www.cs.princeton.edu/courses/archive/spring03/cs496/papers/lucas_kanade.pdf)
+and [Bouguet's pyramid formulation](https://web.stanford.edu/class/cs231m/references/pyr-lucas-kanade-feature-tracker-bouget.pdf).
+The `value` raster has two signed channels in pixels per frame pair.
+Positive X points right and positive Y points down. `confidence` is a
+0–1 heuristic based on local contrast in both axes and the remaining
+intensity difference. Flat patches and motion outside the frame have
+low confidence.
+
+The default `direction: "forward"` maps points on the earlier image to
+the later one. Use `direction: "backward"` to estimate the reverse field
+on the later image. The default `channel: "luma"` weights color by alpha
+for alpha-bearing rasters. Use `channel: "alpha"` for silhouette motion.
+`sampleRange` defaults to `[0, 255]`. The solver also accepts `levels`,
+`radius`, `iterations`, `search` for the coarse correspondence search,
+`maxMotion` in pixels, and `regularization`. Frames use matching dimensions
+and a 500,000-pixel budget.
+
+Use forward flow with `rasterWarp.flowPoints(points, motion, options)`
+or query it at continuous pixel coordinates with
+`rasterWarp.flowSampler(motion, options)(x, y)`. Pixel centers are at
+`x + 0.5, y + 0.5`. Use backward flow with
+`rasterWarp.flow(source, motion, options)` to advect ink or texture
+using the same filtering and edge settings as `warp.sample`. Both
+accept `scale` and optionally gate movement with `confidence` and
+`minConfidence` (0.15 by default). A gated pixel or point holds its
+original coordinate.
+
+Pass an array of backward fields to the `anim.feedback` node's `flow`
+input to advect retained ink. Entry zero maps feedback tick 1 into tick
+0. Supply one field per subsequent simulation tick. At ticks beyond the
+array the feedback uses its authored warp alone. `options.flowScale`
+scales the displacement. Use the same `flow` and `flowScale` settings
+in a standalone raster feedback recipe.
+
+The [browser study](../examples/dense-optical-flow.cjs) shows opposing motion,
+ink and particles driven by the measured field, and a comparison of
+fixed and flow-driven feedback.
+
+```sh
+node examples/dense-optical-flow.cjs optical-flow.html
+```
 
 ### Per-pixel time
 
@@ -1093,7 +1142,7 @@ port to hide a layer during that hold.
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |
 | `anim.spriteDesync` | Composite a layered raster `source` with independent frame holds or offsets on named parts and pixel rectangles. Returns RGBA `value` and the sampled `frames`. |
 | `anim.retime` | Sample a reusable graph named by `group` at the time mapped by its `timing` input. The group retains its inputs and outputs and owns its independent simulation caches. Pass `timing.time` to feed an explicit time, such as an item from `anim.stagger`. |
-| `anim.feedback` | Evolve an input array of raster `frames` at a fixed simulation `dt`. Set source `fps` and playback `mode`, signal `halfLife`, `gain`, optional `threshold`, `warp`, `filter`, and timed reset `cuts`. Returns an isolated RGBA signal to composite using existing raster nodes. |
+| `anim.feedback` | Evolve raster `frames` at a fixed simulation `dt`. Set source `fps` and `mode`, signal `halfLife` and `gain`, and optional `threshold`, `warp`, `filter`, and `cuts`. Feed [backward motion](#dense-optical-flow) into `flow` to advect the retained signal. |
 
 ### Desynchronize sprite fragments
 

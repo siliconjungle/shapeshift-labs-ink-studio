@@ -2,7 +2,7 @@
 (function (P) {
   const { kinds, size, int, range, clamp, buffer, raster } = P.rasterSimSupport;
   kinds.feedback = (settings, recipe, firstTick) => {
-    const { frames, fps = 1 / recipe.dt, mode = 'hold', cuts = [], ...pass } = settings;
+    const { frames, fps = 1 / recipe.dt, mode = 'hold', cuts = [], flow = [], flowScale = 1, ...pass } = settings;
     if (Object.keys(pass).some(key => !['halfLife', 'filter', 'warp', 'gain', 'threshold', 'opacity'].includes(key)))
       throw new TypeError('Unknown raster feedback setting');
     if (!Array.isArray(frames) || !int(frames.length, 1, 512) || !Array.isArray(cuts) || cuts.length > 4096 ||
@@ -11,6 +11,13 @@
     const dims = size(frames[0], 262144), { width: w, height: h } = dims, length = w * h * 4;
     if (length * frames.length > 16e6 || !frames.every(frame => frame.width === w && frame.height === h))
       throw new RangeError('Feedback frames need a common size within the raster budget');
+    if (!Array.isArray(flow) || flow.length > recipe.maxTicks || flow.length * w * h * 2 > 4e6 ||
+        !range(flowScale, -1024, 1024)) throw new RangeError('Feedback flow exceeds its frame, sample or scale budget');
+    const motion = flow.map(field => {
+      if (field?.width !== w || field.height !== h || (field.channels ?? 2) !== 2)
+        throw new RangeError('Feedback needs aligned two-channel backward flow');
+      return buffer(field.data, w * h * 2, -16384, 16384);
+    });
     const image = frames.map(frame => FrameComposite.pixels({ w, h, rgba: P.raster.rgba(frame).data }).data);
     const node = RenderGraph.prepare({ passes: [{ ...pass, id: 'signal', type: 'feedback' }] }).passes[0];
     const { halfLife, warp, filter, gain, threshold, opacity } = node;
@@ -18,6 +25,7 @@
     let state = new Uint8Array(length);
     function step(tick, dt) {
       const elapsed = tick * dt, source = image[P.animationGraph.frameIndex(image.length, elapsed, { fps, mode }).index];
+      const displacement = motion[tick - 1];
       const out = new Uint8Array(length), previous = new Float64Array(4), old = { data: state, w, h, filter };
       const decay = tick === 0 || cutTicks.has(tick) ? 0 : Math.pow(.5, dt / halfLife);
       const { pivot, blockSize, transform: [c, s], offset, wave, theta, frequency } =
@@ -26,8 +34,10 @@
         const x = ix + .5, y = iy + .5, u = x - pivot[0], v = y - pivot[1];
         const qx = blockSize ? (Math.floor(x / blockSize) + .5) * blockSize : x;
         const qy = blockSize ? (Math.floor(y / blockSize) + .5) * blockSize : y;
-        const sx = pivot[0] + c * u + s * v - offset[0] - wave[0] * Math.sin(qy * frequency + theta);
-        const sy = pivot[1] - s * u + c * v - offset[1] - wave[1] * Math.sin(qx * frequency + theta);
+        const sx = pivot[0] + c * u + s * v - offset[0] - wave[0] * Math.sin(qy * frequency + theta) +
+          (displacement ? flowScale * displacement[q / 2] : 0);
+        const sy = pivot[1] - s * u + c * v - offset[1] - wave[1] * Math.sin(qx * frequency + theta) +
+          (displacement ? flowScale * displacement[q / 2 + 1] : 0);
         previous.fill(0);
         if (decay && sx >= 0 && sy >= 0 && sx < w && sy < h) FrameComposite.sample(old, sx, sy, previous);
         let weight = gain;

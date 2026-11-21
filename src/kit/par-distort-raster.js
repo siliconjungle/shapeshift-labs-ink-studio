@@ -2,6 +2,7 @@
 (function(P) {
   const W=P.rasterWarp, {prepareTime}=P.rasterWarpSupport;
   const options={type:'record',default:{}}, mapped={value:'raster',field:'raster'};
+  const confidence={type:'any',default:null};
   W.operations=Object.freeze({
     'warp.field':{
       inputs:{width:'number',height:'number',matrix:{type:'array<vec3>',default:[[1,0,0],[0,1,0]]}},
@@ -10,6 +11,18 @@
     'warp.sample':{
       inputs:{source:'raster',field:'raster',options},outputs:{value:'raster'},
       run({source,field,options}){return {value:W.sample(source,field,options)};}
+    },
+    'warp.opticalFlow':{
+      inputs:{before:'raster',after:'raster',options},outputs:{value:'raster',confidence:'raster'},
+      run({before,after,options}){return W.opticalFlow(before,after,options);}
+    },
+    'warp.flow':{
+      inputs:{source:'raster',motion:'raster',confidence,options},outputs:mapped,
+      run({source,motion,confidence,options}){return W.flow(source,motion,{...options,confidence:confidence ?? options.confidence});}
+    },
+    'warp.flowPoints':{
+      inputs:{points:'array<vec2>',motion:'raster',confidence,options},outputs:{value:'array<vec2>'},
+      run({points,motion,confidence,options}){return {value:W.flowPoints(points,motion,{...options,confidence:confidence ?? options.confidence})};}
     },
     'warp.mesh':{
       inputs:{source:'raster',control:'record',options},outputs:mapped,

@@ -32,19 +32,19 @@
       }
     },
     'anim.feedback': {
-      inputs: { frames: 'array<raster>', options }, outputs, time: true,
+      inputs: { frames: 'array<raster>', flow: { type: 'array<raster>', default: [] }, options }, outputs, time: true,
       instantiate() {
-        let current, priorFrames, priorOptions, priorSeed, priorSequence, previousTick, firstTick = 0;
-        return ({ frames, options }, { time, seed, take, sequence }) => {
+        let current, priorFrames, priorFlow, priorOptions, priorSeed, priorSequence, previousTick, firstTick = 0;
+        return ({ frames, flow, options }, { time, seed, take, sequence }) => {
           const { dt, every, cache, maxTicks, time: localTime, ...settings } = options;
           const at = tickAt(localTime ?? time, dt ?? 1 / 48, localTime === undefined ? take : undefined);
-          const changed = priorFrames !== frames || priorOptions !== options || priorSeed !== seed;
+          const changed = priorFrames !== frames || priorFlow !== flow || priorOptions !== options || priorSeed !== seed;
           const reset = priorSequence !== sequence || sequence !== undefined && at < previousTick;
           if (reset) firstTick = sequence === undefined ? 0 : at;
           if (changed || reset) {
-            current = S.session(S.define('feedback', { ...settings, frames }, { seed, dt, maxTicks }),
+            current = S.session(S.define('feedback', { ...settings, frames, ...(flow.length && { flow }) }, { seed, dt, maxTicks }),
               { every, cache, firstTick });
-            [priorFrames, priorOptions, priorSeed, priorSequence] = [frames, options, seed, sequence];
+            [priorFrames, priorFlow, priorOptions, priorSeed, priorSequence] = [frames, flow, options, seed, sequence];
           }
           const result = current.seekTick(at);
           previousTick = at;
