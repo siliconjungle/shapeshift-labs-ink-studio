@@ -137,6 +137,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     expanded.set(data);
     data = expanded;
   }
+  let colorOverride;
   const moving = [],
     back = [],
     cidx = [],
@@ -439,6 +440,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     if (fine && fine[n * 12 + 11] === 1)
       fine[n * 12 + 11] = 2; // the tile laid for this dab is now its own
     else if (fine && n * 12 < fine.length) fine.fill(0, n * 12, n * 12 + 12);
+    if(colorOverride){col=typeof colorOverride==='function'?colorOverride(col,[x,y,z]):colorOverride;if(!Array.isArray(col)||col.length!==3||!col.every(v=>Number.isFinite(v)&&v>=0&&v<=255))throw new TypeError('Color transform must return finite RGB bytes');}
     const o = n * 16;
     data[o] = x;
     data[o + 1] = y;
@@ -1199,6 +1201,10 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     return out;
   };
   return {
+    withColor(color,draw) {
+      if(typeof draw!=='function'||typeof color!=='function'&&(!Array.isArray(color)||color.length!==3||!color.every(v=>Number.isFinite(v)&&v>=0&&v<=255)))throw new TypeError('withColor needs RGB bytes or a transform and a drawing function');
+      const previous=colorOverride;colorOverride=color;try{return draw();}finally{colorOverride=previous;}
+    },
     detailBudget,
     shadowArt,
     shadowNext,

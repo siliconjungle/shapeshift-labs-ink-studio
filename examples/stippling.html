@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>The Quiet Mark</title
+  ><style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      background: #e8dfcc;
+      color: #294350;
+      margin: 0;
+      font-family: Georgia, serif;
+    }
+    main {
+      max-width: 1440px;
+      margin: auto;
+      padding: 30px 40px;
+    }
+    header {
+      font: 10px monospace;
+      letter-spacing: 2px;
+      border-bottom: 1px solid #bcb39e;
+      padding-bottom: 15px;
+      color: #8a785d;
+    }
+    h1 {
+      font-size: 48px;
+      font-weight: 400;
+      margin: 22px 0 10px;
+    }
+    p {
+      font: 13px/1.7 sans-serif;
+      color: #7b817c;
+      max-width: 700px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 230px;
+      gap: 24px;
+      margin-top: 22px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1.6;
+      touch-action: none;
+    }
+    .stage {
+      border: 1px solid #bcb39e;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+    }
+    button {
+      background: transparent;
+      border: 1px solid #bcb39e;
+      color: #294350;
+      padding: 9px;
+      font: 11px monospace;
+      cursor: pointer;
+    }
+    button.active {
+      background: #294350;
+      color: #e8dfcc;
+    }
+    label {
+      display: block;
+      font: 11px monospace;
+      margin: 17px 0;
+    }
+    input[type='range'] {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      accent-color: #b36f43;
+    }
+    .bar {
+      font: 10px monospace;
+      padding: 12px;
+      border-top: 1px solid #bcb39e;
+    }
+    .note {
+      font: 10px/1.6 monospace;
+    }
+    .hint {
+      font: 9px monospace;
+      color: #8a785d;
+      margin-left: auto;
+    }
+    #apply {
+      width: 100%;
+    }
+    @media (max-width: 800px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      main {
+        padding: 20px;
+      }
+    }
+  </style>
+  <main>
+    <header>INK STUDIO / REPRESENTATIONS 07</header>
+    <h1>The Quiet Mark</h1>
+    <p>Ink and pigment, placed with intent. Broad forms breathe; eyes, curves and silhouettes gather smaller marks.</p>
+    <div class="layout">
+      <section class="stage">
+        <div class="tabs">
+          <button data-view="owl" class="active">01 / Night watch</button
+          ><button data-view="orchard">02 / Sunfruit</button><span class="hint">DRAG · ORBIT / SCROLL · ZOOM</span>
+        </div>
+        <canvas id="view" width="1040" height="650"></canvas>
+        <div id="stats" class="bar">Preparing the surface marks…</div>
+      </section>
+      <aside>
+        <label><input id="adaptive" type="checkbox" checked /> Adaptive allocation</label
+        ><label>Quiet-area spacing<input id="coarse" type="range" min="1" max="4" step=".2" value="2.5" /></label
+        ><label>Mark density<input id="density" type="range" min=".6" max="1.8" step=".1" value="1" /></label
+        ><label><input id="paper" type="checkbox" checked /> Opaque paper support</label
+        ><button id="apply">Regenerate marks</button><label><input id="pause" type="checkbox" /> Pause motion</label>
+        <p class="note">
+          Mark placement is baked once. Camera motion and animation reuse native splats.<br /><br />Rebuilding lets you
+          compare spacing and density without changing the model.
+        </p>
+      </aside>
+    </div>
+  </main>
+  <script src="../dist/ink-studio.browser.js"></script>
+  <script src="./stippling.js"></script>
+  <script type="module">
+    import { createRenderer } from '../webgl.mjs';
+    const $ = id => document.getElementById(id),
+      kit = {
+        KIT,
+        PixelLook,
+        makeBuilder,
+        makeSculpt,
+        SpriteSurface,
+        ContributionRules,
+        RenderStages,
+        TargetSelectors,
+        SplatProvenance
+      };
+    const demo = stipplingDemo(kit),
+      renderer = createRenderer($('view'), { toolkit: kit });
+    demo.state.view = 'owl';
+    document.querySelectorAll('[data-view]').forEach(
+      b =>
+        (b.onclick = () => {
+          demo.state.view = b.dataset.view;
+          document.querySelectorAll('[data-view]').forEach(c => c.classList.toggle('active', c === b));
+        })
+    );
+    $('apply').onclick = () => {
+      Object.assign(demo.state, {
+        adaptive: $('adaptive').checked,
+        coarse: +$('coarse').value,
+        density: +$('density').value,
+        paper: $('paper').checked
+      });
+      demo.rebuild();
+    };
+    $('pause').onchange = e => (demo.state.paused = e.target.checked);
+
+    window.stippleQA = { demo, renderer, kit };
+    let drag;
+    $('view').onpointerdown = e => {
+      drag = [e.clientX, e.clientY];
+      demo.control.take();
+      $('view').setPointerCapture(e.pointerId);
+    };
+    $('view').onpointermove = e => {
+      if (drag) {
+        demo.control.input({ yaw: (e.clientX - drag[0]) * 0.004, pitch: (e.clientY - drag[1]) * 0.004 });
+        drag = [e.clientX, e.clientY];
+      }
+    };
+    $('view').onpointerup = () => (drag = null);
+    $('view').onwheel = e => {
+      e.preventDefault();
+      demo.control.input({ dolly: e.deltaY * 0.001 });
+    };
+    let last;
+    function tick(t) {
+      let dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+      last = t;
+      demo.update(dt);
+      renderer.render(demo.world, { time: demo.state.time, raw: true, changedRows: [] });
+      $('stats').textContent = demo.world.count + ' NATIVE SPLATS';
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    window.stippleQA = { demo, renderer };
+  </script>
+</html>

@@ -533,6 +533,7 @@
     } catch (error) {
       bad('finish.adaptiveSampling', error.message);
     }
+    try{Stippling.prepare(st.finish.stipple);}catch(error){bad('finish.stipple',error.message);}
     let look = st.finish.look;
     try {
       look = K.authoring.looks.scene(look, catalog);
@@ -1423,6 +1424,7 @@
         S.shLen = shadowMarch.distance;
       }
       if (st0.finish.res) S.res = st0.finish.res;
+      if(st0.finish.stipple!==undefined)S.stipple=st0.finish.stipple;
       if (st0.finish.adaptiveSampling !== undefined) S.adaptiveSampling = st0.finish.adaptiveSampling;
       grp = {};
       for (const [g, v] of Object.entries(spec.groups || {})) grp[g] = S.grp(v.blend);

@@ -791,6 +791,7 @@ function makeSculpt(B, rest) {
        m.root  = 0.3                  darker by that much toward the root of a limb (along 0), lighter toward its tip */
   const A = { curv: 0, cav: 0, hollow: 0, up: 0, rel: 0, along: 0, y: 0, own: null },
     ATTR = [];
+  let stippleCandidates = null, stippleProfile = null, stippleProbes=0;
   let curP = null,
     FLO = null;
   S.attr = (name, fn) => ATTR.push([name, fn]);
@@ -1891,6 +1892,7 @@ function makeSculpt(B, rest) {
         }
         const spacing = adaptive ? shadedSpacing((a, b, c) => psd(p, a, b, c), d, x, y, z, nx, ny, nz) : res;
         if (!spacing) return;
+        if(queueStipple(p,p.mat,res,x,y,z,nx,ny,nz,(a,b,c)=>psd(p,a,b,c)))return;
         curP = p;
         if (S.emit) {
           const n0 = B.count();
@@ -1951,6 +1953,7 @@ function makeSculpt(B, rest) {
       if (adaptive && !SculptSampling.surface(m)) return;
       const spacing = adaptive ? shadedSpacing(field, d, x, y, z, nx, ny, nz) : res;
       if (!spacing || S.merge && merged(x, y, z, spacing, m)) return;
+      if(queueStipple(source,m,res,x,y,z,nx,ny,nz,field))return;
       curP = source;
       if (S.emit) {
         const pr = curP,
@@ -1960,12 +1963,160 @@ function makeSculpt(B, rest) {
       } else shadeOwned(curP, m, spacing, x, y, z, nx, ny, nz, true);
     });
   }
+  function queueStipple(owner, material, res, x, y, z, nx, ny, nz, signed) {
+    if (
+      !stippleCandidates ||
+      material.stipple === false ||
+      !SculptSampling.surface(material)
+    )
+      return false;
+    if (stippleCandidates.length >= stippleProfile.maxCandidates)
+      throw new RangeError("Stippling: candidate budget exceeded");
+    const query = (a, b, c) => {
+      if (++stippleProbes > stippleProfile.maxProbes)
+        throw new RangeError("Stippling: probe budget exceeded");
+      return signed(a, b, c);
+    };
+    const base = res / stippleProfile.fine,
+      position = [x, y, z],
+      normal = [nx, ny, nz],
+      measured = Stippling.measure(
+        stippleProfile,
+        query,
+        position,
+        normal,
+        base * 0.8,
+      );
+    stippleCandidates.push({
+      group: owner.whole ? owner : undefined,
+      position,
+      normal,
+      spacing: base,
+      material,
+      owner,
+      ...measured,
+    });
+    return true;
+  }
+  function emitStipple(candidates, profile) {
+    const materials = new WeakMap(),
+      dotProfile = SplatFootprints.prepare({
+        shape: "circle",
+        softness: 0,
+        depth: "plane",
+      });
+    const plan = Stippling.sample(candidates, profile),
+      HALF = Math.sqrt(2 * Math.log(2)),
+      previousPixel = S.pixel,
+      previousFollow = S.follow,
+      previousFat = S.fat;
+    const draw = (c, radius, color, lift, shaped) => {
+      const { owner, material, position: p, normal: n } = c,
+        first = B.count();
+      curP = owner;
+      field(...p);
+      let m = materials.get(material);
+      if (!m) {
+        m = {
+          ...material,
+          fur: undefined,
+          leaf: undefined,
+          blade: undefined,
+          fiber: undefined,
+          brush: undefined,
+          footprint: undefined,
+          surface: undefined,
+          controls: undefined,
+          engraving: false,
+          screenPrint: false,
+          albedo: undefined,
+          pixelStyle: undefined,
+        };
+        materials.set(material, m);
+      }
+      B.withColor(color, () =>
+        shadeOwned(
+          owner,
+          m,
+          radius / (S.fat * HALF),
+          p[0] + n[0] * lift,
+          p[1] + n[1] * lift,
+          p[2] + n[2] * lift,
+          ...n,
+          true,
+        ),
+      );
+      const end = B.count();
+      if (end > first) {
+        const u = K_STIPPLE_TANGENT(n),
+          v = [
+            n[1] * u[2] - n[2] * u[1],
+            n[2] * u[0] - n[0] * u[2],
+            n[0] * u[1] - n[1] * u[0],
+          ];
+        B.describeFootprint(first, end, dotProfile, [
+          ...u.map((x) => x * radius),
+          ...v.map((x) => x * radius),
+        ]);
+      }
+      if (S.emit) S.emit(owner, first, end);
+    };
+    const K_STIPPLE_TANGENT = (n) => {
+      const u = Math.abs(n[1]) < 0.9 ? [n[2], 0, -n[0]] : [0, -n[2], n[1]],
+        l = Math.hypot(...u);
+      return u.map((x) => x / l);
+    };
+    try {
+      S.pixel = false;
+      S.follow = null;
+      S.fat = 1;
+      if (profile.paper) {
+        // The sparse marks and opaque support are independently distributed.
+        // Support is sampled at the authored resolution, with curvature retained.
+        const support = Stippling.sample(candidates, {
+          ...profile,
+          coarse: 1.05,
+          fine: 0.85,
+          density: 1,
+          toneDensity: 0,
+          size: [0.1, 0.42],
+          maxMarks: profile.maxCandidates,
+          importance: undefined,
+        });
+        for (const mark of support.marks)
+          draw(
+            candidates[mark.index],
+            mark.spacing * 0.9,
+            profile.paper,
+            -mark.spacing * 0.1,
+            false,
+          );
+      }
+      for (const mark of plan.marks) {
+        const c = candidates[mark.index];
+        draw(
+          c,
+          mark.radius,
+          (col) => Stippling.paint(profile, col, c.position),
+          c.spacing * 0.15,
+          true,
+        );
+      }
+    } finally {
+      S.pixel = previousPixel;
+      S.follow = previousFollow;
+      S.fat = previousFat;
+    }
+    return plan.stats;
+  }
   S.bake = () => {
     shadowMarch = bakedShadowMarch({ steps: S.shSteps, distance: S.shLen });
     const override = typeof globalThis !== 'undefined' ? globalThis.INK_ADAPTIVE_SAMPLING : undefined;
     const sampling = !S.capture && SculptSampling.prepare(override ?? S.adaptiveSampling);
     const keepSdf = S.keepRenderSdf || (typeof globalThis !== 'undefined' && globalThis.INK_RETAIN_RENDER_SDF);
     renderSdf = keepSdf && !S.capture && B.keepRenderSdf ? captureRenderSdf() : null;
+    if(S.stipple&&S.stipple!==true&&(typeof S.stipple!=='object'||Array.isArray(S.stipple)))throw new TypeError('Stippling needs a boolean or settings');
+    stippleProfile=Stippling.prepare(S.stipple ? {light:S.sun,ambient:S.amb,...(S.stipple===true?{}:S.stipple)} : S.stipple);stippleCandidates=stippleProfile&&!S.capture?[]:null;stippleProbes=0;
     buildGrid();
     L = S.sun;
     for (const p of pos.concat(neg)) {
@@ -1976,7 +2127,8 @@ function makeSculpt(B, rest) {
       for (let bi = 0; bi < bands.length; bi++) {
         const band = bands === ONE_BAND ? -1 : bands[bi][0],
           res = bands === ONE_BAND ? res0 : res0 * bands[bi][1];
-        if (!adaptive) bakeBand(p, band, res, null);
+        if (stippleCandidates&&p.mat.stipple!==false&&SculptSampling.surface(p.mat))bakeBand(p,band,res*stippleProfile.fine,null);
+        else if (!adaptive) bakeBand(p, band, res, null);
         else {
           const probeStep = res * adaptive.coarse * .9;
           bakeBand(p, band, res * adaptive.coarse, adaptive, probeStep, false);
@@ -1984,6 +2136,7 @@ function makeSculpt(B, rest) {
         }
       }
     }
+    if(stippleCandidates){S.stippleStats=emitStipple(stippleCandidates,stippleProfile);stippleCandidates=null;stippleProfile=null;}
     // ghosts are drawn but take no part in shadows (things in the sky, glass, glowing shapes)
     for (const p of ghosts) {
       const res = p.res * (p.detailBudget?.spacing ?? 1),

@@ -1122,4 +1122,6 @@ Use [irregular mosaics and stained glass](docs/mosaic-surfaces.md) for fitted po
 
 Use [halftone and layered screen printing](docs/screen-print.md) for analytic circle, diamond and line screens with registered ink plates, paper grain, overprint and knockout. Explore [The Moonflower Press](examples/screen-print.html), with free camera controls and live plate proofs.
 
+Use [adaptive stippling and pointillism](docs/stippling.md) to place native marks according to silhouette, curvature, light and authored detail. Explore [The Quiet Mark](examples/stippling.html).
+
 Use [irregular mosaics and stained glass](docs/mosaic-surfaces.md) for fitted polygon pieces on planar or curved carriers, opaque grout, geometric bevels and native optical transmission. Explore [The Tessera Collection](examples/mosaic-surfaces.html).

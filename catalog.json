@@ -1475,6 +1475,23 @@
         "render",
         "animation"
       ]
+    },
+    {
+      "id": "kit.stipple",
+      "kind": "api",
+      "status": "ready",
+      "title": "Adaptive stippling and pointillist surface marks",
+      "what": "Deterministic variable-radius native mark placement guided by silhouettes, curvature, lighting and focal regions. Bounded spatial selection, optional opaque support and palette pigment mixtures retain provenance and native animation.",
+      "use": "S.stipple = {views:[[0,0,1]], fine:.6, coarse:2.5}; S.bake()",
+      "where": "src/stippling.js, src/sculpt.js",
+      "example": "docs/stippling.md, examples/stippling.html",
+      "tags": [
+        "stippling",
+        "pointillism",
+        "sampling",
+        "splat",
+        "render"
+      ]
     }
   ]
 }
