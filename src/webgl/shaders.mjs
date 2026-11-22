@@ -1,5 +1,6 @@
 import { gaussianProxyVertex, gaussianProxyFragment } from './gaussian-part-proxies.mjs';
 import { gaussianHarmonicGLSL } from './gaussian-harmonics.mjs';
+import { gaussianMaterialVertex, gaussianMaterialFragment, gaussianMaterialCoverage } from './gaussian-materials.mjs';
 import {engravingVertexUniforms,engravingVertex,engravingFragment} from './engraving-shaders.mjs';
 // Shared draw and resolve shaders extracted from Inkwell Rebirth's WebGL renderer.
 // Hosts provide the ASCII shader hooks and Ink Studio's shared PixelLook GLSL.
@@ -33,7 +34,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -46,6 +47,7 @@ precision highp float; precision highp int;
 uniform highp sampler2D u_data;
 ${facingColors ? facingColors.splatVertexGLSL : ''}
 ${gaussianDegree !== undefined ? gaussianHarmonicGLSL(gaussianDegree) : ''}
+${gaussianMaterials ? gaussianMaterialVertex : ''}
 ${gaussianProxy ? gaussianProxyVertex : ''}
 ${spriteReconstruction ? 'uniform highp sampler2D u_spriteLod; uniform int u_spriteLodCount; flat out int v_spriteLod;' : ''}
 uniform mat4 u_view, u_proj;
@@ -296,10 +298,12 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   ${contributions || masked ? 'v_policySlot = contributionSlot(a_index);' : ''}
   ${masked ? 'if (u_idx < 2.5) placeMask(a_index, v_policySlot, pos, cam.xyz, abs(determinant(FM)) > 1e-8 ? inverse(FM) : mat3(1.0), mat3(u_view));' : ''}
   ${!portal || layeredGlass ? `v_ownerDepth = ${layeredGlass ? '' : 'u_idx > 1.5 ? '}clip.z / clip.w * 0.5 + 0.5${layeredGlass ? '' : ' : 0.0'};` : ''}
+  ${gaussianMaterials ? 'v_gaussianMaterial = 0;' : ''}
   ${gaussianDegree !== undefined ? `
   if (u_idx < 0.5 && record < u_gaussianCount${instances ? ' && a_instance == 0' : ''}) {
     vec3 ray = u_ortho > 0.5 ? -vec3(u_view[0].z, u_view[1].z, u_view[2].z) : pos - u_eye;
     color = gaussianRgb(record, ray);
+    ${gaussianMaterials ? 'color = shadeGaussianMaterial(record, ray, color);' : ''}
     color0 = color;
   }` : ''}
   float dn = clamp((-cam.z - u_fogp.z) / (u_fogp.w - u_fogp.z), 0.0, 1.0);
@@ -436,6 +440,7 @@ ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geomet
   const SPLAT_FS = `#version 300 es
 precision highp float; precision highp int;
 ${gaussianProxy ? gaussianProxyFragment : ''}
+${gaussianMaterials ? gaussianMaterialFragment : ''}
 ${spriteReconstruction ? `flat in int v_spriteLod; uniform vec2 u_spriteLodGrid;
 ${spriteReconstruction}` : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footprintColumns; flat in vec4 v_footprintMap; flat in vec2 v_footprintStyle, v_footprintZ; flat in vec4 v_footprintPlane;' : ''}
@@ -665,6 +670,7 @@ ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
   }
   ` : ''}
 
+${gaussianMaterials ? gaussianMaterialCoverage : ''}
   if (u_paintPass) {
     // Every fragment attenuates the overlay behind it.
     bool overlay = v_paint != 0 ${optical ? '|| hasOptical' : ''};

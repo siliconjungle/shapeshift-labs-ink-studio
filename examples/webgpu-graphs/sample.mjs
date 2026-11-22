@@ -46,7 +46,20 @@ function points() {
   return cloud;
 }
 
-export function samplePly() {
+function pelagicTangent(index, [x, y, z]) {
+  const bell = index < 31 * 104;
+  const radial = Math.hypot(x, z);
+  const t = bell ? Math.floor(index / 104) / 30 : 0;
+  const slope = bell ? 1.9 * Math.cos(t * 2.7) : .18;
+  const side = bell ? Math.max(.12, 2.8 * t) : 1;
+  const length = Math.hypot(side, slope);
+  const nx = side / length * x / radial, ny = slope / length, nz = side / length * z / radial;
+  if (nz < -.999999) return [0, 1, 0, 0];
+  const norm = Math.hypot(nx, ny, 1 + nz);
+  return [(1 + nz) / norm, -ny / norm, nx / norm, 0];
+}
+
+export function samplePly({ materialSurface = false } = {}) {
   const cloud = points();
   const fields = ['x', 'y', 'z', 'scale_0', 'scale_1', 'scale_2',
     'rot_0', 'rot_1', 'rot_2', 'rot_3', 'opacity', 'f_dc_0', 'f_dc_1', 'f_dc_2',
@@ -57,10 +70,11 @@ export function samplePly() {
   result.set(header);
   const data = new DataView(result.buffer);
   let offset = header.length;
-  for (const point of cloud) {
+  for (const [index, point] of cloud.entries()) {
     const [x, y, z, sx, sy, sz, alpha, r, g, b] = point;
     const sh = harmonics(point);
-    const values = [x, y, z, Math.log(sx), Math.log(sy), Math.log(sz), 1, 0, 0, 0,
+    const rotation = materialSurface ? pelagicTangent(index, point) : [1, 0, 0, 0];
+    const values = [x, y, z, Math.log(sx), Math.log(sy), Math.log(materialSurface ? sz * .48 : sz), ...rotation,
       Math.log(alpha / (1 - alpha)), ...[r, g, b].map(c => (c - .5) / sh0),
       ...[0, 1, 2].flatMap(channel => sh.map(row => row[channel]))];
     for (const value of values) {
@@ -69,6 +83,12 @@ export function samplePly() {
     }
   }
   return result;
+}
+
+export function pelagicMaterialMasks(count) {
+  return [[0, 24 * 104], [24 * 104, 31 * 104], [31 * 104, count]].map(([start, end]) => ({
+    count, indices: Array.from({ length: end - start }, (_, index) => start + index)
+  }));
 }
 
 export async function sampleSpz() {

@@ -1,6 +1,7 @@
 import { gaussianSplatColors } from '../gaussian-splats.mjs';
 import { splatScreenRays } from './splat-screen-ray.mjs';
 import { cameraPose, makeCamera } from './view.mjs';
+import { gaussianMaterialPlan } from './gaussian-materials.mjs';
 
 const minimumWeight = .018;
 const inside = (u, v) => u >= 0 && u < 1 && v >= 0 && v < 1;
@@ -48,7 +49,10 @@ export function createGaussianColorInspector(renderer, world, { width, height })
     const color = readPalettePixel(x, y);
     const packed = color ? color[0] << 16 | color[1] << 8 | color[2] : -1;
     const slot = world.pal.indexOf(packed);
-    const ramp = slot < 0 ? (frame.splatPaint ?? world.splatPaint)?.ramp?.indexOf(packed) ?? -1 : -1;
+    const layers = frame.gaussianColor !== 'baked' && gaussianMaterialPlan(world, frame.gaussianMaterials ?? world.gaussianMaterials);
+    const materialRamp = layers && layers.palettes[layers.rows[index * 4 + 3] - 1];
+    const legacy = (frame.splatPaint ?? world.splatPaint)?.ramp?.indexOf(packed) ?? -1;
+    const ramp = slot < 0 ? Math.max(legacy, materialRamp?.indexOf(packed) ?? -1) : -1;
     return { ...sample, state: 'visible', pixel: [x, y],
       swatch: slot >= 0 || ramp >= 0 ? { index: Math.max(slot, ramp), rgb: [color[0], color[1], color[2]],
         ...(ramp >= 0 && { ramp: true }) } : null };

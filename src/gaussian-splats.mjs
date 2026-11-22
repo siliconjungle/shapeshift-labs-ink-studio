@@ -371,6 +371,9 @@ export function gaussianSplatWorld(cloud, {
   const span = Math.max(...hi.map((value, axis) => value - lo[axis]), 6 * maxScale, 1e-30);
   const fit = size / span, basis = shBasis(viewDirection, degree);
   const data = new Float32Array(count * 16);
+  // The shortest covariance axis approximates a surface normal. Encode its
+  // confidence in the vector length and keep the sign ambiguous.
+  const normals = colorMode === 'baked' ? null : new Int8Array(count * 3);
   for (let i = 0; i < count; i++) {
     const p = i * 3, q = i * 4, o = i * 16;
     const x = rotations[q], y = rotations[q + 1], z = rotations[q + 2], w = rotations[q + 3];
@@ -384,6 +387,20 @@ export function gaussianSplatWorld(cloud, {
     const yy = v0 * r10 * r10 + v1 * r11 * r11 + v2 * r12 * r12;
     const yz = v0 * r10 * r20 + v1 * r11 * r21 + v2 * r12 * r22;
     const zz = v0 * r20 * r20 + v1 * r21 * r21 + v2 * r22 * r22;
+    if (normals) {
+      const a = scales[p], b = scales[p + 1], c = scales[p + 2];
+      const shortest = Math.min(a, b, c), longest = Math.max(a, b, c);
+      const middle = Math.max(Math.min(a, b), Math.min(Math.max(a, b), c));
+      const confidence = Math.round(127 * clamp((1 - shortest / Math.max(shortest, middle, Number.MIN_VALUE) - .08) / .37, 0, 1));
+      if (confidence && longest > 0) {
+        const nx = a === shortest ? r00 : b === shortest ? r01 : r02;
+        const ny = a === shortest ? r10 : b === shortest ? r11 : r12;
+        const nz = a === shortest ? r20 : b === shortest ? r21 : r22;
+        normals[p] = Math.round(nx * confidence);
+        normals[p + 1] = Math.round((up === 'z' ? nz : ny) * confidence);
+        normals[p + 2] = Math.round((up === 'z' ? -ny : nz) * confidence);
+      }
+    }
     const py = (positions[p + 1] - center[1]) * fit, pz = (positions[p + 2] - center[2]) * fit;
     data[o] = (positions[p] - center[0]) * fit;
     data[o + 1] = up === 'z' ? pz : py;
@@ -401,7 +418,7 @@ export function gaussianSplatWorld(cloud, {
   return {
     count, data, seed: 1, detail: 14, radius: size, moving: new Int32Array(), back: new Int32Array(),
     bg: [pal[0] >> 16, pal[0] >> 8 & 255, pal[0] & 255], pal,
-    ...(colorMode !== 'baked' && { gaussianHarmonics: { count, degree, dc, sh, up, colorMode } }),
+    ...(colorMode !== 'baked' && { gaussianHarmonics: { count, degree, dc, sh, normals, up, colorMode } }),
     palName: 'Imported Gaussian', dither: 0, fog: { c: 0, start: 1, max: 0 }, outline: { c: 0, edge: 0 },
     cam: { target: [0, 0, 0], yaw: 0, pitch: 0, dist: size * 2.15, sway: 0 }
   };

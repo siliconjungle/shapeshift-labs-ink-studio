@@ -2,6 +2,7 @@ import * as shared from '../png-bytes.js';
 import { captureCamera } from './view.mjs';
 import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
+import { gaussianMaterialPlan } from './gaussian-materials.mjs';
 
 const png = shared.default ?? globalThis[Symbol.for('ink-studio.png-bytes')];
 export const gaussianCoverageFrame = Symbol('Gaussian turntable coverage');
@@ -38,7 +39,8 @@ export function captureGaussianTurntable(gl, render, world, {
   const sheetWidth = cols * width, sheetHeight = Math.ceil(angles.length / cols) * height;
   if (sheetWidth * sheetHeight > 16_000_000) throw new RangeError('Turntable sheet exceeds the pixel budget');
   const splatPaint = frame.splatPaint ?? world.splatPaint;
-  const packedColors = [...new Set([...world.pal, ...(splatPaint?.ramp ?? [])])];
+  const materials = gaussianMaterialPlan(world, frame.gaussianMaterials ?? world.gaussianMaterials);
+  const packedColors = [...new Set([...world.pal, ...(splatPaint?.ramp ?? []), ...(materials?.palettes.flat() ?? [])])];
   if (!packedColors.length || packedColors.length > 255)
     throw new RangeError('A transparent turntable needs 1–255 opaque palette entries');
   const colors = packedColors.map(bytes), transparent = colors.length;

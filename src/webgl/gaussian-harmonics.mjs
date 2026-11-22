@@ -92,8 +92,11 @@ uniform bool u_gaussianZUp;
 vec3 gaussianCoefficient(int offset) {
   return texelFetch(u_gaussianSH, ivec2(offset % u_gaussianWidth, offset / u_gaussianWidth), 0).rgb;
 }
+vec3 gaussianBase(int index) {
+  return vec3(0.5) + 0.28209479177387814 * gaussianCoefficient(index);
+}
 vec3 gaussianRgb(int index, vec3 ray) {
-  vec3 color = vec3(0.5) + 0.28209479177387814 * gaussianCoefficient(index);
+  vec3 color = gaussianBase(index);
 ${degree ? `  vec3 d = normalize(u_gaussianZUp ? vec3(ray.x, -ray.z, ray.y) : ray);
   float x = d.x, y = d.y, z = d.z;
   int first = u_gaussianOffset + index * ${terms};

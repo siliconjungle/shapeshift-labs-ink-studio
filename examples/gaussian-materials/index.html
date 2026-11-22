@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painted splat materials · Ink Studio</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #e6edea; background: #0b1219; font: 14px/1.5 system-ui, sans-serif; }
+  main { width: min(100% - 48px, 1080px); margin: auto; padding: 28px 0 44px; }
+  h1 { font: 600 clamp(30px, 5vw, 47px)/1.05 Georgia, serif; margin: 0 0 9px; }
+  h2 { font-size: 16px; margin: 0; }
+  p { margin: 0; color: #aec1c6; }
+  button, select, .file { color: inherit; background: #182935; border: 1px solid #42606b; border-radius: 6px;
+    font: inherit; padding: 6px 10px; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: #8ae2cf; background: #224042; }
+  button:disabled, .file:has(:disabled) { opacity: .55; cursor: default; }
+  :is(button, select, input):focus-visible, .file:focus-within { outline: 2px solid #a9eadb; outline-offset: 2px; }
+  .file { position: relative; display: inline-flex; }
+  .file input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: inherit; }
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 15px 0; }
+  .toolbar p { font-size: 12px; }
+  .views, .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  figure { margin: 0; border: 1px solid #2f4654; border-radius: 10px; overflow: hidden; background: #101e29; }
+  figcaption { padding: 8px 12px; font-weight: 600; border-bottom: 1px solid #2f4654; }
+  .surface { position: relative; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; background: #0b1523; touch-action: none; cursor: grab; }
+  canvas[data-paint] { cursor: crosshair; }
+  .brush { position: absolute; pointer-events: none; border: 1px solid #d7f4ee; border-radius: 50%;
+    aspect-ratio: 1; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px #14262c; }
+  .card { min-width: 0; padding: 12px; border: 1px solid #2f4654; border-radius: 10px; background: #101e29; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 9px 0 0; }
+  .sliders { display: grid; gap: 7px; margin-top: 10px; }
+  .slider { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr 46px; align-items: center; gap: 8px; }
+  input[type="range"] { min-width: 20px; width: 100%; accent-color: #8ae2cf; }
+  output { color: #bee4dd; text-align: right; font-variant-numeric: tabular-nums; }
+  .swatches { display: flex; gap: 5px; align-items: center; }
+  .swatches input { width: 34px; height: 30px; padding: 1px; border: 1px solid #42606b; background: #182935; cursor: pointer; }
+  .footer { margin-top: 12px; }
+  @media (max-width: 640px) {
+    main { width: calc(100% - 24px); padding-top: 20px; }
+    .views { gap: 6px; }
+    .controls { grid-template-columns: 1fr; }
+    figcaption { padding: 7px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Painted splat materials</h1>
+  <p>Give a painted part its own ramp and lighting, then orbit to see the captured color shift.</p>
+  <div class="toolbar">
+    <button id="sample">Pelagic sample</button>
+    <label class="file">Open PLY or SPZ<input id="asset" type="file" accept=".ply,.spz,.gsz"></label>
+    <label>Output
+      <select id="color-mode"><option value="palette">Indexed palette</option><option value="rgb">Live RGB</option></select>
+    </label>
+    <p id="status" role="status">Opening Pelagic…</p>
+  </div>
+  <div class="views">
+    <figure><figcaption>Captured appearance</figcaption><div class="surface"><canvas id="captured" width="310" height="223" aria-label="Captured splat appearance"></canvas></div></figure>
+    <figure><figcaption>Painted materials</figcaption><div class="surface"><canvas id="edited" width="310" height="223" aria-label="Editable material preview"></canvas><div id="brush-cursor" class="brush" hidden></div></div></figure>
+  </div>
+  <div class="toolbar">
+    <label class="slider">Orbit <input id="orbit" type="range" min="-180" max="180" value="25"><output for="orbit">25°</output></label>
+    <label class="slider">Key light <input id="light" type="range" min="-180" max="180" value="-55"><output for="light">−55°</output></label>
+  </div>
+  <div class="controls">
+    <section class="card">
+      <h2>Material brush</h2>
+      <div class="row">
+        <label>Part <select id="part"><option value="0">Shell</option><option value="1">Fabric</option><option value="2">Tissue</option></select></label>
+        <label>Tool <select id="tool"><option value="orbit">Orbit</option><option value="assign">Assign</option><option value="erase">Erase</option></select></label>
+        <button id="undo" disabled>Undo stroke</button><button id="clear" disabled>Clear part</button>
+      </div>
+      <div class="sliders">
+        <label class="slider">Brush size <input id="size" type="range" min="2" max="24" value="9"><output for="size">9 px</output></label>
+      </div>
+      <div class="row"><label><input id="preview" type="checkbox"> Show selected mask</label><p id="count" aria-live="polite"></p></div>
+      <div class="row">
+        <button id="save" disabled>Save materials</button>
+        <label class="file">Load materials<input id="load" type="file" accept=".json" disabled></label>
+      </div>
+    </section>
+    <section class="card">
+      <h2 id="part-title">Shell response</h2>
+      <div class="row">Base ramp <div id="ramp" class="swatches"></div></div>
+      <div class="sliders">
+        <label class="slider">Captured color <input id="capture" type="range" min="0" max="100"><output for="capture"></output></label>
+        <label class="slider">Ambient <input id="ambient" type="range" min="0" max="100"><output for="ambient"></output></label>
+        <label class="slider">Diffuse <input id="diffuse" type="range" min="0" max="100"><output for="diffuse"></output></label>
+        <label class="slider">Specular <input id="specular" type="range" min="0" max="100"><output for="specular"></output></label>
+        <label class="slider">Roughness <input id="roughness" type="range" min="0" max="100"><output for="roughness"></output></label>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>
