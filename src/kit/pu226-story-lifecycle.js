@@ -24,7 +24,8 @@
     for (const document of documents) for (const [story, definition] of Object.entries(document.stories)) {
       if (!definition.lifecycle) continue;
       const { activation = 'automatic' } = definition.lifecycle;
-      const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry };
+      const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry,
+        ...(definition.incident&&{incident:definition.incident}) };
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
       const key = keyOf(info), stages = definition.lifecycle.progression ? definition.stages : undefined;
       const automatic = new Map();

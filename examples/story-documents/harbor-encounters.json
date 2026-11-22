@@ -1,0 +1,50 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "harbor-encounters",
+  "title": "Harbor encounters",
+  "stories": {
+    "relief-barge": {
+      "kind": "incident",
+      "title": "A relief barge asks to dock",
+      "summary": "Welcome the visitor in time and move two crates into the pier depot.",
+      "incident": { "category": "visitor", "intensity": 2, "tags": ["harbor", "supplies"] },
+      "triggers": { "arrival": { "event": { "kind": "vessel-arrived", "system": "world",
+        "where": { "path": "/vessel", "value": "relief-barge" } } } },
+      "lifecycle": { "activation": "manual", "offerFor": 0.4, "progression": true,
+        "settlement": { "outcomes": { "unloaded": { "cargo": { "transfer": {
+          "from": "goods/barge", "to": "goods/pier", "amount": 2
+        } } } } } },
+      "entry": "offload",
+      "stages": { "offload": { "title": "Offload the supplies", "decision": { "mode": "autonomous" },
+        "next": { "ship": { "outcome": "unloaded", "auto": true } } } },
+      "outcomes": { "unloaded": { "title": "The pier receives the crates" } }
+    },
+    "old-channel-chart": {
+      "kind": "incident",
+      "title": "An old channel chart turns up",
+      "incident": { "category": "discovery", "intensity": 1, "tags": ["harbor", "survey"] },
+      "triggers": { "survey": { "event": { "kind": "survey-finding", "system": "world",
+        "where": { "path": "/finding", "value": "channel-chart" } } } },
+      "entry": "plot",
+      "stages": { "plot": { "title": "Plot the old channel", "next": { "log": { "outcome": "recorded" } } } },
+      "outcomes": { "recorded": { "title": "The channel is recorded" } }
+    },
+    "quiet-watch": {
+      "kind": "incident",
+      "title": "A quiet watch after shortages",
+      "summary": "The pantry must hold four crates for three consecutive tick intervals.",
+      "incident": { "category": "recovery", "intensity": 0, "tags": ["harbor", "supplies"] },
+      "triggers": { "stability": { "hold": 0.3, "state": { "field": "world/account", "args": { "account": "food/pantry" },
+        "when": { "path": "/balance", "op": "gte", "value": 4 } } } },
+      "lifecycle": { "progression": true,
+        "settlement": { "outcomes": { "rested": { "thanks": { "reputation": {
+          "ledger": "standing", "subject": "watch", "faction": "harbor", "delta": 1
+        } } } } } },
+      "entry": "rest",
+      "stages": { "rest": { "title": "Give the watch a breather", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "rested", "auto": true } } } },
+      "outcomes": { "rested": { "title": "The harbor thanks the watch" } }
+    }
+  }
+}

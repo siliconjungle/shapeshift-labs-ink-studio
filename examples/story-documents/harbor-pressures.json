@@ -1,0 +1,45 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "harbor-pressures",
+  "title": "Harbor pressures",
+  "references": { "west-pier": { "kind": "place", "id": "harbor/west-pier" } },
+  "stories": {
+    "missed-shipment": {
+      "kind": "incident",
+      "title": "A shipment misses the tide",
+      "summary": "The west pier runs short when its delivery is delayed.",
+      "refs": ["west-pier"],
+      "incident": { "category": "setback", "intensity": 4, "tags": ["harbor", "supplies"] },
+      "triggers": { "delayed": { "event": { "kind": "shipment-delayed", "system": "world" } } },
+      "lifecycle": { "progression": true },
+      "entry": "notice",
+      "stages": { "notice": { "title": "Log the missed tide", "decision": { "mode": "autonomous" },
+        "next": { "log": { "outcome": "recorded", "auto": true } } } },
+      "outcomes": { "recorded": { "title": "The delay is recorded" } }
+    },
+    "high-water": {
+      "kind": "incident",
+      "title": "Water reaches the upper mark",
+      "incident": { "category": "environmental-change", "intensity": 3, "tags": ["harbor", "tide"] },
+      "triggers": { "high": { "state": { "field": "world/account", "args": { "account": "water/gauge" },
+        "when": { "path": "/balance", "op": "gte", "value": 3 } } } },
+      "lifecycle": { "progression": true },
+      "entry": "mark",
+      "stages": { "mark": { "title": "Mark the high-water line", "decision": { "mode": "autonomous" },
+        "next": { "log": { "outcome": "charted", "auto": true } } } },
+      "outcomes": { "charted": { "title": "The change is charted" } }
+    },
+    "open-repair-shift": {
+      "kind": "incident",
+      "title": "A repair shift opens up",
+      "incident": { "category": "opportunity", "intensity": 2, "tags": ["harbor", "maintenance"] },
+      "triggers": { "shift": { "event": { "kind": "crew-available", "system": "world" } } },
+      "lifecycle": { "progression": true },
+      "entry": "reserve",
+      "stages": { "reserve": { "title": "Record the opening", "decision": { "mode": "autonomous" },
+        "next": { "log": { "outcome": "offered", "auto": true } } } },
+      "outcomes": { "offered": { "title": "The shift is listed" } }
+    }
+  }
+}

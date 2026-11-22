@@ -339,6 +339,7 @@
       if (templates) plan.storyTemplates = templates.instances;
       const { documents } = plan.storyRoles;
       plan.storyTriggers = W.storyTriggers.compile(documents, world, systems);
+      plan.incidentCatalog = W.incidentCatalog.compile(documents,plan.storyTemplates);
       plan.storyReferences = W.storyReferences.compile(documents, world, systems);
       plan.storyCommitments = W.storyCommitments.compile(documents, systems);
       plan.storyHandoffs = W.storyHandoffs.compile(documents, systems);
@@ -464,6 +465,7 @@
     return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:true,
       documents:plan.storyRoles?.documents.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
+      ...(plan.incidentCatalog?.length && {incidentCatalog:W.incidentCatalog.find(plan.incidentCatalog)}),
       ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
       ...(plan.storyLifecycle?.decisions && {decisions:plan.storyLifecycle.decisions}),
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
@@ -492,7 +494,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -562,6 +564,7 @@
         ...(storyFeasibilityState && {storyFeasibility:storyFeasibilityState,storyFeasibilityRules:storyLifecycle.feasibility}),
         ...(storyReferenceState && {storyReferences:storyReferenceState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
+        ...(incidentCatalog?.length && {incidentCatalog}),
         ...(storyTemplates && {storyTemplates}),
         ...((storyTemplates||storyLifecycle?.decisions) && {storyDocuments:storyRoles.documents}),
         ...(storyLifecycle?.decisions && {storyDecisions:storyLifecycle.decisions}),

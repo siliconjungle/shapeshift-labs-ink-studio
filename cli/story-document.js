@@ -77,9 +77,30 @@ function eventCommand(file, rest, options, library) {
   } else process.stdout.write(output);
 }
 
+function catalogCommand(files, options, library) {
+  const {incident,category,tags,text,out} = options;
+  const minimum = options['min-intensity'], maximum = options['max-intensity'];
+  const intensity = value=>value===undefined||typeof value==='string'&&/^[0-5]$/.test(value);
+  if (!files.length||files.length>32||
+      Object.keys(options).some(key=>!['incident','category','tags','text','out','min-intensity','max-intensity'].includes(key))||
+      [incident,category,tags,text,out].some(value=>value!==undefined&&typeof value!=='string')||
+      !intensity(minimum)||!intensity(maximum))
+    throw new TypeError('Use story catalog <story.json> [story.json ...] [--incident document/story] [--category ID] [--tags a,b] [--min-intensity N] [--max-intensity N] [--text text] [--out file]');
+  const api = library().KIT.world.incidentCatalog;
+  const report = api.find(api.compile(files.map(readStoryDocument)),{incident,category,text,
+    ...(tags!==undefined&&{tags:tags.split(',').map(tag=>tag.trim())}),
+    ...(minimum!==undefined&&{minIntensity:Number(minimum)}),...(maximum!==undefined&&{maxIntensity:Number(maximum)})});
+  const output = JSON.stringify(report,null,2)+'\n';
+  if (out!==undefined) {
+    if (files.some(file=>path.resolve(file)===path.resolve(out))) throw new TypeError('Choose an output different from the story documents');
+    write(path.resolve(out),output);
+  } else process.stdout.write(output);
+}
+
 function storyCommand([mode, file, id, ...rest], options, library) {
+  if (mode==='catalog') return catalogCommand([file,id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
-  const usage = 'Usage: ink-studio story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
+  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
     const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));

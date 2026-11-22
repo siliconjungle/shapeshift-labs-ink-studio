@@ -1,0 +1,5 @@
+[
+  { "tick": 5, "action": "world/story-transition", "args": {
+    "document": "harbor-encounters", "story": "relief-barge", "to": "active", "reason": "the-pier-is-ready"
+  } }
+]

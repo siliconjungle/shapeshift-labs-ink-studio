@@ -268,6 +268,8 @@
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
       ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,view.storyDocuments ?? world.storyDocuments))} }),
+      'incident-catalog':{type:'record',qualified:true,read:({args})=>ok(W.incidentCatalog.find(view.incidentCatalog,args,
+        {lifecycle:view.storyLifecycle,triggers:view.storyTriggers}))},
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
       'story-commitments':{type:'record',qualified:true,read:({args})=>
         W.storyCommitments.inspect(view.storyCommitmentDefinitions,view.storyLifecycle,args)},

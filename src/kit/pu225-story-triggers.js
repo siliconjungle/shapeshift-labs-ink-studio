@@ -43,7 +43,8 @@
             rules.set(trigger, { state, duration: hold === undefined ? 0 : Math.max(1, ticks(hold, world.dt, Math.ceil)) });
           }
         }
-        stories.push({ key, document: document.id, story, storyKind, stage, rules });
+        stories.push({key,document:document.id,story,storyKind,stage,rules,
+          ...(definition.incident&&{incident:definition.incident})});
       }
     }
     if (!stories.length) return null;

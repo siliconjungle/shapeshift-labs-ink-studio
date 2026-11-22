@@ -1,0 +1,39 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "harbor-catalog",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "harbor-pressures.json" }, { "file": "harbor-encounters.json" }],
+  "systems": {
+    "food": { "kind": "store", "config": { "accounts": {
+      "reserve": { "resource": "food", "units": "crate", "type": "integer", "initial": 8 },
+      "pantry": { "resource": "food", "units": "crate", "type": "integer", "initial": 3 }
+    } } },
+    "goods": { "kind": "store", "config": { "accounts": {
+      "barge": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 2 },
+      "pier": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 }
+    } } },
+    "standing": { "kind": "social-ledger" },
+    "water": { "kind": "store", "config": { "accounts": {
+      "upstream": { "resource": "water", "units": "mark", "type": "integer", "initial": 4 },
+      "gauge": { "resource": "water", "units": "mark", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 2, "action": "world/event", "args": { "kind": "shipment-delayed" } },
+    { "tick": 2, "action": "world/transfer", "args": { "from": "food/reserve", "to": "food/pantry", "amount": 1 } },
+    { "tick": 3, "action": "world/transfer", "args": { "from": "water/upstream", "to": "water/gauge", "amount": 3 } },
+    { "tick": 4, "action": "world/transfer", "args": { "from": "food/pantry", "to": "food/reserve", "amount": 1 } },
+    { "tick": 4, "action": "world/event", "args": { "kind": "vessel-arrived", "vessel": "relief-barge" } },
+    { "tick": 5, "action": "world/event", "args": { "kind": "survey-finding", "finding": "channel-chart" } },
+    { "tick": 6, "action": "world/event", "args": { "kind": "crew-available" } },
+    { "tick": 7, "action": "world/transfer", "args": { "from": "food/reserve", "to": "food/pantry", "amount": 1 } }
+  ],
+  "eventActions": {
+    "quiet-watch-notice": {
+      "on": { "kind": "story-started", "system": "world", "where": { "path": "/incident/category", "value": "recovery" } },
+      "actions": [{ "action": "world/event", "args": { "kind": "harbor-quiet", "incidentId": "quiet-watch" },
+        "bindings": { "/incidentId": "/story" } }]
+    }
+  }
+}

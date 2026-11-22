@@ -2,6 +2,7 @@
 const StoryDocument = (() => {
   const format = 'ink-studio/story';
   const version = 1;
+  const incidentCategories = Object.freeze(['setback','opportunity','visitor','discovery','environmental-change','recovery']);
   const kinds = new Set(['incident', 'questlet', 'arc']);
   const objectiveKinds = new Set(['reach', 'acquire', 'deliver', 'protect', 'observe', 'build', 'maintain', 'survive', 'negotiate', 'choose']);
   const safeId = value => typeof value === 'string' && /^[a-z][a-z0-9_.-]{0,99}$/i.test(value) &&
@@ -627,6 +628,17 @@ const StoryDocument = (() => {
     }
   }
 
+  function incidentMetadata(value, at, kind) {
+    if (kind!=='incident') invalid(at, 'catalog metadata requires an incident');
+    fields(value, at, ['category','intensity'], ['tags']);
+    if (!incidentCategories.includes(value.category)) invalid(at+'.category', 'expected a known incident category');
+    if (!Number.isSafeInteger(value.intensity)||value.intensity<0||value.intensity>5)
+      invalid(at+'.intensity','expected an integer from 0 to 5');
+    if (Object.hasOwn(value,'tags')&&(!Array.isArray(value.tags)||value.tags.length>16||
+        !Array.from(value.tags).every(safeId)||new Set(value.tags).size!==value.tags.length))
+      invalid(at+'.tags','expected up to 16 unique tag IDs');
+  }
+
   function validate(document, report) {
     fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
@@ -646,9 +658,10 @@ const StoryDocument = (() => {
     }
     for (const [id, story] of entries(stories, 'story.stories', true)) {
       const at = `story.stories.${id}`;
-      fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle']);
+      fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle', 'incident']);
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
       labelsAndRefs(story, at, references, report);
+      if (Object.hasOwn(story,'incident')) incidentMetadata(story.incident,at+'.incident',story.kind);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       const { stages, outcomes } = story;
@@ -781,6 +794,6 @@ const StoryDocument = (() => {
     }
   }
 
-  return Object.freeze({ validateStoryDocument, inspectStoryDocument, objectiveRule, mapRoleValues, roleToken });
+  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, isStoryId:safeId, objectiveRule, mapRoleValues, roleToken });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

@@ -48,7 +48,7 @@ node cli/ink-studio.js sim run examples/story-documents/breakwater-survey.world.
 | Level | Required fields | Optional fields |
 | --- | --- | --- |
 | Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map |
-| Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
+| Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle`, `incident` metadata on an incident |
 | Role | `kind` | `ref` to a document reference of the same kind, `required` for a required world binding or reference default |
 | Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` and `decision` when stage progression is enabled, `children` on a progressing arc |
 | Objective | `title` | `summary`, `refs`, `optional`, `evidence`, `type` with its `params` |
@@ -415,6 +415,69 @@ ink-studio sim run examples/story-documents/signal-contract.world.json \
 ink-studio probe signal-contract.run.json --field world/story-settlements \
   --args '{"story":"signal-contract/repair"}'
 ink-studio sim replay signal-contract.run.json
+```
+
+## Catalog incidents
+
+Add `incident` metadata to a story of kind `incident`. The catalog uses
+the story's qualified `document/story` ID, title, summary, entry stage,
+reference IDs, role slots, and triggers.
+
+```json
+"incident": {
+  "category": "recovery",
+  "intensity": 0,
+  "tags": ["harbor", "supplies"]
+}
+```
+
+Choose one of `setback`, `opportunity`, `visitor`, `discovery`,
+`environmental-change`, and `recovery`. Intensity is an authored
+integer from 0 to 5. Use 0 for a quiet beat. Tags are optional and
+support up to 16 unique IDs. Incidents with older definitions appear
+under `unclassified`. Their category and intensity are `null`.
+
+List one or more documents with `story catalog`. Combine an exact
+`--incident document/story` with `--category`, a comma-separated
+`--tags` list, `--min-intensity`, `--max-intensity`, or `--text`.
+Tag filters require all listed tags. Text matches the qualified ID,
+title, summary, category, and tags without regard to case. The JSON
+report gives the unfiltered `total`, matched `counts` by category,
+and matching `incidents` in qualified ID order.
+
+```sh
+node cli/ink-studio.js story catalog examples/story-documents/harbor-pressures.json \
+  examples/story-documents/harbor-encounters.json --category recovery --max-intensity 1 --tags harbor,supplies
+```
+
+World preflight lists the resolved catalog under `incidentCatalog`,
+including expanded template instances and their template revisions.
+Use the `world/incident-catalog` probe to add live status, matched
+trigger details, and the last lifecycle transition. It accepts
+`incident`, `category`, `tags`, `minIntensity`, `maxIntensity`,
+`text`, and `status` as query arguments. In addition to the lifecycle
+statuses, the catalog can show `registered` for a definition with no
+trigger or lifecycle, `waiting` for a configured incident before it
+opens, `pending` when a trigger matched and the offer has yet to open,
+or `started` for a triggered incident with no lifecycle.
+
+Authored event and state triggers, activation rules, feasibility, and
+deadlines govern starts. Classification travels with story events in
+`incident`, so a world event action can match `/incident/category` and
+react to an entire class of incidents. Recorded events keep the same
+metadata for analysis and presentation.
+
+The [harbor catalog world](../examples/story-documents/harbor-catalog.world.json)
+loads two documents and runs all six categories. You can welcome a
+relief barge and unload its crates, or let its offer expire. The pantry
+must recover and stay stocked before the quiet watch starts.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/harbor-catalog.world.json \
+  --actions examples/story-documents/harbor-catalog.welcome.actions.json --ticks 13 --record harbor.run.json
+node cli/ink-studio.js probe harbor.run.json --field world/incident-catalog \
+  --args '{"category":"visitor","status":"completed"}'
+node cli/ink-studio.js sim replay harbor.run.json
 ```
 
 ## Trigger a story from a world
