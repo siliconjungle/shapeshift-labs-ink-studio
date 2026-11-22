@@ -6,15 +6,21 @@ const limit = 64 * 1024;
 function isSoundRecipe(file) {
   return typeof file === 'string' && file.toLowerCase().endsWith('.sound.json');
 }
+function decodeSoundDocument(bytes) {
+  if (bytes.length > limit) throw new RangeError('Sound document exceeds 64 KiB');
+  return JSON.parse(bytes.toString('utf8'));
+}
+function readSoundDocument(file) {
+  if (fs.statSync(file).size > limit) throw new RangeError('Sound document exceeds 64 KiB');
+  return decodeSoundDocument(fs.readFileSync(file));
+}
 function decodeSoundRecipe(bytes, P) {
-  if (bytes.length > limit) throw new RangeError('Sound recipe exceeds 64 KiB');
-  return P.mediaGraph.soundRecipe.render(JSON.parse(bytes.toString('utf8')));
+  return P.mediaGraph.soundRecipe.render(decodeSoundDocument(bytes));
 }
 function readSoundRecipe(file, P) {
-  if (fs.statSync(file).size > limit) throw new RangeError('Sound recipe exceeds 64 KiB');
-  return decodeSoundRecipe(fs.readFileSync(file), P);
+  return P.mediaGraph.soundRecipe.render(readSoundDocument(file));
 }
 function readAudioSource(file, P, options) {
   return isSoundRecipe(file) ? readSoundRecipe(file, P).value : WAV.read(file, options);
 }
-module.exports = { isSoundRecipe, decodeSoundRecipe, readSoundRecipe, readAudioSource, limit };
+module.exports = { isSoundRecipe, decodeSoundRecipe, readSoundDocument, readSoundRecipe, readAudioSource, limit };

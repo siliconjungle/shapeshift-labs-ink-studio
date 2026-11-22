@@ -560,6 +560,8 @@ const specifications = {
   'audio.buffer': { inputs: audio },
   'audio.renderSoundRecipe': {inputs:{recipe:{format:'ink-studio/sound-recipe',version:1,
     family:'confirm',seed:12,render:{sampleRate:8000}}}},
+  'audio.mutateSoundRecipe': {inputs:{recipe:{format:'ink-studio/sound-recipe',version:1,
+    family:'jump',seed:12,render:{sampleRate:8000}},options:{count:3,locks:['pitchContour'],bounds:{brightness:[.65,1.6]}}}},
   'audio.captureSample': {inputs:sampleCapture.inputs},
   'audio.print': {nodes:{bus:{op:'data.record',inputs:{dry:audio,wet:audio}}},
     inputs:{sources:link('bus'),settings:{sample:{id:'print',label:'Bench print'},

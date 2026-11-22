@@ -141,6 +141,11 @@
       inputs: { recipe: 'record' }, outputs: { value: 'audio', recipe: 'record', report: 'record' },
       run({ recipe }) { return A.soundRecipe.render(recipe); }
     },
+    'audio.mutateSoundRecipe': {
+      description: 'Generate a deterministic family of recipes with pitch, duration, or attack locks.',
+      inputs: { recipe: 'record', options }, outputs: { value: 'array<record>', plan: 'record' },
+      run({ recipe, options }) { return A.soundRecipe.mutate(recipe, options); }
+    },
     'audio.synthesizeGesture': {
       description:'Excite a breath resonator, grainy friction model or inharmonic metal modes and print aligned perspectives.',
       inputs:{options:{type:'record'}},outputs:{value:'audio',perspectives:'record',report:'record'},
