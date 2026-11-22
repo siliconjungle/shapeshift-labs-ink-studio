@@ -5,6 +5,7 @@ const { validateStoryDocument, inspectStoryDocument } = schema;
 const { analyze } = require('../src/story-analysis.js');
 const {collect} = require('../src/story-inventory.js');
 const { write } = require('./asset-files.js');
+const {formatStoryRoutes} = require('./story-routes.js');
 
 function readDefinition(file, check = value => value) {
   try {
@@ -100,10 +101,29 @@ function catalogCommand(files, options, library) {
   } else process.stdout.write(output);
 }
 
+const previewUsage = 'story preview <file.json> [story-id] [--format json|text|dot] [--out file] [--strict]';
+
+function previewCommand(file, id, rest, options) {
+  const {format='json',out,strict} = options;
+  if (!file||rest.length||!['json','text','dot'].includes(format)||
+    Object.keys(options).some(key=>!['format','out','strict'].includes(key))||
+    (strict!==undefined&&strict!==true)||(out!==undefined&&(typeof out!=='string'||!out.trim())))
+    throw new TypeError('Use '+previewUsage);
+  if (out!==undefined&&(path.resolve(file)===path.resolve(out)||
+    fs.existsSync(file)&&fs.existsSync(out)&&fs.realpathSync(file)===fs.realpathSync(out)))
+    throw new TypeError('Choose an output different from the story document');
+  const document = readDefinition(file), report = preflightStoryDocument(document,{story:id});
+  const output = format==='json'?JSON.stringify(report,null,2)+'\n':formatStoryRoutes(report,document,format);
+  if (out!==undefined) write(path.resolve(out),output);
+  else process.stdout.write(output);
+  if (!report.valid||strict&&report.diagnostics.length) process.exitCode = 1;
+}
+
 function storyCommand([mode, file, id, ...rest], options, library) {
   if (mode==='catalog') return catalogCommand([file,id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
-  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
+  if (mode==='preview') return previewCommand(file,id,rest,options);
+  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
     const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));
@@ -114,14 +134,8 @@ function storyCommand([mode, file, id, ...rest], options, library) {
     (options.strict !== undefined && (options.strict !== true || mode === 'describe')) ||
     (options.inventory !== undefined && (options.inventory !== true || mode !== 'describe'))) throw new TypeError(usage);
   if ((!mode || mode === 'help') && file === undefined) return console.log(usage);
-  if (!file || !['validate', 'describe', 'preview'].includes(mode) || mode === 'validate' && id !== undefined)
+  if (!file || !['validate', 'describe'].includes(mode) || mode === 'validate' && id !== undefined)
     throw new TypeError(usage);
-  if (mode === 'preview') {
-    const report = preflightStoryDocument(readDefinition(file), {story:id});
-    console.log(JSON.stringify(report,null,2));
-    if (!report.valid || options.strict && report.diagnostics.length) process.exitCode = 1;
-    return;
-  }
   const document = readStoryDocument(file);
   if (mode==='describe'&&id!==undefined&&!Object.hasOwn(document.stories,id))
     throw new TypeError('story describe: unknown story ' + JSON.stringify(id));

@@ -32,6 +32,22 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 
 The preview uses authored structure and static conditions. It considers possible child openings across incoming paths and checks explicit choice and outcome conflicts. World events, query values, and the order of arrivals are resolved during a run.
 
+### Export potential routes
+
+Add `--format text` for a readable walkthrough or `--format dot` for a Graphviz diagram. Both show entry stages, authored transitions, child waits, objective and choice gates, decision windows, and reachable or unreachable endings. The text view also lists the shortest sample route to each included ending. In DOT, dashed edges mark blocked transitions and transitions from unreachable stages. Red nodes mark broken targets, and double outlines mark named endings.
+
+Pass a story ID to export one definition or omit it to include every story in the document. Child references show their IDs and required results, including when their definitions are outside the selection. Export to stdout or use `--out` to save a companion file beside the story JSON. The default format is JSON. Error diagnostics still produce an export and exit with status 1. With `--strict`, warnings also return status 1.
+
+```sh
+node cli/ink-studio.js story preview examples/story-documents/breakwater-survey.json pick-channel \
+  --format text --out breakwater-survey.routes.txt --strict
+node cli/ink-studio.js story preview examples/story-documents/breakwater-survey.json \
+  --format dot --out breakwater-survey.routes.dot --strict
+dot -Tsvg breakwater-survey.routes.dot -o breakwater-survey.routes.svg
+```
+
+Ink exports DOT directly. The last command uses Graphviz to render it. The diagram describes structural possibilities using the preflight analysis. Availability of live evidence, actor decisions, and event timing is resolved during simulation.
+
 ### Describe a story package before running it
 
 `story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.
