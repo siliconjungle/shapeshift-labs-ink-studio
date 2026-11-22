@@ -123,14 +123,14 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
     toolkit: experiment ? experimentToolkit() : { version: studio().version, sourceHash: digest(studio().bundle()) },
     entry, files: Object.fromEntries([...records].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
       .map(([name,record])=>[name,experiment?{...record,sha256:digest(Buffer.from(record.data,record.encoding))}:record])),
-    attachments: refs, atlases });
+    attachments: refs, atlases }, { digest });
   return writeProjectBundle(project, { out: file });
 }
 
 function readProjectBundle(file) {
   const bundles = api();
   if (fs.statSync(file).size > bundles.maxBytes * 2) throw new RangeError('Project bundle exceeds the JSON size budget');
-  const project = bundles.open(fs.readFileSync(file, 'utf8'));
+  const project = bundles.open(fs.readFileSync(file, 'utf8'), { digest });
   if (project.metadata.kind === 'experiment') verifyExperimentFiles(project.snapshot());
   return project;
 }
@@ -189,7 +189,7 @@ function unpackProject(input, { out } = {}) {
 
 function writeProjectBundle(source, { out } = {}) {
   if (typeof out !== 'string' || !/\.json$/i.test(out)) throw new TypeError('Choose a project .json output filename');
-  const bundles = api(), project = typeof source?.snapshot === 'function' ? source : bundles.open(source);
+  const bundles = api(), project = typeof source?.snapshot === 'function' ? source : bundles.open(source, { digest });
   const snapshot = project.snapshot();
   if (project.metadata.kind === 'experiment') verifyExperimentFiles(snapshot);
   const data = JSON.stringify(snapshot, null, 2) + '\n', file = path.resolve(out);

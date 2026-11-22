@@ -119,8 +119,18 @@
     return { metadata: next, images: map(images) };
   }
 
-  function loadScene(entry, io, source, cache = new Map(), readAtlas, validate = true) {
-    const spec = structuredClone(contents(source ?? io.text(entry)));
+  function loadScene(entry, io, source, cache = new Map(), readAtlas, validate = true, digest) {
+    const authored = structuredClone(contents(source ?? io.text(entry)));
+    const { assetRegistry, ...document } = authored, references = A.assetReferences;
+    const registryFile = assetRegistry === undefined ? undefined : resolvePath(entry, assetRegistry);
+    const registry = registryFile === undefined ? undefined : references.compile(contents(io.text(registryFile)));
+    const spec = references.visual(assetRegistry === undefined ? authored : document, 'scene', (ref, kind) => {
+      if (!registry) throw new TypeError('Scene asset references need an assetRegistry file');
+      const asset = registry.bind(ref, kind), file = resolvePath(registryFile, asset.file);
+      if (digest && digest(io.bytes(file)) !== asset.sha256)
+        throw new Error('Asset SHA-256 mismatch for ' + references.key(ref) + ' (' + file + ')');
+      return JSON.parse(io.text(file));
+    });
     const assets = Object.create(null);
     function mesh(solid, owner, scoped = false) {
       if (solid.kind !== 'mesh' || typeof solid.asset !== 'string') return;
@@ -173,7 +183,7 @@
     return { spec, env, problems, atlasPaths };
   }
 
-  function open(input) {
+  function open(input, { digest } = {}) {
     const document = contents(input), { entry, project, toolkit, files, attachments = {}, atlases = {} } = document;
     const experiment = document.version === experimentVersion;
     if (document.format !== format || ![version, takeVersion, experimentVersion].includes(document.version))
@@ -254,7 +264,7 @@
         }
       });
     }
-    const cached = new Map(), resolve = (source = authored) => loadScene(entry, io, source, cached, readAtlas);
+    const cached = new Map(), resolve = (source = authored) => loadScene(entry, io, source, cached, readAtlas, true, digest);
     const initial = resolve();
     if (initial.spec.id !== project.id) throw new TypeError('Project ID must match the scene entry');
     const metadata = Object.freeze({ id: project.id, revision: project.revision, entry,
@@ -265,14 +275,19 @@
         ...(atlasSources.size && { atlases: structuredClone(Object.fromEntries(atlasSources)) }) };
     }
     function withScene(source, { revision = metadata.revision + 1 } = {}) {
-      const next = structuredClone(contents(source)), data = snapshot();
+      let next = structuredClone(contents(source));
+      const data = snapshot();
+      if (authored.assetRegistry !== undefined && next.assetRegistry === undefined) {
+        next = A.assetReferences.restoreScene(next, authored, initial.spec, K.world.data.equal);
+        next.assetRegistry = authored.assetRegistry;
+      }
       for (const [name, definition] of Object.entries(authored.dataInputs ?? {}))
         if (definition.file !== undefined && Object.hasOwn(next.dataInputs ?? {}, name) &&
             K.world.data.equal(next.dataInputs[name], initial.spec.dataInputs[name]))
           next.dataInputs[name] = definition;
       data.project = { id: next.id, revision };
       data.files[entry] = { encoding: 'utf8', data: JSON.stringify(next, null, 2) + '\n' };
-      return open(data);
+      return open(data, { digest });
     }
     return Object.freeze({ metadata, snapshot, withScene, resolve,
       scene: () => structuredClone(initial.spec),

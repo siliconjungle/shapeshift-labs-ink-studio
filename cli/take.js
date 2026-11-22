@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { readGraphProject } = require('./graph-project.js');
-const { validateTake, readTakeWorld } = require('./take-document.js');
+const { validateTake, readTakeWorld, resolveTakeFile } = require('./take-document.js');
 const { readCheckpoint } = require('./checkpoint-file.js');
 const files = require('./asset-files.js');
 
@@ -113,7 +113,7 @@ function readTake(file, { kit = require('../index.js').load(), checkpoint, ...op
   const world = readTakeWorld(source, spec, kit, file => paths.add(file));
   let graph;
   if (spec.graph !== undefined) {
-    graph = readGraphProject(path.resolve(root, spec.graph), { kit, ...options });
+    graph = readGraphProject(resolveTakeFile(source, spec, 'graph', kit, file => paths.add(file)), { kit, ...options });
     for (const file of graph.sourceFiles()) paths.add(file);
   }
   if (checkpoint === undefined && spec.checkpoint !== undefined) {

@@ -1,7 +1,7 @@
 /* Publish picture and sample-addressed WAV from one set of run outputs. */
 const fs=require('node:fs'),path=require('node:path'),{createHash}=require('node:crypto');
 const {createTake}=require('./take.js');
-const {validateTake,readTakeWorld}=require('./take-document.js');
+const {validateTake,readTakeWorld,resolveTakeFile}=require('./take-document.js');
 const {readGraphProject}=require('./graph-project.js');
 const {readCheckpoint}=require('./checkpoint-file.js');
 const {write,json}=require('./asset-files.js');
@@ -85,7 +85,8 @@ function open(file,{kit=require('../index.js').load(),...options}={}){
     for(const asset of project.sourceFiles())dependency(asset);
     return project;
   }
-  const graph=readGraph(resolve(take.graph,takeFile));
+  check(take.graph!==undefined,'Audiovisual take needs a picture graph');
+  const graph=readGraph(resolveTakeFile(takeFile,take,'graph',kit,dependency));
   const raw=request.audio;
   check(record(raw)&&(raw.physical!==undefined)!==(raw.graph!==undefined),'Choose a physical audio run or an audio-producing graph');
   let audio, signals, audioBus;

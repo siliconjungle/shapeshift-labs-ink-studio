@@ -7,6 +7,7 @@ const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { isModel, mapModels, requireRevision } = require('./simulation-model-files.js');
 const { groupEntries, groupReference, groupDocument, requireGroupReference } = require('./graph-groups.js');
 const Experiment = require('./experiment-schema.js');
+const Assets = require('./asset-references.js');
 
 const formats = {
   'ink-studio/take': 'take',
@@ -42,6 +43,16 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
   };
   const entryDocument = JSON.parse(bytes(requireFile(entry)).toString('utf8'));
   const experiment = entryDocument?.format === Experiment.format;
+  let references;
+  const assetApi = () => references ??= require('../index.js').load().KIT.authoring.assetReferences;
+  const assetIO = { resolvePath, load: file => bytes(requireFile(file)) };
+  function select(file, document) {
+    return Assets.scope(assetApi(), file, document.assetRegistry, assetIO);
+  }
+  function visualAssets(file, document, type) {
+    const resolve = select(file, document);
+    assetApi().visual(document, type, (ref, kind) => Assets.parse(resolve(ref, kind).bytes));
+  }
 
   function directoryAnchor(owner, ref) {
     if (typeof ref !== 'string') throw new TypeError('Expected a project directory path');
@@ -55,6 +66,7 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
 
   function world(file, document) {
     datasetFiles(file, document.dataInputs);
+    visualAssets(file, document, 'world');
     activeModels.add(file);
     mapModels(document, ref => {
       const target = resolvePath(file, ref.file);
@@ -114,7 +126,14 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       inputs.add(name);
       visit(name);
     }
-    if (!/^[\w.-]+$/.test(recipe.scene) || /\.json$/i.test(recipe.scene)) {
+    if (recipe.scene.startsWith('@') && recipe.options['asset-registry']) {
+      const registry = resolvePath(anchor, recipe.options['asset-registry']);
+      if (!inputs.has(registry)) throw new TypeError('Portable shots need a fingerprint for ' + registry);
+      const api = assetApi(), resolved = Assets.open(api, registry, assetIO)
+        .resolve(Assets.referenceArgument(api, recipe.scene), 'scene');
+      if (!inputs.has(resolved.filename)) throw new TypeError('Portable shots need a fingerprint for ' + resolved.filename);
+      visit(resolved.filename, 'scene');
+    } else if (!/^[\w.-]+$/.test(recipe.scene) || /\.json$/i.test(recipe.scene)) {
       const target = resolvePath(anchor, recipe.scene);
       if (!/\.json$/i.test(target) && !/\.(?:obj|gltf|glb)$/i.test(target))
         throw new TypeError('A portable shot needs a declarative scene or mesh: ' + target);
@@ -162,26 +181,34 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       experimentEntry(file, document);
     } else if (kind === 'take') {
       validateTake(document);
+      const bind = select(file, document);
       follow(document.world, 'world');
-      follow(document.graph, 'graph');
+      if (assetApi().isRef(document.graph)) visit(bind(document.graph, 'graph').filename, 'graph');
+      else follow(document.graph, 'graph');
       follow(document.audio, 'audio');
       follow(document.assetPack, 'look');
       follow(document.checkpoint, 'checkpoints');
       for (const ref of values(document.shots)) follow(ref, 'shot');
     } else if (kind === 'graph') {
+      const bind = select(file, document);
       graphGroups(file, document.groups);
       for (const asset of values(document.assets)) {
-        if (asset?.format === 'json') visit(resolvePath(file, asset.file), undefined, true);
-        else requireFile(resolvePath(file, asset?.file));
+        const ref = asset?.file, target = assetApi().isRef(ref) ?
+          bind(ref, Assets.graphKinds(asset.format)).filename : resolvePath(file, ref);
+        if (asset?.format === 'json') visit(target, undefined, true);
+        else requireFile(target);
       }
     } else if (kind === 'group') {
       activeGroups.add(file);
       graphGroups(file, dependency.group.definition.groups);
       activeGroups.delete(file);
     } else if (kind === 'audio') {
+      const bind = select(file, document);
       follow(document.world, 'world');
       for (const asset of values(document.assets)) {
         if (typeof asset === 'string') requireFile(resolvePath(file, asset));
+        else if (assetApi().isRef(asset)) bind(asset, Assets.waveKinds);
+        else if (assetApi().isRef(asset?.graph)) visit(bind(asset.graph, 'graph').filename, 'graph');
         else if (record(asset)) follow(asset.graph, 'graph');
       }
     } else if (kind === 'world') {
@@ -199,6 +226,7 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       for (const world of [data.world, data.world?.world, data.origin?.world, data.end?.world])
         if (world?.dataInputs) datasetFiles(file, world.dataInputs);
     } else if (kind === 'scene') {
+      visualAssets(file, document, 'scene');
       for (const name of bundles.collect(file, get, {}, { validate: file === entry }).atlasPaths) atlasPaths.add(name);
     } else if (kind === undefined) {
       if (experiment && document) simulation(file, document);

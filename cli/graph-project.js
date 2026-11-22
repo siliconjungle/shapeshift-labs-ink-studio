@@ -12,6 +12,8 @@ const { loadGraphGroups, groupFor, groupUsage, groupDependencies } = require('./
 const { snapshotFormat } = require('./graph-diff.js');
 const { fingerprint } = require('./graph-artifact-cache.js');
 const { estimateGraphMemory } = require('./graph-memory.js');
+const Assets = require('./asset-references.js');
+const { resolveTakeFile } = require('./take-document.js');
 
 const format = 'ink-studio/graph-project';
 const reportFormat = 'ink-studio/graph-report';
@@ -264,24 +266,28 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const {broadcast}=graph.arrays;
   const groupOperators=[...graph.arrays.groupOperators,...kit.KIT.procedural.animationGraph.groupOperators];
   const project=data.freeze(data.clone(source));
-  const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},exports:exportsSpec={},
+  const {format:kind,version:revision,groups:definitions={},assets:assetDefinitions={},assetRegistry,exports:exportsSpec={},
     assertions:assertionSpecs=[],time=0,seed=0,...root}=fields(project,
-    ['format','version','inputs','nodes','outputs','groups','assets','exports','assertions','time','seed'],'graph project');
+    ['format','version','inputs','nodes','outputs','groups','assets','assetRegistry','exports','assertions','time','seed'],'graph project');
   if (kind!==format || revision!==version) throw new TypeError('Expected ink-studio/graph-project version 1');
   const spec=graphSpec(root,'project graph',groupOperators);
   const paths=new Set(sourceFile ? [path.resolve(sourceFile)] : []);
+  const api=kit.KIT.authoring.assetReferences;
+  const resolveAsset=Assets.scope(api,path.join(baseDir,'graph.json'),assetRegistry,{onFile:file=>paths.add(file)});
   const groupTree=loadGraphGroups(definitions,baseDir,{onFile:file=>paths.add(file)});
   const groupSpecs=new Map(groupTree.entries.map(group=>[group,graphSpec(group.spec,'group '+group.alias,groupOperators)]));
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
     const {format,file,type,codec,options}=fields(definition,
       definition?.format==='codec' ? ['format','file','type','codec','options'] : ['format','file'],'graph asset '+name);
-    if (!['png','indexed-png','json','wav','inputs','codec'].includes(format) || typeof file!=='string' || !file)
+    if (!['png','indexed-png','json','wav','inputs','codec'].includes(format) ||
+        !(typeof file==='string'&&file||api.isRef(file)))
       throw new TypeError('Graph assets need a PNG, JSON, WAV, input recording or hosted codec file');
-    const full=path.resolve(baseDir,file);
+    const selected=api.isRef(file)?resolveAsset(file,Assets.graphKinds(format)):undefined;
+    const full=selected?.filename??path.resolve(baseDir,file);
     paths.add(full);
     if ((format==='wav' || format==='codec') && fs.statSync(full).size>WAV.maxBytes)
       throw new RangeError('Graph media asset exceeds its byte budget');
-    const bytes=fs.readFileSync(full);
+    const bytes=selected?.bytes??fs.readFileSync(full);
     let value, kind, modelHash;
     if (format==='png') {
       const {w,h,data,max}=planAssets ? PNG.layout(bytes) : PNG.raster(bytes);
@@ -716,7 +722,7 @@ function readGraphProject(file, options={}) {
     const bundles=require('./project-bundle.js'), project=bundles.readProjectBundle(sourceFile);
     const take=project.takeDocument?.(), graph=take?.graph;
     if (!graph) throw new TypeError('Project bundle needs a take with a graph');
-    const mounted=bundles.mountProject(project,entry=>readGraphProject(path.resolve(path.dirname(entry),graph),options));
+    const mounted=bundles.mountProject(project,entry=>readGraphProject(resolveTakeFile(entry,take,'graph',options.kit),options));
     return Object.freeze({...mounted,takeClock:take.clock,sourceFiles:()=>[sourceFile]});
   }
   return createGraphProject(document,{...options,baseDir:path.dirname(sourceFile),sourceFile});

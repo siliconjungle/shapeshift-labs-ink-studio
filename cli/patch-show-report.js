@@ -50,6 +50,7 @@ function showReport(config, rehearse) {
         fps: config.fps, frameBudgetMs: 1000 / config.fps, slowMs: config.slowMs, elapsedMs: elapsed(),
         rendered, displayed, dropped, video, assertionFailures, sources: Object.fromEntries(sources),
         stages: Object.fromEntries([...stages].map(([name, { totalMs, ...entry }]) => [name, { ...entry, meanMs: totalMs / entry.samples }])),
+        ...(config.assetBindings?.length && { assetBindings: config.assetBindings }),
         sourceEvents, presets, samples, unlogged, ...(error && { error: error.message }) };
     }
   };

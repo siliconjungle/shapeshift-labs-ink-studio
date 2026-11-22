@@ -175,7 +175,7 @@ async function runShow(file, opt, settings, emit) {
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
   const output = opt.report && path.resolve(opt.report);
-  const protectedFiles = [...project.sourceFiles(), file, config.cueSource, video, audio].filter(source =>
+  const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, video, audio].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
   const writer = output && graphOutputs(protectedFiles);
   writer?.protect(fs.statSync(output, { throwIfNoEntry: false }));

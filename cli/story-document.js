@@ -90,20 +90,35 @@ function eventCommand(file, rest, options, library) {
 }
 
 function cueCommand(file,plan,rest,options,library) {
-  const {format='sheet',out}=options;
+  const {format='sheet',out,'asset-registry':registry}=options;
   if (!file||!plan||rest.length||!['sheet','timeline'].includes(format)||
-    Object.keys(options).some(key=>!['format','out'].includes(key))||
+    Object.keys(options).some(key=>!['format','out','asset-registry'].includes(key))||
+    registry!==undefined&&(typeof registry!=='string'||!registry.trim())||
     out!==undefined&&(typeof out!=='string'||!out.trim()))
-    throw new TypeError('Use story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline] [--out file]');
-  const input=readDefinition(file), W=library().KIT.world, E=W.storyEvents;
+    throw new TypeError('Use story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline --asset-registry catalog.json --out file]');
+  const input=readDefinition(file), K=library().KIT, W=K.world, E=W.storyEvents;
   const source=input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
   const events=source?.format===E.envelopeFormat?source:E.envelopes(source,{stream:input?.checkpoint?.eventStream,
     simulationRate:input?.checkpoint?.world?.takeClock?.simulationRate});
-  const sheet=W.presentationCues.project(events,readDefinition(plan));
+  const definition=readDefinition(plan), projected=W.presentationCues.project(events,definition);
+  const dependencies=new Set([file,plan]);
+  const Assets=require('./asset-references.js'), api=K.authoring.assetReferences;
+  const references=Object.values(definition.rules).flatMap(row=>Object.entries(row.cue.assets??{}));
+  if(references.length&&registry===undefined) throw new TypeError('Presentation cue assets need --asset-registry catalog.json');
+  const selected=new Map();
+  if(registry!==undefined) {
+    const catalog=Assets.open(api,path.resolve(registry),{onFile:asset=>dependencies.add(asset)});
+    for(const [kind,ref] of references) {
+      const {sha256}=catalog.resolve(ref,kind);
+      selected.set(api.key(ref),sha256);
+    }
+  }
+  const sheet={...projected,cues:projected.cues.map(row=>row.assets===undefined?row:{...row,
+    assets:Object.fromEntries(Object.entries(row.assets).map(([kind,ref])=>[kind,{...ref,sha256:selected.get(api.key(ref))}]))})};
   const output=JSON.stringify(format==='timeline'?{presentationCues:sheet}:sheet,null,2)+'\n';
   if (out!==undefined) {
     const existing=fs.existsSync(out)?fs.statSync(out):null;
-    for (const source of [file,plan]) {
+    for (const source of dependencies) {
       const stat=existing&&fs.statSync(source);
       if (path.resolve(out)===path.resolve(source)||stat&&stat.dev===existing.dev&&stat.ino===existing.ino)
         throw new TypeError('Choose a cue output different from its input files');

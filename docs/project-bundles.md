@@ -6,6 +6,8 @@ Use `--root <directory>` when the scene shares files outside its own directory. 
 
 The packer follows scene and prefab mesh references, including nested and disabled shape modifiers. It carries OBJ material libraries and their textures, and glTF or GLB companion buffers and images. Typed data files and external prefab libraries remain in the file table. Sprite atlas placements carry the source manifests, PNGs, and decoded maps so both renderers can use them.
 
+Scene and take entries also retain the registries and specific revisions they use. [Stable presentation asset references](stable-asset-references.md)
+
 Use `--attachments <files.json>` to carry host-managed resources such as audio cues, alternate meshes, or layered raster assets. The attachment manifest maps logical IDs to local file paths relative to that manifest. A sprite or layered raster manifest also brings its companion images.
 
 ## Opening and editing

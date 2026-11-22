@@ -24,6 +24,7 @@ function readExportWorld(file, kit) {
   } else {
     if (spec?.format !== K.world.format && spec?.format !== K.world.models.format) return;
     source = embedStoryDocuments(embedModels(spec, location), location);
+    source = require('./asset-references.js').visual(K.authoring.assetReferences, source, 'world', location);
     if (source.dataInputs !== undefined) source.dataInputs = embed(K.dataInputs, source.dataInputs, location);
   }
   const create = () => K.world.runtime.create(source);

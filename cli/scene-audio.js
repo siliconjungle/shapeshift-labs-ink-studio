@@ -8,6 +8,7 @@ const { readEditorialProject } = require('./music-editorial.js');
 const { readGraphProject } = require('./graph-project.js');
 const { readAudioPrint } = require('./audio-print.js');
 const { embed } = require('./data-inputs.js');
+const Assets = require('./asset-references.js');
 
 const format = 'ink-studio/scene-audio';
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
@@ -283,7 +284,8 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
 
 function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOptions } = {}) {
   const source = path.resolve(file), folder = path.dirname(source);
-  const { assets = undefined, world, ...definition } = read(source);
+  const { assets = undefined, world, assetRegistry, ...definition } = read(source);
+  const api = kit.KIT.authoring.assetReferences, select = Assets.scope(api, source, assetRegistry);
   const assetsByName = assets === undefined && (definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
   if (!record(assetsByName) || Object.keys(assetsByName).length > 1024 || !Object.keys(assetsByName).every(token))
     throw new TypeError('Soundtrack needs named audio assets');
@@ -294,6 +296,7 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
     if (!token(world)) throw new TypeError('Sound world must be a file path');
     const worldFile = path.resolve(folder, world);
     soundWorld = require('./simulation-model-files.js').embedModels(read(worldFile), worldFile);
+    soundWorld = Assets.visual(api, soundWorld, 'world', worldFile);
     if (soundWorld.dataInputs !== undefined)
       soundWorld.dataInputs = embed(kit.KIT.dataInputs, soundWorld.dataInputs, worldFile);
   }
@@ -332,6 +335,7 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
     const spec = Object.hasOwn(assetsByName, name) ? assetsByName[name] : undefined;
     let audio;
     if (typeof spec === 'string') audio = WAV.read(path.resolve(folder, spec));
+    else if (api.isRef(spec)) audio = WAV.decode(select(spec, Assets.waveKinds).bytes);
     else if (record(spec) && Object.hasOwn(spec,'print')) audio=printAsset(spec).load(spec.take).value;
     else if (fields(spec,['editorial','track']) && token(spec.editorial) && (spec.track===undefined || token(spec.track))) {
       const file=path.resolve(folder,spec.editorial), P=kit.KIT.procedural;
@@ -343,8 +347,9 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
       audio=spec.track===undefined ? result.value : Object.hasOwn(result.stems,spec.track) ? result.stems[spec.track] : undefined;
       if (!audio) throw new RangeError('Unknown editorial soundtrack track '+spec.track);
     }
-    else if (fields(spec, ['graph','output','time','seed','inputs']) && token(spec.graph) && token(spec.output)) {
-      const file = path.resolve(folder, spec.graph);
+    else if (fields(spec, ['graph','output','time','seed','inputs']) &&
+        (token(spec.graph) || api.isRef(spec.graph)) && token(spec.output)) {
+      const file = api.isRef(spec.graph) ? select(spec.graph, 'graph').filename : path.resolve(folder, spec.graph);
       if (!graphs.has(file)) graphs.set(file, readGraphProject(file, { kit, ...graphOptions }));
       const { outputs, report } = graphs.get(file).run({ time: spec.time, seed: spec.seed, inputs: spec.inputs });
       if (!report.passed) throw new Error('Soundtrack graph assertions failed for ' + name);

@@ -2,6 +2,7 @@
 (function(K) {
   const W=K.world,{check,id,record,read:at,selector}=W.data,{freeze}=K.procedural.data;
   const T=K.procedural.takeTime;
+  const assets=K.authoring.assetReferences;
   const planFormat='ink-studio/presentation-cue-plan',format='ink-studio/presentation-cues',version=1;
   const maxCues=4096, maxRules=128;
   const fields=(value,keys)=>record(value)&&Object.keys(value).every(key=>keys.includes(key));
@@ -20,7 +21,8 @@
 
   function cueDetails(row) {
     return id(row.kind)&&(row.label===undefined||label(row.label))&&
-      (row.target===undefined||label(row.target)&&row.target.trim())&&(row.detail===undefined||record(row.detail));
+      (row.target===undefined||label(row.target)&&row.target.trim())&&(row.detail===undefined||record(row.detail))&&
+      (row.assets===undefined||assets.validSlots(row.assets));
   }
 
   function read(sheet) {
@@ -29,7 +31,7 @@
     'Expected a version 1 presentation cue sheet');
     const ids=new Set();
     for(const row of sheet.cues) {
-      check(fields(row,['id','time','timecode','kind','label','target','detail','rule','source'])&&id(row.id)&&!ids.has(row.id)&&
+      check(fields(row,['id','time','timecode','kind','label','target','detail','assets','rule','source'])&&id(row.id)&&!ids.has(row.id)&&
         seconds(row.time)&&(row.timecode===undefined||timecode(row.timecode,row.time))&&cueDetails(row)&&(row.rule===undefined||id(row.rule))&&
         (row.source===undefined||eventRef(row.source)&&(!sheet.source||row.source.world===sheet.source.world&&
           row.source.tick>=sheet.source.from&&row.source.tick<=sheet.source.to)),'Invalid or duplicate presentation cue');
@@ -47,7 +49,7 @@
         (row.on.story===undefined||story(row.on.story)),'Invalid presentation cue filter '+rule);
       W.query.condition(row.on.where,undefined);
       const authored=row.cue;
-      check(fields(authored,['kind','label','target','detail','delay','bindings'])&&cueDetails(authored)&&
+      check(fields(authored,['kind','label','target','detail','assets','delay','bindings'])&&cueDetails(authored)&&
         (authored.delay===undefined||seconds(authored.delay))&&
         (authored.bindings===undefined||record(authored.bindings)&&Object.keys(authored.bindings).length<=32),
       'Invalid presentation cue template '+rule);

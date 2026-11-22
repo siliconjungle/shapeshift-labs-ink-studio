@@ -87,14 +87,15 @@ function meshScene(file) {
 }
 /* a diorama written as data (see lab/data-shrine.json). --style puts it in another style; meshes it names are looked for beside the file */
 function dataScene(file, override, { installedPacks = false } = {}) {
-  const K = lib().KIT,
-    source = override ?? JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+  const K = lib().KIT, Assets = require('./asset-references.js'),
+    raw = override ?? JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')),
+    source = Assets.visual(K.authoring.assetReferences, raw, 'scene', file, shot?.dependency);
   if (source?.format === K.curveSplats.format)
     return { id: source.id, name: source.name ?? source.id, seed: source.seed, build: seed => K.curveSplats.world({
       ...source, seed: seed ?? source.seed
     }) };
   const bundles = K.authoring.projectBundles,
-    project = bundles && source?.format === bundles.format ? bundles.open(source) : undefined,
+    project = bundles && source?.format === bundles.format ? bundles.open(source, { digest: Assets.hash }) : undefined,
     spec = project ? project.scene() : { ...source },
     dir = path.dirname(path.resolve(file));
   if (!project && spec.dataInputs !== undefined)
@@ -165,6 +166,15 @@ function dataScene(file, override, { installedPacks = false } = {}) {
 }
 function scene(id) {
   if (!id) die('which diorama? try: ink-studio scenes');
+  if (id.startsWith('@')) {
+    const file = opt['asset-registry'];
+    if (typeof file !== 'string' || !file.trim()) die('Pass --asset-registry with a locked registry for a versioned scene');
+    const api = lib().KIT.authoring.assetReferences, assets = require('./asset-references.js');
+    const selection = assets.open(api, path.resolve(file), { onFile: shot?.dependency })
+      .resolve(assets.referenceArgument(api, id), 'scene');
+    id = selection.filename;
+    return dataScene(id, assets.parse(selection.bytes));
+  }
   if (opt['environment-preset'] !== undefined && !id.endsWith('.json'))
     die('--environment-preset selects a preset for a JSON diorama');
   if (gaussianFile(id)) {
@@ -1332,6 +1342,8 @@ const CMD = {
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
         '  project pack <scene-take-or-experiment.json> --out <bundle.json> [--root directory --revision n --asset-pack file --paint file --attachments file]',
         '  project inspect <bundle.json>   show the bundle version, entry path and retained files',
+        '  assets lock <draft.json> --out catalog.json | assets validate <catalog.json> | assets resolve <catalog.json> <ID> <revision>',
+        '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
         '  project verify <experiment-bundle.json> [--out report.json --compare-engine]   replay packaged simulation checks',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
@@ -2428,6 +2440,9 @@ const CMD = {
   },
   story() {
     return require('./story-document.js').storyCommand(pos,opt,lib);
+  },
+  assets() {
+    return require('./asset-references.js').command(pos, opt, lib());
   },
   graph() {
     return require('./graph-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});

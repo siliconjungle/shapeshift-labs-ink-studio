@@ -3,6 +3,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { parseRate, parseSize } = require('./patch-media.js');
 const { encodeOsc } = require('./show-protocols.js');
+const Assets = require('./asset-references.js');
 
 const loopback = '127.0.0.1';
 const int = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
@@ -64,15 +65,34 @@ function liveWorldInput(value) {
   return { url: address.href, token, input };
 }
 
+async function projectionSurfaces(surfaces) {
+  if (!Array.isArray(surfaces) || surfaces.length > 32) throw new TypeError('Show projector needs up to 32 surfaces');
+  const mapping = surfaces.map(surface => ({ ...record(surface, ['id', 'corners', 'crop', 'edges', 'gain', 'gamma'],
+    'show projection surface'), source: 'picture' }));
+  const { prepareProjectionSurfaces } = await import('../src/show/projection.mjs');
+  prepareProjectionSurfaces(mapping);
+  return mapping;
+}
+
 async function readShow(file, rehearse, kit) {
   if (fs.statSync(file).size > 1024 * 1024) throw new RangeError('Show cue file exceeds 1 MiB');
   const config = record(JSON.parse(fs.readFileSync(file, 'utf8')), ['format', 'version', 'patch', 'output', 'size', 'fps',
     'frames', 'video', 'audio', 'videoTimeoutMs', 'inputs', 'presets', 'initial', 'cues', 'cueMap', 'projector', 'osc', 'midi', 'slowMs',
-    'liveWorld'], 'patch show cue file');
+    'liveWorld', 'assetRegistry'], 'patch show cue file');
   const { patch, output, size, fps: rate = '30', frames = rehearse ? 120 : Infinity,
     inputs = {}, presets = {}, initial, cues = [], projector = {}, slowMs } = config;
-  if (config.format !== 'ink-studio/patch-show' || config.version !== 1 || typeof patch !== 'string' || !patch || !name(output))
+  const { KIT: K } = kit ?? require('../index.js').load(), api = K.authoring.assetReferences;
+  if (config.format !== 'ink-studio/patch-show' || config.version !== 1 ||
+      !(typeof patch === 'string' && patch || api.isRef(patch)) || !name(output))
     throw new TypeError('Expected ink-studio/patch-show version 1 with a patch file and named output');
+  const assetFiles = new Set(), bindings = new Map();
+  const select = Assets.scope(api, path.resolve(file), config.assetRegistry, { onFile: file => assetFiles.add(file) });
+  function bind(ref, kind) {
+    const result = select(ref, kind), { file, ...identity } = result.entry;
+    bindings.set(api.key(identity), identity);
+    return result;
+  }
+  const media = { ...config, ...(api.isRef(config.audio) && { audio: bind(config.audio, ['voice', 'sound']).filename }) };
   if (!['string', 'number'].includes(typeof rate) || size !== undefined && typeof size !== 'string')
     throw new TypeError('Show needs a frame rate and a WIDTHxHEIGHT size');
   const fps = parseRate(rate), dimensions = parseSize(size);
@@ -100,7 +120,6 @@ async function readShow(file, rehearse, kit) {
       path.isAbsolute(config.cueMap)||path.win32.isAbsolute(config.cueMap))
       throw new TypeError('Show cueMap needs a relative clock map report path');
     cueSource=path.resolve(directory,config.cueMap);
-    const {KIT:K}=kit??require('../index.js').load();
     const report=JSON.parse(fs.readFileSync(cueSource,'utf8'));
     const mapped=K.world.clockMapping.read(report);
     if(mapped.clock.at(0).fps!==fps||report.issues.length)
@@ -112,15 +131,13 @@ async function readShow(file, rehearse, kit) {
       throw new RangeError('Mapped show cues need distinct in-range frames and known presets');
   }
   const { port = 0, wait = !rehearse, surfaces = [] } = record(projector, ['port', 'wait', 'surfaces'], 'show projector');
-  if (!int(port, 0, 65535) || typeof wait !== 'boolean' || !Array.isArray(surfaces) || surfaces.length > 32)
-    throw new TypeError('Show projector needs a valid port, wait flag and up to 32 surfaces');
-  const mapping = surfaces.map(surface => ({ ...record(surface, ['id', 'corners', 'crop', 'edges', 'gain', 'gamma'],
-    'show projection surface'), source: 'picture' }));
-  const { prepareProjectionSurfaces } = await import('../src/show/projection.mjs');
-  prepareProjectionSurfaces(mapping);
-  return { patch: path.resolve(directory, patch), output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,
-    ...sources(config, directory, frames), projector: { port, wait, surfaces: mapping }, slowMs: slowMs ?? 1000 / fps,
+  if (!int(port, 0, 65535) || typeof wait !== 'boolean') throw new TypeError('Show projector needs a valid port and wait flag');
+  const mapping = await projectionSurfaces(api.isRef(surfaces) ? Assets.parse(bind(surfaces, 'projection').bytes) : surfaces);
+  const graph = api.isRef(patch) ? bind(patch, 'graph').filename : path.resolve(directory, patch);
+  return { patch: graph, output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,
+    ...sources(media, directory, frames), projector: { port, wait, surfaces: mapping }, slowMs: slowMs ?? 1000 / fps,
+    assetFiles: [...assetFiles], assetBindings: [...bindings.values()],
     osc: oscInput(config.osc), midi: midiInput(config.midi, presets), liveWorld: liveWorldInput(config.liveWorld) };
 }
 
-module.exports = { readShow, int, loopback };
+module.exports = { readShow, projectionSurfaces, int, loopback };
