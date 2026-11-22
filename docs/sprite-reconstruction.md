@@ -42,3 +42,7 @@ The transition follows a smooth distance curve between the two endpoints and use
 Both renderers accept `spriteReconstruction: 'auto' | 'geometry' | 'sprite'` on a frame. The default is `'auto'`. The CLI accepts the same modes with `--sprite-reconstruction` for scenes that bind the asset in their build function. A frame callback `spriteReconstructionFrame(report)` exposes the distance, native coverage share and selected atlas view for each object. `geometryRows` counts native rows eligible for submission, before ordinary viewport culling and draw budgets.
 
 Depth, alpha, baked or additive emission, normal maps, and edited cels come from the atlas. Set a placement's `depth`, `lighting`, or `emission` flag to control use of its maps. A scene's optional live sun can shade sprite normals. The WebGL picker uses the same depth and coverage as the drawing and reports the same named object. Use scene colliders or shadow proxies wherever those have to stay independent of the displayed representation. This API binds native splat rows and lives on the runtime world built by JavaScript.
+
+For lace and foliage, enable [cutout coverage mipmaps](impostor-atlases.md#cutout-coverage-at-a-distance)
+in the atlas manifest. The same registered level is used for color, depth,
+and picking throughout the reconstruction pass.

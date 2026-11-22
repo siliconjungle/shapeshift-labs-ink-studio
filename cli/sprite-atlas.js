@@ -4,6 +4,7 @@ const PNG = require('./png.js');
 const { render, FOV } = require('./render.js');
 const ArtEffects = require('../src/art-effects.js');
 const AtlasSprites = require('../src/atlas-sprites.js');
+const CutoutMipmaps = require('../src/sprite-cutout-mipmaps.js');
 
 const mapNames = ['depth', 'normal', 'emission', 'silhouette'];
 const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
@@ -22,7 +23,8 @@ function exportViews(world,{directions=8,yaw=world.cam.yaw,pitch=world.cam.pitch
 function spriteAtlas(world, options = {}) {
   const {
     width = 96, height = 96, directions = 8, times = [0], fps = 12, columns = directions,
-    pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view = {}, depthRange, sourceTimes, pitches
+    pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view = {}, depthRange, sourceTimes, pitches,
+    cutoutMipmaps
   } = options;
   if (!integer(width, 1, 2048) || !integer(height, 1, 2048) ||
       !integer(columns, 1, 256) || !Number.isFinite(fps) || fps <= 0 || fps > 240 ||
@@ -35,6 +37,9 @@ function spriteAtlas(world, options = {}) {
       (pose !== undefined && typeof pose !== 'function'))
     throw new RangeError('Invalid sprite atlas dimensions, timing, directions, pivot or maps');
   const requested = [...new Set(maps)];
+  const cutout = CutoutMipmaps.prepare(cutoutMipmaps);
+  if (cutout && width*height > CutoutMipmaps.pixelLimit)
+    throw new RangeError('Cutout mipmaps support up to 262144 pixels per view');
   const passes = requested.filter(name => name !== 'silhouette');
   const angles=exportViews(world,{directions,yaw,pitch:view.pitch,pitches}), views=angles.length;
   const count = times.length * views, cols = Math.min(count, columns);
@@ -120,6 +125,7 @@ function spriteAtlas(world, options = {}) {
   }
   const metadata = { width: w, height: h, tileWidth: width, tileHeight: height, directions, fps, ...(pitches && { pitches:pitches.slice() }),
     pivot: pivot.slice(), frames: entries, normalSpace:'asset', emissionMode:'baked',
+    ...(cutout && { cutoutMipmaps: cutout }),
     encodings: {
       color: 'straight RGBA',
       ...(images.silhouette && { silhouette: 'binary RGBA coverage at alpha >= 128' }),

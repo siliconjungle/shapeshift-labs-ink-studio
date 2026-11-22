@@ -227,3 +227,71 @@ test(
     assert.equal(out.geoPick, 'screen');
   }
 );
+
+function cutoutFixture(kit, { mode = 'coverage', wall = false, depth = true, placed = false } = {}) {
+  const { KIT, makeBuilder } = kit, B = makeBuilder(1, [0x101722, 0xffffff]);
+  const focal = 32 / (7 * Math.tan(19 * Math.PI / 180)), unitsPerPixel = .25 / focal;
+  const color = new Uint8Array(8 * 8 * 4), plane = new Uint8Array(color.length);
+  for (let y = 0; y < 8; y++) for (let x = 1; x < 8; x += 4) {
+    const p = (y * 8 + x) * 4;
+    color.set([32, 230, 126, 255], p);
+    plane[p + 3] = 255;
+  }
+  const atlas = KIT.sprite.atlas({
+    metadata: { width: 8, height: 8, frames: [{ rect: { x: 0, y: 0, width: 8, height: 8 } }],
+      unitsPerPixel, cutoutMipmaps: { mode }, depthRange: [-.18, -.18] },
+    images: { color, depth: plane }
+  });
+  function plate(z, color, object) {
+    const q = [[-.15, -.15, z], [.15, -.15, z], [.15, .15, z], [-.15, .15, z]];
+    for (const tri of [[0, 1, 2], [0, 2, 3]])
+      KIT.surfacePatches.triangle(B, tri.map(i => q[i]), { color, object });
+  }
+  if (!placed) plate(-.22, [240, 190, 10], 'strand');
+  if (wall) plate(.075, [37, 63, 230], 'window');
+  const settings = { cam: { dist: 7, target: [0, 0, 0], yaw: 0, pitch: 0, ortho: true },
+    radius: 5, dither: 0, fog: { c: 0, start: 1, max: 0 } };
+  if (placed) settings.spriteAtlases = [{ at: [0, 0, 0], atlas, mode: 'card', depth }];
+  const world = B.finish(settings), reconstruction = KIT.sprite.reconstruction;
+  if (!placed) reconstruction.bind(world, [{ asset: reconstruction.asset({ atlas }), object: 'strand', at: [0, 0, 0], depth }]);
+  return { world, atlas, focal };
+}
+
+test('cutout coverage keeps a thin depth-bearing texel in both headless atlas paths', () => {
+  const draw = options => ink.render(cutoutFixture(kit, options).world,
+    { w: 64, h: 64, px: 1, raw: true, ortho: true, spriteReconstruction: 'sprite', passes: ['depth'] });
+  const green = image => image.rgb[(31 * 64 + 31) * 3 + 1];
+  for (const placed of [false, true]) {
+    const visible = draw({ placed, wall: true });
+    assert(green(visible) > 210);
+    assert(green(draw({ placed, wall: true, depth: false })) < 100);
+    assert(green(draw({ placed, wall: false, mode: 'average' })) < 100);
+    assert.equal(visible.rgb.filter((value, i) => i % 3 === 1 && value > 210).length, 1);
+  }
+});
+
+test('WebGL draws and picks the same retained cutout mip pixel', { skip: !process.env.INK_TEST_CHROME }, () => {
+  const out = require('../cli/look-webgl')({ chrome: process.env.INK_TEST_CHROME, hardware: true },
+    cutoutFixture, (kit, build, backend) => {
+      const b = backend(64, 64, { raw: true, ortho: true, damp: false, spriteReconstruction: 'sprite' });
+      const prober = { retained: [31, 31], empty: [32, 31] };
+      function draw(options) {
+        const { world, focal } = build(kit, options);
+        b.draw(world);
+        const color = b.sample(prober);
+        const pick = (x, y) => b.pick(world, {
+          origin: [(x + .5 - 32) / focal, (32 - y - .5) / focal, 7], direction: [0, 0, -1]
+        }, { width: 64, height: 64, ortho: true, spriteReconstruction: 'sprite' }).solid?.target?.object;
+        return { color, retained: pick(31, 31), empty: pick(32, 31) };
+      }
+      const result = { covered: draw({}), average: draw({ mode: 'average' }),
+        visible: draw({ wall: true }), hidden: draw({ wall: true, depth: false }) };
+      b.close();
+      return result;
+    });
+  assert(out.covered.color.retained[1] > 210 && out.covered.color.empty[1] < 100, JSON.stringify(out));
+  assert.equal(out.covered.retained, 'strand');
+  assert.equal(out.covered.empty, undefined);
+  assert.equal(out.average.retained, undefined);
+  assert(out.visible.color.retained[1] > 210 && out.hidden.color.retained[2] > 210);
+});

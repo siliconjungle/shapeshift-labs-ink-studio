@@ -59,6 +59,34 @@ A JSON diorama can put an array of placements in `finish.spriteAtlases` and refe
 
 Depth positions each texel along its draw ray and participates in the scene's depth, fog, and emission passes. The renderer uses the silhouette of the selected view. The [survey drone example](../examples/relightable-impostor.js) demonstrates both placement modes under changing camera and lighting angles.
 
+## Cutout coverage at a distance
+
+Add `"cutoutMipmaps": { "mode": "coverage", "cutoff": 0.5 }` to a card
+or impostor manifest for hard-edged paint such as lace, feathers, and foliage.
+Ink builds smaller versions of each view from its original alpha mask and
+selects a level using the sprite's size on the native art grid. Each level
+keeps the nearest whole number of occupied texels to the original coverage.
+Ink gives priority to the most covered footprints and resolves ties with a
+fixed spatial pattern. At very small sizes the available pixels limit which
+parts of the pattern can survive.
+
+Every occupied texel takes its color, depth, normal and emission from the
+same contributing source texel. A hole with no covered source pixels stays
+empty. Use `"mode": "average"` to compare with an ordinary area average
+and hard cutoff. The option requires at most 262,144 pixels per view.
+It applies to world-scaled cards and impostors in the headless renderer,
+and to depth-aware reconstruction in WebGL, including picking. Native-pixel
+cards and active painted transitions use their registered texels.
+
+```sh
+ink-studio atlas my-prop.js --maps depth,normal,emission --cutout-mipmaps coverage --out drone
+```
+
+Run `npm run build` and open the [Lacewing demo](../examples/atlas-cutouts/index.html)
+from a local server to compare both modes and see a bar pass between the wing depths.
+
+[Ignacio Castaño, Computing Alpha Mipmaps](https://www.ludicon.com/castano/blog/articles/computing-alpha-mipmaps/)
+
 ## Painted scenery
 
 Painted scenery can cast [thick cutout shadows](painted-cutout-shadows.md#front-and-back-depth)

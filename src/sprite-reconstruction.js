@@ -123,7 +123,7 @@ bool spriteGeometry(int code, vec2 at) {
     return world;
   }
 
-  function resolve(world, { eye, back, ortho, time = 0, setback = 0, mode = 'auto', atlasTime } = {}) {
+  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime } = {}) {
     const configuration = world.spriteReconstruction;
     if (!configuration || mode === false || mode === 'geometry') return null;
     if (!['auto', 'sprite'].includes(mode) || !Number.isFinite(time) || !Number.isFinite(setback))
@@ -157,6 +157,9 @@ bool spriteGeometry(int code, vec2 at) {
           ? placement.frame(clock)
           : (placement.frame ?? placement.frameAt?.(clock));
       const view = source.atlas.select(frame, 'impostor', local(rotation, direction));
+      const pixelsPerTexel = (view.unitsPerPixel * placement.scale * focal) / (ortho ? 1 : dot(delta, back));
+      const cutoutLevel = source.atlas.cutoutLevel?.(view, pixelsPerTexel);
+      if (cutoutLevel !== undefined) state.cutoutLevel = cutoutLevel;
       const axes = atlasAPI.basis(
         Math.atan2(direction[0], direction[2]),
         Math.atan2(direction[1], Math.hypot(direction[0], direction[2]))
@@ -167,6 +170,7 @@ bool spriteGeometry(int code, vec2 at) {
         at,
         view,
         axes,
+        cutoutLevel,
         normalAxes:
           source.atlas.normalSpace === 'view' ? atlasAPI.basis(view.yaw + placement.yaw, view.pitch) : rotation,
         phase,
@@ -202,8 +206,9 @@ bool spriteGeometry(int code, vec2 at) {
       const plane = dot(plus(origin, at, -1), axes.normal) / facing;
       const base = plus(plus(origin, ray, plane), at, -1),
         units = view.unitsPerPixel * scale;
-      const x = Math.floor(view.pivot.x + dot(base, axes.right) / units);
-      const y = Math.floor(view.pivot.y - dot(base, axes.up) / units);
+      const u = view.pivot.x + dot(base, axes.right) / units;
+      const v = view.pivot.y - dot(base, axes.up) / units;
+      const x = Math.floor(u), y = Math.floor(v);
       if (x < 0 || x >= view.rect.width || y < 0 || y >= view.rect.height) continue;
       const target = {
         kind: 'sprite',
@@ -229,7 +234,9 @@ bool spriteGeometry(int code, vec2 at) {
           solid
         });
       }
-      if (atlas.sample(view, x, y, placement, texel)) add(texel.alpha, texel.depth, texel.color, true);
+      const mip = atlas.cutoutImage?.(view, row.cutoutLevel);
+      if (mip ? atlas.cutoutSample(view, mip, u, v, placement, texel) : atlas.sample(view, x, y, placement, texel))
+        add(texel.alpha, texel.depth, texel.color, true);
       const effect = atlas.effect(view),
         coverage = effect?.sample(x, y, effectColor);
       if (coverage) add(coverage, effect.depth, effectColor, false);

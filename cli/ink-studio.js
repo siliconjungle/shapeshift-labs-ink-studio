@@ -1173,7 +1173,8 @@ const CMD = {
         '  sweep replay <pin.json> --out directory   render the saved case',
         '  sweep nearby <pin.json> <offsets.json> --out directory   vary numeric settings around the saved case',
         '  variants <id> --seeds 3,7,12 [--group silhouette|openness|wear --motion]  render a ranked seed contact sheet',
-        '  atlas <id> [--directions 8 --pitches 0,0.7 --w 96 --h 96 --fps 12 --maps depth,normal,emission,silhouette]  export a transparent sprite atlas',
+        '  atlas <id> [--directions 8 --pitches 0,0.7 --w 96 --h 96 --fps 12 --maps depth,normal,emission,silhouette]',
+        '             [--cutout-mipmaps coverage|average --alpha-cutoff 0.5]  export a transparent sprite atlas',
         '  camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96   export-sized frames and framing checks',
         '  silhouette-review <scene> --directions 8 --w 96 --h 96   paired export-size views and edge contrast',
         '  transition-review <scene> [--plan file.json] --w 160 --h 90 [--out sheet.png]',
@@ -2264,10 +2265,13 @@ const CMD = {
     const times = Array.from({ length: frames }, (_, index) => from + index / fps);
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT, w.id + '-atlas');
     const { spriteAtlas, writeAtlas } = require('./sprite-atlas.js');
+    const cutoutMipmaps = opt['cutout-mipmaps'] === undefined || opt['cutout-mipmaps'] === 'off' ? undefined :
+      { mode: opt['cutout-mipmaps'] === true ? 'coverage' : opt['cutout-mipmaps'], cutoff: num('alpha-cutoff', .5) };
+    if (opt['alpha-cutoff'] !== undefined && !cutoutMipmaps) die('--alpha-cutoff needs --cutout-mipmaps');
     const atlas = spriteAtlas(w, { width: num('w', 96), height: num('h', 96), directions: num('directions', 8),
       columns: num('cols', num('directions', 8)), maps: opt.maps ? String(opt.maps).split(',') : [],
       pivot: opt.pivot ? list('pivot') : w.cam.target, view: view(), yaw: num('yaw', w.cam.yaw),
-      pitches:opt.pitches===undefined?undefined:list('pitches'),times,fps,pose });
+      pitches:opt.pitches===undefined?undefined:list('pitches'),times,fps,pose,cutoutMipmaps });
     writeAtlas(directory, atlas);
     console.log('wrote', directory, atlas.metadata.frames.length, 'frames');
   },

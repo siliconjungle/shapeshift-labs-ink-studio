@@ -837,7 +837,8 @@ function renderFrame(world, o, preparedPalettes) {
   const nominalEye = ortho ? eye.map((value, i) => value - depthOffset * V[2 + i * 4]) : eye;
   const spriteLOD = world.spriteReconstruction && require('../index.js').load().KIT.sprite.reconstruction;
   const spritePlan = spriteLOD && spriteLOD.resolve(world, {
-    eye, back:[V[2],V[6],V[10]], ortho, setback:depthOffset, time:t, mode:o.spriteReconstruction,
+    eye, back:[V[2],V[6],V[10]], ortho, focal:focal/(o.artGridScale||1),
+    setback:depthOffset, time:t, mode:o.spriteReconstruction,
     atlasTime:shutterRows?.atlasTime
   });
   const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);

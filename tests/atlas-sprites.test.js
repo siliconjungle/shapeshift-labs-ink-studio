@@ -273,3 +273,45 @@ test('a rebake can reuse a cel sidecar, preserving baked geometry and requiring 
     fs.rmSync(directory,{recursive:true,force:true});
   }
 });
+
+test('cutout mips conserve occupied texels per registered view and keep aligned source maps', () => {
+  const width = 13, height = 7, color = new Uint8Array(width * height * 4);
+  const depth = new Uint8Array(color.length), normal = new Uint8Array(color.length), emission = new Uint8Array(color.length);
+  let sourceCount = 0;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const p = (y * width + x) * 4;
+    if (x >= 5) { color.set([0, 0, 255, 255], p); continue; }
+    if ((x + y) % 3) { color.set([0, 0, 255, 127], p); continue; }
+    sourceCount++;
+    const b = x >= 2;
+    color.set([b ? 250 : 20, 30, 0, 255], p);
+    depth.set([b ? 255 : 0, 0, 0, 255], p);
+    normal.set(b ? [255, 128, 128, 255] : [128, 128, 255, 255], p);
+    emission.set([b ? 170 : 35, 0, 0, 255], p);
+  }
+  const metadata = { width, height, depthFormat: 'gray', depthRange: [-1, 1], cutoutMipmaps: true,
+    frames: [{ rect: { x: 0, y: 0, width: 5, height: 7 } }, { yaw: Math.PI, rect: { x: 5, y: 0, width: 8, height: 7 } }] };
+  const asset = K.sprite.atlas({ metadata, images: { color, depth, normal, emission } });
+  const front = asset.select(0, 'impostor', [0, 0, 1]), back = asset.select(0, 'impostor', [0, 0, -1]);
+  assert.equal(asset.cutoutLevel(front, .24), 2);
+  assert.equal(asset.cutoutLevel(front, 2), 0);
+  for (let level = 0; level <= 2; level++) {
+    const image = asset.cutoutImage(front, level);
+    assert.equal(image, asset.cutoutImage(front, level));
+    assert.equal(image.covered, Math.round(sourceCount * image.width * image.height / 35));
+    const out = { color: [], normal: [], emission: [] };
+    for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) {
+      if (!asset.cutoutSample(front, image, (x + .5) * 5 / image.width, (y + .5) * 7 / image.height,
+        { depth: true, emission: true }, out)) continue;
+      const far = out.depth === 1;
+      assert.equal(out.depth, far ? 1 : -1);
+      assert.equal(Math.round(out.color[0] * 255), far ? 250 : 20);
+      assert.equal(out.color[2], 0);
+      assert.equal(out.normal[far ? 0 : 2], 1);
+      assert.equal(Math.round(out.emission[0] * 255), far ? 170 : 35);
+    }
+  }
+  assert.equal(asset.cutoutImage(back, 1).covered, 12);
+  assert.throws(() => asset.cutoutImage(front, 3), /mip level/);
+  assert.throws(() => K.sprite.atlas({ metadata: { ...metadata, cutoutMipmaps: { cutoff: 0 } }, images: { color } }), /cutoff/);
+});

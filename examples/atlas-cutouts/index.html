@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lacewing · Ink Studio</title>
+<style>
+:root { color-scheme:dark; font-family:system-ui,sans-serif; color:#ecf4f6; background:#0c141e; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { width:min(100% - 36px,1000px); margin:36px auto; }
+h1 { margin:0 0 9px; font-size:clamp(34px,7vw,60px); letter-spacing:-.06em; line-height:1; }
+p { margin:0; color:#aabdc6; }
+.panels { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:24px 0 17px; }
+figure { margin:0; background:#101f2a; border:1px solid #344c5b; }
+figcaption { padding:11px 12px 5px; font-size:14px; font-weight:650; }
+figure:last-child figcaption { color:#a1e2d1; }
+figure p { font-size:13px; padding:0 12px 9px; }
+figure output { color:#e7cd9d; font-variant-numeric:tabular-nums; }
+canvas { display:block; width:100%; image-rendering:pixelated; background:#0d1c28; }
+.controls { display:flex; align-items:center; flex-wrap:wrap; gap:12px 20px; font-size:14px; }
+.controls label { display:flex; align-items:center; gap:8px; }
+.controls label:first-child { flex:1; }
+input { accent-color:#9ce5d2; }
+input[type=range] { flex:1; max-width:220px; min-width:65px; }
+#size { min-width:11ch; color:#a1e2d1; font-variant-numeric:tabular-nums; }
+#status { min-height:22px; margin-top:12px; font-size:13px; }
+@media(max-width:550px) {
+  main { margin-top:26px; }
+  .panels { gap:7px; margin-top:16px; }
+  figcaption { font-size:12px; padding:8px 7px 4px; }
+  figure p { font-size:11px; padding:0 7px 7px; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Lacewing</h1>
+<p>Reduce a depth-aware atlas and see how much of the cutout survives.</p>
+<section class="panels" aria-label="Cutout rendering comparison">
+  <figure><figcaption>Area average</figcaption><p><output id="average-count">…</output></p><canvas id="average" width="54" height="44" aria-label="Area-averaged cutout"></canvas></figure>
+  <figure><figcaption>Preserve coverage</figcaption><p><output id="coverage-count">…</output></p><canvas id="coverage" width="54" height="44" aria-label="Coverage-preserving cutout"></canvas></figure>
+</section>
+<div class="controls">
+  <label>Size <input id="mip" type="range" min="1" max="4" value="2"><output id="size" for="mip"></output></label>
+  <label><input id="bar" type="checkbox"> Pass a bar through the wing depth</label>
+</div>
+<p id="status" role="status"></p>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

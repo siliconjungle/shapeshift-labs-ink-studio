@@ -3,6 +3,7 @@ const AtlasSprites = (() => {
   const drawing=typeof FrameComposite==='undefined'?require('./frame-composite.js'):FrameComposite;
   const cels=typeof SpriteCels==='undefined'?require('./sprite-cels.js'):SpriteCels;
   const shells=typeof ShadowShell==='undefined'?require('./shadow-shell.js'):ShadowShell;
+  const cutouts=typeof SpriteCutoutMipmaps==='undefined'?require('./sprite-cutout-mipmaps.js'):SpriteCutoutMipmaps;
   const assetBrand=Symbol.for('ink-studio.sprite-atlas'), placedBrand=Symbol.for('ink-studio.atlas-placement');
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const integer=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
@@ -99,6 +100,8 @@ const AtlasSprites = (() => {
       throw new RangeError('Sprite atlas needs valid dimensions and view frames');
     if (!['view','asset'].includes(normalSpace)||!['baked','add'].includes(emissionMode)||!['rgb24','gray'].includes(depthFormat))
       throw new RangeError('Invalid sprite atlas map encoding');
+    const cutoutMipmaps=cutouts.prepare(m.cutoutMipmaps);
+    if (cutoutMipmaps && painted !== undefined) throw new TypeError('Cutout mipmaps need a card or impostor atlas');
     if (outputPalette!==undefined && (!Array.isArray(outputPalette) || !outputPalette.length || outputPalette.length>64 ||
         !Array.from(outputPalette).every(color=>integer(color,0,0xffffff))))
       throw new RangeError('Sprite atlas output palettes need 1 to 64 packed RGB swatches');
@@ -135,6 +138,8 @@ const AtlasSprites = (() => {
       if (!integer(frame,0,32767)||!integer(x,0,width-1)||!integer(y,0,height-1)||
           !integer(w,1,width-x)||!integer(h,1,height-y))
         throw new RangeError('Sprite atlas view rectangle or frame is out of range');
+      if (cutoutMipmaps && w*h > cutouts.pixelLimit)
+        throw new RangeError('Cutout mipmaps support up to 262144 pixels per view');
       const pivot=entry.pivot??{x:w*.5,y:h*.5};
       const view={
         rect:{x,y,width:w,height:h}, pivot:{x:finite(pivot.x,'Sprite pivot X'),y:finite(pivot.y,'Sprite pivot Y')},
@@ -219,6 +224,11 @@ const AtlasSprites = (() => {
     const editedDepth=edits&&Array.from(edits.edited.values()).some(edit=>edit.maps.depth||edit.extensionDepth!==undefined);
     const transition=edits?.transition;
     return Object.freeze({[assetBrand]:true,select,sample,effect,...(edits?.fringe&&{fringe:edits.fringe}),
+      ...(cutoutMipmaps&&{cutoutMipmaps,cutoutLevel:cutouts.level,cutoutSample:cutouts.sample,
+        cutoutImage(view,level=0) {
+          if (!integer(level,0,cutouts.maxLevel(view))) throw new RangeError('Invalid sprite cutout mip level');
+          return cutouts.image(view,sample,cutoutMipmaps,level);
+        }}),
       ...(transition&&{transition:transition.frame}),
       ...(transition?.silhouetteIds.length&&{silhouettes:transition.silhouetteIds,
         silhouette:(view,time,id)=>transition.silhouetteIds.includes(id) ? transition.frame(view,time,id) : null}),

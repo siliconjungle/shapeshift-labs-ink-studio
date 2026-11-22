@@ -78,6 +78,8 @@ function rasterize(placements, settings) {
     const normalAxes=basis(tile.yaw+placement.yaw,tile.pitch);
     const axes=lod?.axes??(fixed?normalAxes:basis(...heading(direction)));
     const units=tile.unitsPerPixel*placement.scale;
+    const mip=!fixed&&!exact&&!transition&&atlas.cutoutImage?.(tile,
+      lod?.cutoutLevel??atlas.cutoutLevel(tile,units*focal/(artScale*(ortho?1:anchorScreen[2]))));
     const {x:tileX,y:tileY,width,height}=tile.rect, px=tile.pivot.x,py=tile.pivot.y;
     // Round the card origin once. Every texel then gets one integer art-pixel address.
     const offset=exact&&placement.pixelOffset?placement.pixelOffset(time):null;
@@ -128,7 +130,9 @@ function rasterize(placements, settings) {
             const strands=fringe?.at(u,v);
             if (!inside&&!strands&&!transition) continue;
             const p=y*W+x;
-            if ((inside||transition) && atlas.sample(tile,u,v,placement,sample,id,transition) && (!lod || spriteLOD.alpha(sample.alpha,lod,x,y))) {
+            const body=mip?inside&&atlas.cutoutSample(tile,mip,uAt,vAt,placement,sample):
+              (inside||transition)&&atlas.sample(tile,u,v,placement,sample,id,transition);
+            if (body && (!lod || spriteLOD.alpha(sample.alpha,lod,x,y))) {
               const hit=fragmentAt(ray,fixed?plane:plane+placement.scale*sample.depth/facing);
               if (hit) {
                 const {position}=hit;

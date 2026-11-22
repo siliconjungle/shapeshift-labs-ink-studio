@@ -30,7 +30,8 @@ export function createSpriteReconstructionPipeline(gl, api, cutaway) {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, item);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA32F, image.width, image.height, 4, 0, gl.RGBA, gl.FLOAT, image.values);
+    const layers = image.values.length / (image.width * image.height * 4);
+    gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA32F, image.width, image.height, layers, 0, gl.RGBA, gl.FLOAT, image.values);
     cache.set(image, item);
     bytes += image.values.byteLength;
   }
@@ -60,7 +61,7 @@ uniform mat4 u_view,u_proj;
 uniform mat3 u_normalAxes;
 uniform vec3 u_eye,u_plane,u_back,u_fog,u_sun;
 uniform vec4 u_range,u_splatPlane;
-uniform vec2 u_surfaceViewport,u_artScale,u_sunGain;
+uniform vec2 u_surfaceViewport,u_artScale,u_sunGain,u_size;
 uniform int u_phase,u_step;
 uniform bool u_ortho,u_depth,u_normal,u_emission,u_baked,u_effect,u_index,u_graphDepth,u_portalCover;
 uniform float u_scale,u_effectDepth;
@@ -76,7 +77,9 @@ layout(location=2) out vec4 water;
 void main(){
   vec2 pixel=gl_FragCoord.xy*u_artScale;
   if(spriteRank(pixel,u_phase)<u_step)discard;
-  ivec2 tx=clamp(ivec2(v_texel),ivec2(0),textureSize(u_sprite,0).xy-1);
+  ivec2 size=textureSize(u_sprite,0).xy;
+  vec2 texel=all(equal(vec2(size),u_size))?v_texel:v_texel/u_size*vec2(size);
+  ivec2 tx=clamp(ivec2(texel),ivec2(0),size-1);
   vec4 ink=texelFetch(u_sprite,ivec3(tx,u_effect?3:0),0);
   if(ink.a*64.0<=float(spriteRank(pixel+vec2(3,5),u_phase^45)))discard;
   vec4 material=texelFetch(u_sprite,ivec3(tx,1),0);
@@ -168,15 +171,16 @@ void main(){
         ...environment?.uniforms
       });
       for (const row of rows) {
-        const image = api.tile(row),
-          { placement, view: tile, at, axes, normalAxes, phase, step } = row;
+        const { placement, view: tile, at, axes, normalAxes, phase, step, cutoutLevel } = row;
+        const mip = placement.atlas.cutoutImage?.(tile, cutoutLevel);
+        const image = mip ?? api.tile(row);
         texture(image);
         shader.set({
           u_anchor: at,
           u_right: axes.right,
           u_up: axes.up,
           u_plane: axes.normal,
-          u_size: [image.width, image.height],
+          u_size: [tile.rect.width, tile.rect.height],
           u_pivot: [tile.pivot.x, tile.pivot.y],
           u_units: tile.unitsPerPixel * placement.scale,
           u_scale: placement.scale,
@@ -191,8 +195,10 @@ void main(){
           u_effectDepth: 0
         });
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        if (image.effectDepth !== undefined) {
-          shader.set({ u_effect: true, u_effectDepth: image.effectDepth });
+        const effectDepth = mip ? placement.atlas.effect(tile)?.depth : image.effectDepth;
+        if (effectDepth !== undefined) {
+          if (mip) texture(api.tile(row));
+          shader.set({ u_effect: true, u_effectDepth: effectDepth });
           gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }
       }
