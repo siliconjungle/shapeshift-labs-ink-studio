@@ -1,0 +1,41 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "pier-facts",
+  "title": "A delivery receipt opens the watch",
+  "stories": {
+    "open-watch": {
+      "kind": "incident",
+      "title": "Open the pier watch when two crates are delivered",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "triggers": {
+        "full-delivery": { "event": { "kind": "world-fact", "where": { "all": [
+          { "path": "/fact/type", "value": "delivery-confirmed" },
+          { "path": "/fact/data/crates", "op": "gte", "value": 2 }
+        ] } } }
+      },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 1, "release": "automatic" },
+        "feasibility": {
+          "known-courier": { "state": {
+            "field": "world/facts",
+            "args": { "type": "delivery-confirmed", "role": "courier", "subject": "crew/mira" },
+            "select": "/matched",
+            "when": { "op": "gte", "value": 1 }
+          } }
+        }
+      },
+      "entry": "open",
+      "stages": { "open": {
+        "title": "Open the watch",
+        "decision": { "mode": "autonomous" },
+        "objectives": { "approval": { "title": "Read the approval", "evidence": {
+          "event": { "kind": "world-fact", "where": { "path": "/fact/type", "value": "watch-approved" } }
+        } } },
+        "next": { "done": { "outcome": "ready", "auto": true } }
+      } },
+      "outcomes": { "ready": { "title": "The pier watch is ready" } }
+    }
+  }
+}

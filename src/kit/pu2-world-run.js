@@ -9,10 +9,12 @@
   const ordered = value => Object.keys(value).sort();
   const worldActions = ['input','patch','event','transfer'];
   const worldAction = (plan, name) => worldActions.includes(name) || plan.chunks?.actions.includes(name) ||
+    plan.worldFacts && name===W.worldFacts.action ||
     plan.storyLifecycle && W.storyLifecycle.actions.includes(name) ||
     plan.incidentCandidates && name===W.incidentCandidates.action;
   const checkpointFormat = 'ink-studio/checkpoint', runFormat = 'ink-studio/run';
   const savedCheckpoints=new WeakSet(), branchToken=Symbol('live checkpoint');
+  const typedFact=Symbol('typed fact event');
 
   function stepTiming(world,at,timing) {
     const baseDt=world.dt, substeps=timing?.substeps??1, detail=timing?.detail;
@@ -334,6 +336,7 @@
     const plan = {world,systems,ports,incoming,order,names,transfers,couplings,dependencies,schedule,rates,timedSolvers,chunks,aggregates,reservations,worksites,
       interactions,influence,population,causePolicy,contracts,phaseEdges,navigationSources};
     plan.storyteller = W.storyteller.compile(world.storyteller,world.dt,world.seed);
+    plan.worldFacts = W.worldFacts.compile(world.facts,world.dt);
     const templates = world.storyTemplates === undefined ? undefined : W.storyTemplates.compile(world);
     if (templates || world.storyDocuments !== undefined || world.storyBindings !== undefined) {
       plan.storyRoles = W.storyRoles.compile(templates?.documents ?? (world.storyDocuments === undefined ? [] : world.storyDocuments),
@@ -383,10 +386,12 @@
         'Live patches may change entities and metadata');
       } else if(plan.chunks?.actions.includes(key))plan.chunks.checkAction(key,args);
       else if (key === 'transfer') plan.transfers.validate(args);
+      else if (key===W.worldFacts.action) plan.worldFacts.checkAction(args);
       else if (key===W.incidentCandidates.action) plan.incidentCandidates.checkAction(args);
       else if (W.storyLifecycle.actions.includes(key)) plan.storyLifecycle.checkAction(key,args);
       else {
         check(id(args.kind), 'An event needs a kind');
+        check(!plan.worldFacts||args.kind!==W.worldFacts.kind,'Use world/fact to publish a typed world fact');
         W.timedEvents.timeOf(args);
       }
     } else {
@@ -474,6 +479,7 @@
       documents:plan.storyRoles?.documents.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.incidentCatalog?.length && {incidentCatalog:W.incidentCatalog.find(plan.incidentCatalog)}),
+      ...(plan.worldFacts && {facts:plan.worldFacts.policy}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
       ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
@@ -510,7 +516,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,navigationSources} = plan;
     const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
       documents:storyRoles?.documents??[]});
     let composition, inspection;
@@ -551,6 +557,7 @@
     let storyLifecycleState = storyLifecycle?.initial();
     let storyFeasibilityState = storyLifecycle?.initialFeasibility?.();
     let storyReferenceState, incidentCandidateState = incidentCandidates?.initial();
+    let worldFactState = worldFacts?.initial();
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -573,6 +580,7 @@
       return Object.freeze({world:worldValue,states:visibleStates(statesValue),
         ...((aggregates||stateViews.length)&&{[W.simulationAggregate.rawStates]:statesValue}),signals,tick:tickValue,time:tickValue*worldValue.dt,history,dropped,
         ...(receipts.length && {transfers:receipts}),...(causes && {causality:causes}),
+        ...(worldFactState && {worldFacts:worldFactState}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
@@ -679,6 +687,7 @@
         ...(storyFeasibilityState && {storyFeasibilityState}),
         ...(storyReferenceState && {storyReferenceState}),
         ...(incidentCandidates && {incidentCandidateState}),
+        ...(worldFactState && {worldFactState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -695,6 +704,7 @@
       storyFeasibilityState = payload.storyFeasibilityState;
       storyReferenceState = payload.storyReferenceState;
       incidentCandidateState = payload.incidentCandidateState;
+      worldFactState = payload.worldFactState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -743,6 +753,8 @@
       if (incidentCandidates) incidentCandidates.validate(payload.incidentCandidateState,payload.tick,payload.storyTriggerState,
         payload.storyLifecycleState,payload.storyFeasibilityState);
       else check(!own(payload,'incidentCandidateState'),'Unexpected incident candidate checkpoint data');
+      if (worldFacts) worldFacts.validate(payload.worldFactState,payload.tick,Boolean(causePolicy),payload.events);
+      else check(!own(payload,'worldFactState'),'Unexpected world fact checkpoint data');
       if (storyReferences) storyReferences.validate(payload.storyReferenceState,payload.tick,payload.storyLifecycleState);
       else check(!own(payload,'storyReferenceState'),'Unexpected story live reference checkpoint data');
       transfers.validateBalances(payload.states);
@@ -815,7 +827,7 @@
     const blockSize = authoredBlockSize===undefined ? undefined :
       Math.min(authoredBlockSize,systems[names[0]].processingLimit?.()??authoredBlockSize);
     const blockSystem = blockSize !== undefined && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
-      !storyLifecycle && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
+      !storyLifecycle && !worldFacts && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
     if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
     debug?.publish(origin);
@@ -895,13 +907,18 @@
         });
       }
       const causal = causePolicy && W.causality.begin(causalState,at,ports,incoming,causePolicy);
-      const makeEmit = (system,scope,root) => (kind,detail = {},parents) => {
+      const factLedger = worldFacts?.begin(worldFactState,at);
+      const makeEmit = (system,scope,root,token) => (kind,detail = {},parents) => {
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
+        const typed = token===typedFact;
+        check(!factLedger||kind!==W.worldFacts.kind||typed,'Use world/fact to publish a typed world fact');
         W.timedEvents.timeOf(detail);
         const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
         events.push(row);
-        if (causal) return causal.event(row,parents??scope?.emitParents()??(root?[root]:[]),scope?.location,
+        const ref = causal?.event(row,parents??scope?.emitParents()??(root?[root]:[]),scope?.location,
           parents?'declared':root?'command':'observed-inputs');
+        factLedger?.note(row,ref,typed);
+        return ref;
       };
       function setInput(port,next,root){
         const descriptor=ports.inputs[port];
@@ -968,6 +985,11 @@
           if (key === 'event') {
             const {kind,...detail} = item.args;
             emit(kind,detail);
+          }
+          if (key===W.worldFacts.action) {
+            const fact = factLedger.prepare(item.args,events.length);
+            const parents = fact.causes.map(cause=>cause.causal??causal?.eventReference(cause.id)).filter(Boolean);
+            makeEmit(name,undefined,root,typedFact)(W.worldFacts.kind,{fact},parents.length?[root,...parents]:undefined);
           }
           if (key === 'transfer') {
             requests.push({name,request:item.args,root});
@@ -1291,7 +1313,8 @@
       let completed;
       const completedView = () => {
         const frame = view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState);
-        return nextStoryReferences ? {...frame,storyReferences:nextStoryReferences} : frame;
+        return nextStoryReferences||factLedger?{...frame,...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
+          ...(factLedger&&{worldFacts:factLedger.snapshot()})}:frame;
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
@@ -1449,7 +1472,9 @@
       const memory = historyWith(events,nextWorld.history);
       const dependencyReport = trace && trace.report();
       const nextCausal = causal?.finish();
+      const nextFacts = factLedger?.finish();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
+        ...(nextFacts && {worldFacts:nextFacts}),
         ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle}),
         ...(nextStoryFeasibility && {storyFeasibility:nextStoryFeasibility}),
         ...(nextStoryReferences && {storyReferences:nextStoryReferences}),
@@ -1475,6 +1500,7 @@
       lastEvents = freeze(events);
       lastTransfers = receipts;
       causalState = nextCausal;
+      worldFactState = nextFacts;
       chunkState = nextChunkState;
       storyTriggerState = nextStoryTriggers;
       storyLifecycleState = nextStoryLifecycle;

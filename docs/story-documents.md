@@ -1066,6 +1066,12 @@ to a different courier.
 
 ## Trigger a story from a world
 
+A [typed world fact](headless-worlds.md#record-and-trace-typed-world-facts)
+can serve as a trigger, a feasibility check, or objective evidence.
+Match its `world-fact` event to use the exact occurrence. Query
+`world/facts` to test whether the retained ledger contains relevant
+evidence. The pier example combines both at the same scheduler boundary.
+
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.
 
 | Trigger | Example | When it starts |

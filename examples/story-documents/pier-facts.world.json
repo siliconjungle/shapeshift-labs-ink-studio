@@ -1,0 +1,54 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "pier-facts",
+  "dt": 0.1,
+  "seed": 7,
+  "history": { "enabled": false },
+  "causality": { "limit": 64 },
+  "storyDocuments": [{ "file": "pier-facts.json" }],
+  "entities": { "south-pier": { "position": [-1, 0.2, 4] } },
+  "facts": {
+    "limit": 32,
+    "eventLimit": 64,
+    "types": {
+      "delivery-confirmed": { "subjects": { "courier": "character", "recipient": "place" },
+        "fields": { "crates": "integer" } },
+      "watch-approved": { "subjects": { "watch": "story" }, "fields": { "approved": "boolean" } }
+    }
+  },
+  "systems": {
+    "stock": { "kind": "store", "config": { "accounts": {
+      "depot": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 3 },
+      "pier": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "eventActions": {
+    "record-delivery": {
+      "on": { "kind": "transfer", "where": { "all": [
+        { "path": "/to", "value": "stock/pier" },
+        { "path": "/applied", "op": "gt", "value": 0 }
+      ] } },
+      "actions": [{ "action": "world/fact", "args": {
+        "type": "delivery-confirmed",
+        "at": { "entity": "south-pier", "place": "harbor/pier", "point": [-1, 0.2, 4] },
+        "subjects": { "courier": "crew/mira", "recipient": "harbor/pier" },
+        "data": { "crates": 0 },
+        "causes": ["1.0"]
+      }, "bindings": { "/data/crates": "/applied", "/causes/0": "/id" } }]
+    },
+    "record-approval": {
+      "on": { "kind": "world-fact", "where": { "all": [
+        { "path": "/fact/type", "value": "delivery-confirmed" },
+        { "path": "/fact/data/crates", "op": "gte", "value": 2 }
+      ] } },
+      "actions": [{ "action": "world/fact", "args": {
+        "type": "watch-approved",
+        "at": { "place": "harbor/pier" },
+        "subjects": { "watch": "pier-facts/open-watch" },
+        "data": { "approved": true },
+        "causes": ["1.0"]
+      }, "bindings": { "/causes/0": "/id" } }]
+    }
+  }
+}

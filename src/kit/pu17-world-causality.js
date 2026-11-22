@@ -159,6 +159,9 @@
       manual(port,ref,append) {manual[port]=append?refs([...(manual[port]??[]),ref]):[ref];},
       command:(system,item)=>add('command',system,'scheduled-command',{action:item.action,args:item.args,
         ...(item.id!==undefined && {commandId:item.id})}),
+      eventReference(id) {
+        for (const row of retained.values()) if (row.event===id) return row.id;
+      },
       event:(row,causes,location,basis)=>add('event',row.system,row.kind,row,causes,{event:row.id,basis,...location})};
   }
 

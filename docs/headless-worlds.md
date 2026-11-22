@@ -650,6 +650,94 @@ map. Style the panel with CSS parts, `--ink-cause-*` properties, or a
 custom `stylesheet` with `defaultStyles:false`. Labels, value formatting,
 and visible controls are configurable.
 
+## Record and trace typed world facts
+
+Declare named occurrence types in the world's `facts.types` table.
+Each type defines subject roles and payload fields. A fact records the
+type, world tick and time, location, named subjects, and earlier events
+that contributed to it.
+
+```json
+"facts": {
+  "types": {
+    "delivery-confirmed": {
+      "subjects": { "courier": "character", "recipient": "place" },
+      "fields": { "crates": "integer" }
+    }
+  },
+  "limit": 256,
+  "eventLimit": 2048
+}
+```
+
+Publish a fact with a scheduled `world/fact` action. Its location
+can carry a qualified `place`, an `entity` with an optional `socket`,
+a finite XYZ `point`, or a combination. Include a point to preserve
+the position of an occurrence at a moving entity. Stable subject
+IDs can be qualified, for example `crew/mira` or `crew/mira/2` for a
+particular generation. Ink attaches the subject kinds from the schema.
+
+```json
+{
+  "tick": 2,
+  "action": "world/fact",
+  "args": {
+    "type": "delivery-confirmed",
+    "at": { "place": "harbor/pier", "entity": "south-pier" },
+    "subjects": { "courier": "crew/mira", "recipient": "harbor/pier" },
+    "data": { "crates": 2 },
+    "causes": ["1.0"]
+  }
+}
+```
+
+Fields support `number`, `integer`, `boolean`, `string`, `id`, and
+`point`. A type can have up to 16 subject roles and 32 fields. Each
+declared role and payload field is required when publishing that type.
+The `subjects`, `data`, and `causes` maps or lists can be omitted when
+empty. Strings accept up to 1,024 characters. Preflight lists the
+compiled schemas under `facts`.
+
+A cause is a world event ID from the same run. Up to 16 distinct
+earlier IDs can be linked, including an event emitted earlier in the
+same tick. Ink verifies the references and stores receipts with the
+event kind, system, and tick. Facts publish a `world-fact` event
+whose `fact` record shares the event ID. An event action can route a
+native event into a fact by binding `/causes/0` to `/id` and mapping
+any required data. The new fact records the tick when it is published,
+and its cause retains the original event's tick.
+
+Probe `world/facts` to filter the ledger by ID, type, subject and role,
+place or entity, inclusive tick bounds, and a normal `where` condition.
+Use the same probe in story feasibility or state triggers. Story event
+triggers and objectives can match `world-fact` fields such as
+`/fact/type` and `/fact/data/crates`.
+
+Facts and event receipts have independent retention from ordinary
+history. `limit` retains 1–4,096 facts and defaults to 256.
+`eventLimit` retains 1–20,000 event receipts for future cause
+references and defaults to 2,048. A retained fact also remains a
+valid cause by ID. Each saved cause receipt survives with its
+dependent fact. Trace `world/fact-causes` to follow direct fact
+links through earlier retained facts and native event receipts.
+A partial result identifies evicted intermediate facts or traversal
+limits. With causality enabled, `world/cause` also follows linked
+event nodes into the native solver graph when those nodes are retained.
+
+The [pier fact demo](../examples/story-documents/pier-facts.world.json)
+takes a real inventory transfer, records who delivered the crates and
+where, and lets the full delivery start and complete a watch story.
+A partial delivery records what arrived. Both cases run with ordinary
+history disabled.
+
+```sh
+ink-studio sim run examples/story-documents/pier-facts.world.json \
+  --actions examples/story-documents/pier-facts.full.actions.json --ticks 6 --record pier.run.json
+ink-studio probe pier.run.json --field world/facts --args '{"type":"delivery-confirmed","subject":"crew/mira","role":"courier"}'
+ink-studio trace pier.run.json world/fact-causes --args '{"id":"3.0"}'
+ink-studio trace pier.run.json world/cause --args '{"event":"3.0"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families
@@ -856,7 +944,7 @@ and call `solve(pins)` to fit the coordinate constraints.
 A manifest has `format: "ink-studio/world"`, `version: 1`, a stable `id`,
 `seed`, `dt`, and tables of `entities` and `systems`. A system record
 declares a `kind`, a `config`, and optionally a [solver schedule](#multi-rate-simulation). Optional sections include `connections`,
-`prefabs`, `assetPacks`, `commands`, `history`, `causality`, `metadata` and
+`prefabs`, `assetPacks`, `commands`, `history`, `causality`, `facts`, `metadata` and
 `scenario`. See [the watershed](../examples/world-watershed.json) and
 [the quarry crossing](../examples/world-crossing.json) for working manifests.
 
