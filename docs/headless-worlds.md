@@ -1040,6 +1040,80 @@ ink-studio probe bridge.run.json --ticks 3 --field standing/obligations
 ink-studio probe bridge.run.json --field standing/obligations --args '{"obligation":"bridge-advance"}'
 ```
 
+## Follow custody and provenance of individual objects
+
+Declare significant objects in `custody.objects` with stable IDs.
+Each starts `undiscovered`. A catalog entry can include a display
+`label` and an `entity` reference to a scene object.
+
+```json
+"custody": {
+  "objects": { "archive/survey-seal": { "label": "Bronze survey seal", "entity": "seal" } },
+  "historyLimit": 32
+}
+```
+
+A holder is a `{kind, id}` reference. Kinds include `actor`,
+`faction`, `container`, and `site`. The same object ID follows the
+item throughout its history. Each held object has a single custodian.
+Use `world/transfer` for quantities in stock accounts and custody
+actions for named objects.
+
+| Action | Required arguments in addition to `object` | Effect |
+| --- | --- | --- |
+| `world/discover-object` | `to`, `at` | Record the first known holder and discovery site. |
+| `world/transfer-object` | `from`, `to` | Move a held object between custodians. |
+| `world/lose-object` | `from` | Clear the current custodian and mark the object lost. |
+| `world/recover-object` | `to`, `at` | Return a lost object to custody and record the recovery site. |
+| `world/inherit-object` | `from`, `to` | Record a succession as a distinct change of custody. |
+
+Use a typed place, entity, or point in `at`. For a transfer, loss, or
+inheritance, supply it when a location is known. It becomes the
+object's `lastKnown` location. A valid transfer, loss, or inheritance
+requires `from` to match the current holder. Changes after discovery
+can also specify `previous`, the current custody receipt ID, so a
+stale command cannot apply to a later custody state.
+
+Any action can cite a retained earlier world event in `source`.
+Current and previous tick events, retained world history, and the typed
+fact ledger can supply the reference. The custody receipt keeps a
+copy of its source ID, kind, system, and tick after that event ages
+out. Use `eventActions` to bind `"/source": "/id"` from a discovery
+fact, delivery event, or departure. For inheritance, author the
+successor in the route and match the correct former holder's event.
+
+A custody change publishes `custody-changed` with the object ID,
+operation, previous receipt, and new status. Rejected actions emit
+`custody-rejected` with a reason and leave custody unchanged. Probe
+`world/custody` with `object` to get its current status and holder.
+Without an object ID, list the catalog or filter it by `holder` or
+`status`. Stories can react to the change and read the new state in
+the same tick. Use `trace world/custody` to read an object's discovery
+receipt and latest changes in order. With causality enabled,
+`trace world/cause` also follows retained links between those changes
+and the events that caused them.
+
+A world can declare up to 1,024 objects. The ledger keeps each
+discovery receipt, the last known location, and up to 32 subsequent
+changes by default. Set `historyLimit` from 1 to 128. A trace reports
+as partial when changes have been evicted or the requested result limit
+omits steps. Custody state and retained receipts survive checkpoints
+and recordings with ordinary event history disabled.
+
+In the [survey seal demo](../examples/story-documents/survey-seal.world.json),
+a surveyor finds a seal and puts it in a chest before it is lost.
+A recovery fact sends the same seal to a diver. The archive inherits
+it when the diver departs, which opens the vault questlet and records
+a durable memory. Without the recovery fact, the seal stays lost and
+the inheritance attempt is rejected.
+
+```sh
+ink-studio sim run examples/story-documents/survey-seal.world.json \
+  --actions examples/story-documents/survey-seal.recovery.actions.json --ticks 9 --record survey.run.json
+ink-studio probe survey.run.json --field world/custody --args '{"object":"archive/survey-seal"}'
+ink-studio trace survey.run.json world/custody --args '{"object":"archive/survey-seal"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families

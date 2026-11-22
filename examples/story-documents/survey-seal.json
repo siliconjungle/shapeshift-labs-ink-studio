@@ -1,0 +1,27 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "survey-seal",
+  "title": "The archive can use the original survey seal",
+  "stories": {
+    "open-vault": {
+      "kind": "questlet",
+      "title": "Unseal the river survey vault",
+      "triggers": { "archive-receives-seal": { "event": { "kind": "custody-changed", "where": { "all": [
+        { "path": "/custody/object", "value": "archive/survey-seal" },
+        { "path": "/custody/operation", "value": "inherit" }
+      ] } } } },
+      "lifecycle": { "progression": true, "feasibility": { "holds-original": { "state": {
+        "field": "world/custody", "args": { "object": "archive/survey-seal" },
+        "select": "/holder", "when": { "value": { "kind": "faction", "id": "river-archive" } }
+      } } } },
+      "entry": "unseal",
+      "stages": { "unseal": {
+        "title": "Present the original seal",
+        "decision": { "mode": "autonomous" },
+        "next": { "opened": { "outcome": "vault-open", "auto": true } }
+      } },
+      "outcomes": { "vault-open": { "title": "The survey vault opens" } }
+    }
+  }
+}

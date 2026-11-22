@@ -85,7 +85,7 @@
       function finish() {
         return freeze({...snapshot(),events:emitted.length?[...previous.events,...emitted].slice(-eventLimit):previous.events});
       }
-      return {prepare,note,snapshot,finish};
+      return {prepare,note,snapshot,finish,receipt:id=>lookup.get(id)};
     }
 
     function validate(saved,tick,causalEnabled,latest) {

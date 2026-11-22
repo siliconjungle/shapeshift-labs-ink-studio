@@ -1,0 +1,5 @@
+[
+  { "tick": 5, "action": "world/fact", "args": {
+    "type": "seal-retrieved", "subjects": { "object": "archive/survey-seal" }, "at": { "place": "river/bank" }
+  } }
+]

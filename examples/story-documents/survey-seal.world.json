@@ -1,0 +1,82 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "survey-seal",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "causality": { "limit": 128 },
+  "storyDocuments": [{ "file": "survey-seal.json" }],
+  "entities": { "seal": { "position": [1, 0, 2] } },
+  "custody": {
+    "objects": {
+      "archive/survey-seal": { "label": "Bronze survey seal", "entity": "seal" },
+      "archive/wax-die": { "label": "Spare wax die" }
+    }
+  },
+  "facts": { "types": {
+    "seal-sighted": { "subjects": { "object": "item" } },
+    "seal-retrieved": { "subjects": { "object": "item" } }
+  } },
+  "memories": { "types": { "seal-returned": { "durable": true, "data": { "object": "id" } } } },
+  "systems": { "crew": { "kind": "agents", "config": {
+    "bounds": { "min": [-4, -1, -4], "max": [4, 3, 4] },
+    "species": { "diver": { "mode": "walk", "speed": 1 } },
+    "agents": { "diver": { "species": "diver", "position": [0, 0, 0] } }
+  } } },
+  "eventActions": {
+    "catalog-discovery": {
+      "on": { "kind": "world-fact", "where": { "path": "/fact/type", "value": "seal-sighted" } },
+      "actions": [{
+        "action": "world/discover-object",
+        "args": { "object": "archive/survey-seal", "source": "1.0",
+          "to": { "kind": "actor", "id": "crew/surveyor" }, "at": { "place": "river/ruin" } },
+        "bindings": { "/source": "/id", "/object": "/fact/subjects/object/id", "/at": "/fact/at" }
+      }]
+    },
+    "catalog-recovery": {
+      "on": { "kind": "world-fact", "where": { "path": "/fact/type", "value": "seal-retrieved" } },
+      "actions": [{
+        "action": "world/recover-object",
+        "args": { "object": "archive/survey-seal", "source": "1.0",
+          "to": { "kind": "actor", "id": "crew/diver" }, "at": { "place": "river/bank" } },
+        "bindings": { "/source": "/id", "/object": "/fact/subjects/object/id", "/at": "/fact/at" }
+      }]
+    },
+    "pass-the-seal-to-the-archive": {
+      "on": { "kind": "agent-despawned", "system": "crew", "where": { "all": [
+        { "path": "/agent", "value": "diver" }, { "path": "/generation", "value": 1 }
+      ] } },
+      "actions": [{
+        "action": "world/inherit-object",
+        "args": { "object": "archive/survey-seal", "source": "1.0",
+          "from": { "kind": "actor", "id": "crew/diver" }, "to": { "kind": "faction", "id": "river-archive" },
+          "at": { "place": "river/archive" } },
+        "bindings": { "/source": "/id" }
+      }]
+    },
+    "remember-the-return": {
+      "on": { "kind": "custody-changed", "where": { "path": "/custody/operation", "value": "inherit" } },
+      "actions": [{
+        "action": "world/remember",
+        "args": { "type": "seal-returned", "holder": { "kind": "faction", "id": "river-archive" },
+          "source": "1.0", "data": { "object": "archive/survey-seal" } },
+        "bindings": { "/source": "/id", "/data/object": "/custody/object" }
+      }]
+    }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/fact", "args": {
+      "type": "seal-sighted", "subjects": { "object": "archive/survey-seal" },
+      "at": { "place": "river/ruin", "point": [1, 0, 2] }
+    } },
+    { "tick": 3, "action": "world/transfer-object", "args": {
+      "object": "archive/survey-seal", "from": { "kind": "actor", "id": "crew/surveyor" },
+      "to": { "kind": "container", "id": "barge/chest" }, "at": { "place": "river/barge" }
+    } },
+    { "tick": 4, "action": "world/lose-object", "args": {
+      "object": "archive/survey-seal", "from": { "kind": "container", "id": "barge/chest" },
+      "at": { "place": "river/eddy" }
+    } },
+    { "tick": 7, "action": "crew/despawn", "args": { "agent": "diver", "generation": 1 } }
+  ]
+}

@@ -264,6 +264,8 @@
         memories:{type:'record',qualified:true,read:({args})=>W.worldMemories.inspect(view.memories,view.memoryPolicy,tick,args)},
         relationship:{type:'record',qualified:true,read:({args})=>W.worldMemories.relationship(view.memories,view.memoryPolicy,tick,args)}
       }),
+      ...(world.custody!==undefined&&{custody:{type:'record',qualified:true,read:({args})=>
+        W.worldCustody.inspect(view.custody,view.custodyPolicy,tick,args)}}),
       account:{type:'record',read:({args}) => {
         const balance = transfers().inspect(states,args.account);
         return balance ? ok(balance.at===undefined?balance:{...balance,position:W.worksites.frame(api,balance.at)?.point??null}) :
@@ -357,6 +359,7 @@
         missing('causal recording is not enabled for this snapshot')},
       ...(world.facts!==undefined&&{'fact-causes':{qualified:true,run:({args})=>W.worldFacts.trace(view.worldFacts,args)}}),
       ...(world.knowledge!==undefined&&{knowledge:{qualified:true,run:({args})=>W.worldKnowledge.trace(view.knowledge,args)}}),
+      ...(world.custody!==undefined&&{custody:{qualified:true,run:({args})=>W.worldCustody.trace(view.custody,args)}}),
       'causal-inspection':{selector:true,qualified:true,run:({target,args})=>
         W.causalInspection.inspect(view,api,transfers().describe(),target,args)},
       signal:{run:({args}) => {
@@ -471,6 +474,7 @@
         ...(view.knowledge ? ['world/'+W.worldKnowledge.action] : []),
         ...(view.beliefs ? W.worldBeliefs.actions.map(action=>'world/'+action) : []),
         ...(view.memories ? ['world/'+W.worldMemories.action] : []),
+        ...(view.custody ? W.worldCustody.actions.map(action=>'world/'+action) : []),
         ...(view.storyLifecycle ? W.storyLifecycle.actions.map(name=>'world/'+name) : []),
         ...(view.incidentCandidatePolicies ? ['world/'+W.incidentCandidates.action] : []),
         ...(world.simulationChunks?W.simulationChunks.actions.map(name=>'world/'+name):[])]};
