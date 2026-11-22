@@ -316,8 +316,72 @@ const StoryDocument = (() => {
     }
   }
 
-  function lifecycle(value, at) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup']);
+  function feasibility(rules, at, roles, report) {
+    const rows = entries(rules, at, true);
+    if (rows.length > 16) invalid(at, 'expected up to 16 feasibility checks');
+    const qualified = value => typeof value === 'string' && value.split('/').length === 2 && value.split('/').every(worldName);
+    const generation = value => Number.isSafeInteger(value) && value > 0;
+    function agent(spec, location, extra, optional) {
+      fields(spec, location, ['system', 'agent', ...extra], ['generation', ...optional]);
+      if (!worldName(spec.system) || !worldName(spec.agent) || Object.hasOwn(spec, 'generation') && !generation(spec.generation))
+        invalid(location, 'expected a roster and agent ID with an optional positive generation');
+    }
+    function pin(value, location) {
+      if (point(value)) return;
+      record(value, location);
+      if (Object.hasOwn(value, 'agent')) {
+        fields(value, location, ['agent'], ['socket']);
+        fields(value.agent, location + '.agent', ['system', 'id'], ['generation']);
+        const {system, id, generation:serial} = value.agent;
+        if (!worldName(system) || !worldName(id) || Object.hasOwn(value.agent, 'generation') && !generation(serial))
+          invalid(location, 'invalid agent pin');
+      } else {
+        fields(value, location, ['entity'], ['socket']);
+        if (!worldName(value.entity)) invalid(location, 'invalid entity pin');
+      }
+      if (Object.hasOwn(value, 'socket') && !worldName(value.socket)) invalid(location + '.socket', 'invalid socket ID');
+    }
+    for (const [id, rule] of rows) {
+      const location = at + '.' + id;
+      fields(rule, location, [], ['route', 'transfer', 'work', 'state']);
+      if (Object.keys(rule).length !== 1) invalid(location, 'expected one feasibility check type');
+      if (roleUses(rule, roles, location, report)) continue;
+      const [[type, spec]] = Object.entries(rule), place = location + '.' + type;
+      if (type === 'route') {
+        agent(spec, place, ['to'], ['from']);
+        pin(spec.to, place + '.to');
+        if (Object.hasOwn(spec, 'from')) pin(spec.from, place + '.from');
+      } else if (type === 'transfer') {
+        fields(spec, place, ['from', 'to', 'amount'], ['requester']);
+        const {from, to, amount, requester} = spec;
+        const vector = Array.isArray(amount) && [2,3].includes(amount.length) &&
+          Array.from(amount).every(Number.isFinite) && amount.some(value => value !== 0);
+        if (!qualified(from) || !qualified(to) || from === to || !(vector || Number.isFinite(amount) && amount > 0) ||
+          Object.hasOwn(spec, 'requester') && !worldName(requester)) invalid(place, 'invalid transfer accounts, amount, or requester');
+      } else if (type === 'work') {
+        fields(spec, place, ['site', 'workers'], ['batch']);
+        if (!qualified(spec.site) || Object.hasOwn(spec, 'batch') && !generation(spec.batch) ||
+            !Array.isArray(spec.workers) || spec.workers.length < 1 || spec.workers.length > 64)
+          invalid(place, 'expected a qualified worksite, optional positive batch, and 1–64 workers');
+        const seen = new Set();
+        for (const [i, worker] of spec.workers.entries()) {
+          const next = place + '.workers[' + i + ']';
+          agent(worker, next, ['task'], ['params', 'targets']);
+          const key = worker.system + '/' + worker.agent;
+          if (!worldName(worker.task) || seen.has(key)) invalid(next, 'expected a task ID and distinct worker');
+          seen.add(key);
+          if (Object.hasOwn(worker, 'params')) record(worker.params, next + '.params');
+          if (Object.hasOwn(worker, 'targets')) record(worker.targets, next + '.targets');
+        }
+      } else {
+        stateSource(spec, place, true);
+        if (spec.field === 'world/story-feasibility') invalid(place + '.field', 'recursive feasibility query');
+      }
+    }
+  }
+
+  function lifecycle(value, at, roles, report) {
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -338,6 +402,7 @@ const StoryDocument = (() => {
           invalid(place, 'an offer deadline requires manual activation and a single offer window');
       }
     }
+    if (Object.hasOwn(value, 'feasibility')) feasibility(value.feasibility, at + '.feasibility', roles, report);
   }
 
   const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];
@@ -446,8 +511,8 @@ const StoryDocument = (() => {
       fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle']);
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
       labelsAndRefs(story, at, references, report);
-      if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
+      if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       const { stages, outcomes } = story;
       for (const [name, role] of entries(roles, `${at}.roles`)) {
         const location = `${at}.roles.${name}`;

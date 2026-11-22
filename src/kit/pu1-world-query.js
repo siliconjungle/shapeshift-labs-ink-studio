@@ -256,11 +256,18 @@
         return balance ? ok(balance.at===undefined?balance:{...balance,position:W.worksites.frame(api,balance.at)?.point??null}) :
           missing('unknown transfer account','missing');
       }},
+      'transfer-feasibility':{type:'record',qualified:true,read:({args}) => {
+        const {requester='world',...spec}=args;
+        check(requester==='world'||own(systems,requester),'Unknown transfer requester');
+        return ok(transfers().preview(states,spec,requester));
+      }},
       transfers:{type:'record',read:()=>ok({tick:view.transfers?.[0]?.tick??tick,receipts:view.transfers??[]})},
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
       ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,view.storyDocuments ?? world.storyDocuments))} }),
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
+      'story-feasibility':{type:'record',qualified:true,read:({args})=>
+        W.storyFeasibility.inspect(view.storyFeasibilityRules,view.storyFeasibility,tick,api,args)},
       ...(world.storyTemplates !== undefined && { 'story-templates':{type:'record',qualified:true,read:({args:{id}}) => {
         const records = view.storyTemplates ?? {};
         return id === undefined ? ok(records) : own(records,id) ? ok(records[id]) :
@@ -460,7 +467,14 @@
         ...(description?.spatial && {type:description.type,spatial:description.spatial}),
         ...(grid ? {grid} : {}),samples:points.map(point => ({point,...api.probe(field,point,args)}))};
     }
-    const api = Object.freeze({inspect,spatial,spatialBatch,anyAgent:(...args)=>occupancy().anyAgent(...args),target,frame:fieldFrame,field,sampler,neighborhood,navigation,navigationSource,
+    function workEffect({action,args={}},batch) {
+      const [system,name]=W.data.endpoint(action);
+      const effects=own(systems,system)&&systems[system].workEffects, hook=own(effects,name)&&effects[name]?.blocker;
+      if(!hook||!own(states,system))return missing('work effect has no snapshot check');
+      if(W.simulationAggregate.isAggregate(states[system]))return missing('work effect solver is aggregated');
+      return ok(hook(states[system],args,batch,{id:system,query:api,tick,time:base.time,dt:world.dt})??null);
+    }
+    const api = Object.freeze({inspect,spatial,spatialBatch,anyAgent:(...args)=>occupancy().anyAgent(...args),target,frame:fieldFrame,field,sampler,neighborhood,navigation,navigationSource,workEffect,
       simulationClock:name=>view.simulationChunks?.clocks[name],
       renderVolume:name=>own(systems,name)?systems[name].volumeFrame?.(states[name]):null,
       renderWater:name=>own(systems,name)?systems[name].waterFrame?.(states[name]):null,

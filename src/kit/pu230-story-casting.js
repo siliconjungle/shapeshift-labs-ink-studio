@@ -206,5 +206,5 @@
     return {tick, time, rosters, requirements, ...(binding && {binding:{...spec.binding, kind:binding.kind}}),
       considered, qualified:qualifiedCount, omitted:considered - candidates.length, candidates};
   }
-  W.storyCasting = Object.freeze({field, cast});
+  W.storyCasting = Object.freeze({field, cast, availability});
 })(KIT);

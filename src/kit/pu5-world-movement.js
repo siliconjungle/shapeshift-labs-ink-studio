@@ -649,6 +649,24 @@
           Q.ok(select(row)):Q.missing('unknown live agent or generation','missing');
       }};
     }
+    function routeFeasibility({state,args,query}) {
+      const row=S.select(S.get(state),args.agent);
+      if(!row||args.generation!==undefined&&args.generation!==row.generation)
+        return Q.missing('unknown live agent or generation','missing');
+      check(W.worksites.target(args.to)&&(args.from===undefined||W.worksites.target(args.from)), 'Expected route pins');
+      const to=W.worksites.frame(query,args.to)?.point;
+      const from=args.from===undefined?row.position:W.worksites.frame(query,args.from)?.point;
+      if(!from||!to)return Q.missing('route pin unavailable','missing');
+      const profile=profileFor(row), ctx={query};
+      const start=fit(ctx,profile,from), goal=fit(ctx,profile,to);
+      const spec={agent:row.id,generation:row.generation,from,to};
+      if(!start||!goal)return Q.ok({...spec,status:!start?'origin-unfit':'destination-unfit'});
+      if(!suitable(ctx,row,goal))return Q.ok({...spec,status:'destination-unsuitable'});
+      const route=plan(ctx,profile,start,goal);
+      const {status,reason,blocked,length,points=[]}=route;
+      return Q.ok({...spec,status:status==='ok'&&!points.length?'empty':status,waypoints:points.length,
+        ...(Number.isFinite(length)&&{length}),...(reason&&{reason}),...(blocked&&{blocked})});
+    }
     function spawnAgent(state,args,ctx){
         const roster=S.get(state), {agent}=args;
         check(!S.find(roster,agent),'Agent already exists '+agent);
@@ -663,7 +681,7 @@
         id(args.prefix)&&args.prefix.length<=80&&W.worksites.target(args.at),'Invalid recruitment effect');
       checkAgent(args.prefix,{...args,position:S.zero});
     }
-    function placedSpawn(state,args,ctx){
+    function spawnPlacement(state,args,ctx){
       const {agent}=args, roster=S.get(state);
       if(S.find(roster,agent))return {reason:'recruit-id-in-use'};
       if(S.count(roster)>=maxAgents)return {reason:'recruit-roster-full'};
@@ -674,7 +692,11 @@
       const center=profile.mode==='walk'?V.add(position,[0,radius+.001,0]):position;
       const {results:[space]}=ctx.query.spatialBatch({queries:[{op:'occupancy',at:center,radius,kinds:['agent','body'],clearance:[]}]});
       if(space.state!=='free')return {reason:'recruit-site-occupied'};
-      return {state:spawnAgent(state,{...args,agent,position},ctx)};
+      return {position};
+    }
+    function placedSpawn(state,args,ctx){
+      const placement=spawnPlacement(state,args,ctx);
+      return placement.reason?placement:{state:spawnAgent(state,{...args,position:placement.position},ctx)};
     }
     function recruit(state,args,batch,ctx){
       return placedSpawn(state,{...args,agent:args.prefix+'.'+batch},ctx);
@@ -738,7 +760,8 @@
     }}),
     ...((crowd||travel?.hasRides)&&{inputs:{...crowd?.inputs,...travel?.inputs}}),
     ...(travel?.hasRides&&{afterStep:syncRiders}),
-    workEffects:{recruit:{check:checkRecruit,run:recruit}},
+    workEffects:{recruit:{check:checkRecruit,run:recruit,blocker:(state,args,batch,ctx)=>
+      spawnPlacement(state,{...args,agent:args.prefix+'.'+batch},ctx).reason}},
     occupancy:{
       kind:'agent',key:S.get,rows:state=>occupants(S.get(state)),
       distance:({x,z,a,b,radius},point)=>Math.hypot(point[0]-x,
@@ -1043,6 +1066,7 @@
     },fields:{
       agents:{type:'record',read:({state})=>Q.ok(S.rows(S.get(state)))},
       agent:agentField('record',row=>row),
+      'route-feasibility':{type:'record',selector:true,qualified:true,read:routeFeasibility},
       position:agentField('vector',row=>row.position,'world'),
       velocity:agentField('vector',row=>row.velocity,'world/s'),
       task:agentField('categorical',row=>row.task),

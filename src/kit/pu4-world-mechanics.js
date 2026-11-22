@@ -981,16 +981,20 @@
       check(record(args)&&Object.keys(args).length===1&&(own(structures,args.body)||own(wearSpecs,args.joint)),
         'A repair effect needs a structural body or wear-tracked joint');
     }
+    function repairBlocker(state,{body,joint}){
+      return joint!==undefined ? state.joints[joint]?.active?null:'joint-detached' :
+        own(state.bodies,body)?null:'repair-body-missing';
+    }
     function repair(state,{body,joint},batch,ctx){
+      const reason=repairBlocker(state,{body,joint});
+      if(reason)return {reason};
       if(joint!==undefined){
         const prior=state.joints[joint];
-        if(!prior.active)return {reason:'joint-detached'};
         const next={...prior,durability:durability.jointInitial(prior.value)};
         ctx.emit('joint-repaired',{joint,body:jointSpecs[joint].child});
         return {state:{...state,joints:{...state.joints,[joint]:next}}};
       }
       const prior=state.bodies[body];
-      if(!prior)return {reason:'repair-body-missing'};
       const {bend,...straight}=prior;
       const bodies=bend?{...state.bodies,[body]:straight}:state.bodies;
       if(bend){
@@ -1001,7 +1005,7 @@
       ctx.emit('body-repaired',{body,entity:prior.entity,at:prior.position});
       return {state:{...state,bodies,beams:{...state.beams,[body]:durability.beamInitial(structures[body])}}};
     }
-    return {...(serviceable&&{workEffects:{repair:{check:checkRepair,run:repair}}}),navigationSource(field,state,query){
+    return {...(serviceable&&{workEffects:{repair:{check:checkRepair,run:repair,blocker:repairBlocker}}}),navigationSource(field,state,query){
       if(!state||!['clearance','support','ground-clearance'].includes(field))return;
       if(field==='clearance'||field==='support'&&!config.terrain){
         const key=state.bodies;

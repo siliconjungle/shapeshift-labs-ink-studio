@@ -104,14 +104,14 @@
       branch: { branch: args.branch, reason, target, skipped, ...(children && {children}) } };
   }
 
-  function validate(flow, definition, status, tick, firstActivation, reasonOK, message, readChild) {
+  function validate(flow, definition, status, tick, firstActivation, reasonOK, message, readChild, readRequest) {
     check(fields(flow, ['current', 'dropped', 'route']) && at(flow.dropped, 0, Number.MAX_SAFE_INTEGER - limit) &&
       Array.isArray(flow.route) && flow.route.length <= limit && (!flow.dropped || flow.route.length === limit), message);
     function visit(row, index, deadline, nextStage, after) {
       check(isId(row.stage) && own(definition.stages, row.stage) && (nextStage === undefined || row.stage === nextStage) &&
         row.visit === index && at(row.enteredAt, 1, deadline) && (after === undefined || row.enteredAt === after) && record(row.objectives), message);
       const stage = definition.stages[row.stage];
-      check(W.storyChildren.opened(stage, row, readChild), message);
+      check(W.storyChildren.opened(stage, row, readChild, readRequest), message);
       const rules = definition.evidence.get(row.stage);
       for (const [id, change] of Object.entries(row.objectives)) {
         const objective = own(stage.objectives, id) && stage.objectives[id];

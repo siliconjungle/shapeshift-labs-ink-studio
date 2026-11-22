@@ -1,0 +1,11 @@
+[
+  { "tick": 1, "action": "world/event", "args": { "kind": "sluice-relief-requested" } },
+  { "tick": 2, "action": "world/transfer", "args": { "from": "supplies/reserve", "to": "supplies/depot", "amount": 2, "mode": "exact" } },
+  { "tick": 3, "action": "world/transfer", "args": { "from": "supplies/shelter", "to": "supplies/annex", "amount": 2, "mode": "exact" } },
+  { "tick": 4, "action": "rig/reshape", "args": { "body": "blockage", "half": [0.18, 0.34, 0.13] } },
+  { "tick": 5, "action": "world/transfer", "args": { "from": "supplies/boards", "to": "workshop/yard.wood", "amount": 2, "mode": "exact" } },
+  { "tick": 6, "action": "world/transfer", "args": { "from": "workshop/yard.platform", "to": "supplies/platform-yard", "amount": 1, "mode": "exact" } },
+  { "tick": 7, "action": "world/story-transition", "args": {
+    "document": "sluice-relief", "story": "relief", "to": "active", "reason": "accepted-ready-offer"
+  } }
+]

@@ -87,24 +87,24 @@
       return values===undefined?result:{...result,values:copy(values)};
     }
 
-    function settle(states, raw, tick, requester, rooted) {
+    function allocation(states, raw, requester, diagnostic = false) {
       const {from,to,requested} = validate(raw);
-      const {resource,units,type} = from, mode = raw.mode ?? 'partial';
-      const zeros = requested.map(()=>0);
-      const receipt = (applied, status, limitedBy) => ({
-        tick,requester,...(raw.id && {requestId:raw.id}),from:from.name,to:to.name,resource,units,type,mode,
-        requested:shape(type,requested),applied:shape(type,applied),status,limitedBy
-      });
+      const {type} = from, mode = raw.mode ?? 'partial';
+      const result = {from,to,requested,mode,applied:requested.map(()=>0),status:'blocked',limitedBy:[],blockers:[]};
       if([from,to].some(account=>account.ownerOnly&&requester!==account.system))
-        return receipt(zeros,'blocked',['access']);
+        return {...result,limitedBy:['access'],blockers:['access']};
       const a = quote(from,states[from.system]), b = quote(to,states[to.system]);
       const available = requested.map((n,i)=>n<0 ? a.high[i]-a.balance[i] : a.balance[i]-a.low[i]);
       const room = requested.map((n,i)=>n<0 ? b.balance[i]-b.low[i] : b.high[i]-b.balance[i]);
+      const finite = value => shape(type,value.map(n=>Number.isFinite(n)?n:null));
       const ratio = limits => limits.reduce((cap,n,i)=>requested[i] ? Math.min(cap,n/Math.abs(requested[i])) : cap,1);
       const aRatio = ratio(available), bRatio = ratio(room), factor = Math.min(aRatio,bRatio);
       const limitedBy = [...(aRatio === factor && factor < 1 ? ['source'] : []),
         ...(bRatio === factor && factor < 1 ? ['destination'] : [])];
-      if (!factor || mode === 'exact' && factor < 1) return receipt(zeros,'blocked',limitedBy);
+      result.limitedBy = limitedBy;
+      if(diagnostic)Object.assign(result,{available:finite(available),room:finite(room),
+        blockers:[...(aRatio<1?['source']:[]),...(bRatio<1?['destination']:[])]});
+      if (!factor || mode === 'exact' && factor < 1) return result;
       const applied = requested.length === 1 ? [Math.min(requested[0],available[0],room[0])] :
         requested.map(n=>n*factor);
       const next = (q,sign) => q.balance.map((n,i)=>Math.min(q.high[i],Math.max(q.low[i],n+sign*applied[i])));
@@ -113,14 +113,29 @@
         (type === 'integer' ? n-before[i] === sign*applied[i] : near(n-before[i],sign*applied[i])) &&
         (requested[i] === 0 || n !== before[i]));
       if (!validChange(a.balance,debit,-1) || !validChange(b.balance,credit,1))
-        return receipt(zeros,'blocked',[...limitedBy,'precision']);
+        return {...result,limitedBy:[...limitedBy,'precision'],blockers:[...result.blockers,'precision']};
 
-      const entry = receipt(applied,factor < 1 ? 'partial' : 'full',limitedBy);
+      return {...result,applied,status:factor < 1 ? 'partial' : 'full',debit,credit,validChange,sourceBalance:a.balance,destinationBalance:b.balance};
+    }
+
+    function preview(states, raw, requester) {
+      const {from,to,requested,status,blockers,available,room} = allocation(states,{...raw,mode:'exact'},requester,true);
+      return {from:from.name,to:to.name,resource:from.resource,units:from.units,type:from.type,
+        requested:shape(from.type,requested),status,blockers,...(available!==undefined&&{available,room})};
+    }
+
+    function settle(states, raw, tick, requester, rooted) {
+      const {from,to,requested,mode,applied,status,limitedBy,debit,credit,validChange,sourceBalance,destinationBalance} =
+        allocation(states,raw,requester);
+      const {resource,units,type} = from;
+      const entry = {tick,requester,...(raw.id && {requestId:raw.id}),from:from.name,to:to.name,resource,units,type,mode,
+        requested:shape(type,requested),applied:shape(type,applied),status,limitedBy};
+      if (status==='blocked') return entry;
       const source = rooted(from.write(states[from.system],shape(type,debit)));
       const destination = rooted(to.write(to.system === from.system ? source : states[to.system],shape(type,credit)));
       const afterSource = quote(from,to.system === from.system ? destination : source).balance;
       const afterDestination = quote(to,destination).balance;
-      check(validChange(a.balance,afterSource,-1) && validChange(b.balance,afterDestination,1),
+      check(validChange(sourceBalance,afterSource,-1) && validChange(destinationBalance,afterDestination,1),
         'Transfer endpoint did not post the agreed balance '+from.name+' -> '+to.name);
       if (from.system !== to.system) states[from.system] = source;
       states[to.system] = destination;
@@ -144,7 +159,7 @@
       }
     }
 
-    const plan = Object.freeze({size:accounts.size,producers:Object.freeze([...producers,...queued]),validate,inspect,observe,settle,validateReceipts,
+    const plan = Object.freeze({size:accounts.size,producers:Object.freeze([...producers,...queued]),validate,inspect,observe,preview,settle,validateReceipts,
       validateBalances(states) {
         for (const account of accounts.values()) quote(account,states[account.system]);
       },

@@ -170,6 +170,36 @@ node cli/ink-studio.js probe dispatches.run.json --field world/story-lifecycle
 node cli/ink-studio.js sim replay dispatches.run.json
 ```
 
+## Check feasibility before offering a story
+
+Put named checks under `lifecycle.feasibility`. Ink tests them against the completed tick before it publishes the `available` transition. Every check must report ready. A request that arrives while blocked stays pending and is checked on later ticks. Ink keeps the original trigger evidence or the parent arc's opening visit. An authored story without triggers first requests an offer at tick one.
+
+| Check | Shape | What Ink verifies |
+| --- | --- | --- |
+| Route | `{"route":{"system":"crew","agent":"courier","generation":2,"to":{"entity":"shelter","socket":"intake"}}}` | Uses the live agent's navigation profile, bounds, and clearance. Starts at the current agent position or an explicit `from` pin. Pins can be XYZ points, entity sockets, or agent handles. |
+| Stock and capacity | `{"transfer":{"from":"supplies/depot","to":"supplies/shelter","amount":2}}` | Quotes one exact native transfer. It checks resource, units, quantity, access, withdrawable balance, receiving room, and ledger precision. The report lists source and destination shortages independently. Optional `requester` uses the named solver's account access. |
+| Work | `{"work":{"site":"workshop/platform","batch":1,"workers":[{"system":"crew","agent":"builder","task":"platform"}]}}` | Checks the next recipe batch, worksite control state, materials, and output room. It verifies enough listed workers are free, have a matching work step, and can reach the site. Built-in build, repair, and recruit effects use their live blocker checks. |
+| Custom world state | `{"state":{"field":"world/signal","args":{"port":"power/ready"},"when":{"value":true}}}` | Samples a qualified Ink field with optional `at`, `args`, and `select`, then applies the usual world condition. An unavailable field sample keeps the offer pending. |
+
+Worker entries accept an optional agent generation plus `params` and `targets` for parameterized order tasks. The work check uses the current next batch when `batch` is omitted. For custom work effect providers, an optional read-only `blocker(state,args,batch,ctx)` hook returns a blocker reason or `null`. A work effect with no snapshot check reports unavailable. Use custom state checks to include other requirements such as reservation pools, weather, or power.
+
+Feasibility checks accept `$role` references and template parameters. `sim preflight` validates the resolved references and lists authored checks. `world/story-feasibility` returns the request and the last attempted report. Set `preview:true` to also sample current conditions, including before a request arrives. Results distinguish `ready`, `blocked`, and `unavailable`. The offer keeps its passing report, while a later preview reflects current conditions. A transfer quote reports unbounded availability or room as `null`. Quotes read the snapshot. Commitments and settlement use the normal reservation, transfer, and work systems.
+
+An offer clock begins when the checks pass and the offer is published. World deadlines keep running while a request is pending. If the deadline arrives first, the story expires before any offer. Checkpoints and recordings preserve the request, original trigger or opening visit, and last report.
+
+### Run the sluice relief example
+
+The [story](../examples/story-documents/sluice-relief.json) requests relief at tick one. It waits for two crates of medicine, space at the shelter, a clear passage, and a worksite with boards and output room. The [commands](../examples/story-documents/sluice-relief.actions.json) remove each blocker by tick six. Accepting at tick seven dispatches the courier and workshop order. The story records the delivery, finished work, and arrival before completing.
+
+```sh
+node cli/ink-studio.js sim preflight examples/story-documents/sluice-relief.world.json --strict
+node cli/ink-studio.js probe examples/story-documents/sluice-relief.world.json --field world/story-feasibility --args '{"story":"sluice-relief/relief","preview":true}'
+node cli/ink-studio.js sim run examples/story-documents/sluice-relief.world.json --actions examples/story-documents/sluice-relief.actions.json --ticks 28 --record sluice.run.json
+node cli/ink-studio.js probe sluice.run.json --ticks 5 --field world/story-feasibility --args '{"story":"sluice-relief/relief"}'
+node cli/ink-studio.js probe sluice.run.json --field world/story-feasibility
+node cli/ink-studio.js sim replay sluice.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

@@ -1,0 +1,66 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "sluice-relief",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "sluice-relief.json" }],
+  "storyBindings": {
+    "sluice-relief/relief": { "courier": { "kind": "roster-member", "value": {
+      "system": "crew", "agent": "courier", "generation": 2
+    } } }
+  },
+  "entities": { "shelter": { "position": [1.25, 0, 0], "sockets": { "intake": [0, 0, 0] } } },
+  "systems": {
+    "rig": { "kind": "mechanics", "config": { "bodies": {
+      "blockage": { "fixed": true, "position": [0, 0.3, 0], "half": [0.18, 0.34, 1.4] }
+    } } },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-2, -0.5, -1], "max": [2, 1, 1] },
+      "ground": 0, "cell": 0.2, "clearance": "rig/clearance",
+      "species": { "responder": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+      "agents": {
+        "builder": { "species": "responder", "position": [-1.25, 0, 0.62] },
+        "courier": { "species": "responder", "position": [-1.25, 0, 0] }
+      },
+      "orders": { "tasks": { "platform": { "steps": [{ "op": "work", "site": "workshop/platform" }] } } }
+    } },
+    "supplies": { "kind": "store", "config": { "accounts": {
+      "reserve": { "type": "integer", "resource": "medicine", "units": "crate", "initial": 2 },
+      "depot": { "type": "integer", "resource": "medicine", "units": "crate", "initial": 1 },
+      "shelter": { "type": "integer", "resource": "medicine", "units": "crate", "initial": 3, "max": 3 },
+      "annex": { "type": "integer", "resource": "medicine", "units": "crate", "initial": 0 },
+      "boards": { "type": "integer", "resource": "wood", "units": "board", "initial": 2 },
+      "platform-yard": { "type": "integer", "resource": "platform", "units": "piece", "initial": 0 }
+    } } },
+    "workshop": { "kind": "logistics", "config": {
+      "resources": {
+        "wood": { "type": "integer", "units": "board" }, "platform": { "type": "integer", "units": "piece" }
+      },
+      "containers": { "yard": { "stocks": { "wood": { "initial": 0, "max": 2 }, "platform": { "initial": 1, "max": 1 } } } },
+      "recipes": { "assemble": { "duration": 0.4, "inputs": { "wood": 2 }, "outputs": { "platform": 1 } } },
+      "processes": {
+        "platform": { "recipe": "assemble", "inputs": { "wood": "yard" }, "outputs": { "platform": "yard" },
+          "work": { "at": [-1.25, 0, 0.62], "batches": 1 } }
+      }
+    } }
+  },
+  "eventActions": {
+    "dispatch-relief": {
+      "on": { "kind": "story-started", "system": "world", "where": { "all": [
+        { "path": "/document", "value": "sluice-relief" }, { "path": "/story", "value": "relief" }
+      ] } },
+      "actions": [
+        { "action": "world/transfer", "args": { "from": "supplies/depot", "to": "supplies/shelter", "amount": 2, "mode": "exact" } },
+        { "action": "crew/issue-order", "args": { "agent": "builder", "order": { "task": "platform" } } },
+        { "action": "crew/seek", "args": { "agent": "courier", "to": [1.25, 0, 0] } }
+      ]
+    },
+    "confirm-relief": {
+      "on": { "kind": "story-objective-resolved", "system": "world",
+        "where": { "all": [{ "path": "/document", "value": "sluice-relief" }, { "path": "/objective", "value": "courier" }] } },
+      "actions": [{ "action": "world/story-choose", "args": {
+        "document": "sluice-relief", "story": "relief", "stage": "deliver", "visit": 1, "branch": "done", "reason": "handoff-verified"
+      } }]
+    }
+  }
+}

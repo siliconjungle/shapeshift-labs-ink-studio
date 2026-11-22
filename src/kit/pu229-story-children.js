@@ -55,10 +55,11 @@
     return !gate(stage, branch, children);
   }
 
-  function opened(stage, visit, read) {
+  function opened(stage, visit, read, request) {
     return (stage.children?.open ?? []).every(id => {
       const child = read(id), first = child?.transitions[0];
-      return child?.parent ? child.parent.visit <= visit.visit :
+      const parent = child?.parent ?? request(id);
+      return parent ? parent.visit <= visit.visit :
         first?.deadline?.clock === 'world' && first.from === null && first.tick <= visit.enteredAt;
     });
   }

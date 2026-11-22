@@ -113,8 +113,8 @@
       ctx.emit('construction-refit',{members:proposed.members,openings:proposed.openings});
       return freeze({...state,pins,layout:proposed,rejected:null});
     }
-    function build(state,args,batch,ctx){
-      if(state.built)return {reason:'already-built'};
+    function buildBlocker(state,args,batch,ctx){
+      if(state.built)return 'already-built';
       const bodies=Object.values(state.layout.bodies);
       const identity=M.rot(up,0);
       const occupied=bodies.some(body=>ctx.query.anyAgent(body.position,V.len(body.half)+12,({position,height,radius})=>{
@@ -123,10 +123,14 @@
         const hit=W.colliders.contact(body,{position,rotation:identity,collider});
         return hit&&hit.gap<-epsilon;
       }));
-      if(occupied)return {reason:'footprint-occupied'};
+      return occupied?'footprint-occupied':null;
+    }
+    function build(state,args,batch,ctx){
+      const reason=buildBlocker(state,args,batch,ctx);
+      if(reason)return {reason};
       for(const field of ['layout','bodies','support','clearance'])
         ctx.spatial?.write(field,state.layout.bounds,'construction-built');
-      ctx.emit('construction-built',{bounds:state.layout.bounds,parts:bodies.length});
+      ctx.emit('construction-built',{bounds:state.layout.bounds,parts:Object.keys(state.layout.bodies).length});
       return {state:{...state,built:true}};
     }
     function support({state,target,args}) {
@@ -147,7 +151,7 @@
       },
       initial:()=>freeze({pins:{},layout:initial,rejected:null,...(planned&&{built:false})}),
       ...(planned&&{workEffects:{build:{
-        check(args){check(record(args)&&!Object.keys(args).length,'A build effect accepts no arguments');},run:build
+        check(args){check(record(args)&&!Object.keys(args).length,'A build effect accepts no arguments');},run:build,blocker:buildBlocker
       }}}),
       actions:{refit},checkAction(type,args){if(type==='refit')pinsOf(args);},
       validateState(state){

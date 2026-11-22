@@ -220,6 +220,28 @@
       ctx.emit('worksite-retired',{process,refundPending:next.jobs[layout.processIndex.get(process)]!==null});
       return {state:next,status:'applied',reason:'site-retired'};
     }
+    function workFeasibility({state,signals,args,query}) {
+      const i=layout.processIndex.get(args.process), row=processes[i];
+      if(!row?.work)return Q.missing('unknown logistics worksite','missing');
+      const {work,enabled,speed,key}=row, batch=state.complete[i]+1;
+      const position=W.worksites.frame(query,work.at)?.point??null;
+      const on=signals[system+'/enable-process.'+key]??enabled;
+      const rate=signals[system+'/speed.'+key]??speed;
+      const blockers=state.retiredWorksites?.[key]?[{reason:'site-retired'}]:
+        batch>work.batches?[{reason:'plan-completed'}]:[
+          ...(args.batch!==undefined&&args.batch!==batch?[{reason:'different-next-batch'}]:[]),
+          ...(!on||rate<=0?[{reason:'disabled'}]:[]),
+          ...(!position?[{reason:'worksite-missing'}]:[]),
+          ...F.quoteWork(layout,state,i).map(part=>({...part,account:pin(part.account)}))
+        ];
+      if(work.effect&&!blockers.length){
+        const sample=query.workEffect(work.effect,batch);
+        if(sample.status!=='ok')return Q.missing(sample.reason);
+        if(sample.value)blockers.push({reason:sample.value,action:work.effect.action});
+      }
+      return Q.ok({site:system+'/'+key,batch,position,minWorkers:work.minWorkers,maxWorkers:work.maxWorkers,
+        recipe:row.recipe,remaining:state.jobs[i]??row.duration,status:blockers.length?'blocked':'ready',blockers});
+    }
     return {initial:()=>initial,inputs,outputs,accounts:transferAccounts,checkFields,validateState,output:signals,
       partitionStep:!workRows.length&&routes.every(row=>!row.checkRoute),
       ...(workRows.length&&{storyCleanup:{site:{accepts:({process})=>W.data.own(definitions,process),run:retireStorySite}},
@@ -247,7 +269,8 @@
           travel:row.travel,shipments:state.shipments[i],
           inTransit:state.shipments[i].reduce((sum,ship)=>sum+ship.amount,0)
         })),
-        ...(workRows.length&&{worksite:worksites}),
+        ...(workRows.length&&{worksite:worksites,
+          'work-feasibility':{type:'record',qualified:true,read:workFeasibility}}),
         ledger:{type:'record',read:({state})=>Q.ok(F.ledger(layout,state))},
         cargo:{type:'record',read:({state})=>cargo(state)},
         'stock-bodies':{type:'record',read:({state,query})=>stockBodies(state,query)}

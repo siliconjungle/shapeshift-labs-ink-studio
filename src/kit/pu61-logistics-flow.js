@@ -198,6 +198,13 @@
     return {...result,state:next};
   }
 
+  function quoteWork(layout,state,i) {
+    const {inputs,outputs}=layout.processes[i], stocks=state.stocks.slice();
+    const consumed=state.jobs[i]===null?batch(stocks,inputs,-1,layout.accounts):[];
+    const produced=consumed.length?[]:batch(stocks,outputs,1,layout.accounts);
+    return [...consumed,...produced];
+  }
+
   function ledger(layout,state){
     const {resources,accounts,processes,routes}=layout;
     const stored=zeros(resources), inProgress=zeros(resources), inTransit=zeros(resources), initial=zeros(resources);
@@ -217,5 +224,5 @@
         error:total-initial[i]-produced[i]+consumed[i]-received[i]+sent[i]}];
     }));
   }
-  W.logisticsFlow=Object.freeze({advance,work,retireWork,ledger,zeros});
+  W.logisticsFlow=Object.freeze({advance,work,quoteWork,retireWork,ledger,zeros});
 })(KIT);

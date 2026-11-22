@@ -1,0 +1,53 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "sluice-relief",
+  "title": "Relief through the sluice",
+  "stories": {
+    "relief": {
+      "kind": "questlet",
+      "title": "Prepare the sluice shelter",
+      "entry": "deliver",
+      "roles": { "courier": { "kind": "roster-member", "required": true } },
+      "triggers": { "request": { "event": { "kind": "sluice-relief-requested", "system": "world" } } },
+      "lifecycle": {
+        "activation": "manual",
+        "progression": true,
+        "deadlines": { "world": { "at": 3 }, "offer": { "for": 0.7 } },
+        "feasibility": {
+          "route-to-shelter": { "route": {
+            "system": { "$role": "courier", "path": "/system" },
+            "agent": { "$role": "courier", "path": "/agent" },
+            "generation": { "$role": "courier", "path": "/generation" },
+            "to": { "entity": "shelter", "socket": "intake" }
+          } },
+          "medicine-stock-and-room": { "transfer": { "from": "supplies/depot", "to": "supplies/shelter", "amount": 2 } },
+          "build-platform": { "work": {
+            "site": "workshop/platform", "batch": 1,
+            "workers": [{ "system": "crew", "agent": "builder", "generation": 1, "task": "platform" }]
+          } }
+        }
+      },
+      "stages": {
+        "deliver": {
+          "title": "Receive medicine and finish the platform",
+          "objectives": {
+            "cargo": { "title": "Two medicine crates received", "type": "deliver",
+              "params": { "from": "supplies/depot", "to": "supplies/shelter", "amount": 2 } },
+            "platform": { "title": "Platform batch finished", "type": "observe", "params": {
+              "event": { "kind": "work-completed", "system": "workshop", "where": { "path": "/process", "value": "platform" } }
+            } },
+            "courier": { "title": "Courier reaches the intake", "type": "reach", "params": {
+              "system": { "$role": "courier", "path": "/system" },
+              "agent": { "$role": "courier", "path": "/agent" },
+              "generation": { "$role": "courier", "path": "/generation" },
+              "min": [1.04, -0.1, -0.2], "max": [1.45, 0.1, 0.2]
+            } }
+          },
+          "next": { "done": { "outcome": "ready" } }
+        }
+      },
+      "outcomes": { "ready": { "title": "Shelter ready" } }
+    }
+  }
+}

@@ -460,6 +460,7 @@
     return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:true,
       documents:plan.storyRoles?.documents.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
+      ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
       ...(plan.storyRoles && Object.keys(plan.storyRoles.roles).length > 0 && {roles:plan.storyRoles.roles})});
   }
   function modelInterface(source) {
@@ -519,6 +520,7 @@
     let currentQuery, lastTransfers = [], lastSignals = {...rootInputs,...rootOutputs};
     let lastCheckpoint, eventActionCounts = freeze({}), storyTriggerState, asyncActive=false, inFlightTick=0;
     let storyLifecycleState = storyLifecycle?.initial();
+    let storyFeasibilityState = storyLifecycle?.initialFeasibility?.();
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -544,6 +546,7 @@
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
+        ...(storyFeasibilityState && {storyFeasibility:storyFeasibilityState,storyFeasibilityRules:storyLifecycle.feasibility}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
         ...(storyTemplates && {storyTemplates,storyDocuments:storyRoles.documents}),
         ...(weatherTrackState && {weatherTrackState})});
@@ -629,6 +632,7 @@
         ...(eventActions && {eventActionCounts}),
         ...(storyTriggers && {storyTriggerState}),
         ...(storyLifecycle && {storyLifecycleState}),
+        ...(storyFeasibilityState && {storyFeasibilityState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -642,6 +646,7 @@
       eventActionCounts = payload.eventActionCounts ?? freeze({});
       storyTriggerState = payload.storyTriggerState;
       storyLifecycleState = payload.storyLifecycleState;
+      storyFeasibilityState = payload.storyFeasibilityState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -684,8 +689,9 @@
       else check(!own(payload, 'eventActionCounts'), 'Unexpected event action checkpoint data');
       if (storyTriggers) storyTriggers.validate(payload.storyTriggerState,payload.tick);
       else check(!own(payload, 'storyTriggerState'), 'Unexpected story trigger checkpoint data');
-      if (storyLifecycle) storyLifecycle.validate(payload.storyLifecycleState,payload.tick);
+      if (storyLifecycle) storyLifecycle.validate(payload.storyLifecycleState,payload.tick,payload.storyFeasibilityState,payload.storyTriggerState);
       else check(!own(payload, 'storyLifecycleState'), 'Unexpected story lifecycle checkpoint data');
+      if (!storyLifecycle?.feasibility) check(!own(payload,'storyFeasibilityState'),'Unexpected story feasibility checkpoint data');
       transfers.validateBalances(payload.states);
       reservations?.validate(payload.states,payload.tick);
       if (own(payload,'transfers')) transfers.validateReceipts(payload.transfers,payload.tick);
@@ -1208,7 +1214,7 @@
       const nextDelays = Object.fromEntries([...incoming.values()].filter(edge => edge.delay && !edge.crossing).map(edge =>
         [edge.to,[...delays[edge.to].slice(1),delayedSamples?.[edge.to] ?? nextOutputs[edge.from]]]));
       publishedSignals = freeze(publishedSignals);
-      let nextStoryTriggers, nextStoryLifecycle, storyStarts = [];
+      let nextStoryTriggers, nextStoryLifecycle, nextStoryFeasibility, storyStarts = [];
       let completed;
       const completedQuery = () => completed ??= Q.create(
         view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState),systems,projection);
@@ -1218,7 +1224,8 @@
         storyStarts = activated.starts;
       }
       if (storyLifecycle) {
-        nextStoryLifecycle = storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery);
+        ({state:nextStoryLifecycle,gates:nextStoryFeasibility} =
+          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,storyFeasibilityState));
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);
@@ -1256,7 +1263,8 @@
       const dependencyReport = trace && trace.report();
       const nextCausal = causal?.finish();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
-        ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle})};
+        ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle}),
+        ...(nextStoryFeasibility && {storyFeasibility:nextStoryFeasibility})};
       if (navigationBefore) for (const notice of navigationChanges(navigationBefore,Q.create(nextView,systems,projection))) {
         check(nextWrites.length<P.spatialDependencies.limit,'Spatial write budget exceeded');
         nextWrites.push(dependencies.write(notice.writer,notice.field,notice.bounds,notice.reason));
@@ -1281,6 +1289,7 @@
       chunkState = nextChunkState;
       storyTriggerState = nextStoryTriggers;
       storyLifecycleState = nextStoryLifecycle;
+      storyFeasibilityState = nextStoryFeasibility;
       sampling = nextSampling;
       spatialSampling = nextSpatial;
       pendingWrites = freeze(nextWrites);
