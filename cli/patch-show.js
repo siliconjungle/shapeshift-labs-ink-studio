@@ -171,6 +171,8 @@ async function runShow(file, opt, settings, emit) {
   const { fps, frames, projector, video, audio, dimensions, liveWorld } = config, period = 1000 / fps;
   const output = opt.report && path.resolve(opt.report);
   const interventionInput = InterventionInput.settings(opt, liveWorld, output);
+  if (video === '-' && interventionInput?.source === '-')
+    throw new TypeError('Video and intervention input cannot both read stdin');
   const media = {}, gpu = createPatchGpu(path.dirname(config.patch), opt['gpu-module']);
   const operations = { ...settings.operations, ...patchNodes(settings.kit, media, gpu) };
   const project = readGraphProject(config.patch, { ...settings, operations });

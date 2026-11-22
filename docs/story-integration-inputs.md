@@ -23,7 +23,8 @@ ink-studio patch show show.json \
 ```
 
 Enter one JSON object per line on stdin once the show is projecting. A local
-controller can send the same lines. Each proposal names a host-authored grant
+controller can send the same lines. Use the file input below if video already
+uses stdin. Each proposal names a host-authored grant
 and a request ID.
 
 ```json

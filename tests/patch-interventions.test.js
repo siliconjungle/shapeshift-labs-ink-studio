@@ -129,5 +129,9 @@ test('rehearsal previews authored pulses and requires a journal destination', as
   assert.equal(result.code, 0, result.stderr || result.stdout);
   assert.deepEqual(read('report.json').interventions, { mode: 'preview', outcomes: { preview: 1, 'not-reached': 1 } });
   assert.equal(journal().find(row => row.status === 'preview').index, 1);
+  save('show.json', { ...read('show.json'), video: '-' });
+  const competing = await run('', '--intervention-input', '-', '--record-interventions', 'unused.ndjson');
+  assert.equal(competing.code, 1);
+  assert.match(competing.stderr, /cannot both read stdin/);
   assert.deepEqual(calls, []);
 });
