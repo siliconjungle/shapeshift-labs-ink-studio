@@ -1,0 +1,11 @@
+[
+  { "tick": 3, "action": "world/dispatch-candidate", "args": {
+    "incident": "quay-opportunities/repair-shift", "reason": "take-the-shift"
+  } },
+  { "tick": 5, "action": "world/dispatch-candidate", "args": {
+    "incident": "quay-opportunities/repair-shift", "reason": "timber-replenished"
+  } },
+  { "tick": 5, "action": "world/dispatch-candidate", "args": {
+    "incident": "quay-opportunities/survey-window", "reason": "try-the-survey"
+  } }
+]

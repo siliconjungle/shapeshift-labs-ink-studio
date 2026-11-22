@@ -1,0 +1,56 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "quay-opportunities",
+  "title": "Opportunities at the quay",
+  "stories": {
+    "repair-shift": {
+      "kind": "incident",
+      "title": "Use the open shift to repair the quay",
+      "incident": { "category": "opportunity", "intensity": 2, "tags": ["quay", "repair"] },
+      "triggers": { "crew": { "event": { "kind": "repair-crew-available", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 1, "release": "manual" },
+        "feasibility": { "timber": { "transfer": { "from": "stock/supply", "to": "stock/work", "amount": 2 } } },
+        "settlement": { "outcomes": { "provisioned": { "timber": {
+          "transfer": { "from": "stock/supply", "to": "stock/work", "amount": 2 }
+        } } } }
+      },
+      "entry": "provision",
+      "stages": { "provision": { "title": "Provision the crew", "decision": { "mode": "autonomous" },
+        "next": { "send": { "outcome": "provisioned", "auto": true } } } },
+      "outcomes": { "provisioned": { "title": "The crew receives two bundles" } }
+    },
+    "relief-barge": {
+      "kind": "incident",
+      "title": "Bring a relief barge to the deep berth",
+      "incident": { "category": "visitor", "intensity": 2, "tags": ["quay", "relief"] },
+      "triggers": { "arrival": { "event": { "kind": "relief-barge-spotted", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 0.4, "release": "automatic", "onExpire": "quay-followups/shallow-load" },
+        "feasibility": { "berth": { "state": { "field": "world/account", "args": { "account": "dock/berth" },
+          "select": "/balance", "when": { "op": "gte", "value": 1 } } } },
+        "settlement": { "outcomes": { "unloaded": { "cargo": {
+          "transfer": { "from": "stock/barge", "to": "stock/pier", "amount": 2 }
+        } } } }
+      },
+      "entry": "dock",
+      "stages": { "dock": { "title": "Unload at the deep berth", "decision": { "mode": "autonomous" },
+        "next": { "ship": { "outcome": "unloaded", "auto": true } } } },
+      "outcomes": { "unloaded": { "title": "Two bundles reach the pier" } }
+    },
+    "survey-window": {
+      "kind": "incident",
+      "title": "A short window to survey the breakwater",
+      "incident": { "category": "discovery", "intensity": 1, "tags": ["quay", "survey"] },
+      "triggers": { "weather": { "event": { "kind": "weather-cleared", "system": "world" } } },
+      "lifecycle": { "progression": true, "candidate": { "for": 0.3 } },
+      "entry": "survey",
+      "stages": { "survey": { "title": "Survey the breakwater", "decision": { "mode": "autonomous" },
+        "next": { "log": { "outcome": "logged", "auto": true } } } },
+      "outcomes": { "logged": { "title": "The survey is logged" } }
+    }
+  }
+}

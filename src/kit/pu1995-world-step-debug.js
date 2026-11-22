@@ -4,7 +4,7 @@
   const format='ink-studio/step-trace', tickOK=value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000;
   const ordered=value=>Object.keys(value??{}).sort();
   const boundaryKeys=['states','outputs','manual','delays','signals','history','events','dropped','scenario','transfers',
-    'sampling','simulationChunks','spatialSampling','dependencyWrites','weatherTrackState','causality'];
+    'sampling','simulationChunks','spatialSampling','dependencyWrites','weatherTrackState','causality','incidentCandidateState'];
 
   function frame(checkpoint,actions,steps){
     const boundary=Object.fromEntries(boundaryKeys.filter(key=>own(checkpoint,key)).map(key=>[key,checkpoint[key]]));

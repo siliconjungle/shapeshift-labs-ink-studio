@@ -229,6 +229,7 @@ const StoryAnalysis = (() => {
     return {id, kind:story.kind, title:story.title, entry:story.entry, completeTopology:intact,
       ...(story.roles && {roles:story.roles}),
       ...(story.incident && {incident:story.incident}),
+      ...(story.lifecycle?.candidate && {candidate:story.lifecycle.candidate}),
       ...(story.lifecycle?.feasibility && {feasibility:story.lifecycle.feasibility}),
       ...(story.lifecycle?.liveReferences && {liveReferences:story.lifecycle.liveReferences}),
       ...(story.lifecycle?.commitment && {commitment:story.lifecycle.commitment}),

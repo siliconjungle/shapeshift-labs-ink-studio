@@ -501,7 +501,7 @@ const StoryDocument = (() => {
   }
 
   function lifecycle(value, at, roles, report) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs', 'settlement']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs', 'settlement', 'candidate']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -628,6 +628,19 @@ const StoryDocument = (() => {
     }
   }
 
+  function candidatePolicy(value, at, kind) {
+    if (kind!=='incident') invalid(at,'candidate queues require an incident');
+    fields(value,at,['for'],['release','onExpire']);
+    if (!Number.isFinite(value.for)||value.for<=0) invalid(at+'.for','expected a positive duration in seconds');
+    if (Object.hasOwn(value,'release')&&!['automatic','manual'].includes(value.release))
+      invalid(at+'.release','expected automatic or manual');
+    if (Object.hasOwn(value,'onExpire')) {
+      const parts = typeof value.onExpire==='string'?value.onExpire.split('/'):[];
+      if (!parts.length||parts.length>2||!parts.every(safeId))
+        invalid(at+'.onExpire','expected a local incident ID or document/incident');
+    }
+  }
+
   function incidentMetadata(value, at, kind) {
     if (kind!=='incident') invalid(at, 'catalog metadata requires an incident');
     fields(value, at, ['category','intensity'], ['tags']);
@@ -664,6 +677,8 @@ const StoryDocument = (() => {
       if (Object.hasOwn(story,'incident')) incidentMetadata(story.incident,at+'.incident',story.kind);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
+      if (Object.hasOwn(story.lifecycle??{},'candidate'))
+        candidatePolicy(story.lifecycle.candidate,at+'.lifecycle.candidate',story.kind);
       const { stages, outcomes } = story;
       if (Object.hasOwn(story.lifecycle??{},'settlement'))
         settlement(story.lifecycle.settlement,at+'.lifecycle.settlement',story,roles,report);

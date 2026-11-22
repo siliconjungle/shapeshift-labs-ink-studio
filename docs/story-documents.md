@@ -480,6 +480,81 @@ node cli/ink-studio.js probe harbor.run.json --field world/incident-catalog \
 node cli/ink-studio.js sim replay harbor.run.json
 ```
 
+## Queue incident opportunities
+
+Add `lifecycle.candidate` to a catalog incident to queue it when its
+trigger matches. Queueing records the original trigger evidence and
+starts an independent lifetime in world seconds.
+
+```json
+"candidate": {
+  "for": 0.4,
+  "release": "automatic",
+  "onExpire": "quay-followups/shallow-load"
+}
+```
+
+Ink evaluates authored `lifecycle.feasibility` checks on each committed
+tick while the candidate waits. A ready candidate can become blocked
+when a route, account, worksite, or other sampled condition changes.
+The initial trigger evidence remains in the receipt. Use feasibility
+checks for conditions that should still hold at dispatch.
+
+The default `release:"manual"` holds a ready candidate for explicit
+selection. Send a scheduled `world/dispatch-candidate` command with
+`incident` and `reason`. Rejected selections record the current queue
+status. `release:"automatic"` dispatches a ready candidate after that
+tick's explicit selections. Automatic dispatch orders ready candidates
+by creation tick and then their qualified IDs. Dispatch opens the
+native story offer and carries its passing feasibility report forward.
+The story's activation policy, costs, commitments, and deadlines still
+govern what happens after dispatch.
+
+```json
+{
+  "tick": 5,
+  "action": "world/dispatch-candidate",
+  "args": {
+    "incident": "quay-opportunities/repair-shift",
+    "reason": "timber-replenished"
+  }
+}
+```
+
+Queue lifetime rounds up to world ticks. A candidate expires before
+selection at its cutoff. An earlier story world deadline can end the
+candidate first. Set `onExpire` to a local incident ID or qualified
+`document/incident` to queue a follow-up. Give that incident its own
+candidate policy and let the original expiry supply its trigger. It
+receives a fresh lifetime and its own feasibility checks. An incident
+instance gets one queue entry per run. Multiple expirations can point
+to the same follow-up and the first creates it. Preflight rejects
+missing targets, targets with independent triggers, and cycles.
+
+World preflight reports compiled queue policies under
+`incidentCandidates`. Probe `world/incident-candidates` for ready,
+blocked, and closed entries with their latest check, deadline, and any
+follow-up link. Pass an `incident` argument to inspect one entry. The
+incident catalog includes its current queue status. Candidate records
+survive checkpoints and replay, and changes emit
+`story-candidate-queued`, `story-candidate-checked`,
+`story-candidate-dispatched`, `story-candidate-expired`, and
+`story-candidate-rejected`. Use those events in event actions and
+`story events` reports.
+
+The [quay demo](../examples/story-documents/quay-candidates.world.json)
+changes the available timber twice before dispatching a repair shift.
+A blocked barge option expires into a shallow-ferry alternative. A
+separate survey window expires when it goes unused. Opening the deep
+berth in time lets the original barge unload instead.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/quay-candidates.world.json \
+  --actions examples/story-documents/quay-candidates.actions.json --ticks 9 --record quay.run.json
+node cli/ink-studio.js probe quay.run.json --ticks 3 --field world/incident-candidates
+node cli/ink-studio.js sim replay quay.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

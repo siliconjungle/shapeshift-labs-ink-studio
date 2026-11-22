@@ -1,0 +1,25 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "quay-followups",
+  "title": "Alternatives at the quay",
+  "stories": {
+    "shallow-load": {
+      "kind": "incident",
+      "title": "Send a smaller load by shallow ferry",
+      "incident": { "category": "opportunity", "intensity": 1, "tags": ["quay", "relief"] },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 0.5, "release": "automatic" },
+        "feasibility": { "cargo": { "transfer": { "from": "stock/cache", "to": "stock/ferry", "amount": 1 } } },
+        "settlement": { "outcomes": { "shipped": { "cargo": {
+          "transfer": { "from": "stock/cache", "to": "stock/ferry", "amount": 1 }
+        } } } }
+      },
+      "entry": "load",
+      "stages": { "load": { "title": "Load the shallow ferry", "decision": { "mode": "autonomous" },
+        "next": { "ship": { "outcome": "shipped", "auto": true } } } },
+      "outcomes": { "shipped": { "title": "The ferry receives one bundle" } }
+    }
+  }
+}

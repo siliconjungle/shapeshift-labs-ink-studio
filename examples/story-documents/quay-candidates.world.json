@@ -1,0 +1,36 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "quay-candidates",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "quay-opportunities.json" }, { "file": "quay-followups.json" }],
+  "systems": {
+    "stock": { "kind": "store", "config": { "accounts": {
+      "cache": { "resource": "timber", "units": "bundle", "type": "integer", "initial": 3 },
+      "supply": { "resource": "timber", "units": "bundle", "type": "integer", "initial": 0 },
+      "work": { "resource": "timber", "units": "bundle", "type": "integer", "initial": 0, "max": 2 },
+      "barge": { "resource": "timber", "units": "bundle", "type": "integer", "initial": 2 },
+      "pier": { "resource": "timber", "units": "bundle", "type": "integer", "initial": 0 },
+      "ferry": { "resource": "timber", "units": "bundle", "type": "integer", "initial": 0 }
+    } } },
+    "dock": { "kind": "store", "config": { "accounts": {
+      "reserve": { "resource": "berth-access", "units": "permit", "type": "integer", "initial": 1 },
+      "berth": { "resource": "berth-access", "units": "permit", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "repair-crew-available" } },
+    { "tick": 1, "action": "world/event", "args": { "kind": "relief-barge-spotted" } },
+    { "tick": 2, "action": "world/transfer", "args": { "from": "stock/cache", "to": "stock/supply", "amount": 2 } },
+    { "tick": 2, "action": "world/event", "args": { "kind": "weather-cleared" } },
+    { "tick": 3, "action": "world/transfer", "args": { "from": "stock/supply", "to": "stock/cache", "amount": 1 } },
+    { "tick": 5, "action": "world/transfer", "args": { "from": "stock/cache", "to": "stock/supply", "amount": 1 } }
+  ],
+  "eventActions": {
+    "announce-ferry": {
+      "on": { "kind": "story-candidate-queued", "system": "world",
+        "where": { "path": "/origin/kind", "value": "follow-up" } },
+      "actions": [{ "action": "world/event", "args": { "kind": "ferry-alternative-announced" } }]
+    }
+  }
+}

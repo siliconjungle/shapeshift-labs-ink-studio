@@ -9,7 +9,8 @@
   const storyKinds = new Set([
     'story-started','story-transition','story-stage-entered','story-objective-resolved','story-progress-rejected',
     'story-branch-chosen','story-decision-opened','story-decision-elapsed','story-commitment-decision',
-    'story-handoff-decision','story-handoff-accepted','story-settlement','story-settlement-blocked'
+    'story-handoff-decision','story-handoff-accepted','story-settlement','story-settlement-blocked',
+    'story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-expired','story-candidate-rejected'
   ]);
 
   function retained(source) {
@@ -79,7 +80,8 @@
     const links = new Set();
     for (const event of recording.events) if (storyOf(event)===story&&storyKinds.has(event.kind)) {
       if (id(event.receipt?.event?.id)) links.add(event.receipt.event.id);
-      if (Array.isArray(event.evidence?.events)) for (const ref of event.evidence.events) if (id(ref)) links.add(ref);
+      const proof = event.evidence??event.source?.evidence;
+      if (Array.isArray(proof?.events)) for (const ref of proof.events) if (id(ref)) links.add(ref);
     }
     return recording.events.filter(event=>storyOf(event)===story||links.has(event.id));
   }

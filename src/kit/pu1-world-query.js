@@ -269,7 +269,9 @@
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
       ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,view.storyDocuments ?? world.storyDocuments))} }),
       'incident-catalog':{type:'record',qualified:true,read:({args})=>ok(W.incidentCatalog.find(view.incidentCatalog,args,
-        {lifecycle:view.storyLifecycle,triggers:view.storyTriggers}))},
+        {lifecycle:view.storyLifecycle,triggers:view.storyTriggers,candidates:view.incidentCandidates}))},
+      'incident-candidates':{type:'record',qualified:true,read:({args})=>
+        W.incidentCandidates.inspect(view.incidentCandidatePolicies,view.incidentCandidates,tick,args)},
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
       'story-commitments':{type:'record',qualified:true,read:({args})=>
         W.storyCommitments.inspect(view.storyCommitmentDefinitions,view.storyLifecycle,args)},
@@ -438,6 +440,7 @@
         actions:sorted(systems[id].actions ?? {})
       })),actions:['world/input','world/patch','world/event',...(accounts.length ? ['world/transfer'] : []),
         ...(view.storyLifecycle ? W.storyLifecycle.actions.map(name=>'world/'+name) : []),
+        ...(view.incidentCandidatePolicies ? ['world/'+W.incidentCandidates.action] : []),
         ...(world.simulationChunks?W.simulationChunks.actions.map(name=>'world/'+name):[])]};
     }
     function spatial({point,radius,where} = {}) {

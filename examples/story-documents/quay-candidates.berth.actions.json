@@ -1,0 +1,6 @@
+[
+  { "tick": 4, "action": "world/transfer", "args": { "from": "dock/reserve", "to": "dock/berth", "amount": 1 } },
+  { "tick": 5, "action": "world/dispatch-candidate", "args": {
+    "incident": "quay-opportunities/repair-shift", "reason": "timber-replenished"
+  } }
+]

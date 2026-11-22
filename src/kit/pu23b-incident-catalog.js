@@ -21,19 +21,20 @@
           category:incident?.category??null,intensity:incident?.intensity??null,tags:[...(incident?.tags??[])].sort(),entry,
           roles:Object.keys(roles).sort(),references:refs.map(id=>({...document.references[id],slot:id})),
           triggers,lifecycle:lifecycle?{activation:lifecycle.activation??'automatic',progression:lifecycle.progression===true}:null,
-          ...(template&&{template})});
+          ...(lifecycle?.candidate&&{candidatePolicy:lifecycle.candidate}),...(template&&{template})});
       }
     }
     entries.sort((left,right)=>left.id<right.id?-1:left.id>right.id?1:0);
     return freeze(copy(entries));
   }
 
-  function withStatus(entry,{lifecycle,triggers}) {
+  function withStatus(entry,{lifecycle,triggers,candidates}) {
     const row = lifecycle?.[entry.id], start = triggers?.[entry.id]?.start;
-    const change = row?.transitions.at(-1);
-    const status = change?.to??(start?entry.lifecycle?'pending':'started':
-      entry.lifecycle||Object.keys(entry.triggers).length?'waiting':'registered');
-    return {...entry,status,...(start&&{start}),...(change&&{transition:change})};
+    const change = row?.transitions.at(-1), candidate = candidates?.[entry.id];
+    const status = change?.to??(candidate?candidate.status==='expired'?'expired':'pending':
+      start?entry.lifecycle?'pending':'started':entry.lifecycle||Object.keys(entry.triggers).length?'waiting':'registered');
+    return {...entry,status,...(start&&{start}),...(change&&{transition:change}),
+      ...(candidate&&{candidate:{status:candidate.status,queuedAt:candidate.queuedAt,expiresAt:candidate.expiresAt}})};
   }
 
   function find(entries,filters={},snapshot) {

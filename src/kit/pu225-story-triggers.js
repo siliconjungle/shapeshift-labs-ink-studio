@@ -17,6 +17,19 @@
     return sample.status === 'ok' ? W.query.condition(when, sample.value) : null;
   }
 
+  function validEvidence(triggers,source,tick) {
+    if (!triggers) return source===undefined;
+    if (!keys(source,['evidence','trigger'])||!own(triggers,source.trigger)) return false;
+    const rule = triggers[source.trigger], evidence = source.evidence;
+    if (rule.event) return keys(evidence,['events','kind'])&&evidence.kind==='event'&&
+      Array.isArray(evidence.events)&&evidence.events.length===(rule.count??1)&&
+      evidence.events.every(id=>typeof id==='string'&&/^\d{1,8}\.\d{1,4}$/.test(id)&&
+        Number(id.split('.')[0])>0&&Number(id.split('.')[0])<=tick);
+    return keys(evidence,['field','kind','since','ticks'])&&evidence.kind==='state'&&evidence.field===rule.state.field&&
+      Number.isSafeInteger(evidence.since)&&evidence.since>=0&&Number.isSafeInteger(evidence.ticks)&&
+      evidence.ticks>=0&&evidence.since+evidence.ticks<=tick;
+  }
+
   function compile(documents, world, systems) {
     check(Array.isArray(documents) && documents.length <= 32, 'Expected up to 32 embedded story documents');
     const ids = new Set(), stories = [], kinds = new Set();
@@ -145,5 +158,5 @@
     return { initial, validate, advance };
   }
 
-  W.storyTriggers = Object.freeze({ compile, ticks });
+  W.storyTriggers = Object.freeze({ compile, ticks, validEvidence });
 })(KIT);

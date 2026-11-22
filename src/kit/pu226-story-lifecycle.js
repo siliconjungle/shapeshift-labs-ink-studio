@@ -27,6 +27,7 @@
       const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry,
         ...(definition.incident&&{incident:definition.incident}) };
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
+      const candidate = definition.lifecycle.candidate;
       const key = keyOf(info), stages = definition.lifecycle.progression ? definition.stages : undefined;
       const automatic = new Map();
       for (const [stage, spec] of Object.entries(stages ?? {})) {
@@ -34,7 +35,7 @@
         if (branches.length) automatic.set(stage, branches);
         for (const child of spec.children?.open ?? []) parents.set(document.id + '/' + child, key);
       }
-      entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
+      entries.set(key, { info, activation, candidate, outcomes: definition.outcomes, triggers: definition.triggers,
         stages, automatic, decisions:W.storyDecisions.compile(stages,world.dt), evidence: compileEvidence(stages, key, document.objectiveTypes),
         feasibility: compileFeasibility(definition.lifecycle.feasibility, key),
         liveReferences: definition.lifecycle.liveReferences,
@@ -81,20 +82,6 @@
         outcomeOK(def, args.to, args.outcome), 'Story transition needs a destination, reason, and any valid outcome ID');
       check(!def.stages || args.to !== 'completed' && args.outcome === undefined,
         'Select an ending branch to resolve a story with stage progression');
-    }
-
-    function validateEvidence(row, def, tick) {
-      const source = row.source;
-      if (!def.triggers) return source === undefined;
-      if (!fields(source, ['trigger', 'evidence']) || !own(def.triggers, source.trigger)) return false;
-      const rule = def.triggers[source.trigger], evidence = source.evidence;
-      if (rule.event) return fields(evidence, ['kind', 'events']) && evidence.kind === 'event' &&
-        Array.isArray(evidence.events) && evidence.events.length === (rule.count ?? 1) &&
-        evidence.events.every(id => typeof id === 'string' && /^\d{1,8}\.\d{1,4}$/.test(id) &&
-          Number(id.split('.')[0]) > 0 && Number(id.split('.')[0]) <= tick);
-      return fields(evidence, ['kind', 'field', 'since', 'ticks']) && evidence.kind === 'state' && evidence.field === rule.state.field &&
-        Number.isSafeInteger(evidence.since) && evidence.since >= 0 && Number.isSafeInteger(evidence.ticks) &&
-        evidence.ticks >= 0 && evidence.since + evidence.ticks <= tick;
     }
 
     function validateParent(parent, owner, child, route, tick, message) {
@@ -151,7 +138,7 @@
           W.storyCommitments.valid(def.commitment,row,tick) &&
           W.storyHandoffs.valid(def.handoffs,row,tick,reasonOK) &&
           W.storySettlement.valid(def.settlement,row,tick) &&
-          (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
+          (cutOffBeforeOffer ? row.source === undefined : W.storyTriggers.validEvidence(def.triggers,row.source,tick)), message);
       }
       check(feasibility ? record(gates) && equal(Object.keys(gates).sort(),gateKeys) : gates === undefined,
         'Invalid story feasibility checkpoint table');
@@ -161,7 +148,7 @@
         const offered = row && (row.dropped > 0 || first.to === 'available');
         const trigger = triggers?.[key]?.start;
         if (gate === null) {
-          check(!offered && (tick===0 || owner || def.triggers&&!trigger || first?.to==='expired'),message);
+          check(!offered && (tick===0 || owner || def.candidate || def.triggers&&!trigger || first?.to==='expired'),message);
           continue;
         }
         check(fields(gate,['request','report']) && fields(gate.request,['tick','source','parent']),message);
@@ -172,7 +159,7 @@
           validateParent(request.parent,owner,def.info.story,state[owner]?.flow,request.tick,message);
           check(request.parent.tick===request.tick && request.source===undefined,message);
         } else {
-          check(request.parent===undefined && validateEvidence(request,def,request.tick) &&
+          check(request.parent===undefined && W.storyTriggers.validEvidence(def.triggers,request.source,request.tick) &&
             (!def.triggers || trigger?.tick===request.tick && trigger.trigger===request.source?.trigger),message);
         }
         if (offered) check((row.dropped || report.tick===first.tick) &&
@@ -214,7 +201,7 @@
       return state;
     }
 
-    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch, settleStory) {
+    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch, settleStory, released) {
       let state = previous, gates = previousGates, queuedOpens = [];
       const requests = new Map(), handoffRequests = new Map(), H = W.storyHandoffs;
       const sourceLength = events.length;
@@ -274,19 +261,19 @@
           transition(key,'active','live-reference-restored',undefined,{publish,reference:last.reference});
         return true;
       }
-      function offer(key, source, parent, publish = emit) {
+      function offer(key, source, parent, publish = emit, candidate) {
         const def = entries.get(key);
         if (def.feasibility) {
           const prior = gates[key];
           if (prior?.report.tick === tick) return;
-          const request = prior?.request ?? {tick,...(source&&{source}),...(parent&&{parent})};
-          const report = W.storyFeasibility.evaluate(def.feasibility,tick,query());
+          const request = prior?.request ?? {tick:candidate?.queuedAt??tick,...(source&&{source}),...(parent&&{parent})};
+          const report = candidate?.report??W.storyFeasibility.evaluate(def.feasibility,tick,query());
           if (gates === previousGates) gates = {...previousGates};
           gates[key] = {request,report};
           if (!report.ready) return;
           ({source,parent} = request);
         }
-        const reason = parent ? 'parent-stage-opened' : source ? 'trigger-matched' : 'authored-offer';
+        const reason = candidate ? 'candidate-dispatched' : parent ? 'parent-stage-opened' : source ? 'trigger-matched' : 'authored-offer';
         transition(key,'available',reason,undefined,{publish,source,parent});
         if (applyReference(key,publish) && def.activation === 'automatic' && !def.commitment)
           activate(key,'automatic-activation',publish);
@@ -386,9 +373,11 @@
             }
           }
         }
-        if (prior === null && (gates?.[key] || !parents.has(key) && (!def.triggers || source)))
+        if (prior===null&&!def.candidate&&(gates?.[key] || !parents.has(key) && (!def.triggers || source)))
           offer(key,source);
       }
+      for (const [key,candidate] of Object.entries(released??{}))
+        if (state[key]===null) offer(key,candidate.source,undefined,emit,candidate);
       const opens = queuedOpens;
       queuedOpens = null;
       for (const { ids, parent, publish } of opens) openChildren(ids, parent, publish);
@@ -477,7 +466,7 @@
       }
       const candidates = commitmentKeys.filter(key=>statusOf(state[key])==='available'&&!policy(key)&&
         (requests.has(key)||state[key].commitment||entries.get(key).activation==='automatic'));
-      const age = key => state[key].commitment?.requestedAt??tick;
+      const age = key => state[key].commitment?.requestedAt??released?.[key]?.queuedAt??tick;
       candidates.sort((left,right)=>age(left)-age(right));
       for (const key of candidates) {
         const {info,commitment:spec} = entries.get(key), row = state[key], prior = row.commitment;
