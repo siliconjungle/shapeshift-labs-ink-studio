@@ -33,7 +33,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -461,6 +461,7 @@ ${materialStyles ? `flat in vec4 v_pixelStyle; flat in float v_pixelFog; uniform
 ${materialStyleThreshold}` : ''}
 uniform float u_idx;
 uniform bool u_paintPass; flat in int v_paint;
+${coverageVote ? 'uniform bool u_coverageVotePass;' : ''}
 ${relighting ? 'flat in vec4 v_relight;' : ''}
 ${optical ? 'flat in vec4 v_optical; flat in vec3 v_scatterTint, v_reflectTint; flat in float v_opticalFog;' : ''}
 layout(location=0) out vec4 o;
@@ -652,6 +653,18 @@ ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
     ${cutaway ? 'sectionAxial' : portal ? 'clipped ? axial : v_portalDepth.x' : 'v_waterAxial'}, mark);` : ''}
   ${environment ? 'rgb = envMedia(rgb, gl_FragCoord.xy, u_viewport, ' + (cutaway ? 'sectionAxial' : 'v_envAxial') + ');' : ''}
   ${gaussianProxy ? 'rgb*=proxyGain;' : ''}
+  ${coverageVote ? `
+  if(u_coverageVotePass){
+    if(!solid||v_depth<0.0||v_gl>0.0||a<0.5)discard;
+    float row=v_ix+1.0;
+    float depth=round(clamp(v_depth,0.0,1.0)*65535.0);
+    o=vec4(rgb,mod(depth,256.0)/255.0);
+    od=vec4(mod(row,256.0),mod(floor(row/256.0),256.0),floor(row/65536.0),floor(depth/256.0))/255.0;
+    oa=vec4(0);
+    return;
+  }
+  ` : ''}
+
   if (u_paintPass) {
     // Every fragment attenuates the overlay behind it.
     bool overlay = v_paint != 0 ${optical ? '|| hasOptical' : ''};

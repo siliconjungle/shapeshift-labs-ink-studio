@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Where the pixels live · Ink Studio</title>
+<style>
+:root{color-scheme:dark;background:#111a26;color:#e5f0ed;font:15px system-ui,sans-serif}
+body{margin:0}
+main{max-width:930px;margin:48px auto;padding:0 20px}
+h1{margin:0 0 8px;font-size:clamp(32px,7vw,60px);line-height:.98;letter-spacing:-.055em}
+h2{margin:0 0 4px;font-size:23px;letter-spacing:-.03em}
+p{margin:0 0 16px;color:#acbfca}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:28px}
+button{border:1px solid #638996;border-radius:6px;background:#254150;color:inherit;font:inherit;padding:8px 16px;cursor:pointer}
+section{margin-bottom:26px}
+.views{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+figure{margin:0;border:1px solid #344c60;border-radius:8px;background:#101c29;overflow:hidden}
+canvas{width:100%;height:auto;display:block;image-rendering:pixelated}
+figcaption{padding:9px 12px;border-top:1px solid #344c60;font-weight:600}
+label{display:grid;grid-template-columns:minmax(0,1fr) 7ch;gap:12px;align-items:center;margin-top:12px}
+input{width:100%;accent-color:#77c4bd}
+output{text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:520px){main{margin:24px auto;padding:0 12px}p{font-size:14px}.views{gap:6px}figcaption{font-size:12px;padding:8px}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Where the pixels live</h1><button id="play" type="button" aria-pressed="false">Play</button></header>
+<section>
+  <h2>Object-local texels</h2><p>Orbit the lantern. The right-hand enamel marks follow its own coarser grid as the swatches turn.</p>
+  <div class="views">
+    <figure><canvas width="184" height="110" aria-label="Lantern with fine texture"></canvas><figcaption>Fine paint on the screen grid</figcaption></figure>
+    <figure><canvas width="184" height="110" aria-label="Lantern with object-local pixels"></canvas><figcaption>Captured texels on the lantern</figcaption></figure>
+  </div>
+  <label><input id="orbit" type="range" min="-180" max="180" value="36" aria-label="Lantern orbit angle"><output id="degrees" for="orbit">36°</output></label>
+</section>
+<section>
+  <h2>Coverage before color</h2><p>Slide across a pixel. At the copper and enamel seam, the right-hand image picks a swatch from the surface that covers the most samples.</p>
+  <div class="views">
+    <figure><canvas width="184" height="108" aria-label="Mixed palette resolve"></canvas><figcaption>Blended color before palette</figcaption></figure>
+    <figure><canvas width="184" height="108" aria-label="Surface coverage vote"></canvas><figcaption>Winning surface before palette</figcaption></figure>
+  </div>
+  <label><input id="phase" type="range" min="-100" max="100" value="0" aria-label="Subpixel pan"><output id="phase-value" for="phase">0.00 px</output></label>
+</section>
+<p id="status" role="status">Loading WebGL…</p>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

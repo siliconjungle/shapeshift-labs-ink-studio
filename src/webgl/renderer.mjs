@@ -1,3 +1,4 @@
+import { createCoverageVote } from './coverage-vote.mjs';
 import { createGaussianProxyRenderer, gaussianProxyPlan } from './gaussian-part-proxies.mjs';
 import { captureGaussianTurntable, gaussianCoverageFrame } from './gaussian-turntable.mjs';
 import { createSplatPaintPass, splatPaintStyle } from './splat-paint-pass.mjs';
@@ -135,7 +136,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
     const { target, table, textureUnit } = targets;
-    let splatPaintPass;
+    let splatPaintPass, coverageVotePass;
     // The material-controls pass uses unit 31 before the splat draw.
     let gaussianProxies;
     const bindGaussians = createGaussianHarmonics(gl, resources, 31, maxSize);
@@ -531,7 +532,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     function drawGeometry(shader, buffer, width, height, options, water, wet, env) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer.framebuffer);
       gl.viewport(0, 0, width, height);
-      if (options.u_paintPass) {
+      if (options.u_coverageVotePass) {
+        gl.clearBufferfv(gl.COLOR, 0, [0,0,0,1]);
+        gl.clearBufferfv(gl.COLOR, 1, zero);
+        gl.disable(gl.BLEND);
+      } else if (options.u_paintPass) {
         gl.clearBufferfv(gl.COLOR, 0, zero);
         gl.clearBufferfv(gl.COLOR, 1, zero);
         gl.enable(gl.BLEND);
@@ -586,7 +591,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         buffer.ensureDepth();
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
         gl.clearBufferfv(gl.DEPTH,0,[1]);gl.disable(gl.BLEND);
-        if (options.u_splatPaintPass) gl.colorMask(false,false,false,false);
+        if (options.u_splatPaintPass || options.u_coverageVotePass) gl.colorMask(false,false,false,false);
         if (surfaces) {
           surfacePipeline ??= createSurfacePipeline(gl, surfaceOptions);
           surfacePipeline.draw(surfaces, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
@@ -612,9 +617,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             options.u_paintPass ? 3 : options.u_idx || 0);
         }
         data.bind();
-        if (options.u_splatPaintPass) gl.colorMask(true,true,true,true);
+        if (options.u_splatPaintPass || options.u_coverageVotePass) gl.colorMask(true,true,true,true);
         gl.depthMask(false);
-        if(!options.u_idx){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);}
+        if(!options.u_idx&&!options.u_coverageVotePass){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);}
       }else if(options.u_idx!==3)gl.disable(gl.DEPTH_TEST);
       if (shader.footprints) footprintBinding.rebind();
       gl.useProgram(shader.p);
@@ -622,7 +627,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         ...options,u_geometryDepth:+(hasSurfaces||hasProxies||hasPlanes),
         u_proxyGrid: options.proxy ? [options.proxy.width/width, options.proxy.height/height] : [1,1],
         u_portalCoverPlane: options.u_portalCoverPlane ?? zero,
-        u_paintPass: !!options.u_paintPass, u_splatPaintPass: !!options.u_splatPaintPass,
+        u_paintPass: !!options.u_paintPass, u_splatPaintPass: !!options.u_splatPaintPass, u_coverageVotePass: !!options.u_coverageVotePass,
         u_materialGridScale: options.u_materialGridScale ?? 1,
         u_facingGridScale: options.u_materialGridScale ?? 1,
         u_spriteLodGrid: options.spriteGrid ?? [1,1],
@@ -952,6 +957,22 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const coverageSetting = frame.splatCoverage ?? look.splatCoverage ?? 'legacy';
       const splatCoverage = coverageRules?.coverageMode?.(coverageSetting) ?? ['legacy', 'continuous', 'soft'].indexOf(coverageSetting);
       if (splatCoverage < 0) throw new RangeError('Splat coverage must be legacy, continuous or soft');
+      const voteDefinition = frame.coverageVote ?? look.coverageVote;
+      let vote;
+      if (voteDefinition && !raw && !reflectionCapture && !portableStages && !frameTone && !patterned &&
+          !constraints && !waterScene && !glass && !group && !proxyPlan && plane === zero && !cover) {
+        coverageVotePass ??= createCoverageVote(gl, {
+          samples:target(2), source:target(), resources, table, program, textureUnit, fullscreen,
+          maxSize, paletteSize:scenePaletteSize
+        });
+        if (coverageVotePass.prepare(world, voteDefinition, Math.min(world.pal.length, scenePaletteSize))) {
+          vote = coverageVotePass;
+          if (width * 2 > Math.min(maxSize, viewportLimit[0]) || height * 2 > Math.min(maxSize, viewportLimit[1]))
+            throw new RangeError('Coverage vote samples exceed the device viewport or texture limit');
+          vote.samples.resize(width * 2, height * 2);
+          vote.source.resize(width, height);
+        }
+      }
       const colored = !raw && !portableStages && !frameTone && !patterned && !coverage && (frame.colored ?? true);
       const detail = prepareDetail(world, budget);
       const scopedCleanup = !!needsDetailFlags && !!detail?.flags;
@@ -1193,7 +1214,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (proxy) historyValid = false;
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
-        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy,
+        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy, coverageVote:!!vote,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
         engraving:engraved, footprints, materialStyles, facingColors:facing && facingAPI, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section, spriteReconstruction:!!spriteMask
       });
@@ -1273,6 +1294,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         drawGeometry(shader, cover.buffer, width, height,
           { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_portalCoverPlane: cover.plane, tangent, proxy:proxy && {...proxy,clip:cover.plane},
             surfaces, scaleSurfaces, spriteRows, surfaceFrame: { ...surfaceFrame, index: true, portalCover: true, clip: cover.plane } });
+      if (vote) {
+        drawGeometry(shader, vote.samples, width * 2, height * 2, { u_snap: 0, u_hard: 0,
+          u_coverageVotePass: true, u_materialGridScale: 2, tangent, surfaces, scaleSurfaces, spriteRows,
+          spriteGrid:[.5,.5], surfaceFrame });
+      }
       gl.disable(gl.BLEND);
       textureUnit(1, geometry.textures[0]);
       textureUnit(2, geometry.textures[1]);
@@ -1353,7 +1379,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (facingPattern) bones.bind(facingBoneUnit);
       const resolveOutput = cleaning ? cleaned.framebuffer : destination;
-      fullscreen(resolve, splatPaint ? splatPaintPass.source.framebuffer : resolveOutput, width, height, {
+      const paletteOutput = splatPaint ? splatPaintPass.source.framebuffer : resolveOutput;
+      fullscreen(resolve, vote ? vote.source.framebuffer : paletteOutput, width, height, {
         ...patternedUniforms, ...glassUniforms, ...bindTone(frameTone), ...water, ...env?.uniforms, u_waterMask: 11,
         ...(layeredGlass&&{u_glassBoundary:8,u_glassBack:4,u_glassThrough:7,
           u_glassRange:camera.depthRange,u_glassProjection:camera.projection}),
@@ -1379,6 +1406,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_gk: glass ? (glass.k || 0.14) : 0, u_bars: Math.min(0.45, world.anim?.bars ?? 0),
         u_grade: +!!grade, ...(grade ? { u_out: grade, u_outl: grade } : {})
       });
+      if (vote) vote.finish(paletteOutput, width, height, pal, grade);
       if (splatPaint)
         splatPaintPass.finish(splatPaint, (colored ? contours : geometry).textures[0], resolveOutput, width, height);
       if (cleaning) {

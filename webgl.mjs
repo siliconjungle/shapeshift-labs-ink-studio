@@ -31,3 +31,4 @@ export {
 } from './show-control.mjs';
 export { compileGaussianPartProxies } from './src/webgl/gaussian-part-proxies.mjs';
 export { encodeGaussianTurntablePNG } from './src/webgl/gaussian-turntable.mjs';
+export { bakeObjectTexels } from './src/object-texels.mjs';
