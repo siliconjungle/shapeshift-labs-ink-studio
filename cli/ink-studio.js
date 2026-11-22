@@ -1217,6 +1217,7 @@ const CMD = {
         '  music rack state rack [settings.json] --out state.json   save recalled macro automation',
         '  music rack render|audition rack recipe.json --out directory   render a rack or compare with bypass',
         '  music rack plugin-info|plugin-state alias [settings.json] --clap-host manifest.json   inspect or save CLAP state',
+        '  '+require('./music-sound-recipe.js').usage+'   render reproducible one-shot audio',
         '  music instrument analyze|audition|build recipe.json --out path   turn a take bank into labeled playable zones',
         '  music instrument discover|keep-discovery file.json [selection.json] --out dir',
         '  music instrument workshop|audition-workshop|keep-workshop file.json [settings.json] --out dir',

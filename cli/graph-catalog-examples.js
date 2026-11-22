@@ -558,6 +558,8 @@ const specifications = {
   'music.interval': { inputs: {a:220,b:330} },
   'music.roughness': { inputs: {spectra:[[[220,1],[440,.5]],[[228,1],[456,.5]]]} },
   'audio.buffer': { inputs: audio },
+  'audio.renderSoundRecipe': {inputs:{recipe:{format:'ink-studio/sound-recipe',version:1,
+    family:'confirm',seed:12,render:{sampleRate:8000}}}},
   'audio.captureSample': {inputs:sampleCapture.inputs},
   'audio.print': {nodes:{bus:{op:'data.record',inputs:{dry:audio,wet:audio}}},
     inputs:{sources:link('bus'),settings:{sample:{id:'print',label:'Bench print'},

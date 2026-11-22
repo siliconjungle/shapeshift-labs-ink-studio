@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const WAV = require('./wav.js');
+const {isSoundRecipe,readSoundRecipe,readAudioSource}=require('./sound-source.js');
 const {json,write} = require('./asset-files.js');
 const {openSampleLibrary} = require('./sample-library.js');
 const {readGraphProject} = require('./graph-project.js');
@@ -20,7 +21,13 @@ function capture(file, recipe, kit) {
   const target = path.resolve(path.dirname(file),input.path), reference = input.path;
   const source = {kind:input.kind,name:path.basename(target),reference};
   let audio;
-  if (input.kind==='file') audio = WAV.read(target);
+  if (input.kind==='file') {
+    if (isSoundRecipe(target)) {
+      const generated=readSoundRecipe(target,K.procedural);
+      audio=generated.value;
+      source.recipe=generated.recipe;
+    } else audio=WAV.read(target);
+  }
   else if (input.kind==='graph') {
     if (!text(input.output)) throw new TypeError('Graph capture needs a named audio output');
     const {outputs,report} = readGraphProject(target,{kit}).run({time:input.time,seed:input.seed,inputs:input.inputs});
@@ -30,7 +37,7 @@ function capture(file, recipe, kit) {
   } else if (input.kind==='instrument') {
     if (!text(input.track)) throw new TypeError('Instrument capture needs a named production track');
     const production = read(target), assets = Object.fromEntries(Object.entries(assetPaths(production,target))
-      .map(([name,at])=>[name,WAV.read(at)]));
+      .map(([name,at])=>[name,readAudioSource(at,K.procedural)]));
     const {report,stems} = K.music.production.render(production.production ?? production,assets,
       {start:input.from,end:input.to,sampleRate:input.sampleRate,stems:true});
     if (!Object.hasOwn(stems,input.track)) throw new RangeError('Unknown production audio track '+input.track);

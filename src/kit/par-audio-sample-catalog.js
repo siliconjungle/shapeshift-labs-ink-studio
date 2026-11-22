@@ -29,7 +29,7 @@
         !fields(license, ['id', 'credit', 'url']) || !text(license.id) ||
         [license.credit, license.url].some(value => value !== undefined && !text(value)))
       throw new TypeError('Invalid audio sample tags or license');
-    if (!fields(source, ['kind', 'name', 'reference', 'firstSample', 'endSample', 'sampleRate', 'gain']) ||
+    if (!fields(source, ['kind', 'name', 'reference', 'firstSample', 'endSample', 'sampleRate', 'gain', 'recipe']) ||
         !kinds.includes(source.kind) || !text(source.name) ||
         source.reference !== undefined && !text(source.reference) || source.sampleRate !== raw.sampleRate ||
         !int(source.firstSample, 0, Number.MAX_SAFE_INTEGER - raw.frames) ||
@@ -39,7 +39,8 @@
     const {pitch: note, print, ...rest} = raw;
     return P.data.freeze({...defined(rest), ...(note !== undefined && {pitch:pitchOf(note)}),
       ...(print!==undefined && {print:A.audioPrint.metadata(print,raw)}),
-      tags:[...new Set(tags)], license:defined(license), source:defined(source)});
+      tags:[...new Set(tags)], license:defined(license), source:defined({ ...source,
+        ...(source.recipe !== undefined && { recipe:A.soundRecipe.normalize(source.recipe) }) })});
   }
   function describe(audio, metadata, source) {
     const {sampleRate, channels, samples} = A.audio(audio);
@@ -53,7 +54,7 @@
     const {sampleRate,channels,samples} = A.audio(audio), frames = samples.length / channels;
     const {firstSample = 0, endSample = frames, source} = options;
     if (!int(firstSample, 0, frames-1) || !int(endSample, firstSample+1, frames) ||
-        !fields(source, ['kind', 'name', 'reference', 'firstSample', 'endSample', 'sampleRate', 'gain']))
+        !fields(source, ['kind', 'name', 'reference', 'firstSample', 'endSample', 'sampleRate', 'gain', 'recipe']))
       throw new RangeError('Capture range is outside the audio or has an invalid source');
     const base = source.firstSample ?? 0;
     if (!int(base, 0, Number.MAX_SAFE_INTEGER-frames) ||

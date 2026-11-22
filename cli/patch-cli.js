@@ -95,7 +95,8 @@ async function run(file,opt,settings) {
     (async function*(){ for (let i=0;i<limit;i++) yield undefined; })();
   let index=0, bytes=0, report, passed=true;
   try {
-    if (opt.audio) media.audio=await audioSource(opt.audio,{video:opt.video,executable:opt.ffmpeg,duration:limit/fps,signal:abort.signal});
+    if (opt.audio) media.audio=await audioSource(opt.audio,{video:opt.video,executable:opt.ffmpeg,duration:limit/fps,signal:abort.signal,
+      procedural:settings.kit.KIT.procedural});
     for await (const frame of frames) {
       if (interrupted) break;
       media.frame=frame;

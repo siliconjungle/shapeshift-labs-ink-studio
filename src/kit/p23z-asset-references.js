@@ -18,6 +18,12 @@
   const localFile = value => typeof value === 'string' && value.trim() === value && value.length > 0 &&
     value.length <= 4096 && !value.startsWith('/') && !/[\\<>:"|?*\x00-\x1f]/.test(value);
 
+  function validFormat({ kind, file }) {
+    const lower = file.toLowerCase();
+    if (kind === 'sound') return lower.endsWith('.wav') || lower.endsWith('.sound.json');
+    return lower.endsWith(kind === 'voice' ? '.wav' : '.json');
+  }
+
   function compile(document, { draft = false } = {}) {
     if (!fields(document, ['format', 'version', 'entries']) || document.format !== format ||
         document.version !== 1 || !Array.isArray(document.entries) || document.entries.length > 4096)
@@ -27,7 +33,7 @@
       if (!fields(row, ['asset', 'revision', 'kind', 'file', 'sha256']) || !id(row.asset) ||
           !revision(row.revision) || !kinds.includes(row.kind) || !localFile(row.file) ||
           !(digest(row.sha256) || draft && row.sha256 === undefined) ||
-          !row.file.toLowerCase().endsWith(['voice', 'sound'].includes(row.kind) ? '.wav' : '.json'))
+          !validFormat(row))
         throw new TypeError('Invalid asset registry entry. Use a namespaced ID, exact revision, typed local file and SHA-256.');
       const identity = key(row);
       if (entries.has(identity)) throw new TypeError('Duplicate asset revision ' + identity);

@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const PNG = require('./png.js');
 const WAV = require('./wav.js');
+const Sound = require('./sound-source.js');
 const { createGraphHost } = require('./graph-host.js');
 const { clip } = require('./graph-clip.js');
 const { resolveCheckpoint } = require('./checkpoint-file.js');
@@ -279,14 +280,16 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
   const assets=new Map(named(assetDefinitions,'assets').map(([name,definition])=>{
     const {format,file,type,codec,options}=fields(definition,
       definition?.format==='codec' ? ['format','file','type','codec','options'] : ['format','file'],'graph asset '+name);
-    if (!['png','indexed-png','json','wav','inputs','codec'].includes(format) ||
+    if (!['png','indexed-png','json','wav','sound-recipe','inputs','codec'].includes(format) ||
         !(typeof file==='string'&&file||api.isRef(file)))
-      throw new TypeError('Graph assets need a PNG, JSON, WAV, input recording or hosted codec file');
+      throw new TypeError('Graph assets need a PNG, JSON, WAV, sound recipe, input recording or hosted codec file');
     const selected=api.isRef(file)?resolveAsset(file,Assets.graphKinds(format)):undefined;
     const full=selected?.filename??path.resolve(baseDir,file);
     paths.add(full);
     if ((format==='wav' || format==='codec') && fs.statSync(full).size>WAV.maxBytes)
       throw new RangeError('Graph media asset exceeds its byte budget');
+    if (format==='sound-recipe' && fs.statSync(full).size>Sound.limit)
+      throw new RangeError('Sound recipe exceeds 64 KiB');
     const bytes=selected?.bytes??fs.readFileSync(full);
     let value, kind, modelHash;
     if (format==='png') {
@@ -299,8 +302,8 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
         const {w,h}=PNG.layout(bytes,true);
         value={value:{width:w,height:h}};
       } else value=PNG.indexedRaster(bytes);
-    } else if (format==='wav') {
-      value=WAV.decode(bytes);
+    } else if (format==='wav' || format==='sound-recipe') {
+      value=format==='wav' ? WAV.decode(bytes) : Sound.decodeSoundRecipe(bytes,kit.KIT.procedural).value;
       kind='audio';
     } else if (format==='codec') {
       value=host.decode(codec,bytes,{type,file:full,options});

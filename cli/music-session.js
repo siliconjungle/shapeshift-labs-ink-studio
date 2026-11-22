@@ -17,7 +17,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   check(file && ['inspect','trace','edit','render','preview','compare','compose','audition-phrase','arrange-performance','performance-ballot','listening-round','listening-evidence','keep-listening-repair','experiment','keep-experiment','stream','play','jam','handoff'].includes(mode),
     'Choose music session inspect, trace, edit, render, preview, compare, compose, audition-phrase, arrange-performance, performance-ballot, record-ballot, listening-round, listening-evidence, keep-listening-repair, record-round, keep-round, experiment, keep-experiment, stream, play, jam or handoff');
   const recipe=read(file);
-  check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
+  check(fields(recipe,['session','assets']),'Expected a music edit session and audio asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
   const assets=readAssets(paths,file,P);
   const editor=P.mediaGraph.musicSession.create(assets,host);

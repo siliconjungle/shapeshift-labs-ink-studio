@@ -136,6 +136,11 @@
       inputs:{clips:'array<record>',options},outputs:{value:'audio',report:'record'},
       run({clips,options}) {return A.gestureBank.audition(clips,options);}
     },
+    'audio.renderSoundRecipe': {
+      description: 'Render a versioned seeded one-shot as typed PCM and return its resolved recipe.',
+      inputs: { recipe: 'record' }, outputs: { value: 'audio', recipe: 'record', report: 'record' },
+      run({ recipe }) { return A.soundRecipe.render(recipe); }
+    },
     'audio.synthesizeGesture': {
       description:'Excite a breath resonator, grainy friction model or inharmonic metal modes and print aligned perspectives.',
       inputs:{options:{type:'record'}},outputs:{value:'audio',perspectives:'record',report:'record'},

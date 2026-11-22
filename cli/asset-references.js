@@ -3,9 +3,10 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { json } = require('./asset-files.js');
 const WAV = require('./wav.js');
+const { isSoundRecipe, decodeSoundRecipe } = require('./sound-source.js');
 
 const waveKinds = Object.freeze(['voice', 'sound']);
-const graphKinds = format => format === 'wav' ? waveKinds :
+const graphKinds = format => format === 'wav' ? waveKinds : format === 'sound-recipe' ? ['sound'] :
   format === 'json' ? ['rig', 'scene', 'effect', 'graph', 'projection'] : [];
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const parse = bytes => JSON.parse(bytes.toString('utf8'));
@@ -54,7 +55,8 @@ function referenceArgument(api, value) {
   return ref;
 }
 
-async function validateContent({ entry, bytes }, kit) {
+async function validateContent({ entry, bytes, filename }, kit) {
+  if (entry.kind === 'sound' && isSoundRecipe(filename)) return decodeSoundRecipe(bytes, kit.KIT.procedural);
   if (entry.kind === 'voice' || entry.kind === 'sound') return WAV.decode(bytes);
   const document = parse(bytes);
   if (entry.kind === 'projection') return require('./patch-show-config.js').projectionSurfaces(document);

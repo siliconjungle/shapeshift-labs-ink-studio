@@ -1,5 +1,6 @@
 const fs=require('node:fs'),path=require('node:path');
 const WAV=require('./wav.js'), {write,json}=require('./asset-files.js');
+const { isSoundRecipe } = require('./sound-source.js');
 const Midi=require('./handoff-midi.js'), Reaper=require('./handoff-reaper.js');
 
 function publish(result,file,recipe,out,host) {
@@ -17,7 +18,7 @@ function publish(result,file,recipe,out,host) {
   try {
     const sourceFolder=path.dirname(path.resolve(file));
     const assets=Object.fromEntries(Object.entries(recipe.assets ?? {}).map(([name,value])=>{
-      const local='assets/'+name+'.wav';
+      const local='assets/'+name+(isSoundRecipe(value) ? '.sound.json' : '.wav');
       save('ink/'+local,fs.readFileSync(path.resolve(sourceFolder,value)));
       return [name,local];
     }));

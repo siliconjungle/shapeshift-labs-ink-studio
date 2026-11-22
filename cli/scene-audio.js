@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const WAV = require('./wav.js');
+const { readAudioSource, isSoundRecipe, decodeSoundRecipe } = require('./sound-source.js');
 const { mix } = require('./scene-audio-mix.js');
 const { createScenePost, buses, legacy } = require('./scene-audio-post.js');
 const { readEditorialProject } = require('./music-editorial.js');
@@ -459,10 +460,13 @@ function readSceneAudio(file, { kit = require('../index.js').load(), onFile = ()
     let audio;
     if (typeof spec === 'string') {
       const file = path.resolve(folder,spec);
-      audio = WAV.read(file);
+      audio = readAudioSource(file, kit.KIT.procedural);
       onFile(file);
     }
-    else if (api.isRef(spec)) audio = WAV.decode(select(spec, Assets.waveKinds).bytes);
+    else if (api.isRef(spec)) {
+      const { bytes, filename } = select(spec, Assets.waveKinds);
+      audio = isSoundRecipe(filename) ? decodeSoundRecipe(bytes, kit.KIT.procedural).value : WAV.decode(bytes);
+    }
     else if (record(spec) && Object.hasOwn(spec,'print')) {
       const print = printAsset(spec), entry = print.entry(spec.take);
       audio = print.load(spec.take).value;

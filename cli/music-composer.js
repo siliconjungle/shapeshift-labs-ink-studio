@@ -155,6 +155,7 @@ module.exports=function musicCommand(pos,opt,kit) {
   if (mode==='session') return require('./music-session.js')(pos.slice(1),opt,kit);
   if (mode==='atmosphere') return require('./music-atmosphere.js')(pos.slice(1),opt,kit);
   if (mode==='jam') return require('./music-jam.js')(pos.slice(1),opt,kit);
+  if (mode==='sound') return require('./music-sound-recipe.js').command(pos.slice(1),opt,kit);
   if (mode==='gestures') return require('./music-gestures.js')(pos.slice(1),opt,kit);
   if (mode==='samples') return require('./music-samples.js')(pos.slice(1),opt,kit);
   if (mode==='pads') return require('./music-pads.js')(pos.slice(1),opt,kit);

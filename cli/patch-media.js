@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const WAV = require('./wav.js');
+const { readAudioSource } = require('./sound-source.js');
 
 function parseRate(text = '12') {
   if (!/^\d+(?:\.\d+|\/\d+)?$/.test(text)) throw new TypeError('Patch FPS needs a number or ratio');
@@ -76,8 +77,8 @@ async function* videoFrames(input, {width,height,rate,executable='ffmpeg',stream
   } finally { await process.stop(); }
 }
 
-async function audioSource(input, {video,executable='ffmpeg',duration,signal}) {
-  if (input!=='video') return WAV.read(localFile(input));
+async function audioSource(input, {video,executable='ffmpeg',duration,signal,procedural}) {
+  if (input!=='video') return readAudioSource(localFile(input),procedural);
   if (!video || video==='-') throw new TypeError('--audio video needs a local video file');
   const file=localFile(video), sampleRate=48000, channels=2;
   const maxBytes=Math.min(WAV.maxSamples*4, Math.ceil(duration*sampleRate)*channels*4+8192);

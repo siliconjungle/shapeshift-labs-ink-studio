@@ -1,6 +1,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const WAV=require('./wav.js');
+const { readAudioSource } = require('./sound-source.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const write=(file,value)=>fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n');
 const nameValid=name=>/^[a-z][a-z0-9_-]{0,47}$/i.test(name) && !['__proto__','constructor','prototype'].includes(name);
@@ -8,7 +9,7 @@ const nameValid=name=>/^[a-z][a-z0-9_-]{0,47}$/i.test(name) && !['__proto__','co
 function assetPaths(recipe,file) {
   const folder=path.dirname(path.resolve(file));
   return Object.fromEntries(Object.entries(recipe.assets ?? {}).map(([name,spec])=>{
-    if (!nameValid(name) || typeof spec!=='string') throw new TypeError('Name each production asset and its WAV path');
+    if (!nameValid(name) || typeof spec!=='string') throw new TypeError('Name each production asset and its audio source path');
     return [name,path.resolve(folder,spec)];
   }));
 }
@@ -196,7 +197,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   if (!file) throw new TypeError('Use music production with a mode and a recipe. Producer modes are plan-audition, review-audition and keep-audition');
   const recipe=read(file);
   const {sources,paths,timeline}=mode==='timeline' ? timelineBank(recipe,file) : {paths:assetPaths(recipe,file)};
-  const assets=Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,WAV.read(file)]));
+  const assets=Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,readAudioSource(file,kit.KIT.procedural)]));
   const production=recipe.lockedArrangement?.production ?? recipe.production ?? recipe;
   if (mode==='search-locked') {
     if (!config || typeof opt.out!=='string') throw new TypeError('Use a production, a locked brief, and --out directory');

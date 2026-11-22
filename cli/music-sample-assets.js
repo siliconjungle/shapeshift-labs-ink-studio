@@ -1,5 +1,6 @@
 /* Load the catalog, edit, print and WAV sources used by playable sample recipes. */
 const fs=require('node:fs'),path=require('node:path'),WAV=require('./wav.js');
+const {isSoundRecipe,readSoundRecipe}=require('./sound-source.js');
 const {readAudioPrint}=require('./audio-print.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const text=value=>typeof value==='string' && value.trim().length>0;
@@ -13,7 +14,7 @@ function openEdit(file,library,tool) {
 function resolveSampleAssets(entries,file,library,kit,{allowWav=false}={}) {
   const P=kit.KIT.procedural,{fields,id,integer,check}=P.musicInstruments;
   const {sampleEdit}=P.mediaGraph;
-  const waves=new Map();
+  const waves=new Map(), recipes=new Map();
   const buffers=new Map(), prints=new Map(), assets={}, sources={};
   let samples=0, originalSamples=0;
   function readSample(name) {
@@ -27,6 +28,16 @@ function resolveSampleAssets(entries,file,library,kit,{allowWav=false}={}) {
   }
   for (const [name,ref] of Object.entries(entries)) {
     check(id(name),'Invalid sample source name');
+    if (isSoundRecipe(ref)) {
+      const filename=path.resolve(path.dirname(file),ref);
+      if (!recipes.has(filename)) recipes.set(filename,readSoundRecipe(filename,P));
+      const {value,recipe}=recipes.get(filename);
+      assets[name]=value;
+      sources[name]={path:ref,recipe};
+      samples+=value.samples.length;
+      check(samples<=32000000,'Sample recipe exceeds its source PCM budget');
+      continue;
+    }
     if (allowWav && (typeof ref==='string' || fields(ref,['wav','fromSample','toSample','sha256']) && text(ref.wav))) {
       const row=typeof ref==='string' ? {wav:ref} : ref, filePath=path.resolve(path.dirname(file),row.wav);
       check(row.sha256===undefined || typeof row.sha256==='string' && /^[a-f0-9]{64}$/.test(row.sha256),
@@ -50,7 +61,7 @@ function resolveSampleAssets(entries,file,library,kit,{allowWav=false}={}) {
     check(fields(ref,['sample','asset']) && id(ref.sample) ||
       fields(ref,['edit','slice']) && text(ref.edit) && (ref.slice===undefined || id(ref.slice)) ||
       fields(ref,['print','take','slice']) && text(ref.print) && (ref.slice===undefined || id(ref.slice)),
-    'Use a catalog sample, sample edit or printed take for '+name);
+    'Use a catalog sample, sound recipe, sample edit or printed take for '+name);
     if (ref.print!==undefined) {
       const filePath=path.resolve(path.dirname(file),ref.print);
       if (!prints.has(filePath)) prints.set(filePath,readAudioPrint(filePath,kit));

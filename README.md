@@ -35,6 +35,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Event-driven visual effects](docs/event-visual-effects.md)
 - [Persistent visual consequences](docs/visual-consequences.md)
 - [Adaptive story audio](docs/adaptive-story-audio.md)
+- [Seeded sound recipes](docs/seeded-sound-recipes.md)
 - [Editable story picture and audio](docs/story-editorial-handoff.md)
 - [Configurable story presentation packs](docs/story-presentation-pack.md)
 - [Interactive story installation inputs](docs/story-installation-inputs.md)

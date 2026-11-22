@@ -1,8 +1,10 @@
 const fs=require('node:fs'), path=require('node:path');
 const WAV=require('./wav.js'), {write,json}=require('./asset-files.js');
 
-function measure(mode,file,opt,monitor) {
-  const input=WAV.read(file);
+const { readAudioSource } = require('./sound-source.js');
+
+function measure(mode,file,opt,P) {
+  const monitor=P.mediaGraph.mixerMonitor, input=readAudioSource(file,P);
   const number=name=>{
     if (opt[name]===undefined) return undefined;
     if (typeof opt[name]!=='string' || !opt[name].trim()) throw new TypeError('Expected a number for --'+name);
@@ -17,7 +19,7 @@ function measure(mode,file,opt,monitor) {
   if (typeof opt.out!=='string' || opt.focus!==undefined && typeof opt.focus!=='string')
     throw new TypeError('Use music mix monitor input.wav [--mode mono|small-speaker|stereo] [--focus stem.wav] --out directory');
   const {value,report}=monitor.preview(input,{mode:opt.mode,lowHz:number('low-hz'),highHz:number('high-hz')},
-    opt.focus && WAV.read(opt.focus));
+    opt.focus && readAudioSource(opt.focus,P));
   const directory=path.resolve(opt.out), preview=path.join(directory,'preview.wav'), fileReport=path.join(directory,'report.json');
   write(preview,WAV.encode(value,{encoding:'pcm24'}));
   json(fileReport,report);
@@ -28,14 +30,14 @@ function measure(mode,file,opt,monitor) {
 
 function readAssets(entries,file,P) {
   const {record,id,check}=P.musicInstruments;
-  check(record(entries) && Object.keys(entries).length<=128,'Expected a table of WAV assets');
+  check(record(entries) && Object.keys(entries).length<=128,'Expected a table of WAV or sound recipe assets');
   const folder=path.dirname(path.resolve(file)), cache=new Map();
   let samples=0;
   return Object.fromEntries(Object.entries(entries).map(([name,relative])=>{
-    check(id(name) && typeof relative==='string' && relative.trim(),'Invalid mixer WAV asset');
+    check(id(name) && typeof relative==='string' && relative.trim(),'Invalid mixer audio asset');
     const file=path.resolve(folder,relative);
     if (!cache.has(file)) {
-      const pcm=WAV.read(file);
+      const pcm=readAudioSource(file,P);
       samples+=pcm.samples.length;
       check(samples<=32e6,'Mixer WAV assets exceed their PCM budget');
       cache.set(file,pcm);
@@ -46,7 +48,7 @@ function readAssets(entries,file,P) {
 
 module.exports=function mixCommand([mode,file],opt,kit) {
   const P=kit.KIT.procedural;
-  if (file && (mode==='meter' || mode==='monitor')) return measure(mode,file,opt,P.mediaGraph.mixerMonitor);
+  if (file && (mode==='meter' || mode==='monitor')) return measure(mode,file,opt,P);
   if (mode!=='render' || !file || typeof opt.out!=='string')
     throw new TypeError('Use music mix render, meter or monitor with a recipe or WAV');
   const {fields,check}=P.musicInstruments;

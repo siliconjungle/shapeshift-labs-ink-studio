@@ -233,7 +233,7 @@ async function runShow(file, opt, settings, emit) {
     if (projector.wait) await projection.wait(signal);
     if (audio) {
       try {
-        media.audio = await audioSource(audio, { ...mediaOptions, video, duration: frames / fps });
+        media.audio = await audioSource(audio, { ...mediaOptions, video, duration: frames / fps, procedural: settings.kit.KIT.procedural });
         report.source('audio', 'online');
       } catch (error) {
         signal.throwIfAborted();
