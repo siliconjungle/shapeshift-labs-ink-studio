@@ -1,0 +1,18 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "crossing-watch",
+  "title": "The midnight crossing",
+  "stories": {
+    "rescue": {
+      "kind": "incident",
+      "title": "Guide the ferry home",
+      "incident": { "category": "setback", "intensity": 2 },
+      "triggers": { "distress": { "event": { "kind": "rescue-call", "system": "world" } } },
+      "lifecycle": { "candidate": { "for": 8, "release": "automatic", "pressure": { "danger": 2 } } },
+      "entry": "hold",
+      "stages": { "hold": { "title": "Hold the crossing", "next": { "done": { "outcome": "secured" } } } },
+      "outcomes": { "secured": { "title": "The ferry has docked" } }
+    }
+  }
+}

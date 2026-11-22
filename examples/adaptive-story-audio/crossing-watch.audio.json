@@ -1,0 +1,38 @@
+{
+  "format": "ink-studio/scene-audio",
+  "version": 1,
+  "sampleRate": 24000,
+  "gain": 0.9,
+  "assets": {
+    "watch-bed": "assets/watch.wav",
+    "search-bed": "assets/search.wav",
+    "pulse": "assets/pulse.wav",
+    "signal": "assets/signal.wav",
+    "latch": "assets/latch.wav",
+    "line": "assets/line.wav",
+    "landing": "assets/landing.wav"
+  },
+  "listener": { "entity": "keeper" },
+  "music": {
+    "system": "score",
+    "gain": 0.86,
+    "fade": 0.15,
+    "layers": { "watch-bed": { "pulse": "pulse" }, "search-bed": { "pulse": "pulse" } },
+    "layerControls": { "pulse": { "path": "/parameters/pressure", "range": [0.03, 0.95] } }
+  },
+  "spatial": {
+    "distance": { "reference": 4, "max": 24, "rolloff": 0.55, "fade": 3 },
+    "cues": {
+      "signal-motif": { "asset": "signal", "bus": "music", "follow": true },
+      "gate": { "asset": "latch", "bus": "foley" },
+      "rope": { "asset": "line", "bus": "foley", "follow": true },
+      "secure": { "asset": "landing", "bus": "foley" }
+    },
+    "bindings": {
+      "gate": { "on": { "kind": "gate-latch" }, "cue": "gate" },
+      "rope": { "on": { "kind": "haul-line" }, "cue": "rope" },
+      "secure": { "on": { "kind": "world-fact", "where": { "path": "/fact/type", "value": "landing-secured" } }, "cue": "secure" }
+    }
+  },
+  "post": {}
+}

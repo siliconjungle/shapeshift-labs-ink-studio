@@ -30,6 +30,8 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   const rate = [BigInt(sampleRate), 1n];
   const sampleOf = point => T.index(T.roundDown(T.mul(point, rate)));
   const stamp = value => sampleOf(T.read(value));
+  const occurrenceOf = event => K.world.timedEvents.timeOf(event) ??
+    (['music-transition','music-cue'].includes(event.kind) ? event.time : undefined);
   const mixer = spatial === undefined ? null : K.world.spatialAudio.create(spatial);
   const clock = K.timeDomains.take({ sampleRate });
   const bed = Array.from(tracks, row => {
@@ -45,11 +47,24 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     return { bus, stem: 'tracks', asset, offset, rate, gain, loop, first: sampleOf(time),
       ...(duration && { end: sampleOf(T.add(time, duration)) }) };
   });
-  if (music !== undefined && (!fields(music, ['system','gain','fade','layers','production']) || !token(music.system) ||
+  if (music !== undefined && (!fields(music, ['system','gain','fade','layers','layerControls','production']) || !token(music.system) ||
       !finite(music.gain ?? 1, 0, 16) || !finite(music.fade ?? .03, 0, 5) ||
       !record(music.layers ?? {}) || Object.values(music.layers ?? {}).some(row =>
         !record(row) || !Object.values(row).every(token))))
     throw new TypeError('Invalid soundtrack music binding');
+  const controls = music?.layerControls ?? {};
+  if (!record(controls) || Object.keys(controls).length > 64 || music?.production && Object.keys(controls).length)
+    throw new TypeError('Layer controls need named loops in a resource-based adaptive score');
+  const layerControls = new Map(Object.entries(controls).map(([name, row]) => {
+    if (!token(name) || !fields(row, ['path','range','fallback']) || row.path===undefined ||
+        !Object.values(music.layers ?? {}).some(layers => Object.hasOwn(layers,name)))
+      throw new TypeError('Layer control needs a score path and a named layer ' + name);
+    const {range=[0,1], fallback=0}=row, select=K.world.data.selector(row.path);
+    if (!Array.isArray(range) || range.length!==2 || !range.every(Number.isFinite) || range[1]<=range[0] ||
+        !Number.isFinite(range[1]-range[0]) || !finite(fallback,0,1))
+      throw new TypeError('Invalid gain range or fallback for layer ' + name);
+    return [name,{select,range,fallback}];
+  }));
   const production=music?.production;
   if (production!==undefined && (!fields(production,['sources','timeline','assets','world']) ||
       !record(production.sources) || !record(production.timeline) ||
@@ -66,21 +81,22 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   const inline = proceduralScore?.score === undefined ? null : K.music.score.compile(proceduralScore.score);
   const scoreSystem = proceduralScore?.system, synthAsset = Symbol('procedural score'), productionAsset=Symbol('music production');
 
-  function render(sequence, { timeline, runtime: sceneRuntime } = {}, selection, delivery=false) {
+  function render(sequence, { timeline, runtime: sceneRuntime, recordedThrough, trace = false } = {}, selection, delivery=false) {
     const start = sampleOf(sequence.startPoint), end = sampleOf(sequence.endPoint);
     const postSelected=post && (!selection || selection.kind==='stem' && !legacy.includes(selection.name));
     const mixStart=postSelected ? 0 : start;
     const musicSelected = postSelected || !selection || selection.kind==='stem' && ['mix','music'].includes(selection.name);
     const factory = runtime ?? sceneRuntime;
-    const run = mixer || music || scoreSystem || !timeline ? factory?.() : undefined;
+    const run = mixer || music || scoreSystem || !timeline || recordedThrough!==undefined ? factory?.() : undefined;
     if (music && !run) throw new Error('Adaptive music export needs a native sound world with its score system');
     if (scoreSystem && run?.view().world.systems[scoreSystem]?.kind !== 'procedural-score')
       throw new Error('Procedural score export needs the named procedural-score system');
     timeline ??= run?.timeline;
     const voices = bed.map(voice => ({ ...voice }));
     const cues = timeline?.audioSchedule(clock) ?? [];
-    const looping = new Map(), resolved = new Map(), positional = [];
-    let next = 0, score = [], knots = 0, generated, produced, entry, worldReport;
+    const looping = new Map(), resolved = new Map(), positional = [], following = [];
+    const history = trace && { sections: [], cues: [], layers: [] };
+    let next = 0, score = [], automated = [], knots = 0, generated, produced, entry, worldReport;
     const productionIntents=[], worldEvents=[];
     const cueLimit=musicSelected && captureWorld ?
       Math.max(end,Math.ceil((production.timeline.end+captureWorld.lookAhead)*sampleRate)) : end;
@@ -126,12 +142,37 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       worldEvents.push({cue,time:{numerator:row.first,denominator:sampleRate},strength:Math.min(1,level),
         ...(duration!==undefined && {duration})});
     }
-    function shot(voice, ear, sample, stem) {
+    function beat(event) {
+      if (!event || !history) return;
+      const {world,eventStream} = run.view(), W = K.world;
+      const { id, tick, system, kind, branch, causes } = W.committedEvents.read(event,world.id,eventStream);
+      const occurrence = occurrenceOf(event);
+      const original = occurrence === undefined ? T.mul(T.read(tick),T.period(world.dt,world.takeClock?.simulationRate)) : T.read(occurrence);
+      const source = { world:world.id, branch, id, tick, system, kind, timecode:T.pack(original) };
+      return { ...source, beatId:W.inspectionLinks.identify(source), causes };
+    }
+    function shot(voice, ear, sample, stem, source) {
       const time = sample + Math.round(voice.delay * sampleRate);
-      if (voice.gain<=0) return;
-      const row={stem,asset:voice.asset,cue:voice.cue,first:time,offset:voice.offset,rate:voice.rate};
+      let report;
+      if (history && source && time < end) {
+        report = { source, cue:voice.cue, asset:voice.asset, stem, bus:voice.bus ?? (stem==='music' ? 'music' : 'effects'),
+          onsetSample:sample, arrivalSample:time, status:voice.status, position:voice.position, gain:voice.gain };
+        if (history.cues.length >= 16384) throw new RangeError('Story audio trace exceeds its cue budget');
+        history.cues.push(report);
+      }
+      if (voice.gain<=0 && !voice.attachment) return;
+      const row={stem,bus:voice.bus,asset:voice.asset,cue:voice.cue,first:time,offset:voice.offset,rate:voice.rate};
       if (stem!=='music') capture(voice.cue,row,voice.gain);
-      if (time<end) push({...row,points:[point(voice,ear,time,true)]});
+      if (time>=end) return;
+      const p = point(voice,ear,time,true);
+      if (voice.attachment) {
+        const audio = resolve(voice.asset);
+        const duration = Math.max(0, (audio.samples.length/audio.channels/audio.sampleRate-voice.offset)/voice.rate);
+        row.end = time + Math.ceil(duration*sampleRate);
+        following.push({ row, attachment:voice.attachment, report });
+        if (report) report.attachment = voice.attachment.at;
+      }
+      push(Object.assign(row,{points:[p]}));
     }
     function cueFrame(query, sample, nextSample, ear) {
       while (next < cues.length && cues[next].firstSample < nextSample && cues[next].firstSample < cueLimit) {
@@ -145,7 +186,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
           shot({ ...configured, offset: row.offset }, ear, first, 'timeline');
         } else {
           const delay = Math.round(configured.delay * sampleRate);
-          const voice={stem:'timeline',asset:configured.asset,first:first+delay,end:endSample+delay,
+          const voice={stem:'timeline',bus:configured.bus,asset:configured.asset,first:first+delay,end:endSample+delay,
             offset:row.offset,rate:configured.rate,points:[]};
           capture(cue,voice,configured.gain);
           if (voice.first<end) {
@@ -161,64 +202,132 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
           Math.max(sample, voice.first), true));
       }
     }
-    function section(row, at) {
+    function section(row, at, source, offset = 0) {
       const fade = Math.round((music.fade ?? .03) * sampleRate), level = music.gain ?? 1;
       for (const voice of score) voice.end = at + fade;
+      automated = [];
       const layers = Object.entries(Object.hasOwn(music.layers ?? {}, row.resource) ? music.layers[row.resource] : {});
-      score = [[row.resource, 1], ...layers.map(([name, asset]) => [asset, row.layers[name] ?? 0])]
-        .filter(([, gain]) => gain > 0)
-        .map(([asset, gain]) => push({ stem: 'music', asset, first: at, end: Number.MAX_SAFE_INTEGER,
-          loop: true, gain: gain * level, fade }));
+      score = [[null,row.resource,1], ...layers.map(([name,asset]) => [name,asset,row.layers[name] ?? 0])]
+        .filter(([, , gain]) => gain > 0)
+        .map(([name, asset, gain]) => {
+          const control = layerControls.get(name);
+          const voice = push({ stem:'music', asset, first:at, end:Number.MAX_SAFE_INTEGER, loop:true, offset, gain:gain*level,
+            fade, ...(control && {points:[]}) });
+          if (control) {
+            const report = history && { resource:row.resource, layer:name, firstSample:at, peak:0, samples:[] };
+            if (report) history.layers.push(report);
+            automated.push({ voice, control, report });
+          }
+          return voice;
+        });
+      if (history) history.sections.push({ section:row.to ?? row.section, resource:row.resource, sample:at,
+        ...(source && {source}) });
+    }
+    function updateLayers(query, sample) {
+      if (!automated.length) return;
+      const state = query.probe(music.system+'/state').value;
+      for (const {voice,control,report} of automated) {
+        const value = K.world.data.read(state,control.select), [lo,hi] = control.range;
+        const gain = Number.isFinite(value) ? Math.min(1,Math.max(0,(value-lo)/(hi-lo))) : control.fallback;
+        // A between-tick transition begins at its musical boundary with this tick's known level.
+        if (!voice.points.length && voice.first<sample)
+          append(voice.points,{sample:voice.first,gain,cutoff:22000,delay:0});
+        append(voice.points,{sample,gain,cutoff:22000,delay:0});
+        if (report) {
+          report.peak = Math.max(report.peak,gain);
+          report.lastGain = gain;
+          if (!report.samples.length || sample-report.samples.at(-1).sample>=sampleRate/10) report.samples.push({sample,gain});
+        }
+      }
+    }
+    function updateFollowing(query, ear, sample) {
+      for (let i=following.length-1;i>=0;i--) {
+        const { row, attachment, report } = following[i];
+        if (sample>=row.end) { following.splice(i,1); continue; }
+        if (sample<=row.first) continue;
+        const live = mixer.cue({query,listener,...attachment});
+        const knot = point(live,ear,sample,true);
+        knot.pan ??= row.points.at(-1).pan;
+        append(row.points,knot);
+        if (report) {
+          report.lastPosition = live.position;
+          report.lastStatus = live.status;
+        }
+      }
     }
     function observe(time, sample, nextSample, query, events = []) {
-      const state = mixer?.frame({ query, listener, time, events });
+      const state = mixer?.frame({ query, listener, time, events, captureSources:trace });
+      const byId = history && state?.cues.length ? new Map(events.map(event=>[event.id,event])) : null;
       cueFrame(query, sample, nextSample, state?.listener);
       if (state) {
+        updateFollowing(query,state.listener,sample);
         for (const voice of state.active) {
           let track = looping.get(voice.id);
           if (!track) {
-            track = push({ stem: 'spatial', asset: voice.asset,
+            track = push({ stem:'spatial', bus:voice.bus, asset:voice.asset,
               ...(voice.id.startsWith('emitter:') && {emitter:voice.id.slice('emitter:'.length)}),
-              first: sample, end: Number.MAX_SAFE_INTEGER,
-              loop: true, offset: voice.offset, rate: voice.rate, points: [] });
+              first:sample, end:Number.MAX_SAFE_INTEGER,
+              loop:true, offset:voice.offset, rate:voice.rate, points:[] });
             looping.set(voice.id, track);
           }
           append(track.points, point(voice, state.listener, sample));
         }
       }
       for (const voice of state?.cues ?? [])
-        shot(voice,state.listener,voice.onset===undefined ? sample : stamp(voice.onset),'spatial');
+        shot(voice,state.listener,voice.onset===undefined ? sample : stamp(voice.onset),'spatial',
+          beat(byId?.get(voice.sourceEvent)));
       for (const event of events) if (musicSelected && music && event.system === music.system) {
         const onset = K.world.timedEvents.timeOf(event) ?? event.time ?? time;
+        const at = onset === time ? sample : stamp(onset);
         if (production && (event.kind==='music-transition' || event.kind==='music-cue')) {
-          if (onset<production.timeline.end) productionIntents.push({...event,time:onset});
+          if (onset<production.timeline.end) {
+            productionIntents.push({...event,time:onset});
+            if (history && event.kind==='music-transition' && at<end)
+              history.sections.push({section:event.to,resource:event.resource,sample:at,source:beat(event)});
+          }
           continue;
         }
-        const at = onset === time ? sample : stamp(onset);
-        if (event.kind === 'music-transition') section(event, at);
+        if (event.kind === 'music-transition') section(event, at, beat(event));
         if (event.kind === 'music-cue') {
-          const addressed = mixer?.cue({ query, listener, cue: event.resource, at: event.emitter, gain: music.gain });
-          if (addressed) shot(addressed, state?.listener, at, 'music');
-          else push({ stem: 'music', asset: event.resource, first: at, gain: music.gain });
+          const addressed = mixer?.cue({ query, listener, cue:event.resource, at:event.emitter, gain:music.gain });
+          if (addressed) shot(addressed,state?.listener,at,'music',beat(event));
+          else {
+            push({stem:'music',asset:event.resource,first:at,gain:music.gain});
+            if (history && at<end) history.cues.push({source:beat(event),cue:event.cue,asset:event.resource,stem:'music',bus:'music',
+              onsetSample:at,arrivalSample:at,status:'unpositioned',position:null,gain:music.gain ?? 1});
+          }
         }
       }
+      updateLayers(query,sample);
     }
-    if (run && (mixer || music || scoreSystem)) {
+    if (run && (mixer || music || scoreSystem || recordedThrough!==undefined)) {
       const initial = run.view(), dt = initial.world.dt;
-      const period = initial.world.takeClock?.simulationRate === undefined ? T.period(dt) :
-        T.div(T.read(1), T.read(initial.world.takeClock.simulationRate));
+      const period = T.period(dt,initial.world.takeClock?.simulationRate);
       const at = tick => sampleOf(T.mul(T.read(tick), period));
       const scoreEnd=musicSelected && production && production.timeline.end+(captureWorld?.lookAhead ?? 0);
       const replayEnd=scoreEnd>T.seconds(sequence.endPoint) ? T.read(scoreEnd) : sequence.endPoint;
-      const limit = -T.index(T.roundDown(T.div(T.sub(T.read(0), replayEnd), period)));
-      if (initial.tick !== 0 || limit > 120000) throw new RangeError('Sound world needs tick zero and a bounded replay range');
+      const requested = -T.index(T.roundDown(T.div(T.sub(T.read(0), replayEnd), period)));
+      const limit = recordedThrough===undefined ? requested : Math.min(requested,recordedThrough);
+      const first = at(initial.tick);
+      if ((initial.tick !== 0 && (recordedThrough===undefined || production)) || start < first || limit-initial.tick > 120000)
+        throw new RangeError('Sound world needs a bounded replay window inside the source; production timelines start at tick zero');
       if (musicSelected && music) {
         const state = run.query().probe(music.system + '/state');
         if (state.status !== 'ok') throw new Error('Unknown soundtrack score ' + music.system);
-        if (production) entry=state.value;
-        else section(state.value, 0);
+        if (production) {
+          entry=state.value;
+          if (history) history.sections.push({section:entry.section,resource:entry.resource,sample:first});
+        } else {
+          const anchor = initial.states[music.system]?.clock?.anchorTime ?? initial.time;
+          section(state.value,first,undefined,Math.max(0,initial.time-anchor));
+        }
       }
-      observe(0, 0, at(1), run.query());
+      const originEvents = recordedThrough!==undefined && initial.tick>0 ?
+        run.events.filter(event => {
+          const onset = occurrenceOf(event);
+          return event.kind!=='music-transition' && (onset===undefined || stamp(onset)>=first);
+        }) : [];
+      observe(initial.time,first,at(initial.tick+1),run.query(),originEvents);
       run.advance(limit, { onTick(view, query) {
         observe(view.time, at(view.tick), at(view.tick + 1), query, run.events);
       } });
@@ -262,6 +371,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     if (selection?.kind==='world' && !result.report.stems.spatial.voices)
       throw new RangeError('No audible world source in the selected capture range');
     if (worldReport) result.report.worldScore=worldReport;
+    if (history) result.report.storyAudio=history;
     return result;
   }
   return Object.freeze({
@@ -282,10 +392,12 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   });
 }
 
-function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOptions } = {}) {
+function readSceneAudio(file, { kit = require('../index.js').load(), onFile = () => {}, recordedOnly = false, ...graphOptions } = {}) {
   const source = path.resolve(file), folder = path.dirname(source);
   const { assets = undefined, world, assetRegistry, ...definition } = read(source);
-  const api = kit.KIT.authoring.assetReferences, select = Assets.scope(api, source, assetRegistry);
+  onFile(source);
+  if (recordedOnly && world!==undefined) throw new TypeError('The recorded run supplies the story soundtrack world');
+  const api = kit.KIT.authoring.assetReferences, select = Assets.scope(api, source, assetRegistry, {onFile});
   const assetsByName = assets === undefined && (definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
   if (!record(assetsByName) || Object.keys(assetsByName).length > 1024 || !Object.keys(assetsByName).every(token))
     throw new TypeError('Soundtrack needs named audio assets');
@@ -295,14 +407,16 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
   if (world !== undefined) {
     if (!token(world)) throw new TypeError('Sound world must be a file path');
     const worldFile = path.resolve(folder, world);
-    soundWorld = require('./simulation-model-files.js').embedModels(read(worldFile), worldFile);
-    soundWorld = Assets.visual(api, soundWorld, 'world', worldFile);
+    onFile(worldFile);
+    soundWorld = require('./simulation-model-files.js').embedModels(read(worldFile), worldFile, onFile);
+    soundWorld = Assets.visual(api, soundWorld, 'world', worldFile, onFile);
     if (soundWorld.dataInputs !== undefined)
       soundWorld.dataInputs = embed(kit.KIT.dataInputs, soundWorld.dataInputs, worldFile);
   }
   function printAsset(spec) {
     if (!fields(spec,['print','take']) || !token(spec.print)) throw new TypeError('Invalid soundtrack print reference');
     const file=path.resolve(folder,spec.print);
+    onFile(file);
     if (!prints.has(file)) prints.set(file,readAudioPrint(file,kit));
     return prints.get(file);
   }
@@ -334,13 +448,23 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
     if (assetCache.has(name)) return assetCache.get(name);
     const spec = Object.hasOwn(assetsByName, name) ? assetsByName[name] : undefined;
     let audio;
-    if (typeof spec === 'string') audio = WAV.read(path.resolve(folder, spec));
+    if (typeof spec === 'string') {
+      const file = path.resolve(folder,spec);
+      audio = WAV.read(file);
+      onFile(file);
+    }
     else if (api.isRef(spec)) audio = WAV.decode(select(spec, Assets.waveKinds).bytes);
-    else if (record(spec) && Object.hasOwn(spec,'print')) audio=printAsset(spec).load(spec.take).value;
+    else if (record(spec) && Object.hasOwn(spec,'print')) {
+      const print = printAsset(spec), entry = print.entry(spec.take);
+      audio = print.load(spec.take).value;
+      onFile(path.resolve(folder,path.dirname(spec.print),entry.print.take+'.wav'));
+    }
     else if (fields(spec,['editorial','track']) && token(spec.editorial) && (spec.track===undefined || token(spec.track))) {
       const file=path.resolve(folder,spec.editorial), P=kit.KIT.procedural;
       if (!editorials.has(file)) {
         const project=readEditorialProject(file,P);
+        onFile(file);
+        for (const wav of Object.values(project.paths)) onFile(path.resolve(path.dirname(file),wav));
         editorials.set(file,P.mediaGraph.audioEditorial.render(project.session,project.assets,{stems:true}));
       }
       const result=editorials.get(file);
@@ -351,7 +475,8 @@ function readSceneAudio(file, { kit = require('../index.js').load(), ...graphOpt
         (token(spec.graph) || api.isRef(spec.graph)) && token(spec.output)) {
       const file = api.isRef(spec.graph) ? select(spec.graph, 'graph').filename : path.resolve(folder, spec.graph);
       if (!graphs.has(file)) graphs.set(file, readGraphProject(file, { kit, ...graphOptions }));
-      const { outputs, report } = graphs.get(file).run({ time: spec.time, seed: spec.seed, inputs: spec.inputs });
+      const graph = graphs.get(file), { outputs, report } = graph.run({ time: spec.time, seed: spec.seed, inputs: spec.inputs });
+      for (const input of graph.sourceFiles()) onFile(input);
       if (!report.passed) throw new Error('Soundtrack graph assertions failed for ' + name);
       if (!Object.hasOwn(outputs, spec.output)) throw new Error('Unknown soundtrack graph output ' + spec.output);
       audio = kit.KIT.procedural.mediaGraph.audio(outputs[spec.output]);

@@ -32,6 +32,9 @@ post buses for dialogue, Foley, effects, ambience, and music.
 Use [audio delivery](audio-delivery.md) to hand off an aligned post mix as
 Broadcast Wave and an editorial timeline.
 
+Use [adaptive story audio](adaptive-story-audio.md) to print aligned WAVs and
+beat-linked cue reports directly from a verified world recording.
+
 ## Soundtrack file
 
 Use `proceduralScore` for a [shared audiovisual score](procedural-score.md).
