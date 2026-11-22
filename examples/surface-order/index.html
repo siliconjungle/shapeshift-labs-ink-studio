@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crossed glass · Ink Studio</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #e9edf0; background: #0c131b; font: 14px/1.5 system-ui, sans-serif; }
+  main { width: min(100% - 48px, 994px); margin: 0 auto; padding: 30px 0 46px; }
+  h1 { font: 600 clamp(32px, 5vw, 48px)/1.06 Georgia, serif; margin: 0 0 10px; }
+  p { margin: 0; color: #b1c2d2; }
+  .comparison { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+  figure { margin: 0; border: 1px solid #314958; border-radius: 8px; overflow: hidden; background: #14232f; }
+  figcaption { padding: 9px 12px; border-bottom: 1px solid #314958; font-weight: 650; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; background: #111722; }
+  .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap: 9px; margin: 13px 0; }
+  button, select { color: inherit; background: #192c38; border: 1px solid #426575; border-radius: 6px;
+    font: inherit; padding: 6px 10px; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: #81ced6; background: #243b47; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #81ced6; outline-offset: 2px; }
+  button:disabled { opacity: .55; }
+  .orbit { display:flex; flex: 1 1 210px; align-items:center; gap: 8px; }
+  .orbit input { width: 100%; accent-color: #81ced6; }
+  output { min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+  .details { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; margin-top:14px; }
+  .details section { border-top: 1px solid #314958; padding: 9px 0; }
+  h2 { font-size: 15px; margin: 0 0 3px; }
+  @media (max-width: 640px) {
+    main { width: calc(100% - 24px); padding-top: 20px; }
+    .comparison { gap: 6px; }
+    figcaption { padding: 6px; font-size: 12px; }
+    .details { grid-template-columns: 1fr; gap: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Crossed glass</h1>
+  <p>Orbit across 0° and watch the overlap. Each side of the crossing has a different front sheet.</p>
+  <div class="comparison">
+    <figure><figcaption>Center order</figcaption><canvas id="center" width="180" height="132" aria-label="Center-ordered translucent glass"></canvas></figure>
+    <figure><figcaption>Surface order</figcaption><canvas id="surface" width="180" height="132" aria-label="Locally ordered translucent glass"></canvas></figure>
+  </div>
+  <div class="toolbar">
+    <label class="orbit">Orbit <input id="orbit" type="range" min="-12" max="12" step=".1" value="0.8"><output for="orbit">0.8°</output></label>
+    <button id="step">Step across 0°</button>
+    <button id="play" aria-pressed="false">Play sweep</button>
+  </div>
+  <div class="toolbar">
+    <label><input id="third" type="checkbox"> Add a third sheet</label>
+    <label>Local layer limit <select id="layers"><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option></select></label>
+    <button id="measure">Measure frame cost</button>
+  </div>
+  <div class="details">
+    <section><h2>Visibility</h2><p id="visibility" role="status">Preparing the crossing…</p></section>
+    <section><h2>Frame cost</h2><p id="timing" role="status">Measure a fixed sweep on this device.</p></section>
+  </div>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

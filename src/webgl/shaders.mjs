@@ -1,5 +1,6 @@
 import { gaussianProxyVertex, gaussianProxyFragment } from './gaussian-part-proxies.mjs';
 import { gaussianHarmonicGLSL } from './gaussian-harmonics.mjs';
+import { surfaceOrderVertex, surfaceOrderFragment } from './surface-order.mjs';
 import { gaussianMaterialVertex, gaussianMaterialFragment, gaussianMaterialCoverage } from './gaussian-materials.mjs';
 import {engravingVertexUniforms,engravingVertex,engravingFragment} from './engraving-shaders.mjs';
 // Shared draw and resolve shaders extracted from Inkwell Rebirth's WebGL renderer.
@@ -34,7 +35,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false, surfaceOrder = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -48,6 +49,7 @@ uniform highp sampler2D u_data;
 ${facingColors ? facingColors.splatVertexGLSL : ''}
 ${gaussianDegree !== undefined ? gaussianHarmonicGLSL(gaussianDegree) : ''}
 ${gaussianMaterials ? gaussianMaterialVertex : ''}
+${surfaceOrder ? surfaceOrderVertex : ''}
 ${gaussianProxy ? gaussianProxyVertex : ''}
 ${spriteReconstruction ? 'uniform highp sampler2D u_spriteLod; uniform int u_spriteLodCount; flat out int v_spriteLod;' : ''}
 uniform mat4 u_view, u_proj;
@@ -292,6 +294,7 @@ void main(){
 ${water && !portal ? '  v_waterAxial = -cam.z;' : ''}
 ${environment ? '  v_envAxial = -cam.z;' : ''}
   vec4 clip = u_proj * cam;
+  ${surfaceOrder ? 'if (u_surfacePeel) surfaceOrderVertex(record, FM, mat3(u_view), cov, cam.xyz, (flags & 4) != 0);' : ''}
   ${layeredGlass ? `
   vec4 nearGlass = u_proj * vec4(cam.xy, min(cam.z + u_glassTolerance, -u_near), cam.w);
   v_glassNearDepth = nearGlass.z / nearGlass.w * 0.5 + 0.5;` : ''}
@@ -441,6 +444,7 @@ ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geomet
 precision highp float; precision highp int;
 ${gaussianProxy ? gaussianProxyFragment : ''}
 ${gaussianMaterials ? gaussianMaterialFragment : ''}
+${surfaceOrder ? surfaceOrderFragment : ''}
 ${spriteReconstruction ? `flat in int v_spriteLod; uniform vec2 u_spriteLodGrid;
 ${spriteReconstruction}` : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footprintColumns; flat in vec4 v_footprintMap; flat in vec2 v_footprintStyle, v_footprintZ; flat in vec4 v_footprintPlane;' : ''}
@@ -493,6 +497,7 @@ ${paletteRowGlsl}` : ''}
 ${masked ? maskUniforms + maskVaryings(textured).replaceAll('LOOK_IO','in') + maskFragment(textured) : ''}
 ${water ? waterGLSL(airPockets, layered, atlas) + (portal ? '' : 'flat in float v_waterAxial;') : ''}
 void main(){
+  ${surfaceOrder ? 'gl_FragDepth = gl_FragCoord.z;' : ''}
   ${spriteReconstruction ? 'if(!spriteGeometry(v_spriteLod,gl_FragCoord.xy*u_spriteLodGrid))discard;' : ''}
 ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + v_conic.z * v_d.y * v_d.y) - v_conic.y * v_d.x * v_d.y;
   ${footprints ? `
@@ -687,6 +692,13 @@ ${gaussianMaterials ? gaussianMaterialCoverage : ''}
   o_through = pane.a > 0.0 && !behind ? vec4(0.0,0.0,0.0,a) : vec4(0.0);` : ''}
   float a2 = (v_color.a >= 1.0 ${gaussianProxy ? '|| proxyOwnsDepth' : ''}) && v_depth >= 0.0 ? a : 0.0;   // only solid splats write depth
   od = vec4(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'} * a2, v_gl * a * 0.5, v_lit * a2, a2);   // (green: how much glass lies over this pixel, in front of the last solid thing; a solid splat wipes it)
+  ${surfaceOrder ? `
+  if (u_surfacePeel) {
+    float axial;
+    oa = surfacePeelKey(axial);
+    od.r = clamp((axial - u_surfaceRange.x) / (u_surfaceRange.y - u_surfaceRange.x), 0.0, 1.0) * a2;
+    return;
+  }` : ''}
   oa = ${water ? 'vec4(mark * a, a)' : 'vec4(v_as * a, v_ast * 0.25 * a, 0.0, a)'};
 }`;
   return { vertex: SPLAT_VS, fragment: SPLAT_FS };

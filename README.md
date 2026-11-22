@@ -1029,6 +1029,10 @@ bake a rigid prop's pixels onto its mesh and resolve splat boundaries from
 surface ownership. The [interactive comparison](examples/texel-coverage/index.html)
 uses a lantern orbit and a subpixel pan.
 
+[Local surface ordering](docs/surface-order.md) fixes visible translucent
+crossings in WebGL. The [Crossed glass demo](examples/surface-order/index.html)
+compares it with the center sort and measures frame cost.
+
 ## WebGPU graphs and Gaussian splat import
 
 Build [WebGPU texture and geometry graphs](docs/webgpu-graphs.md) with reusable buffers, textures and custom WGSL compute passes. The [GPU Studies gallery](examples/webgpu-graphs/index.html) includes a live shader editor, a deformed mesh, and a Gaussian splat viewer for Graphdeco PLY and Niantic SPZ. The [Pelagic viewer](examples/live-gaussian/index.html) compares live directional RGB and palette color. The [part proxy guide](docs/gaussian-part-proxies.md) shows how to bind a painted region to a stroke or mesh while keeping its live directional color. The [material workshop](examples/gaussian-materials/index.html) assigns painted regions independent [ramps and light response](docs/gaussian-materials.md). The CLI supports fixed-view renders of the same formats. Run the examples with a [local server](docs/webgpu-graphs.md#run-the-gallery).

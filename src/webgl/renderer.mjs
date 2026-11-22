@@ -3,6 +3,7 @@ import { createGaussianProxyRenderer, gaussianProxyPlan } from './gaussian-part-
 import { captureGaussianTurntable, gaussianCoverageFrame } from './gaussian-turntable.mjs';
 import { createSplatPaintPass, splatPaintStyle } from './splat-paint-pass.mjs';
 import { createGaussianHarmonics } from './gaussian-harmonics.mjs';
+import { createSurfaceOrder, surfaceOrderRegion, surfaceOrderSettings } from './surface-order.mjs';
 import { createGaussianMaterialBinding, createGaussianMaterialPalette, gaussianMaterialPlan } from './gaussian-materials.mjs';
 import {createEngravingBinding} from './engraving.mjs';
 import { createFootprintBinding } from './footprints.mjs';
@@ -137,7 +138,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE), maxBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
     const targets = createTargets(gl, resources);
     const { target, table, textureUnit } = targets;
-    let splatPaintPass, coverageVotePass, gaussianMaterialBinding, gaussianMaterialPalette;
+    let splatPaintPass, coverageVotePass, gaussianMaterialBinding, gaussianMaterialPalette, surfaceOrdering;
     // The material-controls pass uses unit 31 before the splat draw.
     let gaussianProxies;
     const bindGaussians = createGaussianHarmonics(gl, resources, 31, maxSize);
@@ -631,7 +632,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_proxyGrid: options.proxy ? [options.proxy.width/width, options.proxy.height/height] : [1,1],
         u_portalCoverPlane: options.u_portalCoverPlane ?? zero,
         u_paintPass: !!options.u_paintPass, u_splatPaintPass: !!options.u_splatPaintPass, u_coverageVotePass: !!options.u_coverageVotePass,
-        u_gaussianMaterialPass: !!options.u_gaussianMaterialPass,
+        u_gaussianMaterialPass: !!options.u_gaussianMaterialPass, u_surfacePeel: false,
         u_materialGridScale: options.u_materialGridScale ?? 1,
         u_facingGridScale: options.u_materialGridScale ?? 1,
         u_spriteLodGrid: options.spriteGrid ?? [1,1],
@@ -784,6 +785,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const raw = colorMode === 'baked' ? frame.raw ?? false : colorMode === 'rgb';
       const { outline = true, dither = 0.35, scale = 1 } = frame;
       const look = world.look ?? {};
+      const localOrder = surfaceOrderSettings(frame.splatOrder ?? look.splatOrder, frame.surfaceOrder ?? look.surfaceOrder);
       let engraved=frame.engraving!==false&&!!world.engraving;
       let engravingUniforms;
       const clusterDefinition = raw || reflectionCapture ? false : frame.colorClusters ?? look.colorClusters;
@@ -956,7 +958,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         if(waterScene)wetGlassGeometry ??= target(5);
         else dryGlassGeometry ??= target(4);
       }
-      const geometry = waterScene ? (layeredGlass ? wetGlassGeometry : wetGeometry) :
+      let geometry = waterScene ? (layeredGlass ? wetGlassGeometry : wetGeometry) :
         (layeredGlass ? dryGlassGeometry : dryGeometry), contours = waterScene ? wetContours : dryContours;
       const isNew = world !== lastWorld || world.data !== lastData || world.count !== lastCount || group !== lastInstances;
       const materialStyles = !!(world.materialPixelStyles || group && instancePlan(group).hasMaterialPixelStyles);
@@ -1227,9 +1229,33 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         fog: rgb(world.pal[fog.c ?? 0] ?? 0) };
       const proxyUniforms = proxy && gaussianProxies.prepare(proxyPlan, proxy);
       if (proxy) historyValid = false;
+      const surfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
+      const preview = frame.spriteSurfaces !== false && frame.scalePreviews !== false && world.scalePreviews;
+      let ordering, orderReport;
+      if (localOrder && !reflectionCapture) {
+        const { layers, maxSplats, maxPixels, region } = localOrder;
+        const count = pipeline.count;
+        let reason;
+        if (plane !== zero || cover || group || waterScene || env || layeredGlass || ownsPixels || materialPalette ||
+            splatPaint || vote || portableStages || surfaces || preview || spriteMask || spriteRows?.length || emitterFrame?.display ||
+            proxy || footprints && footprintBinding.hasPlanes || section) reason = 'composition';
+        else if (count < 2) reason = 'splat-count';
+        else if (count > maxSplats) reason = 'splat-budget';
+        else if (rw * rh + (colored ? width * height : 0) > maxPixels) reason = 'pixel-budget';
+        else {
+          surfaceOrdering ??= createSurfaceOrder(gl, { target, table, maxSize, textureUnit, fullscreen, program });
+          if (!surfaceOrdering.prepare(world)) reason = 'no-normals';
+        }
+        if (!reason) {
+          ordering = { layers: Math.min(count, layers), overflow: count > layers, region };
+          historyValid = false;
+        }
+        orderReport = { mode: reason ? 'center' : 'surface', reason, splats: count,
+          layers: ordering?.layers ?? 0, passes: ordering ? (ordering.layers + Number(ordering.overflow)) * (colored ? 2 : 1) : 0 };
+      }
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
-        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote,
+        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote, surfaceOrder:!!ordering,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
         engraving:engraved, footprints, materialStyles, facingColors:facing && facingAPI, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section, spriteReconstruction:!!spriteMask
       });
@@ -1242,6 +1268,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         ...(gaussianUniforms && { ...gaussianUniforms, u_eye: camera.eye }),
         ...proxyUniforms,
         ...materialUniforms,
+        ...(ordering && surfaceOrdering.uniforms),
         ...(facing && { u_facingRows: facingUnit, u_facingCount: facing.count, u_disabledViewColors: disabledViewColors, u_facingPattern: patterned }), ...(spriteMask && {u_spriteLod:spriteLodUnit,u_spriteLodCount:spriteMask.codes.length}), ...(plan && { u_instances: 15 }), u_fineOn: +hasFine, u_fpal: pal, u_view: camera.view,
         ...(materialStyles && { u_materialStyles: 16, u_materialPatterned: patterned, u_materialStylesOn: !raw }),
         u_proj: camera.projection, u_time: time, u_scale: scale, u_ortho: +camera.ortho,
@@ -1271,8 +1298,6 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       });
       const captureSplatCoverage = world.gaussianHarmonics && frame[gaussianCoverageFrame];
       const background = [...rgb(world.pal[0]), captureSplatCoverage ? 0 : 1], tangent = camera.tangent;
-      const surfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
-      const preview = frame.spriteSurfaces !== false && frame.scalePreviews !== false && world.scalePreviews;
       const previewAPI = toolkit.KIT?.procedural?.lod?.preview;
       if (preview && !previewAPI) throw new TypeError('Scale previews need the Ink Studio KIT');
       const scaleSurfaces = preview ? previewAPI.surfaces(preview, {
@@ -1292,6 +1317,25 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_materialGridScale: samples, background, tangent, proxy, lookGrid:coverage&&[width,height],layeredGlass,surfaces,scaleSurfaces,spriteRows,spriteGrid:[width/rw,height/rh],surfaceFrame }, water, wet, env);
       if (colored)
         drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, background, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame }, water, wet, env);
+      if (ordering) {
+        function sortedGeometry(center, index, snap, scale) {
+          const rect = surfaceOrderRegion(ordering.region, center.width, center.height);
+          return surfaceOrdering.draw(center, camera, background, { ...ordering, rect }, index, uniforms => {
+            data.bind();
+            if (shader.footprints) footprintBinding.rebind();
+            if (shader.gaussianMaterials) gaussianMaterialBinding.rebind();
+            gl.useProgram(shader.p);
+            shader.set({
+              ...uniforms, u_snap: snap, u_materialGridScale: scale, u_facingGridScale: scale,
+              u_viewport: [center.width, center.height], u_focal: center.height / (2 * tangent)
+            });
+            pipeline.draw();
+          });
+        }
+        geometry = sortedGeometry(geometry, 0, +(!raw && !colored), samples);
+        if (colored) contours = sortedGeometry(contours, 1, 1, 1);
+      }
+      if (orderReport) frame.surfaceOrderReport?.(orderReport);
       if (captureSplatCoverage) captureSplatCoverage((colored ? contours : geometry).framebuffer);
       if (materialPalette) {
         drawGeometry(shader, gaussianMaterialPalette.coverage, width, height, {

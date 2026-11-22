@@ -422,6 +422,8 @@ node cli/ink-studio.js render examples/emissive-finishes.js --w 322 --h 152 --px
 
 Set `look.splatOrder = 'surface'` or pass `--splat-order surface` to sort overlapping fragments by an estimated intersection with each splat's surface plane. `center` uses the ordinary global order. The queue has a configurable `fragmentBudget` and replays the original order if the budget is exceeded. The result sets `orderFallback` in that case.
 
+Use the [live WebGL surface-order pass](surface-order.md) to repair a visible crossing at the art grid. It keeps separate limits for fragment layers and submitted work.
+
 Run `node scripts/experiment-splat-sampling.js <output-directory>` to reproduce the independent footprint and ordering experiments. The four-tap footprint experiment increased short-sequence flicker in the tested scenes. The surface-order test with crossed planar splats corrected all 576 misordered opaque overlap pixels in that fixture.
 
 ## Directional sprite atlas

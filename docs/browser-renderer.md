@@ -83,6 +83,7 @@ sorting or `specialize: false` in auto mode to compare the full resolve.
 | `scale`, `stepAnimation` | Change the splat size or explicitly enable the legacy 10 fps step for pixel looks. |
 | `afterimages` | Draw historical splat poses with scene depth. See [motion-aware afterimages](motion-afterimages.md). |
 | `reconstruction` | Animate selected splats through fragmentation, withdrawal, and reassembly. See [world-space reveal and reconstruction](world-reconstruction.md). |
+| `splatOrder`, `surfaceOrder` | Enable bounded [local surface ordering](surface-order.md) for a transparent crossing. |
 | `stableTransparency` | Hold the order of nearby translucent splats during motion. See [stable transparency](scene-optics.md#stable-transparency-during-motion). |
 | `water: false` | Compare the scene with water optics disabled. |
 | `reflections: false` | Disable live scene captures bound to water optics. |
