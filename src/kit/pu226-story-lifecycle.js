@@ -22,13 +22,13 @@
     const compileEvidence = W.storyEvidence.compiler(world, systems);
     for (const document of documents) for (const [story, definition] of Object.entries(document.stories)) {
       if (!definition.lifecycle) continue;
-      const { activation = 'automatic', offerFor } = definition.lifecycle;
+      const { activation = 'automatic' } = definition.lifecycle;
       const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry };
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
       const key = keyOf(info), stages = definition.lifecycle.progression ? definition.stages : undefined;
       entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
         stages, evidence: compileEvidence(stages, key, document.objectiveTypes),
-        duration: offerFor === undefined ? null : Math.max(1, W.storyTriggers.ticks(offerFor, world.dt, Math.ceil)) });
+        clock: W.storyDeadlines.compile(definition.lifecycle, world.dt) });
     }
     if (!entries.size) return null;
     const order = [...entries.keys()].sort();
@@ -72,23 +72,31 @@
       for (const [key, def] of entries) {
         check(own(state, key), 'Missing story lifecycle ' + key);
         const row = state[key];
-        if (row === null) continue;
         const message = 'Invalid saved story lifecycle for ' + key;
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
+        if (row === null) {
+          check(W.storyDeadlines.valid(def.clock, row, tick), message);
+          continue;
+        }
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
-          (!row.dropped || row.transitions.length === limit) && validateEvidence(row, def, tick), message);
+          (!row.dropped || row.transitions.length === limit), message);
         let previous;
         for (const change of row.transitions) {
-          check(fields(change, ['from', 'to', 'tick', 'reason', 'outcome']) && allowed(change.from, change.to) &&
+          check(fields(change, ['from', 'to', 'tick', 'reason', 'outcome', 'deadline']) &&
+            (allowed(change.from, change.to) ||
+              (change.from === null && change.to === 'expired' && change.deadline?.clock === 'world')) &&
             Number.isSafeInteger(change.tick) && change.tick > 0 && change.tick <= tick && reasonOK(change.reason) &&
             outcomeOK(def, change.to, change.outcome) &&
             (previous ? change.from === previous.to && change.tick >= previous.tick : (change.from === null) === (row.dropped === 0)), message);
           previous = change;
         }
+        const cutOffBeforeOffer = previous.from === null && previous.to === 'expired';
+        check(W.storyDeadlines.valid(def.clock, row, tick) &&
+          (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
         const hasFlow = Boolean(def.stages && row.transitions.some(change => change.to === 'active' || change.from === 'active' || change.from === 'suspended'));
         if (hasFlow) {
           const activated = row.transitions.find(change => change.from === 'available' && change.to === 'active');
-          W.storyStages.validate(row.flow,def,previous,tick,activated?.tick,reasonOK,message);
+          W.storyStages.validate(row.flow,def,previous,previous.deadline ? previous.tick - 1 : tick,activated?.tick,reasonOK,message);
         }
         else check(!own(row, 'flow'), message);
       }
@@ -113,16 +121,17 @@
         const { stage, visit } = flow.current;
         publish('story-stage-entered', { ...info, stage, visit, reason });
       }
-      function transition(key, to, reason, outcome, publish = emit, source = state[key]?.source) {
-        const prior = state[key], from = statusOf(prior), { info, stages } = entries.get(key);
+      function transition(key, to, reason, outcome, { publish = emit, source = state[key]?.source, deadline } = {}) {
+        const prior = state[key], from = statusOf(prior), { info, stages, clock } = entries.get(key);
         const started = from === 'available' && to === 'active';
         const flow = started && stages ? W.storyStages.initial(info.stage,tick) :
           to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
-        const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }) };
+        const deadlines = W.storyDeadlines.transition(clock, prior?.deadlines, from, to, tick);
+        const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }), ...(deadline && { deadline }) };
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
         save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
-          ...(source && { source }), ...(flow && { flow }) });
+          ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }) });
         const stage = flow?.current ?? flow?.route.at(-1);
         publish('story-transition', { ...info, ...change, ...source, ...(stage && { stage:stage.stage, visit:stage.visit }) });
         if (started) {
@@ -131,8 +140,14 @@
         }
       }
       for (const key of order) {
-        const def = entries.get(key), prior = previous[key], source = matched.get(key);
-        if (statusOf(prior) === 'active' && prior.flow?.current) {
+        const def = entries.get(key), before = previous[key], source = matched.get(key), status = statusOf(before);
+        const { row: prior, expired } = W.storyDeadlines.advance(def.clock, before, status, tick);
+        if (prior !== before) save(key, prior);
+        if (expired) {
+          transition(key, 'expired', expired.reason, undefined, { deadline: expired.receipt });
+          continue;
+        }
+        if (status === 'active' && prior.flow?.current) {
           const { stage, visit } = prior.flow.current, rules = def.evidence.get(stage);
           if (rules) {
             const { flow, changes } = W.storyStages.confirm(prior.flow, rules, tick, eventsOf, query);
@@ -144,11 +159,8 @@
           }
         }
         if (prior === null && (!def.triggers || source)) {
-          transition(key, 'available', source ? 'trigger-matched' : 'authored-offer', undefined, emit, source);
+          transition(key, 'available', source ? 'trigger-matched' : 'authored-offer', undefined, { source });
           if (def.activation === 'automatic') transition(key, 'active', 'automatic-activation');
-        } else if (prior && statusOf(prior) === 'available' && def.duration !== null &&
-          tick - prior.transitions.at(-1).tick >= def.duration) {
-          transition(key, 'expired', 'offer-timeout');
         }
       }
       for (const { action, args, publish } of commands) {
@@ -170,7 +182,7 @@
             publish('story-branch-chosen', { ...step, ...result.branch });
             const end = result.branch.target.outcome;
             if (end === undefined) enterStage(publish,def.info,result.flow,reason);
-            else transition(key,def.outcomes[end].status ?? 'completed',reason,end,publish);
+            else transition(key,def.outcomes[end].status ?? 'completed',reason,end,{ publish });
           }
           continue;
         }
@@ -178,7 +190,7 @@
           publish('story-transition-rejected', { ...entries.get(key).info, from, to, reason: 'transition-not-allowed', requestedReason: reason });
           continue;
         }
-        transition(key, to, reason, outcome, publish);
+        transition(key, to, reason, outcome, { publish });
       }
       return freeze(state);
     }
@@ -186,11 +198,13 @@
     return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction };
   }
 
-  function inspect(state) {
+  function inspect(state, at) {
     return Object.fromEntries(Object.entries(state).map(([key, row]) => {
       if (!row) return [key, null];
-      const { tick, to, reason, outcome } = row.transitions.at(-1);
-      return [key, { status: to, since: tick, reason, ...(outcome !== undefined && { outcome }), ...row }];
+      const end = row.transitions.at(-1), { tick, to, reason, outcome, deadline } = end;
+      return [key, { status: to, since: tick, reason, ...(outcome !== undefined && { outcome }), ...row,
+        ...(deadline && { deadline }),
+        ...(row.deadlines && { deadlines: W.storyDeadlines.inspect(row.deadlines, end, at) }) }];
     }));
   }
 

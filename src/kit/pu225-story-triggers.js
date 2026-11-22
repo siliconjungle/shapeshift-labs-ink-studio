@@ -5,10 +5,10 @@
   const tickAt = (value, tick) => Number.isSafeInteger(value) && value >= 0 && value <= tick;
   const keys = (value, expected) => record(value) && equal(Object.keys(value).sort(), expected);
 
-  function ticks(seconds, dt, round) {
+  function ticks(seconds, dt, round, message = 'Story trigger duration exceeds the world tick budget') {
     const steps = seconds / dt, nearest = Math.round(steps);
     const count = Math.abs(steps - nearest) <= 4 * Number.EPSILON * Math.max(1, steps) ? nearest : round(steps);
-    check(tickAt(count, maxTick), 'Story trigger duration exceeds the world tick budget');
+    check(tickAt(count, maxTick), message);
     return count;
   }
 

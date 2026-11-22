@@ -50,16 +50,17 @@ Each story starts at most once per run. Its named triggers are alternatives. Whe
 
 ## Offer, activate, and resolve a story
 
-Add `"lifecycle": {}` to a story definition to track its state and transition reasons. When a trigger matches, the lifecycle marks the story `available`. With the default `"activation": "automatic"`, it becomes `active` on the same tick. Use `"activation": "manual"` to wait for a command. A lifecycle-enabled story without triggers becomes available on the first tick. While a story waits for its trigger, the lifecycle probe returns `null` for it.
+Add `"lifecycle": {}` to a story definition to track its state and transition reasons. When a trigger matches, the lifecycle marks the story `available`. With the default `"activation": "automatic"`, it becomes `active` on the same tick. Use `"activation": "manual"` to wait for a command. A lifecycle-enabled story without triggers becomes available on the first tick. The lifecycle probe returns `null` while a story waits for its trigger or world deadline.
 
 | Current state | Allowed destinations |
 | --- | --- |
+| Waiting for the trigger | `available`, `expired` at a world deadline |
 | `available` | `active`, `withdrawn`, `expired` |
 | `active` | `suspended`, `completed`, `failed`, `withdrawn`, `expired` |
 | `suspended` | `active`, `failed`, `withdrawn`, `expired` |
 | `completed`, `failed`, `withdrawn`, `expired` | Terminal states |
 
-For manual activation, `offerFor` optionally specifies how many seconds an offer stays available. The runtime rounds it up to a whole tick. At the deadline, expiration takes precedence over a command on the same tick. An active or suspended story can expire explicitly through a command from the host or an event action.
+For manual activation, `offerFor` specifies how many seconds an offer stays available and remains supported in version 1 story documents. Use [deadlines](#set-story-deadlines) to author and inspect the three clocks. An active or suspended story can expire explicitly through a command from the host or an event action.
 
 Schedule `world/story-transition` through ordinary world commands, through `sim run --actions`, or from an event action. Provide the document and story IDs, destination `to`, and a `reason` of up to 256 characters. A `completed` or `failed` transition can also include a declared `outcome` ID.
 
@@ -80,6 +81,48 @@ node cli/ink-studio.js sim run examples/story-documents/winter-crossing.world.js
 node cli/ink-studio.js probe crossing.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe crossing.run.json --field world/history --args '{"where":{"path":"/kind","value":"story-transition"}}'
 node cli/ink-studio.js sim replay crossing.run.json
+```
+
+## Set story deadlines
+
+Add one or more clocks under `lifecycle.deadlines`.
+
+| Clock | Settings | What time counts |
+| --- | --- | --- |
+| `world` | `{"at": 30}` | An absolute timestamp in simulation seconds since tick zero. It keeps running while the story is suspended and can expire the story before its trigger arrives. |
+| `offer` | `{"for": 6}` | A window in seconds starting at the tick the story becomes `available`. Requires manual activation. Accepting the offer closes this clock. |
+| `work` | `{"for": 12}` | A budget in seconds across all active intervals of the story. It starts at activation, pauses on suspension, and resumes with the same remaining budget. |
+
+For example, an offer can stay open for up to six seconds, work can take up to twelve active seconds, and the whole story can have an absolute cutoff at world time 30.
+
+```json
+{
+  "activation": "manual",
+  "deadlines": {
+    "world": { "at": 30 },
+    "offer": { "for": 6 },
+    "work": { "for": 12 }
+  }
+}
+```
+
+Dates and durations are positive seconds and round up to a whole simulation tick. Work charges the interval that just ended if the story was active at its start. The ticks that activate or resume the story start a new interval. Suspending spends the preceding active interval and pauses future ones. Use the existing `world/story-transition` command or event actions to suspend and resume.
+
+At the cutoff tick, expiration takes precedence over a trigger, objective confirmation, or story command. If two clocks become due together, Ink records the world deadline first. The first expiration is terminal. A legacy `offerFor` can still be combined with the world and work clocks. Use one setting for the offer window.
+
+The `world/story-lifecycle` probe shows each configured clock's status and remaining ticks once the story has an offer or an expiration. After a clock closes, its remaining ticks reflect the moment it closed. For stories using `lifecycle.deadlines`, automatic expiration stores a `deadline` receipt on the transition, reports it on the probe, and publishes it on `story-transition`. Event actions can match `/deadline/clock` to route a fallback. Checkpoints, forks, and replays preserve the clocks and their receipts.
+
+### Fork The Harbor Watch
+
+[The Harbor Watch](../examples/story-documents/harbor-watch.world.json) loses the tow offer at tick 6 and hits the pier survey's fixed tide deadline at tick 7, even while the survey is paused. The pump crew has two work ticks left at the shared checkpoint. Both forks resume on tick 9. Delivery on tick 10 completes the objective and closes the story. Delivery on tick 11 reaches the crew after the work budget expires on that tick, so the timeout cues the relief crew.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/harbor-watch.world.json --ticks 8 --checkpoint harbor-start.json
+node cli/ink-studio.js sim fork harbor-start.json --ticks 14 --actions examples/story-documents/harbor-watch-on-time.actions.json --record on-time.run.json
+node cli/ink-studio.js sim fork harbor-start.json --ticks 14 --actions examples/story-documents/harbor-watch-at-cutoff.actions.json --record at-cutoff.run.json
+node cli/ink-studio.js probe harbor-start.json --field world/story-lifecycle
+node cli/ink-studio.js probe at-cutoff.run.json --field world/story-lifecycle
+node cli/ink-studio.js sim replay at-cutoff.run.json
 ```
 
 ## Branch and converge

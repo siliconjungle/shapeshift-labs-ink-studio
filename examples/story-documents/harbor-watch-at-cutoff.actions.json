@@ -1,0 +1,7 @@
+[
+  { "tick": 11, "action": "world/transfer", "args": { "from": "stock/depot", "to": "stock/pump-crew", "amount": 1 } },
+  { "tick": 11, "action": "world/story-choose", "args": {
+    "document": "harbor-watch", "story": "pump-repair", "stage": "resupply", "visit": 1,
+    "branch": "hand-off", "reason": "seal-delivered-at-cutoff"
+  } }
+]

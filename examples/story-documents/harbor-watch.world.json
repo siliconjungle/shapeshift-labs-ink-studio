@@ -1,0 +1,52 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "harbor-watch",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "harbor-watch.json" }],
+  "systems": {
+    "stock": {
+      "kind": "store",
+      "config": { "accounts": {
+        "depot": { "resource": "pump-seal", "units": "part", "type": "integer", "initial": 1, "max": 1 },
+        "pump-crew": { "resource": "pump-seal", "units": "part", "type": "integer", "initial": 0, "max": 1 }
+      } }
+    }
+  },
+  "commands": [
+    { "tick": 2, "action": "world/story-transition", "args": {
+      "document": "harbor-watch", "story": "pump-repair", "to": "active", "reason": "shift-started"
+    } },
+    { "tick": 3, "action": "world/event", "args": { "kind": "towboat-hail" } },
+    { "tick": 4, "action": "world/story-transition", "args": {
+      "document": "harbor-watch", "story": "pump-repair", "to": "suspended", "reason": "crew-sheltering"
+    } },
+    { "tick": 4, "action": "world/story-transition", "args": {
+      "document": "harbor-watch", "story": "tide-survey", "to": "suspended", "reason": "rough-water"
+    } },
+    { "tick": 6, "action": "world/story-transition", "args": {
+      "document": "harbor-watch", "story": "tow-offer", "to": "active", "reason": "reply-to-towboat"
+    } },
+    { "tick": 7, "action": "world/story-transition", "args": {
+      "document": "harbor-watch", "story": "tide-survey", "to": "active", "reason": "try-to-resume-survey"
+    } },
+    { "tick": 9, "action": "world/story-transition", "args": {
+      "document": "harbor-watch", "story": "pump-repair", "to": "active", "reason": "crew-back-on-shift"
+    } }
+  ],
+  "eventActions": {
+    "call-relief-crew": {
+      "on": {
+        "kind": "story-transition",
+        "system": "world",
+        "where": {
+          "all": [
+            { "path": "/story", "value": "pump-repair" },
+            { "path": "/deadline/clock", "value": "work" }
+          ]
+        }
+      },
+      "actions": [{ "action": "world/event", "args": { "kind": "relief-crew-called" } }]
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "harbor-watch",
+  "title": "The Harbor Watch",
+  "stories": {
+    "tide-survey": {
+      "kind": "incident",
+      "title": "Inspect the outer pier before high water",
+      "lifecycle": { "deadlines": { "world": { "at": 0.65 } } },
+      "entry": "survey",
+      "stages": { "survey": { "title": "Survey the pier", "next": { "report": { "outcome": "inspected" } } } },
+      "outcomes": { "inspected": { "title": "Pier inspected" } }
+    },
+    "tow-offer": {
+      "kind": "questlet",
+      "title": "Accept the towboat's one-stop offer",
+      "lifecycle": { "activation": "manual", "deadlines": { "offer": { "for": 0.3 } } },
+      "triggers": { "hail": { "event": { "kind": "towboat-hail", "system": "world" } } },
+      "entry": "reply",
+      "stages": { "reply": { "title": "Reply to the towboat", "next": { "secure": { "outcome": "towed" } } } },
+      "outcomes": { "towed": { "title": "Towboat secured" } }
+    },
+    "pump-repair": {
+      "kind": "questlet",
+      "title": "Resupply the pump worksite",
+      "lifecycle": {
+        "activation": "manual",
+        "progression": true,
+        "deadlines": { "world": { "at": 1.5 }, "work": { "for": 0.4 } }
+      },
+      "entry": "resupply",
+      "stages": {
+        "resupply": {
+          "title": "Deliver the spare pump seal",
+          "objectives": {
+            "deliver-seal": {
+              "title": "Deliver the seal to the pump crew",
+              "type": "deliver",
+              "params": { "system": "world", "from": "stock/depot", "to": "stock/pump-crew", "amount": 1 }
+            }
+          },
+          "next": { "hand-off": { "outcome": "resupplied" } }
+        }
+      },
+      "outcomes": { "resupplied": { "title": "Pump crew resupplied" } }
+    }
+  }
+}

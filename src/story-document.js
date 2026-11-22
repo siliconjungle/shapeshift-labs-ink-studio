@@ -267,7 +267,7 @@ const StoryDocument = (() => {
   }
 
   function lifecycle(value, at) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -275,6 +275,19 @@ const StoryDocument = (() => {
       invalid(`${at}.offerFor`, 'expected a positive offer duration in seconds for manual activation');
     if (Object.hasOwn(value, 'progression') && typeof value.progression !== 'boolean')
       invalid(`${at}.progression`, 'expected a boolean');
+    if (Object.hasOwn(value, 'deadlines')) {
+      const location = `${at}.deadlines`;
+      fields(value.deadlines, location, [], ['world', 'offer', 'work']);
+      if (!Object.keys(value.deadlines).length) invalid(location, 'expected at least one clock');
+      for (const [clock, spec] of Object.entries(value.deadlines)) {
+        const field = clock === 'world' ? 'at' : 'for', place = `${location}.${clock}`;
+        fields(spec, place, [field]);
+        if (!Number.isFinite(spec[field]) || spec[field] <= 0)
+          invalid(`${place}.${field}`, 'expected positive finite seconds');
+        if (clock === 'offer' && (value.activation !== 'manual' || Object.hasOwn(value, 'offerFor')))
+          invalid(place, 'an offer deadline requires manual activation and a single offer window');
+      }
+    }
   }
 
   function validateStoryDocument(document) {
