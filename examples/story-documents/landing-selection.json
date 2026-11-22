@@ -1,0 +1,76 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "landing-selection",
+  "title": "Select a relief landing",
+  "stories": {
+    "canal": {
+      "kind": "incident",
+      "title": "Deliver via the canal",
+      "incident": { "category": "opportunity", "intensity": 2, "tags": ["relief", "landing"] },
+      "triggers": { "manifest": { "event": { "kind": "relief-load-ready", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 0.3, "release": "automatic", "selection": { "pool": "relief-landing", "weight": 3 } },
+        "feasibility": { "weather": { "state": { "field": "world/account", "args": { "account": "weather/window" },
+          "select": "/balance", "when": { "op": "gte", "value": 1 } } } },
+        "settlement": { "outcomes": { "delivered": { "cargo": { "transfer": {
+          "from": "supplies/cache", "to": "supplies/canal", "amount": 2
+        } } } } }
+      },
+      "entry": "send",
+      "stages": { "send": { "title": "Send the canal load", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "delivered", "auto": true } } } },
+      "outcomes": { "delivered": { "title": "The canal depot receives the load" } }
+    },
+    "ridge": {
+      "kind": "incident",
+      "title": "Deliver via the ridge",
+      "incident": { "category": "opportunity", "intensity": 2, "tags": ["relief", "landing"] },
+      "triggers": { "manifest": { "event": { "kind": "relief-load-ready", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 0.3, "release": "automatic", "selection": { "pool": "relief-landing", "weight": 1 } },
+        "feasibility": { "weather": { "state": { "field": "world/account", "args": { "account": "weather/window" },
+          "select": "/balance", "when": { "op": "gte", "value": 1 } } } },
+        "settlement": { "outcomes": { "delivered": { "cargo": { "transfer": {
+          "from": "supplies/cache", "to": "supplies/ridge", "amount": 2
+        } } } } }
+      },
+      "entry": "send",
+      "stages": { "send": { "title": "Send the ridge load", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "delivered", "auto": true } } } },
+      "outcomes": { "delivered": { "title": "The ridge depot receives the load" } }
+    },
+    "deep-quay": {
+      "kind": "incident",
+      "title": "Use the closed deep quay",
+      "incident": { "category": "opportunity", "intensity": 3, "tags": ["relief", "landing"] },
+      "triggers": { "manifest": { "event": { "kind": "relief-load-ready", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 0.3, "release": "automatic", "selection": { "pool": "relief-landing", "weight": 100 } },
+        "feasibility": { "berth": { "state": { "field": "world/account", "args": { "account": "weather/deep-quay-permit" },
+          "select": "/balance", "when": { "op": "gte", "value": 1 } } } }
+      },
+      "entry": "dock",
+      "stages": { "dock": { "title": "Dock at the quay", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "docked", "auto": true } } } },
+      "outcomes": { "docked": { "title": "The barge reaches the quay" } }
+    },
+    "survey": {
+      "kind": "incident",
+      "title": "Survey another route on request",
+      "incident": { "category": "discovery", "intensity": 1, "tags": ["relief", "landing"] },
+      "triggers": { "manifest": { "event": { "kind": "relief-load-ready", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 0.3, "release": "automatic", "selection": { "pool": "relief-landing", "weight": 0 } }
+      },
+      "entry": "survey",
+      "stages": { "survey": { "title": "Survey another landing", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "surveyed", "auto": true } } } },
+      "outcomes": { "surveyed": { "title": "The crew charts another landing" } }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "landing-selection",
+  "seed": 1,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "landing-selection.json" }],
+  "systems": {
+    "supplies": { "kind": "store", "config": { "accounts": {
+      "cache": { "resource": "relief", "units": "crate", "type": "integer", "initial": 2 },
+      "canal": { "resource": "relief", "units": "crate", "type": "integer", "initial": 0 },
+      "ridge": { "resource": "relief", "units": "crate", "type": "integer", "initial": 0 }
+    } } },
+    "weather": { "kind": "store", "config": { "accounts": {
+      "reserve": { "resource": "clearance", "units": "permit", "type": "integer", "initial": 1 },
+      "window": { "resource": "clearance", "units": "permit", "type": "integer", "initial": 0 },
+      "deep-quay-permit": { "resource": "clearance", "units": "permit", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "relief-load-ready" } },
+    { "tick": 3, "action": "world/transfer", "args": { "from": "weather/reserve", "to": "weather/window", "amount": 1 } }
+  ],
+  "eventActions": {
+    "announce-winner": {
+      "on": { "kind": "story-candidate-selected", "system": "world",
+        "where": { "path": "/selection/pool", "value": "relief-landing" } },
+      "actions": [{ "action": "world/event", "args": { "kind": "landing-selected", "route": "canal" },
+        "bindings": { "/route": "/story" } }]
+    }
+  }
+}

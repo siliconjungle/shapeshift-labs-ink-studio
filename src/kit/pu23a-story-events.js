@@ -10,7 +10,7 @@
     'story-started','story-transition','story-stage-entered','story-objective-resolved','story-progress-rejected',
     'story-branch-chosen','story-decision-opened','story-decision-elapsed','story-commitment-decision',
     'story-handoff-decision','story-handoff-accepted','story-settlement','story-settlement-blocked',
-    'story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-expired','story-candidate-rejected'
+    'story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-selected','story-candidate-expired','story-candidate-rejected'
   ]);
 
   function retained(source) {
@@ -68,6 +68,7 @@
       kind==='story-branch-chosen'?label(branch):
       kind==='story-objective-resolved'?label(objective):
       kind==='story-stage-entered'||kind==='story-decision-opened'||kind==='story-decision-elapsed'?label(stage):
+      kind==='story-candidate-selected'?label(event.selection?.reason):
       kind==='story-progress-rejected'?label(reason):undefined;
     const by = kind==='story-branch-chosen'&&label(decision?.by);
     return title+(detail?' · '+detail:'')+(by?' ('+by+')':'');

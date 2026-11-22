@@ -555,6 +555,52 @@ node cli/ink-studio.js probe quay.run.json --ticks 3 --field world/incident-cand
 node cli/ink-studio.js sim replay quay.run.json
 ```
 
+### Select from a weighted pool
+
+Add `selection` to an automatic candidate policy to make the incident
+compete for one dispatch per pool per world tick.
+
+```json
+"candidate": {
+  "for": 0.3,
+  "release": "automatic",
+  "selection": { "pool": "relief-landing", "weight": 3 }
+}
+```
+
+Each pool has its own draw. An eligible candidate's integer weight
+from 1 to 1,000,000 gives it that many tickets. A zero-weight candidate
+stays in the queue and can still be selected explicitly. The draw considers feasible candidates with positive weights. Expiration
+and explicit dispatch run first.
+
+Ink assigns tickets by queue age, then by qualified incident ID in
+lexical order for equal ages. The algorithm uses the world seed, pool
+ID, and tick to choose a ticket. A sole eligible candidate wins with
+reason `only-eligible-candidate`. A draw with multiple eligible candidates
+records `seeded-weighted-draw`. Other candidates stay queued and can be
+reconsidered on the next tick.
+
+Probe `world/incident-selections` with optional `pool` and `winner`
+filters. Each receipt retains the algorithm, seed, tick, candidate set,
+effective eligibility, assigned ticket ranges, draw, winner, and reason.
+The winner's queue record also contains the receipt.
+`story-candidate-selected` publishes it for event actions and recorded
+story analysis. Checkpoint restore verifies the saved draw against its
+recorded inputs.
+
+In the [relief landing demo](../examples/story-documents/landing-selection.world.json),
+the canal has three tickets and the ridge has one. A closed deep quay
+and a zero-weight survey appear in the receipt. Changing the seed
+selects a different destination for the same crate shipment.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/landing-selection.world.json \
+  --ticks 5 --record landing.run.json
+node cli/ink-studio.js probe landing.run.json --field world/incident-selections \
+  --args '{"pool":"relief-landing"}'
+node cli/ink-studio.js sim replay landing.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

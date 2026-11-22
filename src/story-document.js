@@ -2,6 +2,7 @@
 const StoryDocument = (() => {
   const format = 'ink-studio/story';
   const version = 1;
+  const maxCandidateWeight = 1000000;
   const incidentCategories = Object.freeze(['setback','opportunity','visitor','discovery','environmental-change','recovery']);
   const kinds = new Set(['incident', 'questlet', 'arc']);
   const objectiveKinds = new Set(['reach', 'acquire', 'deliver', 'protect', 'observe', 'build', 'maintain', 'survive', 'negotiate', 'choose']);
@@ -630,10 +631,18 @@ const StoryDocument = (() => {
 
   function candidatePolicy(value, at, kind) {
     if (kind!=='incident') invalid(at,'candidate queues require an incident');
-    fields(value,at,['for'],['release','onExpire']);
+    fields(value,at,['for'],['release','onExpire','selection']);
     if (!Number.isFinite(value.for)||value.for<=0) invalid(at+'.for','expected a positive duration in seconds');
     if (Object.hasOwn(value,'release')&&!['automatic','manual'].includes(value.release))
       invalid(at+'.release','expected automatic or manual');
+    if (Object.hasOwn(value,'selection')) {
+      const {selection,release} = value, location = at+'.selection';
+      fields(selection,location,['pool','weight']);
+      if (release!=='automatic') invalid(location,'weighted selection requires automatic release');
+      if (!safeId(selection.pool)) invalid(location+'.pool','expected a pool ID');
+      if (!Number.isSafeInteger(selection.weight)||selection.weight<0||selection.weight>maxCandidateWeight)
+        invalid(location+'.weight','expected an integer weight from 0 to '+maxCandidateWeight);
+    }
     if (Object.hasOwn(value,'onExpire')) {
       const parts = typeof value.onExpire==='string'?value.onExpire.split('/'):[];
       if (!parts.length||parts.length>2||!parts.every(safeId))

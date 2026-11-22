@@ -272,6 +272,8 @@
         {lifecycle:view.storyLifecycle,triggers:view.storyTriggers,candidates:view.incidentCandidates}))},
       'incident-candidates':{type:'record',qualified:true,read:({args})=>
         W.incidentCandidates.inspect(view.incidentCandidatePolicies,view.incidentCandidates,tick,args)},
+      'incident-selections':{type:'record',qualified:true,read:({args})=>
+        W.incidentSelection.inspect(view.incidentCandidates,tick,args)},
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
       'story-commitments':{type:'record',qualified:true,read:({args})=>
         W.storyCommitments.inspect(view.storyCommitmentDefinitions,view.storyLifecycle,args)},
