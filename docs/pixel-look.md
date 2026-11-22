@@ -889,6 +889,7 @@ supplies the settings for that subject. Omitted settings use the scene defaults.
 | `fine` | Enables or disables baked 4 × 4 surface color tiles for the subject. Enabling it needs a bake. Disabling it also suppresses existing tiles for matching splats in both renderers. |
 | `cleanup` | Enables or disables pixel cleanup on pixels owned by the subject, independently of scene-wide cleanup. |
 | `protectSilhouette` | Preserves the subject's visible outer edge and adjacent fringe during cleanup, while allowing cleanup inside the shape. |
+| `protectGaps` | Keeps a one-art-pixel opening when opposing visible edges match this rule and the center is farther from the camera than both. |
 
 JSON solids use `id` for `entity`, `part` or `id` for `object`, and
 `tags` for tag matching. JavaScript solids use `objectId` and
@@ -898,8 +899,24 @@ solids when the template is baked. Placed copies can have independent fine-tile
 and cleanup settings through `objectId` and `target`. Raw rendering skips
 scoped cleanup and fine-tile overrides.
 
-The browser renderer expands shared GPU instance groups when scoped cleanup
-or fine-tile rules need to resolve their individual splats. Spacing-only rules
+To keep the opening between two tentacles, tag both inner edges
+`tentacle-gap` and add this rule to `detailBudgets`.
+
+```json
+{ "select": { "tag": "tentacle-gap" }, "protectGaps": true }
+```
+
+The edges can belong to different objects. Both sides must match the same
+rule. Protection follows the visible edges on the native art grid as the
+camera or pose changes and preserves the color already visible through the
+gap, including scenery. A foreground surface can still cover the opening.
+The rule skips cleanup at the gap itself and also skips the live renderer's
+automatic pinhole repair there. Gap protection uses opaque edge ownership.
+Run `npm run build` and open the [Needle Squid demo](../examples/gap-protection/index.html)
+from a local server to compare both modes and move an occluder in front of the gap.
+
+The browser renderer expands shared GPU instance groups when scoped cleanup,
+gap protection, or fine-tile rules need to resolve their individual splats. Spacing-only rules
 apply at bake time and can use the shared instance path.
 
 ## Material-specific pixel styles

@@ -122,6 +122,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const sources = pixelSources();
     const program = source => resources.program(sources.POST_VS, source);
     let simple = simpleOnly ? program(simpleResolve(sources.POST_FS)) : undefined;
+    let simpleGaps;
     const clean = program(sources.CLEAN_FS);
     // Rebirth hosts can opt into geometry specialization through the lower
     // level pipeline. The canvas path specializes its own fullscreen resolve.
@@ -160,6 +161,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     let opticsDefinition, opticsWorld, opticsPlan, opticsTime;
     const cleaned = target(), finished = target(), history = [target(), target()];
     const detailAPI = toolkit.DetailBudgets ?? toolkit.KIT?.detailBudgets;
+    const detailResolveUnit = 26; // Unit 7 can hold a palette constraint or layered glass during resolve.
     const qualityAPI = toolkit.KIT?.passQuality;
     const contract = toolkit.KIT?.renderContract;
     const lighting = toolkit.KIT?.splatRelighting, shotLighting = toolkit.KIT?.shotLighting, relightUnit = 21;
@@ -264,7 +266,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (previous?.definition === definition && previous.count === world.count &&
           previous.metadata === world.renderMetadata && previous.tiles === world.fine) return previous;
       const at = budget.bind(world);
-      const flags = budget.affectsCleanup && Float32Array.from({ length: world.count }, (_, i) => detailAPI.flags(at(i)));
+      const flags = budget.affectsCleanup && Float32Array.from({ length: world.count }, (_, i) => budget.flags(at(i)));
       let fine = world.fine;
       if (fine && budget.fineOff) {
         for (let i = 0; i < world.count; i++) {
@@ -846,7 +848,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const toneDefinition = raw || coverage ? undefined : frame.tone ?? look.tone;
       const frameTone = prepareTone(toneDefinition);
       const globalCleanup = !raw && (frame.clean ?? (!!look.clean && !frameTone?.preserveDots));
-      const needsDetailFlags = budget?.affectsCleanup && (globalCleanup || budget?.enablesCleanup);
+      const needsDetailFlags = budget?.affectsCleanup && (globalCleanup || budget.enablesCleanup || budget.protectsGaps);
       const constraintDefinition = frame.paletteConstraints ?? look.paletteConstraints;
       const wantsEmitters=frame.areaLights!==false&&world.areaLights?.length||Array.isArray(frame.areaLights)&&frame.areaLights.length||(frame.volumeLighting??world.volumeLighting)?.spots?.length;
       const wantsRelight = lighting && (frame.relighting ?? world.relighting);
@@ -984,7 +986,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const colored = !raw && !portableStages && !frameTone && !patterned && !coverage && (frame.colored ?? true);
       const detail = prepareDetail(world, budget);
       const scopedCleanup = !!needsDetailFlags && !!detail?.flags;
-      const cleaning = globalCleanup || scopedCleanup;
+      const protectGaps = scopedCleanup && budget.protectsGaps;
+      const protectResolve = protectGaps && !colored;
+      const cleaning = globalCleanup || scopedCleanup && budget.enablesCleanup;
       const damping = !raw && !portableStages && !frameTone && !coverage && !colored && !constraints && !!look.pixel && frame.damp !== false;
       const samples = colored ? 2 : 1, rw = width * samples, rh = height * samples;
       if (rw > maxSize || rh > maxSize ||
@@ -1414,20 +1418,28 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       const presentation = finishArt ? artPixelFinish.buffer.framebuffer : output;
       const destination = damping ? finished.framebuffer : presentation;
+      if (scopedCleanup) {
+        if (uploadedDetailFlags !== detail.flags) {
+          detailTable.upload(detail.flags);
+          uploadedDetailFlags = detail.flags;
+        } else detailTable.bind();
+        if (protectResolve) detailTable.bind(detailResolveUnit);
+      }
       let resolve;
       const styledPattern = patterned && materialStyles, facingPattern = patterned && facing;
       const relitPattern = patterned && relighting;
       if (simpleOnly) {
-        resolve = simple;
-      } else if (coverage || constraints || styledPattern || facingPattern || relitPattern || env?.media && patterned) {
+        resolve = protectResolve ? (simpleGaps ??= program(simpleResolve(pixelSources({ protectGaps: true }).POST_FS))) : simple;
+      } else if (protectResolve || coverage || constraints || styledPattern || facingPattern || relitPattern || env?.media && patterned) {
         const cache = coverage ? contributionPost : constrainedPosts;
         const mode = (wet ? 1+Number(wet.airPockets)+2*Number(wet.layered)+4*Number(wet.atlas) : 0) +
           16*Number(masked) + 32*Number(layeredGlass) + 64*Number(styledPattern) + 128*Number(!!constraints) +
-          256*Number(!!env?.media) + 512*Number(relitPattern)+1024*Number(!!env?.lit)+2048*Number(!!facingPattern);
+          256*Number(!!env?.media) + 512*Number(relitPattern)+1024*Number(!!env?.lit)+2048*Number(!!facingPattern) +
+          4096*Number(protectResolve);
         if (!cache.has(mode)) cache.set(mode,program(pixelSources({
           water:!!wet,airPockets:wet?.airPockets,layered:wet?.layered,atlas:wet?.atlas,
           paletteConstraints:!!constraints && !coverage,masked,contributions:coverage,layeredGlass,materialStyles:styledPattern, facingColors:facingPattern && facingAPI,
-          environment:!!env?.media,emitterFog:!!env?.lit,relighting:relitPattern
+          environment:!!env?.media,emitterFog:!!env?.lit,relighting:relitPattern,protectGaps:protectResolve
         }).POST_FS));
         resolve = cache.get(mode);
         if (constraints && !coverage) {
@@ -1462,6 +1474,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         ...(relitPattern && { u_relight: relightUnit, u_relightFog: rgb(world.pal[fog.c ?? 0] ?? 0),
           u_relightFogRange: [fog.start ?? 1, fog.max ?? 0] }),
         u_idxTex: 9,
+        ...(protectResolve && { u_detailFlags: detailResolveUnit }),
         u_sprLayer: 13, u_markA: +(cleaning || !!clusters), u_pal: pal, u_n: palCount, u_luma: 0,
         u_bypass: +(raw || !!portableStages), u_colored: +colored, u_dither: dither * 0.3 * (world.dither ?? 1),
         u_line: rgb(world.pal[lineIndex] ?? 0),
@@ -1480,17 +1493,13 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (splatPaint)
         splatPaintPass.finish(splatPaint, (colored ? contours : geometry).textures[0], resolveOutput, width, height);
       if (cleaning) {
-        if (scopedCleanup) {
-          if (uploadedDetailFlags !== detail.flags) {
-            detailTable.upload(detail.flags);
-            uploadedDetailFlags = detail.flags;
-          } else detailTable.bind();
-        }
+        if (scopedCleanup) detailTable.bind();
         textureUnit(8, cleaned.textures[0]);
         textureUnit(6, colored ? contours.textures[1] : geometry.textures[1]);
         fullscreen(clean, destination, width, height, {
           u_look: 8, u_dep: 6, u_keep: look.clean?.keep ?? 0.3,
           u_scopedOnly: !globalCleanup, u_hasDetailFlags: scopedCleanup,
+          u_protectGaps: protectGaps,
           u_detailOwners: scopedCleanup ? 9 : 8, u_detailFlags: scopedCleanup ? 7 : 8,
           u_detailWater: scopedCleanup && !!water, u_waterMask: scopedCleanup && water ? 11 : 8,
           u_lineClean: +(frame.lineClean !== false && !!look.pixel)

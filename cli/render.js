@@ -1612,8 +1612,9 @@ function renderFrame(world, o, preparedPalettes) {
   const needsCleanupFlags = (styled || o.resolveDetailCleanup) && detailBudget?.affectsCleanup &&
     (defaultCleanup || detailBudget.enablesCleanup);
   const budgetAt = (needsCleanupFlags || detailBudget?.fineOn || detailBudget?.fineOff) ? detailBudget.bind(world) : null;
-  const cleanupFlags = needsCleanupFlags && Uint8Array.from({length:baseCount}, (_, i) => DetailBudgets.flags(budgetAt(i)));
-  const pixelBudgets = cleanupFlags && cleanupFlags.some(Boolean) ? new Uint8Array(W * H) : null;
+  const FlagArray = detailBudget?.protectsGaps ? Uint16Array : Uint8Array;
+  const cleanupFlags = needsCleanupFlags && FlagArray.from({length:baseCount}, (_, i) => detailBudget.flags(budgetAt(i)));
+  const pixelBudgets = cleanupFlags && cleanupFlags.some(Boolean) ? new FlagArray(W * H) : null;
   const FN =
       (defaultFine || detailBudget?.fineOn) && world.fine && world.fine.length >= baseCount * 12 ? world.fine : null,
     FPAL = FN ? world.pal.map((h, i) => hex(i)) : null;
@@ -3123,7 +3124,8 @@ function renderFrame(world, o, preparedPalettes) {
       ...(strand?.inspected && { strandPixel: strand.inspected }),
       ...(deepFrame && { deep: deepFrame }),
       ...(objectMattes && {objectMattes}),
-      ...(o.resolveDetailCleanup && pixelBudgets && { cleanDetail: cleanPixels }),
+      ...(o.resolveDetailCleanup && cleanupFlags && cleanupFlags.some(DetailBudgets.changesCleanup) &&
+        { cleanDetail: cleanPixels }),
       ...(localAt && { localAt, localPalettes, localConstraints }), ...(detail && { detail }), ...(passes && { passes }), ...(motionReference && { motionReference }),
       ...(paletteState && {paletteState}),
       ...(paintStage && {paintStage}),
@@ -3360,12 +3362,19 @@ function renderFrame(world, o, preparedPalettes) {
     const empty = (x, y) => depA(at(x, y)) >= 0.995,
       N4 = N8.slice(0, 4),
       lineClean = o.lineClean === undefined ? !!(world.look && world.look.pixel) : !!o.lineClean;
+    const gapBetween = (pixel, step) => {
+      const a = pixel - step, b = pixel + step;
+      return DetailBudgets.protectsGap(dep[pixel], pixelBudgets[a], dep[a], pixelBudgets[b], dep[b]);
+    };
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
         const q = at(x, y);
         const pixel = (H - 1 - y) * W + x;
         const flags = pixelBudgets?.[pixel] ?? 0;
         if (pixelBudgets && !DetailBudgets.cleans(flags, globalCleanup)) continue;
+        if (pixelBudgets && detailBudget.protectsGaps &&
+            (x > 0 && x + 1 < W && gapBetween(pixel, 1) ||
+             y > 0 && y + 1 < H && gapBetween(pixel, W))) continue;
         if (localConstraints?.[(localAt?.[pixel] || 0) - 1] || (alpha && alpha[q / 3] < 128) || sprM?.[pixel] ||
             edgePixels?.[pixel] >= edgeCoverageThreshold || surfaceGlint?.[pixel] || detail?.[q / 3] || ArtStability.protectedPixel(stable, passes, q / 3)) continue;
         // outlines, as on the page: a notch is filled from what is round it, a bump against the background taken off

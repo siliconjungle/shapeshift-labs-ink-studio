@@ -97,12 +97,49 @@ test('headless cleanup can enable, disable, or protect a visible subject indepen
   }
 });
 
-function checkWebGL(createRenderer, dots, sculpt, halves, makeBuilder, makeSculpt, toolkit) {
+function gaps(makeBuilder, protect, foreground = false) {
+  const rules = [{ select: { object: 'marker' }, cleanup: false }];
+  if (protect) rules.push(
+    { select: { tag: 'gap' }, protectGaps: true },
+    { select: { object: 'other-left' }, protectGaps: true },
+    { select: { object: 'other-right' }, protectGaps: true });
+  const b = makeBuilder(1, [0x161d29, 0x69cbb4, 0xdd9b60], { detailBudgets: rules });
+  const pixel = 14 * Math.tan(19 * Math.PI / 180) / 64;
+  function place(x, y, z, color, object, tags = []) {
+    const start = b.count();
+    b.disc((x + .5 - 48) * pixel, (32 - y - .5) * pixel, z, [0, 0, 1], pixel * .24, .006, b.P[color], 3);
+    b.describeSplats(start, b.count(), { object, target: { tags } });
+  }
+  for (const [dx, dy] of [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]]) {
+    place(24 + dx, 32 + dy, 0, 1, dx < 0 ? 'left' : 'right', ['gap']);
+    place(70 + dx, 32 + dy, 0, 1, dx < 0 ? 'other-left' : 'other-right');
+  }
+  if (foreground) place(24, 32, .5, 2, 'front');
+  place(4, 4, 0, 2, 'marker');
+  return b.finish({ cam: { target: [0, 0, 0], dist: 7, pitch: 0, yaw: 0, ortho: true },
+    radius: 8, dither: 0, look: { clean: true } });
+}
+
+test('headless cleanup preserves a selected opening across two parts and respects foreground depth', () => {
+  for (const colored of [false, true]) {
+    const read = world => ink.render(world, { w: 96, h: 64, px: 1, dither: 0, colored, outline: false }).rgb;
+    const red = (frame, x) => frame[(32 * 96 + x) * 3];
+    const off = read(gaps(makeBuilder, false)), on = read(gaps(makeBuilder, true));
+    assert(red(off, 24) > 22);
+    assert.equal(red(on, 24), 22);
+    assert.equal(red(on, 70), red(off, 70));
+    const front = red(read(gaps(makeBuilder, true, true)), 24);
+    assert(front > 105);
+    assert.equal(front, red(read(gaps(makeBuilder, false, true)), 24));
+  }
+});
+
+function checkWebGL(createRenderer, dots, gaps, sculpt, halves, makeBuilder, makeSculpt, toolkit) {
   const canvas = document.querySelector('canvas');
   const renderer = createRenderer(canvas, { toolkit });
   const gl = canvas.getContext('webgl2'), pixels = new Uint8Array(96 * 64 * 4);
-  const read = world => {
-    renderer.render(world, { width: 96, height: 64, dither: 0, colored: false });
+  const read = (world, options) => {
+    renderer.render(world, { width: 96, height: 64, dither: 0, colored: false, ...options });
     gl.readPixels(0, 0, 96, 64, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     if (gl.getError()) throw new Error('Unexpected WebGL error');
     return pixels.slice();
@@ -115,6 +152,16 @@ function checkWebGL(createRenderer, dots, sculpt, halves, makeBuilder, makeSculp
     const protectedFrame = frame(rule, true);
     if (!(protectedFrame[0] === base[0] && protectedFrame[1] < base[1]))
       throw new Error('Protection leaked or failed: ' + [base, protectedFrame]);
+  }
+  // The plain resolve repairs pinholes even when optional cleanup is disabled.
+  for (const mode of [{ clean: false }, { clean: true }, { colored: true, clean: true }]) {
+    const red = (frame, x) => frame[(31 * 96 + x) * 4];
+    const off = read(gaps(makeBuilder, false), mode), on = read(gaps(makeBuilder, true), mode);
+    const baselineFront = read(gaps(makeBuilder, false, true), mode), front = read(gaps(makeBuilder, true, true), mode);
+    if (!(red(off, 24) > 22 && red(on, 24) === 22 && red(on, 70) === red(off, 70) &&
+        red(front, 24) === red(baselineFront, 24) && red(front, 24) > 105))
+      throw new Error('Gap or occlusion mismatch ' + JSON.stringify(mode) + ': ' +
+        [red(off, 24), red(on, 24), red(off, 70), red(on, 70), red(front, 24), red(baselineFront, 24)]);
   }
   const world = sculpt(makeBuilder, makeSculpt, undefined, true);
   const fine = read(world);
@@ -136,7 +183,7 @@ test('WebGL scopes cleanup and fine tiles to the selected subject', { skip: !pro
 import { createRenderer } from ${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../webgl.mjs')).href)};
 const result = document.querySelector('#result');
 try {
-  (${checkWebGL})(createRenderer, ${dots}, ${sculpt}, ${halves}, makeBuilder, makeSculpt, { KIT, PixelLook });
+  (${checkWebGL})(createRenderer, ${dots}, ${gaps}, ${sculpt}, ${halves}, makeBuilder, makeSculpt, { KIT, PixelLook });
   result.textContent = 'PASS';
 } catch (error) { result.textContent = error.stack; }
 </script>`);

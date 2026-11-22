@@ -868,7 +868,8 @@ bool constrainPalette(ivec2 p, vec3 inputColor, out vec3 color) {
 
 export function pixelShaderSources(PixelLook, { water = false, airPockets = false, layered = false, atlas = false,
   paletteConstraints = false, masked = false, contributions = false, layeredGlass = false, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, packedTone = false, cutaway, facingColors = false } = {}) {
+  environment = false, emitterFog=false, relighting = false, packedTone = false, cutaway, facingColors = false,
+  protectGaps = false } = {}) {
   const waterPixelGLSL = `
 uniform highp sampler2D u_waterMask;
 ivec2 waterPixel(ivec2 p) {
@@ -881,11 +882,34 @@ ivec2 waterPixel(ivec2 p) {
   return other.x >= 0.98 && int(round(other.y * 255.0)) == body ? dest : p;
 }
 `;
+  const detailFlagsGLSL = `
+uniform highp sampler2D u_detailFlags;
+int detailAt(highp sampler2D owners, ivec2 p) {
+  ivec3 owner = ivec3(round(texelFetch(owners, p, 0).rgb * 255.0));
+  int i = owner.r + owner.g * 256 + owner.b * 65536 - 1;
+  if (i < 0) return 0;
+  return 8 | int(texelFetch(u_detailFlags, ivec2((i >> 2) & 511, i >> 11), 0)[i & 3]);
+}
+bool protectedGap(highp sampler2D owners, sampler2D depths, ivec2 p) {
+  ivec2 size = textureSize(depths, 0);
+  float depth = texelFetch(depths, p, 0).r;
+  for (int axis = 0; axis < 2; axis++) {
+    ivec2 step = axis == 0 ? ivec2(1, 0) : ivec2(0, 1);
+    ivec2 a = p - step, b = p + step;
+    if (any(lessThan(a, ivec2(0))) || any(greaterThanEqual(b, size))) continue;
+    float front = max(texelFetch(depths, a, 0).r, texelFetch(depths, b, 0).r);
+    if (depth - front <= 0.004) continue;
+    int group = detailAt(owners, a) >> 4;
+    if (group != 0 && group == (detailAt(owners, b) >> 4)) return true;
+  }
+  return false;
+}
+`;
   const POST_VS = `#version 300 es
 void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
   const POST_FS = `#version 300 es
 precision highp float;
-${paletteConstraints || materialStyles || relighting ? 'precision highp int;' : ''}
+${paletteConstraints || materialStyles || relighting || protectGaps ? 'precision highp int;' : ''}
 uniform sampler2D u_scene, u_depth, u_crispScene, u_crispDepth;
 ${environment ? environmentMediaSource(emitterFog) : ''}
 uniform bool u_paintOn;
@@ -1315,9 +1339,11 @@ vec3 refractContributions(ivec2 p, vec3 color) {
 }` : ''}
 ${PixelLook.glsl}
 ${paletteConstraints ? constraintGlsl(masked) : ''}
+${protectGaps ? detailFlagsGLSL : ''}
 // a hole a pixel across in a surface (its dabs, seen nearly edge on, leave gaps, and what lies under it or far behind shows through, as
 // dark broken lines across the ground): it is drawn as the nearer of the pixels either side of it, which lie on the surface
 ivec2 holeFill(ivec2 p) { ivec2 ms = textureSize(u_depth, 0) - 1; float d0 = texelFetch(u_depth, p, 0).r;
+  ${protectGaps ? 'if (protectedGap(u_idxTex, u_depth, p)) return p;' : ''}
   // (colour per pixel knows which dab is in front at each pixel: a pixel with none, between two that have one, is a hole whatever the
   // depths say: dabs left out of outlines write none)
   if (u_pixOn > 0.5 && dabAt(p) < 0) for (int ax = 0; ax < 2; ax++) { ivec2 o = ax == 0 ? ivec2(0, 1) : ivec2(1, 0); if (dabAt(p + o) >= 0 && dabAt(p - o) >= 0) return p + o; }
@@ -1419,21 +1445,18 @@ ${water ? '  p = waterPixel(p);' : ''}
   const CLEAN_FS = `#version 300 es
 precision highp float; precision highp int;
 uniform sampler2D u_look, u_dep;
-uniform highp sampler2D u_detailOwners, u_detailFlags;
+uniform highp sampler2D u_detailOwners;
 uniform float u_keep, u_lineClean;
-uniform bool u_scopedOnly, u_hasDetailFlags, u_detailWater;
+uniform bool u_scopedOnly, u_hasDetailFlags, u_detailWater, u_protectGaps;
 out vec4 o;
 ${waterPixelGLSL}
+${detailFlagsGLSL}
 bool like(vec3 a, vec3 b) { vec3 d = abs(a - b); return max(d.r, max(d.g, d.b)) < 0.004; }
 vec3 at(ivec2 p) { return texelFetch(u_look, clamp(p, ivec2(0), textureSize(u_look, 0) - 1), 0).rgb; }
 float dp(ivec2 p) { ivec2 q = clamp(p, ivec2(0), textureSize(u_dep, 0) - 1); return texelFetch(u_look, q, 0).a < 0.75 ? 0.5 : texelFetch(u_dep, u_detailWater ? waterPixel(q) : q, 0).r; }
 const ivec2 N8[8] = ivec2[8](ivec2(-1, 0), ivec2(1, 0), ivec2(0, -1), ivec2(0, 1), ivec2(-1, -1), ivec2(1, -1), ivec2(-1, 1), ivec2(1, 1));
 int detailFlags(ivec2 p) {
-  if (!u_hasDetailFlags) return 0;
-  ivec3 owner = ivec3(round(texelFetch(u_detailOwners, u_detailWater ? waterPixel(p) : p, 0).rgb * 255.0));
-  int i = owner.r + owner.g * 256 + owner.b * 65536 - 1;
-  if (i < 0) return 0;
-  return 8 | int(texelFetch(u_detailFlags, ivec2((i >> 2) & 511, i >> 11), 0)[i & 3]);
+  return u_hasDetailFlags ? detailAt(u_detailOwners, u_detailWater ? waterPixel(p) : p) : 0;
 }
 bool protects(int flags) { return (flags & 6) != 0; }
 int likes(ivec2 p, vec3 c, out ivec2 one) { int n = 0; one = p; for (int i = 0; i < 8; i++) if (like(c, at(p + N8[i]))) { n++; one = p + N8[i]; } return n; }
@@ -1442,6 +1465,9 @@ void main(){
   float alpha = texelFetch(u_look, p, 0).a;
   int flags = detailFlags(p);
   if (alpha < 0.75 || (flags & 2) != 0 || (u_scopedOnly && (flags & 1) == 0)) {
+    o = vec4(c0, 1.0); return;
+  }
+  if (u_protectGaps && protectedGap(u_detailOwners, u_dep, u_detailWater ? waterPixel(p) : p)) {
     o = vec4(c0, 1.0); return;
   }
   // outlines: a notch (an empty pixel with things on three or four sides) is filled from them, a bump (a pixel of a thing with

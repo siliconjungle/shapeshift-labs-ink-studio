@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Needle Squid · Ink Studio</title>
+<style>
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #10171e; color: #e6f0ec; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(100% - 36px, 1040px); margin: 44px auto; }
+h1 { margin: 0 0 8px; font-size: clamp(36px, 7vw, 66px); letter-spacing: -.06em; line-height: 1; }
+p { margin: 0; color: #a8bcb8; }
+.panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 26px 0 18px; }
+figure { margin: 0; border: 1px solid #35494e; background: #151f27; }
+figcaption { padding: 12px 14px; font-size: 14px; font-weight: 650; }
+figure:last-child figcaption { color: #a2e6c9; }
+.view { position: relative; background: #101d2a; }
+canvas { display: block; width: 100%; image-rendering: pixelated; }
+canvas.detail { position: absolute; width: 24%; right: 4%; bottom: 6%; border: 1px solid #658178; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; font-size: 14px; }
+.controls label { display: flex; align-items: center; gap: 6px; }
+input { accent-color: #9ceacf; }
+input[type=range] { width: min(32vw, 190px); }
+output { min-width: 4ch; font-variant-numeric: tabular-nums; color: #b5e7d8; }
+#result { margin-top: 16px; display: block; color: #b5e7d8; }
+@media (max-width: 540px) { main { margin-top: 28px; } .panels { gap: 8px; } figcaption { font-size: 12px; padding: 9px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Needle Squid</h1>
+<p>Keep the one-pixel opening between the middle tentacles.</p>
+<div class="panels">
+  <figure><figcaption>Default cleanup</figcaption><div class="view"><canvas id="standard" width="48" height="40" aria-label="Squid with default cleanup"></canvas><canvas id="standard-detail" class="detail" width="9" height="9" aria-label="Magnified default cleanup"></canvas></div></figure>
+  <figure><figcaption>Gap protection</figcaption><div class="view"><canvas id="protected" width="48" height="40" aria-label="Squid with gap protection"></canvas><canvas id="protected-detail" class="detail" width="9" height="9" aria-label="Magnified protected gap"></canvas></div></figure>
+</div>
+<div class="controls">
+  <label>Orbit <input id="orbit" type="range" min="-20" max="20" value="0"><output for="orbit">0°</output></label>
+  <label><input id="clean" type="checkbox" checked> Pixel cleanup</label>
+  <label><input id="foreground" type="checkbox"> Foreground pebble</label>
+</div>
+<span id="result" role="status"></span>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>
