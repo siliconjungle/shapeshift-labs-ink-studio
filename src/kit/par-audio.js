@@ -271,9 +271,14 @@
       run({source,assets}) {return {value:A.musicSession.create(assets).inspect(source)};}
     },
     'music.editSession': {
-      description:'Keep a lane range, pin a performance, or edit a named note, recording or automation knot.',
+      description:'Keep a lane range, capture and comp phrase controls, or edit named notes, recordings and automation.',
       inputs:{source:'record',assets:sessionAssets,edits:scoreRequests},outputs:{value:'record'},
       run({source,assets,edits}) {return {value:A.musicSession.create(assets).edit(source,edits)};}
+    },
+    'music.auditionPhraseTakes': {
+      description:'Audition whole-phrase control takes in context with one score clock, mixer and playback gain.',
+      inputs:{source:'record',settings:'record',assets:sessionAssets},outputs:{audio:'record',report:'record'},
+      run({source,settings,assets},{host}) {return A.musicSession.create(assets,host).auditionPhrase(source,settings);}
     },
     'music.experimentEditSession': {
       description:'Scout a matrix of sound, phrase and cue edits through a shared session and hear diverse finalists in context.',

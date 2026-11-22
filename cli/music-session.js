@@ -4,8 +4,8 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.procedural,{fields,check}=P.musicInstruments;
-  check(file && ['inspect','edit','render','preview','compare','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, edit, render, preview, compare, experiment, keep-experiment, stream, play or handoff');
+  check(file && ['inspect','edit','render','preview','compare','audition-phrase','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, edit, render, preview, compare, audition-phrase, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -59,6 +59,11 @@ module.exports=function command([mode,file,config],opt,kit) {
     const report=writer.report({...result.report,listeningGain:Object.fromEntries(names.map(name=>[name,files[name].gain]))});
     return {...Object.fromEntries(names.map(name=>[name,files[name].target])),report};
   }
+  function auditionPhrase(folder,settings) {
+    const writer=audioWriter(folder), {audio,report}=editor.auditionPhrase(session,settings);
+    const clips=Object.fromEntries(Object.entries(audio).map(([name,pcm])=>[name,writer.audio(pcm,name).target]));
+    return {clips,report:writer.report({...report,files:clips})};
+  }
   function experiment(folder,brief,emitScouts=false) {
     const writer=audioWriter(folder), directory=path.resolve(folder), scouts={};
     const options=emitScouts ? {onScout(id,pcm) {
@@ -71,7 +76,7 @@ module.exports=function command([mode,file,config],opt,kit) {
     return {report,attempted:value.attempted,scoutRenders:value.scoutRenders,contextRenders:value.contextRenders};
   }
   function execute(row) {
-    check(fields(row,['op','out','changes','preview','brief','emitScouts']),'Invalid session command');
+    check(fields(row,['op','out','changes','preview','brief','emitScouts','settings']),'Invalid session command');
     switch (row.op) {
       case 'inspect': {
         const report=editor.inspect(session);
@@ -88,6 +93,7 @@ module.exports=function command([mode,file,config],opt,kit) {
       case 'save': return save(row.out);
       case 'render': return render(row.out);
       case 'compare': return compare(row.out,previous,row.preview);
+      case 'audition-phrase': return auditionPhrase(row.out,row.settings);
       case 'experiment':
         check(typeof (row.emitScouts ?? false)==='boolean','emitScouts must be true or false');
         return experiment(row.out,row.brief,row.emitScouts);
@@ -149,6 +155,7 @@ module.exports=function command([mode,file,config],opt,kit) {
     return result;
   }
   const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(mode==='preview' && {preview:settings}),
+    ...(mode==='audition-phrase' && {settings}),
     ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});
   process.stdout.write(JSON.stringify(result)+'\n');
   return result;

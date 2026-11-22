@@ -1,6 +1,6 @@
 /* Editable score, recording and automation addresses on one session clock. */
 (function (P) {
-  const A=P.musicProduction, M=P.mediaGraph, S=P.mediaGraphSupport;
+  const A=P.musicProduction, M=P.mediaGraph, S=P.mediaGraphSupport, F=P.musicPhrasePerformance;
   const {check,fields,record,id,integer,assetNames}=P.musicInstruments, {clone}=P.data;
   const reference='reference', room='score-room', format='ink-studio/music-edit-session';
   const table=(value,max,label)=>{
@@ -23,7 +23,7 @@
       const key=signature(address), index=used.get(key) ?? 0;
       used.set(key,index+1);
       return {address:[...address,index],beat:row.beat,time:row.time,gate:row.gate,midi:row.midi,
-        velocity:row.velocity,play:row.play,...(row.ties && {ties:row.ties})};
+        velocity:row.velocity,play:row.play,...(row.phrase && {phrase:row.phrase.id}),...(row.ties && {ties:row.ties})};
     });
   }
   function automation(session,strips,processors,time) {
@@ -160,15 +160,82 @@
     }
     return [...updates,selection].sort((a,b)=>a.lane.localeCompare(b.lane) || a.from-b.from);
   }
+  function phraseTake(plan,lane,take,phrase) {
+    return plan.producers.get(take)?.score.tracks[lane]?.phrases.find(entry=>entry.raw.id===phrase);
+  }
+
+  function editPhrase(next,row,plan) {
+    const base=plan.producers.get(reference);
+    const {lane,take}=row;
+    check(id(lane) && id(take) && take!==reference && Object.hasOwn(base.score.tracks,lane) &&
+      plan.pins[lane]!=='all','Choose a named phrase take on an unpinned score lane');
+    const source=plan.producers.get(take) ?? base, original=source.source.tracks[lane];
+    let phrase, use;
+    if (row.op==='record-phrase') {
+      check(fields(row,['op','lane','take','phrase']) && record(row.phrase) && id(row.phrase.id),
+        'Record a performance with its phrase ID and addressed control trace');
+      phrase=row.phrase;
+    } else if (row.op==='phrase-point') {
+      check(fields(row,['op','lane','take','phrase','driver','point','set']) && id(row.phrase) &&
+        id(row.driver) && id(row.point) && (row.set===null || fields(row.set,['beat','value']) &&
+        Object.keys(row.set).length),'Address a driver point and supply its edit or null');
+      const saved=phraseTake(plan,lane,take,row.phrase);
+      check(saved && Object.hasOwn(saved.raw.drivers,row.driver),'Unknown phrase or gesture driver');
+      phrase=clone(saved.raw);
+      const knots=phrase.drivers[row.driver], index=knots.findIndex(point=>point.id===row.point);
+      if (row.set===null) {
+        check(index>=0,'Unknown gesture point');
+        knots.splice(index,1);
+      } else if (index<0) {
+        check(Number.isFinite(row.set.beat) && Number.isFinite(row.set.value),'A new gesture point needs a beat and value');
+        knots.push({id:row.point,...row.set});
+      } else Object.assign(knots[index],row.set);
+      knots.sort((a,b)=>a.beat-b.beat);
+    } else {
+      check(fields(row,['op','lane','take','phrase','sections','activate','fadeSamples']) && id(row.phrase) &&
+        Array.isArray(row.sections) && integer(row.sections.length,2,16) &&
+        typeof (row.activate ?? true)==='boolean','Comp a named phrase from at least two addressed selections');
+      const written=entry=>{
+        const {phrases,...track}=entry.source.tracks[lane];
+        const {definition}=entry.score.arrangement;
+        return signature([track,entry.source.patches[track.patch],{...definition,pins:definition.pins ?? []},
+          entry.source.cueMap,entry.source.grooveMap]);
+      };
+      const originalScore=written(base);
+      const shared=entry=>entry && written(entry)===originalScore;
+      const selected=Array.from(row.sections,pick=>{
+        check(pick && id(pick.take) && pick.take!==take && shared(source) && shared(plan.producers.get(pick.take)),
+          'Phrase comp needs source takes with the same written score, clock and instrument');
+        const phrase=phraseTake(plan,lane,pick.take,row.phrase);
+        check(phrase,'Each selected take needs the named phrase performance');
+        return phrase;
+      });
+      phrase=F.comp(row.phrase,row.sections,selected,base.score.tracks[lane],base.score.clock);
+      if (row.activate!==false) use={lane,take,from:{beat:phrase.from},to:{beat:phrase.to},fadeSamples:row.fadeSamples ?? 0};
+    }
+    next.takes ??= {};
+    const rev=next.takes[take] ??= {};
+    rev.tracks ??= {};
+    rev.tracks[lane]={...rev.tracks[lane],phrases:[...(original.phrases ?? []).filter(row=>row.id!==phrase.id),clone(phrase)]};
+    return use;
+  }
+
+  function saveChoices(choices) {
+    return choices.map(({from,to,...rest})=>({...rest,from:samples(from),to:samples(to)}));
+  }
+
   function edits(session,assets,changes,host) {
     check(Array.isArray(changes) && changes.length<=128,'Supply a list of session edits');
     let plan=compile(session,assets,host);
     const next=clone(session);
     for (const row of changes) {
-      if (row?.op==='comp') {
+      let activation;
+      if (['record-phrase','phrase-point','comp-phrase'].includes(row?.op))
+        activation=editPhrase(next,row,plan);
+      else if (row?.op==='comp') {
         check(fields(row,['op','lane','take','from','to','fadeSamples']),'Invalid comp edit');
         const {op,...selection}=row;
-        next.comp=replace(plan.choices,plan.choice(selection)).map(({from,to,...rest})=>({...rest,from:samples(from),to:samples(to)}));
+        next.comp=saveChoices(replace(plan.choices,plan.choice(selection)));
       } else if (row?.op==='pin') {
         check(fields(row,['op','lane','mode']) && plan.lanes.includes(row.lane) && [null,'all','pitch'].includes(row.mode),
           'Invalid lane pin edit');
@@ -232,7 +299,11 @@
         check(source && get(source,row.take)?.editorial,'Unknown editorial take');
         source[row.take].editorial=M.audioEditorial.revise(source[row.take].editorial,assets,row.edits).value;
       } else check(false,'Unknown session edit');
-      const updated=compile(next,assets,host);
+      let updated=compile(next,assets,host);
+      if (activation) {
+        next.comp=saveChoices(replace(updated.choices,updated.choice(activation)));
+        updated=compile(next,assets,host);
+      }
       // A pitch or complete pin also guards edits to the reference itself.
       const noteTake=row.op==='note' ? row.take : row.op==='keep-notes' ? row.into ?? reference : null;
       if (noteTake===reference && plan.pins[row.lane]) {
@@ -247,5 +318,5 @@
     }
     return P.data.freeze(next);
   }
-  S.musicSessionModel=Object.freeze({compile,edits,instruments,replace,addressed,addressing,reference,room,signature,samples});
+  S.musicSessionModel=Object.freeze({compile,edits,instruments,replace,addressed,addressing,phraseTake,reference,room,signature,samples});
 })(KIT.procedural);

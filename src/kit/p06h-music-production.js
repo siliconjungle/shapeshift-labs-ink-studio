@@ -1,7 +1,7 @@
 /* An arranged cue with independent performance, instrumentation and mix. */
 (function (P) {
   const C=P.musicComposer, H=P.musicHarmony, T=P.takeTime, I=P.musicInstruments, G=P.musicGestures,Q=P.musicCueMap;
-  const N=P.musicNoteClips,R=P.performanceGroove;
+  const N=P.musicNoteClips,R=P.performanceGroove,F=P.musicPhrasePerformance;
   const {record,fields,finite,integer,id,check,clamp,db,hash}=I;
   const epsilon=1e-8;
   const number=(raw,key,fallback,low,high)=>{
@@ -183,7 +183,7 @@
       decay:number(roomSpec,'decay',.42,.05,2),damping:number(roomSpec,'damping',.65,0,1)};
     const tracks=Object.fromEntries(table(source.tracks,8,'production track').map(([name,raw])=>{
       check(name!=='room' && Object.hasOwn(plan.parts,name) &&
-        fields(raw,['patch','gain','pan','highpass','lowpass','send','groove','pad','choke','duck','gestures','clips']) &&
+        fields(raw,['patch','gain','pan','highpass','lowpass','send','groove','pad','choke','duck','gestures','clips','phrases']) &&
         Object.hasOwn(patches,raw.patch) && (raw.choke===undefined || id(raw.choke)), 'Track needs a score part and an instrument patch');
       check(raw.clips===undefined || plan.parts[name].role!=='percussion' ||
         Array.isArray(raw.clips) && raw.clips.every(clip=>clip?.mode==='layer'),
@@ -196,10 +196,12 @@
         highpass:number(raw,'highpass',0,0,4000),lowpass:number(raw,'lowpass',20000,80,24000),
         send:number(raw,'send',0,0,1),choke:raw.choke,duck};
       const patch=patches[raw.patch];
-      return [name,{patch:raw.patch,play:patch.player,external:patch.external,performance:patch.performance,mix,echo:patch.echo,color:patch.color,
+      const compiled={patch:raw.patch,play:patch.player,external:patch.external,performance:patch.performance,mix,echo:patch.echo,color:patch.color,
         gestures:G.score(raw.gestures,patch,plan,clock),
         clips:raw.clips===undefined ? null : N.rows(raw.clips,clock,program,plan.sections.at(-1).end),
-        groove:groove(raw.groove),pad:raw.pad===undefined ? null : pad(raw.pad,plan.sections)}];
+        groove:groove(raw.groove),pad:raw.pad===undefined ? null : pad(raw.pad,plan.sections)};
+      compiled.phrases=F.compile(raw.phrases,plan.sections.at(-1).end,clock,compiled);
+      return [name,compiled];
     }));
     check(Object.keys(tracks).length>0,'A production needs at least one track');
     const names=Object.keys(tracks), end=program.duration;
@@ -217,13 +219,16 @@
         if (row.midi===null || !row.frequency || !row.velocity) continue;
         const beat=round(row.beat), beatStyle=grooveAt(track.groove,row.beat);
         const style=G.perform(track.gestures,row.beat,row.play,track.color), play=style.play;
-        const inherited=performance?.style(name,play.articulation,beat,clock);
+        const phrase=F.at(track.phrases,beat), authoredNote=phrase?.overrides.get(F.noteKey(row));
+        if (authoredNote?.articulation!==undefined) style.play={...play,articulation:authoredNote.articulation};
+        const inherited=performance?.style(name,style.play.articulation,beat,clock);
         const phrasing=ensemble?.style(name,beat,row.midi,clock);
-        const authored=row.time+beatStyle.delay+(play.delay ?? 0)+(inherited?.delay ?? 0)+(phrasing?.delay ?? 0);
+        const authored=row.time+beatStyle.delay+(play.delay ?? 0)+(inherited?.delay ?? 0)+(phrasing?.delay ?? 0)+
+          (authoredNote?.delay ?? 0);
         const proposed=performance?.anchor(row.beat) ? row.time : Math.max(0,authored);
-        const velocity=clamp(row.velocity*beatStyle.accent*style.accent*(inherited?.accent ?? 1)*(phrasing?.accent ?? 1));
+        const velocity=clamp(row.velocity*beatStyle.accent*style.accent*(inherited?.accent ?? 1)*(phrasing?.accent ?? 1)*(authoredNote?.accent ?? 1));
         const audible=proposed<end && !silent(round(proposed)) && velocity>0;
-        drafts.push({row,style,inherited,phrasing,authored,proposed,audible,velocity,adjustment:0});
+        drafts.push({row,style,inherited,phrasing,authored,proposed,audible,velocity,authoredNote,adjustment:0});
       }
       return {drafts,silence,cuts,silent};
     }
@@ -235,8 +240,9 @@
       const {drafts,silence,cuts,silent}=prepared ? prepared[name] : prepare(name);
       const next=(rows,time)=>rows.find(window=>window.startTime>time+epsilon);
       const notes=[], last=new Map(), lastNotes=new Map(), hits=[];
-      for (const {row,style,inherited,phrasing,authored,velocity,adjustment} of drafts) {
-        let play=phrasing?.articulation ? {...style.play,articulation:phrasing.articulation} : style.play;
+      for (const {row,style,inherited,phrasing,authored,velocity,authoredNote,adjustment} of drafts) {
+        const articulation=authoredNote?.articulation ?? phrasing?.articulation;
+        let play=articulation ? {...style.play,articulation} : style.play;
         const proposed=authored+adjustment;
         const time=Math.max(0,performance?.anchor(row.beat) ? row.time : follow ? follow(proposed,row.beat) : proposed);
         const connection=round(time);
@@ -248,7 +254,7 @@
           if (takeGate) shapedGate+=(takeGate.target-shapedGate)*takeGate.strength;
           shapedGate*=phrasing.length;
         }
-        const gate=Math.max(.001,shapedGate);
+        const gate=Math.max(.001,shapedGate*(authoredNote?.gate ?? 1));
         const voice=row.voice ?? 0, retrigger=row.ties ? 1 : play.retrigger ?? 1, fromFrequency=last.get(voice);
         const previous=lastNotes.get(voice);
         const connected=!track.performance && style.legato && velocity>0 && plan.parts[name].role!=='percussion' &&
@@ -273,7 +279,7 @@
             ...(track.performance && !row.clip && row.voice!==undefined && {voice:row.voice}),
             ...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
           const cut=next(cuts,onset)?.startTime;
-          if (cut!==undefined && (track.external || track.performance || onset+track.play.prepare(note,48000,note.gate).duration>cut))
+          if (cut!==undefined && (track.external || track.performance || track.phrases.length || onset+track.play.prepare(note,48000,note.gate).duration>cut))
             note.choke=cut;
           notes.push(note);
           if (r===0 && phrasing?.reference) hits.push({beat:note.beat,midi:note.midi,time:note.time,...phrasing.reference});
@@ -287,7 +293,22 @@
       if (hits.length) references[name]=hits;
     }
     applyChokes(tracks,events);
-    for (const name of names) if (tracks[name].performance) P.musicPhrasing.releases(events[name]);
+    for (const name of names) {
+      const track=tracks[name];
+      if (track.performance) P.musicPhrasing.releases(events[name]);
+      if (!track.phrases.length) continue;
+      const patch=source.patches[track.patch];
+      const release=[patch,...Object.values(patch.instruments ?? {})].some(voice=>voice.type==='sample' &&
+        voice.zones.some(zone=>zone.oneShot!==false)) ? Infinity : 8;
+      let knots=0;
+      for (const note of events[name]) {
+        const phrase=F.at(track.phrases,note.beat);
+        if (phrase) {
+          knots+=F.bind(note,phrase,release);
+          check(knots<=400000,'Phrase expression exceeds its total voice knot budget');
+        }
+      }
+    }
     const locks=cue || performance ? Object.keys(C.locks(written)) : [];
     if (locks.length) {
       const {cueMap,grooveMap,...plain}=source, base=compile(plain,assets);

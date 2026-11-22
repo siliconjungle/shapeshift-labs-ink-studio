@@ -61,6 +61,9 @@ const rehearsalTrace={format:'ink-studio/adaptive-score-trace',version:1,id:'sho
   intents:[{kind:'music-transition',from:'wait',to:'reveal',time:.7}]};
 const rehearsalEdit={id:'tail',transitions:[{from:'wait',to:'reveal',tail:.1}]};
 const editSession={format:'ink-studio/music-edit-session',version:1,id:'bench',sampleRate:8000,production};
+const phraseCapture={op:'music.editSession',inputs:{source:editSession,edits:[{op:'record-phrase',lane:'lead',take:'soft',
+  phrase:{id:'opening',from:0,to:2,drivers:{effort:[{id:'begin',beat:0,value:.2},{id:'lift',beat:1,value:.85}]},
+    mapping:{amplitude:{base:.06,from:{effort:.9}},pitchCents:{base:-21,from:{effort:24}}}}}]}};
 const sessionExperiment={op:'music.experimentEditSession',inputs:{source:editSession,brief:{
   focus:{from:{beat:0},to:{beat:2}},scout:{from:{beat:0},to:{beat:1}},roles:{hook:'lead'},
   axes:{sound:[{id:'lighter',revision:{patches:{pluck:{type:'fm',index:.34}}}}]}
@@ -551,6 +554,8 @@ const specifications = {
   'music.handoffEditSession': {inputs:{source:editSession}},
   'music.inspectEditSession': {inputs:{source:editSession}},
   'music.editSession': {inputs:{source:editSession,edits:[{op:'pin',lane:'lead',mode:'pitch'}]}},
+  'music.auditionPhraseTakes': {nodes:{capture:phraseCapture},inputs:{source:link('capture'),
+    settings:{lane:'lead',phrase:'opening',takes:['soft']}}},
   'music.experimentEditSession': {inputs:sessionExperiment.inputs},
   'music.keepSessionExperiment': {nodes:{trial:sessionExperiment},inputs:{source:editSession,report:link('trial'),
     choice:{candidate:'take-001',reason:'Keep the lighter onset for this example.'}}},

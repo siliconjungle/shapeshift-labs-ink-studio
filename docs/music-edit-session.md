@@ -208,3 +208,100 @@ the `X-Ink-Session` header. `POST /command` takes an `op` of `state`,
 The browser usually owns the audio listener. A headless player can instead
 use `POST /audio` with `{frames,client}`. Its response is little-endian
 interleaved float32 stereo with the chunk address in `X-Ink-Transport`.
+
+## Capture and comp phrase performances
+
+A phrase take stores continuous control traces on the score clock. One
+gesture can drive several sound parameters at once. For example, increasing
+`effort` can open the amplitude and breath while reducing damping. Each
+driver has addressed knots with values from zero to one. Knot positions,
+phrase bounds, and comp sections are absolute beats. Ink interpolates
+between their times on the score clock, including over note boundaries.
+
+```json
+[
+  {
+    "op": "record-phrase",
+    "lane": "reed",
+    "take": "lean",
+    "phrase": {
+      "id": "call",
+      "from": 4,
+      "to": 12,
+      "drivers": {
+        "effort": [
+          {"id": "gather", "beat": 4, "value": 0.23},
+          {"id": "lean-in", "beat": 6, "value": 0.91},
+          {"id": "let-go", "beat": 12, "value": 0.09}
+        ]
+      },
+      "mapping": {
+        "pressure": {"base": 0.1, "from": {"effort": 0.88}},
+        "breath": {"base": 0.15, "from": {"effort": 0.65}},
+        "pitchCents": {"base": -34, "from": {"effort": 55}}
+      },
+      "notes": [
+        {"clip": "line", "voice": "lead", "note": "answer", "delay": 0.022, "gate": 1.35}
+      ]
+    }
+  }
+]
+```
+
+A phrase can map pressure, breath, damping, contact, cutoff, roughness,
+pitch, gain, and amplitude. Pressure, breath, damping, contact, cutoff
+and roughness override those controls when present. Pitch bends and dB
+offsets add to per-note curves. Amplitudes multiply. Set the phrase bounds
+before the earliest performed attack and after its release. A note that starts within the phrase
+continues to read the same controls during its release. Optional addressed
+note edits allow delay in seconds, gate and accent multipliers, and
+articulation. The written notes are still the session's notes. Use a
+native instrument for continuous phrase control.
+
+```sh
+ink-studio music session edit cue.json capture.json --out takes.json
+ink-studio music session audition-phrase takes.json listen.json --out review
+```
+
+Use a listening request such as
+`{"lane":"reed","phrase":"call","takes":["lean","carry"]}`. Optional
+`from` and `to` select the preview context with normal mixer addresses.
+The alternatives use one desk and share a playback gain. Set
+`reference: false` to hear only the requested takes.
+
+```json
+[
+  {
+    "op": "comp-phrase",
+    "lane": "reed",
+    "phrase": "call",
+    "take": "kept",
+    "sections": [
+      {"take": "lean", "from": 4, "to": 9.25},
+      {"take": "carry", "from": 9.25, "to": 12, "blend": 0.16}
+    ]
+  }
+]
+```
+
+The source takes share the same score, instrument and mapping. Ink
+copies each selected slice onto editable driver lanes in one new
+performance. A blend ramps the controls from the outgoing value into the
+incoming take. The attack picks its delay, accent and articulation at the
+written onset. The gate comes from the take at the written note end.
+A held note can cross the splice with its oscillator and room still
+running. The source takes and the comp have independent editable knots.
+The comp is selected on the track by default. Set `activate: false` to
+store it as an alternate take.
+
+Use `record-phrase`, `phrase-point`, and `comp-phrase` with the regular
+editor, graph edit node, or session stream. For an individual knot,
+use `{op:"phrase-point",lane,take,phrase,driver,point,set:{value}}`.
+Set a `beat` to move it, give a new point both fields to insert it, or use
+`set:null` to remove it. Inspect shows the original and combined controls
+under each lane's `performances`. Listen through
+`editor.auditionPhrase(session, settings)` or `music.auditionPhraseTakes`.
+
+Run `node examples/music-production/phrase-performance.cjs output` for
+the Split Reed played three ways and a comp that carries the held note
+through a bass pickup. [Gesture mapping research](https://nime.org/proc/nime2002_hunt/) · [Ableton comping](https://www.ableton.com/en/manual/comping/)

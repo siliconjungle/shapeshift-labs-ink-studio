@@ -22,18 +22,7 @@ const mix=(...inputs)=>({type:'mix',inputs});
 const ring=(input,decay,modes)=>({type:'resonator',input,decay,
   modes:modes.map(([ratio,gain,decay,shape])=>({ratio,gain,decay,...(shape && {shape})}))});
 const graph=(output,tail,nodes,extra={})=>({type:'graph',output,tail,nodes,...extra});
-const reed=graph('out',.44,{
-  register:curve([[0,.968],[.29,.968],[.36,1.4663],[.63,1.4663],[.71,1.15721],[1,1.15721]]),
-  rasp:osc('sine',{ratio:{base:.06448,from:{register:2.015}}}),
-  color:osc('sine',{ratio:{base:.032,from:{register:1}},phaseInput:'rasp',
-    index:{base:.026,by:{pressure:.075}}}),
-  air:noise, throat:filtered('air','bandpass',{base:990,by:{pressure:1380,breath:1700}},1.75),
-  hiss:gain('throat',{base:.018,by:{breath:.14,damping:.072}}),
-  sum:mix('color','hiss'), env:shape(.047,.28,.76,.36), out:move('sum','env',.76)
-},{
-  controls:{pressure:.57,breath:.31,damping:.18},
-  articulations:{steady:{nodes:{rasp:{ratio:2.015},color:{ratio:1}}}}
-});
+const reed=require('./split-reed.cjs');
 const plate=graph('out',.76,{
   grit:noise, friction:filtered('grit','bandpass',{base:740,by:{contact:1100}},1.3),
   edge:curve([[0,0],[.08,.23],[.29,.78],[.48,.72],[.72,.25],[1,.10]]),

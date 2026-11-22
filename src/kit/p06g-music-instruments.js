@@ -245,9 +245,9 @@
     }};
   }
 
-  function express(player,note,rate,gate) {
+  function express(player,note,rate,gate,phraseOffset=0) {
     const authoredGate=(note.gate ?? gate)+(note.start===undefined ? 0 : note.time-note.start);
-    const expression=P.musicNoteExpression.compile(note.play.curves,Math.max(gate,authoredGate),rate);
+    const expression=P.musicNoteExpression.compile(note.play.curves,Math.max(gate,authoredGate),rate,note.phrase,phraseOffset);
     const body=player.prepare(expression ? {...note,expression} : note,rate,gate);
     const fadeIn=note.performance?.fadeIn;
     if (!expression?.gain && !expression?.filter && !expression?.roughness && !fadeIn) return body;
@@ -276,7 +276,7 @@
       if (!release || note.suppressRelease || (note.choke ?? Infinity)<=start+gate+1e-8) return body;
       const tail=express(player,{...note,performance:null,gate:.075,start:undefined,roundRobin:release.roundRobin,
         zoneVelocity:note.velocity,velocity:clamp(note.velocity*release.level),
-        play:{articulation:release.articulation,curves:release.curves}},rate,.075);
+        play:{articulation:release.articulation,curves:release.curves}},rate,.075,gate);
       if (!tail.duration) return body;
       const stereo=body.stereo || tail.stereo, releaseFrame=Math.ceil(gate*rate-1e-7);
       let bodyFrame=-1, tailFrame=-1, dry=0, off=0;

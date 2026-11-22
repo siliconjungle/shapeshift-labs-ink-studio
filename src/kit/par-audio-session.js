@@ -2,7 +2,7 @@
 (function (P) {
   const M=P.mediaGraph,S=P.mediaGraphSupport,A=P.musicProduction;
   const {check,fields,record,id,integer}=P.musicInstruments;
-  const {compile,edits,replace,addressed,reference,room,signature,samples}=S.musicSessionModel;
+  const {compile,edits,replace,addressed,phraseTake,reference,room,signature,samples}=S.musicSessionModel;
   const cacheBudget=160*1024*1024, pcmBudget=32e6;
   const audio=(sampleRate,samples)=>({sampleRate,channels:2,samples});
   const byteSize=pcm=>pcm?.samples.byteLength ?? 0;
@@ -111,8 +111,10 @@
         lanes:Object.fromEntries(plan.lanes.map(lane=>{
           const row=plan.audio.get(lane);
           if (row) return [lane,{kind:'audio',take:row.take,takes:Object.fromEntries(row.takes)}];
+          const performances=Object.fromEntries([...plan.producers].flatMap(([take,{source}])=>
+            source.tracks[lane].phrases?.length ? [[take,source.tracks[lane].phrases]] : []));
           return [lane,{kind:'score',take:reference,takes:Object.fromEntries([...plan.producers].map(([take,{score}])=>
-            [take,addressed(score,lane)]))}];
+            [take,addressed(score,lane)])),...(Object.keys(performances).length && {performances})}];
         })),automation:session.automation ?? {}};
     }
     function playback(plan,preview) {
@@ -252,6 +254,36 @@
     function difference(a,b) {
       return audio(a.sampleRate,Float64Array.from(a.samples,(sample,i)=>sample-b.samples[i]));
     }
+    function auditionPhrase(session,settings) {
+      check(fields(settings,['lane','phrase','takes','from','to','reference']) && id(settings.lane) && id(settings.phrase) &&
+        typeof (settings.reference ?? true)==='boolean','Choose a score lane and recorded phrase to audition');
+      const plan=compile(session,assets,host), {lane,phrase}=settings;
+      const names=settings.takes ?? [...plan.producers.keys()].filter(take=>take!==reference && phraseTake(plan,lane,take,phrase));
+      check(Array.isArray(names) && integer(names.length,1,8) && new Set(names).size===names.length &&
+        Array.from(names).every(take=>id(take) && take!==reference && phraseTake(plan,lane,take,phrase)),
+        'Choose up to eight takes of the named phrase');
+      const anchor=phraseTake(plan,lane,names[0],phrase).raw;
+      check(names.every(take=>{
+        const row=phraseTake(plan,lane,take,phrase).raw;
+        return row.from===anchor.from && row.to===anchor.to;
+      }), 'Phrase auditions need a common score range');
+      const from={beat:anchor.from},to={beat:anchor.to}, preview={from:settings.from ?? from,to:settings.to ?? to};
+      const window=plan.range(preview.from,preview.to);
+      const all=[...(settings.reference===false ? [] : [reference]),...names];
+      check(window.to-window.from<=30*plan.rate && (window.to-window.from)*all.length<=9e6,
+        'Phrase audition exceeds its listening budget');
+      const prints=all.map(take=>{
+        const choice=plan.choice({lane,take,from,to});
+        const result=renderPlan({...plan,choices:replace(plan.choices,choice)},preview);
+        return {take,value:result.value,headroom:result.report.mixer.headroom ?? 1};
+      });
+      const gain=Math.min(...prints.map(row=>row.headroom));
+      return {audio:Object.fromEntries(prints.map(({take,value,headroom})=>[take,headroom===gain ? value : {
+        ...value,samples:value.samples.map(value=>value*gain/headroom)}])),
+        report:{lane,phrase,takes:all,sampleRate:plan.rate,firstSample:window.from,endSample:window.to,
+          phraseRange:plan.range(from,to),gain}};
+    }
+
     function compare(before,after,preview) {
       check(preview!==undefined,'Choose a score range to compare');
       const first=render(before,preview), second=render(after,preview);
@@ -304,7 +336,7 @@
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
       {assets,edit,prepareLive,materialize});
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
-    return Object.freeze({inspect,edit,render,compare,handoff,experiment:experiments.run,keepExperiment:experiments.keep,
+    return Object.freeze({inspect,edit,render,compare,auditionPhrase,handoff,experiment:experiments.run,keepExperiment:experiments.keep,
       open,prepareTransport,prepareLive,openPreparedTransport});
   }
   M.musicSession=Object.freeze({create});

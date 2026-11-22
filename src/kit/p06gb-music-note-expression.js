@@ -38,23 +38,74 @@
     }
     return {value,max:Math.max(...points.map(row=>row[1]))};
   }
-  function compile(raw,gate,rate) {
-    if (!raw) return null;
-    const pitch=raw.pitchCents && curve(raw.pitchCents,gate,n=>2**(n/1200));
-    const amp=raw.gainDb && curve(raw.gainDb,gate,n=>n);
-    const amplitude=raw.amplitude && curve(raw.amplitude,gate,n=>n);
-    const roughness=raw.roughness && curve(raw.roughness,gate,n=>n);
-    const filter=raw.cutoffHz && curve(raw.cutoffHz,gate,n=>Math.log(Math.min(n,rate*.47)));
-    const motion=Object.fromEntries(names.filter(name=>raw[name]).map(name=>{
-      const lane=curve(raw[name],gate,n=>n);
-      return [name,t=>lane.value(t)];
-    }));
-    return {controls:motion,gain:(amp || amplitude) && (t=>(amplitude?.value(t) ?? 1)*10**((amp?.value(t) ?? 0)/20)),
-      roughness:roughness && (t=>roughness.value(t)),
+  function performedPitch(raw) {
+    // Integrate an exponential in each cents-linear segment. Inserting a
+    // comp boundary on the same slope preserves the oscillator's phase.
+    const ratio=cents=>2**(cents/1200), slope=Math.LN2/1200;
+    const clamp=value=>Math.max(-1200,Math.min(1200,value));
+    const points=[];
+    for (const [i,[at,cents]] of raw.entries()) {
+      const before=raw[i-1];
+      if (before) {
+        const [time,value]=before;
+        for (const bound of (cents<value ? [1200,-1200] : [-1200,1200])) {
+          if (bound>Math.min(cents,value) && bound<Math.max(cents,value))
+            points.push([time+(at-time)*(bound-value)/(cents-value),bound]);
+        }
+      }
+      points.push([at,clamp(cents)]);
+    }
+    const measure=(row,time)=>row[1]*(Math.abs(row[2])<1e-12 ? time : Math.expm1(row[2]*time)/row[2]);
+    let sum=0;
+    const parts=points.map(([at,cents],i)=>{
+      const next=points[i+1];
+      const row=[at,ratio(cents),next ? slope*(next[1]-cents)/(next[0]-at) : 0,sum];
+      if (next) sum+=measure(row,next[0]-at);
+      return row;
+    });
+    return {max:Math.max(...parts.map(row=>row[1])),value(time,integral) {
+      let low=0,high=parts.length;
+      while (high-low>1) {
+        const mid=(low+high)>>>1;
+        if (parts[mid][0]<=time) low=mid; else high=mid;
+      }
+      const row=parts[low], elapsed=Math.max(0,time-row[0]);
+      return integral ? row[3]+measure(row,elapsed) : row[1]*Math.exp(row[2]*elapsed);
+    }};
+  }
+
+  function compile(raw,gate,rate,phrase,offset=0) {
+    if (!raw && !phrase) return null;
+    const note=raw ?? {}, lanes=phrase?.lanes ?? {};
+    const control=(name,convert=n=>n)=>{
+      const authored=note[name] && curve(note[name],gate,convert);
+      const performed=lanes[name] && curve(lanes[name],1,convert);
+      return performed ? t=>performed.value(t+offset) : authored && (t=>authored.value(t));
+    };
+    const ratio=n=>2**(n/1200);
+    let pitch=note.pitchCents && curve(note.pitchCents,gate,ratio);
+    if (lanes.pitchCents) {
+      const base=note.pitchCents && curve(note.pitchCents,gate,n=>n);
+      const other=curve(lanes.pitchCents,1,n=>n);
+      const times=[...new Set([0,...(note.pitchCents ?? []).map(([at])=>at*gate),
+        ...lanes.pitchCents.map(([at])=>at-offset).filter(at=>at>0)])].sort((a,b)=>a-b);
+      pitch=performedPitch(times.map(at=>[at,(base?.value(at) ?? 0)+other.value(at+offset)]));
+    }
+    const amp=note.gainDb && curve(note.gainDb,gate,n=>n);
+    const performedAmp=lanes.gainDb && curve(lanes.gainDb,1,n=>n);
+    const amplitude=note.amplitude && curve(note.amplitude,gate,n=>n);
+    const performedAmplitude=lanes.amplitude && curve(lanes.amplitude,1,n=>n);
+    const roughness=control('roughness');
+    const filter=control('cutoffHz',n=>Math.log(Math.min(n,rate*.47)));
+    const motion=Object.fromEntries(names.filter(name=>note[name] || lanes[name]).map(name=>[name,control(name)]));
+    return {controls:motion,gain:(amp || amplitude || performedAmp || performedAmplitude) && (t=>
+      (amplitude?.value(t) ?? 1)*(performedAmplitude?.value(t+offset) ?? 1)*
+      10**(((amp?.value(t) ?? 0)+(performedAmp?.value(t+offset) ?? 0))/20)),
+      roughness,
       pitchTime:pitch && (t=>pitch.value(t,true)),
       pitchRatio:pitch && (t=>pitch.value(t)),
       pitchMax:pitch?.max ?? 1,
-      filter:filter && (t=>1-Math.exp(-2*Math.PI*Math.exp(filter.value(t))/rate))};
+      filter:filter && (t=>1-Math.exp(-2*Math.PI*Math.exp(filter(t))/rate))};
   }
   function duration(travel,span) {
     if (!travel || span===0) return span;
