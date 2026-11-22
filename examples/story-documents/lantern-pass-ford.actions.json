@@ -1,0 +1,7 @@
+[
+  { "tick": 3, "action": "world/event", "args": { "kind": "survey-reported", "questlet": "ford-report", "finding": "clear" } },
+  { "tick": 8, "action": "world/story-choose", "args": {
+    "document": "lantern-pass", "story": "corridor", "stage": "prepare-ford", "visit": 2, "branch": "dispatch", "reason": "check-convoy-readiness"
+  } },
+  { "tick": 11, "action": "world/event", "args": { "kind": "survey-reported", "questlet": "ridge-report", "finding": "blocked" } }
+]

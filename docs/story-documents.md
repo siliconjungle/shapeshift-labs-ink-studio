@@ -22,7 +22,7 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 | Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map |
 | Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
 | Role | `kind` | `ref` to a document reference of the same kind |
-| Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled |
+| Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled, `children` on a progressing arc |
 | Objective | `title` | `summary`, `refs`, `optional`, `evidence`, `type` with its `params` |
 | Outcome | `title` | `summary`, `refs`, `status` when stage progression is enabled |
 | Reference | `kind`, `id` | |
@@ -244,6 +244,51 @@ node cli/ink-studio.js sim fork beacon-start.json --ticks 24 --actions examples/
 node cli/ink-studio.js sim fork beacon-start.json --ticks 24 --actions examples/story-documents/highwater-beacon-breach.actions.json --record breach.run.json
 node cli/ink-studio.js probe ridge.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe breach.run.json --field world/story-lifecycle
+```
+
+## Nest questlets in an arc
+
+An arc with `"lifecycle": {"progression": true}` can open questlets from the same document. Add `children.open` to any stage that opens them. Each questlet needs its own `lifecycle`, takes its start from that arc, and follows its authored automatic or manual activation policy. An arc can open a questlet from more than one stage. Each run keeps one instance of the questlet, so a later visit reuses its existing state and outcome.
+
+```json
+{
+  "title": "Survey the two routes",
+  "children": {
+    "open": ["ford-report", "ridge-report"],
+    "wait": { "any": ["ford-report", "ridge-report"] }
+  },
+  "next": {
+    "use-ford": {
+      "stage": "prepare-ford",
+      "auto": true,
+      "requiresChildren": { "ford-report": { "outcome": "clear" } }
+    },
+    "use-ridge": {
+      "stage": "prepare-ridge",
+      "auto": true,
+      "requiresChildren": { "ridge-report": { "outcome": "clear" } }
+    }
+  }
+}
+```
+
+- `children.wait.any` waits for at least one listed questlet to reach a terminal state. `children.wait.all` waits for every listed questlet. A stage can wait on children opened on an earlier visit.
+- The terminal states are `completed`, `failed`, `withdrawn`, and `expired`. An absolute deadline can expire a questlet before it opens. An unfinished questlet continues independently after the arc moves on or ends.
+- `requiresChildren` on a branch checks named outcomes, terminal statuses, or both. For example, require `{"status":"completed","outcome":"clear"}` on a success route or use `{"status":"expired"}` on a fallback. The wait group and existing objective requirements also apply.
+- With `"auto": true`, Ink checks that branch after the tick's story commands. An active arc can take one automatic branch per tick, starting after its stage's entry tick. When several are eligible, the first branch ID in lexical order wins. An automatic branch needs a child wait or outcome condition. Manual `world/story-choose` commands use the same gates and report pending or mismatched child IDs when blocked.
+
+In the `world/story-lifecycle` probe, `flow.current.children` shows the wait group's readiness and live child statuses. Each opened questlet stores its parent arc, stage, visit, and opening tick in `parent`. A closed arc visit and its `story-branch-chosen` event capture the relevant terminal child results observed at the decision. The snapshots stay fixed when a sibling resolves later. Checkpoints and replays preserve those links and snapshots.
+
+### Fork The Lantern Pass
+
+[The Lantern Pass](../examples/story-documents/lantern-pass.world.json) opens two survey questlets. One fork takes the ford as soon as its report clears. The other receives a blocked ford report and waits for the ridge to clear. Each route opens a supply delivery and a beacon check. Dispatch waits for both surveys, the delivery, and the beacon result.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/lantern-pass.world.json --ticks 2 --checkpoint pass-start.json
+node cli/ink-studio.js sim fork pass-start.json --ticks 14 --actions examples/story-documents/lantern-pass-ford.actions.json --record ford.run.json
+node cli/ink-studio.js sim fork pass-start.json --ticks 14 --actions examples/story-documents/lantern-pass-ridge.actions.json --record ridge.run.json
+node cli/ink-studio.js probe ford.run.json --ticks 11 --field world/story-lifecycle
+node cli/ink-studio.js probe ridge.run.json --field world/story-lifecycle
 ```
 
 ## Replay the demos

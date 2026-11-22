@@ -1,0 +1,7 @@
+[
+  { "tick": 3, "action": "world/event", "args": { "kind": "survey-reported", "questlet": "ford-report", "finding": "blocked" } },
+  { "tick": 5, "action": "world/story-choose", "args": {
+    "document": "lantern-pass", "story": "corridor", "stage": "survey", "visit": 1, "branch": "use-ford", "reason": "check-closed-ford"
+  } },
+  { "tick": 5, "action": "world/event", "args": { "kind": "survey-reported", "questlet": "ridge-report", "finding": "clear" } }
+]

@@ -18,7 +18,7 @@
     (to === 'completed' || to === 'failed') && typeof outcome === 'string' && own(def.outcomes, outcome);
 
   function compile(documents, world, systems) {
-    const entries = new Map();
+    const entries = new Map(), parents = new Map();
     const compileEvidence = W.storyEvidence.compiler(world, systems);
     for (const document of documents) for (const [story, definition] of Object.entries(document.stories)) {
       if (!definition.lifecycle) continue;
@@ -26,12 +26,19 @@
       const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry };
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
       const key = keyOf(info), stages = definition.lifecycle.progression ? definition.stages : undefined;
+      const automatic = new Map();
+      for (const [stage, spec] of Object.entries(stages ?? {})) {
+        const branches = Object.keys(spec.next).filter(branch => spec.next[branch].auto).sort();
+        if (branches.length) automatic.set(stage, branches);
+        for (const child of spec.children?.open ?? []) parents.set(document.id + '/' + child, key);
+      }
       entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
-        stages, evidence: compileEvidence(stages, key, document.objectiveTypes),
+        stages, automatic, evidence: compileEvidence(stages, key, document.objectiveTypes),
         clock: W.storyDeadlines.compile(definition.lifecycle, world.dt) });
     }
     if (!entries.size) return null;
     const order = [...entries.keys()].sort();
+    const autoOrder = order.filter(key => entries.get(key).automatic.size);
 
     function checkAction(action, args) {
       const extra = action === 'story-transition' ? ['to', 'outcome'] :
@@ -77,7 +84,7 @@
           check(W.storyDeadlines.valid(def.clock, row, tick), message);
           continue;
         }
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit), message);
         let previous;
@@ -93,17 +100,37 @@
         const cutOffBeforeOffer = previous.from === null && previous.to === 'expired';
         check(W.storyDeadlines.valid(def.clock, row, tick) &&
           (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
+      }
+      for (const [key, def] of entries) {
+        const row = state[key];
+        if (!row) continue;
+        const owner = parents.get(key), first = row.transitions[0], previous = row.transitions.at(-1);
+        const message = 'Invalid saved story lifecycle for ' + key;
+        if (owner && !(first.from === null && first.to === 'expired')) {
+          const parent = row.parent, parentDef = entries.get(owner), route = state[owner]?.flow;
+          check(fields(parent, ['document', 'story', 'stage', 'visit', 'tick']) &&
+            parent.document === parentDef.info.document && parent.story === parentDef.info.story &&
+            Number.isSafeInteger(parent.visit) && parent.visit > 0 &&
+            typeof parent.stage === 'string' && own(parentDef.stages, parent.stage) &&
+            parentDef.stages[parent.stage].children?.open?.includes(def.info.story) &&
+            Number.isSafeInteger(parent.tick) && parent.tick > 0 && parent.tick <= first.tick &&
+            (row.dropped || parent.tick === first.tick && first.reason === 'parent-stage-opened') &&
+            Array.isArray(route?.route), message);
+          const opening = route.current?.visit === parent.visit ? route.current : route.route.find(visit => visit?.visit === parent.visit);
+          check(opening ? opening.stage === parent.stage && opening.enteredAt === parent.tick : parent.visit <= route.dropped, message);
+        } else check(row.parent === undefined, message);
         const hasFlow = Boolean(def.stages && row.transitions.some(change => change.to === 'active' || change.from === 'active' || change.from === 'suspended'));
         if (hasFlow) {
           const activated = row.transitions.find(change => change.from === 'available' && change.to === 'active');
-          W.storyStages.validate(row.flow,def,previous,previous.deadline ? previous.tick - 1 : tick,activated?.tick,reasonOK,message);
+          W.storyStages.validate(row.flow,def,previous,previous.deadline ? previous.tick - 1 : tick,activated?.tick,
+            reasonOK,message,id => state[def.info.document + '/' + id]);
         }
         else check(!own(row, 'flow'), message);
       }
     }
 
     function advance(previous, starts, commands, tick, emit, events, query) {
-      let state = previous;
+      let state = previous, queuedOpens = [];
       const sourceLength = events.length;
       let indexed;
       const eventsOf = kind => (indexed ??= W.storyEvidence.index(events, sourceLength)).get(kind) ?? [];
@@ -117,12 +144,29 @@
         if (state === previous) state = { ...previous };
         state[key] = row;
       }
-      function enterStage(publish, info, flow, reason) {
-        const { stage, visit } = flow.current;
-        publish('story-stage-entered', { ...info, stage, visit, reason });
+      function openChildren(ids, parent, publish) {
+        for (const id of ids) {
+          const child = parent.document + '/' + id;
+          if (state[child] !== null) continue;
+          transition(child, 'available', 'parent-stage-opened', undefined, { publish, parent });
+          if (entries.get(child).activation === 'automatic')
+            transition(child, 'active', 'automatic-activation', undefined, { publish });
+        }
       }
-      function transition(key, to, reason, outcome, { publish = emit, source = state[key]?.source, deadline } = {}) {
-        const prior = state[key], from = statusOf(prior), { info, stages, clock } = entries.get(key);
+      function enterStage(publish, def, flow, reason) {
+        const { stage, visit } = flow.current;
+        const { info } = def;
+        publish('story-stage-entered', { ...info, stage, visit, reason });
+        const ids = def.stages[stage].children?.open;
+        if (ids) {
+          const parent = { document: info.document, story: info.story, stage, visit, tick };
+          if (queuedOpens) queuedOpens.push({ ids, parent, publish });
+          else openChildren(ids, parent, publish);
+        }
+      }
+      function transition(key, to, reason, outcome, options = {}) {
+        const prior = state[key], from = statusOf(prior), def = entries.get(key), { info, stages, clock } = def;
+        const { publish = emit, source = prior?.source, deadline, parent = prior?.parent } = options;
         const started = from === 'available' && to === 'active';
         const flow = started && stages ? W.storyStages.initial(info.stage,tick) :
           to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
@@ -131,14 +175,28 @@
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
         save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
-          ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }) });
+          ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }), ...(parent && {parent}) });
         const stage = flow?.current ?? flow?.route.at(-1);
-        publish('story-transition', { ...info, ...change, ...source, ...(stage && { stage:stage.stage, visit:stage.visit }) });
+        const link = parent ? { parent } : {};
+        publish('story-transition', { ...info, ...change, ...source, ...link, ...(stage && { stage:stage.stage, visit:stage.visit }) });
         if (started) {
-          publish('story-started', { ...info, ...source });
-          if (flow) enterStage(publish,info,flow,reason);
+          publish('story-started', { ...info, ...source, ...link });
+          if (flow) enterStage(publish,def,flow,reason);
         }
       }
+      function progress(key, def, row, result, publish) {
+        const { stage, visit } = row.flow.current, step = { ...def.info, stage, visit };
+        save(key, { ...row, flow:result.flow });
+        if (result.objective) {
+          publish('story-objective-resolved', { ...step, ...result.objective });
+          return;
+        }
+        const { target, reason } = result.branch;
+        publish('story-branch-chosen', { ...step, ...result.branch });
+        if (target.outcome === undefined) enterStage(publish,def,result.flow,reason);
+        else transition(key,def.outcomes[target.outcome].status ?? 'completed',reason,target.outcome,{ publish });
+      }
+      const readChild = def => id => state[def.info.document + '/' + id];
       for (const key of order) {
         const def = entries.get(key), before = previous[key], source = matched.get(key), status = statusOf(before);
         const { row: prior, expired } = W.storyDeadlines.advance(def.clock, before, status, tick);
@@ -158,32 +216,30 @@
             }
           }
         }
-        if (prior === null && (!def.triggers || source)) {
+        if (prior === null && !parents.has(key) && (!def.triggers || source)) {
           transition(key, 'available', source ? 'trigger-matched' : 'authored-offer', undefined, { source });
           if (def.activation === 'automatic') transition(key, 'active', 'automatic-activation');
         }
       }
+      const opens = queuedOpens;
+      queuedOpens = null;
+      for (const { ids, parent, publish } of opens) openChildren(ids, parent, publish);
       for (const { action, args, publish } of commands) {
         const { to, reason, outcome } = args, key = keyOf(args), from = statusOf(state[key]);
         if (action !== 'story-transition') {
           const def = entries.get(key), row = state[key];
-          const result = from === 'active' ? W.storyStages.advance(action,def,row.flow,args,tick) : { rejected:'story-not-active' };
+          const result = from === 'active' ? W.storyStages.advance(action,def,row.flow,args,tick,readChild(def)) : { rejected:'story-not-active' };
           const step = { ...def.info, stage:args.stage, visit:args.visit };
           if (result.rejected) {
             publish('story-progress-rejected', { ...step, action, reason:result.rejected, requestedReason:reason,
               ...(args.branch !== undefined && { branch:args.branch }), ...(args.objective !== undefined && { objective:args.objective }),
               ...(args.option !== undefined && { option:args.option }),
-              ...(result.pending && { pending:result.pending }) });
+              ...(result.pending && { pending:result.pending }),
+              ...(result.pendingChildren && { pendingChildren:result.pendingChildren }),
+              ...(result.mismatchedChildren && { mismatchedChildren:result.mismatchedChildren }) });
             continue;
           }
-          save(key, { ...row, flow:result.flow });
-          if (result.objective) publish('story-objective-resolved', { ...step, ...result.objective });
-          else {
-            publish('story-branch-chosen', { ...step, ...result.branch });
-            const end = result.branch.target.outcome;
-            if (end === undefined) enterStage(publish,def.info,result.flow,reason);
-            else transition(key,def.outcomes[end].status ?? 'completed',reason,end,{ publish });
-          }
+          progress(key,def,row,result,publish);
           continue;
         }
         if (!allowed(from, to)) {
@@ -192,19 +248,37 @@
         }
         transition(key, to, reason, outcome, { publish });
       }
+      for (const key of autoOrder) {
+        const def = entries.get(key), row = state[key], current = row?.flow?.current;
+        if (statusOf(row) !== 'active' || !current || current.enteredAt === tick) continue;
+        const { stage, visit } = current;
+        for (const branch of def.automatic.get(stage) ?? []) {
+          const result = W.storyStages.advance('story-choose',def,row.flow,
+            { stage, visit, branch, reason:'child-results-matched' },tick,readChild(def));
+          if (!result.rejected) {
+            progress(key,def,row,result,emit);
+            break;
+          }
+        }
+      }
       return freeze(state);
     }
 
     return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction };
   }
 
-  function inspect(state, at) {
+  function inspect(state, at, documents) {
+    const stories = new Map(documents?.map(document => [document.id, document.stories]) ?? []);
     return Object.fromEntries(Object.entries(state).map(([key, row]) => {
       if (!row) return [key, null];
       const end = row.transitions.at(-1), { tick, to, reason, outcome, deadline } = end;
+      const [document, story] = key.split('/'), current = row.flow?.current;
+      const spec = current && stories.get(document)?.[story]?.stages[current.stage];
+      const children = spec && W.storyChildren.inspect(spec, id => state[document + '/' + id]);
       return [key, { status: to, since: tick, reason, ...(outcome !== undefined && { outcome }), ...row,
         ...(deadline && { deadline }),
-        ...(row.deadlines && { deadlines: W.storyDeadlines.inspect(row.deadlines, end, at) }) }];
+        ...(row.deadlines && { deadlines: W.storyDeadlines.inspect(row.deadlines, end, at) }),
+        ...(children && { flow: { ...row.flow, current: { ...current, children } } }) }];
     }));
   }
 

@@ -73,7 +73,7 @@
     return withObjectives(flow, {}, {});
   }
 
-  function advance(action, definition, flow, args, tick) {
+  function advance(action, definition, flow, args, tick, readChild) {
     const { current } = flow;
     if (args.stage !== current.stage || args.visit !== current.visit) return { rejected: 'stale-stage-visit' };
     const stage = definition.stages[current.stage], { reason } = args;
@@ -90,22 +90,28 @@
     }
     const branch = stage.next[args.branch], pending = missing(stage, branch, current.objectives);
     if (pending.length) return { rejected: 'objectives-pending', pending };
+    const children = W.storyChildren.capture(stage, branch, readChild);
+    if (children) {
+      const blocked = W.storyChildren.gate(stage, branch, children);
+      if (blocked) return blocked;
+    }
     const target = targetOf(branch), skipped = omitted(stage, current.objectives);
     const { progress, ...visit } = current;
-    const row = { ...visit, branch: args.branch, reason, leftAt: tick, target, skipped };
+    const row = { ...visit, branch: args.branch, reason, leftAt: tick, target, skipped, ...(children && {children}) };
     const route = [...flow.route, row], overflow = Math.max(0, route.length - limit);
     const next = own(target, 'stage') ? makeVisit(target.stage, current.visit + 1, tick) : null;
     return { flow: { current: next, route: route.slice(overflow), dropped: flow.dropped + overflow },
-      branch: { branch: args.branch, reason, target, skipped } };
+      branch: { branch: args.branch, reason, target, skipped, ...(children && {children}) } };
   }
 
-  function validate(flow, definition, status, tick, firstActivation, reasonOK, message) {
+  function validate(flow, definition, status, tick, firstActivation, reasonOK, message, readChild) {
     check(fields(flow, ['current', 'dropped', 'route']) && at(flow.dropped, 0, Number.MAX_SAFE_INTEGER - limit) &&
       Array.isArray(flow.route) && flow.route.length <= limit && (!flow.dropped || flow.route.length === limit), message);
     function visit(row, index, deadline, nextStage, after) {
       check(isId(row.stage) && own(definition.stages, row.stage) && (nextStage === undefined || row.stage === nextStage) &&
         row.visit === index && at(row.enteredAt, 1, deadline) && (after === undefined || row.enteredAt === after) && record(row.objectives), message);
       const stage = definition.stages[row.stage];
+      check(W.storyChildren.opened(stage, row, readChild), message);
       const rules = definition.evidence.get(row.stage);
       for (const [id, change] of Object.entries(row.objectives)) {
         const objective = own(stage.objectives, id) && stage.objectives[id];
@@ -137,13 +143,14 @@
     let nextStage = flow.dropped ? undefined : definition.info.stage;
     let after = flow.dropped ? undefined : firstActivation, last;
     for (const [index, row] of flow.route.entries()) {
-      check(fields(row, ['branch', 'enteredAt', 'leftAt', 'objectives', 'reason', 'skipped', 'stage', 'target', 'visit']) &&
+      check(fields(row, ['branch', ...(own(row, 'children') ? ['children'] : []), 'enteredAt', 'leftAt', 'objectives',
+        'reason', 'skipped', 'stage', 'target', 'visit']) &&
         at(row.leftAt, 1, tick) && reasonOK(row.reason) && (!last || own(last.target, 'stage')), message);
       const stage = visit(row, flow.dropped + index + 1, row.leftAt, nextStage, after);
       check(isId(row.branch) && own(stage.next, row.branch), message);
       const branch = stage.next[row.branch];
       check(equal(targetOf(branch), row.target) && !missing(stage, branch, row.objectives).length &&
-        equal(omitted(stage, row.objectives), row.skipped), message);
+        equal(omitted(stage, row.objectives), row.skipped) && W.storyChildren.validResults(stage, branch, row, readChild), message);
       nextStage = row.target.stage;
       after = row.leftAt;
       last = row;

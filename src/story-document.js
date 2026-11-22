@@ -290,6 +290,61 @@ const StoryDocument = (() => {
     }
   }
 
+  const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];
+
+  function childList(values, table, at) {
+    if (!Array.isArray(values) || !values.length || values.length > 64) invalid(at, 'expected 1–64 child questlet IDs');
+    links(values, table, at, 'child questlet');
+  }
+
+  function childStages(rows, stories, owner, owners, at) {
+    const children = Object.create(null);
+    for (const [stage, definition] of rows) {
+      record(definition, `${at}.stages.${stage}`);
+      if (!Object.hasOwn(definition, 'children')) continue;
+      const location = `${at}.stages.${stage}.children`, { children: spec } = definition;
+      fields(spec, location, [], ['open', 'wait']);
+      if (!Object.keys(spec).length) invalid(location, 'expected open or wait');
+      if (!Object.hasOwn(spec, 'open')) continue;
+      childList(spec.open, stories, `${location}.open`);
+      for (const id of spec.open) {
+        const target = stories[id];
+        if (target?.kind !== 'questlet' || !target.lifecycle || Object.hasOwn(target, 'triggers'))
+          invalid(`${location}.open`, `child ${id} needs a questlet lifecycle and takes its start from the arc`);
+        if (owners.has(id) && owners.get(id) !== owner) invalid(`${location}.open`, `child ${id} already has an owning arc`);
+        owners.set(id, owner);
+        children[id] = target;
+      }
+    }
+    for (const [stage, definition] of rows) {
+      if (!definition.children || !Object.hasOwn(definition.children, 'wait')) continue;
+      const { wait } = definition.children, location = `${at}.stages.${stage}.children.wait`;
+      fields(wait, location, [], ['any', 'all']);
+      if (Object.keys(wait).length !== 1) invalid(location, 'expected exactly one of any or all');
+      const [mode] = Object.keys(wait);
+      childList(wait[mode], children, `${location}.${mode}`);
+    }
+    return children;
+  }
+
+  function childConditions(conditions, children, at) {
+    const rows = entries(conditions, at, true);
+    if (rows.length > 64) invalid(at, 'expected up to 64 child conditions');
+    for (const [id, condition] of rows) {
+      const place = `${at}.${id}`;
+      link(id, children, place, 'child questlet');
+      fields(condition, place, [], ['status', 'outcome']);
+      if (!Object.keys(condition).length) invalid(place, 'expected a terminal status or outcome');
+      if (Object.hasOwn(condition, 'status') && !terminalStates.includes(condition.status))
+        invalid(`${place}.status`, 'expected a terminal story status');
+      if (Object.hasOwn(condition, 'outcome')) {
+        link(condition.outcome, children[id].outcomes, `${place}.outcome`, 'child outcome');
+        if (['withdrawn', 'expired'].includes(condition.status))
+          invalid(place, 'only completed or failed questlets record named outcomes');
+      }
+    }
+  }
+
   function validateStoryDocument(document) {
     fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
@@ -299,7 +354,7 @@ const StoryDocument = (() => {
     const references = Object.hasOwn(document, 'references') ? document.references : {};
     const types = Object.hasOwn(document, 'objectiveTypes') ? document.objectiveTypes : {};
     objectiveTypes(types);
-    const { stories } = document;
+    const { stories } = document, owners = new Map();
     for (const [id, reference] of entries(references, 'story.references')) {
       const at = `story.references.${id}`;
       fields(reference, at, ['kind', 'id']);
@@ -327,6 +382,8 @@ const StoryDocument = (() => {
       }
       const stageRows = entries(stages, `${at}.stages`, true);
       const progression = story.lifecycle?.progression === true;
+      const nesting = progression && story.kind === 'arc';
+      const children = nesting ? childStages(stageRows, stories, id, owners, at) : {};
       link(story.entry, stages, `${at}.entry`, 'stage');
       for (const [name, outcome] of entries(outcomes, `${at}.outcomes`, true)) {
         const location = `${at}.outcomes.${name}`;
@@ -337,7 +394,8 @@ const StoryDocument = (() => {
       }
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
-        fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story', ...(progression ? ['objectives'] : [])]);
+        fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story',
+          ...(progression ? ['objectives'] : []), ...(nesting ? ['children'] : [])]);
         labelsAndRefs(stage, location, references);
         if (Object.hasOwn(stage, 'roles')) links(stage.roles, roles, `${location}.roles`, 'role');
         if (Object.hasOwn(stage, 'story')) link(stage.story, stories, `${location}.story`, 'story');
@@ -359,7 +417,8 @@ const StoryDocument = (() => {
         }
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
           const edge = `${location}.next.${choice}`;
-          fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires', 'requiresFailed', 'requiresChoice'] : [])]);
+          fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires', 'requiresFailed', 'requiresChoice'] : []),
+            ...(nesting ? ['requiresChildren', 'auto'] : [])]);
           if (Object.hasOwn(target, 'stage') === Object.hasOwn(target, 'outcome')) invalid(edge, 'expected exactly one stage or outcome target');
           if (Object.hasOwn(target, 'stage')) link(target.stage, stages, `${edge}.stage`, 'stage');
           else link(target.outcome, outcomes, `${edge}.outcome`, 'outcome');
@@ -378,6 +437,10 @@ const StoryDocument = (() => {
               link(option, objectives[id].params.options, `${edge}.requiresChoice.${id}`, 'choice option');
             }
           }
+          if (Object.hasOwn(target, 'requiresChildren')) childConditions(target.requiresChildren, children, `${edge}.requiresChildren`);
+          if (Object.hasOwn(target, 'auto') && (typeof target.auto !== 'boolean' ||
+            (target.auto && !stage.children?.wait && !target.requiresChildren)))
+            invalid(`${edge}.auto`, 'expected a boolean and a child wait or outcome condition for an automatic branch');
         }
       }
     }

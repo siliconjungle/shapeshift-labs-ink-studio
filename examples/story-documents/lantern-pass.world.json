@@ -1,0 +1,52 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "lantern-pass",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "lantern-pass.json" }],
+  "systems": {
+    "stock": {
+      "kind": "store",
+      "config": { "accounts": {
+        "depot": { "resource": "relief", "units": "case", "type": "integer", "initial": 4, "max": 4 },
+        "landing": { "resource": "relief", "units": "case", "type": "integer", "initial": 0, "max": 4 }
+      } }
+    },
+    "sensors": { "kind": "puzzle", "config": { "inputs": { "power": "bool" }, "outputs": { "lit": "power" } } }
+  },
+  "commands": [
+    { "tick": 2, "action": "world/story-choose", "args": {
+      "document": "lantern-pass", "story": "corridor", "stage": "survey", "visit": 1,
+      "branch": "use-ford", "reason": "check-unconfirmed-route"
+    } },
+    { "tick": 7, "action": "world/story-transition", "args": {
+      "document": "lantern-pass", "story": "beacon-watch", "to": "active", "reason": "beacon-crew-accepted"
+    } },
+    { "tick": 7, "action": "world/input", "args": { "port": "sensors/power", "value": true } },
+    { "tick": 7, "action": "world/transfer", "args": { "from": "stock/depot", "to": "stock/landing", "amount": 4 } }
+  ],
+  "eventActions": {
+    "close-survey": {
+      "on": { "kind": "survey-reported", "system": "world" },
+      "limit": 2,
+      "actions": [{ "action": "world/story-choose", "args": {
+        "document": "lantern-pass", "story": "ford-report", "stage": "inspect", "visit": 1,
+        "branch": "clear", "reason": "reading-confirmed"
+      }, "bindings": { "/story": "/questlet", "/branch": "/finding" } }]
+    },
+    "close-delivery": {
+      "on": { "kind": "story-objective-resolved", "system": "world", "where": { "path": "/objective", "value": "move-cases" } },
+      "actions": [{ "action": "world/story-choose", "args": {
+        "document": "lantern-pass", "story": "supply-run", "stage": "deliver", "visit": 1,
+        "branch": "handoff", "reason": "received-four-cases"
+      } }]
+    },
+    "close-beacon-check": {
+      "on": { "kind": "story-objective-resolved", "system": "world", "where": { "path": "/objective", "value": "steady-power" } },
+      "actions": [{ "action": "world/story-choose", "args": {
+        "document": "lantern-pass", "story": "beacon-watch", "stage": "test-beacon", "visit": 1,
+        "branch": "report", "reason": "power-verified"
+      } }]
+    }
+  }
+}

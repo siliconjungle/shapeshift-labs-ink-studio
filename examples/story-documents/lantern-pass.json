@@ -1,0 +1,130 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "lantern-pass",
+  "title": "The Lantern Pass",
+  "stories": {
+    "corridor": {
+      "kind": "arc",
+      "title": "Open a relief corridor through the pass",
+      "lifecycle": { "progression": true },
+      "entry": "survey",
+      "stages": {
+        "survey": {
+          "title": "Wait for a usable route",
+          "children": { "open": ["ford-report", "ridge-report"], "wait": { "any": ["ford-report", "ridge-report"] } },
+          "next": {
+            "use-ford": { "stage": "prepare-ford", "auto": true, "requiresChildren": { "ford-report": { "outcome": "clear" } } },
+            "use-ridge": { "stage": "prepare-ridge", "auto": true, "requiresChildren": { "ridge-report": { "outcome": "clear" } } },
+            "close-corridor": { "outcome": "stranded", "auto": true, "requiresChildren": {
+              "ford-report": { "outcome": "blocked" }, "ridge-report": { "outcome": "blocked" }
+            } }
+          }
+        },
+        "prepare-ford": {
+          "title": "Prepare the ford convoy",
+          "children": { "open": ["supply-run", "beacon-watch"], "wait": {
+            "all": ["ford-report", "ridge-report", "supply-run", "beacon-watch"]
+          } },
+          "next": { "dispatch": { "outcome": "ford-corridor", "auto": true, "requiresChildren": {
+            "supply-run": { "outcome": "landed" }, "beacon-watch": { "outcome": "lit" }
+          } } }
+        },
+        "prepare-ridge": {
+          "title": "Prepare the ridge convoy",
+          "children": { "open": ["supply-run", "beacon-watch"], "wait": {
+            "all": ["ford-report", "ridge-report", "supply-run", "beacon-watch"]
+          } },
+          "next": { "dispatch": { "outcome": "ridge-corridor", "auto": true, "requiresChildren": {
+            "supply-run": { "outcome": "landed" }, "beacon-watch": { "outcome": "lit" }
+          } } }
+        }
+      },
+      "outcomes": {
+        "ford-corridor": { "title": "Dispatch the convoy through the ford" },
+        "ridge-corridor": { "title": "Dispatch the convoy along the ridge" },
+        "stranded": { "title": "Both routes are blocked", "status": "failed" }
+      }
+    },
+    "ford-report": {
+      "kind": "questlet",
+      "title": "Check the ford",
+      "lifecycle": { "progression": true },
+      "entry": "inspect",
+      "stages": { "inspect": {
+        "title": "Read the ford survey",
+        "objectives": {
+          "clear-reading": { "title": "Read a clear ford report", "optional": true, "evidence": { "event": {
+            "kind": "survey-reported", "system": "world", "where": { "all": [
+              { "path": "/questlet", "value": "ford-report" }, { "path": "/finding", "value": "clear" }
+            ] }
+          } } },
+          "blocked-reading": { "title": "Read a blocked ford report", "optional": true, "evidence": { "event": {
+            "kind": "survey-reported", "system": "world", "where": { "all": [
+              { "path": "/questlet", "value": "ford-report" }, { "path": "/finding", "value": "blocked" }
+            ] }
+          } } }
+        },
+        "next": {
+          "clear": { "outcome": "clear", "requires": ["clear-reading"] },
+          "blocked": { "outcome": "blocked", "requires": ["blocked-reading"] }
+        }
+      } },
+      "outcomes": { "clear": { "title": "Ford passable" }, "blocked": { "title": "Ford flooded", "status": "failed" } }
+    },
+    "ridge-report": {
+      "kind": "questlet",
+      "title": "Check the ridge",
+      "lifecycle": { "progression": true },
+      "entry": "inspect",
+      "stages": { "inspect": {
+        "title": "Read the ridge survey",
+        "objectives": {
+          "clear-reading": { "title": "Read a clear ridge report", "optional": true, "evidence": { "event": {
+            "kind": "survey-reported", "system": "world", "where": { "all": [
+              { "path": "/questlet", "value": "ridge-report" }, { "path": "/finding", "value": "clear" }
+            ] }
+          } } },
+          "blocked-reading": { "title": "Read a blocked ridge report", "optional": true, "evidence": { "event": {
+            "kind": "survey-reported", "system": "world", "where": { "all": [
+              { "path": "/questlet", "value": "ridge-report" }, { "path": "/finding", "value": "blocked" }
+            ] }
+          } } }
+        },
+        "next": {
+          "clear": { "outcome": "clear", "requires": ["clear-reading"] },
+          "blocked": { "outcome": "blocked", "requires": ["blocked-reading"] }
+        }
+      } },
+      "outcomes": { "clear": { "title": "Ridge passable" }, "blocked": { "title": "Ridge closed", "status": "failed" } }
+    },
+    "supply-run": {
+      "kind": "questlet",
+      "title": "Deliver the relief supplies",
+      "lifecycle": { "progression": true },
+      "entry": "deliver",
+      "stages": { "deliver": {
+        "title": "Stage the cases at the pass",
+        "objectives": { "move-cases": { "title": "Deliver four cases", "type": "deliver", "params": {
+          "from": "stock/depot", "to": "stock/landing", "amount": 4
+        } } },
+        "next": { "handoff": { "outcome": "landed" } }
+      } },
+      "outcomes": { "landed": { "title": "Materials landed" } }
+    },
+    "beacon-watch": {
+      "kind": "questlet",
+      "title": "Bring up the relay beacon",
+      "lifecycle": { "activation": "manual", "progression": true, "deadlines": { "offer": { "for": 0.4 } } },
+      "entry": "test-beacon",
+      "stages": { "test-beacon": {
+        "title": "Confirm steady beacon power",
+        "objectives": { "steady-power": { "title": "Hold beacon power for two tenths of a second", "type": "maintain",
+          "params": { "for": 0.2, "state": { "field": "world/signal", "args": { "port": "sensors/lit" }, "when": { "value": true } } }
+        } },
+        "next": { "report": { "outcome": "lit" } }
+      } },
+      "outcomes": { "lit": { "title": "Beacon lit and checked" } }
+    }
+  }
+}
