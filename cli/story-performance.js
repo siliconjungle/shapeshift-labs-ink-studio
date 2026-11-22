@@ -80,4 +80,4 @@ async function command(file, planFile, rest, opt, library) {
   graphOutputs([...inputs]).write(path.resolve(opt.out), entries);
 }
 
-module.exports = { command, usage };
+module.exports = { command, usage, captions };

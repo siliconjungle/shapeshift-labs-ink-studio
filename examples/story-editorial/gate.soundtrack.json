@@ -1,0 +1,19 @@
+{
+  "format": "ink-studio/scene-audio",
+  "version": 1,
+  "sampleRate": 48000,
+  "gain": 0.86,
+  "assets": {
+    "lower": "assets/lower.wav",
+    "clear": "assets/clear.wav",
+    "latch": "assets/latch.wav",
+    "water": "assets/water.wav"
+  },
+  "tracks": [{ "asset": "water", "loop": true, "gain": 0.35, "bus": "ambience" }],
+  "listener": [0, 0, 1.7],
+  "spatial": {
+    "cues": { "latch": { "asset": "latch", "gain": 0.88, "bus": "foley" } },
+    "bindings": { "drop": { "on": { "kind": "gate-drop" }, "cue": "latch" } }
+  },
+  "post": {}
+}

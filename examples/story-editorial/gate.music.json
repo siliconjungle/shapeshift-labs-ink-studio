@@ -1,0 +1,31 @@
+{
+  "session": {
+    "format": "ink-studio/music-edit-session",
+    "version": 1,
+    "id": "lantern-score",
+    "sampleRate": 48000,
+    "production": {
+      "arrangement": {
+        "score": { "key": { "root": "D4", "mode": "minor" }, "tempoMap": { "tempo": 120 },
+          "endFade": 0, "harmonies": { "d": { "root": "D3", "quality": "unison" } } },
+        "motifs": { "tap": { "length": 4, "events": [{ "id": "tap", "beat": 0, "duration": 0.3, "degree": 1 }] } },
+        "parts": { "keys": { "role": "lead", "material": "tap" }, "bass": { "role": "bass", "material": "tap" } },
+        "sections": [{ "id": "lantern", "bars": 2, "harmony": "d" }]
+      },
+      "patches": { "glass": { "type": "subtractive" }, "low": { "type": "subtractive" } },
+      "tracks": {
+        "keys": { "patch": "glass", "gain": -22, "clips": [{ "id": "quay", "beat": 0, "length": 8, "voices": [{ "id": "line", "notes": [
+          { "id": "wake", "beat": 0.18, "duration": 0.81, "midi": 69, "velocity": 0.55 },
+          { "id": "turn", "beat": 2, "duration": 1.38, "midi": 65, "velocity": 0.54 },
+          { "id": "clear", "beat": 4.4, "duration": 0.61, "midi": 67, "velocity": 0.50 },
+          { "id": "home", "beat": 5.95, "duration": 0.92, "midi": 62, "velocity": 0.44 }
+        ] }] }] },
+        "bass": { "patch": "low", "gain": -18, "clips": [{ "id": "bed", "beat": 0, "length": 8, "voices": [{ "id": "line", "notes": [
+          { "id": "pedal", "beat": 0, "duration": 3.25, "midi": 38, "velocity": 0.43 },
+          { "id": "return", "beat": 4, "duration": 3.1, "midi": 38, "velocity": 0.40 }
+        ] }] }] }
+      }
+    }
+  },
+  "assets": {}
+}

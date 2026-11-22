@@ -17,20 +17,26 @@ function point(T, input, fallback) {
   return T.read(denominator === undefined ? numerator : { numerator, denominator });
 }
 
-async function command(file, plan, rest, opt, library) {
-  if (!file || !plan || rest.length || typeof opt.out !== 'string' || !opt.out.trim() ||
-      Object.keys(opt).some(key => !['out','from','to'].includes(key))) throw new TypeError('Use ' + usage);
-  const kit = library(), { world:W, procedural:P, authoring:{projectBundles} } = kit.KIT;
-  const T = P.takeTime, R = W.runtime;
-  const inputs = new Set([path.resolve(file),path.resolve(plan)]), onFile = entry => inputs.add(path.resolve(entry));
-  if (fs.statSync(file).size > 128*1024*1024 || fs.statSync(plan).size > 8*1024*1024)
-    throw new RangeError('Story audio input exceeds its byte budget');
+function readNativeRun(file, {KIT:K}, onFile) {
+  if (fs.statSync(file).size > 128*1024*1024) throw new RangeError('Story recording exceeds its byte budget');
+  const bundles = K.authoring.projectBundles, R = K.world.runtime;
   const document = resolveCheckpoint(path.resolve(file),JSON.parse(fs.readFileSync(file,'utf8')),{onBlock:onFile});
-  const recording = document?.format === projectBundles.format && document.version === projectBundles.storyVersion ?
+  const recording = document?.format === bundles.format && document.version === bundles.storyVersion ?
     readRecording(readProjectBundle(file)) : document;
   if (recording?.format !== R.runFormat || !Number.isSafeInteger(recording.origin?.tick) ||
       !Number.isSafeInteger(recording.end?.tick) || recording.end.tick-recording.origin.tick > 120000)
-    throw new TypeError('Story audio needs a bounded native run recording');
+    throw new TypeError('Expected a bounded native run recording');
+  return recording;
+}
+
+async function command(file, plan, rest, opt, library) {
+  if (!file || !plan || rest.length || typeof opt.out !== 'string' || !opt.out.trim() ||
+      Object.keys(opt).some(key => !['out','from','to'].includes(key))) throw new TypeError('Use ' + usage);
+  const kit = library(), { world:W, procedural:P } = kit.KIT;
+  const T = P.takeTime, R = W.runtime;
+  const inputs = new Set([path.resolve(file),path.resolve(plan)]), onFile = entry => inputs.add(path.resolve(entry));
+  if (fs.statSync(plan).size > 8*1024*1024) throw new RangeError('Story audio plan exceeds its byte budget');
+  const recording = readNativeRun(file,kit,onFile);
   const { world } = recording.origin;
   const period = T.period(world.dt,world.takeClock?.simulationRate);
   const at = tick => T.mul(T.read(tick),period);
@@ -58,4 +64,4 @@ async function command(file, plan, rest, opt, library) {
   graphOutputs([...inputs]).write(path.resolve(opt.out),[...output,{file:'report.json',document:documentReport}]);
 }
 
-module.exports = { command, usage };
+module.exports = { command, usage, readNativeRun };

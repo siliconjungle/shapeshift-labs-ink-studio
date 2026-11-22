@@ -1296,6 +1296,7 @@ const CMD = {
         '    [--plan markers.json] [--out timeline.json]   export editable scene markers',
         '  '+require('./story-effects.js').usage,
         '  '+require('./story-audio.js').usage,
+        '  '+require('./story-editorial.js').usage,
         '  story performance <recording|fixture|events|cue-sheet> <plan.json> --out directory [--asset-registry catalog.json]',
         '  story shots <recording> [--timeline file --story id/name --from-tick N --to-tick N --limit N --out plan.json]',
         '  story shots-review <recording> <plan.json> --out directory [--all --w N --h N]',

@@ -35,6 +35,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Event-driven visual effects](docs/event-visual-effects.md)
 - [Persistent visual consequences](docs/visual-consequences.md)
 - [Adaptive story audio](docs/adaptive-story-audio.md)
+- [Editable story picture and audio](docs/story-editorial-handoff.md)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)

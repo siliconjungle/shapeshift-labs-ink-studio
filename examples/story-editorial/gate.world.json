@@ -1,0 +1,43 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "lantern-cut",
+  "seed": 31,
+  "dt": 0.05,
+  "history": { "enabled": false },
+  "takeClock": {
+    "fps": { "numerator": 30000, "denominator": 1001 },
+    "simulationRate": 20,
+    "sampleRate": 48000,
+    "cuts": [{ "frame": 0, "id": "Quay wide" }, { "frame": 42, "id": "Gate close" }]
+  },
+  "entities": {
+    "quay": { "position": [-1.5, 0, 0], "visual": { "half": [1.42, 0.15, 1.4], "ramp": [1, 2, 3, 4, 5] } },
+    "water": { "position": [0.7, -0.01, 0], "visual": { "half": [1.7, 0.09, 1.4], "ramp": [13, 14, 15, 16, 17] } },
+    "gate": { "position": [0.15, 0.58, 0], "visual": { "half": [0.12, 0.56, 0.81], "ramp": [19, 20, 21, 22, 23] } },
+    "stone": { "position": [0.2, 0.63, -0.93], "visual": { "half": [0.24, 0.64, 0.23], "ramp": [2, 3, 4, 5] } },
+    "lamp": { "position": [0.2, 1.4, -0.93], "visual": { "half": [0.17, 0.17, 0.17], "ramp": [22, 23, 24] } },
+    "skiff": { "position": [1.56, 0.14, 0.97], "visual": { "half": [0.64, 0.14, 0.26], "ramp": [19, 20, 21, 22, 23] } },
+    "keeper": { "position": [-1.12, 0.43, 0.35], "visual": { "half": [0.13, 0.27, 0.16], "ramp": [19, 20, 22, 24] } }
+  },
+  "visual": {
+    "bounds": { "min": [-3.1, -0.27, -1.54], "max": [2.6, 1.8, 1.57] },
+    "ground": -0.17,
+    "resolution": 0.13,
+    "skyEnvironment": { "defaults": { "zenith": "#334b6c", "horizon": "#82778c", "ground": "#263e4d", "sunStrength": 0 } },
+    "cameraRig": {
+      "shots": {
+        "quay": { "target": [-0.32, 0.31, 0.1], "dist": 7.64, "yaw": 0.45, "pitch": 0.7 },
+        "gate": { "target": [0.10, 0.43, 0.09], "dist": 6.12, "yaw": 0.03, "pitch": 0.86 }
+      },
+      "sequence": [{ "time": 0, "shot": "quay" }, { "time": 1.4014, "shot": "gate" }]
+    }
+  },
+  "commands": [
+    { "tick": 13, "action": "world/event", "args": { "kind": "arrival", "entity": "skiff", "label": "Skiff reaches the gate" } },
+    { "tick": 15, "action": "world/event", "args": { "kind": "keeper-order" } },
+    { "tick": 28, "action": "world/event", "args": { "kind": "gate-drop", "at": [0.15, 0.1, 0] } },
+    { "tick": 47, "action": "world/event", "args": { "kind": "keeper-clear" } },
+    { "tick": 58, "action": "world/event", "args": { "kind": "outcome", "label": "Channel secured" } }
+  ]
+}

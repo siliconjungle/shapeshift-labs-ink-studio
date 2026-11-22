@@ -376,6 +376,11 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   }
   return Object.freeze({
     sampleRate,
+    asset(name) {
+      const audio = resolveAsset(name);
+      if (!audio) throw new RangeError('Missing soundtrack asset ' + name);
+      return K.procedural.mediaGraph.audio(audio);
+    },
     tempoMap: postConfig?.map,
     render: (sequence, options) => render(sequence, options),
     prepareDelivery(sequence, options) {
@@ -392,13 +397,13 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   });
 }
 
-function readSceneAudio(file, { kit = require('../index.js').load(), onFile = () => {}, recordedOnly = false, ...graphOptions } = {}) {
+function readSceneAudio(file, { kit = require('../index.js').load(), onFile = () => {}, recordedOnly = false, additions, ...graphOptions } = {}) {
   const source = path.resolve(file), folder = path.dirname(source);
   const { assets = undefined, world, assetRegistry, ...definition } = read(source);
   onFile(source);
   if (recordedOnly && world!==undefined) throw new TypeError('The recorded run supplies the story soundtrack world');
   const api = kit.KIT.authoring.assetReferences, select = Assets.scope(api, source, assetRegistry, {onFile});
-  const assetsByName = assets === undefined && (definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
+  const assetsByName = assets === undefined && (additions || definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
   if (!record(assetsByName) || Object.keys(assetsByName).length > 1024 || !Object.keys(assetsByName).every(token))
     throw new TypeError('Soundtrack needs named audio assets');
   const assetCache = new Map(), graphs = new Map(), prints=new Map(), editorials=new Map();
@@ -445,6 +450,10 @@ function readSceneAudio(file, { kit = require('../index.js').load(), onFile = ()
     return {...track,time:{numerator:T.index(time[0]),denominator:T.index(time[1])}};
   }
   function resolveAsset(name) {
+    if (additions?.assets.has(name)) {
+      if (Object.hasOwn(assetsByName,name)) throw new TypeError('Soundtrack asset name collides with a handoff asset: '+name);
+      return additions.assets.get(name);
+    }
     if (assetCache.has(name)) return assetCache.get(name);
     const spec = Object.hasOwn(assetsByName, name) ? assetsByName[name] : undefined;
     let audio;
@@ -488,7 +497,12 @@ function readSceneAudio(file, { kit = require('../index.js').load(), onFile = ()
     }
     return audio;
   }
-  const tracks=Array.isArray(definition.tracks) ? definition.tracks.map(place) : definition.tracks;
+  let tracks=Array.isArray(definition.tracks) ? definition.tracks.map(place) : definition.tracks;
+  if (additions) {
+    if (tracks!==undefined && !Array.isArray(tracks)) throw new TypeError('Soundtrack tracks need an array');
+    tracks=[...(tracks??[]),...additions.tracks];
+    definition.post ??= {};
+  }
   return createSceneAudio({...definition,...(tracks!==undefined && {tracks})}, { kit, resolveAsset,
     ...(soundWorld && { runtime: () => kit.KIT.world.runtime.create(soundWorld) }) });
 }

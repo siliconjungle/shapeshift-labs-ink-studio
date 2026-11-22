@@ -1,0 +1,10 @@
+{
+  "format": "ink-studio/story-editorial-plan",
+  "version": 1,
+  "id": "lantern-cut",
+  "title": "The Lantern Gate",
+  "soundtrack": "gate.soundtrack.json",
+  "picture": { "fromFrame": 11, "toFrame": 102, "width": 256, "height": 160 },
+  "dialogue": { "plan": "gate.performance.json", "assets": { "lower": "lower", "clear": "clear" } },
+  "instruments": { "session": "gate.music.json", "at": 0.08 }
+}

@@ -1,0 +1,14 @@
+{
+  "format": "ink-studio/actor-performance-plan",
+  "version": 1,
+  "id": "lantern-performance",
+  "cast": { "keeper": { "actor": "keeper", "label": "Keeper" } },
+  "rules": {
+    "lower": { "on": { "kind": "keeper-order" }, "cue": {
+      "kind": "dialogue", "target": "keeper", "detail": { "text": "Lower the gate.", "duration": 1.32 }
+    } },
+    "clear": { "on": { "kind": "keeper-clear" }, "cue": {
+      "kind": "dialogue", "target": "keeper", "detail": { "text": "Channel clear.", "duration": 1.15 }
+    } }
+  }
+}

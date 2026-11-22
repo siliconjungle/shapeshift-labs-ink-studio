@@ -3,7 +3,7 @@
   const P=K.procedural,T=P.takeTime,S=P.mediaGraphSupport,{id,integer,fields,record,check}=P.musicInstruments;
   const eventId=value=>typeof value==='string' && /^[a-z0-9][a-z0-9._:/-]{0,95}$/i.test(value);
   function editorialClock({picture,world,map,sampleRate,clockMap}) {
-    check(fields(picture,['fps','shots']) && Array.isArray(picture.shots) &&
+    check(fields(picture,['fps','shots','startFrame']) && integer(picture.startFrame ?? 0,0,1000000000) && Array.isArray(picture.shots) &&
       integer(picture.shots.length,1,2048),'Editorial needs a picture rate and a shot list');
     const fps=T.read(picture.fps), take=T.create({fps:picture.fps,sampleRate}), shots=new Map();
     let frames=0;
@@ -15,7 +15,9 @@
       frames+=shot.frames;
     }
     check(frames<=10000000,'Picture exceeds its frame budget');
-    const end=take.at(frames).firstSample;
+    const startFrame=picture.startFrame ?? 0, first=take.at(startFrame).firstSample;
+    const origin=T.position(take,{frame:startFrame});
+    const end=take.at(startFrame+frames).firstSample-first;
     check(end>0,'Picture needs at least one audio sample');
     const musical=P.musicTiming.compile(map), mixer=S.mixerTime(sampleRate,map), events=new Map();
     const mapping=clockMap===undefined?undefined:K.world.clockMapping.read(clockMap);
@@ -66,9 +68,10 @@
         kind=P.musicTiming.isPosition(raw) ? 'beat' : raw.samples===undefined ? 'seconds' : 'samples';
       }
       const position=T.describe(take,point);
-      if (position.frame<0 || position.frame>=frames || position.sample<0 || position.sample>=end)
+      const sample=kind==='samples' ? raw.samples : T.locate(take,T.add(origin,point)).sample-first;
+      if (position.frame<0 || position.frame>=frames || sample<0 || sample>=end)
         return {issue:'outside-picture'};
-      return {kind,...detail,sample:position.sample,frame:position.frame,timecode:position.timecode,
+      return {kind,...detail,sample,frame:position.frame,timecode:position.timecode,
         beat:musical.sample(position.timecode).beat};
     }
     return {frames,end,spot};

@@ -73,7 +73,12 @@ Each spot uses one of these addresses.
 | `{"beat":4}` or `{"bar":2,"beat":1}` | A position in the [tempo and meter map](scene-timeline.md). |
 | `{"samples":72072}` or `{"seconds":{"numerator":3003,"denominator":2000}}` | An absolute position on the output PCM grid or in seconds. |
 
-Shots are contiguous in array order. Their source ranges start at
+Shots are contiguous in array order. Set `picture.startFrame` to retain the
+sample phase of a crop at an absolute picture frame. Spots stay relative
+to the edit. Use [story handoff](story-editorial-handoff.md) to generate this
+setting from a recorded take.
+
+Their source ranges start at
 `inFrame` (default zero) and span `frames` frames. If a picture uses the
 same source material multiple times, give each occurrence a distinct shot ID.
 The report gives each resolved spot's exact rational time, picture frame,
