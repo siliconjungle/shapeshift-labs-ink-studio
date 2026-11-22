@@ -4,12 +4,14 @@ const q=s=>'"'+s+'"'; // All names and relative paths originate in validated Ink
 const dec=n=>Number(n.toFixed(12)).toString();
 const color=0x1000000;
 
-function project(plan,midi,files) {
-  const {id,sampleRate:rate,frames,beatsPerBar,routing:{strips,routes,output}}=plan;
-  const uid=tag=>{
+function guid(id,tag) {
     const hex=createHash('sha256').update(id+'\0'+tag).digest('hex').slice(0,32).toUpperCase();
     return '{'+[hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-')+'}';
-  };
+}
+
+function project(plan,midi,files) {
+  const {id,sampleRate:rate,frames,beatsPerBar,routing:{strips,routes,output}}=plan;
+  const uid=tag=>guid(id,tag);
   const scoreTracks=Object.entries(midi.tracks).filter(([,row])=>row.messages.length);
   const indexes=new Map(Object.keys(strips).map((name,i)=>[name,i+1]));
   const keys=new Map();
@@ -92,4 +94,4 @@ function project(plan,midi,files) {
   for (const [name,row] of scoreTracks) out+=track('score-'+name,name+' - MIDI',{mute:1,inkColor:color+0x8e9fca},midiItem(name,row));
   return out+'>\n';
 }
-module.exports={project};
+module.exports={project,guid,dec};

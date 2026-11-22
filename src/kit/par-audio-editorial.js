@@ -87,8 +87,9 @@
     }
     const tracks=new Set(), ids=new Set(), clips=[];
     for (const raw of session.clips) {
-      check(fields(raw,['id','track','spot','take','takes','comp','fades','gain']) && id(raw.id) &&
-        !ids.has(raw.id) && id(raw.track ?? 'main') && id(raw.take) && finite(raw.gain ?? 1,0,4),
+      check(fields(raw,['id','track','spot','take','takes','comp','fades','gain','offsetSamples']) && id(raw.id) &&
+        !ids.has(raw.id) && id(raw.track ?? 'main') && id(raw.take) && finite(raw.gain ?? 1,0,4) &&
+        integer(raw.offsetSamples ?? 0,-1e9,1e9),
       'Invalid or duplicate editorial clip');
       ids.add(raw.id);
       const track=raw.track ?? 'main';
@@ -113,7 +114,7 @@
         return {from,to,fadeSamples,curve:row.curve ?? 'linear',take:row.take,alt};
       }).sort((a,b)=>a.from-b.from);
       check(ranges.every((row,i)=>i===0 || ranges[i-1].to<=row.from),'Comp ranges may not overlap');
-      const spot=clock.spot(raw.spot);
+      const spot=clock.spot(raw.spot,raw.offsetSamples ?? 0);
       const {pcm,cost,...source}=choice;
       const report={id:raw.id,track,take:raw.take,source,spot,alternates:[...takes.keys()].filter(name=>name!==raw.take),
         fades:{inSamples:fades.inSamples ?? 0,outSamples:fades.outSamples ?? 0,curve:fades.curve ?? 'linear'},
@@ -240,6 +241,11 @@
           check(fields(row,['op','clip','spot']),'Invalid spotting edit');
           clip.spot=row.spot;
           break;
+        case 'nudge':
+          check(fields(row,['op','clip','offsetSamples']) && integer(row.offsetSamples,-1e9,1e9),'Invalid clip sample offset');
+          if (row.offsetSamples) clip.offsetSamples=row.offsetSamples;
+          else delete clip.offsetSamples;
+          break;
         case 'take':
           check(fields(row,['op','clip','take']) && id(row.take),'Invalid take selection');
           clip.take=row.take;
@@ -326,5 +332,5 @@
     return {value:audio(right,after.sampleRate),before:audio(left,before.sampleRate),session:updated,
       report:{before:old,after:current,frames,changes,collisions,...meter}};
   }
-  A.audioEditorial=Object.freeze({inspect:(session,assets)=>describe(compile(session,assets)),revise,render,reconform});
+  A.audioEditorial=Object.freeze({inspect:(session,assets)=>describe(compile(session,assets)),revise,render,reconform,prepare:prepareSession});
 })(KIT.procedural);

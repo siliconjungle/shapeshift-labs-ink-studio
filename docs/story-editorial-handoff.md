@@ -23,6 +23,8 @@ The package contains these Ink editing sources.
 | `parts.json` and `notes.mid` | Cropped performed notes with exact sample addresses, plus the Standard MIDI File on the placed tempo map. |
 | `picture.json` | Each numbered PNG with its absolute frame, simulation tick and half-open audio sample window. |
 
+For an addressed dialogue or Foley edit in REAPER, use the [post-production workshop](audio-post-production.md).
+
 ## Author a handoff
 
 Paths are relative to the plan. Supply a standard [scene soundtrack](scene-audio.md) and a native recording or story run bundle. Use `picture.fromFrame` and exclusive `picture.toFrame` to select a window. The default covers complete picture frames in the recording. `fps` defaults to the recording's take rate, or 24. The soundtrack supplies the audio rate. Numbered PNGs are always included. A default H.264 MOV uses FFmpeg, which can be selected with `--ffmpeg EXECUTABLE`. Set `picture.video: false` to use the PNG sequence as the OTIO picture reference. Optional `picture.effects` names a projected [visual effects sheet](event-visual-effects.md).

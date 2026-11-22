@@ -163,6 +163,7 @@ module.exports=function musicCommand(pos,opt,kit) {
   if (mode==='repair') return require('./music-repair.js')(pos.slice(1),opt,kit);
   if (mode==='mix') return require('./music-mixer.js')(pos.slice(1),opt,kit);
   if (mode==='rack') return require('./music-racks.js')(pos.slice(1),opt,kit);
+  if (mode==='post') return require('./music-post.js')(pos.slice(1),opt,kit);
   if (mode==='editorial') return require('./music-editorial.js')(pos.slice(1),opt,kit);
   if (mode==='groove') return require('./music-groove.js')(pos.slice(1),opt,kit);
   if (mode==='soundfont') return require('./music-soundfont.js')(file,editFile,opt);

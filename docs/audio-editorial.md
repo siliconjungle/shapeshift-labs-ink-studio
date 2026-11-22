@@ -129,10 +129,16 @@ lead-in, then uses an alternate for part of the tail.
 ]
 ```
 
+Use `nudge` with a signed `offsetSamples` to move playback while retaining the
+spot anchor for reconform.
+
 The remaining edits are `add-clip` (full clip object), `remove-clip`,
 `spot`, `take`, `handles`, and `fades`. `trim`, `handles` and
 `slip-head` can target a named alternate via `take`. Editing is
 nondestructive and validates the resulting session before returning it.
+
+Use the [post-production workshop](audio-post-production.md) for field recorder
+relink, room tone, repair auditions, and a verified REAPER round trip.
 
 ## Reconform and use in a scene
 

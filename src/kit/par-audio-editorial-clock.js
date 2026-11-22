@@ -38,7 +38,7 @@
       check(Object.entries(world.aliases ?? {}).every(([alias,key])=>eventId(alias) && eventId(key) &&
         (!events.has(alias) || alias===key)),'World aliases must be distinct from other event IDs');
     }
-    function spot(raw) {
+    function anchor(raw) {
       let point,kind,detail={};
       if (fields(raw,['shot','sourceFrame']) && id(raw.shot) && integer(raw.sourceFrame,0,1000000000)) {
         const shot=shots.get(raw.shot);
@@ -73,6 +73,23 @@
         return {issue:'outside-picture'};
       return {kind,...detail,sample,frame:position.frame,timecode:position.timecode,
         beat:musical.sample(position.timecode).beat};
+    }
+    function spot(raw,offsetSamples=0) {
+      const at=anchor(raw);
+      if (!offsetSamples || at.issue) return at;
+      const sample=at.sample+offsetSamples;
+      if (sample<0 || sample>=end) return {issue:'offset-outside-picture',anchorSample:at.sample,offsetSamples};
+      const point=T.div(T.read(sample),T.read(sampleRate));
+      const absoluteSample=sample+first;
+      // On fractional rates, a picture frame owns its floored starting sample.
+      let low=0,high=frames;
+      while (low+1<high) {
+        const mid=(low+high)>>>1;
+        if (take.at(startFrame+mid).firstSample<=absoluteSample) low=mid;
+        else high=mid;
+      }
+      return {...at,sample,frame:low,timecode:T.pack(point),beat:musical.sample(T.pack(point)).beat,
+        anchorSample:at.sample,anchorFrame:at.frame,offsetSamples};
     }
     const shotSpans=()=>Array.from(shots,([id,shot])=>({id,...shot,
       fromSample:take.at(startFrame+shot.start).firstSample-first,
