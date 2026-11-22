@@ -1,0 +1,6 @@
+{
+  "stock": {
+    "field": "world/account",
+    "args": { "account": "stock/dock" }
+  }
+}

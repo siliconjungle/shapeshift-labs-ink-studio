@@ -1,0 +1,17 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "inputs": { "dock": { "type": "liveSnapshot", "default": null } },
+  "nodes": {
+    "world": { "op": "sim.liveWorld", "inputs": { "packet": { "input": "dock" } } },
+    "stock": { "op": "sim.worldRecord", "inputs": { "source": { "node": "world" }, "options": { "query": "stock" } } },
+    "transfer": { "op": "sim.worldPulse", "inputs": { "source": { "node": "world" }, "options": { "kind": "transfer" } } },
+    "picture": { "op": "demo.dock", "inputs": { "stock": { "node": "stock" }, "pulse": { "node": "transfer" } } }
+  },
+  "outputs": {
+    "picture": { "node": "picture" },
+    "world": { "node": "world", "port": "report" },
+    "stock": { "node": "stock" },
+    "transfer": { "node": "transfer" }
+  }
+}

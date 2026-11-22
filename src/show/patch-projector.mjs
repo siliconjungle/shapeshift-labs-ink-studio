@@ -69,13 +69,15 @@ async function open() {
   const session = await fetch('/session').then(response => response.json());
   const headers = { 'x-ink-session': session.key, 'x-ink-client': crypto.randomUUID() };
   const draw = renderer(session.surfaces);
-  let sequence = 0, started = false, attach;
+  let sequence = 0, snapshot = true, started = false, attach;
   const attached = new Promise(resolve => { attach = resolve; });
   async function pump() {
     let response;
-    try { response = await fetch('/frame?after=' + sequence, { headers, signal: AbortSignal.timeout(2000) }); }
-    catch { setTimeout(pump, 800); return; }
+    try { response = await fetch(snapshot ? '/snapshot' : '/frame?after=' + sequence,
+      { headers, signal: AbortSignal.timeout(2000) }); }
+    catch { snapshot = true; setTimeout(pump, 800); return; }
     if (response.status === 409) {
+      snapshot = true;
       status.textContent = 'Another projector window is connected.';
       setTimeout(pump, 600);
       return;
@@ -85,9 +87,13 @@ async function open() {
     status.textContent = '';
     if (response.headers.has('x-ink-ended')) return;
     if (response.status === 200) {
+      let pixels;
+      try { pixels = await response.arrayBuffer(); }
+      catch { snapshot = true; setTimeout(pump, 800); return; }
       try {
-        draw(await response.arrayBuffer(), Number(response.headers.get('x-ink-width')), Number(response.headers.get('x-ink-height')));
+        draw(pixels, Number(response.headers.get('x-ink-width')), Number(response.headers.get('x-ink-height')));
         sequence = Number(response.headers.get('x-ink-serial'));
+        snapshot = false;
       } catch { status.textContent = 'The projector could not draw the frame.'; return; }
     }
     requestAnimationFrame(pump);

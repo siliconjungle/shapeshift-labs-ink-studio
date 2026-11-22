@@ -12,11 +12,14 @@ const { decodeOsc } = require('./show-protocols.js');
 const { openProjector } = require('./patch-projector.js');
 const { showReport } = require('./patch-show-report.js');
 const { readShow, int } = require('./patch-show-config.js');
+const { feed } = require('./live-world.js');
 
 function presetControl(config, project, report) {
-  const values = new Map(Object.entries(config.presets).map(([name, preset]) => [name, { ...config.inputs, ...preset }]));
+  const worldInput = config.liveWorld && { [config.liveWorld.input]: null };
+  const base = { ...config.inputs, ...worldInput };
+  const values = new Map(Object.entries(config.presets).map(([name, preset]) => [name, { ...base, ...preset, ...worldInput }]));
   for (const inputs of values.values()) project.validate(inputs);
-  project.validate(values.get(config.initial) ?? config.inputs);
+  project.validate(values.get(config.initial) ?? base);
   let active = config.initial, first = true, currentCue = 0, pending;
   return {
     select(preset, source) {
@@ -34,7 +37,7 @@ function presetControl(config, project, report) {
       if (change) { active = change.preset; report.preset(change); }
       first = false;
       pending = undefined;
-      return values.get(active) ?? config.inputs;
+      return values.get(active) ?? base;
     }
   };
 }
@@ -161,12 +164,16 @@ async function showSlot(first, start, period, signal) {
 
 async function runShow(file, opt, settings, emit) {
   const config = await readShow(file, opt.rehearse, settings.kit), report = showReport(config, opt.rehearse);
-  const { fps, frames, projector, video, audio, dimensions } = config, period = 1000 / fps;
+  const { fps, frames, projector, video, audio, dimensions, liveWorld } = config, period = 1000 / fps;
   const media = {}, gpu = createPatchGpu(path.dirname(config.patch), opt['gpu-module']);
   const operations = { ...settings.operations, ...patchNodes(settings.kit, media, gpu) };
   const project = readGraphProject(config.patch, { ...settings, operations });
-  if (!Object.hasOwn(project.plan().outputs, config.output)) throw new TypeError('Unknown projector output ' + config.output);
+  const plan = project.plan();
+  if (!Object.hasOwn(plan.outputs, config.output)) throw new TypeError('Unknown projector output ' + config.output);
+  if (liveWorld && plan.inputs[liveWorld.input]?.type !== 'liveSnapshot')
+    throw new TypeError('Show liveWorld needs a liveSnapshot patch input');
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
+  const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
   const output = opt.report && path.resolve(opt.report);
   const protectedFiles = [...project.sourceFiles(), file, config.cueSource, video, audio].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
@@ -211,6 +218,10 @@ async function runShow(file, opt, settings, emit) {
       capture = openVideo(video, mediaOptions, raster.canvas({ ...dimensions, color: [0, 0, 0, 255] }), config.videoTimeoutMs, report);
       await capture.ready();
     }
+    if (live) {
+      report.source('world', 'waiting');
+      await live.warm();
+    }
     const start = performance.now();
     for (let next = 0; next < frames;) {
       const index = Math.min(frames, await showSlot(next, start, period, signal));
@@ -219,7 +230,8 @@ async function runShow(file, opt, settings, emit) {
       report.frame(index);
       checkSources(start);
       if (capture) media.frame = capture.sample(index);
-      const inputs = control.inputs(index), before = performance.now();
+      const preset = control.inputs(index), inputs = live ? { ...preset, [liveWorld.input]: live.sample() } : preset;
+      const before = performance.now();
       const result = await project.previewFrame(watch, { inputs, time: index / fps }, { profile: true, encodeArtifacts: false });
       signal.throwIfAborted();
       const drawn = performance.now();
@@ -242,7 +254,7 @@ async function runShow(file, opt, settings, emit) {
     process.off('SIGTERM', onTerm);
     abort.abort(new Error('Show ended'));
     try {
-      const closed = await Promise.allSettled([capture?.done, projection?.close(), osc?.close()]);
+      const closed = await Promise.allSettled([capture?.done, projection?.close(), osc?.close(), live?.close()]);
       failure ??= closed.find(result => result.status === 'rejected')?.reason;
       project.clear();
     } catch (error) { failure ??= error; }

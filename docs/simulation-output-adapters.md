@@ -46,6 +46,35 @@ ink-studio graph describe sim.worldScalar
 
 The dock demo publishes an arrival, a mooring tension gauge, and a story objective. As the cable loses its anchor and the stage closes, the gauge holds its previous value and the record uses its fallback. A second trace shows the arrival crossing from a 10 Hz world into a 5 fps take.
 
+## Join a running world
+
+`sim live` runs a native world or checkpoint at wall-clock speed and serves the latest committed tick. Use `--queries` to publish a JSON object of named probes with the same shape as `sim.world` queries. A native recording plays from its origin with its saved commands and defaults to its recorded end tick. For a world or checkpoint, set `--ticks` to the absolute stop tick. `--step-ms` changes publication pacing while preserving the simulation clock and event timestamps. `--linger-ms` keeps the final state available after the last commit and defaults to 500 ms.
+
+```sh
+node cli/ink-studio.js sim live examples/live-snapshot-cursor/dock.world.cjs \
+  --ticks 16 --queries examples/live-snapshot-cursor/dock.queries.json --step-ms 480
+```
+
+Read `url` and `token` from the `live-ready` NDJSON line. The server defaults to an assigned port on loopback. Use `--host` with a reachable IP and `--port` with a fixed port to connect a remote viewer. Both routes require the session token in the `Authorization: Bearer …` header. The server marks its final response with `X-Ink-Ended: 1` during the linger interval.
+
+| Request or response | Behavior |
+| --- | --- |
+| `GET /snapshot` | Returns the current named query samples and a new subscriber's cursor. No earlier effects fire. |
+| `GET /live?after=…` | Pass the URL-encoded JSON cursor from the last applied response. A cursor contains `stream`, `revision`, and `tick`. |
+| `kind: "live"` | Updates state and delivers the newly committed event envelopes when both the publication and tick are consecutive. |
+| `kind: "idle"` | Confirms the applied cursor still points at the current state. |
+| `kind: "snapshot"` | Replaces state when joining, skipping publications, or switching streams. The separate `effects` list is empty. |
+
+Version 1 packets use `format: "ink-studio/live-snapshot"`. Each echoes the requested cursor as `base` (null on a fresh join) and gives the cursor to acknowledge after applying the packet. `state` is a `worldFrame` with an empty event list. Use `effects` for one-shot cues. Apply a packet only when its base matches the subscriber's applied cursor. A stale response leaves that subscriber unchanged. The publisher retains the latest state and up to one tick's effects. Use a recording for an exhaustive event history.
+
+In a patch, declare a graph input of type `liveSnapshot` with a default of null and connect it to `sim.liveWorld.packet`. Wire `sim.liveWorld.value` to `sim.worldRecord`, `sim.worldScalar`, or `sim.worldPulse` as usual. On evaluations without a new packet, pass null to keep state and clear the pulse list. The `report` port shows the cursor, status, reason when available, and effect count. Hosts using the library can also publish a committed frame with `KIT.world.liveSnapshots.create({stream})` and apply packets with `KIT.world.liveSnapshots.receiver()`.
+
+```sh
+node examples/live-snapshot-cursor/demo.cjs ./studio/out/live-snapshot-cursor
+```
+
+The demo joins a running dock simulation, misses deliveries, then starts a patch and attaches the projector after the show is underway. It saves the viewer packets, projector frames, and show diagnostics. [Patch show setup](patch-tooling.md#run-a-patch-as-a-show)
+
 ## Fields, surfaces, and points
 
 An `ink-studio/grid-field` version 1 has a `shape` of one to three

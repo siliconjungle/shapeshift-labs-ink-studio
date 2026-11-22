@@ -825,6 +825,24 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         }
         return respond(opt.section===undefined?domain:W.domains.trace(domain,opt.section));
       }
+      case 'live': {
+        const Live = require('./live-world.js');
+        ensure(typeof file==='string'&&other===undefined&&Object.keys(opt).every(key=>
+          ['ticks','queries','step-ms','linger-ms','host','port','actions','workers'].includes(key))&&
+          (opt.ticks===undefined||typeof opt.ticks==='string'&&/^\d+$/.test(opt.ticks))&&
+          ['queries','actions'].every(key=>opt[key]===undefined||typeof opt[key]==='string'),Live.usage);
+        const input=load(file);
+        ensure(input.world&&(!input.log||opt.actions===undefined),
+          'Live worlds need a world, checkpoint or recording. Recordings keep their original actions.');
+        const run=input.log?recordingRun(input):runtime(input);
+        const until=opt.ticks===undefined?input.log?.end.tick:Number(opt.ticks);
+        ensure(!input.log||until<=input.log.end.tick,'Live playback exceeds the recording end tick');
+        schedule(run);
+        const queries=opt.queries===undefined?{}:read(opt.queries);
+        const emit=value=>new Promise((resolve,reject)=>
+          process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):resolve()));
+        return Live.serve(W,run,opt,{until,queries,emit});
+      }
       case 'run':
       case 'resume':
       case 'fork': {

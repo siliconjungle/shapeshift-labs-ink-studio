@@ -53,10 +53,22 @@ function midiInput(value, presets) {
   return { input, channel, notes, programs };
 }
 
+function liveWorldInput(value) {
+  if (value === undefined) return;
+  const { url, token, input } = record(value, ['url', 'token', 'input'], 'show live world');
+  const address = typeof url === 'string' && new URL(url);
+  if (!address || !['http:', 'https:'].includes(address.protocol) || address.username || address.password ||
+      address.search || address.hash || !address.pathname.endsWith('/') ||
+      typeof token !== 'string' || !/^[a-f0-9]{48}$/.test(token) || !name(input))
+    throw new TypeError('Show liveWorld needs a service URL ending in /, its token and a named graph input');
+  return { url: address.href, token, input };
+}
+
 async function readShow(file, rehearse, kit) {
   if (fs.statSync(file).size > 1024 * 1024) throw new RangeError('Show cue file exceeds 1 MiB');
   const config = record(JSON.parse(fs.readFileSync(file, 'utf8')), ['format', 'version', 'patch', 'output', 'size', 'fps',
-    'frames', 'video', 'audio', 'videoTimeoutMs', 'inputs', 'presets', 'initial', 'cues', 'cueMap', 'projector', 'osc', 'midi', 'slowMs'], 'patch show cue file');
+    'frames', 'video', 'audio', 'videoTimeoutMs', 'inputs', 'presets', 'initial', 'cues', 'cueMap', 'projector', 'osc', 'midi', 'slowMs',
+    'liveWorld'], 'patch show cue file');
   const { patch, output, size, fps: rate = '30', frames = rehearse ? 120 : Infinity,
     inputs = {}, presets = {}, initial, cues = [], projector = {}, slowMs } = config;
   if (config.format !== 'ink-studio/patch-show' || config.version !== 1 || typeof patch !== 'string' || !patch || !name(output))
@@ -108,7 +120,7 @@ async function readShow(file, rehearse, kit) {
   prepareProjectionSurfaces(mapping);
   return { patch: path.resolve(directory, patch), output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,
     ...sources(config, directory, frames), projector: { port, wait, surfaces: mapping }, slowMs: slowMs ?? 1000 / fps,
-    osc: oscInput(config.osc), midi: midiInput(config.midi, presets) };
+    osc: oscInput(config.osc), midi: midiInput(config.midi, presets), liveWorld: liveWorldInput(config.liveWorld) };
 }
 
 module.exports = { readShow, int, loopback };

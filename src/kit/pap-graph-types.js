@@ -137,6 +137,7 @@
     any: () => true,
     number: Number.isFinite,
     unitScalar: unit,
+    liveSnapshot: value => value===null||K.world?.liveSnapshots?.validPacket(value)===true,
     worldFrame: value => value===null||value?.format==='ink-studio/world-graph-frame'&&value.version===1&&
       name(value.world)&&name(value.branch)&&Number.isSafeInteger(value.seed)&&
       Number.isSafeInteger(value.tick)&&value.tick>=0&&Number.isFinite(value.dt)&&value.dt>0&&value.dt<=1&&

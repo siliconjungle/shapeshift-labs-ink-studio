@@ -1,7 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { randomBytes } = require('node:crypto');
+const { randomBytes, randomUUID } = require('node:crypto');
 const { EventEmitter, once } = require('node:events');
 const { int, loopback } = require('./patch-show-config.js');
 
@@ -31,12 +31,12 @@ async function readMidi(request) {
 }
 
 async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) {
-  const key = randomBytes(24).toString('hex'), connections = new EventEmitter();
+  const key = randomBytes(24).toString('hex'), stream = randomUUID(), connections = new EventEmitter();
   let client, latest, serial = 0, ended = false, failure, closed;
   const isConnected = () => client && performance.now() - client.seen < leaseMs;
 
-  function frame(request, response, url) {
-    const id = request.headers['x-ink-client'], last = url.searchParams.get('after');
+  function frame(request, response, url, snapshot = false) {
+    const id = request.headers['x-ink-client'], last = snapshot ? '0' : url.searchParams.get('after');
     if (typeof id !== 'string' || !/^[a-zA-Z\d-]{1,64}$/.test(id) || last === null || !/^\d+$/.test(last))
       return send(response, 400, 'text/plain', 'Expected a projector client and frame sequence');
     if (isConnected() && client.id !== id) return send(response, 409, 'text/plain', 'A projector is already connected');
@@ -45,18 +45,21 @@ async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) 
       return send(response, 400, 'text/plain', 'Unknown projector frame sequence');
     const attached = !isConnected(), replaced = client?.id !== id;
     if (replaced) client = { id, ack: 0, offered: 0 };
+    if (snapshot || attached) client.ack = 0;
     client.seen = performance.now();
     if (attached) {
       afterAttach(replaced);
       connections.emit('attach');
     }
-    if (after > client.ack) {
+    if (!snapshot && !attached && after > client.ack) {
       afterFrame(client.ack ? after - client.ack - 1 : 0);
       client.ack = after;
     }
-    if (!latest || latest.serial <= after) return send(response, 204, 'text/plain', undefined, ended ? { 'X-Ink-Ended': 1 } : {});
+    const headers = { 'X-Ink-Stream': stream, 'X-Ink-State': snapshot || attached ? 'snapshot' : 'live' };
+    if (!latest || latest.serial <= after)
+      return send(response, 204, 'text/plain', undefined, { ...headers, ...(ended && { 'X-Ink-Ended': 1 }) });
     client.offered = latest.serial;
-    return send(response, 200, 'application/octet-stream', latest.bytes, { 'Content-Length': latest.bytes.length,
+    return send(response, 200, 'application/octet-stream', latest.bytes, { ...headers, 'Content-Length': latest.bytes.length,
       'X-Ink-Serial': latest.serial, 'X-Ink-Frame': latest.index, 'X-Ink-Width': latest.width, 'X-Ink-Height': latest.height });
   }
 
@@ -72,10 +75,11 @@ async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) 
         return send(response, 200, type, await fs.readFile(path.join(__dirname, '../src/show', file)));
       }
       if (request.method === 'GET' && route === '/session')
-        return send(response, 200, 'application/json', JSON.stringify({ key, wait: config.wait, surfaces: config.surfaces,
+        return send(response, 200, 'application/json', JSON.stringify({ key, stream, wait: config.wait, surfaces: config.surfaces,
           midi: midi ? { input: midi.input, channel: midi.channel } : null }));
       if (request.headers['x-ink-session'] !== key) return send(response, 403, 'text/plain', 'Expected this projector session');
       if (request.method === 'GET' && route === '/frame') return frame(request, response, url);
+      if (request.method === 'GET' && route === '/snapshot') return frame(request, response, url, true);
       if (request.method === 'POST' && route === '/midi' && midi &&
           request.headers['content-type'] === 'application/json') {
         const value = await readMidi(request);

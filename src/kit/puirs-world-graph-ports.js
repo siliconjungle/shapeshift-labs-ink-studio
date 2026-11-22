@@ -32,6 +32,13 @@
     return value===undefined?{status:'missing',reason:'selected value is unavailable'}:{...sample,value};
   }
 
+  function frameOf(view,query,queries,{events=[],eventFrom=view.tick+1}={}) {
+    const samples=Object.fromEntries(queries.map(([name,probe])=>[name,sampleQuery(query,probe)]));
+    const branch=W.committedEvents.branchAt(view.eventStream,view.tick), {id:world,seed,dt,takeClock}=view.world;
+    return freeze({format,version:1,world,branch,seed,dt,tick:view.tick,eventFrom,events,samples,
+      ...(takeClock?.simulationRate!==undefined&&{simulationRate:takeClock.simulationRate})});
+  }
+
   function tickAt(time,period) {
     return T.index(T.roundDown(T.div(time,period)));
   }
@@ -72,11 +79,8 @@
         for (const row of frame.events) events.push(W.committedEvents.read(row,frame.world.id,frame.eventStream));
       }
       const view=session.scan(Math.min(eventFrom,tick),tick,eventFrom<=tick?collect:()=>{});
-      const query=session.query();
-      const samples=Object.fromEntries(spec.queries.map(([name,probe])=>[name,sampleQuery(query,probe)]));
-      const branch=W.committedEvents.branchAt(view.eventStream,tick), {id:world,seed}=view.world;
-      const value=freeze({format,version:1,world,branch,seed,dt,tick,eventFrom,events,samples,
-        ...(simulationRate!==undefined&&{simulationRate})});
+      const value=frameOf(view,session.query(),spec.queries,{events,eventFrom});
+      const {world,branch}=value;
       origins.set(value,stream);
       return {value,checkpoint:session.checkpoint(),report:{status:'live',world,branch,tick,eventFrom,events:events.length}};
     };
@@ -164,6 +168,7 @@
     'sim.worldScalar':queryPort('unitScalar'),
     'sim.worldRecord':queryPort('record')
   });
-  W.graphPorts=Object.freeze({format,operations});
+  W.graphPorts=Object.freeze({format,operations,queries:value=>settings({queries:value}).queries,frameOf,
+    tagFrame:(value,origin)=>origins.set(value,origin)});
   P.graph.operations=Object.freeze({...P.graph.operations,...operations});
 })(KIT);

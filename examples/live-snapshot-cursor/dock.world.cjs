@@ -1,0 +1,9 @@
+module.exports={
+  format:'ink-studio/world',version:1,id:'night-dock',dt:.4,history:{enabled:false},
+  systems:{stock:{kind:'store',config:{accounts:{
+    boat:{resource:'cargo',units:'crate',type:'integer',initial:16},
+    dock:{resource:'cargo',units:'crate',type:'integer',initial:0}
+  }}}},
+  commands:Array.from({length:16},(_,i)=>({tick:i+1,action:'world/transfer',
+    args:{from:'stock/boat',to:'stock/dock',amount:1,mode:'exact'}}))
+};
