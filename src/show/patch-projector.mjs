@@ -27,16 +27,26 @@ function renderer(surfaces) {
 }
 
 async function connectMidi(config, attached, headers) {
-  let sending = false, statusEvent, messageEvent, input;
+  const queue = [];
+  let sending = false, statusEvent, messageEvent, input, overflow = false;
   async function send(event) {
-    if (event.event === 'message') messageEvent = event;
-    else statusEvent = { ...event, detail: event.detail.slice(0, 255) };
+    if (event.event !== 'message') {
+      if (event.event === 'offline') queue.length = 0;
+      statusEvent = { ...event, detail: event.detail.slice(0, 255) };
+    } else if (!config.choices) messageEvent = event;
+    else if (overflow) return;
+    else if (queue.length < 128) queue.push(event);
+    else {
+      overflow = true;
+      queue.length = 0;
+      statusEvent = { event: 'offline', detail: 'MIDI choice queue overflow' };
+    }
     if (sending) return;
     sending = true;
     try {
       await attached;
-      while (statusEvent || messageEvent) {
-        const next = statusEvent ?? messageEvent;
+      while (statusEvent || messageEvent || queue.length) {
+        const next = statusEvent ?? messageEvent ?? queue.shift();
         if (statusEvent) statusEvent = undefined;
         else messageEvent = undefined;
         await fetch('/midi', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
@@ -51,11 +61,17 @@ async function connectMidi(config, attached, headers) {
     function sync() {
       const selected = [...access.inputs.values()].find(port => port.state === 'connected' &&
         (config.input === undefined || config.input === port.name));
-      if (selected !== input && input) input.onmidimessage = null;
+      if (selected !== input) {
+        if (input) input.onmidimessage = null;
+        queue.length = 0;
+      }
       input = selected;
+      overflow = false;
       if (input) input.onmidimessage = ({ data }) => {
         const type = data[0] & 0xf0;
-        if ((data[0] & 15) + 1 !== config.channel || !(type === 0xc0 || type === 0x90 && data[2] > 0)) return;
+        const isRelease = type === 0x80 || type === 0x90 && data[2] === 0;
+        if ((data[0] & 15) + 1 !== config.channel ||
+            !(type === 0xc0 || type === 0x90 && data[2] > 0 || config.choices && isRelease)) return;
         void send({ event: 'message', data: [...data] });
       };
       void send(input ? { event: 'online', detail: input.name || 'MIDI input' } : { event: 'offline', detail: 'MIDI input disconnected' });

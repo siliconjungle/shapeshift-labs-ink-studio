@@ -3,6 +3,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { parseRate, parseSize } = require('./patch-media.js');
 const { encodeOsc } = require('./show-protocols.js');
+const Installation = require('./patch-installation.js');
 const Assets = require('./asset-references.js');
 
 const loopback = '127.0.0.1';
@@ -78,7 +79,7 @@ async function readShow(file, rehearse, kit) {
   if (fs.statSync(file).size > 1024 * 1024) throw new RangeError('Show cue file exceeds 1 MiB');
   const config = record(JSON.parse(fs.readFileSync(file, 'utf8')), ['format', 'version', 'patch', 'output', 'size', 'fps',
     'frames', 'video', 'audio', 'videoTimeoutMs', 'inputs', 'presets', 'initial', 'cues', 'cueMap', 'projector', 'osc', 'midi', 'slowMs',
-    'liveWorld', 'assetRegistry'], 'patch show cue file');
+    'liveWorld', 'assetRegistry', 'installation'], 'patch show cue file');
   const { patch, output, size, fps: rate = '30', frames = rehearse ? 120 : Infinity,
     inputs = {}, presets = {}, initial, cues = [], projector = {}, slowMs } = config;
   const { KIT: K } = kit ?? require('../index.js').load(), api = K.authoring.assetReferences;
@@ -136,10 +137,12 @@ async function readShow(file, rehearse, kit) {
   if (!int(port, 0, 65535) || typeof wait !== 'boolean') throw new TypeError('Show projector needs a valid port and wait flag');
   const mapping = await projectionSurfaces(api.isRef(surfaces) ? Assets.parse(bind(surfaces, 'projection').bytes) : surfaces);
   const graph = api.isRef(patch) ? bind(patch, 'graph').filename : path.resolve(directory, patch);
+  const osc = oscInput(config.osc), midi = midiInput(config.midi, presets);
+  const installation = Installation.prepare(K.world, config.installation, { osc, midi, dimensions });
   return { patch: graph, output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,
     ...sources(media, directory, frames), projector: { port, wait, surfaces: mapping }, slowMs: slowMs ?? 1000 / fps,
     assetFiles: [...assetFiles], assetBindings: [...bindings.values()],
-    osc: oscInput(config.osc), midi: midiInput(config.midi, presets), liveWorld: liveWorldInput(config.liveWorld) };
+    osc, midi, installation, liveWorld: liveWorldInput(config.liveWorld) };
 }
 
 module.exports = { readShow, projectionSurfaces, int, loopback };

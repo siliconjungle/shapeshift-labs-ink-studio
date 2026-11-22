@@ -1,19 +1,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { createInterface } = require('node:readline');
 const { propose } = require('./live-world.js');
 
 const channel = 'world-intervention';
 const maxInputs = 4096, maxPending = 8, maxLine = 4096;
-const usage = 'Use --intervention-input <recording.json|-> with liveWorld and --record-interventions <journal.ndjson>';
+const usage = 'Use --record-interventions <journal.ndjson> with liveWorld and installation bindings or --intervention-input <recording.json|->';
 
-function settings(opt, liveWorld, reportFile) {
+function settings(opt, liveWorld, reportFile, installation) {
   const source = opt['intervention-input'], output = opt['record-interventions'];
   if (source === undefined && output === undefined) return;
-  if (!source?.trim() || !output?.trim() || output === '-' || !liveWorld) throw new TypeError(usage);
+  if ((source === undefined ? !installation : !source.trim()) || !output?.trim() || output === '-' || !liveWorld) throw new TypeError(usage);
   const file = path.resolve(output);
   if (file === reportFile) throw new TypeError('The intervention journal and show report need separate files');
-  return { source: source === '-' ? source : path.resolve(source), file };
+  return { source: !source || source === '-' ? source : path.resolve(source), file,
+    devices: Boolean(installation && (source === undefined || source === '-')) };
 }
 
 function isProposal(W, value) {
@@ -33,7 +35,7 @@ function readSource(K, file) {
 }
 
 function open(K, { source, file }, liveWorld, { fps, rehearse, report, stdin = process.stdin }) {
-  const replay = source === '-' ? null : readSource(K, source);
+  const replay = source && source !== '-' ? readSource(K, source) : null;
   const recorder = K.procedural.mediaGraph.recorder();
   const mode = rehearse ? 'preview' : 'submit';
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -51,9 +53,9 @@ function open(K, { source, file }, liveWorld, { fps, rehearse, report, stdin = p
     report.intervention(result.status);
   }
 
-  function submit(input) {
+  function submit(input, device) {
     const index = ++observed, cursor = after;
-    append({ kind: 'proposal', index, frame, after: cursor, input });
+    append({ kind: 'proposal', index, frame, after: cursor, input, ...(device && { device }) });
     if (rehearse) return outcome(index, { status: 'preview' });
     if (!passed) return outcome(index, { status: 'frame-failed' });
     if (!cursor) return outcome(index, { status: 'no-cursor' });
@@ -65,21 +67,29 @@ function open(K, { source, file }, liveWorld, { fps, rehearse, report, stdin = p
     pending.add(job);
   }
 
+  function available() {
+    if (failure || stopped || frame === undefined) return false;
+    if (observed < maxInputs) return true;
+    append({ kind: 'input-limit', limit: maxInputs });
+    report.intervention('input-limit');
+    stop();
+    return false;
+  }
+
+  function pulse(value) {
+    return recorder.append({ time: frame / fps, channel, kind: 'pulse', value });
+  }
+
   function line(text) {
-    if (failure || stopped || !text.trim()) return;
+    if (!text.trim()) return;
     try {
-      if (observed >= maxInputs) {
-        append({ kind: 'input-limit', limit: maxInputs });
-        report.intervention('input-limit');
-        stop();
-        return;
-      }
+      if (!available()) return;
       let value;
       if (Buffer.byteLength(text) <= maxLine) {
         try { value = JSON.parse(text); } catch { /* Record the malformed line without its contents. */ }
       }
       if (!isProposal(K.world, value)) return outcome(++observed, { status: 'invalid-input' });
-      submit(recorder.append({ time: frame / fps, channel, kind: 'pulse', value }));
+      submit(pulse(value));
     } catch (error) { failure ??= error; }
   }
 
@@ -91,6 +101,13 @@ function open(K, { source, file }, liveWorld, { fps, rehearse, report, stdin = p
 
   return {
     mode,
+    capture(id, device) {
+      try {
+        if (!available()) return false;
+        submit(pulse({ id, request: 'choice-' + randomUUID() }), device);
+        return true;
+      } catch (error) { failure ??= error; return false; }
+    },
     observe(index, cursor, ok) {
       if (failure) throw failure;
       if (stopped) return;
@@ -101,7 +118,7 @@ function open(K, { source, file }, liveWorld, { fps, rehearse, report, stdin = p
         const now = frame / fps;
         const boundary = now + 8 * Number.EPSILON * Math.max(1, now);
         while (next < replay.length && replay[next].time <= boundary) submit(replay[next++]);
-      } else if (!reader) {
+      } else if (source === '-' && !reader) {
         reader = createInterface({ input: stdin, terminal: false, crlfDelay: Infinity });
         reader.on('line', line);
         reader.on('error', error => { failure ??= error; });
@@ -123,4 +140,4 @@ function open(K, { source, file }, liveWorld, { fps, rehearse, report, stdin = p
   };
 }
 
-module.exports = { settings, open };
+module.exports = { settings, open, channel, isProposal };

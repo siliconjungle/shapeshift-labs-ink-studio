@@ -14,6 +14,7 @@ const { showReport } = require('./patch-show-report.js');
 const { readShow, int } = require('./patch-show-config.js');
 const { feed } = require('./live-world.js');
 const InterventionInput = require('./patch-interventions.js');
+const Installation = require('./patch-installation.js');
 
 function presetControl(config, project, report) {
   const worldInput = config.liveWorld && { [config.liveWorld.input]: null };
@@ -46,13 +47,14 @@ function presetControl(config, project, report) {
   };
 }
 
-async function openOsc(config, control, report) {
+async function openOsc(config, control, report, installation) {
   const socket = dgram.createSocket('udp4');
   let lastMessage, failure;
   socket.on('message', packet => {
     try {
       const { address, args } = decodeOsc(packet);
-      if (address === config.address && args.length === 1 && control.select(args[0], 'osc')) {
+      const preset = address === config.address && args.length === 1 && control.select(args[0], 'osc');
+      if (preset || installation?.osc(address, args)) {
         lastMessage = performance.now();
         failure = undefined;
         report.source('osc', 'online');
@@ -73,19 +75,20 @@ async function openOsc(config, control, report) {
     port: socket.address().port,
     check(started) {
       if (config.idleMs && !failure && performance.now() - Math.max(started, lastMessage ?? 0) >= config.idleMs)
-        report.source('osc', 'offline', 'No matching OSC preset messages within idleMs');
+        report.source('osc', 'offline', 'No matching OSC messages within idleMs');
     },
     close() { return new Promise(resolve => socket.close(resolve)); }
   };
 }
 
-function midiControl(config, control, report) {
+function midiControl(config, control, report, installation) {
   let status = 'waiting', detail;
   return {
-    reset() { status = 'waiting'; detail = undefined; },
+    reset() { status = 'waiting'; detail = undefined; installation?.resetMidi(); },
     push(value) {
       if (['online', 'offline'].includes(value?.event) && typeof value.detail === 'string' && value.detail.length <= 255) {
         status = value.event;
+        if (status === 'offline' || detail !== value.detail) installation?.resetMidi();
         detail = value.detail;
         report.source('midi', status, detail);
         return;
@@ -97,6 +100,7 @@ function midiControl(config, control, report) {
       const type = data[0] & 0xf0;
       if (type === 0x90 && data.length === 3 && data[2] > 0) control.select(config.notes[data[1]], 'midi');
       if (type === 0xc0 && data.length === 2) control.select(config.programs[data[1]], 'midi');
+      installation?.midi(data);
     },
     check(connected, graceExpired) {
       if (!connected && (status === 'online' || graceExpired)) report.source('midi', 'offline', 'Projector MIDI client unavailable');
@@ -109,7 +113,7 @@ function midiControl(config, control, report) {
 function openVideo(input, options, fallback, timeout, report) {
   const opened = performance.now(), buffer = input === '-' ? null : [];
   const { signal } = options;
-  let latest, arrived, ended, sequence = 0, used = 0, signalReady, unpause;
+  let latest, arrived, ended, sequence = 0, used = 0, signalReady, unpause, fresh = false;
   const first = new Promise(resolve => { signalReady = resolve; });
   function resume() { unpause?.(); unpause = undefined; }
   report.source('video', 'waiting');
@@ -132,6 +136,7 @@ function openVideo(input, options, fallback, timeout, report) {
   })();
   return {
     done,
+    get fresh() { return fresh; },
     async ready() {
       await Promise.race([first, delay(timeout, undefined, { signal: options.signal, ref: false })]);
       if (!sequence) report.source('video', 'offline', ended ?? 'Video frame timeout');
@@ -142,7 +147,8 @@ function openVideo(input, options, fallback, timeout, report) {
         if (buffer.length < 4) resume();
       }
       const { number = 0, value } = latest ?? {};
-      if (number > used) {
+      fresh = number > used;
+      if (fresh) {
         report.source('video', 'online');
         report.video('received', number - used - 1);
         used = number;
@@ -170,7 +176,7 @@ async function runShow(file, opt, settings, emit) {
   const config = await readShow(file, opt.rehearse, settings.kit), report = showReport(config, opt.rehearse);
   const { fps, frames, projector, video, audio, dimensions, liveWorld } = config, period = 1000 / fps;
   const output = opt.report && path.resolve(opt.report);
-  const interventionInput = InterventionInput.settings(opt, liveWorld, output);
+  const interventionInput = InterventionInput.settings(opt, liveWorld, output, config.installation);
   if (video === '-' && interventionInput?.source === '-')
     throw new TypeError('Video and intervention input cannot both read stdin');
   const media = {}, gpu = createPatchGpu(path.dirname(config.patch), opt['gpu-module']);
@@ -180,6 +186,9 @@ async function runShow(file, opt, settings, emit) {
   if (!Object.hasOwn(plan.outputs, config.output)) throw new TypeError('Unknown projector output ' + config.output);
   if (liveWorld && plan.inputs[liveWorld.input]?.type !== 'liveSnapshot')
     throw new TypeError('Show liveWorld needs a liveSnapshot patch input');
+  const tracking = interventionInput?.devices && config.installation.tracking;
+  if (tracking && plan.outputs[tracking.output]?.type !== 'array<record>')
+    throw new TypeError('Installation tracking needs a named array<record> patch output');
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
   const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, video, audio,
@@ -189,7 +198,9 @@ async function runShow(file, opt, settings, emit) {
   writer?.protect(fs.statSync(output, { throwIfNoEntry: false }));
   const abort = new AbortController(), { signal } = abort, raster = settings.kit.KIT.procedural.raster;
   let interrupted, projection, osc, capture, interventions, failure, attached = false;
-  const midi = config.midi && midiControl(config.midi, control, report);
+  const installation = interventionInput?.devices ?
+    Installation.open(config.installation, (grant, device) => interventions.capture(grant, device)) : undefined;
+  const midi = config.midi && midiControl(config.midi, control, report, installation);
   const mediaOptions = { ...dimensions, rate: String(config.rate), executable: opt.ffmpeg, signal };
   const interrupt = code => { interrupted = code; abort.abort(new Error('Show interrupted')); };
   const onInt = () => interrupt(130), onTerm = () => interrupt(143);
@@ -209,12 +220,14 @@ async function runShow(file, opt, settings, emit) {
     }
     report.source('projector', 'waiting');
     if (midi) report.source('midi', 'waiting');
-    projection = await openProjector(projector, config.midi, {
+    const projectorMidi = config.midi && { ...config.midi,
+      choices: Boolean(installation && config.installation.midi) };
+    projection = await openProjector(projector, projectorMidi, {
       afterFrame: skipped => report.displayed(skipped),
       afterAttach(replaced) { attached = true; if (replaced) midi?.reset(); report.source('projector', 'online'); },
       onMidi: value => midi.push(value)
     });
-    if (config.osc) osc = await openOsc(config.osc, control, report);
+    if (config.osc) osc = await openOsc(config.osc, control, report, installation);
     await emit({ event: 'show-ready', projector: projection.url, wait: projector.wait, fps, oscPort: osc?.port,
       ...(interventions && { interventions: interventions.mode }) });
     if (projector.wait) await projection.wait(signal);
@@ -260,6 +273,8 @@ async function runShow(file, opt, settings, emit) {
       report.stage('output', performance.now() - drawn);
       report.rendered(result.report.passed);
       interventions?.observe(index, live.cursor(), result.report.passed);
+      if (tracking && result.report.passed && (!capture || capture.fresh))
+        installation.sample(index, result.outputs[tracking.output]);
       next = index + 1;
     }
     interventions?.stop();

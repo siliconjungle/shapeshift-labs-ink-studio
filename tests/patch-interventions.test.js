@@ -135,3 +135,37 @@ test('rehearsal previews authored pulses and requires a journal destination', as
   assert.match(competing.stderr, /cannot both read stdin/);
   assert.deepEqual(calls, []);
 });
+
+test('a configured tracking output submits only with a journal and records its device evidence before POST', async t => {
+  const { file, read, save, run, calls, journal } = await setup(t);
+  const project = read('project.json');
+  project.nodes.camera = { op: 'raster.canvas', inputs: { width: 8, height: 8, color: [255, 255, 255, 255] } };
+  project.nodes.tracks = { op: 'patch.track', inputs: { source: { node: 'camera' } } };
+  project.outputs.tracks = { node: 'tracks' };
+  save('project.json', project);
+  save('show.json', { ...read('show.json'), installation: {
+    tracking: { output: 'tracks', size: [8, 8], dwellFrames: 2,
+      zones: { gate: { rect: [0, 0, 1, 1], grant: choice.id } } }
+  } });
+  const ordinary = await run('');
+  assert.equal(ordinary.code, 0, ordinary.stderr);
+  assert.equal(calls.length, 0);
+  assert.equal(fs.existsSync(file('input.ndjson')), false);
+  const active = await run('', '--record-interventions', 'input.ndjson');
+  assert.equal(active.code, 0, active.stderr || active.stdout);
+  assert.equal(calls.length, 1);
+  const proposal = journal().find(row => row.kind === 'proposal');
+  assert.equal(proposal.device.kind, 'tracking');
+  assert.equal(proposal.device.zone, 'gate');
+  assert.equal(proposal.device.dwellFrames, 2);
+  assert.deepEqual(calls[0].body, { ...proposal.input.value, after: proposal.after });
+  assert(calls[0].journal.some(row => row.device?.track === proposal.device.track));
+  assert.deepEqual(read('report.json').interventions.outcomes, { scheduled: 1 });
+
+  save('timed.json', { format: 'ink-studio/input-recording', version: 1,
+    events: [{ time: 0, channel: 'world-intervention', kind: 'pulse', value: choice }] });
+  const replay = await run('', '--intervention-input', 'timed.json', '--record-interventions', 'preview.ndjson', '--rehearse');
+  assert.equal(replay.code, 0, replay.stderr || replay.stdout);
+  assert.deepEqual(read('report.json').interventions.outcomes, { preview: 1 });
+  assert.equal(calls.length, 1);
+});

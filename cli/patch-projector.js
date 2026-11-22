@@ -76,7 +76,7 @@ async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) 
       }
       if (request.method === 'GET' && route === '/session')
         return send(response, 200, 'application/json', JSON.stringify({ key, stream, wait: config.wait, surfaces: config.surfaces,
-          midi: midi ? { input: midi.input, channel: midi.channel } : null }));
+          midi: midi ? { input: midi.input, channel: midi.channel, ...(midi.choices && { choices: true }) } : null }));
       if (request.headers['x-ink-session'] !== key) return send(response, 403, 'text/plain', 'Expected this projector session');
       if (request.method === 'GET' && route === '/frame') return frame(request, response, url);
       if (request.method === 'GET' && route === '/snapshot') return frame(request, response, url, true);

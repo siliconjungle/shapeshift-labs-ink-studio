@@ -4,8 +4,9 @@ Render graphs use committed world frames, events, and published queries to drive
 picture and sound. `sim.world` samples a private simulation or recording.
 `sim.liveWorld` consumes snapshots and live updates. A projector receives
 rendered frames and can use its existing presentation controls for presets.
-A graph output, a watched event, or a projector control cannot submit a
-world command through the built-in show runner.
+Show graphs and projector controls follow read-only defaults. Installations
+can opt into [recorded tracking, MIDI, and OSC choices](story-installation-inputs.md)
+with named grants and an explicit journal.
 
 ## Enable a recorded operator input
 
@@ -14,7 +15,7 @@ patch operator a named intervention. Set the show’s `liveWorld` input and
 credential to the operator’s scoped stream. Record the native run with
 `sim live --record` when you need to verify committed outcomes afterward.
 
-The built-in show runner opens the operator path only when both flags are set.
+Use both flags to open the operator input path.
 
 ```sh
 ink-studio patch show show.json \
