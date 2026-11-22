@@ -1,0 +1,69 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "lantern-ferry",
+  "title": "Choose a ferry crossing",
+  "stories": {
+    "relay": {
+      "kind": "questlet",
+      "title": "Take the relief ferry",
+      "lifecycle": { "progression": true },
+      "entry": "dispatch",
+      "stages": {
+        "dispatch": {
+          "title": "Wait for a crossing window",
+          "decision": { "mode": "autonomous" },
+          "objectives": {
+            "east-ready": { "title": "East lantern answers", "type": "observe", "optional": true,
+              "params": { "event": { "kind": "east-window-open", "system": "world" } } },
+            "west-ready": { "title": "West lantern answers", "type": "observe", "optional": true,
+              "params": { "event": { "kind": "west-window-open", "system": "world" } } }
+          },
+          "next": {
+            "east": { "outcome": "east-delivery", "requires": ["east-ready"], "auto": true },
+            "west": { "stage": "await-landing", "requires": ["west-ready"], "auto": true }
+          }
+        },
+        "await-landing": {
+          "title": "Wait for the west landing to clear",
+          "decision": { "mode": "autonomous" },
+          "objectives": { "landing": { "title": "West landing cleared", "type": "observe",
+            "params": { "event": { "kind": "west-landing-cleared", "system": "world" } } } },
+          "next": { "land": { "outcome": "west-delivery", "auto": true } }
+        }
+      },
+      "outcomes": {
+        "east-delivery": { "title": "Delivered at the east landing" },
+        "west-delivery": { "title": "Delivered at the west landing" }
+      }
+    },
+    "east-window": {
+      "kind": "incident",
+      "title": "Open the east ferry window",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "roles": { "pilot": { "kind": "ferry-pilot", "required": true } },
+      "triggers": { "summons": { "event": { "kind": "crossing-needed" } } },
+      "lifecycle": {
+        "candidate": { "for": 0.9, "release": "automatic", "selection": { "pool": "crossing", "weight": 1 } },
+        "commitment": { "actor": { "$role": "pilot" }, "order": { "id": "east-crossing", "task": "hold-window" } }
+      },
+      "entry": "open",
+      "stages": { "open": { "title": "Hold the east ferry window", "next": { "leave": { "outcome": "closed" } } } },
+      "outcomes": { "closed": { "title": "Window closed" } }
+    },
+    "west-window": {
+      "kind": "incident",
+      "title": "Open the west ferry window",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "roles": { "pilot": { "kind": "ferry-pilot", "required": true } },
+      "triggers": { "summons": { "event": { "kind": "crossing-needed" } } },
+      "lifecycle": {
+        "candidate": { "for": 0.9, "release": "automatic", "selection": { "pool": "crossing", "weight": 1 } },
+        "commitment": { "actor": { "$role": "pilot" }, "order": { "id": "west-crossing", "task": "hold-window" } }
+      },
+      "entry": "open",
+      "stages": { "open": { "title": "Hold the west ferry window", "next": { "leave": { "outcome": "closed" } } } },
+      "outcomes": { "closed": { "title": "Window closed" } }
+    }
+  }
+}

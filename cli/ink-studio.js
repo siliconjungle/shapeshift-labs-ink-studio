@@ -1030,6 +1030,7 @@ const CMD = {
         '    scene apply <scene> <edits.json> --dry-run   preview edited paths and look targets',
         '  sim run|resume|fork|reset|replay|verify|scrub|take|diff|sweep|render ...  run or compare fixed-tick simulations',
         '    sim fork-compare <world|checkpoint|run> <plan.json> --out directory   capture and compare two verified story branches',
+        '    sim seed-matrix <world> <plan.json> [--out report.json]   compare story outcomes, waiting, blockers, and casts across seeds',
         '    sim run|resume <world|checkpoint|run> [--start-story document/story] [--until-stage document/story/stage]',
         '      [--until-outcome document/story/outcome] [--until-condition condition.json] [--ticks N]   stop at a story breakpoint',
         '    sim run|resume|fork|replay <file> --watch-story document/story[,document/story...]|all   stream story values as NDJSON',

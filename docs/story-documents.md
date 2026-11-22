@@ -143,6 +143,36 @@ node cli/ink-studio.js sim verify breakwater-forks/night.run.json
 
 The breakwater comparison shows two crates sent to the pier on the default route and three sent to the shelter after intervention. The quay experiment compares cancelling a handoff with letting it finish. The Low Bank experiment compares salvaging the survey roll before closure with recovering it later. [Breakwater plan](../examples/story-documents/breakwater-watch.fork-compare.json) · [Quay plan](../examples/story-documents/quay-relay.fork-compare.json) · [Low Bank plan](../examples/story-documents/low-bank.fork-compare.json)
 
+### Run a story seed matrix
+
+`sim seed-matrix <world> <plan.json> [--out report.json]` starts a fresh run for each seed and advances every run to the same absolute tick. Use `--storyteller ID` to apply one authored profile to all trials. Checkpoints keep their original seed and can be explored with the fork tools.
+
+| Plan field | What it controls |
+| --- | --- |
+| `seeds` | An ordered list of up to 2,000 distinct safe integer seeds. |
+| `ticks` | The absolute tick at which to finish measuring. |
+| `stories` | Optional qualified story IDs. The default includes every assembled lifecycle. |
+| `actions` | Optional scheduled commands, as an inline array or a file path relative to the plan. Each seed receives the same commands. |
+
+`ink-studio/story-seed-matrix` version 1 includes aggregate results per story and per-seed details.
+
+| Metric | How to read it |
+| --- | --- |
+| Completion | `completionRate` uses all seeds. `completionRateAfterStart` uses activated trials and is null when none start. `censored` counts stories still open or waiting at the cutoff. Expired candidates have their own status. |
+| Branch frequency | `visits` counts actual selections, including repeat visits. `rate` is the share of seeds that used the branch. `shareOfStageExits` is its share of all selections leaving that stage. |
+| Common blockers | `ticks` counts observed blocked intervals for each reason and `runs` counts seeds affected. Reasons can overlap. Recorded command rejections are counted separately. |
+| Cast repetition | Resolved role values and accepted assignments are counted separately. Each slot gives distinct values and repeat appearances. `usedRuns` counts the seeds in which a bound role belonged to an activated story or an assignment was accepted. |
+| Waiting | Each interval from a published tick to the next tick contributes at most one wait reason. Waiting covers admission, queues, offers, commitments, suspension, work, settlement, unmet stage gates, and player or timed decisions. The final tick contributes outcomes and branch selections. The report gives totals, mean, median, and 90th percentile, including observed waits for stories still pending at the cutoff. |
+
+The [Lantern Ferry matrix](../examples/story-documents/lantern-ferry.seed-matrix.json) uses one scheduler profile and twelve seeds. The recorded draw sends four relays east to completion. Eight go west and wait for the landing through tick 12. The [Sluice Relief matrix](../examples/story-documents/sluice-relief.seed-matrix.json) shows how shared stock, route, and worksite blockers recur across seeds.
+
+```sh
+node cli/ink-studio.js sim seed-matrix examples/story-documents/lantern-ferry.world.json \
+  examples/story-documents/lantern-ferry.seed-matrix.json --out ferry-matrix.json
+node cli/ink-studio.js sim seed-matrix examples/story-documents/sluice-relief.world.json \
+  examples/story-documents/sluice-relief.seed-matrix.json --out relief-matrix.json
+```
+
 ### Describe a story package before running it
 
 `story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.

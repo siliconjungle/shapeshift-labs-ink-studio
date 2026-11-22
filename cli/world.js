@@ -8,6 +8,7 @@ const StoryRun = require('./story-run-controls.js');
 const StoryWatch = require('./story-watch.js');
 const StoryExplanation = require('./story-explanation.js');
 const StoryForkCompare = require('./story-fork-compare.js');
+const StorySeedMatrix = require('./story-seed-matrix.js');
 
 const read = file => JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const parse = input => JSON.parse(String(input));
@@ -61,6 +62,16 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     if (opt.out) write(opt.out,value);
     else process.stdout.write(JSON.stringify(value,null,opt.json?0:2)+'\n');
   };
+  function checkReportPath(sources) {
+    if (opt.out===undefined) return;
+    ensure(typeof opt.out==='string'&&opt.out.trim(),'--out needs a report path');
+    const out = path.resolve(opt.out), existing = fs.existsSync(out)?fs.statSync(out):null;
+    for (const source of sources) if (typeof source==='string') {
+      const stat = existing&&fs.existsSync(source)?fs.statSync(source):null;
+      ensure(path.resolve(source)!==out&&(!stat||stat.dev!==existing.dev||stat.ino!==existing.ino),
+        'Use a report path separate from the story sources');
+    }
+  }
   function document(world, file, dependency) {
     const track = source=>{shot?.dependency(source); dependency?.(source);};
     if (file !== undefined) world = embedModels(world, file, track);
@@ -546,8 +557,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const watching = StoryWatch.enabled(opt);
     if (watching) ensure(['run','resume','fork','replay'].includes(mode)&&other===undefined,
       'Use sim run, resume, fork, or replay with '+StoryWatch.usage);
-    ensure(opt.storyteller===undefined||['run','preflight','why','why-not'].includes(mode),
-      'Use --storyteller with a fresh world in sim run, preflight, why, or why-not');
+    ensure(opt.storyteller===undefined||['run','preflight','why','why-not','seed-matrix'].includes(mode),
+      'Use --storyteller with a fresh world in sim run, preflight, why, why-not, or seed-matrix');
     switch (mode) {
       case 'model': return modelCommand(file,other);
       case 'sections': {
@@ -860,15 +871,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const question = StoryExplanation.request(W,mode,other,opt,read);
         const sources = new Set([file,opt.spec,opt.actions]);
         const input = load(file,{dependency:source=>sources.add(source)});
-        if (opt.out!==undefined) {
-          ensure(typeof opt.out==='string'&&opt.out.trim(),'--out needs a report path');
-          const out = path.resolve(opt.out), existing = fs.existsSync(out)?fs.statSync(out):null;
-          for (const source of sources) if (typeof source==='string') {
-            const stat = existing&&fs.existsSync(source)?fs.statSync(source):null;
-            ensure(path.resolve(source)!==out&&(!stat||stat.dev!==existing.dev||stat.ino!==existing.ino),
-              'Use a report path separate from the story sources');
-          }
-        }
+        checkReportPath(sources);
         return respond(StoryExplanation.explain(W,snapshot(input),question));
       }
       case 'fork-compare': {
@@ -883,6 +886,15 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         });
         process.stdout.write(JSON.stringify(report,null,opt.json?0:2)+'\n');
         return;
+      }
+      case 'seed-matrix': {
+        ensure(typeof file==='string'&&typeof other==='string'&&!extra.length&&
+          Object.keys(opt).every(key=>['out','workers','storyteller','asset-pack','json'].includes(key)),StorySeedMatrix.usage);
+        const sources = new Set([file,other]), plan = StorySeedMatrix.prepare(W,read(other),other,read,sources);
+        const input = load(file,{dependency:source=>sources.add(source)});
+        ensure(!input.checkpoint,'A seed matrix needs a fresh world. Checkpoints keep their original seed');
+        checkReportPath(sources);
+        return respond(StorySeedMatrix.run(W,sourceWorld(input),plan,{workerPool}));
       }
       case 'scheduler': {
         ensure(typeof file==='string'&&other===undefined&&opt.args===undefined&&

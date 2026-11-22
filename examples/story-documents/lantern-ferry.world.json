@@ -1,0 +1,41 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "lantern-ferry",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "storyDocuments": [{ "file": "lantern-ferry.json" }],
+  "storyBindings": {
+    "lantern-ferry/east-window": {
+      "pilot": { "kind": "ferry-pilot", "value": { "system": "crew", "agent": "alma", "generation": 1 } }
+    },
+    "lantern-ferry/west-window": {
+      "pilot": { "kind": "ferry-pilot", "value": { "system": "crew", "agent": "bryn", "generation": 2 } }
+    }
+  },
+  "storyteller": { "active": "single-crossing", "profiles": {
+    "single-crossing": { "cadence": { "minInterval": 2 } }
+  } },
+  "systems": {
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-3, -1, -3], "max": [3, 2, 3] },
+      "species": { "pilot": { "mode": "walk", "speed": 1 } },
+      "agents": {
+        "alma": { "species": "pilot", "position": [-1, 0, 0] },
+        "bryn": { "species": "pilot", "position": [1, 0, 0] }
+      },
+      "orders": { "tasks": { "hold-window": { "steps": [{ "op": "wait", "ticks": 20 }] } } }
+    } }
+  },
+  "commands": [{ "tick": 1, "action": "world/event", "args": { "kind": "crossing-needed" } }],
+  "eventActions": {
+    "open-east": {
+      "on": { "kind": "story-candidate-dispatched", "system": "world", "where": { "path": "/candidate", "value": "lantern-ferry/east-window" } },
+      "actions": [{ "action": "world/event", "args": { "kind": "east-window-open" } }]
+    },
+    "open-west": {
+      "on": { "kind": "story-candidate-dispatched", "system": "world", "where": { "path": "/candidate", "value": "lantern-ferry/west-window" } },
+      "actions": [{ "action": "world/event", "args": { "kind": "west-window-open" } }]
+    }
+  }
+}

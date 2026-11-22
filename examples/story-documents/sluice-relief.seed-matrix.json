@@ -1,0 +1,6 @@
+{
+  "seeds": [2, 5, 13],
+  "ticks": 28,
+  "stories": ["sluice-relief/relief"],
+  "actions": "sluice-relief.actions.json"
+}
