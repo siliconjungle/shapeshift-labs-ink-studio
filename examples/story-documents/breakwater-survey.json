@@ -1,0 +1,48 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "breakwater-survey",
+  "title": "The Breakwater Survey",
+  "stories": {
+    "pick-channel": {
+      "kind": "arc",
+      "title": "Route a convoy through the breakwater",
+      "lifecycle": { "progression": true },
+      "entry": "listen",
+      "stages": {
+        "listen": {
+          "title": "Wait for the sounding",
+          "children": { "open": ["soundings"], "wait": { "all": ["soundings"] } },
+          "next": {
+            "clear-channel": { "stage": "dispatch", "auto": true, "requiresChildren": {
+              "soundings": { "status": "completed", "outcome": "clear" }
+            } },
+            "shallow-channel": { "outcome": "hold", "auto": true, "requiresChildren": {
+              "soundings": { "status": "failed", "outcome": "shallow" }
+            } }
+          }
+        },
+        "dispatch": {
+          "title": "Collect the dock's dispatch confirmation",
+          "objectives": { "signal": { "title": "Read the green dock lamp", "type": "observe", "params": {
+            "state": { "field": "world/signal", "args": { "port": "dock/green" }, "when": { "value": true } }
+          } } },
+          "next": { "launch": { "outcome": "dispatched" } }
+        }
+      },
+      "outcomes": { "dispatched": { "title": "Dispatch the convoy" }, "hold": { "title": "Hold the convoy" } }
+    },
+    "soundings": {
+      "kind": "questlet",
+      "title": "Take a sounding",
+      "lifecycle": { "progression": true },
+      "entry": "measure",
+      "stages": {
+        "measure": { "title": "Measure clearance", "next": {
+          "clear": { "outcome": "clear" }, "shallow": { "outcome": "shallow" }
+        } }
+      },
+      "outcomes": { "clear": { "title": "Channel clear" }, "shallow": { "title": "Channel shallow", "status": "failed" } }
+    }
+  }
+}

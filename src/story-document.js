@@ -7,8 +7,8 @@ const StoryDocument = (() => {
   const safeId = value => typeof value === 'string' && /^[a-z][a-z0-9_.-]{0,99}$/i.test(value) &&
     !['constructor', 'prototype', '__proto__'].includes(value);
 
-  function invalid(at, message) {
-    throw new TypeError(`${at}: ${message}`);
+  function invalid(at, message, code = 'invalid-document') {
+    throw Object.assign(new TypeError(`${at}: ${message}`), { storyIssue: { code, path:at, message, severity:'error' } });
   }
 
   function record(value, at) {
@@ -35,25 +35,29 @@ const StoryDocument = (() => {
     if (typeof value !== 'string' || !value.trim()) invalid(at, 'expected nonempty text');
   }
 
-  function link(value, table, at, label) {
-    if (!safeId(value) || !Object.hasOwn(table, value)) invalid(at, `unknown ${label} ${JSON.stringify(value)}`);
+  function link(value, table, at, label, report) {
+    if (safeId(value) && table && Object.hasOwn(table, value)) return true;
+    const message = `unknown ${label} ${JSON.stringify(value)}`;
+    if (!report) invalid(at, message, 'missing-reference');
+    report({ code:'missing-reference', path:at, message, severity:'error' });
+    return false;
   }
 
-  function links(values, table, at, label) {
+  function links(values, table, at, label, report) {
     if (!Array.isArray(values)) invalid(at, 'expected an array of IDs');
     const seen = new Set();
     for (const [index, value] of values.entries()) {
       const item = `${at}[${index}]`;
-      link(value, table, item, label);
+      link(value, table, item, label, report);
       if (seen.has(value)) invalid(item, `duplicate ${label} ${JSON.stringify(value)}`);
       seen.add(value);
     }
   }
 
-  function labelsAndRefs(value, at, references) {
+  function labelsAndRefs(value, at, references, report) {
     text(value.title, `${at}.title`);
     if (Object.hasOwn(value, 'summary')) text(value.summary, `${at}.summary`);
-    if (Object.hasOwn(value, 'refs')) links(value.refs, references, `${at}.refs`, 'reference');
+    if (Object.hasOwn(value, 'refs')) links(value.refs, references, `${at}.refs`, 'reference', report);
   }
 
   function dataPath(path, at) {
@@ -148,10 +152,10 @@ const StoryDocument = (() => {
     }
   }
 
-  function typedParams({type, params}, types, at) {
+  function typedParams({type, params}, types, at, report) {
     const location = `${at}.params`;
     if (!objectiveKinds.has(type)) {
-      link(type, types, `${at}.type`, 'objective type');
+      if (!link(type, types, `${at}.type`, 'objective type', report)) return;
       fields(params ?? {}, location, Object.keys(types[type].match ?? {}));
       return;
     }
@@ -292,7 +296,7 @@ const StoryDocument = (() => {
 
   const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];
 
-  function cleanup(rules, outcomes, at) {
+  function cleanup(rules, outcomes, at, report) {
     const rows = entries(rules, at, true);
     if (rows.length > 32) invalid(at, 'expected up to 32 cleanup rules');
     const targets = {
@@ -313,17 +317,17 @@ const StoryDocument = (() => {
           if (!Number.isSafeInteger(value) || value <= 0) invalid(`${location}.${key}`, 'expected a positive integer');
         } else if (!worldName(value)) invalid(`${location}.${key}`, 'expected a world ID');
       }
-      if (Object.hasOwn(rule, 'keepOn')) links(rule.keepOn, statuses, `${place}.keepOn`, 'terminal status');
-      if (Object.hasOwn(rule, 'keepOutcomes')) links(rule.keepOutcomes, outcomes, `${place}.keepOutcomes`, 'outcome');
+      if (Object.hasOwn(rule, 'keepOn')) links(rule.keepOn, statuses, `${place}.keepOn`, 'terminal status', report);
+      if (Object.hasOwn(rule, 'keepOutcomes')) links(rule.keepOutcomes, outcomes, `${place}.keepOutcomes`, 'outcome', report);
     }
   }
 
-  function childList(values, table, at) {
+  function childList(values, table, at, report) {
     if (!Array.isArray(values) || !values.length || values.length > 64) invalid(at, 'expected 1–64 child questlet IDs');
-    links(values, table, at, 'child questlet');
+    links(values, table, at, 'child questlet', report);
   }
 
-  function childStages(rows, stories, owner, owners, at) {
+  function childStages(rows, stories, owner, owners, at, report) {
     const children = Object.create(null);
     for (const [stage, definition] of rows) {
       record(definition, `${at}.stages.${stage}`);
@@ -332,8 +336,9 @@ const StoryDocument = (() => {
       fields(spec, location, [], ['open', 'wait']);
       if (!Object.keys(spec).length) invalid(location, 'expected open or wait');
       if (!Object.hasOwn(spec, 'open')) continue;
-      childList(spec.open, stories, `${location}.open`);
+      childList(spec.open, stories, `${location}.open`, report);
       for (const id of spec.open) {
+        if (!safeId(id) || !Object.hasOwn(stories, id)) continue;
         const target = stories[id];
         if (target?.kind !== 'questlet' || !target.lifecycle || Object.hasOwn(target, 'triggers'))
           invalid(`${location}.open`, `child ${id} needs a questlet lifecycle and takes its start from the arc`);
@@ -348,30 +353,30 @@ const StoryDocument = (() => {
       fields(wait, location, [], ['any', 'all']);
       if (Object.keys(wait).length !== 1) invalid(location, 'expected exactly one of any or all');
       const [mode] = Object.keys(wait);
-      childList(wait[mode], children, `${location}.${mode}`);
+      childList(wait[mode], children, `${location}.${mode}`, report);
     }
     return children;
   }
 
-  function childConditions(conditions, children, at) {
+  function childConditions(conditions, children, at, report) {
     const rows = entries(conditions, at, true);
     if (rows.length > 64) invalid(at, 'expected up to 64 child conditions');
     for (const [id, condition] of rows) {
       const place = `${at}.${id}`;
-      link(id, children, place, 'child questlet');
+      const known = link(id, children, place, 'child questlet', report);
       fields(condition, place, [], ['status', 'outcome']);
       if (!Object.keys(condition).length) invalid(place, 'expected a terminal status or outcome');
       if (Object.hasOwn(condition, 'status') && !terminalStates.includes(condition.status))
         invalid(`${place}.status`, 'expected a terminal story status');
       if (Object.hasOwn(condition, 'outcome')) {
-        link(condition.outcome, children[id].outcomes, `${place}.outcome`, 'child outcome');
+        if (known) link(condition.outcome, children[id].outcomes, `${place}.outcome`, 'child outcome', report);
         if (['withdrawn', 'expired'].includes(condition.status))
           invalid(place, 'only completed or failed questlets record named outcomes');
       }
     }
   }
 
-  function validateStoryDocument(document) {
+  function validate(document, report) {
     fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
     if (document.version !== version) invalid('story.version', `unsupported version ${JSON.stringify(document.version)}; expected ${version}`);
@@ -392,7 +397,7 @@ const StoryDocument = (() => {
       const at = `story.stories.${id}`;
       fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle']);
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
-      labelsAndRefs(story, at, references);
+      labelsAndRefs(story, at, references, report);
       if (Object.hasOwn(story, 'triggers')) triggers(story, at);
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
@@ -402,70 +407,76 @@ const StoryDocument = (() => {
         fields(role, location, ['kind'], ['ref']);
         if (!safeId(role.kind)) invalid(`${location}.kind`, 'invalid role kind');
         if (Object.hasOwn(role, 'ref')) {
-          link(role.ref, references, `${location}.ref`, 'reference');
-          if (references[role.ref].kind !== role.kind) invalid(`${location}.ref`, `reference kind must match ${JSON.stringify(role.kind)}`);
+          if (link(role.ref, references, `${location}.ref`, 'reference', report) && references[role.ref].kind !== role.kind)
+            invalid(`${location}.ref`, `reference kind must match ${JSON.stringify(role.kind)}`);
         }
       }
       const stageRows = entries(stages, `${at}.stages`, true);
       const progression = story.lifecycle?.progression === true;
       const nesting = progression && story.kind === 'arc';
-      const children = nesting ? childStages(stageRows, stories, id, owners, at) : {};
-      link(story.entry, stages, `${at}.entry`, 'stage');
+      const children = nesting ? childStages(stageRows, stories, id, owners, at, report) : {};
+      link(story.entry, stages, `${at}.entry`, 'stage', report);
       for (const [name, outcome] of entries(outcomes, `${at}.outcomes`, true)) {
         const location = `${at}.outcomes.${name}`;
         fields(outcome, location, ['title'], ['summary', 'refs', ...(progression ? ['status'] : [])]);
         if (Object.hasOwn(outcome, 'status') && !['completed', 'failed'].includes(outcome.status))
           invalid(`${location}.status`, 'expected completed or failed');
-        labelsAndRefs(outcome, location, references);
+        labelsAndRefs(outcome, location, references, report);
       }
       if (story.lifecycle && Object.hasOwn(story.lifecycle, 'cleanup'))
-        cleanup(story.lifecycle.cleanup, outcomes, `${at}.lifecycle.cleanup`);
+        cleanup(story.lifecycle.cleanup, outcomes, `${at}.lifecycle.cleanup`, report);
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
         fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story',
           ...(progression ? ['objectives'] : []), ...(nesting ? ['children'] : [])]);
-        labelsAndRefs(stage, location, references);
-        if (Object.hasOwn(stage, 'roles')) links(stage.roles, roles, `${location}.roles`, 'role');
-        if (Object.hasOwn(stage, 'story')) link(stage.story, stories, `${location}.story`, 'story');
+        labelsAndRefs(stage, location, references, report);
+        if (Object.hasOwn(stage, 'roles')) links(stage.roles, roles, `${location}.roles`, 'role', report);
+        if (Object.hasOwn(stage, 'story')) link(stage.story, stories, `${location}.story`, 'story', report);
         const objectives = Object.hasOwn(stage, 'objectives') ? stage.objectives : {};
         const objectiveRows = entries(objectives, `${location}.objectives`);
         if (objectiveRows.length > 64) invalid(`${location}.objectives`, 'a stage supports up to 64 objectives');
         for (const [name, objective] of objectiveRows) {
           const place = `${location}.objectives.${name}`;
           fields(objective, place, ['title'], ['summary', 'refs', 'optional', 'evidence', 'type', 'params']);
-          labelsAndRefs(objective, place, references);
+          labelsAndRefs(objective, place, references, report);
           if (Object.hasOwn(objective, 'optional') && typeof objective.optional !== 'boolean')
             invalid(`${place}.optional`, 'expected a boolean');
           if (Object.hasOwn(objective, 'evidence')) evidence(objective.evidence, `${place}.evidence`);
           if (Object.hasOwn(objective, 'type')) {
             if (Object.hasOwn(objective, 'evidence')) invalid(place, 'typed objectives define their evidence through params');
             if (Object.hasOwn(objective, 'params')) record(objective.params, `${place}.params`);
-            typedParams(objective, types, place);
+            typedParams(objective, types, place, report);
           } else if (Object.hasOwn(objective, 'params')) invalid(`${place}.params`, 'requires an objective type');
         }
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
           const edge = `${location}.next.${choice}`;
           fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires', 'requiresFailed', 'requiresChoice'] : []),
             ...(nesting ? ['requiresChildren', 'auto'] : [])]);
-          if (Object.hasOwn(target, 'stage') === Object.hasOwn(target, 'outcome')) invalid(edge, 'expected exactly one stage or outcome target');
-          if (Object.hasOwn(target, 'stage')) link(target.stage, stages, `${edge}.stage`, 'stage');
-          else link(target.outcome, outcomes, `${edge}.outcome`, 'outcome');
-          if (Object.hasOwn(target, 'requires')) links(target.requires, objectives, `${edge}.requires`, 'objective');
+          const hasStage = Object.hasOwn(target, 'stage'), hasOutcome = Object.hasOwn(target, 'outcome');
+          if (hasStage === hasOutcome) {
+            const message = 'expected exactly one stage or outcome target';
+            if (!report) invalid(edge, message, hasStage ? 'ambiguous-transition-target' : 'missing-transition-target');
+            report({ code:hasStage?'ambiguous-transition-target':'missing-transition-target', path:edge, message, severity:'error' });
+          }
+          if (hasStage) link(target.stage, stages, `${edge}.stage`, 'stage', report);
+          if (hasOutcome) link(target.outcome, outcomes, `${edge}.outcome`, 'outcome', report);
+          if (Object.hasOwn(target, 'requires')) links(target.requires, objectives, `${edge}.requires`, 'objective', report);
           if (Object.hasOwn(target, 'requiresFailed')) {
-            links(target.requiresFailed, objectives, `${edge}.requiresFailed`, 'objective');
+            links(target.requiresFailed, objectives, `${edge}.requiresFailed`, 'objective', report);
             for (const id of target.requiresFailed) {
+              if (!safeId(id) || !Object.hasOwn(objectives, id)) continue;
               if (!['protect', 'survive'].includes(objectives[id].type) || target.requires?.includes(id))
                 invalid(`${edge}.requiresFailed`, `expected a failing objective outside requires, received ${id}`);
             }
           }
           if (Object.hasOwn(target, 'requiresChoice')) {
             for (const [id, option] of entries(target.requiresChoice, `${edge}.requiresChoice`, true)) {
-              link(id, objectives, `${edge}.requiresChoice`, 'objective');
+              if (!link(id, objectives, `${edge}.requiresChoice.${id}`, 'objective', report)) continue;
               if (objectives[id].type !== 'choose') invalid(`${edge}.requiresChoice.${id}`, 'expected a choose objective');
-              link(option, objectives[id].params.options, `${edge}.requiresChoice.${id}`, 'choice option');
+              link(option, objectives[id].params.options, `${edge}.requiresChoice.${id}`, 'choice option', report);
             }
           }
-          if (Object.hasOwn(target, 'requiresChildren')) childConditions(target.requiresChildren, children, `${edge}.requiresChildren`);
+          if (Object.hasOwn(target, 'requiresChildren')) childConditions(target.requiresChildren, children, `${edge}.requiresChildren`, report);
           if (Object.hasOwn(target, 'auto') && (typeof target.auto !== 'boolean' ||
             (target.auto && !stage.children?.wait && !target.requiresChildren)))
             invalid(`${edge}.auto`, 'expected a boolean and a child wait or outcome condition for an automatic branch');
@@ -475,6 +486,19 @@ const StoryDocument = (() => {
     return document;
   }
 
-  return Object.freeze({ validateStoryDocument, objectiveRule });
+  const validateStoryDocument = document => validate(document);
+
+  function inspectStoryDocument(document) {
+    const diagnostics = [];
+    try {
+      validate(document, issue => diagnostics.push(issue));
+      return { shapeValid:true, diagnostics };
+    } catch (error) {
+      if (!error.storyIssue) throw error;
+      return { shapeValid:false, diagnostics:[...diagnostics,error.storyIssue] };
+    }
+  }
+
+  return Object.freeze({ validateStoryDocument, inspectStoryDocument, objectiveRule });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

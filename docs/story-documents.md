@@ -13,7 +13,35 @@ node cli/ink-studio.js graph inspect examples/story-documents/inspect.graph.json
 node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --watch 'arc=$arc'
 ```
 
-`story validate` returns a JSON summary listing the document ID, version, and story IDs and kinds. `story describe` without an ID returns the full validated document. With an ID it returns the selected `definition`, its `id`, `documentId`, `version`, and the document's reference table. Both commands fail on an unsupported version or a broken internal reference and identify the field in the error. Node hosts can use `validateStoryDocument(value)` and `readStoryDocument(file)` from the package entry point. Both return the validated document, and validation leaves its data untouched.
+`story validate` returns a JSON summary listing the document ID, version, and story IDs and kinds, plus graph diagnostics where present. `story describe` without an ID returns the full validated document. With an ID it returns the selected `definition`, its `id`, `documentId`, `version`, and the document's reference table. Both commands fail on an unsupported version or a broken internal reference and identify the field in the error. Node hosts can use `validateStoryDocument(value)` and `readStoryDocument(file)` from the package entry point. Both return the validated document, and validation leaves its data untouched.
+
+## Preflight story routes
+
+`story preview <file.json> [story-id]` reports authored stages, branch gates, child waits, reachable endings, and a shortest sample route to each shown ending. It keeps up to 16 sample routes per story and up to 64 steps per sample. Omitted counts are explicit. Set `--strict` on `story validate` or `story preview` to exit with status 1 for any diagnostic. By default, broken references or invalid targets fail the check and graph findings appear as warnings. Preview returns its JSON report even when it finds broken links.
+
+| Finding | What to inspect |
+| --- | --- |
+| Missing reference or ambiguous target | The authored field path identifies an unresolved ID or a branch that names both a stage and an outcome. |
+| Unreachable stage | The analyzer could find no path from the entry after checking the available static gates. |
+| Ambiguous automatic transition | Two automatic branches may qualify together. Distinct choices or incompatible terminal results on the same child can establish that they are exclusive. Runtime selection uses the first eligible branch ID. |
+| Loop without an exit | A reachable cycle has no path to a named ending. |
+| Unbounded chain | A reachable cycle has an exit and permits indefinite revisits. A world or work deadline provides a bound. |
+| Child wait before opening | A group or branch needs a child that cannot open along the way to it. A world deadline can make an unopened child available as an expired result. |
+
+`sim preflight <world.json> [--strict]` compiles the world with its embedded stories and checks the registered query fields, systems, cleanup targets, and action bindings without initializing or stepping the simulation. `sim run` prints graph warnings to stderr before advancing. Node hosts can use `preflightStoryDocument(value, {story})` for a document preview and `KIT.world.runtime.storyPreflight(world)` for a compiled world report.
+
+The preview uses authored structure and static conditions. It considers possible child openings across incoming paths and checks explicit choice and outcome conflicts. World events, query values, and the order of arrivals are resolved during a run.
+
+### Inspect The Breakwater Survey
+
+[The draft](../examples/story-documents/breakwater-draft.json) contains missing links, an ambiguous automatic decision, an unreachable dock, a loop with an exit, a loop with no ending, and a wait placed before its child opens. [The reviewed story](../examples/story-documents/breakwater-survey.json) has two exclusive routes based on the sounding's outcome.
+
+```sh
+node cli/ink-studio.js story preview examples/story-documents/breakwater-draft.json
+node cli/ink-studio.js story preview examples/story-documents/breakwater-survey.json pick-channel --strict
+node cli/ink-studio.js sim preflight examples/story-documents/breakwater-survey.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/breakwater-survey.world.json --ticks 6 --record survey.run.json
+```
 
 ## Write a definition
 

@@ -772,9 +772,20 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const input = load(file);
         ensure(mode==='run' || input.checkpoint,'Expected a checkpoint or recording to resume or fork');
         const run = runtime(input,!!(opt.profile||opt.assert),undefined,recordOptions());
+        if (mode === 'run' && !input.checkpoint) for (const issue of run.storyDiagnostics())
+          console.error(`Story warning [${issue.code}] ${issue.document} ${issue.path}: ${issue.message}`);
         schedule(run);
         run.advance(to(run),{stopOnOutcome:!!opt.scenario});
         finish(run,input.store);
+        break;
+      }
+      case 'preflight': {
+        const input = load(file);
+        ensure(!input.checkpoint && other===undefined && (opt.strict===undefined || opt.strict===true),
+          'Use sim preflight <world.json> [--strict]');
+        const report = R.storyPreflight(sourceWorld(input),{workerPool});
+        respond(report);
+        if (opt.strict && report.diagnostics.length) process.exitCode = 1;
         break;
       }
       case 'plan': return respond(runtime(load(file)).composition());

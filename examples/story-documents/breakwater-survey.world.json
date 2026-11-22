@@ -1,0 +1,26 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "breakwater-survey",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "breakwater-survey.json" }],
+  "systems": {
+    "dock": { "kind": "puzzle", "config": { "inputs": { "lamp": "bool" }, "outputs": { "green": "lamp" } } }
+  },
+  "commands": [
+    { "tick": 3, "action": "world/story-choose", "args": {
+      "document": "breakwater-survey", "story": "soundings", "stage": "measure", "visit": 1,
+      "branch": "clear", "reason": "soundings-cleared"
+    } },
+    { "tick": 4, "action": "world/input", "args": { "port": "dock/lamp", "value": true } }
+  ],
+  "eventActions": {
+    "dispatch-convoy": {
+      "on": { "kind": "story-objective-resolved", "system": "world", "where": { "path": "/objective", "value": "signal" } },
+      "actions": [{ "action": "world/story-choose", "args": {
+        "document": "breakwater-survey", "story": "pick-channel", "stage": "dispatch", "visit": 2,
+        "branch": "launch", "reason": "green-lamp-confirmed"
+      } }]
+    }
+  }
+}

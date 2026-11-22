@@ -1,0 +1,95 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "breakwater-draft",
+  "title": "Breakwater Survey Draft",
+  "stories": {
+    "broken-links": {
+      "kind": "incident",
+      "title": "Check the reference table",
+      "refs": ["missing-chart"],
+      "entry": "survey",
+      "stages": {
+        "survey": {
+          "title": "Read the chart",
+          "roles": ["missing-scout"],
+          "next": {
+            "unclear-target": { "stage": "survey", "outcome": "reported" },
+            "missing-ending": { "outcome": "unknown-ending" }
+          }
+        }
+      },
+      "outcomes": { "reported": { "title": "Issue the report" } }
+    },
+    "route-loops": {
+      "kind": "questlet",
+      "title": "Inspect the routes around the harbor",
+      "lifecycle": { "progression": true },
+      "entry": "approach",
+      "stages": {
+        "approach": {
+          "title": "Approach the breakwater",
+          "next": { "circle": { "stage": "turning-basin" }, "drift": { "stage": "eddies" } }
+        },
+        "turning-basin": {
+          "title": "Circle with a route back",
+          "next": { "circle-again": { "stage": "turning-basin" }, "send-report": { "outcome": "reported" } }
+        },
+        "eddies": { "title": "Enter the eddies", "next": { "sweep": { "stage": "shoal" } } },
+        "shoal": { "title": "Round the shoal", "next": { "sweep": { "stage": "eddies" } } },
+        "unused-dock": { "title": "Unused dock", "next": { "return": { "outcome": "reported" } } }
+      },
+      "outcomes": { "reported": { "title": "Issue the report" } }
+    },
+    "pick-channel": {
+      "kind": "arc",
+      "title": "Choose an automatic channel",
+      "lifecycle": { "progression": true },
+      "entry": "listen",
+      "stages": {
+        "listen": {
+          "title": "Wait for the sounding",
+          "children": { "open": ["soundings"], "wait": { "all": ["soundings"] } },
+          "next": {
+            "a-use-channel": { "outcome": "dispatch", "auto": true, "requiresChildren": { "soundings": { "outcome": "clear" } } },
+            "b-return": { "outcome": "hold", "auto": true, "requiresChildren": { "soundings": { "status": "completed" } } }
+          }
+        }
+      },
+      "outcomes": { "dispatch": { "title": "Dispatch the convoy" }, "hold": { "title": "Hold the convoy" } }
+    },
+    "soundings": {
+      "kind": "questlet",
+      "title": "Take a sounding",
+      "lifecycle": { "progression": true },
+      "entry": "measure",
+      "stages": {
+        "measure": { "title": "Measure clearance", "next": {
+          "clear": { "outcome": "clear" }, "shallow": { "outcome": "shallow" }
+        } }
+      },
+      "outcomes": { "clear": { "title": "Channel clear" }, "shallow": { "title": "Channel shallow", "status": "failed" } }
+    },
+    "wait-before-open": {
+      "kind": "arc",
+      "title": "Check the order of the stores",
+      "lifecycle": { "progression": true },
+      "entry": "wait",
+      "stages": {
+        "wait": { "title": "Wait for the storekeeper", "children": { "wait": { "all": ["stores"] } },
+          "next": { "continue": { "stage": "call" } } },
+        "call": { "title": "Call the storekeeper", "children": { "open": ["stores"] },
+          "next": { "finish": { "outcome": "supplied" } } }
+      },
+      "outcomes": { "supplied": { "title": "Supplies checked" } }
+    },
+    "stores": {
+      "kind": "questlet",
+      "title": "Check the harbor stores",
+      "lifecycle": {},
+      "entry": "count",
+      "stages": { "count": { "title": "Count the stores", "next": { "finish": { "outcome": "ready" } } } },
+      "outcomes": { "ready": { "title": "Ready" } }
+    }
+  }
+}

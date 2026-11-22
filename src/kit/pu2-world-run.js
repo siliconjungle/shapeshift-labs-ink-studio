@@ -335,6 +335,8 @@
     if (world.storyDocuments !== undefined) {
       plan.storyTriggers = W.storyTriggers.compile(world.storyDocuments, world, systems);
       plan.storyLifecycle = W.storyLifecycle.compile(world.storyDocuments, world, systems);
+      plan.storyDiagnostics = freeze(world.storyDocuments.flatMap(document =>
+        StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
     }
     if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
       dt: world.dt, validateAction: command => actionCheck(command, plan),
@@ -443,6 +445,13 @@
     {...workerPool.implementations,...implementations}:implementations;
   const validate=(source,{implementations,workerPool}={})=>
     prepare(source,{implementations:implementationsFor(implementations,workerPool)}).world;
+  function storyPreflight(source,{implementations,workerPool}={}) {
+    const options = {implementations:implementationsFor(implementations,workerPool)};
+    let {world,plan} = prepare(source,options);
+    if (world.scenario?.start?.length) ({world,plan} = prepare(W.apply(world,world.scenario.start).world,options));
+    return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:true,
+      documents:world.storyDocuments?.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? []});
+  }
   function modelInterface(source) {
     const {world,plan:{systems,ports}} = prepare(source);
     return {world,systems,ports};
@@ -1427,6 +1436,7 @@
       ...(debug&&{stepFrame:debug.latest,stepAttempt:debug.attempt}),
       get scenario(){return scenario;}, get history(){return history;}, get events(){return lastEvents;},
       schedule:commands => enqueue(commands,true),checkpoint:save,recording,queues,
+      storyDiagnostics:() => plan.storyDiagnostics ?? [],
       commandCounts:() => {
         const all=[...origin.pending,...added];
         return {scheduled:all.length,applied:all.filter(command=>command.tick<=tick).length,pending:packCommands().length};
@@ -1519,7 +1529,7 @@
       'Simulation diff needs two checkpoints at the same tick');
     return {tick:a.tick,time:{before:a.tick*a.world.dt,after:b.tick*b.world.dt},edits:Q.keyedChanges(a,b)};
   }
-  W.runtime = Object.freeze({register,validate,create,openRecording,replay,replayAsync,verify,verifyAsync,diff,firstDivergence:W.stepDebug.firstDivergence,
+  W.runtime = Object.freeze({register,validate,storyPreflight,create,openRecording,replay,replayAsync,verify,verifyAsync,diff,firstDivergence:W.stepDebug.firstDivergence,
     checkpointFormat,runFormat,maxTick,partitionKernel,checkpointsEqual,modelInterface,
     prefabInterfaces:(world,{implementations}={})=>compile(world,implementations,true)});
 })(KIT);
