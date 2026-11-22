@@ -9,7 +9,10 @@
   const keys=(obj,allowed)=>record(obj)&&Object.keys(obj).every(key=>allowed.includes(key));
   const at=value=>vector(value)||keys(value,['entity','socket'])&&id(value.entity)&&
     (value.socket===undefined||id(value.socket));
-  const ownerOK=owner=>record(owner)&&id(owner.system)&&id(owner.agent)&&positive(owner.generation)&&positive(owner.sequence);
+  const actorOK=actor=>record(actor)&&id(actor.system)&&id(actor.agent)&&positive(actor.generation);
+  const ownerOK=owner=>actorOK(owner)&&positive(owner.sequence);
+  const eligible=(entry,owner)=>!entry.holder||entry.holder.system===owner.system&&entry.holder.agent===owner.agent&&
+    entry.holder.generation===owner.generation;
   const token=owner=>owner.system+'/'+owner.generation+'/'+owner.sequence;
   const compare=(a,b)=>a<b?-1:a>b?1:0;
   const byAge=(a,b)=>a.since-b.since||compare(a.owner.system,b.owner.system)||
@@ -41,7 +44,8 @@
       Object.keys(poolSpecs).length<=jobsLimit&&Object.keys(jobSpecs).length<=jobsLimit,'Invalid reservation board');
     const catalogItem=spec=>(spec.at===undefined||at(spec.at))&&
       (spec.metadata===undefined||record(spec.metadata))&&(spec.leaseTicks===undefined||capacity(spec.leaseTicks));
-    const jobOK=spec=>keys(spec,['at','metadata','leaseTicks','expires'])&&catalogItem(spec)&&
+    const jobOK=spec=>keys(spec,['at','metadata','leaseTicks','expires','holder'])&&catalogItem(spec)&&
+      (spec.holder===undefined||keys(spec.holder,['system','agent','generation'])&&actorOK(spec.holder))&&
       (spec.expires===undefined||tick(spec.expires)&&spec.expires>0);
     const pools=freeze(Object.fromEntries(Object.entries(poolSpecs).map(([name,spec])=>{
       check(id(name)&&keys(spec,['capacity','at','metadata','leaseTicks'])&&capacity(spec.capacity)&&catalogItem(spec),
@@ -97,7 +101,7 @@
         check(id(name)&&key===name&&!own(pools,name)&&kind==='job'&&capacity===1&&jobOK(spec)&&
           integer(revision,1,state.serial)&&!revisions.has(revision)&&tick(posted)&&
           (status==='open'?closed===undefined:['completed','expired'].includes(status)&&tick(closed)&&closed>=posted)&&
-          (status==='completed'?ownerOK(completedBy):completedBy===undefined)&&
+          (status==='completed'?ownerOK(completedBy)&&eligible(row,completedBy):completedBy===undefined)&&
           (spec.expires===undefined||spec.expires>posted),'Invalid saved job '+name);
         revisions.add(revision);
       }
@@ -114,7 +118,7 @@
           grants.add(grant.claim);
           if(row.status==='held'){
             const entry=lookup(state.jobs,grant.pool);
-            check(entry&&entry.revision===grant.revision&&(!entry.status||entry.status==='open')&&
+            check(entry&&entry.revision===grant.revision&&(!entry.status||entry.status==='open')&&eligible(entry,row.owner)&&
               W.data.equal(grant.at,entry.at),'Invalid held reservation '+key);
           }
         }
@@ -216,7 +220,7 @@
         }
 
         const choices=groups.map(({claim,units,options},index)=>({claim,units,index,options:options.filter(item=>
-          item&&(!item.status||item.status==='open')&&item.capacity>=units)}));
+          item&&(!item.status||item.status==='open')&&eligible(item,row.owner)&&item.capacity>=units)}));
         if(choices.some(group=>!group.options.length)){
           sessions[key]=change(row,'waiting','not-offered');
           continue;
@@ -272,13 +276,20 @@
       }
     }
 
-    return {initial:()=>initial,shareCheckpoint:true,validateState,checkAction,reservationBoard:{reconcile,validateOwners},
+    function postingBlocker(state,{job,expires},at) {
+      if(own(state.jobs,job))return 'job-already-exists';
+      if(Object.keys(state.jobs).length>=jobsLimit)return 'job-capacity';
+      if(!positive(state.serial+1)||expires!==undefined&&expires<=at)return 'job-revision-or-deadline';
+      return null;
+    }
+    return {initial:()=>initial,shareCheckpoint:true,validateState,checkAction,reservationBoard:{reconcile,validateOwners,postingBlocker},
       actions:{
         'post-job'(state,{job,...spec},ctx){
-          check(!own(state.jobs,job),'Job already exists '+job);
-          check(Object.keys(state.jobs).length<jobsLimit,'Reservation board job capacity exceeded');
+          const blocker=postingBlocker(state,{job,expires:spec.expires},ctx.tick);
+          check(blocker!=='job-already-exists','Job already exists '+job);
+          check(blocker!=='job-capacity','Reservation board job capacity exceeded');
           const serial=state.serial+1;
-          check(positive(serial)&&(spec.expires===undefined||spec.expires>ctx.tick),'Invalid job revision or deadline '+job);
+          check(!blocker,'Invalid job revision or deadline '+job);
           ctx.emit('job-posted',{job,revision:serial});
           return {...state,serial,jobs:{...state.jobs,[job]:makeJob(job,spec,serial,ctx.tick)}};
         },

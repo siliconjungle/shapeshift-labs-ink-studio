@@ -38,8 +38,10 @@ Declare the board as a world system of kind `reservations`.
 
 Each pool has an integer `capacity`. Jobs have one place and can be posted
 at runtime with `board/post-job`, where `board` is the system name. Pass
-`job` and any optional `at`, `metadata`, `leaseTicks`, or `expires`
-properties. The absolute `expires` world tick closes an uncompleted job.
+`job` and any optional `at`, `metadata`, `leaseTicks`, `expires`, or `holder`
+properties. A `holder` record with `system`, `agent`, and `generation`
+limits the job to that agent generation. It can also be set on initially
+configured jobs or in a [story access reward](story-documents.md#settle-costs-and-rewards-through-the-world). The absolute `expires` world tick closes an uncompleted job.
 `board/withdraw-job` removes a job by ID. A reposted ID has a new revision.
 A holder from the previous posting must claim the new revision with a new order.
 

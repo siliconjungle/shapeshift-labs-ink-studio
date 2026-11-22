@@ -1,0 +1,44 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "signal-contract",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "signal-contract.json" }],
+  "storyBindings": { "signal-contract/repair": {
+    "builder": { "kind": "worker", "value": { "system": "crew", "agent": "mira", "generation": 1 } }
+  } },
+  "entities": { "workbench": { "position": [0, 0, 0] } },
+  "systems": {
+    "booking": { "kind": "reservations", "config": { "pools": { "bench": { "capacity": 1 } } } },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-2, -0.5, -1], "max": [2, 1, 1] },
+      "ground": 0, "cell": 0.2,
+      "species": { "worker": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+      "agents": {
+        "mira": { "species": "worker", "position": [0, 0, 0] },
+        "visitor": { "species": "worker", "position": [1, 0, 0] }
+      },
+      "orders": { "tasks": {
+        "repair": { "steps": [{ "op": "work", "site": "stock/frame" }] },
+        "yard-visit": { "steps": [{ "op": "wait", "ticks": 2 }] }
+      } }
+    } },
+    "funds": { "kind": "store", "config": { "accounts": {
+      "sponsor": { "resource": "money", "units": "coin", "type": "integer", "initial": 10 },
+      "fees": { "resource": "money", "units": "coin", "type": "integer", "initial": 0 },
+      "treasury": { "resource": "money", "units": "coin", "type": "integer", "initial": 9 },
+      "mira": { "resource": "money", "units": "coin", "type": "integer", "initial": 0 }
+    } } },
+    "stock": { "kind": "logistics", "config": {
+      "resources": { "timber": { "type": "integer", "units": "bundle" }, "frame": { "type": "integer", "units": "item" } },
+      "containers": {
+        "depot": { "stocks": { "timber": { "max": 4, "initial": 2 } } },
+        "yard": { "at": { "entity": "workbench" }, "stocks": { "timber": { "max": 2 }, "frame": { "max": 1 } } }
+      },
+      "recipes": { "repair": { "duration": 0.2, "inputs": { "timber": 2 }, "outputs": { "frame": 1 } } },
+      "processes": { "frame": { "recipe": "repair", "inputs": { "timber": "yard" }, "outputs": { "frame": "yard" },
+        "work": { "at": { "entity": "workbench" }, "radius": 0.4 } } }
+    } },
+    "standing": { "kind": "social-ledger", "config": { "reputation": { "mira": { "harbor": 1 } } } }
+  }
+}

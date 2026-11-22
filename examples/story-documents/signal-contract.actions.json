@@ -1,0 +1,19 @@
+[
+  { "tick": 6, "action": "world/story-choose", "args": {
+    "document": "signal-contract", "story": "repair", "stage": "repair", "visit": 1,
+    "branch": "submit", "reason": "frame-tested"
+  } },
+  { "tick": 7, "action": "crew/issue-order", "args": {
+    "agent": "visitor", "order": { "task": "yard-visit", "reservation": {
+      "board": "booking", "require": { "access": { "anyOf": ["priority-yard"] } }
+    } }
+  } },
+  { "tick": 8, "action": "crew/issue-order", "args": {
+    "agent": "mira", "order": { "task": "yard-visit", "reservation": {
+      "board": "booking", "require": { "access": { "anyOf": ["priority-yard"] } }
+    } }
+  } },
+  { "tick": 12, "action": "standing/resolve-obligation", "args": {
+    "obligation": "signal-inspection", "status": "fulfilled"
+  } }
+]

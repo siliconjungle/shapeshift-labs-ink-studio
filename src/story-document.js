@@ -130,6 +130,9 @@ const StoryDocument = (() => {
 
   const worldName = value => typeof value === 'string' && /^[a-z0-9_][a-z0-9_.-]{0,95}$/i.test(value) &&
     !['constructor', 'prototype', '__proto__'].includes(value);
+  const qualified = value => typeof value === 'string' && value.split('/').length === 2 && value.split('/').every(worldName);
+  const transferAmount = value => Number.isFinite(value) && value > 0 ||
+    Array.isArray(value) && [2,3].includes(value.length) && Array.from(value).every(Number.isFinite) && value.some(n => n !== 0);
   const point = value => Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
 
   function eventSource(rule, at) {
@@ -319,7 +322,6 @@ const StoryDocument = (() => {
   function feasibility(rules, at, roles, report) {
     const rows = entries(rules, at, true);
     if (rows.length > 16) invalid(at, 'expected up to 16 feasibility checks');
-    const qualified = value => typeof value === 'string' && value.split('/').length === 2 && value.split('/').every(worldName);
     const generation = value => Number.isSafeInteger(value) && value > 0;
     function agent(spec, location, extra, optional) {
       fields(spec, location, ['system', 'agent', ...extra], ['generation', ...optional]);
@@ -354,9 +356,7 @@ const StoryDocument = (() => {
       } else if (type === 'transfer') {
         fields(spec, place, ['from', 'to', 'amount'], ['requester']);
         const {from, to, amount, requester} = spec;
-        const vector = Array.isArray(amount) && [2,3].includes(amount.length) &&
-          Array.from(amount).every(Number.isFinite) && amount.some(value => value !== 0);
-        if (!qualified(from) || !qualified(to) || from === to || !(vector || Number.isFinite(amount) && amount > 0) ||
+        if (!qualified(from) || !qualified(to) || from === to || !transferAmount(amount) ||
           Object.hasOwn(spec, 'requester') && !worldName(requester)) invalid(place, 'invalid transfer accounts, amount, or requester');
       } else if (type === 'work') {
         fields(spec, place, ['site', 'workers'], ['batch']);
@@ -454,8 +454,53 @@ const StoryDocument = (() => {
     }
   }
 
+  function settlement(table,at,story,roles,report) {
+    fields(table,at,[],['costs','outcomes']);
+    if (!Object.keys(table).length) invalid(at,'expected costs or outcome effects');
+    function effects(rows,location,costs) {
+      const list = entries(rows,location,true);
+      if (list.length>16) invalid(location,'expected up to 16 settlement effects');
+      for (const [name,effect] of list) {
+        const place = location+'.'+name;
+        fields(effect,place,[],['transfer','claim','work','access','reputation','obligation']);
+        if (Object.keys(effect).length!==1) invalid(place,'expected one settlement effect');
+        const [[type,value]] = Object.entries(effect);
+        if (type==='claim'&&!story.lifecycle.commitment) invalid(place,'access costs require a story commitment');
+        if (type==='work'&&(costs||story.lifecycle.progression!==true)) invalid(place,'work receipts require a progressing outcome');
+        if (roleUses(effect,roles,place,report)) continue;
+        if (type==='transfer') {
+          fields(value,place,['from','to','amount']);
+          if (!qualified(value.from)||!qualified(value.to)||value.from===value.to||!transferAmount(value.amount))
+            invalid(place,'expected two distinct transfer accounts and a valid quantity');
+        } else if (type==='claim') {
+          fields(value,place,['board','pool'],['units']);
+          if (!worldName(value.board)||!worldName(value.pool)||Object.hasOwn(value,'units')&&
+              (!Number.isSafeInteger(value.units)||value.units<1)) invalid(place,'invalid reservation claim selector');
+        } else if (type==='work') {
+          fields(value,place,['stage','objective','site','batch'],['actor']);
+          if (!Number.isSafeInteger(value.batch)||value.batch<1||!qualified(value.site))
+            invalid(place,'expected a worksite and positive batch');
+          if (link(value.stage,story.stages,place+'.stage','stage',report))
+            link(value.objective,story.stages[value.stage]?.objectives??{},place+'.objective','objective',report);
+          if (Object.hasOwn(value,'actor')) {
+            fields(value.actor,place+'.actor',['system','agent','generation']);
+            if (!worldName(value.actor.system)||!worldName(value.actor.agent)||!Number.isSafeInteger(value.actor.generation)||value.actor.generation<1)
+              invalid(place+'.actor','invalid worker handle');
+          }
+        } else if (type==='access') fields(value,place,['board','job'],['at','holder','metadata','leaseTicks','expires']);
+        else if (type==='reputation') fields(value,place,['ledger','subject','faction','delta']);
+        else fields(value,place,['ledger','obligation','debtor','creditor','terms']);
+      }
+    }
+    if (Object.hasOwn(table,'costs')) effects(table.costs,at+'.costs',true);
+    if (Object.hasOwn(table,'outcomes')) for (const [outcome,rows] of entries(table.outcomes,at+'.outcomes',true)) {
+      link(outcome,story.outcomes,at+'.outcomes.'+outcome,'outcome',report);
+      effects(rows,at+'.outcomes.'+outcome,false);
+    }
+  }
+
   function lifecycle(value, at, roles, report) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs', 'settlement']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -590,6 +635,8 @@ const StoryDocument = (() => {
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       const { stages, outcomes } = story;
+      if (Object.hasOwn(story.lifecycle??{},'settlement'))
+        settlement(story.lifecycle.settlement,at+'.lifecycle.settlement',story,roles,report);
       if (Object.hasOwn(story.lifecycle ?? {}, 'handoffs')) {
         const location = at+'.lifecycle.handoffs', rows = entries(story.lifecycle.handoffs,location,true);
         if (!story.lifecycle.commitment || rows.length>16) invalid(location,'expected an initial commitment and up to 16 handoff proposals');

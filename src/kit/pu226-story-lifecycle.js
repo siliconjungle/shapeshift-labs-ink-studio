@@ -39,6 +39,7 @@
         liveReferences: definition.lifecycle.liveReferences,
         commitment: definition.lifecycle.commitment,
         handoffs: definition.lifecycle.handoffs,
+        settlement: definition.lifecycle.settlement,
         clock: W.storyDeadlines.compile(definition.lifecycle, world.dt),
         cleanup: W.storyCleanup.compile(definition.lifecycle.cleanup, systems, key) });
     }
@@ -125,7 +126,7 @@
           check(W.storyDeadlines.valid(def.clock, row, tick), message);
           continue;
         }
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment', 'handoffs']) &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment', 'handoffs', 'settlements']) &&
           Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit), message);
@@ -145,6 +146,7 @@
         check(W.storyDeadlines.valid(def.clock, row, tick) && W.storyCleanup.valid(row.cleanup, def.cleanup, previous, tick) &&
           W.storyCommitments.valid(def.commitment,row,tick) &&
           W.storyHandoffs.valid(def.handoffs,row,tick,reasonOK) &&
+          W.storySettlement.valid(def.settlement,row,tick) &&
           (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
       }
       check(feasibility ? record(gates) && equal(Object.keys(gates).sort(),gateKeys) : gates === undefined,
@@ -208,7 +210,7 @@
       return state;
     }
 
-    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch) {
+    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch, settleStory) {
       let state = previous, gates = previousGates, queuedOpens = [];
       const requests = new Map(), handoffRequests = new Map(), H = W.storyHandoffs;
       const sourceLength = events.length;
@@ -229,6 +231,26 @@
         save(key,H.update(row,report));
         if (report.decision!=='deferred'||prior?.decision!=='deferred'||!equal(H.blockers(prior),H.blockers(report)))
           publish('story-handoff-decision',{...entries.get(key).info,...report});
+      }
+      function noteSettlement(key,phase,outcome,report,publish) {
+        const row = state[key], prior = row.settlements?.blocked;
+        save(key,W.storySettlement.note(row,phase,outcome,report));
+        if (report.status==='applied'||prior?.phase!==phase||prior.outcome!==outcome||!equal(prior.blocker,report.blocker))
+          publish(report.status==='applied'?'story-settlement':'story-settlement-blocked',
+            {...entries.get(key).info,phase,...(outcome!==undefined&&{outcome}),...report});
+      }
+      function settle(key,phase,outcome,publish) {
+        const spec = entries.get(key).settlement;
+        const effects = phase==='costs'?spec?.costs:own(spec?.outcomes,outcome)?spec.outcomes[outcome]:undefined;
+        if (!effects) return true;
+        const row = state[key], report = settleStory(effects,row,H.assignment(row));
+        noteSettlement(key,phase,outcome,report,publish);
+        return report.status==='applied';
+      }
+      function activate(key,reason,publish = emit) {
+        if (!settle(key,'costs',undefined,publish)) return false;
+        transition(key,'active',reason,undefined,{publish});
+        return true;
       }
       const policy = key => W.storyReferences.decision(references?.[key]);
       function applyReference(key,publish = emit) {
@@ -263,7 +285,7 @@
         const reason = parent ? 'parent-stage-opened' : source ? 'trigger-matched' : 'authored-offer';
         transition(key,'available',reason,undefined,{publish,source,parent});
         if (applyReference(key,publish) && def.activation === 'automatic' && !def.commitment)
-          transition(key,'active','automatic-activation',undefined,{publish});
+          activate(key,'automatic-activation',publish);
       }
       function openChildren(ids, parent, publish) {
         for (const id of ids) {
@@ -308,6 +330,7 @@
           ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }), ...(parent && {parent}),
           ...(prior?.commitment && {commitment:prior.commitment}),
           ...(prior?.handoffs && {handoffs:prior.handoffs}),
+          ...(prior?.settlements && {settlements:prior.settlements}),
           ...(cleanup && {cleanup}) });
         const stage = flow?.current ?? flow?.route.at(-1);
         const link = parent ? { parent } : {};
@@ -320,7 +343,9 @@
       }
       function progress(key, def, row, result, publish) {
         const { stage, visit } = row.flow.current, step = { ...def.info, stage, visit };
-        save(key, { ...row, flow:result.flow });
+        const outcome = result.branch?.target.outcome;
+        if (outcome!==undefined&&!settle(key,'outcome',outcome,publish)) return;
+        save(key, { ...state[key], flow:result.flow });
         if (result.objective) {
           publish('story-objective-resolved', { ...step, ...result.objective });
           return;
@@ -341,8 +366,8 @@
           continue;
         }
         if (prior !== null && !applyReference(key)) continue;
-        if (status==='available' && def.liveReferences && def.activation==='automatic' && !def.commitment) {
-          transition(key,'active','automatic-activation');
+        if (status==='available' && (def.liveReferences||def.settlement?.costs) && def.activation==='automatic' && !def.commitment) {
+          activate(key,'automatic-activation');
           continue;
         }
         if (status === 'active' && prior.flow?.current) {
@@ -412,10 +437,13 @@
           publish('story-transition-rejected', { ...entries.get(key).info, from, to, reason:'live-reference-blocked', requestedReason:reason, reference });
           continue;
         }
-        if (from==='available'&&to==='active'&&entries.get(key).commitment) {
-          if (!requests.has(key)) requests.set(key,{reason,publish});
+        if (from==='available'&&to==='active') {
+          if (entries.get(key).commitment) {
+            if (!requests.has(key)) requests.set(key,{reason,publish});
+          } else activate(key,reason,publish);
           continue;
         }
+        if (outcome!==undefined&&!settle(key,'outcome',outcome,publish)) continue;
         transition(key, to, reason, outcome, { publish });
       }
       const waiting = handoffKeys.flatMap(key=>{
@@ -438,8 +466,13 @@
         const {info,commitment:spec} = entries.get(key), row = state[key], prior = row.commitment;
         const request = requests.get(key), publish = request?.publish??emit;
         const requestedAt = prior?.requestedAt??tick, requestReason = prior?.requestReason??request?.reason??'automatic-activation';
-        const report = W.storyCommitments.attempt(spec,tick,query(),dispatch);
-        save(key,{...row,commitment:{...report,requestedAt,requestReason}});
+        const costs = entries.get(key).settlement?.costs;
+        const report = W.storyCommitments.attempt(spec,tick,query(),(actor,order)=>{
+          const attempt = dispatch(actor,order,undefined,costs&&((tx,owner)=>W.storySettlement.apply(costs,row,owner,tick,tx)));
+          if (attempt.settlement) noteSettlement(key,'costs',undefined,attempt.settlement,publish);
+          return attempt;
+        });
+        save(key,{...state[key],commitment:{...report,requestedAt,requestReason}});
         if (!prior||report.decision!==prior.decision||!equal(W.storyCommitments.reasons(prior),W.storyCommitments.reasons(report)))
           publish('story-commitment-decision',{...info,...report,requestedAt,requestReason,terms:spec.terms??{},task:spec.order.task});
         if (report.decision==='accepted') transition(key,'active',requestReason,undefined,{publish});

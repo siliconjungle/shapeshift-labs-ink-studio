@@ -342,6 +342,7 @@
       plan.storyReferences = W.storyReferences.compile(documents, world, systems);
       plan.storyCommitments = W.storyCommitments.compile(documents, systems);
       plan.storyHandoffs = W.storyHandoffs.compile(documents, systems);
+      plan.storySettlement = W.storySettlement.compile(documents, systems, transfers);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
       plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
@@ -467,6 +468,7 @@
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
       ...(plan.storyCommitments && {commitments:plan.storyCommitments}),
       ...(plan.storyHandoffs && {handoffs:plan.storyHandoffs}),
+      ...(plan.storySettlement && {settlements:plan.storySettlement}),
       ...(plan.storyRoles && Object.keys(plan.storyRoles.roles).length > 0 && {roles:plan.storyRoles.roles})});
   }
   function modelInterface(source) {
@@ -489,7 +491,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storyRoles,storyTemplates,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -555,6 +557,7 @@
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
         ...(storyCommitments && {storyCommitmentDefinitions:storyCommitments}),
         ...(storyHandoffs && {storyHandoffDefinitions:storyHandoffs}),
+        ...(storySettlement && {storySettlementDefinitions:storySettlement}),
         ...(storyFeasibilityState && {storyFeasibility:storyFeasibilityState,storyFeasibilityRules:storyLifecycle.feasibility}),
         ...(storyReferenceState && {storyReferences:storyReferenceState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
@@ -985,28 +988,31 @@
       }
       check(requests.length <= W.transfers.limit,'Transfer request budget exceeded');
       let confirmations;
+      function balanceChanges(before,after,ref,queryNow) {
+        let query;
+        for (const [index,account] of before.entries()) {
+          const site=account.at;
+          let anchor=null;
+          if (Array.isArray(site)) anchor={point:site};
+          else if (site) {
+            query??=queryNow();
+            const target=W.worksites.frame(query,site);
+            anchor={...site,...(target?.point&&{point:target.point})};
+          }
+          causal.balance(account,after[index],ref,anchor);
+        }
+      }
       function settleTransfer(request,name,emit) {
-        const before=causal?.balance&&[request.from,request.to].map(account=>transfers.inspect(drafts,account));
+        const accounts=[request.from,request.to];
+        const before=causal?.balance&&accounts.map(account=>transfers.inspect(drafts,account));
         const receipt=transfers.settle(drafts,request,at,name,rootedState);
         const ref=emit('transfer',receipt);
-        if(before&&receipt.status!=='blocked'){
-          let query;
-          for(const account of before){
-            const after=transfers.inspect(drafts,account.name);
-            const site=account.at;
-            let anchor=null;
-            if(Array.isArray(site))anchor={point:site};
-            else if(site){
-              query??=Q.create(view(nextWorld,{...drafts}),systems,projection);
-              const target=W.worksites.frame(query,site);
-              anchor={...site,...(target?.point&&{point:target.point})};
-            }
-            causal.balance(account,after,ref,anchor);
-          }
-        }
+        if (before&&receipt.status!=='blocked')
+          balanceChanges(before,accounts.map(account=>transfers.inspect(drafts,account)),ref,
+            ()=>Q.create(view(nextWorld,{...drafts}),systems,projection));
         return receipt;
       }
-      const receipts = requests.map(({name,request,root})=>{
+      let receipts = requests.map(({name,request,root})=>{
         const receipt = settleTransfer(request,name,makeEmit(name,undefined,root));
         if(systems[name]?.receiveTransfers){
           confirmations??=new Map();
@@ -1249,19 +1255,71 @@
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
-      function dispatchCommitment(actor,order,from) {
-        const {system,agent,generation} = actor, scope = W.storyCommitments;
-        if (!detailed(system)||W.simulationAggregate.isAggregate(nextStates[system]))
-          return {check:scope.blocked('simulation','defer','actor-not-detailed')};
-        const notes = [];
-        const stage = publish => (kind, detail, parents) => notes.push(()=>publish(kind,detail,parents));
+      function beginStoryTransaction() {
+        const notes = [], transfersAtBoundary = [];
+        const stage = publish => (kind,detail,parents) => notes.push(()=>publish(kind,detail,parents));
         let trial = {...nextStates};
-        const trialQuery = () => Q.create({...completedView(),states:visibleStates(trial),
+        const query = () => Q.create({...completedView(),states:visibleStates(trial),
           [W.simulationAggregate.rawStates]:trial},systems,projection);
-        const probeTrial = (name,args) => trialQuery().probe(name,undefined,args);
-        function contextFor(name) {
-          return context(name,nextWorld,Object.freeze({...trial}),at,{},stage(systemEmit(name)),trialQuery());
+        const available = name => detailed(name)&&!W.simulationAggregate.isAggregate(trial[name]);
+        function action(name,key,args) {
+          const ctx = context(name,nextWorld,Object.freeze({...trial}),at,{},stage(systemEmit(name)),query());
+          trial[name] = rootedState(systems[name].actions[key](trial[name],args,ctx));
         }
+        return { query, available, action,
+          allocate(board, isDetailed) {
+            trial = reservations.run(trial,{tick:at,emit:name=>stage(makeEmit(name))},isDetailed,board);
+          },
+          transfer(args) {
+            const accounts = [args.from,args.to];
+            if (!accounts.every(account=>available(endpoint(account)[0]))) return {blocked:'account-not-detailed'};
+            if (receipts.length+transfersAtBoundary.length>=W.transfers.limit) return {blocked:'transfer-budget'};
+            const before = causal?.balance&&accounts.map(account=>transfers.inspect(trial,account));
+            const receipt = transfers.settle(trial,{...args,mode:'exact'},at,'world',rootedState);
+            if (receipt.status!=='full') return {blocked:'transfer-limited',detail:receipt};
+            transfersAtBoundary.push(receipt);
+            const after = before&&accounts.map(account=>transfers.inspect(trial,account));
+            notes.push(()=>{
+              const ref = systemEmit('world')('transfer',receipt);
+              if (before) balanceChanges(before,after,ref,query);
+            });
+            return {detail:receipt};
+          },
+          postJob(board,args) {
+            if (!available(board)) return {blocked:'board-not-detailed'};
+            const blocked = systems[board].reservationBoard.postingBlocker(trial[board],args,at);
+            if (blocked) return {blocked};
+            action(board,'post-job',args);
+            return {detail:{board,job:query().probe(board+'/jobs',undefined,{job:args.job}).value}};
+          },
+          social(name,key,args) {
+            if (!available(name)) return {blocked:'social-ledger-not-detailed'};
+            const provider = systems[name].storySocial;
+            const result = provider.apply(trial[name],key,args,at);
+            if (result.blocked) return result;
+            trial[name] = rootedState(result.state);
+            stage(systemEmit(name))(provider.events[key],result.detail);
+            return {detail:{ledger:name,...result.detail}};
+          },
+          commit() {
+            nextStates = trial;
+            if (transfersAtBoundary.length) receipts = freeze([...receipts,...transfersAtBoundary]);
+            completed = undefined;
+            for (const publish of notes) publish();
+          }
+        };
+      }
+      function settleStory(effects,row,owner) {
+        const tx = beginStoryTransaction();
+        const report = W.storySettlement.apply(effects,row,owner,at,tx);
+        if (report.status==='applied') tx.commit();
+        return report;
+      }
+      function dispatchCommitment(actor,order,from,settleActivation) {
+        const {system,agent,generation} = actor, scope = W.storyCommitments;
+        const tx = beginStoryTransaction();
+        if (!tx.available(system)) return {check:scope.blocked('simulation','defer','actor-not-detailed')};
+        const probeTrial = (name,args) => tx.query().probe(name,undefined,args);
         let release;
         if (from) {
           const {system:prior,agent,generation,sequence} = from;
@@ -1275,30 +1333,31 @@
             evidence?{task:evidence.task,phase:evidence.kind.slice(6),nextStep:evidence.results.length,results:evidence.results}:null;
           release = {status:book?'settled':'unavailable',work};
           if (pending) {
-            if (!detailed(prior)||W.simulationAggregate.isAggregate(trial[prior]))
+            if (!tx.available(prior))
               return {check:scope.blocked('release','defer','outgoing-actor-not-detailed')};
-            trial[prior] = rootedState(systems[prior].actions['cancel-order'](trial[prior],{agent,generation,order:sequence},contextFor(prior)));
+            tx.action(prior,'cancel-order',{agent,generation,order:sequence});
             if (pending.reservation)
-              trial = reservations.run(trial,{tick:at,emit:name=>stage(makeEmit(name))},undefined,pending.reservation.board);
+              tx.allocate(pending.reservation.board);
             release = {status:'cancelled',work};
           }
         }
-        trial[system] = rootedState(systems[system].actions['issue-order'](trial[system],{agent,generation,order},contextFor(system)));
+        tx.action(system,'issue-order',{agent,generation,order});
         const sequence = probeTrial(system+'/orders',{agent,generation}).value.active.sequence;
         const owner = {...actor,sequence};
         let reservation;
         if (order.reservation) {
           const {board} = order.reservation;
-          trial = reservations.run(trial,{tick:at,emit:name=>stage(makeEmit(name))},detailed,board);
+          tx.allocate(board,detailed);
           const sample = probeTrial(board+'/claim',owner), claim = sample.value;
           if (claim?.status!=='held') return {check:scope.blocked('reservation',claim?.status==='failed'?'refuse':'defer',
             claim?.reason??'reservation-unavailable',{board,require:order.reservation.require})};
           reservation = scope.pass('reservation',{board,grants:claim.grants,until:claim.until});
         }
-        nextStates = trial;
-        completed = undefined;
-        for (const publish of notes) publish();
-        return {order:owner,...(reservation&&{check:reservation}),...(release&&{release})};
+        const settlement = settleActivation?.(tx,owner);
+        if (settlement?.status==='blocked') return {settlement,
+          check:scope.blocked('settlement','defer',settlement.blocker.reason,settlement.blocker)};
+        tx.commit();
+        return {order:owner,...(settlement&&{settlement}),...(reservation&&{check:reservation}),...(release&&{release})};
       }
       if (storyReferences) {
         nextStoryReferences = storyReferences.advance(storyReferenceState,at,completedQuery(),events,storyLifecycleState,makeEmit('world'));
@@ -1311,7 +1370,7 @@
       }
       if (storyLifecycle) {
         ({state:nextStoryLifecycle,gates:nextStoryFeasibility} =
-          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,storyFeasibilityState,nextStoryReferences,dispatchCommitment));
+          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,storyFeasibilityState,nextStoryReferences,dispatchCommitment,settleStory));
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);

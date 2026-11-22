@@ -355,6 +355,68 @@ node cli/ink-studio.js probe relay.run.json --field world/story-lifecycle
 node cli/ink-studio.js sim replay relay.run.json
 ```
 
+## Settle costs and rewards through the world
+
+Use `lifecycle.settlement.costs` for the first activation and
+`lifecycle.settlement.outcomes` for named endings. Within each batch, name
+each effect with a stable ID. The engine evaluates the effects in ID order
+and commits the whole batch at once. The story can use bound roles and
+template parameters in these effects.
+
+| Effect | Native operation |
+| --- | --- |
+| `transfer` | Move an exact `amount` from `from` to `to` using exposed world accounts. Use it for money, inventory, or any compatible transfer resource. |
+| `claim` | Require the current assignment to hold a claim on `board` and `pool`, with optional minimum `units` (default one). Include the reservation on the commitment order. |
+| `work` | Require an outcome to use a retained `work-completed` objective receipt from `stage` and `objective`. Name the native `site` and `batch`, and optionally the contributing `actor` by roster, agent, and generation. The order and recipe perform the labor and consume its inputs. |
+| `access` | Post a genuine single-use reservation `job` on a `board`. Optional `holder`, `at`, `leaseTicks`, `expires`, and `metadata` are native job fields. |
+| `reputation` | Add a signed integer `delta` to a `subject`'s standing with a `faction` on a `social-ledger`. |
+| `obligation` | Open a named `obligation` from `debtor` to `creditor` on a `social-ledger`. Provide a `terms` record for downstream rules. |
+
+An unaffordable activation leaves the story available. When the story has a
+commitment, the order, the reservation, and the costs commit together.
+Automatic offers and pending commitments retry while they remain available.
+Resuming from suspension preserves the original cost receipt. If a named
+outcome is blocked, the story keeps its stage and objective receipts so
+the ending can be selected again. Automatic ending branches retry on their
+normal evaluation ticks. A story can use another ending in the meantime.
+Applied costs persist when a story closes. To author a refund, attach a
+reverse transfer to a named outcome.
+
+The world posts settlement after the regular solver phases and before the
+story transition. Account probes and the transfer ledger reflect the
+posting on that tick. Orders and solvers can act on it on their next
+scheduled step. `world/story-settlements` exposes the resolved definition,
+applied costs and outcome, and latest blocker. Use `story-settlement` and
+`story-settlement-blocked` with world event actions. Native transfer,
+reservation, and social ledger events also remain available to those rules.
+
+Declare a system of kind `social-ledger` with optional initial
+`config.reputation` scores keyed by subject and then faction. You can
+query `standing/reputation` with `subject` and `faction` or read the whole
+table. Use `standing/obligations` to read the open and closed records. The native
+actions `adjust-reputation`, `open-obligation`, and `resolve-obligation`
+can also be called by other world systems and event actions. Resolve an
+obligation with `{ "obligation": "<id>", "status": "fulfilled" }` or set
+the status to `released`. The world records the close tick and emits
+`obligation-resolved` for downstream rules.
+
+The [harbor signal contract](../examples/story-documents/signal-contract.json)
+uses a two-coin fee and two timber bundles to commission a signal frame.
+The ending pays five coins after the worker finishes the batch, grants
+priority yard access, raises harbor standing by three, and opens an
+inspection obligation. The run also shows another visitor waiting while
+the grant holder uses the reservation.
+
+```sh
+ink-studio sim preflight examples/story-documents/signal-contract.world.json --strict
+ink-studio sim run examples/story-documents/signal-contract.world.json \
+  --actions examples/story-documents/signal-contract.actions.json --ticks 14 \
+  --record signal-contract.run.json
+ink-studio probe signal-contract.run.json --field world/story-settlements \
+  --args '{"story":"signal-contract/repair"}'
+ink-studio sim replay signal-contract.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

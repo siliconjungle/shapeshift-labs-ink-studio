@@ -1,0 +1,53 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "signal-contract",
+  "title": "Repair the harbor signal",
+  "stories": {
+    "repair": {
+      "kind": "questlet",
+      "title": "Repair the harbor signal",
+      "entry": "repair",
+      "roles": { "builder": { "kind": "worker", "required": true } },
+      "lifecycle": {
+        "progression": true,
+        "commitment": {
+          "actor": { "$role": "builder" },
+          "order": { "id": "repair-signal", "task": "repair", "reservation": {
+            "board": "booking", "require": { "bench": { "anyOf": ["bench"] } }
+          } }
+        },
+        "settlement": {
+          "costs": {
+            "bench": { "claim": { "board": "booking", "pool": "bench" } },
+            "fee": { "transfer": { "from": "funds/sponsor", "to": "funds/fees", "amount": 2 } },
+            "materials": { "transfer": { "from": "stock/depot.timber", "to": "stock/yard.timber", "amount": 2 } }
+          },
+          "outcomes": {
+            "repaired": {
+              "access": { "access": { "board": "booking", "job": "priority-yard", "holder": { "$role": "builder" },
+                "at": { "entity": "workbench" }, "expires": 30, "metadata": { "purpose": "priority-yard-access" } } },
+              "credit": { "reputation": { "ledger": "standing", "subject": { "$role": "builder", "path": "/agent" }, "faction": "harbor", "delta": 3 } },
+              "inspection": { "obligation": { "ledger": "standing", "obligation": "signal-inspection",
+                "debtor": "harbor", "creditor": { "$role": "builder", "path": "/agent" }, "terms": { "activity": "inspect-signal" } } },
+              "labor": { "work": { "stage": "repair", "objective": "built", "site": "stock/frame", "batch": 1,
+                "actor": { "$role": "builder" } } },
+              "pay": { "transfer": { "from": "funds/treasury", "to": "funds/mira", "amount": 5 } }
+            }
+          }
+        }
+      },
+      "stages": {
+        "repair": {
+          "title": "Build a new signal frame",
+          "objectives": { "built": { "title": "Finish a frame at the harbor worksite", "type": "observe",
+            "params": { "event": { "kind": "work-completed", "system": "stock", "where": { "all": [
+              { "path": "/process", "value": "frame" }, { "path": "/batch", "value": 1 }
+            ] } } } } },
+          "next": { "submit": { "outcome": "repaired" } }
+        }
+      },
+      "outcomes": { "repaired": { "title": "The signal is ready for inspection" } }
+    }
+  }
+}
