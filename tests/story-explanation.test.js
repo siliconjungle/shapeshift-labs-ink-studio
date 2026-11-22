@@ -58,6 +58,18 @@ test('the selected actor retains role and commitment receipts while a rejected a
   assert.equal(other.actor.casting.focused.checks.free.actual.state,'busy');
   assert.equal(other.actor.casting.status,'rejected');
   assert.deepEqual(other.actor.casting.candidates,[]);
+
+  const refusedWorld = read(source), document = read(example('quay-relay'));
+  refusedWorld.storyDocuments = [document];
+  document.stories.delivery.lifecycle.commitment.consider = {
+    pay:{when:{path:'/terms/pay',op:'gte',value:2},otherwise:'refuse'}
+  };
+  const refusedFile = file('refused');
+  fs.writeFileSync(refusedFile,JSON.stringify(refusedWorld));
+  const refused = report('why-not',refusedFile,story,'--actor','crew/mira',
+    '--actions',example('quay-relay.actions'),'--ticks','1');
+  assert.equal(refused.status,'refused');
+  assert.equal(refused.actor.commitment.checks.find(row=>row.name==='term/pay').reason,'terms-unmet');
 });
 
 test('active and historical stage explanations show pending proof and recorded branch decisions', () => {

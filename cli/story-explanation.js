@@ -82,7 +82,10 @@ function actor(ctx,question) {
     result = verdict('selected',provenance,role?'The role uses the resolved binding.':'The actor has the recorded story assignment.');
   } else if (selected) result = verdict('different-actor','other-actor-assigned','The recorded assignment identifies another actor.');
   else if (role&&binding) result = verdict('unknown','binding-handle-unavailable','The role is bound to a value without a roster handle.');
-  else if (commitment&&!role) result = verdict('waiting','commitment-'+commitment.decision,'The commitment report explains the current response.');
+  else if (commitment&&!role) {
+    result = verdict(commitment.decision==='refused'?'refused':'waiting','commitment-'+commitment.decision,
+      'The commitment report explains the current response.');
+  }
   else result = verdict('unassigned',role?'unbound-role':'no-recorded-assignment','This snapshot has no selected actor for the requested scope.');
   const assessment = casting&&{basis:'current-snapshot',...casting,...(focus&&{status:casting.focused?
     casting.focused.qualifies?'qualified':'rejected':'outside-rosters-or-unavailable'})};
