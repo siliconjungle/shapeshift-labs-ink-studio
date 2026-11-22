@@ -38,10 +38,14 @@
     });
     return {tail,cost:12*bands.length,make() {
       const stages=bands.map(make=>make());
-      return (l,r,kl,kr,t,out)=>{
+      const process=(l,r,kl,kr,t,out)=>{
         out[0]=l; out[1]=r;
         for (const filter of stages) filter(out[0],out[1],t,out);
       };
+      return Object.assign(process,{
+        snapshot:()=>stages.map(filter=>filter.snapshot()),
+        restore(states){stages.forEach((filter,i)=>filter.restore(states[i]));}
+      });
     }};
   }
   const schemas={
@@ -68,21 +72,22 @@
       return {tail:0,cost:10,make() {
         const attack=p.attackDb.reader(), sustain=p.sustainDb.reader();
         const fast=pole(rate,p.fast),slow=pole(rate,p.slow);
-        let a=0,b=0;
-        return (l,r,kl,kr,t,out)=>{
+        const state={a:0,b:0};
+        return P.audioCheckpoint((l,r,kl,kr,t,out)=>{
           const x=Math.max(Math.abs(l),Math.abs(r));
-          a+=(x-a)*fast; b+=(x-b)*slow;
+          state.a+=(x-state.a)*fast; state.b+=(x-state.b)*slow;
+          const {a,b}=state;
           const gain=db(a>b ? attack(t)*(a-b)/Math.max(1e-12,a) : sustain(t)*(b-a)/Math.max(1e-12,b));
           out[0]=l*gain; out[1]=r*gain;
-        };
+        },state);
       }};
     }
     if (type==='saturation') {
       const dc=hertz(rate,16);
       return {tail:Math.ceil(Math.log(.001)/Math.log1p(-dc)),cost:18,make() {
         const drive=p.driveDb.reader(), bias=p.bias.reader(), tone=p.toneHz.reader(), gain=p.outputDb.reader();
-        const average=[0,0], low=[0,0];
-        return (l,r,kl,kr,t,out)=>{
+        const average=new Float64Array(2), low=new Float64Array(2);
+        return P.audioCheckpoint((l,r,kl,kr,t,out)=>{
           const amount=db(drive(t)), offset=bias(t), shift=Math.tanh(offset),
             color=hertz(rate,tone(t)), trim=db(gain(t));
           for (let ch=0;ch<2;ch++) {
@@ -91,7 +96,7 @@
             low[ch]+=(shape-average[ch]-low[ch])*color;
             out[ch]=low[ch]*trim;
           }
-        };
+        },average,low);
       }};
     }
     const gate=type==='gate', openSpeed=pole(rate,p.attack), closeSpeed=pole(rate,p.release);
@@ -99,20 +104,20 @@
     return {tail:0,sidechain:true,cost:10,make() {
       const threshold=p.thresholdDb.reader(), range=p.rangeDb.reader();
       const hysteresis=gate && p.hysteresisDb.reader(), ratio=!gate && p.ratio.reader();
-      let closeAt=0,isOpen=false,smoothed;
-      return (l,r,kl,kr,t,out)=>{
+      const state={closeAt:0,isOpen:false,smoothed:undefined};
+      return P.audioCheckpoint((l,r,kl,kr,t,out)=>{
         const key=level(Math.max(Math.abs(kl),Math.abs(kr))), edge=threshold(t), limit=range(t);
         let target;
         if (gate) {
-          if (key>=(isOpen ? edge-hysteresis(t) : edge)) {isOpen=true;closeAt=t+holdFrames;}
-          else if (t>=closeAt) isOpen=false;
-          target=isOpen ? 0 : -limit;
+          if (key>=(state.isOpen ? edge-hysteresis(t) : edge)) {state.isOpen=true;state.closeAt=t+holdFrames;}
+          else if (t>=state.closeAt) state.isOpen=false;
+          target=state.isOpen ? 0 : -limit;
         } else target=-Math.min(limit,Math.max(0,edge-key)*(ratio(t)-1));
-        smoothed ??= target;
-        smoothed+=(target-smoothed)*(target>smoothed ? openSpeed : closeSpeed);
-        const gain=db(smoothed);
+        state.smoothed ??= target;
+        state.smoothed+=(target-state.smoothed)*(target>state.smoothed ? openSpeed : closeSpeed);
+        const gain=db(state.smoothed);
         out[0]=l*gain; out[1]=r*gain;
-      };
+      },state);
     }};
   }
   S.parametricBand=band;

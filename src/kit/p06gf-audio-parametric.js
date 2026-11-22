@@ -12,8 +12,8 @@
   function band(mode,rate,hz,q,gainDb) {
     // State-variable outputs are mixed into the selected EQ response.
     let lastHz,lastQ,lastGain,g,k,m0,m1,m2,a1,a2,a3;
-    const ic1=[0,0], ic2=[0,0];
-    return (l,r,t,out)=>{
+    const ic1=new Float64Array(2), ic2=new Float64Array(2);
+    return P.audioCheckpoint((l,r,t,out)=>{
       const f=hz(t), width=q(t), gain=gainDb(t);
       if (f!==lastHz || width!==lastQ || gain!==lastGain) {
         const settings=tuning(mode,rate,f,width,gain), {a}=settings;
@@ -36,7 +36,7 @@
         ic1[ch]=2*v1-ic1[ch]; ic2[ch]=2*v2-ic2[ch];
         out[ch]=m0*x+m1*v1+m2*v2;
       }
-    };
+    },ic1,ic2);
   }
   P.audioParametric=Object.freeze({tuning,band});
 })(KIT.procedural);

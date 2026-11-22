@@ -220,12 +220,93 @@ test('JSON-line session keeps the cache warm and saves a portable edit',t=>{
     {op:'preview',preview:{from:b(0),to:b(4)},out:'before'},
     {op:'edit',changes:[{op:'comp',lane:'lead',take:'wrong',from:b(2),to:b(4)}]},
     {op:'edit',changes:[{op:'comp',lane:'lead',take:'soft',from:b(2),to:b(4)}],out:'kept/session.json'},
-    {op:'render',out:'after'}
+    {op:'render',out:'after'},
+    {op:'compare',preview:{from:b(0),to:b(4)},out:'comparison'}
   ].map(row=>JSON.stringify(row)).join('\n');
   const response=execFileSync(process.execPath,[cli,'music','session','stream','session.json'],
     {cwd:root,input:commands,encoding:'utf8'}).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(response.map(row=>row.ok),[true,false,true,true]);
+  assert.deepEqual(response.map(row=>row.ok),[true,false,true,true,true]);
   assert.deepEqual(response[3].result.cache,{hits:2,misses:1});
+  assert(WAV.read(response[4].result.difference).samples.some(Boolean));
   execFileSync(process.execPath,[cli,'music','session','render','kept/session.json','--out','replay'],{cwd:root});
   assert.deepEqual(WAV.read(path.join(root,'after/mix.wav')).samples,WAV.read(path.join(root,'replay/mix.wav')).samples);
+});
+
+test('late note edits resume room, patch echo and keyed desk effects from the same prefix as a cold print',()=>{
+  const source=session(), E=M.musicSession.create();
+  source.production.arrangement.sections[0].bars=12;
+  source.production.room={gain:-6,size:.9};
+  source.production.patches.keys.echo={delay:.14,send:.5,feedback:.45};
+  source.production.tracks.lead.send=.55;
+  source.production.tracks.lead.clips.push({
+    ...clips([voice('return',.25,60,.6)])[0],id:'reprise',beat:36
+  });
+  source.mixer.peakPolicy='error';
+  source.mixer.processors={
+    slap:{type:'tempo-delay',beats:.75,feedback:.36,wet:.22},
+    duck:{type:'compressor',thresholdDb:-42,release:.16},
+    space:{type:'reverb',size:.65,decay:.4,wet:.3}
+  };
+  source.mixer.strips.lead.inserts=['slap',{processor:'duck',sidechain:{strip:'kick'}}];
+  source.mixer.strips['score-room']={inserts:['space']};
+  source.mixer.taps.room={strip:'score-room'};
+  source.automation={ride:{target:{strip:'lead',parameter:'fader'},unit:'beats',curve:'hold',
+    points:[{id:'base',at:0,value:1},{id:'return',at:37,value:.85}]}};
+  const range={from:b(35),to:b(41),context:{beforeSamples:1000,afterSamples:1000}};
+  const first=E.render(source,range);
+  const edit=E.edit(source,[{op:'note',take:'reference',lane:'lead',clip:'reprise',voice:'solo',note:'return',
+    set:{velocity:.3,duration:.44}}]);
+  const second=E.render(edit,range);
+  assert.equal(second.report.renderPath,'incremental');
+  assert.deepEqual(second.report.focus,{from:140000,to:164000});
+  assert(second.report.blocks.resumedFrom>0);
+  assert(second.report.blocks.processedFrames<first.report.blocks.processedFrames);
+  assert.notDeepEqual(first.value.samples,second.value.samples);
+  const print=M.musicSession.create().render(edit);
+  const {warmupSamples,frames}=second.report, firstSample=warmupSamples*2, end=firstSample+frames*2;
+  for (const [window,full] of [[second.value,print.value],[second.taps.room,print.taps.room],
+    [second.taps.lead,print.taps.lead]]) assert.deepEqual(window.samples,full.samples.slice(firstSample,end));
+  const again=E.render(edit,range);
+  assert.equal(again.report.blocks.processedFrames,0);
+  assert(again.report.blocks.outputBlockHits>0);
+  const handoff=E.handoff(edit);
+  assert.deepEqual(handoff.value.samples,print.value.samples);
+  assert(handoff.stems['score-room'].samples.some(Boolean));
+  const ridden=E.edit(edit,[{op:'automation',lane:'ride',point:'return',value:.72}]);
+  const ride=E.render(ridden,range);
+  assert(ride.report.blocks.resumedFrom>0);
+  assert.notDeepEqual(ride.value.samples,second.value.samples);
+  assert.deepEqual(ride.value.samples,M.musicSession.create().render(ridden).value.samples.slice(firstSample,end));
+});
+
+test('a straight preview uses print normalization even when the peak is outside the window',()=>{
+  const E=M.musicSession.create({hit:pcm(16000,i=>i===12000 ? 1 : 0)}), source=session();
+  source.audio={hit:{take:'one',takes:{one:{asset:'hit'}}}};
+  source.mixer.strips.hit={fader:2};
+  const range={from:s(0),to:s(5000)};
+  const heard=E.render(source,range), exported=E.render(source);
+  assert(heard.report.mixer.headroom<.6);
+  assert.equal(heard.report.mixer.headroom,exported.report.mixer.headroom);
+  assert.deepEqual(heard.value.samples,exported.value.samples.slice(0,10000));
+  source.mixer.strips.master.inserts=['limit'];
+  source.mixer.processors={limit:{type:'limiter',ceilingDbTP:-2}};
+  const limited=E.render(source,range), print=E.render(source);
+  assert.equal(limited.report.continuousStage,'limit');
+  assert(limited.report.mixer.latencySamples>0);
+  assert.deepEqual(limited.value.samples,print.value.samples.slice(0,10000));
+});
+
+test('session and live audition solo and subtract taps without changing the edit or playhead',()=>{
+  const E=M.musicSession.create(), source=session(), preview={from:s(0),to:s(800)};
+  const mixed=E.render(source,preview);
+  const solo=E.render(source,{...preview,monitor:{mode:'solo',tap:'lead'}});
+  const minus=E.render(source,{...preview,monitor:{mode:'subtract',tap:'lead'}});
+  assert.deepEqual(solo.value.samples,mixed.taps.lead.samples);
+  assert.deepEqual(minus.value.samples,mixed.value.samples.map((sample,i)=>sample-solo.value.samples[i]));
+  const T=E.open(source);
+  T.pull(880);
+  assert.equal(T.setMonitor({mode:'solo',tap:'lead'}).frame,880);
+  const live=T.pull(64,{taps:true});
+  assert.deepEqual(live.value.samples,Float32Array.from(live.taps.lead.samples));
+  assert.throws(()=>T.setMonitor({mode:'solo',tap:'missing'}),/mixer tap/);
 });

@@ -71,9 +71,17 @@
       notes.sort((a,b)=>a.startSample-b.startSample || a.endSample-b.endSample);
       return [lane,{takes,notes}];
     }));
-    check(printed.report.frames*sourceLanes.length*2<=32e6,'Aligned handoff stems exceed their PCM budget');
+    if (!printed.sources) check(printed.report.frames*sourceLanes.length*2<=32e6,'Aligned handoff stems exceed their PCM budget');
     const stemGains={};
     const stems=Object.fromEntries(sourceLanes.map(name=>{
+      const native=printed.sources?.[name];
+      if (native) {
+        let peak=1;
+        for (const sample of native.samples) peak=Math.max(peak,Math.abs(sample));
+        stemGains[name]=peak;
+        if (peak>1) for (let i=0;i<native.samples.length;i++) native.samples[i]/=peak;
+        return [name,native];
+      }
       const clip=recipe.strips[name].clips?.[0];
       const samples=new Float32Array(printed.report.frames*2);
       stemGains[name]=clip ? db(clip.gainDb) : 1;

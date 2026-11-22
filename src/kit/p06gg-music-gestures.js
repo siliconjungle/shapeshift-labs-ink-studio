@@ -111,7 +111,7 @@
     const smooth=1-Math.exp(-1/(rate*.007));
     const state={...defaults};
     let index=0;
-    return time=>{
+    return P.audioCheckpoint(time=>{
       while (index<placements.length && placements[index].endTime<=time+1e-9) index++;
       const active=placements[index];
       const entry=active && active.time<=time+1e-9 ? active : null;
@@ -121,7 +121,7 @@
         state[name]+=(target-state[name])*smooth;
       }
       return state;
-    };
+    },state);
   }
 
   function tapeEcho(spec,rate) {
@@ -130,24 +130,25 @@
     const left=new Float32Array(frames),right=new Float32Array(frames), out=[0,0];
     const pole=1-Math.exp(-tau*(1250+7100*(1-spec.damping))/rate);
     const delay=rate*spec.delay,wow=rate*.004*spec.wow,flutter=rate*.0008*spec.flutter;
-    let write=0,l=0,r=0;
+    const state={write:0,l:0,r:0};
     const read=(buffer,age)=>{
-      const at=write+frames-age, i=Math.floor(at);
+      const at=state.write+frames-age, i=Math.floor(at);
       const a=buffer[i%frames], b=buffer[(i+1)%frames];
       return a+(b-a)*(at-i);
     };
-    return (frame,inputL,inputR,send)=>{
+    return P.audioCheckpoint((frame,inputL,inputR,send)=>{
       const time=frame/rate;
       const drift=wow*Math.sin(tau*time*.48)+flutter*Math.sin(tau*time*5.8);
       const wetL=read(left,delay+drift),wetR=read(right,delay+drift*.81+spec.width*rate*.003);
-      l+=(wetL-l)*pole; r+=(wetR-r)*pole;
+      state.l+=(wetL-state.l)*pole; state.r+=(wetR-state.r)*pole;
+      const {l,r,write}=state;
       const cross=spec.width*.45;
       left[write]=Math.tanh(inputL*send+(l+(r-l)*cross)*spec.feedback);
       right[write]=Math.tanh(inputR*send+(r+(l-r)*cross)*spec.feedback);
-      write=(write+1)%frames;
+      state.write=(write+1)%frames;
       out[0]=l; out[1]=r;
       return out;
-    };
+    },state,left,right);
   }
 
   P.musicGestures=Object.freeze({patch,score,perform,automate,tapeEcho});

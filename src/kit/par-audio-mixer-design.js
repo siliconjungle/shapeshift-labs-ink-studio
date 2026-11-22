@@ -8,17 +8,18 @@
   }
   function delayLine(frames) {
     const length=Math.max(4,frames), samples=[new Float64Array(length),new Float64Array(length)];
-    let next=0;
+    const state={next:0};
     function read(ch,at,mode='linear') {
       const first=Math.floor(at), u=at-first, data=samples[ch];
       const a=first<0 ? 0 : data[first%length], b=first+1<0 ? 0 : data[(first+1)%length];
       if (mode==='linear') return a+(b-a)*u;
       return cubic(first<1 ? 0 : data[(first-1)%length],a,b,first+2<0 ? 0 : data[(first+2)%length],u);
     }
-    return {read,write(l,r) {
-      const slot=next++%length;
+    function write(l,r) {
+      const slot=state.next++%length;
       samples[0][slot]=l; samples[1][slot]=r;
-    }};
+    }
+    return {read,write,cells:[state,...samples]};
   }
   function repeats(feedback) {
     return feedback===0 ? 1 : 1+Math.ceil(Math.log(.001)/Math.log(feedback));
@@ -37,9 +38,9 @@
     const drive=time.lane(raw.driveDb,0,0,24,'feedback drive');
     const cross=time.lane(raw.crossfeed,0,0,1,'delay crossfeed');
     return {tail:maximum*repeats(fb.max),cost:22,make() {
-      const line=delayLine(maximum+4), highState=[0,0], lowState=[0,0], loop=[0,0];
+      const line=delayLine(maximum+4), highState=new Float64Array(2), lowState=new Float64Array(2), loop=[0,0];
       const feedback=fb.reader(), highpass=low.reader(), lowpass=high.reader(), driveDb=drive.reader(), stereo=cross.reader();
-      return (l,r,kl,kr,t,out)=>{
+      return P.audioCheckpoint((l,r,kl,kr,t,out)=>{
         const at=Math.min(t-1,clock.sampleAt(clock.beatAt(t)-beats));
         const hi=S.sampleKitMix.poleAt(highpass(t),rate), lo=S.sampleKitMix.poleAt(lowpass(t),rate);
         const gain=feedback(t), dbValue=driveDb(t), amount=db(dbValue), x=stereo(t);
@@ -51,7 +52,7 @@
           loop[ch]=dbValue===0 ? lowState[ch] : Math.tanh(lowState[ch]*amount)/amount;
         }
         line.write(l+gain*(loop[0]+(loop[1]-loop[0])*x),r+gain*(loop[1]+(loop[0]-loop[1])*x));
-      };
+      },highState,lowState,...line.cells);
     }};
   }
   function modulation(raw,rate,time) {
@@ -69,14 +70,14 @@
     const maximum=Math.ceil(rate*(extra+width.max)/1000)+2;
     return {tail:maximum*repeats(Math.max(Math.abs(fb.min),Math.abs(fb.max))),cost:16,make() {
       const line=delayLine(maximum+3), depth=width.reader(), speed=freq.reader(), feedback=fb.reader();
-      let phase=0;
-      return (l,r,kl,kr,t,out)=>{
-        const excursion=depth(t), gain=feedback(t);
+      const state={phase:0};
+      return P.audioCheckpoint((l,r,kl,kr,t,out)=>{
+        const excursion=depth(t), gain=feedback(t), {phase}=state;
         out[0]=line.read(0,t-rate*(extra+excursion*Math.sin(phase))/1000,'cubic');
         out[1]=line.read(1,t-rate*(extra+excursion*Math.sin(phase+tau*spread))/1000,'cubic');
         line.write(l+out[0]*gain,r+out[1]*gain);
-        phase=(phase+tau*speed(t)/rate)%tau;
-      };
+        state.phase=(phase+tau*speed(t)/rate)%tau;
+      },state,...line.cells);
     }};
   }
   function tape(raw,rate,time) {

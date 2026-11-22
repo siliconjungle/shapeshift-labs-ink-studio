@@ -25,6 +25,7 @@ module.exports=function play(transport,{port,prepare,recipe,save}) {
       case 'inspect': return transport.inspect();
       case 'switch': return transport.switchTake(args);
       case 'loop': return transport.setLoop(args);
+      case 'monitor': return transport.setMonitor(args.selection ?? null);
       case 'keep': return edit([transport.keepEdit(args)]);
       case 'edit': return edit(args.changes);
       case 'pause': if (listener===args.client) listener=undefined; return transport.state();

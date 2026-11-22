@@ -197,7 +197,15 @@
     if (!rows.length) return null;
     let index=0, filter;
     const pair=[0,0];
+    const make=row=>P.audioParametric.band('peak',rate,
+      ()=>Math.min(rate*.48,row.hz),()=>row.q ?? 1,()=>row.gainDb);
     return {
+      snapshot:()=>({index,filter:filter?.snapshot()}),
+      restore(state){
+        index=state.index;
+        filter=state.filter && make(rows[index]);
+        filter?.restore(state.filter);
+      },
       reset(){filter=null;},
       tick(left,right,frame,time) {
         while (index<rows.length && time>=rows[index].endTime-eps) {
@@ -206,8 +214,7 @@
         }
         const row=rows[index];
         if (!row || row.gainDb===0 || time<row.startTime-.35) return null;
-        filter ??= P.audioParametric.band('peak',rate,
-          ()=>Math.min(rate*.48,row.hz),()=>row.q ?? 1,()=>row.gainDb);
+        filter ??= make(row);
         filter(left,right,frame,pair);
         if (time<row.startTime-eps) return null;
         const edge=Math.min(time-(row.fadeFrom ?? row.startTime),(row.fadeTo ?? row.endTime)-time);

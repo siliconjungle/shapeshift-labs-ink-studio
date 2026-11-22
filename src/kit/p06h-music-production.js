@@ -349,9 +349,10 @@
   function makeSessionRoom(room,rate) {
     const taps=roomTaps(room,rate), smoothing=roomSmoothing(room);
     const length=1+Math.max(...taps.map(row=>row.samples)), ring=new Float32Array(length*2);
-    let index=0,history=0,left=0,right=0;
+    const state={index:0,history:0,left:0,right:0};
     const out=[0,0];
-    return (inputL,inputR,cut)=>{
+    return P.audioCheckpoint((inputL,inputR,cut)=>{
+      let {index,history,left,right}=state;
       if (cut) {history=0; left=right=0;}
       let l=0,r=0;
       for (const tap of taps) {
@@ -364,8 +365,124 @@
       ring[2*index]=inputL; ring[2*index+1]=inputR;
       if (++index===length) index=0;
       if (!cut) history=Math.min(length,history+1);
+      state.index=index; state.history=history; state.left=left; state.right=right;
       out[0]=left;out[1]=right;
       return out;
+    },state,ring);
+  }
+  function prepareVoice(track,note,gateEnd,sampleRate,tails) {
+    const start=note.start ?? note.time;
+    const first=Math.ceil(start*sampleRate-1e-7);
+    const gate=Math.min(note.gate,gateEnd-note.time)+note.time-start;
+    const nativeGate=note.start===undefined ? Math.min(note.gate,gateEnd-note.time) : gate;
+    const cropped=note.performance?.release && gateEnd<note.time+note.gate-1e-8;
+    const sound=track.play.prepare(cropped ? {...note,suppressRelease:true} : note,sampleRate,nativeGate);
+    const naturalEnd=Math.min(note.choke ?? Infinity,start+sound.duration);
+    const shortened=tails?.length ? Q.tailLimit(tails,note.time+note.gate,naturalEnd) : null;
+    const endTime=shortened?.stop ?? naturalEnd;
+    const last=Math.ceil(endTime*sampleRate);
+    const placementGain=note.renderGain ?? 1, entryFade=note.renderFade;
+    return {first,last,write(data,from,to) {
+      for (let at=first;at<Math.min(last,to);at++) {
+        const t=Math.max(0,at/sampleRate-start);
+        const remaining=endTime-at/sampleRate;
+        const fade=shortened ? Math.sin(clamp(remaining/shortened.fade)*Math.PI/2) :
+          note.choke!==endTime ? 1 : note.chokeFade ?
+            Math.sin(clamp(remaining/note.chokeFade)*Math.PI/2) : clamp(remaining*250);
+        const frame=at-first;
+        const placement=entryFade ? placementGain*Math.sin(Math.PI*.5*
+          clamp((at/sampleRate-entryFade.at)/entryFade.duration)) : placementGain;
+        const left=sound.signal(t,frame,0)*fade*placement;
+        data[2*(at-from)]+=left;
+        data[2*(at-from)+1]+=sound.stereo ? sound.signal(t,frame,1)*fade*placement : left;
+      }
+    }};
+  }
+  function scoreStrip(music,name,sampleRate,{end=music.end,withEcho=false,layer=1}={}) {
+    const track=music.tracks[name], local=music.cue?.perTrack[name];
+    const desk=track.mix, panL=Math.sqrt((1-desk.pan)/2), panR=Math.sqrt((1+desk.pan)/2);
+    const automation=G.automate(track.gestures,{gain:0,pan:desk.pan,cutoff:desk.lowpass,echo:track.echo?.send ?? 0},sampleRate);
+    let echo=withEcho ? G.tapeEcho(track.echo,sampleRate) : null;
+    const cut=Q.cursor(local?.cuts ?? []);
+    const roomSend=Q.cursor(local?.room ?? []);
+    const level=Q.cursor(local?.level ?? []);
+    const eq=Q.equalizer(local?.eq ?? [],sampleRate), depth=Q.cursor(local?.depth ?? []);
+    const coefficient=frequency=>1-Math.exp(-2*Math.PI*Math.min(sampleRate*.49,frequency)/sampleRate);
+    const high=coefficient(desk.highpass), low=coefficient(desk.lowpass);
+    const state={lowL:0,lowR:0,highL:0,highR:0,cutting:false,depthRow:null,farL:0,farR:0,farCutoff:1};
+    let hit=0;
+    const anchors=desk.duck && music.events[desk.duck.from].filter(note=>note.time<end);
+    const gain=desk.gain*music.gain*layer;
+    return {
+      roomAutomation:Boolean(roomSend || depth), echoAutomation:Boolean(track.echo && automation),
+      snapshot:()=>({state:{...state},eq:eq?.snapshot(),automation:automation?.snapshot()}),
+      restore(snapshot) {
+        Object.assign(state,snapshot.state);
+        eq?.restore(snapshot.eq);
+        automation?.restore(snapshot.automation);
+      },
+      tick(l,r,i,out) {
+        const time=i/sampleRate;
+        if (cut?.(time)) {
+          if (!state.cutting) {
+            state.cutting=true;
+            state.lowL=state.lowR=state.highL=state.highR=0;
+            eq?.reset();
+            state.depthRow=null;
+            if (withEcho) echo=G.tapeEcho(track.echo,sampleRate);
+          }
+          out[0]=out[1]=out[2]=out[3]=0;
+          return;
+        }
+        state.cutting=false;
+        const settings=automation?.(time), cutoff=settings ? coefficient(settings.cutoff) : low;
+        let volume=gain;
+        const ride=level?.(time);
+        if (ride) {
+          const edge=Math.min(time-(ride.fadeFrom ?? ride.startTime),(ride.fadeTo ?? ride.endTime)-time);
+          volume*=db(ride.gainDb*(ride.fadeSeconds ? clamp(edge/ride.fadeSeconds) : 1));
+        }
+        state.highL+=(l-state.highL)*high; state.highR+=(r-state.highR)*high;
+        state.lowL+=(l-state.highL-state.lowL)*cutoff; state.lowR+=(r-state.highR-state.lowR)*cutoff;
+        if (anchors?.length) {
+          while (hit+1<anchors.length && anchors[hit+1].time<=time) hit++;
+          const dt=time-anchors[hit].time;
+          if (dt>=0 && dt<6*desk.duck.release)
+            volume*=db(-desk.duck.depth*anchors[hit].velocity*clamp(dt/.005)*Math.exp(-dt/desk.duck.release));
+        }
+        if (settings) {
+          volume*=db(settings.gain);
+          l=state.lowL*volume*Math.sqrt((1-settings.pan)/2);
+          r=state.lowR*volume*Math.sqrt((1+settings.pan)/2);
+        } else {
+          l=state.lowL*volume*panL; r=state.lowR*volume*panR;
+        }
+        const shaped=eq?.tick(l,r,i,time);
+        if (shaped) [l,r]=shaped;
+        const space=depth?.(time);
+        let amount=0;
+        if (space) {
+          const edge=Math.min(time-(space.fadeFrom ?? space.startTime),(space.fadeTo ?? space.endTime)-time);
+          amount=space.fadeSeconds ? clamp(edge/space.fadeSeconds) : 1;
+          if (space.cutoffHz!==undefined) {
+            if (state.depthRow!==space.startTime) {
+              state.depthRow=space.startTime;
+              state.farL=l; state.farR=r; state.farCutoff=coefficient(space.cutoffHz);
+            }
+            state.farL+=(l-state.farL)*state.farCutoff; state.farR+=(r-state.farR)*state.farCutoff;
+            l+=(state.farL-l)*amount; r+=(state.farR-r)*amount;
+          }
+        }
+        if (echo) {
+          const wet=echo(i,l,r,settings?.echo ?? track.echo.send);
+          l+=wet[0]; r+=wet[1];
+        }
+        const span=roomSend?.(time);
+        let send=span ? span.send[0]+(span.send[1]-span.send[0])*
+          clamp((time-span.startTime)/(span.endTime-span.startTime)) : desk.send;
+        if (space?.send!==undefined) send+=(space.send-send)*amount;
+        out[0]=l; out[1]=r; out[2]=send; out[3]=settings?.echo ?? track.echo?.send ?? 0;
+      }
     };
   }
   function renderCompiled(music,options={},sessionSource=false,performanceEnd) {
@@ -396,113 +513,25 @@
         instruments[name]=rendered.info;
       }
       for (const note of track.external ? [] : events) {
-        const start=onset(note);
-        if (start>=end) break;
-        const first=Math.ceil(start*sampleRate-1e-7);
-        if (first>=stop) break;
-        const gate=Math.min(note.gate,gateEnd-note.time)+note.time-start;
-        const nativeGate=note.start===undefined ? Math.min(note.gate,gateEnd-note.time) : gate;
-        const cropped=note.performance?.release && gateEnd<note.time+note.gate-1e-8;
-        const sound=track.play.prepare(cropped ? {...note,suppressRelease:true} : note,sampleRate,nativeGate);
-        const naturalEnd=Math.min(note.choke ?? Infinity,start+sound.duration);
-        const shortened=tails?.length ? Q.tailLimit(tails,note.time+note.gate,naturalEnd) : null;
-        const endTime=shortened?.stop ?? naturalEnd;
-        const last=Math.min(stop,Math.ceil(endTime*sampleRate));
-        const placementGain=note.renderGain ?? 1, entryFade=note.renderFade;
-        for (let at=first;at<last;at++) {
-          const t=Math.max(0,at/sampleRate-start);
-          const remaining=endTime-at/sampleRate;
-          const fade=shortened ? Math.sin(clamp(remaining/shortened.fade)*Math.PI/2) :
-            note.choke!==endTime ? 1 : note.chokeFade ?
-              Math.sin(clamp(remaining/note.chokeFade)*Math.PI/2) : clamp(remaining*250);
-          const frame=at-first;
-          const placement=entryFade ? placementGain*Math.sin(Math.PI*.5*
-            clamp((at/sampleRate-entryFade.at)/entryFade.duration)) : placementGain;
-          const left=sound.signal(t,frame,0)*fade*placement;
-          data[2*at]+=left;
-          data[2*at+1]+=sound.stereo ? sound.signal(t,frame,1)*fade*placement : left;
-        }
+        if (onset(note)>=end) break;
+        const voice=prepareVoice(track,note,gateEnd,sampleRate,tails);
+        if (voice.first>=stop) break;
+        voice.write(data,0,stop);
       }
-      const desk=track.mix, panL=Math.sqrt((1-desk.pan)/2), panR=Math.sqrt((1+desk.pan)/2);
-      const automation=G.automate(track.gestures,{gain:0,pan:desk.pan,cutoff:desk.lowpass,echo:track.echo?.send ?? 0},sampleRate);
-      let echo=sessionSource ? null : G.tapeEcho(track.echo,sampleRate), cutting=false;
-      const cut=Q.cursor(local?.cuts ?? []);
-      const roomSend=Q.cursor(local?.room ?? []);
-      const level=Q.cursor(local?.level ?? []);
-      const eq=Q.equalizer(local?.eq ?? [],sampleRate), depth=Q.cursor(local?.depth ?? []);
-      const coefficient=frequency=>1-Math.exp(-2*Math.PI*Math.min(sampleRate*.49,frequency)/sampleRate);
-      const high=coefficient(desk.highpass), low=coefficient(desk.lowpass);
+      const strip=scoreStrip(music,name,sampleRate,{end,withEcho:!sessionSource,layer:layers[name] ?? 1});
       const dry=stems ? new Float32Array(n*2) : null;
-      const roomLevel=sessionSource && (roomSend || depth) ? new Float32Array(n) : null;
-      const echoLevel=sessionSource && track.echo && automation ? new Float32Array(n) : null;
-      let lowL=0,lowR=0,highL=0,highR=0, hit=0;
-      let depthRow, farL=0, farR=0, farCutoff=1;
-      const anchors=desk.duck && music.events[desk.duck.from].filter(note=>note.time<end);
-      const gain=desk.gain*music.gain*(layers[name] ?? 1);
+      const roomLevel=sessionSource && strip.roomAutomation ? new Float32Array(n) : null;
+      const echoLevel=sessionSource && strip.echoAutomation ? new Float32Array(n) : null;
+      const out=[0,0,0,0];
       for (let i=0;i<stop;i++) {
-        const index=2*i, time=i/sampleRate;
-        if (cut?.(time)) {
-          if (!cutting) {
-            cutting=true;
-            lowL=lowR=highL=highR=0;
-            eq?.reset();
-            depthRow=null;
-            if (!sessionSource) echo=G.tapeEcho(track.echo,sampleRate);
-          }
-          continue;
-        }
-        cutting=false;
-        const settings=automation?.(time), cutoff=settings ? coefficient(settings.cutoff) : low;
-        let l=data[index],r=data[index+1], volume=gain;
-        const ride=level?.(time);
-        if (ride) {
-          const edge=Math.min(time-(ride.fadeFrom ?? ride.startTime),(ride.fadeTo ?? ride.endTime)-time);
-          volume*=db(ride.gainDb*(ride.fadeSeconds ? clamp(edge/ride.fadeSeconds) : 1));
-        }
-        highL+=(l-highL)*high; highR+=(r-highR)*high;
-        lowL+=(l-highL-lowL)*cutoff; lowR+=(r-highR-lowR)*cutoff;
-        if (anchors?.length) {
-          while (hit+1<anchors.length && anchors[hit+1].time<=time) hit++;
-          const dt=time-anchors[hit].time;
-          if (dt>=0 && dt<6*desk.duck.release)
-            volume*=db(-desk.duck.depth*anchors[hit].velocity*clamp(dt/.005)*Math.exp(-dt/desk.duck.release));
-        }
-        if (settings) {
-          volume*=db(settings.gain);
-          l=lowL*volume*Math.sqrt((1-settings.pan)/2);
-          r=lowR*volume*Math.sqrt((1+settings.pan)/2);
-        } else {
-          l=lowL*volume*panL; r=lowR*volume*panR;
-        }
-        const shaped=eq?.tick(l,r,i,time);
-        if (shaped) [l,r]=shaped;
-        const space=depth?.(time);
-        let amount=0;
-        if (space) {
-          const edge=Math.min(time-(space.fadeFrom ?? space.startTime),(space.fadeTo ?? space.endTime)-time);
-          amount=space.fadeSeconds ? clamp(edge/space.fadeSeconds) : 1;
-          if (space.cutoffHz!==undefined) {
-            if (depthRow!==space) {
-              depthRow=space;
-              farL=l; farR=r; farCutoff=coefficient(space.cutoffHz);
-            }
-            farL+=(l-farL)*farCutoff; farR+=(r-farR)*farCutoff;
-            l+=(farL-l)*amount; r+=(farR-r)*amount;
-          }
-        }
-        if (echo) {
-          const wet=echo(i,l,r,settings?.echo ?? track.echo.send);
-          l+=wet[0]; r+=wet[1];
-        }
-        const span=roomSend?.(time);
-        let send=span ? span.send[0]+(span.send[1]-span.send[0])*
-          clamp((time-span.startTime)/(span.endTime-span.startTime)) : desk.send;
-        if (space?.send!==undefined) send+=(space.send-send)*amount;
+        const index=i*2,time=i/sampleRate;
+        strip.tick(data[index],data[index+1],i,out);
+        const [l,r,send]=out;
         if (sessionSource) {
           const fade=fadeDuration ? clamp((music.end-time)/fadeDuration) : 1;
           dry[index]=l*fade; dry[index+1]=r*fade;
           if (roomLevel) roomLevel[i]=send;
-          if (echoLevel) echoLevel[i]=settings.echo;
+          if (echoLevel) echoLevel[i]=out[3];
           continue;
         }
         feed[index]+=l*send; feed[index+1]+=r*send;
@@ -596,5 +625,5 @@
     return renderCompiled({...score,tracks:{[lane]:score.tracks[lane]}},{sampleRate,stems:true},true);
   }
   P.musicProduction=Object.freeze({compile,renderCompiled,render,inspect,mapCue,mapGroove,grooveAt,applyChokes,
-    renderSessionSource,makeSessionRoom});
+    renderSessionSource,makeSessionRoom,prepareVoice,scoreStrip});
 })(KIT.procedural);

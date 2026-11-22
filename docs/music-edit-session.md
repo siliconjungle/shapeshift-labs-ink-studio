@@ -107,17 +107,47 @@ per line. For example:
 {"op":"save","out":"kept.json"}
 ```
 
-Each preview or render writes a mix, named mixer taps, switch positions, and
-cache counts. A persistent stream or JS handle reuses unchanged rendered
-takes, with bounded cache eviction. Mixing runs again to preserve effect
-history and respond to changed routing or automation. The interface produces
-offline listening passes and files. It can be driven by an agent without a
-DAW or device transport.
+Previews, renders, and handoff use the saved comp and desk. A warm editor
+reuses bounded audio blocks and checkpoints for score filtering, patch echo,
+room, and supported desk effects, including tempo delay and keyed dynamics.
+A note edit changes the blocks it touches and the history downstream of them.
+`report.blocks` shows how many samples the desk processed, the checkpoint
+it resumed from, and the number of output blocks it reused. `warmupSamples`
+is the sample address of the first audible frame, even on a cache hit.
+
+A single-pass preview without switches uses the same signal as the matching
+slice of the full print. The default normalization uses the full print's
+peak, so a cold preview can require processing all the way through the
+cue. Use a gain-staged desk with `peakPolicy: "error"` to audition quickly
+and validate full scale when you print. Active block processors, external
+instruments, and processors without checkpoint support use the continuous
+renderer and its PCM and processing limits. A terminal true-peak limiter on
+a unity master can use the block cache upstream and process the complete
+master as a continuous stage. The report identifies which path ran.
+
+Use `context` to include audio around the requested loop. The loop includes
+the padded range and the report includes the original focus in sample
+positions. Add a named mixer tap to solo it or subtract it from the mix at
+the same playback gain. Tap subtraction leaves routing and processor state
+in place.
+
+```jsonl
+{"op":"preview","out":"air-solo","preview":{"from":{"bar":8},"to":{"bar":10},"context":{"beforeSamples":24000,"afterSamples":12000},"monitor":{"mode":"solo","tap":"air"}}}
+{"op":"compare","out":"before-after","preview":{"from":{"bar":7},"to":{"bar":10}}}
+```
+
+A stream's `compare` uses the last session before a successful edit. It
+writes aligned `before.wav`, `after.wav`, and `difference.wav` at a shared
+mix gain. If the signed difference needs extra headroom to fit the WAV,
+the report records that playback gain. To compare two saved sessions, use
+`ink-studio music session compare current.json comparison.json --out clips`
+with `{"before":"previous.json","preview":{"from":{"bar":7},"to":{"bar":10}}}`.
+The two recipes must reference the same named audio assets.
 
 The JavaScript entry point is
 `KIT.procedural.mediaGraph.musicSession.create(assets)`. It returns
-`inspect(session)`, `edit(session, edits)`, and
-`render(session, preview?)`. Use `music.inspectEditSession`,
+`inspect(session)`, `edit(session, edits)`,
+`render(session, preview?)`, and `compare(before, after, preview)`. Use `music.inspectEditSession`,
 `music.editSession`, and `music.renderEditSession` in a graph.
 
 ## Play and edit a live loop
@@ -144,7 +174,8 @@ its reference and any kept ranges.
 The live renderer runs one continuous mixer, including per-patch tape echo,
 production room, and causal zero-latency desk inserts. Score automation wraps
 with the loop, and tempo delay runs on the continuous render clock. The live
-player uses a fixed monitor gain and indicates clipping. Use the offline
+player uses a fixed monitor gain and indicates clipping. Native takes are
+read in blocks as the playhead advances. Use the offline
 preview or print for active block-only and latency-compensated inserts or
 mastering peak policies. Reopen the player after changing the clock, routing,
 or mixer automation.
@@ -153,7 +184,8 @@ or mixer automation.
 `pull(frameCount, {taps:true})` supplies interleaved stereo PCM and named taps.
 Each chunk includes the starting and ending score and transport frame
 addresses. Call `state()`, `switchTake({lane,take,fadeSamples?})`,
-`setLoop({from,to})`, `keep({lane,take?,from?,to?,fadeSamples?})`, and
+`setLoop({from,to})`, `setMonitor({mode,tap} | null)`,
+`keep({lane,take?,from?,to?,fadeSamples?})`, and
 `edit(changes)` between pulls. A switch with `take:null` restores the saved
 edit. `keep` defaults to the auditioned take and current loop. Read
 `inspect()` for note addresses and `document()` for the saved composition.
@@ -169,7 +201,8 @@ honor pins and retain the written clip and voice addresses.
 Agents can control the open browser session through its loopback API. Read
 `GET /session` for the current state and the session key, then send JSON with
 the `X-Ink-Session` header. `POST /command` takes an `op` of `state`,
-`inspect`, `switch`, `loop`, `keep`, `edit` (with `changes`), or `save`.
+`inspect`, `switch`, `loop`, `monitor` (with `selection`), `keep`,
+`edit` (with `changes`), or `save`.
 The browser usually owns the audio listener. A headless player can instead
 use `POST /audio` with `{frames,client}`. Its response is little-endian
 interleaved float32 stereo with the chunk address in `X-Ink-Transport`.

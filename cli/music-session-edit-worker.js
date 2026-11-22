@@ -45,8 +45,8 @@ if (isMainThread) {
   }
   parentPort.on('message',({id,session,edits})=>{
     try {
-      const prepared=editor.prepareTransport(edits===undefined ? session : editor.edit(session,edits));
-      for (const {materials} of Object.values(prepared.media)) for (const row of Object.values(materials)) {
+      const prepared=editor.prepareLive(edits===undefined ? session : editor.edit(session,edits));
+      for (const {materials} of Object.values(prepared.media ?? {})) for (const row of Object.values(materials)) {
         const {dry,roomLevel,echoLevel}=row.value;
         row.value={...row.value,dry:{...dry,samples:share(dry.samples)},roomLevel:share(roomLevel),echoLevel:share(echoLevel)};
       }

@@ -1,6 +1,7 @@
 /* Native insert contracts report algorithmic latency and audible tail separately. */
 (function (P) {
   const S=P.mediaGraphSupport, {fields,finite,check,db}=P.musicInstruments;
+  const checkpoint=P.audioCheckpoint;
   const floorLevel=.001, levelDb=x=>20*Math.log10(Math.max(1e-10,x));
   const schema={
     gain:{db:[0,-96,24]},
@@ -62,64 +63,64 @@
     function make() {
       if (type==='gain') {
         const gain=params.db.reader();
-        return (l,r,kl,kr,t,out)=>{
+        return checkpoint((l,r,kl,kr,t,out)=>{
           const scale=db(gain(t));
           out[0]=l*scale; out[1]=r*scale;
-        };
+        });
       }
       if (type==='drive') {
         const drive=params.amount.reader();
-        return (l,r,kl,kr,t,out)=>{
+        return checkpoint((l,r,kl,kr,t,out)=>{
           const amount=drive(t), norm=1/Math.tanh(amount);
           out[0]=Math.tanh(l*amount)*norm; out[1]=Math.tanh(r*amount)*norm;
-        };
+        });
       }
       if (type==='lowpass' || type==='highpass') {
         const hz=params.hz.reader(), high=type==='highpass';
-        let lowL=0,lowR=0;
-        return (l,r,kl,kr,t,out)=>{
+        const state={lowL:0,lowR:0};
+        return checkpoint((l,r,kl,kr,t,out)=>{
           const a=S.sampleKitMix.poleAt(hz(t),rate);
-          lowL+=(l-lowL)*a; lowR+=(r-lowR)*a;
-          out[0]=high ? l-lowL : lowL; out[1]=high ? r-lowR : lowR;
-        };
+          state.lowL+=(l-state.lowL)*a; state.lowR+=(r-state.lowR)*a;
+          out[0]=high ? l-state.lowL : state.lowL; out[1]=high ? r-state.lowR : state.lowR;
+        },state);
       }
       if (type==='delay') {
         const feedback=params.feedback.reader(), line=new Float64Array(delayFrames*2);
-        let index=0;
-        return (l,r,kl,kr,t,out)=>{
-          const retain=feedback(t);
+        const state={index:0};
+        return checkpoint((l,r,kl,kr,t,out)=>{
+          const retain=feedback(t), {index}=state;
           out[0]=line[index]; out[1]=line[index+1];
           line[index]=l+out[0]*retain; line[index+1]=r+out[1]*retain;
-          index=(index+2)%line.length;
-        };
+          state.index=(index+2)%line.length;
+        },state,line);
       }
       if (type==='reverb') {
         const damping=params.damping.reader(), channels=[0,0];
-        const lines=roomLines.map(({size,feedback})=>({ring:new Float64Array(size),at:0,damped:0,feedback}));
-        return (l,r,kl,kr,t,out)=>{
+        const lines=roomLines.map(({size,feedback})=>({ring:new Float64Array(size),state:{at:0,damped:0},feedback}));
+        return checkpoint((l,r,kl,kr,t,out)=>{
           const damp=damping(t);
           channels[0]=.81*l+.19*r; channels[1]=.81*r+.19*l;
           out[0]=0; out[1]=0;
           for (let i=0;i<lines.length;i++) {
-            const line=lines[i], channel=i<4 ? 0 : 1;
-            const sample=line.ring[line.at];
-            line.damped+=(sample-line.damped)*(1-damp);
-            line.ring[line.at]=channels[channel]+line.damped*line.feedback;
-            if (++line.at===line.ring.length) line.at=0;
+            const {ring,state,feedback}=lines[i], channel=i<4 ? 0 : 1;
+            const sample=ring[state.at];
+            state.damped+=(sample-state.damped)*(1-damp);
+            ring[state.at]=channels[channel]+state.damped*feedback;
+            if (++state.at===ring.length) state.at=0;
             out[channel]+=sample*.25;
           }
-        };
+        },...lines.flatMap(({ring,state})=>[ring,state]));
       }
       const threshold=params.thresholdDb.reader(), ratio=params.ratio.reader(), makeup=params.makeupDb.reader();
       const attack=1-Math.exp(-1/(rate*params.attack)), release=1-Math.exp(-1/(rate*params.release));
-      let smooth=0;
-      return (l,r,kl,kr,t,out)=>{
+      const state={smooth:0};
+      return checkpoint((l,r,kl,kr,t,out)=>{
         const over=Math.max(0,levelDb(Math.max(Math.abs(kl),Math.abs(kr)))-threshold(t));
         const aim=over*(1/ratio(t)-1);
-        smooth+=(aim-smooth)*(aim<smooth ? attack : release);
-        const gain=db(smooth+makeup(t));
+        state.smooth+=(aim-state.smooth)*(aim<state.smooth ? attack : release);
+        const gain=db(state.smooth+makeup(t));
         out[0]=l*gain; out[1]=r*gain;
-      };
+      },state);
     }
     return {type,latency,tail:wet.max===0 ? 0 : tail,sidechain:type==='compressor',wet,make,
       cost:type==='reverb' ? 28 : 8};
