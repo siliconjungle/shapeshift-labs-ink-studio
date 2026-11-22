@@ -49,7 +49,7 @@ node cli/ink-studio.js sim run examples/story-documents/breakwater-survey.world.
 | --- | --- | --- |
 | Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map |
 | Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
-| Role | `kind` | `ref` to a document reference of the same kind |
+| Role | `kind` | `ref` to a document reference of the same kind, `required` for a required world binding or reference default |
 | Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled, `children` on a progressing arc |
 | Objective | `title` | `summary`, `refs`, `optional`, `evidence`, `type` with its `params` |
 | Outcome | `title` | `summary`, `refs`, `status` when stage progression is enabled |
@@ -60,6 +60,40 @@ Map keys are stable IDs. They are case-sensitive and start with a letter. The re
 `refs` arrays contain IDs from the document's `references` map. Each reference pairs an authored kind such as `actor`, `place`, `scene`, `score`, or `patch` with an ID in the owning system. The ID can be slash-qualified, for example `river-valley/old-mill`. These are logical IDs. Resolve them in the tool that owns the corresponding data. A role with no `ref` leaves the identity open for later binding.
 
 [Graph projects](headless-authoring.md#run-a-graph-project-from-the-cli) can read the validated file via `jsonAsset`. The [graph example](../examples/story-documents/inspect.graph.json) uses `data.get` to select the recovery arc through its stable ID.
+
+## Bind reusable role slots
+
+Declare any role ID under a story's `roles` map. Names such as requester, rival, escort, and destination are author choices. Kind IDs are also author-defined. A binding carries the declared kind and a JSON value, such as a named participant, a native solver handle, a coordinate, a transfer account, or a custom record.
+
+For a story declaring `"escort": {"kind":"courier"}`, add a binding under its `document/story` key in the world manifest.
+
+```json
+{
+  "storyBindings": {
+    "relief-charter/courier": {
+      "escort": { "kind": "courier", "value": { "system": "trail-crew", "agent": "ridge-runner" } }
+    }
+  }
+}
+```
+
+Use `{"$role":"escort"}` for the whole value, or project part of it with a JSON Pointer or path array, such as `{"$role":"escort","path":"/agent"}`. Local references work in story triggers, objective evidence and parameters, and cleanup targets. Stable graph IDs and choice options stay authored. For example, a reach objective can read the escort's roster from `/system` and the destination's receiving bounds from `/bounds/min`.
+
+World commands and event actions use an explicit scope, such as `{"$role":"escort","story":"relief-charter/courier","path":"/agent"}`. The same command recipe can issue an order on a bound roster and transfer a reward from a bound account. Bindings contain concrete values. Story compilation expands them before checking the resulting commands, objective parameters, and cleanup targets against the ordinary world rules.
+
+A role's `ref` supplies its reference ID as a default. A world binding of the same kind overrides it. Ink requires a value for every referenced role and every role declared with `"required": true`. Roles used purely as annotations may stay open. `story preview` shows declarations and stage role lists. `sim preflight` checks actual bindings. Probe `world/story-roles` with optional `story` and `role` arguments to see values and whether each came from the world or a reference. World bindings travel with the embedded story documents in checkpoints and recordings.
+
+### Recast The Relief Charter
+
+[The Relief Charter](../examples/story-documents/relief-charter.json) uses one story and one command file across [the ridge](../examples/story-documents/relief-charter-ridge.world.json) and [the quay](../examples/story-documents/relief-charter-quay.world.json). Each world binds its own requester, consignment, escort, rival, witness, destination, treasury, and dispatch authorization. The native roster moves the bound escort, the ledger settles the bound delivery, and the completion event pays the bound wallet.
+
+```sh
+node cli/ink-studio.js story preview examples/story-documents/relief-charter.json courier --strict
+node cli/ink-studio.js sim preflight examples/story-documents/relief-charter-ridge.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/relief-charter-ridge.world.json --actions examples/story-documents/relief-charter.actions.json --ticks 18 --record ridge.run.json
+node cli/ink-studio.js sim run examples/story-documents/relief-charter-quay.world.json --actions examples/story-documents/relief-charter.actions.json --ticks 18 --record quay.run.json
+node cli/ink-studio.js probe quay.run.json --field world/story-roles --args '{"story":"relief-charter/courier","role":"escort"}'
+```
 
 ## Trigger a story from a world
 

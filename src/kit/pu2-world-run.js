@@ -332,20 +332,24 @@
     const population = W.populationRuntime.bind({systems,transfers,chunks});
     const plan = {world,systems,ports,incoming,order,names,transfers,couplings,dependencies,schedule,rates,timedSolvers,chunks,aggregates,reservations,worksites,
       interactions,influence,population,causePolicy,contracts,phaseEdges,navigationSources};
-    if (world.storyDocuments !== undefined) {
-      plan.storyTriggers = W.storyTriggers.compile(world.storyDocuments, world, systems);
-      plan.storyLifecycle = W.storyLifecycle.compile(world.storyDocuments, world, systems);
-      plan.storyDiagnostics = freeze(world.storyDocuments.flatMap(document =>
+    if (world.storyDocuments !== undefined || world.storyBindings !== undefined) {
+      plan.storyRoles = W.storyRoles.compile(world.storyDocuments === undefined ? [] : world.storyDocuments, world.storyBindings);
+      const { documents } = plan.storyRoles;
+      plan.storyTriggers = W.storyTriggers.compile(documents, world, systems);
+      plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
+      plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
     }
-    if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
-      dt: world.dt, validateAction: command => actionCheck(command, plan),
+    if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(
+      plan.storyRoles ? plan.storyRoles.resolve(world.eventActions, 'world.eventActions') : world.eventActions, {
+      dt: world.dt, validateAction: command => actionCheck(command, plan, 1, false),
       validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
         'Unknown event action source ' + system)
     });
     return plan;
   }
-  function actionCheck(raw, plan, min = 1) {
+  function actionCheck(raw, plan, min = 1, resolveRoles = true) {
+    if (resolveRoles && plan.storyRoles) raw = plan.storyRoles.command(raw);
     check(record(raw) && tickOK(raw.tick) && raw.tick >= min && record(raw.args ?? {}) &&
       (raw.id === undefined || id(raw.id)), 'Invalid scheduled command or command tick');
     const [system,key] = endpoint(raw.action);
@@ -450,7 +454,8 @@
     let {world,plan} = prepare(source,options);
     if (world.scenario?.start?.length) ({world,plan} = prepare(W.apply(world,world.scenario.start).world,options));
     return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:true,
-      documents:world.storyDocuments?.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? []});
+      documents:world.storyDocuments?.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
+      ...(plan.storyRoles && Object.keys(plan.storyRoles.roles).length > 0 && {roles:plan.storyRoles.roles})});
   }
   function modelInterface(source) {
     const {world,plan:{systems,ports}} = prepare(source);
@@ -472,7 +477,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyRoles,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -534,6 +539,7 @@
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
+        ...(storyRoles && {storyRoles:storyRoles.roles}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function phaseReader(name,snapshot,staged) {

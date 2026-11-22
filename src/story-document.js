@@ -66,6 +66,44 @@ const StoryDocument = (() => {
       path.slice(1).split('/').map(key => key.replace(/~1/g, '/').replace(/~0/g, '~')) : path;
     if (!Array.isArray(parts) || !parts.length || parts.length > 64 || Array.from(parts).some(key =>
       !(safeKey(key) || Number.isSafeInteger(key) && key >= 0))) invalid(at, 'expected a valid path array or JSON Pointer');
+    return parts;
+  }
+
+  function roleToken(token, at, qualified = false) {
+    fields(token, at, qualified ? ['$role', 'story'] : ['$role'], ['path']);
+    if (!safeId(token.$role)) invalid(`${at}.$role`, 'expected a role ID');
+    if (qualified && (typeof token.story !== 'string' || token.story.split('/').length !== 2 ||
+      !token.story.split('/').every(safeId))) invalid(`${at}.story`, 'expected document/story IDs');
+    return Object.hasOwn(token, 'path') ? dataPath(token.path, `${at}.path`) : [];
+  }
+
+  function mapRoleValues(value, at, replace) {
+    if (!value || typeof value !== 'object') return value;
+    if (Object.hasOwn(value, '$role')) return replace(value, at);
+    if (Array.isArray(value)) {
+      const rows = value.map((item, i) => mapRoleValues(item, `${at}[${i}]`, replace));
+      return rows.some((item, i) => item !== value[i]) ? rows : value;
+    }
+    let result = value;
+    for (const key of Object.keys(value)) {
+      const item = mapRoleValues(value[key], `${at}.${key}`, replace);
+      if (item !== value[key]) {
+        if (result === value) result = { ...value };
+        Object.defineProperty(result, key, { value:item, writable:true, configurable:true, enumerable:true });
+      }
+    }
+    return result;
+  }
+
+  function roleUses(value, roles, at, report) {
+    let used = false;
+    mapRoleValues(value, at, (token, location) => {
+      roleToken(token, location);
+      link(token.$role, roles, `${location}.$role`, 'role', report);
+      used = true;
+      return token;
+    });
+    return used;
   }
 
   function condition(rule, at, depth = 0) {
@@ -143,6 +181,7 @@ const StoryDocument = (() => {
       const location = `${at}.${type}`;
       if (objectiveKinds.has(type)) invalid(location, 'built-in objective type');
       fields(spec, location, ['evidence'], ['match']);
+      roleUses(spec.evidence, {}, `${location}.evidence`);
       evidence(spec.evidence, `${location}.evidence`);
       if (Object.hasOwn(spec, 'match')) {
         const matches = entries(spec.match, `${location}.match`, true);
@@ -152,11 +191,17 @@ const StoryDocument = (() => {
     }
   }
 
-  function typedParams({type, params}, types, at, report) {
+  function typedParams({type, params}, types, at, report, roles) {
     const location = `${at}.params`;
+    const templated = roleUses(params, roles, location, report);
     if (!objectiveKinds.has(type)) {
       if (!link(type, types, `${at}.type`, 'objective type', report)) return;
+      if (templated) return;
       fields(params ?? {}, location, Object.keys(types[type].match ?? {}));
+      return;
+    }
+    if (templated) {
+      if (type === 'choose') invalid(location, 'choice options must use authored IDs and labels');
       return;
     }
     const worldId = name => {
@@ -249,11 +294,12 @@ const StoryDocument = (() => {
     }
   }
 
-  function triggers(story, at) {
+  function triggers(story, at, roles, report) {
     const table = `${at}.triggers`;
     for (const [name, rule] of entries(story.triggers, table, true)) {
       const location = `${table}.${name}`;
       record(rule, location);
+      if (roleUses(rule, roles, location, report)) continue;
       if (Object.hasOwn(rule, 'event')) {
         fields(rule, location, ['event'], ['count', 'within']);
         eventSource(rule.event, `${location}.event`);
@@ -296,7 +342,7 @@ const StoryDocument = (() => {
 
   const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];
 
-  function cleanup(rules, outcomes, at, report) {
+  function cleanup(rules, outcomes, at, report, roles) {
     const rows = entries(rules, at, true);
     if (rows.length > 32) invalid(at, 'expected up to 32 cleanup rules');
     const targets = {
@@ -311,11 +357,13 @@ const StoryDocument = (() => {
       const kinds = Object.keys(targets).filter(kind => Object.hasOwn(rule, kind));
       if (kinds.length !== 1) invalid(place, 'expected exactly one claim, offer, or site target');
       const [kind] = kinds, target = rule[kind], location = `${place}.${kind}`;
-      fields(target, location, targets[kind]);
-      for (const [key, value] of Object.entries(target)) {
-        if (['generation', 'sequence', 'revision'].includes(key)) {
-          if (!Number.isSafeInteger(value) || value <= 0) invalid(`${location}.${key}`, 'expected a positive integer');
-        } else if (!worldName(value)) invalid(`${location}.${key}`, 'expected a world ID');
+      if (!roleUses(target, roles, location, report)) {
+        fields(target, location, targets[kind]);
+        for (const [key, value] of Object.entries(target)) {
+          if (['generation', 'sequence', 'revision'].includes(key)) {
+            if (!Number.isSafeInteger(value) || value <= 0) invalid(`${location}.${key}`, 'expected a positive integer');
+          } else if (!worldName(value)) invalid(`${location}.${key}`, 'expected a world ID');
+        }
       }
       if (Object.hasOwn(rule, 'keepOn')) links(rule.keepOn, statuses, `${place}.keepOn`, 'terminal status', report);
       if (Object.hasOwn(rule, 'keepOutcomes')) links(rule.keepOutcomes, outcomes, `${place}.keepOutcomes`, 'outcome', report);
@@ -398,19 +446,21 @@ const StoryDocument = (() => {
       fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle']);
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
       labelsAndRefs(story, at, references, report);
-      if (Object.hasOwn(story, 'triggers')) triggers(story, at);
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
       const { stages, outcomes } = story;
       for (const [name, role] of entries(roles, `${at}.roles`)) {
         const location = `${at}.roles.${name}`;
-        fields(role, location, ['kind'], ['ref']);
+        fields(role, location, ['kind'], ['ref', 'required']);
         if (!safeId(role.kind)) invalid(`${location}.kind`, 'invalid role kind');
+        if (Object.hasOwn(role, 'required') && typeof role.required !== 'boolean')
+          invalid(`${location}.required`, 'expected a boolean');
         if (Object.hasOwn(role, 'ref')) {
           if (link(role.ref, references, `${location}.ref`, 'reference', report) && references[role.ref].kind !== role.kind)
             invalid(`${location}.ref`, `reference kind must match ${JSON.stringify(role.kind)}`);
         }
       }
+      if (Object.hasOwn(story, 'triggers')) triggers(story, at, roles, report);
       const stageRows = entries(stages, `${at}.stages`, true);
       const progression = story.lifecycle?.progression === true;
       const nesting = progression && story.kind === 'arc';
@@ -424,7 +474,7 @@ const StoryDocument = (() => {
         labelsAndRefs(outcome, location, references, report);
       }
       if (story.lifecycle && Object.hasOwn(story.lifecycle, 'cleanup'))
-        cleanup(story.lifecycle.cleanup, outcomes, `${at}.lifecycle.cleanup`, report);
+        cleanup(story.lifecycle.cleanup, outcomes, `${at}.lifecycle.cleanup`, report, roles);
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
         fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story',
@@ -441,11 +491,12 @@ const StoryDocument = (() => {
           labelsAndRefs(objective, place, references, report);
           if (Object.hasOwn(objective, 'optional') && typeof objective.optional !== 'boolean')
             invalid(`${place}.optional`, 'expected a boolean');
-          if (Object.hasOwn(objective, 'evidence')) evidence(objective.evidence, `${place}.evidence`);
+          if (Object.hasOwn(objective, 'evidence') && !roleUses(objective.evidence, roles, `${place}.evidence`, report))
+            evidence(objective.evidence, `${place}.evidence`);
           if (Object.hasOwn(objective, 'type')) {
             if (Object.hasOwn(objective, 'evidence')) invalid(place, 'typed objectives define their evidence through params');
             if (Object.hasOwn(objective, 'params')) record(objective.params, `${place}.params`);
-            typedParams(objective, types, place, report);
+            typedParams(objective, types, place, report, roles);
           } else if (Object.hasOwn(objective, 'params')) invalid(`${place}.params`, 'requires an objective type');
         }
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
@@ -499,6 +550,6 @@ const StoryDocument = (() => {
     }
   }
 
-  return Object.freeze({ validateStoryDocument, inspectStoryDocument, objectiveRule });
+  return Object.freeze({ validateStoryDocument, inspectStoryDocument, objectiveRule, mapRoleValues, roleToken });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

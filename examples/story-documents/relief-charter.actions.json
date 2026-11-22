@@ -1,0 +1,22 @@
+[
+  { "tick": 1, "action": "world/event", "args": {
+    "kind": "charter-issued",
+    "requester": { "$role": "requester", "story": "relief-charter/courier" },
+    "clearance": { "$role": "clearance", "story": "relief-charter/courier" }
+  } },
+  { "tick": 3, "action": "world/transfer", "args": {
+    "from": { "$role": "subject", "story": "relief-charter/courier", "path": "/origin" },
+    "to": { "$role": "destination", "story": "relief-charter/courier", "path": "/account" },
+    "amount": 2, "mode": "exact"
+  } },
+  { "tick": 5, "action": "world/event", "args": {
+    "kind": "delivery-witness",
+    "witness": { "$role": "witness", "story": "relief-charter/courier" },
+    "consignment": { "$role": "subject", "story": "relief-charter/courier", "path": "/id" },
+    "rival": { "$role": "rival", "story": "relief-charter/courier" }
+  } },
+  { "tick": 16, "action": "world/story-choose", "args": {
+    "document": "relief-charter", "story": "courier", "stage": "handoff", "visit": 1,
+    "branch": "settle", "reason": "handoff-verified"
+  } }
+]

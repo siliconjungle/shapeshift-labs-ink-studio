@@ -260,6 +260,13 @@
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
       ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,world.storyDocuments))} }),
+      ...(world.storyDocuments !== undefined && { 'story-roles':{type:'record',qualified:true,read:({args}) => {
+        const {story, role} = args, records = view.storyRoles ?? {};
+        if (story === undefined && role === undefined) return ok(records);
+        if (!own(records,story)) return missing('unknown story with roles','missing');
+        const slots = records[story];
+        return role === undefined ? ok(slots) : own(slots,role) ? ok(slots[role]) : missing('unknown story role','missing');
+      }} }),
       signal:{type:'value',read:({args}) => {
         const port=typeof args.port==='string'?portOf(world,args.port):null;
         return own(signals,port)?ok(signals[port]):missing('unknown signal port');

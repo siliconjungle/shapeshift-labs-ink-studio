@@ -227,10 +227,12 @@ const StoryAnalysis = (() => {
     }
     if (!preview) return;
     return {id, kind:story.kind, title:story.title, entry:story.entry, completeTopology:intact,
+      ...(story.roles && {roles:story.roles}),
       stages:keys(story.stages).map(id => {
         const stage = story.stages[id], available = new Set(possible.graph.get(id).map(edge => edge.id));
         return {id, title:stage.title, reachable:reachable.distance.has(id), canReachOutcome:reachesEnding.has(id),
           ...(stage.children && {children:stage.children}),
+          ...(stage.roles && {roles:stage.roles}),
           ...(stage.objectives && {objectives:keys(stage.objectives).map(id => {
             const {title, type, optional = false} = stage.objectives[id];
             return {id,title,optional,...(type !== undefined && {type})};

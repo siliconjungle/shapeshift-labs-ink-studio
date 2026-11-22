@@ -1,0 +1,279 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "ridge-charter",
+  "dt": 0.1,
+  "storyDocuments": [
+    {
+      "file": "relief-charter.json"
+    }
+  ],
+  "storyBindings": {
+    "relief-charter/courier": {
+      "requester": {
+        "kind": "participant",
+        "value": "warden"
+      },
+      "subject": {
+        "kind": "consignment",
+        "value": {
+          "id": "mountain-pack",
+          "origin": "ridge-stores/outpost"
+        }
+      },
+      "escort": {
+        "kind": "courier",
+        "value": {
+          "system": "trail-crew",
+          "agent": "ridge-runner",
+          "issueAction": "trail-crew/issue-order",
+          "wallet": "ridge-stores/runner-wallet"
+        }
+      },
+      "rival": {
+        "kind": "participant",
+        "value": "trail-claimant"
+      },
+      "witness": {
+        "kind": "participant",
+        "value": "lodge-keeper"
+      },
+      "destination": {
+        "kind": "drop-off",
+        "value": {
+          "site": {
+            "entity": "ridge-lodge"
+          },
+          "account": "ridge-stores/lodge",
+          "bounds": {
+            "min": [
+              1,
+              -0.1,
+              0.3
+            ],
+            "max": [
+              1.4,
+              0.25,
+              0.6
+            ]
+          }
+        }
+      },
+      "reward-source": {
+        "kind": "treasury",
+        "value": "ridge-stores/wardens-fund"
+      },
+      "clearance": {
+        "kind": "dispatch-authorization",
+        "value": {
+          "route": "high-trail",
+          "priority": true
+        }
+      }
+    }
+  },
+  "entities": {
+    "ridge-lodge": {
+      "position": [
+        1.2,
+        0,
+        0.45
+      ]
+    },
+    "warden": {
+      "position": [
+        0,
+        0,
+        -1
+      ]
+    },
+    "lodge-keeper": {
+      "position": [
+        1.2,
+        0,
+        0.9
+      ]
+    },
+    "trail-claimant": {
+      "position": [
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "systems": {
+    "trail-crew": {
+      "kind": "agents",
+      "config": {
+        "bounds": {
+          "min": [
+            -2,
+            -0.5,
+            -1.5
+          ],
+          "max": [
+            2,
+            1,
+            1.5
+          ]
+        },
+        "ground": 0,
+        "cell": 0.2,
+        "species": {
+          "runner": {
+            "mode": "walk",
+            "radius": 0.1,
+            "speed": 2.3
+          }
+        },
+        "agents": {
+          "ridge-runner": {
+            "species": "runner",
+            "position": [
+              -1,
+              0,
+              0.45
+            ]
+          }
+        },
+        "orders": {
+          "tasks": {
+            "carry": {
+              "steps": [
+                {
+                  "op": "move",
+                  "at": {
+                    "target": "site"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "ridge-stores": {
+      "kind": "store",
+      "config": {
+        "accounts": {
+          "outpost": {
+            "resource": "relief",
+            "type": "integer",
+            "units": "case",
+            "initial": 2,
+            "max": 2
+          },
+          "lodge": {
+            "resource": "relief",
+            "type": "integer",
+            "units": "case",
+            "initial": 0,
+            "max": 2
+          },
+          "wardens-fund": {
+            "resource": "coin",
+            "type": "integer",
+            "units": "coin",
+            "initial": 12,
+            "max": 12
+          },
+          "runner-wallet": {
+            "resource": "coin",
+            "type": "integer",
+            "units": "coin",
+            "initial": 0,
+            "max": 12
+          }
+        }
+      }
+    }
+  },
+  "eventActions": {
+    "send-escort": {
+      "on": {
+        "kind": "story-started",
+        "system": "world",
+        "where": {
+          "all": [
+            {
+              "path": "/document",
+              "value": "relief-charter"
+            },
+            {
+              "path": "/story",
+              "value": "courier"
+            }
+          ]
+        }
+      },
+      "actions": [
+        {
+          "action": {
+            "$role": "escort",
+            "story": "relief-charter/courier",
+            "path": "/issueAction"
+          },
+          "args": {
+            "agent": {
+              "$role": "escort",
+              "story": "relief-charter/courier",
+              "path": "/agent"
+            },
+            "order": {
+              "id": "charter-escort",
+              "task": "carry",
+              "targets": {
+                "site": {
+                  "$role": "destination",
+                  "story": "relief-charter/courier",
+                  "path": "/site"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "release-reward": {
+      "on": {
+        "kind": "story-transition",
+        "system": "world",
+        "where": {
+          "all": [
+            {
+              "path": "/document",
+              "value": "relief-charter"
+            },
+            {
+              "path": "/story",
+              "value": "courier"
+            },
+            {
+              "path": "/to",
+              "value": "completed"
+            }
+          ]
+        }
+      },
+      "actions": [
+        {
+          "action": "world/transfer",
+          "args": {
+            "from": {
+              "$role": "reward-source",
+              "story": "relief-charter/courier"
+            },
+            "to": {
+              "$role": "escort",
+              "story": "relief-charter/courier",
+              "path": "/wallet"
+            },
+            "amount": 3,
+            "mode": "exact"
+          }
+        }
+      ]
+    }
+  }
+}

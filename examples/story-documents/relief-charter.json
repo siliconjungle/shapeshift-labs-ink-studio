@@ -1,0 +1,62 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "relief-charter",
+  "title": "The Relief Charter",
+  "stories": {
+    "courier": {
+      "kind": "questlet",
+      "title": "Deliver a witnessed relief charter",
+      "lifecycle": { "progression": true },
+      "roles": {
+        "requester": { "kind": "participant" },
+        "subject": { "kind": "consignment" },
+        "escort": { "kind": "courier" },
+        "rival": { "kind": "participant" },
+        "witness": { "kind": "participant" },
+        "destination": { "kind": "drop-off" },
+        "reward-source": { "kind": "treasury" },
+        "clearance": { "kind": "dispatch-authorization", "required": true }
+      },
+      "triggers": {
+        "commission": { "event": {
+          "kind": "charter-issued",
+          "system": "world",
+          "where": { "all": [
+            { "path": "/requester", "value": { "$role": "requester" } },
+            { "path": "/clearance", "value": { "$role": "clearance" } }
+          ] }
+        } }
+      },
+      "entry": "handoff",
+      "stages": {
+        "handoff": {
+          "title": "Escort the consignment and verify the handoff",
+          "roles": ["requester", "subject", "escort", "rival", "witness", "destination", "reward-source", "clearance"],
+          "objectives": {
+            "escort-arrives": { "title": "Escort reaches the receiving area", "type": "reach", "params": {
+              "system": { "$role": "escort", "path": "/system" },
+              "agent": { "$role": "escort", "path": "/agent" },
+              "min": { "$role": "destination", "path": "/bounds/min" },
+              "max": { "$role": "destination", "path": "/bounds/max" }
+            } },
+            "cargo-arrives": { "title": "Two cases arrive in the receiving ledger", "type": "deliver", "params": {
+              "system": "world", "from": { "$role": "subject", "path": "/origin" },
+              "to": { "$role": "destination", "path": "/account" }, "amount": 2
+            } },
+            "witness-check": { "title": "Witness attests to the consignment and rival", "type": "observe", "params": { "event": {
+              "kind": "delivery-witness", "system": "world",
+              "where": { "all": [
+                { "path": "/witness", "value": { "$role": "witness" } },
+                { "path": "/consignment", "value": { "$role": "subject", "path": "/id" } },
+                { "path": "/rival", "value": { "$role": "rival" } }
+              ] }
+            } } }
+          },
+          "next": { "settle": { "outcome": "delivered" } }
+        }
+      },
+      "outcomes": { "delivered": { "title": "Relief delivered and witnessed" } }
+    }
+  }
+}

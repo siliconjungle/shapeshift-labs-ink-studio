@@ -1,0 +1,279 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "quay-charter",
+  "dt": 0.1,
+  "storyDocuments": [
+    {
+      "file": "relief-charter.json"
+    }
+  ],
+  "storyBindings": {
+    "relief-charter/courier": {
+      "requester": {
+        "kind": "participant",
+        "value": "harbor-master"
+      },
+      "subject": {
+        "kind": "consignment",
+        "value": {
+          "id": "tide-chest",
+          "origin": "quay-ledger/boathouse"
+        }
+      },
+      "escort": {
+        "kind": "courier",
+        "value": {
+          "system": "dock-runners",
+          "agent": "ferry-keeper",
+          "issueAction": "dock-runners/issue-order",
+          "wallet": "quay-ledger/ferryman-wallet"
+        }
+      },
+      "rival": {
+        "kind": "participant",
+        "value": "dock-broker"
+      },
+      "witness": {
+        "kind": "participant",
+        "value": "quay-clerk"
+      },
+      "destination": {
+        "kind": "drop-off",
+        "value": {
+          "site": {
+            "entity": "quay-steps"
+          },
+          "account": "quay-ledger/landing",
+          "bounds": {
+            "min": [
+              -1,
+              -0.1,
+              -0.65
+            ],
+            "max": [
+              -0.6,
+              0.25,
+              -0.35
+            ]
+          }
+        }
+      },
+      "reward-source": {
+        "kind": "treasury",
+        "value": "quay-ledger/harbor-fund"
+      },
+      "clearance": {
+        "kind": "dispatch-authorization",
+        "value": {
+          "route": "low-tide",
+          "window": 2
+        }
+      }
+    }
+  },
+  "entities": {
+    "quay-steps": {
+      "position": [
+        -0.8,
+        0,
+        -0.5
+      ]
+    },
+    "harbor-master": {
+      "position": [
+        0,
+        0,
+        -1
+      ]
+    },
+    "quay-clerk": {
+      "position": [
+        -0.8,
+        0,
+        -0.04999999999999999
+      ]
+    },
+    "dock-broker": {
+      "position": [
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "systems": {
+    "dock-runners": {
+      "kind": "agents",
+      "config": {
+        "bounds": {
+          "min": [
+            -2,
+            -0.5,
+            -1.5
+          ],
+          "max": [
+            2,
+            1,
+            1.5
+          ]
+        },
+        "ground": 0,
+        "cell": 0.2,
+        "species": {
+          "runner": {
+            "mode": "walk",
+            "radius": 0.1,
+            "speed": 2.3
+          }
+        },
+        "agents": {
+          "ferry-keeper": {
+            "species": "runner",
+            "position": [
+              1.2,
+              0,
+              -0.5
+            ]
+          }
+        },
+        "orders": {
+          "tasks": {
+            "carry": {
+              "steps": [
+                {
+                  "op": "move",
+                  "at": {
+                    "target": "site"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "quay-ledger": {
+      "kind": "store",
+      "config": {
+        "accounts": {
+          "boathouse": {
+            "resource": "relief",
+            "type": "integer",
+            "units": "case",
+            "initial": 2,
+            "max": 2
+          },
+          "landing": {
+            "resource": "relief",
+            "type": "integer",
+            "units": "case",
+            "initial": 0,
+            "max": 2
+          },
+          "harbor-fund": {
+            "resource": "coin",
+            "type": "integer",
+            "units": "coin",
+            "initial": 12,
+            "max": 12
+          },
+          "ferryman-wallet": {
+            "resource": "coin",
+            "type": "integer",
+            "units": "coin",
+            "initial": 0,
+            "max": 12
+          }
+        }
+      }
+    }
+  },
+  "eventActions": {
+    "send-escort": {
+      "on": {
+        "kind": "story-started",
+        "system": "world",
+        "where": {
+          "all": [
+            {
+              "path": "/document",
+              "value": "relief-charter"
+            },
+            {
+              "path": "/story",
+              "value": "courier"
+            }
+          ]
+        }
+      },
+      "actions": [
+        {
+          "action": {
+            "$role": "escort",
+            "story": "relief-charter/courier",
+            "path": "/issueAction"
+          },
+          "args": {
+            "agent": {
+              "$role": "escort",
+              "story": "relief-charter/courier",
+              "path": "/agent"
+            },
+            "order": {
+              "id": "charter-escort",
+              "task": "carry",
+              "targets": {
+                "site": {
+                  "$role": "destination",
+                  "story": "relief-charter/courier",
+                  "path": "/site"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "release-reward": {
+      "on": {
+        "kind": "story-transition",
+        "system": "world",
+        "where": {
+          "all": [
+            {
+              "path": "/document",
+              "value": "relief-charter"
+            },
+            {
+              "path": "/story",
+              "value": "courier"
+            },
+            {
+              "path": "/to",
+              "value": "completed"
+            }
+          ]
+        }
+      },
+      "actions": [
+        {
+          "action": "world/transfer",
+          "args": {
+            "from": {
+              "$role": "reward-source",
+              "story": "relief-charter/courier"
+            },
+            "to": {
+              "$role": "escort",
+              "story": "relief-charter/courier",
+              "path": "/wallet"
+            },
+            "amount": 3,
+            "mode": "exact"
+          }
+        }
+      ]
+    }
+  }
+}
