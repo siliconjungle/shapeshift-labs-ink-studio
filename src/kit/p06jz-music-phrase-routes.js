@@ -13,7 +13,7 @@
   const canSpeak=(track,note)=>track?.mix.gain>0 && note.velocity>0 &&
     (track.external || track.play.prepare(note,48000,note.gate).duration>0);
 
-  function create(raw,segments,load,end) {
+  function create(raw,segments,load,end,live=false) {
     check(fields(raw,['routes','listen']) && record(raw.routes ?? {}) && record(raw.listen ?? {}) &&
       Object.keys(raw.routes ?? {}).length<=64 && Object.keys(raw.listen ?? {}).length<=64,
     'Phrase routing needs named routes and optional listening tracks');
@@ -58,6 +58,11 @@
       }
       return indexes.get(key);
     }
+    function heardPhrase(phrase,segment,source,at) {
+      counts.set(phrase,(counts.get(phrase) ?? 0)+1);
+      if (live && played.length===64) played.shift();
+      played.push({phrase,segment,source,at});
+    }
     function remember(clip) {
       const window=segments[clip.segment], complete=clip.at+clip.to-clip.from;
       if (clip.kind!=='segment' || !clip.gain || !clip.phrase || complete>end+epsilon ||
@@ -74,8 +79,7 @@
         }
         return notes[lo]<clip.to-epsilon;
       })) return;
-      counts.set(clip.phrase,(counts.get(clip.phrase) ?? 0)+1);
-      played.push({phrase:clip.phrase,segment:clip.segment,source:clip.source,at:complete});
+      heardPhrase(clip.phrase,clip.segment,clip.source,complete);
     }
     function choose(name,time,source,via,rule,reason) {
       const choices=routes.get(name);
@@ -88,12 +92,13 @@
           heard(test.phrase)<=(test.max ?? 4096));
       const match=choices.find(matches), selected={source:match?.source ?? source,phrase:match?.id ?? name};
       const referenced=new Set(choices.flatMap(row=>(row.when.heard ?? []).map(test=>test.phrase)));
+      if (live && decisions.length===64) decisions.shift();
       decisions.push({time,segment:name,reason,via:via.slice(),rule,...selected,
         matched:match?.id ?? null,heard:Object.fromEntries([...referenced].map(phrase=>[phrase,heard(phrase)]))});
       return selected;
     }
-    return {choose,remember,repeats:name=>routes.has(name),
-      report:()=>({heard:Object.fromEntries(counts),played,decisions})};
+    return {choose,remember,heardPhrase,tracks:name=>tracks.get(name),repeats:name=>routes.has(name),
+      counts:()=>Object.fromEntries(counts),report:()=>({heard:Object.fromEntries(counts),played:played.slice(),decisions:decisions.slice()})};
   }
   P.musicPhraseRoutes=Object.freeze({create,signature,sharesGrid,onset});
 })(KIT.procedural);

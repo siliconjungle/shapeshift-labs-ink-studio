@@ -406,37 +406,52 @@
     const releaseFade=limitedEnd<naturalEnd && endTime===limitedEnd ? Math.min(.02,Math.max(.004,releaseLimit*.5)) : 0;
     const last=Math.ceil(endTime*sampleRate);
     const placementGain=note.renderGain ?? 1, entryFade=note.renderFade;
-    return {first,last,write(data,from,to) {
+    function read(at,out) {
+      if (at<first || at>=last) {
+        out[0]=out[1]=0;
+        return;
+      }
+      const t=Math.max(0,at/sampleRate-start);
+      const remaining=endTime-at/sampleRate;
+      const fade=shortened ? Math.sin(clamp(remaining/shortened.fade)*Math.PI/2) :
+        note.choke!==endTime ? 1 : note.chokeFade ?
+          Math.sin(clamp(remaining/note.chokeFade)*Math.PI/2) : clamp(remaining*250);
+      const frame=at-first;
+      const placement=entryFade ? placementGain*Math.sin(Math.PI*.5*
+        clamp((at/sampleRate-entryFade.at)/entryFade.duration)) : placementGain;
+      const fadeIn=attackFade ? Math.sin(Math.PI*.5*clamp(t/attackFade)) : 1;
+      const fadeOut=releaseFade ? Math.sin(Math.PI*.5*clamp(remaining/releaseFade)) : 1;
+      out[0]=sound.signal(t,frame,0)*fade*placement*fadeIn*fadeOut;
+      out[1]=sound.stereo ? sound.signal(t,frame,1)*fade*placement*fadeIn*fadeOut : out[0];
+    }
+    return {first,last,read,write(data,from,to) {
+      const out=[0,0];
       for (let at=first;at<Math.min(last,to);at++) {
-        const t=Math.max(0,at/sampleRate-start);
-        const remaining=endTime-at/sampleRate;
-        const fade=shortened ? Math.sin(clamp(remaining/shortened.fade)*Math.PI/2) :
-          note.choke!==endTime ? 1 : note.chokeFade ?
-            Math.sin(clamp(remaining/note.chokeFade)*Math.PI/2) : clamp(remaining*250);
-        const frame=at-first;
-        const placement=entryFade ? placementGain*Math.sin(Math.PI*.5*
-          clamp((at/sampleRate-entryFade.at)/entryFade.duration)) : placementGain;
-        const fadeIn=attackFade ? Math.sin(Math.PI*.5*clamp(t/attackFade)) : 1;
-        const fadeOut=releaseFade ? Math.sin(Math.PI*.5*clamp(remaining/releaseFade)) : 1;
-        const left=sound.signal(t,frame,0)*fade*placement*fadeIn*fadeOut;
-        data[2*(at-from)]+=left;
-        data[2*(at-from)+1]+=sound.stereo ? sound.signal(t,frame,1)*fade*placement*fadeIn*fadeOut : left;
+        read(at,out);
+        data[2*(at-from)]+=out[0];
+        data[2*(at-from)+1]+=out[1];
       }
     }};
   }
   function scoreStrip(music,name,sampleRate,{end=music.end,withEcho=false,layer=1}={}) {
     const track=music.tracks[name], local=music.cue?.perTrack[name];
     const desk=track.mix, panL=Math.sqrt((1-desk.pan)/2), panR=Math.sqrt((1+desk.pan)/2);
-    const automation=G.automate(track.gestures,{gain:0,pan:desk.pan,cutoff:desk.lowpass,echo:track.echo?.send ?? 0},sampleRate);
+    const automate=()=>G.automate(track.gestures,{gain:0,pan:desk.pan,cutoff:desk.lowpass,echo:track.echo?.send ?? 0},sampleRate);
+    let automation=automate();
     let echo=withEcho ? G.tapeEcho(track.echo,sampleRate) : null;
-    const cut=Q.cursor(local?.cuts ?? []);
-    const roomSend=Q.cursor(local?.room ?? []);
-    const level=Q.cursor(local?.level ?? []);
-    const eq=Q.equalizer(local?.eq ?? [],sampleRate), depth=Q.cursor(local?.depth ?? []);
+    let cut,roomSend,level,eq,depth,hit;
+    function resetClock() {
+      cut=Q.cursor(local?.cuts ?? []);
+      roomSend=Q.cursor(local?.room ?? []);
+      level=Q.cursor(local?.level ?? []);
+      eq=Q.equalizer(local?.eq ?? [],sampleRate);
+      depth=Q.cursor(local?.depth ?? []);
+      hit=0;
+    }
+    resetClock();
     const coefficient=frequency=>1-Math.exp(-2*Math.PI*Math.min(sampleRate*.49,frequency)/sampleRate);
     const high=coefficient(desk.highpass), low=coefficient(desk.lowpass);
     const state={lowL:0,lowR:0,highL:0,highR:0,cutting:false,depthRow:null,farL:0,farR:0,farCutoff:1};
-    let hit=0;
     const anchors=desk.duck && music.events[desk.duck.from].filter(note=>note.time<end);
     const gain=desk.gain*music.gain*layer;
     return {
@@ -447,8 +462,12 @@
         eq?.restore(snapshot.eq);
         automation?.restore(snapshot.automation);
       },
-      tick(l,r,i,out) {
-        const time=i/sampleRate;
+      resetClock() {
+        resetClock();
+        automation=automate();
+        state.depthRow=null;
+      },
+      tick(l,r,i,out,time=i/sampleRate,liveAnchor=undefined) {
         if (cut?.(time)) {
           if (!state.cutting) {
             state.cutting=true;
@@ -470,11 +489,16 @@
         }
         state.highL+=(l-state.highL)*high; state.highR+=(r-state.highR)*high;
         state.lowL+=(l-state.highL-state.lowL)*cutoff; state.lowR+=(r-state.highR-state.lowR)*cutoff;
-        if (anchors?.length) {
+        let anchor=liveAnchor, clock=i/sampleRate;
+        if (liveAnchor===undefined && anchors?.length) {
           while (hit+1<anchors.length && anchors[hit+1].time<=time) hit++;
-          const dt=time-anchors[hit].time;
+          anchor=anchors[hit];
+          clock=time;
+        }
+        if (anchor) {
+          const dt=clock-anchor.time;
           if (dt>=0 && dt<6*desk.duck.release)
-            volume*=db(-desk.duck.depth*anchors[hit].velocity*clamp(dt/.005)*Math.exp(-dt/desk.duck.release));
+            volume*=db(-desk.duck.depth*anchor.velocity*clamp(dt/.005)*Math.exp(-dt/desk.duck.release));
         }
         if (settings) {
           volume*=db(settings.gain);

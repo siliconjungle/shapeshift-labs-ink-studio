@@ -7,12 +7,12 @@
     check(finite(value,lo,hi),'Invalid transition '+label);
     return value;
   };
-  function schedule(sources,spec,intents=[],assets={},host,bank=new Map()) {
+  function prepare(sources,spec,assets,host,bank,liveResources) {
+    const live=liveResources!==undefined;
     check(record(sources) && Object.keys(sources).length<=32 && Object.keys(sources).every(id) &&
       fields(spec,['entry','segments','transitions','stingers','stingerRules','end','thematic','phrasing','performers']) && record(spec.segments) &&
-      Object.keys(spec.segments).length<=64 && Object.keys(spec.segments).every(id) &&
-      Array.isArray(intents) && intents.length<=2048,'Invalid production timeline');
-    const end=numeric(spec.end,.001,300,'end'), compiled={};
+      Object.keys(spec.segments).length<=64 && Object.keys(spec.segments).every(id),'Invalid production timeline');
+    const end=live ? Infinity : numeric(spec.end,.001,300,'end'), compiled=Object.create(null);
     const load=name=>{
       check(Object.hasOwn(sources,name),'Unknown production source');
       if (!bank.has(name)) bank.set(name,A.compile(sources[name],assets,host));
@@ -38,12 +38,12 @@
     check(known(spec.entry),'Transition entry must name a segment');
     const thematic=spec.thematic;
     let memory;
-    const routes=new Map(), decisions=[];
+    const routes=new Map();
     if (thematic!==undefined) {
       check(fields(thematic,['maps','routes']) && record(thematic.maps) && record(thematic.routes ?? {}) &&
         Object.keys(thematic.maps).length<=32 && Object.keys(thematic.routes ?? {}).length<=64,'Invalid thematic timeline');
       for (const name of Object.keys(thematic.maps)) load(name);
-      memory=P.musicThemes.createHistory(thematic.maps,end,compiled);
+      memory=P.musicThemes.createHistory(thematic.maps,end,compiled,live);
       const vocabulary=memory.at(0);
       for (const [segment,choices] of Object.entries(thematic.routes ?? {})) {
         check(known(segment) && Array.isArray(choices) && choices.length>=1 && choices.length<=8,'Invalid thematic route');
@@ -62,13 +62,13 @@
         routes.set(segment,parsed);
       }
     }
-    const phrasing=spec.phrasing===undefined ? null : F.create(spec.phrasing,segments,load,end);
+    const phrasing=live || spec.phrasing!==undefined ? F.create(spec.phrasing===undefined ? {} : spec.phrasing,segments,load,end,live) : null;
     const edges=spec.transitions ?? [], stingers=spec.stingers ?? {};
     check(Array.isArray(edges) && edges.length<=128 && record(stingers) && Object.keys(stingers).length<=128 &&
       Object.entries(stingers).every(([key,value])=>id(key) && known(value)),'Invalid transition or stinger table');
     const holds=spec.stingerRules ?? [];
     check(Array.isArray(holds) && holds.length<=128 && Array.from(holds).every(row=>
-      fields(row,['resource','section','linked']) && Object.hasOwn(stingers,row.resource) && known(row.section) &&
+      fields(row,['resource','section','linked']) && (Object.hasOwn(stingers,row.resource) || liveResources?.has(row.resource)) && known(row.section) &&
       (row.linked===undefined || typeof row.linked==='boolean')),
     'Stinger rules need a mapped resource and a section in which to withhold it');
     const rules=new Map();
@@ -89,8 +89,18 @@
         const clip=segments[tone.segment];
         numeric(tone.pickup ?? 0,0,Math.min(4,clip.end-clip.start-.001),'common tone pickup');
       }
-      rules.set(key,{exit,entry,tail,fadeIn,bridge:edge.bridge,pickup,commonTone:tone});
+      rules.set(key,{exit,entry,tail,fadeIn,bridge:edge.bridge,pickup,commonTone:tone,
+        ...(live && {waitForExit:edge.exit!==undefined})});
     }
+    if (id(spec.performers?.roomSource)) load(spec.performers.roomSource);
+    return {compiled,segments,end,known,memory,routes,phrasing,stingers,holds,rules};
+  }
+
+  function schedule(sources,spec,intents=[],assets={},host,bank=new Map()) {
+    check(Array.isArray(intents) && intents.length<=2048,'Invalid production timeline');
+    const {compiled,segments,end,known,memory,routes,phrasing,stingers,holds,rules}=
+      prepare(sources,spec,assets,host,bank);
+    const decisions=[];
     const eligible=intents.filter(intent=>intent?.kind==='music-transition' || intent?.kind==='music-cue');
     check(eligible.every(event=>finite(event.time,0,1e9)),'Music intents need nonnegative times');
     const events=eligible.filter(event=>event.time<end)
@@ -184,7 +194,6 @@
     playRegion(name,selection,offset,start,end,fadeIn,layers);
     placements.sort((a,b)=>a.at-b.at);
     const themes=memory && {final:memory.at(end),decisions,appearances:memory.completed()};
-    if (id(spec.performers?.roomSource)) load(spec.performers.roomSource);
     const performerSpec=spec.performers===undefined ? null : P.musicPersistentPerformers.prepare(
       spec.performers,{sources,compiled,segments,placements,entry:spec.entry});
     return {compiled,segments,placements,markers,cueDecisions,duration:end,themes,performerSpec,
@@ -296,6 +305,6 @@
   function renderTimeline(sources,spec,intents,assets={},options={},host) {
     return renderScheduled(schedule(sources,spec,intents,assets,host),spec,options);
   }
-  P.musicTimeline=Object.freeze({schedule,renderScheduled,study});
+  P.musicTimeline=Object.freeze({prepare,schedule,renderScheduled,study});
   P.musicProduction=Object.freeze({...A,renderTimeline});
 })(KIT.procedural);

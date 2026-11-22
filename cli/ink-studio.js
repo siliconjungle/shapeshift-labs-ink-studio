@@ -1248,6 +1248,7 @@ const CMD = {
         '  music critique recall <memory-directory> <query.json>   recall matching blind choices and reasons',
         '  music critique tag <source.wav> <settings.json> --out directory   keep a tagged listening excerpt',
         '  music critique find <index.json> [query.json]   find listening clips and past decisions by intent',
+        '  music live replay <timeline.json> <route.json> --out directory   render live engine audio and explanations',
         '  music rehearsal capture <world.run.json> <settings.json>   capture exact world music and cue events',
         '  music rehearsal capture-score <timeline.json> <settings.json>   capture standalone clock updates',
         '  music rehearsal run <timeline.json> <suite.json> --out directory   audit and audition the same recorded traces',

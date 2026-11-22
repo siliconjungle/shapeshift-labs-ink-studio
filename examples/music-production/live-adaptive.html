@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Floodgate · Ink Studio</title>
+<style>
+:root{color-scheme:dark;--ink:#edf2ee;--dim:#9faea9;--line:#344640;--lit:#b8faa7;--paper:#121b1b}
+*{box-sizing:border-box}
+body{margin:0;background:#101615;color:var(--ink);font:15px/1.5 system-ui,sans-serif;padding:clamp(18px,5vw,64px)}
+main{max-width:1040px;margin:auto}
+h1{font:400 clamp(42px,10vw,108px)/.98 Georgia,serif;letter-spacing:-.064em;margin:0}
+h2{font:inherit;font-weight:650;margin:0 0 10px}
+p{margin:.65em 0;color:var(--dim)}
+button,audio{font:inherit}
+button{border:1px solid var(--line);background:#172522;color:var(--ink);border-radius:4px;padding:10px 14px;cursor:pointer}
+button:enabled:hover{border-color:var(--lit)}
+button:focus-visible{outline:2px solid var(--lit);outline-offset:3px}
+button:disabled{opacity:.4;cursor:default}
+button[aria-pressed=true]{color:var(--lit);border-color:#6a8f6a}
+#start{background:var(--lit);border-color:var(--lit);color:#142317;min-width:116px;font-weight:650}
+header{padding:0 0 26px}
+small{color:var(--dim)}
+.visual{border:1px solid var(--line);background:var(--paper);border-radius:7px;overflow:hidden}
+canvas{display:block;width:100%;height:160px}
+.caption,.controls{display:flex;flex-wrap:wrap;gap:8px;padding:13px}
+.caption{justify-content:space-between;border-top:1px solid var(--line);font:13px ui-monospace,monospace;color:var(--dim)}
+.caption :first-child{color:var(--lit)}
+.controls{padding:16px 0;align-items:center}
+.space{flex:1}
+.grid{display:grid;grid-template-columns:1.05fr 1fr;gap:12px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:16px;min-width:0}
+dl{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;margin:0;font:13px/1.5 ui-monospace,monospace}
+dt{color:var(--dim)}dd{margin:0;overflow-wrap:anywhere}
+summary{cursor:pointer;color:var(--dim);margin-top:12px}pre{white-space:pre-wrap;max-height:320px;overflow:auto;font-size:12px}
+audio{width:100%;margin:7px 0 0}
+@media(max-width:660px){.grid{grid-template-columns:1fr}.space{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>The Floodgate</h1>
+  <p>Drive a live Ink score through a quay, a sluice, and a signal tower.</p>
+</header>
+<div class="visual">
+  <canvas width="1000" height="190" aria-label="Stereo waveform"></canvas>
+  <div class="caption"><span id="position">Quay · ready</span><span id="pending">Waiting for playback</span></div>
+</div>
+<nav class="controls" aria-label="Live score controls">
+  <button id="start">Start audio</button>
+  <button data-scene="quay" aria-pressed="true" disabled>Quay</button>
+  <button data-scene="sluice" aria-pressed="false" disabled>Sluice</button>
+  <button data-scene="tower" aria-pressed="false" disabled>Tower</button>
+  <span class="space"></span>
+  <button id="busy" disabled>Flood the mix</button>
+  <button id="late" disabled>Late bell</button>
+</nav>
+<div class="grid">
+  <section class="card"><h2>Last join</h2><dl id="join"><dt>State</dt><dd>Explore a new scene to hear an authored exit.</dd></dl></section>
+  <section class="card"><h2>Audio profile</h2><dl id="profile"><dt>State</dt><dd>Ready</dd></dl></section>
+  <section class="card"><h2>Recorded route</h2><p>A cancelled turn, a late tower signal, a long dwell, and two bursts of chain noise.</p>
+    <audio controls preload="none" src="recorded-route/score.wav" aria-label="Recorded Floodgate route"></audio></section>
+  <section class="card"><h2>How to hear the join</h2><p>Choose Sluice, then choose Quay again before its exit. On the next crossing, listen as the reed holds over the join. In Tower, stay for a complete phrase to hear its answer.</p>
+    <details><summary>Transition trace</summary><pre id="trace">No transitions yet.</pre></details></section>
+</div>
+</main>
+<script src="ink-engine.js"></script>
+<script src="score.js"></script>
+<script src="desk.js"></script>
+</body>
+</html>
