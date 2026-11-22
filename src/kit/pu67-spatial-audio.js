@@ -54,7 +54,7 @@
 
   function create(definition={}){
     const config=copy(definition);
-    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay']),
+    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed']),
       'Invalid spatial audio settings');
     const distance=distanceSettings(config.distance), cueList=table(config.cues??{},512,'cues',cueName);
     const {propagationDelay=false,surface}=config;
@@ -85,15 +85,17 @@
         'Invalid material audio cues '+name);
       return [name,row];
     }));
+    const S=W.spatialSoundSelection, selection=S.compile(config.soundFamilies??{},config.soundSeed??0,cues);
     const bindings=new Map();
     for(const [name,row] of table(config.bindings??{},128,'bindings')){
-      check(keys(row,['on','cue','interaction','at','gain'])&&keys(row.on,['kind','system','where'])&&
+      check(keys(row,['on','cue','interaction','at','gain','select','speedForFullStrength'])&&keys(row.on,['kind','system','where'])&&
         id(row.on.kind)&&(row.on.system===undefined||id(row.on.system))&&
-        (row.cue===undefined?['roll','step','impact'].includes(row.interaction):cues.has(row.cue))&&
+        (row.cue!==undefined?cues.has(row.cue):row.interaction!==undefined?['roll','step','impact'].includes(row.interaction):row.select!==undefined)&&
+        (row.speedForFullStrength===undefined||row.select!==undefined&&finite(row.speedForFullStrength,.000001,1e9))&&
         (row.at===undefined||selector(row.at))&&finite(row.gain??1,0,16),'Invalid cue binding '+name);
       Q.condition(row.on.where,{});
       if(!bindings.has(row.on.kind))bindings.set(row.on.kind,[]);
-      bindings.get(row.on.kind).push({name,...row});
+      bindings.get(row.on.kind).push({name,...row,select:row.select===undefined?undefined:selection.rules(row.select,name)});
     }
 
     function mix(query,listener,input){
@@ -105,6 +107,7 @@
       const result={id:input.id,cue:input.cue,asset:cue.asset,mode:input.mode,offset:input.offset??0,
         rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(cue.bus!==undefined&&{bus:cue.bus}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
+        ...(input.selection!==undefined&&{selection:input.selection}),
         ...(cue.follow&&input.mode==='cue'&&at?.entity&&{attachment:{cue:input.cue,at,
           ...(input.gain!==undefined&&{gain:input.gain}),...(input.pitch!==undefined&&{pitch:input.pitch}),
           ...(input.exclude!==undefined&&{exclude:input.exclude})}})};
@@ -170,8 +173,12 @@
       }
       return id(row.entity)?{entity:row.entity}:undefined;
     }
+    function surfaceAt(query,at){
+      const position=resolve(query,at)?.point;
+      return position&&W.materials.probe(query,surface,position);
+    }
     function materialCue(query,row,at,interaction){
-      const position=resolve(query,at)?.point, profile=position&&W.materials.probe(query,surface,position);
+      const profile=surfaceAt(query,at);
       const material=row.material??profile?.id;
       return materials.get(material)?.[interaction]??profile?.sounds?.[interaction];
     }
@@ -187,17 +194,25 @@
         if(voice)target.push(input.onset===undefined?voice:{...voice,onset:input.onset});
         check(active.length+shots.length<=4096,'Spatial audio mix exceeds its voice budget');
       }
-      function route(row,serial){
+      function route(row,serial,contact){
         const at=eventAt(row), gain=row.gain??1, pitch=row.pitch??1;
         if(!finite(gain,0,64)||!finite(pitch,.0625,8))return;
         const raw={mode:'cue',at,gain,pitch,onset:W.timedEvents.timeOf(row),exclude:id(row.entity)?row.entity:undefined,
           ...(captureSources&&typeof row.id==='string'&&W.committedEvents.eventId(row.id)&&{sourceEvent:row.id})};
-        let matched=false;
+        let matched=false, profile;
         for(const binding of bindings.get(row.kind)??[]){
           if(binding.on.system!==undefined&&binding.on.system!==row.system||!Q.condition(binding.on.where,row))continue;
+          let chosen;
+          if(binding.select){
+            if(profile===undefined)profile=surfaceAt(query,at)??null;
+            const context=S.contactContext(row,contact,profile,binding.speedForFullStrength);
+            chosen=selection.choose(binding.select,context,serial,binding.name);
+            if(!chosen&&binding.cue===undefined&&binding.interaction===undefined)continue;
+          }
           matched=true;
-          const site=binding.at??at, cue=binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
-          if(cue)add({...raw,id:serial+'/'+binding.name,cue,at:site,gain:gain*(binding.gain??1)},shots);
+          const site=binding.at??at, cue=chosen?.cue??binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
+          if(cue)add({...raw,id:serial+'/'+binding.name,cue,at:site,gain:gain*(binding.gain??1),
+            selection:chosen?.selection},shots);
         }
         if(!matched&&eventKinds.includes(row.kind)&&cueName(row.cue))add({...raw,id:serial,cue:row.cue},shots);
       }
@@ -219,7 +234,7 @@
           const contact=own(stream.contacts??{},event.contact)&&stream.contacts[event.contact];
           const row={...event,kind,system:stream.id,material:contact?.material??event.data?.material,
             at:contact?.at??anchors.get(event.contact)??event.data?.at??stream.at};
-          route(row,'animation:'+JSON.stringify([stream.id,event.layer??null,event.time??time,event.eventId??event.id??null,i]));
+          route(row,'animation:'+JSON.stringify([stream.id,event.layer??null,event.time??time,event.eventId??event.id??null,i]),contact);
         });
       }
       if(timeline){

@@ -12,6 +12,7 @@ simulation, and acoustic queries.
 | `cues` | A table of cue names mapped to asset IDs or records with `asset`, `at`, `gain`, `pitch`, `distance`, and `occlusion`. A cue with an `at` position uses an XYZ point or entity/socket selector. A cue without a position plays without spatial panning. |
 | `emitters` | Named looping emitters with a `cue`, optional overriding `at`, `gain`, and starting buffer `offset` in seconds. Entity/socket positions follow the current world snapshot. |
 | `bindings` | Named rules with `on.kind`, optional `on.system` and `on.where`, and a `cue` or material `interaction`. A rule can override `at` and scale `gain`. |
+| `soundFamilies` | Named sets of takes for context-based selections in a binding's `select` rules. Takes use the same cue table as ordinary bindings. |
 | `materials` | A material-to-cue table with optional `step`, `roll`, and `impact` entries. Set `surface` to a physical surface field to read authored material sounds at a contact point. |
 | `distance` | Default falloff in world units. Set `reference`, `max`, `rolloff`, and `fade`. Cues can override these values. Default gain is full through 1 unit, falls off inversely, and fades to silence across the last 5 of 50 units. |
 | `occlusion` | An `acoustic` hearing field can supply room transmission and the listener-side apparent source. `rays` can name mechanics or construction traces. `segments` can name live volume segment traces. The closest blocker applies `lossDb` and low-pass `cutoff`, with optional overrides by blocker material. |
@@ -61,3 +62,69 @@ Call `update(frame, {seek: true})` on a discontinuous seek and `dispose()`
 when the player is removed. The caller owns the context and can resume it
 from a user gesture. Cue assets stay under host control.
 [Web Audio API](https://www.w3.org/TR/webaudio/)
+
+## Select a take from contact context
+
+A binding can use `select` to choose a family before it falls back to its
+ordinary `cue` or material `interaction`. Place specific rules first.
+The first matching rule with an eligible take supplies one cue.
+Independent bindings can still layer cues on the same event.
+
+```json
+{
+  "soundSeed": 41,
+  "surface": "floor/surface",
+  "cues": {
+    "wet-tick": { "asset": "wet-tick", "bus": "foley" },
+    "wet-strike": { "asset": "wet-strike", "bus": "foley" },
+    "board-knock": { "asset": "board-knock", "bus": "foley" },
+    "default-contact": "default-contact"
+  },
+  "soundFamilies": {
+    "wet-stone": {
+      "takes": {
+        "soft": { "cue": "wet-tick", "strength": [0, 0.45] },
+        "hard": { "cue": "wet-strike", "strength": [0.45, 1] }
+      }
+    },
+    "dry-boards": { "takes": { "knock": "board-knock" } }
+  },
+  "bindings": {
+    "drops": {
+      "on": { "kind": "object-contact" },
+      "cue": "default-contact",
+      "select": [
+        { "id": "wet", "when": { "action": "drop", "object": "metal-hook", "surface": "shop/stone", "wetness": [0.5, 1] }, "family": "wet-stone" },
+        { "id": "dry", "when": { "action": "drop", "object": "metal-hook", "surface": "shop/boards", "wetness": [0, 0.5] }, "family": "dry-boards" }
+      ]
+    }
+  }
+}
+```
+
+Commit the action, object, surface, and normalized strength in the
+event, its `contact` record, or a typed fact's `data`. When available,
+legacy `interaction`, `entity`, `source`, and `material` also supply
+labels. With `surface` configured, Ink samples the contact point for a
+material ID and wetness. Explicit event values take precedence over
+the surface reading. A binding can convert a recorded contact `speed`
+to strength with `speedForFullStrength`. Speeds at or above that
+reference map to one.
+
+Rules can constrain `action`, `object`, `surface`, `strength`, and
+`wetness`. Strength and wetness use ranges from zero to one with an
+inclusive lower bound and exclusive upper bound, except that one is
+included in a range ending there. A missing measurement can match an
+unrestricted rule or take. A take's optional positive `weight`
+defaults to one. When several takes qualify, Ink uses `soundSeed`
+and the committed event's ID to choose among them. Trimming or
+replaying a recording yields the same take.
+
+The voice and story audio report carry a `selection` receipt with
+the binding, rule, family, chosen take, eligible takes, and resolved
+context. Cue assets can reference WAVs, editable recipes, or exact
+registry revisions from a saved event-sound family. [Sound browser exports](music-edit-session.md#export-the-candidate)
+
+Run the [context sound demo](../examples/context-sounds/demo.cjs) with
+`node examples/context-sounds/demo.cjs output/context-sounds` to hear
+the same hook on wet stone and dry boards.

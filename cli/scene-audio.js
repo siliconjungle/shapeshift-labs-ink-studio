@@ -157,7 +157,8 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       let report;
       if (history && source && time < end) {
         report = { source, cue:voice.cue, asset:voice.asset, stem, bus:voice.bus ?? (stem==='music' ? 'music' : 'effects'),
-          onsetSample:sample, arrivalSample:time, status:voice.status, position:voice.position, gain:voice.gain };
+          onsetSample:sample, arrivalSample:time, status:voice.status, position:voice.position, gain:voice.gain,
+          ...(voice.selection && { selection:voice.selection }) };
         if (history.cues.length >= 16384) throw new RangeError('Story audio trace exceeds its cue budget');
         history.cues.push(report);
       }

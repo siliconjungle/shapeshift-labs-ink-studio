@@ -101,6 +101,56 @@ test('audio tracks retain timeline offsets across trimming and handle one-shot c
   assert.deepEqual(audio.frame({timeline,time:2.75,listener}).cues,[]);
 });
 
+test('event sound context selects one eligible family member and preserves fallback and layered bindings',()=>{
+  const audio=W.spatialAudio.create({soundSeed:19,
+    cues:{soft:'wet-tap',hit:'wet-hit',thud:'board-thud',fallback:'default',layer:'extra'},
+    soundFamilies:{
+      wet:{takes:{soft:{cue:'soft',strength:[0,.5]},hard:{cue:'hit',strength:[.5,1]}}},
+      dry:{takes:{thud:'thud'}}
+    },
+    bindings:{contact:{on:{kind:'contact'},cue:'fallback',speedForFullStrength:4,select:[
+      {id:'water',when:{action:'drop',object:'hook',surface:'stone',wetness:[.5,1]},family:'wet'},
+      {id:'wood',when:{action:'drop',object:'hook',surface:'boards'},family:'dry'}
+    ]}, layer:{on:{kind:'contact',where:{path:'/extra',value:true}},cue:'layer'}}
+  });
+  const base={kind:'contact',object:'hook',action:'drop',surface:'stone',wetness:1,at:[0,0,-1]};
+  const selected=audio.frame({listener:[0,0,0],events:[
+    {...base,id:'1.0',strength:0},
+    {...base,id:'2.0',contact:{strength:.5}},
+    {...base,id:'3.0',speed:9},
+    {...base,id:'4.0'},
+    {...base,id:'5.0',object:undefined,action:undefined,surface:undefined,extra:true,
+      fact:{data:{action:'drop',object:'hook',surface:'boards',strength:.9}}},
+    {...base,id:'6.0',object:'wrench',strength:1}
+  ]}).cues;
+  assert.deepEqual(selected.map(voice=>voice.cue),['soft','hit','hit','fallback','thud','layer','fallback']);
+  assert.deepEqual(selected[0].selection,{binding:'contact',rule:'water',family:'wet',take:'soft',
+    context:{action:'drop',object:'hook',surface:'stone',strength:0,wetness:1},eligible:['soft']});
+  assert.equal(selected[2].selection.context.strength,1);
+  assert.equal(selected[3].selection,undefined);
+  assert.deepEqual(selected[4].selection.context,{action:'drop',object:'hook',surface:'boards',strength:.9,wetness:1});
+});
+
+test('weighted sound choices use stable event IDs and reject invalid rules and take ranges',()=>{
+  const families={tools:{takes:{b:{cue:'b',weight:5},a:{cue:'a',weight:1}}}};
+  const config={soundSeed:721,cues:{a:'a',b:'b',original:'original'},soundFamilies:families,bindings:{
+    tools:{on:{kind:'material-sound'},select:[{id:'hook',when:{object:'hook'},family:'tools'}]}
+  }};
+  const events=Array.from({length:80},(_,i)=>({id:(i+1)+'.0',entity:'hook',kind:'material-sound',cue:'original'}));
+  const frame=(audio,events,time)=>audio.frame({listener:[0,0,0],events,time}).cues;
+  const planner=W.spatialAudio.create(config), first=frame(planner,events,1);
+  const reordered=W.spatialAudio.create({...config,soundFamilies:{tools:{takes:{a:families.tools.takes.a,b:families.tools.takes.b}}}});
+  const next=frame(reordered,[...events].reverse(),12).slice().reverse();
+  assert.deepEqual(first,next);
+  assert(first.some(row=>row.cue==='a'));
+  assert(first.filter(row=>row.cue==='b').length>45);
+  const fallback=frame(planner,[{...events[0],entity:'other'}],1);
+  assert.equal(fallback[0].cue,'original');
+  assert.throws(()=>W.spatialAudio.create({...config,soundFamilies:{tools:{takes:{a:'missing'}}}}),/Invalid sound take/);
+  assert.throws(()=>W.spatialAudio.create({...config,soundFamilies:{tools:{takes:{a:{cue:'a',strength:[.8,.2]}}}}}),/Invalid sound take/);
+  assert.throws(()=>W.spatialAudio.create({...config,soundFamilies:{}}),/Invalid sound selection rule/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
