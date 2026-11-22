@@ -48,10 +48,11 @@ from a performance rule. The graph defines what each control does.
 | --- | --- |
 | `oscillator` | Sine, triangle, saw, or pulse. `ratio` and `detune` in semitones offset the played pitch. Fixed `hz` supports LFOs and fixed-frequency carriers. Pulse `width` is 0.04–0.96. Sine can take `phaseInput` with `index` in turns. Initial `phase` is in turns. |
 | `noise` | A seeded bipolar source. |
-| `sample` | Reuse sampler `zones` and `env`, with root pitch, looping, articulation and round robins. Use `channel` to read `left`, `right` or their average (`mix`, the default). |
+| `sample` | Reuse sampler `zones` and `env`, with root pitch, looping, articulation and round robins. Use `channel` to read `left`, `right` or their average (`mix`, the default). `startSeconds` delays playback, and `offsetSeconds` skips into the source independently of the delay. |
 | `curve` | Piecewise-linear `points` such as `[[0, 0], [0.2, 1], [1, 0.3]]`. With `clock: "gate"` (default) the x axis is normalized note phase. With `clock: "seconds"` it is time since note-on. The endpoint values hold outside the curve. Use `from` to route the value into another node. |
 | `envelope` | A gated envelope with `env` settings for attack, decay, sustain and release. Route it to a parameter with `from`. |
 | `mix` | Sum up to 16 named `inputs`. Use gain nodes for a weighted mix. |
+| `blend` | Crossfade two named `inputs` on a shared clock. `position` is modulatable from 0 to 1. Use `law: "linear"` (default) or `"equal-power"`. An optional `window: [low, high]` sets where the crossfade starts and ends. |
 | `gain`, `drive` | Apply `amount` to an `input`. Drive uses a tanh waveshaper. |
 | `filter` | Low-pass, high-pass or band-pass `mode`, with `input`, `cutoff` in Hz and `resonance` as Q. |
 | `resonator` | Excite up to 12 damped modes from one `input`. Each mode needs a frequency `ratio` and can set `gain`, relative `decay` and integer `shape`. The node tracks note pitch, with optional fixed `hz` and a node-wide `ratio`. Node `decay` is the time to drop 60 dB, in seconds. A mode with a shape receives excitation proportional to `sin(π × shape × contact)`. The contact input defaults to the note's contact position. |
@@ -60,7 +61,7 @@ from a performance rule. The graph defines what each control does.
 A modulatable parameter takes a number or
 `{base, by: {control: depth}, from: {node: depth}}`. The renderer adds each
 source times its depth and clamps to the parameter's range. In addition to
-the four expression controls, `by` can read `velocity`, `gate` (1 while
+pressure, breath, damping, contact and room, `by` can read `velocity`, `gate` (1 while
 held), `key` (MIDI note divided by 127), and `phase` (0–1 over the gate).
 `from` reads the current output of a node. For example, a sine oscillator
 at `hz: 0.4` can open and close a filter around its authored cutoff.

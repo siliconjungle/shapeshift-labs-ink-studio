@@ -38,7 +38,7 @@ export function createPassClock() {
 }
 
 const initialControllers=()=>Object.create(null);
-const cc={1:'contact',2:'breath',11:'amplitude',74:'contact'};
+const cc={1:'contact',2:'breath',11:'amplitude',74:'contact',91:'room'};
 const add=(series,frame,value)=>{
   if (series.at(-1)?.[0]===frame) series[series.length-1]=[frame,value];
   else if (series.at(-1)?.[1]!==value) series.push([frame,value]);

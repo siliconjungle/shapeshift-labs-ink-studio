@@ -18,8 +18,8 @@ test('exported sound packs contain playable phrase recipes and complete recordin
     assert.deepEqual(Object.keys(pack.provenance), Object.keys(pack.assets));
     assert.equal(read(path.join(folder, pack.rack)).id, entry.rack);
     for (const source of Object.values(pack.provenance)) {
-      assert.equal(pack.credits[source.credit].license, 'CC0-1.0');
-      assert.match(source.original, /\.wav$/i);
+      assert.ok(['CC0-1.0','LicenseRef-Public-Domain-Author'].includes(pack.credits[source.credit].license));
+      assert.match(source.original, /\.(wav|ogg|flac)$/i);
     }
     for (const {file} of pack.phrases) {
       const full = path.join(folder, file);

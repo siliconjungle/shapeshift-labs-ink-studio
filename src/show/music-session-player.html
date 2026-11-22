@@ -27,7 +27,7 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 #piano-keys{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
 .piano-key{touch-action:none;flex:1;white-space:nowrap;padding-inline:8px}
 .piano-key.down,.piano-key:active{background:var(--accent);color:#17221a}
-#breath{padding:0;width:min(250px,100%)}
+#breath,#pressure-level,#room-level{padding:0;width:min(250px,100%)}
 </style>
 <script type="module" src="/player.mjs"></script>
 </head>
@@ -55,7 +55,11 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 </div>
 <div id="piano" tabindex="0" hidden aria-label="Play notes with A W S E D F T G Y H U J K">
 <div id="piano-keys"></div>
+<div class="row">
 <label>Breath<input id="breath" type="range" min="0" max="127" value="0"></label>
+<label>Pressure<input id="pressure-level" type="range" min="0" max="127" value="0"></label>
+<label>Room<input id="room-level" type="range" min="0" max="127" value="0"></label>
+</div>
 </div>
 <div class="row">
 <button type="button" id="mic-toggle">Enable mic</button>

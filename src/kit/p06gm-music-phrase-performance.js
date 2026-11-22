@@ -1,7 +1,7 @@
 /* Capture a performer's controls on the score clock and retain them across note boundaries. */
 (function (P) {
   const I=P.musicInstruments, {fields,record,finite,integer,id,check}=I;
-  const limits={pressure:[0,1],breath:[0,1],damping:[0,1],contact:[0,1],
+  const limits={pressure:[0,1],breath:[0,1],damping:[0,1],contact:[0,1],room:[0,1],
     pitchCents:[-1200,1200],roughness:[0,1],gainDb:[-60,12],amplitude:[0,1],cutoffHz:[40,24000]};
   const eps=1e-8;
   const noteKey=({clip,voice,note})=>JSON.stringify([clip,voice,note]);

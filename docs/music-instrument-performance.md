@@ -35,14 +35,20 @@ gestures on a flute, an electric bass, or a prepared-metal kit.
 ```
 
 Gaps and fades are in seconds. The interval is in signed MIDI semitones
-relative to the previous note on the same voice. Select a directional or
-interval-specific rule before a catch-all legato rule. A rule's optional
+relative to the previous note on the same voice. Use `keys: [low, high]`
+to restrict the rule to specific destination MIDI notes. Select a directional
+or interval-specific rule before a catch-all legato rule. A rule's optional
 `velocity: [low, high]` matches inclusive bounds against the incoming
 normalized note velocity, before applying the rule's level. Put a
 velocity-specific rule before its general fallback. Use `glide` for a
 native synth transition. A sampler can select an authored transition
 recording instead. Connecting voices crossfade and suppress the outgoing
 key-off articulation. Authored silence and choke groups still apply.
+Set `recorded: true` on a legato rule with a named articulation and an
+interval to apply it to captured MIDI takes and overlapping live notes.
+Set `connect.unmatched: "attack"` to play a full new attack on unmapped
+intervals. Live monitoring starts the recorded pickup as the next key
+arrives. Score playback can advance it by `attackLead`.
 
 `attackLead` advances the trigger by up to two seconds while preserving the
 intended musical onset and note-off. The cue start, an authored silence,
@@ -83,8 +89,8 @@ Cutoff adds a per-voice low-pass filter. An `amplitude` curve applies a
 linear 0–1 gain that can reach silence. A `roughness` curve sets the
 depth of rapid amplitude modulation in the same 0–1 range. These curves also work on notes
 played without performance maps. [Modular patches](music-instrument-graphs.md)
-can also route per-note pressure, breath, damping and contact position to
-their own parameters.
+can also route per-note pressure, breath, damping, contact position and room
+to their own parameters.
 
 ## Groove against another player
 

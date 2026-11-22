@@ -1,7 +1,7 @@
 /* Per-voice automation on the performed gate, with integrated pitch travel. */
 (function (P) {
   const {fields,finite,check}=P.musicInstruments;
-  const controls=Object.freeze({pressure:.5,breath:0,damping:.25,contact:.5});
+  const controls=Object.freeze({pressure:.5,breath:0,damping:.25,contact:.5,room:0});
   const names=Object.keys(controls);
   const limits={gainDb:[-60,12],pitchCents:[-1200,1200],cutoffHz:[40,24000],amplitude:[0,1],roughness:[0,1],brightness:[0,1],
     ...Object.fromEntries(names.map(name=>[name,[0,1]]))};

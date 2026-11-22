@@ -5,18 +5,22 @@
 
   function compile(raw,patch) {
     if (raw===undefined) return null;
-    check(fields(raw,['connect','repeatGap','rules']) && fields(raw.connect ?? {},['gap','interval','fade']) &&
+    check(fields(raw,['connect','repeatGap','rules']) && fields(raw.connect ?? {},['gap','interval','fade','unmatched']) &&
       Array.isArray(raw.rules ?? []) && (raw.rules?.length ?? 0)<=32,'Invalid instrument performance map');
-    const {gap=.085,interval=12,fade=.018}=raw.connect ?? {}, {repeatGap=.16}=raw;
-    check(finite(gap,0,1) && integer(interval,0,127) && finite(fade,0,.25) && finite(repeatGap,0,2),
+    const {gap=.085,interval=12,fade=.018,unmatched='connect'}=raw.connect ?? {}, {repeatGap=.16}=raw;
+    check(finite(gap,0,1) && integer(interval,0,127) && finite(fade,0,.25) && finite(repeatGap,0,2) &&
+      ['connect','attack'].includes(unmatched),
       'Invalid note connection or repeat window');
     const names=articulationNames(patch);
     const rules=Array.from(raw.rules ?? [],row=>{
-      check(fields(row,['when','interval','velocity','articulation','attackLead','glide','level','curves']) &&
+      check(fields(row,['when','interval','keys','velocity','articulation','attackLead','glide','level','curves','recorded']) &&
         ['attack','repeat','legato','release'].includes(row.when) &&
         (row.articulation===undefined || id(row.articulation) && names.has(row.articulation)) &&
         (row.interval===undefined || row.when==='legato' && Array.isArray(row.interval) && row.interval.length===2 &&
           integer(row.interval[0],-127,127) && integer(row.interval[1],row.interval[0],127)) &&
+        (row.keys===undefined || Array.isArray(row.keys) && row.keys.length===2 &&
+          integer(row.keys[0],0,127) && integer(row.keys[1],row.keys[0],127)) &&
+        (row.recorded===undefined || row.recorded===true && row.when==='legato' && row.articulation && row.interval) &&
         (row.velocity===undefined || Array.isArray(row.velocity) && row.velocity.length===2 &&
           finite(row.velocity[0],0,1) && finite(row.velocity[1],row.velocity[0],1)) &&
         finite(row.attackLead ?? 0,0,2) && finite(row.glide ?? 0,0,1) && finite(row.level ?? 1,0,2),
@@ -27,25 +31,24 @@
       return {...row,...(row.curves!==undefined && {curves:P.musicNoteExpression.validate(row.curves)})};
     });
     check(rules.filter(row=>row.when==='release').length<=1,'Use one release articulation per patch');
-    return {gap,interval,fade,repeatGap,rules,...(patch.type==='zoned' &&
+    return {gap,interval,fade,unmatched,repeatGap,rules,...(patch.type==='zoned' &&
       patch.zones.some(zone=>zone.articulation!==undefined) && {zones:patch.zones,
       defaultArticulation:patch.defaultArticulation})};
   }
 
+  function select(model,kind,span,note,recorded=false) {
+    return model.rules.find(row=>row.when===kind && (!recorded || row.recorded) &&
+      (!row.interval || span>=row.interval[0] && span<=row.interval[1]) &&
+      (!row.keys || note.midi>=row.keys[0] && note.midi<=row.keys[1]) &&
+      (!row.velocity || note.velocity>=row.velocity[0] && note.velocity<=row.velocity[1]));
+  }
+  const releaseSpec=rule=>({articulation:rule.articulation,level:rule.level ?? 1,
+    ...(rule.curves && {curves:rule.curves})});
+
   function apply(model,notes,silence,percussion) {
     const byVoice=new Map(), turns=new Map();
-    const select=(kind,span,velocity)=>model.rules.find(row=>row.when===kind &&
-      (!row.interval || span>=row.interval[0] && span<=row.interval[1]) &&
-      (!row.velocity || velocity>=row.velocity[0] && velocity<=row.velocity[1]));
     for (const note of notes) {
       const voice=note.voice ?? 0, prev=byVoice.get(voice);
-      if (note.played) {
-        const release=select('release',null,note.velocity);
-        if (release) note.performance={kind:'attack',interval:null,attackLead:0,requestedLead:0,
-          release:{articulation:release.articulation,level:release.level ?? 1,...(release.curves && {curves:release.curves})}};
-        byVoice.set(voice,note);
-        continue;
-      }
       const cleared=silence.findLast(row=>row.endTime<=note.time+eps);
       const floor=cleared?.endTime ?? 0;
       const available=prev && prev.time>=floor-eps && prev.time<note.time-eps &&
@@ -55,7 +58,17 @@
       let kind='attack';
       if (interval===0 && gap<=model.repeatGap) kind='repeat';
       else if (interval!==null && !percussion && Math.abs(interval)<=model.interval && gap<=model.gap) kind='legato';
-      const rule=select(kind,interval,note.velocity), release=select('release',interval,note.velocity);
+      let rule=select(model,kind,interval,note,note.played);
+      if (kind==='legato' && !rule && model.unmatched==='attack') {
+        kind='attack';
+        rule=select(model,kind,interval,note,note.played);
+      }
+      const release=select(model,'release',interval,note);
+      if (note.played && !rule) {
+        if (release) note.performance={kind:'attack',interval:null,attackLead:0,requestedLead:0,release:releaseSpec(release)};
+        byVoice.set(voice,note);
+        continue;
+      }
       const articulation=note.play.articulation ?? rule?.articulation;
       const lead=rule?.attackLead ?? 0;
       const minimum=prev && !percussion ? Math.max(floor,Math.min(note.time,(prev.start ?? prev.time)+.001)) : floor;
@@ -69,6 +82,7 @@
       note.roundRobin=counter;
       if (start<note.time) note.start=start;
       note.performance={kind,interval,attackLead:round(note.time-start),requestedLead:lead,
+        ...(rule?.recorded && {recorded:true}),
         ...(kind==='legato' && model.fade && {fadeIn:model.fade}),...(group && {roundRobinGroup:group})};
       if (rule) {
         note.velocity=velocity;
@@ -79,16 +93,15 @@
       if (kind==='legato') {
         note.connected=true;
         note.fromFrequency=prev.frequency;
-        prev.gate=round(Math.max(.001,start-prev.time)+model.fade);
+        if (!prev.played) prev.gate=round(Math.max(.001,start-prev.time)+model.fade);
         const end=round(start+model.fade);
         if (end<(prev.choke ?? Infinity)) {
           prev.choke=end;
           prev.chokeFade=model.fade;
         }
       }
-      if (available && (kind!=='attack' || note.time<prev.time+prev.gate-eps)) delete prev.performance.release;
-      if (release) note.performance.release={articulation:release.articulation,level:release.level ?? 1,
-        ...(release.curves && {curves:release.curves})};
+      if (available && prev.performance && (kind!=='attack' || note.time<prev.time+prev.gate-eps)) delete prev.performance.release;
+      if (release) note.performance.release=releaseSpec(release);
       byVoice.set(voice,note);
     }
   }
@@ -105,5 +118,5 @@
       }
     }
   }
-  P.musicPhrasing=Object.freeze({compile,apply,releases});
+  P.musicPhrasing=Object.freeze({compile,select,apply,releases});
 })(KIT.procedural);

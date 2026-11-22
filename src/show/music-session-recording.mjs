@@ -107,7 +107,7 @@ export function setupRecording({state,inspect,context,post,command,refresh,clien
         }
         monitor.port.addEventListener('message',receive);
         monitor.port.start();
-        monitor.port.postMessage({id,type:'patch',patch:info.patch,assets,gain:info.gain},
+        monitor.port.postMessage({id,type:'patch',patch:info.patch,performance:info.performance,assets,gain:info.gain},
           Object.values(assets).map(({samples})=>samples.buffer));
       });
       if (activeRevision===revision) monitorContext=lane;
@@ -203,7 +203,9 @@ export function setupRecording({state,inspect,context,post,command,refresh,clien
     if (keysHeld.delete(key)) midiMessage([0x80,60+keys.indexOf(key),0],event.timeStamp);
   });
   window.addEventListener('blur',releaseInputs);
-  $('breath').addEventListener('input',event=>midiMessage([0xb0,2,Number(event.target.value)],event.timeStamp));
+  for (const [id,cc] of [['breath',2],['room-level',91]])
+    $(id).addEventListener('input',event=>midiMessage([0xb0,cc,Number(event.target.value)],event.timeStamp));
+  $('pressure-level').addEventListener('input',event=>midiMessage([0xd0,Number(event.target.value)],event.timeStamp));
 
   function releaseMic() {
     const current=stream;

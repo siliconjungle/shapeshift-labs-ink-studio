@@ -156,7 +156,7 @@
     check(Array.isArray(cases) && integer(cases.length,1,24) && Array.from(cases).every(row=>{
       const valid=fields(row,['id','key','velocity','articulation','gate','play']) && id(row.id) && !names.has(row.id) &&
         integer(row.key,0,127) && finite(row.velocity,.02,1) && id(row.articulation) &&
-        finite(row.gate ?? .52,.08,2.5) && fields(row.play ?? {},['pressure','breath','damping','contact','curves']);
+        finite(row.gate ?? .52,.08,2.5) && fields(row.play ?? {},['pressure','breath','damping','contact','room','curves']);
       if (valid) names.add(row.id);
       return valid;
     }),'Choose named key, velocity and articulation probes');

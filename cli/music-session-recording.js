@@ -2,14 +2,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const coreFiles = ['p00-procedural', 'p06-musical-harmony', 'p06g-music-instruments',
-  'p06ga-music-subtractive', 'p06gb-music-note-expression', 'p06gd-music-instrument-graph'];
+  'p06ga-music-subtractive', 'p06gb-music-note-expression', 'p06gc-music-phrasing', 'p06gd-music-instrument-graph'];
 function instrumentCore() {
   return 'const KIT={};\n' + coreFiles.map(name =>
     fs.readFileSync(path.join(__dirname, '../src/kit', name + '.js'), 'utf8')).join('\n') +
-    '\nexport const instruments=KIT.procedural.musicInstruments;\n';
+    '\nexport const instruments=KIT.procedural.musicInstruments, phrasing=KIT.procedural.musicPhrasing;\n';
 }
 
-const controls = {breath:[0,1], pressure:[0,1], contact:[0,1], amplitude:[0,1], pitchCents:[-200,200]};
+const controls = {breath:[0,1], pressure:[0,1], contact:[0,1], room:[0,1], amplitude:[0,1], pitchCents:[-200,200]};
 const headerBudget = 768 * 1024;
 const bodyBudget = headerBudget + 4 + 2e6 * 4;
 const own = (row, name) => Object.hasOwn(row ?? {}, name) ? row[name] : undefined;

@@ -452,5 +452,104 @@
     "file": "../music-production/samples/hat-closed-alt.wav",
     "source": "ink-vcsl",
     "original": "Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v2_rr2_Mid.wav"
+  },
+  "reed-slur-g4-c5": {
+    "file": "recordings/reed-slur-g4-c5.wav",
+    "source": "amalialloren",
+    "original": "Glissando ascendent de l'harmònica.wav",
+    "sourceRange": [
+      0.554,
+      0.679
+    ]
+  },
+  "reed-slur-c5-e5": {
+    "file": "recordings/reed-slur-c5-e5.wav",
+    "source": "amalialloren",
+    "original": "Glissando ascendent de l'harmònica.wav",
+    "sourceRange": [
+      0.642,
+      0.758
+    ]
+  },
+  "reed-slur-g4-c4": {
+    "file": "recordings/reed-slur-g4-c4.wav",
+    "source": "mastermesh",
+    "original": "Harmonica.ogg",
+    "sourceRange": [
+      2.028,
+      2.209
+    ]
+  },
+  "metal-plate-soft-a-mid": {
+    "file": "recordings/metal-plate-soft-a-mid.wav",
+    "source": "virtuosity",
+    "original": "Samples/mid/ride/mid_ride_bell_vl1_rr1.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-soft-a-room": {
+    "file": "recordings/metal-plate-soft-a-room.wav",
+    "source": "virtuosity",
+    "original": "Samples/room/ride/room_ride_bell_vl1_rr1.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-soft-b-mid": {
+    "file": "recordings/metal-plate-soft-b-mid.wav",
+    "source": "virtuosity",
+    "original": "Samples/mid/ride/mid_ride_bell_vl1_rr2.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-soft-b-room": {
+    "file": "recordings/metal-plate-soft-b-room.wav",
+    "source": "virtuosity",
+    "original": "Samples/room/ride/room_ride_bell_vl1_rr2.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-hard-a-mid": {
+    "file": "recordings/metal-plate-hard-a-mid.wav",
+    "source": "virtuosity",
+    "original": "Samples/mid/ride/mid_ride_bell_vl3_rr1.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-hard-a-room": {
+    "file": "recordings/metal-plate-hard-a-room.wav",
+    "source": "virtuosity",
+    "original": "Samples/room/ride/room_ride_bell_vl3_rr1.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-hard-b-mid": {
+    "file": "recordings/metal-plate-hard-b-mid.wav",
+    "source": "virtuosity",
+    "original": "Samples/mid/ride/mid_ride_bell_vl3_rr2.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
+  },
+  "metal-plate-hard-b-room": {
+    "file": "recordings/metal-plate-hard-b-room.wav",
+    "source": "virtuosity",
+    "original": "Samples/room/ride/room_ride_bell_vl3_rr2.flac",
+    "sourceRange": [
+      0.0,
+      2.82
+    ]
   }
 }

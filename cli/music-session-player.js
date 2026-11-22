@@ -71,7 +71,9 @@ module.exports=function play(transport,{port,prepare,discard,editor,assets,P,rec
     const patch=track && production.patches[track.patch];
     if (!patch || patch.type==='clap') throw new RangeError('Choose a native instrument lane');
     const {performance,echo,gestures,...voice}=patch;
-    return {patch:voice,assets:[...new Set(P.musicInstruments.assetNames(voice))],gain:Math.min(1,10**((track.gain ?? 0)/20))};
+    const recorded=performance?.rules?.filter(rule=>rule.recorded);
+    return {patch:voice,...(recorded?.length && {performance:{connect:performance.connect,rules:recorded}}),
+      assets:[...new Set(P.musicInstruments.assetNames(voice))],gain:Math.min(1,10**((track.gain ?? 0)/20))};
   }
   const command=({op,...args})=>{
     switch (op) {

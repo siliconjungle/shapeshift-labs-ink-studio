@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const WAV = require('./wav.js');
+const {expressiveReed, expressivePlate} = require('./music-expressive-patches.js');
 const {studyScores, kitPerformance} = require('../examples/native-sound-library/performances.cjs');
 
 const root = path.resolve(__dirname, '../examples/native-sound-library');
@@ -17,6 +18,21 @@ const recordingCredits = {
     license: 'CC0-1.0',
     source: 'https://github.com/sgossner/VCSL/tree/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e'
   },
+  amalialloren: {
+    credit: 'Amalialloren, Glissando ascendent de l’harmònica',
+    license: 'CC0-1.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Glissando_ascendent_de_l%27harm%C3%B2nica.wav'
+  },
+  mastermesh: {
+    credit: 'mastermesh, Harmonica',
+    license: 'LicenseRef-Public-Domain-Author',
+    source: 'https://commons.wikimedia.org/wiki/File:Harmonica.ogg'
+  },
+  virtuosity: {
+    credit: 'Versilian Studios and Karoryfer Samples, Virtuosity Drums, played by Austin McMahon',
+    license: 'CC0-1.0',
+    source: 'https://github.com/sfzinstruments/virtuosity_drums/tree/9f04cf9a734527edfbb0a4eee1f674e45bbf71bc'
+  },
   freepats: {
     credit: 'Andrea Biasior, Bass Guitar YR for FreePats',
     license: 'CC0-1.0',
@@ -29,14 +45,14 @@ const catalog = Object.freeze([
     id: 'breath-and-reed',
     title: 'Breath & Reed',
     description: 'A close-recorded harmonica with soft, normal and vibrato takes and paired key-up recordings.',
-    patches: ['recorded-reed', 'breathing-reed'],
+    patches: ['recorded-reed', 'breathing-reed', 'expressive-reed'],
     rack: 'porcelain-room'
   },
   {
     id: 'struck-and-scraped-metal',
     title: 'Struck & Scraped Metal',
     description: 'Brake drums, gong, cymbal and bell-tree scrapes, plus a playable modal metal voice.',
-    patches: ['brake-drum', 'scraped-metal', 'tuned-metal'],
+    patches: ['brake-drum', 'scraped-metal', 'tuned-metal', 'expressive-plate'],
     rack: 'pocket-repeater'
   },
   {
@@ -163,7 +179,11 @@ function rhythmKit() {
 }
 
 const patchesFor = {
-  'breath-and-reed': () => ({'recorded-reed': reed(false), 'breathing-reed': reed(true)}),
+  'breath-and-reed': () => {
+    const roots=['c4','e4','g4','c5','e5'].map(note=>'reed-normal-'+note);
+    return {'recorded-reed':reed(false),'breathing-reed':reed(true),'expressive-reed':expressiveReed(
+      pitchedZones(roots,[57,79],{oneShot:false}),pitchedZones(roots.map(name=>name+'-off'),[57,79]))};
+  },
   'struck-and-scraped-metal': () => ({
     'brake-drum': strike(iron),
     'scraped-metal': sample([
@@ -171,7 +191,8 @@ const patchesFor = {
       hit(['metal-gong-drag'], {articulation: 'gong'}),
       hit(['metal-bells-drag-a', 'metal-bells-drag-b'], {articulation: 'bells'})
     ]),
-    'tuned-metal': tunedMetal()
+    'tuned-metal': tunedMetal(),
+    'expressive-plate': expressivePlate()
   }),
   'drums-and-bass': () => ({
     ...Object.fromEntries(Object.entries(drumLayers).map(([name, layers]) => [name, strike(layers)])),
@@ -189,8 +210,8 @@ function describe(id) {
     return name.startsWith('bass-') || Object.values(drumLayers).some(row => Object.values(row).flat().includes(name));
   });
   const sources = Object.fromEntries(wanted.map(name => {
-    const {file, source, original} = recordings[name];
-    return [name, {file: path.resolve(root, file), credit: source, ...(original && {original})}];
+    const {file, source, original, sourceRange} = recordings[name];
+    return [name, {file: path.resolve(root, file), credit: source, ...(original && {original}), ...(sourceRange && {sourceRange})}];
   }));
   const credits = Object.fromEntries([...new Set(Object.values(sources).map(row => row.credit))]
     .map(name => [name, {...recordingCredits[name]}]));

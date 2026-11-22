@@ -40,10 +40,11 @@
         shape([]);
         break;
       case 'sample': {
-        shape(['zones','env','channel','startSeconds']);
-        const {zones,env,channel='mix',startSeconds=0}=raw;
-        check(['mix','left','right'].includes(channel) && finite(startSeconds,0,6),'Invalid sample channel or start on '+name);
-        args={channel,startSeconds,player:I.sampler({type,zones,env},assets)};
+        shape(['zones','env','channel','startSeconds','offsetSeconds']);
+        const {zones,env,channel='mix',startSeconds=0,offsetSeconds=0}=raw;
+        check(['mix','left','right'].includes(channel) && finite(startSeconds,0,6) && finite(offsetSeconds,0,6),
+          'Invalid sample channel, start or offset on '+name);
+        args={channel,startSeconds,offsetSeconds,player:I.sampler({type,zones,env},assets)};
         break;
       }
       case 'envelope':
@@ -65,6 +66,16 @@
         check(Array.isArray(raw.inputs) && integer(raw.inputs.length,1,16),'Mix needs 1–16 inputs on '+name);
         inputs=Array.from(raw.inputs);
         break;
+      case 'blend': {
+        shape(['inputs','position','law','window']);
+        const {law='linear',window=[0,1]}=raw;
+        check(Array.isArray(raw.inputs) && raw.inputs.length===2 &&
+          ['linear','equal-power'].includes(law) && Array.isArray(window) && window.length===2 &&
+          finite(window[0],0,1) && finite(window[1],window[0]+1e-6,1),
+        'Blend needs two inputs, a valid law and an ordered window on '+name);
+        inputs=Array.from(raw.inputs);args={law,window:window.slice()};param('position',[.5,0,1]);
+        break;
+      }
       case 'gain':
         shape(['input','amount']);
         inputs=[input];param('amount',[1,-8,8]);
@@ -229,7 +240,8 @@
         process=()=>I.noise(state.frame,salt);break;
       }
       case 'sample': {
-        const sound=row.player.prepare(note,rate,Math.max(0,gate-row.startSeconds));
+        const source=row.offsetSeconds ? {...note,play:{...note.play,offset:(note.play.offset ?? 0)+row.offsetSeconds}} : note;
+        const sound=row.player.prepare(source,rate,Math.max(0,gate-row.startSeconds));
         const first=Math.ceil(row.startSeconds*rate-1e-7);
         process=()=>{
           const t=state.t-row.startSeconds, frame=state.frame-first;
@@ -255,6 +267,19 @@
         break;
       }
       case 'mix': process=()=>refs.reduce((sum,at)=>sum+values[at],0);break;
+      case 'blend': {
+        const [a,b]=refs, [first,last]=row.window, scale=1/(last-first);
+        const position=()=>clamp((params.position()-first)*scale);
+        if (row.law==='linear') process=()=> {
+          const u=position(), left=values[a];
+          return left+(values[b]-left)*u;
+        };
+        else process=()=> {
+          const x=position()*Math.PI*.5;
+          return values[a]*Math.cos(x)+values[b]*Math.sin(x);
+        };
+        break;
+      }
       case 'gain': process=()=>read()*params.amount();break;
       case 'drive': process=()=>Math.tanh(read()*params.amount());break;
       case 'filter': {
@@ -332,7 +357,8 @@
     return {output:outputs,tail,controls,assets:[...new Set(I.assetNames(raw))],
       inactive:Object.keys(base.nodes).filter(name=>!order.includes(name)),order,nodes:active.map(({name,type,inputs,params,...spec})=>({name,type,inputs,
         ...(type==='delay' && {writesAfterFrame:true}),
-        ...(type==='curve' && {clock:spec.clock,points:spec.points}),parameters:Object.fromEntries(Object.entries(params)
+        ...(type==='curve' && {clock:spec.clock,points:spec.points}),
+        ...(type==='blend' && {law:spec.law,window:spec.window}),parameters:Object.fromEntries(Object.entries(params)
           .map(([key,{base,by,from}])=>[key,{base,by:Object.fromEntries(by),from:Object.fromEntries(from)}]))}))};
   }
   P.musicInstrumentGraph=Object.freeze({compile,articulate,inspect});

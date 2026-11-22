@@ -189,8 +189,8 @@
     for (const row of cases) {
       check(fields(row,['id','midi','velocity','gate','play']) && id(row.id) && !keys.has(row.id) &&
         integer(row.midi,0,127) && finite(row.velocity,.02,1) && finite(row.gate,.02,6) &&
-        fields(row.play ?? {},['breath','damping','pressure','contact','bend','curves','articulation']) &&
-        ['breath','damping','pressure','contact'].every(key=>finite(row.play?.[key] ?? 0,0,1)) &&
+        fields(row.play ?? {},['breath','damping','pressure','contact','room','bend','curves','articulation']) &&
+        ['breath','damping','pressure','contact','room'].every(key=>finite(row.play?.[key] ?? 0,0,1)) &&
         finite(row.play?.bend ?? 0,-2400,2400) &&
         (row.play?.articulation===undefined || id(row.play.articulation)),'Invalid instrument fit audition case');
       keys.add(row.id);

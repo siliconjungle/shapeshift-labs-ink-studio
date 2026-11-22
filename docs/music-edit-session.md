@@ -267,13 +267,13 @@ interleaved float32 stereo with the chunk address in `X-Ink-Transport`.
 ## Record straight into take lanes
 
 In the live desk, choose a native instrument lane and **Enable MIDI** in a
-browser with Web MIDI support. The **On-screen keys** and breath slider work
+browser with Web MIDI support. The **On-screen keys** and the Breath, Pressure, and Room sliders work
 without a controller. The dry native instrument monitor plays on the browser
 audio device. Saved takes use the regular score renderer and mixer.
 
 - **MIDI notes and expression** records note timing, velocity, sustain,
-  pressure, breath (CC2), contact (CC1 or CC74), expression (CC11) and
-  pitch bend (±2 semitones). Captured notes are editable in a played note clip.
+  pressure, breath (CC2), contact (CC1 or CC74), expression (CC11),
+  room (CC91), and pitch bend (±2 semitones). Captured notes are editable in a played note clip.
   The melodic clip replaces the lane inside the pass when auditioned. Drum clips
   layer over the score's drum events. Existing groove templates leave captured
   timing alone.

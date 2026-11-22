@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sill Lights · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:16px/1.53 system-ui,sans-serif;background:#181b21;color:#f3eee6;--text:#bcc3cf;--accent:#b9d4f7;--line:#495260;--panel:#202630}
+*{box-sizing:border-box}body{margin:0}main{max-width:1050px;margin:auto;padding:38px max(20px,4vw) 52px}header{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0 25px;margin-bottom:22px}
+small{font:700 .75rem ui-monospace,monospace;letter-spacing:.115em;text-transform:uppercase;color:var(--accent)}
+h1,h2{font-family:Georgia,serif;line-height:1;letter-spacing:-.04em;font-weight:400;margin:0}h1{font-size:clamp(4rem,11vw,7.75rem);margin:.1em 0 .04em}h2{font-size:clamp(1.8rem,4.2vw,2.5rem)}
+p{color:var(--text);margin:.58em 0 1em}audio{display:block;width:100%}header audio{max-width:640px}
+a{color:var(--accent);text-underline-offset:.18em}a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+article{padding:20px;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column}
+article p{flex:1}.choices{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+button{background:#303a48;color:inherit;border:1px solid #657186;border-radius:3px;padding:6px 9px;font:inherit;font-size:.86rem;cursor:pointer}
+button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#23324d}
+.links{display:flex;gap:8px 14px;flex-wrap:wrap;font-size:.88rem;margin-top:11px}
+footer{margin-top:25px;border-top:1px solid var(--line);padding-top:16px;font-size:.88rem;color:var(--text)}
+details summary{cursor:pointer;color:var(--accent)}pre{overflow:auto;background:var(--panel);padding:10px;font-size:.8rem}
+@media(max-width:660px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main>
+<header>
+  <small>Ink Studio · Expressive sampling</small>
+  <h1>Sill Lights</h1>
+  <p>A harmonica line that opens from air into pitch, with a recorded cymbal bell and electric keys.</p>
+  <audio controls preload="metadata" src="sill-lights.wav" aria-label="Play Sill Lights"></audio>
+  <div class="links"><a href="sill-lights.json">Editable score</a><a href="report.json">Recorded transition timings</a></div>
+</header>
+<div class="grid">
+  <article>
+    <h2>Breath into tone</h2>
+    <p>One held E4. In the sweep, pressure brings the sampled reed forward and lets it recede again.</p>
+    <div class="choices" role="group" aria-label="Pressure studies">
+      <button type="button" data-wav="reed-air.wav" aria-pressed="false">Air</button>
+      <button type="button" data-wav="reed-pressure.wav" aria-pressed="true">Pressure sweep</button>
+      <button type="button" data-wav="reed-held.wav" aria-pressed="false">Held tone</button>
+    </div>
+    <audio controls preload="metadata" src="reed-pressure.wav" aria-label="Play a pressure study"></audio>
+  </article>
+  <article>
+    <h2>Connected notes</h2>
+    <p>Hear the same phrase with three recorded joins or fresh attacks. The joined take starts each recording just ahead of the destination note, then blends into its sustain.</p>
+    <div class="choices" role="group" aria-label="Articulation studies">
+      <button type="button" data-wav="reed-joined.wav" aria-pressed="true">Recorded joins</button>
+      <button type="button" data-wav="reed-retriggered.wav" aria-pressed="false">Fresh attacks</button>
+    </div>
+    <audio controls preload="metadata" src="reed-joined.wav" aria-label="Play an articulation study"></audio>
+  </article>
+  <article>
+    <h2>Strike force</h2>
+    <p>Five taps from soft to hard. The sampler blends the recorded velocity layers as the strike gets stronger.</p>
+    <audio controls preload="metadata" src="plate-force.wav" aria-label="Play five strikes from soft to hard"></audio>
+  </article>
+  <article>
+    <h2>Direct to room</h2>
+    <p>One strike, two synchronized mic recordings. Hear each position or move across them during the decay.</p>
+    <div class="choices" role="group" aria-label="Microphone studies">
+      <button type="button" data-wav="plate-direct.wav" aria-pressed="true">Direct</button>
+      <button type="button" data-wav="plate-between.wav" aria-pressed="false">Halfway</button>
+      <button type="button" data-wav="plate-room.wav" aria-pressed="false">Room</button>
+      <button type="button" data-wav="plate-mic-ride.wav" aria-pressed="false">Sweep</button>
+    </div>
+    <audio controls preload="metadata" src="plate-direct.wav" aria-label="Play a microphone study"></audio>
+  </article>
+</div>
+<footer>
+  <details><summary>Play the patches in the live desk</summary>
+  <p>Run this from the demo folder. Select the reed or plate lane. Use aftertouch or the Pressure slider for the reed, and CC91 or the Room slider for the plate. Overlap the mapped reed notes to play a recorded join.</p>
+  <pre><code>ink-studio music session play live-session.json live-loop.json</code></pre></details>
+  <div class="links"><a href="packs/breath-and-reed/pack.json">Reed patch and credits</a><a href="packs/struck-and-scraped-metal/pack.json">Plate patch and credits</a></div>
+</footer>
+</main>
+<script>
+const all=[...document.querySelectorAll('audio')];
+for (const player of all) player.addEventListener('play',()=>{
+  for (const other of all) if (other!==player) other.pause();
+});
+for (const choices of document.querySelectorAll('.choices')) {
+  const player=choices.nextElementSibling;
+  let pending;
+  choices.addEventListener('click',event=>{
+    const choice=event.target.closest('button[data-wav]');
+    if (!choice || choice.getAttribute('aria-pressed')==='true') return;
+    pending ??= {position:player.currentTime,resume:!player.paused};
+    for (const item of choices.querySelectorAll('button')) item.setAttribute('aria-pressed',String(item===choice));
+    player.onloadedmetadata=()=>{
+      if (!pending) return;
+      player.currentTime=Math.min(player.duration,pending.position);
+      if (pending.resume) player.play().catch(()=>{});
+      pending=undefined;
+    };
+    player.src=choice.dataset.wav;
+    player.load();
+  });
+}
+</script>
+</body></html>
