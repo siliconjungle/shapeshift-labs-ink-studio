@@ -98,6 +98,100 @@ test('mutation locks preserve shaped parents and reject conflicting or impossibl
   assert(bounded.value.every(row => sound.render(row).report.frames >= 320));
 });
 
+test('one-shot pitch edits produce smooth glides, discrete intervals and different pulse duties', () => {
+  const base = { ...recipe('confirm', 73, { sampleRate: 8000, duration: .6 }), shape: { noise: 0 } };
+  const crossings = (samples, from, to) => samples.slice(from, to)
+    .reduce((count, value, i) => count + Number(value > 0 && samples[from + i - 1] <= 0), 0);
+  const steps = sound.render({ ...base, synth: { pitchSteps: [{ at: 0, semitones: 0 }, { at: .5, semitones: 12 }] } }).value.samples;
+  const early = crossings(steps, 400, 720), late = crossings(steps, 1100, 1420);
+  assert(Math.abs(late / early - 2) < .12);
+  assert.equal(crossings(steps, 660, 980), early);
+  const smooth = sound.render({ ...base, synth: { pitchSweep: { fromSemitones: -3, toSemitones: 12 } } }).value.samples;
+  const before = crossings(smooth, 400, 720), after = crossings(smooth, 1100, 1420);
+  assert(after > before * 1.2 && after < before * 1.8);
+  const pulse = width => sound.render({ ...base, synth: { pulseWidth: width } }).value.samples;
+  assert.notDeepEqual(pulse(.5), pulse(.15));
+  assert(pulse(.15).every(Number.isFinite));
+  assert.throws(() => sound.normalize({ ...base, synth: { pulseWidth: 1 } }), /Pulse width/);
+  assert.throws(() => sound.normalize({ ...base, synth: { pitchSteps: [{ at: .2, semitones: 0 }] } }), /starting at zero/);
+});
+
+test('noise color, cutoff motion and punch change distinct parts of a one-shot', () => {
+  const base = recipe('jump', 41, { sampleRate: 16000, duration: .55 });
+  const render = synth => sound.render({ ...base, synth }).value.samples;
+  const texture = color => ({ noise: { color, level: 1 } });
+  const roughness = (samples, from, to) => {
+    let changes = 0, total = 0;
+    for (let i = from; i < to; i++) {
+      changes += (samples[i] - samples[i - 1]) ** 2;
+      total += samples[i] ** 2;
+    }
+    return changes / total;
+  };
+  const white = render(texture('white')), pink = render(texture('pink')), brown = render(texture('brown'));
+  assert(roughness(white, 100, 1800) > roughness(pink, 100, 1800));
+  assert(roughness(pink, 100, 1800) > roughness(brown, 100, 1800));
+  const filtered = render({ ...texture('white'), filter: { fromHz: 100, toHz: 6500 } });
+  const high = render({ ...texture('white'), filter: { type: 'highpass', fromHz: 2500, toHz: 150 } });
+  assert(roughness(filtered, 100, 1800) < roughness(white, 100, 1800) * .2);
+  assert(roughness(filtered, 6200, 7400) > roughness(filtered, 100, 1800) * 2);
+  assert(roughness(high, 100, 1800) > roughness(white, 100, 1800));
+  const punched = render({ punch: { amount: 3, decayMs: 80 } }), plain = render({});
+  const power = (samples, from, to) => samples.slice(from, to).reduce((sum, value) => sum + value ** 2, 0);
+  assert(power(punched, 20, 450) / power(punched, 2000, 3000) >
+    4 * power(plain, 20, 450) / power(plain, 2000, 3000));
+});
+
+test('retriggering restarts synthesis at exact samples and works with duration mutation and attack locks', () => {
+  const base = { ...recipe('jump', 123, { sampleRate: 8000, duration: .8 }),
+    synth: { pulseWidth: .24, retrigger: { positions: [0, .5], gate: .5 }, punch: { amount: 2 } } };
+  const { value: { samples }, report } = sound.render(base);
+  assert.deepEqual(report.hits.map(hit => [hit.startSample, hit.frames]), [[0, 1600], [3200, 1600]]);
+  assert.deepEqual(samples.slice(0, 1600), samples.slice(3200, 4800));
+  assert(samples.slice(1600, 3200).every(value => value === 0));
+  const { value: variants } = sound.mutate(base, { count: 3, locks: ['pitchContour', 'attack'],
+    bounds: { duration: [.5, 1.2], brightness: [.45, 1.8] } });
+  for (const variant of variants) {
+    assert.deepEqual(variant.synth, sound.normalize(base).synth);
+    const next = sound.render(variant).report;
+    assert.deepEqual(next.hits.map(hit => hit.attackFrames), report.hits.map(hit => hit.attackFrames));
+    assert.equal(next.hits[1].startSample, Math.round(next.frames / 2));
+  }
+  const tooShort = { ...base, synth: { retrigger: { positions: [0, .000001] } } };
+  assert.throws(() => sound.normalize(tooShort), /fit inside every layer/);
+});
+
+test('edited recipes rebuild through CLI and graph with the same retro insert as the mixer', t => {
+  const { file, save, read, run } = room(t);
+  const dryRecipe = { ...recipe('impact', 23, { sampleRate: 8000, peak: .73 }),
+    synth: { filter: { fromHz: 1800, toHz: 210 }, punch: { amount: 2, decayMs: 50 }, pulseWidth: .2 } };
+  const dry = sound.render(dryRecipe);
+  const edited = { ...dryRecipe, retro: { bits: 4, rateHz: 4000 } };
+  const { recipe: resolved, report, value } = sound.render(edited);
+  const mix = P.mediaGraph.mixer.render({
+    id: 'retro-reference', sampleRate: 8000, output: 'out', tail: 'cut',
+    strips: { out: { clips: [{ id: 'source', source: 'source' }], inserts: ['retro'] } },
+    processors: { retro: resolved.retro }
+  }, { source: dry.value });
+  assert.equal(report.frames, dry.report.frames);
+  assert.equal(report.retro.bits, 4);
+  assert.equal(report.retro.minimumHz, 4000);
+  assert.deepEqual(value.samples, Float32Array.from(value.samples, (_, i) => mix.value.samples[2 * i]));
+  assert(value.samples.every((sample, i) => sample * 8 === Math.round(sample * 8) && (i % 2 === 0 || sample === value.samples[i - 1])));
+  assert.deepEqual(sound.render({ ...edited, retro: { ...edited.retro, wet: 0 } }).value.samples, dry.value.samples);
+  assert.throws(() => sound.normalize({ ...edited, retro: { bits: 1 } }), /retro capture rate/);
+  const graph = ink.createGraphProject({ format: 'ink-studio/graph-project', version: 1,
+    nodes: { shot: { op: 'audio.renderSoundRecipe', inputs: { recipe: edited } } },
+    outputs: { shot: { node: 'shot' }, recipe: { node: 'shot', port: 'recipe' } } }).run();
+  assert.deepEqual(graph.outputs.shot.samples, value.samples);
+  assert.deepEqual(graph.outputs.recipe, resolved);
+  save('edited.sound.json', edited);
+  run('music', 'sound', 'render', 'edited.sound.json', '--out', 'print');
+  run('music', 'sound', 'render', 'print/recipe.sound.json', '--out', 'rebuilt');
+  assert.deepEqual(read('print/recipe.sound.json'), resolved);
+  assert(fs.readFileSync(file('print/sound.wav')).equals(fs.readFileSync(file('rebuilt/sound.wav'))));
+});
+
 test('CLI publishes rebuildable families and shares the same recipes with typed graphs and the sample catalog', t => {
   const { file, save, read, run } = room(t);
   const base = recipe('impact', 715, { sampleRate: 8000 });

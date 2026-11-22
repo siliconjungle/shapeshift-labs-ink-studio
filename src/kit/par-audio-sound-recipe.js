@@ -1,6 +1,7 @@
 /* Versioned one-shots for the typed Ink audio graph. */
 (function (P) {
   const { check, fields, id, integer, finite, noise, hash, clamp } = P.musicInstruments;
+  const C = P.mediaGraphSupport.oneShotControls;
   const format = 'ink-studio/sound-recipe', tau = Math.PI * 2;
   const mutationFormat = 'ink-studio/sound-mutation';
   const wavEncodings = Object.freeze(['pcm16', 'pcm24', 'float32']);
@@ -62,12 +63,13 @@
     return Math.max(1, Math.min(voiceFrames(voice, referenceFrames) * .085, cap) * scale);
   }
 
-  function attackFits(family, rate, duration, shape, ranges = false) {
+  function attackFits(family, rate, duration, shape, retrigger, ranges = false) {
     const frames = Math.round(rate * duration), reference = Math.round(rate * shape.attackReferenceDuration);
-    return families[family].voices.every(voice => {
-      const length = ranges ? Math.floor(frames * voice.span[1] - frames * voice.span[0]) : voiceFrames(voice, frames);
-      return attackFrames(family, voice, rate, reference, shape.attack) < length - 1;
-    });
+    const references = C.windows(reference, retrigger);
+    return C.windows(frames, retrigger, ranges).every((hit, index) => families[family].voices.every(voice => {
+      const length = ranges ? Math.floor(hit.frames * voice.span[1] - hit.frames * voice.span[0]) : voiceFrames(voice, hit.frames);
+      return attackFrames(family, voice, rate, references[index].frames, shape.attack) < length - 1;
+    }));
   }
   const attackError = 'Attack needs to fit inside every layer. Shorten the attack or increase the duration.';
 
@@ -81,7 +83,7 @@
   }
 
   function normalize(source) {
-    check(fields(source, ['format', 'version', 'id', 'family', 'seed', 'render', 'shape']) &&
+    check(fields(source, ['format', 'version', 'id', 'family', 'seed', 'render', 'shape', 'synth', 'retro']) &&
       source.format === format && source.version === 1 && typeof source.family === 'string' &&
       Object.hasOwn(families, source.family) && (source.id === undefined || id(source.id)) && Number.isSafeInteger(source.seed),
     'Expected a version 1 sound recipe with a known family and an integer seed');
@@ -91,22 +93,35 @@
     check(integer(sampleRate, 8000, 96000) && finite(duration, .04, 4) && finite(peak, .01, 1) &&
       wavEncodings.includes(encoding), 'Sound recipes need a bounded duration, sample rate, peak and WAV encoding');
     const shape = source.shape === undefined ? undefined : normalizeShape(source.shape, duration);
-    if (shape) check(attackFits(source.family, sampleRate, duration, shape), attackError);
+    const synth = source.synth === undefined ? undefined : C.normalizeSynth(source.synth, sampleRate);
+    const retro = source.retro === undefined ? undefined : C.normalizeRetro(source.retro, sampleRate);
+    if (shape || synth?.retrigger) {
+      const attack = shape ?? { ...shapeDefaults, attackReferenceDuration: duration };
+      check(attackFits(source.family, sampleRate, duration, attack, synth?.retrigger), attackError);
+    }
     return { format, version: 1, id: source.id ?? source.family, family: source.family, seed: source.seed,
-      render: { sampleRate, duration, peak, encoding }, ...(shape && { shape }) };
+      render: { sampleRate, duration, peak, encoding }, ...(shape && { shape }), ...(synth && { synth }), ...(retro && { retro }) };
   }
 
-  function oscillator(voice, rate, salt, { pitchSemitones, sweep, brightness }) {
+  function oscillator(voice, rate, salt, { pitchSemitones, sweep, brightness }, synth) {
     const [from, to] = voice.pitch, tuning = 2 ** (noise(0, salt) * .075 + pitchSemitones / 12);
     const end = sweep === 1 ? to : from * (to / from) ** sweep;
-    const weights = spectra[voice.color].map((gain, index) =>
-      (index + 1) * Math.max(from, end) * tuning < .45 * rate ? gain * brightness ** index : 0);
+    const peakHz = Math.max(from, end), cap = .44 * rate, motion = C.pitchMotion(synth);
+    const top = motion && Math.min(peakHz * tuning * motion.maxRatio, cap);
+    const width = synth.pulseWidth;
+    const harmonics = width === undefined ? spectra[voice.color].map((gain, index) => gain * brightness ** index) :
+      C.pulseWeights(width, brightness);
+    const weights = harmonics.map((gain, index) => {
+      const harmonic = index + 1;
+      return (motion ? harmonic * top : harmonic * peakHz * tuning) < .45 * rate ? gain : 0;
+    });
+    const wave = width === undefined ? (p, n) => Math.sin(tau * p * n) : (p, n) => Math.cos(tau * (p - width / 2) * n);
     let phase = 0;
     return progress => {
       const hz = from * (to / from) ** (progress ** voice.motion * sweep) * tuning;
-      phase = (phase + hz / rate) % 1;
+      phase = (phase + (motion ? Math.min(cap, hz * motion.ratio(progress)) : hz) / rate) % 1;
       let value = 0;
-      for (let i = 0; i < weights.length; i++) if (weights[i]) value += weights[i] * Math.sin(tau * phase * (i + 1));
+      for (let i = 0; i < weights.length; i++) if (weights[i]) value += weights[i] * wave(phase, i + 1);
       return value;
     };
   }
@@ -120,16 +135,13 @@
     };
   }
 
-  function render(source) {
-    const recipe = normalize(source), { family, seed } = recipe;
-    const { sampleRate, duration, peak: target } = recipe.render;
-    const frames = Math.round(sampleRate * duration), samples = new Float32Array(frames);
-    const shape = recipe.shape ?? shapeDefaults;
-    const reference = recipe.shape ? Math.round(sampleRate * shape.attackReferenceDuration) : frames;
+  function renderHit(samples, reference, recipe, shape) {
+    const { family, seed, synth = {} } = recipe, { sampleRate } = recipe.render;
+    const frames = samples.length;
     const attacks = [];
     for (const [layer, voice] of families[family].voices.entries()) {
       const salt = hash([format, 1, seed, family, layer]), tone = voice.pitch !== undefined;
-      const sample = tone ? oscillator(voice, sampleRate, salt, shape) : coloredNoise(voice, sampleRate, salt);
+      const sample = tone ? oscillator(voice, sampleRate, salt, shape, synth) : coloredNoise(voice, sampleRate, salt);
       const first = Math.round(frames * voice.span[0]), end = Math.round(frames * voice.span[1]);
       const length = end - first, attack = attackFrames(family, voice, sampleRate, reference, shape.attack);
       attacks.push(attack);
@@ -142,16 +154,43 @@
         samples[first + i] += gain * sample(tone ? progress : i) * envelope * clamp(i / attack);
       }
     }
-    let peak = 0, energy = 0;
-    for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
-    const factor = target / peak;
-    for (let i = 0; i < samples.length; i++) {
-      samples[i] *= factor;
-      energy += samples[i] ** 2;
+    if (synth.noise?.level) {
+      const bed = C.noiseBed(synth.noise.color, sampleRate, hash([format, 1, seed, family, 'noise-bed']));
+      const gain = synth.noise.level * shape.noise, last = frames - 1;
+      for (let i = 0; i < frames; i++)
+        samples[i] += gain * bed(i) * (1 - i / last) ** (1.4 * shape.decay) * clamp(i / attacks[0]);
     }
-    return { value: { sampleRate, channels: 1, samples }, recipe,
-      report: { frames, seconds: frames / sampleRate, attackFrames: attacks,
-        peak: Math.fround(target), rms: Math.sqrt(energy / frames) } };
+    C.finishHit(samples, synth, sampleRate);
+    return attacks;
+  }
+
+  function render(source) {
+    const recipe = normalize(source), { synth, retro } = recipe;
+    const { sampleRate, duration, peak: target } = recipe.render;
+    const frames = Math.round(sampleRate * duration), samples = new Float32Array(frames);
+    const shape = recipe.shape ?? shapeDefaults;
+    const reference = recipe.shape ? Math.round(sampleRate * shape.attackReferenceDuration) : frames;
+    const retrigger = synth?.retrigger, windows = C.windows(reference, retrigger);
+    const hits = C.windows(frames, retrigger).map(({ start, frames }, index) => {
+      const attackFrames = renderHit(samples.subarray(start, start + frames), windows[index].frames, recipe, shape);
+      return { startSample: start, frames, attackFrames };
+    });
+    let peak = 0;
+    for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+    const factor = peak ? target / peak : 1;
+    for (let i = 0; i < samples.length; i++) samples[i] *= factor;
+    const input = { sampleRate, channels: 1, samples };
+    const processed = retro?.wet ? C.retroPrint(input, retro) : undefined;
+    const output = processed ? processed.samples : samples;
+    let energy = 0, outputPeak = 0;
+    for (const sample of output) {
+      outputPeak = Math.max(outputPeak, Math.abs(sample));
+      energy += sample ** 2;
+    }
+    return { value: { ...input, samples: output }, recipe,
+      report: { frames, seconds: frames / sampleRate, attackFrames: hits[0].attackFrames,
+        ...(retrigger && { hits }), ...(processed && { retro: processed.report }),
+        peak: processed ? outputPeak : Math.fround(target), rms: Math.sqrt(energy / frames) } };
   }
 
   function variationBounds(base, authored, locks) {
@@ -182,7 +221,7 @@
     const shape = base.shape ?? { ...shapeDefaults, attackReferenceDuration: render.duration };
     const bounds = variationBounds({ ...render, ...shape }, options.bounds, locks);
     const fits = () => attackFits(family, render.sampleRate, bounds.duration[0],
-      { ...shape, attack: bounds.attack[1] }, bounds.duration[0] !== bounds.duration[1]);
+      { ...shape, attack: bounds.attack[1] }, base.synth?.retrigger, bounds.duration[0] !== bounds.duration[1]);
     if (options.bounds === undefined && !fits()) {
       bounds.duration[0] = render.duration;
       if (!fits()) bounds.attack[1] = shape.attack;

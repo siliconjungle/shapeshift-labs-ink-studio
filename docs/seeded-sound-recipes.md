@@ -40,6 +40,55 @@ The renderer accepts 8–96 kHz, a duration from 0.04 to 4 seconds,
 a peak from 0.01 to 1 in linear amplitude, and one of `pcm16`,
 `pcm24`, or `float32`. Duration rounds to the nearest sample.
 
+## Edit a one-shot
+
+Use the optional `synth` and `retro` records in a recipe to shape
+the sound. Render it with the same `music sound render` command.
+
+```json
+{
+  "format": "ink-studio/sound-recipe",
+  "version": 1,
+  "family": "jump",
+  "seed": 731,
+  "render": { "sampleRate": 48000, "duration": 0.6 },
+  "synth": {
+    "pitchSweep": { "fromSemitones": -6, "toSemitones": 7, "curve": 1.4 },
+    "pitchSteps": [{ "at": 0, "semitones": 0 }, { "at": 0.55, "semitones": 5 }],
+    "pulseWidth": 0.23,
+    "retrigger": { "positions": [0, 0.29, 0.63], "gate": 0.76 },
+    "noise": { "color": "pink", "level": 0.35 },
+    "filter": { "type": "lowpass", "fromHz": 420, "toHz": 5800 },
+    "punch": { "amount": 1.7, "decayMs": 36 }
+  },
+  "retro": { "bits": 5, "rateHz": 6200, "interpolation": "hold", "wet": 0.85 }
+}
+```
+
+| Control | Effect |
+| --- | --- |
+| `pitchSweep` | Add a glide on top of each pitched layer's existing contour. Endpoints are offsets from −24 to 24 semitones. Both default to zero. The curve exponent ranges from 0.25 to 4 and defaults to 1. |
+| `pitchSteps` | Add up to 32 held pitch offsets in the same semitone range. Steps start at zero and increase to just below one, using the normalized time of each pitched layer. Sweep and step offsets add together. |
+| `pulseWidth` | Switch pitched layers to a band-limited pulse with duty from 0.05 to 0.95. A duty of 0.5 gives a square wave. Edited oscillator frequencies are capped at 44% of the render rate. |
+| `retrigger` | Restart the family waveform and envelope at 2–16 normalized positions across the one-shot. Positions start at zero and are strictly increasing below one. `gate` sets the fraction of each interval that sounds, from 0.1 to 1, with a default of 0.8. |
+| `noise` | Blend a seeded `white`, `pink`, or `brown` noise layer at a relative level from 0 to 1. The defaults are white noise and level 0.4. |
+| `filter` | Sweep a one-pole `lowpass` or `highpass` filter from `fromHz` to `toHz` on each hit. The default type is lowpass. Both cutoffs must be between 20 Hz and 49% of the render rate. |
+| `punch` | Boost the start of each hit with an amount from 0 to 3 and a decay from 1 to 120 milliseconds. The defaults are 1 and 24 milliseconds. |
+
+The [retro sampler](sound-design-effects.md#separate-the-retro-controls)
+processes the synthesized sound after peak normalization. `bits` is
+zero for full precision or an integer from 2 to 24. `rateHz` ranges
+from 100 Hz to the render rate and controls the internal capture clock.
+The WAV keeps the render rate and length. Reconstruction can use
+`hold`, `linear`, or `cubic`. `wet` blends in the insert from 0 to
+1. Its default is 1. The report records insert settings and latency
+when applicable, and retrigger reports include exact hit starts, lengths,
+and attack ramps.
+
+The edit records travel with the saved recipe through the graph node,
+mixer, and sample catalog. Family mutation copies these authored
+controls and uses the same attack locks for each retriggered hit.
+
 ## Generate a family of variations
 
 ```sh
@@ -152,6 +201,13 @@ followed by four variants with pitch, attack, and duration locked.
 
 ```sh
 node examples/seeded-sounds/variations.cjs ./sound-variations
+```
+
+Hear pairs that isolate pitch sweep, stepped pitch, pulse width,
+retriggering, noise color, filter sweep, punch, and the retro insert.
+
+```sh
+node examples/seeded-sounds/one-shot-controls.cjs ./one-shot-controls
 ```
 
 [Ink mixer](audio-mixer.md) · [Sample catalog and editing](sample-capture.md) · [Story audio](adaptive-story-audio.md)
