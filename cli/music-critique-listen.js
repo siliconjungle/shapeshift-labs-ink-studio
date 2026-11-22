@@ -24,6 +24,7 @@ button[aria-pressed="true"], button[type="submit"] { background:var(--accent); c
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .actions { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; }
 .grid { display:grid; gap:10px 16px; grid-template-columns:1fr 1fr; }
+[hidden] { display:none !important; }
 label { display:grid; gap:5px; }
 textarea { width:100%; min-height:100px; resize:vertical; margin-bottom:14px; }
 .answer { margin-top:15px; }
@@ -40,15 +41,16 @@ textarea { width:100%; min-height:100px; resize:vertical; margin-bottom:14px; }
 <label>Pair <select id="pairs"></select></label>
 <div class="actions" id="takes"></div>
 <audio id="player" controls preload="metadata"></audio>
+<p id="windows" hidden></p>
 <div id="ratings" class="grid"></div>
 </section>
 <section>
 <div class="grid">
 <label>Listener ID <input id="listener" value="listener" pattern="[a-zA-Z][a-zA-Z0-9_\\x2D]{0,47}" maxlength="48" required></label>
-<label>Take to keep <select id="winner" required></select></label>
+<label id="keep">Take to keep <select id="winner"></select></label>
 </div>
-<label class="answer">Why this take works <textarea id="reason" required maxlength="2000"></textarea></label>
-<button type="submit">Download listening decision</button>
+<label class="answer">What did you hear? <textarea id="reason" required maxlength="2000"></textarea></label>
+<button type="submit" id="download">Download listening decision</button>
 <p id="status" role="status" aria-live="polite"></p>
 </section>
 </form>
@@ -80,6 +82,15 @@ for (const [i,trial] of test.trials.entries()) byId('pairs').append(option((i+1)
 for (const label of test.labels) byId('winner').append(option('Take '+caps(label),label));
 byId('winner').prepend(option('Choose a take',''));
 byId('winner').value='';
+if(test.sequence) {
+  const timing=byId('windows');
+  timing.hidden=false;
+  timing.textContent='The return begins at '+(test.sequence[1].firstFrame/test.sampleRate).toFixed(2)+' s in both takes.';
+}
+if(test.question) {
+  byId('keep').hidden=true;
+  byId('download').textContent='Download ballot';
+} else byId('winner').required=true;
 function selectPair() {
   const trial=test.trials.find(row=>row.id===byId('pairs').value);
   const controls=byId('takes'), ratings=byId('ratings');
@@ -95,7 +106,7 @@ function selectPair() {
   }
   for(const goal of test.criteria) {
     const label=document.createElement('label'), choices=document.createElement('select');
-    label.textContent=names[goal];
+    label.textContent=test.question || names[goal];
     choices.append(option('Skip',''),...trial.takes.map(label=>option('Take '+caps(label),label)),option('Tie','tie'));
     choices.value=state[trial.id][goal] || '';
     choices.addEventListener('change',()=>{ if(choices.value) state[trial.id][goal]=choices.value;
@@ -113,17 +124,18 @@ byId('ballot').addEventListener('submit',event=>{
   const take=byId('winner').value,reason=byId('reason').value.trim(), listener=byId('listener').value;
   const votes=Object.entries(state).filter(([,choices])=>Object.keys(choices).length)
     .map(([trial,preferences])=>({trial,listener,preferences}));
-  if(!reason || !votes.some(row=>Object.values(row.preferences).includes(take))) {
-    byId('status').textContent='Record at least one preference for the take you want to keep, and say why.';
+  if(!reason || (test.question ? !votes.length : !votes.some(row=>Object.values(row.preferences).includes(take)))) {
+    byId('status').textContent=test.question ? 'Choose A, B or a tie, and say what you heard.' :
+      'Record at least one preference for the take you want to keep, and say why.';
     return;
   }
-  const url=URL.createObjectURL(new Blob([JSON.stringify({token:test.token,take,reason,votes},null,2)+'\\n'],{type:'application/json'}));
+  const url=URL.createObjectURL(new Blob([JSON.stringify({token:test.token,...(!test.question && {take}),reason,votes},null,2)+'\\n'],{type:'application/json'}));
   const link=document.createElement('a');
   link.href=url;
-  link.download='listening-decision.json';
+  link.download=test.question ? 'listening-ballot.json' : 'listening-decision.json';
   link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  byId('status').textContent='Listening decision downloaded.';
+  byId('status').textContent=test.question ? 'Ballot downloaded.' : 'Listening decision downloaded.';
 });
 </script>
 </html>

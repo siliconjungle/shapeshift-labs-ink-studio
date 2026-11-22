@@ -5,8 +5,8 @@ const relative=(file,ref)=>path.resolve(path.dirname(path.resolve(file)),ref);
 
 module.exports=function command([mode,file,config,traceFile],opt,kit) {
   const {check,fields}=kit.KIT.procedural.musicInstruments, R=kit.KIT.music.production.rehearsal;
-  check(typeof file==='string' && ['capture','capture-score','run','keep'].includes(mode),
-    'Use music rehearsal capture, capture-score, run or keep');
+  check(typeof file==='string' && ['capture','capture-score','run','regression','keep'].includes(mode),
+    'Use music rehearsal capture, capture-score, run, regression or keep');
   const out=typeof opt.out==='string' ? path.resolve(opt.out) : undefined;
   const output=value=>{
     if (out) json(out,value);
@@ -41,11 +41,44 @@ module.exports=function command([mode,file,config,traceFile],opt,kit) {
     }
     return output(kept);
   }
+  const host=opt['clap-host']===undefined ? undefined : require('./clap-adapter').load(opt['clap-host']);
+  if (mode==='regression') {
+    check(fields(settings,['score','seed','scenarios','traces','variants','options']) &&
+      (settings.traces===undefined || Array.isArray(settings.traces) && settings.traces.length<=512),
+    'Supply route scenarios or a bank of recorded traces');
+    const traces=(settings.traces ?? []).map(row=>typeof row==='string' ? read(relative(config,row)) : row);
+    const result=R.regression(sources,timeline,{...settings,score:settings.score ?? recipe.adaptive?.score,traces},assets,host);
+    const {report,audio}=result;
+    const listening=report.listening.map(join=>{
+      const traceFile=join.id+'/trace.json';
+      const repair=report.groups.find(group=>group.key===join.key).representative.repair;
+      const repairFile=repair ? join.id+'/repair.json' : null;
+      json(path.join(out,traceFile),result.traces.find(trace=>trace.id===join.trace));
+      if (repairFile) json(path.join(out,repairFile),repair);
+      const takes=join.takes.map(take=>{
+        const file=join.id+'/'+take.id+'.wav';
+        write(path.join(out,file),WAV.encode(audio[join.id][take.id],{encoding:'pcm24'}));
+        return {...take,file};
+      });
+      return {...join,traceFile,repairFile,takes};
+    });
+    const tracePath=path.join(out,'traces.json'), manifest=path.join(out,'manifest.json');
+    json(tracePath,result.traces);
+    json(manifest,{...report,listening,traceFile:'traces.json'});
+    const selected=typeof opt.assert==='string' ? opt.assert : 'reference';
+    if (opt.assert!==undefined) {
+      const gate=report.gates.find(row=>row.id===selected);
+      check(gate && gate.limits.length,'Regression assertion needs a version and at least one failure limit');
+      if (!gate.pass) process.exitCode=1;
+    }
+    const summary={manifest,traces:tracePath,routes:report.count,groups:report.groups.length,gates:report.gates};
+    process.stdout.write(JSON.stringify(summary,null,2)+'\n');
+    return summary;
+  }
   check(fields(settings,['traces','variants','options']) && Array.isArray(settings.traces) &&
     settings.traces.length<=12,'Use a rehearsal request with up to twelve traces');
   const traces=settings.traces.map(row=>typeof row==='string' ? read(relative(config,row)) : row);
   const variants=settings.variants ?? [];
-  const host=opt['clap-host']===undefined ? undefined : require('./clap-adapter').load(opt['clap-host']);
   const {audio,report}=R.run(sources,timeline,traces,variants,assets,settings.options,host);
   const listing=report.listening.map(take=>{
     const key=take.trace+':'+take.id;

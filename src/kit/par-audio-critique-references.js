@@ -5,16 +5,17 @@
   const prose=(value,max)=>typeof value==='string' && value.trim().length>0 && value.length<=max;
   const words=value=>value.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   const normalized=value=>words(value).join(' ');
-  function audioHash(samples) {
+  function audioHash(samples, transform=value=>value) {
     const point=new DataView(new ArrayBuffer(8));
     let hash=2166136261;
     for (const sample of samples) {
-      point.setFloat64(0,sample,true);
+      point.setFloat64(0,transform(sample),true);
       hash=Math.imul(hash ^ point.getUint32(0,true),16777619);
       hash=Math.imul(hash ^ point.getUint32(4,true),16777619);
     }
     return (hash>>>0).toString(36);
   }
+  const excerptHash=samples=>audioHash(samples,value=>Math.min(8388607,Math.round(value*8388608)));
   function assetSignature(assets) {
     return Object.keys(assets).sort().map(name=>{
       const {samples,channels,sampleRate}=P.mediaGraph.audio(assets[name]);
@@ -65,5 +66,5 @@
     }).filter(Boolean);
     return hits.sort((a,b)=>b.score-a.score || a.id.localeCompare(b.id)).slice(0,options.limit ?? 12);
   }
-  P.musicCritiqueReferences=Object.freeze({tag,search,tags,prose,audioHash,assetSignature,decisionFormat});
+  P.musicCritiqueReferences=Object.freeze({tag,search,tags,prose,audioHash,excerptHash,assetSignature,decisionFormat});
 })(KIT.procedural);

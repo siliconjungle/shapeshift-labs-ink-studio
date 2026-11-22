@@ -113,3 +113,32 @@ test('CLI captures recordings, publishes snippets and exports a production timel
   assert.equal(read('kept.json').timeline.transitions[0].pickup,.2);
   assert.deepEqual(read('kept.json').intents,early.intents);
 });
+
+test('seeded regression groups real joins, compares revisions over the same routes and gates by affected route',()=>{
+  const scenarios=[{id:'entry',count:6,end:[6.5,7.2],updates:[
+    {time:[2.17,2.39],parameters:{open:1}},{time:[4.13,4.21],cues:[{cue:'hit'}]}]},
+    {id:'dwell',count:4,end:[7.5,8]}];
+  const options={sampleRate:rate,watchTracks:['lead'],limit:3,listenFor:['hook-collision','exhausted-dwell'],
+    checks:{dwells:[{id:'idle-hook',segment:'search',maxConsecutive:3}]},
+    maxAffected:{'hook-collision':0}};
+  const seed=37;
+  const actual=R.regression(sources,timeline,{score:adaptive,scenarios,seed,variants:[revision],options});
+  const {report,audio,traces}=actual;
+  assert.equal(report.count,10);
+  assert.deepEqual(R.seedTraces(adaptive,scenarios,seed),traces);
+  assert.notDeepEqual(R.seedTraces(adaptive,scenarios,seed+1),traces);
+  const collision=report.groups.find(row=>row.family==='hook-collision');
+  assert.equal(collision.versions[0].routes,6);
+  assert.equal(collision.versions[1].routes,0);
+  assert.equal(collision.representative.repair.stingerRules[0].resource,'strike');
+  const dwell=report.groups.find(row=>row.family==='exhausted-dwell');
+  assert.equal(dwell.versions[0].routes,4);
+  assert.deepEqual(report.gates.map(gate=>gate.pass),[false,true]);
+  const join=report.listening.find(row=>row.key===collision.key), trace=traces.find(row=>row.id===join.trace);
+  const original=A.renderTimeline(sources,{...timeline,end:trace.end},trace.intents,{}, {sampleRate:rate});
+  const samples=original.value.samples.slice(join.firstSample*2,join.endSample*2);
+  const audition=audio[join.id].reference.samples, {gain}=join.takes[0].playback;
+  assert.equal(audition.length,samples.length);
+  assert(audition.every((value,i)=>Math.abs(value-samples[i]*gain)<.000001));
+  assert.equal(join.takes[1].issues.length,0);
+});

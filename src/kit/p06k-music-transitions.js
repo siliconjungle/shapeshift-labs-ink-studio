@@ -7,7 +7,7 @@
     check(finite(value,lo,hi),'Invalid transition '+label);
     return value;
   };
-  function schedule(sources,spec,intents=[],assets={},host) {
+  function schedule(sources,spec,intents=[],assets={},host,bank=new Map()) {
     check(record(sources) && Object.keys(sources).length<=32 && Object.keys(sources).every(id) &&
       fields(spec,['entry','segments','transitions','stingers','stingerRules','end','thematic','phrasing','performers']) && record(spec.segments) &&
       Object.keys(spec.segments).length<=64 && Object.keys(spec.segments).every(id) &&
@@ -15,7 +15,8 @@
     const end=numeric(spec.end,.001,300,'end'), compiled={};
     const load=name=>{
       check(Object.hasOwn(sources,name),'Unknown production source');
-      return compiled[name] ??= A.compile(sources[name],assets,host);
+      if (!bank.has(name)) bank.set(name,A.compile(sources[name],assets,host));
+      return compiled[name]=bank.get(name);
     };
     const segments=Object.fromEntries(Object.entries(spec.segments).map(([name,raw])=>{
       check(fields(raw,['source','start','end','loop','layers','gain']) && Object.hasOwn(sources,raw.source),
@@ -190,7 +191,7 @@
       ...(phrasing && {phrasing:phrasing.report()})};
   }
 
-  function renderScheduled(timeline,spec,options={}) {
+  function renderScheduled(timeline,spec,options={},shared) {
     check(fields(options,['sampleRate','start','end','stems','world']),'Invalid production timeline render options');
     const {sampleRate=48000,start:beginPoint=0,end:endPoint=timeline.duration,stems=false}=options;
     const start=T.seconds(T.read(beginPoint)),end=T.seconds(T.read(endPoint));
@@ -230,8 +231,8 @@
       if (first>=last || first+span+Math.ceil(clip.tail*sampleRate)<=begin) continue;
       const additions=world?.additions.get(clip);
       const separate=clip.kind==='segment' && timeline.performerSpec?.uses.get(clip.source);
-      const key=JSON.stringify([clip.source,clip.from,clip.to,clip.tail,clip.layers,Boolean(separate)]);
-      let tracks=additions ? undefined : cache.get(key);
+      const key=JSON.stringify([clip.source,clip.from,clip.to,clip.tail,clip.layers,separate ? [...separate] : null]);
+      let tracks=additions ? undefined : cache.get(key) ?? shared?.find(sampleRate,key);
       if (!tracks) {
         let music=timeline.compiled[clip.source];
         let layers=clip.layers;
@@ -254,7 +255,10 @@
         tracks=render.stems;
         cached+=Object.values(tracks).reduce((sum,stem)=>sum+stem.samples.length,0);
         check(cached<=48e6,'Production timeline exceeds its source audio budget');
-        if (!additions) cache.set(key,tracks);
+        if (!additions) {
+          cache.set(key,tracks);
+          shared?.keep(sampleRate,key,tracks);
+        }
       }
       for (const [part,stem] of Object.entries(tracks)) add(part,stem,first,{...clip,span});
     }
@@ -266,9 +270,32 @@
       ...(world && {world:world.report}),
       ...(A.meters(value))}};
   }
+  function study(sources,assets,host) {
+    const bank=new Map(), clips=new Map(), budget=3e6;
+    let samples=0;
+    const shared={
+      find:(rate,key)=>clips.get(rate+':'+key)?.tracks,
+      keep(rate,key,tracks) {
+        const count=Object.values(tracks).reduce((sum,track)=>sum+track.samples.length,0);
+        if (count>budget) return;
+        while (samples+count>budget) {
+          const oldest=clips.keys().next().value;
+          samples-=clips.get(oldest).count;
+          clips.delete(oldest);
+        }
+        clips.set(rate+':'+key,{tracks,count});
+        samples+=count;
+      }
+    };
+    return {
+      schedule:(spec,intents)=>schedule(sources,spec,intents,assets,host,bank),
+      render:(schedule,spec,options)=>renderScheduled(schedule,spec,options,shared)
+    };
+  }
+
   function renderTimeline(sources,spec,intents,assets={},options={},host) {
     return renderScheduled(schedule(sources,spec,intents,assets,host),spec,options);
   }
-  P.musicTimeline=Object.freeze({schedule,renderScheduled});
+  P.musicTimeline=Object.freeze({schedule,renderScheduled,study});
   P.musicProduction=Object.freeze({...A,renderTimeline});
 })(KIT.procedural);

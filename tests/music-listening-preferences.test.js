@@ -142,3 +142,40 @@ test('CLI persists separate test records and reads the same archive into a new p
   save('brief.json',{...brief,listeningContext:context,memory:'memory',criterion:'shape'});
   assert.equal(cli('plan','cue.json','brief.json').session.takes[1].id,'delay-bass');
 });
+
+test('priority spends one ballot on the broad decision, preserves two cues, and updates after a tie',()=>{
+  const baseline={...score(),gain:0};
+  const checkPlan=C.plan(baseline,{...brief,kind:'custom',listeningContext:context,takes:[
+    {id:'change-arrival',hypothesis:'Leave a hole in the bass at the return.',
+      revision:{cueMap:{silence:[{from:4,to:5,parts:['bass'],mode:'cut'}]}}},
+    {id:'closer-drums',hypothesis:'Shorten the room on the playable drum strike.',
+      revision:{cueMap:{room:[{from:4,to:5,parts:['drums'],send:.02}]}}},
+    {id:'inaudible',hypothesis:'Keep the exact existing overall gain.',revision:{gain:0}}
+  ]});
+  const question=(id,move,impacts)=>({id,plan:checkPlan,criterion:'shape',question:'Which entrance feels more deliberate?',
+    impacts,moves:['reference',move]});
+  const arrival={...question('arrival','change-arrival',{timing:3,orchestration:2}),
+    later:{fromBeat:6.5,toBeat:8}};
+  const small=question('drums','closer-drums',{space:4});
+  const identical=question('identical','inaudible',{space:10});
+  const initial=C.prioritize(baseline,[arrival,small,identical],undefined,{}, {budget:1,seed:88});
+  assert.equal(initial.report.selected[0].request,'arrival');
+  assert.equal(initial.report.skipped[0].reason,'negligible-rendered-difference');
+  const {test,key,audio}=initial.tests['question-1'];
+  assert.equal(test.trials.length,1);
+  assert.deepEqual(test.criteria,['shape']);
+  assert.equal(test.sequence[1].range.fromBeat,6.5);
+  assert.equal(audio.a.samples.length/2,test.sequence[1].endFrame);
+  assert(!JSON.stringify(test).includes('change-arrival'));
+  const ballot={token:test.token,reason:'Both returns feel equally well set up.',
+    votes:[{listener:'one',trial:'pair-1',preferences:{shape:'tie'}}]};
+  const archive=C.archiveBallot(undefined,key,ballot,audio);
+  assert.equal(archive.entries[0].selected,null);
+  assert.equal(archive.entries[0].excerpt.votes[0].preferences.shape,'tie');
+  assert.deepEqual(archive.entries[0].excerpt.sequence,test.sequence);
+  const recall=C.recallPreferences(archive,{context,criterion:'shape'});
+  assert.equal(recall.preferred,null);
+  assert.deepEqual(recall.pairs[0].votes,[0,0,1]);
+  assert.throws(()=>C.archiveBallot(undefined,key,ballot,{...audio,a:audio.b}),/match the blind listening excerpt/);
+  assert.equal(C.prioritize(baseline,[arrival,small],archive,{}, {budget:1,seed:88}).report.selected[0].request,'drums');
+});

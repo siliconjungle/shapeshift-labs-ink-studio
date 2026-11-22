@@ -89,3 +89,57 @@ Headless graphs expose `music.rememberListeningPreference` and
 `recallPreferences(memory, query)`. Pass `undefined` to start an archive
 with the first reference. The returned versioned snapshot can be serialized
 as JSON and loaded by the CLI as an alternative to a directory.
+
+## Choose what to ask
+
+An agent can rank questions about an addressed passage before asking for
+any votes. Each question uses a normal critique plan with a listening
+context and names the downstream decisions it could affect. Weights from
+0.1 to 10 express how consequential those decisions are. Use the same
+decision ID across questions when they affect the same choice.
+
+```json
+{
+  "memory": "listening-memory",
+  "options": {"budget": 2, "seed": 96},
+  "questions": [
+    {
+      "id": "recognize-call",
+      "plan": "call-plan.json",
+      "criterion": "identity",
+      "question": "Which three-note call would you recognize at the return?",
+      "moves": ["reference", "wide-answer"],
+      "impacts": {"lead-performance": 3, "return-orchestration": 2},
+      "later": {"fromBeat": 124, "toBeat": 128, "gapSeconds": 0.45}
+    }
+  ]
+}
+```
+
+Omit `memory` for a fresh archive and `moves` to consider every available
+pair in the plan. Use `later` to compare both the original appearance and
+the recall inside one level-matched audition. Ink retains both score
+addresses and marks the start of the later excerpt in both takes.
+
+```sh
+ink-studio music critique prioritize cue.json questions.json --out choices
+ink-studio music critique archive-ballot listening-memory choices/question-1/review-key.json ballot.json
+```
+
+The queue ranks the expected information from an additional ballot using
+context-matched A, B, and tie counts. It discounts decisions a selected
+question already covers. It renders the shortlisted pairs, then skips
+duplicate or near-identical level-matched audio. Share only a question's
+`public` folder. Its player asks one question and downloads a ballot with
+the listener's choice or tie and their reason. The private key verifies
+the excerpt before the archive stores the WAVs and the two edit
+descriptions with the ballot. A vote can guide recall and the next queue
+without changing the cue. The ranking is a budgeting heuristic informed
+by [pairwise preference research](https://www.nist.gov/publications/human-preferences-dueling-bandits).
+
+Use `critique.prioritize(source, questions, memory, assets, options)` and
+`critique.archiveBallot(memory, key, ballot, audio)` in JavaScript, or
+`music.prioritizeListeningQuestions` and `music.archiveListeningBallot`
+in a graph. The selected packs expose public metadata and audio alongside
+their private keys. The CLI archive keeps the audio beside the JSON
+memory record, under its test token.

@@ -115,6 +115,11 @@ const memoryPlan={op:'music.planCritique',inputs:{...critiquePlan.inputs,brief:{
 const keepMemoryExample={op:'music.keepCritique',inputs:{source:production,key:link('blind','key'),
   token:link('blind','token'),selection:{take:'a',reason:'The held breath makes the pickup easier to follow.',
     votes:[{listener:'example',trial:'pair-1',preferences:{shape:'a'}}]}}};
+const questionQueue={op:'music.prioritizeListeningQuestions',inputs:{source:production,plan:link('plan'),questions:[{
+  id:'arrival',criterion:'shape',question:'Which entrance has more room to breathe?',
+  impacts:{'opening-arrangement':2},moves:['reference','empty-beat']}],options:{seed:4,budget:1}}};
+const focusedBlind={op:'music.blindCritique',inputs:{source:production,plan:link('plan'),
+  options:{moves:['reference','empty-beat'],criterion:'shape',question:'Which entrance has more room to breathe?'}}};
 const rememberExample={op:'music.rememberListeningPreference',inputs:{reference:link('decision','reference')}};
 
 const cameraGrid = { op: 'coord.cameraGrid', inputs: { width: 64, height: 48, camera: { dist: 4 } } };
@@ -448,6 +453,10 @@ const specifications = {
     inputs:rememberExample.inputs},
   'music.recallListeningPreferences': {nodes:{plan:memoryPlan,blind:blindCritique,decision:keepMemoryExample,remember:rememberExample},
     inputs:{memory:link('remember'),query:{context:memoryContext,criterion:'shape',moves:['reference','empty-beat']}}},
+  'music.prioritizeListeningQuestions': {nodes:{plan:memoryPlan},inputs:questionQueue.inputs},
+  'music.archiveListeningBallot': {nodes:{plan:memoryPlan,blind:focusedBlind},inputs:{
+    key:link('blind','key'),audio:link('blind','audio'),token:link('blind','token'),ballot:{
+      reason:'The two arrivals sound equally clear.',votes:[{listener:'example',trial:'pair-1',preferences:{shape:'tie'}}]}}},
   'music.tagListeningReference': {inputs:{source:audio,settings:referenceSettings}},
   'music.findListeningReferences': {inputs:{references:[{format:'ink-studio/critique-reference',version:1,...referenceSettings}],
     options:{tags:['short tail']}}},
@@ -457,6 +466,8 @@ const specifications = {
     settings:{id:'short',end:1.4}}},
   'music.rehearseTransitions': {inputs:{sources:{score:production},timeline:rehearsalTimeline,traces:[rehearsalTrace],
     variants:[rehearsalEdit],options:{sampleRate:8000,limit:1}}},
+  'music.regressAdaptiveScore': {inputs:{sources:{score:production},timeline:rehearsalTimeline,
+    settings:{traces:[rehearsalTrace],variants:[rehearsalEdit],options:{sampleRate:8000,limit:1}}}},
   'music.reviseTransitions': {inputs:{sources:{score:production},timeline:rehearsalTimeline,revision:rehearsalEdit}},
   'music.arrange': { inputs:{source:arrangement} },
   'music.revise': { inputs:{source:arrangement,options:{edits:[{part:'lead',operations:[{type:'answer'}]}]}} },

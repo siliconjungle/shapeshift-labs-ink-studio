@@ -123,3 +123,82 @@ The JavaScript API is `KIT.music.production.rehearsal` with
 `music.captureScoreTrace`, `music.rehearseTransitions`, and
 `music.reviseTransitions`. The transition matrix follows a familiar
 source/destination authoring model. [Wwise's transition guide](https://www.audiokinetic.com/download/documents/WwiseProjectAdventure_en.pdf)
+
+## Run a regression over seeded and recorded routes
+
+Use `music rehearsal regression` after authoring a linear cue and the
+adaptive score that drives it. Define route scenarios as time-stamped
+inputs to the actual score state machine. A timestamp or end can be a
+fixed number of seconds or a two-element jitter range. Each route
+receives a repeatable seed. Supply recorded `traces` in the same request
+when specific real routes also matter. The command uses the score from
+the timeline recipe's `adaptive.score` or from `score` in the suite.
+
+```json
+{
+  "seed": 7744,
+  "scenarios": [
+    {
+      "id": "turn-back",
+      "count": 72,
+      "end": [6.5, 7.0],
+      "updates": [
+        {"time": [0.65, 0.85], "parameters": {"open": 1}},
+        {"time": [1.4, 1.7], "parameters": {"open": 0}},
+        {"time": [2.2, 2.4], "parameters": {"open": 1}}
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "id": "cleaner-return",
+      "stingerRules": [{"resource": "latch", "section": "reveal", "linked": false}]
+    }
+  ],
+  "options": {
+    "sampleRate": 12000,
+    "watchTracks": ["lead"],
+    "checks": {
+      "hooks": [{"id": "call", "segments": ["reveal"], "tracks": ["lead"], "minGap": 2.5}],
+      "dwells": [{"id": "holding", "segment": "search", "maxConsecutive": 3}]
+    },
+    "listenFor": ["early-hook-return", "exhausted-dwell", "hook-collision"],
+    "maxAffected": {"hook-collision": 0}
+  }
+}
+```
+
+```sh
+ink-studio music rehearsal regression timeline.json routes.json --out review --assert cleaner-return
+```
+
+The runner streams full mixes of up to 512 traces for each version,
+within its total mixing budget. Each version uses the same intents and
+world events. Repeated source windows share the normal timeline renderer's
+stems. Only representative WAV windows are exported. The manifest groups
+occurrences by failure and passage, counts affected routes separately
+from total occurrences, and compares both counts for every edit. Use
+`listenFor` to choose what gets auditioned without changing the scan.
+`--assert` tests route counts against `maxAffected` for the named version
+and returns a nonzero exit status on a failed gate after writing the
+report, comparable WAVs, and exact `traces.json`.
+
+A hook policy measures the time between first attacks in eligible
+placements. Narrow it by source when the same scene has different
+arrangements. A dwell policy checks consecutive sounding uses of the
+same source in one visit. Both policies accept a normal transition
+`repair` to attach to the representative, such as a later entry marker
+or a phrase rotation using existing sources. A played stinger is
+checked near its first scheduled attack and can suggest a withholding
+rule scoped to the scene and linkage. These signals flag passages for
+listening. Set a limit only for behavior the score should avoid.
+Add a proposed repair to `variants` to measure it over the full suite,
+then use `music rehearsal keep` to write the chosen timeline. Each
+audition folder has its own `trace.json` and, when available, an editable
+`repair.json` ready for `music rehearsal keep` or a new suite.
+
+Use `rehearsal.seedTraces(score, scenarios, seed)` and
+`rehearsal.regression(sources, timeline, settings, assets)` from
+JavaScript, or use `music.regressAdaptiveScore` in a graph. To reproduce
+both workflows and their audio, run
+`node examples/music-production/listening-regression.cjs demo-output`.

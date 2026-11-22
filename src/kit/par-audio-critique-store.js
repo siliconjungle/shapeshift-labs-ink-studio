@@ -30,7 +30,8 @@
       trialIndex.set(trial.id,{...trial,pair});
     }
     const seen=new Set(), votes=Array.from(raw,row=>{
-      check(fields(row,['trial','listener','preferences']) && id(row.trial) && id(row.listener) &&
+      check(fields(row,['trial','listener','preferences','reason']) && id(row.trial) && id(row.listener) &&
+        (row.reason===undefined || R.prose(row.reason,2000)) &&
         fields(row.preferences,criteria) && Object.keys(row.preferences).length,'A vote needs a trial, listener and preference');
       const trial=trialIndex.get(row.trial), mark=row.listener+':'+row.trial;
       check(trial && !seen.has(mark),'Vote once per listener and trial');
@@ -71,7 +72,8 @@
 
   function entry(raw) {
     const addr=raw?.focus;
-    check(fields(raw,['id','title','reason','token','selected','focus','listening']) && id(raw.id) && id(raw.selected) &&
+    check(fields(raw,['id','title','reason','token','selected','focus','listening','excerpt']) && id(raw.id) &&
+      (raw.selected===null ? raw.excerpt!==undefined : id(raw.selected)) &&
       R.prose(raw.title,160) && R.prose(raw.reason,2000) && typeof raw.token==='string' && /^test-[a-z0-9]+-[a-z0-9]+$/.test(raw.token) &&
       fields(addr,['fromBeat','toBeat','firstSample','endSample','start','end']) &&
       finite(addr.fromBeat,0,65536) && finite(addr.toBeat,addr.fromBeat,65536) && addr.toBeat>addr.fromBeat &&
@@ -79,12 +81,30 @@
       finite(addr.start,0,3600) && finite(addr.end,addr.start,3600) && addr.end>addr.start,
     'Invalid blind preference provenance or passage');
     const listening=heard(raw.listening);
-    check(listening.pairs.some(({moves,criteria})=>moves.includes(raw.selected) &&
+    check(raw.selected===null || listening.pairs.some(({moves,criteria})=>moves.includes(raw.selected) &&
       Object.values(criteria).some(tally=>tally[moves.indexOf(raw.selected)]>0)),
     'The kept move needs support from a blind vote');
+    const excerpt=raw.excerpt;
+    if (excerpt!==undefined) {
+      check(fields(excerpt,['question','criterion','range','sampleRate','takes','votes','sequence']) &&
+        R.prose(excerpt.question,400) && criteria.includes(excerpt.criterion) && integer(excerpt.sampleRate,8000,48000) &&
+        fields(excerpt.range,['start','end','firstSample','endSample','fromBeat','toBeat']) &&
+        integer(excerpt.range.firstSample,0,addr.firstSample) && integer(excerpt.range.endSample,addr.endSample,192e6) &&
+        finite(excerpt.range.start,0,addr.start) && finite(excerpt.range.end,addr.end,3600) &&
+        finite(excerpt.range.fromBeat,0,addr.fromBeat) && finite(excerpt.range.toBeat,addr.toBeat,65536) &&
+        P.musicInstruments.record(excerpt.takes) && Object.keys(excerpt.takes).length===2 &&
+        Object.entries(excerpt.takes).every(([label,take])=>id(label) && fields(take,['move','audioHash','change']) &&
+          id(take.move) && /^[a-z0-9]+$/.test(take.audioHash ?? '') && R.prose(take.change,640)) &&
+        Array.isArray(excerpt.votes) && excerpt.votes.every(vote=>Object.keys(vote?.preferences ?? {}).join()===excerpt.criterion),
+      'Invalid listening question or excerpt provenance');
+      if (excerpt.sequence!==undefined) sequenceFrames(excerpt.sequence,excerpt.range);
+      const labels=Object.fromEntries(Object.entries(excerpt.takes).map(([label,take])=>[label,take.move]));
+      const {pairs}=ballots(labels,[{id:'pair-1',takes:Object.keys(labels)}],excerpt.votes);
+      check(same(listening.pairs,pairs),'The archived listening counts must match the excerpt ballots');
+    }
     return {id:raw.id,title:raw.title,reason:raw.reason,token:raw.token,selected:raw.selected,
       focus:{fromBeat:addr.fromBeat,toBeat:addr.toBeat,firstSample:addr.firstSample,endSample:addr.endSample,
-        start:addr.start,end:addr.end},listening};
+        start:addr.start,end:addr.end},listening,...(excerpt && {excerpt})};
   }
 
   function store(raw={format,version:1,entries:[]}) {
@@ -105,13 +125,53 @@
     const {pairs}=ballots(labels,trials,reference.votes);
     const observed=heard(listening);
     check(same(observed.pairs,heard({...listening,pairs}).pairs),'The recorded pair counts must match the blind ballots');
-    const entries=store(raw), next=entry({id:reference.id,title:reference.title,reason:reference.reason,
-      token:reference.token,selected:reference.move,focus:reference.focus,listening:observed});
-    const prior=entries.find(row=>row.token===next.token);
+    return append(raw,entry({id:reference.id,title:reference.title,reason:reference.reason,
+      token:reference.token,selected:reference.move,focus:reference.focus,listening:observed}));
+  }
+
+  function append(raw,next) {
+    const entries=store(raw), prior=entries.find(row=>row.token===next.token);
     check(!prior || same(next,prior),'This blind test is already archived with a different decision');
     check(prior || entries.length<256,'Listening preference memory exceeds its test budget');
     if (!prior) entries.push(next);
     return P.data.freeze({format,version:1,entries:entries.sort((a,b)=>a.token.localeCompare(b.token))});
+  }
+
+  function sequenceFrames(raw,context) {
+    const length=context.endSample-context.firstSample;
+    if (raw===undefined) return length;
+    check(Array.isArray(raw) && raw.length===2 && Array.from(raw).every(row=>
+      fields(row,['range','firstFrame','endFrame']) && fields(row.range,['start','end','firstSample','endSample','fromBeat','toBeat']) &&
+      integer(row.firstFrame,0,3e6) && integer(row.endFrame,row.firstFrame+8,3e6) &&
+      integer(row.range.firstSample,0,192e6) && integer(row.range.endSample,row.range.firstSample+8,192e6) &&
+      row.range.endSample-row.range.firstSample===row.endFrame-row.firstFrame) &&
+      raw[0].firstFrame===0 && raw[0].endFrame===length && same(raw[0].range,context) &&
+      raw[1].firstFrame>length && raw[1].range.firstSample>=context.endSample,
+    'Invalid linked listening excerpt timing');
+    return raw[1].endFrame;
+  }
+
+  function rememberBallot(raw,key,decision,audio) {
+    const {test,labels,session,listeningContext,audioHashes}=key ?? {};
+    check(key?.format==='ink-studio/blind-listening-key' && key.version===1 && test?.format==='ink-studio/blind-listening' &&
+      P.musicInstruments.record(labels) && P.musicInstruments.record(audioHashes) && fields(audio,Object.keys(labels)) &&
+      test.trials?.length===1 &&
+      test.trials[0]?.id==='pair-1' && test.criteria?.length===1 && Array.isArray(session?.takes) &&
+      fields(decision,['token','reason','votes']) && decision.token===test.token && R.prose(decision.reason,2000),
+    'Archive a focused listening question with its blind key and ballot reason');
+    const {pairs,votes}=ballots(labels,test.trials,decision.votes);
+    const frames=sequenceFrames(test.sequence,test.range);
+    for (const label of Object.keys(labels)) {
+      const clip=P.mediaGraph.audio(audio[label]);
+      check(clip.sampleRate===test.sampleRate && clip.channels===2 &&
+        clip.samples.length===2*frames &&
+        R.excerptHash(clip.samples)===audioHashes[label],'The archived audio must match the blind listening excerpt');
+    }
+    const takes=Object.fromEntries(Object.entries(labels).map(([label,move])=>
+      [label,{move,audioHash:audioHashes[label],change:session.takes.find(row=>row.id===move)?.hypothesis}]));
+    return append(raw,entry({id:test.id,title:test.question?.slice(0,160),reason:decision.reason,
+      token:test.token,selected:null,focus:test.focus,listening:{context:listeningContext,test:test.id,pairs},
+      excerpt:{question:test.question,criterion:test.criteria[0],range:test.range,sampleRate:test.sampleRate,takes,votes,...(test.sequence && {sequence:test.sequence})}}));
   }
 
   function recall(raw,query) {
@@ -143,7 +203,8 @@
         for (let i=0;i<3;i++) totals[i]+=tally[i];
         score+=(tally[0]-tally[1])/(tally[0]+tally[1]+tally[2]);
         rationale.push({id:row.id,test:row.listening.test,token:row.token,title:row.title,selected:row.selected,
-          reason:row.reason,context:row.listening.context,focus:row.focus,votes:tally});
+          reason:row.reason,context:row.listening.context,focus:row.focus,votes:tally,
+          ...(row.excerpt && {excerpt:row.excerpt})});
       }
       score=round(score);
       for (const [i,move] of group.moves.entries()) {
@@ -165,5 +226,5 @@
     return {context:here,criterion,matchingTests:matching.length,usedTests:used.size,suppressed,preferred,ranking:ranked,pairs};
   }
 
-  P.musicCritiqueMemory=Object.freeze({context,criteria,ballots,remember,recall,format});
+  P.musicCritiqueMemory=Object.freeze({context,criteria,ballots,remember,rememberBallot,recall,format});
 })(KIT.procedural);

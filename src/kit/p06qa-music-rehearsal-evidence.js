@@ -46,6 +46,29 @@
     return hits.sort((a,b)=>Number(b.holding)-Number(a.holding) || Math.abs(a.delta)-Math.abs(b.delta)).slice(0,8);
   }
 
+  function placementAttack(timeline,clip,wanted,indexes,rate) {
+    if (!clip || !clip.gain) return null;
+    const cue=timeline.compiled[clip.source];
+    const tracks=wanted?.length ? wanted : Object.keys(cue.tracks);
+    const end=Math.min(clip.to,clip.from+timeline.duration-clip.at);
+    let earliest=Infinity;
+    for (const track of tracks) {
+      if (!visible(cue,clip,track)) continue;
+      const part=cue.tracks[track], key=clip.source+'/'+track;
+      if (!indexes.has(key)) indexes.set(key,cue.events[track].filter(note=>note.velocity>0 &&
+        (part.external || part.play.prepare(note,rate,note.gate).duration>0))
+        .map(note=>note.start ?? note.time).sort((a,b)=>a-b));
+      const times=indexes.get(key);
+      let low=0,high=times.length;
+      while (low<high) {
+        const middle=(low+high)>>>1;
+        if (times[middle]<clip.from-eps) low=middle+1; else high=middle;
+      }
+      if (times[low]<end-eps) earliest=Math.min(earliest,clip.at+Math.max(0,times[low]-clip.from));
+    }
+    return Number.isFinite(earliest) ? earliest : null;
+  }
+
   function pitches(timeline,clip,from,to) {
     if (!clip || to<from) return [];
     const music=timeline.compiled[clip.source], notes=new Set();
@@ -87,8 +110,8 @@
 
   function observe(trace,timeline,result,options) {
     const {report,value}=result, clips=timeline.placements.filter(clip=>clip.kind==='segment');
-    const {watchTracks,radius}=options;
-    const cases=[], loops=[], indexes=new Map();
+    const {watchTracks,radius,measureStingerAttack}=options;
+    const cases=[], loops=[], indexes=new Map(), onsets=new Map();
     const append=(row)=>{
       const signal=audioEvidence(value,row.time), issues=[];
       const issue=(name,weight)=>issues.push({kind:name,weight});
@@ -133,8 +156,11 @@
         outgoing:{source:left.source,position:left.to},incoming:{source:right.source,position:right.from}});
     }
     for (const [i,cue] of timeline.cueDecisions.entries()) {
-      const hook=pointNotes(timeline,clips,cue.time,watchTracks,radius,indexes);
-      append({id:'cue-'+(i+1),kind:'stinger',...cue,hook});
+      const placement=measureStingerAttack && cue.status==='played' ? timeline.placements.find(clip=>
+        clip.kind==='stinger' && clip.segment===cue.segment && near(clip.at,cue.time)) : null;
+      const attack=measureStingerAttack ? placementAttack(timeline,placement,null,onsets,value.sampleRate) : cue.time;
+      const hook=attack===null ? [] : pointNotes(timeline,clips,attack,watchTracks,radius,indexes);
+      append({id:'cue-'+(i+1),kind:'stinger',...cue,hook,...(measureStingerAttack && {attack})});
     }
     for (const [i,row] of trace.worldEvents.entries()) {
       const hook=pointNotes(timeline,clips,row.time,watchTracks,radius,indexes);
@@ -169,5 +195,5 @@
     });
   }
 
-  P.adaptiveRehearsalEvidence=Object.freeze({observe,matched,sample,audioEvidence});
+  P.adaptiveRehearsalEvidence=Object.freeze({observe,matched,sample,audioEvidence,placementAttack});
 })(KIT.procedural);

@@ -163,12 +163,47 @@
     return result;
   }
 
+  function sequence(takes,score,assets,range,later,rate,target,ceiling) {
+    const end=score.arrangement.sections.at(-1).end;
+    check(fields(later,['fromBeat','toBeat','gapSeconds']) && finite(later.fromBeat,range.toBeat,end) &&
+      finite(later.toBeat,later.fromBeat,end) && later.toBeat>later.fromBeat &&
+      finite(later.gapSeconds ?? .45,.15,2),'Choose a later listening range and a short gap');
+    const followup=E.address(score,rate,later.fromBeat,later.toBeat);
+    const lengths=[range,followup].map(part=>part.endSample-part.firstSample);
+    check(lengths.every(frames=>integer(frames,8,30*rate)) && (lengths[0]+lengths[1])*takes.length<=6e6,
+      'Paired listening excerpts exceed the render budget');
+    const next=lengths[0]+Math.round((later.gapSeconds ?? .45)*rate);
+    const windows=[{range,firstFrame:0,endFrame:lengths[0]},
+      {range:followup,firstFrame:next,endFrame:next+lengths[1]}];
+    const waves=takes.map(take=>{
+      const samples=new Float32Array((next+lengths[1])*2);
+      for (const [i,{range,firstFrame}] of windows.entries()) {
+        const start=score.clock.timeAt({beat:range.fromBeat}),end=score.clock.timeAt({beat:range.toBeat});
+        const {value}=A.render(take.production,assets,{start,end,sampleRate:rate});
+        check(value.samples.length===lengths[i]*2,'Later excerpts need the same score clock for every take');
+        const fade=Math.min(Math.floor(lengths[i]/2),Math.round(.008*rate));
+        for (let frame=0;frame<lengths[i];frame++) {
+          const gain=Math.min(1,frame/fade,(lengths[i]-1-frame)/fade);
+          samples[2*(firstFrame+frame)]=value.samples[frame*2]*gain;
+          samples[2*(firstFrame+frame)+1]=value.samples[frame*2+1]*gain;
+        }
+      }
+      return {samples,sampleRate:rate,channels:2};
+    });
+    const matched=P.adaptiveRehearsalEvidence.matched(waves,target,ceiling);
+    return {windows,takes:takes.map((take,i)=>({...take,value:matched[i].value})),lufs:matched.find(row=>row.playback.lufs!==null)?.playback.lufs ?? null};
+  }
+
   function blind(source,planned,assets={},options={}) {
     check(planned?.format===planFormat && planned.version===1 && Array.isArray(planned.session?.takes) &&
-      planned.session.takes.length>=2 && fields(options,['id','seed','target','ceiling']) &&
-      id(options.id ?? 'listening-test') && Number.isSafeInteger(options.seed ?? 0),
+      planned.session.takes.length>=2 && fields(options,['id','seed','target','ceiling','moves','criterion','question','later']) &&
+      id(options.id ?? 'listening-test') && Number.isSafeInteger(options.seed ?? 0) &&
+      (options.moves===undefined || Array.isArray(options.moves) && options.moves.length===2 &&
+        new Set(options.moves).size===2 && Array.from(options.moves).every(move=>planned.session.takes.some(row=>row.id===move))) &&
+      (options.question===undefined && options.criterion===undefined || options.moves && criteria.includes(options.criterion) &&
+        R.prose(options.question,400)) && (options.later===undefined || options.question),
     'Blind listening needs at least one editable alternative and a valid test ID and seed');
-    const {id:name='listening-test',seed=0,target=-18,ceiling=-1.2}=options;
+    const {id:name='listening-test',seed=0,target=-18,ceiling=-1.2,moves,criterion,question,later}=options;
     const {sampleRate,context,focus}=planned.evidence ?? {};
     const score=A.compile(source,assets), {lead,layer,bass,rivals}=planned.tracks ?? {};
     const endBeat=score.arrangement.sections.at(-1).end;
@@ -182,27 +217,34 @@
     check(sameAddress(context,range) && sameAddress(focus,observed) &&
       focus.start>=context.start && focus.end<=context.end && focus.end>focus.start,
     'The listening ranges must match the original score');
-    const {takes,report}=A.reviewProducer(source,planned.session,assets,{start:score.clock.timeAt({beat:context.fromBeat}),
+    const session=moves ? {...planned.session,takes:planned.session.takes.filter(row=>row.id==='reference' || moves.includes(row.id))} : planned.session;
+    const {takes,report}=A.reviewProducer(source,session,assets,{start:score.clock.timeAt({beat:context.fromBeat}),
       end:score.clock.timeAt({beat:context.toBeat}),sampleRate,target,ceiling,focus:[]});
-    const order=shuffle(takes,seed), labels=Object.fromEntries(order.map((row,i)=>[String.fromCharCode(97+i),row.id]));
+    const relevant=takes.filter(take=>!moves || moves.includes(take.id));
+    const joined=later && sequence(relevant,score,assets,range,later,sampleRate,target,ceiling);
+    const order=shuffle(joined?.takes ?? relevant,seed), labels=Object.fromEntries(order.map((row,i)=>[String.fromCharCode(97+i),row.id]));
     const keys=Object.keys(labels), pairs=keys.flatMap((first,i)=>keys.slice(i+1).map(second=>[first,second]));
     const trials=shuffle(pairs,seed^0x44f9d9).map((pair,i)=>({id:'pair-'+(i+1),takes:shuffle(pair,seed+i*307+19)}));
     const signature=R.assetSignature(assets);
     const listeningContext=planned.listeningContext===undefined ? undefined : M.context(planned.listeningContext);
-    const stamp=JSON.stringify([name,seed,planned.session,context,focus,sampleRate,target,ceiling,signature,...(listeningContext ? [listeningContext] : [])]);
+    const stamp=JSON.stringify([name,seed,planned.session,context,focus,sampleRate,target,ceiling,signature,...(listeningContext ? [listeningContext] : []),
+      ...(moves ? [moves,criterion ?? null,question ?? null] : []),...(joined ? [joined.windows] : [])]);
     const token='test-'+P.data.hash(stamp).toString(36)+'-'+P.data.hash(stamp,0x9e3779b9).toString(36);
     const audio=Object.fromEntries(keys.map((label,i)=>[label,order[i].value]));
     const measured=E.measure(score,context,focus,lead,rivals,sampleRate);
     const evidence=E.snippets(measured,lead,layer,bass);
     const test=frozen({format:testFormat,version:1,id:name,token,range,focus:observed,sampleRate,
-      lufs:report.target,criteria,trials,labels:keys});
-    const key=frozen({format:keyFormat,version:1,test,labels,session:planned.session,tags:planned.tags,assets:signature,
-      ...(listeningContext && {listeningContext})});
+      lufs:joined ? joined.lufs : report.target,criteria:criterion ? [criterion] : criteria,trials,labels:keys,
+      ...(joined && {sequence:joined.windows}),
+      ...(question && {question})});
+    const key=frozen({format:keyFormat,version:1,test,labels,session,tags:planned.tags,assets:signature,
+      ...(listeningContext && {listeningContext}),
+      ...(question && {audioHashes:Object.fromEntries(keys.map(label=>[label,R.excerptHash(audio[label].samples)]))})});
     return {test,key,audio,evidence:{...evidence,report:measured.report}};
   }
 
   function keep(source,key,selection,assets={}) {
-    check(fields(key,['format','version','test','labels','session','tags','assets','listeningContext']) && key.format===keyFormat &&
+    check(fields(key,['format','version','test','labels','session','tags','assets','listeningContext','audioHashes']) && key.format===keyFormat &&
       key.version===1 && key.test?.format===testFormat && key.test.version===1 && record(key.labels) &&
       R.prose(key.session?.goal,640) && Array.isArray(key.session.takes) &&
       Array.isArray(key.test.trials) && key.test.trials.length<=28 && key.test.trials.every(row=>
@@ -237,5 +279,6 @@
   }
 
   P.musicProduction=Object.freeze({...A,critique:Object.freeze({plan,blind,keep,openAudio:P.musicCritiqueWorkbench.open,listener:P.musicCritiqueListener,applyEdit:P.musicCritiqueWorkbench.apply,tagReference:R.tag,findReferences:R.search,
-    rememberPreference:M.remember,recallPreferences:M.recall})});
+    rememberPreference:M.remember,recallPreferences:M.recall,
+    archiveBallot:M.rememberBallot,prioritize:(...args)=>P.musicCritiqueQuestions.prioritize(blind,...args)})});
 })(KIT.procedural);

@@ -22,7 +22,7 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
   if (['listener-pack','listener-run','listener-score'].includes(mode))
     return require('./music-critique-calibration.js')(mode,file,config,opt,kit);
   const C=kit.KIT.music.production.critique,{check,fields}=kit.KIT.procedural.musicInstruments;
-  check(typeof file==='string' && ['plan','listen','keep','tag','find','inspect','compare','diagnose','apply','foreground','remember','recall'].includes(mode),
+  check(typeof file==='string' && ['plan','listen','keep','tag','find','inspect','compare','diagnose','apply','foreground','remember','recall','prioritize','archive-ballot'].includes(mode),
     'Use music critique inspect, compare, diagnose, apply, foreground, plan, listen, keep, remember, recall, tag or find');
   const out=typeof opt.out==='string' ? path.resolve(opt.out) : undefined;
   const output=(result,target)=>{
@@ -39,6 +39,22 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
       'Listening preference memory exceeds its test budget');
     publishJson(target,entry,'This blind test is already archived with a different decision');
     return output({memory:directory,entry:target});
+  }
+  if (mode==='archive-ballot') {
+    check(config && settingsFile,'Supply a memory directory, blind key and ballot file');
+    const directory=path.resolve(file), key=read(config), ballot=read(settingsFile);
+    const names=key.test?.labels;
+    check(Array.isArray(names) && names.length===2 && names.every(name=>typeof name==='string' && /^[ab]$/.test(name)),
+      'Open the focused blind listening key beside its public audio');
+    const clips=Object.fromEntries(names.map(name=>[name,WAV.read(path.join(path.dirname(path.resolve(config)),'public',name+'.wav'))]));
+    const prior=fs.existsSync(directory) ? readMemory(directory,check) : undefined;
+    const archive=C.archiveBallot(prior,key,ballot,clips);
+    const entry=archive.entries.find(row=>row.token===ballot.token);
+    const folder=path.join(directory,entry.token);
+    for (const [label,pcm] of Object.entries(clips)) audio(path.join(folder,label+'.wav'),pcm);
+    const target=path.join(directory,entry.token+'.json');
+    publishJson(target,entry,'This blind test is already archived with a different ballot');
+    return output({memory:directory,entry:target,audio:folder});
   }
   if (mode==='recall') {
     check(config,'Supply a listening context query');
@@ -115,20 +131,32 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
     return output(C.plan(source,brief,assets),out);
   }
   check(config && out,'Use a plan or private key file and an output directory');
-  if (mode==='listen') {
-    const {test,key,audio:takes,evidence}=C.blind(source,read(config),assets,settingsFile && read(settingsFile));
-    const publicDir=path.join(out,'public'), desk=path.join(publicDir,'index.html'), manifest=path.join(publicDir,'test.json');
-    const privateKey=path.join(out,'review-key.json');
+  const publishBlind=({test,key,audio:takes,evidence},folder)=>{
+    const publicDir=path.join(folder,'public'), desk=path.join(publicDir,'index.html'), manifest=path.join(publicDir,'test.json');
+    const privateKey=path.join(folder,'review-key.json');
     publishJson(privateKey,key,'A different blind listening test already uses this directory');
     const files=Object.fromEntries(test.labels.map(label=>[label,label+'.wav']));
     for (const [label,value] of Object.entries(takes)) audio(path.join(publicDir,files[label]),value);
     json(manifest,{...test,files});
     write(desk,listeningPage({...test,files}));
-    const evidenceDir=path.join(out,'evidence');
+    const evidenceDir=path.join(folder,'evidence');
     for (const [name,value] of Object.entries(evidence.audio)) audio(path.join(evidenceDir,name+'.wav'),value);
     const clips=Object.fromEntries(Object.entries(evidence.ranges).map(([name,address])=>[name,{...address,file:name+'.wav'}]));
     json(path.join(evidenceDir,'report.json'),{...evidence.report,previewGain:evidence.gain,clips});
-    return output({player:desk,manifest,key:privateKey,evidence:path.join(evidenceDir,'report.json')});
+    return {player:desk,manifest,key:privateKey,evidence:path.join(evidenceDir,'report.json')};
+  };
+  if (mode==='listen') return output(publishBlind(
+    C.blind(source,read(config),assets,settingsFile && read(settingsFile)),out));
+  if (mode==='prioritize') {
+    const settings=read(config);
+    check(fields(settings,['questions','memory','options']) && Array.isArray(settings.questions) &&
+      settings.questions.length<=16,'Supply focused listening questions with plans and downstream decisions');
+    const memory=typeof settings.memory==='string' ? readMemory(relative(config,settings.memory),check) : settings.memory;
+    const questions=settings.questions.map(row=>({...row,plan:typeof row.plan==='string' ? read(relative(config,row.plan)) : row.plan}));
+    const {report,tests}=C.prioritize(source,questions,memory,assets,settings.options);
+    const manifest=path.join(out,'queue.json');
+    json(manifest,{...report,selected:report.selected.map(row=>({...row,files:publishBlind(tests[row.id],path.join(out,row.id))}))});
+    return output({manifest,questions:report.selected.length});
   }
   check(settingsFile,'Supply the listening decision JSON alongside the private key');
   const result=C.keep(source,read(config),read(settingsFile),assets);

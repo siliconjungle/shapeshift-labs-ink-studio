@@ -802,6 +802,22 @@
       inputs:{memory:'record',query:'record'},outputs:{value:'record'},
       run({memory,query}) {return {value:P.musicProduction.critique.recallPreferences(memory,query)};}
     },
+    'music.prioritizeListeningQuestions': {
+      description:'Spend a blind listening budget on uncertain pairs that inform weighted downstream musical decisions.',
+      inputs:{source:'record',questions:'array<record>',plan:options,memory:{type:'record',default:{format:'ink-studio/listening-preference-memory',version:1,entries:[]}},
+        assets:options,options},outputs:{value:'record',tests:'record'},
+      run({source,questions,plan,memory,assets,options}) {
+        const requests=questions.map(row=>({...row,plan:row.plan ?? plan}));
+        const {report,tests}=P.musicProduction.critique.prioritize(source,requests,memory,assets,options);
+        return {value:report,tests};
+      }
+    },
+    'music.archiveListeningBallot': {
+      description:'Verify and archive a focused human judgment with its actual audio, listening reason and context, including a tie.',
+      inputs:{key:'record',token:'string',ballot:'record',audio:'record',memory:{type:'record',default:{format:'ink-studio/listening-preference-memory',version:1,entries:[]}}},
+      outputs:{value:'record'},
+      run({key,token,ballot,audio,memory}) {return {value:P.musicProduction.critique.archiveBallot(memory,key,{...ballot,token},audio)};}
+    },
     'music.tagListeningReference': {
       description:'Keep a sample-addressed reference clip and a description of what to listen for.',
       inputs:{source:'audio',settings:'record'},outputs:{value:'record',audio:'audio'},
@@ -855,6 +871,15 @@
       run({sources,timeline,traces,variants,assets,options}) {
         const {report,audio}=P.musicProduction.rehearsal.run(sources,timeline,traces,variants,assets,options);
         return {value:report,audio};
+      }
+    },
+    'music.regressAdaptiveScore': {
+      description:'Rehearse seeded and recorded routes at scale, group recurring failures, and compare editable fixes in context.',
+      inputs:{sources:'record',timeline:'record',settings:'record',assets:options},
+      outputs:{value:'record',audio:'record',traces:'array<record>'},
+      run({sources,timeline,settings,assets}) {
+        const {report,audio,traces}=P.musicProduction.rehearsal.regression(sources,timeline,settings,assets);
+        return {value:report,audio,traces};
       }
     },
     'music.reviseTransitions': {
