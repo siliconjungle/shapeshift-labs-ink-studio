@@ -94,14 +94,19 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         value.simulation ? document(value.simulation,file,dependency) : {legacy:file};
     }
     if (/\.json$/i.test(file)) {
-      const { value,store } = readCheckpointFile(file);
+      let { value,store } = readCheckpointFile(file);
+      const bundles=kit.KIT.authoring.projectBundles;
+      if(value?.format===bundles.format&&value.version===bundles.storyVersion){
+        const project=require('./project-bundle.js').readProjectBundle(file);
+        value=require('./story-exchange.js').readRecording(project);
+        ensure(value,'This story bundle has no native recording. Use story events or import its definitions.');
+      }
       if ([W.format,W.models.format].includes(value.format)) return document(value,file,dependency);
       if (!lookPreview && [R.checkpointFormat,R.runFormat].includes(value.format))
         ensure(opt['asset-pack']===undefined,'Recorded runs and checkpoints keep their original asset packs');
       if (value.format === R.checkpointFormat) return {world:value.world,checkpoint:value,store};
       if (value.format === R.runFormat) return {world:value.end.world,checkpoint:value.end,log:value,store};
       if (value.format === SimulationFixture.format) return {fixture:value};
-      const bundles = kit.KIT.authoring.projectBundles;
       if (bundles && value.format === bundles.format) return { legacy: file, document: bundles.open(value).scene() };
       return {legacy:file,document:value};
     }

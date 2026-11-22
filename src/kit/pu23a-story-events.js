@@ -5,7 +5,7 @@
   const maxHistory = 100000, maxBatch = 10000, maxData = 32*1024*1024, maxCues = 4096;
   const validTick = tick => Number.isSafeInteger(tick)&&tick>=0&&tick<=W.runtime.maxTick;
   const validDt = dt => Number.isFinite(dt)&&dt>0&&dt<=1;
-  const storyOf = ({document,story}) => id(document)&&id(story)?document+'/'+story:null;
+  const storyOf = ({document,story,eventContext}) => id(document)&&id(story)?document+'/'+story:eventContext?.story??null;
   const storyKinds = new Set([
     'story-started','story-start-rejected','story-transition','story-stage-entered','story-beat-entered','story-objective-resolved','story-progress-rejected',
     'story-branch-chosen','story-decision-opened','story-decision-elapsed','story-commitment-decision',
@@ -34,6 +34,11 @@
   }
 
   function read(source) {
+    if(source?.format===envelopeFormat){
+      const {world,dt,from,to,coverage,dropped,events}=readEnvelopes(source);
+      source={format,version,id:world,dt,from,to,coverage,dropped,events:events.map(
+        ({id,tick,kind,system,payload,...eventContext})=>({...payload,id,tick,kind,system,eventContext}))};
+    }
     if ([W.runtime.runFormat,W.runtime.checkpointFormat].includes(source?.format)) source = retained(source);
     check(record(source)&&source.format===format&&source.version===version&&id(source.id)&&validDt(source.dt)&&
       Object.keys(source).every(key=>['format','version','id','dt','from','to','coverage','dropped','events'].includes(key))&&
@@ -42,20 +47,48 @@
       (source.coverage!=='complete'||source.dropped===0)&&Array.isArray(source.events)&&source.events.length<=maxHistory+maxBatch,
       'Expected a version 1 story event recording with a clock and coverage');
     const events = [], seen = new Set();
+    const orderError = 'Story event IDs must be unique and events must be in tick order';
     let last = source.from, size = 0;
     for (const input of source.events) {
       const event = copy(input);
       check(record(event)&&id(event.id)&&id(event.kind)&&id(event.system)&&validTick(event.tick)&&
-        event.tick>=last&&event.tick<=source.to&&!seen.has(event.id),
-        'Story event IDs must be unique and events must be in tick order');
+        event.tick>=last&&event.tick<=source.to,orderError);
+      const key=(event.eventContext?.branch??'main')+'/'+event.id;
+      check(!seen.has(key),orderError);
       W.timedEvents.timeOf(event);
       size += JSON.stringify(event).length;
       check(size<=maxData, 'Story event recording exceeds its data budget');
-      seen.add(event.id);
+      seen.add(key);
       events.push(event);
       last = event.tick;
     }
     return freeze({...source,events});
+  }
+
+  function readEnvelopes(source) {
+    check(record(source)&&source.format===envelopeFormat&&source.version===version&&id(source.world)&&validDt(source.dt)&&
+      Object.keys(source).every(key=>['format','version','world','dt','from','to','coverage','dropped','events','simulationRate'].includes(key))&&
+      validTick(source.from)&&validTick(source.to)&&source.from<=source.to&&['complete','retained'].includes(source.coverage)&&
+      Number.isSafeInteger(source.dropped)&&source.dropped>=0&&(source.coverage!=='complete'||source.dropped===0)&&
+      Array.isArray(source.events)&&source.events.length<=maxHistory+maxBatch,'Expected a version 1 committed event log');
+    if(source.simulationRate!==undefined)K.procedural.takeTime.period(source.dt,source.simulationRate);
+    const seen=new Set();
+    let tick=source.from,size=0;
+    for(const row of source.events){
+      check(record(row)&&row.version===version&&row.world===source.world&&validTick(row.tick)&&
+        row.tick>=tick&&row.tick<=source.to&&[row.id,row.kind,row.system,row.branch].every(id)&&
+        (row.story===null||typeof row.story==='string'&&row.story.split('/').length===2&&row.story.split('/').every(id))&&
+        (row.stage===null||id(row.stage))&&record(row.payload)&&Array.isArray(row.subjects)&&Array.isArray(row.causes),
+        'Invalid committed story event');
+      const key=row.branch+'/'+row.id;
+      check(!seen.has(key),'Duplicate committed story event '+key);
+      seen.add(key);
+      tick=row.tick;
+      W.timedEvents.timeOf(row.payload);
+      size+=JSON.stringify(row).length;
+      check(size<=maxData,'Story event recording exceeds its data budget');
+    }
+    return freeze(copy(source));
   }
 
   function describe(event) {
@@ -128,16 +161,21 @@
         .map(key=>[key,event[key]]));
       if (Number.isSafeInteger(event.visit)&&event.visit>0) descriptor.visit = event.visit;
       markers.push({id:cueId,time,label});
+      const [document,name]=(storyOf(event)??'').split('/');
       cues.push({id:cueId,time,kind:'story-cue',detail:{label,sourceEvent:event.id,sourceKind:event.kind,
-        sourceSystem:event.system,sourceTick:event.tick,...descriptor,...(storyOf(event)&&{document:event.document,story:event.story})}});
+        sourceSystem:event.system,sourceTick:event.tick,...descriptor,...(name&&{document,story:name})}});
     }
     return freeze({duration:recording.to*recording.dt,markers,events:cues});
   }
 
   function envelopes(source,{story,stream,simulationRate} = {}) {
-    const {events:rows,id:world,dt,from,to,coverage,dropped}=read(source);
     check(story===undefined||typeof story==='string'&&story.split('/').length===2&&story.split('/').every(id),
       'Story event filter needs a document/story ID');
+    if(source?.format===envelopeFormat){
+      const log=readEnvelopes(source);
+      return story===undefined?log:freeze({...log,events:log.events.filter(row=>row.story===story)});
+    }
+    const {events:rows,id:world,dt,from,to,coverage,dropped}=read(source);
     const lineage=stream??source.end?.eventStream??source.eventStream;
     const rate=simulationRate??(source.end??source).world?.takeClock?.simulationRate;
     const events=rows.map(row=>W.committedEvents.read(row,world,lineage))
@@ -146,5 +184,5 @@
       ...(rate!==undefined&&{simulationRate:copy(rate)})});
   }
 
-  W.storyEvents = Object.freeze({format,envelopeFormat,read,analyze,timeline,envelopes});
+  W.storyEvents = Object.freeze({format,envelopeFormat,read,readEnvelopes,analyze,timeline,envelopes});
 })(KIT);

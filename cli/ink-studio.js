@@ -1052,7 +1052,7 @@ const CMD = {
         '    sim run|resume|fork <file> [--branch ID]   name the branch in committed events',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',
         '    sim run <world> --record file.json [--observations plan.json]   retain reproducible execution evidence',
-        '    sim verify <run|fixture> [--workers N]   replay and check the recorded evidence',
+        '    sim verify <run|fixture|story-run-bundle> [--workers N]   replay and check the recorded evidence',
         '    sim fixture <world|checkpoint|run> --out fixture.json [--from N --ticks N --actions file.json]',
         '      [--event KIND --event-where JSON | --fault] [--minimize]   package a portable replay and event trace',
         '    sim block-play <model> --samples N [--resume checkpoint --checkpoint file]   sample and checkpoint a fast kernel',
@@ -1279,15 +1279,15 @@ const CMD = {
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
         '  story describe <file.json> [story-id] --inventory      list role schemas and required interfaces',
         '  story preview <file.json> [story-id] [--format json|text|dot] [--out file] [--strict]   export potential story routes',
-        '  story instantiate <template.json> <instance.json>   expand typed story parameters and inspect the result',
+        '  story instantiate <template.json|story-pack-bundle> <instance.json> [--template ID]',
         '  sim preflight <world.json> [--strict]   check world bindings and story routes before stepping',
         '  sim scheduler <world|checkpoint|run> [--ticks N] [--incident document/story]   explain incident eligibility and commitments',
         '  sim why|why-not <world|checkpoint|run> document/story [--offer | --role ID | --actor system/agent | --stage [ID] | --outcome ID]',
         '    [--spec casting.json] [--ticks N] [--trace]   explain an offer, actor, stage, or ending',
         '    sim run|preflight <world.json> --storyteller ID   select an authored incident profile',
         '  story catalog <story.json> [story.json ...]   discover authored incidents',
-        '  story events <recording|fixture> [--format json|markdown|timeline|events|envelopes]   inspect or present recorded story events',
-        '  story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline] [--out file]   project committed results into presentation cues',
+        '  story events <recording|fixture|story-run-bundle> [--format json|markdown|timeline|events|envelopes]',
+        '  story cues <recording|fixture|envelopes|story-run-bundle> <plan.json> [--format sheet|timeline] [--out file]',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
         '  graph nodes [--json]   list registered graph operations and their ports',
@@ -1341,12 +1341,13 @@ const CMD = {
         '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
         '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
-        '  project pack <scene-take-or-experiment.json> --out <bundle.json> [--root directory --revision n --asset-pack file --paint file --attachments file]',
+        '  project pack <scene|take|experiment|story-pack|story-run.json> --out <bundle.json> [--root directory --revision N]',
+        '    [--asset-pack file --paint file --attachments file]',
         '  project inspect <bundle.json>   show the bundle version, entry path and retained files',
         '  assets lock <draft.json> --out catalog.json | assets validate <catalog.json> | assets resolve <catalog.json> <ID> <revision>',
         '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
-        '  project verify <experiment-bundle.json> [--out report.json --compare-engine]   replay packaged simulation checks',
+        '  project verify <experiment-or-story-bundle.json> [--out report.json --compare-engine]',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -2672,7 +2673,7 @@ const CMD = {
     }
     console.log('wrote', file);
   },
-  project() {
+  async project() {
     const [mode, input] = pos, api = require('./project-bundle.js');
     if (pos.length !== 2 || !['pack', 'inspect', 'unpack', 'verify'].includes(mode))
       die('Use project pack, inspect, unpack or verify with a JSON document');
@@ -2684,19 +2685,24 @@ const CMD = {
     if (mode === 'inspect') {
       const project = api.readProjectBundle(input), { format, version, attachments } = project.snapshot();
       process.stdout.write(JSON.stringify({ format, version, ...project.metadata, files: project.files(), attachments,
-        take: project.takeDocument?.(), experiment: project.experimentDocument?.() }, null, 2) + '\n');
+        take: project.takeDocument?.(), experiment: project.experimentDocument?.(),
+        ...(project.storyManifest&&{story:project.storyManifest(),inventory:project.storyInventory(),
+          templates:project.storyTemplates(),resources:project.storyResources()}) }, null, 2) + '\n');
       return;
     }
     if (mode === 'verify') {
       if (Object.keys(opt).some(key => key !== 'out' && key !== 'compare-engine') ||
           opt.out !== undefined && (typeof opt.out !== 'string' || !opt.out.trim()) ||
           opt['compare-engine'] !== undefined && opt['compare-engine'] !== true)
-        die('Use project verify <experiment-bundle.json> [--out report.json --compare-engine]');
+        die('Use project verify <experiment-or-story-bundle.json> [--out report.json --compare-engine]');
       if (opt.out && fs.existsSync(opt.out)) {
         const source = fs.statSync(input), destination = fs.statSync(opt.out);
         if (source.dev === destination.dev && source.ino === destination.ino) die('Choose a report separate from its experiment bundle');
       }
-      const report = require('./project-experiment.js').verify(input, { compareEngine: opt['compare-engine'] ?? false });
+      const project=api.readProjectBundle(input);
+      if(project.storyManifest&&opt['compare-engine'])die('--compare-engine applies to experiment bundles');
+      const report=project.storyManifest?await require('./story-exchange.js').verify(project,lib().KIT):
+        require('./project-experiment.js').verify(project,{compareEngine:opt['compare-engine']??false});
       if (opt.out) require('./asset-files.js').json(path.resolve(opt.out), report);
       else process.stdout.write(JSON.stringify(report, null, 2) + '\n');
       if (!report.passed) process.exitCode = 2;

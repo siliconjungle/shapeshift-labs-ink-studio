@@ -36,7 +36,7 @@ const inside = (root, file) => {
 
 function packProject(scene, { out, root, revision, assetPack, paint, attachments } = {}) {
   if (typeof scene !== 'string' || !/\.json$/i.test(scene) || typeof out !== 'string' || !/\.json$/i.test(out))
-    throw new TypeError('Project packing needs a JSON scene, take or experiment and a .json output file');
+    throw new TypeError('Project packing needs a JSON scene, take, experiment or story recipe and a .json output file');
   if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) throw new RangeError('Choose a positive project revision');
   const input = path.resolve(scene), projectRoot = path.resolve(root ?? path.dirname(input));
   const actualRoot = fs.realpathSync(projectRoot), entry = inside(projectRoot, input);
@@ -78,6 +78,12 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
   if (spec?.format === bundles.format) throw new TypeError('Pack a source JSON diorama or save edits with withScene()');
   const take = spec?.format === 'ink-studio/take';
   const experiment = spec?.format === Experiment.format;
+  const story = kit.authoring.storyExchange.kindOf(spec?.format);
+  if(story){
+    kit.authoring.storyExchange.validate(spec);
+    if(assetPack!==undefined||paint!==undefined)throw new TypeError('Author story assets in the story pack recipe');
+    if(revision!==undefined&&revision!==(spec.revision??1))throw new TypeError('Project revision must match the story recipe');
+  }
   if (experiment) {
     Experiment.validate(spec);
     if (assetPack !== undefined || paint !== undefined)
@@ -117,12 +123,12 @@ function packProject(scene, { out, root, revision, assetPack, paint, attachments
     return stat.dev === prior.dev && stat.ino === prior.ino;
   })) throw new Error('Choose a project output separate from its inputs');
   const project = bundles.open({ format: bundles.format,
-    version: experiment ? bundles.experimentVersion : take ? bundles.takeVersion : bundles.version,
+    version: experiment ? bundles.experimentVersion : story ? bundles.storyVersion : take ? bundles.takeVersion : bundles.version,
     project: { id: spec.id ?? (take && spec.world ? jsonFile(path.resolve(path.dirname(input), spec.world)).id : undefined) ??
-      path.basename(entry, path.extname(entry)), revision: revision ?? (experiment ? spec.revision ?? 1 : 1) },
+      path.basename(entry, path.extname(entry)), revision: revision ?? (experiment || story ? spec.revision ?? 1 : 1) },
     toolkit: experiment ? experimentToolkit() : { version: studio().version, sourceHash: digest(studio().bundle()) },
     entry, files: Object.fromEntries([...records].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-      .map(([name,record])=>[name,experiment?{...record,sha256:digest(Buffer.from(record.data,record.encoding))}:record])),
+      .map(([name,record])=>[name,experiment||story?{...record,sha256:digest(Buffer.from(record.data,record.encoding))}:record])),
     attachments: refs, atlases }, { digest });
   return writeProjectBundle(project, { out: file });
 }
@@ -132,14 +138,20 @@ function readProjectBundle(file) {
   if (fs.statSync(file).size > bundles.maxBytes * 2) throw new RangeError('Project bundle exceeds the JSON size budget');
   const project = bundles.open(fs.readFileSync(file, 'utf8'), { digest });
   if (project.metadata.kind === 'experiment') verifyExperimentFiles(project.snapshot());
+  if (project.storyManifest) validateDependencies(bundles,project.snapshot());
   return project;
+}
+
+function validateDependencies(bundles,snapshot) {
+  return collectDependencies(bundles,snapshot.entry,file=>Object.hasOwn(snapshot.files,file)?snapshot.files[file]:undefined,
+    snapshot.attachments);
 }
 
 function materialize(project, directory) {
   const snapshot = project.snapshot();
   if (project.metadata.kind === 'experiment') verifyExperimentFiles(snapshot);
-  collectDependencies(api(), snapshot.entry, file => Object.hasOwn(snapshot.files, file) ? snapshot.files[file] : undefined,
-    snapshot.attachments);
+  if (snapshot.version === api().storyVersion) api().open(snapshot, { digest });
+  validateDependencies(api(),snapshot);
   for (const name of project.files()) {
     const file = path.resolve(directory, name);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -192,6 +204,10 @@ function writeProjectBundle(source, { out } = {}) {
   const bundles = api(), project = typeof source?.snapshot === 'function' ? source : bundles.open(source, { digest });
   const snapshot = project.snapshot();
   if (project.metadata.kind === 'experiment') verifyExperimentFiles(snapshot);
+  if(snapshot.version===bundles.storyVersion){
+    bundles.open(snapshot,{digest});
+    validateDependencies(bundles,snapshot);
+  }
   const data = JSON.stringify(snapshot, null, 2) + '\n', file = path.resolve(out);
   if (Buffer.byteLength(data) > bundles.maxBytes * 2) throw new RangeError('Project bundle exceeds the JSON size budget');
   write(file, data);

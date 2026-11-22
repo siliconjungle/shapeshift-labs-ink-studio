@@ -8,6 +8,7 @@ const { isModel, mapModels, requireRevision } = require('./simulation-model-file
 const { groupEntries, groupReference, groupDocument, requireGroupReference } = require('./graph-groups.js');
 const Experiment = require('./experiment-schema.js');
 const Assets = require('./asset-references.js');
+const Story = require('../src/story-document.js');
 
 const formats = {
   'ink-studio/take': 'take',
@@ -25,6 +26,14 @@ const formats = {
   'ink-studio/asset-pack': 'look',
   'ink-studio/asset-bundle': 'look',
   'ink-studio/input-recording': 'inputs',
+  'ink-studio/story-pack': 'story-pack',
+  'ink-studio/story-run': 'story-run',
+  'ink-studio/story': 'story-definition',
+  'ink-studio/story-template': 'story-template',
+  'ink-studio/story-events': 'story-events',
+  'ink-studio/committed-events': 'story-events',
+  'ink-studio/simulation-fixture': 'fixture',
+  'ink-studio/project-bundle': 'archive',
   [Experiment.format]: 'experiment'
 };
 const bytes = record => Buffer.from(record.data, record.encoding);
@@ -43,8 +52,9 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
   };
   const entryDocument = JSON.parse(bytes(requireFile(entry)).toString('utf8'));
   const experiment = entryDocument?.format === Experiment.format;
-  let references;
-  const assetApi = () => references ??= require('../index.js').load().KIT.authoring.assetReferences;
+  let kit;
+  const toolkit=()=>kit??=require('../index.js').load().KIT;
+  const assetApi=()=>toolkit().authoring.assetReferences;
   const assetIO = { resolvePath, load: file => bytes(requireFile(file)) };
   function select(file, document) {
     return Assets.scope(assetApi(), file, document.assetRegistry, assetIO);
@@ -67,6 +77,16 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
   function world(file, document) {
     datasetFiles(file, document.dataInputs);
     visualAssets(file, document, 'world');
+    for(const item of document.storyDocuments??[]){
+      if(item?.file!==undefined)visit(resolvePath(file,item.file),'story-definition');
+      if(item?.pack!==undefined){
+        const packed=visit(resolvePath(file,item.pack),'archive').archive;
+        if(packed?.metadata.kind!=='story-pack'||packed.metadata.revision!==item.revision)
+          throw new TypeError('World needs the pinned story pack revision at '+item.pack);
+      }
+    }
+    for(const item of document.storyTemplates??[])if(item?.file!==undefined)
+      visit(resolvePath(file,item.file),'story-template');
     activeModels.add(file);
     mapModels(document, ref => {
       const target = resolvePath(file, ref.file);
@@ -75,6 +95,31 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       return ref;
     });
     activeModels.delete(file);
+  }
+
+  function storyEntry(file,document,kind) {
+    const K=toolkit(), W=K.world;
+    K.authoring.storyExchange.validate(document);
+    const follow=(ref,type)=>visit(resolvePath(file,ref),type);
+    for(const ref of [...values(document.inputs),...values(document.media)])follow(ref);
+    if(kind==='story-pack'){
+      for(const ref of document.documents??[])follow(ref,'story-definition');
+      for(const ref of values(document.templates))follow(ref,'story-template');
+      for(const ref of document.assetPacks??[])follow(ref,'look');
+      const bind=select(file,document);
+      for(const ref of values(document.assets)){
+        const selected=bind(ref);
+        if(['graph','scene'].includes(selected.entry.kind))visit(selected.filename,selected.entry.kind);
+      }
+    }else{
+      if(document.pack!==undefined)follow(document.pack,'story-pack');
+      follow(document.events,'story-events');
+      if(document.recording!==undefined){
+        const source=follow(document.recording);
+        if(source.kind!=='fixture'&&source.recordingFormat!==W.runtime.runFormat)
+          throw new TypeError('Story run recording needs a native run or simulation fixture');
+      }
+    }
   }
 
   function simulation(file, document) {
@@ -167,7 +212,7 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
     const document = file === entry ? entryDocument :
       /\.json$/i.test(file) || expected || json ? JSON.parse(bytes(raw).toString('utf8')) : undefined;
     const kind = document && Object.hasOwn(formats, document.format) ? formats[document.format] :
-      document && document.format === undefined && expected === 'world' ? 'world' :
+      document && document.format === undefined && ['world','scene'].includes(expected) ? expected :
       document && (file === entry || Array.isArray(document.solids) || document.brushRegion || document.prefabLibrary || document.instances)
         ? 'scene' : undefined;
     if (expected && expected !== kind) throw new TypeError('Unexpected project dependency type: ' + file);
@@ -179,6 +224,20 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
     if (kind === 'experiment') {
       if (!experiment || file !== entry) throw new TypeError('A simulation experiment must be the project entry');
       experimentEntry(file, document);
+    } else if (kind==='story-pack'||kind==='story-run') {
+      storyEntry(file,document,kind);
+    } else if (kind==='story-definition') {
+      Story.validateStoryDocument(document);
+    } else if (kind==='story-events') {
+      toolkit().world.storyEvents.envelopes(document);
+    } else if (kind==='inputs') {
+      toolkit().procedural.mediaGraph.recording(document);
+    } else if (kind==='archive'&&document.version===bundles.storyVersion) {
+      dependency.archive=bundles.open(document,{digest:data=>createHash('sha256').update(data).digest('hex')});
+    } else if (kind==='fixture') {
+      const W=toolkit().world;
+      require('./simulation-fixture.js').eventRecording(W,document);
+      datasetFiles(file,document.checkpoint.world.dataInputs);
     } else if (kind === 'take') {
       validateTake(document);
       const bind = select(file, document);
@@ -223,6 +282,7 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
           return bytes(requireFile(resolvePath('', name)));
         }
       });
+      dependency.recordingFormat=data.format;
       for (const world of [data.world, data.world?.world, data.origin?.world, data.end?.world])
         if (world?.dataInputs) datasetFiles(file, world.dataInputs);
     } else if (kind === 'scene') {

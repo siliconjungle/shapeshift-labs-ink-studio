@@ -222,6 +222,12 @@ module.exports = {
   writeProjectBundle: require('./cli/project-bundle.js').writeProjectBundle,
   unpackProject: require('./cli/project-bundle.js').unpackProject,
   verifyProjectExperiment: (...args) => require('./cli/project-experiment.js').verify(...args),
+  verifyStoryBundle(file, options) {
+    return require('./cli/story-exchange.js').verify(module.exports.readProjectBundle(file),module.exports.load().KIT,options);
+  },
+  replayStoryBundle(file, options) {
+    return require('./cli/story-exchange.js').replay(module.exports.readProjectBundle(file),module.exports.load().KIT,options);
+  },
   describeRenderFrame: (world, frame) => require('./src/render-contract.js').describe(world, frame),
   capturePixelScan: require('./cli/pixel-scan.js').capturePixelScan,
   createCameraAtlas(options) {

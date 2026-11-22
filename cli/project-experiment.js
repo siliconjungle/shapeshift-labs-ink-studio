@@ -94,7 +94,7 @@ function replay(kit,directory,project,recipe){
 
 function verify(file,{compareEngine=false}={}){
   if(typeof compareEngine!=='boolean')throw new TypeError('Invalid experiment engine comparison option');
-  const project=readProjectBundle(file);
+  const project=typeof file==='string'?readProjectBundle(file):file;
   if(project.metadata.kind!=='experiment')throw new TypeError('Project verification needs a packed simulation experiment');
   const recipe=Schema.validate(project.experimentDocument()), expected=project.metadata.toolkit, actual=experimentToolkit();
   const engine={matched:Object.keys(expected).every(key=>expected[key]===actual[key]),expected,actual,compareEngine};

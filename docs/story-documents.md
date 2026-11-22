@@ -170,6 +170,8 @@ Use `sim budget` to measure queue growth, retained history, story evaluation tim
 
 Use `sim fixture` to share a short replay keyed to a story event, such as a rejected dispatch. `story events` reads the resulting trace directly. [Portable test fixtures](simulation-checkpoints.md#portable-test-fixtures)
 
+Use a story pack to install versioned definitions in another world. A run bundle can carry the event log, native replay, and pinned media together for editing or review. [Portable story packs and run bundles](portable-story-packs.md)
+
 Use `story events <recording|fixture> --format envelopes` to inspect the story, stage, subject, branch, and causal references for each committed event. [Committed event envelopes](simulation-checkpoints.md#committed-event-envelopes)
 
 Use `world/story-objective` to expose one current objective as a graph record and `sim.worldPulse` to publish story or world events to graph consumers. [Typed world graph ports](simulation-output-adapters.md#typed-world-graph-ports)

@@ -18,6 +18,15 @@ function readDefinition(file, check = value => value) {
 }
 
 const readStoryDocument = file => readDefinition(file, validateStoryDocument);
+const storyBundle = file => require('./project-bundle.js').readProjectBundle(file);
+
+function readStoryEvents(file,library) {
+  const input=readDefinition(file), bundles=library().KIT.authoring.projectBundles;
+  if(input?.format!==bundles.format||input.version!==bundles.storyVersion)return {input};
+  const project=storyBundle(file);
+  if(!project.storyEvents)throw new TypeError('Story pack contains definitions. Use a run bundle for recorded events.');
+  return {input:project.storyEvents(),project};
+}
 
 function preflightStoryDocument(document, {story} = {}) {
   const inspected = inspectStoryDocument(document);
@@ -32,13 +41,26 @@ function preflightStoryDocument(document, {story} = {}) {
 function embedStoryDocuments(world, file, dependency) {
   if (!Array.isArray(world.storyDocuments) && !Array.isArray(world.storyTemplates)) return world;
   const directory = path.dirname(path.resolve(file));
-  const documents = Array.isArray(world.storyDocuments) ? world.storyDocuments.map(item => {
-    if (!item || !Object.hasOwn(item, 'file')) return item;
+  const importedPacks=[];
+  const documents = Array.isArray(world.storyDocuments) ? world.storyDocuments.flatMap(item => {
+    if(item&&Object.hasOwn(item,'pack')){
+      const {pack,revision}=item;
+      if(Object.keys(item).length!==2||typeof pack!=='string'||!pack.trim()||path.isAbsolute(pack)||
+        path.win32.isAbsolute(pack)||!Number.isSafeInteger(revision)||revision<1)
+        throw new TypeError('Story pack reference needs a relative file and an exact revision');
+      const source=path.resolve(directory,pack), project=storyBundle(source);
+      if(project.metadata.kind!=='story-pack'||project.metadata.revision!==revision)
+        throw new TypeError('Expected story pack revision '+revision+' at '+pack);
+      dependency?.(source);
+      importedPacks.push(...project.storyAssetPacks());
+      return project.storyDocuments();
+    }
+    if (!item || !Object.hasOwn(item, 'file')) return [item];
     if (Object.keys(item).length !== 1 || typeof item.file !== 'string' || !item.file || path.isAbsolute(item.file))
       throw new TypeError('Story document file reference needs a relative file path');
     const source = path.resolve(directory, item.file);
     dependency?.(source);
-    return readStoryDocument(source);
+    return [readStoryDocument(source)];
   }) : undefined;
   const cache = new Map();
   const templates = Array.isArray(world.storyTemplates) ? world.storyTemplates.map(item => {
@@ -54,7 +76,11 @@ function embedStoryDocuments(world, file, dependency) {
     }
     return {...spec, template:cache.get(source)};
   }) : undefined;
-  return { ...world, ...(documents && {storyDocuments:documents}), ...(templates && {storyTemplates:templates}) };
+  const assetPacks=importedPacks.length?
+    require('../index.js').load().KIT.authoring.assetPacks.merge(world.assetPacks??[],
+      {format:'ink-studio/asset-bundle',version:1,packs:importedPacks}).packs:world.assetPacks;
+  return { ...world, ...(documents && {storyDocuments:documents}), ...(templates && {storyTemplates:templates}),
+    ...(assetPacks!==undefined&&{assetPacks}) };
 }
 
 function eventCommand(file, rest, options, library) {
@@ -63,7 +89,7 @@ function eventCommand(file, rest, options, library) {
     Object.keys(options).some(key=>!['format','story','out'].includes(key)) ||
     story!==undefined&&(typeof story!=='string'||format==='events') || out!==undefined&&typeof out!=='string')
     throw new TypeError('Use story events <recording|fixture> [--story document/story] [--format json|markdown|timeline|events|envelopes] [--out file]');
-  const input = readDefinition(file), W = library().KIT.world, api = W.storyEvents;
+  const {input}=readStoryEvents(file,library), W=library().KIT.world, api=W.storyEvents;
   const source = input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
   let value;
   if (format==='envelopes') {
@@ -96,7 +122,7 @@ function cueCommand(file,plan,rest,options,library) {
     registry!==undefined&&(typeof registry!=='string'||!registry.trim())||
     out!==undefined&&(typeof out!=='string'||!out.trim()))
     throw new TypeError('Use story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline --asset-registry catalog.json --out file]');
-  const input=readDefinition(file), K=library().KIT, W=K.world, E=W.storyEvents;
+  const {input,project}=readStoryEvents(file,library), K=library().KIT, W=K.world, E=W.storyEvents;
   const source=input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
   const events=source?.format===E.envelopeFormat?source:E.envelopes(source,{stream:input?.checkpoint?.eventStream,
     simulationRate:input?.checkpoint?.world?.takeClock?.simulationRate});
@@ -104,12 +130,14 @@ function cueCommand(file,plan,rest,options,library) {
   const dependencies=new Set([file,plan]);
   const Assets=require('./asset-references.js'), api=K.authoring.assetReferences;
   const references=Object.values(definition.rules).flatMap(row=>Object.entries(row.cue.assets??{}));
-  if(references.length&&registry===undefined) throw new TypeError('Presentation cue assets need --asset-registry catalog.json');
+  if(references.length&&registry===undefined&&!project)
+    throw new TypeError('Presentation cue assets need --asset-registry catalog.json or a story run bundle with pinned assets');
   const selected=new Map();
-  if(registry!==undefined) {
-    const catalog=Assets.open(api,path.resolve(registry),{onFile:asset=>dependencies.add(asset)});
+  if(registry!==undefined||references.length) {
+    const resolve=registry!==undefined?Assets.open(api,path.resolve(registry),{onFile:asset=>dependencies.add(asset)}).resolve:
+      project.resolveStoryAsset;
     for(const [kind,ref] of references) {
-      const {sha256}=catalog.resolve(ref,kind);
+      const {sha256}=resolve(ref,kind);
       selected.set(api.key(ref),sha256);
     }
   }
@@ -172,8 +200,10 @@ function storyCommand([mode, file, id, ...rest], options, library) {
   if (mode==='preview') return previewCommand(file,id,rest,options);
   const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story cues <recording> <plan.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
-    if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
-    const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));
+    if (!file || !id || rest.length || Object.keys(options).some(key=>key!=='template')||
+      (options.template!==undefined&&typeof options.template!=='string'))throw new TypeError(usage);
+    const template=options.template===undefined?readDefinition(file):storyBundle(file).storyTemplate(options.template);
+    const materialized = library().KIT.world.storyTemplates.instantiate(template, readDefinition(id));
     console.log(JSON.stringify(materialized, null, 2));
     return;
   }

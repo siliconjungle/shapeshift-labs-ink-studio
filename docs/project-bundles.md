@@ -80,3 +80,7 @@ A version 3 project bundle carries a [simulation experiment](simulation-experime
 Use `project pack` to retain its model, geometry, inputs, references,
 checkpoint, and expected results. Use `project verify` to replay the named
 checks against the packaged files on the pinned engine.
+
+## Exchange story packs and recorded runs
+
+A version 4 bundle carries definitions, capability declarations, pinned assets, inputs, and optional media. A run bundle also retains a recorded event log and can include native replay data. The same bundle opens in the story event and cue tools. [Portable story packs and run bundles](portable-story-packs.md)
