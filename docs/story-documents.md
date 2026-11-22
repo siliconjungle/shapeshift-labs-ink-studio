@@ -114,7 +114,7 @@ The `world/story-lifecycle` probe shows each configured clock's status and remai
 
 ### Fork The Harbor Watch
 
-[The Harbor Watch](../examples/story-documents/harbor-watch.world.json) loses the tow offer at tick 6 and hits the pier survey's fixed tide deadline at tick 7, even while the survey is paused. The pump crew has two work ticks left at the shared checkpoint. Both forks resume on tick 9. Delivery on tick 10 completes the objective and closes the story. Delivery on tick 11 reaches the crew after the work budget expires on that tick, so the timeout cues the relief crew.
+[The Harbor Watch](../examples/story-documents/harbor-watch.world.json) loses the tow offer at tick 6 and hits the pier survey's fixed tide deadline at tick 7, even while the survey is paused. The pump crew has two work ticks left at the shared checkpoint. Both forks resume on tick 9. Delivery on tick 10 completes the objective and closes the story. At tick 11, the work clock expires before objective confirmation. The transfer still reaches the crew, and the timeout cues the relief crew.
 
 ```sh
 node cli/ink-studio.js sim run examples/story-documents/harbor-watch.world.json --ticks 8 --checkpoint harbor-start.json
