@@ -31,6 +31,9 @@ rhythm and microtiming auditions.
 The [sample instrument builder](sample-instrument-builder.md) creates a
 portable sampler patch and its WAV assets from a bank of recorded gestures.
 
+Run the [production benchmark](production-benchmark.md) to compare a full cue,
+a dialogue recut, and three routes through a playable adaptive score.
+
 ## Instruments and performance
 
 A production is a JSON record with an `arrangement`, a `patches` table, and a

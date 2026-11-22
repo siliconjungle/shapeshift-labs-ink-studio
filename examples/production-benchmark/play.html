@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Relay Chamber</title>
+<style>
+:root { color-scheme:dark; font:16px/1.5 system-ui,sans-serif; background:#12191b; color:#eee8de; }
+* { box-sizing:border-box; } main { width:min(940px,100% - 42px); margin:5vh auto; }
+h1 { font:normal clamp(2.6rem,8vw,5rem)/1 Georgia,serif; letter-spacing:-.055em; margin:.4em 0; }
+p { max-width:66ch; color:#afc0bc; } a { color:#b7e6d4; }
+svg { display:block; width:100%; height:auto; margin:24px 0; border:1px solid #42635d; background:#152624; }
+button,select { padding:.5em .8em; font:inherit; color:#eef4ee; background:#243b36; border:1px solid #628279; border-radius:.3rem; }
+button:enabled { cursor:pointer; } button:disabled { opacity:.4; }
+nav { display:flex; gap:9px; flex-wrap:wrap; margin:1em 0; }
+label { margin-right:.5em; } .door { transition:opacity .5s; } .closed { opacity:.22; }
+</style>
+<main>
+<a href="../index.html">Production benchmark</a>
+<h1>The Relay Chamber</h1>
+<p>Enter the passage, turn back if you like, and open the chamber when you’re ready. The score changes on its own clock.</p>
+<svg viewBox="0 0 720 235" role="img" aria-label="World route from the landing through the passage to the chamber">
+<defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#315149" stroke-width=".7"/></pattern></defs>
+<rect width="720" height="235" fill="url(#grid)"/>
+<path d="M120 120H600" fill="none" stroke="#789d8b" stroke-width="2" stroke-dasharray="3 10"/>
+<rect x="298" y="79" width="124" height="83" rx="6" fill="#213931" stroke="#426b5a"/>
+<path d="M72 155h96M85 143h70M99 132h42" stroke="#7f9f8a" fill="none"/>
+<g id="door" class="door closed" fill="none" stroke="#e9be77"><circle cx="600" cy="119" r="60" opacity=".2"/><circle cx="600" cy="119" r="42"/><path d="M600 72v95M554 119h92" opacity=".5"/></g>
+<g font-family="system-ui" text-anchor="middle" font-size="13" fill="#a3bfb3"><text x="120" y="205">Landing</text><text x="360" y="205">Passage</text><text x="600" y="205">Chamber</text></g>
+<circle id="position" cx="120" cy="120" r="7" fill="#e9be77"/>
+</svg>
+<label>Mix <select id="version"><option value="revised">Revised</option><option value="previous">Previous</option></select></label>
+<button id="start">Start live world</button>
+<nav aria-label="World controls">
+<button id="approach" disabled>Enter passage</button><button id="retreat" disabled>Return to landing</button>
+<button id="open" disabled>Open chamber</button><button id="back" disabled>Leave chamber</button>
+</nav>
+<p id="state" role="status">Start the world to hear the landing.</p>
+<script src="ink-runtime.js"></script>
+<script src="player-data.js"></script>
+<script src="play.js"></script>
+</main>
+</html>

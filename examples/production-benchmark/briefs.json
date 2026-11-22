@@ -1,0 +1,46 @@
+{
+  "format": "ink-studio/production-benchmark",
+  "version": 1,
+  "cue": {
+    "title": "The Water Keeps Its Name",
+    "brief": "A 90-second cue about mistaking a low signal for a warning. Establish four notes on a reed, let metal and keys answer, then leave enough space for the same call to feel different when it returns.",
+    "previous": "First print with a regular bass entrance and a repeated call at the return.",
+    "revision": "Keep the first call. Withhold the pulse before the return, then bring bass and metal in as answers.",
+    "question": "Which print makes the opening call easier to recognize when it returns a minute later?",
+    "references": [
+      {"title":"Hildur Guðnadóttir on scoring Chernobyl","url":"https://www.bmi.com/news/meet-joker-and-chernobyl-composer-hildur-gunadottir",
+       "listenFor":"In the score, hear how industrial sound can supply both a musical color and a sense of place. Listen in this cue for the brake drum giving the reed a different edge when it answers."}
+    ]
+  },
+  "scene": {
+    "title": "The Water Above",
+    "brief": "A keeper stops a fan in a flooded pump room. A warning follows when the water becomes audible. The late recut takes time away from the landing and gives it to the waterline.",
+    "previous": "The original mix treatment carried onto the revised picture with the same reconformed placements.",
+    "revision": "Keep the room bed continuous and carve room for the warning in the water and music. Retain the original print under the original cut as editorial evidence.",
+    "question": "In which print can you hear the warning clearly while the room still feels continuous across the cuts?",
+    "references": [
+      {"title":"RX Ambience Match","url":"https://www.izotope.com/en/products/rx/features/ambience-match.html",
+       "listenFor":"Follow the room underneath a dialogue join, then listen for that room to survive the picture edit and the fan stopping."},
+      {"title":"Nuendo ReConform workflow","url":"https://www.steinberg.help/r/nuendo/15.0/en/cubase_nuendo/topics/reconform/reconform_workflow_c.html",
+       "listenFor":"Check that the switch and warning stay attached to the same source action when the in and out points change."}
+    ]
+  },
+  "world": {
+    "title": "The Relay Chamber",
+    "brief": "Enter a passage under an old relay station. Players can go straight to the chamber, turn back, or stay in the passage. Each route should make the same chamber reveal feel connected to what came before.",
+    "previous": "First print with short transitions and a sharper, short-lived reveal.",
+    "revision": "Carry a continuous low layer through section changes and give the reveal a longer decay.",
+    "question": "Which print makes the chamber reveal land naturally after this route?",
+    "references": [
+      {"title":"Disasterpeace on Mini Metro","url":"https://designingsound.org/2016/02/18/the-programmed-music-of-mini-metro-interview-with-rich-vreeland-disasterpeace/",
+       "listenFor":"Follow the identity of a limited sound palette even as input timing and density change."},
+      {"title":"Wwise Project Adventure","url":"https://www.audiokinetic.com/download/documents/WwiseProjectAdventure_en.pdf",
+       "listenFor":"Hear where a change is requested and where it actually lands on the musical grid. Listen for the sound still ringing through the join."}
+    ]
+  },
+  "method": {
+    "title": "Benchmarking music generation models and metrics via human preference studies",
+    "url": "https://arxiv.org/abs/2506.19085",
+    "note": "Level-match the comparison context and keep listener preferences and reasons independently of technical checks."
+  }
+}
