@@ -1213,6 +1213,7 @@ const CMD = {
         '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
         '  sim preflight <world.json> [--strict]   check world bindings and story routes before stepping',
+        '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',

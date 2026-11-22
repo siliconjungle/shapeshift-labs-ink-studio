@@ -779,6 +779,13 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         finish(run,input.store);
         break;
       }
+      case 'cast': {
+        ensure(typeof file==='string' && other===undefined && typeof opt.spec==='string' && opt.args===undefined,
+          'Use sim cast <world|checkpoint|run> --spec casting.json');
+        const result = view(file).probe(W.storyCasting.field,undefined,read(opt.spec));
+        ensure(result.status==='ok',result.reason);
+        return respond(result.value);
+      }
       case 'preflight': {
         const input = load(file);
         ensure(!input.checkpoint && other===undefined && (opt.strict===undefined || opt.strict===true),

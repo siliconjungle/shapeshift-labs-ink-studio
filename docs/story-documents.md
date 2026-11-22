@@ -95,6 +95,37 @@ node cli/ink-studio.js sim run examples/story-documents/relief-charter-quay.worl
 node cli/ink-studio.js probe quay.run.json --field world/story-roles --args '{"story":"relief-charter/courier","role":"escort"}'
 ```
 
+## Find and explain casting candidates
+
+Use `sim cast` to search one or more agent rosters in a world, checkpoint, or run recording. Each named requirement contributes an explanation for every returned candidate. The report records the snapshot tick and the observed values behind `pass`, `fail`, or `unavailable`. A missing account or relationship stays unavailable even when a threshold would accept zero.
+
+```sh
+node cli/ink-studio.js sim cast examples/story-documents/beacon-casting.world.json --spec examples/story-documents/beacon-casting.query.json
+node cli/ink-studio.js sim cast examples/story-documents/beacon-casting.world.json --spec examples/story-documents/beacon-casting.query.json --actions examples/story-documents/beacon-shift.actions.json --ticks 2
+```
+
+Ada qualifies at tick zero. At tick two Ada has taken a gate watch and transferred her repair kits to Bow, who now qualifies. The [clearance query](../examples/story-documents/beacon-clearance.query.json) uses the same world and command file to find Rei after the keeper approves him through a live world signal.
+
+Give the spec a `rosters` array of system IDs and an optional `requirements` map. Each entry has one criterion. All requirements must pass. Up to 32 rosters and 32 requirements may be evaluated in one report.
+
+| Criterion | Example | Evidence |
+| --- | --- | --- |
+| Traits | `{"traits":{"all":["steady","local"]}}` | Candidate's `metadata.traits` array and any missing tags. |
+| Capabilities | `{"capabilities":{"all":["carry"]}}` | Candidate's `metadata.capabilities` array and any missing tags. |
+| Faction | `{"faction":{"is":"harbor"}}` | Candidate's `metadata.faction` ID. |
+| Relationship | `{"relationship":{"with":"keeper","when":{"path":"/trust","op":"gte","value":0.6}}}` | Directional value under `metadata.relationships` at the counterpart ID. |
+| Inventory | `{"inventory":{"accountPath":"/metadata/toolAccount","atLeast":2}}` | Live scalar balance, resource, and units from `world/account`. |
+| Proximity | `{"proximity":{"at":{"entity":"beacon","socket":"landing"},"within":3}}` | Inclusive 3D distance in world units from the candidate to an XYZ point or resolved entity/socket. |
+| Availability | `{"availability":"free"}` | Native roster state. Dormant agents are `unavailable`. Orders, shared travel, driven formations, assigned tasks, or an outstanding movement destination make the agent `busy`. Others are `free`. |
+| Candidate condition | `{"where":{"path":"/metadata/score","op":"gte","value":5}}` | The shared world condition evaluated against the agent record. |
+| World query | `{"query":{"field":"world/signal","bind":{"port":"/metadata/clearancePort"},"when":{"value":true}}}` | A live field read, its resolved arguments, and the value compared. |
+
+Traits, capabilities, faction, and relationship criteria accept an optional `path` for custom metadata layouts. Conditions use the same operators as story triggers. Custom world queries accept literal `args` and a `bind` map from argument names to candidate paths. Supply `at` as a point, an entity/socket, or `"candidate"` to sample at the candidate's current position. Use `select` to compare and record just one part of a field result. Candidate paths can use the agent's usual fields plus `/system`, `/agent`, and `/generation`.
+
+Qualified rows come first. Within each group, rows are ordered by roster ID then agent ID. `limit` caps returned rows at 100 by default and accepts 0 for counts only, up to 10,000. Counts refer to the entire search, and `omitted` counts rows outside the limit. The same report is available to Ink systems through the `world/story-candidates` probe, with the spec passed as its query arguments.
+
+To get copyable role bindings on qualified rows, add `"binding":{"story":"document/story","role":"escort"}` to use the role kind from an embedded story. Use `"binding":{"kind":"field-escort"}` to cast from a roster snapshot before binding a required role. The default binding value contains the roster system, agent ID, and generation. Set `binding.select` to a path for a single value or a map of names to paths for a custom value record. Candidates missing a required value list its projection key under `bindingMissing`. Write the selected row's `binding` into the world's `storyBindings` and run `sim preflight` to verify the authored story can use it.
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

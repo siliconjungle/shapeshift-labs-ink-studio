@@ -1,0 +1,13 @@
+{
+  "rosters": ["crew", "visitors"],
+  "binding": { "kind": "field-escort" },
+  "requirements": {
+    "knows-route": { "traits": { "all": ["steady", "local"] } },
+    "keeper-trust": { "relationship": { "with": "beacon-keeper", "when": { "path": "/trust", "op": "gte", "value": 0.6 } } },
+    "local-guild": { "faction": { "is": "harbor" } },
+    "repair-kits": { "inventory": { "accountPath": "/metadata/toolAccount", "atLeast": 2 } },
+    "within-response-radius": { "proximity": { "at": { "entity": "flood-beacon", "socket": "landing" }, "within": 3 } },
+    "off-duty": { "availability": "free" },
+    "can-carry": { "capabilities": { "all": ["carry"] } }
+  }
+}

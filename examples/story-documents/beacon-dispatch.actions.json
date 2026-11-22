@@ -1,0 +1,12 @@
+[
+  { "tick": 3, "action": "world/event", "args": { "kind": "beacon-call" } },
+  { "tick": 4, "action": "crew/seek", "args": {
+    "agent": { "$role": "escort", "story": "beacon-dispatch/response", "path": "/agent" },
+    "generation": { "$role": "escort", "story": "beacon-dispatch/response", "path": "/generation" },
+    "to": [0.2, 0, 0]
+  } },
+  { "tick": 15, "action": "world/story-choose", "args": {
+    "document": "beacon-dispatch", "story": "response", "stage": "respond", "visit": 1,
+    "branch": "finish", "reason": "escort-at-landing"
+  } }
+]

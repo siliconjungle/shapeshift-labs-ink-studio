@@ -1,0 +1,12 @@
+{
+  "rosters": ["crew", "visitors"],
+  "binding": { "kind": "authorized-participant", "select": "/entity" },
+  "requirements": {
+    "keeper-approval": { "query": {
+      "field": "world/signal",
+      "bind": { "port": "/metadata/clearancePort" },
+      "when": { "value": true }
+    } },
+    "off-duty": { "availability": "free" }
+  }
+}

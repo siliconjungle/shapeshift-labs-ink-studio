@@ -1,0 +1,5 @@
+[
+  { "tick": 1, "action": "world/transfer", "args": { "from": "kits/ada", "to": "kits/bow", "amount": 2, "mode": "exact" } },
+  { "tick": 1, "action": "crew/issue-order", "args": { "agent": "ada", "order": { "id": "north-gate", "task": "watch-gate" } } },
+  { "tick": 2, "action": "world/input", "args": { "port": "clearance/rei", "value": true } }
+]

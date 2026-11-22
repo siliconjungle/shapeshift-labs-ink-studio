@@ -1,0 +1,71 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "beacon-casting",
+  "dt": 0.1,
+  "entities": {
+    "flood-beacon": { "position": [0, 0, 0], "sockets": { "landing": [0.2, 0, 0] } }
+  },
+  "systems": {
+    "crew": {
+      "kind": "agents",
+      "config": {
+        "bounds": { "min": [-5, -0.5, -3], "max": [5, 1, 3] },
+        "ground": 0,
+        "cell": 0.2,
+        "species": { "runner": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+        "agents": {
+          "ada": { "name": "Ada", "species": "runner", "position": [-1, 0, -0.4], "metadata": {
+            "traits": ["steady", "local"], "faction": "harbor", "capabilities": ["carry", "signal"],
+            "relationships": { "beacon-keeper": { "trust": 0.9 } }, "toolAccount": "kits/ada",
+            "clearancePort": "clearance/ada-approved"
+          } },
+          "bow": { "name": "Bow", "species": "runner", "position": [1.5, 0, 0], "metadata": {
+            "traits": ["steady", "local"], "faction": "harbor", "capabilities": ["carry"],
+            "relationships": { "beacon-keeper": { "trust": 0.8 } }, "toolAccount": "kits/bow",
+            "clearancePort": "clearance/bow-approved"
+          } },
+          "rei": { "name": "Rei", "species": "runner", "position": [1, 0, 1], "metadata": {
+            "traits": ["steady", "local"], "faction": "harbor", "capabilities": ["carry"],
+            "relationships": { "beacon-keeper": { "trust": 0.3 } }, "toolAccount": "kits/rei",
+            "clearancePort": "clearance/rei-approved"
+          } }
+        },
+        "orders": { "tasks": { "watch-gate": { "steps": [{ "op": "wait", "ticks": 25 }] } } }
+      }
+    },
+    "visitors": {
+      "kind": "agents",
+      "config": {
+        "bounds": { "min": [-5, -0.5, -3], "max": [5, 1, 3] },
+        "ground": 0,
+        "cell": 0.2,
+        "species": { "runner": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+        "agents": {
+          "sol": { "name": "Sol", "species": "runner", "position": [4, 0, 1], "metadata": {
+            "traits": ["steady"], "faction": "upland", "capabilities": ["signal"],
+            "relationships": {}, "toolAccount": "kits/sol"
+          } }
+        }
+      }
+    },
+    "clearance": {
+      "kind": "puzzle",
+      "config": {
+        "inputs": { "ada": "bool", "bow": "bool", "rei": "bool" },
+        "outputs": { "ada-approved": "ada", "bow-approved": "bow", "rei-approved": "rei" }
+      }
+    },
+    "kits": {
+      "kind": "store",
+      "config": {
+        "accounts": {
+          "ada": { "type": "integer", "resource": "repair-kit", "units": "kit", "initial": 2, "max": 2 },
+          "bow": { "type": "integer", "resource": "repair-kit", "units": "kit", "initial": 0, "max": 2 },
+          "rei": { "type": "integer", "resource": "repair-kit", "units": "kit", "initial": 2, "max": 2 },
+          "sol": { "type": "integer", "resource": "repair-kit", "units": "kit", "initial": 2, "max": 2 }
+        }
+      }
+    }
+  }
+}
