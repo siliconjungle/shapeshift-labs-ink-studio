@@ -661,12 +661,30 @@ const StoryDocument = (() => {
     }
   }
 
-  function candidatePolicy(value, at, kind) {
+  function anchorPolicy(anchor, at, roles, report) {
+    fields(anchor,at,[],['window','state']);
+    if (!Object.keys(anchor).length) invalid(at,'expected a world window or condition');
+    if (Object.hasOwn(anchor,'window')) {
+      const window = anchor.window, place = at+'.window';
+      fields(window,place,['from','until']);
+      if (!Number.isFinite(window.from)||window.from<0||!Number.isFinite(window.until)||window.until<window.from)
+        invalid(place,'expected ordered nonnegative world seconds');
+    }
+    if (Object.hasOwn(anchor,'state')&&!roleUses(anchor.state,roles,at+'.state',report))
+      stateSource(anchor.state,at+'.state',true);
+  }
+
+  function candidatePolicy(value, at, kind, roles, report) {
     if (kind!=='incident') invalid(at,'candidate queues require an incident');
-    fields(value,at,['for'],['release','onExpire','selection','pressure']);
+    fields(value,at,['for'],['release','onExpire','selection','pressure','anchor']);
     if (!Number.isFinite(value.for)||value.for<=0) invalid(at+'.for','expected a positive duration in seconds');
     if (Object.hasOwn(value,'release')&&!['automatic','manual'].includes(value.release))
       invalid(at+'.release','expected automatic or manual');
+    if (Object.hasOwn(value,'anchor')) {
+      if (value.release!=='automatic'||Object.hasOwn(value,'selection'))
+        invalid(at+'.anchor','an authored anchor requires automatic release and uses its own priority');
+      anchorPolicy(value.anchor,at+'.anchor',roles,report);
+    }
     if (Object.hasOwn(value,'pressure')) {
       const loads = entries(value.pressure,at+'.pressure');
       if (loads.length>16) invalid(at+'.pressure','expected up to 16 pressure dimensions');
@@ -767,7 +785,7 @@ const StoryDocument = (() => {
       if (Object.hasOwn(story,'incident')) incidentMetadata(story.incident,at+'.incident',story.kind,roles,report);
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       if (Object.hasOwn(story.lifecycle??{},'candidate'))
-        candidatePolicy(story.lifecycle.candidate,at+'.lifecycle.candidate',story.kind);
+        candidatePolicy(story.lifecycle.candidate,at+'.lifecycle.candidate',story.kind,roles,report);
       if (Object.hasOwn(story.lifecycle??{},'cooldown'))
         cooldownPolicy(story.lifecycle.cooldown,at+'.lifecycle.cooldown',story,roles,report);
       const { stages, outcomes } = story;

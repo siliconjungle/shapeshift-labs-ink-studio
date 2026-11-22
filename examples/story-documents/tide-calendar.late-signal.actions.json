@@ -1,0 +1,5 @@
+[
+  { "tick": 10, "action": "world/transfer", "args": {
+    "from": "stock/signal-store", "to": "stock/signal", "amount": 1, "mode": "exact"
+  } }
+]

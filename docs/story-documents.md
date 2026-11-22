@@ -865,6 +865,80 @@ node cli/ink-studio.js sim run examples/story-documents/harbor-rotation.world.js
 node cli/ink-studio.js probe harbor-rotation.run.json --ticks 3 --field world/incident-variety
 ```
 
+## Pin an incident with an authored anchor
+
+Put an `anchor` on an automatic `lifecycle.candidate` to place a key
+incident at a world time, when a state condition matches, or when both
+match. The anchor schedules the incident's dispatch. Its offer,
+activation, stages, and outcomes follow the normal lifecycle.
+
+```json
+"candidate": {
+  "release": "automatic",
+  "for": 2,
+  "anchor": {
+    "window": { "from": 6, "until": 8 },
+    "state": {
+      "field": "world/account",
+      "args": { "account": "stock/signal" },
+      "select": "/balance",
+      "when": { "op": "gte", "value": 1 }
+    }
+  }
+}
+```
+
+Window endpoints are inclusive world seconds. Ink rounds the start up
+and the end down to whole ticks. Equal endpoints pin a single
+representable tick. For a condition, Ink reads the completed world
+sample at placement and records matching evidence. Use a qualified
+field and optional `at`, `args`, or `select` just as for objective
+evidence. Query inputs can come from bound roles.
+
+An anchor with a trigger waits for the trigger. An anchor reached
+through an expiry follow-up waits for that link. Other anchors enter
+the queue at their window opening, or at tick 1 for a condition-only
+anchor. The candidate's `for` duration counts from queue entry or the
+window opening, whichever is later. The anchor window and the lifecycle
+world deadline can expire it sooner. A missed window can enqueue
+the normal `onExpire` follow-up.
+
+An eligible anchor takes the automatic beat ahead of ordinary
+candidates. If several anchors are ready, the earliest expiry wins,
+with ties broken by queue age and stable incident ID. Placement uses
+feasibility, pressure limits, and recovery cooldowns. Authored anchors
+take precedence over cadence, challenge, variety, and weighted draws.
+Manual dispatch is available for ordinary candidates. Anchors run
+through the scheduler so they can keep their authored timing.
+
+With a storyteller profile, a forthcoming window-only anchor reserves
+room when another ordinary offer would push its next cadence opening
+past the anchor's first tick. The scheduler can use the open beat
+when a conditional anchor is still waiting. A newly eligible anchor
+can place immediately and becomes the reference point for the next
+ordinary cadence gap. Its dispatch also contributes to variety history.
+
+Preflight lists `incidentAnchors` with resolved queries and clock ticks.
+Probe `world/incident-anchors` for upcoming reservations, queued
+conditions, blockers, and placed or missed anchors. Dispatches use the
+reason `authored-anchor` and include the matched window or condition
+receipt. Window expiry uses `anchor-window-missed` when the window is the
+first cutoff.
+
+The [tide calendar demo](../examples/story-documents/tide-calendar.world.json)
+reserves tick 6 for the tide bell, then raises the beacon flag whenever
+its signal arrives. An early signal takes tick 8. A later signal
+leaves tick 9 open for a rope check before the beacon takes tick 10.
+In the missed-bell run, an unpowered bell queues a written notice.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/tide-calendar.world.json \
+  --actions examples/story-documents/tide-calendar.early-signal.actions.json \
+  --ticks 18 --record tide-calendar.run.json
+node cli/ink-studio.js probe tide-calendar.run.json --ticks 4 --field world/incident-anchors
+node cli/ink-studio.js probe tide-calendar.run.json --field world/incident-anchors
+```
+
 ## Escalate an incident across beats
 
 For an incident with `lifecycle.progression` enabled, put a `beat` on

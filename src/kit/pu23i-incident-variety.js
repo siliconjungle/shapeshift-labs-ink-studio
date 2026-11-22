@@ -127,7 +127,7 @@
     const decisions = new Map(), rows = Object.values(state);
     for (const row of rows) {
       const receipt = row.variety, message = 'Invalid saved variety decision for '+row.candidate;
-      if (!settings||row.storyteller?.mode!=='automatic') {
+      if (!settings||row.storyteller?.mode!=='automatic'||row.anchor) {
         check(receipt===undefined,message);
         continue;
       }

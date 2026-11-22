@@ -349,8 +349,8 @@
       plan.storySettlement = W.storySettlement.compile(documents, systems, transfers);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
       plan.incidentCooldowns = W.incidentCooldowns.compile(documents,world.dt);
-      plan.incidentCandidates = W.incidentCandidates.compile(documents,world.dt,plan.storyLifecycle?.feasibility,world.seed,
-        world.incidentPressure,plan.incidentCooldowns,plan.storyteller,plan.incidentVariety);
+      plan.incidentCandidates = W.incidentCandidates.compile(documents,world,systems,plan.storyLifecycle?.feasibility,
+        plan.incidentCooldowns,plan.storyteller,plan.incidentVariety);
       plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
     }
@@ -475,6 +475,7 @@
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.incidentCatalog?.length && {incidentCatalog:W.incidentCatalog.find(plan.incidentCatalog)}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
+      ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
       ...(plan.incidentCooldowns && {incidentCooldowns:plan.incidentCooldowns}),
       ...(plan.incidentVariety && {incidentVariety:plan.incidentVariety}),
@@ -585,6 +586,7 @@
         ...(incidentVariety && {incidentVariety}),
         ...(storyteller && {storyteller,storytellerCandidates:incidentCandidates?.direction}),
         ...(incidentCandidates && {incidentCandidatePolicies:incidentCandidates.policies,incidentCandidates:incidentCandidateState}),
+        ...(incidentCandidates?.anchors && {incidentAnchors:incidentCandidates.anchors}),
         ...(storyTemplates && {storyTemplates}),
         ...((storyTemplates||storyLifecycle?.decisions||storyLifecycle?.beats) && {storyDocuments:storyRoles.documents}),
         ...(storyLifecycle?.decisions && {storyDecisions:storyLifecycle.decisions}),

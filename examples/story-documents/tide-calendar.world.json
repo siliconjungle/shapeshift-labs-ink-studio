@@ -1,0 +1,32 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "tide-calendar",
+  "seed": 13,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "tide-calendar.json" }],
+  "storyteller": {
+    "active": "harbor-log",
+    "profiles": { "harbor-log": { "cadence": { "minInterval": 0.3 }, "challenge": { "maxIntensity": 3 },
+      "variety": { "family": 1 } } }
+  },
+  "systems": {
+    "stock": { "kind": "store", "config": { "accounts": {
+      "bell-power": { "resource": "power", "units": "cell", "type": "integer", "initial": 1 },
+      "bell-spent": { "resource": "power", "units": "cell", "type": "integer", "initial": 0 },
+      "signal-store": { "resource": "signal", "units": "charge", "type": "integer", "initial": 1 },
+      "signal": { "resource": "signal", "units": "charge", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "harbor-opens" } },
+    { "tick": 2, "action": "world/event", "args": { "kind": "crew-list-posted" } }
+  ],
+  "eventActions": {
+    "sound-bell": {
+      "on": { "kind": "story-beat-entered", "system": "world", "where": { "path": "/story", "value": "tide-bell" } },
+      "limit": 1,
+      "actions": [{ "action": "world/event", "args": { "kind": "tide-bell-heard" } }]
+    }
+  }
+}

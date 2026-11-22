@@ -1,0 +1,8 @@
+[
+  { "tick": 5, "action": "world/transfer", "args": {
+    "from": "stock/bell-power", "to": "stock/bell-spent", "amount": 1, "mode": "exact"
+  } },
+  { "tick": 8, "action": "world/transfer", "args": {
+    "from": "stock/signal-store", "to": "stock/signal", "amount": 1, "mode": "exact"
+  } }
+]

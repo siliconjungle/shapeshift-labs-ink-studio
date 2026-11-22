@@ -70,6 +70,7 @@
       kind==='story-objective-resolved'?label(objective):
       kind==='story-stage-entered'||kind==='story-decision-opened'||kind==='story-decision-elapsed'?label(stage):
       kind==='story-candidate-selected'?label(event.selection?.reason):
+      kind==='story-candidate-dispatched'&&event.anchor?label(event.anchor.reason):
       kind==='story-progress-rejected'?label(reason):undefined;
     const by = kind==='story-branch-chosen'&&label(decision?.by??beat?.by);
     return title+(detail?' · '+detail:'')+(by?' ('+by+')':'');

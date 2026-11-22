@@ -38,7 +38,7 @@
     for (let i=1;authoredPools.has(sharedPool);i++) sharedPool = 'storyteller-'+i;
     const rows = [];
     for (const [key,{policy,info}] of specs) {
-      if (policy.release!=='automatic') continue;
+      if (policy.release!=='automatic'||policy.anchor) continue;
       const {category='unclassified',intensity=null} = info.incident??{};
       const categoryWeight = categoryWeights[category]??1;
       const original = policy.selection??(weighted?{pool:sharedPool,weight:1}:null);
@@ -78,7 +78,12 @@
       const message = 'Invalid saved storyteller dispatch for '+candidate;
       check((mode==='manual'||mode==='automatic')&&equal(storyteller,receipt(model,mode,previous,terminal.tick)),message);
       if (mode==='manual') {
-        check(selection===undefined,message);
+        check(selection===undefined&&!row.anchor,message);
+        continue;
+      }
+      if (row.anchor) {
+        check(previous!==terminal.tick&&selection===undefined&&terminal.reason===W.incidentAnchors.reason,message);
+        previous = terminal.tick;
         continue;
       }
       const spec = direction[candidate], earliest = nextAt(model,previous);

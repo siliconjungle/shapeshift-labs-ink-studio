@@ -1,0 +1,86 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "tide-calendar",
+  "title": "A tide bell and a beacon signal shape the harbor schedule",
+  "references": { "signal": { "kind": "account", "id": "stock/signal" } },
+  "stories": {
+    "market-preview": {
+      "kind": "incident",
+      "title": "The market sets up at dawn",
+      "incident": { "category": "opportunity", "intensity": 1, "variety": { "family": ["market"] } },
+      "triggers": { "opening": { "event": { "kind": "harbor-opens" } } },
+      "lifecycle": { "candidate": { "for": 3, "release": "automatic" } },
+      "entry": "market",
+      "stages": { "market": { "title": "Set up the market", "next": { "done": { "outcome": "open" } } } },
+      "outcomes": { "open": { "title": "The stalls open" } }
+    },
+    "tide-bell": {
+      "kind": "incident",
+      "title": "Sound the tide bell at the published time",
+      "incident": { "category": "environmental-change", "intensity": 5 },
+      "lifecycle": {
+        "progression": true,
+        "candidate": {
+          "for": 1, "release": "automatic", "onExpire": "quiet-notice",
+          "anchor": { "window": { "from": 0.6, "until": 0.6 } }
+        },
+        "feasibility": { "bell-powered": { "state": {
+          "field": "world/account", "args": { "account": "stock/bell-power" },
+          "select": "/balance", "when": { "op": "gte", "value": 1 }
+        } } }
+      },
+      "entry": "sound",
+      "stages": { "sound": {
+        "title": "The tide bell rings", "beat": { "kind": "consequence", "for": 0.2, "otherwise": "done" },
+        "next": { "done": { "outcome": "rang" } }
+      } },
+      "outcomes": { "rang": { "title": "The harbor heard the bell" } }
+    },
+    "beacon-signal": {
+      "kind": "incident",
+      "title": "Raise the harbor flag when the beacon comes online",
+      "incident": { "category": "discovery", "intensity": 4 },
+      "roles": { "signal": { "kind": "account", "ref": "signal" } },
+      "lifecycle": {
+        "candidate": { "for": 2, "release": "automatic",
+          "anchor": { "state": { "field": "world/account",
+            "args": { "account": { "$role": "signal" } }, "select": "/balance",
+            "when": { "op": "gte", "value": 1 } } }
+        }
+      },
+      "entry": "signal",
+      "stages": { "signal": { "title": "Raise the flag", "next": { "done": { "outcome": "visible" } } } },
+      "outcomes": { "visible": { "title": "The flag is visible from the crossing" } }
+    },
+    "equipment-check": {
+      "kind": "incident",
+      "title": "Check a spare set of ropes",
+      "incident": { "category": "opportunity", "intensity": 1, "variety": { "family": ["maintenance"] } },
+      "triggers": { "checks-open": { "event": { "kind": "crew-list-posted" } } },
+      "lifecycle": { "candidate": { "for": 3, "release": "automatic" } },
+      "entry": "inspect",
+      "stages": { "inspect": { "title": "Check the ropes", "next": { "done": { "outcome": "checked" } } } },
+      "outcomes": { "checked": { "title": "The spare ropes are ready" } }
+    },
+    "visitor": {
+      "kind": "incident",
+      "title": "Welcome a visiting pilot",
+      "incident": { "category": "visitor", "intensity": 1, "variety": { "family": ["visitor"] } },
+      "triggers": { "visit": { "event": { "kind": "crew-list-posted" } } },
+      "lifecycle": { "candidate": { "for": 3, "release": "automatic" } },
+      "entry": "welcome",
+      "stages": { "welcome": { "title": "Greet the pilot", "next": { "done": { "outcome": "welcomed" } } } },
+      "outcomes": { "welcomed": { "title": "The pilot is welcomed" } }
+    },
+    "quiet-notice": {
+      "kind": "incident",
+      "title": "Post a notice after the bell fails to ring",
+      "incident": { "category": "recovery", "intensity": 0, "variety": { "family": ["notice"] } },
+      "lifecycle": { "candidate": { "for": 3, "release": "automatic" } },
+      "entry": "post",
+      "stages": { "post": { "title": "Post the notice", "next": { "done": { "outcome": "posted" } } } },
+      "outcomes": { "posted": { "title": "The tide notice is posted" } }
+    }
+  }
+}
