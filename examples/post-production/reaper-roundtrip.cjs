@@ -1,6 +1,7 @@
 /* Build the workshop from the Lantern Gate story and optionally verify it in REAPER. */
 const fs=require('node:fs'), path=require('node:path'), os=require('node:os'), assert=require('node:assert/strict');
-const {execFileSync}=require('node:child_process');
+const {execFileSync,spawn}=require('node:child_process');
+const {setTimeout:delay}=require('node:timers/promises');
 const ink=require('../..'), {KIT}=ink.load(), P=KIT.procedural, T=P.takeTime;
 const rate=48000, ffmpeg=process.env.INK_HANDOFF_FFMPEG ?? 'ffmpeg';
 const WAV=require('../../cli/wav.js');
@@ -135,7 +136,7 @@ function setup() {
     'room-tone':'room.json',recut:'recut.json','reconform-review':'review/report.json'}});
   cli('music','post','export','cut-project.json','handoff-settings.json','--out','handoff');
 }
-function verify(executable) {
+async function verify(executable) {
   const manifest=read('handoff/handoff.json'), folder=file('handoff');
   const line=manifest.items.find(row=>row.clip==='cue-1'), foley=manifest.items.find(row=>row.clip==='gate-latch');
   const picture=manifest.items.find(row=>row.role==='picture'), shift=1200;
@@ -146,14 +147,25 @@ function verify(executable) {
   fs.writeFileSync(config,'return {\n'+settings+'\n}\n');
   for (const name of ['reaper-error.txt','reaper-return.json','reaper-picture.txt','reaper-pcm.wav'])
     fs.rmSync(file('handoff/'+name),{force:true});
+  const child=spawn(executable,['-newinst','-cfgfile',path.join(options,'reaper.ini'),fields.project,
+    path.join(__dirname,'verify-reaper.lua')],
+  {env:{...process.env,INK_REAPER_VERIFY_CONFIG:config},stdio:'inherit'});
+  let failure;
+  child.once('error',error=>{failure=error;});
+  const proof=file('handoff/reaper-picture.txt'), errorFile=file('handoff/reaper-error.txt');
   try {
-    execFileSync(executable,['-newinst','-cfgfile',path.join(options,'reaper.ini'),fields.project,
-      path.join(__dirname,'verify-reaper.lua')],
-    {env:{...process.env,INK_REAPER_VERIFY_CONFIG:config},timeout:45000,stdio:'inherit'});
+    const deadline=Date.now()+45000;
+    while (!fs.existsSync(proof) && !fs.existsSync(errorFile)) {
+      if (failure) throw failure;
+      if (child.exitCode!==null || Date.now()>=deadline) throw Error('REAPER exited or timed out before printing its verification');
+      await delay(120);
+    }
   } finally {
+    // This instance uses a temporary profile and has already saved the edited project.
+    if (child.exitCode===null) child.kill();
+    child.unref();
     fs.rmSync(options,{recursive:true,force:true});
   }
-  const errorFile=file('handoff/reaper-error.txt');
   if (fs.existsSync(errorFile)) throw Error(fs.readFileSync(errorFile,'utf8'));
   cli('music','post','import','handoff','handoff/reaper-return.json','--out','returned');
   const report=read('returned/report.json');
@@ -179,4 +191,4 @@ function verify(executable) {
   console.log(file('verification.json'));
 }
 if (process.argv[4]!=='--verify-only') setup();
-if (process.argv[3]) verify(path.resolve(process.argv[3]));
+if (process.argv[3]) verify(path.resolve(process.argv[3])).catch(error=>{console.error(error);process.exitCode=1;});

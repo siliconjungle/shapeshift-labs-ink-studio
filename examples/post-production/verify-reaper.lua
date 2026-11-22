@@ -41,10 +41,11 @@ local function verify()
   for name, value in pairs(strings) do r.GetSetProjectInfo_String(project,name,value,true) end
   r.Main_OnCommand(42230,0)
   r.Main_SaveProjectEx(project,config.folder .. '/edited.rpp',0)
-  local proof = assert(io.open(config.folder .. '/reaper-picture.txt','w'))
+  local proof = assert(io.open(config.folder .. '/reaper-picture.tmp','w'))
   local pictureRate = r.TimeMap_curFrameRate(project)
   proof:write(r.GetAppVersion(),'\n',string.format('%.17g',pictureSeconds),'\n',string.format('%.17g',pictureRate),'\n')
   proof:close()
+  assert(os.rename(config.folder .. '/reaper-picture.tmp',config.folder .. '/reaper-picture.txt'))
 end
 local ok, message = xpcall(verify, debug.traceback)
 if not ok then
