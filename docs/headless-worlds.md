@@ -738,6 +738,85 @@ ink-studio trace pier.run.json world/fact-causes --args '{"id":"3.0"}'
 ink-studio trace pier.run.json world/cause --args '{"event":"3.0"}'
 ```
 
+## Track what actors and factions know
+
+Enable `"knowledge": true` alongside typed world facts. Each holder
+has its own view of an occurrence. Use a holder of kind `actor` or
+`faction` with a stable qualified ID. Actor and faction IDs occupy
+separate scopes, and reports can move between either kind.
+
+Add `witnesses` to a `world/fact` action to record firsthand
+observations when the fact is published. A witness can observe all
+details or a named subset. The fact ID and type identify what the
+observation is about. The selectable details are `at`, each
+`subject/<role>`, and each `data/<field>` declared by the fact type.
+
+```json
+"witnesses": [
+  { "holder": { "kind": "actor", "id": "crew/mira" } },
+  { "holder": { "kind": "actor", "id": "crew/niko" }, "fields": ["at"] }
+]
+```
+
+Use `world/share-fact` to report selected details. An omitted
+`fields` list shares everything the sender currently knows about
+that fact. The receiver gains the new details and keeps the original
+receipt for each detail it already knew. A report that asks for an
+unknown detail is rejected as a unit, with the missing fields on
+the `fact-report-rejected` event.
+
+```json
+{
+  "tick": 4,
+  "action": "world/share-fact",
+  "args": {
+    "fact": "1.0",
+    "from": { "kind": "actor", "id": "crew/mira" },
+    "to": { "kind": "faction", "id": "harbor-watch" },
+    "fields": ["data/severity"]
+  }
+}
+```
+
+Probe `world/knowledge` with a holder and a fact ID for
+`unknown`, `partial`, or `complete` status. The holder's report
+includes the disclosed values, missing detail names, and a receipt
+for each known detail. Its origin is `witness`, `secondhand`, or
+`mixed`. Query by holder alone to list their knowledge, or by fact ID
+to see all retained holders' views of that occurrence. Results can
+also be filtered by `type`. Lists accept a `limit`.
+
+A `fact-learned` event records the holder, newly learned detail
+names, and the preceding receipt for each detail. A story can trigger
+on that event and use `world/knowledge` for its own holder's feasibility
+checks and objective evidence. Use the authoritative `world/facts`
+ledger for world-level inspection. Trace `world/knowledge` with a
+holder, fact, and field to follow a particular detail back through
+reports to a witness. With causality enabled, learning events link
+to their retained source events in the native causal graph.
+
+The knowledge ledger retains 512 holder/fact entries by default.
+Set `"knowledge": {"limit":32}` to change that limit within 1–4,096.
+It evicts the entry least recently updated with new information.
+Known details remain available after the authoritative fact is
+evicted. The lineage reports a gap when an earlier holder's record
+is evicted from the knowledge ledger.
+
+In the [lock knowledge demo](../examples/story-documents/lock-knowledge.world.json),
+Mira witnesses the damage and Niko sees its location. The harbor
+watch first hears where it happened. The severity report opens the
+repair brief, and a later report gives the watch the lane count
+needed to finish it.
+
+```sh
+ink-studio sim run examples/story-documents/lock-knowledge.world.json \
+  --actions examples/story-documents/lock-knowledge.relay.actions.json --ticks 9 --record lock.run.json
+ink-studio probe lock.run.json --ticks 4 --field world/knowledge \
+  --args '{"holder":{"kind":"faction","id":"harbor-watch"},"fact":"1.0"}'
+ink-studio trace lock.run.json world/knowledge \
+  --args '{"holder":{"kind":"actor","id":"crew/niko"},"fact":"1.0","field":"data/severity"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families
@@ -944,7 +1023,7 @@ and call `solve(pins)` to fit the coordinate constraints.
 A manifest has `format: "ink-studio/world"`, `version: 1`, a stable `id`,
 `seed`, `dt`, and tables of `entities` and `systems`. A system record
 declares a `kind`, a `config`, and optionally a [solver schedule](#multi-rate-simulation). Optional sections include `connections`,
-`prefabs`, `assetPacks`, `commands`, `history`, `causality`, `facts`, `metadata` and
+`prefabs`, `assetPacks`, `commands`, `history`, `causality`, `facts`, `knowledge`, `metadata` and
 `scenario`. See [the watershed](../examples/world-watershed.json) and
 [the quarry crossing](../examples/world-crossing.json) for working manifests.
 

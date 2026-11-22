@@ -256,6 +256,8 @@
       }},
       ...(world.facts!==undefined&&{facts:{type:'record',qualified:true,read:({args})=>
         W.worldFacts.inspect(view.worldFacts,tick,args)}}),
+      ...(world.knowledge!==undefined&&{knowledge:{type:'record',qualified:true,read:({args})=>
+        W.worldKnowledge.inspect(view.knowledge,view.knowledgePolicy,tick,args)}}),
       account:{type:'record',read:({args}) => {
         const balance = transfers().inspect(states,args.account);
         return balance ? ok(balance.at===undefined?balance:{...balance,position:W.worksites.frame(api,balance.at)?.point??null}) :
@@ -348,6 +350,7 @@
         W.causality.trace(view.causality,world,tick,args,target?.entity??args.entity) :
         missing('causal recording is not enabled for this snapshot')},
       ...(world.facts!==undefined&&{'fact-causes':{qualified:true,run:({args})=>W.worldFacts.trace(view.worldFacts,args)}}),
+      ...(world.knowledge!==undefined&&{knowledge:{qualified:true,run:({args})=>W.worldKnowledge.trace(view.knowledge,args)}}),
       'causal-inspection':{selector:true,qualified:true,run:({target,args})=>
         W.causalInspection.inspect(view,api,transfers().describe(),target,args)},
       signal:{run:({args}) => {
@@ -459,6 +462,7 @@
         actions:sorted(systems[id].actions ?? {})
       })),actions:['world/input','world/patch','world/event',...(accounts.length ? ['world/transfer'] : []),
         ...(view.worldFacts ? ['world/'+W.worldFacts.action] : []),
+        ...(view.knowledge ? ['world/'+W.worldKnowledge.action] : []),
         ...(view.storyLifecycle ? W.storyLifecycle.actions.map(name=>'world/'+name) : []),
         ...(view.incidentCandidatePolicies ? ['world/'+W.incidentCandidates.action] : []),
         ...(world.simulationChunks?W.simulationChunks.actions.map(name=>'world/'+name):[])]};

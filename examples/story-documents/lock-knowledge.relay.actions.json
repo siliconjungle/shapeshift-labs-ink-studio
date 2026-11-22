@@ -1,0 +1,21 @@
+[
+  { "tick": 4, "action": "world/share-fact", "args": {
+    "fact": "1.0", "from": { "kind": "actor", "id": "crew/mira" },
+    "to": { "kind": "faction", "id": "harbor-watch" }, "fields": ["data/severity"]
+  } },
+  { "tick": 5, "action": "world/share-fact", "args": {
+    "fact": "1.0", "from": { "kind": "faction", "id": "harbor-watch" },
+    "to": { "kind": "actor", "id": "crew/dispatcher" }
+  } },
+  { "tick": 6, "action": "world/share-fact", "args": {
+    "fact": "1.0", "from": { "kind": "actor", "id": "crew/dispatcher" },
+    "to": { "kind": "actor", "id": "crew/niko" }, "fields": ["data/severity"]
+  } },
+  { "tick": 7, "action": "world/share-fact", "args": {
+    "fact": "1.0", "from": { "kind": "actor", "id": "crew/mira" },
+    "to": { "kind": "faction", "id": "harbor-watch" }
+  } },
+  { "tick": 8, "action": "world/fact", "args": {
+    "type": "weather-note", "at": { "place": "harbor" }, "data": { "clear": true }
+  } }
+]

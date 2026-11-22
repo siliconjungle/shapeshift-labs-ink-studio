@@ -45,7 +45,7 @@
     }
 
     function checkAction(args) {
-      check(fields(args,['type','at','subjects','data','causes'])&&typeof args.type==='string'&&own(schemas,args.type)&&atOK(args.at),
+      check(fields(args,['type','at','subjects','data','causes','witnesses'])&&typeof args.type==='string'&&own(schemas,args.type)&&atOK(args.at),
         'A world fact needs a registered type and a place, entity, or point');
       const schema = schemas[args.type], {subjects={},data={},causes=[]} = args;
       check(namesMatch(subjects,schema.subjects)&&Object.values(subjects).every(qualified),
@@ -172,5 +172,6 @@
     return Q.ok({status:gaps.size?'partial':'complete',root:root.id,nodes,edges,gaps:[...gaps.values()],dropped:state.dropped});
   }
 
-  W.worldFacts = Object.freeze({action,kind,compile,inspect,trace});
+  const valueOK = (shape,value)=>own(types,shape)&&types[shape](value);
+  W.worldFacts = Object.freeze({action,kind,compile,inspect,trace,qualified,eventId,compare,atOK,valueOK});
 })(KIT);

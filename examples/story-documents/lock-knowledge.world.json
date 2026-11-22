@@ -1,0 +1,36 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "lock-knowledge",
+  "dt": 0.1,
+  "causality": { "limit": 64 },
+  "history": { "enabled": false },
+  "storyDocuments": [{ "file": "lock-knowledge.json" }],
+  "facts": {
+    "types": {
+      "lock-damage": { "subjects": { "structure": "site" }, "fields": { "lanes": "integer", "severity": "string" } },
+      "weather-note": { "fields": { "clear": "boolean" } }
+    }
+  },
+  "knowledge": { "limit": 32 },
+  "commands": [
+    { "tick": 1, "action": "world/fact", "args": {
+      "type": "lock-damage",
+      "at": { "place": "harbor/lock", "point": [2, 0, 5] },
+      "subjects": { "structure": "harbor/lock" },
+      "data": { "lanes": 2, "severity": "critical" },
+      "witnesses": [
+        { "holder": { "kind": "actor", "id": "crew/mira" } },
+        { "holder": { "kind": "actor", "id": "crew/niko" }, "fields": ["at"] }
+      ]
+    } },
+    { "tick": 2, "action": "world/share-fact", "args": {
+      "fact": "1.0", "from": { "kind": "actor", "id": "crew/mira" },
+      "to": { "kind": "faction", "id": "harbor-watch" }, "fields": ["at"]
+    } },
+    { "tick": 3, "action": "world/share-fact", "args": {
+      "fact": "1.0", "from": { "kind": "faction", "id": "harbor-watch" },
+      "to": { "kind": "actor", "id": "crew/dispatcher" }, "fields": ["at", "data/severity"]
+    } }
+  ]
+}

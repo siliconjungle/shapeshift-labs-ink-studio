@@ -1,0 +1,43 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "lock-knowledge",
+  "title": "A faction gets enough information to plan a repair",
+  "stories": {
+    "repair-brief": {
+      "kind": "incident",
+      "title": "Prepare the harbor lock repair brief",
+      "incident": { "category": "opportunity", "intensity": 2 },
+      "triggers": {
+        "watch-hears": { "event": { "kind": "fact-learned", "where": { "all": [
+          { "path": "/learning/holder/kind", "value": "faction" },
+          { "path": "/learning/holder/id", "value": "harbor-watch" },
+          { "path": "/learning/type", "value": "lock-damage" }
+        ] } } }
+      },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 2, "release": "automatic" },
+        "feasibility": { "severity-reported": { "state": {
+          "field": "world/knowledge",
+          "args": { "holder": { "kind": "faction", "id": "harbor-watch" }, "fact": "1.0" },
+          "select": "/knowledge/data/severity",
+          "when": { "value": "critical" }
+        } } }
+      },
+      "entry": "brief",
+      "stages": { "brief": {
+        "title": "Confirm how many lanes are blocked",
+        "decision": { "mode": "autonomous" },
+        "objectives": { "lane-count": { "title": "Receive the lane count", "evidence": { "state": {
+          "field": "world/knowledge",
+          "args": { "holder": { "kind": "faction", "id": "harbor-watch" }, "fact": "1.0" },
+          "select": "/knowledge/data/lanes",
+          "when": { "op": "gt", "value": 0 }
+        } } } },
+        "next": { "ready": { "outcome": "briefed", "auto": true } }
+      } },
+      "outcomes": { "briefed": { "title": "The watch can brief the repair crew" } }
+    }
+  }
+}

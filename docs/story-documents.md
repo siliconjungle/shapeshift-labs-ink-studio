@@ -1072,6 +1072,12 @@ Match its `world-fact` event to use the exact occurrence. Query
 `world/facts` to test whether the retained ledger contains relevant
 evidence. The pier example combines both at the same scheduler boundary.
 
+For cast-specific decisions, use
+[actor or faction knowledge](headless-worlds.md#track-what-actors-and-factions-know).
+A `fact-learned` trigger can open a candidate when a holder hears about
+an occurrence. A `world/knowledge` feasibility check can wait until that
+holder receives a particular detail.
+
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.
 
 | Trigger | Example | When it starts |
