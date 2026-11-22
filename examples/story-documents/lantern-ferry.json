@@ -12,16 +12,14 @@
       "stages": {
         "dispatch": {
           "title": "Wait for a crossing window",
-          "decision": { "mode": "autonomous" },
+          "decision": { "mode": "player" },
           "objectives": {
-            "east-ready": { "title": "East lantern answers", "type": "observe", "optional": true,
-              "params": { "event": { "kind": "east-window-open", "system": "world" } } },
-            "west-ready": { "title": "West lantern answers", "type": "observe", "optional": true,
-              "params": { "event": { "kind": "west-window-open", "system": "world" } } }
+            "route": { "title": "Use the crossing window assigned by the scheduler", "type": "choose",
+              "params": { "options": { "east": "East window", "west": "West window" } } }
           },
           "next": {
-            "east": { "outcome": "east-delivery", "requires": ["east-ready"], "auto": true },
-            "west": { "stage": "await-landing", "requires": ["west-ready"], "auto": true }
+            "east": { "outcome": "east-delivery", "requiresChoice": { "route": "east" } },
+            "west": { "stage": "await-landing", "requiresChoice": { "route": "west" } }
           }
         },
         "await-landing": {

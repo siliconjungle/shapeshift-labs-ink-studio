@@ -31,11 +31,29 @@
   "eventActions": {
     "open-east": {
       "on": { "kind": "story-candidate-dispatched", "system": "world", "where": { "path": "/candidate", "value": "lantern-ferry/east-window" } },
-      "actions": [{ "action": "world/event", "args": { "kind": "east-window-open" } }]
+      "actions": [
+        { "action": "world/story-select", "args": {
+          "document": "lantern-ferry", "story": "relay", "stage": "dispatch", "visit": 1,
+          "objective": "route", "option": "east", "reason": "east-window-dispatched"
+        } },
+        { "action": "world/story-choose", "args": {
+          "document": "lantern-ferry", "story": "relay", "stage": "dispatch", "visit": 1,
+          "branch": "east", "reason": "use-dispatched-window"
+        } }
+      ]
     },
     "open-west": {
       "on": { "kind": "story-candidate-dispatched", "system": "world", "where": { "path": "/candidate", "value": "lantern-ferry/west-window" } },
-      "actions": [{ "action": "world/event", "args": { "kind": "west-window-open" } }]
+      "actions": [
+        { "action": "world/story-select", "args": {
+          "document": "lantern-ferry", "story": "relay", "stage": "dispatch", "visit": 1,
+          "objective": "route", "option": "west", "reason": "west-window-dispatched"
+        } },
+        { "action": "world/story-choose", "args": {
+          "document": "lantern-ferry", "story": "relay", "stage": "dispatch", "visit": 1,
+          "branch": "west", "reason": "use-dispatched-window"
+        } }
+      ]
     }
   }
 }
