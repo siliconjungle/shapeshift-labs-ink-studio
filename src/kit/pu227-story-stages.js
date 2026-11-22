@@ -73,10 +73,22 @@
     return withObjectives(flow, {}, {});
   }
 
-  function advance(action, definition, flow, args, tick, readChild, credit) {
+  function eligibility(stage, branch, objectives, readChild) {
+    const pending = missing(stage, branch, objectives);
+    if (pending.length) return { rejected:'objectives-pending', pending };
+    const children = W.storyChildren.capture(stage, branch, readChild);
+    return children?W.storyChildren.gate(stage,branch,children)??{children}:{};
+  }
+
+  function advance(action, definition, flow, args, tick, readChild, credit, by = 'player') {
     const { current } = flow;
     if (args.stage !== current.stage || args.visit !== current.visit) return { rejected: 'stale-stage-visit' };
     const stage = definition.stages[current.stage], { reason } = args;
+    const policy = own(definition.decisions,current.stage)?definition.decisions[current.stage]:undefined;
+    if (by==='player'&&action!=='story-objective') {
+      const rejected = W.storyDecisions.playerBlocker(policy,current.intervention);
+      if (rejected) return {rejected};
+    }
     if (action !== 'story-choose') {
       const { objective, option } = args, selected = action === 'story-select';
       const { type, optional } = stage.objectives[objective], result = selected ? 'completed' : args.result;
@@ -88,20 +100,17 @@
       delete progress[objective];
       return { flow: withObjectives(flow, { [objective]: change }, progress), objective: { objective, ...change } };
     }
-    const branch = stage.next[args.branch], pending = missing(stage, branch, current.objectives);
-    if (pending.length) return { rejected: 'objectives-pending', pending };
-    const children = W.storyChildren.capture(stage, branch, readChild);
-    if (children) {
-      const blocked = W.storyChildren.gate(stage, branch, children);
-      if (blocked) return blocked;
-    }
+    const branch = stage.next[args.branch], gate = eligibility(stage,branch,current.objectives,readChild);
+    if (gate.rejected) return gate;
     const target = targetOf(branch), skipped = omitted(stage, current.objectives);
+    const decision = W.storyDecisions.proof(policy,by);
+    const closure = {branch:args.branch,reason,target,skipped,...gate,...(decision&&{decision})};
     const { progress, ...visit } = current;
-    const row = { ...visit, branch: args.branch, reason, leftAt: tick, target, skipped, ...(children && {children}) };
+    const row = { ...visit, ...closure, leftAt:tick };
     const route = [...flow.route, row], overflow = Math.max(0, route.length - limit);
     const next = own(target, 'stage') ? makeVisit(target.stage, current.visit + 1, tick) : null;
     return { flow: { current: next, route: route.slice(overflow), dropped: flow.dropped + overflow },
-      branch: { branch: args.branch, reason, target, skipped, ...(children && {children}) } };
+      branch: closure };
   }
 
   function validate(flow, definition, status, tick, firstActivation, reasonOK, message, readChild, readRequest, creditAt) {
@@ -111,7 +120,9 @@
       check(isId(row.stage) && own(definition.stages, row.stage) && (nextStage === undefined || row.stage === nextStage) &&
         row.visit === index && at(row.enteredAt, 1, deadline) && (after === undefined || row.enteredAt === after) && record(row.objectives), message);
       const stage = definition.stages[row.stage];
-      check(W.storyChildren.opened(stage, row, readChild, readRequest), message);
+      const policy = own(definition.decisions,row.stage)?definition.decisions[row.stage]:undefined;
+      check(W.storyChildren.opened(stage, row, readChild, readRequest)&&
+        W.storyDecisions.valid(policy,row,deadline,own(row,'branch')),message);
       const rules = definition.evidence.get(row.stage);
       for (const [id, change] of Object.entries(row.objectives)) {
         const objective = own(stage.objectives, id) && stage.objectives[id];
@@ -145,13 +156,15 @@
     let nextStage = flow.dropped ? undefined : definition.info.stage;
     let after = flow.dropped ? undefined : firstActivation, last;
     for (const [index, row] of flow.route.entries()) {
-      check(fields(row, ['branch', ...(own(row, 'children') ? ['children'] : []), 'enteredAt', 'leftAt', 'objectives',
+      check(fields(row, ['branch', ...(own(row, 'children') ? ['children'] : []), ...(own(row,'decision')?['decision']:[]),
+        'enteredAt', ...(own(row,'intervention')?['intervention']:[]), 'leftAt', 'objectives',
         'reason', 'skipped', 'stage', 'target', 'visit']) &&
         at(row.leftAt, 1, tick) && reasonOK(row.reason) && (!last || own(last.target, 'stage')), message);
       const stage = visit(row, flow.dropped + index + 1, row.leftAt, nextStage, after);
       check(isId(row.branch) && own(stage.next, row.branch), message);
       const branch = stage.next[row.branch];
       check(equal(targetOf(branch), row.target) && !missing(stage, branch, row.objectives).length &&
+        (!row.decision||row.decision.by==='player'||branch.auto===true)&&
         equal(omitted(stage, row.objectives), row.skipped) && W.storyChildren.validResults(stage, branch, row, readChild), message);
       nextStage = row.target.stage;
       after = row.leftAt;
@@ -162,12 +175,13 @@
       check(ending !== undefined && ending === status.outcome && last.leftAt === status.tick &&
         last.reason === status.reason && (definition.outcomes[ending].status ?? 'completed') === status.to, message);
     } else {
-      check(fields(flow.current, ['enteredAt', 'objectives', ...(own(flow.current, 'progress') ? ['progress'] : []), 'stage', 'visit']) &&
+      check(fields(flow.current, ['enteredAt', ...(own(flow.current,'intervention')?['intervention']:[]), 'objectives',
+        ...(own(flow.current, 'progress') ? ['progress'] : []), 'stage', 'visit']) &&
         (!last || own(last.target, 'stage')) &&
         status.to !== 'completed', message);
       visit(flow.current, flow.dropped + flow.route.length + 1, tick, nextStage, after);
     }
   }
 
-  W.storyStages = Object.freeze({ initial, checkAction, advance, validate, confirm, clearProgress });
+  W.storyStages = Object.freeze({ initial, checkAction, advance, validate, confirm, clearProgress, eligibility, targetOf });
 })(KIT);

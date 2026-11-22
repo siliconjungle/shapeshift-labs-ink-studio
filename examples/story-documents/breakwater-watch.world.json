@@ -1,0 +1,33 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "breakwater-watch",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "breakwater-watch.json" }],
+  "systems": {
+    "supplies": { "kind": "store", "config": { "accounts": {
+      "depot": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 4 },
+      "staging": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 },
+      "pier": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 },
+      "shelter": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 3, "action": "world/transfer", "args": {
+      "from": "supplies/depot", "to": "supplies/staging", "amount": 4, "mode": "exact"
+    } }
+  ],
+  "eventActions": {
+    "broadcast-window": {
+      "on": { "kind": "story-decision-opened", "system": "world" },
+      "limit": 8,
+      "actions": [{ "action": "world/event", "args": { "kind": "radio-intervention-available", "stage": "plan-route", "visit": 2 },
+        "bindings": { "/stage": "/stage", "/visit": "/visit" } }]
+    },
+    "notify-crew-route": {
+      "on": { "kind": "story-branch-chosen", "system": "world", "where": { "path": "/stage", "value": "plan-route" } },
+      "actions": [{ "action": "world/event", "args": { "kind": "radio-route-committed", "route": "coast" },
+        "bindings": { "/route": "/branch" } }]
+    }
+  }
+}

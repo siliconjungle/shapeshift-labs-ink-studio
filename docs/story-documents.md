@@ -50,7 +50,7 @@ node cli/ink-studio.js sim run examples/story-documents/breakwater-survey.world.
 | Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map |
 | Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
 | Role | `kind` | `ref` to a document reference of the same kind, `required` for a required world binding or reference default |
-| Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled, `children` on a progressing arc |
+| Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` and `decision` when stage progression is enabled, `children` on a progressing arc |
 | Objective | `title` | `summary`, `refs`, `optional`, `evidence`, `type` with its `params` |
 | Outcome | `title` | `summary`, `refs`, `status` when stage progression is enabled |
 | Reference | `kind`, `id` | |
@@ -543,6 +543,61 @@ node cli/ink-studio.js probe lower.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe upper.run.json --field world/story-lifecycle
 ```
 
+## Author autonomous and player-directed stages
+
+Set `decision` on any stage with [stage progression](#branch-and-converge)
+enabled. A questlet can use a different policy on each stage.
+
+| Decision | How the stage advances |
+| --- | --- |
+| `{"mode":"autonomous"}` | All branches use `"auto":true`. Ink selects the first eligible branch by ID after world evidence and story commands have been processed. |
+| `{"mode":"player"}` | An explicit `world/story-choose` selects an eligible branch. Use `world/story-select` first when that branch requires a typed choice. |
+| `{"mode":"intervene","for":0.3}` | At least one branch uses `"auto":true` as a fallback. The active stage opens a window once a fallback meets its objective and child gates. During the window, explicit choices can select any eligible branch. If the window elapses, Ink tries the first eligible fallback by ID. |
+
+An automatic branch must be able to satisfy its gates without a manual
+objective or typed player choice. For example, a stage can use an optional
+`choose` objective to unlock a player branch while its fallback waits on
+inventory evidence. Existing arc branches with child gates can use
+`"auto":true` without a decision policy.
+
+A window first opens after the visit's entry tick. Ink checks readiness
+after sampling world evidence and before processing story commands.
+The opening tick accepts intervention, and the cutoff tick runs the
+fallback after rejecting late player commands. Durations are in seconds
+and round up to world ticks. Suspension pauses the window. A new visit,
+including a return to the same stage, gets a fresh window and rejects
+commands for the previous visit. Story deadlines still apply while a
+stage waits. An elapsed fallback can retry an unsettled outcome when
+world conditions change.
+
+`story preview` lists the authored policies. `sim preflight` reports their
+resolved tick durations. Probe `world/story-decisions` with an optional
+`story` filter to inspect the current visit, window time remaining, typed
+choices, and eligible branches. `selectable` also accounts for the visit's
+policy and lifecycle. The `story-stage-entered` event includes the compiled
+policy. Timed windows emit `story-decision-opened` and
+`story-decision-elapsed`, which can drive event actions. The
+`story-branch-chosen` event and retained visit identify progression by
+`player`, `autonomous`, or `fallback`. Checkpoints retain the window and
+closed visits for replay.
+
+The [breakwater dispatch](../examples/story-documents/breakwater-watch.json)
+waits for a native stock transfer, then offers two chances to intervene.
+The normal route ships two crates to the pier. Taking both opportunities
+lets the player approve a larger shipment to the night shelter. Native
+event actions announce windows and broadcast the selected route.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/breakwater-watch.world.json \
+  --ticks 14 --record observed.run.json
+node cli/ink-studio.js sim run examples/story-documents/breakwater-watch.world.json \
+  --actions examples/story-documents/breakwater-watch.intervene.actions.json \
+  --ticks 14 --record intervened.run.json
+node cli/ink-studio.js probe intervened.run.json --ticks 4 --field world/story-decisions \
+  --args '{"story":"breakwater-watch/dispatch"}'
+node cli/ink-studio.js sim replay intervened.run.json
+```
+
 ## Confirm objectives with evidence
 
 Add one `evidence` rule to an objective. Ink completes it when the current visit receives a matching event or observes a matching query result. Once configured, completion requires the rule to match. An optional objective can still be skipped explicitly.
@@ -659,7 +714,7 @@ An arc with `"lifecycle": {"progression": true}` can open questlets from the sam
 - `children.wait.any` waits for at least one listed questlet to reach a terminal state. `children.wait.all` waits for every listed questlet. A stage can wait on children opened on an earlier visit.
 - The terminal states are `completed`, `failed`, `withdrawn`, and `expired`. An absolute deadline can expire a questlet before it opens. An unfinished questlet continues independently after the arc moves on or ends.
 - `requiresChildren` on a branch checks named outcomes, terminal statuses, or both. For example, require `{"status":"completed","outcome":"clear"}` on a success route or use `{"status":"expired"}` on a fallback. The wait group and existing objective requirements also apply.
-- With `"auto": true`, Ink checks that branch after the tick's story commands. An active arc can take one automatic branch per tick, starting after its stage's entry tick. When several are eligible, the first branch ID in lexical order wins. An automatic branch needs a child wait or outcome condition. Manual `world/story-choose` commands use the same gates and report pending or mismatched child IDs when blocked.
+- With `"auto": true`, Ink checks that branch after the tick's story commands. An active arc can take one automatic branch per tick, starting after its stage's entry tick. When several are eligible, the first branch ID in lexical order wins. Without a decision policy, an automatic branch needs a child wait or outcome condition. Manual `world/story-choose` commands use the same gates and report pending or mismatched child IDs when blocked.
 
 In the `world/story-lifecycle` probe, `flow.current.children` shows the wait group's readiness and live child statuses. Each opened questlet stores its parent arc, stage, visit, and opening tick in `parent`. A closed arc visit and its `story-branch-chosen` event capture the relevant terminal child results observed at the decision. The snapshots stay fixed when a sibling resolves later. Checkpoints and replays preserve those links and snapshots.
 

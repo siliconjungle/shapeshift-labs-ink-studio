@@ -34,7 +34,7 @@
         for (const child of spec.children?.open ?? []) parents.set(document.id + '/' + child, key);
       }
       entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
-        stages, automatic, evidence: compileEvidence(stages, key, document.objectiveTypes),
+        stages, automatic, decisions:W.storyDecisions.compile(stages,world.dt), evidence: compileEvidence(stages, key, document.objectiveTypes),
         feasibility: compileFeasibility(definition.lifecycle.feasibility, key),
         liveReferences: definition.lifecycle.liveReferences,
         commitment: definition.lifecycle.commitment,
@@ -46,6 +46,9 @@
     if (!entries.size) return null;
     const order = [...entries.keys()].sort();
     const autoOrder = order.filter(key => entries.get(key).automatic.size);
+    const interventionOrder = autoOrder.filter(key=>Object.values(entries.get(key).decisions).some(policy=>policy.mode==='intervene'));
+    const decisionKeys = order.filter(key=>Object.keys(entries.get(key).decisions).length);
+    const decisions = decisionKeys.length?freeze(Object.fromEntries(decisionKeys.map(key=>[key,entries.get(key).decisions]))):undefined;
     const cleanupOrder = order.filter(key => entries.get(key).cleanup);
     const gateKeys = order.filter(key => entries.get(key).feasibility);
     const commitmentKeys = order.filter(key => entries.get(key).commitment);
@@ -297,7 +300,8 @@
       function enterStage(publish, def, flow, reason) {
         const { stage, visit } = flow.current;
         const { info } = def;
-        publish('story-stage-entered', { ...info, stage, visit, reason });
+        const decision = own(def.decisions,stage)?def.decisions[stage]:undefined;
+        publish('story-stage-entered', { ...info, stage, visit, reason, ...(decision&&{decision}) });
         const ids = def.stages[stage].children?.open;
         if (ids) {
           const parent = { document: info.document, story: info.story, stage, visit, tick };
@@ -387,6 +391,18 @@
       const opens = queuedOpens;
       queuedOpens = null;
       for (const { ids, parent, publish } of opens) openChildren(ids, parent, publish);
+      for (const key of interventionOrder) {
+        const row = state[key], current = row?.flow?.current, def = entries.get(key);
+        const policy = current&&def.decisions[current.stage];
+        if (policy?.mode!=='intervene'||statusOf(previous[key])!=='active'||statusOf(row)!=='active'||current.enteredAt===tick) continue;
+        const stage = def.stages[current.stage];
+        const step = W.storyDecisions.advance(policy,current,tick,()=>def.automatic.get(current.stage).some(branch=>
+          !W.storyStages.eligibility(stage,stage.next[branch],current.objectives,readChild(def)).rejected));
+        if (!step) continue;
+        save(key,{...row,flow:{...row.flow,current:{...current,intervention:step.window}}});
+        if (step.event) emit(step.event,{...def.info,stage:current.stage,visit:current.visit,mode:policy.mode,
+          window:W.storyDecisions.describeWindow(policy,step.window)});
+      }
       for (const { action, args, publish } of commands) {
         const { to, reason, outcome } = args, key = keyOf(args), from = statusOf(state[key]);
         if (action==='story-handoff'||action==='story-cancel-handoff') {
@@ -481,10 +497,13 @@
       for (const key of autoOrder) {
         const def = entries.get(key), row = state[key], current = row?.flow?.current;
         if (statusOf(row) !== 'active' || !current || current.enteredAt === tick) continue;
-        const { stage, visit } = current;
+        const { stage, visit } = current, policy = own(def.decisions,stage)?def.decisions[stage]:undefined;
+        if (policy?.mode==='intervene'&&current.intervention?.closedAt===undefined) continue;
+        const by = policy?.mode==='intervene'?'fallback':'autonomous';
+        const reason = !policy?'child-results-matched':by==='fallback'?'intervention-window-elapsed':'automatic-branch-ready';
         for (const branch of def.automatic.get(stage) ?? []) {
           const result = W.storyStages.advance('story-choose',def,row.flow,
-            { stage, visit, branch, reason:'child-results-matched' },tick,readChild(def));
+            { stage, visit, branch, reason },tick,readChild(def),undefined,by);
           if (!result.rejected) {
             progress(key,def,row,result,emit);
             break;
@@ -496,7 +515,7 @@
 
     return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction,
       ...(feasibility&&{feasibility,initialFeasibility:()=>freeze(Object.fromEntries(gateKeys.map(key=>[key,null])))}),
-      ...(cleanupOrder.length && {cleanup}) };
+      ...(cleanupOrder.length && {cleanup}),...(decisions&&{decisions}) };
   }
 
   function inspect(state, at, documents) {

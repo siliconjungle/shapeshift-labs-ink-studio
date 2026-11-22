@@ -610,6 +610,23 @@ const StoryDocument = (() => {
     }
   }
 
+  function decision(spec, at) {
+    fields(spec, at, ['mode'], ['for']);
+    if (!['autonomous', 'player', 'intervene'].includes(spec.mode))
+      invalid(at+'.mode', 'expected autonomous, player or intervene');
+    if (spec.mode==='intervene' ? !Number.isFinite(spec.for)||spec.for<=0 : Object.hasOwn(spec,'for'))
+      invalid(at+'.for', 'intervene requires a positive duration in seconds');
+  }
+
+  function automaticObjectives(target, objectives, at) {
+    if (target.requiresChoice) invalid(at, 'an automatic branch cannot require a player choice');
+    for (const [name, objective] of Object.entries(objectives)) {
+      const required = target.requires?.includes(name)||!objective.optional&&!target.requiresFailed?.includes(name);
+      if (required&&(objective.type==='choose'||objective.type===undefined&&!objective.evidence))
+        invalid(at, 'an automatic branch requires manual objective '+name);
+    }
+  }
+
   function validate(document, report) {
     fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
@@ -682,10 +699,12 @@ const StoryDocument = (() => {
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
         fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story',
-          ...(progression ? ['objectives'] : []), ...(nesting ? ['children'] : [])]);
+          ...(progression ? ['objectives', 'decision'] : []), ...(nesting ? ['children'] : [])]);
         labelsAndRefs(stage, location, references, report);
         if (Object.hasOwn(stage, 'roles')) links(stage.roles, roles, `${location}.roles`, 'role', report);
         if (Object.hasOwn(stage, 'story')) link(stage.story, stories, `${location}.story`, 'story', report);
+        if (Object.hasOwn(stage,'decision')) decision(stage.decision,location+'.decision');
+        const mode = stage.decision?.mode;
         const objectives = Object.hasOwn(stage, 'objectives') ? stage.objectives : {};
         const objectiveRows = entries(objectives, `${location}.objectives`);
         if (objectiveRows.length > 64) invalid(`${location}.objectives`, 'a stage supports up to 64 objectives');
@@ -703,10 +722,11 @@ const StoryDocument = (() => {
             typedParams(objective, types, place, report, roles);
           } else if (Object.hasOwn(objective, 'params')) invalid(`${place}.params`, 'requires an objective type');
         }
+        let automatic = false;
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
           const edge = `${location}.next.${choice}`;
           fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires', 'requiresFailed', 'requiresChoice'] : []),
-            ...(nesting ? ['requiresChildren', 'auto'] : [])]);
+            ...(nesting ? ['requiresChildren'] : []), ...(nesting||mode ? ['auto'] : [])]);
           const hasStage = Object.hasOwn(target, 'stage'), hasOutcome = Object.hasOwn(target, 'outcome');
           if (hasStage === hasOutcome) {
             const message = 'expected exactly one stage or outcome target';
@@ -732,10 +752,17 @@ const StoryDocument = (() => {
             }
           }
           if (Object.hasOwn(target, 'requiresChildren')) childConditions(target.requiresChildren, children, `${edge}.requiresChildren`, report);
-          if (Object.hasOwn(target, 'auto') && (typeof target.auto !== 'boolean' ||
-            (target.auto && !stage.children?.wait && !target.requiresChildren)))
-            invalid(`${edge}.auto`, 'expected a boolean and a child wait or outcome condition for an automatic branch');
+          if (Object.hasOwn(target,'auto')&&typeof target.auto!=='boolean') invalid(edge+'.auto','expected a boolean');
+          if (mode==='autonomous'&&!target.auto||mode==='player'&&target.auto)
+            invalid(edge+'.auto', 'branch disagrees with the stage decision mode');
+          if (target.auto) {
+            automatic = true;
+            if (mode) automaticObjectives(target,objectives,edge);
+            else if (!stage.children?.wait&&!target.requiresChildren)
+              invalid(edge+'.auto','an automatic arc branch needs a child wait or outcome condition');
+          }
         }
+        if (mode==='intervene'&&!automatic) invalid(location+'.decision','intervene needs an automatic fallback branch');
       }
     }
     return document;

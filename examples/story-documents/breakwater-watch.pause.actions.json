@@ -1,0 +1,12 @@
+[
+  { "tick": 5, "action": "world/story-transition", "args": {
+    "document": "breakwater-watch", "story": "dispatch", "to": "suspended", "reason": "radio-outage"
+  } },
+  { "tick": 9, "action": "world/story-transition", "args": {
+    "document": "breakwater-watch", "story": "dispatch", "to": "active", "reason": "radio-restored"
+  } },
+  { "tick": 11, "action": "world/story-choose", "args": {
+    "document": "breakwater-watch", "story": "dispatch", "stage": "plan-route", "visit": 2,
+    "branch": "ridge", "reason": "message-arrived-at-cutoff"
+  } }
+]

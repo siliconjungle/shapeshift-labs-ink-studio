@@ -1,0 +1,79 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "breakwater-watch",
+  "title": "Dispatch supplies to the breakwater",
+  "stories": {
+    "dispatch": {
+      "kind": "questlet",
+      "title": "Dispatch the staged supplies",
+      "entry": "stage-stock",
+      "lifecycle": {
+        "progression": true,
+        "settlement": {
+          "outcomes": {
+            "standard-delivery": { "dispatch": { "transfer": {
+              "from": "supplies/staging", "to": "supplies/pier", "amount": 2
+            } } },
+            "night-delivery": { "dispatch": { "transfer": {
+              "from": "supplies/staging", "to": "supplies/shelter", "amount": 3
+            } } }
+          }
+        }
+      },
+      "stages": {
+        "stage-stock": {
+          "title": "Wait for the depot shipment",
+          "decision": { "mode": "autonomous" },
+          "objectives": {
+            "stock-received": { "title": "Stage four crates", "type": "deliver", "params": {
+              "from": "supplies/depot", "to": "supplies/staging", "amount": 4
+            } }
+          },
+          "next": { "ready": { "stage": "plan-route", "auto": true } }
+        },
+        "plan-route": {
+          "title": "Let the crew plan a route",
+          "decision": { "mode": "intervene", "for": 0.3 },
+          "objectives": {
+            "route": { "title": "Radio a route to the crew", "type": "choose", "optional": true,
+              "params": { "options": { "ridge": "Take the ridge", "coast": "Stay on the coast" } } }
+          },
+          "next": {
+            "coast": { "stage": "dispatch-stock", "auto": true },
+            "ridge": { "stage": "dispatch-stock", "requiresChoice": { "route": "ridge" } }
+          }
+        },
+        "dispatch-stock": {
+          "title": "Release the shipment",
+          "decision": { "mode": "intervene", "for": 0.2 },
+          "objectives": {
+            "crates-ready": { "title": "Keep at least two crates on the staging pallet", "type": "acquire",
+              "params": { "account": "supplies/staging", "amount": 2 } }
+          },
+          "next": {
+            "ship": { "outcome": "standard-delivery", "auto": true },
+            "review": { "stage": "review-dispatch" }
+          }
+        },
+        "review-dispatch": {
+          "title": "Approve a destination and dispatch time",
+          "decision": { "mode": "player" },
+          "objectives": {
+            "destination": { "title": "Approve the delivery plan", "type": "choose", "params": {
+              "options": { "night": "Supply the night shelter", "day": "Supply the pier" }
+            } }
+          },
+          "next": {
+            "night": { "outcome": "night-delivery", "requiresChoice": { "destination": "night" } },
+            "day": { "outcome": "standard-delivery", "requiresChoice": { "destination": "day" } }
+          }
+        }
+      },
+      "outcomes": {
+        "standard-delivery": { "title": "Pier received its normal shipment" },
+        "night-delivery": { "title": "Night shelter received the larger shipment" }
+      }
+    }
+  }
+}

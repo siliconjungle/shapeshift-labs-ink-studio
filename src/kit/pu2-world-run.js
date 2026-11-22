@@ -465,6 +465,7 @@
       documents:plan.storyRoles?.documents.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
+      ...(plan.storyLifecycle?.decisions && {decisions:plan.storyLifecycle.decisions}),
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
       ...(plan.storyCommitments && {commitments:plan.storyCommitments}),
       ...(plan.storyHandoffs && {handoffs:plan.storyHandoffs}),
@@ -561,7 +562,9 @@
         ...(storyFeasibilityState && {storyFeasibility:storyFeasibilityState,storyFeasibilityRules:storyLifecycle.feasibility}),
         ...(storyReferenceState && {storyReferences:storyReferenceState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
-        ...(storyTemplates && {storyTemplates,storyDocuments:storyRoles.documents}),
+        ...(storyTemplates && {storyTemplates}),
+        ...((storyTemplates||storyLifecycle?.decisions) && {storyDocuments:storyRoles.documents}),
+        ...(storyLifecycle?.decisions && {storyDecisions:storyLifecycle.decisions}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function phaseReader(name,snapshot,staged) {
