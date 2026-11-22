@@ -167,7 +167,7 @@
     };
   }
 
-  function cast(input, query, {tick, time}) {
+  function cast(input, query, {tick, time}, focus) {
     check(keys(input, ['rosters', 'requirements', 'binding', 'limit']), 'Invalid casting query');
     const spec = copy(input), {rosters, requirements = {}, limit = 100} = spec;
     check(ids(rosters) && rosters.length <= 32, 'Casting needs 1 to 32 distinct roster IDs');
@@ -185,7 +185,7 @@
     });
     const binding = prepareBinding(spec.binding, query);
     const qualified = [], rejected = [];
-    let considered = 0, qualifiedCount = 0;
+    let considered = 0, qualifiedCount = 0, focused = null;
     const sources = rosters.sort().map(system => {
       const sample = query.probe(system + '/agents');
       check(sample.status === 'ok' && record(sample.value), 'Casting roster is unavailable: ' + system);
@@ -203,16 +203,19 @@
         const group = qualifies ? qualified : rejected;
         considered++;
         if (qualifies) qualifiedCount++;
-        if (group.length < limit) {
+        const selected = focus?.system===system&&focus.agent===agent;
+        if (selected||group.length < limit) {
           const {generation, name, entity} = candidate;
-          group.push({system, agent, generation, ...(name !== undefined && {name}), ...(entity !== undefined && {entity}),
-            qualifies, checks, ...(qualifies || projection?.bindingMissing ? projection : {})});
+          const result = {system, agent, generation, ...(name !== undefined && {name}), ...(entity !== undefined && {entity}),
+            qualifies, checks, ...(qualifies || projection?.bindingMissing ? projection : {})};
+          if (selected) focused = result;
+          if (group.length < limit) group.push(result);
         }
       }
     }
     const candidates = qualified.concat(rejected).slice(0, limit);
     return {tick, time, rosters, requirements, ...(binding && {binding:{...spec.binding, kind:binding.kind}}),
-      considered, qualified:qualifiedCount, omitted:considered - candidates.length, candidates};
+      considered, qualified:qualifiedCount, omitted:considered - candidates.length, candidates, ...(focus&&{focused})};
   }
   W.storyCasting = Object.freeze({field, cast, availability});
 })(KIT);

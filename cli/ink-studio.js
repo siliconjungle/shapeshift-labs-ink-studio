@@ -1265,6 +1265,8 @@ const CMD = {
         '  story instantiate <template.json> <instance.json>   expand typed story parameters and inspect the result',
         '  sim preflight <world.json> [--strict]   check world bindings and story routes before stepping',
         '  sim scheduler <world|checkpoint|run> [--ticks N] [--incident document/story]   explain incident eligibility and commitments',
+        '  sim why|why-not <world|checkpoint|run> document/story [--offer | --role ID | --actor system/agent | --stage [ID] | --outcome ID]',
+        '    [--spec casting.json] [--ticks N] [--trace]   explain an offer, actor, stage, or ending',
         '    sim run|preflight <world.json> --storyteller ID   select an authored incident profile',
         '  story catalog <story.json> [story.json ...]   discover authored incidents',
         '  story events <recording> [--format json|markdown|timeline|events]   inspect or present recorded story events',

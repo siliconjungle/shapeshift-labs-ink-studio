@@ -99,6 +99,27 @@ node cli/ink-studio.js sim resume route.checkpoint.json \
   --watch-story breakwater-watch/dispatch --watch-values choices,evidence,changes --ticks 14
 ```
 
+### Ask why a story changed
+
+Use `sim why` or `sim why-not` with a world, checkpoint, or recording and a `document/story` ID. The report gives the result, reason, and supporting records at the inspected tick. Use `--ticks N` to advance a world or inspect an earlier tick within a recording. A checkpoint or recording defaults to its saved tick.
+
+| Question | What it explains |
+| --- | --- |
+| `--offer` (default) | The offer transition, trigger or launch receipt, arc opening, or scheduler dispatch. Pending offers show available feasibility checks and the scheduler’s next-tick forecast. |
+| `--role ID [--actor system/agent]` | The role schema and resolved binding. For a live assignment, `--actor system/agent` also works by itself and reports commitment or handoff receipts. |
+| `--spec casting.json` | Reuses the casting criteria to evaluate actors at the inspected snapshot. A requested actor gets their own checks even when the spec limits rows in the general candidate list. |
+| `--stage [ID]` | The current stage or a named retained visit. See branch blockers, pending objective evidence, available choices, and the branch that left a closed visit. |
+| `--outcome ID` | The recorded ending, terminal transition or pending gates. When a retained branch left all authored routes to the requested ending, the report identifies that branch and the alternatives authored at its stage. |
+
+The report labels current query samples and scheduler forecasts with their snapshot basis. Historical choices and receipts come from retained runtime records. Add `--trace` to follow available event causes using the world’s causal recording. The report identifies proof event IDs absent from retained history even when their evidence is still embedded in a lifecycle or objective receipt.
+
+```sh
+node cli/ink-studio.js sim why-not examples/story-documents/sluice-relief.world.json sluice-relief/relief \
+  --actions examples/story-documents/sluice-relief.actions.json --ticks 1
+node cli/ink-studio.js sim why-not examples/story-documents/breakwater-watch.world.json breakwater-watch/dispatch \
+  --outcome night-delivery --ticks 14 --out missed-ending.json
+```
+
 ### Describe a story package before running it
 
 `story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.

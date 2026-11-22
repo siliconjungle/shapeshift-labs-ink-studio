@@ -6,6 +6,7 @@ const {embedModels} = require('./simulation-model-files.js');
 const {embedStoryDocuments} = require('./story-document.js');
 const StoryRun = require('./story-run-controls.js');
 const StoryWatch = require('./story-watch.js');
+const StoryExplanation = require('./story-explanation.js');
 
 const read = file => JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const parse = input => JSON.parse(String(input));
@@ -207,17 +208,18 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const input = load(file, { lookPreview: true });
     return input.world ? visualSnapshot(input) : null;
   }
+  function snapshot(input) {
+    let run = runtime(input);
+    if (opt.actions || opt.ticks !== undefined || opt.steps !== undefined || opt.t !== undefined) {
+      const tick = to(run);
+      run = snapshotRun(input, run, tick);
+      run.advance(tick);
+    }
+    return run;
+  }
   function view(file, {worldOnly=false} = {}) {
     const input = load(file);
-    if (input.world) {
-      let run = runtime(input);
-      if (opt.actions || opt.ticks !== undefined || opt.steps !== undefined || opt.t !== undefined) {
-        const tick = to(run);
-        run = snapshotRun(input, run, tick);
-        run.advance(tick);
-      }
-      return run.query();
-    }
+    if (input.world) return snapshot(input).query();
     ensure(!worldOnly,'The inspector needs an Ink Studio world, checkpoint, or recording');
     const world = build(input.legacy);
     const t = Number(opt.t ?? 0);
@@ -543,8 +545,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const watching = StoryWatch.enabled(opt);
     if (watching) ensure(['run','resume','fork','replay'].includes(mode)&&other===undefined,
       'Use sim run, resume, fork, or replay with '+StoryWatch.usage);
-    ensure(opt.storyteller===undefined||['run','preflight'].includes(mode),
-      'Use --storyteller with a fresh world in sim run or preflight');
+    ensure(opt.storyteller===undefined||['run','preflight','why','why-not'].includes(mode),
+      'Use --storyteller with a fresh world in sim run, preflight, why, or why-not');
     switch (mode) {
       case 'model': return modelCommand(file,other);
       case 'sections': {
@@ -849,6 +851,24 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const result = view(file).probe(W.storyCasting.field,undefined,read(opt.spec));
         ensure(result.status==='ok',result.reason);
         return respond(result.value);
+      }
+      case 'why':
+      case 'why-not': {
+        ensure(typeof file==='string'&&Object.keys(opt).every(key=>['offer','role','actor','spec','stage','outcome','trace',
+          'ticks','steps','t','actions','seed','dt','storyteller','asset-pack','workers','out','json'].includes(key)),StoryExplanation.usage);
+        const question = StoryExplanation.request(W,mode,other,opt,read);
+        const sources = new Set([file,opt.spec,opt.actions]);
+        const input = load(file,{dependency:source=>sources.add(source)});
+        if (opt.out!==undefined) {
+          ensure(typeof opt.out==='string'&&opt.out.trim(),'--out needs a report path');
+          const out = path.resolve(opt.out), existing = fs.existsSync(out)?fs.statSync(out):null;
+          for (const source of sources) if (typeof source==='string') {
+            const stat = existing&&fs.existsSync(source)?fs.statSync(source):null;
+            ensure(path.resolve(source)!==out&&(!stat||stat.dev!==existing.dev||stat.ino!==existing.ino),
+              'Use a report path separate from the story sources');
+          }
+        }
+        return respond(StoryExplanation.explain(W,snapshot(input),question));
       }
       case 'scheduler': {
         ensure(typeof file==='string'&&other===undefined&&opt.args===undefined&&
