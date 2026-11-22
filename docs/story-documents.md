@@ -660,6 +660,70 @@ node cli/ink-studio.js probe crossing.run.json --ticks 6 --field world/incident-
   --args '{"incident":"pressure-shifts/ridge-watch"}'
 ```
 
+## Pace incidents after a setback
+
+Use `lifecycle.cooldown` on an incident to start recovery windows when it
+closes. A queued incident can declare matching scope IDs without starting
+its own clocks. Incident categories and intensity remain available in the
+catalog, and the recovery durations are authored per incident.
+
+```json
+"cooldown": {
+  "scopes": {
+    "location": ["west-pier"],
+    "character": ["crew/mira"],
+    "faction": ["harbor-union"],
+    "family": ["flood"]
+  },
+  "for": { "world": 0.2, "location": 0.4, "character": 0.6, "faction": 0.3, "family": 0.5 },
+  "on": ["failed"]
+}
+```
+
+Use the same stable ID in the same scope on related incidents. IDs can be
+qualified, such as `crew/mira`, or resolved from a story role such as
+`{ "$role": "escort", "path": "/id" }`. Each local duration applies to every
+ID listed in its scope. The world duration applies to all queued incidents.
+The optional `on` list defaults to `completed` and `failed`. An incident can
+start a clock regardless of how it entered the lifecycle.
+
+Durations are positive seconds rounded up to world ticks. A closure at
+tick 2 schedules a two-tick cooldown for ticks 3 and 4, so candidates
+can dispatch at tick 5 if their other checks pass. Overlap keeps the
+latest release for each scope ID. When two sources tie, the earlier
+`document/story` ID in lexical order supplies the receipt. Candidates
+must clear every matching clock, satisfy feasibility, and fit the
+pressure budget before manual dispatch or weighted selection. Waiting
+candidates keep their original deadlines and expiry follow-ups.
+
+Probe `world/incident-cooldowns` for scheduled and active windows. Filter
+by `scope` or `id` to see the source incident, closure, first blocked tick
+(`from`), and first eligible tick for that clock (`until`). The candidate's
+`cooldown` receipt shows matching blocks and their latest release
+(`readyAt`). Early manual dispatch of a feasible candidate reports
+`incident-cooling-down`. The `story-cooldown-started` event records the
+windows scheduled by each closure and can drive event actions or be
+exported in a story recording. Checkpoints derive the clocks from
+lifecycle transitions and replay the same queue decisions.
+
+The [harbor demo](../examples/story-documents/harbor-recovery.world.json)
+opens the inland market as soon as the world quiet period ends and
+releases four related incidents on their respective clocks. The
+[overlapping setback](../examples/story-documents/harbor-recovery.overlap.actions.json)
+extends family recovery while the original pier closure keeps its later
+release time.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/harbor-recovery.world.json \
+  --ticks 12 --record harbor.run.json
+node cli/ink-studio.js probe harbor.run.json --ticks 3 --field world/incident-cooldowns
+node cli/ink-studio.js sim run examples/story-documents/harbor-recovery.world.json \
+  --actions examples/story-documents/harbor-recovery.overlap.actions.json \
+  --ticks 12 --record harbor-overlap.run.json
+node cli/ink-studio.js probe harbor-overlap.run.json --ticks 6 --field world/incident-cooldowns \
+  --args '{"scope":"family"}'
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

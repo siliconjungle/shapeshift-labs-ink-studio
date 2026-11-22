@@ -1,0 +1,6 @@
+[
+  { "tick": 4, "action": "world/event", "args": { "kind": "lock-outage" } },
+  { "tick": 5, "action": "world/story-transition", "args": {
+    "document": "harbor-recovery", "story": "lock-outage", "to": "completed", "outcome": "closed", "reason": "lock-isolated"
+  } }
+]

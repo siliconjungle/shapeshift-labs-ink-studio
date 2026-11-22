@@ -54,7 +54,7 @@
     return selections;
   }
 
-  function validate(state,seed,policyFor) {
+  function validate(state,seed,policyFor,cooldownAt) {
     const rows = Object.values(state), draws = new Set();
     for (const row of rows) {
       if (!Object.hasOwn(row,'selection')) continue;
@@ -72,10 +72,12 @@
       check(selection.candidates.length===members.length,message);
       const inputs = members.map((item,index)=>{
         const saved = selection.candidates[index], {weight} = policyFor(item.candidate);
+        const cooling = (item.report.tick===tick?item.cooldown:cooldownAt(item.candidate,tick))?.ready===false;
+        const canChange = item.report.tick!==tick||item.report.ready&&item.pressure?.ready===false;
         check(record(saved)&&saved.candidate===item.candidate&&saved.queuedAt===item.queuedAt&&saved.weight===weight&&
-          (item.report.tick!==tick||item.report.ready&&item.pressure?.ready===false ?
-            saved.status==='blocked'||saved.status===status(true,weight) :
-            saved.status===status(item.report.ready,weight)),message);
+          (saved.status==='blocked'||!cooling)&&
+          (canChange?saved.status==='blocked'||saved.status===status(true,weight):
+            saved.status===status(item.report.ready&&!cooling,weight)),message);
         return {candidate:item.candidate,queuedAt:item.queuedAt,weight,status:saved.status};
       });
       check(equal(selection,decide(seed,pool,tick,inputs)),message);

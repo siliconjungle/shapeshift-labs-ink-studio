@@ -274,6 +274,8 @@
         W.incidentCandidates.inspect(view.incidentCandidatePolicies,view.incidentCandidates,tick,args)},
       'incident-pressure':{type:'record',qualified:true,read:()=>
         W.incidentPressure.inspect(view.incidentPressure,view.storyLifecycle,tick)},
+      'incident-cooldowns':{type:'record',qualified:true,read:({args})=>
+        W.incidentCooldowns.inspect(view.incidentCooldowns,view.storyLifecycle,tick,args)},
       'incident-selections':{type:'record',qualified:true,read:({args})=>
         W.incidentSelection.inspect(view.incidentCandidates,tick,args)},
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},

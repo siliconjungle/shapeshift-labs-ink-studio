@@ -4,11 +4,13 @@ const StoryDocument = (() => {
   const version = 1;
   const maxCandidateWeight = 1000000;
   const pressureUnits = value => Number.isSafeInteger(value)&&value>=0&&value<=1000000;
+  const cooldownScopes = Object.freeze(['location', 'character', 'faction', 'family']);
   const incidentCategories = Object.freeze(['setback','opportunity','visitor','discovery','environmental-change','recovery']);
   const kinds = new Set(['incident', 'questlet', 'arc']);
   const objectiveKinds = new Set(['reach', 'acquire', 'deliver', 'protect', 'observe', 'build', 'maintain', 'survive', 'negotiate', 'choose']);
   const safeId = value => typeof value === 'string' && /^[a-z][a-z0-9_.-]{0,99}$/i.test(value) &&
     !['constructor', 'prototype', '__proto__'].includes(value);
+  const cooldownId = value => typeof value === 'string' && value.length <= 512 && value.split('/').every(safeId);
 
   function invalid(at, message, code = 'invalid-document') {
     throw Object.assign(new TypeError(`${at}: ${message}`), { storyIssue: { code, path:at, message, severity:'error' } });
@@ -503,7 +505,7 @@ const StoryDocument = (() => {
   }
 
   function lifecycle(value, at, roles, report) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs', 'settlement', 'candidate']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs', 'settlement', 'candidate', 'cooldown']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -657,6 +659,36 @@ const StoryDocument = (() => {
     }
   }
 
+  function cooldownPolicy(value, at, story, roles, report) {
+    if (story.kind !== 'incident') invalid(at, 'cooldowns require an incident');
+    fields(value, at, [], ['scopes', 'for', 'on']);
+    const { scopes = {}, for:durations = {}, on } = value;
+    fields(scopes, at+'.scopes', [], cooldownScopes);
+    fields(durations, at+'.for', [], [...cooldownScopes, 'world']);
+    if (!Object.keys(scopes).length && !Object.keys(durations).length)
+      invalid(at, 'expected scope IDs or a recovery duration');
+    if (!Object.keys(durations).length && !story.lifecycle.candidate)
+      invalid(at, 'scope matching requires a queued incident or a recovery duration');
+    for (const [scope, ids] of Object.entries(scopes)) {
+      const place = at+'.scopes.'+scope, seen = new Set();
+      if (!Array.isArray(ids) || !ids.length || ids.length > 16) invalid(place, 'expected 1–16 scope IDs');
+      for (const [i, id] of ids.entries()) {
+        const item = place+'['+i+']';
+        if (id && typeof id === 'object' && Object.hasOwn(id, '$role')) roleUses(id, roles, item, report);
+        else if (!cooldownId(id) || seen.has(id)) invalid(item, 'expected a unique scope ID or story role');
+        seen.add(id);
+      }
+    }
+    for (const [scope, seconds] of Object.entries(durations)) {
+      const place = at+'.for.'+scope;
+      if (!Number.isFinite(seconds) || seconds <= 0) invalid(place, 'expected positive finite seconds');
+      if (scope !== 'world' && !Object.hasOwn(scopes, scope)) invalid(place, 'requires matching scope IDs');
+    }
+    if (on !== undefined && (!Object.keys(durations).length || !Array.isArray(on) || !on.length ||
+      on.length > 2 || new Set(on).size !== on.length || !Array.from(on).every(status => ['completed','failed'].includes(status))))
+      invalid(at+'.on', 'expected completed or failed with an authored recovery duration');
+  }
+
   function incidentMetadata(value, at, kind) {
     if (kind!=='incident') invalid(at, 'catalog metadata requires an incident');
     fields(value, at, ['category','intensity'], ['tags']);
@@ -695,6 +727,8 @@ const StoryDocument = (() => {
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       if (Object.hasOwn(story.lifecycle??{},'candidate'))
         candidatePolicy(story.lifecycle.candidate,at+'.lifecycle.candidate',story.kind);
+      if (Object.hasOwn(story.lifecycle??{},'cooldown'))
+        cooldownPolicy(story.lifecycle.cooldown,at+'.lifecycle.cooldown',story,roles,report);
       const { stages, outcomes } = story;
       if (Object.hasOwn(story.lifecycle??{},'settlement'))
         settlement(story.lifecycle.settlement,at+'.lifecycle.settlement',story,roles,report);
@@ -825,6 +859,6 @@ const StoryDocument = (() => {
     }
   }
 
-  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, isStoryId:safeId, pressureUnits, objectiveRule, mapRoleValues, roleToken });
+  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, cooldownScopes, cooldownId, isStoryId:safeId, pressureUnits, objectiveRule, mapRoleValues, roleToken });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

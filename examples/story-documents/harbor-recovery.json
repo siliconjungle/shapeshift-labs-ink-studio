@@ -1,0 +1,99 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "harbor-recovery",
+  "title": "A harbor recovers after a flood",
+  "references": { "mira": { "kind": "character", "id": "crew/mira" } },
+  "stories": {
+    "flood": {
+      "kind": "incident",
+      "title": "Flood the west pier",
+      "incident": { "category": "setback", "intensity": 5 },
+      "triggers": { "surge": { "event": { "kind": "storm-surge" } } },
+      "lifecycle": {
+        "cooldown": {
+          "scopes": { "location": ["west-pier"], "character": ["crew/mira"], "faction": ["harbor-union"], "family": ["flood"] },
+          "for": { "world": 0.2, "location": 0.4, "character": 0.6, "faction": 0.3, "family": 0.5 },
+          "on": ["failed"]
+        }
+      },
+      "entry": "contain",
+      "stages": { "contain": { "title": "Contain the surge", "next": { "done": { "outcome": "breached" } } } },
+      "outcomes": { "breached": { "title": "The levee gives way" } }
+    },
+    "lock-outage": {
+      "kind": "incident",
+      "title": "Close a damaged lock during cleanup",
+      "incident": { "category": "setback", "intensity": 3 },
+      "triggers": { "outage": { "event": { "kind": "lock-outage" } } },
+      "lifecycle": {
+        "cooldown": {
+          "scopes": { "location": ["west-pier"], "family": ["flood"] },
+          "for": { "location": 0.1, "family": 0.6 }
+        }
+      },
+      "entry": "secure",
+      "stages": { "secure": { "title": "Secure the lock", "next": { "done": { "outcome": "closed" } } } },
+      "outcomes": { "closed": { "title": "The damaged lock is isolated" } }
+    },
+    "ridge-market": {
+      "kind": "incident",
+      "title": "Open the inland market",
+      "incident": { "category": "recovery", "intensity": 0 },
+      "triggers": { "notice": { "event": { "kind": "fresh-opportunities" } } },
+      "lifecycle": { "candidate": { "for": 1.5, "release": "automatic", "selection": { "pool": "harbor-beats", "weight": 1 } } },
+      "entry": "open",
+      "stages": { "open": { "title": "Open the stalls", "next": { "done": { "outcome": "open" } } } },
+      "outcomes": { "open": { "title": "The inland market opens" } }
+    },
+    "union-meeting": {
+      "kind": "incident",
+      "title": "Call a harbor union meeting",
+      "triggers": { "notice": { "event": { "kind": "fresh-opportunities" } } },
+      "lifecycle": {
+        "candidate": { "for": 1.5, "release": "automatic", "selection": { "pool": "harbor-beats", "weight": 2 } },
+        "cooldown": { "scopes": { "faction": ["harbor-union"] } }
+      },
+      "entry": "meet",
+      "stages": { "meet": { "title": "Gather the union", "next": { "done": { "outcome": "heard" } } } },
+      "outcomes": { "heard": { "title": "The union has met" } }
+    },
+    "pier-survey": {
+      "kind": "incident",
+      "title": "Survey the west pier",
+      "triggers": { "notice": { "event": { "kind": "fresh-opportunities" } } },
+      "lifecycle": {
+        "candidate": { "for": 1.5, "release": "automatic", "selection": { "pool": "harbor-beats", "weight": 20 } },
+        "cooldown": { "scopes": { "location": ["west-pier"] } }
+      },
+      "entry": "survey",
+      "stages": { "survey": { "title": "Inspect the pier", "next": { "done": { "outcome": "charted" } } } },
+      "outcomes": { "charted": { "title": "The damage is charted" } }
+    },
+    "dam-watch": {
+      "kind": "incident",
+      "title": "Post a flood watch upriver",
+      "triggers": { "notice": { "event": { "kind": "fresh-opportunities" } } },
+      "lifecycle": {
+        "candidate": { "for": 1.5, "release": "automatic", "selection": { "pool": "harbor-beats", "weight": 10 } },
+        "cooldown": { "scopes": { "location": ["upriver-dam"], "family": ["flood"] } }
+      },
+      "entry": "watch",
+      "stages": { "watch": { "title": "Check the dam gauges", "next": { "done": { "outcome": "covered" } } } },
+      "outcomes": { "covered": { "title": "The dam has a lookout" } }
+    },
+    "mira-escort": {
+      "kind": "incident",
+      "title": "Ask a crew member to lead an escort",
+      "roles": { "escort": { "kind": "character", "ref": "mira" } },
+      "triggers": { "notice": { "event": { "kind": "fresh-opportunities" } } },
+      "lifecycle": {
+        "candidate": { "for": 1.5, "release": "automatic", "selection": { "pool": "harbor-beats", "weight": 5 } },
+        "cooldown": { "scopes": { "character": [{ "$role": "escort" }] } }
+      },
+      "entry": "escort",
+      "stages": { "escort": { "title": "Lead the escort", "next": { "done": { "outcome": "arrived" } } } },
+      "outcomes": { "arrived": { "title": "The party arrives" } }
+    }
+  }
+}

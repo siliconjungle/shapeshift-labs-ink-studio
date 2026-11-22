@@ -21,7 +21,8 @@
           category:incident?.category??null,intensity:incident?.intensity??null,tags:[...(incident?.tags??[])].sort(),entry,
           roles:Object.keys(roles).sort(),references:refs.map(id=>({...document.references[id],slot:id})),
           triggers,lifecycle:lifecycle?{activation:lifecycle.activation??'automatic',progression:lifecycle.progression===true}:null,
-          ...(lifecycle?.candidate&&{candidatePolicy:lifecycle.candidate}),...(template&&{template})});
+          ...(lifecycle?.candidate&&{candidatePolicy:lifecycle.candidate}),
+          ...(lifecycle?.cooldown&&{cooldownPolicy:lifecycle.cooldown}),...(template&&{template})});
       }
     }
     entries.sort((left,right)=>left.id<right.id?-1:left.id>right.id?1:0);

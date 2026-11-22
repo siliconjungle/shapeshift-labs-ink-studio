@@ -1,0 +1,18 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "harbor-recovery",
+  "seed": 28,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "harbor-recovery.json" }],
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "storm-surge" } },
+    { "tick": 2, "action": "world/story-transition", "args": {
+      "document": "harbor-recovery", "story": "flood", "to": "failed", "outcome": "breached", "reason": "levee-breached"
+    } },
+    { "tick": 3, "action": "world/event", "args": { "kind": "fresh-opportunities" } },
+    { "tick": 3, "action": "world/dispatch-candidate", "args": {
+      "incident": "harbor-recovery/pier-survey", "reason": "try-to-survey-early"
+    } }
+  ]
+}

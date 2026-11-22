@@ -6,9 +6,10 @@
   const reasonOK = value => typeof value==='string'&&value.length<=256&&value.trim().length>0;
   const waiting = row => ['blocked','ready'].includes(row.status);
   const due = (spec,at) => Math.min(at+spec.policy.windowTicks,spec.policy.worldDeadlineTick??Infinity);
+  const admissible = row => row.report.ready&&(row.pressure?.ready??true)&&(row.cooldown?.ready??true);
   const expiryReason = (spec,row) => row.expiresAt===spec.policy.worldDeadlineTick?'world-deadline':'candidate-timeout';
 
-  function compile(documents,dt,feasibility,seed,pressureConfig) {
+  function compile(documents,dt,feasibility,seed,pressureConfig,cooldownPolicies) {
     const {before,select,validate:validateSelections} = W.incidentSelection;
     const specs = new Map(), inbound = new Set();
     for (const document of documents) for (const [story,definition] of Object.entries(document.stories)) {
@@ -52,15 +53,31 @@
         'Candidate dispatch needs a registered incident and a reason');
     }
 
+    function cooldownReports(lifecycle) {
+      let reportTick, live;
+      return (key,tick) => {
+        if (!cooldownPolicies) return undefined;
+        if (reportTick!==tick) {
+          reportTick = tick;
+          live = W.incidentCooldowns.active(cooldownPolicies,lifecycle,tick);
+        }
+        return W.incidentCooldowns.assess(cooldownPolicies,live,key,tick);
+      };
+    }
+
     function advance(previous,starts,commands,tick,query,lifecycle,emit) {
       const state = {...previous}, released = {}, normal = [];
       const budget = pressurePolicy&&W.incidentPressure.begin(pressurePolicy,lifecycle);
+      const cooldownAt = cooldownReports(lifecycle);
       function checkReadiness(row,report) {
         const pressure = budget?.assess(row.candidate,tick);
-        const status = report.ready&&(!pressure||pressure.ready)?'ready':'blocked';
-        const next = {...row,status,report,...(pressure&&{pressure})};
+        const cooldown = row.cooldown?.tick===tick?row.cooldown:cooldownAt(row.candidate,tick);
+        const readiness = {report,...(pressure&&{pressure}),...(cooldown&&{cooldown})};
+        const status = admissible(readiness)?'ready':'blocked';
+        const next = {...row,...readiness,status};
         state[row.candidate] = next;
-        if (row.status!==status||!row.report) publish(emit,'checked',row,{status,report,...(pressure&&{pressure})});
+        if (row.status!==status||!row.report||!equal(row.cooldown?.blocks,cooldown?.blocks))
+          publish(emit,'checked',row,{status,...readiness});
         return next;
       }
       function publish(say,kind,row,details={}) {
@@ -79,7 +96,8 @@
         const terminal = {tick,reason};
         state[key] = {...row,status:'dispatched',terminal,...(selection&&{selection})};
         released[key] = {queuedAt,source,report};
-        publish(say,'dispatched',row,{queuedAt,report,terminal,...(row.pressure&&{pressure:row.pressure})});
+        publish(say,'dispatched',row,{queuedAt,report,terminal,...(row.pressure&&{pressure:row.pressure}),
+          ...(row.cooldown&&{cooldown:row.cooldown})});
         if (budget) {
           budget.reserve(key);
           for (const pending of Object.values(state).filter(waiting).sort(before)) checkReadiness(pending,pending.report);
@@ -108,9 +126,12 @@
         const row = state[args.incident];
         if (row?.status==='ready') dispatch(row,args.reason,say);
         else {
-          const blocked = row?.status==='blocked'&&row.report.ready&&row.pressure?.ready===false;
-          publish(say,'rejected',{candidate:args.incident},{reason:blocked?'pressure-budget-exhausted':
-            row?'candidate-'+row.status:'candidate-not-queued',requestedReason:args.reason,...(blocked&&{pressure:row.pressure})});
+          const feasible = row?.status==='blocked'&&row.report.ready;
+          const cooling = feasible&&row.cooldown?.ready===false, overBudget = feasible&&row.pressure?.ready===false;
+          const reason = cooling?'incident-cooling-down':overBudget?'pressure-budget-exhausted':
+            row?'candidate-'+row.status:'candidate-not-queued';
+          publish(say,'rejected',{candidate:args.incident},{reason,requestedReason:args.reason,
+            ...(overBudget&&{pressure:row.pressure}),...(cooling&&{cooldown:row.cooldown})});
         }
       }
       function release(key,choice) {
@@ -139,6 +160,7 @@
 
     function validate(state,tick,triggers,lifecycle,gates) {
       check(record(state)&&Object.keys(state).length<=specs.size,'Invalid saved incident candidate queue');
+      const cooldownAt = cooldownReports(lifecycle);
       const tickOK = value=>Number.isSafeInteger(value)&&value>0&&value<=tick;
       for (const [key,spec] of specs) {
         const row = state[key], start = triggers?.[key]?.start, story = lifecycle[key];
@@ -148,10 +170,11 @@
           check(!offered&&(!start||start.tick>=(spec.policy.worldDeadlineTick??Infinity)),message);
           continue;
         }
-        check(fields(row,['candidate','queuedAt','expiresAt','origin','source','status','report','pressure','terminal','followUp','selection'])&&
+        check(fields(row,['candidate','queuedAt','expiresAt','origin','source','status','report','pressure','cooldown','terminal','followUp','selection'])&&
           row.candidate===key&&tickOK(row.queuedAt)&&row.expiresAt===due(spec,row.queuedAt)&&row.expiresAt>row.queuedAt&&
           fields(row.origin,['kind','incident'])&&W.storyFeasibility.validReport(row.report,spec.rules,row.queuedAt,tick)&&
-          W.incidentPressure.validReport(pressurePolicy,key,row.pressure,row.report.tick),message);
+          W.incidentPressure.validReport(pressurePolicy,key,row.pressure,row.report.tick)&&
+          equal(row.cooldown,cooldownAt(key,row.report.tick)),message);
         if (spec.triggers) check(row.origin.kind==='trigger'&&row.origin.incident===undefined&&start?.tick===row.queuedAt&&
           start.trigger===row.source?.trigger&&W.storyTriggers.validEvidence(spec.triggers,row.source,row.queuedAt),message);
         else {
@@ -161,13 +184,13 @@
         }
         check(offered===(row.status==='dispatched'),message);
         if (waiting(row)) {
-          check(row.expiresAt>tick&&row.report.tick===tick&&(row.report.ready&&(row.pressure?.ready??true))===(row.status==='ready')&&
+          check(row.expiresAt>tick&&row.report.tick===tick&&admissible(row)===(row.status==='ready')&&
             row.terminal===undefined&&row.followUp===undefined&&row.selection===undefined,message);
           continue;
         }
         check(fields(row.terminal,['tick','reason'])&&tickOK(row.terminal.tick)&&reasonOK(row.terminal.reason),message);
         if (row.status==='dispatched') {
-          check(row.report.ready&&(row.pressure?.ready??true)&&row.report.tick===row.terminal.tick&&row.terminal.tick<row.expiresAt&&row.followUp===undefined&&
+          check(admissible(row)&&row.report.tick===row.terminal.tick&&row.terminal.tick<row.expiresAt&&row.followUp===undefined&&
             (story.dropped||story.transitions[0].tick===row.terminal.tick&&story.transitions[0].reason==='candidate-dispatched')&&
             equal(story.source,row.source)&&(!Object.keys(spec.rules).length||equal(gates?.[key]?.report,row.report)),message);
           continue;
@@ -185,7 +208,7 @@
         }
       }
       check(Object.keys(state).every(key=>specs.has(key)),'Unknown saved incident candidate');
-      validateSelections(state,seed,selectionFor);
+      validateSelections(state,seed,selectionFor,cooldownAt);
       if (pressurePolicy) W.incidentPressure.validate(pressurePolicy,lifecycle);
     }
     return {policies,pressure:pressurePolicy,initial:()=>freeze({}),advance,validate,checkAction};

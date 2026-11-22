@@ -10,7 +10,7 @@
     'story-started','story-transition','story-stage-entered','story-objective-resolved','story-progress-rejected',
     'story-branch-chosen','story-decision-opened','story-decision-elapsed','story-commitment-decision',
     'story-handoff-decision','story-handoff-accepted','story-settlement','story-settlement-blocked',
-    'story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-selected','story-candidate-expired','story-candidate-rejected'
+    'story-cooldown-started','story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-selected','story-candidate-expired','story-candidate-rejected'
   ]);
 
   function retained(source) {
