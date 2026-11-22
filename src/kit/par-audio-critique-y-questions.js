@@ -62,12 +62,16 @@
       check(context && integer(context.firstSample,0,192e6) && integer(context.endSample,context.firstSample+1,192e6),
         'Listening plan needs an addressed comparison range');
       // The producer may also render the reference for a comparison of two edits.
-      frames+=(context.endSample-context.firstSample)*3+(request.later===undefined ? 0 : context.endSample-context.firstSample);
+      frames+=(context.endSample-context.firstSample)*3;
       check(frames<=20e6,'Prioritized listening exceeds the comparison render budget');
       attempted++;
       const pack=blind(source,request.plan,assets,{id:request.id,seed:P.data.hash(JSON.stringify([seed,row.request,row.moves])),
         moves:row.moves,criterion:row.criterion,question:request.question,later:request.later,...(target!==undefined && {target}),
         ...(ceiling!==undefined && {ceiling})});
+      if (pack.test.sequence) {
+        frames+=2*pack.test.sequence.at(-1).endFrame;
+        check(frames<=20e6,'Prioritized listening exceeds the comparison render budget');
+      }
       const [a,b]=Object.values(pack.audio).map(clip=>clip.samples);
       let error=0,power=0;
       for (let i=0;i<a.length;i++) {

@@ -15,7 +15,7 @@
     }
     return (hash>>>0).toString(36);
   }
-  const excerptHash=samples=>audioHash(samples,value=>Math.min(8388607,Math.round(value*8388608)));
+  const excerptHash=samples=>audioHash(samples,value=>Math.min(8388607,Math.round(value*8388608)) || 0);
   function assetSignature(assets) {
     return Object.keys(assets).sort().map(name=>{
       const {samples,channels,sampleRate}=P.mediaGraph.audio(assets[name]);
