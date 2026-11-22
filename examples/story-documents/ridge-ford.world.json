@@ -1,0 +1,54 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "ridge-ford",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "causality": { "limit": 128 },
+  "siteHistory": { "sites": {
+    "ridge/ford": {
+      "kind": "crossing", "label": "Ridge Ford", "at": { "place": "ridge/ford", "point": [2, 0, 5] },
+      "fields": { "safe": "boolean", "surface": "string", "rations": "integer" },
+      "initial": { "safe": false, "surface": "washed-out", "rations": 0 }
+    },
+    "ridge/camp": { "kind": "camp", "label": "Upper Ridge Camp" }
+  } },
+  "storyDocuments": [{ "file": "ridge-ford.json" }],
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "party-arrived", "site": "ridge/ford",
+      "visitor": { "kind": "faction", "id": "ridge-caravan" } } },
+    { "tick": 7, "action": "world/event", "args": { "kind": "party-arrived", "site": "ridge/ford",
+      "visitor": { "kind": "faction", "id": "ridge-caravan" } } }
+  ],
+  "eventActions": {
+    "mark-arrival": {
+      "on": { "kind": "party-arrived", "where": { "path": "/site", "value": "ridge/ford" } },
+      "limit": 2,
+      "actions": [{ "action": "world/visit-site", "args": {
+        "site": "ridge/ford", "visitor": { "kind": "faction", "id": "ridge-caravan" }, "source": "1.0"
+      }, "bindings": { "/visitor": "/visitor", "/source": "/id" } }]
+    },
+    "remember-reinforcement": {
+      "on": { "kind": "story-transition", "where": { "all": [
+        { "path": "/document", "value": "ridge-ford" },
+        { "path": "/story", "value": "survey" },
+        { "path": "/outcome", "value": "reinforced" }
+      ] } },
+      "actions": [{ "action": "world/change-site", "args": {
+        "site": "ridge/ford", "outcome": "deck-reinforced", "set": { "safe": true, "surface": "planked", "rations": 3 },
+        "source": "3.0", "visit": "2.0"
+      }, "bindings": { "/source": "/id", "/visit": "/evidence/events/0" } }]
+    },
+    "remember-warning": {
+      "on": { "kind": "story-transition", "where": { "all": [
+        { "path": "/document", "value": "ridge-ford" },
+        { "path": "/story", "value": "survey" },
+        { "path": "/outcome", "value": "marked" }
+      ] } },
+      "actions": [{ "action": "world/change-site", "args": {
+        "site": "ridge/ford", "outcome": "warning-marked", "set": { "surface": "marked-unsafe" },
+        "source": "3.0", "visit": "2.0"
+      }, "bindings": { "/source": "/id", "/visit": "/evidence/events/0" } }]
+    }
+  }
+}

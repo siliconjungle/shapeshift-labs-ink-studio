@@ -1,0 +1,6 @@
+[
+  { "tick": 3, "action": "world/story-choose", "args": {
+    "document": "ridge-ford", "story": "survey", "stage": "choose", "visit": 1,
+    "branch": "reinforce", "reason": "plank-the-deck"
+  } }
+]

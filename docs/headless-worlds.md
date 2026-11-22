@@ -1114,6 +1114,80 @@ ink-studio probe survey.run.json --field world/custody --args '{"object":"archiv
 ink-studio trace survey.run.json world/custody --args '{"object":"archive/survey-seal"}'
 ```
 
+## Carry site history between visits
+
+Give each significant place a stable ID under `siteHistory.sites`.
+A camp, ruin, crossing, or meeting place can define its own `kind`
+and typed state. The optional `at` uses the same place, entity, or
+point shape as a typed fact. Its default is the site's ID as a place.
+
+```json
+"siteHistory": {
+  "sites": {
+    "ridge/ford": {
+      "kind": "crossing",
+      "fields": { "safe": "boolean", "surface": "string", "rations": "integer" },
+      "initial": { "safe": false, "surface": "washed-out", "rations": 0 }
+    }
+  }
+}
+```
+
+| Action | Arguments | Effect |
+| --- | --- | --- |
+| `world/visit-site` | `site`, `visitor`, optional `source` | Record an actor or faction's visit. The `site-visited` event contains the site's cumulative `visitNumber` and the visitor's retained `visitorCount`. |
+| `world/change-site` | `site`, `outcome`, `set`, optional `visit`, `source`, `expect` | Set one or more typed fields and record the named consequence. The `site-changed` event carries the applied values and receipts. |
+
+The visitor is a `{kind, id}` reference with kind `actor` or
+`faction`. A change can cite a visit receipt from the same site in
+`visit`. Use any retained visit entry or the first or latest receipt
+for a tracked visitor. Either action can cite an earlier retained
+world event in `source`. To guard against stale state, put the
+expected field values in `expect`. A mismatch rejects the entire
+change. Failed actions emit `site-history-rejected`.
+
+Use `eventActions` to record visits from arrival events or write
+consequences from questlet outcomes, work receipts, transfers, or
+other systems. Bind `source` to the triggering event's ID. A story
+that started on a visit can bind `visit` from its trigger evidence
+when recording the outcome.
+
+Probe `world/site-history` with `site` to read the current `state`,
+total `visits`, and the latest `consequences` for each changed field.
+Pass `visitor` to also get that visitor's count and first and latest
+retained receipt IDs. Omit `site` to list sites, optionally filtered
+by `kind`. In a story condition, select a current field such as
+`/state/safe`. A story can react to `site-visited` or `site-changed`
+and read the updated site on that tick.
+
+Use `trace world/site-history` to read the retained visits and changes
+in order. Where causality is enabled, `world/cause` can follow those
+entries back to their retained triggers. Site state, total visits,
+and the latest receipt for each changed field survive timeline
+eviction, checkpoint restore, and replay. They also persist with
+ordinary event history disabled.
+
+Declare up to 1,024 sites with up to 32 fields each. Set `historyLimit`
+from 1 to 128 entries per site (default 32). A trace reports a partial
+timeline when earlier entries have been evicted or a result limit
+omits them. Set `visitorLimit` from 1 to 256 per site (default 64).
+The least recently seen visitor is evicted when the table fills.
+After evictions, a missing visitor is reported as `untracked`, and
+their next visit starts a fresh retained count. The site's total
+visit count continues to accumulate.
+
+In the [Ridge Ford demo](../examples/story-documents/ridge-ford.world.json),
+the caravan can reinforce the crossing and leave rations or mark the
+unsafe deck. On its return, the saved site state opens the crossing
+questlet or the ridge detour.
+
+```sh
+ink-studio sim run examples/story-documents/ridge-ford.world.json \
+  --actions examples/story-documents/ridge-ford.reinforce.actions.json --ticks 9 --record ford.run.json
+ink-studio probe ford.run.json --field world/site-history --args '{"site":"ridge/ford"}'
+ink-studio trace ford.run.json world/site-history --args '{"site":"ridge/ford"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families

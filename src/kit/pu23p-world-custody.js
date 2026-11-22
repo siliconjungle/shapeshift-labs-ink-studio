@@ -11,15 +11,12 @@
   const fields = (value,keys)=>record(value)&&Object.keys(value).every(key=>keys.includes(key));
   const integer = (value,min,max)=>Number.isSafeInteger(value)&&value>=min&&value<=max;
   const holderOK = value=>fields(value,['kind','id'])&&kinds.includes(value.kind)&&F.qualified(value.id);
-  const tickOf = event=>Number(event.split('.')[0]);
   const latest = row=>row.changes.at(-1)??row.origin;
   const needsFrom = op=>op==='transfer'||op==='inherit'||op==='lose';
   const needsAt = op=>op==='discover'||op==='recover';
   const statusOf = event=>event?.operation==='lose'?'lost':event?'held':'undiscovered';
   const earlier = (id,event)=>F.eventId(id)&&F.compare(id,event)<0;
-  const asSource = ({id,tick,kind,system})=>({id,tick,kind,system});
-  const sourceOK = (source,event)=>fields(source,['id','tick','kind','system'])&&earlier(source.id,event)&&
-    source.tick===tickOf(source.id)&&id(source.kind)&&id(source.system);
+  const sourceOK = (source,event)=>F.eventReceiptOK(source)&&earlier(source.id,event);
 
   function stepOK(op,{from,to,at}) {
     return (needsFrom(op)?holderOK(from):from===undefined)&&(op==='lose'?to===undefined:holderOK(to))&&
@@ -68,7 +65,7 @@
         if (args.source!==undefined) {
           const receipt = earlier(args.source,event)&&findSource(args.source);
           if (!receipt) return {rejected:'source-unavailable'};
-          source = asSource(receipt);
+          source = F.eventReceipt(receipt);
         }
         const change = {id:event,tick,operation,...(prior&&{previous:prior.id}),...(from&&{from}),...(to&&{to}),
           ...(at&&{at}),...(source&&{source})};
@@ -94,7 +91,7 @@
           (!row.dropped||row.changes.length===historyLimit),message);
         function checkReceipt(change) {
           check(fields(change,['id','tick','operation','previous','from','to','at','source'])&&F.eventId(change.id)&&
-            integer(change.tick,1,tick)&&change.tick===tickOf(change.id)&&!used.has(change.id)&&
+            integer(change.tick,1,tick)&&change.tick===F.eventTick(change.id)&&!used.has(change.id)&&
             Object.values(operations).includes(change.operation)&&stepOK(change.operation,change)&&
             (change.source===undefined||sourceOK(change.source,change.id)),message);
           used.add(change.id);

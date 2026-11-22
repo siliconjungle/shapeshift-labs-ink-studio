@@ -6,6 +6,10 @@
   const eventId = value => typeof value==='string'&&/^[1-9]\d{0,7}\.(0|[1-9]\d{0,3})$/.test(value);
   const fields = (value,keys) => record(value)&&Object.keys(value).every(key=>keys.includes(key));
   const integer = (value,min,max) => Number.isSafeInteger(value)&&value>=min&&value<=max;
+  const eventTick = value=>Number(value.split('.')[0]);
+  const eventReceipt = ({id,tick,kind,system})=>({id,tick,kind,system});
+  const eventReceiptOK = row=>fields(row,['id','tick','kind','system'])&&eventId(row.id)&&
+    eventTick(row.id)===row.tick&&id(row.kind)&&id(row.system);
   const compare = (a,b) => {
     const [ta,ia] = a.split('.').map(Number), [tb,ib] = b.split('.').map(Number);
     return ta-tb||ia-ib;
@@ -173,6 +177,6 @@
   }
 
   const valueOK = (shape,value)=>own(types,shape)&&types[shape](value);
-  W.worldFacts = Object.freeze({action,kind,compile,inspect,trace,qualified,eventId,compare,atOK,valueOK,
+  W.worldFacts = Object.freeze({action,kind,compile,inspect,trace,qualified,eventId,eventTick,eventReceipt,eventReceiptOK,compare,atOK,valueOK,
     valueTypes:Object.freeze(Object.keys(types))});
 })(KIT);

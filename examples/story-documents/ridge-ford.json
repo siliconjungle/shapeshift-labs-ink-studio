@@ -1,0 +1,65 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "ridge-ford",
+  "title": "The caravan remembers what it left at Ridge Ford",
+  "stories": {
+    "survey": {
+      "kind": "questlet",
+      "title": "Survey the washed-out ford",
+      "triggers": { "first-visit": { "event": { "kind": "site-visited", "where": { "all": [
+        { "path": "/site", "value": "ridge/ford" },
+        { "path": "/visit/visitNumber", "value": 1 }
+      ] } } } },
+      "lifecycle": { "progression": true },
+      "entry": "choose",
+      "stages": { "choose": {
+        "title": "Reinforce the deck or mark the hazard",
+        "decision": { "mode": "player" },
+        "next": { "reinforce": { "outcome": "reinforced" }, "mark": { "outcome": "marked" } }
+      } },
+      "outcomes": {
+        "reinforced": { "title": "The deck is planked and a cache is left" },
+        "marked": { "title": "The unsafe crossing is marked for later travelers" }
+      }
+    },
+    "cross-deck": {
+      "kind": "questlet",
+      "title": "Cross the planked deck",
+      "triggers": { "return": { "event": { "kind": "site-visited", "where": { "all": [
+        { "path": "/site", "value": "ridge/ford" },
+        { "path": "/visit/visitorCount", "op": "gte", "value": 2 }
+      ] } } } },
+      "lifecycle": { "progression": true, "feasibility": { "safe-deck": { "state": {
+        "field": "world/site-history", "args": { "site": "ridge/ford" },
+        "select": "/state/safe", "when": { "value": true }
+      } } } },
+      "entry": "cross",
+      "stages": { "cross": {
+        "title": "Use the safe crossing",
+        "decision": { "mode": "autonomous" },
+        "next": { "arrived": { "outcome": "across", "auto": true } }
+      } },
+      "outcomes": { "across": { "title": "The caravan reaches the far bank" } }
+    },
+    "take-ridge": {
+      "kind": "questlet",
+      "title": "Follow the marked detour",
+      "triggers": { "return": { "event": { "kind": "site-visited", "where": { "all": [
+        { "path": "/site", "value": "ridge/ford" },
+        { "path": "/visit/visitorCount", "op": "gte", "value": 2 }
+      ] } } } },
+      "lifecycle": { "progression": true, "feasibility": { "hazard-marked": { "state": {
+        "field": "world/site-history", "args": { "site": "ridge/ford" },
+        "select": "/state/surface", "when": { "value": "marked-unsafe" }
+      } } } },
+      "entry": "detour",
+      "stages": { "detour": {
+        "title": "Lead the caravan along the ridge",
+        "decision": { "mode": "autonomous" },
+        "next": { "arrived": { "outcome": "detoured", "auto": true } }
+      } },
+      "outcomes": { "detoured": { "title": "The caravan bypasses the unsafe crossing" } }
+    }
+  }
+}

@@ -14,6 +14,7 @@
     plan.worldBeliefs && W.worldBeliefs.actions.includes(name) ||
     plan.worldMemories && name===W.worldMemories.action ||
     plan.worldCustody && W.worldCustody.actions.includes(name) ||
+    plan.worldSiteHistory && W.worldSiteHistory.actions.includes(name) ||
     plan.storyLifecycle && W.storyLifecycle.actions.includes(name) ||
     plan.incidentCandidates && name===W.incidentCandidates.action;
   const checkpointFormat = 'ink-studio/checkpoint', runFormat = 'ink-studio/run';
@@ -23,6 +24,7 @@
   const typedBelief=Symbol('belief event');
   const typedMemory=Symbol('memory event');
   const typedCustody=Symbol('custody event');
+  const typedSite=Symbol('site history event');
 
   function stepTiming(world,at,timing) {
     const baseDt=world.dt, substeps=timing?.substeps??1, detail=timing?.detail;
@@ -349,6 +351,7 @@
     plan.worldBeliefs = W.worldBeliefs.compile(world.beliefs,plan.worldFacts?.policy,plan.worldKnowledge?.policy);
     plan.worldMemories = W.worldMemories.compile(world.memories);
     plan.worldCustody = W.worldCustody.compile(world.custody);
+    plan.worldSiteHistory = W.worldSiteHistory.compile(world.siteHistory);
     const templates = world.storyTemplates === undefined ? undefined : W.storyTemplates.compile(world);
     if (templates || world.storyDocuments !== undefined || world.storyBindings !== undefined) {
       plan.storyRoles = W.storyRoles.compile(templates?.documents ?? (world.storyDocuments === undefined ? [] : world.storyDocuments),
@@ -409,6 +412,7 @@
       else if (W.worldBeliefs.actions.includes(key)) plan.worldBeliefs.checkAction(key,args);
       else if (key===W.worldMemories.action) plan.worldMemories.checkAction(args);
       else if (W.worldCustody.actions.includes(key)) plan.worldCustody.checkAction(key,args);
+      else if (W.worldSiteHistory.actions.includes(key)) plan.worldSiteHistory.checkAction(key,args);
       else if (key===W.incidentCandidates.action) plan.incidentCandidates.checkAction(args);
       else if (W.storyLifecycle.actions.includes(key)) plan.storyLifecycle.checkAction(key,args);
       else {
@@ -418,6 +422,7 @@
         check(!plan.worldBeliefs||!W.worldBeliefs.eventKinds.includes(args.kind),'Use world belief actions to publish belief events');
         check(!plan.worldMemories||!W.worldMemories.eventKinds.includes(args.kind),'Use world/remember to publish memory events');
         check(!plan.worldCustody||!W.worldCustody.eventKinds.includes(args.kind),'Use world custody actions to publish custody events');
+        check(!plan.worldSiteHistory||!W.worldSiteHistory.eventKinds.includes(args.kind),'Use site history actions to publish site events');
         W.timedEvents.timeOf(args);
       }
     } else {
@@ -510,6 +515,7 @@
       ...(plan.worldBeliefs && {beliefs:plan.worldBeliefs.policy}),
       ...(plan.worldMemories && {memories:plan.worldMemories.policy}),
       ...(plan.worldCustody && {custody:plan.worldCustody.policy}),
+      ...(plan.worldSiteHistory && {siteHistory:plan.worldSiteHistory.policy}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
       ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
@@ -546,7 +552,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,worldCustody,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,worldCustody,worldSiteHistory,navigationSources} = plan;
     const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
       documents:storyRoles?.documents??[]});
     let composition, inspection;
@@ -593,6 +599,7 @@
     let beliefState = worldBeliefs?.initial();
     let memoryState = worldMemories?.initial();
     let custodyState = worldCustody?.initial();
+    let siteHistoryState = worldSiteHistory?.initial();
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -620,6 +627,7 @@
         ...(beliefState && {beliefs:beliefState,beliefPolicy:worldBeliefs.policy}),
         ...(memoryState && {memories:memoryState,memoryPolicy:worldMemories.policy}),
         ...(custodyState && {custody:custodyState,custodyPolicy:worldCustody.policy}),
+        ...(siteHistoryState && {siteHistory:siteHistoryState,siteHistoryPolicy:worldSiteHistory.policy}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
@@ -731,6 +739,7 @@
         ...(beliefState && {beliefState}),
         ...(memoryState && {memoryState}),
         ...(custodyState && {custodyState}),
+        ...(siteHistoryState && {siteHistoryState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -752,6 +761,7 @@
       beliefState = payload.beliefState;
       memoryState = payload.memoryState;
       custodyState = payload.custodyState;
+      siteHistoryState = payload.siteHistoryState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -810,6 +820,8 @@
       else check(!own(payload,'memoryState'),'Unexpected world memory checkpoint data');
       if (worldCustody) worldCustody.validate(payload.custodyState,payload.tick,payload.events);
       else check(!own(payload,'custodyState'),'Unexpected world custody checkpoint data');
+      if (worldSiteHistory) worldSiteHistory.validate(payload.siteHistoryState,payload.tick,payload.events);
+      else check(!own(payload,'siteHistoryState'),'Unexpected site history checkpoint data');
       if (storyReferences) storyReferences.validate(payload.storyReferenceState,payload.tick,payload.storyLifecycleState);
       else check(!own(payload,'storyReferenceState'),'Unexpected story live reference checkpoint data');
       transfers.validateBalances(payload.states);
@@ -882,7 +894,8 @@
     const blockSize = authoredBlockSize===undefined ? undefined :
       Math.min(authoredBlockSize,systems[names[0]].processingLimit?.()??authoredBlockSize);
     const blockSystem = blockSize !== undefined && !socialObservers.length && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
-      !storyLifecycle && !worldFacts && !worldMemories && !worldCustody && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
+      !storyLifecycle && !worldFacts && !worldMemories && !worldCustody && !worldSiteHistory && !causePolicy &&
+      !regions && !evidence && !playback && !debug ? names[0] : undefined;
     if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
     debug?.publish(origin);
@@ -967,6 +980,7 @@
       const beliefLedger = worldBeliefs?.begin(beliefState);
       const memoryLedger = worldMemories?.begin(memoryState,at);
       const custodyLedger = worldCustody?.begin(custodyState,at);
+      const siteLedger = worldSiteHistory?.begin(siteHistoryState,at);
       const nativeTransfers = socialObservers.length?new Set():null;
       const makeEmit = (system,scope,root,token) => (kind,detail = {},parents) => {
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
@@ -980,6 +994,8 @@
           'Use world/remember to publish memory events');
         check(!custodyLedger||!W.worldCustody.eventKinds.includes(kind)||token===typedCustody,
           'Use world custody actions to publish custody events');
+        check(!siteLedger||!W.worldSiteHistory.eventKinds.includes(kind)||token===typedSite,
+          'Use site history actions to publish site events');
         W.timedEvents.timeOf(detail);
         const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
         events.push(row);
@@ -992,7 +1008,7 @@
         const causes = [...new Set(Object.values(learning.via))].map(id=>causal?.eventReference(id)).filter(Boolean);
         makeEmit('world',undefined,root,typedLearning)(W.worldKnowledge.kind,{learning},causes.length?[root,...causes]:undefined);
       }
-      function custodySource(id) {
+      function retainedEvent(id) {
         return factLedger?.receipt(id)??events.find(event=>event.id===id)??lastEvents.find(event=>event.id===id)??
           history.findLast(event=>event.id===id);
       }
@@ -1094,7 +1110,7 @@
             if (rejected) publish(W.worldMemories.rejection,{args:item.args,reason:rejected});
           }
           if (custodyLedger&&W.worldCustody.actions.includes(key)) {
-            const {custody,rejected} = custodyLedger.apply(key,item.args,at+'.'+events.length,custodySource);
+            const {custody,rejected} = custodyLedger.apply(key,item.args,at+'.'+events.length,retainedEvent);
             const publish = makeEmit(name,undefined,root,typedCustody);
             if (custody) {
               const parents = [...new Set([custody.previous,custody.source?.id])].filter(Boolean)
@@ -1102,6 +1118,17 @@
               publish(W.worldCustody.kind,{custody},parents.length?[root,...parents]:undefined);
             }
             if (rejected) publish(W.worldCustody.rejection,{action:item.action,args:item.args,reason:rejected});
+          }
+          if (siteLedger&&W.worldSiteHistory.actions.includes(key)) {
+            const {kind,detail,rejected} = siteLedger.apply(key,item.args,at+'.'+events.length,retainedEvent);
+            const publish = makeEmit(name,undefined,root,typedSite);
+            if (detail) {
+              const entry = detail.visit??detail.change;
+              const parents = [...new Set([entry.previous,entry.visit?.id,entry.source?.id])].filter(Boolean)
+                .map(id=>causal?.eventReference(id)).filter(Boolean);
+              publish(kind,detail,parents.length?[root,...parents]:undefined);
+            }
+            if (rejected) publish(W.worldSiteHistory.rejection,{action:item.action,args:item.args,reason:rejected});
           }
           if (key === 'transfer') {
             requests.push({name,request:item.args,root});
@@ -1444,10 +1471,11 @@
       observeSocial();
       const completedView = () => {
         const frame = view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState);
-        return nextStoryReferences||factLedger||memoryLedger||custodyLedger?{...frame,...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
+        return nextStoryReferences||factLedger||memoryLedger||custodyLedger||siteLedger?{...frame,
+          ...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
           ...(factLedger&&{worldFacts:factLedger.snapshot()}),...(knowledgeLedger&&{knowledge:knowledgeLedger.snapshot()}),
           ...(beliefLedger&&{beliefs:beliefLedger.snapshot()}),...(memoryLedger&&{memories:memoryLedger.snapshot()}),
-          ...(custodyLedger&&{custody:custodyLedger.snapshot()})}:frame;
+          ...(custodyLedger&&{custody:custodyLedger.snapshot()}),...(siteLedger&&{siteHistory:siteLedger.snapshot()})}:frame;
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
@@ -1612,12 +1640,14 @@
       const nextBeliefs = beliefLedger?.snapshot();
       const nextMemories = memoryLedger?.snapshot();
       const nextCustody = custodyLedger?.snapshot();
+      const nextSiteHistory = siteLedger?.snapshot();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
         ...(nextFacts && {worldFacts:nextFacts}),
         ...(nextKnowledge && {knowledge:nextKnowledge}),
         ...(nextBeliefs && {beliefs:nextBeliefs}),
         ...(nextMemories && {memories:nextMemories}),
         ...(nextCustody && {custody:nextCustody}),
+        ...(nextSiteHistory && {siteHistory:nextSiteHistory}),
         ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle}),
         ...(nextStoryFeasibility && {storyFeasibility:nextStoryFeasibility}),
         ...(nextStoryReferences && {storyReferences:nextStoryReferences}),
@@ -1648,6 +1678,7 @@
       beliefState = nextBeliefs;
       memoryState = nextMemories;
       custodyState = nextCustody;
+      siteHistoryState = nextSiteHistory;
       chunkState = nextChunkState;
       storyTriggerState = nextStoryTriggers;
       storyLifecycleState = nextStoryLifecycle;
