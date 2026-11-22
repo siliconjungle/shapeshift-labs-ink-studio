@@ -1,0 +1,36 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "pressure-shifts",
+  "seed": 1,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "pressure-shifts.json" }],
+  "incidentPressure": { "commitments": 2, "limits": { "danger": 2, "scarcity": 2, "social-tension": 1, "travel": 2 } },
+  "systems": {
+    "standing": { "kind": "social-ledger" },
+    "stock": { "kind": "store", "config": { "accounts": {
+      "reserve": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 1 },
+      "watch": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "rescue-call" } },
+    { "tick": 1, "action": "world/event", "args": { "kind": "supply-call" } },
+    { "tick": 2, "action": "world/event", "args": { "kind": "response-requested" } },
+    { "tick": 3, "action": "world/dispatch-candidate", "args": {
+      "incident": "pressure-shifts/mediation", "reason": "request-a-third-commitment"
+    } },
+    { "tick": 3, "action": "world/story-transition", "args": {
+      "document": "pressure-shifts", "story": "supply-shift", "to": "completed", "outcome": "stocked", "reason": "convoy-arrived"
+    } },
+    { "tick": 4, "action": "world/story-transition", "args": {
+      "document": "pressure-shifts", "story": "rescue-shift", "to": "suspended", "reason": "weather-pause"
+    } },
+    { "tick": 6, "action": "world/story-transition", "args": {
+      "document": "pressure-shifts", "story": "rescue-shift", "to": "active", "reason": "weather-cleared"
+    } },
+    { "tick": 7, "action": "world/story-transition", "args": {
+      "document": "pressure-shifts", "story": "rescue-shift", "to": "completed", "outcome": "secured", "reason": "crossing-secured"
+    } }
+  ]
+}

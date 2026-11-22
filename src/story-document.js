@@ -3,6 +3,7 @@ const StoryDocument = (() => {
   const format = 'ink-studio/story';
   const version = 1;
   const maxCandidateWeight = 1000000;
+  const pressureUnits = value => Number.isSafeInteger(value)&&value>=0&&value<=1000000;
   const incidentCategories = Object.freeze(['setback','opportunity','visitor','discovery','environmental-change','recovery']);
   const kinds = new Set(['incident', 'questlet', 'arc']);
   const objectiveKinds = new Set(['reach', 'acquire', 'deliver', 'protect', 'observe', 'build', 'maintain', 'survive', 'negotiate', 'choose']);
@@ -631,10 +632,16 @@ const StoryDocument = (() => {
 
   function candidatePolicy(value, at, kind) {
     if (kind!=='incident') invalid(at,'candidate queues require an incident');
-    fields(value,at,['for'],['release','onExpire','selection']);
+    fields(value,at,['for'],['release','onExpire','selection','pressure']);
     if (!Number.isFinite(value.for)||value.for<=0) invalid(at+'.for','expected a positive duration in seconds');
     if (Object.hasOwn(value,'release')&&!['automatic','manual'].includes(value.release))
       invalid(at+'.release','expected automatic or manual');
+    if (Object.hasOwn(value,'pressure')) {
+      const loads = entries(value.pressure,at+'.pressure');
+      if (loads.length>16) invalid(at+'.pressure','expected up to 16 pressure dimensions');
+      for (const [dimension,load] of loads)
+        if (!pressureUnits(load)) invalid(at+'.pressure.'+dimension,'expected integer pressure units from 0 to 1000000');
+    }
     if (Object.hasOwn(value,'selection')) {
       const {selection,release} = value, location = at+'.selection';
       fields(selection,location,['pool','weight']);
@@ -818,6 +825,6 @@ const StoryDocument = (() => {
     }
   }
 
-  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, isStoryId:safeId, objectiveRule, mapRoleValues, roleToken });
+  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, isStoryId:safeId, pressureUnits, objectiveRule, mapRoleValues, roleToken });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

@@ -346,10 +346,11 @@
       plan.storyHandoffs = W.storyHandoffs.compile(documents, systems);
       plan.storySettlement = W.storySettlement.compile(documents, systems, transfers);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
-      plan.incidentCandidates = W.incidentCandidates.compile(documents,world.dt,plan.storyLifecycle?.feasibility,world.seed);
+      plan.incidentCandidates = W.incidentCandidates.compile(documents,world.dt,plan.storyLifecycle?.feasibility,world.seed,world.incidentPressure);
       plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
     }
+    plan.incidentPressure = plan.incidentCandidates?.pressure??W.incidentPressure.compile(world.incidentPressure,{});
     const eventActions = templates ? templates.eventActions : world.eventActions;
     if (eventActions !== undefined) plan.eventActions = K.eventActions.compile(
       plan.storyRoles ? plan.storyRoles.resolve(eventActions, 'world.eventActions') : eventActions, {
@@ -470,6 +471,7 @@
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.incidentCatalog?.length && {incidentCatalog:W.incidentCatalog.find(plan.incidentCatalog)}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
+      ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
       ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
       ...(plan.storyLifecycle?.decisions && {decisions:plan.storyLifecycle.decisions}),
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
@@ -498,7 +500,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -569,6 +571,7 @@
         ...(storyReferenceState && {storyReferences:storyReferenceState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
         ...(incidentCatalog?.length && {incidentCatalog}),
+        ...(incidentPressure && {incidentPressure}),
         ...(incidentCandidates && {incidentCandidatePolicies:incidentCandidates.policies,incidentCandidates:incidentCandidateState}),
         ...(storyTemplates && {storyTemplates}),
         ...((storyTemplates||storyLifecycle?.decisions) && {storyDocuments:storyRoles.documents}),

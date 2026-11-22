@@ -601,6 +601,65 @@ node cli/ink-studio.js probe landing.run.json --field world/incident-selections 
 node cli/ink-studio.js sim replay landing.run.json
 ```
 
+### Budget simultaneous incident commitments
+
+Set `incidentPressure` on the world to cap the number of simultaneous
+queue commitments and any named pressure dimensions.
+
+```json
+"incidentPressure": {
+  "commitments": 2,
+  "limits": { "danger": 2, "scarcity": 2, "social-tension": 1, "travel": 2 }
+}
+```
+
+Author the incident's demand with `lifecycle.candidate.pressure`. The
+units are relative to your world, and dimensions can use any stable
+ID. Candidate loads and dimension limits use nonnegative integer
+units up to 1,000,000. The optional commitment cap is 0–256. An omitted
+cap leaves that measure open and it still appears in the usage report.
+
+```json
+"candidate": {
+  "for": 1.2,
+  "release": "automatic",
+  "pressure": { "danger": 2, "travel": 1 }
+}
+```
+
+Every dispatched queue candidate occupies one commitment slot from
+its offer through active and suspended stages. Its authored loads
+occupy the corresponding pressure dimensions for the same period.
+A terminal transition releases the hold in the published world
+snapshot. The queue can use that capacity on the next tick.
+
+The queue checks budgets as well as native feasibility. Each successful
+dispatch reserves capacity before the next manual or automatic choice.
+Weighted draws use the candidates that fit at the time of the draw.
+A candidate that exceeds any cap stays queued and can be reconsidered
+until its deadline. A manual choice that exceeds a cap reports
+`pressure-budget-exhausted`.
+
+Probe `world/incident-pressure` to see the live holds, committed units,
+limits, and remaining capacity. On `world/incident-candidates`, the
+`pressure` check reports the candidate's requested load and the caps
+that blocked it. Dispatch and rejection events carry the admission
+receipt. Checkpoints restore holds from the incident lifecycle and
+retain the queue's decision receipts for replay.
+
+The [crossing demo](../examples/story-documents/pressure-shifts.world.json)
+holds a rescue and a supply convoy at once. Once the convoy ends, the
+remaining danger budget favors mediation. The ridge watch can dispatch
+after the rescue commitment closes.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/pressure-shifts.world.json \
+  --ticks 10 --record crossing.run.json
+node cli/ink-studio.js probe crossing.run.json --ticks 4 --field world/incident-pressure
+node cli/ink-studio.js probe crossing.run.json --ticks 6 --field world/incident-candidates \
+  --args '{"incident":"pressure-shifts/ridge-watch"}'
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

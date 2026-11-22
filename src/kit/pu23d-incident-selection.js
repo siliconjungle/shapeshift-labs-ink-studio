@@ -40,12 +40,12 @@
 
   function select(seed,tick,rows,policyFor) {
     const pools = new Map(), selections = new Map();
-    for (const {candidate,queuedAt,report} of rows) {
+    for (const {candidate,queuedAt,status:state} of rows) {
       const policy = policyFor(candidate);
       if (!policy) continue;
       const {pool,weight} = policy;
       if (!pools.has(pool)) pools.set(pool,[]);
-      pools.get(pool).push({candidate,queuedAt,weight,status:status(report.ready,weight)});
+      pools.get(pool).push({candidate,queuedAt,weight,status:status(state==='ready',weight)});
     }
     for (const [pool,candidates] of pools) {
       const receipt = decide(seed,pool,tick,candidates);
@@ -73,8 +73,9 @@
       const inputs = members.map((item,index)=>{
         const saved = selection.candidates[index], {weight} = policyFor(item.candidate);
         check(record(saved)&&saved.candidate===item.candidate&&saved.queuedAt===item.queuedAt&&saved.weight===weight&&
-          (item.report.tick===tick?saved.status===status(item.report.ready,weight):
-            saved.status==='blocked'||saved.status===status(true,weight)),message);
+          (item.report.tick!==tick||item.report.ready&&item.pressure?.ready===false ?
+            saved.status==='blocked'||saved.status===status(true,weight) :
+            saved.status===status(item.report.ready,weight)),message);
         return {candidate:item.candidate,queuedAt:item.queuedAt,weight,status:saved.status};
       });
       check(equal(selection,decide(seed,pool,tick,inputs)),message);

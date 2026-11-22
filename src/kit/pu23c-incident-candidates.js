@@ -8,18 +8,18 @@
   const due = (spec,at) => Math.min(at+spec.policy.windowTicks,spec.policy.worldDeadlineTick??Infinity);
   const expiryReason = (spec,row) => row.expiresAt===spec.policy.worldDeadlineTick?'world-deadline':'candidate-timeout';
 
-  function compile(documents,dt,feasibility,seed) {
+  function compile(documents,dt,feasibility,seed,pressureConfig) {
     const {before,select,validate:validateSelections} = W.incidentSelection;
     const specs = new Map(), inbound = new Set();
     for (const document of documents) for (const [story,definition] of Object.entries(document.stories)) {
       const config = definition.lifecycle?.candidate;
       if (!config) continue;
-      const key = document.id+'/'+story, {for:seconds,release='manual',onExpire,selection} = config;
+      const key = document.id+'/'+story, {for:seconds,release='manual',onExpire,selection,pressure} = config;
       const windowTicks = Math.max(1,W.storyTriggers.ticks(seconds,dt,Math.ceil,'Candidate window exceeds the world tick budget'));
       const worldDeadlineTick = W.storyDeadlines.compile(definition.lifecycle,dt)?.world;
       const target = onExpire===undefined?undefined:onExpire.includes('/')?onExpire:document.id+'/'+onExpire;
       const info = {document:document.id,story,storyKind:definition.kind,...(definition.incident&&{incident:definition.incident})};
-      const policy = {windowTicks,release,...(selection&&{selection}),...(target&&{onExpire:target}),
+      const policy = {windowTicks,release,...(pressure&&{pressure}),...(selection&&{selection}),...(target&&{onExpire:target}),
         ...(worldDeadlineTick!==undefined&&{worldDeadlineTick})};
       specs.set(key,{policy,info,triggers:definition.triggers,rules:feasibility?.[key]??{}});
     }
@@ -44,6 +44,7 @@
       check(spec.triggers||inbound.has(key),'Candidate needs an authored trigger or an incoming follow-up: '+key);
     const policies = freeze(Object.fromEntries([...specs.keys()].sort().map(key=>[key,specs.get(key).policy])));
 
+    const pressurePolicy = W.incidentPressure.compile(pressureConfig,policies);
     const selectionFor = key => specs.get(key).policy.selection;
 
     function checkAction(args) {
@@ -53,6 +54,15 @@
 
     function advance(previous,starts,commands,tick,query,lifecycle,emit) {
       const state = {...previous}, released = {}, normal = [];
+      const budget = pressurePolicy&&W.incidentPressure.begin(pressurePolicy,lifecycle);
+      function checkReadiness(row,report) {
+        const pressure = budget?.assess(row.candidate,tick);
+        const status = report.ready&&(!pressure||pressure.ready)?'ready':'blocked';
+        const next = {...row,status,report,...(pressure&&{pressure})};
+        state[row.candidate] = next;
+        if (row.status!==status||!row.report) publish(emit,'checked',row,{status,report,...(pressure&&{pressure})});
+        return next;
+      }
       function publish(say,kind,row,details={}) {
         say('story-candidate-'+kind,{...specs.get(row.candidate).info,candidate:row.candidate,...details});
       }
@@ -69,7 +79,11 @@
         const terminal = {tick,reason};
         state[key] = {...row,status:'dispatched',terminal,...(selection&&{selection})};
         released[key] = {queuedAt,source,report};
-        publish(say,'dispatched',row,{queuedAt,report,terminal});
+        publish(say,'dispatched',row,{queuedAt,report,terminal,...(row.pressure&&{pressure:row.pressure})});
+        if (budget) {
+          budget.reserve(key);
+          for (const pending of Object.values(state).filter(waiting).sort(before)) checkReadiness(pending,pending.report);
+        }
       }
       for (const start of starts) {
         const key = start.document+'/'+start.story;
@@ -87,26 +101,38 @@
       }
       const ready = [];
       for (const row of Object.values(state).filter(waiting).sort(before)) {
-        const report = W.storyFeasibility.evaluate(specs.get(row.candidate).rules,tick,query());
-        const status = report.ready?'ready':'blocked', next = {...row,status,report};
-        state[row.candidate] = next;
-        if (row.status!==status||!row.report) publish(emit,'checked',row,{status,report});
-        if (report.ready) ready.push(row.candidate);
+        const evaluated = checkReadiness(row,W.storyFeasibility.evaluate(specs.get(row.candidate).rules,tick,query()));
+        if (evaluated.status==='ready'&&specs.get(row.candidate).policy.release==='automatic') ready.push(row.candidate);
       }
       for (const {args,publish:say} of commands) {
         const row = state[args.incident];
         if (row?.status==='ready') dispatch(row,args.reason,say);
-        else publish(say,'rejected',{candidate:args.incident},{reason:row?'candidate-'+row.status:'candidate-not-queued',
-          requestedReason:args.reason});
+        else {
+          const blocked = row?.status==='blocked'&&row.report.ready&&row.pressure?.ready===false;
+          publish(say,'rejected',{candidate:args.incident},{reason:blocked?'pressure-budget-exhausted':
+            row?'candidate-'+row.status:'candidate-not-queued',requestedReason:args.reason,...(blocked&&{pressure:row.pressure})});
+        }
       }
-      const choices = select(seed,tick,Object.values(state).filter(waiting),selectionFor);
-      for (const key of ready) {
-        if (state[key].status!=='ready'||specs.get(key).policy.release!=='automatic') continue;
-        const choice = choices.get(key);
-        if (choice) {
-          publish(emit,'selected',state[key],{selection:choice});
-          dispatch(state[key],choice.reason,emit,choice);
-        } else if (!selectionFor(key)) dispatch(state[key],'automatic-release',emit);
+      function release(key,choice) {
+        if (choice) publish(emit,'selected',state[key],{selection:choice});
+        dispatch(state[key],choice?.reason??'automatic-release',emit,choice);
+      }
+      if (budget) {
+        const pools = new Set();
+        // Reserve each release before testing the remaining pools for the next seat.
+        while (true) {
+          const contenders = Object.values(state).filter(row=>waiting(row)&&!pools.has(selectionFor(row.candidate)?.pool));
+          const choices = select(seed,tick,contenders,selectionFor);
+          const key = ready.find(id=>state[id].status==='ready'&&(!selectionFor(id)||choices.has(id)));
+          if (key===undefined) break;
+          const choice = choices.get(key);
+          if (choice) pools.add(choice.pool);
+          release(key,choice);
+        }
+      } else {
+        const choices = select(seed,tick,Object.values(state).filter(waiting),selectionFor);
+        for (const key of ready)
+          if (state[key].status==='ready'&&(!selectionFor(key)||choices.has(key))) release(key,choices.get(key));
       }
       return {state:freeze(state),starts:normal,released};
     }
@@ -122,9 +148,10 @@
           check(!offered&&(!start||start.tick>=(spec.policy.worldDeadlineTick??Infinity)),message);
           continue;
         }
-        check(fields(row,['candidate','queuedAt','expiresAt','origin','source','status','report','terminal','followUp','selection'])&&
+        check(fields(row,['candidate','queuedAt','expiresAt','origin','source','status','report','pressure','terminal','followUp','selection'])&&
           row.candidate===key&&tickOK(row.queuedAt)&&row.expiresAt===due(spec,row.queuedAt)&&row.expiresAt>row.queuedAt&&
-          fields(row.origin,['kind','incident'])&&W.storyFeasibility.validReport(row.report,spec.rules,row.queuedAt,tick),message);
+          fields(row.origin,['kind','incident'])&&W.storyFeasibility.validReport(row.report,spec.rules,row.queuedAt,tick)&&
+          W.incidentPressure.validReport(pressurePolicy,key,row.pressure,row.report.tick),message);
         if (spec.triggers) check(row.origin.kind==='trigger'&&row.origin.incident===undefined&&start?.tick===row.queuedAt&&
           start.trigger===row.source?.trigger&&W.storyTriggers.validEvidence(spec.triggers,row.source,row.queuedAt),message);
         else {
@@ -134,13 +161,13 @@
         }
         check(offered===(row.status==='dispatched'),message);
         if (waiting(row)) {
-          check(row.expiresAt>tick&&row.report.tick===tick&&row.report.ready===(row.status==='ready')&&
+          check(row.expiresAt>tick&&row.report.tick===tick&&(row.report.ready&&(row.pressure?.ready??true))===(row.status==='ready')&&
             row.terminal===undefined&&row.followUp===undefined&&row.selection===undefined,message);
           continue;
         }
         check(fields(row.terminal,['tick','reason'])&&tickOK(row.terminal.tick)&&reasonOK(row.terminal.reason),message);
         if (row.status==='dispatched') {
-          check(row.report.ready&&row.report.tick===row.terminal.tick&&row.terminal.tick<row.expiresAt&&row.followUp===undefined&&
+          check(row.report.ready&&(row.pressure?.ready??true)&&row.report.tick===row.terminal.tick&&row.terminal.tick<row.expiresAt&&row.followUp===undefined&&
             (story.dropped||story.transitions[0].tick===row.terminal.tick&&story.transitions[0].reason==='candidate-dispatched')&&
             equal(story.source,row.source)&&(!Object.keys(spec.rules).length||equal(gates?.[key]?.report,row.report)),message);
           continue;
@@ -159,8 +186,9 @@
       }
       check(Object.keys(state).every(key=>specs.has(key)),'Unknown saved incident candidate');
       validateSelections(state,seed,selectionFor);
+      if (pressurePolicy) W.incidentPressure.validate(pressurePolicy,lifecycle);
     }
-    return {policies,initial:()=>freeze({}),advance,validate,checkAction};
+    return {policies,pressure:pressurePolicy,initial:()=>freeze({}),advance,validate,checkAction};
   }
 
   function inspect(policies,state,tick,args) {

@@ -1,0 +1,64 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "pressure-shifts",
+  "title": "Commitments at the mountain crossing",
+  "stories": {
+    "rescue-shift": {
+      "kind": "incident",
+      "title": "Keep the rescue team at the crossing",
+      "incident": { "category": "setback", "intensity": 3, "tags": ["crossing"] },
+      "triggers": { "call": { "event": { "kind": "rescue-call", "system": "world" } } },
+      "lifecycle": { "candidate": { "for": 1.2, "release": "automatic", "pressure": { "danger": 2, "travel": 1 } } },
+      "entry": "hold",
+      "stages": { "hold": { "title": "Hold the rescue commitment", "next": { "done": { "outcome": "secured" } } } },
+      "outcomes": { "secured": { "title": "The crossing is secured" } }
+    },
+    "supply-shift": {
+      "kind": "incident",
+      "title": "Finish the supply convoy",
+      "incident": { "category": "opportunity", "intensity": 2, "tags": ["crossing"] },
+      "triggers": { "call": { "event": { "kind": "supply-call", "system": "world" } } },
+      "lifecycle": { "candidate": { "for": 1.2, "release": "automatic", "pressure": { "scarcity": 2, "travel": 1 } } },
+      "entry": "deliver",
+      "stages": { "deliver": { "title": "Hold the supply commitment", "next": { "done": { "outcome": "stocked" } } } },
+      "outcomes": { "stocked": { "title": "The supplies have arrived" } }
+    },
+    "mediation": {
+      "kind": "incident",
+      "title": "Mediate the crossing dispute",
+      "incident": { "category": "opportunity", "intensity": 1, "tags": ["crossing"] },
+      "triggers": { "request": { "event": { "kind": "response-requested", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 1.2, "release": "automatic", "pressure": { "social-tension": 1 },
+          "selection": { "pool": "crossing-response", "weight": 1 } },
+        "settlement": { "outcomes": { "agreed": { "standing": {
+          "reputation": { "ledger": "standing", "subject": "crew", "faction": "crossing", "delta": 1 }
+        } } } }
+      },
+      "entry": "meet",
+      "stages": { "meet": { "title": "Record the agreement", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "agreed", "auto": true } } } },
+      "outcomes": { "agreed": { "title": "The crossing council accepts the agreement" } }
+    },
+    "ridge-watch": {
+      "kind": "incident",
+      "title": "Post a watch on the exposed ridge",
+      "incident": { "category": "opportunity", "intensity": 3, "tags": ["crossing"] },
+      "triggers": { "request": { "event": { "kind": "response-requested", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 1.2, "release": "automatic", "pressure": { "danger": 1, "travel": 1 },
+          "selection": { "pool": "crossing-response", "weight": 100 } },
+        "settlement": { "outcomes": { "posted": { "supplies": {
+          "transfer": { "from": "stock/reserve", "to": "stock/watch", "amount": 1 }
+        } } } }
+      },
+      "entry": "post",
+      "stages": { "post": { "title": "Send the watch supplies", "decision": { "mode": "autonomous" },
+        "next": { "finish": { "outcome": "posted", "auto": true } } } },
+      "outcomes": { "posted": { "title": "The ridge watch receives supplies" } }
+    }
+  }
+}
