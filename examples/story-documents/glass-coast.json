@@ -1,0 +1,85 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "glass-coast",
+  "title": "Seven possible beats on the glass coast",
+  "stories": {
+    "breakwater-collapse": {
+      "kind": "incident",
+      "title": "Respond to a breakwater collapse",
+      "incident": { "category": "setback", "intensity": 5 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": { "candidate": { "for": 4, "release": "automatic" } },
+      "entry": "respond",
+      "stages": { "respond": { "title": "Protect the harbor", "next": { "done": { "outcome": "contained" } } } },
+      "outcomes": { "contained": { "title": "The collapse is contained" } }
+    },
+    "drift-chart": {
+      "kind": "incident",
+      "title": "Follow a difficult drift chart",
+      "incident": { "category": "discovery", "intensity": 4 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": { "candidate": { "for": 4, "release": "automatic" } },
+      "entry": "follow",
+      "stages": { "follow": { "title": "Read the offshore currents", "next": { "done": { "outcome": "charted" } } } },
+      "outcomes": { "charted": { "title": "The offshore channel is charted" } }
+    },
+    "lantern-hour": {
+      "kind": "incident",
+      "title": "Spend a quiet hour at the lantern",
+      "incident": { "category": "recovery", "intensity": 0 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": { "candidate": { "for": 4, "release": "automatic" } },
+      "entry": "rest",
+      "stages": { "rest": { "title": "Rest by the lantern", "next": { "done": { "outcome": "rested" } } } },
+      "outcomes": { "rested": { "title": "The harbor rests" } }
+    },
+    "lightkeeper-map": {
+      "kind": "incident",
+      "title": "Unfold the lightkeeper's map",
+      "incident": { "category": "discovery", "intensity": 2 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": { "candidate": { "for": 4, "release": "automatic" } },
+      "entry": "read",
+      "stages": { "read": { "title": "Find a safe inlet", "next": { "done": { "outcome": "located" } } } },
+      "outcomes": { "located": { "title": "A safe inlet is marked" } }
+    },
+    "mutual-aid": {
+      "kind": "incident",
+      "title": "Accept a neighboring crew's supplies",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 4, "release": "automatic" },
+        "settlement": { "outcomes": { "supplied": {
+          "crates": { "transfer": { "from": "stock/reserve", "to": "stock/harbor", "amount": 2 } }
+        } } }
+      },
+      "entry": "receive",
+      "stages": { "receive": { "title": "Receive the aid crates", "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "supplied", "auto": true } } } },
+      "outcomes": { "supplied": { "title": "The harbor receives two crates" } }
+    },
+    "salt-storm": {
+      "kind": "incident",
+      "title": "Ride out the salt storm",
+      "incident": { "category": "environmental-change", "intensity": 3 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": { "candidate": { "for": 4, "release": "automatic" } },
+      "entry": "shelter",
+      "stages": { "shelter": { "title": "Secure the weather stations", "next": { "done": { "outcome": "secured" } } } },
+      "outcomes": { "secured": { "title": "The stations survive the storm" } }
+    },
+    "visiting-cartographer": {
+      "kind": "incident",
+      "title": "Welcome a visiting cartographer",
+      "incident": { "category": "visitor", "intensity": 2 },
+      "triggers": { "opening": { "event": { "kind": "coast-opens" } } },
+      "lifecycle": { "candidate": { "for": 4, "release": "automatic" } },
+      "entry": "welcome",
+      "stages": { "welcome": { "title": "Show the visitor the docks", "next": { "done": { "outcome": "welcomed" } } } },
+      "outcomes": { "welcomed": { "title": "The cartographer has a berth" } }
+    }
+  }
+}

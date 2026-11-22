@@ -1226,6 +1226,7 @@ const CMD = {
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
         '  story instantiate <template.json> <instance.json>   expand typed story parameters and inspect the result',
         '  sim preflight <world.json> [--strict]   check world bindings and story routes before stepping',
+        '    sim run|preflight <world.json> --storyteller ID   select an authored incident profile',
         '  story catalog <story.json> [story.json ...]   discover authored incidents',
         '  story events <recording> [--format json|markdown|timeline|events]   inspect or present recorded story events',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',

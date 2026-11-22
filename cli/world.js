@@ -90,8 +90,15 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     ensure(input.world,'The scene must expose an Ink Studio world manifest');
     if (input.checkpoint) ensure(opt.seed===undefined && opt.dt===undefined,'A resumed run uses its checkpoint seed and timestep');
     if (input.world.simulationModel) ensure(opt.seed===undefined && opt.dt===undefined,'A simulation model pins its seed and timestep');
-    return !input.checkpoint && (opt.seed !== undefined || opt.dt !== undefined)
-      ? {...input.world,...(opt.seed===undefined?{}:{seed:Number(opt.seed)}),...(opt.dt===undefined?{}:{dt:Number(opt.dt)})}
+    const storyteller = opt.storyteller;
+    if (storyteller!==undefined) {
+      ensure(!input.checkpoint,'A recorded world keeps its original storyteller profile');
+      ensure(typeof storyteller==='string'&&W.data.own(input.world.storyteller?.profiles,storyteller),
+        '--storyteller needs an authored profile ID');
+    }
+    return !input.checkpoint && (opt.seed!==undefined||opt.dt!==undefined||storyteller!==undefined)
+      ? {...input.world,...(opt.seed!==undefined&&{seed:Number(opt.seed)}),...(opt.dt!==undefined&&{dt:Number(opt.dt)}),
+        ...(storyteller!==undefined&&{storyteller:{...input.world.storyteller,active:storyteller}})}
       : input.world;
   }
   function runtime(input, profile = false, regionRevisions, recordRun) {
@@ -505,6 +512,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       ...(world.simulationModel.exposedParameters && {exposedParameters:world.simulationModel.exposedParameters})});
   }
   function runSimulation([mode,file,other]) {
+    ensure(opt.storyteller===undefined||['run','preflight'].includes(mode),
+      'Use --storyteller with a fresh world in sim run or preflight');
     switch (mode) {
       case 'model': return modelCommand(file,other);
       case 'sections': {

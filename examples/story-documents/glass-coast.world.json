@@ -1,0 +1,30 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "glass-coast",
+  "seed": 29,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "glass-coast.json" }],
+  "storyteller": {
+    "active": "slow-burn",
+    "profiles": {
+      "slow-burn": { "cadence": { "minInterval": 0.5 }, "challenge": { "maxIntensity": 5 } },
+      "volatile": { "cadence": { "minInterval": 0.2, "maxInterval": 0.4 }, "challenge": { "maxIntensity": 5 } },
+      "exploratory": { "cadence": { "minInterval": 0.3 }, "challenge": { "maxIntensity": 5 },
+        "categoryWeights": { "discovery": 16, "visitor": 3 } },
+      "generous": { "cadence": { "minInterval": 0.3 }, "challenge": { "maxIntensity": 2 },
+        "categoryWeights": { "opportunity": 16, "recovery": 12 } },
+      "generous-unrestricted": { "cadence": { "minInterval": 0.3 }, "challenge": { "maxIntensity": 5 },
+        "categoryWeights": { "opportunity": 16, "recovery": 12 } }
+    }
+  },
+  "systems": {
+    "stock": { "kind": "store", "config": { "accounts": {
+      "reserve": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 2 },
+      "harbor": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "coast-opens" } }
+  ]
+}

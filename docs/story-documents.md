@@ -724,6 +724,77 @@ node cli/ink-studio.js probe harbor-overlap.run.json --ticks 6 --field world/inc
   --args '{"scope":"family"}'
 ```
 
+## Author a storyteller profile
+
+A world's optional `storyteller` section names the active profile and
+holds up to 32 authored profiles. Profiles guide the automatic incident
+queue, using the world seed and existing incident metadata.
+
+```json
+"storyteller": {
+  "active": "exploratory",
+  "profiles": {
+    "exploratory": {
+      "cadence": { "minInterval": 1, "maxInterval": 2 },
+      "challenge": { "maxIntensity": 4 },
+      "categoryWeights": { "discovery": 8, "visitor": 3 }
+    },
+    "quiet": {
+      "cadence": { "minInterval": 3 },
+      "challenge": { "maxIntensity": 2 }
+    }
+  }
+}
+```
+
+- **Cadence** sets the gap after each successful automatic dispatch.
+  Author a positive `minInterval` in seconds for a fixed gap. Add a
+  `maxInterval` for a seeded draw between the two bounds. The bounds
+  round up to world ticks and the draw includes both resulting ticks.
+  The first beat is available immediately. An open beat waits for an
+  eligible candidate, and each beat admits at most one incident.
+- **Challenge** uses each incident's authored `incident.intensity`.
+  `maxIntensity` accepts 0–5 and defaults to 5. Incidents without
+  classification remain eligible. The profile changes which incidents
+  can be offered automatically. Each incident runs its own objectives
+  and settlements.
+- **Category weights** multiply the candidate's selection weight by an
+  integer from 0 to 16. Missing categories use 1. Set 0 to omit a
+  category from automatic draws. Use any catalog category or
+  `unclassified`. Authored selection pools keep their membership.
+  When category weights are authored, otherwise unpooled automatic
+  candidates share a default pool and start with a weight of 1.
+  The queue considers pool winners in its usual stable order.
+
+Feasibility, pressure limits, and recovery cooldowns still apply before
+release. The queue keeps its authored deadlines and expiry follow-ups.
+An explicit `world/dispatch-candidate` can pick a feasible candidate
+that fits the pressure and recovery rules. It spends no automatic beat.
+Direct story starts continue to use their authored triggers and lifecycle.
+
+Choose a profile in the world manifest or pass `--storyteller ID` to
+`sim run` or `sim preflight` on a fresh world. Preflight reports the
+compiled cadence bounds and the candidate weights for the active
+profile. Probe `world/storyteller` to inspect the last and next
+automatic beats and the blockers for pending automatic candidates.
+Dispatch events carry the profile, dispatch mode, and the automatic
+beat timing. Recorded worlds keep the selected profile and reproduce
+the same draws on resume and replay.
+
+The [glass coast demo](../examples/story-documents/glass-coast.world.json)
+offers the same catalog to each storyteller. Compare fixed slow-burn
+spacing with volatile spacing, see exploratory weighting favor
+discoveries, or use generous to favor recovery and aid. The
+`generous-unrestricted` profile uses the same spacing and weights
+with the intensity ceiling raised from 2 to 5.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/glass-coast.world.json \
+  --storyteller generous --ticks 42 --record glass-coast.run.json
+node cli/ink-studio.js probe glass-coast.run.json --ticks 2 --field world/storyteller
+node cli/ink-studio.js probe glass-coast.run.json --field world/incident-selections
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

@@ -8,10 +8,10 @@
   const before = (a,b) => a.queuedAt-b.queuedAt||compareId(a.candidate,b.candidate);
   const status = (ready,weight) => !ready?'blocked':weight===0?'zero-weight':'eligible';
 
-  function draw(seed,pool,tick,totalWeight) {
+  function draw(seed,pool,tick,totalWeight,stream=algorithm) {
     const ceiling = wordCount-wordCount%totalWeight;
     for (let attempt=0;attempt<128;attempt++) {
-      let word = hash(JSON.stringify([algorithm,seed,pool,tick,attempt]));
+      let word = hash(JSON.stringify([stream,seed,pool,tick,attempt]));
       word = Math.imul(word^(word>>>16),0x7feb352d);
       word = Math.imul(word^(word>>>15),0x846ca68b);
       word = (word^(word>>>16))>>>0;
@@ -38,14 +38,14 @@
       reason:sample===null?'only-eligible-candidate':'seeded-weighted-draw'});
   }
 
-  function select(seed,tick,rows,policyFor) {
+  function select(seed,tick,rows,policyFor,canSelect) {
     const pools = new Map(), selections = new Map();
     for (const {candidate,queuedAt,status:state} of rows) {
       const policy = policyFor(candidate);
       if (!policy) continue;
       const {pool,weight} = policy;
       if (!pools.has(pool)) pools.set(pool,[]);
-      pools.get(pool).push({candidate,queuedAt,weight,status:status(state==='ready',weight)});
+      pools.get(pool).push({candidate,queuedAt,weight,status:status(state==='ready'&&canSelect(candidate),weight)});
     }
     for (const [pool,candidates] of pools) {
       const receipt = decide(seed,pool,tick,candidates);
@@ -54,7 +54,7 @@
     return selections;
   }
 
-  function validate(state,seed,policyFor,cooldownAt) {
+  function validate(state,seed,policyFor,cooldownAt,canSelect) {
     const rows = Object.values(state), draws = new Set();
     for (const row of rows) {
       if (!Object.hasOwn(row,'selection')) continue;
@@ -72,12 +72,13 @@
       check(selection.candidates.length===members.length,message);
       const inputs = members.map((item,index)=>{
         const saved = selection.candidates[index], {weight} = policyFor(item.candidate);
-        const cooling = (item.report.tick===tick?item.cooldown:cooldownAt(item.candidate,tick))?.ready===false;
+        const blocked = !canSelect(item.candidate)||
+          (item.report.tick===tick?item.cooldown:cooldownAt(item.candidate,tick))?.ready===false;
         const canChange = item.report.tick!==tick||item.report.ready&&item.pressure?.ready===false;
         check(record(saved)&&saved.candidate===item.candidate&&saved.queuedAt===item.queuedAt&&saved.weight===weight&&
-          (saved.status==='blocked'||!cooling)&&
+          (saved.status==='blocked'||!blocked)&&
           (canChange?saved.status==='blocked'||saved.status===status(true,weight):
-            saved.status===status(item.report.ready&&!cooling,weight)),message);
+            saved.status===status(item.report.ready&&!blocked,weight)),message);
         return {candidate:item.candidate,queuedAt:item.queuedAt,weight,status:saved.status};
       });
       check(equal(selection,decide(seed,pool,tick,inputs)),message);
@@ -98,5 +99,5 @@
     return Q.ok({tick,selections});
   }
 
-  W.incidentSelection = Object.freeze({select,validate,inspect,before});
+  W.incidentSelection = Object.freeze({select,validate,inspect,before,draw});
 })(KIT);
