@@ -40,7 +40,8 @@ function storyCommand([mode, file, id, ...rest], options) {
   } else if (id !== undefined) {
     if (!Object.hasOwn(document.stories, id)) throw new TypeError('story describe: unknown story ' + JSON.stringify(id));
     output = { documentId: document.id, version: document.version, id, definition: document.stories[id],
-      references: document.references ?? {} };
+      references: document.references ?? {},
+      ...(document.objectiveTypes !== undefined && { objectiveTypes: document.objectiveTypes }) };
   }
   console.log(JSON.stringify(output, null, 2));
 }

@@ -1,0 +1,114 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "highwater-beacon",
+  "title": "The Highwater Beacon",
+  "objectiveTypes": {
+    "decode-transponder": {
+      "evidence": {
+        "event": {
+          "kind": "transponder-read",
+          "system": "crew",
+          "where": { "path": "/data/verified", "value": true }
+        }
+      },
+      "match": { "channel": "/data/channel" }
+    }
+  },
+  "stories": {
+    "relief": {
+      "kind": "questlet",
+      "title": "Open the relief corridor",
+      "lifecycle": { "progression": true },
+      "entry": "response",
+      "stages": {
+        "response": {
+          "title": "Establish the relay",
+          "objectives": {
+            "reach-ridge": {
+              "title": "Get the scout within the ridge marker",
+              "type": "reach",
+              "params": { "system": "crew", "agent": "scout", "min": [1.15, -0.1, 0.45], "max": [1.8, 0.2, 0.85] }
+            },
+            "load-cases": {
+              "title": "Load four relief cases into the carrier",
+              "type": "acquire",
+              "params": { "account": "stores/carrier", "amount": 4 }
+            },
+            "deliver-cases": {
+              "title": "Deliver four cases to the shelter",
+              "type": "deliver",
+              "params": { "system": "world", "from": "stores/carrier", "to": "stores/shelter", "amount": 4 }
+            },
+            "protect-seal": {
+              "title": "Protect the shelter seal for half a second",
+              "type": "protect",
+              "params": {
+                "for": 0.5,
+                "state": { "field": "world/signal", "args": { "port": "sensors/seal" }, "when": { "value": true } }
+              }
+            },
+            "observe-warning": {
+              "title": "Observe the flood warning",
+              "type": "observe",
+              "params": {
+                "state": { "field": "world/signal", "args": { "port": "sensors/warning" }, "when": { "value": true } }
+              }
+            },
+            "build-relay": {
+              "title": "Build the relay footing",
+              "type": "build",
+              "params": { "system": "relay" }
+            },
+            "maintain-power": {
+              "title": "Maintain relay power for three tenths of a second",
+              "type": "maintain",
+              "params": {
+                "for": 0.3,
+                "state": { "field": "world/signal", "args": { "port": "sensors/power" }, "when": { "value": true } }
+              }
+            },
+            "survive-hold": {
+              "title": "Keep breathable air throughout the six-tenths-second hold",
+              "type": "survive",
+              "params": {
+                "for": 0.6,
+                "state": {
+                  "field": "world/account",
+                  "args": { "account": "stores/air" },
+                  "select": "/balance",
+                  "when": { "op": "gte", "value": 1 }
+                }
+              }
+            },
+            "secure-access": {
+              "title": "Settle the access agreement with the local guide",
+              "type": "negotiate",
+              "params": { "system": "council", "offer": "relief-access" }
+            },
+            "choose-route": {
+              "title": "Choose the route for the relief convoy",
+              "type": "choose",
+              "params": { "options": { "ridge": "Ridge road", "river": "River landing" } }
+            },
+            "read-rescue-code": {
+              "title": "Decode the verified rescue transponder",
+              "type": "decode-transponder",
+              "params": { "channel": "rescue" }
+            }
+          },
+          "next": {
+            "send-ridge": { "outcome": "ridge-relief", "requiresChoice": { "choose-route": "ridge" } },
+            "send-river": { "outcome": "river-relief", "requiresChoice": { "choose-route": "river" } },
+            "report-breach": { "outcome": "seal-breach", "requiresFailed": ["protect-seal"] }
+          }
+        }
+      },
+      "outcomes": {
+        "ridge-relief": { "title": "Relief convoy dispatched along the ridge" },
+        "river-relief": { "title": "Relief convoy dispatched by the river" },
+        "seal-breach": { "title": "The shelter seal failed during the hold", "status": "failed" }
+      }
+    }
+  }
+}

@@ -8,7 +8,7 @@
     completed: [], failed: [], withdrawn: [], expired: []
   });
   const limit = 64;
-  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose']);
+  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose', 'story-select']);
   const reasonOK = value => typeof value === 'string' && value.length <= 256 && value.trim().length > 0;
   const fields = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
   const allowed = (from, to) => from === null ? to === 'available' : own(destinations, from) && destinations[from].includes(to);
@@ -27,7 +27,7 @@
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
       const key = keyOf(info), stages = definition.lifecycle.progression ? definition.stages : undefined;
       entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
-        stages, evidence: compileEvidence(stages, key),
+        stages, evidence: compileEvidence(stages, key, document.objectiveTypes),
         duration: offerFor === undefined ? null : Math.max(1, W.storyTriggers.ticks(offerFor, world.dt, Math.ceil)) });
     }
     if (!entries.size) return null;
@@ -35,7 +35,8 @@
 
     function checkAction(action, args) {
       const extra = action === 'story-transition' ? ['to', 'outcome'] :
-        action === 'story-choose' ? ['stage', 'visit', 'branch'] : ['stage', 'visit', 'objective', 'result'];
+        action === 'story-choose' ? ['stage', 'visit', 'branch'] :
+        ['stage', 'visit', 'objective', action === 'story-select' ? 'option' : 'result'];
       check(fields(args, ['document', 'story', 'reason', ...extra]) &&
         typeof args.document === 'string' && !args.document.includes('/') &&
         typeof args.story === 'string' && !args.story.includes('/'), 'Story transition needs document and story IDs');
@@ -115,7 +116,8 @@
       function transition(key, to, reason, outcome, publish = emit, source = state[key]?.source) {
         const prior = state[key], from = statusOf(prior), { info, stages } = entries.get(key);
         const started = from === 'available' && to === 'active';
-        const flow = started && stages ? W.storyStages.initial(info.stage,tick) : prior?.flow;
+        const flow = started && stages ? W.storyStages.initial(info.stage,tick) :
+          to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
         const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }) };
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
@@ -133,9 +135,9 @@
         if (statusOf(prior) === 'active' && prior.flow?.current) {
           const { stage, visit } = prior.flow.current, rules = def.evidence.get(stage);
           if (rules) {
-            const changes = W.storyStages.confirm(prior.flow, rules, tick, eventsOf, query);
-            if (Object.keys(changes).length) {
-              save(key, { ...prior, flow: W.storyStages.withObjectives(prior.flow, changes) });
+            const { flow, changes } = W.storyStages.confirm(prior.flow, rules, tick, eventsOf, query);
+            if (flow !== prior.flow) {
+              save(key, { ...prior, flow });
               for (const [objective, change] of Object.entries(changes))
                 emit('story-objective-resolved', { ...def.info, stage, visit, objective, ...change });
             }
@@ -158,6 +160,7 @@
           if (result.rejected) {
             publish('story-progress-rejected', { ...step, action, reason:result.rejected, requestedReason:reason,
               ...(args.branch !== undefined && { branch:args.branch }), ...(args.objective !== undefined && { objective:args.objective }),
+              ...(args.option !== undefined && { option:args.option }),
               ...(result.pending && { pending:result.pending }) });
             continue;
           }

@@ -1,0 +1,16 @@
+[
+  { "tick": 4, "action": "world/input", "args": { "port": "sensors/seal", "value": false } },
+  { "tick": 5, "action": "world/input", "args": { "port": "sensors/seal", "value": true } },
+  { "tick": 20, "action": "world/story-select", "args": {
+    "document": "highwater-beacon", "story": "relief", "stage": "response", "visit": 1,
+    "objective": "choose-route", "option": "ridge", "reason": "prepare-fallback"
+  } },
+  { "tick": 21, "action": "world/story-choose", "args": {
+    "document": "highwater-beacon", "story": "relief", "stage": "response", "visit": 1,
+    "branch": "send-ridge", "reason": "check-damaged-shelter"
+  } },
+  { "tick": 22, "action": "world/story-choose", "args": {
+    "document": "highwater-beacon", "story": "relief", "stage": "response", "visit": 1,
+    "branch": "report-breach", "reason": "seal-did-not-hold"
+  } }
+]

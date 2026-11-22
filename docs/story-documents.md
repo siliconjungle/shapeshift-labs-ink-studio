@@ -19,11 +19,11 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 
 | Level | Required fields | Optional fields |
 | --- | --- | --- |
-| Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map |
+| Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map |
 | Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
 | Role | `kind` | `ref` to a document reference of the same kind |
 | Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled |
-| Objective | `title` | `summary`, `refs`, `optional`, `evidence` |
+| Objective | `title` | `summary`, `refs`, `optional`, `evidence`, `type` with its `params` |
 | Outcome | `title` | `summary`, `refs`, `status` when stage progression is enabled |
 | Reference | `kind`, `id` | |
 
@@ -131,7 +131,7 @@ Ink checks the visit that was active at the start of the tick, using that tick's
 
 Each automatic result has reason `evidence-confirmed` and a `receipt`. An event receipt contains the source record, including its ID, tick, system, and payload. A state receipt contains the tick, query field, supplied `at`, `args` and `select`, and the sampled value. Inspect receipts in the resolution event and in `world/story-lifecycle` under `flow.current.objectives` or `flow.route[].objectives`. They survive checkpoints and replay even with world event history disabled.
 
-The world supports up to 256 evidence rules. Each receipt must fit within 16,384 JSON characters. Use `select` to keep a query receipt focused on the fact it proves.
+The world supports up to 256 objectives with a type or evidence rule. Each receipt must fit within 16,384 JSON characters. Use `select` to keep a query receipt focused on the fact it proves.
 
 ### Replay The Relief Crossing
 
@@ -142,6 +142,65 @@ node cli/ink-studio.js sim run examples/story-documents/relief-crossing.world.js
 node cli/ink-studio.js probe relief-crossing.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe relief-crossing.run.json --field world/history --args '{"where":{"path":"/kind","value":"story-objective-resolved"}}'
 node cli/ink-studio.js sim replay relief-crossing.run.json
+```
+
+## Use typed objectives
+
+Set `type` and supply its `params`. Ink derives the proof rule from those parameters. An objective may use a type, its own `evidence` rule, or manual resolution. Typed results include the type ID alongside the reason and receipt in the lifecycle probe and resolution event.
+
+| Type | Parameters | Completion proof |
+| --- | --- | --- |
+| `reach` | Agent `system`, `agent`, inclusive XYZ `min` and `max`, optional `generation` | The agent's published position is inside the box. |
+| `acquire` | Qualified `account`, positive `amount` | The scalar account balance is at least the requested amount. |
+| `deliver` | Qualified `from` and `to` accounts, positive `amount`, optional source `system` | One published transfer between those accounts applied at least the requested amount. |
+| `observe` | One `event` or `state` rule using the evidence syntax above | The event or query matches the rule. |
+| `build` | Construction `system` ID | The system publishes `construction-built`. |
+| `negotiate` | Influence board `system` and `offer` ID | The board publishes `offer-completed` after the agreement settles. |
+| `maintain` | A `state` rule and `for` in seconds | The condition holds for a continuous sampled interval. |
+| `protect` | A `state` rule for a target's safety and `for` in seconds | The target stays safe for the interval. A known violation fails the objective. |
+| `survive` | A `state` rule for an actor or party and `for` in seconds | The survival condition holds for the interval. A known violation fails the objective. |
+| `choose` | An `options` map from stable option IDs to display labels | An explicit `world/story-select` command selects a known option on the active visit. |
+
+Timed rules count elapsed time from the first matching sample and round up to a whole tick. A missing sample or suspension clears the pending interval. A false reading restarts `maintain` and resolves `protect` or `survive` as `failed` with a receipt of the observed violation. Completed intervals store their starting tick and elapsed ticks in `receipt.interval`. Pending windows appear in `flow.current.progress`. An objective's result is final for its visit.
+
+Use `requiresFailed` on a branch to require specific `protect` or `survive` failures. Each listed objective is checked for failure in place of the usual completion check on that branch. All other requirements still apply. Use `requiresChoice` to map a choice objective to the option that opens a branch. The choice command takes effect once per visit and retains the selected option in its receipt.
+
+```json
+{"tick":20,"action":"world/story-select","args":{"document":"highwater-beacon","story":"relief","stage":"response","visit":1,"objective":"choose-route","option":"ridge","reason":"ridge-road-cleared"}}
+```
+
+### Define a custom objective type
+
+Add a document-level `objectiveTypes` entry with a stable ID and one reusable `evidence` rule. An optional `match` map declares required per-objective parameters. Each parameter adds an equality check at the indicated JSON Pointer or path array on the event or selected query value. The base condition and all supplied parameters must match. Custom definitions travel with embedded story documents in checkpoints and recordings. Native systems and host-registered world systems can both publish the source event or query field.
+
+```json
+{
+  "decode-transponder": {
+    "evidence": {
+      "event": {
+        "kind": "transponder-read",
+        "system": "crew",
+        "where": { "path": "/data/verified", "value": true }
+      }
+    },
+    "match": { "channel": "/data/channel" }
+  }
+}
+```
+
+Use that definition on an objective with `"type": "decode-transponder", "params": {"channel":"rescue"}`.
+
+### Fork The Highwater Beacon
+
+[The Highwater Beacon](../examples/story-documents/highwater-beacon.world.json) uses all ten built-ins and a custom transponder objective. Both forks start from tick 3. The ridge route records delivery, construction, a paid access agreement, a recovered power interval, and the chosen route. The other fork briefly breaks the seal, then restores it. The recorded violation opens the failure ending.
+
+```sh
+node cli/ink-studio.js story describe examples/story-documents/highwater-beacon.json relief
+node cli/ink-studio.js sim run examples/story-documents/highwater-beacon.world.json --ticks 3 --checkpoint beacon-start.json
+node cli/ink-studio.js sim fork beacon-start.json --ticks 24 --actions examples/story-documents/highwater-beacon-ridge.actions.json --record ridge.run.json
+node cli/ink-studio.js sim fork beacon-start.json --ticks 24 --actions examples/story-documents/highwater-beacon-breach.actions.json --record breach.run.json
+node cli/ink-studio.js probe ridge.run.json --field world/story-lifecycle
+node cli/ink-studio.js probe breach.run.json --field world/story-lifecycle
 ```
 
 ## Replay the demos

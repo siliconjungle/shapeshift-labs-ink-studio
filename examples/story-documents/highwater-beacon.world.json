@@ -1,0 +1,107 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "highwater-beacon",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "highwater-beacon.json" }],
+  "entities": {
+    "ridge-marker": { "position": [1.6, 0, 0.65] },
+    "council-shelter": { "position": [1.1, 0, -0.8] }
+  },
+  "systems": {
+    "stores": {
+      "kind": "store",
+      "config": { "accounts": {
+        "depot": { "resource": "supplies", "type": "integer", "units": "case", "initial": 4, "max": 4 },
+        "carrier": { "resource": "supplies", "type": "integer", "units": "case", "initial": 0, "max": 4 },
+        "shelter": { "resource": "supplies", "type": "integer", "units": "case", "initial": 0, "max": 4 },
+        "air": { "resource": "oxygen", "type": "integer", "units": "unit", "initial": 3, "max": 3 },
+        "used-air": { "resource": "oxygen", "type": "integer", "units": "unit", "initial": 0, "max": 3 },
+        "council": { "resource": "coin", "type": "integer", "units": "coin", "initial": 20, "max": 20 },
+        "guide": { "resource": "coin", "type": "integer", "units": "coin", "initial": 0, "max": 20 }
+      } }
+    },
+    "sensors": {
+      "kind": "puzzle",
+      "config": {
+        "inputs": { "seal": "bool", "power": "bool", "warning": "bool" },
+        "outputs": { "seal": "seal", "power": "power", "warning": "warning" }
+      }
+    },
+    "relay": {
+      "kind": "construction",
+      "config": {
+        "initiallyBuilt": false,
+        "points": { "footing": { "position": [0, 0.35, -1.4] } },
+        "blocks": [{ "id": "footing", "at": "footing", "half": [0.18, 0.35, 0.2] }]
+      }
+    },
+    "workshop": {
+      "kind": "logistics",
+      "config": {
+        "resources": { "stone": { "type": "integer", "units": "block" } },
+        "containers": { "yard": { "stocks": { "stone": { "initial": 1, "max": 1 } } } },
+        "recipes": { "footing": { "duration": 0.5, "inputs": { "stone": 1 } } },
+        "processes": { "footing": {
+          "recipe": "footing",
+          "inputs": { "stone": "yard" },
+          "work": { "at": [0.55, 0, -1.4], "radius": 0.35, "batches": 1, "effect": { "action": "relay/build" } }
+        } }
+      }
+    },
+    "council": {
+      "kind": "influence",
+      "config": {
+        "interval": 1,
+        "funding": { "treasury": "stores/council", "resource": "coin", "units": "coin" },
+        "templates": {
+          "access": { "at": { "entity": "council-shelter" }, "target": "site", "order": { "task": "sign-access" } }
+        }
+      }
+    },
+    "crew": {
+      "kind": "agents",
+      "config": {
+        "bounds": { "min": [-2, -0.5, -2], "max": [2, 1, 1.2] },
+        "ground": 0,
+        "cell": 0.2,
+        "species": { "worker": { "mode": "walk", "radius": 0.12, "speed": 3 } },
+        "agents": {
+          "scout": { "species": "worker", "position": [-1, 0, 0.65] },
+          "engineer": { "species": "worker", "position": [0.55, 0, -1.4] },
+          "guide": { "species": "worker", "position": [0.5, 0, -0.8] }
+        },
+        "orders": { "tasks": {
+          "survey": { "steps": [
+            { "op": "emit", "kind": "transponder-read", "data": { "channel": "weather", "verified": true } },
+            { "op": "move", "at": { "target": "site" } },
+            { "op": "emit", "kind": "transponder-read", "data": { "channel": "rescue", "verified": true } }
+          ] },
+          "build-relay": { "steps": [{ "op": "work", "site": "workshop/footing" }] },
+          "sign-access": { "steps": [{ "op": "move", "at": { "target": "site" } }, { "op": "wait", "ticks": 2 }] }
+        } },
+        "influence": {
+          "board": "council",
+          "profiles": { "local": { "templates": ["access"], "minScore": 2, "distanceCost": 1 } },
+          "members": { "guide": { "profile": "local", "wallet": "stores/guide" } }
+        }
+      }
+    }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/input", "args": { "port": "sensors/seal", "value": true } },
+    { "tick": 1, "action": "world/input", "args": { "port": "sensors/power", "value": true } },
+    { "tick": 1, "action": "world/input", "args": { "port": "sensors/warning", "value": true } },
+    { "tick": 1, "action": "crew/issue-order", "args": { "agent": "engineer", "order": { "task": "build-relay" } } },
+    { "tick": 2, "action": "world/transfer", "args": { "from": "stores/depot", "to": "stores/carrier", "amount": 4 } },
+    { "tick": 2, "action": "council/post", "args": { "offer": "relief-access", "template": "access", "reward": 6 } },
+    { "tick": 2, "action": "crew/issue-order", "args": { "agent": "scout", "order": {
+      "task": "survey", "targets": { "site": { "entity": "ridge-marker" } }
+    } } },
+    { "tick": 4, "action": "world/input", "args": { "port": "sensors/power", "value": false } },
+    { "tick": 4, "action": "world/transfer", "args": { "from": "stores/carrier", "to": "stores/shelter", "amount": 4 } },
+    { "tick": 4, "action": "world/transfer", "args": { "from": "stores/air", "to": "stores/used-air", "amount": 1 } },
+    { "tick": 5, "action": "world/input", "args": { "port": "sensors/power", "value": true } },
+    { "tick": 7, "action": "world/transfer", "args": { "from": "stores/air", "to": "stores/used-air", "amount": 1 } }
+  ]
+}

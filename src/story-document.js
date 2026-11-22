@@ -3,6 +3,7 @@ const StoryDocument = (() => {
   const format = 'ink-studio/story';
   const version = 1;
   const kinds = new Set(['incident', 'questlet', 'arc']);
+  const objectiveKinds = new Set(['reach', 'acquire', 'deliver', 'protect', 'observe', 'build', 'maintain', 'survive', 'negotiate', 'choose']);
   const safeId = value => typeof value === 'string' && /^[a-z][a-z0-9_.-]{0,99}$/i.test(value) &&
     !['constructor', 'prototype', '__proto__'].includes(value);
 
@@ -85,7 +86,9 @@ const StoryDocument = (() => {
       op === 'in' && !Array.isArray(value)) invalid(`${at}.value`, 'expected a value for ' + op);
   }
 
-  const worldName = value => safeId(value) && value.length <= 96;
+  const worldName = value => typeof value === 'string' && /^[a-z0-9_][a-z0-9_.-]{0,95}$/i.test(value) &&
+    !['constructor', 'prototype', '__proto__'].includes(value);
+  const point = value => Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
 
   function eventSource(rule, at) {
     fields(rule, at, ['kind'], ['system', 'where']);
@@ -104,7 +107,6 @@ const StoryDocument = (() => {
     if (Object.hasOwn(rule, 'args')) record(args, `${location}.args`);
     if (Object.hasOwn(rule, 'select')) dataPath(select, `${location}.select`);
     if (Object.hasOwn(rule, 'at')) {
-      const point = value => Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
       if (!point(at)) {
         if (at && Object.hasOwn(at, 'point')) {
           fields(at, `${location}.at`, ['point']);
@@ -127,6 +129,119 @@ const StoryDocument = (() => {
     } else {
       fields(rule, at, ['state']);
       stateSource(rule.state, `${at}.state`, true);
+    }
+  }
+
+  function objectiveTypes(types) {
+    const at = 'story.objectiveTypes', rows = entries(types, at);
+    if (rows.length > 64) invalid(at, 'a document supports up to 64 custom objective types');
+    for (const [type, spec] of rows) {
+      const location = `${at}.${type}`;
+      if (objectiveKinds.has(type)) invalid(location, 'built-in objective type');
+      fields(spec, location, ['evidence'], ['match']);
+      evidence(spec.evidence, `${location}.evidence`);
+      if (Object.hasOwn(spec, 'match')) {
+        const matches = entries(spec.match, `${location}.match`, true);
+        if (matches.length > 16) invalid(`${location}.match`, 'expected up to 16 match parameters');
+        for (const [name, path] of matches) dataPath(path, `${location}.match.${name}`);
+      }
+    }
+  }
+
+  function typedParams({type, params}, types, at) {
+    const location = `${at}.params`;
+    if (!objectiveKinds.has(type)) {
+      link(type, types, `${at}.type`, 'objective type');
+      fields(params ?? {}, location, Object.keys(types[type].match ?? {}));
+      return;
+    }
+    const worldId = name => {
+      if (!worldName(params[name])) invalid(`${location}.${name}`, 'expected a world ID');
+    };
+    const positive = name => {
+      if (!Number.isFinite(params[name]) || params[name] <= 0) invalid(`${location}.${name}`, 'expected a positive finite number');
+    };
+    const account = name => {
+      const value = params[name], parts = typeof value === 'string' ? value.split('/') : [];
+      if (parts.length !== 2 || !parts.every(worldName)) invalid(`${location}.${name}`, 'expected a qualified account ID');
+    };
+    switch (type) {
+      case 'reach':
+        fields(params, location, ['system', 'agent', 'min', 'max'], ['generation']);
+        worldId('system');
+        worldId('agent');
+        if (!point(params.min) || !point(params.max) || params.min.some((value, i) => value > params.max[i]))
+          invalid(location, 'expected ordered finite XYZ bounds');
+        if (Object.hasOwn(params, 'generation') && (!Number.isSafeInteger(params.generation) || params.generation < 1))
+          invalid(`${location}.generation`, 'expected a positive agent generation');
+        break;
+      case 'acquire':
+        fields(params, location, ['account', 'amount']);
+        account('account');
+        positive('amount');
+        break;
+      case 'deliver':
+        fields(params, location, ['from', 'to', 'amount'], ['system']);
+        account('from');
+        account('to');
+        if (params.from === params.to) invalid(location, 'expected two distinct transfer accounts');
+        if (Object.hasOwn(params, 'system')) worldId('system');
+        positive('amount');
+        break;
+      case 'observe':
+        evidence(params, location);
+        break;
+      case 'build':
+        fields(params, location, ['system']);
+        worldId('system');
+        break;
+      case 'negotiate':
+        fields(params, location, ['system', 'offer']);
+        worldId('system');
+        worldId('offer');
+        break;
+      case 'protect':
+      case 'maintain':
+      case 'survive':
+        fields(params, location, ['state', 'for']);
+        stateSource(params.state, `${location}.state`, true);
+        positive('for');
+        break;
+      case 'choose':
+        fields(params, location, ['options']);
+        for (const [name, label] of entries(params.options, `${location}.options`, true)) text(label, `${location}.options.${name}`);
+        if (Object.keys(params.options).length > 64) invalid(`${location}.options`, 'expected up to 64 options');
+        break;
+    }
+  }
+
+  function objectiveRule(objective, types) {
+    const {type, params = {}, evidence} = objective;
+    if (type === undefined) return evidence;
+    const {system, agent, generation, min, max, account, from, to, amount, offer, state, options} = params;
+    const equals = (path, value) => ({path, value});
+    const atLeast = (path, value) => ({path, op: 'gte', value});
+    switch (type) {
+      case 'reach': return {type, state: {field: system + '/position', args: {agent, ...(generation !== undefined && {generation})},
+        when: {all: min.flatMap((value, i) => [atLeast([i], value), {path: [i], op: 'lte', value: max[i]}])}}};
+      case 'acquire': return {type, state: {field: 'world/account', args: {account}, when: atLeast('/balance', amount)}};
+      case 'deliver': return {type, event: {kind: 'transfer', ...(system !== undefined && {system}),
+        where: {all: [equals('/from', from), equals('/to', to), atLeast('/applied', amount)]}}};
+      case 'observe': return {type, ...params};
+      case 'build': return {type, event: {kind: 'construction-built', system}};
+      case 'negotiate': return {type, event: {kind: 'offer-completed', system, where: equals('/offer', offer)}};
+      case 'maintain':
+      case 'protect':
+      case 'survive': return {type, state, hold: params.for, failOnViolation: type !== 'maintain'};
+      case 'choose': return {type, options};
+      default: {
+        const spec = types[type], source = spec.evidence.event ? 'event' : 'state';
+        const filter = source === 'event' ? 'where' : 'when';
+        const base = spec.evidence[source];
+        const clauses = Object.keys(spec.match ?? {}).sort().map(name => equals(spec.match[name], params[name]));
+        if (!clauses.length) return {type, ...spec.evidence};
+        return {type, [source]: {...base, [filter]: {all: [...(base[filter] === undefined ? [] : [base[filter]]), ...clauses]}}};
+      }
     }
   }
 
@@ -163,12 +278,14 @@ const StoryDocument = (() => {
   }
 
   function validateStoryDocument(document) {
-    fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references']);
+    fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
     if (document.version !== version) invalid('story.version', `unsupported version ${JSON.stringify(document.version)}; expected ${version}`);
     if (!safeId(document.id)) invalid('story.id', 'invalid document ID');
     if (Object.hasOwn(document, 'title')) text(document.title, 'story.title');
     const references = Object.hasOwn(document, 'references') ? document.references : {};
+    const types = Object.hasOwn(document, 'objectiveTypes') ? document.objectiveTypes : {};
+    objectiveTypes(types);
     const { stories } = document;
     for (const [id, reference] of entries(references, 'story.references')) {
       const at = `story.references.${id}`;
@@ -216,25 +333,44 @@ const StoryDocument = (() => {
         if (objectiveRows.length > 64) invalid(`${location}.objectives`, 'a stage supports up to 64 objectives');
         for (const [name, objective] of objectiveRows) {
           const place = `${location}.objectives.${name}`;
-          fields(objective, place, ['title'], ['summary', 'refs', 'optional', 'evidence']);
+          fields(objective, place, ['title'], ['summary', 'refs', 'optional', 'evidence', 'type', 'params']);
           labelsAndRefs(objective, place, references);
           if (Object.hasOwn(objective, 'optional') && typeof objective.optional !== 'boolean')
             invalid(`${place}.optional`, 'expected a boolean');
           if (Object.hasOwn(objective, 'evidence')) evidence(objective.evidence, `${place}.evidence`);
+          if (Object.hasOwn(objective, 'type')) {
+            if (Object.hasOwn(objective, 'evidence')) invalid(place, 'typed objectives define their evidence through params');
+            if (Object.hasOwn(objective, 'params')) record(objective.params, `${place}.params`);
+            typedParams(objective, types, place);
+          } else if (Object.hasOwn(objective, 'params')) invalid(`${place}.params`, 'requires an objective type');
         }
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
           const edge = `${location}.next.${choice}`;
-          fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires'] : [])]);
+          fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires', 'requiresFailed', 'requiresChoice'] : [])]);
           if (Object.hasOwn(target, 'stage') === Object.hasOwn(target, 'outcome')) invalid(edge, 'expected exactly one stage or outcome target');
           if (Object.hasOwn(target, 'stage')) link(target.stage, stages, `${edge}.stage`, 'stage');
           else link(target.outcome, outcomes, `${edge}.outcome`, 'outcome');
           if (Object.hasOwn(target, 'requires')) links(target.requires, objectives, `${edge}.requires`, 'objective');
+          if (Object.hasOwn(target, 'requiresFailed')) {
+            links(target.requiresFailed, objectives, `${edge}.requiresFailed`, 'objective');
+            for (const id of target.requiresFailed) {
+              if (!['protect', 'survive'].includes(objectives[id].type) || target.requires?.includes(id))
+                invalid(`${edge}.requiresFailed`, `expected a failing objective outside requires, received ${id}`);
+            }
+          }
+          if (Object.hasOwn(target, 'requiresChoice')) {
+            for (const [id, option] of entries(target.requiresChoice, `${edge}.requiresChoice`, true)) {
+              link(id, objectives, `${edge}.requiresChoice`, 'objective');
+              if (objectives[id].type !== 'choose') invalid(`${edge}.requiresChoice.${id}`, 'expected a choose objective');
+              link(option, objectives[id].params.options, `${edge}.requiresChoice.${id}`, 'choice option');
+            }
+          }
         }
       }
     }
     return document;
   }
 
-  return Object.freeze({ validateStoryDocument });
+  return Object.freeze({ validateStoryDocument, objectiveRule });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

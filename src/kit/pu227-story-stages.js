@@ -12,13 +12,15 @@
     return own(rule, 'stage') ? { stage: rule.stage } : { outcome: rule.outcome };
   }
 
-  function requirements(stage, branch) {
-    const needed = Object.keys(stage.objectives ?? {}).filter(id => !stage.objectives[id].optional);
-    return [...new Set([...needed, ...(branch.requires ?? [])])].sort();
-  }
-
   function missing(stage, branch, objectives) {
-    return requirements(stage, branch).filter(id => objectives[id]?.result !== 'completed');
+    const failed = branch.requiresFailed ?? [], choices = branch.requiresChoice ?? {};
+    const pending = failed.filter(id => objectives[id]?.result !== 'failed');
+    for (const [id, option] of Object.entries(choices))
+      if (objectives[id]?.receipt?.option !== option) pending.push(id);
+    for (const id of Object.keys(stage.objectives ?? {}))
+      if ((!stage.objectives[id].optional && !failed.includes(id) || branch.requires?.includes(id)) &&
+        objectives[id]?.result !== 'completed') pending.push(id);
+    return [...new Set(pending)].sort();
   }
 
   function omitted(stage, objectives) {
@@ -31,43 +33,66 @@
     const stage = stages[args.stage];
     if (action === 'story-choose') {
       check(isId(args.branch) && own(stage.next, args.branch), 'Unknown branch for story stage ' + args.stage);
-    } else {
-      check(isId(args.objective) && own(stage.objectives, args.objective) && ['completed', 'skipped'].includes(args.result),
-        'Story objective needs a known objective and a completed or skipped result');
-      check(args.result !== 'completed' || !stage.objectives[args.objective].evidence,
-        'Story objective requires world evidence to complete: ' + args.objective);
+      return;
     }
+    check(isId(args.objective) && own(stage.objectives, args.objective), 'Story progress needs a known objective');
+    const objective = stage.objectives[args.objective];
+    if (action === 'story-select') {
+      check(objective.type === 'choose' && isId(args.option) && own(objective.params.options, args.option),
+        'Story choice requires a known option on a choose objective');
+      return;
+    }
+    check(['completed', 'skipped'].includes(args.result), 'Story objective needs a completed or skipped result');
+    check(args.result !== 'completed' || (!objective.evidence && objective.type === undefined),
+      objective.type === 'choose' ? 'Use story-select to complete a choice objective' :
+        'Story objective requires world evidence to complete: ' + args.objective);
   }
 
   function confirm(flow, rules, tick, eventsOf, query) {
-    const changes = {};
+    const changes = {}, progress = { ...flow.current.progress };
     for (const [id, rule] of rules) {
-      if (own(flow.current.objectives, id)) continue;
-      const receipt = W.storyEvidence.observe(rule, tick, eventsOf, query);
-      if (receipt) changes[id] = { result: 'completed', reason: 'evidence-confirmed', tick, receipt };
+      if (rule.options || own(flow.current.objectives, id)) continue;
+      const result = W.storyEvidence.observe(rule, tick, eventsOf, query, progress[id]);
+      if (result.change) changes[id] = result.change;
+      if (result.progress) progress[id] = result.progress;
+      else delete progress[id];
     }
-    return changes;
+    if (!Object.keys(changes).length && equal(progress, flow.current.progress ?? {})) return { flow, changes };
+    return { flow: withObjectives(flow, changes, progress), changes };
   }
 
-  function withObjectives(flow, changes) {
-    return { ...flow, current: { ...flow.current, objectives: { ...flow.current.objectives, ...changes } } };
+  function withObjectives(flow, changes, progress) {
+    const current = { ...flow.current, objectives: { ...flow.current.objectives, ...changes } };
+    if (Object.keys(progress).length) current.progress = progress;
+    else delete current.progress;
+    return { ...flow, current };
+  }
+
+  function clearProgress(flow) {
+    if (!flow?.current?.progress) return flow;
+    return withObjectives(flow, {}, {});
   }
 
   function advance(action, definition, flow, args, tick) {
     const { current } = flow;
     if (args.stage !== current.stage || args.visit !== current.visit) return { rejected: 'stale-stage-visit' };
     const stage = definition.stages[current.stage], { reason } = args;
-    if (action === 'story-objective') {
-      const { objective, result } = args;
+    if (action !== 'story-choose') {
+      const { objective, option } = args, selected = action === 'story-select';
+      const { type, optional } = stage.objectives[objective], result = selected ? 'completed' : args.result;
       if (own(current.objectives, objective)) return { rejected: 'objective-already-resolved' };
-      if (result === 'skipped' && !stage.objectives[objective].optional) return { rejected: 'objective-required' };
-      const change = { result, reason, tick };
-      return { flow: withObjectives(flow, { [objective]: change }), objective: { objective, ...change } };
+      if (result === 'skipped' && !optional) return { rejected: 'objective-required' };
+      const change = { result, reason, tick, ...(type !== undefined && { type }),
+        ...(selected && { receipt: {kind:'choice', option, tick} }) };
+      const progress = { ...current.progress };
+      delete progress[objective];
+      return { flow: withObjectives(flow, { [objective]: change }, progress), objective: { objective, ...change } };
     }
     const branch = stage.next[args.branch], pending = missing(stage, branch, current.objectives);
     if (pending.length) return { rejected: 'objectives-pending', pending };
     const target = targetOf(branch), skipped = omitted(stage, current.objectives);
-    const row = { ...current, branch: args.branch, reason, leftAt: tick, target, skipped };
+    const { progress, ...visit } = current;
+    const row = { ...visit, branch: args.branch, reason, leftAt: tick, target, skipped };
     const route = [...flow.route, row], overflow = Math.max(0, route.length - limit);
     const next = own(target, 'stage') ? makeVisit(target.stage, current.visit + 1, tick) : null;
     return { flow: { current: next, route: route.slice(overflow), dropped: flow.dropped + overflow },
@@ -81,14 +106,31 @@
       check(isId(row.stage) && own(definition.stages, row.stage) && (nextStage === undefined || row.stage === nextStage) &&
         row.visit === index && at(row.enteredAt, 1, deadline) && (after === undefined || row.enteredAt === after) && record(row.objectives), message);
       const stage = definition.stages[row.stage];
+      const rules = definition.evidence.get(row.stage);
       for (const [id, change] of Object.entries(row.objectives)) {
         const objective = own(stage.objectives, id) && stage.objectives[id];
-        const proof = change?.result === 'completed' ? objective?.evidence : undefined;
-        check(objective && fields(change, proof ? ['reason', 'receipt', 'result', 'tick'] : ['reason', 'result', 'tick']) &&
-          (change.result === 'completed' || change.result === 'skipped' && objective.optional) &&
+        const rule = rules?.get(id), failed = change?.result === 'failed';
+        const proof = change?.result === 'skipped' ? undefined : rule;
+        const keys = ['reason', ...(proof ? ['receipt'] : []), 'result', 'tick', ...(rule?.type ? ['type'] : [])];
+        check(objective && fields(change, keys) && change.type === rule?.type &&
+          (change.result === 'completed' || change.result === 'skipped' && objective.optional || failed && rule?.failOnViolation) &&
           reasonOK(change.reason) && at(change.tick, row.enteredAt, deadline), message);
-        if (proof) check(change.reason === 'evidence-confirmed' && change.tick > row.enteredAt &&
-          W.storyEvidence.valid(proof, change.receipt, change.tick), message);
+        if (proof?.options) {
+          const option = change.receipt?.option;
+          check(isId(option) && own(proof.options, option) && equal(change.receipt, {kind:'choice', option, tick:change.tick}), message);
+        } else if (proof) {
+          check(change.reason === (failed ? 'condition-violated' : 'evidence-confirmed') && change.tick > row.enteredAt &&
+            W.storyEvidence.valid(proof, change.receipt, change.tick, row.enteredAt, failed), message);
+        }
+      }
+      if (own(row, 'progress')) {
+        check(record(row.progress) && Object.keys(row.progress).length > 0, message);
+        for (const [id, window] of Object.entries(row.progress)) {
+          const duration = rules?.get(id)?.duration;
+          check(duration !== undefined && !own(row.objectives, id) && fields(window, ['since','tick']) &&
+            at(window.since, row.enteredAt + 1, window.tick) && at(window.tick, window.since, deadline) &&
+            window.tick - window.since < duration, message);
+        }
       }
       return stage;
     }
@@ -111,11 +153,12 @@
       check(ending !== undefined && ending === status.outcome && last.leftAt === status.tick &&
         last.reason === status.reason && (definition.outcomes[ending].status ?? 'completed') === status.to, message);
     } else {
-      check(fields(flow.current, ['enteredAt', 'objectives', 'stage', 'visit']) && (!last || own(last.target, 'stage')) &&
+      check(fields(flow.current, ['enteredAt', 'objectives', ...(own(flow.current, 'progress') ? ['progress'] : []), 'stage', 'visit']) &&
+        (!last || own(last.target, 'stage')) &&
         status.to !== 'completed', message);
       visit(flow.current, flow.dropped + flow.route.length + 1, tick, nextStage, after);
     }
   }
 
-  W.storyStages = Object.freeze({ initial, checkAction, advance, validate, confirm, withObjectives });
+  W.storyStages = Object.freeze({ initial, checkAction, advance, validate, confirm, clearProgress });
 })(KIT);
