@@ -123,3 +123,50 @@ timeline compilation automatically.
 
 Use [the native simulation policy](simulation-fast-checkpoints.md#set-a-takes-native-simulation-policy)
 for fast state at cuts, warm-up and loop wraps.
+
+## Map an editorial cut
+
+`take map` maps source addresses to edited picture frames, equivalent simulation ticks, PCM samples, and show cue frames. It keeps the original coordinates beside every edited placement. It can read committed envelopes, native recordings, checkpoints, or portable fixtures. Use a fixture or a complete envelope export when the original world history was disabled or filtered.
+
+```json
+{
+  "format": "ink-studio/clock-map",
+  "version": 1,
+  "id": "harbor-edit",
+  "clock": {"fps": {"numerator": 30000, "denominator": 1001}, "sampleRate": 48000},
+  "sources": {
+    "harbor": {
+      "clock": {"sampleRate": 44100},
+      "events": {"file": "harbor.fixture.json"},
+      "words": [{"id": "land", "text": "land", "from": {"sample": 8820}, "to": {"sample": 13230}}]
+    }
+  },
+  "clips": [
+    {"id": "entry", "source": "harbor", "in": {"tick": 6}, "out": {"tick": 18},
+      "at": {"frame": 10}, "duration": {"frame": 8}}
+  ],
+  "cues": {
+    "arrival": {"source": "harbor", "at": {"event": "12.0", "branch": "main"}, "preset": "amber"},
+    "dialogue": {"source": "harbor", "at": {"word": "land", "edge": "end"}, "preset": "blue"}
+  }
+}
+```
+
+An address can be seconds, a rational seconds pair, or one integer `tick`, `frame`, or `sample`. Source addresses use the named source's rates. Edited addresses use the top-level clock. Linked native sources supply their take rates when available. An envelope export can supply its exact simulation rate. A timed event keeps its occurrence time and its separate commit tick. Dialogue uses supplied word intervals and accepts a relative file containing the same word array.
+
+Each clip maps the half-open interval from `in` to `out` onto the edited interval beginning at `at`. Its `duration` defaults to the source length. The map includes the visible portion of a trimmed word and preserves its full original interval. Repeated placements keep separate clip IDs. Cues can refer to a source coordinate, an event, or a word edge. A cue with an explicit `clip` resolves within that placement. A cue with no source uses an edited address directly. Unplaced cues appear under `issues`.
+
+`frame`, `tick`, and `sample` are the containing output coordinates. A show fires at `showFrame`, the first picture frame at or after the cue. Scene presentation can use the containing frame and the exact subframe time. Exact calculations use integer ratios through trims and speed changes. Numerators and denominators that exceed safe JSON integers are serialized as decimal strings.
+
+```sh
+ink-studio take map cut.clock.json --out cut.map.json
+ink-studio take map cut.clock.json --format timeline --out cut.timeline.json
+```
+
+Use the timeline export as the scene's `timeline`. Set `cueMap` in a [patch show](patch-tooling.md#run-a-patch-as-a-show) to the report path. Embed the same report as `clockMap` in an [audio editorial session](audio-editorial.md#session) and choose a clip spot such as `{"cue":"dialogue","clip":"entry"}`. The JavaScript entries are `KIT.world.clockMapping.map` and `timeline`. For individual positions, `clock.address({sample: 8820})` returns the same coordinate fields.
+
+```sh
+node examples/clock-mapping/demo.cjs ./studio/out/clock-mapping
+```
+
+The demo retimes a committed arrival and dialogue word markers, prints paired WAVs with mapped sync points, and rehearses the resulting show cue frames.

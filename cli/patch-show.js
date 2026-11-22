@@ -28,7 +28,7 @@ function presetControl(config, project, report) {
       let change;
       while (config.cues[currentCue]?.frame <= frame) {
         const cue = config.cues[currentCue++];
-        change = { preset: cue.preset, source: 'cue', scheduledFrame: cue.frame };
+        change = { preset: cue.preset, source: 'cue', scheduledFrame: cue.frame, ...(cue.clockCue&&{clockCue:cue.clockCue}) };
       }
       change = pending ?? change ?? (first && active !== undefined ? { preset: active, source: 'initial' } : undefined);
       if (change) { active = change.preset; report.preset(change); }
@@ -160,7 +160,7 @@ async function showSlot(first, start, period, signal) {
 }
 
 async function runShow(file, opt, settings, emit) {
-  const config = await readShow(file, opt.rehearse), report = showReport(config, opt.rehearse);
+  const config = await readShow(file, opt.rehearse, settings.kit), report = showReport(config, opt.rehearse);
   const { fps, frames, projector, video, audio, dimensions } = config, period = 1000 / fps;
   const media = {}, gpu = createPatchGpu(path.dirname(config.patch), opt['gpu-module']);
   const operations = { ...settings.operations, ...patchNodes(settings.kit, media, gpu) };
@@ -168,7 +168,7 @@ async function runShow(file, opt, settings, emit) {
   if (!Object.hasOwn(project.plan().outputs, config.output)) throw new TypeError('Unknown projector output ' + config.output);
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const output = opt.report && path.resolve(opt.report);
-  const protectedFiles = [...project.sourceFiles(), file, video, audio].filter(source =>
+  const protectedFiles = [...project.sourceFiles(), file, config.cueSource, video, audio].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
   const writer = output && graphOutputs(protectedFiles);
   writer?.protect(fs.statSync(output, { throwIfNoEntry: false }));

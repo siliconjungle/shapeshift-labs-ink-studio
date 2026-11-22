@@ -11,7 +11,7 @@
     return Object.entries(value);
   }
   function compile(session,assets) {
-    check(fields(session,['format','version','id','sampleRate','picture','world','map','sourceEdits','clips']) &&
+    check(fields(session,['format','version','id','sampleRate','picture','world','map','sourceEdits','clips','clockMap']) &&
       session.format===format && session.version===1 && id(session.id) &&
       integer(session.sampleRate,8000,96000) && record(assets) && Array.isArray(session.clips) &&
       session.clips.length<=512,'Expected a bounded audio editorial session');
@@ -277,7 +277,8 @@
     return pairs;
   }
   function reconform(session,assets,revision) {
-    check(fields(revision,['picture','world','map']) && Object.keys(revision).length>0,'Give the revised picture, world ledger, or tempo map');
+    check(fields(revision,['picture','world','map','clockMap']) && Object.keys(revision).length>0,
+      'Give the revised picture, world ledger, tempo map, or clock map');
     const updated=P.data.clone({...session,...revision});
     const before=compile(session,assets), after=compile(updated,assets), frames=Math.max(before.clock.end,after.clock.end);
     check(frames*4<=limit,'Reconform pair exceeds its combined PCM budget');

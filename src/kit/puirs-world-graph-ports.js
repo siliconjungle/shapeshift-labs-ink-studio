@@ -54,7 +54,7 @@
         prior=inputs;
         stream={};
       }
-      const {dt}=session.view().world, period=T.period(dt);
+      const {dt,takeClock}=session.view().world, simulationRate=takeClock?.simulationRate, period=T.period(dt,simulationRate);
       const timing=spec.tick===undefined&&take!==undefined?T.requireFrame(take):undefined;
       const takeTick=point=>dt===timing.dt?timing.locate(point).tick:tickAt(point,period);
       const nearest=time/dt, rounded=Math.round(nearest);
@@ -75,7 +75,8 @@
       const query=session.query();
       const samples=Object.fromEntries(spec.queries.map(([name,probe])=>[name,sampleQuery(query,probe)]));
       const branch=W.committedEvents.branchAt(view.eventStream,tick), {id:world,seed}=view.world;
-      const value=freeze({format,version:1,world,branch,seed,dt,tick,eventFrom,events,samples});
+      const value=freeze({format,version:1,world,branch,seed,dt,tick,eventFrom,events,samples,
+        ...(simulationRate!==undefined&&{simulationRate})});
       origins.set(value,stream);
       return {value,checkpoint:session.checkpoint(),report:{status:'live',world,branch,tick,eventFrom,events:events.length}};
     };
@@ -96,7 +97,8 @@
     }
     const events=source.events.filter(row=>(kind===undefined||kind===row.kind)&&(system===undefined||system===row.system)&&
       (story===undefined||story===row.story)&&(branch===undefined||branch===row.branch)&&W.query.condition(where,row));
-    const value=events.length?W.outputAdapters.events(events,{dt:source.dt}):emptyLog;
+    const dt=source.simulationRate===undefined?source.dt:T.pack(T.period(source.dt,source.simulationRate));
+    const value=events.length?W.outputAdapters.events(events,{dt}):emptyLog;
     return {value,report:{status:events.length?'live':'empty',count:events.length,tick:source.tick,eventFrom:source.eventFrom}};
   }
 

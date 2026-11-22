@@ -125,6 +125,8 @@ function readTake(file, { kit = require('../index.js').load(), checkpoint, ...op
 }
 
 function command(pos, opt, settings) {
+  if(pos[0]==='map'&&pos.length===2)
+    return require('./take-clock-map.js').command(pos[1],opt,settings);
   if(pos[0]==='render-av'&&pos.length===2)
     return require('./audiovisual-take.js').command(pos[1],opt,settings);
   const usage = 'Use take sample <take.json> --frame N [--iteration N --resume checkpoint.json --checkpoint file.json --out report.json]';

@@ -1306,6 +1306,7 @@ const CMD = {
         '  camera-impulses <motion.json> [--at seconds --eye x,y,z --yaw radians --pitch radians --out report.json]  inspect camera motion',
         '  camera-rig <scene or world> [--at seconds --camera-shot ID --out report.json]  sample a shot and its clearance',
         '  take sample <take.json> --frame N [--iteration N --resume checkpoint.json --checkpoint file.json --out report.json]',
+        '  take map <clock-map.json> [--format report|timeline] [--out file.json]   map events and dialogue words through an exact editorial cut',
         '  take render-av <recipe.json> --out directory   publish synchronized picture controls, PNGs and WAV',
         '  timeline <scene> [--at seconds] [--from seconds --to seconds] [--out report.json]  sample tracks and export cues',
         '  authored-contacts <id> [--at seconds] [--out report.json]  inspect contact ranges and socket transfer timing',

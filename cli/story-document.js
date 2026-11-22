@@ -69,7 +69,8 @@ function eventCommand(file, rest, options, library) {
   if (format==='envelopes') {
     if (story!==undefined&&!(story.split('/').length===2&&story.split('/').every(schema.isStoryId)))
       throw new TypeError('Story event filter needs a document/story ID');
-    value=api.envelopes(source,{story,stream:input?.checkpoint?.eventStream});
+    value=api.envelopes(source,{story,stream:input?.checkpoint?.eventStream,
+      simulationRate:input?.checkpoint?.world?.takeClock?.simulationRate});
   } else value = format==='events'?api.read(source):format==='timeline'?api.timeline(source,{story}):api.analyze(source,{story});
   let output;
   if (format==='markdown') {
@@ -96,7 +97,8 @@ function cueCommand(file,plan,rest,options,library) {
     throw new TypeError('Use story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline] [--out file]');
   const input=readDefinition(file), W=library().KIT.world, E=W.storyEvents;
   const source=input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
-  const events=source?.format===E.envelopeFormat?source:E.envelopes(source,{stream:input?.checkpoint?.eventStream});
+  const events=source?.format===E.envelopeFormat?source:E.envelopes(source,{stream:input?.checkpoint?.eventStream,
+    simulationRate:input?.checkpoint?.world?.takeClock?.simulationRate});
   const sheet=W.presentationCues.project(events,readDefinition(plan));
   const output=JSON.stringify(format==='timeline'?{presentationCues:sheet}:sheet,null,2)+'\n';
   if (out!==undefined) {

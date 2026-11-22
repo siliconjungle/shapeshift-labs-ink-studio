@@ -9,15 +9,14 @@
   const tick=value=>Number.isSafeInteger(value)&&value>=0&&value<=W.runtime.maxTick;
   const story=value=>typeof value==='string'&&value.split('/').length===2&&value.split('/').every(id);
   const label=value=>typeof value==='string'&&value.length<=1024;
-  const eventRef=row=>fields(row,['world','branch','id','tick','kind','system'])&&
-    [row.world,row.branch,row.id,row.kind,row.system].every(id)&&tick(row.tick);
+  const eventRef=row=>fields(row,['world','branch','id','tick','kind','system','timecode'])&&
+    [row.world,row.branch,row.id,row.kind,row.system].every(id)&&tick(row.tick)&&
+    (row.timecode===undefined||seconds(T.seconds(T.read(row.timecode))));
   const header=row=>fields(row,['world','dt','from','to','coverage','dropped'])&&id(row.world)&&
     Number.isFinite(row.dt)&&row.dt>0&&row.dt<=1&&tick(row.from)&&tick(row.to)&&row.from<=row.to&&
     ['complete','retained'].includes(row.coverage)&&Number.isSafeInteger(row.dropped)&&row.dropped>=0&&
     (row.coverage!=='complete'||row.dropped===0);
-  const timecode=(value,time)=>fields(value,['numerator','denominator'])&&
-    Number.isSafeInteger(value.numerator)&&value.numerator>=0&&
-    Number.isSafeInteger(value.denominator)&&value.denominator>0&&T.seconds(T.read(value))===time;
+  const timecode=(value,time)=>fields(value,['numerator','denominator'])&&T.seconds(T.read(value))===time;
 
   function cueDetails(row) {
     return id(row.kind)&&(row.label===undefined||label(row.label))&&
@@ -70,7 +69,7 @@
       Array.isArray(recording.events)&&recording.events.length<=110000,'Presentation cues need committed event envelopes');
     const {world,dt,from,to,coverage,dropped,events}=recording, source={world,dt,from,to,coverage,dropped};
     check(header(source),'Invalid committed event source coverage');
-    const rules=prepare(plan), byKind=new Map(), cues=[], seen=new Set(), step=T.period(dt);
+    const rules=prepare(plan), byKind=new Map(), cues=[], seen=new Set(), step=T.period(dt,recording.simulationRate);
     for(const rule of rules) {
       const kind=rule.on.kind;
       if (!byKind.has(kind)) byKind.set(kind,[]);
@@ -96,13 +95,13 @@
           check(value!==undefined,'Presentation cue '+rule+' needs event value '+from.join('/'));
           return {op:'set',path:into,value};
         });
-        const timing=T.add(T.mul(T.read(tick),step),delay), time=T.seconds(timing);
+        const commit=T.mul(T.read(tick),step), timing=T.add(commit,delay), time=T.seconds(timing);
         check(seconds(time),'Presentation cue time exceeds its range');
-        const [numerator,denominator]=timing.map(Number);
-        const exact=Number.isSafeInteger(numerator)&&Number.isSafeInteger(denominator);
+        const nativeTime=W.timedEvents.timeOf(event.payload);
+        const original=nativeTime===undefined?commit:T.read(nativeTime);
         const data=W.data.copy(detail);
-        cues.push({id:'cue-'+(cues.length+1),time,...(exact&&{timecode:{numerator,denominator}}),...cue,
-          detail:edits.length?W.apply(data,edits,{validate:null}).world:data,rule,source:ref});
+        cues.push({id:'cue-'+(cues.length+1),time,timecode:T.pack(timing),...cue,
+          detail:edits.length?W.apply(data,edits,{validate:null}).world:data,rule,source:{...ref,timecode:T.pack(original)}});
       }
     }
     cues.sort((a,b)=>a.time-b.time);

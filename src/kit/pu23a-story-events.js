@@ -134,14 +134,16 @@
     return freeze({duration:recording.to*recording.dt,markers,events:cues});
   }
 
-  function envelopes(source,{story,stream} = {}) {
+  function envelopes(source,{story,stream,simulationRate} = {}) {
     const {events:rows,id:world,dt,from,to,coverage,dropped}=read(source);
     check(story===undefined||typeof story==='string'&&story.split('/').length===2&&story.split('/').every(id),
       'Story event filter needs a document/story ID');
     const lineage=stream??source.end?.eventStream??source.eventStream;
+    const rate=simulationRate??(source.end??source).world?.takeClock?.simulationRate;
     const events=rows.map(row=>W.committedEvents.read(row,world,lineage))
       .filter(row=>story===undefined||row.story===story);
-    return freeze({format:envelopeFormat,version,world,dt,from,to,coverage,dropped,events});
+    return freeze({format:envelopeFormat,version,world,dt,from,to,coverage,dropped,events,
+      ...(rate!==undefined&&{simulationRate:copy(rate)})});
   }
 
   W.storyEvents = Object.freeze({format,envelopeFormat,read,analyze,timeline,envelopes});

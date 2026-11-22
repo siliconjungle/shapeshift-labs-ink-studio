@@ -109,7 +109,7 @@
       });
       const presentationRows = input.presentationCues===undefined?[]:
         K.world.presentationCues.read(input.presentationCues).cues.map(({timecode,...row})=>
-          ({...row,time:exact?(timecode??row.time):row.time}));
+          ({...row,originalTimecode:timecode??T.pack(T.read(row.time)),time:exact?(timecode??row.time):row.time}));
       const presentation = items(presentationRows, 'presentation', clock, ({id,time,...row})=>row);
       const audio = items(input.audio, 'audio', clock, row => {
         const { cue, duration: rawDuration = 0, offset: rawOffset = 0, gain = 1 } = row;
@@ -159,7 +159,8 @@
 
     function mappedPoint(item, path, time, fields) {
       const { cueTrack, ...entry } = item;
-      const row = { ...entry, ...fields, path: cueTrack === undefined ? path : [...path, cueTrack], time: seconds(time) };
+      const row = { ...entry, ...fields, path: cueTrack === undefined ? path : [...path, cueTrack], time: seconds(time),
+        ...(item.type==='presentation'&&{timecode:T.pack(exact?time:T.read(time))}) };
       if (exact) precise.set(row, time);
       points.push(row);
     }
@@ -167,7 +168,7 @@
       check(depth <= 32 && Number.isFinite(seconds(rate)) && seconds(rate) > 0, 'Timeline nesting or retiming limit exceeded');
       spend(node.tracks.length + node.content.length + node.clips.length + 1);
       const mapped = local => !compare(local, low) ? start :
-        !compare(local, high) ? end : add(start, div(sub(local, low), rate));
+        !compare(local, high) ? end : exact?T.affine(local,low,high,start,end):add(start, div(sub(local, low), rate));
       for (const tr of node.tracks) {
         const key = JSON.stringify(tr.target);
         targets.set(key, tr.target);

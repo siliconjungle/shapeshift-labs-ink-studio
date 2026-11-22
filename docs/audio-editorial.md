@@ -69,6 +69,7 @@ Each spot uses one of these addresses.
 | `{"shot":"latch","sourceFrame":92}` | A specific frame in a named shot. It follows that frame through reorder and head trims. |
 | `{"frame":36}` | An absolute frame on the output timeline. |
 | `{"event":"gate-open"}` | A committed simulation event. |
+| `{"cue":"dialogue","clip":"entry"}` | A cue in the session's embedded [clock map report](take-clock.md#map-an-editorial-cut). Use `clip` to select an occurrence of a repeated cue. |
 | `{"beat":4}` or `{"bar":2,"beat":1}` | A position in the [tempo and meter map](scene-timeline.md). |
 | `{"samples":72072}` or `{"seconds":{"numerator":3003,"denominator":2000}}` | An absolute position on the output PCM grid or in seconds. |
 
@@ -85,6 +86,8 @@ tick. Spot by the event's actual `id` or provide a stable alias, such as
 `aliases: {"gate-open":"333.0"}`. After a new world run, update the alias to
 the corresponding committed event ID. The address comes from
 `event.tick / simulationRate`.
+
+A mapped cue keeps its original address in the placement report. The clock map needs the session's picture and output sample rates. Pass a revised `clockMap` to `reconform` to move those spots after an edit.
 
 ## Take edits
 
