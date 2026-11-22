@@ -86,6 +86,7 @@
       return [name,row];
     }));
     const S=W.spatialSoundSelection, selection=S.compile(config.soundFamilies??{},config.soundSeed??0,cues);
+    const livePlayback=S.createPlayback();
     const bindings=new Map();
     for(const [name,row] of table(config.bindings??{},128,'bindings')){
       check(keys(row,['on','cue','interaction','at','gain','select','speedForFullStrength','loadForFullStrength'])&&keys(row.on,['kind','system','where'])&&
@@ -102,12 +103,13 @@
       const cue=cues.get(input.cue);
       if(!cue)return null;
       const at=input.at??cue.at, positioned=at!==undefined, source=resolve(query,at);
-      const pitch=Math.max(.001,Math.min(64,(input.pitch??1)*cue.pitch));
+      const variation=input.selection?.variation, detune=variation?2**(variation.pitchCents/1200):1;
+      const pitch=variation?.rate??Math.max(.001,Math.min(64,(input.pitch??1)*cue.pitch*detune));
       const scale=Math.min(16384,(input.gain??1)*cue.gain);
       const result={id:input.id,cue:input.cue,asset:cue.asset,mode:input.mode,offset:input.offset??0,
         rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(cue.bus!==undefined&&{bus:cue.bus}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
-        ...(input.selection!==undefined&&{selection:input.selection}),
+        ...(input.selection!==undefined&&{selection:variation?{...input.selection,variation:{...variation,rate:pitch}}:input.selection}),
         ...(cue.follow&&input.mode==='cue'&&at?.entity&&{attachment:{cue:input.cue,at,
           ...(input.gain!==undefined&&{gain:input.gain}),...(input.pitch!==undefined&&{pitch:input.pitch}),
           ...(input.exclude!==undefined&&{exclude:input.exclude})}})};
@@ -182,11 +184,13 @@
       const material=row.material??profile?.id;
       return materials.get(material)?.[interaction]??profile?.sounds?.[interaction];
     }
-    function frame({query,time=0,from=time,listener,events=[],animation=[],timeline,captureSources=false}={}){
+    function frame({query,time=0,from=time,listener,events=[],animation=[],timeline,captureSources=false,
+      playback=livePlayback,receipts}={}){
       check(finite(time,0,1e9)&&finite(from,-1e9,time)&&Array.isArray(events)&&events.length<=10000&&
         Array.isArray(animation)&&animation.length<=128&&(!timeline||typeof timeline.sample==='function'&&
           typeof timeline.between==='function'),'Invalid spatial audio frame');
       const ear=listenerFrame(query,listener), active=[], shots=[], known=new Set();
+      playback.observe(time);
       function add(input,target){
         if(known.has(input.id))return;
         known.add(input.id);
@@ -199,14 +203,17 @@
         if(!finite(gain,0,64)||!finite(pitch,.0625,8))return;
         const raw={mode:'cue',at,gain,pitch,onset:W.timedEvents.timeOf(row),exclude:id(row.entity)?row.entity:undefined,
           ...(captureSources&&typeof row.id==='string'&&W.committedEvents.eventId(row.id)&&{sourceEvent:row.id})};
-        let matched=false, profile;
+        const recorded=receipts?.get(row.id);
+        let matched=false, profile, replayed=0;
         for(const binding of bindings.get(row.kind)??[]){
           if(binding.on.system!==undefined&&binding.on.system!==row.system||!Q.condition(binding.on.where,row))continue;
           let chosen;
           if(binding.select){
             if(profile===undefined)profile=surfaceAt(query,at)??null;
             const reading=S.readContact(row,contact,profile,binding);
-            chosen=selection.choose(binding.select,reading,serial,binding.name);
+            const replay=recorded?.get(binding.name);
+            chosen=selection.choose(binding.select,reading,serial,binding.name,playback,replay);
+            if(replay)replayed++;
             if(!chosen&&binding.cue===undefined&&binding.interaction===undefined)continue;
           }
           matched=true;
@@ -222,6 +229,7 @@
             if(cue)add({...raw,id:voiceId,cue,at:site,gain:level},shots);
           }
         }
+        check(!recorded||replayed===recorded.size,'Saved sound choice no longer matches its binding');
         if(!matched&&eventKinds.includes(row.kind)&&cueName(row.cue))add({...raw,id:serial,cue:row.cue},shots);
       }
       for(const row of emitters)add({...row,id:'emitter:'+row.name,mode:'loop',offset:(row.offset??0)+time*cues.get(row.cue).pitch},active);
@@ -261,7 +269,7 @@
     function cue({ query, listener, cue, at, gain, pitch, exclude } = {}) {
       return mix(query, listenerFrame(query, listener), { cue, at, gain, pitch, exclude, mode: 'cue' });
     }
-    return Object.freeze({frame,cue});
+    return Object.freeze({frame,cue,createPlayback:S.createPlayback});
   }
   W.spatialAudio=Object.freeze({create});
 })(KIT);

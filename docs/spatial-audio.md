@@ -185,3 +185,52 @@ anchor, weight, and any layer fallback alongside the source beat.
 Run the [velocity layers demo](../examples/velocity-layers/demo.cjs) with
 `node examples/velocity-layers/demo.cjs output/velocity-layers` to hear
 wood respond to speed and a brass latch respond to load on the same boards.
+
+### Rotate takes and replay the choices
+
+Add a `variation` record to a sound family that should rotate takes or
+vary pitch.
+
+```json
+{
+  "takes": { "a": "hook-a", "b": "hook-b", "c": "hook-c" },
+  "variation": { "rotate": true, "pitchCents": [-90, 90] }
+}
+```
+
+With rotation enabled, Ink draws from unused eligible takes before
+starting a new cycle. It excludes the last take while another take
+qualifies. If just one take qualifies, that take can repeat. History
+is separate for each binding, family, and velocity layer. Take
+weights still apply when choosing among the available alternatives.
+
+`pitchCents` is an inclusive range of integer cents between −1200 and
+1200. It defaults to zero cents. Each event gets a seeded draw,
+applied on top of its event and cue pitch. Set `rotate` to false or
+omit it to use pitch variation with ordinary weighted selection.
+
+Live hosts can pass a fresh `planner.createPlayback()` as `playback`
+to `frame` when starting a new event stream. Without one, the
+planner keeps its own history and resets it when frame time moves
+backward. Feed it events in committed order. Recent duplicate event
+deliveries reuse their decisions.
+
+`story audio` runs the selector from the recording's origin, including
+the events before a trimmed window. It writes `receipts.json` for
+families with variation. Each receipt holds the source beat, binding,
+family, take, layer when present, pitch in cents, and final playback rate.
+
+```sh
+ink-studio story audio shop.run.json shop.audio.json --out first
+ink-studio story audio shop.run.json shop.audio.json --receipts first/receipts.json --out replay
+```
+
+Replay uses saved choices for the matching beats. Keep the referenced
+takes and assets available in the soundtrack. Beats without a saved
+choice still use the live selector, with the history updated by any
+saved choices it played.
+
+Run the [repeat avoidance demo](../examples/repeat-safe-sounds/demo.cjs)
+with `node examples/repeat-safe-sounds/demo.cjs output/repeat-safe-sounds`
+to compare a weighted draw, a rotation, and receipt replay after a seed
+change.

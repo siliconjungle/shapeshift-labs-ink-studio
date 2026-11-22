@@ -77,6 +77,59 @@ test('story replay mixes both velocity takes at the same sample and carries thei
   assert.deepEqual(sliced.samples,mixed.samples.subarray(3200));
 });
 
+test('story audio saves per-layer take and pitch receipts and replays them with a changed seed', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-sound-receipts-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=name=>path.join(dir,name), bytes=name=>fs.readFileSync(file(name));
+  const save=(name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const read=name=>JSON.parse(bytes(name));
+  const call=(...args)=>execFileSync(process.execPath,[cli,...args],{cwd:dir,encoding:'utf8',stdio:'pipe'});
+  const run=R.create({id:'tap-replay',dt:.1,commands:Array.from({length:6},(_,i)=>({
+    tick:i+1,action:'world/event',args:{kind:'impact',strength:.5,pitch:1.11}
+  }))});
+  run.advance(8);
+  save('run.json',run.recording());
+  const ids=['a','b','c','d'];
+  const spatial={soundSeed:28,cues:Object.fromEntries(ids.map(id=>[id,{asset:id,pitch:1.2}])),
+    soundFamilies:{tool:{takes:Object.fromEntries(ids.map(id=>[id,id])),
+      layers:[{at:0,takes:['a','b']},{at:1,takes:['c','d']}],variation:{rotate:true,pitchCents:[-80,80]}}},
+    bindings:{tool:{on:{kind:'impact'},select:[{id:'tool',family:'tool'}]}}};
+  for(const [i,id] of ids.entries())fs.writeFileSync(file(id+'.wav'),ink.encodeWav({
+    sampleRate:rate,channels:1,samples:Float32Array.from({length:128},(_,n)=>.1*Math.sin(n*(.2+.25*i)))
+  }));
+  const soundtrack={format:'ink-studio/scene-audio',version:1,sampleRate:rate,spatial,
+    assets:Object.fromEntries(ids.map(id=>[id,id+'.wav']))};
+  save('mix.json',soundtrack);
+  call('story','audio','run.json','mix.json','--out','original');
+  const receipts=read('original/receipts.json'), rows=read('original/report.json').cues;
+  assert.equal(receipts.choices.length,12);
+  assert.equal(read('original/report.json').receipts,'receipts.json');
+  for(const [i,choice] of receipts.choices.entries()){
+    const {selection,source}=rows[i];
+    assert.equal(choice.take,selection.take);
+    assert.equal(choice.beatId,source.beatId);
+    assert.equal(choice.rate,1.11*1.2*2**(choice.pitchCents/1200));
+  }
+  call('story','audio','run.json','mix.json','--from','.25','--to','.65','--out','cut');
+  assert.deepEqual(read('cut/receipts.json'),receipts);
+  assert.deepEqual(ink.decodeWav(bytes('cut/mix.wav')).samples,
+    ink.decodeWav(bytes('original/mix.wav')).samples.slice(4000,10400));
+  spatial.soundSeed=183;
+  save('changed.json',soundtrack);
+  call('story','audio','run.json','changed.json','--out','redraw');
+  assert(!bytes('redraw/mix.wav').equals(bytes('original/mix.wav')));
+  call('story','audio','run.json','changed.json','--receipts','original/receipts.json','--out','replay');
+  for(const file of ['mix.wav','receipts.json','report.json'])assert(bytes('replay/'+file).equals(bytes('original/'+file)));
+  const invalid=structuredClone(receipts);
+  invalid.choices[0].take='d';
+  save('invalid.json',invalid);
+  const failure=spawnSync(process.execPath,[cli,'story','audio','run.json','mix.json','--receipts','invalid.json','--out','bad'],
+    {cwd:dir,encoding:'utf8'});
+  assert.equal(failure.status,1);
+  assert.match(failure.stderr,/no longer eligible/);
+  assert(!fs.existsSync(file('bad')));
+});
+
 test('story audio prints a verified branch window with exact onset and beat lookup', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-story-audio-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));

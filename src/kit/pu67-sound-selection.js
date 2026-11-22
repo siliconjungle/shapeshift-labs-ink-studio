@@ -35,10 +35,32 @@
     return [{...low,weight:1-weight},{...high,weight}];
   }
 
+  function createPlayback(){
+    const pools=new Map(), recent=new Map();
+    let previous=-Infinity;
+    return {pools,recent,observe(time){
+      if(time<previous){pools.clear();recent.clear();}
+      previous=time;
+    },remember(event,members){
+      if(recent.size>=16384)recent.delete(recent.keys().next().value);
+      recent.set(event,members);
+    }};
+  }
+
+  function variation(raw){
+    if(raw===undefined)return;
+    check(keys(raw,['rotate','pitchCents']),'Invalid sound take variation');
+    const {rotate=false,pitchCents=[0,0]}=raw;
+    check(typeof rotate==='boolean'&&Array.isArray(pitchCents)&&pitchCents.length===2&&
+      Array.from(pitchCents).every(value=>Number.isInteger(value)&&finite(value,-1200,1200))&&pitchCents[0]<=pitchCents[1],
+    'Sound variation needs a rotation flag and an ordered integer-cent range within an octave');
+    return {rotate,pitchCents};
+  }
+
   function compile(raw,seed,cues){
     check(record(raw)&&Object.keys(raw).length<=128&&Number.isSafeInteger(seed),'Invalid spatial sound families or seed');
     const families=new Map(Object.entries(raw).map(([family,spec])=>{
-      check(key(family)&&keys(spec,['takes','layers'])&&record(spec.takes),'Invalid spatial sound family '+family);
+      check(key(family)&&keys(spec,['takes','layers','variation'])&&record(spec.takes),'Invalid spatial sound family '+family);
       const ids=Object.keys(spec.takes).sort();
       check(ids.length>0&&ids.length<=64&&ids.every(key),'Sound family needs one to 64 named takes: '+family);
       const takes=ids.map(id=>{
@@ -48,7 +70,7 @@
         'Invalid sound take '+family+'/'+id);
         return {id,cue:take.cue,strength:take.strength,weight:take.weight??1};
       });
-      return [family,{takes,layers:velocityLayers(spec.layers,takes,family)}];
+      return [family,{takes,layers:velocityLayers(spec.layers,takes,family),variation:variation(spec.variation)}];
     }));
 
     function rules(raw,binding){
@@ -65,38 +87,68 @@
       }).sort((a,b)=>Number(b.when.prop!==undefined)-Number(a.when.prop!==undefined));
     }
 
-    function pick(takes,strength,salt){
-      const eligible=takes.filter(take=>within(take.strength,strength));
-      if(!eligible.length)return null;
-      const total=eligible.reduce((sum,take)=>sum+take.weight,0);
-      let draw=(noise(0,hash(JSON.stringify(salt)))+1)*.5*total;
-      const chosen=eligible.find(take=>(draw-=take.weight)<0)??eligible.at(-1);
-      return {cue:chosen.cue,take:chosen.id,eligible:eligible.map(take=>take.id)};
+    const unitDraw=salt=>(noise(0,hash(JSON.stringify(salt)))+1)*.5;
+    function draw(takes,salt){
+      const total=takes.reduce((sum,take)=>sum+take.weight,0);
+      let ticket=unitDraw(salt)*total;
+      return takes.find(take=>(ticket-=take.weight)<0)??takes.at(-1);
     }
 
-    function choose(rules,{context,measurement},event,binding){
-      for(const {id,when,family,takes,layers} of rules){
+    function pick(takes,salt,playback,pool,settings,saved){
+      if(!settings?.rotate)return saved??draw(takes,salt);
+      if(!playback.pools.has(pool))playback.pools.set(pool,{used:new Set(),last:null});
+      const history=playback.pools.get(pool);
+      const allowed=takes.length>1?takes.filter(take=>take.id!==history.last):takes;
+      const unused=allowed.filter(take=>!history.used.has(take.id));
+      if(!unused.length&&takes.length>1)history.used.clear();
+      const chosen=saved??draw(unused.length?unused:allowed,salt);
+      history.used.add(chosen.id);
+      history.last=chosen.id;
+      return chosen;
+    }
+
+    function choose(rules,{context,measurement},event,binding,playback,replay){
+      const address=JSON.stringify([event,binding]), remembered=playback.recent.get(address);
+      if(remembered)return remembered;
+      for(const {id,when,family,takes,layers,variation:settings} of rules){
         if(!labels.every(name=>when[name]===undefined||when[name]===context[name])||
           !measurements.every(name=>within(when[name],context[name])))continue;
         const salt=['sound-take-v1',seed,event,binding,id,family], strength=context.strength;
-        const receipt={binding,rule:id,family,context};
-        if(!layers){
-          const chosen=pick(takes,strength,salt);
-          if(chosen)return [{cue:chosen.cue,selection:{binding,rule:id,family,take:chosen.take,context,eligible:chosen.eligible}}];
-          continue;
+        const adjacent=layers?bracket(layers,strength):[{takes,weight:1}];
+        const groups=adjacent.map(layer=>({...layer,eligible:layer.takes.filter(take=>within(take.strength,strength))}))
+          .filter(layer=>layer.eligible.length);
+        if(!groups.length)continue;
+        let saved;
+        if(replay){
+          check(settings&&replay.length===groups.length,'Saved sound choice does not match eligible layers for '+binding);
+          saved=groups.map(({at,eligible})=>{
+            const row=replay.find(row=>row.layer===at), take=row&&eligible.find(take=>take.id===row.take);
+            check(take&&row.rule===id&&row.family===family&&row.cue===take.cue&&row.asset===cues.get(take.cue).asset&&
+              Number.isInteger(row.pitchCents)&&finite(row.pitchCents,-1200,1200)&&finite(row.rate,.001,64),
+              'Saved sound choice is no longer eligible for '+binding);
+            return {row,take};
+          });
         }
-        const adjacent=bracket(layers,strength);
-        const chosen=adjacent.flatMap(layer=>{
-          const take=pick(layer.takes,strength,[...salt,layer.at]);
-          return take?[{...take,at:layer.at,weight:layer.weight}]:[];
-        });
-        if(chosen.length)return chosen.map(row=>({
-          cue:row.cue,selection:{...receipt,take:row.take,eligible:row.eligible,
-            layer:{at:row.at,weight:chosen.length===1?1:row.weight},
+        const members=groups.map(({at,weight,eligible},index)=>{
+          const layerSalt=at===undefined?salt:[...salt,at], prior=saved?.[index];
+          const take=pick(eligible,layerSalt,playback,JSON.stringify([binding,family,at]),settings,prior?.take);
+          const choices=eligible.map(candidate=>candidate.id);
+          const selection=layers?{binding,rule:id,family,context,take:take.id,eligible:choices,
+            layer:{at,weight:groups.length===1?1:weight},
             ...(measurement?{measurement}:{fallback:'quiet-layer'}),
-            ...(chosen.length<adjacent.length&&{fallback:'available-layer'})}
-        }));
+            ...(groups.length<adjacent.length&&{fallback:'available-layer'})}:
+            {binding,rule:id,family,take:take.id,context,eligible:choices};
+          if(settings){
+            const [min,max]=settings.pitchCents;
+            selection.variation=prior?{pitchCents:prior.row.pitchCents,rate:prior.row.rate}:
+              {pitchCents:min+Math.floor(unitDraw([...layerSalt,'pitch',take.id])*(max-min+1))};
+          }
+          return {cue:take.cue,selection};
+        });
+        if(settings)playback.remember(address,members);
+        return members;
       }
+      check(!replay,'Saved sound choice is no longer eligible for '+binding);
       return null;
     }
     return {rules,choose};
@@ -133,5 +185,5 @@
     const length=K.V.len(row.normal);
     if(Number.isFinite(length)&&length>0)return Math.abs(K.V.dot(row.force,K.V.mul(row.normal,1/length)));
   }
-  W.spatialSoundSelection=Object.freeze({compile,readContact});
+  W.spatialSoundSelection=Object.freeze({compile,readContact,createPlayback});
 })(KIT);

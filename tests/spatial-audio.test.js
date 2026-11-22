@@ -187,6 +187,52 @@ test('velocity layers blend adjacent takes using strength, normal load, or speed
     handle:{takes:{soft:'soft'},layers:[{at:.5,takes:['soft']},{at:.4,takes:['missing']}]}}}),/Invalid velocity layer/);
 });
 
+test('sound rotation exhausts eligible takes, ignores duplicate events, and keeps velocity histories separate',()=>{
+  const planner=W.spatialAudio.create({soundSeed:142,
+    cues:{a:'a',b:'b',c:'c',x:'x',y:'y',z:'z'},
+    soundFamilies:{latch:{takes:{a:'a',b:'b',c:'c',x:'x',y:'y',z:'z'},variation:{rotate:true,pitchCents:[-80,80]},
+      layers:[{at:0,takes:['a','b','c']},{at:1,takes:['x','y','z']}]}},
+    bindings:{drop:{on:{kind:'impact'},select:[{id:'latch',family:'latch'}]}}
+  });
+  const events=Array.from({length:9},(_,i)=>({id:(i+1)+'.0',kind:'impact',strength:.5,pitch:1.12}));
+  const listen=(rows,playback,time=1)=>planner.frame({listener:[0,0,0],time,events:rows,playback}).cues;
+  const all=listen(events,planner.createPlayback());
+  for(const anchor of [0,1]){
+    const rows=all.filter(row=>row.selection.layer.at===anchor);
+    for(let i=0;i<rows.length;i+=3)assert.equal(new Set(rows.slice(i,i+3).map(row=>row.cue)).size,3);
+    assert(rows.every((row,i)=>!i||rows[i-1].cue!==row.cue));
+  }
+  for(const row of all){
+    const {pitchCents,rate}=row.selection.variation;
+    assert(pitchCents>=-80 && pitchCents<=80);
+    near(rate,1.12*2**(pitchCents/1200));
+    assert.equal(row.rate,rate);
+  }
+  const playback=planner.createPlayback();
+  const streamed=events.flatMap((event,i)=>{
+    const first=listen([event,event],playback,i+1);
+    assert.deepEqual(first,listen([event],playback,i+1));
+    return first;
+  });
+  assert.deepEqual(streamed,all);
+  assert.deepEqual(listen([events[0]],playback,0),all.slice(0,2));
+});
+
+test('rotation tolerates forced repeats and resumes avoiding them when more takes qualify',()=>{
+  const planner=W.spatialAudio.create({cues:{a:'a',b:'b',c:'c'},
+    soundFamilies:{tool:{takes:{a:'a',b:{cue:'b',strength:[.5,1]},c:{cue:'c',strength:[.5,1]}},variation:{rotate:true}}},
+    bindings:{tool:{on:{kind:'impact'},select:[{id:'tool',family:'tool'}]}}
+  });
+  const events=[.1,.1,.8,.8,.8].map((strength,i)=>({id:(i+1)+'.0',kind:'impact',strength}));
+  const voices=planner.frame({events,listener:[0,0,0]}).cues;
+  assert.deepEqual(voices.slice(0,2).map(row=>row.cue),['a','a']);
+  assert.deepEqual(new Set(voices.slice(2,4).map(row=>row.cue)),new Set(['b','c']));
+  assert.equal(voices[4].cue,'a');
+  assert.throws(()=>W.spatialAudio.create({cues:{a:'a'},soundFamilies:{
+    tool:{takes:{a:'a'},variation:{rotate:true,pitchCents:[60,-30]}}}
+  }),/ordered integer-cent range/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
