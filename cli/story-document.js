@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateStoryDocument } = require('../src/kit/pu01-story-document.js');
+const { validateStoryDocument } = require('../src/story-document.js');
 
 function readStoryDocument(file) {
   try {

@@ -166,6 +166,8 @@ test('the prebuilt Node entry renders from a read-only package with its authorin
     const kit = studio.load();
     assert.equal(kit, require('./dist/ink-studio.node.cjs'));
     assert.ok(kit.SCENES.length > 0);
+    const story = studio.readStoryDocument('examples/story-documents/burned-mill.json');
+    assert.equal(story.stories['mill-fire'].triggers['survey-report'].event.kind, 'discovery');
     const builder = kit.makeBuilder(1, [0x141823, 0xdeac7b]);
     builder.disc(0, 0, 0, [0, 0, 1], .35, .03, builder.P[1], 3);
     const world = builder.finish({ cam: { target: [0, 0, 0], dist: 4, yaw: 0, pitch: 0 } });
