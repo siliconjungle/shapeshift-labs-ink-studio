@@ -75,6 +75,8 @@ node examples/live-snapshot-cursor/demo.cjs ./studio/out/live-snapshot-cursor
 
 The demo joins a running dock simulation, misses deliveries, then starts a patch and attaches the projector after the show is underway. It saves the viewer packets, projector frames, and show diagnostics. [Patch show setup](patch-tooling.md#run-a-patch-as-a-show)
 
+Pass `--policy` to serve separate authoritative, faction, and spectator streams from the same run. The policy also grants named interventions through the native command scheduler. [World views and intervention permissions](world-access.md)
+
 ## Fields, surfaces, and points
 
 An `ink-studio/grid-field` version 1 has a `shape` of one to three

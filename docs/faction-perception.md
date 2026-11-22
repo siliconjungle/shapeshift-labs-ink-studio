@@ -38,7 +38,7 @@ checkpoint, fork, and replay.
 
 ## Read sight, proximity, and memory
 
-The examples use `intel` as the system ID.
+The examples use `intel` as the system ID. A scoped export can bind that provider to one faction's view. [World views and intervention permissions](world-access.md)
 
 | Field | Result |
 | --- | --- |

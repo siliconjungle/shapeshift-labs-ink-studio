@@ -557,6 +557,38 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       ...(source.instances !== undefined && {instances:source.instances}),
       ...(world.simulationModel.exposedParameters && {exposedParameters:world.simulationModel.exposedParameters})});
   }
+  async function worldView(mode,file,other) {
+    const Live=require('./live-world.js'), streaming=mode==='live';
+    const common=['ticks','queries','policy','actions','workers'];
+    const modeOptions=streaming?['step-ms','linger-ms','host','port','record']:['view','out','json'];
+    const usage=streaming?Live.usage:
+      'Use sim view <world|checkpoint|run> --policy access.json --view ID [--ticks N --queries queries.json --out file]';
+    ensure(typeof file==='string'&&other===undefined&&Object.keys(opt).every(key=>common.includes(key)||modeOptions.includes(key))&&
+      (opt.ticks===undefined||typeof opt.ticks==='string'&&/^\d+$/.test(opt.ticks))&&
+      ['queries','actions','policy','record'].every(key=>opt[key]===undefined||typeof opt[key]==='string'&&opt[key].trim())&&
+      (streaming||opt.policy!==undefined&&W.data.id(opt.view)&&(opt.json===undefined||opt.json===true)),usage);
+    const sources=new Set([file,opt.queries,opt.policy,opt.actions]);
+    const input=load(file,{dependency:source=>sources.add(source)});
+    ensure(input.world&&(!input.log||opt.actions===undefined&&opt.record===undefined),
+      'World views need a world, checkpoint or recording. Recordings are read-only.');
+    checkReportPath([...sources],streaming?opt.record:opt.out,'world view inputs');
+    const run=input.log?recordingRun(input):runtime(input,false,undefined,opt.record===undefined?undefined:true);
+    const until=opt.ticks===undefined?input.log?.end.tick??(streaming?undefined:run.view().tick):Number(opt.ticks);
+    ensure(!input.log||until<=input.log.end.tick,'World view exceeds the recording end tick');
+    schedule(run);
+    const queries=opt.queries===undefined?{}:read(opt.queries), policy=opt.policy===undefined?undefined:read(opt.policy);
+    if(streaming){
+      const emit=value=>new Promise((resolve,reject)=>
+        process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):resolve()));
+      await Live.serve(W,run,opt,{until,queries,policy,playback:!!input.log,emit});
+      if(opt.record!==undefined)write(opt.record,run.recording());
+      return;
+    }
+    const access=W.worldAccess.compile(policy,run.view().world,{queries});
+    access.audience(opt.view);
+    await run.advanceAsync(until);
+    respond(access.project(opt.view,run.view(),run.query(),run.committedEvents()));
+  }
   function runSimulation([mode,file,other,...extra]) {
     const watching = StoryWatch.enabled(opt);
     if (watching) ensure(['run','resume','fork','replay'].includes(mode)&&other===undefined,
@@ -826,24 +858,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         }
         return respond(opt.section===undefined?domain:W.domains.trace(domain,opt.section));
       }
-      case 'live': {
-        const Live = require('./live-world.js');
-        ensure(typeof file==='string'&&other===undefined&&Object.keys(opt).every(key=>
-          ['ticks','queries','step-ms','linger-ms','host','port','actions','workers'].includes(key))&&
-          (opt.ticks===undefined||typeof opt.ticks==='string'&&/^\d+$/.test(opt.ticks))&&
-          ['queries','actions'].every(key=>opt[key]===undefined||typeof opt[key]==='string'),Live.usage);
-        const input=load(file);
-        ensure(input.world&&(!input.log||opt.actions===undefined),
-          'Live worlds need a world, checkpoint or recording. Recordings keep their original actions.');
-        const run=input.log?recordingRun(input):runtime(input);
-        const until=opt.ticks===undefined?input.log?.end.tick:Number(opt.ticks);
-        ensure(!input.log||until<=input.log.end.tick,'Live playback exceeds the recording end tick');
-        schedule(run);
-        const queries=opt.queries===undefined?{}:read(opt.queries);
-        const emit=value=>new Promise((resolve,reject)=>
-          process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):resolve()));
-        return Live.serve(W,run,opt,{until,queries,emit});
-      }
+      case 'live':
+      case 'view': return worldView(mode,file,other);
       case 'run':
       case 'resume':
       case 'fork': {

@@ -1,0 +1,87 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "lantern-harbor",
+  "seed": 39115,
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "entities": {
+    "west-lantern": { "position": [2, 0, 0], "tags": ["beacon"] },
+    "east-cache": { "position": [24, 0, 0], "tags": ["private-stock"] }
+  },
+  "systems": {
+    "intel": {
+      "kind": "perception",
+      "config": {
+        "profiles": { "watch": { "sight": { "range": 7 } } },
+        "factions": {
+          "west": { "observers": { "post": { "at": [0, 0, 0], "profile": "watch" } } },
+          "east": { "observers": { "post": { "at": [22, 0, 0], "profile": "watch" } } }
+        },
+        "targets": { "kinds": ["entity"] }
+      }
+    },
+    "stock": {
+      "kind": "store",
+      "config": {
+        "accounts": {
+          "reserve": { "resource": "lantern", "units": "item", "type": "integer", "initial": 3 },
+          "in-use": { "resource": "lantern", "units": "item", "type": "integer", "initial": 0 }
+        }
+      }
+    }
+  },
+  "facts": {
+    "types": {
+      "gate-inspection": { "fields": { "severity": "string" } }
+    }
+  },
+  "knowledge": true,
+  "scenario": { "allow": ["world/story-choose"] },
+  "commands": [
+    { "tick": 1, "action": "world/fact", "args": {
+      "type": "gate-inspection", "at": { "place": "harbor/gate", "point": [2, 0, 0] },
+      "data": { "severity": "hinge fractured" },
+      "witnesses": [
+        { "holder": { "kind": "faction", "id": "west" }, "fields": ["at"] },
+        { "holder": { "kind": "faction", "id": "east" } }
+      ]
+    } },
+    { "tick": 1, "action": "world/event", "args": {
+      "kind": "dispatch-ready", "signal": "amber", "message": "The east cache has three lanterns."
+    } }
+  ],
+  "storyDocuments": [
+    {
+      "format": "ink-studio/story",
+      "version": 1,
+      "id": "harbor-watch",
+      "stories": {
+        "dispatch": {
+          "kind": "questlet",
+          "title": "Light the west lantern",
+          "triggers": { "briefing": { "event": { "kind": "dispatch-ready" } } },
+          "entry": "plan",
+          "stages": {
+            "plan": {
+              "title": "Choose tonight's signal",
+              "decision": { "mode": "player" },
+              "next": { "release": { "outcome": "lit" }, "hold": { "outcome": "dark" } }
+            }
+          },
+          "outcomes": { "lit": { "title": "Lantern in use" }, "dark": { "title": "Lantern held in reserve" } },
+          "lifecycle": {
+            "progression": true,
+            "settlement": {
+              "outcomes": {
+                "lit": {
+                  "lamp": { "transfer": { "from": "stock/reserve", "to": "stock/in-use", "amount": 1 } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

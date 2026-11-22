@@ -1,0 +1,40 @@
+{
+  "format": "ink-studio/world-access",
+  "version": 1,
+  "views": {
+    "authority": { "kind": "world" },
+    "west": { "kind": "faction", "faction": "west", "perception": "intel" },
+    "east": { "kind": "faction", "faction": "east", "perception": "intel" },
+    "audience": { "kind": "spectator" }
+  },
+  "public": {
+    "queries": {
+      "lanterns": { "field": "world/account", "args": { "account": "stock/in-use" }, "select": "/balance" }
+    },
+    "events": {
+      "dispatch-ready": { "as": "signal-ready", "fields": { "color": "/payload/signal" } },
+      "transfer": {
+        "as": "lantern-lit",
+        "where": { "path": "/payload/to", "value": "stock/in-use" },
+        "fields": { "amount": "/payload/applied" }
+      }
+    }
+  },
+  "interventions": {
+    "release-lantern": { "action": "world/story-choose", "args": {
+      "document": "harbor-watch", "story": "dispatch", "stage": "plan", "visit": 1,
+      "branch": "release", "reason": "watch-authorized"
+    } },
+    "hold-lantern": { "action": "world/story-choose", "args": {
+      "document": "harbor-watch", "story": "dispatch", "stage": "plan", "visit": 1,
+      "branch": "hold", "reason": "watch-authorized"
+    } },
+    "ring-siren": { "action": "world/event", "args": { "kind": "siren" } }
+  },
+  "principals": {
+    "operator": { "view": "authority" },
+    "west-guide": { "view": "west", "interventions": ["release-lantern", "hold-lantern", "ring-siren"] },
+    "east-guide": { "view": "east" },
+    "projector": { "view": "audience" }
+  }
+}

@@ -1,43 +1,56 @@
 const http=require('node:http');
 const net=require('node:net');
-const {randomBytes,randomUUID}=require('node:crypto');
 const {setTimeout:delay}=require('node:timers/promises');
 const {once}=require('node:events');
+const Access=require('./live-access.js');
 
-const usage='Use sim live <world|checkpoint|run> [--ticks N --queries queries.json --step-ms N --linger-ms N --host IP --port N]';
+const usage='Use sim live <world|checkpoint|run> [--ticks N --queries queries.json --policy access.json --record run.json --step-ms N --linger-ms N --host IP --port N]';
 const int=(value,min,max)=>Number.isSafeInteger(value)&&value>=min&&value<=max;
 const maxBytes=8*1024*1024;
 
-async function serve(W,run,options,{until,queries,emit}) {
+async function serve(W,run,options,{until,queries,policy,playback,emit}) {
   const {check}=W.data, api=W.liveSnapshots, start=run.view().tick;
   const host=options.host??'127.0.0.1', port=Number(options.port??0);
   const stepMs=Number(options['step-ms']??run.view().world.dt*1000), linger=Number(options['linger-ms']??500);
   check([options.host,options.port,options['step-ms'],options['linger-ms']].every(value=>value===undefined||typeof value==='string'&&value.trim())&&
     net.isIP(host)&&int(port,0,65535)&&Number.isFinite(stepMs)&&stepMs>0&&stepMs<=60000&&int(linger,0,60000)&&
     int(until,start,W.runtime.maxTick),usage);
-  const stream=randomUUID(), token=randomBytes(24).toString('hex'), publisher=api.create({stream});
-  const probes=W.graphPorts.queries(queries), signal=new AbortController();
-  let ended=false;
-  const publish=effects=>publisher.publish(W.graphPorts.frameOf(run.view(),run.query(),probes,{events:effects}));
-  publish([]);
-  function send(response,status,body) {
+  const access=Access.create(W,run,{until,queries,policy,playback}), signal=new AbortController();
+  let ended=false, busy=false;
+  access.publish([]);
+  function send(response,status,body,headers) {
     const bytes=JSON.stringify(body);
     response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',
-      'X-Content-Type-Options':'nosniff','X-Ink-Ended':ended?'1':'0'});
+      'X-Content-Type-Options':'nosniff','X-Ink-Ended':ended?'1':'0',...headers});
     response.end(bytes);
   }
-  const server=http.createServer((request,response)=>{
-    if (request.headers.authorization!=='Bearer '+token) return send(response,403,{error:'Expected the live world key'});
+  const server=http.createServer(async(request,response)=>{
+    const principal=access.authorize(request.headers.authorization);
+    if(!principal)return send(response,403,{error:'Expected a live world key'});
     try {
       const url=new URL(request.url,'http://localhost');
+      if(request.method==='GET'&&url.pathname==='/permissions')
+        return send(response,200,access.permissions(principal,!ended&&run.view().tick<until));
+      if(request.method==='POST'&&url.pathname==='/intervene'){
+        if(!principal.grants.size)return send(response,403,{error:'Intervention is not granted'});
+        const input=await Access.readCommand(request);
+        const result=input.status?input:access.submit(principal,input.command,{busy,ended:ended||signal.signal.aborted});
+        if(input.status===413||input.status===415){
+          request.resume();
+          return send(response,result.status,result.body,{'Connection':'close'});
+        }
+        return send(response,result.status,result.body);
+      }
       if (request.method!=='GET'||!['/snapshot','/live'].includes(url.pathname))
         return send(response,404,{error:'Unknown live world route'});
       const after=url.searchParams.get('after');
       if (url.pathname==='/live'&&(after===null||after.length>512)) return send(response,400,{error:'Expected a live cursor'});
       const cursor=url.pathname==='/snapshot'?null:JSON.parse(after);
       if (url.pathname==='/live'&&!api.validCursor(cursor)) return send(response,400,{error:'Invalid live cursor'});
-      send(response,200,publisher.pull(cursor));
-    } catch (error) { if (!response.headersSent) send(response,400,{error:error.message}); }
+      send(response,200,principal.publisher.pull(cursor));
+    } catch {
+      if(!response.headersSent&&!response.destroyed)send(response,400,{error:'Invalid live world request'});
+    }
   });
   server.requestTimeout=5000;
   server.maxConnections=64;
@@ -48,14 +61,16 @@ async function serve(W,run,options,{until,queries,emit}) {
     server.listen(port,host);
     await once(server,'listening');
     const address=host.includes(':')?'['+host+']':host;
-    await emit({event:'live-ready',url:'http://'+address+':'+server.address().port+'/',stream,token,tick:start});
+    await emit({event:'live-ready',url:'http://'+address+':'+server.address().port+'/',...access.ready(),tick:start});
     for(let tick=start+1;tick<=until;tick++) {
       await delay(stepMs,undefined,{signal:signal.signal});
+      busy=true;
       await run.stepAsync();
-      publish(run.committedEvents());
+      access.publish(run.committedEvents());
+      busy=false;
     }
     ended=true;
-    await emit({event:'live-end',cursor:publisher.cursor()});
+    await emit({event:'live-end',...access.cursors()});
     await delay(linger,undefined,{signal:signal.signal});
   } catch(error) {
     if (!signal.signal.aborted||error.name!=='AbortError') throw error;

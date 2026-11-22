@@ -1,0 +1,5 @@
+{
+  "reserve": { "field": "world/account", "args": { "account": "stock/reserve" } },
+  "inspection": { "field": "world/facts" },
+  "dispatch": { "field": "world/story-lifecycle", "args": { "story": "harbor-watch/dispatch" } }
+}
