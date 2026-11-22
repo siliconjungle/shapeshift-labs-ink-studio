@@ -36,6 +36,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Persistent visual consequences](docs/visual-consequences.md)
 - [Adaptive story audio](docs/adaptive-story-audio.md)
 - [Editable story picture and audio](docs/story-editorial-handoff.md)
+- [Configurable story presentation packs](docs/story-presentation-pack.md)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)
