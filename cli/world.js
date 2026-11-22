@@ -60,7 +60,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
   function document(world, file) {
     if (file !== undefined) world = embedModels(world, file, shot?.dependency);
     if (world.format === W.models.format) world = W.models.compile(world);
-    if (file !== undefined && world.storyDocuments !== undefined) world = embedStoryDocuments(world, file, shot?.dependency);
+    if (file !== undefined) world = embedStoryDocuments(world, file, shot?.dependency);
     if (file !== undefined && world.dataInputs !== undefined) world = { ...world,
       dataInputs: require('./data-inputs.js').embed(kit.KIT.dataInputs, world.dataInputs, file, shot?.dependency) };
     if (opt['asset-pack'] === undefined) return {world};

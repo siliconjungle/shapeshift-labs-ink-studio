@@ -126,6 +126,50 @@ Qualified rows come first. Within each group, rows are ordered by roster ID then
 
 To get copyable role bindings on qualified rows, add `"binding":{"story":"document/story","role":"escort"}` to use the role kind from an embedded story. Use `"binding":{"kind":"field-escort"}` to cast from a roster snapshot before binding a required role. The default binding value contains the roster system, agent ID, and generation. Set `binding.select` to a path for a single value or a map of names to paths for a custom value record. Candidates missing a required value list its projection key under `bindingMissing`. Write the selected row's `binding` into the world's `storyBindings` and run `sim preflight` to verify the authored story can use it.
 
+## Instantiate parameterized story templates
+
+Use an `ink-studio/story-template` version 1 document to reuse a story graph while varying the cast, sites, objective thresholds, deadlines, and consequences. The template has its own `id` and positive integer `revision`. Its `document` is a story document body with a `stories` map and optional `title`, `references`, and `objectiveTypes`. It can contain multiple stories, including arcs with local child questlets.
+
+Declare inputs in the template's `parameters` map. Each entry has a `type`. Supported types are `string`, `id`, `boolean`, `number`, `integer`, `point` for finite XYZ coordinates, `object`, `array`, and `json` for any finite JSON value. `default` makes an input optional. Numbers and integers accept inclusive `min` and `max`. Each instance can supply up to 64 declared parameters. An undeclared value, wrong type, missing required input, or out-of-bounds number fails expansion.
+
+`{"$param":"cases"}` inserts a whole JSON value. `{"$param":"destination","path":"/account"}` inserts a selected part of a structured value. The selector accepts a JSON Pointer or a path array. Object keys are authored literally. Keep story, stage, objective, and outcome IDs fixed when the variations share the same graph. `{"$instance":true}` inserts the instance document ID, and `{"$instance":"delivery"}` inserts that instance's qualified story ID, such as `quay-run/delivery`.
+
+A template can declare `bindings` as a map of local story IDs to role bindings and `eventActions` as native event routing rules. A `$param` can carry a complete `{kind,value}` binding from a casting query. Inside the story, `$role` resolves in the usual way. For a qualified role use in an event action, use `{"$role":"courier","story":{"$instance":"delivery"},"path":"/agent"}`. Template route IDs are prefixed with the instance document ID. To listen for your instance's lifecycle events, filter `/document` with `{"$instance":true}`. The usual action validation applies to the expanded commands. Duplicate document IDs, role bindings, and event action IDs fail preflight.
+
+Add a `storyTemplates` array to the world manifest. Each instance uses `id`, either an embedded `template` or a CLI-relative `file`, and optional `parameters` and `revision` to pin the expected revision. Concrete `storyDocuments` can live alongside instances. Each instance counts against the world's existing 32-document limit. CLI runs embed the template sources and chosen values in checkpoints and recordings so replay needs only the recording.
+
+```json
+{
+  "id": "quay-run",
+  "file": "supply-dispatch.template.json",
+  "revision": 1,
+  "parameters": {
+    "label": "Resupply the quay before the tide turns",
+    "courier": { "kind": "supply-courier", "value": { "system": "crew", "agent": "nilo", "generation": 2, "seek": "crew/seek" } },
+    "destination": { "point": [0.6, 0, 1], "min": [0.4, -0.1, 0.85], "max": [0.8, 0.1, 1.15], "account": "dispatch/quay-depot" },
+    "stock": "dispatch/quay-stock",
+    "wallet": "dispatch/nilo",
+    "cases": 4,
+    "timeBudget": 1.6,
+    "reward": 7
+  }
+}
+```
+
+`story instantiate template.json instance.json` prints the expanded `document`, `storyBindings`, `eventActions`, and instance provenance. For this command, the instance file has the same `id`, `parameters`, and optional `revision` as the world row. The template comes from the first file argument. Node code can use `instantiateStoryTemplate(template, instance)` for the same result. Use `sim preflight` to verify the assembled world and inspect resolved parameter values and defaults under `templates`. During or after a run, read the same provenance through `world/story-templates` with an optional `id` argument.
+
+### Run three dispatch variants
+
+The [supply-dispatch template](../examples/story-documents/supply-dispatch.template.json) runs three independent instances in the [same world](../examples/story-documents/supply-dispatch.world.json). Mai delivers two cases to the mill and earns three coins. Nilo's first handoff falls short of the quay's four-case requirement. A later shipment proves the delivery and pays seven coins. The ridge courier runs out of time and receives no reward.
+
+```sh
+node cli/ink-studio.js sim preflight examples/story-documents/supply-dispatch.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/supply-dispatch.world.json --actions examples/story-documents/supply-dispatch.actions.json --ticks 14 --record dispatches.run.json
+node cli/ink-studio.js probe dispatches.run.json --field world/story-templates --args '{"id":"quay-run"}'
+node cli/ink-studio.js probe dispatches.run.json --field world/story-lifecycle
+node cli/ink-studio.js sim replay dispatches.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

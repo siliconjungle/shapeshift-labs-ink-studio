@@ -24,21 +24,41 @@ function preflightStoryDocument(document, {story} = {}) {
 }
 
 function embedStoryDocuments(world, file, dependency) {
-  if (!Array.isArray(world.storyDocuments)) return world;
+  if (!Array.isArray(world.storyDocuments) && !Array.isArray(world.storyTemplates)) return world;
   const directory = path.dirname(path.resolve(file));
-  const documents = world.storyDocuments.map(item => {
+  const documents = Array.isArray(world.storyDocuments) ? world.storyDocuments.map(item => {
     if (!item || !Object.hasOwn(item, 'file')) return item;
     if (Object.keys(item).length !== 1 || typeof item.file !== 'string' || !item.file || path.isAbsolute(item.file))
       throw new TypeError('Story document file reference needs a relative file path');
     const source = path.resolve(directory, item.file);
     dependency?.(source);
     return readStoryDocument(source);
-  });
-  return { ...world, storyDocuments: documents };
+  }) : undefined;
+  const cache = new Map();
+  const templates = Array.isArray(world.storyTemplates) ? world.storyTemplates.map(item => {
+    if (!item || !Object.hasOwn(item, 'file')) return item;
+    const {file, ...spec} = item;
+    if (Object.hasOwn(spec, 'template') || typeof file !== 'string' || !file.trim() ||
+        path.isAbsolute(file) || path.win32.isAbsolute(file))
+      throw new TypeError('Story template file reference needs a relative file path');
+    const source = path.resolve(directory, file);
+    if (!cache.has(source)) {
+      dependency?.(source);
+      cache.set(source, readDefinition(source));
+    }
+    return {...spec, template:cache.get(source)};
+  }) : undefined;
+  return { ...world, ...(documents && {storyDocuments:documents}), ...(templates && {storyTemplates:templates}) };
 }
 
-function storyCommand([mode, file, id, ...rest], options) {
-  const usage = 'Usage: ink-studio story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict]';
+function storyCommand([mode, file, id, ...rest], options, library) {
+  const usage = 'Usage: ink-studio story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
+  if (mode === 'instantiate') {
+    if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
+    const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));
+    console.log(JSON.stringify(materialized, null, 2));
+    return;
+  }
   if (rest.length || Object.keys(options).some(key => key !== 'strict') ||
     (options.strict !== undefined && (options.strict !== true || mode === 'describe'))) throw new TypeError(usage);
   if ((!mode || mode === 'help') && file === undefined) return console.log(usage);

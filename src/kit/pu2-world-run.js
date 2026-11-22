@@ -332,16 +332,20 @@
     const population = W.populationRuntime.bind({systems,transfers,chunks});
     const plan = {world,systems,ports,incoming,order,names,transfers,couplings,dependencies,schedule,rates,timedSolvers,chunks,aggregates,reservations,worksites,
       interactions,influence,population,causePolicy,contracts,phaseEdges,navigationSources};
-    if (world.storyDocuments !== undefined || world.storyBindings !== undefined) {
-      plan.storyRoles = W.storyRoles.compile(world.storyDocuments === undefined ? [] : world.storyDocuments, world.storyBindings);
+    const templates = world.storyTemplates === undefined ? undefined : W.storyTemplates.compile(world);
+    if (templates || world.storyDocuments !== undefined || world.storyBindings !== undefined) {
+      plan.storyRoles = W.storyRoles.compile(templates?.documents ?? (world.storyDocuments === undefined ? [] : world.storyDocuments),
+        templates?.bindings ?? world.storyBindings);
+      if (templates) plan.storyTemplates = templates.instances;
       const { documents } = plan.storyRoles;
       plan.storyTriggers = W.storyTriggers.compile(documents, world, systems);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
       plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
     }
-    if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(
-      plan.storyRoles ? plan.storyRoles.resolve(world.eventActions, 'world.eventActions') : world.eventActions, {
+    const eventActions = templates ? templates.eventActions : world.eventActions;
+    if (eventActions !== undefined) plan.eventActions = K.eventActions.compile(
+      plan.storyRoles ? plan.storyRoles.resolve(eventActions, 'world.eventActions') : eventActions, {
       dt: world.dt, validateAction: command => actionCheck(command, plan, 1, false),
       validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
         'Unknown event action source ' + system)
@@ -454,7 +458,8 @@
     let {world,plan} = prepare(source,options);
     if (world.scenario?.start?.length) ({world,plan} = prepare(W.apply(world,world.scenario.start).world,options));
     return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:true,
-      documents:world.storyDocuments?.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
+      documents:plan.storyRoles?.documents.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
+      ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.storyRoles && Object.keys(plan.storyRoles.roles).length > 0 && {roles:plan.storyRoles.roles})});
   }
   function modelInterface(source) {
@@ -477,7 +482,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyRoles,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyRoles,storyTemplates,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -540,6 +545,7 @@
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
+        ...(storyTemplates && {storyTemplates,storyDocuments:storyRoles.documents}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function phaseReader(name,snapshot,staged) {

@@ -1,0 +1,94 @@
+{
+  "format": "ink-studio/story-template",
+  "version": 1,
+  "id": "supply-dispatch",
+  "revision": 1,
+  "parameters": {
+    "label": { "type": "string", "default": "Dispatch supplies" },
+    "courier": { "type": "object" },
+    "destination": { "type": "object" },
+    "stock": { "type": "string" },
+    "cases": { "type": "integer", "min": 1, "default": 2 },
+    "timeBudget": { "type": "number", "min": 0.1, "default": 2.5 },
+    "treasury": { "type": "string", "default": "dispatch/treasury" },
+    "wallet": { "type": "string" },
+    "reward": { "type": "integer", "min": 1, "default": 3 }
+  },
+  "document": {
+    "title": { "$param": "label" },
+    "stories": {
+      "delivery": {
+        "kind": "questlet",
+        "title": { "$param": "label" },
+        "entry": "dispatch",
+        "roles": { "courier": { "kind": "supply-courier", "required": true } },
+        "triggers": {
+          "request": { "event": {
+            "kind": "supply-requested", "system": "world",
+            "where": { "path": "/document", "value": { "$instance": true } }
+          } }
+        },
+        "lifecycle": { "progression": true, "deadlines": { "work": { "for": { "$param": "timeBudget" } } } },
+        "stages": {
+          "dispatch": {
+            "title": "Bring supplies to the receiving station",
+            "roles": ["courier"],
+            "objectives": {
+              "arrive": {
+                "title": "Courier reaches the station", "type": "reach",
+                "params": {
+                  "system": { "$role": "courier", "path": "/system" },
+                  "agent": { "$role": "courier", "path": "/agent" },
+                  "generation": { "$role": "courier", "path": "/generation" },
+                  "min": { "$param": "destination", "path": "/min" },
+                  "max": { "$param": "destination", "path": "/max" }
+                }
+              },
+              "deliver": {
+                "title": "Required cases reach the receiving ledger", "type": "deliver",
+                "params": {
+                  "system": "world", "from": { "$param": "stock" },
+                  "to": { "$param": "destination", "path": "/account" }, "amount": { "$param": "cases" }
+                }
+              }
+            },
+            "next": { "accept": { "outcome": "delivered" } }
+          }
+        },
+        "outcomes": { "delivered": { "title": "Delivery verified" } }
+      }
+    }
+  },
+  "bindings": { "delivery": { "courier": { "$param": "courier" } } },
+  "eventActions": {
+    "dispatch": {
+      "on": { "kind": "story-started", "system": "world", "where": { "all": [
+        { "path": "/document", "value": { "$instance": true } },
+        { "path": "/story", "value": "delivery" }
+      ] } },
+      "actions": [{
+        "action": { "$role": "courier", "story": { "$instance": "delivery" }, "path": "/seek" },
+        "args": {
+          "agent": { "$role": "courier", "story": { "$instance": "delivery" }, "path": "/agent" },
+          "generation": { "$role": "courier", "story": { "$instance": "delivery" }, "path": "/generation" },
+          "to": { "$param": "destination", "path": "/point" }
+        }
+      }]
+    },
+    "reward": {
+      "on": { "kind": "story-transition", "system": "world", "where": { "all": [
+        { "path": "/document", "value": { "$instance": true } },
+        { "path": "/story", "value": "delivery" },
+        { "path": "/to", "value": "completed" },
+        { "path": "/outcome", "value": "delivered" }
+      ] } },
+      "actions": [{
+        "action": "world/transfer",
+        "args": {
+          "from": { "$param": "treasury" }, "to": { "$param": "wallet" },
+          "amount": { "$param": "reward" }, "mode": "exact"
+        }
+      }]
+    }
+  }
+}

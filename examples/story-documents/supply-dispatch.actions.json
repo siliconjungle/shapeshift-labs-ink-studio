@@ -1,0 +1,26 @@
+[
+  { "tick": 1, "action": "world/event", "args": { "kind": "supply-requested", "document": "mill-run" } },
+  { "tick": 2, "action": "world/event", "args": { "kind": "supply-requested", "document": "quay-run" } },
+  { "tick": 3, "action": "world/event", "args": { "kind": "supply-requested", "document": "ridge-run" } },
+  { "tick": 8, "action": "world/transfer", "args": {
+    "from": "dispatch/mill-stock", "to": "dispatch/mill-depot", "amount": 2, "mode": "exact"
+  } },
+  { "tick": 8, "action": "world/transfer", "args": {
+    "from": "dispatch/quay-stock", "to": "dispatch/quay-depot", "amount": 1, "mode": "exact"
+  } },
+  { "tick": 9, "action": "world/story-choose", "args": {
+    "document": "quay-run", "story": "delivery", "stage": "dispatch", "visit": 1,
+    "branch": "accept", "reason": "attempted-early"
+  } },
+  { "tick": 10, "action": "world/story-choose", "args": {
+    "document": "mill-run", "story": "delivery", "stage": "dispatch", "visit": 1,
+    "branch": "accept", "reason": "verified-load"
+  } },
+  { "tick": 11, "action": "world/transfer", "args": {
+    "from": "dispatch/quay-stock", "to": "dispatch/quay-depot", "amount": 4, "mode": "exact"
+  } },
+  { "tick": 12, "action": "world/story-choose", "args": {
+    "document": "quay-run", "story": "delivery", "stage": "dispatch", "visit": 1,
+    "branch": "accept", "reason": "verified-load"
+  } }
+]

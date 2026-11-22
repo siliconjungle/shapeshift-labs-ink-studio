@@ -1212,6 +1212,7 @@ const CMD = {
         '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
         '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
+        '  story instantiate <template.json> <instance.json>   expand typed story parameters and inspect the result',
         '  sim preflight <world.json> [--strict]   check world bindings and story routes before stepping',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
@@ -2357,7 +2358,7 @@ const CMD = {
     return require('./patch-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
   },
   story() {
-    return require('./story-document.js').storyCommand(pos,opt);
+    return require('./story-document.js').storyCommand(pos,opt,lib);
   },
   graph() {
     return require('./graph-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});

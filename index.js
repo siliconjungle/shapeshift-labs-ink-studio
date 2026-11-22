@@ -170,6 +170,9 @@ module.exports = {
   validateStoryDocument: require('./cli/story-document.js').validateStoryDocument,
   preflightStoryDocument: require('./cli/story-document.js').preflightStoryDocument,
   readStoryDocument: require('./cli/story-document.js').readStoryDocument,
+  instantiateStoryTemplate(template, instance) {
+    return module.exports.load().KIT.world.storyTemplates.instantiate(template, instance);
+  },
   findGraphGroupUsers: require('./cli/graph-groups.js').findGraphGroupUsers,
   diffGraphs: require('./cli/graph-diff.js').diffGraphs,
   listGraphNodes: require('./cli/graph-catalog.js').listGraphNodes,

@@ -259,9 +259,14 @@
       transfers:{type:'record',read:()=>ok({tick:view.transfers?.[0]?.tick??tick,receipts:view.transfers??[]})},
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
-      ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,world.storyDocuments))} }),
+      ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,view.storyDocuments ?? world.storyDocuments))} }),
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
-      ...(world.storyDocuments !== undefined && { 'story-roles':{type:'record',qualified:true,read:({args}) => {
+      ...(world.storyTemplates !== undefined && { 'story-templates':{type:'record',qualified:true,read:({args:{id}}) => {
+        const records = view.storyTemplates ?? {};
+        return id === undefined ? ok(records) : own(records,id) ? ok(records[id]) :
+          missing('unknown story template instance','missing');
+      }} }),
+      ...((world.storyDocuments !== undefined || world.storyTemplates !== undefined) && { 'story-roles':{type:'record',qualified:true,read:({args}) => {
         const {story, role} = args, records = view.storyRoles ?? {};
         if (story === undefined && role === undefined) return ok(records);
         if (!own(records,story)) return missing('unknown story with roles','missing');

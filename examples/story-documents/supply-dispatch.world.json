@@ -1,0 +1,73 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "three-dispatches",
+  "dt": 0.1,
+  "storyTemplates": [
+    {
+      "file": "supply-dispatch.template.json", "id": "mill-run", "revision": 1,
+      "parameters": {
+        "label": "Resupply the mill", "stock": "dispatch/mill-stock", "wallet": "dispatch/mai",
+        "courier": { "kind": "supply-courier", "value": {
+          "system": "crew", "agent": "mai", "generation": 1, "seek": "crew/seek"
+        } },
+        "destination": { "point": [-0.4, 0, -1], "min": [-0.6, -0.1, -1.15], "max": [-0.2, 0.1, -0.85],
+          "account": "dispatch/mill-depot" }
+      }
+    },
+    {
+      "file": "supply-dispatch.template.json", "id": "quay-run", "revision": 1,
+      "parameters": {
+        "label": "Resupply the quay before the tide turns", "stock": "dispatch/quay-stock", "wallet": "dispatch/nilo",
+        "cases": 4, "timeBudget": 1.6, "reward": 7,
+        "courier": { "kind": "supply-courier", "value": {
+          "system": "crew", "agent": "nilo", "generation": 2, "seek": "crew/seek"
+        } },
+        "destination": { "point": [0.6, 0, 1], "min": [0.4, -0.1, 0.85], "max": [0.8, 0.1, 1.15],
+          "account": "dispatch/quay-depot" }
+      }
+    },
+    {
+      "file": "supply-dispatch.template.json", "id": "ridge-run", "revision": 1,
+      "parameters": {
+        "label": "Get supplies to the ridge before the road closes", "stock": "dispatch/ridge-stock", "wallet": "dispatch/suri",
+        "cases": 3, "timeBudget": 0.4, "reward": 11,
+        "courier": { "kind": "supply-courier", "value": {
+          "system": "crew", "agent": "suri", "generation": 3, "seek": "crew/seek"
+        } },
+        "destination": { "point": [2, 0, 0], "min": [1.8, -0.1, -0.15], "max": [2.2, 0.1, 0.15],
+          "account": "dispatch/ridge-depot" }
+      }
+    }
+  ],
+  "systems": {
+    "crew": {
+      "kind": "agents",
+      "config": {
+        "bounds": { "min": [-5, -0.5, -3], "max": [5, 1, 3] },
+        "ground": 0, "cell": 0.2,
+        "species": { "courier": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+        "agents": {
+          "mai": { "species": "courier", "position": [-1.5, 0, -1], "metadata": { "seek": "crew/seek" } },
+          "nilo": { "species": "courier", "position": [1.5, 0, 1], "metadata": { "seek": "crew/seek" } },
+          "suri": { "species": "courier", "position": [-3, 0, 0], "metadata": { "seek": "crew/seek" } }
+        }
+      }
+    },
+    "dispatch": {
+      "kind": "store",
+      "config": { "accounts": {
+        "mill-stock": { "type": "integer", "resource": "supply", "units": "case", "initial": 2 },
+        "mill-depot": { "type": "integer", "resource": "supply", "units": "case", "initial": 0 },
+        "quay-stock": { "type": "integer", "resource": "supply", "units": "case", "initial": 5 },
+        "quay-depot": { "type": "integer", "resource": "supply", "units": "case", "initial": 0 },
+        "ridge-stock": { "type": "integer", "resource": "supply", "units": "case", "initial": 3 },
+        "ridge-depot": { "type": "integer", "resource": "supply", "units": "case", "initial": 0 },
+        "treasury": { "type": "integer", "resource": "coin", "units": "coin", "initial": 30 },
+        "mai": { "type": "integer", "resource": "coin", "units": "coin", "initial": 0 },
+        "nilo": { "type": "integer", "resource": "coin", "units": "coin", "initial": 0 },
+        "suri": { "type": "integer", "resource": "coin", "units": "coin", "initial": 0 }
+      } }
+    }
+  }
+}
