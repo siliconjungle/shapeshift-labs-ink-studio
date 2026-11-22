@@ -290,8 +290,13 @@
       inputs:{source:'record',assets:sessionAssets},outputs:{value:'record'},
       run({source,assets}) {return {value:A.musicSession.create(assets).inspect(source)};}
     },
+    'music.traceEditSession': {
+      description:'Trace chosen score notes, picture and world spots, takes, and automation into session samples.',
+      inputs:{source:'record',assets:sessionAssets,options},outputs:{value:'record'},
+      run({source,assets,options},{host}) {return {value:A.musicSession.create(assets,host).trace(source,options.preview)};}
+    },
     'music.editSession': {
-      description:'Keep a lane range, capture and comp phrase controls, or edit named notes, recordings and automation.',
+      description:'Keep take ranges or releases, and revise named score, recording, picture, world or automation addresses together.',
       inputs:{source:'record',assets:sessionAssets,edits:scoreRequests},outputs:{value:'record'},
       run({source,assets,edits}) {return {value:A.musicSession.create(assets).edit(source,edits)};}
     },

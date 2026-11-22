@@ -9,8 +9,8 @@ module.exports=function command([mode,file,config],opt,kit) {
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  check(file && ['inspect','edit','render','preview','compare','audition-phrase','arrange-performance','performance-ballot','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, edit, render, preview, compare, audition-phrase, arrange-performance, performance-ballot, record-ballot, experiment, keep-experiment, stream, play or handoff');
+  check(file && ['inspect','trace','edit','render','preview','compare','audition-phrase','arrange-performance','performance-ballot','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, trace, edit, render, preview, compare, audition-phrase, arrange-performance, performance-ballot, record-ballot, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -97,6 +97,11 @@ module.exports=function command([mode,file,config],opt,kit) {
         if (typeof row.out==='string') json(row.out,report);
         return report;
       }
+      case 'trace': {
+        const report=editor.trace(session,row.preview);
+        if (typeof row.out==='string') json(row.out,report);
+        return report;
+      }
       case 'edit': {
         const updated=editor.edit(session,row.changes);
         const result=row.out===undefined ? {edited:true} : save(row.out,updated);
@@ -150,7 +155,7 @@ module.exports=function command([mode,file,config],opt,kit) {
       }
     })();
   }
-  check(mode==='inspect' || typeof opt.out==='string','Use --out for session edits and audio');
+  check(['inspect','trace'].includes(mode) || typeof opt.out==='string','Use --out for session edits and audio');
   const settings=config && read(config);
   if (mode==='keep-experiment') {
     check(fields(settings,['report','candidate','reason']) && typeof settings.report==='string','Choose an experiment report and candidate');
@@ -172,7 +177,7 @@ module.exports=function command([mode,file,config],opt,kit) {
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(mode==='preview' && {preview:settings}),
+  const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(['preview','trace'].includes(mode) && {preview:settings}),
     ...(mode==='audition-phrase' && {settings}),
     ...(['arrange-performance','performance-ballot'].includes(mode) && {brief:settings}),
     ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});

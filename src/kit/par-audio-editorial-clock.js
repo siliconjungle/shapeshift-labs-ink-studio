@@ -74,7 +74,10 @@
       return {kind,...detail,sample,frame:position.frame,timecode:position.timecode,
         beat:musical.sample(position.timecode).beat};
     }
-    return {frames,end,spot};
+    const shotSpans=()=>Array.from(shots,([id,shot])=>({id,...shot,
+      fromSample:take.at(startFrame+shot.start).firstSample-first,
+      toSample:take.at(startFrame+shot.start+shot.frames).firstSample-first}));
+    return {frames,end,spot,shotSpans};
   }
   S.editorialClock=editorialClock;
 })(KIT);

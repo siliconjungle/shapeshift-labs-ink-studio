@@ -83,14 +83,13 @@
     return {at,range,choice};
   }
   function compile(session,assets,host) {
-    check(fields(session,['format','version','id','sampleRate','production','takes','audio','comp','pins','mixer','automation']) &&
+    check(fields(session,['format','version','id','sampleRate','production','takes','audio','comp','pins','mixer','automation','editorial']) &&
       session.format===format && session.version===1 && id(session.id) && record(session.production) &&
       integer(session.sampleRate,8000,96000),'Expected a version 1 music edit session');
     const {production,sampleRate:rate}=session, revisions=table(session.takes ?? {},15,'score takes');
     const baseline=A.compile(production,instruments(assets,production),host);
     const map=baseline.arrangement.score.tempoMap ?? {}, time=S.mixerTime(rate,map);
-    const frames=time.frame(time.position({bar:baseline.arrangement.report.bars}));
-    check(integer(frames,1,rate*180),'Music edit sessions can span up to three minutes');
+    const scoreFrames=time.frame(time.position({bar:baseline.arrangement.report.bars}));
     const producers=new Map([[reference,{source:production,score:baseline}]]);
     for (const [name,revision] of revisions) {
       check(name!==reference && record(revision) && revision.unpin===undefined,'Score takes need a revision and respect production pins');
@@ -100,8 +99,18 @@
         'Score takes share the same tracks');
       producers.set(name,{source,score});
     }
+    const editorial=session.editorial;
+    let editorialClock;
+    if (editorial!==undefined) {
+      check(fields(editorial,['picture','world','clockMap']),'Invalid shared session editorial clock');
+      editorialClock=S.editorialClock({...editorial,map,sampleRate:rate});
+    }
+    const frames=Math.max(scoreFrames,editorialClock?.end ?? 0);
+    check(integer(frames,1,rate*1800),'Music edit sessions can span up to thirty minutes');
+    const editorialDoc=row=>({format:'ink-studio/audio-editorial',version:1,id:session.id,sampleRate:rate,
+      ...editorial,map,sourceEdits:row.sourceEdits ?? {},clips:row.clips});
     const audioRows=table(session.audio ?? {},12,'audio lanes');
-    const scoreNames=Object.keys(baseline.tracks), audio=new Map();
+    const scoreNames=Object.keys(baseline.tracks), audio=new Map(), placed=new Map();
     check(!scoreNames.includes(room),'The score-room lane is reserved');
     for (const [name,row] of audioRows) {
       check(!scoreNames.includes(name) && name!==room && fields(row,['take','takes']) && id(row.take),
@@ -109,12 +118,15 @@
       const takes=new Map(table(row.takes,16,'audio takes'));
       check(takes.has(row.take),'Choose an existing audio take on '+name);
       for (const [take,source] of takes) {
-        const valid=fields(source,['asset','at','fromSample','toSample']) && id(source.asset) ||
+        const shared=editorial!==undefined && fields(source,['clips','sourceEdits','track']) && Array.isArray(source.clips) &&
+          (source.track===undefined || id(source.track));
+        const valid=shared || fields(source,['asset','at','fromSample','toSample']) && id(source.asset) ||
           fields(source,['editorial','track','at']) && record(source.editorial) && (source.track===undefined || id(source.track)) ||
           fields(source,['motif','at']) && fields(source.motif,['source','score','plan','role']) &&
             id(source.motif.source) && id(source.motif.score) && record(source.motif.plan) &&
             ['raw','lead','accent','texture'].includes(source.motif.role);
         check(valid,'Invalid audio take '+name+'/'+take);
+        if (shared) placed.set(name+'/'+take,S.prepareSessionEditorial(editorialDoc(source),assets,source.track));
       }
       audio.set(name,{take:row.take,takes});
     }
@@ -145,7 +157,7 @@
     table(processors,64,'processors');
     automation(session,strips,processors,time);
     return {session,rate,map,frames,at,range,choice,choices,lanes,sourceLanes,audio,producers,pins,
-      mixer:{...desk,id:session.id,sampleRate:rate,map,strips,processors}};
+      mixer:{...desk,id:session.id,sampleRate:rate,map,strips,processors},placed,editorialDoc,editorialClock};
   }
   function replace(choices,selection) {
     const updates=[];
@@ -224,6 +236,26 @@
     return choices.map(({from,to,...rest})=>({...rest,from:samples(from),to:samples(to)}));
   }
 
+  function keepRelease(plan,row) {
+    check(fields(row,['op','lane','take','clip','voice','note','to','fadeSamples']) &&
+      [row.lane,row.take,row.clip,row.voice,row.note].every(id),'Choose a score take and a written note for the release');
+    const pick=take=>{
+      const score=plan.producers.get(take)?.score, track=get(score?.tracks ?? {},row.lane);
+      const events=track && score.events[row.lane].filter(note=>
+        note.clip===row.clip && note.voice===row.voice && note.note===row.note);
+      check(events?.length===1 && !track.external,'Release needs an unambiguous native note in both takes');
+      return {score,track,note:events[0]};
+    };
+    const release=({note})=>Math.ceil((note.time+note.gate)*plan.rate);
+    const alternate=pick(row.take), base=pick(reference);
+    const from=Math.max(release(alternate),release(base)), {score,track,note}=alternate;
+    const end=A.prepareVoice(track,note,score.end,plan.rate,score.cue?.perTrack[row.lane].tail).last;
+    const to=row.to===undefined ? Math.min(end,plan.frames) : plan.at(row.to);
+    check(to<=end,'Release selection extends past the alternate note');
+    const fadeSamples=row.fadeSamples ?? Math.max(0,Math.min(Math.round(plan.rate*.012),Math.floor((to-from-1)/2)));
+    return plan.choice({lane:row.lane,take:row.take,from:samples(from),to:samples(to),fadeSamples});
+  }
+
   function edits(session,assets,changes,host) {
     check(Array.isArray(changes) && changes.length<=128,'Supply a list of session edits');
     let plan=compile(session,assets,host);
@@ -236,6 +268,18 @@
         check(fields(row,['op','lane','take','from','to','fadeSamples']),'Invalid comp edit');
         const {op,...selection}=row;
         next.comp=saveChoices(replace(plan.choices,plan.choice(selection)));
+      } else if (row?.op==='keep-release') {
+        next.comp=saveChoices(replace(plan.choices,keepRelease(plan,row)));
+      } else if (row?.op==='picture') {
+        check(next.editorial && fields(row,['op','picture']) && record(row.picture),
+          'Replace the shared picture cut with an addressed shot list');
+        next.editorial.picture=clone(row.picture);
+      } else if (row?.op==='world-spot') {
+        const world=next.editorial?.world;
+        check(world && fields(row,['op','alias','event']) && typeof row.alias==='string' &&
+          Object.hasOwn(world.aliases ?? {},row.alias) && world.events.some(event=>event.id===row.event),
+          'Rebind an existing spot alias to an event in the committed ledger');
+        world.aliases[row.alias]=row.event;
       } else if (row?.op==='pin') {
         check(fields(row,['op','lane','mode']) && plan.lanes.includes(row.lane) && [null,'all','pitch'].includes(row.mode),
           'Invalid lane pin edit');
@@ -296,8 +340,11 @@
       } else if (row?.op==='editorial') {
         check(fields(row,['op','lane','take','edits']) && id(row.lane) && id(row.take),'Invalid editorial take edit');
         const source=get(next.audio ?? {},row.lane)?.takes;
-        check(source && get(source,row.take)?.editorial,'Unknown editorial take');
-        source[row.take].editorial=M.audioEditorial.revise(source[row.take].editorial,assets,row.edits).value;
+        const take=source && get(source,row.take);
+        check(take?.editorial || plan.placed.has(row.lane+'/'+row.take),'Unknown editorial take');
+        const revised=M.audioEditorial.revise(take.editorial ?? plan.editorialDoc(take),assets,row.edits).value;
+        if (take.editorial) take.editorial=revised;
+        else take.clips=revised.clips;
       } else check(false,'Unknown session edit');
       let updated=compile(next,assets,host);
       if (activation) {
@@ -314,6 +361,14 @@
         check(signature(key(before))===signature(key(after)), 'Edit changes pinned material on '+row.lane);
       }
       if (row.op==='editorial') check(plan.pins[row.lane]!=='all','Lane is pinned '+row.lane);
+      if (row.op==='picture' || row.op==='world-spot') for (const lane of plan.audio.keys()) {
+        if (plan.pins[lane]!=='all') continue;
+        for (const take of plan.audio.get(lane).takes.keys()) {
+          const key=lane+'/'+take, before=plan.placed.get(key), after=updated.placed.get(key);
+          if (before) check(signature(before.fingerprint(0,plan.frames))===signature(after.fingerprint(0,plan.frames)),
+            'Edit changes pinned editorial material on '+lane);
+        }
+      }
       plan=updated;
     }
     return P.data.freeze(next);

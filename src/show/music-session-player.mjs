@@ -19,7 +19,7 @@ function status(message) { $('status').textContent=message; }
 function act(callback) {
   return async(event)=>{
     event?.preventDefault();
-    try { await callback(); }
+    try { await callback(event); }
     catch (error) { status(error.message); }
   };
 }
@@ -40,7 +40,7 @@ function selections() {
       address[3]+' · beat '+Number(beat.toFixed(3)))));
   $('note').value=notes.length && [...$('note').options].some(row=>row.value===previous) ? previous : '';
   $('note').disabled=!notes.length;
-  $('copy-note').disabled=!$('note').value;
+  $('copy-note').disabled=$('keep-release').disabled=!$('note').value;
   $('keep-range').disabled=!take;
 }
 function bounds(loop=state.loop) {
@@ -77,6 +77,16 @@ function show(next) {
     row.lane+' · '+row.take+' ('+(row.from/state.sampleRate).toFixed(2)+'–'+(row.to/state.sampleRate).toFixed(2)+' s)').join('   /   ') :
     'No ranges kept';
   selections();
+  monitorTargets();
+}
+function monitorTargets() {
+  const mode=$('monitor-mode').value, target=$('monitor-target'), selected=target.value;
+  const names=mode==='mute' ? Object.keys(state.lanes) : mode ? state.taps : [];
+  if (names.join()!==[...target.options].map(row=>row.value).join()) {
+    target.replaceChildren(...names.map(name=>option(name)));
+    if (names.includes(selected)) target.value=selected;
+  }
+  target.disabled=!mode;
 }
 async function refresh(readNotes=false) {
   const next=await command('state');
@@ -129,10 +139,11 @@ function cursor() {
   if (anchor) {
     const {loop}=anchor, size=loop.to-loop.from;
     const queued=anchor.at===undefined ? 0 : Math.max(0,Math.min(anchor.count-1,Math.floor((now-anchor.at)*state.sampleRate)));
-    const offset=anchor.scoreSample-loop.from+queued;
-    $('cursor').textContent=( (loop.from+offset%size)/state.sampleRate).toFixed(3)+' s   ·   Pass '+
-      (anchor.pass+1+Math.floor(offset/size))+(clippedFrames ? '   ·   clipped' : '');
-    $('position').value=(offset%size)/size;
+    const offset=anchor.scoreSample-loop.from+queued, intro=offset<0;
+    const at=loop.from+offset%size;
+    const lap=intro ? 'Lead-in' : 'Pass '+(anchor.pass+1+Math.floor(offset/size));
+    $('cursor').textContent=(at/state.sampleRate).toFixed(3)+' s   ·   '+lap+(clippedFrames ? '   ·   clipped' : '');
+    $('position').value=intro ? 0 : (offset%size)/size;
   }
   requestAnimationFrame(cursor);
 }
@@ -153,23 +164,44 @@ $('play').addEventListener('click',act(async()=>{
   }
 }));
 $('loop').addEventListener('submit',act(async()=>{
-  show(await command('loop',{from:seconds($('loop-in').value),to:seconds($('loop-out').value)}));
+  const lead=$('lead-in').value;
+  show(await command('loop',{from:seconds($('loop-in').value),to:seconds($('loop-out').value),
+    ...(lead!=='' && {leadInSamples:Math.round(Number(lead)*state.sampleRate)})}));
   bounds();
   if (!playing && nextAt<= (context?.currentTime ?? 0)) heard=[];
   status('Loop updated');
 }));
 $('keep-lane').addEventListener('change',selections);
-$('note').addEventListener('change',()=>{$('copy-note').disabled=!$('note').value;});
+$('note').addEventListener('change',()=>{$('copy-note').disabled=$('keep-release').disabled=!$('note').value;});
+$('monitor-mode').addEventListener('change',monitorTargets);
+$('monitor').addEventListener('submit',act(async()=>{
+  const mode=$('monitor-mode').value, target=$('monitor-target').value;
+  show(await command('monitor',{selection:mode ? {mode,[mode==='mute' ? 'lane' : 'tap']:target} : null}));
+  status(mode ? mode+' · '+target : 'Master mix');
+}));
 $('keep').addEventListener('submit',act(async()=>{
   const lane=$('keep-lane').value, take=state.lanes[lane]?.take;
   show(await command('keep',{lane,take,from:seconds($('keep-in').value),to:seconds($('keep-out').value)}));
   status('Range kept from '+take);
 }));
-$('keep-note').addEventListener('submit',act(async()=>{
+$('keep-note').addEventListener('submit',act(async(event)=>{
   const lane=$('keep-lane').value, take=state.lanes[lane]?.take, note=JSON.parse($('note').value);
-  await command('edit',{changes:[{op:'keep-notes',lane,take,notes:[note]}]});
+  const release=event.submitter?.value==='release';
+  await command('edit',{changes:[release ? {op:'keep-release',lane,take,...note} : {op:'keep-notes',lane,take,notes:[note]}]});
   await refresh(true);
-  status('Kept '+note.note+' in the reference take');
+  status(release ? 'Kept the release from '+take : 'Kept '+note.note+' in the reference take');
+}));
+$('timeline-edits').addEventListener('submit',act(async()=>{
+  const changes=JSON.parse($('changes').value);
+  await command('edit',{changes});
+  await refresh(true);
+  status('Applied '+changes.length+' timeline edits');
+}));
+$('refresh-trace').addEventListener('click',act(async()=>{
+  const preview={from:{samples:state.loop.from},to:{samples:state.loop.to},
+    ...(state.monitor && {monitor:state.monitor})};
+  $('trace').textContent=JSON.stringify(await command('trace',{preview}),null,2);
+  $('trace-panel').open=true;
 }));
 $('save').addEventListener('click',act(async()=>{
   const saved=await command('save');
@@ -192,6 +224,11 @@ try {
   key=initial.key;
   $('title').textContent=initial.state.id;
   await refresh(true);
+  if (state.monitor) {
+    $('monitor-mode').value=state.monitor.mode;
+    monitorTargets();
+    $('monitor-target').value=state.monitor.lane ?? state.monitor.tap;
+  }
   bounds();
   $('play').disabled=false;
   requestAnimationFrame(cursor);

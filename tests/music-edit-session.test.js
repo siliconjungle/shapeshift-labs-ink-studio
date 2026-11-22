@@ -310,3 +310,77 @@ test('session and live audition solo and subtract taps without changing the edit
   assert.deepEqual(live.value.samples,Float32Array.from(live.taps.lead.samples));
   assert.throws(()=>T.setMonitor({mode:'solo',tap:'missing'}),/mixer tap/);
 });
+
+test('a shared cut, committed event, recording comp, note and ride trace to the same reprinted samples',()=>{
+  const E=M.musicSession.create({hard:pcm(2000,i=>i<600 ? .38 : .1),
+    soft:pcm(2000,i=>i<600 ? .3 : .017),bed:pcm(rate*2,()=>.12)});
+  const source=session();
+  source.takes.release={patches:{keys:{type:'subtractive',env:{release:.45}}}};
+  source.editorial={picture:{fps:24,shots:[{id:'walk',frames:24},{id:'wheel',frames:24}]},
+    world:{simulationRate:20,events:[{id:'6.0',tick:6,kind:'touch'},{id:'18.0',tick:18,kind:'open'}],aliases:{gate:'6.0'}}};
+  source.audio={
+    foley:{take:'sync',takes:{sync:{clips:[{id:'latch',spot:{event:'gate'},take:'hard',
+      takes:{hard:{asset:'hard',sync:{sample:0}},soft:{asset:'soft',sync:{sample:0}}}}]}}},
+    voice:{take:'spot',takes:{spot:{clips:[{id:'call',spot:{shot:'wheel',sourceFrame:6},take:'hard',
+      takes:{hard:{asset:'hard',sync:{sample:0}}}}]}}},
+    bed:{take:'base',takes:{base:{asset:'bed'}}}
+  };
+  source.mixer.peakPolicy='error';
+  source.mixer.processors={duck:{type:'compressor',thresholdDb:-42,ratio:8,attack:.001,release:.2}};
+  source.mixer.strips.bed={inserts:[{processor:'duck',sidechain:{strip:'foley',tap:'input'}}]};
+  source.mixer.taps.bed={strip:'bed'};
+  source.automation={ride:{target:{strip:'bed',parameter:'fader'},unit:'samples',curve:'hold',
+    points:[{id:'base',at:0,value:1},{id:'door',at:8700,value:.86}]}};
+  const edits=[
+    {op:'picture',picture:{fps:24,shots:[{id:'walk',frames:20},{id:'wheel',inFrame:2,frames:28}]}},
+    {op:'world-spot',alias:'gate',event:'18.0'},
+    {op:'editorial',lane:'foley',take:'sync',edits:[{op:'comp',clip:'latch',ranges:[
+      {take:'soft',fromOffset:600,toOffset:2000,fadeSamples:40}]}]},
+    {op:'note',lane:'lead',take:'reference',clip:'line',voice:'solo',note:'answer',set:{velocity:.68}},
+    {op:'automation',lane:'ride',point:'door',at:9400,value:.71},
+    {op:'keep-release',lane:'lead',take:'release',clip:'line',voice:'solo',note:'answer',fadeSamples:30}
+  ];
+  const before=E.trace(source);
+  assert.throws(()=>E.edit(source,[...edits,{op:'world-spot',alias:'gate',event:'lost'}]),/committed ledger/);
+  assert.deepEqual(E.trace(source),before);
+  const revised=E.edit(source,edits), print=E.render(revised), trace=print.report.timeline;
+  assert.deepEqual(trace.editorial.world.events,source.editorial.world.events);
+  const [latch]=trace.lanes.foley[0].clips, [call]=trace.lanes.voice[0].clips;
+  assert.equal(latch.spot.eventId,'18.0');
+  assert.equal(latch.sessionSyncSample,7200);
+  assert.equal(latch.comp[0].asset,'soft');
+  assert.equal(call.sessionSyncSample,8000);
+  assert.equal(trace.automation.ride.points[1].sample,9400);
+  const release=trace.lanes.lead.find(row=>row.take==='release');
+  assert.equal(release.from,release.notes[0].releaseSample);
+  assert.equal(release.to,release.notes[0].toSample);
+  assert.equal(release.mixedWith,'reference');
+  const preview={from:s(8500),to:s(14900),leadInSamples:1600};
+  const heard=E.render(revised,preview);
+  assert.deepEqual(heard.value.samples,print.value.samples.slice(6900*2,14900*2));
+  const mute={mode:'mute',lane:'foley'};
+  const muted=E.render(revised,{...preview,monitor:mute});
+  assert.notDeepEqual(muted.taps.bed.samples,heard.taps.bed.samples);
+  assert.deepEqual(muted.report.timeline.lanes.foley,[]);
+  const explicitlySilent=E.edit(revised,[{op:'audio-take',lane:'foley',take:'sync',source:{clips:[]}}]);
+  assert.deepEqual(muted.value.samples,E.render(explicitlySilent,preview).value.samples);
+  assert.deepEqual(E.render(revised,{...preview,passes:2}).report.segments,[{from:6900,to:14900},{from:8500,to:14900}]);
+
+  const T=E.open(revised,{...preview,monitor:mute});
+  assert.equal(T.state().scoreSample,6900);
+  const live=T.pull(8000,{taps:true});
+  assert.deepEqual(live.value.samples,Float32Array.from(muted.value.samples));
+  assert.deepEqual([live.end.scoreSample,live.end.pass],[8500,1]);
+  const old=T.state();
+  T.edit([{op:'automation',lane:'ride',point:'door',value:.54}]);
+  assert.equal(T.state().scoreSample,old.scoreSample);
+  assert.equal(T.trace(preview).automation.ride.points[1].value,.54);
+  const reset=T.setLoop({from:preview.from,to:preview.to,leadInSamples:preview.leadInSamples});
+  const altered=E.render(T.document(),{...preview,monitor:mute});
+  assert.equal(reset.scoreSample,6900);
+  assert.deepEqual(T.pull(8000).value.samples,Float32Array.from(altered.value.samples));
+  T.edit([{op:'picture',picture:{fps:24,shots:[...revised.editorial.picture.shots,{id:'tail',frames:12}]}}]);
+  assert.equal(T.state().frames,20000);
+  assert.deepEqual(T.trace().shots.at(-1),{id:'tail',start:48,frames:12,inFrame:0,fromSample:16000,toSample:20000});
+  assert.equal(E.render(T.document()).report.frames,20000);
+});

@@ -11,13 +11,15 @@ header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:20p
 h1{font-size:clamp(30px,6vw,48px);line-height:1;margin:0;overflow-wrap:anywhere}
 h2{font-size:17px;margin:0 0 12px}section{margin-top:14px;border:1px solid var(--line);padding:16px;border-radius:8px;background:#1a211f}
 .row{display:flex;flex-wrap:wrap;align-items:end;gap:10px 14px}.between{justify-content:space-between;align-items:center}
-label{display:grid;gap:6px;color:var(--muted);font-size:13px}input,select,button{font:inherit;border-radius:5px;min-height:39px;border:1px solid #576660;background:#131a18;color:var(--ink);padding:7px 9px}
+label{display:grid;gap:6px;color:var(--muted);font-size:13px}input,select,button,textarea{font:inherit;border-radius:5px;min-height:39px;border:1px solid #576660;background:#131a18;color:var(--ink);padding:7px 9px}
 input{width:7.4em}select{max-width:100%}button{cursor:pointer;padding-inline:14px}button:disabled{opacity:.55;cursor:default}
 button.primary{background:var(--accent);color:#17221a;border-color:var(--accent);font-weight:700}
 progress{display:block;width:100%;height:13px;accent-color:var(--accent);margin:14px 0}
 output{font:13px ui-monospace,monospace;color:var(--muted)}.lane{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:10px;border-top:1px solid var(--line);padding:7px 0}
 .lane select{width:100%}#status{display:block;min-height:1.5em;margin-top:12px;color:var(--accent);overflow-wrap:anywhere}
 #comp{margin:.5em 0 0;color:var(--muted);font-size:13px}#note{width:min(250px,100%)}
+textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-height:24em;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+#timeline-edits button{margin-top:10px}
 </style>
 <script type="module" src="/player.mjs"></script>
 </head>
@@ -30,10 +32,16 @@ output{font:13px ui-monospace,monospace;color:var(--muted)}.lane{display:grid;gr
 <form id="loop" class="row">
 <label>Loop in · sec<input id="loop-in" type="number" min="0" step="any" required></label>
 <label>Loop out · sec<input id="loop-out" type="number" min="0" step="any" required></label>
+<label>Lead-in · sec<input id="lead-in" type="number" min="0" step="any" placeholder="Optional"></label>
 <button>Set loop</button>
 </form>
 </section>
-<section><h2>Live takes</h2><div id="lanes"></div></section>
+<section><h2>Live takes</h2><div id="lanes"></div>
+<form id="monitor" class="row">
+<label>Monitor<select id="monitor-mode"><option value="">Master mix</option><option value="mute">Mute source</option><option value="solo">Solo tap</option><option value="subtract">Subtract tap</option></select></label>
+<label>Source or tap<select id="monitor-target"></select></label>
+<button>Set monitor</button>
+</form></section>
 <section>
 <h2>Keep in session</h2>
 <form id="keep" class="row">
@@ -45,8 +53,18 @@ output{font:13px ui-monospace,monospace;color:var(--muted)}.lane{display:grid;gr
 <p id="comp" aria-live="polite"></p>
 <form id="keep-note" class="row">
 <label>Written note<select id="note"></select></label>
-<button id="copy-note">Keep note</button>
+<button id="copy-note" value="note">Keep note</button>
+<button id="keep-release" value="release">Keep release</button>
 </form>
+</section>
+<section>
+<h2>Timeline edits</h2>
+<form id="timeline-edits">
+<label>Batch of session edits (JSON)<textarea id="changes" spellcheck="false" placeholder="[]"></textarea></label>
+<button>Apply edits</button>
+<button type="button" id="refresh-trace">Trace saved loop sources</button>
+</form>
+<details id="trace-panel"><summary>Notes, spots, takes and automation</summary><pre id="trace"></pre></details>
 </section>
 <section><button id="save">Save session</button><output id="status" role="status"></output></section>
 </main>

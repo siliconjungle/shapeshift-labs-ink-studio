@@ -25,6 +25,7 @@ mapping names to relative WAV paths. The session contains the following:
 | `pins` | A lane table mapping to `"all"` (protect the source lane) or, for score lanes, `"pitch"` (protect the written pitch sequence per voice within each selection) |
 | `mixer` | Native mixer desk with `output`, `strips`, and optional `processors`, `taps`, `tail`, and `peakPolicy` |
 | `automation` | Named fader, pan, send-level, or insert parameter lanes with named control points |
+| `editorial` | Shared picture cut and optional committed world event ledger or clock mapping |
 
 Each production track and added audio lane has its own strip. A separate
 `score-room` strip receives the production's room contribution. The desk
@@ -42,6 +43,37 @@ role, with its original score-window start as the default placement. The other
 takes default to sample zero. All placement and range addresses use the
 mixer's musical, second, or sample syntax. Bars are zero-indexed.
 
+## Work across score, picture, and recordings
+
+Use `editorial: {picture, world?, clockMap?}` with the clocks and shot format
+from [audio editorial](audio-editorial.md). The session uses its production
+tempo map and sample rate throughout. Its timeline ends at the later of the
+score and the picture cut. The timeline supports up to 30 minutes. Preview
+and print buffers still follow the renderer's PCM and processor budgets.
+
+On any audio lane, a take shaped as `{clips, track?, sourceEdits?}` uses
+that shared cut and event ledger directly. Each clip uses the native
+editorial format to select a recorded take, pin a transient, and comp
+ranges against that sync point. Shared clips render sparsely. A recut
+invalidates the blocks containing clips that moved and the dependent
+mixer history.
+
+Use `{op:"picture",picture}` to replace the ordered cut while retaining
+shot IDs, and `{op:"world-spot",alias,event}` to rebind a named Foley spot
+to another event from the committed ledger. Rebinding leaves the event
+records intact. The same `edit` batch can revise the source recording
+or spot through `{op:"editorial",lane,take,edits}`, change a score note,
+and move an automation point. If a cut trims out a spot, trace the issue
+and move the clip before printing.
+
+Use `editor.trace(session, preview?)`, `music.traceEditSession`, or
+`ink-studio music session trace cue.json [preview.json]`. The trace gives
+sample-exact shot ranges, committed event IDs, take and asset addresses,
+clip sync points and comps, performed note envelopes, and automation
+knots. Lane regions include both their session time and their offset in
+the excerpt. With a shared cut, the trace is also saved under `timeline`
+in the mix report.
+
 ## Loop, switch, keep
 
 Render this preview to play bars 7–10 twice, switching the lead to its
@@ -52,15 +84,16 @@ Render this preview to play bars 7–10 twice, switching the lead to its
   "from": {"bar": 6},
   "to": {"bar": 10},
   "passes": 2,
+  "leadInSamples": 24000,
   "switches": [
     {"pass": 1, "at": {"bar": 8}, "lane": "lead", "take": "breathy", "fadeSamples": 240}
   ]
 }
 ```
 
-The preview prerolls from cue start and outputs only the requested loop
-passes. The desk processes one continuous timeline and keeps its state across
-switches and wraps. Score-addressed automation follows each pass. Insert
+The preview warms the mix from cue start and plays `leadInSamples` of actual
+timeline audio before the first pass. Subsequent passes start at the requested
+loop in. The desk preserves its state across switches and wraps. Score-addressed automation follows each pass. Insert
 parameters that specify a one-time trigger or source buffer position
 continue to refer to the unrolled mixer timeline. Switches persist into
 subsequent passes and use a one-sided entrance fade if specified.
@@ -81,6 +114,12 @@ own take. The take's notes, patch, and native revision remain editable.
 An `all` pin guards the source material before the desk so the mixer can
 still balance it. A `pitch` pin permits changes to gate, timing, dynamics,
 and articulation while preserving pitches. Production pins still apply.
+Use `{op:"keep-release",lane,take,clip,voice,note,fadeSamples?}` to keep
+only a native note's alternate release. The range starts after key-up in
+both takes and ends at the alternate voice's tail. An optional `to` can
+shorten it. The default fade is capped at 12 ms. This is a lane comp, so it also affects audio on that lane
+during the chosen range. For a recorded clip use an editorial comp range
+relative to its sync point.
 
 ```sh
 ink-studio music session inspect cue.json --out addresses.json
@@ -131,7 +170,10 @@ Use `context` to include audio around the requested loop. The loop includes
 the padded range and the report includes the original focus in sample
 positions. Add a named mixer tap to solo it or subtract it from the mix at
 the same playback gain. Tap subtraction leaves routing and processor state
-in place.
+in place. Use `{mode:"mute",lane:"foley"}` in `monitor` to remove
+the source before its inserts, sends, production room and mixer sidechain
+inputs. This runs the actual mixer from the muted source state. Production
+ducking authored against score events still follows those events.
 
 ```jsonl
 {"op":"preview","out":"air-solo","preview":{"from":{"bar":8},"to":{"bar":10},"context":{"beforeSamples":24000,"afterSamples":12000},"monitor":{"mode":"solo","tap":"air"}}}
@@ -148,7 +190,7 @@ The two recipes must reference the same named audio assets.
 
 The JavaScript entry point is
 `KIT.procedural.mediaGraph.musicSession.create(assets)`. It returns
-`inspect(session)`, `edit(session, edits)`,
+`inspect(session)`, `trace(session, preview?)`, `edit(session, edits)`,
 `render(session, preview?)`, and `compare(before, after, preview)`. Use `music.inspectEditSession`,
 `music.editSession`, and `music.renderEditSession` in a graph.
 
@@ -159,18 +201,25 @@ ink-studio music session play cue.json live.json --out kept.json
 ```
 
 Open the loopback URL printed by the command. The settings file is optional.
-It accepts `{from?,to?,at?,preroll?,gain?,fadeSamples?}`. The loop defaults to
-the whole cue, with preroll from cue start if it starts later. `gain` is
+It accepts `{from?,to?,at?,preroll?,gain?,fadeSamples?,leadInSamples?,monitor?}`. The loop defaults to
+the whole cue, with preroll from cue start if it starts later. Enter a lead-in
+to hear that part of the timeline once before the loop. `gain` is
 linear monitoring gain and defaults to unity. The default switch fade is
 12 ms. Keep a range at the selected lane's take or copy a written note to the
-reference. The player prepares edits in the background and installs them at
-the next unrendered sample once ready. Save writes the specified recipe with relative asset paths. Without
+reference. Use **Keep release** for the selected note or **Timeline edits**
+to apply an addressed JSON batch across score, picture, recording, Foley, and
+mix. **Trace saved loop sources** reads back the print addresses. Use **Mute
+source** to audition the desk with that input removed. The player prepares
+edits in the background and installs them at the next unrendered sample once
+ready. Save writes the specified recipe with relative asset paths. Without
 `--out`, Save downloads a recipe with paths to the original local WAVs.
 
 Switches apply at the next unrendered sample. The browser buffers roughly
 a tenth of a second and displays the playing loop position. The playhead stays
 in the loop during the switch. A loop edit only moves it if the new range
-excludes its current position. Switching a lane back to **Saved edit** plays
+excludes its current position, or if you explicitly request a lead-in. A
+new lead-in rebuilds the preceding mix state and starts playback at its
+first sample. Switching a lane back to **Saved edit** plays
 its reference and any kept ranges.
 
 The live renderer runs one continuous mixer, including per-patch tape echo,
@@ -179,14 +228,18 @@ with the loop, and tempo delay runs on the continuous render clock. The live
 player uses a fixed monitor gain and indicates clipping. Native takes are
 read in blocks as the playhead advances. Use the offline
 preview or print for active block-only and latency-compensated inserts or
-mastering peak policies. Reopen the player after changing the clock, routing,
-or mixer automation.
+mastering peak policies. Live automation edits take effect at the next
+unrendered sample with existing processor history. Muting live lets that
+history ring out. To hear the mix exactly as if the edit or mute had been
+present from cue start, reset the loop with a lead-in or render a preview.
+Reopen the player after changing tempo, routing, or the set of mixer lanes.
 
 `editor.open(session, settings?)` is the device-independent transport.
 `pull(frameCount, {taps:true})` supplies interleaved stereo PCM and named taps.
 Each chunk includes the starting and ending score and transport frame
 addresses. Call `state()`, `switchTake({lane,take,fadeSamples?})`,
-`setLoop({from,to})`, `setMonitor({mode,tap} | null)`,
+`setLoop({from,to,leadInSamples?})`,
+`setMonitor({mode,tap} | {mode:"mute",lane} | null)`,
 `keep({lane,take?,from?,to?,fadeSamples?})`, and
 `edit(changes)` between pulls. A switch with `take:null` restores the saved
 edit. `keep` defaults to the auditioned take and current loop. Read
@@ -305,6 +358,21 @@ under each lane's `performances`. Listen through
 Run `node examples/music-production/phrase-performance.cjs output` for
 the Split Reed played three ways and a comp that carries the held note
 through a bass pickup. [Gesture mapping research](https://nime.org/proc/nime2002_hunt/) · [Ableton comping](https://www.ableton.com/en/manual/comping/)
+
+## Reproduce the long-form audition
+
+```sh
+node examples/music-production/long-form-session.cjs output
+ink-studio music session play output/revised-session.json output/live.json
+```
+
+Open `output/index.html` for matched before, revised, and source-muted
+listening. The package includes the portable session, native world recording,
+edit batch, print trace, and benchmark. The benchmark times 24 warm late-note
+edits and their four-bar previews with a two-second lead-in, then verifies
+each output sample of the last preview against a fresh uninterrupted print.
+The report gives the machine, p95, and the maximum absolute error for the mix
+and both taps.
 
 ## Accompaniment that follows a kept take
 

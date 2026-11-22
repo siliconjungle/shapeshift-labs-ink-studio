@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spillway · Ink Studio listening demo</title>
+<style>
+  :root{color-scheme:dark;background:#111916;color:#ededdd;font:16px/1.5 system-ui,sans-serif;
+    --line:#44544c;--mint:#a7e2b3;--soft:#bcc8ba;--amber:#f2be82}
+  *{box-sizing:border-box}body{max-width:840px;margin:0 auto;padding:36px 20px 52px}
+  header{border-bottom:1px solid var(--line);padding-bottom:18px}h1{font-size:clamp(42px,10vw,84px);line-height:1;margin:8px 0}
+  h2{font-size:1.15rem;margin:0 0 10px}p{max-width:64ch}header p{color:var(--soft);margin:0}
+  main{display:grid;gap:22px;margin-top:22px}.panel{border:1px solid var(--line);padding:18px}
+  .buttons{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  button{border:1px solid var(--line);padding:7px 12px;background:#1e2d25;font:inherit;color:inherit;cursor:pointer}
+  button[aria-pressed=true]{background:var(--mint);color:#14201a;border-color:var(--mint)}
+  audio{width:100%;display:block}a{color:var(--mint)}small{color:var(--soft)}
+  #timeline{height:135px;background:#16241d;margin-top:18px;position:relative;font:12px/1.3 ui-monospace,monospace}
+  .span{height:28px;position:absolute;padding:6px;overflow:hidden;white-space:nowrap;border-right:1px solid #849388;background:#293d32}
+  .mark{position:absolute;border-left:1px solid var(--amber);padding-left:4px;height:23px;color:var(--amber);white-space:nowrap}
+  #cursor{position:absolute;background:#e9f5e9;top:0;bottom:0;width:2px;pointer-events:none}
+  .labels{display:flex;justify-content:space-between;font:12px ui-monospace,monospace;color:var(--soft);padding-top:5px}
+  ul{padding-left:22px}ul.links{display:flex;gap:8px 22px;flex-wrap:wrap;margin:0}output{display:block;color:var(--mint);margin-top:10px}
+</style>
+</head>
+<body>
+<header><p>Ink Studio · Session audition</p><h1>Spillway</h1><p>Two seconds of lead-in and four bars from the end of a 5:04 cue.</p></header>
+<main>
+<section class="panel" aria-label="Compare mixes">
+<div class="buttons">
+<button data-mode="before" aria-pressed="false">Original cut</button>
+<button data-mode="after" aria-pressed="true">Revised cut</button>
+<button data-mode="muted" aria-pressed="false">Foley muted at source</button>
+</div>
+<audio id="audio" controls preload="metadata" src="after.wav"></audio>
+<div id="timeline" aria-label="Picture cut and sync markers"><div id="cursor"></div></div>
+<div class="labels"><span>4:50 · Lead-in</span><span>4:52 · Loop in</span><span>5:00 · Loop out</span></div>
+<output id="edit-description"></output>
+</section>
+<section class="panel"><h2>What to listen for</h2>
+<ul>
+<li>The revised shot starts earlier and the voice take changes. The latch moves to a later committed world event and keeps the softer tail.</li>
+<li>Muting Foley also cuts its send and opens the water bed through the compressor key. Switch while listening to hear the water fill that gap.</li>
+<li>The last reed note retains its original attack. The longer release comes from an alternate take.</li>
+</ul>
+<p><a href="two-passes.wav">Hear two loops with a take switch mid-pass</a></p>
+<h2>Session files</h2>
+<ul class="links">
+<li><a href="revised-session.json">Editable session</a></li>
+<li><a href="changes.json">Edit batch</a></li>
+<li><a href="timeline.json">Print trace</a></li>
+<li><a href="benchmark.json">Benchmark and parity</a></li>
+</ul>
+<p><small>The voice is a synthetic scratch recording. The other sources are composed or generated in the example.</small></p>
+</section>
+</main>
+<script type="application/json" id="data">__DEMO_DATA__</script>
+<script>
+const details=JSON.parse(document.querySelector('#data').textContent);
+const audio=document.querySelector('#audio'), cursor=document.querySelector('#cursor'), timeline=cursor.parentNode;
+const buttons=[...document.querySelectorAll('[data-mode]')], description=document.querySelector('#edit-description');
+let mode='after', switchId=0;
+function draw() {
+  const {shots,marks}=details[mode];
+  for (const node of timeline.querySelectorAll('.span,.mark')) node.remove();
+  for (const [name,from,to] of shots) {
+    const tile=document.createElement('div');
+    tile.className='span';
+    tile.style.left=(from*10)+'%';
+    tile.style.width=((to-from)*10)+'%';
+    tile.textContent=name;
+    timeline.insertBefore(tile,cursor);
+  }
+  for (const [name,at,row] of marks) {
+    const mark=document.createElement('div');
+    mark.className='mark';
+    mark.style.left=(at*10)+'%';
+    mark.style.top=(34+row*28)+'px';
+    mark.textContent=name;
+    timeline.insertBefore(mark,cursor);
+  }
+  description.textContent=details[mode].description;
+}
+buttons.forEach(button=>button.addEventListener('click',()=>{
+  if (mode===button.dataset.mode) return;
+  const switching=++switchId, wasPlaying=!audio.paused, at=audio.currentTime;
+  mode=button.dataset.mode;
+  buttons.forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+  audio.addEventListener('loadedmetadata',()=>{
+    if (switching!==switchId) return;
+    audio.currentTime=Math.min(at,audio.duration||0);
+    if (wasPlaying) audio.play().catch(()=>{});
+  },{once:true});
+  audio.src=mode+'.wav';
+  draw();
+}));
+audio.addEventListener('timeupdate',()=>{cursor.style.left=(audio.currentTime*10)+'%';});
+draw();
+</script>
+</body>
+</html>

@@ -145,12 +145,15 @@
     check(cost<=240e6,'Editorial render exceeds its resampling budget');
     const out=new Float64Array(2*frames), tracks=Object.fromEntries(stems ?
       [...plan.tracks].map(name=>[name,new Float64Array(out.length)]) : []);
+    mixClips(plan.clips.filter(row=>row.report.range),out,0,frames,tracks);
+    return {out,tracks};
+  }
+  function mixClips(clips,out,from,to,tracks={}) {
     const current=[0,0], alternate=[0,0], scratch=[0,0];
-    for (const {report,choice,ranges,gain} of plan.clips) {
-      if (!report.range) continue;
+    for (const {report,choice,ranges,gain} of clips) {
       const {spot,range,fades,track}=report, dest=Object.hasOwn(tracks,track) ? tracks[track] : null;
       let index=0;
-      for (let i=range.fromSample;i<range.toSample;i++) {
+      for (let i=Math.max(from,range.fromSample);i<Math.min(to,range.toSample);i++) {
         const t=i-spot.sample;
         choice.pcm(t,current,scratch);
         while (index<ranges.length && t>=ranges[index].to) index++;
@@ -163,13 +166,39 @@
         }
         const u=Math.min(1,fades.inSamples ? (t-choice.first)/fades.inSamples : 1,
           fades.outSamples ? (choice.last-1-t)/fades.outSamples : 1);
-        const level=gain*edge(u,fades.curve), at=i*2, left=current[0]*level,right=current[1]*level;
+        const level=gain*edge(u,fades.curve), at=(i-from)*2, left=current[0]*level,right=current[1]*level;
         out[at]+=left; out[at+1]+=right;
         if (dest) {dest[at]+=left;dest[at+1]+=right;}
       }
     }
-    return {out,tracks};
   }
+  function prepareSession(session,assets,track) {
+    const plan=compile(session,assets);
+    check(track===undefined || plan.tracks.has(track),'Unknown session editorial track '+track);
+    const selected=plan.clips.filter(row=>track===undefined || track===row.report.track);
+    const placed=selected.filter(row=>row.report.range && row.report.range.fromSample<row.report.range.toSample);
+    let cost=0;
+    const original=new Map(session.clips.map(row=>[row.id,row]));
+    const keys=new Map(placed.map(row=>{
+      const {report,choice,ranges}=row;
+      cost+=(report.range.toSample-report.range.fromSample)*choice.cost;
+      for (const pick of ranges) cost+=(pick.to-pick.from)*pick.alt.cost;
+      const source=session.sourceEdits ?? {};
+      const assets=[choice.asset,...ranges.map(pick=>pick.alt.asset)];
+      return [row,[original.get(report.id),report.spot.sample,report.range,assets.map(asset=>
+        Object.hasOwn(source,asset) ? source[asset] : null)]];
+    }));
+    check(cost<=240e6,'Session editorial exceeds its resampling budget');
+    const overlaps=(row,from,to)=>row.report.range.fromSample<to && row.report.range.toSample>from;
+    const unresolved=selected.filter(row=>row.report.spot.issue).map(row=>row.report.id);
+    return {clips:selected.map(row=>row.report),unresolved,
+      fingerprint(from,to){return placed.filter(row=>overlaps(row,from,to)).map(row=>keys.get(row));},
+      write(out,from,to) {
+        check(!unresolved.length,'Resolve session editorial spots: '+unresolved.join(', '));
+        mixClips(placed.filter(row=>overlaps(row,from,to)),out,from,to);
+      }};
+  }
+  S.prepareSessionEditorial=prepareSession;
   const audio=(samples,sampleRate)=>({samples,sampleRate,channels:2});
   function normalize(buffers) {
     let peak=0;

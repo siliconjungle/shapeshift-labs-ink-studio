@@ -1254,7 +1254,7 @@ const CMD = {
         '  music session arrange-performance <session.json> <brief.json> --out directory',
         '  music session performance-ballot <session.json> <brief.json> --out directory',
         '  music session record-ballot <review-key.json> <ballot.json> --out directory',
-        '  music session inspect|edit|render|preview recipe.json [settings.json] --out output   comp and audition score and audio takes',
+        '  music session inspect|trace|edit|render|preview recipe.json [settings.json] --out output   comp and audition score and audio takes',
         '  music session handoff recipe.json --out directory [--clap-host manifest.json]   export a DAW project, MIDI and stems',
         '  music session play recipe.json [settings.json] [--port N] [--out kept.json]   open the shared live audition desk',
         '  music session compare recipe.json comparison.json --out clips',

@@ -159,12 +159,16 @@
       return {keys,block,send,echo,roomSpec:room,roomCuts:score.cue?.roomCuts,trackCuts:local?.cuts};
     }
 
-    function audioSource(plan,row,prepared) {
+    function audioSource(plan,row,prepared,placed) {
       const {signature}=S.musicSessionModel;
-      const key=identify(signature([plan.rate,plan.frames,plan.map,row]));
-      return {keys:null,key,block(index) {
+      const keys=placed && Array.from({length:Math.ceil(plan.frames/blockFrames)},(_,index)=>{
         const from=index*blockFrames, to=Math.min(plan.frames,from+blockFrames);
-        const id=identify('audio/'+key+'/'+index);
+        return identify(signature(['editorial',plan.rate,from,to,placed.fingerprint(from,to)]));
+      });
+      const key=placed ? identify(signature(['editorial-take',keys])) : identify(signature([plan.rate,plan.frames,plan.map,row]));
+      return {keys,key,block(index) {
+        const from=index*blockFrames, to=Math.min(plan.frames,from+blockFrames);
+        const id=keys?.[index] ?? identify('audio/'+key+'/'+index);
         const prior=sources.get(id);
         if (prior) return prior;
         const dry=new Float32Array(2*(to-from));

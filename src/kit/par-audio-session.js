@@ -6,7 +6,11 @@
   const cacheBudget=160*1024*1024, pcmBudget=32e6;
   const audio=(sampleRate,samples)=>({sampleRate,channels:2,samples});
   const byteSize=pcm=>pcm?.samples.byteLength ?? 0;
-  function monitorSelection(spec,taps) {
+  function monitorSelection(spec,taps,lanes) {
+    if (spec?.mode==='mute') {
+      check(fields(spec,['mode','lane']) && lanes.includes(spec.lane),'Choose a session source lane to mute');
+      return {...spec};
+    }
     check(fields(spec,['mode','tap']) && ['solo','subtract'].includes(spec.mode) && id(spec.tap) &&
       Object.hasOwn(taps,spec.tap),'Choose a mixer tap to solo or subtract');
     return {...spec};
@@ -67,6 +71,8 @@
     }
     function prepareAudio(plan,lane,take) {
       const row=plan.audio.get(lane).takes.get(take);
+      const placed=plan.placed.get(lane+'/'+take);
+      if (placed) return {...placed,from:0,duration:plan.editorialClock.end};
       let pcm, fallback=0;
       if (row.motif) {
         const {source,score,plan:saved,role}=row.motif;
@@ -97,7 +103,8 @@
     }
     function audioTake(plan,lane,take,counts) {
       const row=plan.audio.get(lane).takes.get(take);
-      const key=signature(['audio',plan.rate,plan.frames,plan.map,row]);
+      const key=signature(['audio',plan.rate,plan.frames,plan.map,row,
+        plan.placed.has(lane+'/'+take) ? plan.session.editorial : null]);
       return reuse(key,()=>{
         const {from,duration,write}=prepareAudio(plan,lane,take);
         const out=new Float32Array(duration*2);
@@ -115,28 +122,31 @@
             source.tracks[lane].phrases?.length ? [[take,source.tracks[lane].phrases]] : []));
           return [lane,{kind:'score',take:reference,takes:Object.fromEntries([...plan.producers].map(([take,{score}])=>
             [take,addressed(score,lane)])),...(Object.keys(performances).length && {performances})}];
-        })),automation:session.automation ?? {}};
+        })),automation:session.automation ?? {},...(session.editorial && {editorial:session.editorial})};
     }
     function playback(plan,preview) {
       if (preview===undefined) return {warmup:0,segments:[{from:0,to:plan.frames,choices:plan.choices}],switches:[]};
-      check(fields(preview,['from','to','passes','switches','monitor','context']) && integer(preview.passes ?? 1,1,8),
+      check(fields(preview,['from','to','passes','switches','monitor','context','leadInSamples']) && integer(preview.passes ?? 1,1,8),
         'Preview needs a loop range and up to eight passes');
       const focus=plan.range(preview.from,preview.to), passes=preview.passes ?? 1;
       const context=preview.context ?? {}, {beforeSamples=0,afterSamples=0}=context;
       check(fields(context,['beforeSamples','afterSamples']) && integer(beforeSamples,0,plan.frames) &&
         integer(afterSamples,0,plan.frames),'Choose nonnegative preview context in samples');
-      const from=Math.max(0,focus.from-beforeSamples), to=Math.min(plan.frames,focus.to+afterSamples), length=to-from;
+      const {leadInSamples=0}=preview;
+      check(integer(leadInSamples,0,plan.frames),'Choose a nonnegative lead-in in samples');
+      const from=Math.max(0,focus.from-beforeSamples), to=Math.min(plan.frames,focus.to+afterSamples);
+      const first=Math.max(0,from-leadInSamples), length=to-from;
       const raw=preview.switches ?? [];
       check(Array.isArray(raw) && raw.length<=128,'Invalid preview switch list');
       const switches=Array.from(raw,row=>{
         check(fields(row,['pass','at','lane','take','fadeSamples']) && integer(row.pass,0,passes-1),
           'Switch needs a loop pass, playhead address, lane and take');
         const at=plan.at(row.at);
-        check(integer(at,from,to-1),'Switch playhead is outside the loop');
+        check(integer(at,row.pass===0 ? first : from,to-1),'Switch playhead is outside the loop or lead-in');
         const selection=plan.choice({lane:row.lane,take:row.take,from:row.at,to:samples(to),fadeSamples:row.fadeSamples ?? 0});
-        return {...selection,pass:row.pass,at:at-from+row.pass*length};
+        return {...selection,pass:row.pass,at:at-first+row.pass*length};
       }).sort((a,b)=>a.at-b.at);
-      const active=new Map(), segments=from ? [{from:0,to:from,choices:plan.choices}] : [];
+      const active=new Map(), segments=first ? [{from:0,to:first,choices:plan.choices}] : [];
       const unique=new Set();
       for (const row of switches) {
         const key=signature([row.at,row.lane]);
@@ -153,9 +163,83 @@
           choices=replace(choices,{...row,fadeFrom});
           active.set(row.lane,row);
         }
-        segments.push({from,to,choices});
+        segments.push({from:pass===0 ? first : from,to,choices});
       }
-      return {warmup:from,segments,switches,focus};
+      return {warmup:first,segments,switches,focus};
+    }
+    function tracePlan(plan,transport,muted) {
+      const {session,rate,map,frames}=plan, {segments,warmup}=transport;
+      const lanes=Object.fromEntries(plan.lanes.map(lane=>[lane,[]]));
+      const notes=new Map(), spots=new Map();
+      let lead=0;
+      const traceAudio=(lane,take,from,to)=>{
+        const row=plan.audio.get(lane).takes.get(take);
+        const address=lane+'/'+take, placed=plan.placed.get(address);
+        if (placed || row.editorial) {
+          if (!spots.has(address)) {
+            const report=placed?.clips ?? M.audioEditorial.inspect(row.editorial,assets).clips
+              .filter(clip=>row.track===undefined || row.track===clip.track);
+            const offset=row.at===undefined ? 0 : plan.at(row.at);
+            const factor=placed ? 1 : rate/row.editorial.sampleRate;
+            spots.set(address,report.map(clip=>{
+              const {range,spot}=clip;
+              const aligned=sample=>Math.ceil(sample*factor)+offset;
+              return {...clip,...(range && {sessionRange:{fromSample:aligned(range.fromSample),toSample:aligned(range.toSample)},
+                sessionSyncSample:aligned(spot.sample)})};
+            }));
+          }
+          return spots.get(address).filter(({sessionRange:span})=>!span || span.fromSample<to && span.toSample>from);
+        }
+        const {from:at,duration}=prepareAudio(plan,lane,take);
+        return at<to && at+duration>from ? [{source:row,sessionRange:{fromSample:at,toSample:at+duration}}] : [];
+      };
+      for (const {from:begin,to,choices} of segments) {
+        const from=Math.max(begin,begin+warmup-lead), at=lead+from-begin-warmup;
+        lead+=to-begin;
+        if (from>=to) continue;
+        for (const lane of plan.lanes) {
+          if (lane===muted) continue;
+          const audio=plan.audio.get(lane), fallback=audio?.take ?? reference;
+          const picks=choices.filter(row=>row.lane===lane && row.from<to && row.to>from);
+          const edges=[from,...picks.flatMap(row=>[Math.max(row.from,from),Math.min(row.to,to)]),to];
+          for (let i=0;i<edges.length-1;i++) {
+            const first=edges[i], last=edges[i+1], pick=i%2 ? picks[(i-1)/2] : undefined;
+            if (first>=last) continue;
+            const take=pick?.take ?? fallback, address=lane+'/'+take;
+            const contents=name=>{
+              if (audio) return traceAudio(lane,name,first,last);
+              const key=lane+'/'+name;
+              if (!notes.has(key)) {
+                const score=plan.producers.get(name).score, track=score.tracks[lane];
+                notes.set(key,addressed(score,lane).map((row,index)=>{
+                  const note=score.events[lane][index], end=track.external ? Math.ceil((note.time+note.gate)*rate) :
+                    A.prepareVoice(track,note,score.end,rate,score.cue?.perTrack[lane].tail).last;
+                  return {...row,fromSample:Math.ceil((note.start ?? note.time)*rate-1e-7),
+                    releaseSample:Math.ceil((note.time+note.gate)*rate),toSample:end};
+                }));
+              }
+              return notes.get(key).filter(row=>row.fromSample<last && row.toSample>first);
+            };
+            const mixedWith=pick?.fadeSamples ? pick.fadeFrom ?? fallback : undefined;
+            lanes[lane].push({from:first,to:last,outputFrom:at+first-from,take,address,
+              ...(mixedWith && {fadeSamples:pick.fadeSamples,mixedWith,alternate:contents(mixedWith)}),
+              ...(audio ? {clips:contents(take)} : {notes:contents(take)})});
+          }
+        }
+      }
+      const units={beats:'beat',seconds:'seconds',samples:'samples'};
+      const automation=Object.fromEntries(Object.entries(session.automation ?? {}).map(([name,row])=>
+        [name,{...row,points:row.points.map(point=>({...point,sample:plan.at({[units[row.unit]]:point.at})}))}]));
+      return {id:session.id,sampleRate:rate,frames,tempoMap:map,
+        ...(session.editorial && {editorial:session.editorial,pictureSamples:plan.editorialClock.end,
+          shots:plan.editorialClock.shotSpans()}),
+        ...(muted!==undefined && {muted}),automation,lanes};
+    }
+    function trace(session,preview) {
+      const plan=compile(session,assets,host), transport=playback(plan,preview);
+      const muted=preview?.monitor?.mode==='mute' ?
+        monitorSelection(preview.monitor,{},plan.lanes).lane : undefined;
+      return tracePlan(plan,transport,muted);
     }
     function mixerInput(plan,segments,counts) {
       const frames=segments.reduce((n,row)=>n+row.to-row.from,0);
@@ -181,6 +265,7 @@
       let cursor=0;
       for (const {from,to,choices} of segments) {
         for (const lane of plan.lanes) {
+          if (lane===plan.muted) continue;
           const initial=plan.audio.get(lane)?.take ?? reference;
           const ranges=choices.filter(row=>row.lane===lane && row.from<to && row.to>from);
           const edges=[from,...ranges.flatMap(row=>[Math.max(from,row.from),Math.min(to,row.to)]),to];
@@ -228,10 +313,14 @@
     }
     function renderPlan(plan,preview) {
       const transport=playback(plan,preview);
-      const result=incremental(plan,transport,preview) ?? continuous(plan,transport,preview);
-      if (preview?.context) result.report.focus=transport.focus;
+      const muted=preview?.monitor?.mode==='mute' ? monitorSelection(preview.monitor,{},plan.lanes).lane : undefined;
+      const active=muted===undefined ? plan : {...plan,muted};
+      const result=incremental(active,transport,preview) ?? continuous(active,transport,preview);
+      if (preview?.context || preview?.leadInSamples!==undefined) result.report.focus=transport.focus;
+      if (plan.session.editorial) result.report.timeline=tracePlan(plan,transport,muted);
+      if (muted!==undefined) return {...result,report:{...result.report,monitor:preview.monitor}};
       if (preview?.monitor) {
-        const monitor=monitorSelection(preview.monitor,result.taps);
+        const monitor=monitorSelection(preview.monitor,result.taps,plan.lanes);
         const source=result.taps[monitor.tap];
         const value=monitor.mode==='solo' ? source : difference(result.value,source);
         return {...result,value,report:{...result.report,monitor}};
@@ -338,9 +427,9 @@
     const prepareLive=session=>prepareTransport(session,'deferred');
     const materialize=prepared=>prepared.incremental ? prepareTransport(prepared.session,'blocks') : prepared;
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
-      {assets,edit,prepareLive,materialize});
+      {assets,host,edit,trace,prepareLive,materialize});
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
-    return Object.freeze({inspect,edit,render,compare,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,experiment:experiments.run,keepExperiment:experiments.keep,
+    return Object.freeze({inspect,trace,edit,render,compare,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,experiment:experiments.run,keepExperiment:experiments.keep,
       open,prepareTransport,prepareLive,openPreparedTransport});
   }
   M.musicSession=Object.freeze({create});

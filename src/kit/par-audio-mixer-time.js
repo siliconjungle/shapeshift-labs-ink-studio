@@ -82,7 +82,7 @@
         max=Math.max(max,knot.value);
         prior=at;
       }
-      return {min,max,points:knots,curve:raw.curve ?? 'linear',reader() {
+      return {min,max,automated:true,points:knots,curve:raw.curve ?? 'linear',reader() {
         let index=0;
         return sample=>{
           while (index+1<knots.length && knots[index+1].sample<=sample) index++;

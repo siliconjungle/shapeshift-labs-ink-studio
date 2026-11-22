@@ -5,7 +5,8 @@
   const {addressing,signature,samples}=S.musicSessionModel;
   const {blockFrames}=S.sessionBlocks;
   const bounded=value=>Math.max(-1,Math.min(1,value));
-  const clockKey=plan=>signature([plan.rate,plan.map,plan.frames,plan.lanes,plan.mixer]);
+  const clockKey=plan=>signature([plan.rate,plan.map,plan.lanes,plan.session.mixer,
+    Object.entries(plan.session.automation ?? {}).map(([name,row])=>[name,row.target])]);
 
   function timeline(prepared) {
     const {rate,map,frames,pins,media}=prepared;
@@ -17,7 +18,7 @@
   }
 
   S.openSessionTransport=function openSessionTransport(initial,options={},editor) {
-    check(fields(options,['from','to','at','preroll','gain','fadeSamples']) &&
+    check(fields(options,['from','to','at','preroll','gain','fadeSamples','leadInSamples','monitor']) &&
       typeof (options.preroll ?? true)==='boolean' && finite(options.gain ?? 1,0,2),
     'Invalid live session settings');
     let plan=initial, time=timeline(plan);
@@ -25,13 +26,28 @@
     const defaultFade=options.fadeSamples ?? Math.round(.012*rate);
     check(integer(defaultFade,0,rate/2),'A take fade needs up to half a second');
     let loop=time.range(options.from ?? samples(0),options.to ?? samples(plan.frames));
-    let position=options.at===undefined ? loop.from : time.at(options.at);
-    check(integer(position,loop.from,loop.to-1),'Starting playhead is outside the loop');
-    const clock=S.sessionMixerTime(rate,plan.map), desk=S.prepareSessionMixer(plan.mixer,editor.assets,clock);
+    function leadIn(loop,count=0) {
+      check(integer(count,0,plan.frames),'Choose a nonnegative lead-in in samples');
+      return Math.max(0,loop.from-count);
+    }
+    const first=leadIn(loop,options.leadInSamples);
+    let position=options.at===undefined ? first : time.at(options.at);
+    check(integer(position,first,loop.to-1),'Starting playhead is outside the loop and lead-in');
     const feeds=Object.fromEntries(plan.sourceLanes.map(name=>[name,[0,0]]));
-    const effects=S.sessionEffects(rate,feeds);
-    let runFrame=0, frame=0, pass=0, clippedFrames=0;
-    let lanes, cache, monitor=null, revision=0;
+    let clock, desk, effects, warmup, lanes, cache, revision=0;
+    let runFrame=0, frame=0, pass=0, clippedFrames=0, monitor=null;
+    function reset(next,at,preroll,selection=monitor) {
+      clock=S.sessionMixerTime(rate,next.map);
+      desk=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host);
+      monitor=selection===null ? null : S.sessionMonitor(selection,desk.taps,next.lanes);
+      effects=S.sessionEffects(rate,feeds);
+      lanes=undefined;
+      runFrame=0;
+      prepare(next);
+      if (preroll) for (let sample=0;sample<at;sample++) step(sample);
+      warmup=runFrame;
+      clock.begin(runFrame,at,loop);
+    }
 
     function prepare(next) {
       const nextLanes=effects.prepare(()=>Object.fromEntries(next.lanes.map(name=>{
@@ -108,6 +124,7 @@
         lane.previous=at;
         while (lane.choices[lane.index]?.to<=at) lane.index++;
         const row=lane.choices[lane.index], weights=readWeights(lane,frame);
+        if (monitor?.mode==='mute' && monitor.lane===name) continue;
         const base=weights[0];
         if (base) {
           if (!row || at<row.from) read(lane,dest,lane.fallback,base,at);
@@ -123,13 +140,10 @@
       desk.process(runFrame++,feeds);
     }
 
-    prepare(plan);
-    if (options.preroll!==false) for (let at=0;at<position;at++) step(at);
-    clock.begin(runFrame,position,loop);
-    const warmup=runFrame;
+    reset(plan,position,options.preroll!==false,options.monitor ?? null);
 
     const state=()=>({id:plan.session.id,sampleRate:rate,frames:plan.frames,revision,frame,scoreSample:position,pass,
-      loop:{...loop},warmupSamples:warmup,clippedFrames,monitor,cache:{...cache},comp:plan.choices.map(row=>({...row})),
+      loop:{...loop},warmupSamples:warmup,clippedFrames,monitor,taps:Object.keys(desk.taps),cache:{...cache},comp:plan.choices.map(row=>({...row})),
       lanes:Object.fromEntries(plan.lanes.map(name=>[name,{take:lanes[name].selected,takes:lanes[name].names.slice()}]))});
     function pull(frames,options={}) {
       check(integer(frames,1,16384) && fields(options,['taps']) &&
@@ -138,9 +152,9 @@
       const out=new Float32Array(frames*2);
       const taps=options.taps ? Object.fromEntries(Object.keys(desk.taps).map(key=>[key,new Float32Array(frames*2)])) : {};
       const outputs=Object.entries(taps).map(([name,pcm])=>({pcm,source:desk.taps[name]}));
+      const source=monitor?.tap ? desk.taps[monitor.tap] : desk.output;
       for (let i=0;i<frames;i++) {
         step(position);
-        const source=monitor ? desk.taps[monitor.tap] : desk.output;
         const subtract=monitor?.mode==='subtract';
         const l=(subtract ? desk.output[0]-source[0] : source[0])*gain;
         const r=(subtract ? desk.output[1]-source[1] : source[1])*gain;
@@ -172,8 +186,19 @@
       return {frame,scoreSample:position,pass,lane:command.lane,take};
     }
     function setLoop(range) {
-      check(fields(range,['from','to']),'Choose new loop bounds');
-      const next=time.range(range.from,range.to);
+      check(fields(range,['from','to','leadInSamples']),'Choose new loop bounds');
+      const next=time.range(range.from,range.to), first=leadIn(next,range.leadInSamples);
+      if (range.leadInSamples!==undefined) {
+        const auditions=Object.entries(lanes).filter(([,lane])=>lane.selected!==null);
+        for (const [lane,control] of auditions)
+          time.choice({lane,take:control.selected,from:samples(next.from),to:samples(next.to)});
+        loop=next;
+        position=first;
+        pass=0;
+        reset(plan,position,true);
+        for (const [lane,control] of auditions) switchTake({lane,take:control.selected,fadeSamples:0});
+        return state();
+      }
       for (const [lane,control] of Object.entries(lanes)) if (control.selected!==null)
         time.choice({lane,take:control.selected,from:samples(next.from),to:samples(next.to)});
       if (next.from===loop.from && next.to===loop.to) return state();
@@ -186,10 +211,23 @@
     function applyPrepared(prepared) {
       const next=editor.materialize(prepared);
       const nextTime=timeline(next);
-      check(clockKey(next)===key,'Reopen the live transport after changing its tracks, clock or mixer');
+      check(clockKey(next)===key,'Reopen the live transport after changing its tracks, clock or mixer routing');
+      let revised;
+      if (signature(next.mixer)!==signature(plan.mixer)) {
+        revised=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host);
+        revised.restore(desk.snapshot());
+      }
+      const resized={from:Math.min(loop.from,next.frames-1),
+        to:loop.to===plan.frames ? next.frames : Math.min(loop.to,next.frames)};
       for (const [lane,control] of Object.entries(lanes)) if (control.selected!==null)
-        nextTime.choice({lane,take:control.selected,from:samples(loop.from),to:samples(loop.to)});
+        nextTime.choice({lane,take:control.selected,from:samples(resized.from),to:samples(resized.to)});
       prepare(next);
+      if (resized.from!==loop.from || resized.to!==loop.to) {
+        loop=resized;
+        if (position>=loop.to) position=loop.from;
+        clock.begin(runFrame,position,loop);
+      }
+      if (revised) desk=revised;
       plan=next;
       time=nextTime;
       revision++;
@@ -205,10 +243,11 @@
         to:command.to ?? samples(loop.to),fadeSamples:command.fadeSamples ?? 0};
     }
     function setMonitor(selection) {
-      monitor=selection===null ? null : S.sessionMonitor(selection,desk.taps);
+      monitor=selection===null ? null : S.sessionMonitor(selection,desk.taps,plan.lanes);
       return state();
     }
     return Object.freeze({pull,state,switchTake,setLoop,setMonitor,edit,keep:command=>edit([keepEdit(command)]),
-      keepEdit,applyPrepared,inspect:()=>plan.report,document:()=>P.data.freeze(plan.session)});
+      keepEdit,applyPrepared,inspect:()=>plan.report,
+      trace:preview=>editor.trace(plan.session,preview),document:()=>P.data.freeze(plan.session)});
   };
 })(KIT.procedural);

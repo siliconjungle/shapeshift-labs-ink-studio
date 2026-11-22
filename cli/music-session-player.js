@@ -23,6 +23,7 @@ module.exports=function play(transport,{port,prepare,recipe,save}) {
     switch (op) {
       case 'state': return transport.state();
       case 'inspect': return transport.inspect();
+      case 'trace': return transport.trace(args.preview);
       case 'switch': return transport.switchTake(args);
       case 'loop': return transport.setLoop(args);
       case 'monitor': return transport.setMonitor(args.selection ?? null);

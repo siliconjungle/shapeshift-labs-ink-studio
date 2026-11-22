@@ -24,6 +24,11 @@
     function prepareSource(plan,lane,take) {
       const audio=plan.audio.get(lane);
       if (audio) {
+        const placed=plan.placed.get(lane+'/'+take);
+        if (placed) {
+          check(!placed.unresolved.length,'Resolve session editorial spots: '+placed.unresolved.join(', '));
+          return store.audioSource(plan,audio.takes.get(take),placed.write,placed);
+        }
         let sound;
         return store.audioSource(plan,audio.takes.get(take),(out,from,to)=>{
           sound ??= prepareAudio(plan,lane,take);
@@ -75,7 +80,7 @@
             [mixer.output]:{...output,latency:processor.latency,inserts:[...output.inserts,operation]}}}}};
     }
     function render(plan,transport,preview,withSources=false,raw=false) {
-      const {rate,map,lanes,sourceLanes,mixer}=plan, {warmup,switches}=transport;
+      const {rate,map,lanes,sourceLanes,mixer}=plan, audible=lanes.filter(lane=>lane!==plan.muted), {warmup,switches}=transport;
       const audition=preview!==undefined, straight=audition && (preview.passes ?? 1)===1 && !switches.length;
       const printGain=straight && !raw && mixer.peakPolicy!=='error';
       const length=transport.segments.reduce((sum,{from,to})=>sum+to-from,0);
@@ -130,7 +135,7 @@
           const size=Math.min(span.to-from,(index+1)*blockFrames-cursor,(scoreBlock+1)*blockFrames-from);
           const to=from+size;
           const inputs=[];
-          if (!span.tail) for (const lane of lanes) {
+          if (!span.tail) for (const lane of audible) {
             const initial=plan.audio.get(lane)?.take ?? reference, ranges=choices[lane];
             const rows=ranges.filter(row=>row.from<to && row.to>from);
             let edge=from;
