@@ -17,8 +17,9 @@ const bakeKit = new Set([
   'kq-surface-presets.js', 'kr-tex.js', 'kt-nodes.js', 'kv-form.js', 'kz-weather.js', 'kza-ascii.js',
   'p00-procedural.js', 'p01-cutaway.js', 'p01-procedural-surfaces.js', 'p01-splat-sample-state.js',
   'p02-procedural-mesh.js', 'p04-profile-triangulation.js', 'p17-profile-distance.js', 'p1b-sample-coverage.js',
-  'p39-noise-fields.js', 'p40-field-composition.js', 'p43-render-grid.js', 'p44-splat-footprints.js',
-  'p59-sculptural-fields.js', 'p68-drawing.js', 'p69-material-masks.js', 'p73-blue-noise.js', 'p95-weather-tracks.js'
+  'p39-noise-fields.js', 'p40-field-composition.js', 'p43-render-grid.js', 'p44-splat-footprints.js', 'p46-native-patches.js',
+  'p59-sculptural-fields.js', 'p68-drawing.js', 'p69-material-masks.js', 'p73-blue-noise.js',
+  'p76-faceted-surfaces.js', 'p80-voxel-surface.js', 'p81-turntable-shape.js', 'p95-weather-tracks.js'
 ]);
 const files = () =>
   [

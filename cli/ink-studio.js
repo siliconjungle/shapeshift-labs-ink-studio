@@ -1119,6 +1119,9 @@ const CMD = {
         '    --input-space space --output-space space --input-range min,max --output-range min,max',
         '    --input-out-of-range preserve|clamp|error --output-out-of-range preserve|clamp|error --domain-policy clamp|error|extrapolate',
         '',
+        '  shape capture <recipe.js|shape.json> [--out dir] [--yaw degrees,...] [--pitch degrees] export editable silhouettes',
+        '  shape fit <capture-dir> [--out shape.json] [--growth voxels] fit a shared voxel proxy',
+        '',
         '  scenes                      list every diorama',
         '  show-bridge [--port 8181] [--osc-in 9002]   open live audio, timecode, stage and projection control',
         '    --dmx-host IP --dmx-protocol artnet|sacn --universe N   configure a physical lighting destination',
@@ -2990,6 +2993,9 @@ const CMD = {
   },
   depth() {
     require('./depth.js')(pos[0], opt, lib(), path.join(OUT, 'depth-import'));
+  },
+  shape() {
+    require('./turntable-shape.js').command(pos, opt, lib());
   },
   mesh() {
     const w = build(pos[0]),

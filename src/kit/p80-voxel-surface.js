@@ -34,8 +34,7 @@
         emit(x, y, dx, dy);
       }
   }
-  function compile(grid, input, { mode = 'cubes', closed = false, gap = 0, maxFaces = 180000, samples = 0 } = {}) {
-    budget(maxFaces, faceLimit, 'face');
+  function validateGrid(grid) {
     if (
       !grid ||
       !vec(grid.origin) ||
@@ -45,7 +44,13 @@
       !latticeIndex(grid.min) ||
       !latticeIndex(grid.dims) ||
       !grid.dims.every((n, k) => integer(n, 1, 2000000) && Number.isSafeInteger(grid.min[k] + n)) ||
-      grid.dims.reduce((a, b) => a * b, 1) > 2000000 ||
+      grid.dims.reduce((a, b) => a * b, 1) > 2000000
+    ) fail('invalid block grid');
+  }
+  function compile(grid, input, { mode = 'cubes', closed = false, gap = 0, maxFaces = 180000, samples = 0 } = {}) {
+    budget(maxFaces, faceLimit, 'face');
+    validateGrid(grid);
+    if (
       !Array.isArray(input) ||
       input.length > 100000 ||
       !['cubes', 'columns', 'slabs', 'relief'].includes(mode) ||
@@ -268,6 +273,21 @@
           if (!Number.isFinite(d)) fail('distance sample must be finite');
           occupied[offset(p)] = d <= iso ? 1 : 0;
         }
+    return fromMask(occupied, { min, dims, size, origin, orientation },
+      { mode, axis, side, thickness, closed, gap, maxBlocks, maxFaces, samples });
+  }
+  function fromMask(occupied, grid, {
+    mode = 'cubes', axis = 1, side = 1, thickness = 0.12, closed = false, gap = 0,
+    maxBlocks = 30000, maxFaces = 180000, samples = 0
+  } = {}) {
+    validateGrid(grid);
+    budget(maxBlocks, 100000, 'block');
+    const { min, dims, size } = grid, count = dims[0] * dims[1] * dims[2];
+    if (!(occupied instanceof Uint8Array) || occupied.length !== count || occupied.some(n => n > 1) ||
+        !['cubes', 'columns', 'slabs', 'relief'].includes(mode) || !integer(axis, 0, 2) ||
+        ![-1, 1].includes(side) || !Number.isFinite(thickness) || thickness < 0.001 || thickness > 1e4)
+      fail('invalid voxel mask or block options');
+    const offset = p => p[0] + dims[0] * (p[1] + dims[1] * p[2]);
     const blocks = [],
       append = (index, span) => {
         if (blocks.length >= maxBlocks) fail('block budget exceeded');
@@ -340,7 +360,7 @@
         }
     }
     return compile(
-      { min, dims, size: size.slice(), origin: origin.slice(), orientation: orientation.slice() },
+      { min: min.slice(), dims: dims.slice(), size: size.slice(), origin: grid.origin.slice(), orientation: grid.orientation.slice() },
       blocks,
       { mode, closed, gap, maxFaces, samples }
     );
@@ -443,6 +463,7 @@
   }
   K.voxelSurface = Object.freeze({
     fromSdf,
+    fromMask,
     draw,
     toMesh: (input, options = {}) => {
       const p = validate(input);

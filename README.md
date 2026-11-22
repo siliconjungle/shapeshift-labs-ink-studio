@@ -837,6 +837,8 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | `variants <scene> --seeds 3,7,12` | Render a ranked seed contact sheet for a scene with variant metrics. |
 | `sheet <scene> --from 0 --to 3 --n 12` | Make a labeled sheet of animation frames. |
 | `turn <scene> --n 8` | Make a sheet from multiple viewing angles. |
+| `shape capture <recipe.js\|shape.json>` | Export editable orthographic silhouette masks for an object-local proxy. |
+| `shape fit <capture-dir>` | Fit one reusable voxel proxy from the edited views. |
 | `clip <scene> --from 0 --to 3 --fps 12` | Save an animated PNG. Use `--text ascii\|symbols\|braille\|blocks` for animated text rendering. |
 | `ghost <scene> --t 1 --spacing 0.12 --n 2` | Overlay neighboring animation poses. |
 | `mesh <file.obj\|.gltf\|.glb>` | Import, inspect and render a mesh from multiple angles. |
@@ -932,6 +934,13 @@ Use [`paint cause`](docs/caused-marks.md) to bake drips, scuffs, and lichen from
 The [art-pixel rendering guide](docs/art-passes.md) describes the selectable
 render passes, selective ink, camera snapping, stable dithering, art-pixel
 effects, local fragment ordering and directional export.
+
+## Fit geometry from turntable edits
+
+Use [turntable shape fitting](docs/turntable-shape.md) to open a gap or thicken
+a rigid part across several silhouette views and bake the resulting
+proxy back into the scene. The [lantern comparison](examples/turntable-shape.html)
+lets you edit three masks, refit the handle, orbit the result and download the proxy.
 
 ## View-dependent surface materials
 

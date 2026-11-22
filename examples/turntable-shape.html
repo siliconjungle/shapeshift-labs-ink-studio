@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lantern handle fit · Ink Studio</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #e9e6db; background: #0b1217; font: 15px/1.5 system-ui, sans-serif; }
+  main { width: min(100% - 40px, 980px); margin: 0 auto; padding: 32px 0 44px; }
+  h1 { font: 600 clamp(30px, 5vw, 46px)/1.05 Georgia, serif; margin: 0 0 12px; }
+  h2 { font-size: 18px; margin: 0; }
+  p { margin: 0; color: #acbdbd; }
+  .comparison, .edits { display: grid; gap: 12px; }
+  .comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
+  .edits { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  figure { margin: 0; overflow: hidden; border: 1px solid #334b50; border-radius: 10px; background: #102028; }
+  figcaption { padding: 8px 12px; font-size: 14px; font-weight: 600; border-bottom: 1px solid #334b50; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; touch-action: none; }
+  .comparison canvas { cursor: grab; background: #101a21; }
+  .comparison canvas:active { cursor: grabbing; }
+  .edits canvas { cursor: crosshair; background: #101a21; aspect-ratio: 3 / 2; }
+  .edits figcaption { display: flex; justify-content: space-between; gap: 6px; }
+  button { color: inherit; background: #172932; border: 1px solid #466169; border-radius: 6px;
+    font: inherit; font-size: 13px; padding: 7px 11px; cursor: pointer; }
+  button[aria-pressed="true"] { background: #25413f; border-color: #90ead3; }
+  button.primary { color: #0e201f; background: #90ead3; border-color: #90ead3; font-weight: 700; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #f4d795; outline-offset: 3px; }
+  button:disabled { opacity: .56; cursor: default; }
+  .view-tools, .edit-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .view-tools label { display: flex; align-items: center; gap: 9px; flex: 1 1 235px; }
+  input[type="range"] { width: 100%; accent-color: #90ead3; }
+  #angle-label { color: #c8ded9; font-variant-numeric: tabular-nums; min-width: 134px; text-align: right; }
+  section { border-top: 1px solid #334b50; margin-top: 24px; padding-top: 16px; }
+  .markers { display: flex; gap: 14px; margin-top: 7px; font-size: 13px; color: #c0cdcd; flex-wrap: wrap; }
+  .markers span::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 6px; background: var(--ink); }
+  .add { --ink: #90ead3; } .erase { --ink: #ef8e7a; }
+  #result { color: #c3d4d3; font-size: 13px; min-height: 1.5em; }
+  @media (max-width: 620px) {
+    main { width: calc(100% - 24px); padding-top: 20px; }
+    .comparison, .edits { gap: 6px; }
+    figcaption { padding: 6px 8px; font-size: 12px; }
+    .counts { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lantern handle fit</h1>
+  <p>Three edited silhouettes open the gap and thicken the brass. Orbit to see how the shared shape holds up between views.</p>
+  <div class="comparison">
+    <figure><figcaption>Source proxy</figcaption><canvas id="source" width="240" height="168" aria-label="Source lantern render"></canvas></figure>
+    <figure><figcaption>Fitted proxy</figcaption><canvas id="fit" width="240" height="168" aria-label="Fitted lantern render"></canvas></figure>
+  </div>
+  <div class="view-tools">
+    <label>Orbit <input id="yaw" aria-label="View angle" type="range" min="-180" max="180" value="28"></label>
+    <output id="angle-label" for="yaw"></output>
+    <button id="between">View between edits</button>
+  </div>
+  <section aria-labelledby="edits-title">
+    <h2 id="edits-title">Silhouette edits</h2>
+    <div class="markers"><span class="add">Add material</span><span class="erase">Erase material</span></div>
+    <div class="edit-tools">
+      <button id="add" aria-pressed="true">Paint</button>
+      <button id="erase" aria-pressed="false">Erase</button>
+      <button id="reset">Reset edits</button>
+      <button id="refit" class="primary">Fit shape</button>
+      <button id="save">Download proxy</button>
+    </div>
+    <div id="edits" class="edits"></div>
+    <p id="result" role="status">Preparing the lantern…</p>
+  </section>
+</main>
+<script src="../dist/ink-studio.browser.js"></script>
+<script src="./turntable-shape-lantern.js"></script>
+<script type="module" src="./turntable-shape-demo.mjs"></script>
+</body>
+</html>
