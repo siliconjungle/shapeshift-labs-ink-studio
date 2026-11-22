@@ -385,7 +385,7 @@
         return ok(picker.ray({...args,origin:args.origin??(Array.isArray(target)?target:target?.point)}));
       }},
       cause:{selector:true,run:({target,args}) => view.causality ?
-        W.causality.trace(view.causality,world,tick,args,target?.entity??args.entity) :
+        W.causality.trace(view.causality,world,tick,args,target?.entity??args.entity,view.eventStream) :
         missing('causal recording is not enabled for this snapshot')},
       ...(world.facts!==undefined&&{'fact-causes':{qualified:true,run:({args})=>W.worldFacts.trace(view.worldFacts,args)}}),
       ...(world.knowledge!==undefined&&{knowledge:{qualified:true,run:({args})=>W.worldKnowledge.trace(view.knowledge,args)}}),

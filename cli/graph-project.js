@@ -613,13 +613,15 @@ function createGraphProject(source, { kit=require('../index.js').load(), baseDir
     const results=watches.map(([name,{output,node,port}])=>{
       const value=output!==undefined ? frame.outputs[output] : frame.preview(node,port);
       const artifact=encodeArtifacts && preview(value,{grayscale:true});
-      return { name, value, artifact:artifact && {...artifact,file:'previews/'+name+'.'+artifact.format} };
+      const links=kit.KIT.world.inspectionLinks.references(value);
+      return { name, value, links, artifact:artifact && {...artifact,file:'previews/'+name+'.'+artifact.format} };
     });
     const assertions=prepareFrameChecks(frame);
     return {outputs:frame.outputs,values:Object.fromEntries(results.map(({name,value})=>[name,value])),
       artifacts:results.flatMap(({artifact})=>artifact?[artifact]:[]),
       report:{...report,kind:'patch-frame',...assertions,...(frame.timings && {timingsMs:frame.timings}),
-        previews:Object.fromEntries(results.map(({name,value,artifact})=>[name,{value:describe(value),
+        previews:Object.fromEntries(results.map(({name,value,artifact,links})=>[name,{value:describe(value),
+          ...(links.length&&{links}),
           ...(artifact && {file:artifact.file,sha256:artifact.sha256})}]))}};
   }
   function prepareFrameChecks(frame) {

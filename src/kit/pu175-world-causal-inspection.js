@@ -107,7 +107,8 @@
         (node.data.action??node.kind)+':'+(node.data.account??node.data.entity??node.data.field??'');
       root(node.id,match,key);
     }
-    return W.query.ok({...scope,roots,...W.causality.walk(state,roots.map(row=>row.id),maxDepth,limit),
+    return W.query.ok({...scope,roots,...W.causality.walk(state,roots.map(row=>row.id),maxDepth,limit,
+      {world:world.id,stream:view.eventStream}),
       ...(!roots.length&&{status:'unrecorded'})});
   }
   W.causalInspection=Object.freeze({inspect});

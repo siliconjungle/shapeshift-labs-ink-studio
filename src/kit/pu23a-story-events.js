@@ -82,6 +82,7 @@
         'Invalid committed story event');
       const key=row.branch+'/'+row.id;
       check(!seen.has(key),'Duplicate committed story event '+key);
+      W.inspectionLinks.identify(row);
       seen.add(key);
       tick=row.tick;
       W.timedEvents.timeOf(row.payload);
@@ -144,11 +145,17 @@
       const receipt = event.receipt?.event?.receipt??event.receipt;
       if (receipt?.format===W.storyHosts.format&&W.storyHosts.validReceipt(receipt,receipt.attempt,receipt.tick,receipt.status))
         hostReceipts.set(receipt.system+'/'+receipt.attempt+'/'+receipt.id,receipt);
-      return {time:event.tick*recording.dt,label:describe(event),event};
+      const beatId=beat(source,recording,event);
+      return {time:event.tick*recording.dt,label:describe(event),...(beatId&&{beatId}),event};
     });
     return freeze({format:'ink-studio/story-event-report',version,source:{...header,events:all.length},
       ...(story!==undefined&&{story}),counts:Object.fromEntries(kinds),stories:Object.fromEntries(stories),
       hostReceipts:[...hostReceipts.values()],timeline});
+  }
+
+  function beat(source,recording,event) {
+    const envelope=W.committedEvents.read(event,recording.id,source.end?.eventStream??source.eventStream);
+    return W.inspectionLinks.identify(envelope);
   }
 
   function timeline(source,{story} = {}) {
@@ -156,13 +163,13 @@
     check(events.length<=maxCues,'Story timeline exceeds 4096 cues. Select a story or a shorter recording.');
     const markers = [], cues = [];
     for (const [index,event] of events.entries()) {
-      const cueId = 'story-cue-'+index, time = event.tick*recording.dt, label = describe(event);
+      const cueId = 'story-cue-'+index, time = event.tick*recording.dt, label = describe(event), beatId=beat(source,recording,event);
       const descriptor = Object.fromEntries(['stage','branch','objective','outcome','to'].filter(key=>id(event[key]))
         .map(key=>[key,event[key]]));
       if (Number.isSafeInteger(event.visit)&&event.visit>0) descriptor.visit = event.visit;
-      markers.push({id:cueId,time,label});
+      markers.push({id:cueId,time,label,...(beatId&&{beatId})});
       const [document,name]=(storyOf(event)??'').split('/');
-      cues.push({id:cueId,time,kind:'story-cue',detail:{label,sourceEvent:event.id,sourceKind:event.kind,
+      cues.push({id:cueId,time,kind:'story-cue',detail:{label,...(beatId&&{beatId}),sourceEvent:event.id,sourceKind:event.kind,
         sourceSystem:event.system,sourceTick:event.tick,...descriptor,...(name&&{document,story:name})}});
     }
     return freeze({duration:recording.to*recording.dt,markers,events:cues});

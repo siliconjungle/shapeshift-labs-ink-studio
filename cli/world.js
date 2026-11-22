@@ -1153,14 +1153,28 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       case 'render': {
         const recording=shotReplay?.runtime;
         const input=recording ? null : load(file);
+        const beat=opt.beat===undefined?undefined:W.inspectionLinks.parse(opt.beat);
+        if(opt.beat!==undefined)ensure(beat&&!beat.projected&&W.committedEvents.eventId(beat.id)&&
+          (recording||input.checkpoint)&&['t','ticks','steps','actions'].every(key=>opt[key]===undefined),
+          'Render a native beat from a recording or checkpoint without time or action overrides');
         const initial=recording ? R.openRecording(recording,{workerPool,recordRun:recording.evidence?.plan}) : runtime(input);
-        const tick=recording?.end.tick ?? to(initial);
+        const tick=beat?W.committedEvents.tickOf(beat.id):recording?.end.tick??to(initial);
+        if(beat)ensure((recording?tick===recording.end.tick:input.log?tick<=input.log.end.tick:tick===initial.view().tick),
+          'Beat falls outside the recorded render source');
         const run=recording ? initial : snapshotRun(input,initial,tick);
         ensure(typeof opt.out==='string','Simulation render needs --out image.png');
         const output=path.resolve(opt.out), diagnostics=require('./look-preview.js').preview(opt);
-        const suffixes=diagnostics?.suffixes ?? [];
+        const suffixes=[...(diagnostics?.suffixes??[]),...(beat?['-beat.json']:[])];
+        const beatReport=beat&&output.replace(/\.(?:a?png)$/i,'')+'-beat.json';
+        if(beat){
+          ensure(/\.png$/i.test(output),'Beat render needs a PNG output');
+          checkReportPath([file],output,'render inputs');
+          checkReportPath([file,output],beatReport,'render inputs');
+        }
         shot?.destination(output,suffixes);
         const atmospherePose=advanceVisual(run,tick);
+        const event=beat&&run.committedEvents().find(row=>W.inspectionLinks.identify(row)===opt.beat);
+        if(beat)ensure(event,'Beat is absent from the recorded world, branch or tick');
         if (recording) ensure(W.data.equal(run.checkpoint(),recording.end),
           'Shot simulation checkpoint diverged at tick '+recording.end.tick);
         if (shot) {
@@ -1189,6 +1203,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         require('./png.js').write(output,image.w,image.h,image.rgb);
         diagnostics?.capture(image,1);
         diagnostics?.write(output,{times:[run.view().time]});
+        if(event)write(beatReport,{format:'ink-studio/beat-render',version:1,beatId:opt.beat,
+          tick,time:run.view().time,event,file:path.basename(output),width:image.w,height:image.h});
         shot?.finish(output,{suffixes});
         break;
       }
@@ -1351,7 +1367,9 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       }
       case 'trace':
         ensure(typeof name==='string','Supply a named trace');
-        respond(view(file).trace(name,target(opt),args()));
+        if(opt.beat!==undefined)ensure(name==='world/cause'&&typeof opt.beat==='string'&&opt.args===undefined,
+          'Use --beat ID with world/cause by itself');
+        respond(view(file).trace(name,target(opt),opt.beat===undefined?args():{beatId:opt.beat}));
         break;
       case 'field': {
         ensure(typeof name==='string'&&typeof opt.spec==='string','Provide a field and --spec file.json');

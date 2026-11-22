@@ -87,7 +87,8 @@
           const value=read(event,path);
           return value===undefined?[]:[[name,value]];
         }));
-        rows.push({version:1,id:frame.tick+'.'+rows.length,tick:frame.tick,world:frame.world,branch:frame.branch,
+        const ref={id:frame.tick+'.'+rows.length,world:frame.world,branch:frame.branch};
+        rows.push({version:1,...ref,tick:frame.tick,beatId:W.inspectionLinks.make(ref,true),
           system:'presentation',kind:rule.kind,story:null,stage:null,visit:null,subjects:[],causes:[],payload});
       }
       return rows;

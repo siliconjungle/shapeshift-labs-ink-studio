@@ -2,6 +2,8 @@
 
 Use `ink-studio patch` to edit and inspect the wiring of an Ink graph from a terminal. Patches use the same versioned graph JSON, typed sockets, groups, assets, assertions and parameter links as `ink-studio graph`. The patch runner adds sequential video input, soundtrack analysis, streaming region tracking and optional native WGSL compute.
 
+[Shared beat inspection links](inspection-links.md) connect event watches and rehearsal cues to the same committed world event.
+
 ## Run Night Current
 
 The included generator writes a six-second source video with sound, a separate WAV, an edit journal for each patch, and two graphs. The CPU graph uses Ink's composite-video effect. The WGSL graph replaces the finish with a shader that uses the bass band to displace the image. Both route the same FFT band into the half-life of tracked trails.

@@ -210,24 +210,27 @@
       state.delays[edge.to].every(references)),'Invalid saved delayed causal references');
   }
 
-  function trace(state,world,tick,args,entity) {
-    const {id:ref,event,port,kind,system,direction,atTick=tick,maxDepth=32,limit=256}=args;
+  function trace(state,world,tick,args,entity,stream) {
+    const {id:ref,event,beatId,port,kind,system,direction,atTick=tick,maxDepth=32,limit=256}=args;
+    const beat=beatId===undefined?undefined:W.inspectionLinks.parse(beatId);
     const key=port===undefined?null:W.data.portOf(world,port);
     const portType=direction??(key!==null&&own(state.outputs,key)?'output':'input');
-    check([ref,event,port,kind].filter(value=>value!==undefined).length===1 &&
+    check([ref,event,beatId,port,kind].filter(value=>value!==undefined).length===1 &&
       [ref,event,port,kind,system,entity].every(value=>value===undefined || typeof value==='string') &&
       (direction===undefined || key!==null&&['input','output'].includes(direction)) &&
       Number.isSafeInteger(atTick)&&atTick>=0&&atTick<=tick && Number.isSafeInteger(maxDepth)&&maxDepth>=0&&maxDepth<=256 &&
       Number.isSafeInteger(limit)&&limit>=1&&limit<=2000,
-    'Causal trace needs one of id, event, port or kind and a bounded tick or traversal limit');
+    'Causal trace needs one of id, event, beatId, port or kind and a bounded tick or traversal limit');
+    check(beatId===undefined||beat&&!beat.projected,'Causal trace needs a native beat ID');
+    const matchesBeat=row=>beat.world===world.id&&row.event===beat.id&&W.committedEvents.branchAt(stream,row.tick)===beat.branch;
     const root=state.nodes.findLast(row=>row.tick<=atTick && (system===undefined||row.system===system) &&
       (entity===undefined||[row.data.entity,row.data.body,row.data.place].includes(entity)) &&
-      (ref!==undefined?row.id===ref:event!==undefined?row.event===event:key!==null?row.port===key&&row.type===portType:row.kind===kind));
+      (ref!==undefined?row.id===ref:beat?matchesBeat(row):event!==undefined?row.event===event:key!==null?row.port===key&&row.type===portType:row.kind===kind));
     if (!root) return W.query.missing(state.dropped?'No matching retained cause':'No matching cause','missing');
-    const {status,...graph}=walk(state,[root.id],maxDepth,limit);
+    const {status,...graph}=walk(state,[root.id],maxDepth,limit,{world:world.id,stream});
     return W.query.ok({status,root:root.id,...graph});
   }
-  function walk(state,roots,maxDepth,limit) {
+  function walk(state,roots,maxDepth,limit,{world,stream}={}) {
     const byId=new Map(state.nodes.map(row=>[row.id,row])), nodes=[], gaps=[], edges=[], visited=new Set();
     const queue=roots.map(ref=>[ref,0,null]);
     for(let i=0;i<queue.length;i++){
@@ -237,7 +240,9 @@
       const reason=ref===clipped?'fan-in':!row?'retention':depth>maxDepth?'depth':nodes.length>=limit?'node-budget':null;
       if(reason){gaps.push({id:ref,reason});continue;}
       visited.add(ref);
-      nodes.push(row);
+      const beatId=world&&id(row.event)?W.inspectionLinks.make({
+        world,branch:W.committedEvents.branchAt(stream,row.tick),id:row.event}):undefined;
+      nodes.push(beatId?{...row,beatId}:row);
       for(const parent of row.parents)queue.push([parent,depth+1,ref]);
     }
     return {status:gaps.length?'partial':'complete',nodes,edges,

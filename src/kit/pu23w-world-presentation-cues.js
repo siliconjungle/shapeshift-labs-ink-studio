@@ -10,7 +10,7 @@
   const tick=value=>Number.isSafeInteger(value)&&value>=0&&value<=W.runtime.maxTick;
   const story=value=>typeof value==='string'&&value.split('/').length===2&&value.split('/').every(id);
   const label=value=>typeof value==='string'&&value.length<=1024;
-  const eventRef=row=>fields(row,['world','branch','id','tick','kind','system','timecode'])&&
+  const eventRef=row=>fields(row,['world','branch','id','tick','kind','system','timecode','beatId'])&&
     [row.world,row.branch,row.id,row.kind,row.system].every(id)&&tick(row.tick)&&
     (row.timecode===undefined||seconds(T.seconds(T.read(row.timecode))));
   const header=row=>fields(row,['world','dt','from','to','coverage','dropped'])&&id(row.world)&&
@@ -31,10 +31,13 @@
     'Expected a version 1 presentation cue sheet');
     const ids=new Set();
     for(const row of sheet.cues) {
-      check(fields(row,['id','time','timecode','kind','label','target','detail','assets','rule','source'])&&id(row.id)&&!ids.has(row.id)&&
+      check(fields(row,['id','time','timecode','kind','label','target','detail','assets','rule','source','beatId'])&&id(row.id)&&!ids.has(row.id)&&
         seconds(row.time)&&(row.timecode===undefined||timecode(row.timecode,row.time))&&cueDetails(row)&&(row.rule===undefined||id(row.rule))&&
         (row.source===undefined||eventRef(row.source)&&(!sheet.source||row.source.world===sheet.source.world&&
           row.source.tick>=sheet.source.from&&row.source.tick<=sheet.source.to)),'Invalid or duplicate presentation cue');
+      const linked=row.source&&W.inspectionLinks.identify(row.source);
+      check(row.beatId===undefined||W.inspectionLinks.parse(row.beatId)&&(!linked||linked===row.beatId),
+        'Presentation cue beat ID differs from its source');
       ids.add(row.id);
     }
     return sheet;
@@ -88,6 +91,7 @@
       'Invalid, duplicate or unordered committed event envelope');
       seen.add(key);
       last=tick;
+      const beatId=W.inspectionLinks.identify(event);
       for(const {rule,on,cue,delay,detail,mappings} of byKind.get(kind)??[]) {
         if (['system','branch','story','stage'].some(key=>on[key]!==undefined&&on[key]!==event[key])||
           !W.query.condition(on.where,event)) continue;
@@ -102,8 +106,8 @@
         const nativeTime=W.timedEvents.timeOf(event.payload);
         const original=nativeTime===undefined?commit:T.read(nativeTime);
         const data=W.data.copy(detail);
-        cues.push({id:'cue-'+(cues.length+1),time,timecode:T.pack(timing),...cue,
-          detail:edits.length?W.apply(data,edits,{validate:null}).world:data,rule,source:{...ref,timecode:T.pack(original)}});
+        cues.push({id:'cue-'+(cues.length+1),time,timecode:T.pack(timing),...cue,beatId,
+          detail:edits.length?W.apply(data,edits,{validate:null}).world:data,rule,source:{...ref,beatId,timecode:T.pack(original)}});
       }
     }
     cues.sort((a,b)=>a.time-b.time);

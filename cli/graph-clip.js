@@ -37,7 +37,7 @@ function clip({ output, from = 0, to, warmup = 0, format = 'both', clock: settin
   const isScene = P.graphTypes.validator('world'), isFrame = P.graphTypes.validator('renderFrame');
   const render = createSceneSampler(kit), artifacts = [], packed = [], frames = [], cuts = [];
   const { camera, lights, ...options } = renderOptions;
-  let sequence, bytes = 0, passed = true;
+  let sequence, bytes = 0, passed = true, linkBudget = 100000, omittedLinks = 0;
   function append(file, data) {
     const item = { file, bytes: data, sha256: hash(data) };
     artifacts.push(item);
@@ -65,6 +65,15 @@ function clip({ output, from = 0, to, warmup = 0, format = 'both', clock: settin
       if (!keep) continue;
       const row = { frame: i, time: take.start, tick: take.tick, firstSample: take.firstSample,
         cut: take.cut, shot: take.shot, ...dimensions };
+      const links=[];
+      for(const [output,value] of Object.entries(evaluated.outputs)){
+        const found=K.world.inspectionLinks.references(value);
+        const count=Math.min(found.length,linkBudget);
+        links.push(...found.slice(0,count).map(ref=>({...ref,output})));
+        linkBudget-=count;
+        omittedLinks+=found.length-count;
+      }
+      if(links.length)row.links=links;
       if (raster) {
         const frame = PNG.packRGBA(raster);
         if (apng && packed.length && !frame.header.equals(packed[0].header))
@@ -88,7 +97,7 @@ function clip({ output, from = 0, to, warmup = 0, format = 'both', clock: settin
   const recording = visual ? append('sample.json', Buffer.from(JSON.stringify(visual.snapshot()) + '\n')) : undefined;
   const report = { format: 'ink-studio/graph-clip', version: 1, projectHash: plan.projectHash,
     output, seed, fps, from, to, warmup: { from: start, count: from - start }, cuts, frames, passed,
-    ...(animation && { animation }), ...(recording && { sample: recording }) };
+    ...(omittedLinks&&{omittedLinks}), ...(animation && { animation }), ...(recording && { sample: recording }) };
   return { report, artifacts };
 }
 

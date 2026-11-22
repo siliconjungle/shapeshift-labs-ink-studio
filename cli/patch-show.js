@@ -31,8 +31,11 @@ function presetControl(config, project, report) {
       let change;
       while (config.cues[currentCue]?.frame <= frame) {
         const cue = config.cues[currentCue++];
-        change = { preset: cue.preset, source: 'cue', scheduledFrame: cue.frame, ...(cue.clockCue&&{clockCue:cue.clockCue}) };
+        if(change)report.cueLink(change.scheduledFrame,'superseded');
+        change = { preset: cue.preset, source: 'cue', scheduledFrame: cue.frame, ...(cue.clockCue&&{clockCue:cue.clockCue}),
+          ...(cue.beatId&&{beatId:cue.beatId}) };
       }
+      if(change)report.cueLink(change.scheduledFrame,pending?'superseded':'applied');
       change = pending ?? change ?? (first && active !== undefined ? { preset: active, source: 'initial' } : undefined);
       if (change) { active = change.preset; report.preset(change); }
       first = false;
@@ -233,6 +236,8 @@ async function runShow(file, opt, settings, emit) {
       const preset = control.inputs(index), inputs = live ? { ...preset, [liveWorld.input]: live.sample() } : preset;
       const before = performance.now();
       const result = await project.previewFrame(watch, { inputs, time: index / fps }, { profile: true, encodeArtifacts: false });
+      for(const [output,value] of Object.entries(result.outputs))
+        for(const link of settings.kit.KIT.world.inspectionLinks.references(value))report.graphLink(output,link);
       signal.throwIfAborted();
       const drawn = performance.now();
       report.stage('graph', drawn - before);

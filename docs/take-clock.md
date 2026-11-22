@@ -8,6 +8,8 @@ derives video frame boundaries, committed simulation ticks, and output audio
 sample positions from integer ratios. Rendering, keyframe interpolation, and
 audio DSP still receive seconds or samples through their existing APIs.
 
+[Shared beat inspection links](inspection-links.md) let a cue use a committed event ID and carry it through every edited placement.
+
 ## Sample a take from the CLI
 
 Save a version 1 take beside its source files. The world and graph are optional

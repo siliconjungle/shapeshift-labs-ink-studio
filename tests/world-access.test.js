@@ -20,7 +20,8 @@ test('scoped exports use faction memory and project only explicitly public data 
   assert.equal(spectator.branch,'public');
   assert.equal(spectator.events.length,1);
   assert.deepEqual(spectator.events[0],{
-    version:1,id:'1.0',tick:1,world:world.id,branch:'public',system:'presentation',kind:'signal-ready',
+    version:1,id:'1.0',tick:1,world:world.id,branch:'public',beatId:'ink:public-beat:lantern-harbor/public/1.0',
+    system:'presentation',kind:'signal-ready',
     story:null,stage:null,visit:null,subjects:[],causes:[],payload:{color:'amber'}
   });
   assert.deepEqual(west.samples.perception.value.contacts.map(row=>row.entity),['west-lantern']);

@@ -108,8 +108,9 @@ async function readShow(file, rehearse, kit) {
   if (!Array.isArray(cues) || cues.length > 4096) throw new TypeError('Show needs up to 4096 ordered cues');
   let previous = -1;
   for (const cue of cues) {
-    const { frame, preset } = record(cue, ['frame', 'preset'], 'show cue');
-    if (!int(frame, previous + 1, frames - 1) || !name(preset) || !Object.hasOwn(presets, preset))
+    const { frame, preset, beatId } = record(cue, ['frame', 'preset', 'beatId'], 'show cue');
+    if (!int(frame, previous + 1, frames - 1) || !name(preset) || !Object.hasOwn(presets, preset) ||
+        beatId!==undefined&&!K.world.inspectionLinks.parse(beatId))
       throw new RangeError('Show cues need increasing in-range frames and known presets');
     previous = frame;
   }
@@ -124,7 +125,8 @@ async function readShow(file, rehearse, kit) {
     const mapped=K.world.clockMapping.read(report);
     if(mapped.clock.at(0).fps!==fps||report.issues.length)
       throw new RangeError('Show cue map needs the show frame rate and resolved cue addresses');
-    scheduled=cues.concat(mapped.cues.map(cue=>({frame:cue.at.showFrame,preset:cue.preset,clockCue:cue})))
+    scheduled=cues.concat(mapped.cues.map(cue=>({frame:cue.at.showFrame,preset:cue.preset,clockCue:cue,
+      ...(cue.beatId&&{beatId:cue.beatId})})))
       .sort((a,b)=>a.frame-b.frame);
     if(scheduled.length>4096||scheduled.some((cue,i)=>!int(cue.frame,0,frames-1)||
       (i>0&&cue.frame===scheduled[i-1].frame)||!Object.hasOwn(presets,cue.preset)))

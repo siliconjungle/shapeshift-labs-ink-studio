@@ -99,9 +99,10 @@
       check(new Set(tracks.map(({ target }) => JSON.stringify(target))).size === tracks.length,
         'A timeline sequence needs one track per target');
       const markers = items(input.markers, 'marker', clock, row => {
-        check(has(row, ['id', 'time', 'label']) && (row.label === undefined || typeof row.label === 'string'),
+        check(has(row, ['id', 'time', 'label', 'beatId']) && (row.label === undefined || typeof row.label === 'string') &&
+          (row.beatId===undefined||K.world.inspectionLinks.parse(row.beatId)),
           'Invalid timeline marker label');
-        return row.label === undefined ? {} : { label: row.label };
+        return { ...(row.label!==undefined&&{label:row.label}),...(row.beatId!==undefined&&{beatId:row.beatId}) };
       });
       const events = items(input.events, 'event', clock, row => {
         check(has(row, ['id', 'time', 'kind', 'detail']) && id(row.kind) && record(row.detail ?? {}), 'Invalid timeline world event');

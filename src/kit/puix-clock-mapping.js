@@ -1,6 +1,7 @@
 /* Project original media and simulation addresses through an exact editorial cut list. */
 (function(K){
   const W=K.world,T=K.procedural.takeTime,{check,id,record,copy}=W.data,{freeze}=K.procedural.data;
+  const links=W.inspectionLinks;
   const format='ink-studio/clock-map',reportFormat='ink-studio/clock-map-report';
   const fields=(value,keys)=>record(value)&&Object.keys(value).every(key=>keys.includes(key));
   const min=(a,b)=>T.compare(a,b)<=0?a:b, max=(a,b)=>T.compare(a,b)>=0?a:b;
@@ -36,7 +37,8 @@
         seen.add(key);
         const timed=W.timedEvents.timeOf(event.payload);
         const time=point(clock,timed??{tick:event.tick});
-        events.push({id:event.id,branch:event.branch,world:event.world,kind:event.kind,system:event.system,tick:event.tick,time});
+        events.push({id:event.id,branch:event.branch,world:event.world,kind:event.kind,system:event.system,tick:event.tick,
+          beatId:links.identify(event),time});
       }
     }
     for(const word of row.words??[]) {
@@ -72,7 +74,7 @@
       const input=sources.get(clip.source), origin=time=>describe(input.clock,time), edited=time=>describe(clock,clip.project(time));
       for(const {time,...event} of input.events) if(contains(clip,time)) {
         budget();
-        events.push({source:clip.source,clip:clip.id,event,original:origin(time),edited:edited(time)});
+        events.push({source:clip.source,clip:clip.id,beatId:event.beatId,event,original:origin(time),edited:edited(time)});
       }
       for(const word of input.words.values()) {
         const from=max(word.from,clip.from), to=min(word.to,clip.to);
@@ -103,8 +105,11 @@
       }
       const input=sources.get(row.source), spec=row.at;
       let time,anchor,issue;
-      if(fields(spec,['event','branch'])&&id(spec.event)&&(spec.branch===undefined||id(spec.branch))) {
-        const matches=input.events.filter(event=>event.id===spec.event&&(spec.branch===undefined||spec.branch===event.branch));
+      const byBeat=fields(spec,['beatId'])&&spec.beatId!==undefined;
+      if(byBeat||fields(spec,['event','branch'])&&id(spec.event)&&(spec.branch===undefined||id(spec.branch))) {
+        check(!byBeat||links.parse(spec.beatId),'Invalid clock map beat ID');
+        const matches=input.events.filter(event=>byBeat?event.beatId===spec.beatId:
+          event.id===spec.event&&(spec.branch===undefined||spec.branch===event.branch));
         if(matches.length!==1) issue=matches.length?'ambiguous-event':'unknown-event';
         else {
           const {time:original,...event}=matches[0];
@@ -123,6 +128,7 @@
         .filter(clip=>time&&contains(clip,time));
       if(!selected.length) issues.push({cue:name,source:row.source,reason:issue??'outside-clip',anchor:copy(spec)});
       else for(const clip of selected) addCue({...cue,source:row.source,clip:clip.id,anchor,
+        ...(anchor?.event&&{beatId:anchor.event.beatId}),
         original:describe(input.clock,time)},clip.project(time));
     }
     const byTime=coordinate=>(a,b)=>T.compare(T.read(coordinate(a).timecode),T.read(coordinate(b).timecode));
@@ -146,7 +152,9 @@
         (row.clip===undefined||id(row.clip))&&(row.source===undefined||id(row.source)),'Invalid clock map cue result');
       const time=point(clock,row.at.timecode), at=describe(clock,time);
       check(W.data.equal(at,row.at),'Clock map cue coordinates differ from its exact time');
-      return row;
+      const event=row.anchor?.event, beatId=event&&links.identify(event);
+      check(row.beatId===undefined||row.beatId===beatId,'Clock map cue beat ID differs from its event');
+      return beatId?{...row,beatId}:row;
     });
     return {clock,cues};
   }
@@ -158,6 +166,7 @@
       cues:cues.map((cue,index)=>{
         const {original,clip,anchor}=cue, event=anchor?.event;
         return {id:'clock-cue-'+(index+1),time:cue.at.seconds,timecode:copy(cue.at.timecode),kind:'show-cue',
+          ...(cue.beatId&&{beatId:cue.beatId}),
           label:cue.id,target:cue.preset,detail:{preset:cue.preset,showFrame:cue.at.showFrame,
             ...(clip&&{clip}),...(original&&{original:copy(original)}),...(anchor&&{anchor:copy(anchor)})},
           ...(event&&original&&{source:{...event,timecode:copy(original.timecode)}})};

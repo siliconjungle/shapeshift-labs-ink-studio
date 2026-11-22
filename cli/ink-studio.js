@@ -1026,7 +1026,9 @@ const CMD = {
         '  inspect|validate|probe <scene|run> --select JSON   inspect, check, or sample a look target',
         '  probe <scene|run> --field look/sample [--select JSON | --entity ID] [--at x,y,z]   explain a baked splat',
         '  trace <scene|run> <name>    trace a route, signal or other exposed query',
-        '    trace <scene|run> world/cause --args JSON   follow recorded decisions, inputs and events',
+        '    trace <scene|run> world/cause [--args JSON | --beat ID]   follow recorded decisions, inputs and events',
+        '  beat <beat-id> <report.json|watch.ndjson> [...] [--out file.json]   find the same event across inspection reports',
+        '    sim render <run|checkpoint> --beat ID --out frame.png   render the recorded event tick',
         '  field <scene|run> <name> --spec file.json [--explain]  export a line, grid or time series',
         '  authoring inspect <scene> [--authoring snapshot.json] [--part id]   inspect retained parts',
         '  authoring preview <scene> <edits.json> [--authoring snapshot.json] [--image preview.png]   stage and validate edits',
@@ -2442,6 +2444,9 @@ const CMD = {
   },
   story() {
     return require('./story-document.js').storyCommand(pos,opt,lib);
+  },
+  beat() {
+    return require('./inspection-links.js').command(pos,opt,lib());
   },
   assets() {
     return require('./asset-references.js').command(pos, opt, lib());

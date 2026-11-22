@@ -102,7 +102,11 @@
     const events=source.events.filter(row=>(kind===undefined||kind===row.kind)&&(system===undefined||system===row.system)&&
       (story===undefined||story===row.story)&&(branch===undefined||branch===row.branch)&&W.query.condition(where,row));
     const dt=source.simulationRate===undefined?source.dt:T.pack(T.period(source.dt,source.simulationRate));
-    const value=events.length?W.outputAdapters.events(events,{dt}):emptyLog;
+    const publicView=W.inspectionLinks.isPublic(source);
+    const value=events.length?W.outputAdapters.events(events.map(event=>{
+      const beatId=W.inspectionLinks.identify(event,publicView);
+      return beatId?{...event,beatId}:event;
+    }),{dt}):emptyLog;
     return {value,report:{status:events.length?'live':'empty',count:events.length,tick:source.tick,eventFrom:source.eventFrom}};
   }
 

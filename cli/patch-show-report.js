@@ -3,6 +3,11 @@ const sampleLimit = 256;
 function showReport(config, rehearse) {
   const began = performance.now(), sources = new Map(), stages = new Map();
   const dropped = { schedule: 0, projector: 0, video: 0 }, samples = [], presets = [], sourceEvents = [];
+  const cueLinks=new Map(config.cues.filter(cue=>cue.beatId).map(({frame,preset,beatId,clockCue})=>{
+    const tick=clockCue?.anchor?.event?.tick;
+    return [frame,{beatId,preset,scheduledFrame:frame,status:'not-reached',...(tick!==undefined&&{tick})}];
+  }));
+  const graphLinks=[];
   const video = { received: 0, repeated: 0, fallback: 0 };
   let rendered = 0, displayed = 0, assertionFailures = 0, frame = 0, unlogged = 0;
   const elapsed = () => performance.now() - began;
@@ -42,15 +47,22 @@ function showReport(config, rehearse) {
       dropped.video += skipped;
     },
     preset(change) { append(presets, { frame, ...change }); },
+    cueLink(scheduledFrame,status) {
+      const link=cueLinks.get(scheduledFrame);
+      if(link)Object.assign(link,{frame,status});
+    },
+    graphLink(output,link) { append(graphLinks,{...link,output,frame,status:'observed'}); },
     finish(reason, error) {
       const slow = [...stages.values()].some(value => value.slowFrames > 0);
       const offline = [...sources.values()].some(value => value.outages > 0);
+      const beatLinks=[...cueLinks.values(),...graphLinks];
       return { format: 'ink-studio/patch-show-report', version: 1, event: 'show-report', mode: rehearse ? 'rehearsal' : 'show',
         reason, passed: reason === 'completed' && !slow && !offline && !assertionFailures && !Object.values(dropped).some(Boolean),
         fps: config.fps, frameBudgetMs: 1000 / config.fps, slowMs: config.slowMs, elapsedMs: elapsed(),
         rendered, displayed, dropped, video, assertionFailures, sources: Object.fromEntries(sources),
         stages: Object.fromEntries([...stages].map(([name, { totalMs, ...entry }]) => [name, { ...entry, meanMs: totalMs / entry.samples }])),
         ...(config.assetBindings?.length && { assetBindings: config.assetBindings }),
+        ...(beatLinks.length&&{beatLinks}),
         sourceEvents, presets, samples, unlogged, ...(error && { error: error.message }) };
     }
   };

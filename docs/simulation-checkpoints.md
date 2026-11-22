@@ -12,6 +12,8 @@ Sediment and thermal transport can replace it.
 [Interactive checkpoint branching](#interactive-checkpoint-branching) keeps
 multiple named outcomes and their starting points in one session.
 
+[Shared beat inspection links](inspection-links.md) can point to a causal trace or a still rendered at the beat’s recorded tick.
+
 The default checkpoint and recording are still standalone version 1 JSON.
 For experiments with several saved runs, use a shared block directory.
 
