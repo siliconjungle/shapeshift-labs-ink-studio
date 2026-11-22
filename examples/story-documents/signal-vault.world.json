@@ -1,0 +1,55 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "signal-vault",
+  "dt": 0.1,
+  "storyDocuments": [
+    {
+      "file": "signal-vault.json"
+    }
+  ],
+  "commands": [
+    {
+      "tick": 1,
+      "action": "world/event",
+      "args": {
+        "kind": "map-verified"
+      }
+    },
+    {
+      "tick": 3,
+      "action": "world/story-objective",
+      "args": {
+        "document": "signal-vault",
+        "story": "open-vault",
+        "stage": "survey",
+        "visit": 1,
+        "objective": "power",
+        "result": "completed",
+        "reason": "stable-feed"
+      }
+    }
+  ],
+  "eventActions": {
+    "confirm-map": {
+      "on": {
+        "kind": "map-verified",
+        "system": "world"
+      },
+      "actions": [
+        {
+          "action": "world/story-objective",
+          "args": {
+            "document": "signal-vault",
+            "story": "open-vault",
+            "stage": "survey",
+            "visit": 1,
+            "objective": "map",
+            "result": "completed",
+            "reason": "survey-received"
+          }
+        }
+      ]
+    }
+  }
+}

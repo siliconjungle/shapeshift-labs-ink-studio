@@ -1,0 +1,102 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "signal-vault",
+  "title": "The Signal Vault",
+  "stories": {
+    "open-vault": {
+      "kind": "arc",
+      "title": "Open the Signal Vault",
+      "lifecycle": {
+        "progression": true
+      },
+      "entry": "survey",
+      "stages": {
+        "survey": {
+          "title": "Survey the approach",
+          "objectives": {
+            "map": {
+              "title": "Map the lower route"
+            },
+            "power": {
+              "title": "Verify the power line"
+            },
+            "service-key": {
+              "title": "Recover the service key",
+              "optional": true
+            }
+          },
+          "next": {
+            "lower-route": {
+              "stage": "tunnel"
+            },
+            "upper-route": {
+              "stage": "gantry",
+              "requires": [
+                "service-key"
+              ]
+            }
+          }
+        },
+        "tunnel": {
+          "title": "Follow the tunnel",
+          "next": {
+            "arrive": {
+              "stage": "alignment"
+            }
+          }
+        },
+        "gantry": {
+          "title": "Cross the upper gantry",
+          "next": {
+            "straight-through": {
+              "stage": "alignment"
+            },
+            "service-detour": {
+              "stage": "service-bay"
+            }
+          }
+        },
+        "service-bay": {
+          "title": "Inspect the spare receiver",
+          "objectives": {
+            "test-receiver": {
+              "title": "Test the spare receiver",
+              "optional": true
+            }
+          },
+          "next": {
+            "rejoin": {
+              "stage": "alignment"
+            }
+          }
+        },
+        "alignment": {
+          "title": "Align the main receiver",
+          "objectives": {
+            "tune": {
+              "title": "Tune the receiver"
+            }
+          },
+          "next": {
+            "transmit": {
+              "outcome": "beacon-lit"
+            },
+            "lock-down": {
+              "outcome": "vault-sealed"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "beacon-lit": {
+          "title": "The beacon is transmitting"
+        },
+        "vault-sealed": {
+          "title": "The vault was sealed",
+          "status": "failed"
+        }
+      }
+    }
+  }
+}

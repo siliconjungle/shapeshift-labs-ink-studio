@@ -22,8 +22,8 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 | Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map |
 | Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
 | Role | `kind` | `ref` to a document reference of the same kind |
-| Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document |
-| Outcome | `title` | `summary`, `refs` |
+| Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled |
+| Outcome | `title` | `summary`, `refs`, `status` when stage progression is enabled |
 | Reference | `kind`, `id` | |
 
 Map keys are stable IDs. They are case-sensitive and start with a letter. The remaining characters can be letters, digits, underscores, hyphens, or dots, up to 100 characters total. Keep IDs when changing a title or reordering entries. Within a document, story IDs are unique. Stage, outcome, and role IDs are scoped to their story. A `next` ID is scoped to its stage and points to exactly one local target, for example `"delivered": { "outcome": "grain-delivered" }` or `"retry": { "stage": "collect" }`. The key identifies the branch. It does not execute a condition.
@@ -45,7 +45,7 @@ Add `storyDocuments` to a world manifest. The library accepts an array of embedd
 
 `where` tests an event record. `when` tests a query result. Both use [world conditions](headless-worlds.md#query-a-revision), including JSON Pointers, comparisons, and `all`, `any`, or `not`. For state rules, `field` must be qualified. `at` can select a world point, entity, or socket, and `args` are passed to the query. Rules read the tick's solver and transfer publications before derived event actions and observer updates. Hold durations round up to a whole tick. Repeat windows count ticks within the authored duration, with machine-rounding tolerance at an exact tick boundary.
 
-Each story starts at most once per run. Its named triggers are alternatives. When several match on the same tick, the first trigger ID in lexical order wins. A story starts when a trigger matches or, with manual activation, when it is accepted. `story-started` includes the document, story, and entry stage, plus the trigger and its evidence when applicable. Use [event actions](event-actions.md) to turn that into a cue or command. The checkpoint stores pending trigger progress and the first match. Branch choice and stage progression are separate runtime work.
+Each story starts at most once per run. Its named triggers are alternatives. When several match on the same tick, the first trigger ID in lexical order wins. A story starts when a trigger matches or, with manual activation, when it is accepted. `story-started` includes the document, story, and entry stage, plus the trigger and its evidence when applicable. Use [event actions](event-actions.md) to turn that into a cue or command. The checkpoint stores pending trigger progress and the first match.
 
 ## Offer, activate, and resolve a story
 
@@ -79,6 +79,40 @@ node cli/ink-studio.js sim run examples/story-documents/winter-crossing.world.js
 node cli/ink-studio.js probe crossing.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe crossing.run.json --field world/history --args '{"where":{"path":"/kind","value":"story-transition"}}'
 node cli/ink-studio.js sim replay crossing.run.json
+```
+
+## Branch and converge
+
+Set `"lifecycle": { "progression": true }` to run the authored stage graph. First activation enters `entry` at visit `1`. Every stage link opens a new visit, including links back to the same stage. This lets a loop revisit a problem with fresh objectives. Suspension keeps the current visit and progress intact.
+
+- Define `objectives` on a stage as a map keyed by stable IDs. Each objective needs a `title` and can have `summary`, `refs`, and `optional: true`. All required objectives are open together and can complete in any order.
+- `next` names alternative branches. Each branch points to a stage or outcome. Multiple branches can point to the same stage. Give an optional stage a detour branch and provide a route that bypasses it.
+- A branch opens after all required objectives and any listed in its optional `requires` array are complete. `requires` names objectives on the departing stage. This lets an optional objective unlock a particular route, such as a service key opening an upper entrance.
+- An outcome ends the story with `completed` by default, or `failed` if the outcome specifies `"status": "failed"`. Use `world/story-transition` for outside interruptions such as failure, withdrawal, expiry, or suspension. Choose an ending branch to complete the story or select a named outcome.
+
+Use ordinary world commands to resolve objectives or choose a branch. Include the `stage` and `visit` from the lifecycle probe or `story-stage-entered` event. A request for an older visit cannot affect a new one. These commands also work in event actions, which can map a world event to an objective result through the existing bindings.
+
+```json
+[
+  {"tick":4,"action":"world/story-objective","args":{"document":"signal-vault","story":"open-vault","stage":"survey","visit":1,"objective":"service-key","result":"completed","reason":"key-recovered"}},
+  {"tick":5,"action":"world/story-choose","args":{"document":"signal-vault","story":"open-vault","stage":"survey","visit":1,"branch":"upper-route","reason":"gantry-unlocked"}}
+]
+```
+
+`world/story-objective` accepts `completed` or `skipped`. Only optional objectives can be skipped. Unresolved optional objectives that do not block the chosen branch appear in the branch event's `skipped` list. Stage progress changes while the story is active. A well-formed request that cannot apply emits `story-progress-rejected`, with pending objective IDs when requirements are missing. Objective results are supplied by commands or event actions.
+
+`world/story-lifecycle` exposes `flow.current` and the last 64 closed visits in `flow.route`. Closed visits retain objective results, reasons, skipped IDs, the selected branch, and its target. An authored ending clears `flow.current` and records the outcome on the story. The world publishes `story-stage-entered`, `story-objective-resolved`, and `story-branch-chosen` in commit order. Checkpoints, forks, and replay preserve the route.
+
+### Fork The Signal Vault
+
+[The Signal Vault](../examples/story-documents/signal-vault.world.json) records the survey and power objectives before the fork. The lower route skips the service key and reaches alignment through the tunnel. The upper route uses the key and takes the optional service detour before rejoining at alignment. The two forks then select different endings.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/signal-vault.world.json --ticks 3 --checkpoint vault-start.json
+node cli/ink-studio.js sim fork vault-start.json --ticks 7 --actions examples/story-documents/signal-vault-lower.actions.json --record lower.run.json
+node cli/ink-studio.js sim fork vault-start.json --ticks 10 --actions examples/story-documents/signal-vault-upper.actions.json --record upper.run.json
+node cli/ink-studio.js probe lower.run.json --field world/story-lifecycle
+node cli/ink-studio.js probe upper.run.json --field world/story-lifecycle
 ```
 
 ## Replay the demos

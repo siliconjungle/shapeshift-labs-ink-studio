@@ -9,7 +9,7 @@
   const ordered = value => Object.keys(value).sort();
   const worldActions = ['input','patch','event','transfer'];
   const worldAction = (plan, name) => worldActions.includes(name) || plan.chunks?.actions.includes(name) ||
-    name === 'story-transition' && plan.storyLifecycle;
+    plan.storyLifecycle && W.storyLifecycle.actions.includes(name);
   const checkpointFormat = 'ink-studio/checkpoint', runFormat = 'ink-studio/run';
   const savedCheckpoints=new WeakSet(), branchToken=Symbol('live checkpoint');
 
@@ -361,7 +361,7 @@
         'Live patches may change entities and metadata');
       } else if(plan.chunks?.actions.includes(key))plan.chunks.checkAction(key,args);
       else if (key === 'transfer') plan.transfers.validate(args);
-      else if (key === 'story-transition') plan.storyLifecycle.checkAction(args);
+      else if (W.storyLifecycle.actions.includes(key)) plan.storyLifecycle.checkAction(key,args);
       else {
         check(id(args.kind), 'An event needs a kind');
         W.timedEvents.timeOf(args);
@@ -868,7 +868,7 @@
             requests.push({name,request:item.args,root});
             if(commanded)for(const port of [item.args.from,item.args.to])commanded.add(endpoint(port)[0]);
           }
-          if (key === 'story-transition') storyCommands.push({args:item.args,publish:emit});
+          if (storyCommands && W.storyLifecycle.actions.includes(key)) storyCommands.push({action:key,args:item.args,publish:emit});
           if(chunks?.actions.includes(key))nextChunkState=chunks.action(nextChunkState,key,item.args,at);
         } else {
           commanded?.add(name);

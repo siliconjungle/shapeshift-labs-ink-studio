@@ -1,0 +1,51 @@
+[
+  {
+    "tick": 4,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "survey",
+      "visit": 1,
+      "branch": "lower-route",
+      "reason": "take-tunnel"
+    }
+  },
+  {
+    "tick": 5,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "tunnel",
+      "visit": 2,
+      "branch": "arrive",
+      "reason": "tunnel-clear"
+    }
+  },
+  {
+    "tick": 6,
+    "action": "world/story-objective",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "alignment",
+      "visit": 3,
+      "objective": "tune",
+      "result": "completed",
+      "reason": "receiver-quiet"
+    }
+  },
+  {
+    "tick": 7,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "alignment",
+      "visit": 3,
+      "branch": "transmit",
+      "reason": "clean-carrier"
+    }
+  }
+]

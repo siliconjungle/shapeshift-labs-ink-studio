@@ -402,7 +402,7 @@
         id,...world.systems[id],inputs:systems[id].inputs ?? {},outputs:systems[id].outputs ?? {},
         actions:sorted(systems[id].actions ?? {})
       })),actions:['world/input','world/patch','world/event',...(accounts.length ? ['world/transfer'] : []),
-        ...(view.storyLifecycle ? ['world/story-transition'] : []),
+        ...(view.storyLifecycle ? W.storyLifecycle.actions.map(name=>'world/'+name) : []),
         ...(world.simulationChunks?W.simulationChunks.actions.map(name=>'world/'+name):[])]};
     }
     function spatial({point,radius,where} = {}) {

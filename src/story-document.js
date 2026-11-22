@@ -131,12 +131,14 @@ const StoryDocument = (() => {
   }
 
   function lifecycle(value, at) {
-    fields(value, at, [], ['activation', 'offerFor']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
       (value.activation !== 'manual' || !Number.isFinite(value.offerFor) || value.offerFor <= 0))
       invalid(`${at}.offerFor`, 'expected a positive offer duration in seconds for manual activation');
+    if (Object.hasOwn(value, 'progression') && typeof value.progression !== 'boolean')
+      invalid(`${at}.progression`, 'expected a boolean');
   }
 
   function validateStoryDocument(document) {
@@ -173,24 +175,38 @@ const StoryDocument = (() => {
         }
       }
       const stageRows = entries(stages, `${at}.stages`, true);
+      const progression = story.lifecycle?.progression === true;
       link(story.entry, stages, `${at}.entry`, 'stage');
       for (const [name, outcome] of entries(outcomes, `${at}.outcomes`, true)) {
         const location = `${at}.outcomes.${name}`;
-        fields(outcome, location, ['title'], ['summary', 'refs']);
+        fields(outcome, location, ['title'], ['summary', 'refs', ...(progression ? ['status'] : [])]);
+        if (Object.hasOwn(outcome, 'status') && !['completed', 'failed'].includes(outcome.status))
+          invalid(`${location}.status`, 'expected completed or failed');
         labelsAndRefs(outcome, location, references);
       }
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
-        fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story']);
+        fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story', ...(progression ? ['objectives'] : [])]);
         labelsAndRefs(stage, location, references);
         if (Object.hasOwn(stage, 'roles')) links(stage.roles, roles, `${location}.roles`, 'role');
         if (Object.hasOwn(stage, 'story')) link(stage.story, stories, `${location}.story`, 'story');
+        const objectives = Object.hasOwn(stage, 'objectives') ? stage.objectives : {};
+        const objectiveRows = entries(objectives, `${location}.objectives`);
+        if (objectiveRows.length > 64) invalid(`${location}.objectives`, 'a stage supports up to 64 objectives');
+        for (const [name, objective] of objectiveRows) {
+          const place = `${location}.objectives.${name}`;
+          fields(objective, place, ['title'], ['summary', 'refs', 'optional']);
+          labelsAndRefs(objective, place, references);
+          if (Object.hasOwn(objective, 'optional') && typeof objective.optional !== 'boolean')
+            invalid(`${place}.optional`, 'expected a boolean');
+        }
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
           const edge = `${location}.next.${choice}`;
-          fields(target, edge, [], ['stage', 'outcome']);
-          if (Object.keys(target).length !== 1) invalid(edge, 'expected exactly one stage or outcome target');
+          fields(target, edge, [], ['stage', 'outcome', ...(progression ? ['requires'] : [])]);
+          if (Object.hasOwn(target, 'stage') === Object.hasOwn(target, 'outcome')) invalid(edge, 'expected exactly one stage or outcome target');
           if (Object.hasOwn(target, 'stage')) link(target.stage, stages, `${edge}.stage`, 'stage');
           else link(target.outcome, outcomes, `${edge}.outcome`, 'outcome');
+          if (Object.hasOwn(target, 'requires')) links(target.requires, objectives, `${edge}.requires`, 'objective');
         }
       }
     }

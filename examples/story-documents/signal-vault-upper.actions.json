@@ -1,0 +1,89 @@
+[
+  {
+    "tick": 4,
+    "action": "world/story-objective",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "survey",
+      "visit": 1,
+      "objective": "service-key",
+      "result": "completed",
+      "reason": "key-recovered"
+    }
+  },
+  {
+    "tick": 5,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "survey",
+      "visit": 1,
+      "branch": "upper-route",
+      "reason": "gantry-unlocked"
+    }
+  },
+  {
+    "tick": 6,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "gantry",
+      "visit": 2,
+      "branch": "service-detour",
+      "reason": "inspect-backup"
+    }
+  },
+  {
+    "tick": 7,
+    "action": "world/story-objective",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "service-bay",
+      "visit": 3,
+      "objective": "test-receiver",
+      "result": "skipped",
+      "reason": "time-running-low"
+    }
+  },
+  {
+    "tick": 8,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "service-bay",
+      "visit": 3,
+      "branch": "rejoin",
+      "reason": "returned-to-main-receiver"
+    }
+  },
+  {
+    "tick": 9,
+    "action": "world/story-objective",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "alignment",
+      "visit": 4,
+      "objective": "tune",
+      "result": "completed",
+      "reason": "receiver-tuned"
+    }
+  },
+  {
+    "tick": 10,
+    "action": "world/story-choose",
+    "args": {
+      "document": "signal-vault",
+      "story": "open-vault",
+      "stage": "alignment",
+      "visit": 4,
+      "branch": "lock-down",
+      "reason": "unstable-carrier"
+    }
+  }
+]

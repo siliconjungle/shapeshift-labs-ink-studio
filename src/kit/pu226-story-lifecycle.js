@@ -8,6 +8,7 @@
     completed: [], failed: [], withdrawn: [], expired: []
   });
   const limit = 64;
+  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose']);
   const reasonOK = value => typeof value === 'string' && value.length <= 256 && value.trim().length > 0;
   const fields = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
   const allowed = (from, to) => from === null ? to === 'available' : own(destinations, from) && destinations[from].includes(to);
@@ -24,19 +25,29 @@
       const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry };
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
       entries.set(keyOf(info), { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
+        stages: definition.lifecycle.progression ? definition.stages : undefined,
         duration: offerFor === undefined ? null : Math.max(1, W.storyTriggers.ticks(offerFor, dt, Math.ceil)) });
     }
     if (!entries.size) return null;
     const order = [...entries.keys()].sort();
 
-    function checkAction(args) {
-      check(fields(args, ['document', 'story', 'to', 'reason', 'outcome']) &&
+    function checkAction(action, args) {
+      const extra = action === 'story-transition' ? ['to', 'outcome'] :
+        action === 'story-choose' ? ['stage', 'visit', 'branch'] : ['stage', 'visit', 'objective', 'result'];
+      check(fields(args, ['document', 'story', 'reason', ...extra]) &&
         typeof args.document === 'string' && !args.document.includes('/') &&
         typeof args.story === 'string' && !args.story.includes('/'), 'Story transition needs document and story IDs');
       const def = entries.get(keyOf(args));
       check(def, 'Unknown story with lifecycle ' + keyOf(args));
+      if (action !== 'story-transition') {
+        check(def.stages && reasonOK(args.reason), 'Story progress needs enabled stage progression and a reason');
+        W.storyStages.checkAction(action, def.stages, args);
+        return;
+      }
       check(typeof args.to === 'string' && own(destinations, args.to) && args.to !== 'available' && reasonOK(args.reason) &&
         outcomeOK(def, args.to, args.outcome), 'Story transition needs a destination, reason, and any valid outcome ID');
+      check(!def.stages || args.to !== 'completed' && args.outcome === undefined,
+        'Select an ending branch to resolve a story with stage progression');
     }
 
     function validateEvidence(row, def, tick) {
@@ -60,7 +71,7 @@
         const row = state[key];
         if (row === null) continue;
         const message = 'Invalid saved story lifecycle for ' + key;
-        check(fields(row, ['transitions', 'dropped', 'source']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit) && validateEvidence(row, def, tick), message);
         let previous;
@@ -71,6 +82,12 @@
             (previous ? change.from === previous.to && change.tick >= previous.tick : (change.from === null) === (row.dropped === 0)), message);
           previous = change;
         }
+        const hasFlow = Boolean(def.stages && row.transitions.some(change => change.to === 'active' || change.from === 'active' || change.from === 'suspended'));
+        if (hasFlow) {
+          const activated = row.transitions.find(change => change.from === 'available' && change.to === 'active');
+          W.storyStages.validate(row.flow,def,previous,tick,activated?.tick,reasonOK,message);
+        }
+        else check(!own(row, 'flow'), message);
       }
     }
 
@@ -82,15 +99,29 @@
         if (entries.has(key)) matched.set(key, { trigger: start.trigger, evidence: start.evidence });
         else emit('story-started', start);
       }
+      function save(key, row) {
+        if (state === previous) state = { ...previous };
+        state[key] = row;
+      }
+      function enterStage(publish, info, flow, reason) {
+        const { stage, visit } = flow.current;
+        publish('story-stage-entered', { ...info, stage, visit, reason });
+      }
       function transition(key, to, reason, outcome, publish = emit, source = state[key]?.source) {
-        const prior = state[key], from = statusOf(prior), { info } = entries.get(key);
+        const prior = state[key], from = statusOf(prior), { info, stages } = entries.get(key);
+        const started = from === 'available' && to === 'active';
+        const flow = started && stages ? W.storyStages.initial(info.stage,tick) : prior?.flow;
         const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }) };
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
-        if (state === previous) state = { ...previous };
-        state[key] = { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow, ...(source && { source }) };
-        publish('story-transition', { ...info, ...change, ...source });
-        if (from === 'available' && to === 'active') publish('story-started', { ...info, ...source });
+        save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
+          ...(source && { source }), ...(flow && { flow }) });
+        const stage = flow?.current ?? flow?.route.at(-1);
+        publish('story-transition', { ...info, ...change, ...source, ...(stage && { stage:stage.stage, visit:stage.visit }) });
+        if (started) {
+          publish('story-started', { ...info, ...source });
+          if (flow) enterStage(publish,info,flow,reason);
+        }
       }
       for (const key of order) {
         const def = entries.get(key), prior = state[key], source = matched.get(key);
@@ -102,8 +133,28 @@
           transition(key, 'expired', 'offer-timeout');
         }
       }
-      for (const { args, publish } of commands) {
+      for (const { action, args, publish } of commands) {
         const { to, reason, outcome } = args, key = keyOf(args), from = statusOf(state[key]);
+        if (action !== 'story-transition') {
+          const def = entries.get(key), row = state[key];
+          const result = from === 'active' ? W.storyStages.advance(action,def,row.flow,args,tick) : { rejected:'story-not-active' };
+          const step = { ...def.info, stage:args.stage, visit:args.visit };
+          if (result.rejected) {
+            publish('story-progress-rejected', { ...step, action, reason:result.rejected, requestedReason:reason,
+              ...(args.branch !== undefined && { branch:args.branch }), ...(args.objective !== undefined && { objective:args.objective }),
+              ...(result.pending && { pending:result.pending }) });
+            continue;
+          }
+          save(key, { ...row, flow:result.flow });
+          if (result.objective) publish('story-objective-resolved', { ...step, ...result.objective });
+          else {
+            publish('story-branch-chosen', { ...step, ...result.branch });
+            const end = result.branch.target.outcome;
+            if (end === undefined) enterStage(publish,def.info,result.flow,reason);
+            else transition(key,def.outcomes[end].status ?? 'completed',reason,end,publish);
+          }
+          continue;
+        }
         if (!allowed(from, to)) {
           publish('story-transition-rejected', { ...entries.get(key).info, from, to, reason: 'transition-not-allowed', requestedReason: reason });
           continue;
@@ -124,5 +175,5 @@
     }));
   }
 
-  W.storyLifecycle = Object.freeze({ compile, inspect });
+  W.storyLifecycle = Object.freeze({ compile, inspect, actions });
 })(KIT);
