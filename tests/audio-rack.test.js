@@ -87,7 +87,8 @@ test('CLI lists native presets and reuses a recalled state with a new input',t=>
   fs.writeFileSync(path.join(dir,'source.wav'),WAV.encode(input,{encoding:'pcm24'}));
   const cli=path.resolve(__dirname,'../cli/ink-studio.js');
   const go=(...args)=>JSON.parse(execFileSync(process.execPath,[cli,'music','rack',...args],{cwd:dir,encoding:'utf8'}));
-  assert.deepEqual(go('list').map(row=>row.id),['steel-bus','porcelain-room','pocket-repeater']);
+  assert.deepEqual(go('list').map(row=>row.id),['steel-bus','porcelain-room','pocket-repeater',
+    'dynamic-eq','oversampled-clipper','oversampled-saturation','typing-room','factory-warehouse','lady-chapel']);
   go('state','steel-bus','--out','stored.json');
   fs.writeFileSync(path.join(dir,'recipe.json'),JSON.stringify({assets:{main:'source.wav'},state:'stored.json',options:{tail:'cut'}}));
   const files=go('audition','steel-bus','recipe.json','--out','take');

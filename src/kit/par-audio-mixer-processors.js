@@ -23,7 +23,10 @@
       return {type,latency:0,wet,...design};
     }
     const tool=S.mixerTool(raw,rate,time);
-    if (tool) return {type,latency:0,wet,...tool,tail:wet.max===0 ? 0 : tool.tail};
+    if (tool) {
+      if (tool.block && wet.max===0) return {type,latency:tool.latency ?? 0,wet,tail:0,cost:1,block() {}};
+      return {type,latency:0,wet,...tool,tail:wet.max===0 ? 0 : tool.tail};
+    }
     const controls=Object.hasOwn(schema,type) && schema[type];
     check(controls && fields(raw,['type','wet',...Object.keys(controls)]),'Unknown mixer processor or parameter');
     const params=Object.fromEntries(Object.entries(controls).map(([name,[fallback,min,max,fixed]])=>{

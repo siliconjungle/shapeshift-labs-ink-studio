@@ -1,0 +1,65 @@
+{
+  "typing-room": {
+    "space": "Terry’s Typing Room",
+    "authors": "Damian T. Murphy",
+    "collection": "OpenAIR, Audiolab, University of York",
+    "license": "CC-BY-4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "file": "typing-room.wav",
+    "source": "https://webfiles.york.ac.uk/OPENAIR/IRs/terrys-typing-room/stereo/terrys_typing_ortf.wav",
+    "sourceRecord": "https://webfiles.york.ac.uk/OPENAIR/IRs/terrys-typing-room/",
+    "edits": {
+      "sourceRangeSeconds": [
+        0.019,
+        1.28
+      ],
+      "tailFadeSeconds": 0.16,
+      "sampleRate": 48000,
+      "channels": 2,
+      "gainDb": -1.26373
+    },
+    "frames": 60528
+  },
+  "factory-warehouse": {
+    "space": "Terry’s Factory Warehouse",
+    "authors": "Damian T. Murphy",
+    "collection": "OpenAIR, Audiolab, University of York",
+    "license": "CC-BY-4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "file": "factory-warehouse.wav",
+    "source": "https://webfiles.york.ac.uk/OPENAIR/IRs/terrys-factory-warehouse/stereo/terrys_warehouse_stereo.wav",
+    "sourceRecord": "https://webfiles.york.ac.uk/OPENAIR/IRs/terrys-factory-warehouse/",
+    "edits": {
+      "sourceRangeSeconds": [
+        0.068,
+        2.69
+      ],
+      "tailFadeSeconds": 0.48,
+      "sampleRate": 48000,
+      "channels": 2,
+      "gainDb": -9.56096
+    },
+    "frames": 125856
+  },
+  "lady-chapel": {
+    "space": "Lady Chapel, St Albans Cathedral",
+    "authors": "Marcin Gorzel, Gavin Kearney, Aglaia Foteinou, Sorrel Hoare, Simon Shelley",
+    "collection": "OpenAIR, Audiolab, University of York",
+    "license": "CC-BY-4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "file": "lady-chapel.wav",
+    "source": "https://webfiles.york.ac.uk/OPENAIR/IRs/lady-chapel-st-albans-cathedral/stereo/stalbans_a_ortf.wav",
+    "sourceRecord": "https://webfiles.york.ac.uk/OPENAIR/IRs/lady-chapel-st-albans-cathedral/",
+    "edits": {
+      "sourceRangeSeconds": [
+        0.005,
+        2.25
+      ],
+      "tailFadeSeconds": 0.27,
+      "sampleRate": 48000,
+      "channels": 2,
+      "gainDb": -6.15669
+    },
+    "frames": 107760
+  }
+}

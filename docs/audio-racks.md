@@ -19,6 +19,10 @@ ink-studio music rack audition porcelain-room recipe.json --out comparison
 | Steel Bus | Drums or short percussion | Attack and parallel weight |
 | Porcelain Room | Spaced chords and plucks | Room distance and shade |
 | Pocket Repeater | Metallic phrases or sampled hooks | Capture clock and ghost send |
+| Dynamic EQ | Buildup on keys, vocals, or a bus | Low-mid and presence cut |
+| Oversampled Clipper | Peaks on drums or a mix bus | Drive, soft knee, and clip point |
+| Oversampled Saturation | Bass, keys, and subgroups | Drive, tone, and bias |
+| Terry’s Typing Room, Terry’s Factory Warehouse, Lady Chapel | Three measured spaces | Room amount |
 
 ```json
 {
@@ -36,18 +40,27 @@ ink-studio music rack audition porcelain-room recipe.json --out comparison
 A recipe can reference a saved state file relative to itself. In a
 definition, `inputs` maps port names to empty mixer strips and must
 include `main`. A second port can supply an inaudible key for
-sidechain processing. Additional audio assets can supply impulses.
+sidechain processing. A definition can declare WAV assets such as
+impulses in an optional `assets` table, with paths relative to the
+definition. Recipe assets can override these references. Exporting
+a definition with `describe --out` rebases its asset paths. Keep or copy
+the WAVs when moving the definition to another machine.
 Macros map a normalized value or lane into one or more numeric mixer
 controls. A target specifies a path and two endpoint values, which may
 have descending order. Set `bypass: true` in a state to route the main
 port directly to the output. Keep the rack definition with the state
 file to replay it.
 
-`audition` renders the rack and prints the bypass at the same length
-on the same sample grid. It lowers the shared loudness target when
-either print would exceed the chosen true-peak ceiling. The report
-records both gains and the achieved target. The production render
-keeps the rack's gain staging.
+`audition` writes `rack.wav` and `bypass.wav` on the same sample
+grid, with a common integrated loudness target. A very short or quiet
+phrase uses RMS when both prints have a measurable level. The report
+records the matching method, both gains, and the true-peak ceiling.
+`difference.wav` subtracts the matched bypass from the matched rack.
+`effect.wav` subtracts the bypass at the original mix gains, with a
+separate peak-safety trim. For a parallel room, it isolates the
+reflections. The production render keeps the rack's gain staging.
+See [production mix tools](production-mix-tools.md) for processor
+settings and an in-context insert comparison.
 
 Use `audio.renderRack` and `audio.auditionRack` in a headless graph.
 Their audio outputs can feed another rack, a mixer, or an audio print.
@@ -131,7 +144,7 @@ node examples/audio-racks/faust-probe.cjs /path/to/node_modules/@grame/faustwasm
 node examples/audio-racks/workshop.cjs output
 ```
 
-The workshop generates inputs for all three presets and prints matched
+The workshop generates inputs for its three example presets and prints matched
 A/B takes. Pass a fixture manifest as a second argument for the
 optional CLAP comparison. Its plug-in alias must be `relay`.
 The fixture verifies state, key routing, automatable trim, a seven-sample

@@ -1,6 +1,6 @@
 /* Reusable mixer graphs with named input ports, macro recall and aligned audition. */
 (function (P) {
-  const A=P.mediaGraph,T=P.takeTime, {fields,record,finite,integer,id,check,db}=P.musicInstruments;
+  const A=P.mediaGraph,T=P.takeTime, {fields,record,finite,integer,id,check}=P.musicInstruments;
   const format='ink-studio/audio-rack', stateFormat='ink-studio/audio-rack-state';
   function named(value,max,label) {
     check(record(value) && Object.keys(value).length<=max && Object.keys(value).every(id),'Invalid rack '+label);
@@ -23,7 +23,7 @@
     return {object,key};
   }
   function describe(rack) {
-    check(fields(rack,['format','version','id','revision','title','description','inputs','output','strips','processors','taps','macros']) &&
+    check(fields(rack,['format','version','id','revision','title','description','inputs','output','strips','processors','taps','macros','assets']) &&
       rack.format===format && rack.version===1 && id(rack.id) && integer(rack.revision,1,1e6) &&
       typeof rack.title==='string' && rack.title.length>0 && rack.title.length<=80 &&
       (rack.description===undefined || typeof rack.description==='string' && rack.description.length<=240) &&
@@ -47,7 +47,13 @@
     }
     check(named(rack.strips,48,'strips').every(([,row])=>record(row) && !Object.hasOwn(row,'clips')),
       'Rack input ports supply audio clips at render time');
-    return {inputs,macros,fingerprint:(P.data.hash(JSON.stringify(rack))>>>0).toString(16).padStart(8,'0')};
+    const {assets={},...definition}=rack;
+    const entries=named(assets,16,'asset paths');
+    check(entries.every(([name,file])=>!Object.hasOwn(rack.inputs,name) &&
+      typeof file==='string' && file.trim().length>0),'Rack asset paths must name files outside the input ports');
+    // File references can be rebased when a rack definition is exported.
+    if (rack.assets!==undefined) definition.assets=Object.keys(assets).sort();
+    return {inputs,macros,fingerprint:(P.data.hash(JSON.stringify(definition))>>>0).toString(16).padStart(8,'0')};
   }
   function normalized(value) {
     if (finite(value,0,1)) return value;
@@ -111,20 +117,11 @@
   function audition(rack,sources,state={},options={},host={}) {
     check(fields(options,['sampleRate','map','end','tail','targetLufs','ceilingDbTP']),
       'Invalid rack audition settings');
-    const {targetLufs=-18,ceilingDbTP=-1,...settings}=options;
-    check(finite(targetLufs,-36,-9) && finite(ceilingDbTP,-12,-.1),'Invalid audition loudness target or ceiling');
+    const {targetLufs,ceilingDbTP,...settings}=options;
     const wet=render(rack,sources,{...state,bypass:false},settings,host);
-    const dryTake=dry(sources.main,{...settings,sampleRate:wet.value.sampleRate},wet.report.frames).value;
-    const tapes=[dryTake,wet.value], meters=tapes.map(take=>A.mixerMonitor.meter(take));
-    const floor=Math.min(targetLufs,...meters.flatMap(row=>row.integratedLufs===null ? [] :
-      [row.integratedLufs+ceilingDbTP-row.truePeakDbTP]));
-    const gains=meters.map(row=>row.integratedLufs===null ? (row.truePeakDbTP===null ? 0 :
-      Math.min(0,ceilingDbTP-row.truePeakDbTP)) : floor-row.integratedLufs);
-    const [bypass,value]=tapes.map((take,i)=>({...take,samples:take.samples.map(x=>x*db(gains[i]))}));
-    return {value,bypass,state:wet.state,report:{rack:rack.id,frames:wet.report.frames,sampleRate:value.sampleRate,
-      matchingLufs:meters.every(row=>row.integratedLufs!==null) ? floor : null,ceilingDbTP,
-      takes:Object.fromEntries(['bypass','rack'].map((name,i)=>[name,{before:meters[i],gainDb:gains[i]}])),
-      mixer:wet.report}};
+    const dryTake=dry(sources.main,{...settings,sampleRate:wet.value.sampleRate},wet.report.frames);
+    const result=A.mixerMonitor.compare(dryTake,wet,{targetLufs,ceilingDbTP});
+    return {...result,state:wet.state,report:{...result.report,rack:rack.id,mixer:wet.report}};
   }
   A.audioRack=Object.freeze({state:recall,render,audition});
 })(KIT.procedural);

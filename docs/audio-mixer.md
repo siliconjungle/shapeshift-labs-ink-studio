@@ -54,7 +54,7 @@ ink-studio music mix render session.json --out take
   mono or stereo sources to the session's stereo sample grid.
 - **Inserts** name processors in a separate bank. Replace a definition or
   reorder the strip's insert names without editing the clips or score.
-  An insert can take its compressor detector from another strip's
+  An insert can take its dynamics detector from another strip's
   `input`, `pre`, or `post` tap. Leave the sidechain out to detect the
   insert's own input. An inaudible key strip can use `output: null`.
 - **Input gain** takes a linear 0–1 value before inserts and before the
@@ -99,9 +99,11 @@ Beat, second, and sample lanes can coexist in one mixer.
 | `reverb` | Fixed `size` and `decay` in seconds, automated `damping` |
 | `compressor` | Automated `thresholdDb`, `ratio`, and `makeupDb`, with fixed `attack`, `release`, and `lookahead` in seconds |
 | `eq` | Up to eight parametric bands with automated frequency, Q, and bell or shelf gain |
+| `dynamic-eq` | Up to six stereo-linked dynamic bells and shelves with an optional external key |
+| `clipper` | 2×, 4×, or 8× oversampling with drive, clip point, knee, and output trim |
 | `gate`, `expander` | Below-threshold dynamics. Both can take an external key |
 | `transient` | Independent attack and sustain gain, using two envelope speeds |
-| `saturation` | Soft clipping with drive, asymmetry, tone and output trim |
+| `saturation` | Soft clipping with drive, asymmetry, tone, output trim, and optional 2×, 4×, or 8× oversampling |
 | `limiter` | Stereo-linked true-peak ceiling with lookahead and release |
 | `deesser`, `band-duck` | Dialogue-focused dynamic EQ with an optional external key for band ducking |
 
@@ -142,6 +144,8 @@ loudness and peak metering, and mono and small-speaker checks.
 See [sound design inserts](sound-design-effects.md) for tempo echoes,
 imported impulse responses, modulation, tape drift, granular playback,
 spectral freeze, and retro sampling.
+See [production mix tools](production-mix-tools.md) for dynamic EQ, oversampled
+shaping, measured rooms, and in-context insert auditions.
 See [audio racks](audio-racks.md) for reusable routing, saved controls,
 matched bypass, and the optional offline CLAP worker.
 

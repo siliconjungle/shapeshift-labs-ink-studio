@@ -122,7 +122,12 @@
   }
   S.parametricBand=band;
   S.parametricTail=(mode,rate,hz,q,db)=>tailFor(tuning(mode,rate,hz,q,db));
-  S.mixerTool=(raw,rate,time)=>raw?.type==='eq' ? eq(raw,rate,time) :
-    Object.hasOwn(schemas,raw?.type) ? dynamics(raw,rate,time) :
-    ['deesser','band-duck'].includes(raw?.type) ? S.dialogueBand(raw,rate,time) : null;
+  S.mixerTool=(raw,rate,time)=>{
+    if (raw?.type==='eq') return eq(raw,rate,time);
+    if (raw?.type==='dynamic-eq') return S.dynamicEq(raw,rate,time);
+    if (raw?.type==='clipper' || raw?.type==='saturation' && raw.oversample!==undefined)
+      return S.oversampledWaveshaper(raw,rate,time);
+    if (Object.hasOwn(schemas,raw?.type)) return dynamics(raw,rate,time);
+    return ['deesser','band-duck'].includes(raw?.type) ? S.dialogueBand(raw,rate,time) : null;
+  };
 })(KIT.procedural);

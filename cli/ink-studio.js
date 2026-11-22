@@ -1211,6 +1211,7 @@ const CMD = {
         '  music production sound-pack ID --out DIR   export patches, WAVs, provenance and a mix rack',
         '  music production groove <recipe.json> [mapping.json]   transfer performance timing, accents and gates',
         '  music mix render recipe.json --out directory   render routed audio, inserts, automation and taps',
+        '  music mix audition recipe.json --strip ID --insert ID --out directory   print a matched insert comparison and difference',
         '  music mix meter input.wav [--out report.json]   measure loudness, true peak and mono compatibility',
         '  music mix monitor input.wav --mode mono|small-speaker|stereo --out directory   audition the mix',
         '  music rack list|describe [rack]   discover built-in racks or inspect a definition',

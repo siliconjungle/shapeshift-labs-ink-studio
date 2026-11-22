@@ -43,9 +43,9 @@
       run({source,sources,state,options}) {return A.audioRack.render(source,sources,state,options);}
     },
     'audio.auditionRack': {
-      description: 'Print an aligned, loudness-matched bypass and effects rack with a recalled state.',
+      description: 'Print an aligned, loudness-matched bypass, processed take, and differences from a recalled rack.',
       inputs:{source:'record',sources:'record',state:{type:'record',default:{}},options},
-      outputs:{value:'audio',bypass:'audio',report:'record',state:'record'},
+      outputs:{value:'audio',bypass:'audio',difference:'audio',effect:'audio',report:'record',state:'record'},
       run({source,sources,state,options}) {return A.audioRack.audition(source,sources,state,options);}
     },
     'audio.meterMix': {
