@@ -1,0 +1,132 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "burned-mill",
+  "dt": 0.1,
+  "storyDocuments": [
+    {
+      "file": "burned-mill.json"
+    }
+  ],
+  "systems": {
+    "stock": {
+      "kind": "store",
+      "config": {
+        "accounts": {
+          "mill": {
+            "resource": "grain",
+            "units": "sack",
+            "type": "integer",
+            "initial": 6,
+            "max": 8
+          },
+          "reserve": {
+            "resource": "grain",
+            "units": "sack",
+            "type": "integer",
+            "initial": 2,
+            "max": 8
+          }
+        }
+      }
+    }
+  },
+  "timeline": {
+    "duration": 1.25,
+    "events": [
+      {
+        "id": "survey",
+        "time": 0.1,
+        "kind": "discovery",
+        "detail": {
+          "place": "old-mill"
+        }
+      },
+      {
+        "id": "shortage-1",
+        "time": 0.1,
+        "kind": "shortage",
+        "detail": {
+          "goods": "grain"
+        }
+      },
+      {
+        "id": "shortage-2",
+        "time": 0.4,
+        "kind": "shortage",
+        "detail": {
+          "goods": "grain"
+        }
+      },
+      {
+        "id": "shortage-3",
+        "time": 0.5,
+        "kind": "shortage",
+        "detail": {
+          "goods": "grain"
+        }
+      },
+      {
+        "id": "shortage-4",
+        "time": 0.6,
+        "kind": "shortage",
+        "detail": {
+          "goods": "grain"
+        }
+      }
+    ]
+  },
+  "commands": [
+    {
+      "tick": 2,
+      "action": "world/transfer",
+      "args": {
+        "from": "stock/mill",
+        "to": "stock/reserve",
+        "amount": 4
+      }
+    },
+    {
+      "tick": 4,
+      "action": "world/transfer",
+      "args": {
+        "from": "stock/reserve",
+        "to": "stock/mill",
+        "amount": 4
+      }
+    },
+    {
+      "tick": 5,
+      "action": "world/transfer",
+      "args": {
+        "from": "stock/mill",
+        "to": "stock/reserve",
+        "amount": 4
+      }
+    }
+  ],
+  "eventActions": {
+    "ring-bell": {
+      "on": {
+        "kind": "story-started",
+        "system": "world",
+        "where": {
+          "path": "/story",
+          "value": "carry-grain"
+        }
+      },
+      "actions": [
+        {
+          "action": "world/event",
+          "args": {
+            "kind": "mill-bell",
+            "story": "carry-grain"
+          },
+          "bindings": {
+            "/story": "/story"
+          }
+        }
+      ]
+    }
+  }
+}

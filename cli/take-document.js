@@ -3,6 +3,7 @@ const path = require('node:path');
 const { embed } = require('./data-inputs.js');
 const { install } = require('./asset-pack.js');
 const { embedModels } = require('./simulation-model-files.js');
+const { embedStoryDocuments } = require('./story-document.js');
 
 const format = 'ink-studio/take';
 const plain = value => value !== null && typeof value === 'object' &&
@@ -27,7 +28,8 @@ function readTakeWorld(file, spec, kit, dependency = () => {}) {
   if (spec.world === undefined) return;
   const location = path.resolve(path.dirname(file), spec.world);
   dependency(location);
-  const document = embedModels(JSON.parse(fs.readFileSync(location, 'utf8')), location, dependency), K = kit.KIT;
+  const model = embedModels(JSON.parse(fs.readFileSync(location, 'utf8')), location, dependency), K = kit.KIT;
+  const document = embedStoryDocuments(model, location, dependency);
   const world = document?.format === K.world.models.format ? { ...K.world.models.compile(document) } : document;
   if (world.dataInputs !== undefined) world.dataInputs = embed(K.dataInputs, world.dataInputs, location, dependency);
   if (spec.assetPack !== undefined) {

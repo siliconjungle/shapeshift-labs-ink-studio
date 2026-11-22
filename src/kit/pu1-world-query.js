@@ -258,6 +258,7 @@
       }},
       transfers:{type:'record',read:()=>ok({tick:view.transfers?.[0]?.tick??tick,receipts:view.transfers??[]})},
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
+      ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
       signal:{type:'value',read:({args}) => {
         const port=typeof args.port==='string'?portOf(world,args.port):null;
         return own(signals,port)?ok(signals[port]):missing('unknown signal port');

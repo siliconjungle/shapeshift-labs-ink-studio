@@ -1,0 +1,74 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "observatory",
+  "title": "The Empty Observatory",
+  "stories": {
+    "lookout-arrived": {
+      "kind": "questlet",
+      "title": "Inspect the Lookout",
+      "entry": "survey",
+      "triggers": {
+        "arrival": {
+          "event": {
+            "kind": "order-succeeded",
+            "system": "team",
+            "where": {
+              "path": "/order",
+              "value": "reach-lookout"
+            }
+          }
+        }
+      },
+      "stages": {
+        "survey": {
+          "title": "Inspect the Lookout",
+          "next": {
+            "done": {
+              "outcome": "settled"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "settled": {
+          "title": "The observatory is ready"
+        }
+      }
+    },
+    "main-lens": {
+      "kind": "arc",
+      "title": "Open the Main Lens",
+      "entry": "align",
+      "triggers": {
+        "charge-crossed": {
+          "state": {
+            "field": "power/charge",
+            "at": {
+              "entity": "lookout"
+            },
+            "when": {
+              "op": "gte",
+              "value": 0.6
+            }
+          }
+        }
+      },
+      "stages": {
+        "align": {
+          "title": "Open the Main Lens",
+          "next": {
+            "done": {
+              "outcome": "settled"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "settled": {
+          "title": "The observatory is ready"
+        }
+      }
+    }
+  }
+}

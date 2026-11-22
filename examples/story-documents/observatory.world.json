@@ -1,0 +1,122 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "observatory",
+  "dt": 0.1,
+  "storyDocuments": [
+    {
+      "file": "observatory.json"
+    }
+  ],
+  "entities": {
+    "lookout": {
+      "position": [
+        1,
+        0,
+        0
+      ]
+    }
+  },
+  "systems": {
+    "power": {
+      "kind": "fields",
+      "config": {
+        "fields": {
+          "charge": {
+            "default": 0.25
+          }
+        }
+      }
+    },
+    "team": {
+      "kind": "agents",
+      "config": {
+        "bounds": {
+          "min": [
+            -2,
+            0,
+            -1
+          ],
+          "max": [
+            2,
+            1,
+            1
+          ]
+        },
+        "ground": 0,
+        "cell": 0.2,
+        "species": {
+          "scout": {
+            "mode": "walk",
+            "radius": 0.1,
+            "speed": 1
+          }
+        },
+        "agents": {
+          "scout": {
+            "species": "scout",
+            "position": [
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        "orders": {
+          "tasks": {
+            "move": {
+              "steps": [
+                {
+                  "op": "move",
+                  "at": {
+                    "target": "site"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "commands": [
+    {
+      "tick": 1,
+      "action": "team/issue-order",
+      "args": {
+        "agent": "scout",
+        "order": {
+          "id": "reach-lookout",
+          "task": "move",
+          "targets": {
+            "site": {
+              "entity": "lookout"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tick": 4,
+      "action": "power/set",
+      "args": {
+        "field": "charge",
+        "region": {
+          "bounds": {
+            "min": [
+              0.5,
+              -1,
+              -0.5
+            ],
+            "max": [
+              1.5,
+              1,
+              0.5
+            ]
+          },
+          "value": 0.75
+        }
+      }
+    }
+  ]
+}

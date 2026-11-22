@@ -15,6 +15,9 @@
       "kind": "incident",
       "title": "Fire at the Mill",
       "refs": ["old-mill"],
+      "triggers": {
+        "survey-report": { "event": { "kind": "discovery", "system": "world", "where": { "path": "/place", "value": "old-mill" } } }
+      },
       "entry": "assess",
       "stages": {
         "assess": {
@@ -36,6 +39,13 @@
       "roles": {
         "requester": { "kind": "actor", "ref": "mill-keeper" },
         "porter": { "kind": "actor" }
+      },
+      "triggers": {
+        "repeat-shortage": {
+          "event": { "kind": "shortage", "system": "world", "where": { "path": "/goods", "value": "grain" } },
+          "count": 3,
+          "within": 0.3
+        }
       },
       "entry": "collect",
       "stages": {
@@ -63,6 +73,12 @@
       "kind": "arc",
       "title": "Recover the Mill",
       "refs": ["recovery-scene"],
+      "triggers": {
+        "grain-stays-low": {
+          "state": { "field": "world/account", "args": { "account": "stock/mill" }, "when": { "path": "/balance", "op": "lte", "value": 2 } },
+          "hold": 0.3
+        }
+      },
       "entry": "damage",
       "stages": {
         "damage": {

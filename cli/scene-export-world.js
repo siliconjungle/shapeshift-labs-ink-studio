@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { embed } = require('./data-inputs.js');
 const { embedModels } = require('./simulation-model-files.js');
+const { embedStoryDocuments } = require('./story-document.js');
 const { validateTake, readTakeWorld } = require('./take-document.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -22,7 +23,7 @@ function readExportWorld(file, kit) {
     audio = spec.audio === undefined ? undefined : path.resolve(path.dirname(location), spec.audio);
   } else {
     if (spec?.format !== K.world.format && spec?.format !== K.world.models.format) return;
-    source = embedModels(spec, location);
+    source = embedStoryDocuments(embedModels(spec, location), location);
     if (source.dataInputs !== undefined) source.dataInputs = embed(K.dataInputs, source.dataInputs, location);
   }
   const create = () => K.world.runtime.create(source);

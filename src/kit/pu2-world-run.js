@@ -335,6 +335,7 @@
       validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
         'Unknown event action source ' + system)
     });
+    if (world.storyDocuments !== undefined) plan.storyTriggers = W.storyTriggers.compile(world.storyDocuments, world, systems);
     return plan;
   }
   function actionCheck(raw, plan, min = 1) {
@@ -456,7 +457,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -491,7 +492,7 @@
     let pendingWrites = [], lastDependencies = null, sampling, spatialSampling = {};
     let causalState, weatherTrackState, chunkState;
     let currentQuery, lastTransfers = [], lastSignals = {...rootInputs,...rootOutputs};
-    let lastCheckpoint, eventActionCounts = freeze({}), asyncActive=false, inFlightTick=0;
+    let lastCheckpoint, eventActionCounts = freeze({}), storyTriggerState, asyncActive=false, inFlightTick=0;
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -515,6 +516,7 @@
         ...((aggregates||stateViews.length)&&{[W.simulationAggregate.rawStates]:statesValue}),signals,tick:tickValue,time:tickValue*worldValue.dt,history,dropped,
         ...(receipts.length && {transfers:receipts}),...(causes && {causality:causes}),
         ...(chunkView&&{simulationChunks:chunkView}),
+        ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function phaseReader(name,snapshot,staged) {
@@ -596,6 +598,7 @@
       lastCheckpoint=freeze({format:checkpointFormat,version:1,tick,world,states,outputs,manual,delays,history,dropped,
         signals:lastSignals,events:lastEvents,pending:packCommands(),scenario,
         ...(eventActions && {eventActionCounts}),
+        ...(storyTriggers && {storyTriggerState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -607,6 +610,7 @@
     function install(payload) {
       ({tick,states,outputs,manual,delays,history,dropped,scenario,signals:lastSignals,events:lastEvents}=payload);
       eventActionCounts = payload.eventActionCounts ?? freeze({});
+      storyTriggerState = payload.storyTriggerState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -647,6 +651,8 @@
       for (const name of names) systems[name].validateState?.(payload.states[name]);
       if (eventActions) eventActions.validate(payload.eventActionCounts);
       else check(!own(payload, 'eventActionCounts'), 'Unexpected event action checkpoint data');
+      if (storyTriggers) storyTriggers.validate(payload.storyTriggerState,payload.tick);
+      else check(!own(payload, 'storyTriggerState'), 'Unexpected story trigger checkpoint data');
       transfers.validateBalances(payload.states);
       reservations?.validate(payload.states,payload.tick);
       if (own(payload,'transfers')) transfers.validateReceipts(payload.transfers,payload.tick);
@@ -707,6 +713,7 @@
         const initialView = view();
         weatherTrackState = weather.step(undefined,{time:0,view:initialView,query:Q.create(initialView,systems,projection)});
       }
+      if (storyTriggers) storyTriggerState = storyTriggers.initial(Q.create(view(),systems,projection));
       enqueue([...world.commands,...(world.scenario?.commands ?? []),...timelineCommands(world,timeline)],false);
     }
     const origin = save();
@@ -714,7 +721,7 @@
     const authoredBlockSize = world.simulationModel?.blockSize;
     const blockSize = authoredBlockSize===undefined ? undefined :
       Math.min(authoredBlockSize,systems[names[0]].processingLimit?.()??authoredBlockSize);
-    const blockSystem = blockSize !== undefined && !world.scenario && !weather && !timeline && !eventActions &&
+    const blockSystem = blockSize !== undefined && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
       !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
     if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
@@ -1156,6 +1163,15 @@
       const nextDelays = Object.fromEntries([...incoming.values()].filter(edge => edge.delay && !edge.crossing).map(edge =>
         [edge.to,[...delays[edge.to].slice(1),delayedSamples?.[edge.to] ?? nextOutputs[edge.from]]]));
       publishedSignals = freeze(publishedSignals);
+      let nextStoryTriggers;
+      if (storyTriggers) {
+        let completed;
+        const activated = storyTriggers.advance(storyTriggerState, events, at, () => completed ??= Q.create(
+          view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState),systems,projection));
+        nextStoryTriggers = activated.state;
+        const emit = makeEmit('world');
+        for (const row of activated.starts) emit('story-started',row);
+      }
       const routed = eventActions?.route(eventActionCounts, events, at);
       if (routed?.commands.length) {
         check(routed.commands.length + packCommands().length - commands.length <= maxPendingCommands, 'Pending command budget exceeded');
@@ -1188,7 +1204,8 @@
       const memory = historyWith(events,nextWorld.history);
       const dependencyReport = trace && trace.report();
       const nextCausal = causal?.finish();
-      const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory};
+      const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
+        ...(storyTriggers && {storyTriggers:nextStoryTriggers})};
       if (navigationBefore) for (const notice of navigationChanges(navigationBefore,Q.create(nextView,systems,projection))) {
         check(nextWrites.length<P.spatialDependencies.limit,'Spatial write budget exceeded');
         nextWrites.push(dependencies.write(notice.writer,notice.field,notice.bounds,notice.reason));
@@ -1211,6 +1228,7 @@
       lastTransfers = receipts;
       causalState = nextCausal;
       chunkState = nextChunkState;
+      storyTriggerState = nextStoryTriggers;
       sampling = nextSampling;
       spatialSampling = nextSpatial;
       pendingWrites = freeze(nextWrites);
