@@ -227,11 +227,22 @@
       const mixerReport=desk.report;
       const output=Array.from({length:outputs},(_,i)=>i<printTaps ?
         new Float64Array((stop-warmup)*2) : new Float32Array((stop-warmup)*2));
-      for (let index=Math.floor(warmup/blockFrames);index<rounded(stop);index++) {
+      function copy(index,audio) {
         const blockStart=index*blockFrames, from=Math.max(0,warmup-blockStart);
-        const to=Math.min(stop-blockStart,blockFrames), {audio}=read(index);
+        const to=Math.min(stop-blockStart,blockFrames);
         audio.forEach((data,i)=>output[i].set(data.subarray(from*2,to*2),2*Math.max(0,blockStart-warmup)));
       }
+      // Copy retained audio before filling misses. A long print can evict its
+      // own later blocks if it starts by repopulating an older missing prefix.
+      const missing=[];
+      for (let index=Math.floor(warmup/blockFrames);index<rounded(stop);index++) {
+        const block=store.mixes.get(keys[index]);
+        if (block) {
+          copy(index,block.audio);
+          stats.outputBlockHits++;
+        } else missing.push(index);
+      }
+      for (const index of missing) copy(index,read(index).audio);
       let peak=0;
       if (printGain) {
         for (let index=0;index<blocks.length;index++) {
