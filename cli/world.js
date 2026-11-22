@@ -7,6 +7,7 @@ const {embedStoryDocuments} = require('./story-document.js');
 const StoryRun = require('./story-run-controls.js');
 const StoryWatch = require('./story-watch.js');
 const StoryExplanation = require('./story-explanation.js');
+const StoryForkCompare = require('./story-fork-compare.js');
 
 const read = file => JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const parse = input => JSON.parse(String(input));
@@ -541,7 +542,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       ...(source.instances !== undefined && {instances:source.instances}),
       ...(world.simulationModel.exposedParameters && {exposedParameters:world.simulationModel.exposedParameters})});
   }
-  function runSimulation([mode,file,other]) {
+  function runSimulation([mode,file,other,...extra]) {
     const watching = StoryWatch.enabled(opt);
     if (watching) ensure(['run','resume','fork','replay'].includes(mode)&&other===undefined,
       'Use sim run, resume, fork, or replay with '+StoryWatch.usage);
@@ -869,6 +870,19 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           }
         }
         return respond(StoryExplanation.explain(W,snapshot(input),question));
+      }
+      case 'fork-compare': {
+        ensure(typeof file==='string'&&typeof other==='string'&&!extra.length&&typeof opt.out==='string'&&opt.out.trim()&&
+          Object.keys(opt).every(key=>['out','workers','seed','dt','asset-pack','json'].includes(key)),StoryForkCompare.usage);
+        const sources = new Set([file,other]), plan = StoryForkCompare.prepare(W,read(other),other,read,sources);
+        const input = load(file,{dependency:source=>sources.add(source)});
+        const fromRecording = input.log&&(plan.capture.stage!==undefined||plan.capture.tick<input.checkpoint.tick);
+        const report = StoryForkCompare.run(W,plan,{
+          engine:fromRecording?recordingRun(input):runtime(input),recordedEnd:input.log?.end.tick,
+          workerPool,destination:opt.out,sources
+        });
+        process.stdout.write(JSON.stringify(report,null,opt.json?0:2)+'\n');
+        return;
       }
       case 'scheduler': {
         ensure(typeof file==='string'&&other===undefined&&opt.args===undefined&&

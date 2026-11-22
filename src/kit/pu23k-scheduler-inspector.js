@@ -171,5 +171,5 @@
       commitments:commitments(view,query,pressure,definitions),candidates}));
   }
 
-  W.schedulerInspector = Object.freeze({field,source,inspect});
+  W.schedulerInspector = Object.freeze({field,source,inspect,orderStatus});
 })(KIT);

@@ -120,6 +120,29 @@ node cli/ink-studio.js sim why-not examples/story-documents/breakwater-watch.wor
   --outcome night-delivery --ticks 14 --out missed-ending.json
 ```
 
+### Compare choices from one decision point
+
+`sim fork-compare <world|checkpoint|run> <plan.json> --out <directory>` captures a single checkpoint, runs two branches from it to the same ending tick, and verifies each recording by replay. The directory contains `decision.checkpoint.json`, one portable run per branch, and `comparison.json`. The report compares each branch to the capture and compares the second branch to the first.
+
+| Plan field | What it controls |
+| --- | --- |
+| `story` | Qualified lifecycle ID to feature in the report. |
+| `capture` | Use `{"tick":4}` for an exact tick or `{"stage":"plan-route","byTick":8}` to find the first current visit within a bound. For a recording, a stage search starts at the recording's origin and stays inside its saved interval. Omit capture to use the source's starting or saved checkpoint. |
+| `until` | Shared absolute ending tick after capture. |
+| `actions` | Optional common commands, as an array or a file path relative to the plan. Any commands pending at capture carry into both branches. Later submissions in a source recording stay outside a fork from an earlier tick. |
+| `branches` | Two entries with distinct lower-case IDs. Each can supply `actions` or a shorthand `choice` such as `{"branch":"ridge","select":{"route":"ridge"},"tick":5}`. Omitting the choice tick queues it on the next tick. The shorthand uses the captured stage and visit and follows the normal choice gates. |
+| `probes` | Optional named world queries with `field`, and optional `args`, `at`, or `select`. Samples show downstream differences such as custody or site access. |
+
+Costs include native account deltas, transfer receipts, and story settlements. Commitments show the recorded actor, order, handoffs, and resulting order phase. Fallout includes lifecycle and route changes across stories, cleanup, closure consequences, world events, and probe deltas. Event and transfer counts cover the full trial, with up to 256 recent receipts retained in each journal. Actual rejections appear in the event journal so a rejected choice remains inspectable on replay.
+
+```sh
+node cli/ink-studio.js sim fork-compare examples/story-documents/breakwater-watch.world.json \
+  examples/story-documents/breakwater-watch.fork-compare.json --out breakwater-forks
+node cli/ink-studio.js sim verify breakwater-forks/night.run.json
+```
+
+The breakwater comparison shows two crates sent to the pier on the default route and three sent to the shelter after intervention. The quay experiment compares cancelling a handoff with letting it finish. The Low Bank experiment compares salvaging the survey roll before closure with recovering it later. [Breakwater plan](../examples/story-documents/breakwater-watch.fork-compare.json) · [Quay plan](../examples/story-documents/quay-relay.fork-compare.json) · [Low Bank plan](../examples/story-documents/low-bank.fork-compare.json)
+
 ### Describe a story package before running it
 
 `story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.

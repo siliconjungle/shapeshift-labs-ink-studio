@@ -1,0 +1,27 @@
+{
+  "story": "quay-relay/delivery",
+  "capture": { "tick": 7 },
+  "until": 17,
+  "actions": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "quay-relay-requested" } },
+    { "tick": 1, "action": "crew/issue-order", "args": {
+      "agent": "keeper", "order": { "id": "inspect-landing", "task": "inspect-landing",
+        "reservation": { "board": "booking", "require": { "landing": { "anyOf": ["landing"] } } } }
+    } },
+    { "tick": 1, "action": "crew/issue-order", "args": {
+      "agent": "niko", "order": { "id": "count-hold", "task": "stocktake" }
+    } },
+    { "tick": 2, "action": "world/story-handoff", "args": {
+      "document": "quay-relay", "story": "delivery", "proposal": "relief", "revision": 0, "reason": "change-of-watch"
+    } },
+    { "tick": 8, "action": "crew/cancel-order", "args": { "agent": "keeper", "order": "inspect-landing" } }
+  ],
+  "branches": [
+    { "id": "keep-loader", "actions": [
+      { "tick": 8, "action": "world/story-cancel-handoff", "args": {
+        "document": "quay-relay", "story": "delivery", "revision": 0, "reason": "keep-the-initial-assignment"
+      } }
+    ] },
+    { "id": "complete-handoff" }
+  ]
+}

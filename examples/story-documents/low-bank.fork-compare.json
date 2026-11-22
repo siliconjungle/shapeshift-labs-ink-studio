@@ -1,0 +1,13 @@
+{
+  "story": "low-bank/evacuate",
+  "capture": { "tick": 4 },
+  "until": 14,
+  "branches": [
+    { "id": "salvage-before-closure", "actions": "low-bank.salvaged.actions.json" },
+    { "id": "recover-after-closure", "actions": "low-bank.late-salvage.actions.json" }
+  ],
+  "probes": {
+    "roll-status": { "field": "world/custody", "args": { "object": "archive/roll" }, "select": "/status" },
+    "site-access": { "field": "world/site-history", "args": { "site": "river/low-bank" }, "select": "/state/access" }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "story": "breakwater-watch/dispatch",
+  "capture": { "stage": "plan-route", "byTick": 8 },
+  "until": 14,
+  "branches": [
+    { "id": "coast" },
+    {
+      "id": "night",
+      "choice": { "branch": "ridge", "select": { "route": "ridge" }, "tick": 5 },
+      "actions": [
+        { "tick": 7, "action": "world/story-choose", "args": {
+          "document": "breakwater-watch", "story": "dispatch", "stage": "dispatch-stock", "visit": 3,
+          "branch": "review", "reason": "review-night-demand"
+        } },
+        { "tick": 12, "action": "world/story-select", "args": {
+          "document": "breakwater-watch", "story": "dispatch", "stage": "review-dispatch", "visit": 4,
+          "objective": "destination", "option": "night", "reason": "more-people-at-the-shelter"
+        } },
+        { "tick": 12, "action": "world/story-choose", "args": {
+          "document": "breakwater-watch", "story": "dispatch", "stage": "review-dispatch", "visit": 4,
+          "branch": "night", "reason": "approve-shelter-shipment"
+        } }
+      ]
+    }
+  ]
+}

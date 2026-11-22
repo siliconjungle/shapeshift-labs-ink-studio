@@ -1029,6 +1029,7 @@ const CMD = {
         '    scene sync-prefab <release.json> <world ...> --out NEW_DIRECTORY | --dry-run',
         '    scene apply <scene> <edits.json> --dry-run   preview edited paths and look targets',
         '  sim run|resume|fork|reset|replay|verify|scrub|take|diff|sweep|render ...  run or compare fixed-tick simulations',
+        '    sim fork-compare <world|checkpoint|run> <plan.json> --out directory   capture and compare two verified story branches',
         '    sim run|resume <world|checkpoint|run> [--start-story document/story] [--until-stage document/story/stage]',
         '      [--until-outcome document/story/outcome] [--until-condition condition.json] [--ticks N]   stop at a story breakpoint',
         '    sim run|resume|fork|replay <file> --watch-story document/story[,document/story...]|all   stream story values as NDJSON',
