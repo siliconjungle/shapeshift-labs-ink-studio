@@ -1203,6 +1203,7 @@ const CMD = {
         '  music revise <plan.json> <edits.json> [--out revised.json]   revise unpinned parts and bindings',
         '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
         '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
+        '  story validate <file.json> | story describe <file.json> [story-id]   inspect versioned story definitions',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
@@ -2344,6 +2345,9 @@ const CMD = {
   },
   patch() {
     return require('./patch-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
+  },
+  story() {
+    return require('./story-document.js').storyCommand(pos,opt);
   },
   graph() {
     return require('./graph-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});

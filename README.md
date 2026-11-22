@@ -31,6 +31,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Browser renderer](#browser-renderer)
 - [Live show control](#live-show-control)
 - [CLI patch tooling](#cli-patch-tooling)
+- [Story documents](docs/story-documents.md)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)

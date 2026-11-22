@@ -1,0 +1,91 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "burned-mill",
+  "title": "The Burned Mill",
+  "references": {
+    "old-mill": { "kind": "place", "id": "river-valley/old-mill" },
+    "mill-keeper": { "kind": "actor", "id": "river-valley/mill-keeper" },
+    "crossing": { "kind": "place", "id": "river-valley/east-crossing" },
+    "recovery-scene": { "kind": "scene", "id": "river-valley/mill-recovery" },
+    "recovery-score": { "kind": "score", "id": "river-valley/mill-recovery" }
+  },
+  "stories": {
+    "mill-fire": {
+      "kind": "incident",
+      "title": "Fire at the Mill",
+      "refs": ["old-mill"],
+      "entry": "assess",
+      "stages": {
+        "assess": {
+          "title": "Assess the damage",
+          "next": {
+            "store-intact": { "outcome": "stock-saved" },
+            "store-burned": { "outcome": "stock-lost" }
+          }
+        }
+      },
+      "outcomes": {
+        "stock-saved": { "title": "The grain survived" },
+        "stock-lost": { "title": "The stockpile was lost" }
+      }
+    },
+    "carry-grain": {
+      "kind": "questlet",
+      "title": "Carry Grain Across the River",
+      "roles": {
+        "requester": { "kind": "actor", "ref": "mill-keeper" },
+        "porter": { "kind": "actor" }
+      },
+      "entry": "collect",
+      "stages": {
+        "collect": {
+          "title": "Collect the grain",
+          "roles": ["requester", "porter"],
+          "next": { "collected": { "stage": "cross" } }
+        },
+        "cross": {
+          "title": "Cross with the grain",
+          "roles": ["porter"],
+          "refs": ["crossing"],
+          "next": {
+            "delivered": { "outcome": "grain-delivered" },
+            "road-closed": { "outcome": "delivery-deferred" }
+          }
+        }
+      },
+      "outcomes": {
+        "grain-delivered": { "title": "The village has grain again" },
+        "delivery-deferred": { "title": "The porter returned with the grain" }
+      }
+    },
+    "mill-recovery": {
+      "kind": "arc",
+      "title": "Recover the Mill",
+      "refs": ["recovery-scene"],
+      "entry": "damage",
+      "stages": {
+        "damage": {
+          "title": "Find out what survived",
+          "story": "mill-fire",
+          "next": {
+            "grain-survived": { "outcome": "settled" },
+            "need-supplies": { "stage": "supplies" }
+          }
+        },
+        "supplies": {
+          "title": "Bring new supplies across the river",
+          "story": "carry-grain",
+          "next": {
+            "supplied": { "outcome": "settled" },
+            "crossing-closed": { "outcome": "unresolved" }
+          }
+        }
+      },
+      "outcomes": {
+        "settled": { "title": "The food stores are secure", "refs": ["recovery-score"] },
+        "unresolved": { "title": "The mill must wait for another supply route" }
+      }
+    }
+  }
+}

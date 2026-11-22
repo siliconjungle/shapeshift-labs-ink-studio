@@ -1,0 +1,12 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "assets": { "story": { "format": "json", "file": "burned-mill.json" } },
+  "nodes": {
+    "source": { "op": "jsonAsset", "inputs": { "name": "story" } },
+    "stories": { "op": "data.get", "inputs": { "record": { "node": "source" }, "key": "stories" } },
+    "arc": { "op": "data.get", "inputs": { "record": { "node": "stories" }, "key": "mill-recovery" } }
+  },
+  "outputs": { "arc": { "node": "arc" } },
+  "exports": { "arc": { "output": "arc", "format": "json" } }
+}
