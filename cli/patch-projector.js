@@ -5,7 +5,21 @@ const { randomBytes, randomUUID } = require('node:crypto');
 const { EventEmitter, once } = require('node:events');
 const { int, loopback } = require('./patch-show-config.js');
 
-const leaseMs = 2000;
+const leaseMs = 2000, frameHistory = 512;
+
+function skippedFrames(history, fromSerial, toSerial) {
+  const ranges = [];
+  const first = Math.max(fromSerial, toSerial - frameHistory + 1);
+  let unknown = first - fromSerial;
+  for (let serial = first; serial < toSerial; serial++) {
+    const index = history.get(serial);
+    if (index === undefined) { unknown++; continue; }
+    const last = ranges.at(-1);
+    if (last?.toFrame === index) last.toFrame++;
+    else ranges.push({ fromFrame: index, toFrame: index + 1 });
+  }
+  return { ranges, unknown };
+}
 const assets = new Map([
   ['/', ['patch-projector.html', 'text/html; charset=utf-8']],
   ['/patch-projector.mjs', ['patch-projector.mjs', 'text/javascript; charset=utf-8']],
@@ -32,6 +46,7 @@ async function readMidi(request) {
 
 async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) {
   const key = randomBytes(24).toString('hex'), stream = randomUUID(), connections = new EventEmitter();
+  const history = new Map();
   let client, latest, serial = 0, ended = false, failure, closed;
   const isConnected = () => client && performance.now() - client.seen < leaseMs;
 
@@ -52,7 +67,8 @@ async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) 
       connections.emit('attach');
     }
     if (!snapshot && !attached && after > client.ack) {
-      afterFrame(client.ack ? after - client.ack - 1 : 0);
+      const skipped = client.ack ? after - client.ack - 1 : 0;
+      afterFrame(skipped, skipped ? skippedFrames(history, client.ack + 1, after) : undefined);
       client.ack = after;
     }
     const headers = { 'X-Ink-Stream': stream, 'X-Ink-State': snapshot || attached ? 'snapshot' : 'live' };
@@ -105,6 +121,8 @@ async function openProjector(config, midi, { afterFrame, afterAttach, onMidi }) 
     async wait(signal) { if (!isConnected()) await once(connections, 'attach', { signal }); },
     publish(index, { width, height, data }) {
       latest = { index, width, height, serial: ++serial, bytes: Buffer.from(data.buffer, data.byteOffset, data.byteLength) };
+      history.set(serial, index);
+      history.delete(serial - frameHistory);
     },
     end() { ended = true; },
     close() {

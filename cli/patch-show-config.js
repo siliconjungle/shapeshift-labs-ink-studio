@@ -3,6 +3,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { parseRate, parseSize } = require('./patch-media.js');
 const { encodeOsc } = require('./show-protocols.js');
+const Beats = require('./show-beat-diagnostics.js');
 const Installation = require('./patch-installation.js');
 const Assets = require('./asset-references.js');
 
@@ -79,7 +80,7 @@ async function readShow(file, rehearse, kit) {
   if (fs.statSync(file).size > 1024 * 1024) throw new RangeError('Show cue file exceeds 1 MiB');
   const config = record(JSON.parse(fs.readFileSync(file, 'utf8')), ['format', 'version', 'patch', 'output', 'size', 'fps',
     'frames', 'video', 'audio', 'videoTimeoutMs', 'inputs', 'presets', 'initial', 'cues', 'cueMap', 'projector', 'osc', 'midi', 'slowMs',
-    'liveWorld', 'assetRegistry', 'installation'], 'patch show cue file');
+    'liveWorld', 'assetRegistry', 'installation', 'beatWindows', 'presentationReport'], 'patch show cue file');
   const { patch, output, size, fps: rate = '30', frames = rehearse ? 120 : Infinity,
     inputs = {}, presets = {}, initial, cues = [], projector = {}, slowMs } = config;
   const { KIT: K } = kit ?? require('../index.js').load(), api = K.authoring.assetReferences;
@@ -116,16 +117,22 @@ async function readShow(file, rehearse, kit) {
     previous = frame;
   }
   const directory = path.dirname(path.resolve(file));
-  let cueSource, scheduled=cues;
+  let cueSource, presentationSource, scheduled=cues;
+  const T = K.procedural.takeTime;
+  const beatAnchors = Beats.authored(K.world, config.beatWindows === undefined ? [] : config.beatWindows, frames);
+  if (config.presentationReport !== undefined) {
+    const { file, report } = Beats.reportFile(directory, config.presentationReport, 'presentationReport');
+    presentationSource = file;
+    beatAnchors.push(...Beats.presentation(K, report, rate, frames));
+  }
   if(config.cueMap!==undefined) {
-    if(typeof config.cueMap!=='string'||!config.cueMap.trim()||
-      path.isAbsolute(config.cueMap)||path.win32.isAbsolute(config.cueMap))
-      throw new TypeError('Show cueMap needs a relative clock map report path');
-    cueSource=path.resolve(directory,config.cueMap);
-    const report=JSON.parse(fs.readFileSync(cueSource,'utf8'));
+    const { file, report } = Beats.reportFile(directory, config.cueMap, 'cueMap');
+    cueSource = file;
     const mapped=K.world.clockMapping.read(report);
-    if(mapped.clock.at(0).fps!==fps||report.issues.length)
+    if (T.compare(T.position(mapped.clock, { frame: 1 }), T.div(T.read(1), Beats.showRate(T, rate))) !== 0 ||
+        report.issues.length)
       throw new RangeError('Show cue map needs the show frame rate and resolved cue addresses');
+    for (const row of Beats.edited(K, report, mapped.clock, frames)) beatAnchors.push(row);
     scheduled=cues.concat(mapped.cues.map(cue=>({frame:cue.at.showFrame,preset:cue.preset,clockCue:cue,
       ...(cue.beatId&&{beatId:cue.beatId})})))
       .sort((a,b)=>a.frame-b.frame);
@@ -139,7 +146,7 @@ async function readShow(file, rehearse, kit) {
   const graph = api.isRef(patch) ? bind(patch, 'graph').filename : path.resolve(directory, patch);
   const osc = oscInput(config.osc), midi = midiInput(config.midi, presets);
   const installation = Installation.prepare(K.world, config.installation, { osc, midi, dimensions });
-  return { patch: graph, output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,
+  return { patch: graph, output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,presentationSource,beatAnchors,
     ...sources(media, directory, frames), projector: { port, wait, surfaces: mapping }, slowMs: slowMs ?? 1000 / fps,
     assetFiles: [...assetFiles], assetBindings: [...bindings.values()],
     osc, midi, installation, liveWorld: liveWorldInput(config.liveWorld) };

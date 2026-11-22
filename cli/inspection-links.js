@@ -53,6 +53,10 @@ function locate(api,beatId,files,base,timing) {
             if(Number.isFinite(value))context[key]=value;
           if(typeof row.status==='string')context.status=row.status;
           if(typeof row.output==='string')context.output=row.output;
+          if (format === 'ink-studio/patch-show-report' && /^\/storyDiagnostics\/findings\/\d+$/.test(pointer)) {
+            const { kind, fromFrame, toFrame, source, channel, stage } = row;
+            context.diagnostic = { kind, fromFrame, toFrame, source, channel, stage };
+          }
           if(local(row.file))context.file=row.file;
           if(local(row.frameFolder))context.frameFolder=row.frameFolder;
           if(pointer===''&&local(row.animation?.file))context.file=row.animation.file;

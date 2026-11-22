@@ -37,12 +37,12 @@ function presetControl(config, project, report) {
         change = { preset: cue.preset, source: 'cue', scheduledFrame: cue.frame, ...(cue.clockCue&&{clockCue:cue.clockCue}),
           ...(cue.beatId&&{beatId:cue.beatId}) };
       }
-      if(change)report.cueLink(change.scheduledFrame,pending?'superseded':'applied');
+      if (change) report.cueLink(change.scheduledFrame, pending ? 'superseded' : 'selected');
       change = pending ?? change ?? (first && active !== undefined ? { preset: active, source: 'initial' } : undefined);
       if (change) { active = change.preset; report.preset(change); }
       first = false;
       pending = undefined;
-      return values.get(active) ?? base;
+      return { preset: values.get(active) ?? base, selectedCue: change?.scheduledFrame };
     }
   };
 }
@@ -150,7 +150,7 @@ function openVideo(input, options, fallback, timeout, report) {
       fresh = number > used;
       if (fresh) {
         report.source('video', 'online');
-        report.video('received', number - used - 1);
+        report.video('received', number - used - 1, buffer && { fromFrame: used, toFrame: number - 1 });
         used = number;
       } else {
         const issue = ended ?? (performance.now() - (arrived ?? opened) >= timeout ? 'Video frame timeout' : undefined);
@@ -191,7 +191,7 @@ async function runShow(file, opt, settings, emit) {
     throw new TypeError('Installation tracking needs a named array<record> patch output');
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
-  const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, video, audio,
+  const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, config.presentationSource, video, audio,
     interventionInput?.source].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
   const writer = output && graphOutputs(protectedFiles);
@@ -223,7 +223,7 @@ async function runShow(file, opt, settings, emit) {
     const projectorMidi = config.midi && { ...config.midi,
       choices: Boolean(installation && config.installation.midi) };
     projection = await openProjector(projector, projectorMidi, {
-      afterFrame: skipped => report.displayed(skipped),
+      afterFrame: (skipped, placement) => report.displayed(skipped, placement),
       afterAttach(replaced) { attached = true; if (replaced) midi?.reset(); report.source('projector', 'online'); },
       onMidi: value => midi.push(value)
     });
@@ -257,7 +257,7 @@ async function runShow(file, opt, settings, emit) {
       report.frame(index);
       checkSources(start);
       if (capture) media.frame = capture.sample(index);
-      const preset = control.inputs(index), inputs = live ? { ...preset, [liveWorld.input]: live.sample() } : preset;
+      const { preset, selectedCue } = control.inputs(index), inputs = live ? { ...preset, [liveWorld.input]: live.sample() } : preset;
       const before = performance.now();
       const result = await project.previewFrame(watch, { inputs, time: index / fps }, { profile: true, encodeArtifacts: false });
       for(const [output,value] of Object.entries(result.outputs))
@@ -270,6 +270,7 @@ async function runShow(file, opt, settings, emit) {
       if (picture?.colorSpace === 'srgb-linear' || !(picture?.width * picture?.height <= 1048576))
         throw new TypeError('Projector output needs a display raster up to 1,048,576 pixels');
       projection.publish(index, raster.rgba(picture));
+      if (selectedCue !== undefined) report.cueLink(selectedCue, result.report.passed ? 'applied' : 'render-failed');
       report.stage('output', performance.now() - drawn);
       report.rendered(result.report.passed);
       interventions?.observe(index, live.cursor(), result.report.passed);

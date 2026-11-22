@@ -48,7 +48,7 @@ Debug, puppet, and splat views default to 320×180. Width and height each accept
 
 - `presentation.json` gives the shared clock, source recording digest, and per-view frame receipts with relative PNG paths and SHA-256 hashes. A committed event is linked at the first frame in the selected window that observes its tick. Active performance and effect cues can extend across several frames.
 - `timeline.json` contains editable markers. An optional [marker plan](story-scene-timeline.md) labels events used by the production. The pack also includes the projected performance and effect sheets when configured.
-- Each projector view includes `feed.mkv`, `patch.json`, and `show.json`. Run the show cue file through the existing projector runner. Playback starts at local frame zero. The pack keeps the source frame and tick so you can find the corresponding simulation state.
+- Each projector view includes `feed.mkv`, `patch.json`, and `show.json`. Run the show cue file through the existing projector runner. Playback starts at local frame zero. The pack keeps the source frame and tick so you can find the corresponding simulation state. The generated show uses that index in its [story-aware rehearsal report](story-rehearsal.md).
 - `ink-studio beat <id> pack/presentation.json pack/timeline.json` finds the same event in the frame receipts and editable timeline. Add the performance and effects reports to follow the event into the corresponding gesture, caption, light, or shader.
 
 ## Try the beacon demo

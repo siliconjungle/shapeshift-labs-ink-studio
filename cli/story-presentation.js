@@ -88,7 +88,7 @@ function projector(stage,spec,clock,ffmpeg) {
   },outputs:{picture:{node:'feed'}}});
   const show=dir+'/show.json';
   stage.json(show,{format:'ink-studio/patch-show',version:1,patch:'patch.json',output:'picture',video:'feed.mkv',
-    size:spec.width+'x'+spec.height,fps,frames:clock.frameCount,projector:{surfaces:spec.surfaces??[]}});
+    size:spec.width+'x'+spec.height,fps,frames:clock.frameCount,presentationReport:'../../presentation.json',projector:{surfaces:spec.surfaces??[]}});
   return {file,show};
 }
 

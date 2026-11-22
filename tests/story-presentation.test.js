@@ -87,6 +87,10 @@ test('projector only accepts art and gives the show decoder opaque frames at the
   const { views } = read('pack/presentation.json');
   const show = read('pack/' + views.screen.feed.show);
   assert.deepEqual([show.fps, show.frames, show.size], ['30000/1001', 3, '80x64']);
+  const { readShow } = require('../cli/patch-show-config.js');
+  const config = await readShow(file('pack/' + views.screen.feed.show), true, { KIT: K });
+  assert.deepEqual(config.beatAnchors.map(row => [row.alignment, row.fromFrame, row.sourceFrame, row.tick]),
+    [['presentation', 1, 2, 2], ['presentation', 1, 2, 2]]);
   const expected = views.screen.frames.map(row => Buffer.from(PNG.raster(file('pack/' + row.file)).data));
   assert.deepEqual(expected[0].subarray(0, 4), Buffer.from([0, 0, 0, 255]));
   const decoded = [];
