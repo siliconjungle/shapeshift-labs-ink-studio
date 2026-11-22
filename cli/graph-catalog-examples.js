@@ -77,6 +77,19 @@ const accompanimentSession={...editSession,production:{...production,arrangement
     metal:{patch:'metal',gain:-20}}}};
 const accompanimentBrief={lead:'lead',bass:'bass',metal:'metal',response:performanceRange(0,7.5),
   hook:performanceRange(8,11),context:performanceRange(0,12)};
+const performanceBallot={op:'music.performanceBallot',inputs:{source:accompanimentSession,brief:{
+  lead:'lead',context:accompanimentBrief.context,call:performanceRange(0,2.5),recall:accompanimentBrief.hook,
+  sources:[{id:'bell',change:'Swap to a brighter tone.',patch:{type:'fm',index:2.4}}],
+  performances:[{id:'late',change:'Lean into the held note and delay the second note of the return.',edits:[
+    {op:'record-phrase',lane:'lead',take:'bend',phrase:{id:'delivery',from:0,to:11,
+      drivers:{air:[{id:'a',beat:0,value:.24},{id:'b',beat:3.5,value:.95},{id:'c',beat:11,value:.38}]},
+      mapping:{amplitude:{base:.08,from:{air:.9}}},
+      notes:[{clip:'call',voice:'line',note:'hold',delay:.026,gate:1.29},
+        {clip:'call',voice:'line',note:'return-b',delay:.06,accent:1.24}]}},
+    {op:'comp',lane:'lead',take:'bend',...performanceRange(0,11)}]}],
+  accompaniment:{bass:'bass',metal:'metal',response:accompanimentBrief.response,hook:accompanimentBrief.hook},
+  arrangements:[{id:'pedal',return:'withheld',change:'Put a low pedal under the new delivery.'}]
+}}};
 const sessionExperiment={op:'music.experimentEditSession',inputs:{source:editSession,brief:{
   focus:{from:{beat:0},to:{beat:2}},scout:{from:{beat:0},to:{beat:1}},roles:{hook:'lead'},
   axes:{sound:[{id:'lighter',revision:{patches:{pluck:{type:'fm',index:.34}}}}]}
@@ -570,6 +583,11 @@ const specifications = {
   'music.auditionPhraseTakes': {nodes:{capture:phraseCapture},inputs:{source:link('capture'),
     settings:{lane:'lead',phrase:'opening',takes:['soft']}}},
   'music.arrangePerformance': {inputs:{source:accompanimentSession,brief:accompanimentBrief}},
+  'music.performanceBallot': {inputs:performanceBallot.inputs},
+  'music.recordPerformanceBallot': {nodes:{listen:performanceBallot},inputs:{key:link('listen','key'),
+    audio:link('listen','audio'),token:link('listen','token'),ballot:{listener:'example',
+      answers:{identity:{choices:['a','c'],reason:'Both contours were equally memorable.'}}}}},
+
   'music.experimentEditSession': {inputs:sessionExperiment.inputs},
   'music.keepSessionExperiment': {nodes:{trial:sessionExperiment},inputs:{source:editSession,report:link('trial'),
     choice:{candidate:'take-001',reason:'Keep the lighter onset for this example.'}}},

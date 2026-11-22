@@ -167,8 +167,8 @@
     strip.inserts=[...(strip.inserts ?? []),name];
   }
 
-  S.createPerformanceAccompaniment=({compile,render})=>function arrange(session,brief) {
-    const plan=compile(session), {reference,samples}=S.musicSessionModel, {rate,frames}=plan;
+  function draft(compile,session,brief,mode) {
+    const plan=compile(session), {reference}=S.musicSessionModel, {rate,frames}=plan;
     const {score}=plan.producers.get(reference), {clock}=score;
     check(fields(brief,['lead','bass','metal','response','hook','context','withhold','support','bassMidi','returnMidi','metalMidi']) &&
       ['lead','bass','metal'].every(role=>Object.hasOwn(score.tracks,brief[role])) &&
@@ -248,8 +248,9 @@
         ...(drum && {pitchCents:shift*100})};
     }).filter(row=>row.to-row.from>=rate*.010);
     check(strike.length>0,'The metal hook needs space for at least one attack');
-    const variants={}, clips={}, heard=[];
-    for (const id of ['exposed','withheld','handoff']) {
+    const variants={}, plans={}, returns=[];
+    check(mode===undefined || ['exposed','withheld','handoff'].includes(mode),'Choose a known accompaniment return');
+    for (const id of mode ? [mode] : ['exposed','withheld','handoff']) {
       const next=clone(session), destinations=[answer,pickup.hit];
       const onMetal=id==='handoff';
       const metalNotes=onMetal ? strike : [];
@@ -267,22 +268,33 @@
         .map(row=>({id:row.note.note,take:row.take,clip:row.note.clip,voice:row.note.voice,sample:row.from,midi:row.note.midi}))]));
       check(destinations.every(note=>Object.values(placed).flat().some(row=>row.id===note.id)),
         'An accompaniment note is suppressed by the current score or take');
-      const audio=render(candidate,{from:samples(context.from),to:samples(context.to)});
-      heard.push({id,audio:audio.value,headroom:audio.report.mixer.headroom ?? 1,renderPath:audio.report.renderPath,
-        foreground,events:placed});
+      returns.push({id,foreground,events:placed});
       variants[id]=freeze(next);
+      plans[id]=candidate;
     }
-    const gain=Math.min(...heard.map(row=>row.headroom));
-    const returns=heard.map(({id,audio,headroom,...row})=>{
-      const scale=gain/headroom;
-      clips[id]=scale===1 ? audio : {...audio,samples:Float64Array.from(audio.samples,value=>value*scale)};
-      return {id,...row};
-    });
-    const report=freeze({format:'ink-studio/performance-accompaniment',version:1,sampleRate:rate,lead,bass,metal,support:[...support],
-      ranges:{response,hook,context},gain,attacks:{response:approach,hook:theme},
+    const report={format:'ink-studio/performance-accompaniment',version:1,sampleRate:rate,lead,bass,metal,support:[...support],
+      ranges:{response,hook,context},attacks:{response:approach,hook:theme},
       replies:{bass:{hold:reply.row,...answer},metal:{previous:pickup.prior,call:pickup.row,ratio:pickup.ratio,...pickup.hit}},
       bassReturn:anchor ?? {lane:bass,from:existing.from,to:existing.to,midi:existing.note.midi,authored:true},
-      percussionHook:strike,withhold,returns});
-    return {report,clips,sessions:variants};
+      percussionHook:strike,withhold,returns};
+    return {report,sessions:variants,plans};
+  }
+
+  S.createPerformanceAccompaniment=({compile,render})=>{
+    function run(session,brief) {
+      const {report,sessions,plans}=draft(compile,session,brief), {context}=report.ranges, {samples}=S.musicSessionModel;
+      const heard=report.returns.map(row=>{
+        const audio=render(plans[row.id],{from:samples(context.from),to:samples(context.to)});
+        return {row,audio,headroom:audio.report.mixer.headroom ?? 1};
+      });
+      const gain=Math.min(...heard.map(row=>row.headroom)), clips={};
+      const returns=heard.map(({row,audio,headroom})=>{
+        const scale=gain/headroom;
+        clips[row.id]=scale===1 ? audio.value : {...audio.value,samples:Float64Array.from(audio.value.samples,value=>value*scale)};
+        return {...row,renderPath:audio.report.renderPath};
+      });
+      return {report:freeze({...report,gain,returns}),clips,sessions};
+    }
+    return {run,draft:(session,brief,mode)=>draft(compile,session,brief,mode)};
   };
 })(KIT.procedural);

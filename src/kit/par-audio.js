@@ -285,6 +285,20 @@
       inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{report:'record',clips:'record',sessions:'record'},
       run({source,brief,assets},{host}) {return A.musicSession.create(assets,host).arrangePerformance(source,brief);}
     },
+    'music.performanceBallot': {
+      description:'Scout sound, performance and accompaniment forks, then publish four matched takes for two blind questions.',
+      inputs:{source:'record',brief:'record',assets:sessionAssets},
+      outputs:{test:'record',audio:'record',key:'record',sessions:'record',report:'record',token:'string'},
+      run({source,brief,assets},{host}) {
+        const result=A.musicSession.create(assets,host).performanceBallot(source,brief);
+        return {...result,token:result.test.token};
+      }
+    },
+    'music.recordPerformanceBallot': {
+      description:'Verify the blind excerpts and resolve a listener’s favorite or tie for each answered question.',
+      inputs:{key:'record',ballot:'record',audio:'record',token:{type:'string',default:''}},outputs:{value:'record'},
+      run({key,ballot,audio,token}) {return {value:A.performanceBallot.archive(key,{token,...ballot},audio)};}
+    },
     'music.experimentEditSession': {
       description:'Scout a matrix of sound, phrase and cue edits through a shared session and hear diverse finalists in context.',
       inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{value:'record',clips:'record'},

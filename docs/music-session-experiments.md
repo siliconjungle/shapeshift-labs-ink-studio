@@ -139,3 +139,65 @@ treatment and pocket fixed while changing the approach. The example
 writes both reports, each full-context listening clip, short comparison
 reels and a reusable session and brief. `--scouts` adds all 96 full
 return WAVs.
+
+## Four-way performance ballot
+
+Use a ballot to hear the current cue, a different lead source, a new
+performance of the written lead, and accompaniment rebuilt around that
+new performance. Start with the current editable session. The original
+branch is that session as supplied.
+
+```sh
+ink-studio music session performance-ballot session.json brief.json --out review
+ink-studio music session record-ballot review/review-key.json performance-ballot.json --out ballots
+```
+
+`brief.json` uses normal session addresses. Set `lead`, a listening
+`context`, the first `call`, its later `recall`, and an optional shorter
+`scout` within the context. `gapSeconds` controls the silence in the call
+comparison. The full-context comparison plays straight through. Name the
+accompaniment lanes and response and hook ranges in `accompaniment`
+using the [performance arranger](music-edit-session.md#accompaniment-that-follows-a-kept-take).
+
+Each of `sources`, `performances`, and `arrangements` accepts up to 24
+named alternatives. Set `id`, `change` to describe the musical experiment,
+and optionally `family` in each row.
+
+- Sources supply a native instrument `patch`. They preserve the lead's
+  existing gesture, echo and performance configuration, its scheduled
+  onsets, and its accompaniment. The swap changes only the selected
+  lead's instrument, even when other lanes use the same patch.
+- Performances supply lead-only `edits`. Use `record-phrase`,
+  `phrase-point`, `comp-phrase`, and `comp`. The written lead,
+  instrument and accompaniment stay fixed.
+- Arrangements supply a `return` of `exposed`, `withheld`, or
+  `handoff` and optional arranger `settings` such as `bassMidi`,
+  `returnMidi`, `metalMidi`, `withhold`, and `support`. They
+  start from the exact new performance that advanced.
+
+The experiment renderer auditions each family against its reference.
+It screens invalid edits, inaudible scouts and over-level renders,
+then checks the shortlisted prints in context. `advance` sets the
+context budget per family from one to four. The technical ranking
+selects representatives for the ballot. It does not judge what is
+memorable or worth hearing again. The report keeps the scout and
+context results, the advanced choices, and any context prints that
+would repeat an earlier ballot branch after gain alignment.
+
+Open `review/public/index.html` or share the whole `public` directory.
+Each question shuffles its own A–D labels and matches its four excerpts
+to a common integrated loudness under a true-peak ceiling. The browser
+downloads a ballot with a favorite or a group of tied favorites and an
+independent reason for each answered question. The archive checks the
+token and the eight audio excerpts and keeps one submission per listener
+per test. A repeat of the same submission is safe. The private key reveals
+the labels, and `review/sessions` holds the four editable recipes.
+
+Use `editor.performanceBallot(session, brief)` or the
+`music.performanceBallot` graph operation. To validate a downloaded
+ballot, use `mediaGraph.performanceBallot.archive(key, ballot, audio)`
+or `music.recordPerformanceBallot`.
+
+Run `node examples/music-production/performance-ballot.cjs output` to
+reproduce the Blackwater comparison. An optional second argument points
+to the earlier accompaniment demo's `source-session.json`.

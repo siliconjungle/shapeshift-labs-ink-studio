@@ -50,7 +50,7 @@
         words(S.musicSessionModel.reference,row)})}));
   }
 
-  function setup(base,brief) {
+  function setup(base,brief,lockHook=true) {
     check(fields(brief,['id','goal','seed','focus','scout','context','roles','locks','axes','advance','targets','screen']) &&
       id(brief.id ?? 'experiment') && Number.isSafeInteger(brief.seed ?? 0) &&
       (brief.goal===undefined || text(brief.goal,640)) && fields(brief.axes,levels) && Object.keys(brief.axes).length,
@@ -66,8 +66,8 @@
       ['onsets','pitch','all'].includes(row.mode ?? 'onsets') &&
       (!base.audio.has(row.lane) || row.mode==='all')),'Choose valid experiment locks');
     const sentinels=locks.map(row=>({lane:row.lane,span:row.range ? bound(base,row.range) : focus,mode:row.mode ?? 'onsets'}));
-    if (roles.hook && !base.audio.has(roles.hook)) sentinels.push({lane:roles.hook,span:focus,mode:'onsets'});
-    else if (roles.hook) sentinels.push({lane:roles.hook,span:focus,mode:'all'});
+    if (lockHook && roles.hook && !base.audio.has(roles.hook)) sentinels.push({lane:roles.hook,span:focus,mode:'onsets'});
+    else if (lockHook && roles.hook) sentinels.push({lane:roles.hook,span:focus,mode:'all'});
     for (const [lane,mode] of Object.entries(base.pins)) sentinels.push({lane,span:{from:0,to:base.frames},mode});
     for (const row of sentinels) row.before=serial(protectedLane(base,row.lane,row.span,row.mode));
 
@@ -130,10 +130,10 @@
       return candidate;
     }
 
-    function run(source,brief,options={}) {
+    function audition(source,brief,options={},fork) {
       check(fields(options,['onScout']) && (options.onScout===undefined || typeof options.onScout==='function'),
         'Invalid experiment output callback');
-      const base=compile(source), model=setup(base,brief), {scout,focus,context,roles,matrix,sentinels,targets,screen}=model;
+      const base=compile(source), model=setup(base,brief,fork?.lockHook), {scout,focus,context,roles,matrix,sentinels,targets,screen}=model;
       const taps={...base.mixer.taps}, probe={};
       for (const [kind,lane] of Object.entries(roles)) {
         let name=Object.keys(taps).find(key=>taps[key].strip===lane && (taps[key].tap ?? 'post')==='post');
@@ -160,7 +160,14 @@
         result.value.samples.length,metrics.rmsDb,metrics.peakDb,metrics.gain]);
       const exact=new Map([[serial(source),'reference']]), fingerprints=new Map([
         [fingerprintOf(baseScout,baseline),'reference']]);
-      const candidates=[], eligible=[];
+      const candidates=[], eligible=[], sessions={};
+      const forks=new Map();
+      function branch(variants) {
+        if (!fork) return apply(source,variants);
+        const name=variants[0].id;
+        if (!forks.has(name)) forks.set(name,fork.build(name));
+        return forks.get(name);
+      }
       let renders=0;
       for (const [index,variants] of matrix.entries()) {
         const id=identity(index), axes=Object.fromEntries(variants.map(({axis,id,label,family})=>
@@ -169,7 +176,7 @@
         candidates.push(row);
         let audible;
         try {
-          const session=apply(source,variants), plan=guarded(base,session,sentinels), spec=serial(session);
+          const session=branch(variants), plan=guarded(base,session,sentinels), spec=serial(session);
           if (exact.has(spec)) {
             Object.assign(row,{status:'duplicate',duplicateOf:exact.get(spec)});
             continue;
@@ -207,7 +214,7 @@
         const candidate=candidates.find(entry=>entry.id===row.id);
         const index=Number(row.id.slice(5))-1;
         try {
-          const plan=guarded(base,apply(source,matrix[index]),sentinels);
+          const session=branch(matrix[index]), plan=guarded(base,session,sentinels);
           const audio=hear(plan,context);
           contextRenders++;
           row.metrics=spans(audio);
@@ -224,6 +231,7 @@
             row.renderPath=audio.report.renderPath;
             candidate.status='advanced';
             heard.set(row.id,listening(audio));
+            if (fork) sessions[row.id]=session;
           }
         } catch (error) {
           row.status='rejected';
@@ -238,7 +246,7 @@
       const value=freeze({format,version:1,id:brief.id ?? 'experiment',brief:clone(brief),scope:signature(source,brief),
         sampleRate:base.rate,ranges:{focus,scout,context},attempted:matrix.length,scoutRenders:renders,
         contextRenders,contextHeard:heard.size-1,gain,baseline:{scout:baseline,context:baselineContext},candidates,shortlist});
-      return {value,clips};
+      return {value,clips,...(fork && {sessions})};
     }
 
     function keep(source,report,choice) {
@@ -254,6 +262,7 @@
       return {value:freeze(clone(session)),decision:freeze({experiment:report.id,candidate:choice.candidate,reason:choice.reason,
         axes:Object.fromEntries(matrix[index].map(row=>[row.axis,row.id])),scope:report.scope})};
     }
-    return {run,keep};
+    return {run:(source,brief,options)=>audition(source,brief,options),keep,
+      sweep:(source,brief,fork)=>audition(source,brief,{},fork)};
   };
 })(KIT.procedural);

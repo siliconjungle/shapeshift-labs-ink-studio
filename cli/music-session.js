@@ -4,8 +4,13 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.procedural,{fields,check}=P.musicInstruments;
-  check(file && ['inspect','edit','render','preview','compare','audition-phrase','arrange-performance','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, edit, render, preview, compare, audition-phrase, arrange-performance, experiment, keep-experiment, stream, play or handoff');
+  if (mode==='record-ballot') {
+    const result=require('./music-session-ballot.js').archive(file,config,opt.out,P);
+    process.stdout.write(JSON.stringify(result)+'\n');
+    return result;
+  }
+  check(file && ['inspect','edit','render','preview','compare','audition-phrase','arrange-performance','performance-ballot','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, edit, render, preview, compare, audition-phrase, arrange-performance, performance-ballot, record-ballot, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -104,6 +109,9 @@ module.exports=function command([mode,file,config],opt,kit) {
       case 'compare': return compare(row.out,previous,row.preview);
       case 'audition-phrase': return auditionPhrase(row.out,row.settings);
       case 'arrange-performance': return arrangePerformance(row.out,row.brief);
+      case 'performance-ballot':
+        check(typeof row.out==='string','Use an output directory for the listening ballot');
+        return require('./music-session-ballot.js').publish(row.out,editor.performanceBallot(session,row.brief),save);
       case 'experiment':
         check(typeof (row.emitScouts ?? false)==='boolean','emitScouts must be true or false');
         return experiment(row.out,row.brief,row.emitScouts);
@@ -166,7 +174,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   }
   const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(mode==='preview' && {preview:settings}),
     ...(mode==='audition-phrase' && {settings}),
-    ...(mode==='arrange-performance' && {brief:settings}),
+    ...(['arrange-performance','performance-ballot'].includes(mode) && {brief:settings}),
     ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});
   process.stdout.write(JSON.stringify(result)+'\n');
   return result;
