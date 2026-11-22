@@ -85,8 +85,8 @@ export function createSpatialAudioPlayer(context, {
     seen.clear();
     previousTime=-Infinity;
   }
-  function start(voice){
-    const row={voice,when:context.currentTime+voice.delay};
+  function start(voice,at){
+    const row={voice,when:at+voice.delay};
     voices.set(voice.id,row);
     row.pending=asset(voice.asset).then(buffer=>{
       if(disposed||voices.get(voice.id)!==row)return;
@@ -170,7 +170,7 @@ export function createSpatialAudioPlayer(context, {
       }
       const selected=new Map([...desired].sort(([,a],[,b])=>b.gain-a.gain).slice(0,maxVoices));
       for(const row of voices.values())if(!selected.has(row.voice.id))stop(row,true);
-      const pending=[];
+      const pending=[], at=context.currentTime;
       for(const [id,voice] of selected){
         let row=voices.get(id);
         if(row&&(row.voice.asset!==voice.asset||row.voice.rate!==voice.rate||Boolean(row.voice.position)!==Boolean(voice.position))){
@@ -184,7 +184,7 @@ export function createSpatialAudioPlayer(context, {
           }
           row.voice=voice;
           tune(row,false);
-        }else pending.push(start(voice));
+        }else pending.push(start(voice,at));
       }
       return Promise.all(pending).then(()=>undefined);
     },

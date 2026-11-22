@@ -66,9 +66,10 @@ from a user gesture. Cue assets stay under host control.
 ## Select a take from contact context
 
 A binding can use `select` to choose a family before it falls back to its
-ordinary `cue` or material `interaction`. Place specific rules first.
-The first matching rule with an eligible take supplies one cue.
-Independent bindings can still layer cues on the same event.
+ordinary `cue` or material `interaction`. The first matching rule with
+eligible takes supplies the sound. Prop rules run before other rules.
+Within each group, rules run in authored order. Independent bindings can
+still layer cues on the same event.
 
 ```json
 {
@@ -111,7 +112,7 @@ the surface reading. A binding can convert a recorded contact `speed`
 to strength with `speedForFullStrength`. Speeds at or above that
 reference map to one.
 
-Rules can constrain `action`, `object`, `surface`, `strength`, and
+Rules can constrain `action`, `object`, `prop`, `surface`, `strength`, and
 `wetness`. Strength and wetness use ranges from zero to one with an
 inclusive lower bound and exclusive upper bound, except that one is
 included in a range ending there. A missing measurement can match an
@@ -128,3 +129,59 @@ registry revisions from a saved event-sound family. [Sound browser exports](musi
 Run the [context sound demo](../examples/context-sounds/demo.cjs) with
 `node examples/context-sounds/demo.cjs output/context-sounds` to hear
 the same hook on wet stone and dry boards.
+
+### Blend velocity layers and override a material
+
+Give a family a `layers` array to blend neighboring takes. Each layer
+names its normalized velocity `at` and one or more takes from that
+family. Keep layer positions strictly increasing. Weights on takes
+still rank alternatives within a layer.
+
+```json
+{
+  "soundFamilies": {
+    "board": { "takes": { "knock": "board-knock" } },
+    "brass-latch": {
+      "takes": { "soft": "latch-touch", "hard": "latch-clack" },
+      "layers": [{ "at": 0, "takes": ["soft"] }, { "at": 1, "takes": ["hard"] }]
+    }
+  },
+  "bindings": {
+    "impact": {
+      "on": { "kind": "object-contact" },
+      "speedForFullStrength": 4,
+      "loadForFullStrength": 120,
+      "cue": "default-contact",
+      "select": [
+        { "id": "wood", "when": { "surface": "shop/boards" }, "family": "board" },
+        { "id": "latch", "when": { "prop": "brass-latch" }, "family": "brass-latch" }
+      ]
+    }
+  }
+}
+```
+
+`prop` identifies a particular item. It can be authored on the event
+or contact, and defaults to a recorded entity or source ID when available.
+Here the specific brass latch takes precedence over the boards. When its
+rule or takes are ineligible, the boards can supply the sound.
+
+An explicit normalized `strength` takes precedence. Otherwise Ink
+uses scalar `load` or the magnitude of force along the contact normal
+when `loadForFullStrength` is set. It uses `speed` when
+`speedForFullStrength` is set and a load is unavailable. The
+measurement is divided by its authored reference and capped at one.
+
+Ink blends the two neighboring layers with linear gains that add to one
+and schedules them at the same event time. At an anchor or outside the
+authored span it plays one layer. Without a measurement it tries the
+lowest velocity layer. When a take's strength restriction leaves just one of
+the two layers eligible, that layer plays at full gain. If neither is
+eligible, the selector tries the next rule.
+
+For each played layer, the story audio report records the measurement,
+anchor, weight, and any layer fallback alongside the source beat.
+
+Run the [velocity layers demo](../examples/velocity-layers/demo.cjs) with
+`node examples/velocity-layers/demo.cjs output/velocity-layers` to hear
+wood respond to speed and a brass latch respond to load on the same boards.

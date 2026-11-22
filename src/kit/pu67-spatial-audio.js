@@ -88,10 +88,10 @@
     const S=W.spatialSoundSelection, selection=S.compile(config.soundFamilies??{},config.soundSeed??0,cues);
     const bindings=new Map();
     for(const [name,row] of table(config.bindings??{},128,'bindings')){
-      check(keys(row,['on','cue','interaction','at','gain','select','speedForFullStrength'])&&keys(row.on,['kind','system','where'])&&
+      check(keys(row,['on','cue','interaction','at','gain','select','speedForFullStrength','loadForFullStrength'])&&keys(row.on,['kind','system','where'])&&
         id(row.on.kind)&&(row.on.system===undefined||id(row.on.system))&&
         (row.cue!==undefined?cues.has(row.cue):row.interaction!==undefined?['roll','step','impact'].includes(row.interaction):row.select!==undefined)&&
-        (row.speedForFullStrength===undefined||row.select!==undefined&&finite(row.speedForFullStrength,.000001,1e9))&&
+        [row.speedForFullStrength,row.loadForFullStrength].every(value=>value===undefined||row.select!==undefined&&finite(value,.000001,1e12))&&
         (row.at===undefined||selector(row.at))&&finite(row.gain??1,0,16),'Invalid cue binding '+name);
       Q.condition(row.on.where,{});
       if(!bindings.has(row.on.kind))bindings.set(row.on.kind,[]);
@@ -205,14 +205,22 @@
           let chosen;
           if(binding.select){
             if(profile===undefined)profile=surfaceAt(query,at)??null;
-            const context=S.contactContext(row,contact,profile,binding.speedForFullStrength);
-            chosen=selection.choose(binding.select,context,serial,binding.name);
+            const reading=S.readContact(row,contact,profile,binding);
+            chosen=selection.choose(binding.select,reading,serial,binding.name);
             if(!chosen&&binding.cue===undefined&&binding.interaction===undefined)continue;
           }
           matched=true;
-          const site=binding.at??at, cue=chosen?.cue??binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
-          if(cue)add({...raw,id:serial+'/'+binding.name,cue,at:site,gain:gain*(binding.gain??1),
-            selection:chosen?.selection},shots);
+          const site=binding.at??at, voiceId=serial+'/'+binding.name, level=gain*(binding.gain??1);
+          if(chosen){
+            for(const {cue,selection} of chosen){
+              const layer=selection.layer;
+              add({...raw,id:layer?'layer:'+JSON.stringify([voiceId,layer.at]):voiceId,
+                cue,selection,at:site,gain:level*(layer?.weight??1)},shots);
+            }
+          }else{
+            const cue=binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
+            if(cue)add({...raw,id:voiceId,cue,at:site,gain:level},shots);
+          }
         }
         if(!matched&&eventKinds.includes(row.kind)&&cueName(row.cue))add({...raw,id:serial,cue:row.cue},shots);
       }

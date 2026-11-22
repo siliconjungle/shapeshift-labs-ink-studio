@@ -151,6 +151,42 @@ test('weighted sound choices use stable event IDs and reject invalid rules and t
   assert.throws(()=>W.spatialAudio.create({...config,soundFamilies:{}}),/Invalid sound selection rule/);
 });
 
+test('velocity layers blend adjacent takes using strength, normal load, or speed and prioritize prop rules',()=>{
+  const family=(soft,hard)=>({takes:{soft,hard},layers:[{at:0,takes:['soft']},{at:1,takes:['hard']}]});
+  const config={cues:{soft:'felt',hard:'metal',board:'wood',default:'tap'},
+    soundFamilies:{board:{takes:{knock:'board'}},handle:family('soft','hard'),fragile:{
+      ...family('soft','hard'),takes:{soft:{cue:'soft',strength:[0,.2]},hard:{cue:'hard',strength:[.8,1]}}
+    }},
+    bindings:{impact:{on:{kind:'impact'},cue:'default',speedForFullStrength:4,loadForFullStrength:100,select:[
+      {id:'floor',when:{surface:'wood'},family:'board'},
+      {id:'handle',when:{prop:'brass-handle'},family:'handle'},
+      {id:'fragile',when:{prop:'cabinet-knob'},family:'fragile'}
+    ]}}
+  };
+  const audio=W.spatialAudio.create(config);
+  const base={kind:'impact',id:'1.0',entity:'brass-handle',surface:'wood',at:[0,0,-1]};
+  const voices=other=>audio.frame({listener:[0,0,0],events:[{...base,...other},{...base,...other}]}).cues;
+  const blend=voices({speed:1});
+  assert.deepEqual(blend.map(voice=>[voice.cue,voice.gain]),[['soft',.75],['hard',.25]]);
+  assert.deepEqual(blend.map(row=>row.selection.layer),[{at:0,weight:.75},{at:1,weight:.25}]);
+  assert(blend.every(row=>row.selection.rule==='handle' && row.selection.context.prop==='brass-handle'));
+  assert.deepEqual(blend[0].selection.measurement,{kind:'speed',value:1,reference:4});
+  assert.deepEqual(voices({contact:{force:[900,-50,0],normal:[0,2,0]},speed:4})
+    .map(row=>[row.gain,row.selection.measurement]),[[.5,{kind:'load',value:50,reference:100}],[.5,{kind:'load',value:50,reference:100}]]);
+  const measured=voices({strength:.2,load:100,speed:4});
+  near(measured[1].gain,.2);
+  assert.equal(measured[1].selection.measurement.kind,'strength');
+  assert.deepEqual(voices({load:500}).map(row=>[row.cue,row.gain]),[['hard',1]]);
+  assert.deepEqual(voices({load:0}).map(row=>[row.cue,row.gain]),[['soft',1]]);
+  assert.equal(voices({})[0].selection.fallback,'quiet-layer');
+  assert.deepEqual(voices({prop:'cabinet-knob',load:50}).map(row=>row.cue),['board']);
+  assert.deepEqual(voices({prop:'cabinet-knob',load:10}).map(row=>[row.cue,row.gain,row.selection.fallback]),
+    [['soft',1,'available-layer']]);
+  assert.deepEqual(voices({prop:'different',surface:'stone'}).map(row=>row.cue),['default']);
+  assert.throws(()=>W.spatialAudio.create({...config,soundFamilies:{...config.soundFamilies,
+    handle:{takes:{soft:'soft'},layers:[{at:.5,takes:['soft']},{at:.4,takes:['missing']}]}}}),/Invalid velocity layer/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
@@ -172,13 +208,15 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   import {createSpatialAudioPlayer} from ${JSON.stringify(moduleURL)};
   const base=${JSON.stringify(base)}, voice=${JSON.stringify(voice)}, rate=${rate}, samples=${samples};
   const report=body=>fetch(${JSON.stringify(reportURL)},{method:'POST',mode:'no-cors',body:JSON.stringify(body)});
-  async function play(voice,{duplicate=false,cancel=false}={}){
+  async function play(voice,{duplicate=false,cancel=false,blend=false}={}){
     const context=new OfflineAudioContext(2,samples,rate), signal=context.createBuffer(1,samples,rate);
     for(let i=0;i<samples;i++)signal.getChannelData(0)[i]=.25*Math.sin(i*2*Math.PI*${high}/rate)+.25*Math.sin(i*2*Math.PI*${low}/rate);
     let ready;
     const player=createSpatialAudioPlayer(context,{panning:'equalpower',smoothing:0,
       resolveAsset:()=>cancel?new Promise(resolve=>{ready=resolve;}):signal});
-    const frame={...base,cues:[voice]}, started=player.update(frame);
+    const cues=blend?[.25,.75].map((weight,i)=>({...voice,id:'layer-'+i,gain:voice.gain*weight,
+      bands:Object.fromEntries(Object.entries(voice.bands).map(([name,level])=>[name,level*weight]))})):[voice];
+    const frame={...base,cues}, started=player.update(frame);
     if(cancel){await Promise.resolve();player.reset();ready(signal);}
     await started;
     if(duplicate)await player.update(frame);
@@ -212,7 +250,7 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
     const clear=await play(voice), same=await play(voice,{duplicate:true}),
       obstructed=await play({...voice,gain:.22,bands:{low:.22,mid:.22,high:.06},cutoff:1000}),
       cancelled=await play(voice,{cancel:true});
-    await report({clear,same,obstructed,cancelled,starts:await looping()});
+    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping()});
   }catch(error){await report({error:error.stack});}
   </script>`);
   const child=spawn(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
@@ -233,6 +271,7 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   const {clear,same,obstructed,cancelled}=report;
   assert(clear.rms[1]>.1&&clear.rms[1]>clear.rms[0]*4);
   assert.deepEqual(clear,same);
+  near(report.blend.rms[1],clear.rms[1]);
   assert(obstructed.low>0&&obstructed.low<clear.low*.6);
   assert(obstructed.high<clear.high*.03);
   assert.deepEqual(cancelled.rms,[0,0]);

@@ -51,6 +51,32 @@ test('score layers follow smoothed pressure inside a section and moving cue tail
   assert.deepEqual([row.position,row.lastPosition],[[-2,0,0],[2,0,0]]);
 });
 
+test('story replay mixes both velocity takes at the same sample and carries their separate receipts', () => {
+  const world={id:'load-blend',dt:.1,commands:[{tick:2,action:'world/event',args:{kind:'drop',
+    contact:{load:60,prop:'brass-latch'}}}]};
+  const run=R.create(world);
+  run.advance(5);
+  const recording=run.recording();
+  const soundtrack=ink.createSceneAudio({
+    format:'ink-studio/scene-audio',version:1,sampleRate:rate,spatial:{
+      cues:{soft:{asset:'soft'},hard:{asset:'hard'}},
+      soundFamilies:{latch:{takes:{soft:'soft',hard:'hard'},layers:[{at:0,takes:['soft']},{at:1,takes:['hard']}]}},
+      bindings:{drop:{on:{kind:'drop'},loadForFullStrength:120,select:[{id:'latch',when:{prop:'brass-latch'},family:'latch'}]}}
+    }
+  },{kit,resolveAsset:name=>audio(name==='soft'?.25:.75,120)});
+  const render=start=>soundtrack.render({startPoint:T.read(start),endPoint:T.read(.5)},{
+    runtime:()=>R.openRecording(recording),recordedThrough:5,trace:true
+  });
+  const all=render(0), cut=render(.2);
+  const rows=all.report.storyAudio.cues;
+  assert.deepEqual(rows.map(row=>[row.cue,row.onsetSample,row.selection.layer.weight]),[['soft',1600,.5],['hard',1600,.5]]);
+  assert(rows.every(row=>row.source.beatId==='ink:beat:load-blend/main/2.0'));
+  assert.deepEqual(cut.report.storyAudio.cues,rows);
+  const mixed=ink.decodeWav(all.waves.mix), sliced=ink.decodeWav(cut.waves.mix);
+  assert.deepEqual(Array.from(select(mixed,.2)),[.5,.5]);
+  assert.deepEqual(sliced.samples,mixed.samples.subarray(3200));
+});
+
 test('story audio prints a verified branch window with exact onset and beat lookup', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-story-audio-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
