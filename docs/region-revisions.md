@@ -62,6 +62,74 @@ It accepts `retain`, `maxEdits`, and `maxActions`. Region packets are
 ordinary versioned JSON and the receiver validates them before committing
 a replacement. The API works with local scripts and files.
 
+## Carry named continuity across region views
+
+Add `regionContinuity` to a world with authored simulation chunks. It
+selects the people, parties, accounts, and story lifecycles that a
+receiver needs even when it unloads every regional section.
+
+```json
+"regionContinuity": {
+  "people": {
+    "mira": { "system": "crew", "agent": "mira", "generation": 1 }
+  },
+  "parties": {
+    "caravan": { "formation": "crew/caravan" }
+  },
+  "accounts": {
+    "on-the-road": { "account": "west-stock/pack", "party": "caravan" },
+    "east-rations": { "account": "east-stock/rations", "dormantTransfers": true }
+  },
+  "stories": {
+    "canal-caravan/deliver": { "people": ["mira"], "parties": ["caravan"], "accounts": ["on-the-road"], "regions": ["east"] }
+  }
+}
+```
+
+| Record | Source and continuity |
+| --- | --- |
+| `people` | A roster, agent ID, and generation identify one lifetime. The report includes the live region, solver owner, detail or aggregate representation, sleep state, and any current order or travel phase. A departed lifetime becomes `unavailable`. |
+| `parties` | Use a live `formation` handle or a list of named `members`. A formation publishes its current membership and phase. The report lists the regions the members occupy, including both regions when a party straddles a boundary. |
+| `accounts` | Read the balance from one exposed account. An optional `person` or `party` makes its region follow that carrier while the native account keeps its solver owner. |
+| `stories` | Use a qualified lifecycle ID. The report includes status, current stage and visit, and any outcome. Link named people, parties, accounts, or explicit regions to identify where the story is relevant. |
+
+`world/region-continuity` reports those records to the CLI, host queries,
+and story conditions. A condition can select `/people/mira/region`,
+for example. The report derives from the committed simulation. Region
+packets include the same report under `state.continuity`, and deltas
+can update it as the selected region set changes. Pull with
+`{ "regions": [] }` to unload all regional sections while retaining
+that report. Recipients can save the resulting snapshot and pick up
+the same stream, including after a history gap. The authoritative
+run resumes from its world checkpoint.
+
+The reported geographic region and solver owner are independent.
+A person can be east of the boundary while its roster stays in the
+west. Its owner still determines when that solver steps. The runtime
+keeps formation and story state through sleep and aggregation.
+Detailed work resumes at the solver's normal boundaries.
+
+For native store accounts, `dormantTransfers` allows a story settlement
+to post an exact transfer while the owning chunk sleeps. Every sleeping
+endpoint must opt in. The same account capacity checks, atomic batch
+commit, and transfer receipts apply, and the solver clock stays
+asleep. Movement, work, and reservations retain their existing
+simulation requirements.
+
+The [Canal Caravan demo](../examples/story-documents/canal-caravan.world.json)
+follows Mira and Noor across the canal, through cohort mode and sleep,
+and back to detailed movement. An allocation moves four rations
+between sleeping depots while the delivery questlet is in progress.
+
+```sh
+ink-studio sim run examples/story-documents/canal-caravan.world.json --ticks 24 --record caravan.run.json
+ink-studio probe caravan.run.json --ticks 10 --field world/region-continuity
+ink-studio sim regions caravan.run.json --stream canal-continuity --regions '' --ticks 10 --out unloaded.json
+ink-studio sim regions caravan.run.json --stream canal-continuity --regions east,west --ticks 24 \
+  --since unloaded.json --out returned.json
+ink-studio sim regions-apply unloaded.json returned.json
+```
+
 ## Headless example
 
 ```sh

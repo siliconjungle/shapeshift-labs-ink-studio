@@ -1,0 +1,40 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "canal-caravan",
+  "title": "A caravan crosses while the western region goes to sleep",
+  "stories": {
+    "deliver": {
+      "kind": "questlet",
+      "title": "Bring the caravan to the east depot",
+      "triggers": { "dispatch": { "event": { "kind": "delivery-authorized" } } },
+      "lifecycle": { "progression": true },
+      "entry": "travel",
+      "stages": { "travel": {
+        "title": "Follow the formation to the depot",
+        "decision": { "mode": "autonomous" },
+        "objectives": { "arrived": {
+          "title": "The caravan reaches the depot",
+          "evidence": { "event": { "kind": "group-arrived", "system": "crew", "where": { "path": "/group", "value": "caravan" } } }
+        } },
+        "next": { "delivered": { "outcome": "delivered", "auto": true } }
+      } },
+      "outcomes": { "delivered": { "title": "The caravan made the delivery" } }
+    },
+    "share-food": {
+      "kind": "questlet",
+      "title": "Reallocate rations between the two depots",
+      "triggers": { "allocation": { "event": { "kind": "allocate-rations" } } },
+      "lifecycle": { "progression": true, "settlement": { "costs": {
+        "rations": { "transfer": { "from": "west-stock/rations", "to": "east-stock/rations", "amount": 4 } }
+      } } },
+      "entry": "account",
+      "stages": { "account": {
+        "title": "Confirm the allocation",
+        "decision": { "mode": "autonomous" },
+        "next": { "recorded": { "outcome": "allocated", "auto": true } }
+      } },
+      "outcomes": { "allocated": { "title": "The east depot has the rations" } }
+    }
+  }
+}

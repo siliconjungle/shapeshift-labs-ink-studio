@@ -16,7 +16,7 @@
       accounts[key] = {resource,units,type,...(at!==undefined&&{at}),read:state=>({balance:state[key],min:normalized.min,max:normalized.max}),
         write:(state,balance)=>({...state,[key]:balance})};
     }
-    return {accounts,initial:()=>initial};
+    return {accounts,durableAccounts:true,initial:()=>initial};
   }
 
   function exchange(config, {world}) {

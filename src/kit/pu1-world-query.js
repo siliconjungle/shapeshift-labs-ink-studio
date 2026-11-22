@@ -121,7 +121,7 @@
     const fields = new Map(), traces = new Map();
     const base = {world, states:visible, signals, tick, time:view.time ?? tick * world.dt};
     const locations = new Map(), active = new Set();
-    let spatialIndex, spatialBatchRead, aliases, appearance, picker, renderScene;
+    let spatialIndex, spatialBatchRead, aliases, appearance, picker, renderScene, continuityReport;
     const navigationSources=new Map();
     const scene = () => renderScene ??= (visual ? visual() : W.visual({makeBuilder,makeSculpt},view,api));
     const transfers = () => W.transfers.bind(systems);
@@ -226,6 +226,8 @@
             system.simulationRepresentation&&own(states,key)?[[key,system.simulationRepresentation(states[key])]]:[])));
         }}
       }),
+      ...(world.regionContinuity!==undefined&&{'region-continuity':{type:'record',qualified:true,read:()=>view.regionContinuity?
+        ok(continuityReport??=W.regionContinuity.report(view.regionContinuity,view,api)):missing('Region continuity is unavailable')}}),
       ...((world.dataInputs !== undefined || dataInputs) && { data: { type: 'value', read({target, args, time}) {
         dataInputs ??= K.dataInputs.prepare(world.dataInputs);
         const options = target.point && args.at === undefined ? { ...args, at: target.point } : args;

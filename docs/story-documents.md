@@ -1106,6 +1106,11 @@ lets a story leave consequences at a stable place. Route a
 `story-transition` into `world/change-site`, then use `site-visited`
 and `world/site-history` to check what returning parties will find.
 
+[Cross-region continuity](region-revisions.md#carry-named-continuity-across-region-views)
+keeps selected lifecycles visible alongside their cast, parties, and
+balances as regional views unload. Stories can read `world/region-continuity`.
+Opted-in store accounts can settle exact story transfers while their chunks sleep.
+
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.
 
 | Trigger | Example | When it starts |

@@ -1,0 +1,65 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "canal-caravan",
+  "dt": 0.25,
+  "storyDocuments": [{ "file": "canal-caravan.json" }],
+  "systems": {
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [0, -1, 0], "max": [16, 3, 8] },
+      "species": { "walker": { "mode": "walk", "radius": 0.12, "speed": 2 } },
+      "agents": {
+        "mira": { "species": "walker", "position": [6, 0, 2] },
+        "noor": { "species": "walker", "position": [6, 0, 3] }
+      },
+      "formations": { "groups": { "caravan": { "members": ["mira", "noor"],
+        "layout": { "columns": 2, "spacing": 0.75 } } } }
+    } },
+    "west-stock": { "kind": "store", "config": { "accounts": {
+      "rations": { "resource": "food", "units": "ration", "type": "integer", "initial": 9 },
+      "pack": { "resource": "food", "units": "ration", "type": "integer", "initial": 2 }
+    } } },
+    "east-stock": { "kind": "store", "config": { "accounts": {
+      "rations": { "resource": "food", "units": "ration", "type": "integer", "initial": 1 }
+    } } }
+  },
+  "simulationChunks": {
+    "grid": { "size": 8 },
+    "focus": { "observer": { "at": [4, 0, 2] } },
+    "levels": [
+      { "id": "near", "within": 0.5 },
+      { "id": "coarse", "within": 8, "systems": { "agents": { "aggregate": { "model": "cohorts", "cell": 8 } } } },
+      { "id": "sleep", "sleep": true }
+    ],
+    "chunks": {
+      "west": { "index": [0, 0], "systems": ["crew", "west-stock"] },
+      "east": { "index": [1, 0], "systems": ["east-stock"] }
+    }
+  },
+  "regionContinuity": {
+    "people": {
+      "mira": { "system": "crew", "agent": "mira", "generation": 1 },
+      "noor": { "system": "crew", "agent": "noor", "generation": 2 }
+    },
+    "parties": { "caravan": { "formation": "crew/caravan" } },
+    "accounts": {
+      "west-rations": { "account": "west-stock/rations", "dormantTransfers": true },
+      "east-rations": { "account": "east-stock/rations", "dormantTransfers": true },
+      "on-the-road": { "account": "west-stock/pack", "party": "caravan" }
+    },
+    "stories": {
+      "canal-caravan/deliver": { "people": ["mira", "noor"], "parties": ["caravan"], "accounts": ["on-the-road"], "regions": ["east"] },
+      "canal-caravan/share-food": { "accounts": ["west-rations", "east-rations"] }
+    }
+  },
+  "commands": [
+    { "tick": 1, "action": "crew/group-move", "args": { "group": "caravan", "to": [12, 0, 2.5] } },
+    { "tick": 2, "action": "world/event", "args": { "kind": "delivery-authorized" } },
+    { "tick": 6, "action": "world/chunk-level", "args": { "chunk": "west", "level": "coarse" } },
+    { "tick": 8, "action": "world/chunk-level", "args": { "chunk": "west", "level": "sleep" } },
+    { "tick": 8, "action": "world/chunk-level", "args": { "chunk": "east", "level": "sleep" } },
+    { "tick": 9, "action": "world/event", "args": { "kind": "allocate-rations" } },
+    { "tick": 13, "action": "world/chunk-level", "args": { "chunk": "west", "level": "near" } },
+    { "tick": 13, "action": "world/chunk-level", "args": { "chunk": "east", "level": "near" } }
+  ]
+}

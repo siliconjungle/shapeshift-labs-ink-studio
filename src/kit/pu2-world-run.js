@@ -373,6 +373,7 @@
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
     }
     plan.incidentPressure = plan.incidentCandidates?.pressure??W.incidentPressure.compile(world.incidentPressure,{});
+    plan.regionContinuity = W.regionContinuity.compile(world,systems,transfers,plan.storyLifecycle);
     const eventActions = templates ? templates.eventActions : world.eventActions;
     if (eventActions !== undefined) plan.eventActions = K.eventActions.compile(
       plan.storyRoles ? plan.storyRoles.resolve(eventActions, 'world.eventActions') : eventActions, {
@@ -516,6 +517,7 @@
       ...(plan.worldMemories && {memories:plan.worldMemories.policy}),
       ...(plan.worldCustody && {custody:plan.worldCustody.policy}),
       ...(plan.worldSiteHistory && {siteHistory:plan.worldSiteHistory.policy}),
+      ...(plan.regionContinuity && {regionContinuity:plan.world.regionContinuity}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
       ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
@@ -552,7 +554,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,worldCustody,worldSiteHistory,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,worldCustody,worldSiteHistory,regionContinuity,navigationSources} = plan;
     const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
       documents:storyRoles?.documents??[]});
     let composition, inspection;
@@ -628,6 +630,7 @@
         ...(memoryState && {memories:memoryState,memoryPolicy:worldMemories.policy}),
         ...(custodyState && {custody:custodyState,custodyPolicy:worldCustody.policy}),
         ...(siteHistoryState && {siteHistory:siteHistoryState,siteHistoryPolicy:worldSiteHistory.policy}),
+        ...(regionContinuity&&{regionContinuity}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
@@ -1496,7 +1499,10 @@
           },
           transfer(args) {
             const accounts = [args.from,args.to];
-            if (!accounts.every(account=>available(endpoint(account)[0]))) return {blocked:'account-not-detailed'};
+            if (!accounts.every(account=>{
+              const [system] = endpoint(account);
+              return available(system)||regionContinuity?.permitsDormant(account)&&!W.simulationAggregate.isAggregate(trial[system]);
+            })) return {blocked:'account-not-detailed'};
             if (receipts.length+transfersAtBoundary.length>=W.transfers.limit) return {blocked:'transfer-budget'};
             const before = causal?.balance&&accounts.map(account=>transfers.inspect(trial,account));
             const receipt = transfers.settle(trial,{...args,mode:'exact'},at,'world',rootedState);

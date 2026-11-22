@@ -1,0 +1,140 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const {test} = require('node:test');
+const {load} = require('..');
+const {embedStoryDocuments} = require('../cli/story-document.js');
+const W = load().KIT.world, R = W.runtime;
+const file = '../examples/story-documents/canal-caravan.world.json';
+const world = ()=>embedStoryDocuments(structuredClone(require(file)),path.resolve(__dirname,file));
+const json = value=>JSON.parse(JSON.stringify(value));
+const scope = (...regions)=>({regions});
+const options = {regionRevisions:{stream:'caravan-test',retain:8}};
+const open = ()=>R.create(world(),options);
+const probe = (run,field,args)=>run.query().probe(field,undefined,args).value;
+const continuity = run=>probe(run,'world/region-continuity');
+const delivery = 'canal-caravan/deliver', allocation = 'canal-caravan/share-food';
+const balances = report=>['west-rations','east-rations','on-the-road'].map(key=>report.accounts[key].balance);
+
+test('people, living formation membership, carried resources and active stories follow geographic region without changing owner',()=>{
+  const authored = world(), run = R.create(authored,options);
+  assert.deepEqual(R.storyPreflight(authored).regionContinuity.people.mira,{system:'crew',agent:'mira',generation:1});
+  const before = continuity(run);
+  assert.deepEqual(before.parties.caravan.regions,['west']);
+  assert.deepEqual(before.accounts['on-the-road'].regions,['west']);
+  assert.equal(before.stories[delivery].status,'pending');
+  run.advance(6);
+  const coarse = continuity(run);
+  assert.equal(coarse.people.mira.owner,'west');
+  assert.equal(coarse.people.mira.region,'east');
+  assert.equal(coarse.people.mira.representation,'aggregate');
+  assert.equal(coarse.people.mira.model,'cohorts');
+  assert.equal(coarse.parties.caravan.phase,'moving');
+  assert.deepEqual(coarse.parties.caravan.members.map(row=>row.handle.generation),[1,2]);
+  assert.deepEqual(coarse.accounts['on-the-road'].regions,['east']);
+  assert.deepEqual(coarse.stories[delivery].regions,['east']);
+  run.advance(10);
+  const sleeping = continuity(run);
+  assert.equal(sleeping.people.mira.sleeping,true);
+  assert.deepEqual(sleeping.people.mira.position,coarse.people.mira.position);
+  assert.deepEqual(sleeping.parties.caravan,coarse.parties.caravan);
+  assert.deepEqual(sleeping.stories[delivery],coarse.stories[delivery]);
+  assert.deepEqual(balances(sleeping),[5,5,2]);
+  assert.equal(sleeping.accounts['east-rations'].sleeping,true);
+  assert.equal(sleeping.stories[allocation].status,'completed');
+  const settled = probe(run,'world/story-settlements',{story:allocation}).costs;
+  assert.equal(settled.tick,9);
+  assert.equal(settled.effects[0].detail.status,'full');
+  const saved = json(run.checkpoint()), resumed = R.create(saved.world,{checkpoint:saved,...options});
+  run.advance(24);
+  resumed.advance(24);
+  const arrived = continuity(run);
+  assert.equal(arrived.people.mira.representation,'detail');
+  assert.equal(arrived.people.mira.sleeping,false);
+  assert.equal(arrived.parties.caravan.phase,'arrived');
+  assert.equal(arrived.stories[delivery].outcome,'delivered');
+  assert.deepEqual(arrived.people.mira.handle,before.people.mira.handle);
+  assert.deepEqual(balances(arrived),[5,5,2]);
+  assert.deepEqual(resumed.checkpoint(),run.checkpoint());
+  assert.deepEqual(continuity(resumed),arrived);
+  assert.deepEqual(R.replay(json(run.recording())).checkpoint(),run.checkpoint());
+});
+
+test('regional packets retain continuity through scope changes, complete unload, restore and history-gap recovery',()=>{
+  const run = open(), receiver = W.regionRevisions.receiver();
+  const west = run.regions.pull(scope('west'));
+  assert.equal(receiver.apply(json(west)).status,'applied');
+  run.advance(6);
+  const east = run.regions.pull(scope('east'),{since:west.cursor});
+  assert.equal(east.type,'delta');
+  assert(east.edits.some(edit=>edit.path[0]==='continuity'));
+  assert.equal(receiver.apply(json(east)).status,'applied');
+  assert.deepEqual(Object.keys(receiver.snapshot().state.regions),['east']);
+  assert.equal(receiver.snapshot().state.regions.east.systems.crew,undefined);
+  assert.deepEqual(receiver.snapshot().state.continuity,continuity(run));
+  run.advance(10);
+  const unloaded = run.regions.pull(scope(),{since:east.cursor});
+  assert.equal(receiver.apply(json(unloaded)).status,'applied');
+  const retained = receiver.snapshot();
+  assert.deepEqual(retained.state.regions,{});
+  assert.equal(retained.state.continuity.stories[delivery].status,'active');
+  const reopened = W.regionRevisions.receiver({snapshot:json(retained)});
+  run.advance(24);
+  const recovered = run.regions.pull(scope('east','west'),{since:retained.cursor});
+  assert.equal(recovered.type,'snapshot');
+  assert.equal(recovered.reason,'history-gap');
+  assert.equal(reopened.apply(json(recovered)).status,'applied');
+  assert.equal(reopened.snapshot().state.continuity.stories[delivery].outcome,'delivered');
+  assert.deepEqual(reopened.snapshot().state,run.regions.pull(scope('east','west')).state);
+});
+
+test('an absent named lifetime never resolves to a replacement with the same local ID',()=>{
+  const run = open();
+  run.advance(24);
+  run.schedule([
+    {tick:25,action:'crew/despawn',args:{agent:'mira',generation:1}},
+    {tick:25,action:'crew/spawn',args:{agent:'mira',species:'walker',position:[7,0,1]}}
+  ]);
+  run.advance(25);
+  const report = continuity(run);
+  assert.equal(report.people.mira.status,'unavailable');
+  assert.equal(report.people.mira.handle.generation,1);
+  assert.equal(report.people.mira.region,undefined);
+  assert.equal(probe(run,'crew/agent',{agent:'mira'}).generation,3);
+  assert.deepEqual(report.parties.caravan.members.map(row=>row.person),['noor']);
+  assert.equal(report.stories[delivery].outcome,'delivered');
+});
+
+test('sleeping settlement stays opt-in and retains atomic exact transfer semantics',()=>{
+  const authored = world();
+  authored.regionContinuity.accounts['east-rations'].dormantTransfers = false;
+  const waiting = R.create(authored);
+  waiting.advance(10);
+  assert.deepEqual(balances(continuity(waiting)),[9,1,2]);
+  assert.equal(probe(waiting,'world/story-settlements',{story:allocation}).blocked.blocker.reason,'account-not-detailed');
+  waiting.advance(14);
+  assert.deepEqual(balances(continuity(waiting)),[5,5,2]);
+  assert.equal(probe(waiting,'world/story-settlements',{story:allocation}).costs.tick,13);
+  const poor = world();
+  poor.systems['east-stock'].config.accounts.rations.max = 3;
+  const blocked = R.create(poor);
+  blocked.advance(10);
+  assert.deepEqual(balances(continuity(blocked)),[9,1,2]);
+  assert.equal(probe(blocked,'world/story-settlements',{story:allocation}).blocked.blocker.reason,'transfer-limited');
+});
+
+test('continuity configuration and malformed receiver updates leave stable identities intact',()=>{
+  const missing = world();
+  missing.regionContinuity.accounts['west-rations'].account = 'west-stock/unknown';
+  assert.throws(()=>R.create(missing),/Invalid continuity account/);
+  const unknown = world();
+  unknown.regionContinuity.stories[delivery].regions = ['not-a-region'];
+  assert.throws(()=>R.create(unknown),/Unknown continuity story region/);
+  const run = open(), receiver = W.regionRevisions.receiver();
+  const initial = run.regions.pull(scope('west'));
+  receiver.apply(json(initial));
+  run.advance(1);
+  const packet = json(run.regions.pull(scope('west'),{since:initial.cursor}));
+  packet.edits.push({op:'set',path:['continuity','people','mira','handle','generation'],value:7});
+  assert.throws(()=>receiver.apply(packet),/Invalid regional continuity report/);
+  assert.deepEqual(receiver.snapshot().state,initial.state);
+});

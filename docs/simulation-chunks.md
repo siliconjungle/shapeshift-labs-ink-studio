@@ -68,6 +68,10 @@ Movable props stay with the system that owns them, even if they cross a
 chunk boundary. Existing field reads, signals and transfers define the
 interfaces between authored systems.
 
+[Region continuity](region-revisions.md#carry-named-continuity-across-region-views)
+keeps named lifetimes, parties, balances, and active stories visible to
+receivers as those regions are unloaded and reopened.
+
 ## Wake and inspect
 
 - `world/chunk-focus` sets or moves a named focus with

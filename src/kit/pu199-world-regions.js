@@ -14,12 +14,8 @@
     return value;
   }
 
-  function capture(world, options, providers){
-    check(allowed(options,['stream','retain','maxEdits','maxActions']), 'Invalid region revision options');
-    const {stream,retain=16,maxEdits=4096,maxActions=1024}=options;
-    check(id(stream)&&integer(retain,1,256)&&integer(maxEdits,1,10000)&&integer(maxActions,1,100000),
-      'Region revisions need a stream ID and bounded retention');
-    const frames=new Map(), layout=new Map(), addresses=new Map(), owners=new Map(), ports=new Map();
+  function layoutOf(world){
+    const layout=new Map(), addresses=new Map(), owners=new Map();
     const source=world.simulationChunks, dimensions=source?.grid?.dimensions??2;
     const grid=source&&P.chunks.grid({...source.grid,dimensions});
     const coord=point=>dimensions===2?[point[0],point[2]]:point;
@@ -32,11 +28,30 @@
     }
     const owner=name=>owners.get(name)??globalRegion;
     layout.set(globalRegion,freeze({id:globalRegion,systems:Object.keys(world.systems).filter(key=>!owners.has(key)).sort()}));
+    function locate(place,position){
+      if(grid&&vector(position)&&id(place)){
+        try {
+          return addresses.get(grid.key(place,grid.index(coord(position))))??globalRegion;
+        } catch(error) {
+          if(!(error instanceof RangeError))throw error;
+        }
+      }
+      return globalRegion;
+    }
+    return {layout,owner,coord,locate};
+  }
+
+  function capture(world, options, providers){
+    check(allowed(options,['stream','retain','maxEdits','maxActions']), 'Invalid region revision options');
+    const {stream,retain=16,maxEdits=4096,maxActions=1024}=options;
+    check(id(stream)&&integer(retain,1,256)&&integer(maxEdits,1,10000)&&integer(maxActions,1,100000),
+      'Region revisions need a stream ID and bounded retention');
+    const frames=new Map(), ports=new Map(), {layout,owner,coord,locate}=layoutOf(world);
     let latest;
 
     function ownership(frame){
       if(frame.entities)return frame.entities;
-      const entities=frame.view.world.entities, query=W.query.create(frame.view,providers), pages=new Map(), membership=new Map();
+      const entities=frame.view.world.entities, query=frame.query(), pages=new Map(), membership=new Map();
       const states=frame.view[W.simulationAggregate.rawStates], places=new Map(), posed=new Map();
       for(const [system,provider] of Object.entries(providers))if(provider.poseEntities){
         for(const name of provider.poseEntities(states[system]))
@@ -53,14 +68,7 @@
         const entity=own(entities,name)?entities[name]:null;
         const position=query.target({entity:name})?.point??null, place=placeOf(name);
         if(!entity&&!position)continue;
-        let region=globalRegion;
-        if(grid&&position&&vector(position)&&id(place)){
-          try {
-            region=addresses.get(grid.key(place,grid.index(coord(position))))??globalRegion;
-          } catch(error) {
-            if(!(error instanceof RangeError))throw error;
-          }
-        }
+        const region=locate(place,position);
         membership.set(name,region);
         if(!pages.has(region))pages.set(region,{});
         pages.get(region)[name]=freeze({entity,position});
@@ -84,7 +92,10 @@
       frame.sections.set(name,result);
       return result;
     }
-    const project=(frame,scope)=>freeze({regions:Object.fromEntries(scope.map(name=>[name,section(frame,name)]))});
+    function project(frame,scope){
+      const continuity=frame.view.regionContinuity && (frame.continuity??=frame.query().probe('world/region-continuity').value);
+      return freeze({regions:Object.fromEntries(scope.map(name=>[name,section(frame,name)])),...(continuity&&{continuity})});
+    }
 
     function select(spec={}){
       check(allowed(spec,['regions','at','place','radius','includeGlobal'])&&
@@ -140,8 +151,11 @@
       }
       const frameView={world:view.world,states:view.states,signals:view.signals,tick:revision,
         ...(view.simulationChunks&&{simulationChunks:view.simulationChunks}),
+        ...(view.regionContinuity&&{regionContinuity:view.regionContinuity,storyLifecycle:view.storyLifecycle}),
         [W.simulationAggregate.rawStates]:view[W.simulationAggregate.rawStates]??view.states};
-      latest={revision,view:frameView,sections:new Map(),commands:commands.length<=maxActions?commands:null};
+      let query;
+      latest={revision,view:frameView,sections:new Map(),commands:commands.length<=maxActions?commands:null,
+        query:()=>query??=W.query.create(frameView,providers)};
       frames.set(revision,latest);
       if(frames.size>retain)frames.delete(frames.keys().next().value);
     }
@@ -181,10 +195,11 @@
   function receiver({snapshot:initial}={}){
     let current, state;
     function validateState(value,revision){
-      check(allowed(value,['regions'])&&record(value.regions)&&
+      check(allowed(value,['regions','continuity'])&&record(value.regions)&&
         equal(Object.keys(value.regions).sort(),revision.regions)&&
         Object.entries(value.regions).every(([key,row])=>record(row)&&row.id===key&&
           record(row.systems)&&record(row.entities)), 'Invalid region snapshot membership');
+      if(own(value,'continuity')||own(state,'continuity'))W.regionContinuity.validateReport(value.continuity);
     }
     function apply(update){
       check(record(update)&&update.format===format&&update.version===1&&['snapshot','delta'].includes(update.type)&&
@@ -203,7 +218,8 @@
       }else{
         check(base&&Array.isArray(update.edits)&&update.edits.length<=10000&&update.edits.every(edit=>
           record(edit)&&['set','remove'].includes(edit.op)&&Array.isArray(edit.path)&&
-          edit.path.length>=2&&edit.path[0]==='regions'&&regionId(edit.path[1])), 'Invalid region delta edits');
+          (edit.path[0]==='continuity'&&own(state,'continuity')||
+            edit.path.length>=2&&edit.path[0]==='regions'&&regionId(edit.path[1]))), 'Invalid region delta edits');
         if(!equal(current,base))return {status:'needs-snapshot',cursor:current};
         draft=W.apply(state,update.edits,{validate:null}).world;
       }
@@ -220,5 +236,5 @@
     }
     return Object.freeze({apply,snapshot});
   }
-  W.regionRevisions=Object.freeze({capture,receiver,format,globalRegion});
+  W.regionRevisions=Object.freeze({capture,receiver,format,globalRegion,layoutOf});
 })(KIT);
