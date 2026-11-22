@@ -9,6 +9,7 @@ const StoryWatch = require('./story-watch.js');
 const StoryExplanation = require('./story-explanation.js');
 const StoryForkCompare = require('./story-fork-compare.js');
 const StorySeedMatrix = require('./story-seed-matrix.js');
+const SimulationFixture = require('./simulation-fixture.js');
 
 const read = file => JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const parse = input => JSON.parse(String(input));
@@ -62,14 +63,14 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     if (opt.out) write(opt.out,value);
     else process.stdout.write(JSON.stringify(value,null,opt.json?0:2)+'\n');
   };
-  function checkReportPath(sources) {
-    if (opt.out===undefined) return;
-    ensure(typeof opt.out==='string'&&opt.out.trim(),'--out needs a report path');
-    const out = path.resolve(opt.out), existing = fs.existsSync(out)?fs.statSync(out):null;
+  function checkReportPath(sources,destination=opt.out,inputLabel='story sources') {
+    if (destination===undefined) return;
+    ensure(typeof destination==='string'&&destination.trim(),'--out needs a report path');
+    const out = path.resolve(destination), existing = fs.existsSync(out)?fs.statSync(out):null;
     for (const source of sources) if (typeof source==='string') {
       const stat = existing&&fs.existsSync(source)?fs.statSync(source):null;
       ensure(path.resolve(source)!==out&&(!stat||stat.dev!==existing.dev||stat.ino!==existing.ino),
-        'Use a report path separate from the story sources');
+        'Use a report path separate from the '+inputLabel);
     }
   }
   function document(world, file, dependency) {
@@ -98,6 +99,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         ensure(opt['asset-pack']===undefined,'Recorded runs and checkpoints keep their original asset packs');
       if (value.format === R.checkpointFormat) return {world:value.world,checkpoint:value,store};
       if (value.format === R.runFormat) return {world:value.end.world,checkpoint:value.end,log:value,store};
+      if (value.format === SimulationFixture.format) return {fixture:value};
       const bundles = kit.KIT.authoring.projectBundles;
       if (bundles && value.format === bundles.format) return { legacy: file, document: bundles.open(value).scene() };
       return {legacy:file,document:value};
@@ -896,6 +898,37 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         checkReportPath(sources);
         return respond(StorySeedMatrix.run(W,sourceWorld(input),plan,{workerPool}));
       }
+      case 'fixture': {
+        ensure(typeof file==='string'&&other===undefined&&typeof opt.out==='string'&&opt.out.trim()&&
+          Object.keys(opt).every(key=>['out','json','from','ticks','actions','event','event-where','fault','minimize',
+            'workers','asset-pack'].includes(key))&&['from','ticks'].every(key=>opt[key]===undefined||/^\d+$/.test(opt[key]))&&
+          (opt.actions===undefined||typeof opt.actions==='string')&&(opt['event-where']===undefined||
+            typeof opt.event==='string'&&typeof opt['event-where']==='string')&&
+          (opt.event===undefined||typeof opt.event==='string'&&opt.event.trim()&&opt.fault===undefined)&&
+          ['fault','minimize'].every(key=>opt[key]===undefined||opt[key]===true),SimulationFixture.usage);
+        const sources = new Set([file,opt.actions]);
+        const input = load(file,{dependency:source=>sources.add(source)});
+        checkReportPath(sources,opt.out,'source files');
+        if (input.store) {
+          const output = fs.existsSync(opt.out)?fs.realpathSync(opt.out):path.resolve(opt.out);
+          const relative = path.relative(fs.realpathSync(input.store),output);
+          ensure(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative),
+            'Write fixtures outside the source checkpoint store');
+        }
+        const where = opt['event-where']===undefined?undefined:parse(opt['event-where']);
+        W.query.condition(where,undefined);
+        const focus = opt.fault?{kind:'fault'}:opt.event?{kind:'event',event:opt.event,...(where!==undefined&&{where})}:undefined;
+        const fixture = JSON.parse(JSON.stringify(SimulationFixture.build(W,input,{
+          from:opt.from===undefined?undefined:Number(opt.from),until:opt.ticks===undefined?undefined:Number(opt.ticks),
+          actions:opt.actions===undefined?undefined:read(opt.actions),focus,reduce:opt.minimize,workerPool
+        })));
+        const {report} = SimulationFixture.replay(W,fixture,{workerPool});
+        ensure(report.status==='verified','Fixture could not be replayed after export at tick '+report.mismatch?.tick);
+        write(opt.out,fixture);
+        process.stdout.write(JSON.stringify({...report,file:path.resolve(opt.out),focus:fixture.focus,reduction:fixture.reduction},
+          null,opt.json?0:2)+'\n');
+        return;
+      }
       case 'scheduler': {
         ensure(typeof file==='string'&&other===undefined&&opt.args===undefined&&
           (opt.incident===undefined||typeof opt.incident==='string'),
@@ -972,9 +1005,25 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       }
       case 'replay': {
         const input=load(file);
-        ensure(input.log,'Expected a run recording');
+        ensure(input.log||input.fixture,'Expected a run recording or simulation fixture');
         ensure(opt.observations===undefined,'The replay uses the observation plan saved with the run');
         const options = {profile:!!(opt.profile||opt.assert),workerPool,traceSteps:traceRetention(),recordRun:recordOptions()};
+        if(input.fixture){
+          ensure(!watching&&other===undefined&&Object.keys(opt).every(key=>['out','json','workers','profile','assert',
+            'checkpoint','record','checkpoint-store','trace-steps'].includes(key)),
+          'Use sim replay <fixture> [--checkpoint file.json --record file.json --out report.json --workers N]');
+          const outputs=[opt.out,opt.checkpoint,opt.record].filter(value=>value!==undefined);
+          for (const [i,destination] of outputs.entries())
+            checkReportPath([file,...outputs.slice(0,i)],destination,'source files');
+          const {run,report}=SimulationFixture.replay(W,input.fixture,options);
+          if(report.status==='diverged'){
+            respond(report);
+            process.exitCode=2;
+            break;
+          }
+          finish(run,undefined,{fixture:report});
+          break;
+        }
         if (watching) return watchSimulation(input,mode,[file],async (onStart,onTick)=>{
           await R.replayAsync(input.log,{...options,onStart,onTick});
         });
@@ -982,9 +1031,14 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         break;
       }
       case 'verify': {
-        const {log}=load(file);
-        ensure(log,'Expected a run recording');
-        const report=R.verify(log,{workerPool});
+        const {log,fixture}=load(file);
+        ensure(log||fixture,'Expected a run recording or simulation fixture');
+        if (fixture) {
+          ensure(other===undefined&&Object.keys(opt).every(key=>['out','workers','json'].includes(key)),
+            'Use sim verify <fixture> [--out report.json --workers N]');
+          checkReportPath([file],opt.out,'source files');
+        }
+        const report=fixture?SimulationFixture.replay(W,fixture,{workerPool}).report:R.verify(log,{workerPool});
         respond(report);
         if(report.status==='diverged')process.exitCode=2;
         break;
@@ -1095,7 +1149,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         shot?.finish(output,{suffixes});
         break;
       }
-      default: throw Error('Use sim model|run|resume|fork|reset|replay|verify|scrub|take|diff|sweep|render|plan|dependencies|regions|regions-apply');
+      default: throw Error('Use sim model|run|resume|fork|reset|replay|verify|fixture|scrub|take|diff|sweep|render|plan|dependencies|regions|regions-apply');
     }
   }
   function applyEdits(input, edits, { dryRun = false } = {}) {

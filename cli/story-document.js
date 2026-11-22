@@ -6,6 +6,7 @@ const { analyze } = require('../src/story-analysis.js');
 const {collect} = require('../src/story-inventory.js');
 const { write } = require('./asset-files.js');
 const {formatStoryRoutes} = require('./story-routes.js');
+const SimulationFixture = require('./simulation-fixture.js');
 
 function readDefinition(file, check = value => value) {
   try {
@@ -61,8 +62,9 @@ function eventCommand(file, rest, options, library) {
   if (!file || rest.length || !['json','markdown','timeline','events'].includes(format) ||
     Object.keys(options).some(key=>!['format','story','out'].includes(key)) ||
     story!==undefined&&(typeof story!=='string'||format==='events') || out!==undefined&&typeof out!=='string')
-    throw new TypeError('Use story events <recording.json> [--story document/story] [--format json|markdown|timeline|events] [--out file]');
-  const source = readDefinition(file), api = library().KIT.world.storyEvents;
+    throw new TypeError('Use story events <recording|fixture> [--story document/story] [--format json|markdown|timeline|events] [--out file]');
+  const input = readDefinition(file), W = library().KIT.world, api = W.storyEvents;
+  const source = input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
   const value = format==='events'?api.read(source):format==='timeline'?api.timeline(source,{story}):api.analyze(source,{story});
   let output;
   if (format==='markdown') {

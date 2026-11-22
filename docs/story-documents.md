@@ -168,6 +168,8 @@ The [Lantern Ferry matrix](../examples/story-documents/lantern-ferry.seed-matrix
 
 Use `sim budget` to measure queue growth, retained history, story evaluation time, deadline misses, and the effect on unrelated world systems over longer runs. [Long-running story budgets](simulation-performance-budgets.md#long-running-stories)
 
+Use `sim fixture` to share a short replay keyed to a story event, such as a rejected dispatch. `story events` reads the resulting trace directly. [Portable test fixtures](simulation-checkpoints.md#portable-test-fixtures)
+
 ```sh
 node cli/ink-studio.js sim seed-matrix examples/story-documents/lantern-ferry.world.json \
   examples/story-documents/lantern-ferry.seed-matrix.json --out ferry-matrix.json
