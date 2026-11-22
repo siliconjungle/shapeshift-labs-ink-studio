@@ -504,7 +504,7 @@
     for (const [name,prefab] of Object.entries(world.prefabs)) {
       const sandbox = W.manifest({id:'prefab-check',prefabs:{[name]:prefab},assetPacks:world.assetPacks});
       const stamped = W.stamp(sandbox,name,'instance').world;
-      W.validateLooks({...stamped,visual,dataInputs:world.dataInputs}, catalog);
+      W.validateLooks({...stamped,visual,dataInputs:world.dataInputs,siteHistory:world.siteHistory}, catalog);
       const prefabPlan = compile(stamped,implementations);
       for (const port of Object.values(stamped.entities.instance.ports))
         check(own(prefabPlan.ports.inputs,port) || own(prefabPlan.ports.outputs,port), 'Invalid public prefab port ' + port);

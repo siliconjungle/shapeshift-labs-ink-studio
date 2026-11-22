@@ -33,6 +33,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [CLI patch tooling](#cli-patch-tooling)
 - [Story documents](docs/story-documents.md)
 - [Event-driven visual effects](docs/event-visual-effects.md)
+- [Persistent visual consequences](docs/visual-consequences.md)
 - [WebGPU graphs and Gaussian splat import](#webgpu-graphs-and-gaussian-splat-import)
 - [Screen transitions](#screen-transitions)
 - [Module reference](#module-reference)

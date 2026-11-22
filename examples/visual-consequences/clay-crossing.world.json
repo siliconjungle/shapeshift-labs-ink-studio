@@ -1,0 +1,91 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "clay-crossing",
+  "seed": 814,
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "entities": {
+    "floor": { "position": [-2.37, 0.08, 0.13], "visual": { "half": [1.11, 0.13, 0.95], "ramp": [19, 20, 21, 22, 23] } },
+    "kiln": { "position": [-2.81, 0.67, -0.39], "visual": { "half": [0.51, 0.55, 0.37], "ramp": [19, 20, 21, 22] } },
+    "kiln-cap": { "position": [-2.81, 1.24, -0.39], "visual": { "half": [0.54, 0.07, 0.4], "ramp": [1, 2, 3, 4] } },
+    "brick-pile": { "position": [-1.61, 0.32, -0.51], "visual": { "half": [0.28, 0.11, 0.22], "ramp": [19, 20, 22] } },
+    "canal-bed": { "position": [0.63, 0.024, -0.56], "visual": { "half": [1.04, 0.035, 1.91], "ramp": [13, 14, 15, 16, 17] } },
+    "west-pier": { "position": [-0.85, 0.23, -0.49], "visual": { "half": [0.23, 0.23, 0.59], "ramp": [1, 2, 3, 4, 5] } },
+    "east-pier": { "position": [2.08, 0.23, -0.49], "visual": { "half": [0.27, 0.23, 0.59], "ramp": [1, 2, 3, 4, 5] } },
+    "east-cache": { "position": [2.94, 0.2, -1.51], "visual": { "half": [0.26, 0.20, 0.3], "ramp": [19, 20, 21, 22] } },
+    "east-shed": { "position": [3.03, 0.52, -1.89], "visual": { "half": [0.51, 0.52, 0.29], "ramp": [13, 14, 15, 16, 17] } }
+  },
+  "systems": {
+    "crossing": { "kind": "construction", "config": {
+      "points": {
+        "west": { "position": [-1.15, 0.59, -0.49] },
+        "west-joint": { "position": [0.41, 0.59, -0.49] },
+        "east-joint": { "position": [0.88, 0.59, -0.49] },
+        "east": { "position": [2.36, 0.59, -0.49] }
+      },
+      "constraints": [{ "id": "repair-joint", "type": "pin", "point": "east-joint", "position": [0.88, 0.59, -0.49] }],
+      "spans": [
+        { "id": "west-deck", "a": "west", "b": "west-joint", "width": 0.97, "depth": 0.17, "rise": -0.085, "look": [19, 20, 21, 22, 23] },
+        { "id": "east-deck", "a": "east-joint", "b": "east", "width": 0.97, "depth": 0.17, "rise": -0.085, "look": [19, 20, 21, 22, 23] }
+      ]
+    } }
+  },
+  "siteHistory": {
+    "historyLimit": 1,
+    "sites": {
+      "crossing/kiln": { "kind": "workshop", "at": { "point": [-2.19, 0.21, 0.44] },
+        "fields": { "finish": "string" }, "initial": { "finish": "clean" } },
+      "crossing/bridge": { "kind": "bridge", "at": { "point": [0.61, 0.59, -0.49] },
+        "fields": { "deck": "string" }, "initial": { "deck": "damaged" } },
+      "crossing/trail": { "kind": "route", "fields": { "surveyed": "boolean" } }
+    }
+  },
+  "facts": { "eventLimit": 2, "types": { "kiln-overheated": { "fields": { "temperature": "number" } } } },
+  "eventActions": {
+    "record-scorch": { "on": { "kind": "world-fact", "where": { "path": "/fact/type", "value": "kiln-overheated" } },
+      "actions": [{ "action": "world/change-site", "args": { "site": "crossing/kiln", "set": { "finish": "scorched" },
+        "outcome": "floor-scorched", "source": "1.0" }, "bindings": { "/source": "/id" } }] },
+    "record-repair": { "on": { "kind": "construction-refit", "system": "crossing" },
+      "actions": [{ "action": "world/change-site", "args": { "site": "crossing/bridge", "set": { "deck": "repaired" },
+        "outcome": "deck-repaired", "source": "1.0" }, "bindings": { "/source": "/id" } }] },
+    "record-cleaning": { "on": { "kind": "kiln-floor-cleaned" },
+      "actions": [{ "action": "world/change-site", "args": { "site": "crossing/kiln", "set": { "finish": "clean" },
+        "outcome": "floor-resurfaced", "source": "1.0" }, "bindings": { "/source": "/id" } }] },
+    "record-travel": { "on": { "kind": "trail-crossed" }, "limit": 5,
+      "actions": [{ "action": "world/visit-site", "args": { "site": "crossing/trail",
+        "visitor": { "kind": "actor", "id": "porter" }, "source": "1.0" },
+        "bindings": { "/source": "/id", "/visitor": "/visitor" } }] }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/fact", "args": { "type": "kiln-overheated", "at": { "place": "crossing/kiln", "point": [-2.19, 0.21, 0.44] }, "data": { "temperature": 936 } } },
+    { "tick": 3, "action": "world/event", "args": { "kind": "trail-crossed", "visitor": { "kind": "actor", "id": "porter" } } },
+    { "tick": 10, "action": "world/event", "args": { "kind": "trail-crossed", "visitor": { "kind": "actor", "id": "porter" } } },
+    { "tick": 15, "action": "world/event", "args": { "kind": "trail-crossed", "visitor": { "kind": "actor", "id": "keeper" } } },
+    { "tick": 21, "action": "world/event", "args": { "kind": "trail-crossed", "visitor": { "kind": "actor", "id": "porter" } } },
+    { "tick": 27, "action": "world/event", "args": { "kind": "trail-crossed", "visitor": { "kind": "actor", "id": "keeper" } } },
+    { "tick": 30, "action": "world/change-site", "args": { "site": "crossing/trail", "outcome": "survey-saved", "set": { "surveyed": true } } }
+  ],
+  "visual": {
+    "bounds": { "min": [-4.4, -0.35, -2.72], "max": [3.95, 1.65, 2.7] },
+    "camera": { "target": [-0.29, 0.20, 0.04], "dist": 10.5, "yaw": 0.18, "pitch": 0.94 },
+    "resolution": 0.073,
+    "skyEnvironment": { "defaults": { "zenith": "#6e87a0", "horizon": "#bbbec2", "ground": "#344c55", "sunStrength": 0 } },
+    "fields": { "bodies": "crossing/bodies" },
+    "consequences": {
+      "version": 1,
+      "rules": {
+        "kiln-char": { "site": "crossing/kiln", "field": "finish", "when": { "value": "scorched" },
+          "paint": { "kind": "imprint", "pattern": "soot", "normal": [0, 1, 0], "heading": [1, 0, -0.23],
+            "length": 1.38, "width": 0.97, "color": [1, 1, 2, 19], "select": { "entity": "floor" } } },
+        "bridge-patch": { "site": "crossing/bridge", "field": "deck", "when": { "value": "repaired" },
+          "paint": { "kind": "imprint", "pattern": "repair", "normal": [0, 1, 0], "heading": [0, 0, 1],
+            "length": 0.91, "width": 0.38, "color": [6, 23, 24], "select": { "entity": "crossing.east-deck" } } },
+        "worn-trail": { "site": "crossing/trail", "visits": true, "range": [0, 5],
+          "paint": { "kind": "trail", "path": [[-4.16, 0, 2.08], [-3.04, 0, 1.91], [-2.13, 0, 1.83],
+            [-1.31, 0, 1.55], [-0.98, 0, 0.95], [-1.44, 0, 0.33], [-1.41, 0, -0.37]],
+            "width": 0.47, "color": [19, 20, 20, 21, 22], "select": { "surface": "terrain" } } }
+      }
+    }
+  }
+}

@@ -250,12 +250,43 @@
     }
   }
 
-  const modes={ drips, scuffs, lichen, imprint };
+  function trail(layer,cast,select,step,random,write) {
+    const {path,width=.38,normal=up,reach=.18}=layer, n=axis(normal,'Trail normal');
+    if (!Array.isArray(path) || path.length<2 || path.length>64 || !Array.from(path).every(point) ||
+        !between(width,.02,5) || !between(reach,.005,3)) throw new RangeError('Invalid surface trail');
+    const steps=path.slice(1).map((end,i)=>{
+      const start=path[i], direction=V.sub(end,start), length=V.len(direction);
+      if (length<.001) throw new RangeError('Surface trail needs distinct consecutive points');
+      return {start,direction,length};
+    });
+    if (steps.reduce((total,segment)=>total+segment.length,0)>120) throw new RangeError('Surface trail exceeds its length budget');
+    const cross=sweep([-width*.5,width*.5],step);
+    let traveled=0;
+    for (const {start,direction,length} of steps) {
+      const side=V.norm(V.cross(n,direction),V.perp(n));
+      // Overlap adjacent segments slightly to keep the paint continuous at bends.
+      for (const along of sweep([-step*.5,length+step*.5],step)) {
+        const center=V.mad(start,direction,along/length);
+        const sway=Math.sin((along+traveled)*5.1)*width*.045;
+        for (const offset of cross) {
+          const weight=K.clamp((1-2*Math.abs(offset)/width)*1.7,0,1);
+          if (random()>(.28+.72*weight)) continue;
+          const hit=projected(V.mad(center,side,offset+sway),n,reach,cast);
+          if (targetMatches(select,hit) && V.dot(n,hit.normal)>.62)
+            write(hit,weight*(.83+random()*.17),random);
+        }
+      }
+      traveled+=length;
+    }
+  }
+
+  const modes={ drips, scuffs, lichen, imprint, trail };
   const fields={
     drips:['bounds','direction','edge','interval','length','width','reach','minDrop','startDrop','density'],
     scuffs:['contacts','length','width','reach','loadReference'],
     lichen:['bounds','direction','interval','radius','shelterReach','minShelter','density'],
-    imprint:['pattern','point','normal','heading','length','width','reach']
+    imprint:['pattern','point','normal','heading','length','width','reach'],
+    trail:['path','width','normal','reach']
   };
   function bake(world,recipe) {
     if (!record(recipe) || Object.keys(recipe).some(key=>!['version','seed','maxWork','maxSamples','layers'].includes(key)))

@@ -67,4 +67,6 @@ Run both demos with an installed Node WebGPU binding and a GPU adapter. Omit the
 node examples/event-visual-effects/demo.cjs /tmp/spillway-review /absolute/path/to/node_modules/webgpu/index.js
 ```
 
+For marks that should last until world state changes, use [persistent visual consequences](visual-consequences.md).
+
 See [presentation cues](story-documents.md#project-presentation-cues), [surface marks from events](caused-marks.md), [geometry-shaped atmosphere](geometry-shaped-atmosphere.md), [contact effects](contact-effects.md) and [CLI patch tooling](patch-tooling.md).

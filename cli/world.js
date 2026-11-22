@@ -1168,6 +1168,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const run=recording ? initial : snapshotRun(input,initial,tick);
         ensure(typeof opt.out==='string','Simulation render needs --out image.png');
         const output=path.resolve(opt.out), diagnostics=require('./look-preview.js').preview(opt);
+        ensure(opt.consequences === undefined || ['on','off'].includes(opt.consequences), 'Use --consequences on|off');
         const effectsFile = opt['event-effects'];
         const effectsReport = effectsFile === undefined ? undefined : output.replace(/\.png$/i, '') + '-effects.json';
         if (effectsReport) {
@@ -1183,7 +1184,6 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           checkReportPath([file],output,'render inputs');
           checkReportPath([file,output],beatReport,'render inputs');
         }
-        shot?.destination(output,suffixes);
         const atmospherePose=advanceVisual(run,tick);
         const event=beat&&run.committedEvents().find(row=>W.inspectionLinks.identify(row)===opt.beat);
         if(beat)ensure(event,'Beat is absent from the recorded world, branch or tick');
@@ -1194,7 +1194,18 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           shot.runtime(run.recording());
         }
         const eventEffects = effectsReport && require('./story-effects.js').readSheet(effectsFile);
-        const world=W.visual(kit,run.view(),run.query(),{controls:opt.params===undefined?undefined:parse(opt.params),eventEffects});
+        const world=W.visual(kit,run.view(),run.query(),{controls:opt.params===undefined?undefined:parse(opt.params),
+          eventEffects,visualConsequences:opt.consequences!=='off'});
+        const consequenceSuffix = '-consequences.json';
+        const consequenceReport = world.visualConsequences && output.replace(/\.png$/i, '') + consequenceSuffix;
+        if (consequenceReport) {
+          ensure(/\.png$/i.test(output),'Consequence render needs a PNG output');
+          const sources = [file,effectsFile,opt.actions];
+          checkReportPath(sources,output,'render inputs');
+          checkReportPath([...sources,output],consequenceReport,'render inputs');
+          suffixes.push(consequenceSuffix);
+        }
+        shot?.destination(output,suffixes);
         if (atmospherePose) world.atmospherePose=atmospherePose;
         const studio=require('../index.js');
         const image=studio.render(world,{w:Number(opt.w??720),h:Number(opt.h??475),colored:!!opt.colored,
@@ -1220,6 +1231,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           tick,time:run.view().time,event,file:path.basename(output),width:image.w,height:image.h});
         if (effectsReport) write(effectsReport, { format: 'ink-studio/event-visual-effects-frame', version: 1,
           world: run.view().world.id, tick, file: path.basename(output), ...world.eventEffects });
+        if (consequenceReport) write(consequenceReport,{...world.visualConsequences,file:path.basename(output)});
         shot?.finish(output,{suffixes});
         break;
       }

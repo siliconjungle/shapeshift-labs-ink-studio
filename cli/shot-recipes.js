@@ -9,7 +9,7 @@ const format = 'ink-studio/shot-recipe';
 const commands = new Map([
   ['render', ['render']], ['clip', ['clip']], ['transition-review', ['transition-review']], ['sim render', ['sim','render']]
 ]);
-const validSidecar = suffix => /^(?:\.(?:json|txt)|-(?:passes|join|beat|effects)\.json|-[a-zA-Z][a-zA-Z0-9]*\.png)$/.test(suffix);
+const validSidecar = suffix => /^(?:\.(?:json|txt)|-(?:passes|join|beat|effects|consequences)\.json|-[a-zA-Z][a-zA-Z0-9]*\.png)$/.test(suffix);
 const fileOptions = new Set([
   'actions','adaptive-sampling','afterimages','area-lights','art-direction','asset-pack','asset-registry','atmosphere-depth-bands','atmosphere-emitters','authoring','bounce-probes','camera-staging','celestial-tracks','cloud-field',
   'color-clusters','color-stack','composite','contact-shadows','curve-width','cutaway','edge-filter','effect-palettes','event-effects','horizon-bands','ink','inspection','lightning','look','lut','palette-constraints','pass-quality','plan','precipitation',

@@ -1029,6 +1029,7 @@ const CMD = {
         '    trace <scene|run> world/cause [--args JSON | --beat ID]   follow recorded decisions, inputs and events',
         '  beat <beat-id> <report.json|watch.ndjson> [...] [--out file.json]   find the same event across inspection reports',
         '    sim render <run|checkpoint|world> --event-effects <sheet.json> --out frame.png   render committed visual effects',
+        '    sim render <run|checkpoint|world> --consequences on|off   show or hide authored persistent visual consequences',
         '    sim render <run|checkpoint> --beat ID --out frame.png   render the recorded event tick',
         '  field <scene|run> <name> --spec file.json [--explain]  export a line, grid or time series',
         '  authoring inspect <scene> [--authoring snapshot.json] [--part id]   inspect retained parts',
