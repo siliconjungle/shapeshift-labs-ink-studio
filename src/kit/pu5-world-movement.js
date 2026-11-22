@@ -596,6 +596,15 @@
       return {...(switched?controlled:row),orders,...(switched&&{route:emptyList,cursor:0,retry:0,
         ...(row.routing&&{routing:RQ.idle})})};
     }
+    function releaseStoryClaim(state,{agent,generation,sequence},ctx){
+      const roster=S.get(state), slot=S.find(roster,agent), row=slot&&S.read(roster,slot);
+      if(!row||row.generation!==generation)return {state,status:'skipped',reason:'owner-unavailable'};
+      const book=row.orders??O.blank;
+      const entry=[book.active,...book.paused,...book.queue].find(order=>order?.sequence===sequence);
+      if(!entry?.reservation)return {state,status:'skipped',reason:'claim-not-pending'};
+      const next=replace(state,{agent,generation},current=>changeOrders(current,orders.cancel(book,sequence,current,ctx,'story-ended')));
+      return {state:next,status:'applied',reason:'order-cancelled'};
+    }
     function* pendingTransfers(roster){
       for(const slot of S.order(roster)){
         if(roster.pages[slot.p].details[slot.i].orders?.active?.phase!=='settling')continue;
@@ -806,7 +815,7 @@
       if(config.surface!==undefined)W.materials.checkSurface(query,config.surface);
       policy?.checkFields(query);
       orders?.checkFields(query);
-    }}),validateState,checkAction(type,args){
+    }}),...(orders&&{storyCleanup:{claim:{run:releaseStoryClaim}}}),validateState,checkAction(type,args){
       if(formations&&W.formations.actions.includes(type))return formations.checkAction(type,args);
       if(type==='spawn'){
         checkAgent(args.agent,args);

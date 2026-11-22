@@ -1,0 +1,36 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "canal-camp",
+  "title": "The Canal Camp",
+  "stories": {
+    "commission": {
+      "kind": "questlet",
+      "title": "Commission the canal shelter",
+      "lifecycle": {
+        "progression": true,
+        "cleanup": {
+          "bench-claim": { "claim": { "system": "crew", "agent": "builder", "generation": 1, "sequence": 1 } },
+          "public-notice": { "offer": { "system": "notices", "offer": "camp-help", "revision": 1 } },
+          "temporary-yard": {
+            "site": { "system": "workshop", "process": "frames" },
+            "keepOutcomes": ["permanent"]
+          }
+        }
+      },
+      "entry": "commission",
+      "stages": {
+        "commission": {
+          "title": "Record the shelter's first delivery",
+          "objectives": {
+            "deliver-bedding": { "title": "Deliver a bedding bundle", "type": "deliver", "params": {
+              "system": "world", "from": "stock/depot", "to": "stock/shelter", "amount": 1
+            } }
+          },
+          "next": { "establish": { "outcome": "permanent" } }
+        }
+      },
+      "outcomes": { "permanent": { "title": "Keep the yard as a permanent worksite" } }
+    }
+  }
+}

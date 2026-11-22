@@ -88,6 +88,14 @@
       check(state.requests.length<1024,'Influence request budget exceeded');
       return {...state,requests:[...state.requests,{key,args}]};
     }]));
+    function closeStoryOffer(state,{offer,revision}){
+      const row=own(state.offers,offer)&&state.offers[offer];
+      if(!row||row.revision!==revision)return {state,status:'skipped',reason:'offer-revision-unavailable'};
+      if(row.withdrawn||!['open','assigned'].includes(row.status)||
+        state.requests.some(request=>request.key==='withdraw'&&request.args.offer===offer))
+        return {state,status:'skipped',reason:'offer-closed'};
+      return {state:actions.withdraw(state,{offer}),status:'applied',reason:'withdrawal-requested'};
+    }
     const offers={type:'record',qualified:true,selector:true,read({state,args,query}){
       function report(row){
         const point=query.target(row.at)?.point;
@@ -100,7 +108,7 @@
     }};
     return {initial:()=>({serial:0,escrow:0,offers:{},requests:[],
         scan:{tick:null,limited:false,truncated:false,cursor:0,routeCursor:0,responses:[]}}),
-      shareCheckpoint:true,validateState,checkAction,actions,contract:{emits:lifecycle},
+      shareCheckpoint:true,validateState,checkAction,actions,contract:{emits:lifecycle},storyCleanup:{offer:{run:closeStoryOffer}},
       ...(funding&&{accounts:{escrow:{type:'integer',resource:funding.resource,units:funding.units,ownerOnly:true,
         read:state=>({balance:state.escrow}),write:(state,escrow)=>({...state,escrow})}}}),
       checkFields(query){for(const field of fields)check(query.field(field),'Unknown influence requirement '+field);},

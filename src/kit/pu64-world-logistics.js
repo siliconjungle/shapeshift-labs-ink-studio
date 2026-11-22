@@ -138,6 +138,11 @@
               Number.isSafeInteger(worker.generation)&&worker.generation>0&&W.worksites.rate(worker.rate))&&
             positive(row.labor)&&(row.reason===null||W.data.id(row.reason));
         }):state.workSites===undefined,'Invalid saved worksite state');
+      check(state.retiredWorksites===undefined||record(state.retiredWorksites)&&Object.entries(state.retiredWorksites).every(([key,tick])=>
+        W.data.own(definitions,key)&&Number.isSafeInteger(tick)&&tick>0&&tick<=W.runtime.maxTick&&
+        state.workSites[key].reason==='site-retired'&&state.workSites[key].workers.length===0&&
+        state.workSites[key].labor===0&&state.process[layout.processIndex.get(key)].status==='disabled'),
+        'Invalid saved retired worksites');
       for(const row of Object.values(F.ledger(layout,state)))
         check(Math.abs(row.error)<=1e-8*Math.max(1,row.initial+row.produced+row.received),'Unbalanced saved logistics ledger');
     }
@@ -200,16 +205,25 @@
     const stockField=records(containers,'container',container);
     const worksites=records(workRows,'process',(state,row,_,args,query)=>{
       const i=layout.processIndex.get(row.key), {work}=row, completed=state.complete[i], current=state.workSites[row.key];
-      const point=W.worksites.frame(query,work.at)?.point??null, remaining=state.jobs[i];
-      const needs=remaining===null&&completed<work.batches?row.inputs.map(({account,amount})=>({
+      const retiredAt=state.retiredWorksites?.[row.key], point=retiredAt?null:W.worksites.frame(query,work.at)?.point??null;
+      const remaining=state.jobs[i];
+      const needs=!retiredAt&&remaining===null&&completed<work.batches?row.inputs.map(({account,amount})=>({
         account:pin(account),required:amount,available:state.stocks[account],missing:Math.max(0,amount-state.stocks[account])})): [];
       return {id:row.key,recipe:row.recipe,...work,position:point,completed,remaining,duration:row.duration,
         status:state.process[i].status,workers:current.workers,labor:current.labor,reason:current.reason,
-        workersNeeded:completed>=work.batches?0:Math.max(0,work.minWorkers-current.workers.length),materials:needs};
+        workersNeeded:retiredAt||completed>=work.batches?0:Math.max(0,work.minWorkers-current.workers.length),materials:needs,
+        ...(retiredAt&&{retiredAt,refundPending:remaining!==null})};
     });
+    function retireStorySite(state,{process},ctx){
+      if(state.retiredWorksites?.[process])return {state,status:'skipped',reason:'site-already-retired'};
+      const next=F.retireWork(layout,state,layout.processIndex.get(process),ctx.tick);
+      ctx.emit('worksite-retired',{process,refundPending:next.jobs[layout.processIndex.get(process)]!==null});
+      return {state:next,status:'applied',reason:'site-retired'};
+    }
     return {initial:()=>initial,inputs,outputs,accounts:transferAccounts,checkFields,validateState,output:signals,
       partitionStep:!workRows.length&&routes.every(row=>!row.checkRoute),
-      ...(workRows.length&&{worksites:{definitions,
+      ...(workRows.length&&{storyCleanup:{site:{accepts:({process})=>W.data.own(definitions,process),run:retireStorySite}},
+        worksites:{definitions,
         completed:(state,key)=>state.complete[layout.processIndex.get(key)],
         step:(state,key,ctx,effect)=>F.work(layout,state,layout.processIndex.get(key),ctx,effect)
       }}),

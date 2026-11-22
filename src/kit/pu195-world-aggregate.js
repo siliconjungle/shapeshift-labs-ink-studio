@@ -86,6 +86,11 @@
         ...(provider.traces&&{traces:descriptors(provider.traces,'traces','run')}),
         ...(provider.actions&&{actions:Object.fromEntries(Object.entries(provider.actions).map(([key,action])=>
           [key,(state,args,ctx)=>action(fine(state),args,ctx)]))}),
+        ...(provider.storyCleanup&&{storyCleanup:Object.fromEntries(Object.entries(provider.storyCleanup).map(([kind,rule])=>
+          [kind,{...rule,run(state,args,ctx){
+            const detail=fine(state), result=rule.run(detail,args,ctx);
+            return result.state===detail?{...result,state}:result;
+          }}]))}),
         ...(provider.accounts&&{accounts:Object.fromEntries(Object.entries(provider.accounts).map(([key,account])=>
           [key,{...account,
             read(state){

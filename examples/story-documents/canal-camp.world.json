@@ -1,0 +1,61 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "canal-camp",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "canal-camp.json" }],
+  "entities": { "yard": { "position": [0, 0, 0] } },
+  "systems": {
+    "booking": { "kind": "reservations", "config": {
+      "pools": { "bench": { "capacity": 1, "at": { "entity": "yard" } } }
+    } },
+    "stock": { "kind": "store", "config": { "accounts": {
+      "depot": { "resource": "bedding", "units": "bundle", "type": "integer", "initial": 1, "max": 1 },
+      "shelter": { "resource": "bedding", "units": "bundle", "type": "integer", "initial": 0, "max": 1 },
+      "treasury": { "resource": "coin", "units": "coin", "type": "integer", "initial": 12, "max": 12 },
+      "spare-planks": { "resource": "wood", "units": "plank", "type": "integer", "initial": 2, "max": 2 }
+    } } },
+    "workshop": { "kind": "logistics", "config": {
+      "resources": {
+        "wood": { "type": "integer", "units": "plank" },
+        "frame": { "type": "integer", "units": "frame" }
+      },
+      "containers": { "yard": { "at": { "entity": "yard" }, "stocks": {
+        "wood": { "initial": 2, "max": 2 }, "frame": { "initial": 0, "max": 1 }
+      } } },
+      "recipes": { "frame": { "duration": 1.1, "inputs": { "wood": 2 }, "outputs": { "frame": 1 } } },
+      "processes": { "frames": {
+        "recipe": "frame", "inputs": { "wood": "yard" }, "outputs": { "frame": "yard" },
+        "work": { "at": { "entity": "yard" }, "radius": 0.8, "batches": 1 }
+      } }
+    } },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-2, -0.5, -1], "max": [2, 1, 1] },
+      "ground": 0,
+      "cell": 0.2,
+      "species": { "wright": { "mode": "walk", "radius": 0.12, "speed": 2 } },
+      "agents": {
+        "builder": { "species": "wright", "position": [0, 0, 0] },
+        "maintainer": { "species": "wright", "position": [0.5, 0, 0] }
+      },
+      "orders": { "tasks": { "frame": { "steps": [{ "op": "work", "site": "workshop/frames" }] } } }
+    } },
+    "notices": { "kind": "influence", "config": {
+      "interval": 1,
+      "funding": { "treasury": "stock/treasury", "resource": "coin", "units": "coin" },
+      "templates": { "wright": { "at": { "entity": "yard" }, "order": { "task": "frame" } } }
+    } }
+  },
+  "commands": [
+    { "tick": 1, "action": "crew/issue-order", "args": {
+      "agent": "builder", "order": {
+        "id": "camp-frames", "task": "frame", "reservation": { "board": "booking", "require": { "bench": { "anyOf": ["bench"] } } }
+      }
+    } },
+    { "tick": 2, "action": "notices/post", "args": { "offer": "camp-help", "template": "wright", "reward": 5 } },
+    { "tick": 2, "action": "world/transfer", "args": { "from": "stock/depot", "to": "stock/shelter", "amount": 1 } },
+    { "tick": 6, "action": "crew/issue-order", "args": {
+      "agent": "maintainer", "order": { "id": "take-over", "task": "frame" }
+    } }
+  ]
+}

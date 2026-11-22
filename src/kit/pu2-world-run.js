@@ -836,6 +836,17 @@
           return emit(kind,detail,parents);
         };
       }
+      const cleanedStories = storyLifecycle?.cleanup ? storyLifecycle.cleanup(storyLifecycleState, at, ({kind,target}) => {
+        const {system} = target, before = drafts[system];
+        const query = Q.create(view(nextWorld,{...drafts}),systems,projection);
+        const ctx = context(system,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(system),query,spatial(system,false));
+        const result = systems[system].storyCleanup[kind].run(before,target,ctx);
+        if (result.state !== before) {
+          drafts[system] = rootedState(result.state);
+          commanded?.add(system);
+        }
+        return result;
+      }, makeEmit('world')) : storyLifecycleState;
       for (const item of commands) {
         const [name,key] = endpoint(item.action);
         if(debug)debug.enter({system:W.stepDebug.actionSystem(item),inputs:item.args});
@@ -1186,7 +1197,7 @@
         storyStarts = activated.starts;
       }
       if (storyLifecycle) {
-        nextStoryLifecycle = storyLifecycle.advance(storyLifecycleState,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery);
+        nextStoryLifecycle = storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery);
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);

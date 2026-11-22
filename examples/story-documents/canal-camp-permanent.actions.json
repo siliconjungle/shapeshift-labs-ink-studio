@@ -1,0 +1,6 @@
+[
+  { "tick": 4, "action": "world/story-choose", "args": {
+    "document": "canal-camp", "story": "commission", "stage": "commission", "visit": 1,
+    "branch": "establish", "reason": "transfer-yard-to-maintenance"
+  } }
+]

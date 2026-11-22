@@ -267,7 +267,7 @@ const StoryDocument = (() => {
   }
 
   function lifecycle(value, at) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -291,6 +291,32 @@ const StoryDocument = (() => {
   }
 
   const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];
+
+  function cleanup(rules, outcomes, at) {
+    const rows = entries(rules, at, true);
+    if (rows.length > 32) invalid(at, 'expected up to 32 cleanup rules');
+    const targets = {
+      claim: ['system', 'agent', 'generation', 'sequence'],
+      offer: ['system', 'offer', 'revision'],
+      site: ['system', 'process']
+    };
+    const statuses = Object.fromEntries(terminalStates.map(status => [status, true]));
+    for (const [id, rule] of rows) {
+      const place = `${at}.${id}`;
+      fields(rule, place, [], [...Object.keys(targets), 'keepOn', 'keepOutcomes']);
+      const kinds = Object.keys(targets).filter(kind => Object.hasOwn(rule, kind));
+      if (kinds.length !== 1) invalid(place, 'expected exactly one claim, offer, or site target');
+      const [kind] = kinds, target = rule[kind], location = `${place}.${kind}`;
+      fields(target, location, targets[kind]);
+      for (const [key, value] of Object.entries(target)) {
+        if (['generation', 'sequence', 'revision'].includes(key)) {
+          if (!Number.isSafeInteger(value) || value <= 0) invalid(`${location}.${key}`, 'expected a positive integer');
+        } else if (!worldName(value)) invalid(`${location}.${key}`, 'expected a world ID');
+      }
+      if (Object.hasOwn(rule, 'keepOn')) links(rule.keepOn, statuses, `${place}.keepOn`, 'terminal status');
+      if (Object.hasOwn(rule, 'keepOutcomes')) links(rule.keepOutcomes, outcomes, `${place}.keepOutcomes`, 'outcome');
+    }
+  }
 
   function childList(values, table, at) {
     if (!Array.isArray(values) || !values.length || values.length > 64) invalid(at, 'expected 1–64 child questlet IDs');
@@ -392,6 +418,8 @@ const StoryDocument = (() => {
           invalid(`${location}.status`, 'expected completed or failed');
         labelsAndRefs(outcome, location, references);
       }
+      if (story.lifecycle && Object.hasOwn(story.lifecycle, 'cleanup'))
+        cleanup(story.lifecycle.cleanup, outcomes, `${at}.lifecycle.cleanup`);
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
         fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story',

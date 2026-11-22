@@ -44,6 +44,21 @@
     return {amount};
   }
 
+  function refundWork(stocks,jobs,row,i,accounts){
+    if(jobs[i]===null)return [];
+    const blocked=batch(stocks,row.inputs,1,accounts);
+    if(!blocked.length)jobs[i]=null;
+    return blocked;
+  }
+
+  function retireWork(layout,state,i,tick){
+    const row=layout.processes[i], stocks=state.stocks.slice(), jobs=state.jobs.slice(), process=state.process.slice();
+    const blocked=refundWork(stocks,jobs,row,i,layout.accounts);
+    process[i]={status:'disabled',blocked,batches:0};
+    return {...state,stocks,jobs,process,retiredWorksites:{...state.retiredWorksites,[row.key]:tick},
+      workSites:{...state.workSites,[row.key]:{workers:[],labor:0,reason:'site-retired'}}};
+  }
+
   function advance(layout,state,ctx,routeCheck){
     const {processes,routes,accounts,processOrder,routeOrder,maxBatches}=layout;
     const stocks=state.stocks.slice(), time=ctx.time, complete=state.complete.slice();
@@ -68,7 +83,11 @@
     }
     for(const i of processOrder){
       const row=processes[i], {key,inputs,outputs,duration}=row;
-      if(row.work){nextProcesses[i]=state.process[i];continue;}
+      if(row.work){
+        nextProcesses[i]=state.retiredWorksites?.[key]&&jobs[i]!==null?
+          {status:'disabled',blocked:refundWork(stocks,jobs,row,i,accounts),batches:0}:state.process[i];
+        continue;
+      }
       const enabled=ctx.input['enable-process.'+key], speed=W.fields.clamp(ctx.input['speed.'+key],0,64);
       let left=ctx.dt*speed, job=jobs[i], count=0, blocked=[], status='idle';
       if(!enabled||!speed)status=enabled?'paused':'disabled';
@@ -133,6 +152,7 @@
   }
   function work(layout,state,i,{workers,arrived,dt,enabled,speed},effect){
     const row=layout.processes[i], {key,inputs,outputs,duration,work}=row, previous=state.workSites[key];
+    if(state.retiredWorksites?.[key])return {state,finished:false,reason:'site-retired',demandChanged:false};
     const speedLimit=W.fields.clamp(speed,0,64);
     let job=state.jobs[i], stocks=state.stocks, blocked=[], finished=false, labor=0, status='paused', reason=null;
     if(state.complete[i]>=work.batches)status='completed';
@@ -197,5 +217,5 @@
         error:total-initial[i]-produced[i]+consumed[i]-received[i]+sent[i]}];
     }));
   }
-  W.logisticsFlow=Object.freeze({advance,work,ledger,zeros});
+  W.logisticsFlow=Object.freeze({advance,work,retireWork,ledger,zeros});
 })(KIT);

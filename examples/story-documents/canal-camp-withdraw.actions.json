@@ -1,0 +1,8 @@
+[
+  { "tick": 4, "action": "world/story-transition", "args": {
+    "document": "canal-camp", "story": "commission", "to": "suspended", "reason": "water-rising"
+  } },
+  { "tick": 4, "action": "world/story-transition", "args": {
+    "document": "canal-camp", "story": "commission", "to": "withdrawn", "reason": "relocate-the-camp"
+  } }
+]

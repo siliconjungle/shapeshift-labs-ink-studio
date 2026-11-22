@@ -291,6 +291,45 @@ node cli/ink-studio.js probe ford.run.json --ticks 11 --field world/story-lifecy
 node cli/ink-studio.js probe ridge.run.json --field world/story-lifecycle
 ```
 
+## Clean up when a story ends
+
+Use `lifecycle.cleanup` to name the resources a story should release when it completes, fails, is withdrawn, or expires. Each named rule targets one resource. Cleanup runs at the start of the next simulation tick, before that tick's commands and solver work. A suspended story can be explicitly withdrawn with `world/story-transition`.
+
+| Target | Required fields | What cleanup does |
+| --- | --- | --- |
+| `claim` | Agent roster `system`, `agent`, `generation`, and order `sequence` | Cancels that pending reserving order. The reservation board releases its claims through the ordinary order lifecycle. |
+| `offer` | Influence board `system`, `offer`, and `revision` | Requests withdrawal of that posting. Open offers return their escrow through the board. An already accepted order can finish under its accepted terms. List its reserving order separately if it should also be cancelled. |
+| `site` | Logistics `system` and worksite `process` | Retires the process for the rest of the run and returns inputs reserved for the unfinished batch. A full destination leaves the refund pending until stock space opens. Completed batches and their outputs remain in the ledger. |
+
+Add `keepOn` for terminal statuses or `keepOutcomes` for named outcomes that should keep the resource. Either match keeps the rule's target. Other world consequences, such as stock already delivered or a completed construction effect, remain part of the simulation.
+
+```json
+{
+  "bench-claim": { "claim": { "system": "crew", "agent": "builder", "generation": 1, "sequence": 1 } },
+  "public-notice": { "offer": { "system": "notices", "offer": "camp-help", "revision": 1 } },
+  "temporary-yard": {
+    "site": { "system": "workshop", "process": "frames" },
+    "keepOutcomes": ["permanent"]
+  }
+}
+```
+
+Read order generations and sequences through the roster and reservation probes. Read offer revisions through the influence board's `offers` field. Cleanup skips a missing target or a replaced generation or revision. Rule IDs execute in lexical order within each story.
+
+Probe `world/story-lifecycle` for the scheduled tick and each rule's `pending`, `kept`, `applied`, or `skipped` result. Actual attempts emit `story-cleanup-resolved` with their target and reason. Native events and probes report the resulting order cancellation, claim release, offer withdrawal and site retirement. The site probe includes `retiredAt` and `refundPending`. Checkpoints and replays preserve pending rules and their results.
+
+### Fork The Canal Camp
+
+[The Canal Camp](../examples/story-documents/canal-camp.world.json) forks from a held bench claim, a funded public notice, an unfinished frame, and a delivered bedding bundle. Withdrawing the story frees the bench, closes the notice, and retires the yard with its planks returned. The permanent-yard outcome frees the bench and closes the notice, and a second worker finishes the frame at the retained yard. The bedding delivery persists in both runs.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/canal-camp.world.json --ticks 3 --checkpoint camp-start.json
+node cli/ink-studio.js sim fork camp-start.json --ticks 18 --actions examples/story-documents/canal-camp-withdraw.actions.json --record withdraw.run.json
+node cli/ink-studio.js sim fork camp-start.json --ticks 18 --actions examples/story-documents/canal-camp-permanent.actions.json --record permanent.run.json
+node cli/ink-studio.js probe withdraw.run.json --field world/story-lifecycle
+node cli/ink-studio.js probe permanent.run.json --field workshop/worksite --args '{"process":"frames"}'
+```
+
 ## Replay the demos
 
 **The Burned Mill** starts an incident from a survey report, opens a grain questlet after three shortages, and activates an arc only after the stock ledger stays low. A brief recovery resets the hold. The questlet start also schedules a bell event on the next tick.

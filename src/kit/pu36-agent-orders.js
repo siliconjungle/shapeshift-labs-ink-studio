@@ -262,6 +262,10 @@
           const row=movement.hold(agent,entry.task).agent;
           return {row,book:completed(book,entry,{op:'work',site,batch},row,ctx)};
         }
+        if(report?.retiredAt){
+          const row=movement.hold(agent,entry.task).agent;
+          return {row,book:finish({...book,active:null},entry,'failed','site-retired',row,ctx)};
+        }
         if(report?.position&&K.V.dist(agent.position,report.position)>report.radius+1e-8){
           const moved=movement.move(agent,report.position,entry,report.radius);
           return {row:moved.agent,book:motion(moved.agent,moved.phase??'moving',moved.reason??null)};

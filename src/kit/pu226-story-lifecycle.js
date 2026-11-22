@@ -34,11 +34,13 @@
       }
       entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
         stages, automatic, evidence: compileEvidence(stages, key, document.objectiveTypes),
-        clock: W.storyDeadlines.compile(definition.lifecycle, world.dt) });
+        clock: W.storyDeadlines.compile(definition.lifecycle, world.dt),
+        cleanup: W.storyCleanup.compile(definition.lifecycle.cleanup, systems, key) });
     }
     if (!entries.size) return null;
     const order = [...entries.keys()].sort();
     const autoOrder = order.filter(key => entries.get(key).automatic.size);
+    const cleanupOrder = order.filter(key => entries.get(key).cleanup);
 
     function checkAction(action, args) {
       const extra = action === 'story-transition' ? ['to', 'outcome'] :
@@ -84,7 +86,8 @@
           check(W.storyDeadlines.valid(def.clock, row, tick), message);
           continue;
         }
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent']) && Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup']) &&
+          Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit), message);
         let previous;
@@ -98,7 +101,7 @@
           previous = change;
         }
         const cutOffBeforeOffer = previous.from === null && previous.to === 'expired';
-        check(W.storyDeadlines.valid(def.clock, row, tick) &&
+        check(W.storyDeadlines.valid(def.clock, row, tick) && W.storyCleanup.valid(row.cleanup, def.cleanup, previous, tick) &&
           (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
       }
       for (const [key, def] of entries) {
@@ -127,6 +130,20 @@
         }
         else check(!own(row, 'flow'), message);
       }
+    }
+
+    function cleanup(previous, tick, apply, emit) {
+      let state = previous;
+      for (const key of cleanupOrder) {
+        const row = previous[key], def = entries.get(key), ending = row?.transitions.at(-1);
+        const next = W.storyCleanup.advance(row?.cleanup, def.cleanup, tick, apply, result =>
+          emit('story-cleanup-resolved', { document:def.info.document, story:def.info.story,
+            endedAs:ending.to, ...(ending.outcome !== undefined && {outcome:ending.outcome}), ...result }));
+        if (next === row?.cleanup) continue;
+        if (state === previous) state = { ...previous };
+        state[key] = { ...row, cleanup:next };
+      }
+      return state;
     }
 
     function advance(previous, starts, commands, tick, emit, events, query) {
@@ -172,10 +189,12 @@
           to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
         const deadlines = W.storyDeadlines.transition(clock, prior?.deadlines, from, to, tick);
         const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }), ...(deadline && { deadline }) };
+        const cleanup = W.storyCleanup.begin(def.cleanup, change);
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
         save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
-          ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }), ...(parent && {parent}) });
+          ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }), ...(parent && {parent}),
+          ...(cleanup && {cleanup}) });
         const stage = flow?.current ?? flow?.route.at(-1);
         const link = parent ? { parent } : {};
         publish('story-transition', { ...info, ...change, ...source, ...link, ...(stage && { stage:stage.stage, visit:stage.visit }) });
@@ -264,7 +283,8 @@
       return freeze(state);
     }
 
-    return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction };
+    return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction,
+      ...(cleanupOrder.length && {cleanup}) };
   }
 
   function inspect(state, at, documents) {
