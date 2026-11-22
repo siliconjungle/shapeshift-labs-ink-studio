@@ -56,6 +56,10 @@ const rehearsalTrace={format:'ink-studio/adaptive-score-trace',version:1,id:'sho
   intents:[{kind:'music-transition',from:'wait',to:'reveal',time:.7}]};
 const rehearsalEdit={id:'tail',transitions:[{from:'wait',to:'reveal',tail:.1}]};
 const editSession={format:'ink-studio/music-edit-session',version:1,id:'bench',sampleRate:8000,production};
+const sessionExperiment={op:'music.experimentEditSession',inputs:{source:editSession,brief:{
+  focus:{from:{beat:0},to:{beat:2}},scout:{from:{beat:0},to:{beat:1}},roles:{hook:'lead'},
+  axes:{sound:[{id:'lighter',revision:{patches:{pluck:{type:'fm',index:.34}}}}]}
+}}};
 const lockedSearch={op:'music.searchLockedArrangement',
   inputs:{source:production,brief:{range:{from:0,to:2},locks:{tracks:{lead:'all'}},kinds:['counterline']}}};
 const padPattern = {op:'music.programPads',inputs:{
@@ -518,6 +522,9 @@ const specifications = {
   'music.handoffEditSession': {inputs:{source:editSession}},
   'music.inspectEditSession': {inputs:{source:editSession}},
   'music.editSession': {inputs:{source:editSession,edits:[{op:'pin',lane:'lead',mode:'pitch'}]}},
+  'music.experimentEditSession': {inputs:sessionExperiment.inputs},
+  'music.keepSessionExperiment': {nodes:{trial:sessionExperiment},inputs:{source:editSession,report:link('trial'),
+    choice:{candidate:'take-001',reason:'Keep the lighter onset for this example.'}}},
   'music.renderEditSession': {inputs:{source:editSession,options:{preview:{from:{beat:0},to:{beat:1}}}}},
   'music.atmosphereReference': {inputs:{score:audio,performance:{events:{lead:[]}}}},
   'music.planAtmosphere': {inputs:atmospherePlan.inputs},

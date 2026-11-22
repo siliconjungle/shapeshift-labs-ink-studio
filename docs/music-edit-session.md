@@ -6,6 +6,8 @@ editable recipe. Use [producer revisions](music-producer.md),
 [audio editorial](audio-editorial.md), and [sample motifs](sample-motif.md)
 as sources. Use [DAW handoff](clap-instruments-and-handoff.md#hand-the-edit-to-a-daw)
 to export the active comp, routing, automation, and aligned prints.
+Use [session experiments](music-session-experiments.md) to compare combinations
+of sound, phrase, and cue decisions through the same desk.
 
 ## Assemble a session
 

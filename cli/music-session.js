@@ -4,8 +4,8 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.procedural,{fields,check}=P.musicInstruments;
-  check(file && ['inspect','edit','render','preview','compare','stream','play','handoff'].includes(mode),
-    'Use music session inspect, edit, render, preview, compare, stream, play or handoff');
+  check(file && ['inspect','edit','render','preview','compare','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, edit, render, preview, compare, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -59,8 +59,19 @@ module.exports=function command([mode,file,config],opt,kit) {
     const report=writer.report({...result.report,listeningGain:Object.fromEntries(names.map(name=>[name,files[name].gain]))});
     return {...Object.fromEntries(names.map(name=>[name,files[name].target])),report};
   }
+  function experiment(folder,brief,emitScouts=false) {
+    const writer=audioWriter(folder), directory=path.resolve(folder), scouts={};
+    const options=emitScouts ? {onScout(id,pcm) {
+      scouts[id]=path.relative(directory,writer.audio(pcm,'scouts/'+id).target);
+    }} : {};
+    const {value,clips}=editor.experiment(session,brief,options);
+    const previews=Object.fromEntries(Object.entries(clips).map(([id,pcm])=>
+      [id,path.relative(directory,writer.audio(pcm,'context/'+id).target)]));
+    const report=writer.report({...value,files:{scouts,context:previews}});
+    return {report,attempted:value.attempted,scoutRenders:value.scoutRenders,contextRenders:value.contextRenders};
+  }
   function execute(row) {
-    check(fields(row,['op','out','changes','preview']),'Invalid session command');
+    check(fields(row,['op','out','changes','preview','brief','emitScouts']),'Invalid session command');
     switch (row.op) {
       case 'inspect': {
         const report=editor.inspect(session);
@@ -77,6 +88,9 @@ module.exports=function command([mode,file,config],opt,kit) {
       case 'save': return save(row.out);
       case 'render': return render(row.out);
       case 'compare': return compare(row.out,previous,row.preview);
+      case 'experiment':
+        check(typeof (row.emitScouts ?? false)==='boolean','emitScouts must be true or false');
+        return experiment(row.out,row.brief,row.emitScouts);
       case 'preview':
         check(row.preview!==undefined,'Provide the preview loop and optional switches');
         return render(row.out,row.preview);
@@ -114,6 +128,15 @@ module.exports=function command([mode,file,config],opt,kit) {
   }
   check(mode==='inspect' || typeof opt.out==='string','Use --out for session edits and audio');
   const settings=config && read(config);
+  if (mode==='keep-experiment') {
+    check(fields(settings,['report','candidate','reason']) && typeof settings.report==='string','Choose an experiment report and candidate');
+    const report=read(path.resolve(path.dirname(config),settings.report));
+    const kept=editor.keepExperiment(session,report,{candidate:settings.candidate,reason:settings.reason});
+    const decision=path.resolve(opt.out,'decision.json'), result={...save(path.resolve(opt.out,'session.json'),kept.value),decision};
+    json(decision,kept.decision);
+    process.stdout.write(JSON.stringify(result)+'\n');
+    return result;
+  }
   if (mode==='compare') {
     check(fields(settings,['before','preview']) && typeof settings.before==='string','Supply an earlier session and a preview range');
     const baselineFile=path.resolve(path.dirname(config),settings.before), baseline=read(baselineFile);
@@ -125,7 +148,8 @@ module.exports=function command([mode,file,config],opt,kit) {
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(mode==='preview' && {preview:settings})});
+  const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(mode==='preview' && {preview:settings}),
+    ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});
   process.stdout.write(JSON.stringify(result)+'\n');
   return result;
 };

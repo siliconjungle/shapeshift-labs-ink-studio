@@ -160,9 +160,9 @@
     }
     return [...updates,selection].sort((a,b)=>a.lane.localeCompare(b.lane) || a.from-b.from);
   }
-  function edits(session,assets,changes) {
+  function edits(session,assets,changes,host) {
     check(Array.isArray(changes) && changes.length<=128,'Supply a list of session edits');
-    let plan=compile(session,assets);
+    let plan=compile(session,assets,host);
     const next=clone(session);
     for (const row of changes) {
       if (row?.op==='comp') {
@@ -232,7 +232,7 @@
         check(source && get(source,row.take)?.editorial,'Unknown editorial take');
         source[row.take].editorial=M.audioEditorial.revise(source[row.take].editorial,assets,row.edits).value;
       } else check(false,'Unknown session edit');
-      const updated=compile(next,assets);
+      const updated=compile(next,assets,host);
       // A pitch or complete pin also guards edits to the reference itself.
       const noteTake=row.op==='note' ? row.take : row.op==='keep-notes' ? row.into ?? reference : null;
       if (noteTake===reference && plan.pins[row.lane]) {
@@ -247,5 +247,5 @@
     }
     return P.data.freeze(next);
   }
-  S.musicSessionModel=Object.freeze({compile,edits,replace,addressed,addressing,reference,room,signature,samples});
+  S.musicSessionModel=Object.freeze({compile,edits,instruments,replace,addressed,addressing,reference,room,signature,samples});
 })(KIT.procedural);

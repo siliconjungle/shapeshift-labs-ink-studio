@@ -222,7 +222,10 @@
       return {recipe:{...plan.mixer,strips,end:samples(frames)},material};
     }
     function render(session,preview) {
-      const plan=compile(session,assets,host), transport=playback(plan,preview);
+      return renderPlan(compile(session,assets,host),preview);
+    }
+    function renderPlan(plan,preview) {
+      const transport=playback(plan,preview);
       const result=incremental(plan,transport,preview) ?? continuous(plan,transport,preview);
       if (preview?.context) result.report.focus=transport.focus;
       if (preview?.monitor) {
@@ -269,7 +272,8 @@
       const counts={hits:0,misses:0}, {recipe,material}=mixerInput(plan,transport.segments,counts);
       return S.musicHandoff(plan,recipe,material,M.mixer.render(recipe,material,host));
     }
-    const edit=(session,changes)=>edits(session,assets,changes);
+    const edit=(session,changes)=>edits(session,assets,changes,host);
+    const experiments=S.createSessionExperiment({compile:session=>compile(session,assets,host),render:renderPlan,edit,assets});
     function prepareTransport(session,mode='buffered') {
       const plan=compile(session,assets,host);
       const native=[...plan.producers.values()].every(({score})=>Object.values(score.tracks).every(track=>!track.external));
@@ -300,7 +304,8 @@
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
       {assets,edit,prepareLive,materialize});
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
-    return Object.freeze({inspect,edit,render,compare,handoff,open,prepareTransport,prepareLive,openPreparedTransport});
+    return Object.freeze({inspect,edit,render,compare,handoff,experiment:experiments.run,keepExperiment:experiments.keep,
+      open,prepareTransport,prepareLive,openPreparedTransport});
   }
   M.musicSession=Object.freeze({create});
 })(KIT.procedural);

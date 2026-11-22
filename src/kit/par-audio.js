@@ -264,6 +264,16 @@
       inputs:{source:'record',assets:sessionAssets,edits:scoreRequests},outputs:{value:'record'},
       run({source,assets,edits}) {return {value:A.musicSession.create(assets).edit(source,edits)};}
     },
+    'music.experimentEditSession': {
+      description:'Scout a matrix of sound, phrase and cue edits through a shared session and hear diverse finalists in context.',
+      inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{value:'record',clips:'record'},
+      run({source,brief,assets},{host}) {return A.musicSession.create(assets,host).experiment(source,brief);}
+    },
+    'music.keepSessionExperiment': {
+      description:'Recover the editable session for a heard experiment candidate and retain the listening decision.',
+      inputs:{source:'record',report:'record',choice:'record',assets:sessionAssets},outputs:{value:'record',decision:'record'},
+      run({source,report,choice,assets},{host}) {return A.musicSession.create(assets,host).keepExperiment(source,report,choice);}
+    },
     'music.renderEditSession': {
       description:'Render a music comp or audition synchronous take switches and loop passes through one continuous desk.',
       inputs:{source:'record',assets:sessionAssets,options},outputs:{value:'audio',taps:'record',report:'record'},
