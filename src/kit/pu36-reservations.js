@@ -323,11 +323,11 @@
       }
       return requests;
     }
-    function run(states,ctx,canClaim){
+    function run(states,ctx,canClaim,onlyBoard){
       const requests=registrations(states,canClaim);
       let next=states;
       const outcome=owner=>systems[owner.system]?.reservationOrders?.outcome(states[owner.system],owner);
-      for(const name of boards){
+      for(const name of onlyBoard===undefined?boards:[onlyBoard]){
         const updated=systems[name].reservationBoard.reconcile(states[name],requests.get(name),
           {tick:ctx.tick,emit:ctx.emit(name)},outcome,Boolean(canClaim));
         if(updated!==states[name]){

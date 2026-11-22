@@ -1,0 +1,72 @@
+{
+  "format": "ink-studio/story-template",
+  "version": 1,
+  "id": "dock-dispatch",
+  "revision": 1,
+  "parameters": {
+    "rate": { "type": "integer", "min": 1, "default": 8 },
+    "orderId": { "type": "id", "default": "dock-dispatch" }
+  },
+  "document": {
+    "title": "The dock dispatch",
+    "stories": {
+      "unload": {
+        "kind": "questlet",
+        "title": "Unload the medicine",
+        "entry": "work",
+        "roles": { "operator": { "kind": "crane-operator", "required": true } },
+        "triggers": { "request": { "event": { "kind": "dock-help-requested", "system": "world" } } },
+        "lifecycle": {
+          "activation": "manual",
+          "progression": true,
+          "deadlines": { "offer": { "for": 1.5 } },
+          "commitment": {
+            "actor": { "$role": "operator" },
+            "activity": "dock-shift",
+            "terms": { "reward": { "$param": "rate" }, "cargo": "medicine", "units": "coin" },
+            "consider": {
+              "minimum-pay": { "when": { "path": "/terms/reward", "op": "gte", "value": 6 }, "otherwise": "refuse" }
+            },
+            "order": {
+              "id": { "$param": "orderId" }, "task": "unload",
+              "reservation": { "board": "booking", "require": {
+                "crane": { "anyOf": ["crane"] }, "landing": { "anyOf": ["landing"] }
+              } }
+            }
+          }
+        },
+        "stages": {
+          "work": {
+            "title": "Unload on the reserved landing",
+            "roles": ["operator"],
+            "objectives": {
+              "unloaded": { "title": "The committed order succeeded", "type": "observe", "params": {
+                "event": { "kind": "order-succeeded", "system": { "$role": "operator", "path": "/system" }, "where": { "all": [
+                  { "path": "/agent", "value": { "$role": "operator", "path": "/agent" } },
+                  { "path": "/generation", "value": { "$role": "operator", "path": "/generation" } },
+                  { "path": "/order", "value": { "$param": "orderId" } }
+                ] } }
+              } }
+            },
+            "next": { "done": { "outcome": "unloaded" } }
+          }
+        },
+        "outcomes": { "unloaded": { "title": "Medicine unloaded" } }
+      }
+    }
+  },
+  "eventActions": {
+    "confirm": { "on": { "kind": "story-objective-resolved", "system": "world", "where": { "all": [
+      { "path": "/document", "value": { "$instance": true } }, { "path": "/story", "value": "unload" },
+      { "path": "/objective", "value": "unloaded" }
+    ] } }, "actions":[{ "action": "world/story-choose", "args": {
+      "document": { "$instance": true }, "story": "unload", "stage": "work", "visit": 1, "branch": "done", "reason": "unload-verified"
+    } }] },
+    "pay": { "on": { "kind": "story-transition", "system": "world", "where": { "all": [
+      { "path": "/document", "value": { "$instance": true } }, { "path": "/story", "value": "unload" },
+      { "path": "/to", "value": "completed" }, { "path": "/outcome", "value": "unloaded" }
+    ] } }, "actions":[{ "action": "world/transfer", "args": {
+      "from": "stores/treasury", "to": "stores/operator-wallet", "amount": { "$param": "rate" }, "mode": "exact"
+    } }] }
+  }
+}

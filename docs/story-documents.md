@@ -243,6 +243,60 @@ node cli/ink-studio.js probe passage.run.json --field world/story-reference-targ
 node cli/ink-studio.js sim replay passage.run.json
 ```
 
+## Negotiate an actor commitment
+
+Add `lifecycle.commitment` to ask an actor to take an ordinary [agent order](agent-orders.md) when the story activates. Each commitment names one actor and one proposed order. The actor can come from a `$role` binding or template parameter. A generation pins the request to that actor's lifetime.
+
+```json
+{
+  "actor": { "system": "crew", "agent": "mira", "generation": 2 },
+  "activity": "dock-shift",
+  "terms": { "reward": 8, "units": "coin" },
+  "consider": {
+    "minimum-pay": {
+      "when": { "path": "/terms/reward", "op": "gte", "value": 6 },
+      "otherwise": "refuse"
+    }
+  },
+  "order": {
+    "id": "dock-dispatch",
+    "task": "unload",
+    "reservation": {
+      "board": "booking",
+      "require": { "crane": { "anyOf": ["crane"] }, "landing": { "anyOf": ["landing"] } }
+    }
+  }
+}
+```
+
+Ink checks existing orders, assigned movement, shared travel, formations, and autonomous activities that the actor has committed to finish. Optional `activity` uses an activity assigned to the actor to check its [recurring shift and need condition](agent-needs.md). Ink uses the current completed tick and keeps the authored window, meter values, and condition in the decision report. The accepted order then runs under the usual order and reservation rules.
+
+`terms` is author-defined JSON. Each named `consider` condition can read `actor`, `needs`, `activity`, `phase`, and `terms`. Use `otherwise: "refuse"` for a hard requirement and `otherwise: "defer"` for a condition that may improve. Story authors can route wages or other consequences through normal ledger actions.
+
+| Response | What happens |
+| --- | --- |
+| Accepted | Ink starts the native order and grants the entire requested reservation bundle in the same tick, then activates the story. The next solver visit begins the order's work. |
+| Deferred | The offer stays available and the original request retries automatically. Busy actors, unmet need or shift conditions, and unavailable reservation capacity can defer a request. The offer deadline runs while waiting. |
+| Refused | Ink withdraws the offer with reason `actor-refused`. The report can name an unmet hard term, a replaced generation, an activity the actor lacks, or a closed reservation job. |
+
+Manual offers start evaluation when a `world/story-transition` command requests `active`. Automatic offers request activation on their own. A withdrawal or deadline closes an offer before a pending attempt can dispatch. Older pending requests are considered first, with story IDs breaking ties. The order's reservation follows the native [whole-bundle allocator](job-reservations.md). A deferred attempt leaves the actor's order queue and the reservation board available for other work.
+
+`sim preflight` lists resolved proposals under `commitments`. Use `world/story-commitments` with an optional `story` argument to inspect the proposal and latest decision. `story-commitment-decision` events report when the response or blocker changes. The `story-started` event includes the accepted order handle. To inspect an actor's current availability and activity terms separately, read the roster's `commitment-terms` field with `agent` and optional `activity` arguments.
+
+An accepted commitment records the actor's roster, generation, and order sequence. If the story ends while that order is still pending, Ink cancels that exact order on the next tick and the native board releases its claims. The accepted decision and pending request survive checkpoints and replay.
+
+### Run the dock dispatch example
+
+The [dock dispatch template](../examples/story-documents/dock-dispatch.template.json) offers Mira eight coins for unloading medicine. The [commands](../examples/story-documents/dock-dispatch.actions.json) finish her stocktake, lower fatigue, wait through the closed shift, and release the occupied crane. The story accepts at tick 11 with both the crane and landing reserved. Changing the template's `rate` parameter to three coins makes her refuse the same proposal.
+
+```sh
+node cli/ink-studio.js sim preflight examples/story-documents/dock-dispatch.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/dock-dispatch.world.json --actions examples/story-documents/dock-dispatch.actions.json --ticks 20 --record dispatch.run.json
+node cli/ink-studio.js probe dispatch.run.json --ticks 8 --field world/story-commitments --args '{"story":"dispatch/unload"}'
+node cli/ink-studio.js probe dispatch.run.json --ticks 11 --field booking/claims
+node cli/ink-studio.js sim replay dispatch.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

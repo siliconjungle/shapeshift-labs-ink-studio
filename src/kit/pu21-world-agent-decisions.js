@@ -248,6 +248,10 @@
         return Boolean(decision?.choice&&['traveling','acting'].includes(decision.phase)&&
           catalog.get(decision.choice.activity).program?.commitment);
       },
+      terms(agent,activity,decision,tick){
+        if(!policies.get(agent)?.includes(activity))return null;
+        return needs.terms(catalog.get(activity).program,decision?.needs??{},tick);
+      },
       update,
       release,
       hasNeeds:needs.hasMeters,

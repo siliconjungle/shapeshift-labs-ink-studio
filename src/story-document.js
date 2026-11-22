@@ -431,8 +431,31 @@ const StoryDocument = (() => {
     }
   }
 
+  function commitment(value, at, roles, report) {
+    fields(value, at, ['actor','order'], ['activity','terms','consider']);
+    if (roleUses(value,roles,at,report)) return;
+    const {actor, order, activity, terms, consider} = value;
+    fields(actor,at+'.actor',['system','agent'],['generation']);
+    if (!worldName(actor.system) || !worldName(actor.agent) || Object.hasOwn(actor,'generation') &&
+        (!Number.isSafeInteger(actor.generation) || actor.generation<1)) invalid(at+'.actor','invalid actor handle');
+    record(order,at+'.order');
+    if (!worldName(order.task)) invalid(at+'.order.task','expected an agent order task ID');
+    if (Object.hasOwn(value,'activity') && !worldName(activity)) invalid(at+'.activity','expected an activity ID');
+    if (Object.hasOwn(value,'terms')) record(terms,at+'.terms');
+    if (Object.hasOwn(value,'consider')) {
+      const rules = entries(consider,at+'.consider',true);
+      if (rules.length>16) invalid(at+'.consider','expected up to 16 consideration rules');
+      for (const [id,rule] of rules) {
+        const place=at+'.consider.'+id;
+        fields(rule,place,['when','otherwise']);
+        condition(rule.when,place+'.when');
+        if (!['defer','refuse'].includes(rule.otherwise)) invalid(place+'.otherwise','expected defer or refuse');
+      }
+    }
+  }
+
   function lifecycle(value, at, roles, report) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -455,6 +478,7 @@ const StoryDocument = (() => {
     }
     if (Object.hasOwn(value, 'feasibility')) feasibility(value.feasibility, at + '.feasibility', roles, report);
     if (Object.hasOwn(value, 'liveReferences')) liveReferences(value.liveReferences, at + '.liveReferences', roles, report);
+    if (Object.hasOwn(value, 'commitment')) commitment(value.commitment,at+'.commitment',roles,report);
   }
 
   const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];

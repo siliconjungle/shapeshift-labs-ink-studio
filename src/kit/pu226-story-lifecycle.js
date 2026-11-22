@@ -37,6 +37,7 @@
         stages, automatic, evidence: compileEvidence(stages, key, document.objectiveTypes),
         feasibility: compileFeasibility(definition.lifecycle.feasibility, key),
         liveReferences: definition.lifecycle.liveReferences,
+        commitment: definition.lifecycle.commitment,
         clock: W.storyDeadlines.compile(definition.lifecycle, world.dt),
         cleanup: W.storyCleanup.compile(definition.lifecycle.cleanup, systems, key) });
     }
@@ -45,6 +46,7 @@
     const autoOrder = order.filter(key => entries.get(key).automatic.size);
     const cleanupOrder = order.filter(key => entries.get(key).cleanup);
     const gateKeys = order.filter(key => entries.get(key).feasibility);
+    const commitmentKeys = order.filter(key => entries.get(key).commitment);
     const feasibility = gateKeys.length ? freeze(Object.fromEntries(gateKeys.map(key => [key,entries.get(key).feasibility]))) : undefined;
 
     function checkAction(action, args) {
@@ -114,7 +116,7 @@
           check(W.storyDeadlines.valid(def.clock, row, tick), message);
           continue;
         }
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup']) &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment']) &&
           Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit), message);
@@ -132,6 +134,7 @@
         }
         const cutOffBeforeOffer = previous.from === null && previous.to === 'expired';
         check(W.storyDeadlines.valid(def.clock, row, tick) && W.storyCleanup.valid(row.cleanup, def.cleanup, previous, tick) &&
+          W.storyCommitments.valid(def.commitment,row,tick) &&
           (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
       }
       check(feasibility ? record(gates) && equal(Object.keys(gates).sort(),gateKeys) : gates === undefined,
@@ -194,8 +197,9 @@
       return state;
     }
 
-    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references) {
+    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch) {
       let state = previous, gates = previousGates, queuedOpens = [];
+      const requests = new Map();
       const sourceLength = events.length;
       let indexed;
       const eventsOf = kind => (indexed ??= W.storyEvidence.index(events, sourceLength)).get(kind) ?? [];
@@ -241,7 +245,7 @@
         }
         const reason = parent ? 'parent-stage-opened' : source ? 'trigger-matched' : 'authored-offer';
         transition(key,'available',reason,undefined,{publish,source,parent});
-        if (applyReference(key,publish) && def.activation === 'automatic')
+        if (applyReference(key,publish) && def.activation === 'automatic' && !def.commitment)
           transition(key,'active','automatic-activation',undefined,{publish});
       }
       function openChildren(ids, parent, publish) {
@@ -276,12 +280,14 @@
         const overflow = Math.max(0, transitions.length - limit);
         save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
           ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }), ...(parent && {parent}),
+          ...(prior?.commitment && {commitment:prior.commitment}),
           ...(cleanup && {cleanup}) });
         const stage = flow?.current ?? flow?.route.at(-1);
         const link = parent ? { parent } : {};
         publish('story-transition', { ...info, ...change, ...source, ...link, ...(stage && { stage:stage.stage, visit:stage.visit }) });
         if (started) {
-          publish('story-started', { ...info, ...source, ...link });
+          publish('story-started', { ...info, ...source, ...link,
+            ...(prior.commitment?.order && {commitment:prior.commitment.order}) });
           if (flow) enterStage(publish,def,flow,reason);
         }
       }
@@ -307,7 +313,7 @@
           continue;
         }
         if (prior !== null && !applyReference(key)) continue;
-        if (status==='available' && def.liveReferences && def.activation==='automatic') {
+        if (status==='available' && def.liveReferences && def.activation==='automatic' && !def.commitment) {
           transition(key,'active','automatic-activation');
           continue;
         }
@@ -355,7 +361,26 @@
           publish('story-transition-rejected', { ...entries.get(key).info, from, to, reason:'live-reference-blocked', requestedReason:reason, reference });
           continue;
         }
+        if (from==='available'&&to==='active'&&entries.get(key).commitment) {
+          if (!requests.has(key)) requests.set(key,{reason,publish});
+          continue;
+        }
         transition(key, to, reason, outcome, { publish });
+      }
+      const candidates = commitmentKeys.filter(key=>statusOf(state[key])==='available'&&!policy(key)&&
+        (requests.has(key)||state[key].commitment||entries.get(key).activation==='automatic'));
+      const age = key => state[key].commitment?.requestedAt??tick;
+      candidates.sort((left,right)=>age(left)-age(right));
+      for (const key of candidates) {
+        const {info,commitment:spec} = entries.get(key), row = state[key], prior = row.commitment;
+        const request = requests.get(key), publish = request?.publish??emit;
+        const requestedAt = prior?.requestedAt??tick, requestReason = prior?.requestReason??request?.reason??'automatic-activation';
+        const report = W.storyCommitments.attempt(spec,tick,query(),dispatch);
+        save(key,{...row,commitment:{...report,requestedAt,requestReason}});
+        if (!prior||report.decision!==prior.decision||!equal(W.storyCommitments.reasons(prior),W.storyCommitments.reasons(report)))
+          publish('story-commitment-decision',{...info,...report,requestedAt,requestReason,terms:spec.terms??{},task:spec.order.task});
+        if (report.decision==='accepted') transition(key,'active',requestReason,undefined,{publish});
+        else if (report.decision==='refused') transition(key,'withdrawn','actor-refused',undefined,{publish});
       }
       for (const key of autoOrder) {
         const def = entries.get(key), row = state[key], current = row?.flow?.current;

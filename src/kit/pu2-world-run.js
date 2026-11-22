@@ -340,6 +340,7 @@
       const { documents } = plan.storyRoles;
       plan.storyTriggers = W.storyTriggers.compile(documents, world, systems);
       plan.storyReferences = W.storyReferences.compile(documents, world, systems);
+      plan.storyCommitments = W.storyCommitments.compile(documents, systems);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
       plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
@@ -463,6 +464,7 @@
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
+      ...(plan.storyCommitments && {commitments:plan.storyCommitments}),
       ...(plan.storyRoles && Object.keys(plan.storyRoles.roles).length > 0 && {roles:plan.storyRoles.roles})});
   }
   function modelInterface(source) {
@@ -485,7 +487,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyRoles,storyTemplates,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyRoles,storyTemplates,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -549,6 +551,7 @@
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
+        ...(storyCommitments && {storyCommitmentDefinitions:storyCommitments}),
         ...(storyFeasibilityState && {storyFeasibility:storyFeasibilityState,storyFeasibilityRules:storyLifecycle.feasibility}),
         ...(storyReferenceState && {storyReferences:storyReferenceState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
@@ -883,6 +886,18 @@
         }
         return result;
       }, makeEmit('world')) : storyLifecycleState;
+      if (storyCommitments) for (const {story,order} of W.storyCommitments.releases(storyCommitments,cleanedStories,at)) {
+        const {system,agent,generation,sequence} = order;
+        const query = Q.create(view(nextWorld,{...drafts}),systems,projection);
+        const sample = query.probe(system+'/orders',undefined,{agent,generation});
+        if (sample.status!=='ok') continue;
+        const {active,paused,queue} = sample.value;
+        if (![active,...paused,...queue].some(row=>row?.sequence===sequence)) continue;
+        const ctx = context(system,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(system),query,spatial(system,false));
+        drafts[system] = rootedState(systems[system].actions['cancel-order'](drafts[system],{agent,generation,order:sequence},ctx));
+        commanded?.add(system);
+        makeEmit('world')('story-commitment-released',{story,order});
+      }
       for (const item of commands) {
         const [name,key] = endpoint(item.action);
         if(debug)debug.enter({system:W.stepDebug.actionSystem(item),inputs:item.args});
@@ -1231,6 +1246,33 @@
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
+      function dispatchCommitment(actor,order) {
+        const {system,agent,generation} = actor, scope = W.storyCommitments;
+        if (!detailed(system)||W.simulationAggregate.isAggregate(nextStates[system]))
+          return {check:scope.blocked('simulation','defer','actor-not-detailed')};
+        const notes = [];
+        const stage = publish => (kind, detail, parents) => notes.push(()=>publish(kind,detail,parents));
+        let trial = {...nextStates};
+        const ctx = context(system,nextWorld,Object.freeze({...trial}),at,{},stage(systemEmit(system)),completedQuery());
+        trial[system] = rootedState(systems[system].actions['issue-order'](trial[system],{agent,generation,order},ctx));
+        const probeTrial = (name,args) => Q.create({...completedView(),states:visibleStates(trial),
+          [W.simulationAggregate.rawStates]:trial},systems,projection).probe(name,undefined,args);
+        const sequence = probeTrial(system+'/orders',{agent,generation}).value.active.sequence;
+        const owner = {...actor,sequence};
+        let reservation;
+        if (order.reservation) {
+          const {board} = order.reservation;
+          trial = reservations.run(trial,{tick:at,emit:name=>stage(makeEmit(name))},detailed,board);
+          const sample = probeTrial(board+'/claim',owner), claim = sample.value;
+          if (claim?.status!=='held') return {check:scope.blocked('reservation',claim?.status==='failed'?'refuse':'defer',
+            claim?.reason??'reservation-unavailable',{board,require:order.reservation.require})};
+          reservation = scope.pass('reservation',{board,grants:claim.grants,until:claim.until});
+        }
+        nextStates = trial;
+        completed = undefined;
+        for (const publish of notes) publish();
+        return {order:owner,...(reservation&&{check:reservation})};
+      }
       if (storyReferences) {
         nextStoryReferences = storyReferences.advance(storyReferenceState,at,completedQuery(),events,storyLifecycleState,makeEmit('world'));
         completed = undefined;
@@ -1242,7 +1284,7 @@
       }
       if (storyLifecycle) {
         ({state:nextStoryLifecycle,gates:nextStoryFeasibility} =
-          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,storyFeasibilityState,nextStoryReferences));
+          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,storyFeasibilityState,nextStoryReferences,dispatchCommitment));
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);

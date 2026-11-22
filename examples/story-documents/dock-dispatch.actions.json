@@ -1,0 +1,13 @@
+[
+  { "tick": 1, "action": "crew/issue-order", "args": {
+    "agent": "keeper", "order": { "id": "crane-inspection", "task": "hold-crane",
+      "reservation": { "board": "booking", "require": { "inspection": { "anyOf": ["crane"] } } } }
+  } },
+  { "tick": 1, "action": "crew/issue-order", "args": { "agent": "mira", "order": { "id": "stocktake", "task": "inventory" } } },
+  { "tick": 1, "action": "world/event", "args": { "kind": "dock-help-requested" } },
+  { "tick": 2, "action": "world/story-transition", "args": {
+    "document": "dispatch", "story": "unload", "to": "active", "reason": "accept-dock-assignment"
+  } },
+  { "tick": 7, "action": "crew/set-need", "args": { "agent": "mira", "need": "fatigue", "value": 20 } },
+  { "tick": 11, "action": "crew/cancel-order", "args": { "agent": "keeper", "order": "crane-inspection" } }
+]

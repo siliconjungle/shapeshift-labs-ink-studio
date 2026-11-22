@@ -1,0 +1,50 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "dock-dispatch",
+  "dt": 0.1,
+  "storyTemplates": [{ "id": "dispatch", "file": "dock-dispatch.template.json", "revision": 1 }],
+  "storyBindings": { "dispatch/unload": { "operator": { "kind": "crane-operator", "value": {
+    "system": "crew", "agent": "mira", "generation": 2
+  } } } },
+  "systems": {
+    "booking": { "kind": "reservations", "config": {
+      "pools": { "crane": { "capacity": 1 }, "landing": { "capacity": 1 } }
+    } },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-2, -0.5, -1], "max": [2, 1, 1] },
+      "ground": 0, "cell": 0.2,
+      "species": { "dockhand": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+      "agents": {
+        "keeper": { "species": "dockhand", "position": [1, 0, 0] },
+        "mira": { "species": "dockhand", "position": [-1, 0, 0] }
+      },
+      "orders": { "tasks": {
+        "hold-crane": { "steps": [{ "op": "wait", "ticks": 24 }] },
+        "inventory": { "steps": [{ "op": "wait", "ticks": 3 }] },
+        "unload": { "steps": [
+          { "op": "wait", "ticks": 3 },
+          { "op": "transfer", "from": "stores/depot", "to": "stores/pier", "amount": 2, "mode": "exact" }
+        ] }
+      } },
+      "decisions": {
+        "interval": 1, "cycle": 20,
+        "needs": { "fatigue": { "initial": 80 } },
+        "members": { "mira": ["rest", "dock-shift"] },
+        "activities": {
+          "rest": { "priority": 1, "destinations": { "bench": { "at": [-1, 0, 0] } } },
+          "dock-shift": { "priority": 2, "schedule": [{ "start": 8, "end": 18 }],
+            "needWhen": { "path": "/fatigue", "op": "lt", "value": 60 },
+            "destinations": { "post": { "at": [-1, 0, 0] } }
+          }
+        }
+      }
+    } },
+    "stores": { "kind": "store", "config": { "accounts": {
+      "depot": { "resource": "medicine", "units": "crate", "type": "integer", "initial": 2 },
+      "pier": { "resource": "medicine", "units": "crate", "type": "integer", "initial": 0, "max": 2 },
+      "treasury": { "resource": "coin", "units": "coin", "type": "integer", "initial": 20 },
+      "operator-wallet": { "resource": "coin", "units": "coin", "type": "integer", "initial": 0 }
+    } } }
+  }
+}

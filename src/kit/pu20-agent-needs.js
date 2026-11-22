@@ -45,14 +45,17 @@
       return {schedule,needWhen,priority:amounts(needPriority??{},'need priorities'),
         effects:amounts(needEffects??{},'need effects'),rates:new Map(amounts(needRates??{},'need rates')),commitment,urgent};
     }
+    const inWindow=(schedule,phase)=>schedule.some(({start,end})=>
+      start<end?phase>=start&&phase<end:phase>=start||phase<end);
     function gate(program,values,tick){
       if(!program)return null;
-      if(program.schedule){
-        const phase=tick%cycle;
-        if(!program.schedule.some(({start,end})=>start<end?phase>=start&&phase<end:phase>=start||phase<end))
-          return 'outside-schedule';
-      }
+      if(program.schedule&&!inWindow(program.schedule,tick%cycle))return 'outside-schedule';
       return Q.condition(program.needWhen,values)?null:'need-condition';
+    }
+    function terms(program,values,tick){
+      return { ...(program?.schedule&&{schedule:{cycle,phase:tick%cycle,windows:program.schedule,
+        open:inWindow(program.schedule,tick%cycle)}}),
+        ...(program?.needWhen&&{need:{when:program.needWhen,pass:Q.condition(program.needWhen,values)}}) };
     }
     function score(program,values){
       return program?.priority.reduce((sum,[key,weight])=>sum+weight*values[key],0)??0;
@@ -76,7 +79,7 @@
       for(const [key,amount] of program.effects)next[key]=clamp(meters.get(key),values[key]+amount);
       return next;
     }
-    return {get enabled(){return enabled;},hasMeters:meters.size>0,compile,gate,score,values,validate,
+    return {get enabled(){return enabled;},hasMeters:meters.size>0,compile,gate,terms,score,values,validate,
       advance,apply,validValue};
   }
   W.agentNeeds=Object.freeze({create});

@@ -667,6 +667,23 @@
       return Q.ok({...spec,status:status==='ok'&&!points.length?'empty':status,waypoints:points.length,
         ...(Number.isFinite(length)&&{length}),...(reason&&{reason}),...(blocked&&{blocked})});
     }
+    function commitmentTerms({state,args,tick,query,system}){
+      const row=S.select(S.get(state),args.agent);
+      if(!row)return Q.missing('unknown live agent','missing');
+      const book=row.orders??O.blank, decision=state.decisions?.[row.id], active=book.active;
+      const actor={system,agent:row.id,generation:row.generation};
+      const available=row.mode==='dormant'?'agent-dormant':O.runnable(book)?'existing-order':
+        row.travelPlan?'shared-travel':row.formationDriven||formations?.active(state.formations,row)?'formation':
+        policy?.committed(decision)?'committed-activity': !decision&&W.storyCasting.availability(row).state==='busy'?'assigned-movement':null;
+      const order=active?{task:active.task,sequence:active.sequence,phase:active.phase,
+        ...(active.id!==undefined&&{id:active.id}),
+        ...(active.reservation&&{reservation:query.probe(active.reservation.board+'/claim',undefined,{...actor,sequence:active.sequence}).value??null})}:null;
+      const orderAvailable=Number.isSafeInteger(book.serial+1)&&
+        (args.orderId===undefined||![active,...book.paused,...book.queue,...book.outcomes].some(entry=>entry?.id===args.orderId));
+      return Q.ok({actor,available,orderAvailable,orders:{active:order,paused:book.paused.length,queued:book.queue.length},
+        needs:decision?.needs??{},activity:decision?.choice?.activity??null,phase:decision?.phase??null,
+        ...(args.activity!==undefined&&{activityTerms:policy?.terms(row.id,args.activity,decision,tick)??null})});
+    }
     function spawnAgent(state,args,ctx){
         const roster=S.get(state), {agent}=args;
         check(!S.find(roster,agent),'Agent already exists '+agent);
@@ -1075,6 +1092,7 @@
         Q.ok(travel.report(travelRows(S.get(ctx.state)),ctx))}}),
       ...(orders&&{
         orders:agentField('record',row=>row.orders??O.blank),
+        'commitment-terms':{type:'record',qualified:true,read:commitmentTerms},
         'order-tasks':{type:'record',qualified:true,read:()=>Q.ok(orders.tasks)}
       }),
       ...(formations&&{formations:{type:'record',qualified:true,selector:true,read({state,args}){
