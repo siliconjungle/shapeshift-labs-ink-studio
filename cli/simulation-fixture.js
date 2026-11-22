@@ -27,11 +27,14 @@ function capture(W,subject,settings,workerPool) {
   const {check} = W.data, {from,until,focus} = settings, R = W.runtime;
   const run = subject.log ? R.openRecording(subject.log,{workerPool}) :
     R.create(subject.checkpoint?.world??subject.world,{checkpoint:subject.checkpoint,workerPool,
-      playback:subject.submissions&&new Map(subject.submissions.map(row=>[row.tick,row.commands]))});
+      playback:subject.submissions&&new Map(subject.submissions.map(row=>[row.tick,row.commands])),
+      branch:subject.eventBranch,legacyEvents:subject.submissions!==undefined&&subject.eventBranch===undefined&&
+        subject.checkpoint.eventStream===undefined});
   if (subject.actions?.length) run.schedule(subject.actions);
   const prefix = scan(run,from,()=>false);
   check(!prefix.fault,'Cannot reach the fixture start: '+prefix.fault?.message);
   const checkpoint = run.checkpoint(), trace = [];
+  const eventBranch = run.view().eventStream!==checkpoint.eventStream?run.eventBranch:undefined;
   let event;
   const result = scan(run,until,(rows)=>{
     addEvents(trace,rows,check);
@@ -46,7 +49,7 @@ function capture(W,subject,settings,workerPool) {
     ? [...W.runRecords.playback(subject.log)].map(([tick,commands])=>({tick,commands}))
     : subject.submissions??[];
   const submissions = batches.filter(row=>row.tick>from&&row.tick<=result.tick);
-  return {checkpoint,submissions,until:result.tick,trace,end:run.checkpoint(),event,fault:result.fault};
+  return {checkpoint,submissions,eventBranch,until:result.tick,trace,end:run.checkpoint(),event,fault:result.fault};
 }
 
 function deletions(subject) {
@@ -136,10 +139,11 @@ function build(W,input,{from,until,actions,focus,reduce,workerPool}={}) {
   const subject = log?{log}:input.checkpoint?{checkpoint:input.checkpoint,actions}:{world:input.world,actions};
   const reference = capture(W,subject,settings,workerPool);
   const reduced = reduce?minimize(W,input.checkpoint?{
-    checkpoint:reference.checkpoint,submissions:reference.submissions
+    checkpoint:reference.checkpoint,submissions:reference.submissions,eventBranch:reference.eventBranch
   }:subject,settings,reference,workerPool):null;
-  const {checkpoint,submissions,trace,end,event,fault} = reduced?.best??reference;
+  const {checkpoint,submissions,eventBranch,trace,end,event,fault} = reduced?.best??reference;
   return {format,version:1,checkpoint,submissions,until:event?.tick??fault?.tick??reference.until,
+    ...(eventBranch!==undefined&&{eventBranch}),
     expect:{events:trace,endSha256:sha256(end),...(fault&&{fault})},
     ...(focus&&{focus:{...focus,tick:event?.tick??fault.tick}}),...(reduced&&{reduction:reduced.reduction})};
 }
@@ -175,7 +179,8 @@ function replay(W,fixture,options={}) {
   validate(W,fixture);
   const {checkpoint,submissions,until,expect} = fixture, {equal} = W.data;
   const run = W.runtime.create(checkpoint.world,{...options,checkpoint,
-    playback:new Map(submissions.map(row=>[row.tick,row.commands]))});
+    playback:new Map(submissions.map(row=>[row.tick,row.commands])),branch:fixture.eventBranch,
+    legacyEvents:fixture.eventBranch===undefined&&checkpoint.eventStream===undefined});
   let cursor=0, mismatch;
   const result = scan(run,until,(rows,tick)=>{
     for (const row of rows) {

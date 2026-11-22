@@ -194,7 +194,7 @@ function run(W,plan,{engine,recordedEnd,workerPool,destination,sources}) {
     ...(plan.measurements.length&&{probes:baseline.probes})};
   const prepared = plan.branches.map(branch=>commands(W,plan,branch,frame));
   const results = plan.branches.map((branch,index)=>{
-    const fork = root.fork(), transfers = journal(), events = journal();
+    const fork = root.fork({branch:branch.id}), transfers = journal(), events = journal();
     fork.schedule(prepared[index]);
     fork.advance(plan.until,{onTick(view) {
       transfers.add(view.transfers??[],'status');

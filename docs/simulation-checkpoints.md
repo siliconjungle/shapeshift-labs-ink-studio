@@ -96,6 +96,34 @@ the same implementation factories during capture and verification.
 For sample-rate kernels, see [fast state checkpoints and take transport](simulation-fast-checkpoints.md).
 The world and its nested kernel states save together, including pending signal events.
 
+## Committed event envelopes
+
+`run.committedEvents()` returns the envelopes for the last committed tick. Query `world/events` for the same envelopes and add `retained: true` to include history with the latest batch. Filter by `kind`, `branch`, qualified `story`, or a `subject` ID. The latest batch is available with history disabled.
+
+```sh
+ink-studio sim fork decision.json --branch night --ticks 36 --record night.run.json
+ink-studio story events night.run.json --format envelopes --out night.events.json
+ink-studio probe night.run.json --field world/events --args '{"retained":true,"branch":"night"}'
+```
+
+| Envelope field | Meaning |
+| --- | --- |
+| `id`, `tick`, `world`, `branch` | The local `tick.sequence` ID, absolute commit tick, manifest ID, and branch ID. Use `world`, `branch`, and `id` together when comparing events across branches. |
+| `kind`, `system`, `payload` | The event kind, emitting system, and event-specific fields. |
+| `story`, `stage`, `visit` | The qualified story ID, stage ID, and visit number when present. Unavailable fields are null. |
+| `subjects` | Typed references with `role`, `kind`, and `id`. The envelope carries authored subject references, typed fact subjects, known native references, and transfer accounts. |
+| `causes` | Links to earlier `event` IDs, the originating `command` at its tick and index, and `trace` nodes when native causality is enabled. Story evidence and routed actions carry event links even with history disabled. A linked record may have aged out of retention. |
+
+Named branches start emitting under their new ID on the next committed tick. Inherited events and links keep the branch that emitted them. Use `run.fork({ branch: "night" })` or the CLI `--branch` option to name a fork. An unnamed runtime fork inherits the current branch for replay and rollback. Branch sessions and story fork comparisons use their authored branch IDs.
+
+The existing event rows keep their flat payload fields for filters, bindings, and receipts. They persist envelope metadata in `eventContext` so a checkpoint stores the payload once. Older runs and fixtures retain their original replay behavior. When read as envelopes, older rows use the same field layout with available payload information. A legacy checkpoint resumed into a new run starts producing committed metadata.
+
+```sh
+node examples/committed-events/demo.cjs ./studio/out/committed-events
+```
+
+The demo exports sibling branches with the same local event ID and a shared parent cause. A quay fixture shows the story stage and the event that triggered it.
+
 ## Portable test fixtures
 
 `sim fixture` packages a simulation interval as one versioned JSON file. It includes the native checkpoint and its embedded scene, queued commands, later submissions at their original ticks, the committed event trace, and a checksum for the final checkpoint. The CLI verifies the fixture after serialization before writing it. Block-backed sources produce standalone fixtures. Reviewers need the same Ink runtime and any registered custom systems or kernels used by the scene.

@@ -122,7 +122,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       : input.world;
   }
   function runtime(input, profile = false, regionRevisions, recordRun) {
-    return R.create(sourceWorld(input),{checkpoint:input.checkpoint,profile,workerPool,regionRevisions,traceSteps:traceRetention(),recordRun});
+    return R.create(sourceWorld(input),{checkpoint:input.checkpoint,profile,workerPool,regionRevisions,traceSteps:traceRetention(),
+      recordRun,branch:opt.branch});
   }
   function recordingRun(input, options) {
     sourceWorld(input);
@@ -561,6 +562,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       'Use sim run, resume, fork, or replay with '+StoryWatch.usage);
     ensure(opt.storyteller===undefined||['run','preflight','why','why-not','seed-matrix'].includes(mode),
       'Use --storyteller with a fresh world in sim run, preflight, why, why-not, or seed-matrix');
+    ensure(opt.branch===undefined||['run','resume','fork'].includes(mode)&&W.data.id(opt.branch),
+      'Use --branch ID with sim run, resume or fork');
     switch (mode) {
       case 'model': return modelCommand(file,other);
       case 'sections': {

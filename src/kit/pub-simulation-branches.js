@@ -10,7 +10,7 @@
     check(record(runtime)&&Number.isSafeInteger(maxStepsPerFrame)&&maxStepsPerFrame>=1&&maxStepsPerFrame<=120,
       'Invalid branch session runtime or frame budget');
     const branches=new Map(), marks=new Map(), listeners=new Set();
-    const restore=checkpoint=>R.create(checkpoint.world,{...runtime,checkpoint});
+    const restore=(checkpoint,options)=>R.create(checkpoint.world,{...runtime,checkpoint,...options});
     const matches=(a,b)=>a.id===b.id&&a.dt===b.dt&&a.seed===b.seed&&equal(a.systems,b.systems);
     let active=initialId, playing=false, remainder=0, currentStatus, sessionWorld;
 
@@ -50,7 +50,8 @@
       for (const row of source.marks) {
         check(record(row)&&id(row.branch)&&row.checkpoint?.format===R.checkpointFormat,'Invalid saved checkpoint mark');
         markId(row.id);
-        const parent=branch(row.branch), pinned=restore(row.checkpoint), checkpoint=pinned.checkpoint();
+        const parent=branch(row.branch), pinned=restore(row.checkpoint,{legacyEvents:row.checkpoint.eventStream===undefined}),
+          checkpoint=pinned.checkpoint();
         check(matches(sessionWorld,checkpoint.world)&&parent.forkTick<=checkpoint.tick&&checkpoint.tick<=parent.run.view().tick,
           'Marked checkpoint is outside its branch');
         marks.set(row.id,{id:row.id,branch:row.branch,checkpoint,fork:pinned.fork});
@@ -63,8 +64,9 @@
       active=branch(source.active).id;
     } else {
       const run=source?.format===R.runFormat?R.replay(source,runtime):
-        source?.format===R.checkpointFormat?restore(source):
-        typeof source?.fork==='function'&&typeof source?.checkpoint==='function'?source.fork():R.create(source,runtime);
+        source?.format===R.checkpointFormat?restore(source,{branch:initialId}):
+        typeof source?.fork==='function'&&typeof source?.checkpoint==='function'?source.fork({branch:initialId}):
+          R.create(source,{...runtime,branch:initialId});
       add(initialId,label,run);
     }
 
@@ -118,7 +120,7 @@
       const pinned=markedId===undefined?null:marks.get(markedId);
       check(markedId===undefined||pinned,'Unknown checkpoint mark '+markedId);
       const parent=branch(pinned?.branch??from);
-      const run=pinned?pinned.fork():parent.run.fork();
+      const run=(pinned??parent.run).fork({branch:branchId});
       add(branchId,label,run,parent.id,markedId??null);
       stop();
       active=branchId;

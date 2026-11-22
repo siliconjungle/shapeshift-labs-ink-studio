@@ -398,6 +398,8 @@
       (raw.id === undefined || id(raw.id)), 'Invalid scheduled command or command tick');
     const [system,key] = endpoint(raw.action);
     let args = raw.args ?? {};
+    check(raw.eventCause===undefined||W.committedEvents.eventId(raw.eventCause)&&
+      W.committedEvents.tickOf(raw.eventCause)<raw.tick,'Invalid scheduled event cause');
     if (system === 'world') {
       check(worldAction(plan,key), 'Unknown world action ' + key);
       if (key === 'input') {
@@ -552,11 +554,14 @@
     return {world,systems,ports};
   }
   function create(source, {checkpoint,implementations,profile = false,validated = false,workerPool,regionRevisions,traceSteps,
-    recordRun,playback,skipInitialSubmission=false,validateEntities,storyClock} = {}, token) {
+    recordRun,playback,skipInitialSubmission=false,validateEntities,storyClock,branch:branchId,legacyEvents=false} = {}, token) {
     check(workerPool===undefined||typeof workerPool?.solve==='function'&&
       (workerPool.async===undefined||typeof workerPool.async==='boolean'),'Invalid simulation worker pool');
     check(validateEntities===undefined||typeof validateEntities==='function','Invalid entity validation callback');
     check(storyClock===undefined||typeof storyClock==='function','Invalid story evaluation clock');
+    const E=W.committedEvents, eventStream=legacyEvents?undefined:E.stream(checkpoint?.eventStream,checkpoint?.tick??0,branchId);
+    const eventBranch=eventStream?.lineage.at(-1).branch;
+    let checkpointStream=checkpoint&&branchId!==undefined?checkpoint.eventStream:eventStream;
     const modules=workerPool?.implementations;
     const installed=implementationsFor(implementations,workerPool);
     let result=validated?{world:source,plan:compile(source,installed)}:prepare(source,{implementations:installed});
@@ -638,7 +643,9 @@
       causes = causalState, chunkView = chunkState) {
       return Object.freeze({world:worldValue,states:visibleStates(statesValue),
         ...((aggregates||stateViews.length)&&{[W.simulationAggregate.rawStates]:statesValue}),signals,tick:tickValue,time:tickValue*worldValue.dt,history,dropped,
+        events:lastEvents,
         ...(receipts.length && {transfers:receipts}),...(causes && {causality:causes}),
+        ...(eventStream&&{eventStream}),
         ...(worldFactState && {worldFacts:worldFactState}),
         ...(knowledgeState && {knowledge:knowledgeState,knowledgePolicy:worldKnowledge.policy}),
         ...(beliefState && {beliefs:beliefState,beliefPolicy:worldBeliefs.policy}),
@@ -747,6 +754,7 @@
       if(lastCheckpoint)return lastCheckpoint;
       lastCheckpoint=freeze({format:checkpointFormat,version:1,tick,world,states,outputs,manual,delays,history,dropped,
         signals:lastSignals,events:lastEvents,pending:packCommands(),scenario,
+        ...(checkpointStream&&{eventStream:checkpointStream}),
         ...(eventActions && {eventActionCounts}),
         ...(storyTriggers && {storyTriggerState}),
         ...(storyLifecycle && {storyLifecycleState}),
@@ -797,7 +805,7 @@
         install(payload);
         weatherTrackState=payload.weatherTrackState;
         queue(payload.pending,false);
-        lastCheckpoint=payload;
+        if (payload.eventStream===checkpointStream) lastCheckpoint=payload;
         return;
       }
       check(record(payload.states) && equal(ordered(payload.states),names) && record(payload.scenario) &&
@@ -1007,7 +1015,7 @@
       const custodyLedger = worldCustody?.begin(custodyState,at);
       const siteLedger = worldSiteHistory?.begin(siteHistoryState,at);
       const nativeTransfers = socialObservers.length?new Set():null;
-      const makeEmit = (system,scope,root,token) => (kind,detail = {},parents) => {
+      const makeEmit = (system,scope,root,token,command) => (kind,detail = {},parents) => {
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
         const typed = token===typedFact;
         check(!factLedger||kind!==W.worldFacts.kind||typed,'Use world/fact to publish a typed world fact');
@@ -1024,16 +1032,20 @@
         check(!storyLifecycle?.hasConsequences||kind!==W.storyConsequences.kind||token===typedConsequences,
           'Story consequences are published at closure');
         W.timedEvents.timeOf(detail);
-        const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
+        const data=copy(detail), rowData={...data,kind,system,tick:at,id:at+'.'+events.length};
+        const causalParents=causal?(parents??scope?.emitParents()??(root?[root]:[])):[];
+        if (eventStream) rowData.eventContext=E.context(rowData,world.id,eventStream,
+          {detail:data,command,causalParents,lifecycle:storyLifecycleState});
+        const row=freeze(rowData);
         events.push(row);
-        const ref = causal?.event(row,parents??scope?.emitParents()??(root?[root]:[]),scope?.location,
+        const ref = causal?.event(row,causalParents,scope?.location,
           parents?'declared':root?'command':'observed-inputs');
         factLedger?.note(row,ref,typed);
         return ref;
       };
-      function publishLearning(learning,root) {
+      function publishLearning(learning,root,command) {
         const causes = [...new Set(Object.values(learning.via))].map(id=>causal?.eventReference(id)).filter(Boolean);
-        makeEmit('world',undefined,root,typedLearning)(W.worldKnowledge.kind,{learning},causes.length?[root,...causes]:undefined);
+        makeEmit('world',undefined,root,typedLearning,command)(W.worldKnowledge.kind,{learning},causes.length?[root,...causes]:undefined);
       }
       function retainedEvent(id) {
         return factLedger?.receipt(id)??events.find(event=>event.id===id)??lastEvents.find(event=>event.id===id)??
@@ -1046,8 +1058,8 @@
         nextManual[port] = rates && descriptor.type==='event' ?
           W.rates.add(nextManual[port],next,'event') : next;
       }
-      function systemEmit(name,scope,root) {
-        const emit=makeEmit(name,scope,root), allowed=contracts.get(name)?.emits;
+      function systemEmit(name,scope,root,command) {
+        const emit=makeEmit(name,scope,root,undefined,command), allowed=contracts.get(name)?.emits;
         if (!allowed) return emit;
         return (kind,detail,parents) => {
           check(allowed.includes(kind),'Undeclared simulation event '+String(kind)+' from '+name);
@@ -1080,10 +1092,11 @@
         makeEmit('world')('story-commitment-released',{story,order});
       }
       if (measuringMaintenance) finishStoryPhase('maintenance',maintenanceStarted);
-      for (const item of commands) {
+      for (const [index,item] of commands.entries()) {
         const [name,key] = endpoint(item.action);
         if(debug)debug.enter({system:W.stepDebug.actionSystem(item),inputs:item.args});
-        const root = causal?.command(name,item), emit = makeEmit(name,undefined,root);
+        const command=eventStream&&{index,action:item.action,id:item.id,source:item.eventCause};
+        const root = causal?.command(name,item), emit = makeEmit(name,undefined,root,undefined,command);
         if (name === 'world') {
           if (key === 'input') {
             const {port,value} = item.args, descriptor = ports.inputs[port];
@@ -1111,19 +1124,19 @@
           if (key===W.worldFacts.action) {
             const fact = factLedger.prepare(item.args,events.length);
             const parents = fact.causes.map(cause=>cause.causal??causal?.eventReference(cause.id)).filter(Boolean);
-            makeEmit(name,undefined,root,typedFact)(W.worldFacts.kind,{fact},parents.length?[root,...parents]:undefined);
+            makeEmit(name,undefined,root,typedFact,command)(W.worldFacts.kind,{fact},parents.length?[root,...parents]:undefined);
             for (const witness of item.args.witnesses??[])
-              publishLearning(knowledgeLedger.witness(fact,witness,at+'.'+events.length),root);
+              publishLearning(knowledgeLedger.witness(fact,witness,at+'.'+events.length),root,command);
           }
           if (key===W.worldKnowledge.action) {
             const {fact,from,to} = item.args;
             const {learning,rejected,missing} = knowledgeLedger.share(item.args,at+'.'+events.length);
-            if (learning) publishLearning(learning,root);
+            if (learning) publishLearning(learning,root,command);
             if (rejected) emit('fact-report-rejected',{fact,from,to,reason:rejected,...(missing&&{missing})});
           }
           if (beliefLedger&&W.worldBeliefs.actions.includes(key)) {
             const {belief,via,rejected} = beliefLedger.apply(key,item.args,at+'.'+events.length,knowledgeLedger);
-            const publish = makeEmit(name,undefined,root,typedBelief);
+            const publish = makeEmit(name,undefined,root,typedBelief,command);
             if (belief) {
               const parent = via&&causal?.eventReference(via);
               publish(W.worldBeliefs.kind,{belief},parent?[root,parent]:undefined);
@@ -1132,7 +1145,7 @@
           }
           if (key===W.worldMemories.action) {
             const {memory,rejected} = memoryLedger.remember(item.args,at+'.'+events.length);
-            const publish = makeEmit(name,undefined,root,typedMemory);
+            const publish = makeEmit(name,undefined,root,typedMemory,command);
             if (memory) {
               const parent = memory.source&&causal?.eventReference(memory.source);
               publish(W.worldMemories.kind,{memory},parent?[root,parent]:undefined);
@@ -1141,7 +1154,7 @@
           }
           if (custodyLedger&&W.worldCustody.actions.includes(key)) {
             const {custody,rejected} = custodyLedger.apply(key,item.args,at+'.'+events.length,retainedEvent);
-            const publish = makeEmit(name,undefined,root,typedCustody);
+            const publish = makeEmit(name,undefined,root,typedCustody,command);
             if (custody) {
               const parents = [...new Set([custody.previous,custody.source?.id])].filter(Boolean)
                 .map(id=>causal?.eventReference(id)).filter(Boolean);
@@ -1151,7 +1164,7 @@
           }
           if (siteLedger&&W.worldSiteHistory.actions.includes(key)) {
             const {kind,detail,rejected} = siteLedger.apply(key,item.args,at+'.'+events.length,retainedEvent);
-            const publish = makeEmit(name,undefined,root,typedSite);
+            const publish = makeEmit(name,undefined,root,typedSite,command);
             if (detail) {
               const entry = detail.visit??detail.change;
               const parents = [...new Set([entry.previous,entry.visit?.id,entry.source?.id])].filter(Boolean)
@@ -1161,7 +1174,7 @@
             if (rejected) publish(W.worldSiteHistory.rejection,{action:item.action,args:item.args,reason:rejected});
           }
           if (key === 'transfer') {
-            requests.push({name,request:item.args,root});
+            requests.push({name,request:item.args,root,command});
             if(commanded)for(const port of [item.args.from,item.args.to])commanded.add(endpoint(port)[0]);
           }
           if (candidateCommands && key===W.incidentCandidates.action) candidateCommands.push({args:item.args,publish:emit});
@@ -1172,7 +1185,7 @@
           const actionQuery = Q.create(view(nextWorld,{...drafts}),systems,projection);
           const scope=causal?.scope(name,{}, {},actionQuery,{root,queryTick:tick,queryTime:tick*nextWorld.dt});
           causal?.action(name,root);
-          const ctx = context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name,scope,root),actionQuery,
+          const ctx = context(name,nextWorld,Object.freeze({...drafts}),at,{},systemEmit(name,scope,root,command),actionQuery,
             spatial(name,false),undefined,scope?.api);
           drafts[name] = rootedState(systems[name].actions[key](drafts[name],item.args,ctx));
         }
@@ -1242,8 +1255,8 @@
             ()=>Q.create(view(nextWorld,{...drafts}),systems,projection));
         return receipt;
       }
-      let receipts = requests.map(({name,request,root})=>{
-        const receipt = settleTransfer(request,name,makeEmit(name,undefined,root));
+      let receipts = requests.map(({name,request,root,command})=>{
+        const receipt = settleTransfer(request,name,makeEmit(name,undefined,root,undefined,command));
         if(systems[name]?.receiveTransfers){
           confirmations??=new Map();
           if(!confirmations.has(name))confirmations.set(name,[]);
@@ -1654,7 +1667,7 @@
         if (storyClock) finishStoryPhase('cooldowns',started);
       }
       observeSocial();
-      const routed = eventActions?.route(eventActionCounts, events, at);
+      const routed = eventActions?.route(eventActionCounts, events, at,{trackCauses:Boolean(eventStream)});
       if (routed?.commands.length) {
         check(routed.commands.length + packCommands().length - commands.length <= maxPendingCommands, 'Pending command budget exceeded');
         const emit = makeEmit('world');
@@ -1691,7 +1704,7 @@
       const nextMemories = memoryLedger?.snapshot();
       const nextCustody = custodyLedger?.snapshot();
       const nextSiteHistory = siteLedger?.snapshot();
-      const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
+      const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,events:freeze(events),
         ...(nextFacts && {worldFacts:nextFacts}),
         ...(nextKnowledge && {knowledge:nextKnowledge}),
         ...(nextBeliefs && {beliefs:nextBeliefs}),
@@ -1712,6 +1725,7 @@
       const recordView=evidence&&weather?{...nextView,weatherTrackState:nextWeather}:nextView;
       const retained=evidence?.prepare(recordView,()=>Q.create(recordView,systems,projection),commands,observedTiming);
       tick = at;
+      checkpointStream = eventStream;
       world = nextWorld;
       states = nextStates;
       outputs = freeze(nextOutputs);
@@ -1818,6 +1832,7 @@
       lastDependencies = null;
       scheduled.delete(first);
       tick = end;
+      checkpointStream = eventStream;
       if (profile) {
         const prior = metrics.get(blockSystem) ?? {calls:0,ms:0,maxMs:0};
         const ms = clock()-start;
@@ -1887,6 +1902,7 @@
     function recording() {
       const trace=debug?.recording(),end=save();
       return freeze({format:runFormat,version:1,origin,commands:added.slice(),end,...(trace&&{trace}),
+        ...(eventBranch&&eventStream!==origin.eventStream&&{eventBranch}),
         ...(evidence&&{evidence:evidence.document(end)})});
     }
     function queues(){
@@ -1905,9 +1921,10 @@
         rows['bridge/'+name+'/'+port]={pending:count,capacity,unit:'events'};
       return rows;
     }
-    return Object.freeze({view,query,projectEntities,step,advance,stepAsync,advanceAsync,...(blockSystem&&{[W.models.heldAdvance]:advanceHeld}),...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
+    return Object.freeze({view,query,projectEntities,step,advance,stepAsync,advanceAsync,eventBranch,...(blockSystem&&{[W.models.heldAdvance]:advanceHeld}),...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
       ...(debug&&{stepFrame:debug.latest,stepAttempt:debug.attempt}),
       get scenario(){return scenario;}, get history(){return history;}, get events(){return lastEvents;},
+      committedEvents:()=>Object.freeze(lastEvents.map(row=>E.read(row,world.id,eventStream))),
       ...(storyClock&&{storyTiming:()=>lastStoryTiming}),
       schedule:commands => enqueue(commands,true),checkpoint:save,recording,queues,
       storyDiagnostics:() => plan.storyDiagnostics ?? [],
@@ -1936,11 +1953,12 @@
         systems:Object.fromEntries(names.filter(name=>jobsBySystem.has(name)).map(name=>[name,jobsBySystem.get(name)]))}),
       dependencies:() => ({declarations:dependencies.describe,
         ...(lastDependencies ?? {changes:[],affected:[],work:[]}),pending:pendingWrites}),
-      fork:() => branch(save(),playback),
+      fork:({branch:label}={}) => branch(save(),playback,label),
       reset:() => branch(origin)});
-    function branch(checkpoint,remaining){
+    function branch(checkpoint,remaining,label){
       return create(checkpoint.world,{checkpoint,implementations,profile,validated:true,workerPool,traceSteps,storyClock,
-        recordRun:evidence?.plan,playback:remaining,skipInitialSubmission:true,validateEntities},
+        recordRun:evidence?.plan,playback:remaining,skipInitialSubmission:true,validateEntities,branch:label??eventBranch,
+        legacyEvents:legacyEvents&&label===undefined},
         checkpoint.world===plan.world?branchToken:undefined);
     }
   }
@@ -1948,7 +1966,8 @@
     const playback=W.runRecords.playback(log), start=checkpoint??log.origin;
     check(tickOK(start.tick)&&start.tick>=log.origin.tick&&start.tick<=log.end.tick&&
       ['id','seed','dt'].every(key=>start.world?.[key]===log.origin.world[key]),'Checkpoint lies outside the recording');
-    return create(start.world,{...options,checkpoint:start,playback,skipInitialSubmission:checkpoint!==undefined});
+    return create(start.world,{...options,checkpoint:start,playback,skipInitialSubmission:checkpoint!==undefined,
+      branch:log.eventBranch,legacyEvents:log.eventBranch===undefined&&log.end.eventStream===undefined});
   }
   function prepareReplay(log,options){
     return openRecording(log,{...options,checkpoint:undefined,recordRun:log?.evidence?.plan??options?.recordRun});

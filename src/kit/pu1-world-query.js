@@ -257,6 +257,20 @@
           (entity===undefined||[event.entity,event.body,event.place].includes(entity))&&condition(where,event));
         return ok({events:events.slice(0,limit),matched:events.length,dropped});
       }},
+      events:{type:'records',qualified:true,read:({args})=>{
+        const {retained=false,after=-1,before=tick,kind,branch,story,subject,where,limit=10000}=args;
+        check(typeof retained==='boolean'&&Number.isSafeInteger(after)&&Number.isSafeInteger(before)&&before>=after&&
+          Number.isSafeInteger(limit)&&limit>=0&&[kind,branch,story,subject].every(value=>value===undefined||typeof value==='string'),
+        'Invalid committed event range or filter');
+        const latest=view.events??[];
+        const rows=retained?[...new Map([...history,...latest].map(row=>[row.id,row])).values()]:latest;
+        const events=rows.filter(row=>row.tick>after&&row.tick<=before&&(kind===undefined||row.kind===kind))
+          .map(row=>W.committedEvents.read(row,world.id,view.eventStream))
+          .filter(row=>(branch===undefined||branch===row.branch)&&(story===undefined||story===row.story)&&
+            (subject===undefined||row.subjects.some(ref=>ref.id===subject))&&condition(where,row));
+        return ok({events:events.slice(0,limit),matched:events.length,scope:retained?'retained':'latest',
+          ...(retained&&{dropped})});
+      }},
       ...(world.facts!==undefined&&{facts:{type:'record',qualified:true,read:({args})=>
         W.worldFacts.inspect(view.worldFacts,tick,args)}}),
       ...(world.knowledge!==undefined&&{knowledge:{type:'record',qualified:true,read:({args})=>

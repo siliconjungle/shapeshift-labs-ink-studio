@@ -59,13 +59,22 @@ function embedStoryDocuments(world, file, dependency) {
 
 function eventCommand(file, rest, options, library) {
   const {format = 'json', story, out} = options;
-  if (!file || rest.length || !['json','markdown','timeline','events'].includes(format) ||
+  if (!file || rest.length || !['json','markdown','timeline','events','envelopes'].includes(format) ||
     Object.keys(options).some(key=>!['format','story','out'].includes(key)) ||
     story!==undefined&&(typeof story!=='string'||format==='events') || out!==undefined&&typeof out!=='string')
-    throw new TypeError('Use story events <recording|fixture> [--story document/story] [--format json|markdown|timeline|events] [--out file]');
+    throw new TypeError('Use story events <recording|fixture> [--story document/story] [--format json|markdown|timeline|events|envelopes] [--out file]');
   const input = readDefinition(file), W = library().KIT.world, api = W.storyEvents;
   const source = input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
-  const value = format==='events'?api.read(source):format==='timeline'?api.timeline(source,{story}):api.analyze(source,{story});
+  let value;
+  if (format==='envelopes') {
+    const {events:rows,id:world,dt,from,to,coverage,dropped}=api.read(source);
+    if (story!==undefined&&!(story.split('/').length===2&&story.split('/').every(schema.isStoryId)))
+      throw new TypeError('Story event filter needs a document/story ID');
+    const stream=input.checkpoint?.eventStream??input.end?.eventStream??input.eventStream;
+    const events=rows.map(row=>W.committedEvents.read(row,world,stream))
+      .filter(row=>story===undefined||row.story===story);
+    value={format:'ink-studio/committed-events',version:1,world,dt,from,to,coverage,dropped,events};
+  } else value = format==='events'?api.read(source):format==='timeline'?api.timeline(source,{story}):api.analyze(source,{story});
   let output;
   if (format==='markdown') {
     const escape = value => value.replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]))

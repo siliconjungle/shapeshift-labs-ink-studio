@@ -53,7 +53,7 @@
       'Invalid event action checkpoint');
     }
 
-    function route(state, events, tick) {
+    function route(state, events, tick, {trackCauses=false} = {}) {
       const commands = [], scheduled = [];
       let counts = state;
       for (const event of events) for (const { name, on, ticks, limit, commands: outputs } of byKind.get(event.kind) ?? []) {
@@ -70,7 +70,7 @@
             return { op: 'set', path: into, value };
           });
           const resolved = changes.length ? W.apply(args, changes, { validate: null }).world : args;
-          const row = { action, args: resolved, tick: due };
+          const row = { action, args: resolved, tick: due, ...(trackCauses&&{eventCause:event.id}) };
           commands.push(validateAction ? validateAction(row) : freeze(row));
         }
         scheduled.push({ rule: name, due, occurrence: count + 1, trigger: event.id,

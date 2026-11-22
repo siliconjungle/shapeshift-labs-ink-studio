@@ -170,6 +170,8 @@ Use `sim budget` to measure queue growth, retained history, story evaluation tim
 
 Use `sim fixture` to share a short replay keyed to a story event, such as a rejected dispatch. `story events` reads the resulting trace directly. [Portable test fixtures](simulation-checkpoints.md#portable-test-fixtures)
 
+Use `story events <recording|fixture> --format envelopes` to inspect the story, stage, subject, branch, and causal references for each committed event. [Committed event envelopes](simulation-checkpoints.md#committed-event-envelopes)
+
 ```sh
 node cli/ink-studio.js sim seed-matrix examples/story-documents/lantern-ferry.world.json \
   examples/story-documents/lantern-ferry.seed-matrix.json --out ferry-matrix.json
