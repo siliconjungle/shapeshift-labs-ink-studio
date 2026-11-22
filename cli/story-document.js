@@ -231,10 +231,11 @@ function storyCommand([mode, file, id, ...rest], options, library) {
   if (mode==='catalog') return catalogCommand([file,id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='cues') return cueCommand(file,id,rest,options,library);
+  if (mode==='performance') return require('./story-performance.js').command(file,id,rest,options,library);
   if (mode==='shots'||mode==='shots-review') return require('./story-camera.js').command(mode,file,id,rest,options,library);
   if (mode==='timeline') return timelineCommand(file,[id,...rest].filter(value => value !== undefined),options,library);
   if (mode==='preview') return previewCommand(file,id,rest,options);
-  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | '+timelineUsage+' | story shots <recording> | story shots-review <recording> <shot-plan.json> --out directory | story cues <recording> <plan.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
+  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story performance <recording> <plan.json> --out directory | '+timelineUsage+' | story shots <recording> | story shots-review <recording> <shot-plan.json> --out directory | story cues <recording> <plan.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).some(key=>key!=='template')||
       (options.template!==undefined&&typeof options.template!=='string'))throw new TypeError(usage);

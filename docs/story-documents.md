@@ -1875,6 +1875,8 @@ for a standalone input. Node and browser bundle hosts can use
 
 Use `story timeline` to export arrivals, discoveries, arguments, choices, and outcomes as scene markers. Rename or retime them while retaining their committed event links. [Story scene timeline export](story-scene-timeline.md)
 
+Connect committed cues to a cast, rig poses, dialogue, and prop sockets. [Actor performance adapters](actor-performance.md)
+
 ### Project presentation cues
 
 Use a versioned cue plan to turn committed events from a recording, fixture, or envelope export into presentation cues. Each rule selects an event kind and can refine it by system, branch, story, stage, or a condition on the envelope. Cue details can copy values from the committed payload. The cue time defaults to the event's tick time, with an optional delay in seconds.

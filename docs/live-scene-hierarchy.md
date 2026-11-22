@@ -4,6 +4,8 @@
 
 Try [Lantern exchange](../examples/live-scene-hierarchy.html). A lantern carries a crisp pixel sigil, a working lamp and an inspection target. Transfer it between crane sockets while keeping its pose, dock it explicitly, hide whole branches, inspect local/world frames, or export the hierarchy. Free orbit remains available.
 
+Apply recorded cast visibility and prop socket changes to a scene hierarchy. [Actor performance adapters](actor-performance.md)
+
 ## Nodes and affine transforms
 
 ```js

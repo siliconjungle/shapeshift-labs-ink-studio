@@ -305,6 +305,13 @@ const specifications = {
   'sdf.facets': { inputs: { options: { size: .3 } } },
   'sdf.render': { inputs: { options: { width: 16, height: 16 } } },
   'scene.diorama': { inputs: { definition: diorama } },
+  'scene.actorPerformance': { inputs: { actor: 'pilot', sheet: {
+    format: 'ink-studio/actor-performance', version: 1, id: 'signal',
+    cast: { pilot: { actor: 'pilot', label: 'Pilot' } }, props: {},
+    presentationCues: { format: 'ink-studio/presentation-cues', version: 1, id: 'signal', cues: [
+      { id: 'warn', time: 0, kind: 'dialogue', target: 'pilot', detail: { text: 'Tide rising.', duration: 1 } }
+    ] }
+  } } },
   'scene.cameraTrack': { inputs: { definition: { shots: { main: { yaw: 0, dist: 4 } },
     sequence: [{ time: 0, shot: 'main' }] } } },
   'scene.world': { nodes: {

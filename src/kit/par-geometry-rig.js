@@ -98,16 +98,23 @@
     return { angle, translate, scale };
   }
 
-  function spritePose(tracks, time = 0) {
-    if (!record(tracks) || Object.keys(tracks).length > 96 || !Number.isFinite(time))
+  function compileSpritePose(tracks) {
+    if (!record(tracks) || Object.keys(tracks).length > 96)
       throw new RangeError('Sprite pose needs bounded tracks and finite time');
-    return Object.fromEntries(Object.entries(tracks).map(([id, rows]) => {
+    const compiled = Object.entries(tracks).map(([id, rows]) => {
       if (!name(id) || !Array.isArray(rows) || !integer(rows.length, 1, 4096))
         throw new RangeError('Sprite bone track needs an ID and 1 to 4096 keys');
       const keys = Array.from(rows, ({ time, ease, ...value }) => ({ time, ease, value: poseRow(value) }));
-      const track = K.anim.keyframeTrack.create({ angle: 'radians', translate: 'vector', scale: 'positive' }, keys);
-      return [id, track.sample(time)];
-    }));
+      return [id, K.anim.keyframeTrack.create({ angle: 'radians', translate: 'vector', scale: 'positive' }, keys)];
+    });
+    return (time = 0) => {
+      if (!Number.isFinite(time)) throw new RangeError('Sprite pose needs bounded tracks and finite time');
+      return Object.fromEntries(compiled.map(([id, track]) => [id, track.sample(time)]));
+    };
+  }
+
+  function spritePose(tracks, time = 0) {
+    return compileSpritePose(tracks)(time);
   }
 
   function skinSprite(source, bind, pose = {}, options = {}) {
@@ -148,5 +155,5 @@
     return { ...result, points, joints };
   }
 
-  Object.assign(A, { bindSprite, spritePose, skinSprite });
+  Object.assign(A, { bindSprite, spritePose, compileSpritePose, skinSprite });
 })(KIT);

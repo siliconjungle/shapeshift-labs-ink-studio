@@ -10,6 +10,8 @@ write its contours, scramble a bitmap signal, and detach/reassemble its actual
 SDF lettering. The example uses original Ink Sans outlines and the existing
 bitmap atlas, without downloading fonts or libraries.
 
+Use timed story dialogue as input to bitmap lettering and subtitle exports. [Actor performance adapters](actor-performance.md)
+
 ## Fonts and layout
 
 ```js

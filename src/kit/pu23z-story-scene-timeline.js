@@ -119,11 +119,12 @@
       to: source.end.tick }, options);
   }
 
-  async function scan(source, visit) {
+  async function scan(source, visit, initialize) {
     const { world, eventStream } = source.end;
     await W.runtime.replayAsync(source, {
       onStart(run) {
         const frame = run.view(), query = run.query();
+        initialize?.(frame);
         for (const event of W.storyEvents.envelopes(source.origin).events)
           visit(event, ...(event.tick === frame.tick ? [frame, query] : []));
       },
