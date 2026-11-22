@@ -817,6 +817,78 @@ ink-studio trace lock.run.json world/knowledge \
   --args '{"holder":{"kind":"actor","id":"crew/niko"},"fact":"1.0","field":"data/severity"}'
 ```
 
+## Model rumours and conflicting accounts
+
+Enable `beliefs` alongside `facts` and `knowledge` to give actors and
+factions separate beliefs about the same situation. Define each named
+topic against a typed fact detail. Pick a topic ID that identifies the
+particular question in this world, such as `east-channel`.
+
+```json
+"beliefs": {
+  "topics": { "east-channel": { "type": "channel-inspection", "field": "data/state" } },
+  "limit": 512,
+  "accountLimit": 16
+}
+```
+
+The field can be `at`, `subject/<role>`, or `data/<field>`. Accounts use
+the same value shape as the declared detail. A holder or source is
+`{"kind":"actor","id":"crew/niko"}` or `{"kind":"faction","id":"harbor-watch"}`.
+
+| Action | Arguments | Effect |
+| --- | --- | --- |
+| `world/claim-belief` | `topic`, `holder`, `source`, `value`, `confidence` | Record the named source's account as heard by the holder. Use an integer confidence from 0 to 100. An account can arrive before an inspection takes place. |
+| `world/relay-belief` | `topic`, `from`, `to`, `account`, optional `confidence` | Pass on an account the sender holds, using its original event ID. Preserve its value and source, record the relay, and keep or lower its confidence. A recipient retains at most one copy of each original account. |
+| `world/verify-belief` | `topic`, `holder`, `fact` | Apply a matching fact to the topic once the holder knows its configured detail. The author selects the fact for the named situation. A more recent occurrence can revise the verified value again. |
+
+Probe `world/beliefs` with both `holder` and `topic` to read one
+perspective. Either filter can also be used on its own to list records.
+An unseen topic is `unknown` for that holder. The highest-confidence
+account guides a `believed` topic. Equally strong accounts with different
+values leave the topic `contested`, with no selected value. Accounts keep
+their stated confidence regardless of how often the value is repeated.
+Verification selects the fact's value at confidence 100 and keeps rival
+accounts visible. A claim at confidence 100 is still a claim. The
+`world/knowledge` ledger still tracks only witnessed and shared facts.
+
+An accepted update publishes `belief-updated` with the holder, topic,
+before and after assessments, and its account or evidence receipt. A
+relay exposes the original source and event plus the immediate sender
+and preceding receipt. An attempt to relay an unavailable account,
+inflate its confidence, or verify without the required fact detail
+emits `belief-rejected`. Duplicate relays and evidence at or before the
+current verified fact leave the existing belief in place. With causality
+enabled, `world/cause` can follow an update through retained relay and
+fact-learning events. Checkpoints and recordings carry the ledger even
+when ordinary event history is disabled.
+
+A story can trigger on `belief-updated` and use `world/beliefs` at
+the same scheduler boundary. Select `/status` for the assessment and
+`/belief/value` for the selected value. A story may act on a rumour
+or wait for that holder to receive verification.
+
+Declare up to 128 topics. The ledger retains up to 512 holder/topic
+entries by default (configurable from 1 to 4,096) and evicts the least
+recently updated entry first. Each entry retains its latest 16 accounts
+by default (configurable from 2 to 64) and tracks applied evidence
+separately. That evidence stays with the entry if the source fact or
+knowledge record ages out.
+
+In the [east channel demo](../examples/story-documents/channel-beliefs.world.json),
+Niko hears conflicting accounts and the harbor watch acts on the one it
+receives. The evidence actions disclose the inspection finding and start
+the convoy reroute. Run without those actions to see the watch keep
+believing the passage is open while the reroute remains blocked.
+
+```sh
+ink-studio sim run examples/story-documents/channel-beliefs.world.json \
+  --actions examples/story-documents/channel-beliefs.evidence.actions.json --ticks 5 --record channel.run.json
+ink-studio probe channel.run.json --ticks 3 --field world/beliefs
+ink-studio probe channel.run.json --ticks 4 --field world/beliefs
+ink-studio trace channel.run.json world/cause --args '{"event":"4.1"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families

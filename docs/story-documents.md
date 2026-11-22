@@ -1078,6 +1078,11 @@ A `fact-learned` trigger can open a candidate when a holder hears about
 an occurrence. A `world/knowledge` feasibility check can wait until that
 holder receives a particular detail.
 
+[Rumours and conflicting accounts](headless-worlds.md#model-rumours-and-conflicting-accounts)
+can also drive a story. Use a `belief-updated` trigger and query
+`world/beliefs` for the holder and topic. A convoy reroute can require
+the harbor watch's belief to reach `verified` with the value `closed`.
+
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.
 
 | Trigger | Example | When it starts |

@@ -1,0 +1,43 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "channel-beliefs",
+  "dt": 0.1,
+  "causality": { "limit": 128 },
+  "history": { "enabled": false },
+  "storyDocuments": [{ "file": "channel-beliefs.json" }],
+  "facts": {
+    "types": {
+      "channel-inspection": { "fields": { "state": "string" } }
+    }
+  },
+  "knowledge": true,
+  "beliefs": {
+    "topics": { "east-channel": { "type": "channel-inspection", "field": "data/state" } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/claim-belief", "args": {
+      "topic": "east-channel", "value": "open", "confidence": 70,
+      "holder": { "kind": "actor", "id": "crew/niko" }, "source": { "kind": "actor", "id": "crew/ferryman" }
+    } },
+    { "tick": 2, "action": "world/claim-belief", "args": {
+      "topic": "east-channel", "value": "closed", "confidence": 70,
+      "holder": { "kind": "actor", "id": "crew/niko" }, "source": { "kind": "faction", "id": "dock-workers" }
+    } },
+    { "tick": 2, "action": "world/relay-belief", "args": {
+      "topic": "east-channel", "account": "1.0", "confidence": 55,
+      "from": { "kind": "actor", "id": "crew/niko" }, "to": { "kind": "faction", "id": "harbor-watch" }
+    } },
+    { "tick": 3, "action": "world/fact", "args": {
+      "type": "channel-inspection", "at": { "place": "harbor/east-channel" }, "data": { "state": "closed" },
+      "witnesses": [{ "holder": { "kind": "actor", "id": "crew/mira" } }]
+    } },
+    { "tick": 3, "action": "world/share-fact", "args": {
+      "fact": "3.0", "from": { "kind": "actor", "id": "crew/mira" },
+      "to": { "kind": "faction", "id": "harbor-watch" }, "fields": ["at"]
+    } },
+    { "tick": 3, "action": "world/verify-belief", "args": {
+      "topic": "east-channel", "holder": { "kind": "faction", "id": "harbor-watch" }, "fact": "3.0"
+    } }
+  ]
+}

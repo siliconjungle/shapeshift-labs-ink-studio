@@ -1,0 +1,9 @@
+[
+  { "tick": 4, "action": "world/share-fact", "args": {
+    "fact": "3.0", "from": { "kind": "actor", "id": "crew/mira" },
+    "to": { "kind": "faction", "id": "harbor-watch" }, "fields": ["data/state"]
+  } },
+  { "tick": 4, "action": "world/verify-belief", "args": {
+    "topic": "east-channel", "holder": { "kind": "faction", "id": "harbor-watch" }, "fact": "3.0"
+  } }
+]

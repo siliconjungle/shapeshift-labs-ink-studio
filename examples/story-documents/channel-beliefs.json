@@ -1,0 +1,43 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "channel-beliefs",
+  "title": "Conflicting accounts about the east channel",
+  "stories": {
+    "reroute-convoy": {
+      "kind": "incident",
+      "title": "Reroute the harbor convoy",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "triggers": {
+        "watch-updated": { "event": { "kind": "belief-updated", "where": { "all": [
+          { "path": "/belief/holder/kind", "value": "faction" },
+          { "path": "/belief/holder/id", "value": "harbor-watch" },
+          { "path": "/belief/topic", "value": "east-channel" }
+        ] } } }
+      },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 2, "release": "automatic" },
+        "feasibility": {
+          "verified": { "state": {
+            "field": "world/beliefs",
+            "args": { "holder": { "kind": "faction", "id": "harbor-watch" }, "topic": "east-channel" },
+            "select": "/status", "when": { "value": "verified" }
+          } },
+          "closure": { "state": {
+            "field": "world/beliefs",
+            "args": { "holder": { "kind": "faction", "id": "harbor-watch" }, "topic": "east-channel" },
+            "select": "/belief/value", "when": { "value": "closed" }
+          } }
+        }
+      },
+      "entry": "brief",
+      "stages": { "brief": {
+        "title": "Brief the convoy on the closure",
+        "decision": { "mode": "autonomous" },
+        "next": { "ready": { "outcome": "briefed", "auto": true } }
+      } },
+      "outcomes": { "briefed": { "title": "The watch briefed the convoy on the closure" } }
+    }
+  }
+}

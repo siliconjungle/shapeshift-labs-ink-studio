@@ -11,12 +11,14 @@
   const worldAction = (plan, name) => worldActions.includes(name) || plan.chunks?.actions.includes(name) ||
     plan.worldFacts && name===W.worldFacts.action ||
     plan.worldKnowledge && name===W.worldKnowledge.action ||
+    plan.worldBeliefs && W.worldBeliefs.actions.includes(name) ||
     plan.storyLifecycle && W.storyLifecycle.actions.includes(name) ||
     plan.incidentCandidates && name===W.incidentCandidates.action;
   const checkpointFormat = 'ink-studio/checkpoint', runFormat = 'ink-studio/run';
   const savedCheckpoints=new WeakSet(), branchToken=Symbol('live checkpoint');
   const typedFact=Symbol('typed fact event');
   const typedLearning=Symbol('knowledge event');
+  const typedBelief=Symbol('belief event');
 
   function stepTiming(world,at,timing) {
     const baseDt=world.dt, substeps=timing?.substeps??1, detail=timing?.detail;
@@ -340,6 +342,7 @@
     plan.storyteller = W.storyteller.compile(world.storyteller,world.dt,world.seed);
     plan.worldFacts = W.worldFacts.compile(world.facts,world.dt);
     plan.worldKnowledge = W.worldKnowledge.compile(world.knowledge,plan.worldFacts?.policy);
+    plan.worldBeliefs = W.worldBeliefs.compile(world.beliefs,plan.worldFacts?.policy,plan.worldKnowledge?.policy);
     const templates = world.storyTemplates === undefined ? undefined : W.storyTemplates.compile(world);
     if (templates || world.storyDocuments !== undefined || world.storyBindings !== undefined) {
       plan.storyRoles = W.storyRoles.compile(templates?.documents ?? (world.storyDocuments === undefined ? [] : world.storyDocuments),
@@ -397,12 +400,14 @@
         }
       }
       else if (key===W.worldKnowledge.action) plan.worldKnowledge.checkAction(args);
+      else if (W.worldBeliefs.actions.includes(key)) plan.worldBeliefs.checkAction(key,args);
       else if (key===W.incidentCandidates.action) plan.incidentCandidates.checkAction(args);
       else if (W.storyLifecycle.actions.includes(key)) plan.storyLifecycle.checkAction(key,args);
       else {
         check(id(args.kind), 'An event needs a kind');
         check(!plan.worldFacts||args.kind!==W.worldFacts.kind,'Use world/fact to publish a typed world fact');
         check(!plan.worldKnowledge||args.kind!==W.worldKnowledge.kind,'Use fact witnessing or world/share-fact to record learning');
+        check(!plan.worldBeliefs||!W.worldBeliefs.eventKinds.includes(args.kind),'Use world belief actions to publish belief events');
         W.timedEvents.timeOf(args);
       }
     } else {
@@ -492,6 +497,7 @@
       ...(plan.incidentCatalog?.length && {incidentCatalog:W.incidentCatalog.find(plan.incidentCatalog)}),
       ...(plan.worldFacts && {facts:plan.worldFacts.policy}),
       ...(plan.worldKnowledge && {knowledge:plan.worldKnowledge.policy}),
+      ...(plan.worldBeliefs && {beliefs:plan.worldBeliefs.policy}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
       ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
@@ -528,7 +534,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,navigationSources} = plan;
     const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
       documents:storyRoles?.documents??[]});
     let composition, inspection;
@@ -571,6 +577,7 @@
     let storyReferenceState, incidentCandidateState = incidentCandidates?.initial();
     let worldFactState = worldFacts?.initial();
     let knowledgeState = worldKnowledge?.initial();
+    let beliefState = worldBeliefs?.initial();
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -595,6 +602,7 @@
         ...(receipts.length && {transfers:receipts}),...(causes && {causality:causes}),
         ...(worldFactState && {worldFacts:worldFactState}),
         ...(knowledgeState && {knowledge:knowledgeState,knowledgePolicy:worldKnowledge.policy}),
+        ...(beliefState && {beliefs:beliefState,beliefPolicy:worldBeliefs.policy}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
@@ -703,6 +711,7 @@
         ...(incidentCandidates && {incidentCandidateState}),
         ...(worldFactState && {worldFactState}),
         ...(knowledgeState && {knowledgeState}),
+        ...(beliefState && {beliefState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -721,6 +730,7 @@
       incidentCandidateState = payload.incidentCandidateState;
       worldFactState = payload.worldFactState;
       knowledgeState = payload.knowledgeState;
+      beliefState = payload.beliefState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -773,6 +783,8 @@
       else check(!own(payload,'worldFactState'),'Unexpected world fact checkpoint data');
       if (worldKnowledge) worldKnowledge.validate(payload.knowledgeState,payload.tick,payload.worldFactState,payload.events);
       else check(!own(payload,'knowledgeState'),'Unexpected knowledge checkpoint data');
+      if (worldBeliefs) worldBeliefs.validate(payload.beliefState,payload.tick,payload.worldFactState,payload.knowledgeState,payload.events);
+      else check(!own(payload,'beliefState'),'Unexpected belief checkpoint data');
       if (storyReferences) storyReferences.validate(payload.storyReferenceState,payload.tick,payload.storyLifecycleState);
       else check(!own(payload,'storyReferenceState'),'Unexpected story live reference checkpoint data');
       transfers.validateBalances(payload.states);
@@ -927,12 +939,15 @@
       const causal = causePolicy && W.causality.begin(causalState,at,ports,incoming,causePolicy);
       const factLedger = worldFacts?.begin(worldFactState,at);
       const knowledgeLedger = worldKnowledge?.begin(knowledgeState,at);
+      const beliefLedger = worldBeliefs?.begin(beliefState);
       const makeEmit = (system,scope,root,token) => (kind,detail = {},parents) => {
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
         const typed = token===typedFact;
         check(!factLedger||kind!==W.worldFacts.kind||typed,'Use world/fact to publish a typed world fact');
         check(!knowledgeLedger||kind!==W.worldKnowledge.kind||token===typedLearning,
           'Use fact witnessing or world/share-fact to record learning');
+        check(!beliefLedger||!W.worldBeliefs.eventKinds.includes(kind)||token===typedBelief,
+          'Use world belief actions to publish belief events');
         W.timedEvents.timeOf(detail);
         const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
         events.push(row);
@@ -1023,6 +1038,15 @@
             const {learning,rejected,missing} = knowledgeLedger.share(item.args,at+'.'+events.length);
             if (learning) publishLearning(learning,root);
             if (rejected) emit('fact-report-rejected',{fact,from,to,reason:rejected,...(missing&&{missing})});
+          }
+          if (beliefLedger&&W.worldBeliefs.actions.includes(key)) {
+            const {belief,via,rejected} = beliefLedger.apply(key,item.args,at+'.'+events.length,knowledgeLedger);
+            const publish = makeEmit(name,undefined,root,typedBelief);
+            if (belief) {
+              const parent = via&&causal?.eventReference(via);
+              publish(W.worldBeliefs.kind,{belief},parent?[root,parent]:undefined);
+            }
+            if (rejected) publish(W.worldBeliefs.rejection,{action:item.action,args:item.args,reason:rejected});
           }
           if (key === 'transfer') {
             requests.push({name,request:item.args,root});
@@ -1347,7 +1371,8 @@
       const completedView = () => {
         const frame = view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState);
         return nextStoryReferences||factLedger?{...frame,...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
-          ...(factLedger&&{worldFacts:factLedger.snapshot()}),...(knowledgeLedger&&{knowledge:knowledgeLedger.snapshot()})}:frame;
+          ...(factLedger&&{worldFacts:factLedger.snapshot()}),...(knowledgeLedger&&{knowledge:knowledgeLedger.snapshot()}),
+          ...(beliefLedger&&{beliefs:beliefLedger.snapshot()})}:frame;
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
@@ -1507,9 +1532,11 @@
       const nextCausal = causal?.finish();
       const nextFacts = factLedger?.finish();
       const nextKnowledge = knowledgeLedger?.snapshot();
+      const nextBeliefs = beliefLedger?.snapshot();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
         ...(nextFacts && {worldFacts:nextFacts}),
         ...(nextKnowledge && {knowledge:nextKnowledge}),
+        ...(nextBeliefs && {beliefs:nextBeliefs}),
         ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle}),
         ...(nextStoryFeasibility && {storyFeasibility:nextStoryFeasibility}),
         ...(nextStoryReferences && {storyReferences:nextStoryReferences}),
@@ -1537,6 +1564,7 @@
       causalState = nextCausal;
       worldFactState = nextFacts;
       knowledgeState = nextKnowledge;
+      beliefState = nextBeliefs;
       chunkState = nextChunkState;
       storyTriggerState = nextStoryTriggers;
       storyLifecycleState = nextStoryLifecycle;

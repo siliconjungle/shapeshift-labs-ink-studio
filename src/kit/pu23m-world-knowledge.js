@@ -31,6 +31,16 @@
       F.valueOK(schema.fields[name],value);
   }
 
+  function validReceipt(receipt,holder,fact,schema,field,tick) {
+    if (!fields(receipt,['value','event','tick','mode','via','from'])||!validDetail(schema,field,receipt.value)||
+      !F.eventId(receipt.event)||!F.eventId(receipt.via)||!integer(receipt.tick,1,tick)||
+      Number(receipt.event.split('.')[0])!==receipt.tick||F.compare(fact,receipt.event)>=0||
+      F.compare(receipt.via,receipt.event)>=0) return false;
+    if (receipt.mode==='witness')
+      return receipt.from===undefined&&receipt.via===fact&&fact.split('.')[0]===receipt.event.split('.')[0];
+    return receipt.mode==='report'&&holderOK(receipt.from)&&!sameHolder(receipt.from,holder)&&F.compare(fact,receipt.via)<0;
+  }
+
   function compile(raw,factPolicy) {
     if (raw===undefined) return null;
     check(factPolicy,'World knowledge requires typed world facts');
@@ -93,8 +103,12 @@
         return {learning:grant(fact,prior.type,to,disclosure,id,{mode:'report',from,
           values:field=>({value:prior.details[field].value,via:prior.details[field].event})})};
       }
+      function lookup(holder,fact,field) {
+        const row = index().get(keyFor(holder,fact));
+        return row&&own(row.details,field)?{type:row.type,receipt:row.details[field]}:undefined;
+      }
       const snapshot = ()=>view??=freeze({records:[...rows.values()],dropped});
-      return {witness,share,snapshot};
+      return {witness,share,lookup,snapshot};
     }
 
     function validate(saved,tick,facts,events) {
@@ -115,15 +129,9 @@
         holders.add(key);
         let latest;
         for (const [field,receipt] of Object.entries(row.details)) {
-          check(fields(receipt,['value','event','tick','mode','via','from'])&&validDetail(schemas[row.type],field,receipt.value)&&
-            F.eventId(receipt.event)&&F.eventId(receipt.via)&&integer(receipt.tick,1,tick)&&
-            Number(receipt.event.split('.')[0])===receipt.tick&&F.compare(row.fact,receipt.event)<0&&
-            F.compare(receipt.via,receipt.event)<0&&(!fact||equal(detail(fact,field),receipt.value)),message);
-          if (receipt.mode==='witness')
-            check(receipt.from===undefined&&receipt.via===row.fact&&row.fact.split('.')[0]===receipt.event.split('.')[0],message);
-          else {
-            check(receipt.mode==='report'&&holderOK(receipt.from)&&!sameHolder(receipt.from,row.holder)&&
-              F.compare(row.fact,receipt.via)<0,message);
+          check(validReceipt(receipt,row.holder,row.fact,schemas[row.type],field,tick)&&
+            (!fact||equal(detail(fact,field),receipt.value)),message);
+          if (receipt.mode==='report') {
             links.push({row,field,receipt});
           }
           const indexed = receiptKey(receipt.event,field), event = lastEvents.get(receipt.event);
@@ -200,5 +208,5 @@
     return Q.ok({fact,field,status:gap?'partial':'complete',value:root.details[field].value,steps,...(gap&&{gap})});
   }
 
-  W.worldKnowledge = Object.freeze({action,kind,compile,inspect,trace});
+  W.worldKnowledge = Object.freeze({action,kind,compile,inspect,trace,holderOK,sameHolder,keyFor,detail,validDetail,validReceipt});
 })(KIT);
