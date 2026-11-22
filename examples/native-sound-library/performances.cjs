@@ -96,7 +96,13 @@ function studyScores(id, patches) {
     ['metal-modelled', score({plate: {patch:'tuned-metal',notes:strikes}})],
     ['metal-scrapes', score({scrape: {patch:'scraped-metal',notes:scrapes,pan:.25}})]
   ];
-  return [['rhythm-study', score(rhythmLanes(pocket(4)), 4)]];
+  const lanes = rhythmLanes(pocket(4));
+  const {bass, ...drums} = lanes;
+  return [
+    ['rhythm-study', score(lanes, 4)],
+    ['rhythm-drums', score(drums, 4)],
+    ['rhythm-bass', score({bass}, 4)]
+  ];
 }
 
 function kitPerformance(sampleRate = 32000) {

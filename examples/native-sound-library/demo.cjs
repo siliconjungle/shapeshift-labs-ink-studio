@@ -52,15 +52,21 @@ function printGroup(entries, bank, target = -20) {
     json(id + '.json', {production: settings, assets: references, options});
     results[id] = {...measured, gainDb: settings.gain - score.gain};
   }
+  if (entries.length > 1) {
+    const levels = entries.map(([id]) => results[id].integratedLufs);
+    assert.ok(Math.max(...levels) - Math.min(...levels) < .15, 'Comparison prints must match in loudness');
+  }
   return rendered[0].value;
 }
 
 const lead = (patch, notes) => ({patch, notes, highpass: 125});
 const recorded = printGroup(studyScores(reed.entry.id, reed.patches), reed.assets);
 const metalStudies = studyScores(metal.entry.id, metal.patches);
-const struck = printGroup(metalStudies.slice(0, 2), metal.assets);
+const struck = printGroup(metalStudies.slice(0, 2), metal.assets, -24.5);
 printGroup(metalStudies.slice(2), metal.assets);
-const drums = printGroup(studyScores(rhythm.entry.id, rhythm.patches), rhythm.assets);
+const rhythmStudies = studyScores(rhythm.entry.id, rhythm.patches);
+const drums = printGroup(rhythmStudies.slice(0, 1), rhythm.assets);
+for (const solo of rhythmStudies.slice(1)) printGroup([solo], rhythm.assets);
 
 function rackDemo(id, pack, value) {
   const rendered = audio.audioRack.audition(pack.rack, {main:value}, undefined,

@@ -27,7 +27,7 @@
   a { color: var(--accent); text-underline-offset: .16em; }
   .feature { border-bottom: 1px solid var(--line); padding-bottom: 25px; margin-bottom: 25px; }
   .feature audio { max-width: 640px; }
-  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
   article { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); padding: 20px; }
   article p { flex: 1; margin: 0; min-height: 4.65em; }
   audio { width: 100%; display: block; min-width: 0; margin: 0 0 4px; }
@@ -96,6 +96,11 @@
     <article>
       <h2>Drums &amp; Bass</h2>
       <p>A four-bar pocket with alternating kick and snare hits, a closed hat that cuts the open hat short, and fingered and picked bass.</p>
+      <div class="buttons" role="group" aria-label="Rhythm phrase versions">
+        <button type="button" data-audio="rhythm-study.wav" aria-pressed="true">Together</button>
+        <button type="button" data-audio="rhythm-drums.wav" aria-pressed="false">Drums</button>
+        <button type="button" data-audio="rhythm-bass.wav" aria-pressed="false">Bass</button>
+      </div>
       <audio controls preload="metadata" src="rhythm-study.wav" aria-label="Play Drums and Bass"></audio>
       <details>
         <summary>Steel Bus rack</summary>
