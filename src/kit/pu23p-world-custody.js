@@ -3,7 +3,8 @@
   const W = K.world, F = W.worldFacts, Q = W.query;
   const {check,record,own,id,equal} = W.data, {freeze} = K.procedural.data;
   const operations = Object.freeze({
-    'discover-object':'discover','transfer-object':'transfer','lose-object':'lose','recover-object':'recover','inherit-object':'inherit'
+    'discover-object':'discover','transfer-object':'transfer','lose-object':'lose','recover-object':'recover',
+    'inherit-object':'inherit','destroy-object':'destroy'
   });
   const actions = Object.freeze(Object.keys(operations)), kinds = ['actor','faction','container','site'];
   const kind = 'custody-changed', rejection = 'custody-rejected';
@@ -14,19 +15,22 @@
   const latest = row=>row.changes.at(-1)??row.origin;
   const needsFrom = op=>op==='transfer'||op==='inherit'||op==='lose';
   const needsAt = op=>op==='discover'||op==='recover';
-  const statusOf = event=>event?.operation==='lose'?'lost':event?'held':'undiscovered';
+  const statusOf = event=>event?.operation==='destroy'?'destroyed':event?.operation==='lose'?'lost':event?'held':'undiscovered';
   const earlier = (id,event)=>F.eventId(id)&&F.compare(id,event)<0;
   const sourceOK = (source,event)=>F.eventReceiptOK(source)&&earlier(source.id,event);
 
   function stepOK(op,{from,to,at}) {
-    return (needsFrom(op)?holderOK(from):from===undefined)&&(op==='lose'?to===undefined:holderOK(to))&&
-      (needsAt(op)||at!==undefined?F.atOK(at):true)&&!equal(from,to);
+    const fromOK = needsFrom(op)?holderOK(from):from===undefined||op==='destroy'&&holderOK(from);
+    const toOK = op==='lose'||op==='destroy'?to===undefined:holderOK(to);
+    return fromOK&&toOK&&(needsAt(op)||at!==undefined?F.atOK(at):true)&&(from===undefined||!equal(from,to));
   }
 
   function transition(op,prior,from) {
+    if (prior?.operation==='destroy') return 'object-destroyed';
     if (op==='discover') return prior?'already-discovered':undefined;
     if (!prior) return 'not-discovered';
     if (op==='recover') return prior.operation!=='lose'?'not-lost':undefined;
+    if (op==='destroy') return equal(prior.to,from)?undefined:'holder-mismatch';
     if (prior.operation==='lose') return 'object-lost';
     if (!equal(prior.to,from)) return 'holder-mismatch';
   }
@@ -133,7 +137,7 @@
   function inspect(state,policy,tick,args) {
     check(fields(args,['object','holder','status','limit'])&&(args.object===undefined||F.qualified(args.object))&&
       (args.holder===undefined||holderOK(args.holder))&&
-      (args.status===undefined||['held','lost','undiscovered'].includes(args.status))&&integer(args.limit??128,0,1024),
+      (args.status===undefined||['held','lost','destroyed','undiscovered'].includes(args.status))&&integer(args.limit??128,0,1024),
     'Invalid object custody filter');
     if (!state) return Q.missing('World custody is not enabled','missing');
     const {object,holder,status,limit=128} = args;

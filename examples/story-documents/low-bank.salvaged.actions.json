@@ -1,0 +1,5 @@
+[
+  { "tick": 5, "action": "world/recover-object", "args": {
+    "object": "archive/roll", "to": { "kind": "faction", "id": "river-watch" }, "at": { "place": "river/rally" }
+  } }
+]

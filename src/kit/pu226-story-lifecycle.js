@@ -21,6 +21,7 @@
     const entries = new Map(), parents = new Map();
     const compileEvidence = W.storyEvidence.compiler(world, systems);
     const compileFeasibility = W.storyFeasibility.compiler(world, systems);
+    const compileConsequences = W.storyConsequences.compiler(world,systems);
     for (const document of documents) for (const [story, definition] of Object.entries(document.stories)) {
       if (!definition.lifecycle) continue;
       const { activation = 'automatic' } = definition.lifecycle;
@@ -42,10 +43,12 @@
         commitment: definition.lifecycle.commitment,
         handoffs: definition.lifecycle.handoffs,
         settlement: definition.lifecycle.settlement,
+        consequences: compileConsequences(definition.outcomes,key),
         clock: W.storyDeadlines.compile(definition.lifecycle, world.dt),
         cleanup: W.storyCleanup.compile(definition.lifecycle.cleanup, systems, key) });
     }
     if (!entries.size) return null;
+    const hasConsequences = [...entries.values()].some(row=>row.consequences);
     const order = [...entries.keys()].sort();
     const autoOrder = order.filter(key => entries.get(key).automatic.size);
     const interventionOrder = autoOrder.filter(key=>Object.values(entries.get(key).decisions).some(policy=>policy.mode==='intervene'));
@@ -119,7 +122,8 @@
           check(W.storyDeadlines.valid(def.clock, row, tick), message);
           continue;
         }
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment', 'handoffs', 'settlements']) &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment', 'handoffs',
+          'settlements', 'consequences']) &&
           Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit), message);
@@ -140,6 +144,7 @@
           W.storyCommitments.valid(def.commitment,row,tick) &&
           W.storyHandoffs.valid(def.handoffs,row,tick,reasonOK) &&
           W.storySettlement.valid(def.settlement,row,tick) &&
+          W.storyConsequences.valid(row.consequences,def.consequences,key,previous,id=>state[def.info.document+'/'+id]) &&
           (cutOffBeforeOffer ? row.source === undefined : W.storyTriggers.validEvidence(def.triggers,row.source,tick)), message);
       }
       check(feasibility ? record(gates) && equal(Object.keys(gates).sort(),gateKeys) : gates === undefined,
@@ -203,7 +208,8 @@
       return state;
     }
 
-    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch, settleStory, released) {
+    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch, settleStory, released,
+      publishConsequences) {
       let state = previous, gates = previousGates, queuedOpens = [];
       const requests = new Map(), handoffRequests = new Map(), H = W.storyHandoffs;
       const sourceLength = events.length;
@@ -319,6 +325,9 @@
         const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }), ...(deadline && { deadline }),
           ...(reference && {reference}) };
         const cleanup = W.storyCleanup.begin(def.cleanup, change);
+        const resultRules = own(def.consequences,outcome)?def.consequences[outcome]:undefined;
+        const consequences = resultRules&&W.storyConsequences.capture(resultRules,key,outcome,to,tick,query(),
+          id=>state[info.document+'/'+id]);
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
         save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
@@ -326,10 +335,11 @@
           ...(prior?.commitment && {commitment:prior.commitment}),
           ...(prior?.handoffs && {handoffs:prior.handoffs}),
           ...(prior?.settlements && {settlements:prior.settlements}),
-          ...(cleanup && {cleanup}) });
+          ...(cleanup && {cleanup}),...(consequences&&{consequences}) });
         const stage = flow?.current ?? flow?.route.at(-1);
         const link = parent ? { parent } : {};
         publish('story-transition', { ...info, ...change, ...source, ...link, ...(stage && { stage:stage.stage, visit:stage.visit }) });
+        if (consequences) publishConsequences(W.storyConsequences.kind,{...info,outcome,consequences});
         if (started) {
           publish('story-started', { ...info, ...source, ...link,
             ...(prior.commitment?.order && {commitment:prior.commitment.order}) });
@@ -520,7 +530,7 @@
       return {state:freeze(state),gates:gates&&freeze(gates)};
     }
 
-    return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction,
+    return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction,hasConsequences,
       ...(feasibility&&{feasibility,initialFeasibility:()=>freeze(Object.fromEntries(gateKeys.map(key=>[key,null])))}),
       ...(cleanupOrder.length && {cleanup}),...(decisions&&{decisions}),...(beats&&{beats}) };
   }

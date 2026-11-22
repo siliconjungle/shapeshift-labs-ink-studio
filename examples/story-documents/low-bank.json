@@ -1,0 +1,88 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "low-bank",
+  "title": "An evacuation ends with mixed results",
+  "stories": {
+    "evacuate": {
+      "kind": "arc", "title": "Evacuate the low bank",
+      "triggers": { "order": { "event": { "kind": "evacuation-ordered" } } },
+      "lifecycle": { "progression": true },
+      "entry": "rally",
+      "stages": { "rally": {
+        "title": "Close the response when someone reaches the rally",
+        "decision": { "mode": "autonomous" },
+        "children": { "open": ["mira-escape", "jules-escape"], "wait": { "any": ["mira-escape", "jules-escape"] } },
+        "next": { "close": { "outcome": "partial-evacuation", "auto": true } }
+      } },
+      "outcomes": { "partial-evacuation": {
+        "title": "Close the evacuation and record the losses",
+        "consequences": {
+          "mira": { "subject": { "kind": "actor", "id": "crew/mira" }, "cases": [
+            { "result": "escaped", "child": { "story": "mira-escape", "outcome": "safe" } }
+          ] },
+          "jules": { "subject": { "kind": "actor", "id": "crew/jules" }, "cases": [
+            { "result": "escaped", "child": { "story": "jules-escape", "outcome": "safe" } }
+          ] },
+          "level": { "subject": { "kind": "item", "id": "archive/level" }, "cases": [
+            { "result": "destroyed", "irreversible": true, "evidence": "/latest", "state": {
+              "field": "world/custody", "args": { "object": "archive/level" }, "select": "/status", "when": { "value": "destroyed" }
+            } }
+          ] },
+          "roll": { "subject": { "kind": "item", "id": "archive/roll" }, "cases": [
+            { "result": "salvaged", "evidence": "/latest", "state": {
+              "field": "world/custody", "args": { "object": "archive/roll" }, "select": "/holder",
+              "when": { "value": { "kind": "faction", "id": "river-watch" } }
+            } },
+            { "result": "lost", "evidence": "/latest", "state": {
+              "field": "world/custody", "args": { "object": "archive/roll" }, "select": "/status", "when": { "value": "lost" }
+            } }
+          ] }
+        }
+      } }
+    },
+    "mira-escape": {
+      "kind": "questlet", "title": "Bring Mira to the rally",
+      "lifecycle": { "progression": true }, "entry": "escape",
+      "stages": { "escape": {
+        "title": "Reach the rally", "decision": { "mode": "autonomous" },
+        "objectives": { "arrived": { "title": "Mira reaches safety", "evidence": { "event": { "kind": "mira-reached-rally" } } } },
+        "next": { "safe": { "outcome": "safe", "auto": true } }
+      } },
+      "outcomes": { "safe": { "title": "Mira is safe" } }
+    },
+    "jules-escape": {
+      "kind": "questlet", "title": "Bring Jules to the rally",
+      "lifecycle": { "progression": true }, "entry": "escape",
+      "stages": { "escape": {
+        "title": "Reach the rally", "decision": { "mode": "autonomous" },
+        "objectives": { "arrived": { "title": "Jules reaches safety", "evidence": { "event": { "kind": "jules-reached-rally" } } } },
+        "next": { "safe": { "outcome": "safe", "auto": true } }
+      } },
+      "outcomes": { "safe": { "title": "Jules is safe" } }
+    },
+    "certify-salvage": {
+      "kind": "incident", "title": "Certify what was saved in the evacuation",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "triggers": { "watch-hears": { "event": { "kind": "fact-learned", "where": { "all": [
+        { "path": "/learning/holder/id", "value": "river-watch" },
+        { "path": "/learning/type", "value": "evacuation-brief" }
+      ] } } } },
+      "lifecycle": {
+        "progression": true, "candidate": { "for": 1, "release": "automatic" },
+        "feasibility": {
+          "saved-at-close": { "state": { "field": "world/story-consequences", "args": { "story": "low-bank/evacuate" },
+            "select": "/subjects/roll/result", "when": { "value": "salvaged" } } },
+          "site-restricted": { "state": { "field": "world/site-history", "args": { "site": "river/low-bank" },
+            "select": "/state/access", "when": { "value": "salvage-only" } } },
+          "paper": { "state": { "field": "world/account", "args": { "account": "bank-stock/blank-pages" },
+            "select": "/balance", "when": { "op": "gte", "value": 1 } } }
+        }
+      },
+      "entry": "certify",
+      "stages": { "certify": { "title": "Record the certified response", "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "certified", "auto": true } } } },
+      "outcomes": { "certified": { "title": "The survey roll was certified as saved in the response" } }
+    }
+  }
+}

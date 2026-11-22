@@ -1068,13 +1068,19 @@ actions for named objects.
 | `world/lose-object` | `from` | Clear the current custodian and mark the object lost. |
 | `world/recover-object` | `to`, `at` | Return a lost object to custody and record the recovery site. |
 | `world/inherit-object` | `from`, `to` | Record a succession as a distinct change of custody. |
+| `world/destroy-object` | `from` if held | Record permanent destruction of a known object. Omit `from` for an already lost object. |
 
-Use a typed place, entity, or point in `at`. For a transfer, loss, or
-inheritance, supply it when a location is known. It becomes the
-object's `lastKnown` location. A valid transfer, loss, or inheritance
-requires `from` to match the current holder. Changes after discovery
+Use a typed place, entity, or point in `at`. For a transfer, loss,
+inheritance, or destruction, supply it when a location is known.
+It becomes the object's `lastKnown` location. A valid change from
+held custody requires `from` to match the current holder. Changes after discovery
 can also specify `previous`, the current custody receipt ID, so a
 stale command cannot apply to a later custody state.
+
+`destroyed` is a terminal custody state. Attempts to discover,
+recover, transfer, or inherit that identity are rejected. A story can
+record the destruction alongside recoverable losses and salvage in
+its [closure report](story-documents.md#close-with-partial-and-irreversible-consequences).
 
 Any action can cite a retained earlier world event in `source`.
 Current and previous tick events, retained world history, and the typed

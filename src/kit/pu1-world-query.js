@@ -317,6 +317,8 @@
         W.storyHandoffs.inspect(view.storyHandoffDefinitions,view.storyLifecycle,args)},
       'story-settlements':{type:'record',qualified:true,read:({args})=>
         W.storySettlement.inspect(view.storySettlementDefinitions,view.storyLifecycle,args)},
+      'story-consequences':{type:'record',qualified:true,read:({args})=>
+        W.storyConsequences.inspect(view.storyLifecycle,args)},
       'story-beats':{type:'record',qualified:true,read:({args})=>
         W.storyBeats.inspect(view.storyBeats,view.storyLifecycle,view.storyDocuments,args)},
       'story-decisions':{type:'record',qualified:true,read:({args})=>

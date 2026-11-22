@@ -644,6 +644,45 @@ const StoryDocument = (() => {
     }
   }
 
+  function consequences(value, at, roles, report, children) {
+    const rows = entries(value,at,true), subjects = new Set();
+    if (rows.length>32) invalid(at,'expected up to 32 consequence subjects');
+    for (const [name,rule] of rows) {
+      const place = at+'.'+name;
+      fields(rule,place,['subject','cases']);
+      if (roleUses(rule,roles,place,report)) continue;
+      const {subject,cases} = rule;
+      fields(subject,place+'.subject',['kind','id']);
+      if (!worldName(subject.kind)||typeof subject.id!=='string'||subject.id.length>512||!subject.id.split('/').every(worldName))
+        invalid(place+'.subject','expected a typed world subject');
+      const identity = subject.kind+'#'+subject.id;
+      if (subjects.has(identity)) invalid(place+'.subject','duplicate consequence subject');
+      subjects.add(identity);
+      if (!Array.isArray(cases)||!cases.length||cases.length>8) invalid(place+'.cases','expected 1–8 ordered consequence cases');
+      const results = new Set();
+      for (const [index,entry] of cases.entries()) {
+        const location = place+'.cases.'+index;
+        fields(entry,location,['result'],['state','child','evidence','irreversible']);
+        if (!worldName(entry.result)||entry.result==='unresolved'||results.has(entry.result))
+          invalid(location+'.result','expected a distinct consequence result');
+        results.add(entry.result);
+        if (Object.hasOwn(entry,'irreversible')&&typeof entry.irreversible!=='boolean')
+          invalid(location+'.irreversible','expected a boolean');
+        if (Object.hasOwn(entry,'state')===Object.hasOwn(entry,'child'))
+          invalid(location,'expected one state or child evidence source');
+        if (Object.hasOwn(entry,'state')) {
+          stateSource(entry.state,location+'.state',true);
+          if (Object.hasOwn(entry,'evidence')) dataPath(entry.evidence,location+'.evidence');
+        } else {
+          if (Object.hasOwn(entry,'evidence')) invalid(location+'.evidence','child evidence already carries its terminal receipt');
+          fields(entry.child,location+'.child',['story'],['status','outcome']);
+          const {story,...condition} = entry.child;
+          childConditions({[story]:condition},children,location+'.child',report);
+        }
+      }
+    }
+  }
+
   function decision(spec, at) {
     fields(spec, at, ['mode'], ['for']);
     if (!['autonomous', 'player', 'intervene'].includes(spec.mode))
@@ -855,10 +894,13 @@ const StoryDocument = (() => {
       link(story.entry, stages, `${at}.entry`, 'stage', report);
       for (const [name, outcome] of entries(outcomes, `${at}.outcomes`, true)) {
         const location = `${at}.outcomes.${name}`;
-        fields(outcome, location, ['title'], ['summary', 'refs', ...(progression ? ['status'] : [])]);
+        fields(outcome, location, ['title'], ['summary', 'refs', ...(progression ? ['status'] : []),
+          ...(story.lifecycle ? ['consequences'] : [])]);
         if (Object.hasOwn(outcome, 'status') && !['completed', 'failed'].includes(outcome.status))
           invalid(`${location}.status`, 'expected completed or failed');
         labelsAndRefs(outcome, location, references, report);
+        if (Object.hasOwn(outcome,'consequences'))
+          consequences(outcome.consequences,location+'.consequences',roles,report,children);
       }
       if (story.lifecycle && Object.hasOwn(story.lifecycle, 'cleanup'))
         cleanup(story.lifecycle.cleanup, outcomes, `${at}.lifecycle.cleanup`, report, roles);

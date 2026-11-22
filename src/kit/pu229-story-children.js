@@ -73,5 +73,5 @@
     return { ...stage.children, ready: !pending.length, pending, stories: records };
   }
 
-  W.storyChildren = Object.freeze({ capture, gate, validResults, opened, inspect });
+  W.storyChildren = Object.freeze({ capture, gate, validResults, opened, inspect, result });
 })(KIT);

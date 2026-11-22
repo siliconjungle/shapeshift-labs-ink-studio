@@ -1,0 +1,6 @@
+[
+  { "tick": 12, "action": "world/recover-object", "args": {
+    "object": "archive/roll", "to": { "kind": "faction", "id": "river-watch" }, "at": { "place": "river/rally" }
+  } },
+  { "tick": 12, "action": "world/event", "args": { "kind": "jules-reached-rally" } }
+]

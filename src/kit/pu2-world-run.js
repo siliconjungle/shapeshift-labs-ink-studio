@@ -25,6 +25,7 @@
   const typedMemory=Symbol('memory event');
   const typedCustody=Symbol('custody event');
   const typedSite=Symbol('site history event');
+  const typedConsequences=Symbol('story consequence event');
 
   function stepTiming(world,at,timing) {
     const baseDt=world.dt, substeps=timing?.substeps??1, detail=timing?.detail;
@@ -425,6 +426,7 @@
         check(!plan.worldMemories||!W.worldMemories.eventKinds.includes(args.kind),'Use world/remember to publish memory events');
         check(!plan.worldCustody||!W.worldCustody.eventKinds.includes(args.kind),'Use world custody actions to publish custody events');
         check(!plan.worldSiteHistory||!W.worldSiteHistory.eventKinds.includes(args.kind),'Use site history actions to publish site events');
+        check(!plan.storyLifecycle?.hasConsequences||args.kind!==W.storyConsequences.kind,'Story consequences are published at closure');
         W.timedEvents.timeOf(args);
       }
     } else {
@@ -1002,6 +1004,8 @@
           'Use world custody actions to publish custody events');
         check(!siteLedger||!W.worldSiteHistory.eventKinds.includes(kind)||token===typedSite,
           'Use site history actions to publish site events');
+        check(!storyLifecycle?.hasConsequences||kind!==W.storyConsequences.kind||token===typedConsequences,
+          'Story consequences are published at closure');
         W.timedEvents.timeOf(detail);
         const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
         events.push(row);
@@ -1606,7 +1610,9 @@
       if (queueUpdate) storyStarts = queueUpdate.starts;
       if (storyLifecycle) {
         ({state:nextStoryLifecycle,gates:nextStoryFeasibility} =
-          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,storyFeasibilityState,nextStoryReferences,dispatchCommitment,settleStory,queueUpdate?.released));
+          storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,
+            storyFeasibilityState,nextStoryReferences,dispatchCommitment,settleStory,queueUpdate?.released,
+            makeEmit('world',undefined,undefined,typedConsequences)));
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);

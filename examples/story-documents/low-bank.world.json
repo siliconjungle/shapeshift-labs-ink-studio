@@ -1,0 +1,68 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "low-bank",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "causality": { "limit": 128 },
+  "storyDocuments": [{ "file": "low-bank.json" }],
+  "facts": { "types": { "evacuation-brief": { "fields": { "checked": "boolean" } } } },
+  "knowledge": true,
+  "custody": { "objects": {
+    "archive/level": { "label": "Survey level" },
+    "archive/roll": { "label": "Property survey roll" }
+  } },
+  "siteHistory": { "sites": { "river/low-bank": {
+    "kind": "crossing", "fields": { "access": "string" }, "initial": { "access": "ordinary" }
+  } } },
+  "systems": { "bank-stock": { "kind": "store", "config": { "accounts": {
+    "blank-pages": { "resource": "paper", "units": "page", "type": "integer", "initial": 3 }
+  } } } },
+  "simulationChunks": {
+    "grid": { "size": 8 },
+    "levels": [{ "id": "near", "within": 1 }, { "id": "sleep", "sleep": true }],
+    "focus": { "observer": { "at": [2, 0, 2] } },
+    "chunks": { "low-bank": { "index": [0, 0], "systems": ["bank-stock"] } }
+  },
+  "eventActions": {
+    "restrict-the-bank": {
+      "on": { "kind": "story-consequences", "where": { "all": [
+        { "path": "/document", "value": "low-bank" }, { "path": "/story", "value": "evacuate" },
+        { "path": "/consequences/subjects/level/irreversible", "value": true }
+      ] } },
+      "actions": [{ "action": "world/change-site", "args": {
+        "site": "river/low-bank", "outcome": "flood-damage-recorded", "set": { "access": "salvage-only" }, "source": "1.0"
+      }, "bindings": { "/source": "/id" } }]
+    }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/discover-object", "args": {
+      "object": "archive/level", "to": { "kind": "site", "id": "river/low-bank" }, "at": { "place": "river/low-bank" }
+    } },
+    { "tick": 1, "action": "world/discover-object", "args": {
+      "object": "archive/roll", "to": { "kind": "site", "id": "river/low-bank" }, "at": { "place": "river/low-bank" }
+    } },
+    { "tick": 2, "action": "world/lose-object", "args": {
+      "object": "archive/roll", "from": { "kind": "site", "id": "river/low-bank" }
+    } },
+    { "tick": 3, "action": "world/event", "args": { "kind": "storehouse-collapsed" } },
+    { "tick": 3, "action": "world/destroy-object", "args": {
+      "object": "archive/level", "from": { "kind": "site", "id": "river/low-bank" },
+      "at": { "place": "river/low-bank" }, "source": "3.0"
+    } },
+    { "tick": 4, "action": "world/event", "args": { "kind": "evacuation-ordered" } },
+    { "tick": 6, "action": "world/event", "args": { "kind": "mira-reached-rally" } },
+    { "tick": 8, "action": "world/chunk-level", "args": { "chunk": "low-bank", "level": "sleep" } },
+    { "tick": 9, "action": "world/fact", "args": {
+      "type": "evacuation-brief", "at": { "place": "river/rally" }, "data": { "checked": true },
+      "witnesses": [{ "holder": { "kind": "actor", "id": "crew/mira" } }]
+    } },
+    { "tick": 10, "action": "world/recover-object", "args": {
+      "object": "archive/level", "to": { "kind": "faction", "id": "river-watch" }, "at": { "place": "river/low-bank" }
+    } },
+    { "tick": 11, "action": "world/share-fact", "args": {
+      "fact": "9.0", "from": { "kind": "actor", "id": "crew/mira" }, "to": { "kind": "faction", "id": "river-watch" }
+    } },
+    { "tick": 13, "action": "world/chunk-level", "args": { "chunk": "low-bank", "level": "near" } }
+  ]
+}

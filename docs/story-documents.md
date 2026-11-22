@@ -1491,6 +1491,66 @@ node cli/ink-studio.js probe ford.run.json --ticks 11 --field world/story-lifecy
 node cli/ink-studio.js probe ridge.run.json --field world/story-lifecycle
 ```
 
+## Close with partial and irreversible consequences
+
+An outcome can carry a `consequences` table. Give each participant,
+site, or object a stable subject reference and ordered cases. Each
+case gives a named result and the evidence that supports it.
+
+```json
+"consequences": {
+  "mira": {
+    "subject": { "kind": "actor", "id": "crew/mira" },
+    "cases": [{ "result": "escaped", "child": { "story": "mira-escape", "outcome": "safe" } }]
+  },
+  "level": {
+    "subject": { "kind": "item", "id": "archive/level" },
+    "cases": [{
+      "result": "destroyed", "irreversible": true,
+      "state": { "field": "world/custody", "args": { "object": "archive/level" }, "select": "/status", "when": { "value": "destroyed" } },
+      "evidence": "/latest"
+    }]
+  }
+}
+```
+
+Use `child` to match a terminal result of a questlet owned by the arc.
+Use `state` to check the closing tick's world snapshot, with an
+optional `evidence` path for a receipt such as the latest custody ID.
+The first matching case wins for that subject. Subjects with missing
+or unmatched evidence are recorded as `unresolved`. An outcome
+can report escape, destruction, and salvage together. It can also
+close with `partial` coverage while some subjects remain unresolved.
+
+The runtime captures the report once, after any outcome settlement.
+Later discoveries and recoveries can change current world state while
+the report preserves what was established at closure. Read it with
+`world/story-consequences` and a qualified `story` ID, or omit
+`story` to list all reports. The same report appears in the story
+lifecycle and in the `story-consequences` event. Values and evidence
+captured from a query retain up to 4,096 JSON characters each.
+
+Mark a case `irreversible` when its source establishes a permanent
+result. For example, `world/destroy-object` gives a tracked object a
+terminal custody state. Use event actions to turn the closure into
+persistent effects such as access restrictions, recorded losses, or
+memories. Later stories can check those effects and the closure report
+after the original arc ends. They can also require a faction to learn
+the relevant facts or observe the aftermath before acting. [Faction perception](faction-perception.md) · [Simulation chunks](simulation-chunks.md)
+
+In the [Low Bank demo](../examples/story-documents/low-bank.world.json),
+Mira makes it out, Jules is unaccounted for at closure, and the survey
+level is destroyed. The survey roll can be salvaged before closure or
+recovered later. That timing determines whether the watch can certify
+the original response after learning the brief. The site restriction
+persists while its chunk sleeps and when it wakes again.
+
+```sh
+ink-studio sim run examples/story-documents/low-bank.world.json \
+  --actions examples/story-documents/low-bank.salvaged.actions.json --ticks 14 --record low-bank.run.json
+ink-studio probe low-bank.run.json --field world/story-consequences --args '{"story":"low-bank/evacuate"}'
+```
+
 ## Clean up when a story ends
 
 Use `lifecycle.cleanup` to name the resources a story should release when it completes, fails, is withdrawn, or expires. Each named rule targets one resource. Cleanup runs at the start of the next simulation tick, before that tick's commands and solver work. A suspended story can be explicitly withdrawn with `world/story-transition`.
