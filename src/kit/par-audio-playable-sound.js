@@ -171,7 +171,7 @@
       score:{key:{root:'C4'},tempoMap:{tempo},endFade:0,harmonies:{home:{root:'C4',quality:'unison'}}},
       motifs:{guide:{length:1,events:[{id:'guide',beat:0,duration:.1,midi:60,velocity:0}]}},
       parts:{voice:{role:'lead',material:'guide'}},sections:[{id:'probe',bars,harmony:'home'}]
-    },patches:{sound:{...patch,performance}},tracks:{voice:{patch:'sound',gain:-6,
+    },patches:{sound:{...patch,performance:patch.performance ?? performance}},tracks:{voice:{patch:'sound',gain:-6,
       clips:[{id:'probe',beat:0,length:4*bars,voices:[{id:'player',notes}]}]}}};
     const compiled=P.musicProduction.compile(source,assets);
     const result=P.musicProduction.renderCompiled(compiled,{sampleRate:rate,end:{numerator:frames,denominator:rate}});
@@ -321,5 +321,6 @@
       report:{id:workshop.id,candidate:chosen,from,trigger:{key,velocity,gate,sampleRate:rate},profile}};
   }
 
+  S.playableSoundProbe=Object.freeze({performance,diagnostic,scoreProbe,patchAssets,probePrint,midi});
   A.playableSound=Object.freeze({build,audition,keep});
 })(KIT.procedural);

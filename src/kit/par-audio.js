@@ -190,6 +190,17 @@
         return {...kept,patch:kept.value.patch,motif:kept.value.motif};
       }
     },
+    'music.auditionSoundSources': {
+      description:'Play one dry performance across procedural, sampled and native instrument sources, with matched playback.',
+      inputs:{spec:'record',assets:options},outputs:{value:'audio',bank:'record',libraries:'record',clips:'record',report:'record'},
+      run({spec,assets},{seed}) {return A.soundDiscovery.audition({seed,...spec},assets);}
+    },
+    'music.keepDiscoveredSound': {
+      description:'Keep a discovered instrument and derive motifs or a new sample from an exact audition slice or held gesture.',
+      inputs:{bank:'record',libraries:'record',selection:'record'},
+      outputs:{patch:'record',assets:'record',motif:'record',reference:'audio',report:'record'},
+      run({bank,libraries,selection}) {return A.soundDiscovery.keep(bank,libraries,selection);}
+    },
     'audio.warp': {
       description: 'Fit audio to tempo or sample and picture pins with beat, tonal, speech or varispeed processing.',
       inputs: {source:'audio',options}, outputs: {value:'audio',report:'record'},

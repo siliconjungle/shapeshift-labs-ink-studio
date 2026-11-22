@@ -4,6 +4,7 @@ const {openSampleLibrary}=require('./sample-library.js');
 const {resolveSampleAssets}=require('./music-sample-assets.js');
 
 module.exports=function instrumentCommand([mode,file,config],opt,kit) {
+  if (['discover','keep-discovery'].includes(mode)) return discovery(mode,file,config,opt,kit);
   if (['workshop','audition-workshop','keep-workshop'].includes(mode)) {
     return workshop(mode,file,config,opt,kit);
   }
@@ -123,5 +124,53 @@ function workshop(mode,file,config,opt,kit) {
   json(instrument,{patch,zones,assets:writeAssets(dir,selection.assets),motif:'motif.json'});
   json(motif,selection.value.motif);
   json(report,{...selection.report,source:recipe.source});
+  return send({instrument,motif,audio,report});
+}
+
+function discovery(mode,file,config,opt,kit) {
+  const P=kit.KIT.procedural, {fields,check,record,id}=P.musicInstruments, tool=P.mediaGraph.soundDiscovery;
+  check(file && typeof opt.out==='string','Supply a source discovery recipe or bank and --out');
+  const read=name=>JSON.parse(fs.readFileSync(name,'utf8'));
+  const recipe=read(file), dir=path.resolve(opt.out), report=path.join(dir,'report.json');
+  const send=value=>{process.stdout.write(JSON.stringify(value)+'\n');return value;};
+  if (mode==='discover') {
+    check(fields(recipe,['discovery','assets','library']) && record(recipe.assets ?? {}) &&
+      Object.keys(recipe.assets ?? {}).length<=128 && (recipe.library===undefined || typeof recipe.library==='string'),
+    'Use a discovery specification with optional named sample sources');
+    const library=recipe.library===undefined ? undefined :
+      openSampleLibrary(path.resolve(path.dirname(file),recipe.library),{kit});
+    const {assets,sources}=resolveSampleAssets(recipe.assets ?? {},file,library,kit,{allowWav:true});
+    const result=tool.audition(recipe.discovery,assets), manifest=path.join(dir,'bank.json'), audio=path.join(dir,'audition.wav');
+    const libraries=Object.fromEntries(Object.entries(result.libraries).map(([key,{source,assets}])=>{
+      const relative='instruments/'+key, folder=path.join(dir,relative);
+      write(path.join(folder,'source.wav'),WAV.encode(source,{encoding:'float32'}));
+      return [key,{source:relative+'/source.wav',assets:Object.fromEntries(Object.entries(writeAssets(folder,assets))
+        .map(([id,name])=>[id,relative+'/'+name]))}];
+    }));
+    const takes=Object.fromEntries(Object.entries(result.clips).map(([key,cells])=>[key,
+      Object.fromEntries(Object.entries(cells).map(([id,value])=>{
+        const name='takes/'+key+'/'+id+'.wav';
+        write(path.join(dir,name),WAV.encode(value,{encoding:'pcm24'}));
+        return [id,name];
+      }))]));
+    write(audio,WAV.encode(result.value,{encoding:'pcm24'}));
+    json(manifest,{bank:result.bank,libraries,sources});
+    json(report,{...result.report,takes});
+    return send({audio,report,bank:manifest});
+  }
+  check(config && fields(recipe,['bank','libraries','sources']) && record(recipe.libraries),'Supply a bank and a selection');
+  const selection=read(config), key=selection.candidate, row=id(key) && Object.hasOwn(recipe.libraries,key) && recipe.libraries[key];
+  check(fields(row,['source','assets']) && typeof row.source==='string' && record(row.assets) &&
+    Object.keys(row.assets).length<=128,'The selection needs a saved source and patch assets');
+  const {assets}=resolveSampleAssets(row.assets,file,undefined,kit,{allowWav:true});
+  const source=WAV.read(path.resolve(path.dirname(file),row.source));
+  const kept=tool.keep(recipe.bank,{[key]:{source,assets}},selection);
+  const instrument=path.join(dir,'instrument.json'), motif=path.join(dir,'motif.json'), audio=path.join(dir,'gesture.wav');
+  json(instrument,{patch:kept.patch,assets:writeAssets(dir,kept.assets),motif:'motif.json'});
+  json(motif,kept.motif);
+  write(audio,WAV.encode(kept.reference,{encoding:'pcm24'}));
+  const origin=kept.report.origin;
+  json(report,{...kept.report,...(origin.kind==='asset' && recipe.sources?.[origin.asset] &&
+    {source:recipe.sources[origin.asset]})});
   return send({instrument,motif,audio,report});
 }

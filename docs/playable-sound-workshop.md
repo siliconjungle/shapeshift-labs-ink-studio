@@ -148,3 +148,78 @@ then play the same test phrase. The sketch starts with the source again,
 then uses the fitted instrument's projected contour as a melody and its
 attacks as a percussion answer. It keeps separate quiet, low firm and
 high firm playing zones in an editable session.
+
+## Compare different source instruments
+
+Use sound discovery to run one performance across different materials.
+Each candidate can be a native patch, a procedurally synthesized gesture,
+or a named sample from a WAV, catalog, edit, or print. Source recordings
+use the ordinary fitting workshop to build one editable voice each. A
+native patch keeps its authored performance mapping.
+
+```json
+{
+  "discovery": {
+    "id": "sound-study",
+    "seed": 3071,
+    "candidates": [
+      {
+        "id": "air",
+        "family": "sampled-breath",
+        "source": {"gesture": {"model": "breath", "duration": 1.02}},
+        "build": {"variant": {"family": "attack"}}
+      },
+      {
+        "id": "plate",
+        "family": "struck-metal",
+        "source": {"asset": "contact"}
+      }
+    ],
+    "settings": {
+      "keys": ["C3", "C4", "C5"],
+      "velocities": [0.44, 0.86],
+      "anchor": {"key": "C4", "velocity": 0.86}
+    }
+  },
+  "assets": {"contact": "plate.wav"}
+}
+```
+
+```sh
+ink-studio music instrument discover sources.json --out audition
+ink-studio music instrument keep-discovery audition/bank.json choice.json --out chosen
+```
+
+The dry probe plays a quiet entrance, a repeated strike, a connected
+interval, and a held note into release. The reel uses a shared key and
+velocity, matched in integrated loudness subject to peak headroom. Each
+build applies its one playback gain across the complete key and velocity
+grid, so changes in dynamics remain audible. The report links the
+individual takes and gives note onset addresses and release levels. Set
+`settings.performance` to use your own probe. The bank supports up to
+24 candidates and 112 rendered cells within the PCM and reel budgets.
+For long releases, set `settings.releaseSeconds` up to six seconds.
+
+`keep-discovery` accepts a `candidate`, a listening `reason`, and optional
+`range` with inclusive `low` and `high` keys and a velocity interval.
+For a single native voice this creates an ordinary key and velocity zone.
+Use `from: "performed"` (the default) to project a new held note.
+`trigger` can set `key`, `velocity`, `gate`, and note `play` expression.
+Use `from: "source"` to project the dry source. Use `from: "slice"`
+with `slice: {cell, fromSample, toSample}` to keep audio from a specific
+audition take on its original clock. Set `resample: true` to save that
+gesture as an ordinary playable sample. The original instrument and all
+of its settings stay editable in the saved audition bank. The kept scope
+includes the projected pitch contour when detected, attack motif, decay,
+and the selection's audio and provenance.
+
+JavaScript exposes `KIT.procedural.mediaGraph.soundDiscovery` with
+`audition(spec, assets)` and `keep(bank, libraries, selection)`. The graph
+operations are `music.auditionSoundSources` and `music.keepDiscoveredSound`.
+
+Run `node examples/music-production/sound-discovery.cjs output` for
+12 original procedural instruments and 72 dry takes. The *Blackwater*
+session derives its melody from a split reed's changing pitch, then
+captures a pair of porcelain contacts from the audition for percussion.
+The velocity-damped bell, friction plate, and feedback wire use native
+portable instrument graphs.

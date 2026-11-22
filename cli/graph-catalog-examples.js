@@ -17,6 +17,11 @@ const fitTone={sampleRate:8000,channels:1,samples:Array.from({length:1600},(_,i)
 const fittedTone={op:'audio.fitInstrument',inputs:{source:fitTone}};
 const playableSound={op:'music.buildPlayableSound',inputs:{source:fitTone,options:{
   variants:[{id:'body',family:'contour'},{id:'air',family:'handoff'}]}}};
+const soundDiscovery={op:'music.auditionSoundSources',inputs:{assets:{tone:fitTone},spec:{
+  candidates:[{id:'ring',family:'sampled',source:{asset:'tone'},root:'C4'},
+    {id:'reed',family:'synth',patch:{type:'fm',index:.25}}],
+  settings:{sampleRate:8000,keys:[60],velocities:[.8]}
+}}};
 const event = { time: 0, channel: 'held', value: true };
 const sampleCapture = {op:'audio.captureSample',inputs:{source:audio,settings:{
   sample:{id:'tone',label:'Bench tone',material:'synth',pitch:'A4',license:{id:'CC0-1.0'}},
@@ -520,6 +525,9 @@ const specifications = {
   'audio.auditionInstrumentFit': {nodes:{fit:fittedTone},inputs:{
     fit:link('fit'),assets:link('fit','assets'),reference:link('fit','reference'),
     options:{candidates:['synth'],sampleRate:8000,cases:[{id:'match',midi:61,velocity:.8,gate:.2}]}}},
+  'music.auditionSoundSources': {inputs:soundDiscovery.inputs},
+  'music.keepDiscoveredSound': {nodes:{discover:soundDiscovery},inputs:{bank:link('discover','bank'),
+    libraries:link('discover','libraries'),selection:{candidate:'ring',from:'source',reason:'Keep the falling edge.'}}},
   'music.buildPlayableSound': {inputs:playableSound.inputs},
   'music.auditionPlayableSound': {nodes:{build:playableSound},inputs:{workshop:link('build'),assets:link('build','assets'),
     options:{pitches:[61],velocities:[.8],sampleRate:8000}}},
