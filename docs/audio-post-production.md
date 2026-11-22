@@ -97,7 +97,8 @@ record them in the manifest.
    the original sync positions.
 2. From the Actions list, load and run **Capture Ink edits.lua**, included
    in the handoff. It writes `reaper-return.json` beside the current project.
-   Keep a saved copy in the handoff directory if you want to reopen the edits.
+   Save the edit beside the exported project to keep media addresses relative
+   when the package changes machines.
 3. Run the import above. Ink validates the item, take, track, source hash and
    archived project. It applies the addressed edits and prints Broadcast
    Wave stems and a mix. The report gives the returned sync samples and

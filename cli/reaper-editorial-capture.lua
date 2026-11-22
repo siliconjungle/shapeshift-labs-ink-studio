@@ -25,6 +25,7 @@ local function capture()
   if name == '' then error('Open or save the Ink editorial project before capturing.') end
   local folder = name:match('^(.*[\\/])')
   if not folder then error('Unable to locate the project folder.') end
+  local localFolder = folder:gsub('\\','/')
   local items, tracks = {}, {}
   for i = 0, r.CountTracks(project)-1 do
     local track = r.GetTrack(project, i)
@@ -42,10 +43,13 @@ local function capture()
       local function itemValue(param) return number(r.GetMediaItemInfo_Value(item, param)) end
       local function takeValue(param) return number(r.GetMediaItemTakeInfo_Value(take, param)) end
       local media = r.GetMediaItemTake_Source(take)
+      local file = r.GetMediaSourceFileName(media,'')
+      local portable = file:gsub('\\','/')
+      if portable:sub(1,#localFolder) == localFolder then file = portable:sub(#localFolder+1) end
       local known = {}
       for k = 0, r.CountTakes(item)-1 do known[#known+1] = takeGUID(r.GetTake(item, k)) end
       items[#items+1] = object({guid=quoted(id),track=guid,take=takeGUID(take),takes=array(known),
-        file=quoted(r.GetMediaSourceFileName(media,'')),position=itemValue('D_POSITION'),length=itemValue('D_LENGTH'),
+        file=quoted(file),position=itemValue('D_POSITION'),length=itemValue('D_LENGTH'),
         itemGain=itemValue('D_VOL'),mute=itemValue('B_MUTE'),allTakes=itemValue('B_ALLTAKESPLAY'),
         loop=itemValue('B_LOOPSRC'),fadeIn=itemValue('D_FADEINLEN'),fadeOut=itemValue('D_FADEOUTLEN'),
         autoIn=itemValue('D_FADEINLEN_AUTO'),autoOut=itemValue('D_FADEOUTLEN_AUTO'),offset=takeValue('D_STARTOFFS'),

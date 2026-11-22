@@ -201,7 +201,9 @@ function addressed(P,folder,capture) {
       row.takes.length===original.takes.length && new Set(row.takes).size===row.takes.length &&
       original.takes.every(take=>row.takes.includes(take.guid)),
     'An item was split, moved to a new track, or changed takes outside the handoff: '+label);
-    const media=checkMedia(take.file,take.sha256), actual=path.resolve(path.dirname(capture.project),row.file ?? '');
+    const media=checkMedia(take.file,take.sha256);
+    check(token(row.file),'The REAPER take has no source path: '+label);
+    const actual=path.resolve(folder,row.file);
     check(fs.realpathSync(actual)===fs.realpathSync(media),'The REAPER take points to different media: '+label);
     check(defaults(row,{itemGain:1,takeGain:1,pan:0,pitch:0,offset:0,rate:1,allTakes:0,loop:0,mute:0,
       fadeIn:0,fadeOut:0,channelMode:0,fx:0,envelopes:0}) && row.autoIn<=0 && row.autoOut<=0 &&

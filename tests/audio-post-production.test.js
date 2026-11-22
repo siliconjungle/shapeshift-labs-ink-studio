@@ -114,6 +114,10 @@ test('REAPER return applies addressed take and Foley offsets without replacing e
       {op:'comp',clip:'line',ranges:[]},{op:'take',clip:'line',take:'inner'},{op:'nudge',clip:'hinge',offsetSamples:27}]);
     assert.deepEqual(applied.session.clips[1].spot,session.clips[1].spot);
     assert.equal(applied.log.find(row=>row.clip==='hinge').syncSample,hinge.syncSample+27);
+    const moved=path.join(directory,'relocated');
+    fs.renameSync(folder,moved);
+    assert.deepEqual(Reaper.addressed(P,moved,returned).changes,applied.changes);
+    fs.renameSync(moved,folder);
 
     target.fadeIn=.01;
     assert.throws(()=>Reaper.addressed(P,folder,returned),/trim, fade/);
