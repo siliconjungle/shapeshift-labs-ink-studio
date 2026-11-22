@@ -82,7 +82,7 @@
         const receipt={binding,rule:id,family,context};
         if(!layers){
           const chosen=pick(takes,strength,salt);
-          if(chosen)return [{cue:chosen.cue,selection:{...receipt,take:chosen.take,eligible:chosen.eligible}}];
+          if(chosen)return [{cue:chosen.cue,selection:{binding,rule:id,family,take:chosen.take,context,eligible:chosen.eligible}}];
           continue;
         }
         const adjacent=bracket(layers,strength);
