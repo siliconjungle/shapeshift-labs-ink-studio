@@ -334,7 +334,7 @@
       interactions,influence,population,causePolicy,contracts,phaseEdges,navigationSources};
     if (world.storyDocuments !== undefined) {
       plan.storyTriggers = W.storyTriggers.compile(world.storyDocuments, world, systems);
-      plan.storyLifecycle = W.storyLifecycle.compile(world.storyDocuments, world.dt);
+      plan.storyLifecycle = W.storyLifecycle.compile(world.storyDocuments, world, systems);
     }
     if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
       dt: world.dt, validateAction: command => actionCheck(command, plan),
@@ -1177,15 +1177,16 @@
         [edge.to,[...delays[edge.to].slice(1),delayedSamples?.[edge.to] ?? nextOutputs[edge.from]]]));
       publishedSignals = freeze(publishedSignals);
       let nextStoryTriggers, nextStoryLifecycle, storyStarts = [];
+      let completed;
+      const completedQuery = () => completed ??= Q.create(
+        view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState),systems,projection);
       if (storyTriggers) {
-        let completed;
-        const activated = storyTriggers.advance(storyTriggerState, events, at, () => completed ??= Q.create(
-          view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState),systems,projection));
+        const activated = storyTriggers.advance(storyTriggerState, events, at, completedQuery);
         nextStoryTriggers = activated.state;
         storyStarts = activated.starts;
       }
       if (storyLifecycle) {
-        nextStoryLifecycle = storyLifecycle.advance(storyLifecycleState,storyStarts,storyCommands,at,makeEmit('world'));
+        nextStoryLifecycle = storyLifecycle.advance(storyLifecycleState,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery);
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);

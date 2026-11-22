@@ -17,16 +17,18 @@
   const outcomeOK = (def, to, outcome) => outcome === undefined ||
     (to === 'completed' || to === 'failed') && typeof outcome === 'string' && own(def.outcomes, outcome);
 
-  function compile(documents, dt) {
+  function compile(documents, world, systems) {
     const entries = new Map();
+    const compileEvidence = W.storyEvidence.compiler(world, systems);
     for (const document of documents) for (const [story, definition] of Object.entries(document.stories)) {
       if (!definition.lifecycle) continue;
       const { activation = 'automatic', offerFor } = definition.lifecycle;
       const info = { document: document.id, story, storyKind: definition.kind, stage: definition.entry };
       check(entries.size < 256, 'World story lifecycle budget exceeds 256 definitions');
-      entries.set(keyOf(info), { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
-        stages: definition.lifecycle.progression ? definition.stages : undefined,
-        duration: offerFor === undefined ? null : Math.max(1, W.storyTriggers.ticks(offerFor, dt, Math.ceil)) });
+      const key = keyOf(info), stages = definition.lifecycle.progression ? definition.stages : undefined;
+      entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
+        stages, evidence: compileEvidence(stages, key),
+        duration: offerFor === undefined ? null : Math.max(1, W.storyTriggers.ticks(offerFor, world.dt, Math.ceil)) });
     }
     if (!entries.size) return null;
     const order = [...entries.keys()].sort();
@@ -91,8 +93,11 @@
       }
     }
 
-    function advance(previous, starts, commands, tick, emit) {
+    function advance(previous, starts, commands, tick, emit, events, query) {
       let state = previous;
+      const sourceLength = events.length;
+      let indexed;
+      const eventsOf = kind => (indexed ??= W.storyEvidence.index(events, sourceLength)).get(kind) ?? [];
       const matched = new Map();
       for (const start of starts) {
         const key = keyOf(start);
@@ -124,7 +129,18 @@
         }
       }
       for (const key of order) {
-        const def = entries.get(key), prior = state[key], source = matched.get(key);
+        const def = entries.get(key), prior = previous[key], source = matched.get(key);
+        if (statusOf(prior) === 'active' && prior.flow?.current) {
+          const { stage, visit } = prior.flow.current, rules = def.evidence.get(stage);
+          if (rules) {
+            const changes = W.storyStages.confirm(prior.flow, rules, tick, eventsOf, query);
+            if (Object.keys(changes).length) {
+              save(key, { ...prior, flow: W.storyStages.withObjectives(prior.flow, changes) });
+              for (const [objective, change] of Object.entries(changes))
+                emit('story-objective-resolved', { ...def.info, stage, visit, objective, ...change });
+            }
+          }
+        }
         if (prior === null && (!def.triggers || source)) {
           transition(key, 'available', source ? 'trigger-matched' : 'authored-offer', undefined, emit, source);
           if (def.activation === 'automatic') transition(key, 'active', 'automatic-activation');

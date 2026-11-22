@@ -1,0 +1,65 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "relief-crossing",
+  "title": "The Relief Crossing",
+  "stories": {
+    "evacuate": {
+      "kind": "questlet",
+      "title": "Evacuate across the flood channel",
+      "lifecycle": { "progression": true },
+      "entry": "prepare",
+      "stages": {
+        "prepare": {
+          "title": "Prepare the crossing",
+          "objectives": {
+            "deliver-crates": {
+              "title": "Deliver four medical crates to the landing",
+              "evidence": {
+                "event": {
+                  "kind": "transfer",
+                  "system": "world",
+                  "where": {
+                    "all": [
+                      { "path": "/from", "value": "supplies/depot" },
+                      { "path": "/to", "value": "supplies/landing" },
+                      { "path": "/applied", "op": "gte", "value": 4 }
+                    ]
+                  }
+                }
+              }
+            },
+            "mend-brace": {
+              "title": "Repair the crossing brace",
+              "evidence": {
+                "event": { "kind": "body-repaired", "system": "rig", "where": { "path": "/body", "value": "brace" } }
+              }
+            }
+          },
+          "next": { "cross": { "stage": "crossing" } }
+        },
+        "crossing": {
+          "title": "Reach higher ground",
+          "objectives": {
+            "party-safe": {
+              "title": "Get both evacuees across the safety line",
+              "evidence": {
+                "state": {
+                  "field": "crew/agents",
+                  "when": {
+                    "all": [
+                      { "path": "/scout/position/0", "op": "gte", "value": 1 },
+                      { "path": "/medic/position/0", "op": "gte", "value": 1 }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "next": { "close": { "outcome": "sheltered" } }
+        }
+      },
+      "outcomes": { "sheltered": { "title": "The party reached shelter" } }
+    }
+  }
+}

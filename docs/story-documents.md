@@ -23,6 +23,7 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 | Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
 | Role | `kind` | `ref` to a document reference of the same kind |
 | Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` when stage progression is enabled |
+| Objective | `title` | `summary`, `refs`, `optional`, `evidence` |
 | Outcome | `title` | `summary`, `refs`, `status` when stage progression is enabled |
 | Reference | `kind`, `id` | |
 
@@ -85,12 +86,12 @@ node cli/ink-studio.js sim replay crossing.run.json
 
 Set `"lifecycle": { "progression": true }` to run the authored stage graph. First activation enters `entry` at visit `1`. Every stage link opens a new visit, including links back to the same stage. This lets a loop revisit a problem with fresh objectives. Suspension keeps the current visit and progress intact.
 
-- Define `objectives` on a stage as a map keyed by stable IDs. Each objective needs a `title` and can have `summary`, `refs`, and `optional: true`. All required objectives are open together and can complete in any order.
+- Define `objectives` on a stage as a map keyed by stable IDs. Each objective needs a `title` and can have `summary`, `refs`, `optional: true`, and `evidence`. All required objectives are open together and can complete in any order.
 - `next` names alternative branches. Each branch points to a stage or outcome. Multiple branches can point to the same stage. Give an optional stage a detour branch and provide a route that bypasses it.
 - A branch opens after all required objectives and any listed in its optional `requires` array are complete. `requires` names objectives on the departing stage. This lets an optional objective unlock a particular route, such as a service key opening an upper entrance.
 - An outcome ends the story with `completed` by default, or `failed` if the outcome specifies `"status": "failed"`. Use `world/story-transition` for outside interruptions such as failure, withdrawal, expiry, or suspension. Choose an ending branch to complete the story or select a named outcome.
 
-Use ordinary world commands to resolve objectives or choose a branch. Include the `stage` and `visit` from the lifecycle probe or `story-stage-entered` event. A request for an older visit cannot affect a new one. These commands also work in event actions, which can map a world event to an objective result through the existing bindings.
+Use ordinary world commands to resolve manual objectives and choose branches. Include the `stage` and `visit` from the lifecycle probe or `story-stage-entered` event. A request for an older visit cannot affect a new one. Event actions can also issue these commands.
 
 ```json
 [
@@ -99,7 +100,7 @@ Use ordinary world commands to resolve objectives or choose a branch. Include th
 ]
 ```
 
-`world/story-objective` accepts `completed` or `skipped`. Only optional objectives can be skipped. Unresolved optional objectives that do not block the chosen branch appear in the branch event's `skipped` list. Stage progress changes while the story is active. A well-formed request that cannot apply emits `story-progress-rejected`, with pending objective IDs when requirements are missing. Objective results are supplied by commands or event actions.
+`world/story-objective` accepts `completed` for manual objectives and `skipped` for optional objectives. Unresolved optional objectives that do not block the chosen branch appear in the branch event's `skipped` list. Stage progress changes while the story is active. A well-formed request that cannot apply emits `story-progress-rejected`, with pending objective IDs when requirements are missing.
 
 `world/story-lifecycle` exposes `flow.current` and the last 64 closed visits in `flow.route`. Closed visits retain objective results, reasons, skipped IDs, the selected branch, and its target. An authored ending clears `flow.current` and records the outcome on the story. The world publishes `story-stage-entered`, `story-objective-resolved`, and `story-branch-chosen` in commit order. Checkpoints, forks, and replay preserve the route.
 
@@ -113,6 +114,34 @@ node cli/ink-studio.js sim fork vault-start.json --ticks 7 --actions examples/st
 node cli/ink-studio.js sim fork vault-start.json --ticks 10 --actions examples/story-documents/signal-vault-upper.actions.json --record upper.run.json
 node cli/ink-studio.js probe lower.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe upper.run.json --field world/story-lifecycle
+```
+
+## Confirm objectives with evidence
+
+Add one `evidence` rule to an objective. Ink completes it when the current visit receives a matching event or observes a matching query result. Once configured, completion requires the rule to match. An optional objective can still be skipped explicitly.
+
+| Proof | Objective's `evidence` field |
+| --- | --- |
+| A repair event from the mechanics system named `rig` | `{"event":{"kind":"body-repaired","system":"rig","where":{"path":"/body","value":"brace"}}}` |
+| At least four crates in the landing account | `{"state":{"field":"world/account","args":{"account":"supplies/landing"},"select":"/balance","when":{"op":"gte","value":4}}}` |
+
+Event rules take the first published record matching `kind`, optional `system`, and optional `where`. State rules read a qualified query `field` with optional `at` and `args`. Use `select` with a JSON Pointer or path array to extract a value before applying `when`. The sample must be available and contain the selected value. A query can confirm a condition that is already true when the visit first samples it.
+
+Ink checks the visit that was active at the start of the tick, using that tick's solver events and state. New and resumed visits start observing on the next tick. Suspended visits take no samples, and events from earlier ticks never count. Evidence resolves before story commands, so a branch choice on the same tick can use a newly confirmed objective. The resulting `story-objective-resolved` event can drive event actions.
+
+Each automatic result has reason `evidence-confirmed` and a `receipt`. An event receipt contains the source record, including its ID, tick, system, and payload. A state receipt contains the tick, query field, supplied `at`, `args` and `select`, and the sampled value. Inspect receipts in the resolution event and in `world/story-lifecycle` under `flow.current.objectives` or `flow.route[].objectives`. They survive checkpoints and replay even with world event history disabled.
+
+The world supports up to 256 evidence rules. Each receipt must fit within 16,384 JSON characters. Use `select` to keep a query receipt focused on the fact it proves.
+
+### Replay The Relief Crossing
+
+In [The Relief Crossing](../examples/story-documents/relief-crossing.world.json), a shipment applies only two of the four requested crates, so the early branch choice reports both objectives pending. After the depot is replenished, the ledger confirms a full shipment on tick 5. A staffed worksite straightens the bent brace on tick 7. The scout and medic then cross the safety line, which the agent query confirms on tick 19. The resulting event closes the questlet on tick 20.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/relief-crossing.world.json --ticks 32 --record relief-crossing.run.json
+node cli/ink-studio.js probe relief-crossing.run.json --field world/story-lifecycle
+node cli/ink-studio.js probe relief-crossing.run.json --field world/history --args '{"where":{"path":"/kind","value":"story-objective-resolved"}}'
+node cli/ink-studio.js sim replay relief-crossing.run.json
 ```
 
 ## Replay the demos

@@ -55,6 +55,14 @@ const StoryDocument = (() => {
     if (Object.hasOwn(value, 'refs')) links(value.refs, references, `${at}.refs`, 'reference');
   }
 
+  function dataPath(path, at) {
+    const safeKey = key => typeof key === 'string' && key.length > 0 && !['constructor', 'prototype', '__proto__'].includes(key);
+    const parts = typeof path === 'string' && path.startsWith('/') && !/~(?![01])/u.test(path) ?
+      path.slice(1).split('/').map(key => key.replace(/~1/g, '/').replace(/~0/g, '~')) : path;
+    if (!Array.isArray(parts) || !parts.length || parts.length > 64 || Array.from(parts).some(key =>
+      !(safeKey(key) || Number.isSafeInteger(key) && key >= 0))) invalid(at, 'expected a valid path array or JSON Pointer');
+  }
+
   function condition(rule, at, depth = 0) {
     record(rule, at);
     if (depth >= 16) invalid(at, 'condition nesting exceeds 16 levels');
@@ -69,13 +77,7 @@ const StoryDocument = (() => {
     }
     fields(rule, at, [], ['path', 'op', 'value']);
     const { path, op = 'eq', value } = rule;
-    const safeKey = key => typeof key === 'string' && key.length > 0 && !['constructor', 'prototype', '__proto__'].includes(key);
-    if (Object.hasOwn(rule, 'path')) {
-      const parts = typeof path === 'string' && path.startsWith('/') && !/~(?![01])/u.test(path) ?
-        path.slice(1).split('/').map(key => key.replace(/~1/g, '/').replace(/~0/g, '~')) : path;
-      if (!Array.isArray(parts) || !parts.length || parts.length > 64 || Array.from(parts).some(key =>
-        !(safeKey(key) || Number.isSafeInteger(key) && key >= 0))) invalid(`${at}.path`, 'expected a valid path array or JSON Pointer');
-    }
+    if (Object.hasOwn(rule, 'path')) dataPath(path, `${at}.path`);
     if (!['eq', 'ne', 'lt', 'lte', 'gt', 'gte', 'in', 'exists'].includes(op)) invalid(`${at}.op`, 'unknown condition operator');
     if (op === 'exists') {
       if (Object.hasOwn(rule, 'value')) invalid(`${at}.value`, 'exists takes no value');
@@ -83,47 +85,66 @@ const StoryDocument = (() => {
       op === 'in' && !Array.isArray(value)) invalid(`${at}.value`, 'expected a value for ' + op);
   }
 
+  const worldName = value => safeId(value) && value.length <= 96;
+
+  function eventSource(rule, at) {
+    fields(rule, at, ['kind'], ['system', 'where']);
+    const { kind, system, where } = rule;
+    if (!worldName(kind) || ['story-started', 'event-action-scheduled'].includes(kind))
+      invalid(`${at}.kind`, 'expected a source event kind');
+    if (Object.hasOwn(rule, 'system') && !worldName(system)) invalid(`${at}.system`, 'invalid system ID');
+    if (Object.hasOwn(rule, 'where')) condition(where, `${at}.where`);
+  }
+
+  function stateSource(rule, location, selectable = false) {
+    fields(rule, location, ['field', 'when'], ['at', 'args', ...(selectable ? ['select'] : [])]);
+    const { field, when, args, at, select } = rule;
+    if (typeof field !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(field) || field === 'world/story-triggers')
+      invalid(`${location}.field`, 'expected a qualified world query field');
+    if (Object.hasOwn(rule, 'args')) record(args, `${location}.args`);
+    if (Object.hasOwn(rule, 'select')) dataPath(select, `${location}.select`);
+    if (Object.hasOwn(rule, 'at')) {
+      const point = value => Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
+      if (!point(at)) {
+        if (at && Object.hasOwn(at, 'point')) {
+          fields(at, `${location}.at`, ['point']);
+          if (!point(at.point)) invalid(`${location}.at.point`, 'expected a finite XYZ point');
+        } else {
+          fields(at, `${location}.at`, ['entity'], ['socket']);
+          if (!worldName(at.entity) || Object.hasOwn(at, 'socket') && !worldName(at.socket))
+            invalid(`${location}.at`, 'invalid entity or socket ID');
+        }
+      }
+    }
+    condition(when, `${location}.when`);
+  }
+
+  function evidence(rule, at) {
+    record(rule, at);
+    if (Object.hasOwn(rule, 'event')) {
+      fields(rule, at, ['event']);
+      eventSource(rule.event, `${at}.event`);
+    } else {
+      fields(rule, at, ['state']);
+      stateSource(rule.state, `${at}.state`, true);
+    }
+  }
+
   function triggers(story, at) {
     const table = `${at}.triggers`;
-    const worldName = value => safeId(value) && value.length <= 96;
     for (const [name, rule] of entries(story.triggers, table, true)) {
       const location = `${table}.${name}`;
       record(rule, location);
       if (Object.hasOwn(rule, 'event')) {
         fields(rule, location, ['event'], ['count', 'within']);
-        const event = `${location}.event`;
-        fields(rule.event, event, ['kind'], ['system', 'where']);
-        const { kind, system, where } = rule.event;
-        if (!worldName(kind) || ['story-started', 'event-action-scheduled'].includes(kind))
-          invalid(`${event}.kind`, 'expected a source event kind');
-        if (Object.hasOwn(rule.event, 'system') && !worldName(system)) invalid(`${event}.system`, 'invalid system ID');
-        if (Object.hasOwn(rule.event, 'where')) condition(where, `${event}.where`);
+        eventSource(rule.event, `${location}.event`);
         const { count = 1, within } = rule;
         if (!Number.isInteger(count) || count < 1 || count > 128) invalid(`${location}.count`, 'expected an integer from 1 to 128');
         if (count > 1 && !(Number.isFinite(within) && within > 0) || count === 1 && Object.hasOwn(rule, 'within'))
           invalid(`${location}.within`, 'supply a positive window in seconds for counts greater than one');
       } else {
         fields(rule, location, ['state'], ['hold']);
-        const state = `${location}.state`;
-        fields(rule.state, state, ['field', 'when'], ['at', 'args']);
-        const { field, when, args, at } = rule.state;
-        if (typeof field !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(field) || field === 'world/story-triggers')
-          invalid(`${state}.field`, 'expected a qualified world query field');
-        if (Object.hasOwn(rule.state, 'args')) record(args, `${state}.args`);
-        if (Object.hasOwn(rule.state, 'at')) {
-          const point = value => Array.isArray(value) && value.length === 3 && Array.from(value).every(Number.isFinite);
-          if (!point(at)) {
-            if (at && Object.hasOwn(at, 'point')) {
-              fields(at, `${state}.at`, ['point']);
-              if (!point(at.point)) invalid(`${state}.at.point`, 'expected a finite XYZ point');
-            } else {
-              fields(at, `${state}.at`, ['entity'], ['socket']);
-              if (!worldName(at.entity) || Object.hasOwn(at, 'socket') && !worldName(at.socket))
-                invalid(`${state}.at`, 'invalid entity or socket ID');
-            }
-          }
-        }
-        condition(when, `${state}.when`);
+        stateSource(rule.state, `${location}.state`);
         if (Object.hasOwn(rule, 'hold') && !(Number.isFinite(rule.hold) && rule.hold > 0))
           invalid(`${location}.hold`, 'expected a positive duration in seconds');
       }
@@ -195,10 +216,11 @@ const StoryDocument = (() => {
         if (objectiveRows.length > 64) invalid(`${location}.objectives`, 'a stage supports up to 64 objectives');
         for (const [name, objective] of objectiveRows) {
           const place = `${location}.objectives.${name}`;
-          fields(objective, place, ['title'], ['summary', 'refs', 'optional']);
+          fields(objective, place, ['title'], ['summary', 'refs', 'optional', 'evidence']);
           labelsAndRefs(objective, place, references);
           if (Object.hasOwn(objective, 'optional') && typeof objective.optional !== 'boolean')
             invalid(`${place}.optional`, 'expected a boolean');
+          if (Object.hasOwn(objective, 'evidence')) evidence(objective.evidence, `${place}.evidence`);
         }
         for (const [choice, target] of entries(stage.next, `${location}.next`, true)) {
           const edge = `${location}.next.${choice}`;
