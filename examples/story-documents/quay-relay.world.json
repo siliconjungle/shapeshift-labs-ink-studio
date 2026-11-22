@@ -1,0 +1,51 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "quay-relay",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "quay-relay.json" }],
+  "storyBindings": { "quay-relay/delivery": {
+    "loader": { "kind": "courier", "value": { "system": "crew", "agent": "mira", "generation": 2 } },
+    "relief": { "kind": "courier", "value": { "system": "crew", "agent": "niko", "generation": 3 } }
+  } },
+  "systems": {
+    "booking": { "kind": "reservations", "config": {
+      "pools": { "lift": { "capacity": 1 }, "landing": { "capacity": 1 } }
+    } },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-2, -0.5, -1], "max": [2, 1, 1] },
+      "ground": 0, "cell": 0.2,
+      "species": { "worker": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+      "agents": {
+        "keeper": { "species": "worker", "position": [1, 0, 0] },
+        "mira": { "species": "worker", "position": [-1, 0, 0] },
+        "niko": { "species": "worker", "position": [0, 0, 0] }
+      },
+      "orders": { "tasks": {
+        "load": { "steps": [
+          { "op": "transfer", "from": "supplies/depot", "to": "supplies/staging", "amount": 2, "mode": "exact" },
+          { "op": "wait", "ticks": 40 }
+        ] },
+        "finish": { "steps": [
+          { "op": "wait", "ticks": 2 },
+          { "op": "transfer", "from": "supplies/staging", "to": "supplies/pier", "amount": 2, "mode": "exact" }
+        ] },
+        "inspect-landing": { "steps": [{ "op": "wait", "ticks": 28 }] },
+        "stocktake": { "steps": [{ "op": "wait", "ticks": 6 }] }
+      } }
+    } },
+    "supplies": { "kind": "store", "config": { "accounts": {
+      "depot": { "resource": "medicine", "units": "crate", "type": "integer", "initial": 2 },
+      "staging": { "resource": "medicine", "units": "crate", "type": "integer", "initial": 0 },
+      "pier": { "resource": "medicine", "units": "crate", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "eventActions": {
+    "confirm-delivery": { "on": { "kind": "story-objective-resolved", "system": "world", "where": { "all": [
+      { "path": "/document", "value": "quay-relay" }, { "path": "/story", "value": "delivery" },
+      { "path": "/objective", "value": "received" }
+    ] } }, "actions": [{ "action": "world/story-choose", "args": {
+      "document": "quay-relay", "story": "delivery", "stage": "transfer", "visit": 1, "branch": "done", "reason": "both-legs-verified"
+    } }] }
+  }
+}

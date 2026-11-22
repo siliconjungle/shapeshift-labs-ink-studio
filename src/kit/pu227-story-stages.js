@@ -48,12 +48,12 @@
         'Story objective requires world evidence to complete: ' + args.objective);
   }
 
-  function confirm(flow, rules, tick, eventsOf, query) {
+  function confirm(flow, rules, tick, eventsOf, query, credit) {
     const changes = {}, progress = { ...flow.current.progress };
     for (const [id, rule] of rules) {
       if (rule.options || own(flow.current.objectives, id)) continue;
       const result = W.storyEvidence.observe(rule, tick, eventsOf, query, progress[id]);
-      if (result.change) changes[id] = result.change;
+      if (result.change) changes[id] = credit&&result.change.result==='completed'?{...result.change,credit}:result.change;
       if (result.progress) progress[id] = result.progress;
       else delete progress[id];
     }
@@ -73,7 +73,7 @@
     return withObjectives(flow, {}, {});
   }
 
-  function advance(action, definition, flow, args, tick, readChild) {
+  function advance(action, definition, flow, args, tick, readChild, credit) {
     const { current } = flow;
     if (args.stage !== current.stage || args.visit !== current.visit) return { rejected: 'stale-stage-visit' };
     const stage = definition.stages[current.stage], { reason } = args;
@@ -82,7 +82,7 @@
       const { type, optional } = stage.objectives[objective], result = selected ? 'completed' : args.result;
       if (own(current.objectives, objective)) return { rejected: 'objective-already-resolved' };
       if (result === 'skipped' && !optional) return { rejected: 'objective-required' };
-      const change = { result, reason, tick, ...(type !== undefined && { type }),
+      const change = { result, reason, tick, ...(type !== undefined && { type }), ...(credit&&result==='completed'&&{credit}),
         ...(selected && { receipt: {kind:'choice', option, tick} }) };
       const progress = { ...current.progress };
       delete progress[objective];
@@ -104,7 +104,7 @@
       branch: { branch: args.branch, reason, target, skipped, ...(children && {children}) } };
   }
 
-  function validate(flow, definition, status, tick, firstActivation, reasonOK, message, readChild, readRequest) {
+  function validate(flow, definition, status, tick, firstActivation, reasonOK, message, readChild, readRequest, creditAt) {
     check(fields(flow, ['current', 'dropped', 'route']) && at(flow.dropped, 0, Number.MAX_SAFE_INTEGER - limit) &&
       Array.isArray(flow.route) && flow.route.length <= limit && (!flow.dropped || flow.route.length === limit), message);
     function visit(row, index, deadline, nextStage, after) {
@@ -117,8 +117,10 @@
         const objective = own(stage.objectives, id) && stage.objectives[id];
         const rule = rules?.get(id), failed = change?.result === 'failed';
         const proof = change?.result === 'skipped' ? undefined : rule;
-        const keys = ['reason', ...(proof ? ['receipt'] : []), 'result', 'tick', ...(rule?.type ? ['type'] : [])];
+        const credit = change?.result==='completed' ? creditAt?.(change.tick) : undefined;
+        const keys = [...(credit?['credit']:[]), 'reason', ...(proof ? ['receipt'] : []), 'result', 'tick', ...(rule?.type ? ['type'] : [])];
         check(objective && fields(change, keys) && change.type === rule?.type &&
+          equal(change.credit,credit)&&
           (change.result === 'completed' || change.result === 'skipped' && objective.optional || failed && rule?.failOnViolation) &&
           reasonOK(change.reason) && at(change.tick, row.enteredAt, deadline), message);
         if (proof?.options) {

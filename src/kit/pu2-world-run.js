@@ -341,6 +341,7 @@
       plan.storyTriggers = W.storyTriggers.compile(documents, world, systems);
       plan.storyReferences = W.storyReferences.compile(documents, world, systems);
       plan.storyCommitments = W.storyCommitments.compile(documents, systems);
+      plan.storyHandoffs = W.storyHandoffs.compile(documents, systems);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
       plan.storyDiagnostics = freeze(documents.flatMap(document =>
         StoryAnalysis.analyze(document).diagnostics.map(issue => ({document:document.id, ...issue}))));
@@ -465,6 +466,7 @@
       ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
       ...(plan.storyCommitments && {commitments:plan.storyCommitments}),
+      ...(plan.storyHandoffs && {handoffs:plan.storyHandoffs}),
       ...(plan.storyRoles && Object.keys(plan.storyRoles.roles).length > 0 && {roles:plan.storyRoles.roles})});
   }
   function modelInterface(source) {
@@ -487,7 +489,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyRoles,storyTemplates,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storyRoles,storyTemplates,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -552,6 +554,7 @@
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
         ...(storyCommitments && {storyCommitmentDefinitions:storyCommitments}),
+        ...(storyHandoffs && {storyHandoffDefinitions:storyHandoffs}),
         ...(storyFeasibilityState && {storyFeasibility:storyFeasibilityState,storyFeasibilityRules:storyLifecycle.feasibility}),
         ...(storyReferenceState && {storyReferences:storyReferenceState}),
         ...(storyRoles && {storyRoles:storyRoles.roles}),
@@ -1246,17 +1249,41 @@
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
-      function dispatchCommitment(actor,order) {
+      function dispatchCommitment(actor,order,from) {
         const {system,agent,generation} = actor, scope = W.storyCommitments;
         if (!detailed(system)||W.simulationAggregate.isAggregate(nextStates[system]))
           return {check:scope.blocked('simulation','defer','actor-not-detailed')};
         const notes = [];
         const stage = publish => (kind, detail, parents) => notes.push(()=>publish(kind,detail,parents));
         let trial = {...nextStates};
-        const ctx = context(system,nextWorld,Object.freeze({...trial}),at,{},stage(systemEmit(system)),completedQuery());
-        trial[system] = rootedState(systems[system].actions['issue-order'](trial[system],{agent,generation,order},ctx));
-        const probeTrial = (name,args) => Q.create({...completedView(),states:visibleStates(trial),
-          [W.simulationAggregate.rawStates]:trial},systems,projection).probe(name,undefined,args);
+        const trialQuery = () => Q.create({...completedView(),states:visibleStates(trial),
+          [W.simulationAggregate.rawStates]:trial},systems,projection);
+        const probeTrial = (name,args) => trialQuery().probe(name,undefined,args);
+        function contextFor(name) {
+          return context(name,nextWorld,Object.freeze({...trial}),at,{},stage(systemEmit(name)),trialQuery());
+        }
+        let release;
+        if (from) {
+          const {system:prior,agent,generation,sequence} = from;
+          const book = probeTrial(prior+'/orders',{agent,generation}).value;
+          const pending = book&&[book.active,...book.paused,...book.queue].find(row=>row?.sequence===sequence);
+          const previous = pending??book?.outcomes.find(row=>row.sequence===sequence);
+          const evidence = previous?undefined:[events,lastEvents,history].map(rows=>rows.find(row=>
+            row.system===prior&&row.agent===agent&&row.generation===generation&&row.sequence===sequence&&
+            Array.isArray(row.results)&&['order-cancelled','order-failed','order-succeeded'].includes(row.kind))).find(Boolean);
+          const work = previous?{task:previous.task,phase:previous.phase,nextStep:previous.step,results:previous.results}:
+            evidence?{task:evidence.task,phase:evidence.kind.slice(6),nextStep:evidence.results.length,results:evidence.results}:null;
+          release = {status:book?'settled':'unavailable',work};
+          if (pending) {
+            if (!detailed(prior)||W.simulationAggregate.isAggregate(trial[prior]))
+              return {check:scope.blocked('release','defer','outgoing-actor-not-detailed')};
+            trial[prior] = rootedState(systems[prior].actions['cancel-order'](trial[prior],{agent,generation,order:sequence},contextFor(prior)));
+            if (pending.reservation)
+              trial = reservations.run(trial,{tick:at,emit:name=>stage(makeEmit(name))},undefined,pending.reservation.board);
+            release = {status:'cancelled',work};
+          }
+        }
+        trial[system] = rootedState(systems[system].actions['issue-order'](trial[system],{agent,generation,order},contextFor(system)));
         const sequence = probeTrial(system+'/orders',{agent,generation}).value.active.sequence;
         const owner = {...actor,sequence};
         let reservation;
@@ -1271,7 +1298,7 @@
         nextStates = trial;
         completed = undefined;
         for (const publish of notes) publish();
-        return {order:owner,...(reservation&&{check:reservation})};
+        return {order:owner,...(reservation&&{check:reservation}),...(release&&{release})};
       }
       if (storyReferences) {
         nextStoryReferences = storyReferences.advance(storyReferenceState,at,completedQuery(),events,storyLifecycleState,makeEmit('world'));

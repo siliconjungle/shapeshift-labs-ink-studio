@@ -11,21 +11,26 @@
     checks.some(row=>row.status==='defer')?'deferred':'accepted';
   const reasons = report => report.checks.filter(row=>row.status!=='pass').map(({name,status,reason})=>[name,status,reason]);
 
+  function checkProposal(spec,systems,key) {
+    const {actor:{system,...actor},order} = spec;
+    const roster = own(systems,system)&&systems[system];
+    check(roster?.fields?.['commitment-terms']&&roster.actions?.['issue-order']&&roster.actions?.['cancel-order'],
+      'Unknown story commitment roster '+system+' in '+key);
+    try { roster.checkAction('issue-order',{...actor,order}); }
+    catch(error) { throw new Error('Invalid story commitment order in '+key+': '+error.message); }
+    if (order.reservation) {
+      const board = order.reservation.board;
+      check(own(systems,board)&&systems[board].reservationBoard,'Unknown story commitment reservation board '+board);
+    }
+  }
+
   function compile(documents, systems) {
     const definitions = {};
     for (const document of documents) for (const [story,definition] of Object.entries(document.stories)) {
       const spec = definition.lifecycle?.commitment;
       if (!spec) continue;
-      const key = document.id+'/'+story, {actor:{system,...actor},order} = spec;
-      const roster = own(systems,system)&&systems[system];
-      check(roster?.fields?.['commitment-terms']&&roster.actions?.['issue-order']&&roster.actions?.['cancel-order'],
-        'Unknown story commitment roster '+system+' in '+key);
-      try { roster.checkAction('issue-order',{...actor,order}); }
-      catch(error) { throw new Error('Invalid story commitment order in '+key+': '+error.message); }
-      if (order.reservation) {
-        const board = order.reservation.board;
-        check(own(systems,board)&&systems[board].reservationBoard,'Unknown story commitment reservation board '+board);
-      }
+      const key = document.id+'/'+story;
+      checkProposal(spec,systems,key);
       definitions[key] = spec;
     }
     return Object.keys(definitions).length?freeze(definitions):undefined;
@@ -79,7 +84,8 @@
   function releases(definitions,state,tick) {
     return Object.keys(definitions??{}).sort().flatMap(story=>{
       const row = state[story], end = row?.transitions.at(-1);
-      return end?.tick===tick-1&&terminal.has(end.to)&&row.commitment?.order?[{story,order:row.commitment.order}]:[];
+      const order = W.storyHandoffs.assignment(row);
+      return end?.tick===tick-1&&terminal.has(end.to)&&order?[{story,order}]:[];
     });
   }
 
@@ -108,10 +114,14 @@
   }
 
   function inspect(definitions,lifecycle,{story}) {
-    const row = key => ({proposal:definitions[key],decision:lifecycle?.[key]?.commitment??null});
+    const row = key => {
+      const state = lifecycle?.[key];
+      return {proposal:definitions[key],decision:state?.commitment??null,
+        ...(state?.handoffs?.transfers.length&&{assignment:W.storyHandoffs.assignment(state)})};
+    };
     if (story!==undefined) return own(definitions,story)?Q.ok(row(story)):Q.missing('unknown story commitment','missing');
     return Q.ok(Object.fromEntries(Object.keys(definitions??{}).sort().map(key=>[key,row(key)])));
   }
 
-  W.storyCommitments = Object.freeze({compile,attempt,blocked,pass,reasons,releases,valid,inspect});
+  W.storyCommitments = Object.freeze({compile,checkProposal,attempt,blocked,pass,reasons,releases,valid,inspect});
 })(KIT);

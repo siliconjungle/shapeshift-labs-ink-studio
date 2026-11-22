@@ -8,7 +8,7 @@
     completed: [], failed: [], withdrawn: [], expired: []
   });
   const limit = 64;
-  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose', 'story-select']);
+  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose', 'story-select', 'story-handoff', 'story-cancel-handoff']);
   const reasonOK = value => typeof value === 'string' && value.length <= 256 && value.trim().length > 0;
   const fields = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
   const allowed = (from, to) => from === null ? to === 'available' : own(destinations, from) && destinations[from].includes(to);
@@ -38,6 +38,7 @@
         feasibility: compileFeasibility(definition.lifecycle.feasibility, key),
         liveReferences: definition.lifecycle.liveReferences,
         commitment: definition.lifecycle.commitment,
+        handoffs: definition.lifecycle.handoffs,
         clock: W.storyDeadlines.compile(definition.lifecycle, world.dt),
         cleanup: W.storyCleanup.compile(definition.lifecycle.cleanup, systems, key) });
     }
@@ -47,10 +48,12 @@
     const cleanupOrder = order.filter(key => entries.get(key).cleanup);
     const gateKeys = order.filter(key => entries.get(key).feasibility);
     const commitmentKeys = order.filter(key => entries.get(key).commitment);
+    const handoffKeys = order.filter(key => entries.get(key).handoffs);
     const feasibility = gateKeys.length ? freeze(Object.fromEntries(gateKeys.map(key => [key,entries.get(key).feasibility]))) : undefined;
 
     function checkAction(action, args) {
-      const extra = action === 'story-transition' ? ['to', 'outcome'] :
+      const handoff = action==='story-handoff'||action==='story-cancel-handoff';
+      const extra = handoff ? ['revision',...(action==='story-handoff'?['proposal']:[])] : action === 'story-transition' ? ['to', 'outcome'] :
         action === 'story-choose' ? ['stage', 'visit', 'branch'] :
         ['stage', 'visit', 'objective', action === 'story-select' ? 'option' : 'result'];
       check(fields(args, ['document', 'story', 'reason', ...extra]) &&
@@ -58,6 +61,12 @@
         typeof args.story === 'string' && !args.story.includes('/'), 'Story transition needs document and story IDs');
       const def = entries.get(keyOf(args));
       check(def, 'Unknown story with lifecycle ' + keyOf(args));
+      if (handoff) {
+        check(def.handoffs&&Number.isSafeInteger(args.revision)&&args.revision>=0&&reasonOK(args.reason)&&
+          (action==='story-cancel-handoff'||typeof args.proposal==='string'&&own(def.handoffs,args.proposal)),
+          'Story handoff needs an authored proposal, current assignment revision and a reason');
+        return;
+      }
       if (action !== 'story-transition') {
         check(def.stages && reasonOK(args.reason), 'Story progress needs enabled stage progression and a reason');
         W.storyStages.checkAction(action, def.stages, args);
@@ -116,7 +125,7 @@
           check(W.storyDeadlines.valid(def.clock, row, tick), message);
           continue;
         }
-        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment']) &&
+        check(fields(row, ['transitions', 'dropped', 'source', 'flow', 'deadlines', 'parent', 'cleanup', 'commitment', 'handoffs']) &&
           Number.isSafeInteger(row.dropped) && row.dropped >= 0 &&
           Array.isArray(row.transitions) && row.transitions.length > 0 && row.transitions.length <= limit &&
           (!row.dropped || row.transitions.length === limit), message);
@@ -135,6 +144,7 @@
         const cutOffBeforeOffer = previous.from === null && previous.to === 'expired';
         check(W.storyDeadlines.valid(def.clock, row, tick) && W.storyCleanup.valid(row.cleanup, def.cleanup, previous, tick) &&
           W.storyCommitments.valid(def.commitment,row,tick) &&
+          W.storyHandoffs.valid(def.handoffs,row,tick,reasonOK) &&
           (cutOffBeforeOffer ? row.source === undefined : validateEvidence(row, def, tick)), message);
       }
       check(feasibility ? record(gates) && equal(Object.keys(gates).sort(),gateKeys) : gates === undefined,
@@ -177,7 +187,8 @@
           const activated = row.transitions.find(change => change.from === 'available' && change.to === 'active');
           W.storyStages.validate(row.flow,def,previous,previous.deadline ? previous.tick - 1 : tick,activated?.tick,
             reasonOK,message,id => state[def.info.document + '/' + id],
-            id => gates?.[def.info.document + '/' + id]?.request.parent);
+            id => gates?.[def.info.document + '/' + id]?.request.parent,
+            def.handoffs ? tick=>W.storyHandoffs.creditAt(row,tick) : undefined);
         }
         else check(!own(row, 'flow'), message);
       }
@@ -199,7 +210,7 @@
 
     function advance(previous, starts, commands, tick, emit, events, query, previousGates, references, dispatch) {
       let state = previous, gates = previousGates, queuedOpens = [];
-      const requests = new Map();
+      const requests = new Map(), handoffRequests = new Map(), H = W.storyHandoffs;
       const sourceLength = events.length;
       let indexed;
       const eventsOf = kind => (indexed ??= W.storyEvidence.index(events, sourceLength)).get(kind) ?? [];
@@ -212,6 +223,12 @@
       function save(key, row) {
         if (state === previous) state = { ...previous };
         state[key] = row;
+      }
+      function noteHandoff(key,report,publish = emit) {
+        const row = state[key], prior = row.handoffs?.last;
+        save(key,H.update(row,report));
+        if (report.decision!=='deferred'||prior?.decision!=='deferred'||!equal(H.blockers(prior),H.blockers(report)))
+          publish('story-handoff-decision',{...entries.get(key).info,...report});
       }
       const policy = key => W.storyReferences.decision(references?.[key]);
       function applyReference(key,publish = emit) {
@@ -267,8 +284,17 @@
         }
       }
       function transition(key, to, reason, outcome, options = {}) {
-        const prior = state[key], from = statusOf(prior), def = entries.get(key), { info, stages, clock } = def;
+        let prior = state[key];
+        const from = statusOf(prior), def = entries.get(key), { info, stages, clock } = def;
         const { publish = emit, source = prior?.source, deadline, parent = prior?.parent, reference } = options;
+        if (def.handoffs&&H.closed.has(to)) {
+          const request = handoffRequests.get(key)?.request??(H.pending(prior)?prior.handoffs.last:undefined);
+          if (request) {
+            noteHandoff(key,H.cancel(request,tick,'story-closed'),publish);
+            handoffRequests.delete(key);
+            prior = state[key];
+          }
+        }
         const started = from === 'available' && to === 'active';
         const flow = started && stages ? W.storyStages.initial(info.stage,tick) :
           to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
@@ -281,6 +307,7 @@
         save(key, { transitions: transitions.slice(overflow), dropped: (prior?.dropped ?? 0) + overflow,
           ...(source && { source }), ...(flow && { flow }), ...(deadlines && { deadlines }), ...(parent && {parent}),
           ...(prior?.commitment && {commitment:prior.commitment}),
+          ...(prior?.handoffs && {handoffs:prior.handoffs}),
           ...(cleanup && {cleanup}) });
         const stage = flow?.current ?? flow?.route.at(-1);
         const link = parent ? { parent } : {};
@@ -304,6 +331,7 @@
         else transition(key,def.outcomes[target.outcome].status ?? 'completed',reason,target.outcome,{ publish });
       }
       const readChild = def => id => state[def.info.document + '/' + id];
+      const credit = (def,row) => def.handoffs ? H.assignment(row) : undefined;
       for (const key of order) {
         const def = entries.get(key), before = previous[key], source = matched.get(key), status = statusOf(before);
         const { row: prior, expired } = W.storyDeadlines.advance(def.clock, before, status, tick);
@@ -320,7 +348,7 @@
         if (status === 'active' && prior.flow?.current) {
           const { stage, visit } = prior.flow.current, rules = def.evidence.get(stage);
           if (rules) {
-            const { flow, changes } = W.storyStages.confirm(prior.flow, rules, tick, eventsOf, query);
+            const { flow, changes } = W.storyStages.confirm(prior.flow, rules, tick, eventsOf, query,credit(def,prior));
             if (flow !== prior.flow) {
               save(key, { ...prior, flow });
               for (const [objective, change] of Object.entries(changes))
@@ -336,9 +364,32 @@
       for (const { ids, parent, publish } of opens) openChildren(ids, parent, publish);
       for (const { action, args, publish } of commands) {
         const { to, reason, outcome } = args, key = keyOf(args), from = statusOf(state[key]);
+        if (action==='story-handoff'||action==='story-cancel-handoff') {
+          const row = state[key], def = entries.get(key), cancel = action==='story-cancel-handoff';
+          const queued = handoffRequests.get(key)?.request;
+          let rejected;
+          if (args.revision!==H.revision(row)) rejected = 'stale-assignment-revision';
+          else if (!(from==='active'||cancel&&from==='suspended')) rejected = 'story-not-active';
+          else if (cancel) {
+            const pending = queued??(H.pending(row)?row.handoffs.last:undefined);
+            if (!pending) rejected = 'handoff-not-pending';
+            else {
+              noteHandoff(key,H.cancel(pending,tick,reason),publish);
+              handoffRequests.delete(key);
+            }
+          } else if (queued) rejected = 'handoff-already-pending';
+          else {
+            const request = H.request(row,args,def.handoffs[args.proposal],tick);
+            rejected = request.rejected;
+            if (!rejected) handoffRequests.set(key,{request,publish});
+          }
+          if (rejected) publish('story-handoff-rejected',{...def.info,action,reason:rejected,requestedReason:reason,
+            revision:args.revision,...(args.proposal&&{proposal:args.proposal})});
+          continue;
+        }
         if (action !== 'story-transition') {
           const def = entries.get(key), row = state[key];
-          const result = from === 'active' ? W.storyStages.advance(action,def,row.flow,args,tick,readChild(def)) : { rejected:'story-not-active' };
+          const result = from === 'active' ? W.storyStages.advance(action,def,row.flow,args,tick,readChild(def),credit(def,row)) : { rejected:'story-not-active' };
           const step = { ...def.info, stage:args.stage, visit:args.visit };
           if (result.rejected) {
             publish('story-progress-rejected', { ...step, action, reason:result.rejected, requestedReason:reason,
@@ -366,6 +417,18 @@
           continue;
         }
         transition(key, to, reason, outcome, { publish });
+      }
+      const waiting = handoffKeys.flatMap(key=>{
+        const queued = handoffRequests.get(key), row = state[key];
+        if (queued) return [{key,...queued}];
+        return H.pending(row)?[{key,request:row.handoffs.last,publish:emit}]:[];
+      }).sort((left,right)=>left.request.requestedAt-right.request.requestedAt);
+      for (const {key,request,publish} of waiting) {
+        const row = state[key], spec = entries.get(key).handoffs[request.proposal];
+        const report = H.attempt(row,request,spec,tick,query(),dispatch);
+        noteHandoff(key,report,publish);
+        if (report.decision==='accepted')
+          publish('story-handoff-accepted',{...entries.get(key).info,...report,revision:report.revision+1});
       }
       const candidates = commitmentKeys.filter(key=>statusOf(state[key])==='available'&&!policy(key)&&
         (requests.has(key)||state[key].commitment||entries.get(key).activation==='automatic'));

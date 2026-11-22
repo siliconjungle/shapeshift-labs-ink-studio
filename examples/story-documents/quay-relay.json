@@ -1,0 +1,56 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "quay-relay",
+  "title": "Relay the quay delivery",
+  "stories": {
+    "delivery": {
+      "kind": "questlet",
+      "title": "Move medicine through the quay",
+      "entry": "transfer",
+      "roles": {
+        "loader": { "kind": "courier", "required": true },
+        "relief": { "kind": "courier", "required": true }
+      },
+      "triggers": { "request": { "event": { "kind": "quay-relay-requested", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "deadlines": { "work": { "for": 1.5 } },
+        "commitment": {
+          "actor": { "$role": "loader" },
+          "order": { "id": "load-medicine", "task": "load",
+            "reservation": { "board": "booking", "require": { "lift": { "anyOf": ["lift"] } } }
+          }
+        },
+        "handoffs": {
+          "relief": {
+            "stage": "transfer",
+            "requires": ["staged"],
+            "commitment": {
+              "actor": { "$role": "relief" },
+              "terms": { "cargo": "medicine", "leg": "staging-to-pier" },
+              "order": { "id": "finish-delivery", "task": "finish",
+                "reservation": { "board": "booking", "require": {
+                  "lift": { "anyOf": ["lift"] }, "landing": { "anyOf": ["landing"] }
+                } }
+              }
+            }
+          }
+        }
+      },
+      "stages": {
+        "transfer": {
+          "title": "Stage and deliver the medicine",
+          "objectives": {
+            "staged": { "title": "Medicine staged", "type": "deliver",
+              "params": { "from": "supplies/depot", "to": "supplies/staging", "amount": 2 } },
+            "received": { "title": "Pier received the medicine", "type": "deliver",
+              "params": { "from": "supplies/staging", "to": "supplies/pier", "amount": 2 } }
+          },
+          "next": { "done": { "outcome": "delivered" } }
+        }
+      },
+      "outcomes": { "delivered": { "title": "Both legs verified" } }
+    }
+  }
+}

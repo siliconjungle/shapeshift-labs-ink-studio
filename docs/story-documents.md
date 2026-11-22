@@ -297,6 +297,64 @@ node cli/ink-studio.js probe dispatch.run.json --ticks 11 --field booking/claims
 node cli/ink-studio.js sim replay dispatch.run.json
 ```
 
+## Delegate or hand off an active story
+
+Add named proposals under `lifecycle.handoffs` on a story with an initial [actor commitment](#negotiate-an-actor-commitment). Each proposal has a successor `commitment` with the same actor, order, activity, and terms options as the original. Supply a continuation order for the unfinished work. Posted transfers, completed objectives, and the current stage visit carry forward.
+
+```json
+{
+  "relief": {
+    "stage": "transfer",
+    "requires": ["staged"],
+    "commitment": {
+      "actor": { "$role": "relief" },
+      "order": {
+        "id": "finish-delivery",
+        "task": "finish",
+        "reservation": {
+          "board": "booking",
+          "require": { "lift": { "anyOf": ["lift"] }, "landing": { "anyOf": ["landing"] } }
+        }
+      }
+    }
+  }
+}
+```
+
+Optional `stage` restricts the proposal to that stage. `requires` waits for the listed objectives in that stage to complete. An active story can request a handoff through an authored command or a normal event action.
+
+```json
+{
+  "tick": 2,
+  "action": "world/story-handoff",
+  "args": {
+    "document": "quay-relay",
+    "story": "delivery",
+    "proposal": "relief",
+    "revision": 0,
+    "reason": "change-of-watch"
+  }
+}
+```
+
+Read the current revision from `world/story-handoffs`. Revision zero identifies the initial assignment. A successful transfer increments it, so delayed commands for an earlier assignment are rejected. Up to 16 proposals and 32 successful transfers are supported per story. Deferred requests retry while the story and stage visit remain eligible. Use `world/story-cancel-handoff` with `document`, `story`, `revision`, and `reason` to cancel a pending request. Leaving the requested visit or closing the story cancels it.
+
+Ink evaluates the successor's commitment against the completed world tick. Acceptance cancels the outgoing order by its exact roster, agent generation, and sequence, releases its claims, and issues the incoming order with its full reservation bundle. The native reservation board decides access and queue priority. A refusal or deferral keeps the outgoing assignment and its claims in place. Unrelated orders continue normally. If the story ends after a successful transfer, its cleanup applies to the current assignment.
+
+`sim preflight` lists the resolved proposals. `world/story-handoffs` takes an optional `story` argument and shows the current assignment, revision, latest decision, and accepted transfers. The transfer records retained work from the outgoing native order. Completed objectives keep their original evidence and carry `credit` naming the assignment that was in effect when each objective was completed. `story-handoff-decision` events report changes in the response, `story-handoff-rejected` identifies invalid requests, and `story-handoff-accepted` carries the incoming order handle and new revision for event routing.
+
+### Run the quay relay example
+
+In [the quay relay](../examples/story-documents/quay-relay.json), Mira stages two crates. The handoff waits for that receipt, Niko's stocktake, and an occupied landing. At tick eight the whole assignment transfers. Niko delivers those same two crates from staging to the pier, and the completed visit credits each courier for their leg.
+
+```sh
+node cli/ink-studio.js sim preflight examples/story-documents/quay-relay.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/quay-relay.world.json --actions examples/story-documents/quay-relay.actions.json --ticks 17 --record relay.run.json
+node cli/ink-studio.js probe relay.run.json --ticks 7 --field world/story-handoffs --args '{"story":"quay-relay/delivery"}'
+node cli/ink-studio.js probe relay.run.json --field world/story-lifecycle
+node cli/ink-studio.js sim replay relay.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

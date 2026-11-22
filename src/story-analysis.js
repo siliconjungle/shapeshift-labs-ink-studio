@@ -231,6 +231,7 @@ const StoryAnalysis = (() => {
       ...(story.lifecycle?.feasibility && {feasibility:story.lifecycle.feasibility}),
       ...(story.lifecycle?.liveReferences && {liveReferences:story.lifecycle.liveReferences}),
       ...(story.lifecycle?.commitment && {commitment:story.lifecycle.commitment}),
+      ...(story.lifecycle?.handoffs && {handoffs:story.lifecycle.handoffs}),
       stages:keys(story.stages).map(id => {
         const stage = story.stages[id], available = new Set(possible.graph.get(id).map(edge => edge.id));
         return {id, title:stage.title, reachable:reachable.distance.has(id), canReachOutcome:reachesEnding.has(id),

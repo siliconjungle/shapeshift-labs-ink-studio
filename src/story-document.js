@@ -455,7 +455,7 @@ const StoryDocument = (() => {
   }
 
   function lifecycle(value, at, roles, report) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences', 'commitment', 'handoffs']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -590,6 +590,22 @@ const StoryDocument = (() => {
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       const { stages, outcomes } = story;
+      if (Object.hasOwn(story.lifecycle ?? {}, 'handoffs')) {
+        const location = at+'.lifecycle.handoffs', rows = entries(story.lifecycle.handoffs,location,true);
+        if (!story.lifecycle.commitment || rows.length>16) invalid(location,'expected an initial commitment and up to 16 handoff proposals');
+        for (const [name,handoff] of rows) {
+          const place = location+'.'+name;
+          fields(handoff,place,['commitment'],['stage','requires']);
+          commitment(handoff.commitment,place+'.commitment',roles,report);
+          if (Object.hasOwn(handoff,'requires')&&!Object.hasOwn(handoff,'stage'))
+            invalid(place+'.requires','requires a stage');
+          if (Object.hasOwn(handoff,'stage')) {
+            if (story.lifecycle.progression!==true) invalid(place+'.stage','requires stage progression');
+            if (link(handoff.stage,stages,place+'.stage','stage',report)&&Object.hasOwn(handoff,'requires'))
+              links(handoff.requires,stages[handoff.stage]?.objectives??{},place+'.requires','objective',report);
+          }
+        }
+      }
       for (const [name, role] of entries(roles, `${at}.roles`)) {
         const location = `${at}.roles.${name}`;
         fields(role, location, ['kind'], ['ref', 'required']);

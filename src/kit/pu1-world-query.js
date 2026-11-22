@@ -271,6 +271,8 @@
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
       'story-commitments':{type:'record',qualified:true,read:({args})=>
         W.storyCommitments.inspect(view.storyCommitmentDefinitions,view.storyLifecycle,args)},
+      'story-handoffs':{type:'record',qualified:true,read:({args})=>
+        W.storyHandoffs.inspect(view.storyHandoffDefinitions,view.storyLifecycle,args)},
       'story-feasibility':{type:'record',qualified:true,read:({args})=>
         W.storyFeasibility.inspect(view.storyFeasibilityRules,view.storyFeasibility,tick,api,args)},
       'story-references':{type:'record',qualified:true,read:({args})=>W.storyReferences.inspect(view.storyReferences,args)},
