@@ -9,7 +9,7 @@
   const admissible = row => row.report.ready&&(row.pressure?.ready??true)&&(row.cooldown?.ready??true);
   const expiryReason = (spec,row) => row.expiresAt===spec.policy.worldDeadlineTick?'world-deadline':'candidate-timeout';
 
-  function compile(documents,dt,feasibility,seed,pressureConfig,cooldownPolicies,storyteller) {
+  function compile(documents,dt,feasibility,seed,pressureConfig,cooldownPolicies,storyteller,varietyModel) {
     const {before,select,validate:validateSelections} = W.incidentSelection;
     const specs = new Map(), inbound = new Set();
     for (const document of documents) for (const [story,definition] of Object.entries(document.stories)) {
@@ -47,6 +47,7 @@
 
     const pressurePolicy = W.incidentPressure.compile(pressureConfig,policies);
     const direction = storyteller&&W.storyteller.candidates(storyteller,specs);
+    const varietyPolicy = storyteller?.profiles[storyteller.active].variety;
     const selectionFor = key => direction?direction[key]?.selection:specs.get(key).policy.selection;
     const canSelect = key => !direction||direction[key]?.withinChallenge===true;
 
@@ -94,14 +95,14 @@
         state[key] = row;
         publish(emit,'queued',row,{queuedAt:tick,expiresAt:row.expiresAt,origin,...(source&&{source})});
       }
-      function dispatch(row,reason,say,mode,selection) {
+      function dispatch(row,reason,say,mode,selection,variety) {
         const {candidate:key,queuedAt,source,report} = row;
         const terminal = {tick,reason};
         const pacing = storyteller&&{storyteller:W.storyteller.receipt(storyteller,mode,previousAutomaticAt,tick)};
-        state[key] = {...row,status:'dispatched',terminal,...(selection&&{selection}),...pacing};
+        state[key] = {...row,status:'dispatched',terminal,...(selection&&{selection}),...(variety&&{variety}),...pacing};
         released[key] = {queuedAt,source,report};
         publish(say,'dispatched',row,{queuedAt,report,terminal,...(row.pressure&&{pressure:row.pressure}),
-          ...(row.cooldown&&{cooldown:row.cooldown}),...pacing});
+          ...(row.cooldown&&{cooldown:row.cooldown}),...(variety&&{variety}),...pacing});
         if (budget) {
           budget.reserve(key);
           for (const pending of Object.values(state).filter(waiting).sort(before)) checkReadiness(pending,pending.report);
@@ -139,19 +140,23 @@
             ...(overBudget&&{pressure:row.pressure}),...(cooling&&{cooldown:row.cooldown})});
         }
       }
-      function release(key,choice) {
-        if (choice) publish(emit,'selected',state[key],{selection:choice});
-        dispatch(state[key],choice?.reason??'automatic-release',emit,'automatic',choice);
-      }
       const next = storyteller?W.storyteller.nextAt(storyteller,previousAutomaticAt):null;
       if (next!==null&&tick<next) return {state:freeze(state),starts:normal,released};
+      const variety = varietyPolicy&&W.incidentVariety.rank(varietyPolicy,varietyModel,state,
+        ready.filter(key=>state[key].status==='ready'&&selectionFor(key)?.weight!==0),tick);
+      const deferred = variety&&W.incidentVariety.deferred(variety);
+      const eligible = deferred?key=>canSelect(key)&&!deferred.has(key):canSelect;
+      function release(key,choice) {
+        if (choice) publish(emit,'selected',state[key],{selection:choice});
+        dispatch(state[key],choice?.reason??'automatic-release',emit,'automatic',choice,variety);
+      }
       if (budget||storyteller) {
         const pools = new Set();
         // Reserve each release before testing the remaining pools for the next seat.
         while (true) {
           const contenders = Object.values(state).filter(row=>waiting(row)&&!pools.has(selectionFor(row.candidate)?.pool));
-          const choices = select(seed,tick,contenders,selectionFor,canSelect);
-          const key = ready.find(id=>state[id].status==='ready'&&(!selectionFor(id)||choices.has(id)));
+          const choices = select(seed,tick,contenders,selectionFor,eligible);
+          const key = ready.find(id=>state[id].status==='ready'&&eligible(id)&&(!selectionFor(id)||choices.has(id)));
           if (key===undefined) break;
           const choice = choices.get(key);
           if (choice) pools.add(choice.pool);
@@ -178,7 +183,7 @@
           check(!offered&&(!start||start.tick>=(spec.policy.worldDeadlineTick??Infinity)),message);
           continue;
         }
-        check(fields(row,['candidate','queuedAt','expiresAt','origin','source','status','report','pressure','cooldown','terminal','followUp','selection','storyteller'])&&
+        check(fields(row,['candidate','queuedAt','expiresAt','origin','source','status','report','pressure','cooldown','terminal','followUp','selection','storyteller','variety'])&&
           row.candidate===key&&tickOK(row.queuedAt)&&row.expiresAt===due(spec,row.queuedAt)&&row.expiresAt>row.queuedAt&&
           fields(row.origin,['kind','incident'])&&W.storyFeasibility.validReport(row.report,spec.rules,row.queuedAt,tick)&&
           W.incidentPressure.validReport(pressurePolicy,key,row.pressure,row.report.tick)&&
@@ -218,7 +223,8 @@
       }
       check(Object.keys(state).every(key=>specs.has(key)),'Unknown saved incident candidate');
       if (storyteller) W.storyteller.validate(storyteller,direction,state);
-      validateSelections(state,seed,selectionFor,cooldownAt,canSelect);
+      const deferred = W.incidentVariety.validate(varietyPolicy,varietyModel,state,selectionFor,canSelect,cooldownAt);
+      validateSelections(state,seed,selectionFor,cooldownAt,(key,tick)=>canSelect(key)&&!deferred.get(tick)?.has(key));
       if (pressurePolicy) W.incidentPressure.validate(pressurePolicy,lifecycle);
     }
     return {policies,pressure:pressurePolicy,direction,initial:()=>freeze({}),advance,validate,checkAction};

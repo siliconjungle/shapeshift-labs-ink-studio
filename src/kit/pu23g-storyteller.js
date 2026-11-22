@@ -14,7 +14,7 @@
     const ticks = value=>Math.max(1,W.storyTriggers.ticks(value,dt,Math.ceil,'Storyteller cadence exceeds the world tick budget'));
     const profiles = Object.fromEntries(Object.keys(raw.profiles).sort().map(id=>{
       const profile = raw.profiles[id], place = 'Storyteller profile '+id;
-      check(isStoryId(id)&&fields(profile,['cadence','challenge','categoryWeights']),place+' has invalid fields');
+      check(isStoryId(id)&&fields(profile,['cadence','challenge','categoryWeights','variety']),place+' has invalid fields');
       const {cadence,challenge={},categoryWeights={}} = profile;
       check(fields(cadence,['minInterval','maxInterval'])&&seconds(cadence.minInterval)&&
         (cadence.maxInterval===undefined||seconds(cadence.maxInterval)&&cadence.maxInterval>=cadence.minInterval),
@@ -23,8 +23,9 @@
         place+' needs a maximum intensity from 0 to 5');
       check(fields(categoryWeights,categories)&&Object.values(categoryWeights).every(weight=>integer(weight,16)),
         place+' needs integer weights from 0 to 16 for known incident categories');
+      const variety = W.incidentVariety.policy(profile.variety,place);
       return [id,{cadence:{minTicks:ticks(cadence.minInterval),maxTicks:ticks(cadence.maxInterval??cadence.minInterval)},
-        challenge:{maxIntensity:challenge.maxIntensity??5},categoryWeights}];
+        challenge:{maxIntensity:challenge.maxIntensity??5},categoryWeights,...(variety&&{variety})}];
     }));
     return freeze({active:raw.active,profiles,seed});
   }

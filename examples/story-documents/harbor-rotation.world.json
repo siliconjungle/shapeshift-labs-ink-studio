@@ -1,0 +1,23 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "harbor-rotation",
+  "seed": 11,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "harbor-rotation.json" }],
+  "storyteller": {
+    "active": "rotate",
+    "profiles": {
+      "rotate": { "cadence": { "minInterval": 0.2 }, "variety": { "cast": 1, "location": 1, "family": 1, "situation": 2 } },
+      "sequence": { "cadence": { "minInterval": 0.2 } }
+    }
+  },
+  "systems": {
+    "stock": { "kind": "store", "config": { "accounts": {
+      "braces": { "resource": "brace", "units": "brace", "type": "integer", "initial": 2 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "harbor-opens" } }
+  ]
+}

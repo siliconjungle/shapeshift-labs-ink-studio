@@ -698,16 +698,8 @@ const StoryDocument = (() => {
       invalid(at, 'expected scope IDs or a recovery duration');
     if (!Object.keys(durations).length && !story.lifecycle.candidate)
       invalid(at, 'scope matching requires a queued incident or a recovery duration');
-    for (const [scope, ids] of Object.entries(scopes)) {
-      const place = at+'.scopes.'+scope, seen = new Set();
-      if (!Array.isArray(ids) || !ids.length || ids.length > 16) invalid(place, 'expected 1–16 scope IDs');
-      for (const [i, id] of ids.entries()) {
-        const item = place+'['+i+']';
-        if (id && typeof id === 'object' && Object.hasOwn(id, '$role')) roleUses(id, roles, item, report);
-        else if (!cooldownId(id) || seen.has(id)) invalid(item, 'expected a unique scope ID or story role');
-        seen.add(id);
-      }
-    }
+    for (const [scope, ids] of Object.entries(scopes))
+      identityList(ids,at+'.scopes.'+scope,roles,report);
     for (const [scope, seconds] of Object.entries(durations)) {
       const place = at+'.for.'+scope;
       if (!Number.isFinite(seconds) || seconds <= 0) invalid(place, 'expected positive finite seconds');
@@ -718,15 +710,35 @@ const StoryDocument = (() => {
       invalid(at+'.on', 'expected completed or failed with an authored recovery duration');
   }
 
-  function incidentMetadata(value, at, kind) {
+  function identityList(ids, at, roles, report) {
+    const seen = new Set();
+    if (!Array.isArray(ids) || !ids.length || ids.length > 16) invalid(at, 'expected 1–16 scope IDs');
+    for (const [i, id] of ids.entries()) {
+      const place = at+'['+i+']';
+      if (id && typeof id === 'object' && Object.hasOwn(id, '$role')) roleUses(id, roles, place, report);
+      else if (!cooldownId(id) || seen.has(id)) invalid(place, 'expected a unique scope ID or story role');
+      seen.add(id);
+    }
+  }
+
+  function incidentMetadata(value, at, kind, roles, report) {
     if (kind!=='incident') invalid(at, 'catalog metadata requires an incident');
-    fields(value, at, ['category','intensity'], ['tags']);
+    fields(value, at, ['category','intensity'], ['tags','variety']);
     if (!incidentCategories.includes(value.category)) invalid(at+'.category', 'expected a known incident category');
     if (!Number.isSafeInteger(value.intensity)||value.intensity<0||value.intensity>5)
       invalid(at+'.intensity','expected an integer from 0 to 5');
     if (Object.hasOwn(value,'tags')&&(!Array.isArray(value.tags)||value.tags.length>16||
         !Array.from(value.tags).every(safeId)||new Set(value.tags).size!==value.tags.length))
       invalid(at+'.tags','expected up to 16 unique tag IDs');
+    if (Object.hasOwn(value,'variety')) {
+      const place = at+'.variety', variety = value.variety;
+      fields(variety,place,[],['cast','location','family','situation']);
+      if (!Object.keys(variety).length) invalid(place,'expected at least one variety axis');
+      for (const axis of ['cast','location','family'])
+        if (Object.hasOwn(variety,axis)) identityList(variety[axis],place+'.'+axis,roles,report);
+      if (Object.hasOwn(variety,'situation')&&!cooldownId(variety.situation))
+        invalid(place+'.situation','expected a stable situation ID');
+    }
   }
 
   function validate(document, report) {
@@ -751,8 +763,8 @@ const StoryDocument = (() => {
       fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle', 'incident']);
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
       labelsAndRefs(story, at, references, report);
-      if (Object.hasOwn(story,'incident')) incidentMetadata(story.incident,at+'.incident',story.kind);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
+      if (Object.hasOwn(story,'incident')) incidentMetadata(story.incident,at+'.incident',story.kind,roles,report);
       if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`, roles, report);
       if (Object.hasOwn(story.lifecycle??{},'candidate'))
         candidatePolicy(story.lifecycle.candidate,at+'.lifecycle.candidate',story.kind);

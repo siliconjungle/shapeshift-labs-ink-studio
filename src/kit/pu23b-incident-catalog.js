@@ -19,7 +19,7 @@
         const template = own(templates,document.id)&&templates[document.id].template;
         entries.push({id:document.id+'/'+story,document:document.id,story,title,...(summary!==undefined&&{summary}),
           category:incident?.category??null,intensity:incident?.intensity??null,tags:[...(incident?.tags??[])].sort(),entry,
-          roles:Object.keys(roles).sort(),references:refs.map(id=>({...document.references[id],slot:id})),
+          ...(incident?.variety&&{variety:incident.variety}),roles:Object.keys(roles).sort(),references:refs.map(id=>({...document.references[id],slot:id})),
           triggers,lifecycle:lifecycle?{activation:lifecycle.activation??'automatic',progression:lifecycle.progression===true}:null,
           ...(lifecycle?.candidate&&{candidatePolicy:lifecycle.candidate}),
           ...(lifecycle?.cooldown&&{cooldownPolicy:lifecycle.cooldown}),...(template&&{template})});

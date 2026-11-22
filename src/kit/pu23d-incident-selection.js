@@ -72,7 +72,7 @@
       check(selection.candidates.length===members.length,message);
       const inputs = members.map((item,index)=>{
         const saved = selection.candidates[index], {weight} = policyFor(item.candidate);
-        const blocked = !canSelect(item.candidate)||
+        const blocked = !canSelect(item.candidate,tick)||
           (item.report.tick===tick?item.cooldown:cooldownAt(item.candidate,tick))?.ready===false;
         const canChange = item.report.tick!==tick||item.report.ready&&item.pressure?.ready===false;
         check(record(saved)&&saved.candidate===item.candidate&&saved.queuedAt===item.queuedAt&&saved.weight===weight&&

@@ -795,6 +795,76 @@ node cli/ink-studio.js probe glass-coast.run.json --ticks 2 --field world/storyt
 node cli/ink-studio.js probe glass-coast.run.json --field world/incident-selections
 ```
 
+## Rotate incidents and detect repeated situations
+
+Set `variety` on a storyteller profile to prefer incidents with fewer
+recent matches. Give each enabled axis a lookback of 1–32 dispatches.
+For example, use the last two offers to rotate the cast, the last
+three for locations, and the last four for situations.
+
+```json
+"variety": { "cast": 2, "location": 3, "family": 2, "situation": 4 }
+```
+
+Declare identities on `incident.variety`. Cast, location, and
+family each take up to 16 stable IDs. Qualified IDs and values from
+story roles work here, including roles bound by template instances.
+An omitted axis can use the incident's existing cooldown scopes
+(`character`, `location`, and `family` respectively).
+
+```json
+"incident": {
+  "category": "opportunity",
+  "intensity": 2,
+  "variety": {
+    "cast": [{ "$role": "lead" }],
+    "location": ["harbor/low-bank"],
+    "family": ["maintenance"],
+    "situation": "repair/request-braces"
+  }
+}
+```
+
+Reuse a situation ID across reskins that an author considers the same,
+including prose-driven incidents or variants with different parameters.
+When a mechanically defined incident leaves the situation ID open, Ink
+compares its canonical recipe. This includes trigger rules, stage keys
+and transitions, objective evidence, and authored consequences. Story,
+stage, objective, and outcome titles and summaries are display text.
+A substantive change such as a different evidence threshold can give
+the recipe a distinct identity.
+
+At each automatic beat, Ink ranks the candidates that already pass
+feasibility, pressure, recovery, challenge, and weight checks. It prefers
+fewer repeated situations first, then fewer total matches across the
+configured axes. One earlier dispatch counts at most once per axis.
+The existing seeded selection and pool ordering resolve ties among
+the preferred candidates. If every eligible incident repeats, the
+queue can still use the beat. Manual dispatches count toward later
+history, and dispatches on the same tick use stable incident IDs
+to order the lookback. Candidate deadlines and follow-ups still apply.
+
+Preflight groups the catalog's repeated situations under
+`incidentVariety.repeats`, including when rotation is disabled.
+Probe `world/incident-variety` for resolved identities and the latest
+automatic decision. Each dispatch receipt lists the considered
+candidates, preferred candidates, and recent dispatches. Its
+`repeated` arrays use zero-based indices into that receipt's
+`history` list. Recorded decisions replay with the same ordering.
+
+The [harbor rotation demo](../examples/story-documents/harbor-rotation.world.json)
+uses the same cadence for both profiles. The sequential profile offers
+two differently titled brace requests back to back. The rotating
+profile opens the night market between them and explains the repeated
+cast, location, family, and situation matches it deferred.
+
+```sh
+node cli/ink-studio.js sim preflight examples/story-documents/harbor-rotation.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/harbor-rotation.world.json \
+  --storyteller rotate --ticks 13 --record harbor-rotation.run.json
+node cli/ink-studio.js probe harbor-rotation.run.json --ticks 3 --field world/incident-variety
+```
+
 ## Escalate an incident across beats
 
 For an incident with `lifecycle.progression` enabled, put a `beat` on

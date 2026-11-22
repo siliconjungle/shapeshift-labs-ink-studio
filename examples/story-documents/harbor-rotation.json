@@ -1,0 +1,85 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "harbor-rotation",
+  "title": "Rotate the harbor's incident queue",
+  "references": { "mira": { "kind": "character", "id": "crew/mira" } },
+  "stories": {
+    "a-bank-call": {
+      "kind": "incident",
+      "title": "A call for braces at the low bank",
+      "roles": { "lead": { "kind": "character", "ref": "mira" } },
+      "incident": { "category": "setback", "intensity": 3,
+        "variety": { "cast": [{ "$role": "lead" }], "location": ["harbor/low-bank"], "family": ["flood"] } },
+      "lifecycle": { "progression": true, "candidate": { "for": 2, "release": "automatic" } },
+      "triggers": { "notice": { "event": { "kind": "harbor-opens" } } },
+      "entry": "stage-stock",
+      "stages": { "stage-stock": {
+        "title": "Find braces for the bank", "decision": { "mode": "autonomous" },
+        "objectives": { "stock": { "title": "Stage two braces", "type": "acquire", "params": { "account": "stock/braces", "amount": 2 } } },
+        "next": { "ready": { "outcome": "available", "auto": true } }
+      } },
+      "outcomes": { "available": { "title": "The bank braces are ready" } }
+    },
+    "b-bridge-bell": {
+      "kind": "incident",
+      "title": "The bridge keeper rings the bell",
+      "incident": { "category": "opportunity", "intensity": 2,
+        "variety": { "cast": ["crew/niko"], "location": ["upland/bridge"], "family": ["maintenance"] } },
+      "lifecycle": { "progression": true, "candidate": { "for": 2, "release": "automatic" } },
+      "triggers": { "bell": { "event": { "kind": "harbor-opens" } } },
+      "entry": "stage-stock",
+      "stages": { "stage-stock": {
+        "title": "Gather shoring at the upland bridge", "decision": { "mode": "autonomous" },
+        "objectives": { "stock": { "title": "Locate a pair of supports", "type": "acquire", "params": { "amount": 2, "account": "stock/braces" } } },
+        "next": { "ready": { "outcome": "available", "auto": true } }
+      } },
+      "outcomes": { "available": { "title": "The bridge keeper can start work" } }
+    },
+    "c-mira-survey": {
+      "kind": "incident",
+      "title": "Mira surveys the old orchard",
+      "incident": { "category": "discovery", "intensity": 1,
+        "variety": { "cast": ["crew/mira"], "location": ["upland/orchard"], "family": ["survey"], "situation": "orchard-survey" } },
+      "lifecycle": { "candidate": { "for": 2, "release": "automatic" } },
+      "triggers": { "notice": { "event": { "kind": "harbor-opens" } } },
+      "entry": "survey",
+      "stages": { "survey": { "title": "Walk the orchard markers", "next": { "done": { "outcome": "charted" } } } },
+      "outcomes": { "charted": { "title": "The orchard is charted" } }
+    },
+    "d-bank-lantern": {
+      "kind": "incident",
+      "title": "Niko brings a lamp to the low bank",
+      "incident": { "category": "recovery", "intensity": 0,
+        "variety": { "cast": ["crew/niko"], "location": ["harbor/low-bank"], "family": ["patrol"], "situation": "lamplight" } },
+      "lifecycle": { "candidate": { "for": 2, "release": "automatic" } },
+      "triggers": { "notice": { "event": { "kind": "harbor-opens" } } },
+      "entry": "light",
+      "stages": { "light": { "title": "Place the lamp", "next": { "done": { "outcome": "lit" } } } },
+      "outcomes": { "lit": { "title": "The bank path is lit" } }
+    },
+    "e-upland-water": {
+      "kind": "incident",
+      "title": "A flood watch starts at the upland dam",
+      "incident": { "category": "environmental-change", "intensity": 2,
+        "variety": { "situation": "water-watch" } },
+      "lifecycle": { "candidate": { "for": 2, "release": "automatic" },
+        "cooldown": { "scopes": { "character": ["crew/sol"], "location": ["upland/dam"], "family": ["flood"] } } },
+      "triggers": { "notice": { "event": { "kind": "harbor-opens" } } },
+      "entry": "watch",
+      "stages": { "watch": { "title": "Watch the water line", "next": { "done": { "outcome": "posted" } } } },
+      "outcomes": { "posted": { "title": "The upland dam has a watch" } }
+    },
+    "f-night-market": {
+      "kind": "incident",
+      "title": "A visitor opens the night market",
+      "incident": { "category": "visitor", "intensity": 1,
+        "variety": { "cast": ["crew/lin"], "location": ["town/square"], "family": ["trade"], "situation": "night-market" } },
+      "lifecycle": { "candidate": { "for": 2, "release": "automatic" } },
+      "triggers": { "notice": { "event": { "kind": "harbor-opens" } } },
+      "entry": "welcome",
+      "stages": { "welcome": { "title": "Welcome the vendor", "next": { "done": { "outcome": "open" } } } },
+      "outcomes": { "open": { "title": "The night market is open" } }
+    }
+  }
+}

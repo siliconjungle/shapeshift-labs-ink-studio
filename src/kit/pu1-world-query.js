@@ -276,6 +276,8 @@
         W.incidentPressure.inspect(view.incidentPressure,view.storyLifecycle,tick)},
       'incident-cooldowns':{type:'record',qualified:true,read:({args})=>
         W.incidentCooldowns.inspect(view.incidentCooldowns,view.storyLifecycle,tick,args)},
+      'incident-variety':{type:'record',qualified:true,read:()=>
+        W.incidentVariety.inspect(view.incidentVariety,view.storyteller?.profiles[view.storyteller.active].variety,view.incidentCandidates,tick)},
       storyteller:{type:'record',qualified:true,read:()=>
         W.storyteller.inspect(view.storyteller,view.storytellerCandidates,view.incidentCandidates,tick)},
       'incident-selections':{type:'record',qualified:true,read:({args})=>
