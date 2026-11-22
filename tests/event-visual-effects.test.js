@@ -55,7 +55,7 @@ test('entity locations come from the verified commit tick and portable event log
   const recording = run.recording(), definition = {
     format: Fx.planFormat, version: 1, id: 'emitter', rules: {
       discharge: { on: { kind: 'discharge' }, cue: { kind: 'shader', target: 'water', delay: .1,
-        detail: { value: 12, range: [0, 20], duration: .2 } } }
+        detail: { value: 12, range: [0, 20], duration: .3, attack: .1, release: .2 } } }
     }
   };
   assert.deepEqual(run.query().target({ entity: 'valve' }).point, [3, 2, 1]);
@@ -64,7 +64,8 @@ test('entity locations come from the verified commit tick and portable event log
   assert.deepEqual(cue.source.timecode, { numerator: 1, denominator: 10 });
   assert.deepEqual(cue.timecode, { numerator: 1, denominator: 5 });
   assert.deepEqual(track.sample(.2).active[0].at, [1, 2, 3]);
-  assert.equal(track.sample(.4).active.length, 0);
+  assert.equal(track.sample(.4).active[0].amount, .3);
+  assert.equal(track.sample(.5).active.length, 0);
 
   const log = { format: W.storyEvents.envelopeFormat, version: 1, world: 'moving-emitter',
     dt: .1, from: 0, to: 2, coverage: 'complete', dropped: 0, events: [] };
@@ -80,8 +81,8 @@ test('entity locations come from the verified commit tick and portable event log
     outputs: { position: { node: 'effect', port: 'position' }, amount: { node: 'effect', port: 'amount' } }
   });
   const watches = { position: { output: 'position' }, amount: { output: 'amount' } };
-  assert.deepEqual((await graph.previewFrame(watches, { time: .2 })).values, { position: [2, 4, 6], amount: .6 });
-  assert.deepEqual((await graph.previewFrame(watches, { time: .4 })).values, { position: [0, 0, 0], amount: 0 });
+  assert.deepEqual((await graph.previewFrame(watches, { time: .3 })).values, { position: [2, 4, 6], amount: .6 });
+  assert.deepEqual((await graph.previewFrame(watches, { time: .5 })).values, { position: [0, 0, 0], amount: 0 });
 });
 
 test('sim render records the effect sheet dependency and preserves input files', t => {

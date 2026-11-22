@@ -28,7 +28,8 @@
     const { point: at, offset = zero, duration = 1, attack = 0, release = 0,
       value = 1, range = [0, 1], normal = up, heading = [1, 0, 0] } = detail;
     check(point(at) && point(offset) && bounded(duration, .001, 86400) &&
-      bounded(attack, 0, duration) && bounded(release, 0, duration) && attack + release <= duration &&
+      bounded(attack, 0, duration) && bounded(release, 0, duration) &&
+      T.compare(T.add(T.read(attack), T.read(release)), T.read(duration)) <= 0 &&
       bounded(value, -1e12, 1e12) && Array.isArray(range) && range.length === 2 &&
       range.every(n => bounded(n, -1e12, 1e12)) && range[0] < range[1],
     'Effect ' + kind + ' needs a recorded XYZ point, finite value and valid timing and range');
