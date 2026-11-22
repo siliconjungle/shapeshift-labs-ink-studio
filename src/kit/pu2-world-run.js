@@ -1049,7 +1049,7 @@
       });
       interactions?.run(drafts,{world:nextWorld,tick:at,detailed,root:rootedState,emit:systemEmit,input:setInput,
         query:queryDrafts,
-        effect(source,effect,query){
+        effect(source,effect,query,interaction){
           if((effect.destinations??[effect.destination]).some(name=>!detailed(name)||
             W.simulationAggregate.isAggregate(drafts[name])))return {reason:'effect-asleep'};
           if(effect.kind==='transfer'){
@@ -1064,11 +1064,13 @@
           const staged=Object.freeze({...base,emit:deferred(emit),...(writer&&{spatial:Object.freeze({
             ...writer,write:deferred(writer.write),rebuilt:deferred(writer.rebuilt)
           })})});
-          const prepared=handler.run(drafts[destination],args,1,staged);
-          if(prepared.reason)return {reason:prepared.reason};
+          const prepared = effect.kind==='story-host' ?
+            effect.host(drafts[destination],args,staged,{service:source,...interaction}) : handler.run(drafts[destination],args,1,staged);
+          const detail = prepared.receipt ? {receipt:prepared.receipt} : {};
+          if(prepared.reason)return {reason:prepared.reason,...detail};
           drafts[destination]=rootedState(prepared.state);
           for(const publish of notes)publish();
-          return {};
+          return detail;
         }
       });
       if(influence){

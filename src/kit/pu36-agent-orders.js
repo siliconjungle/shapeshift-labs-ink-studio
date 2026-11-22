@@ -336,9 +336,11 @@
     }
     function receiveInteraction(agent,outcome,ctx){
       const book=agent.orders, entry=book.active;
-      return outcome.status==='completed'?completed(book,entry,{op:'interact',attempt:outcome.id,
-        target:outcome.target,verb:outcome.verb},agent,ctx):
-        finish({...book,active:null},entry,'failed',outcome.reason,agent,ctx);
+      const receipt=outcome.receipt?.format===W.storyHosts.format?outcome.receipt:undefined;
+      const result={op:'interact',attempt:outcome.id,target:outcome.target,verb:outcome.verb,...(receipt&&{receipt})};
+      if(outcome.status==='completed')return completed(book,entry,result,agent,ctx);
+      const failed=receipt?{...entry,results:[...entry.results,{...result,tick:ctx.tick}]}:entry;
+      return finish({...book,active:null},failed,'failed',outcome.reason,agent,ctx);
     }
     function receive(agent,receipt,ctx){
       const book=agent.orders, entry=book.active, result={op:'transfer',receipt,tick:ctx.tick};
@@ -372,13 +374,16 @@
           Array.isArray(row.results),'Invalid saved order entry');
         orderShape(row);
         const steps=catalog.get(row.task).steps;
-        const blockedTransfer=row.phase==='failed'&&row.reason==='transfer-blocked';
+        const failedStep=row.phase==='failed'&&steps[row.step];
+        const blockedTransfer=failedStep?.op==='transfer'&&row.reason==='transfer-blocked';
+        const blockedHost=failedStep?.op==='interact'&&row.results.length===row.step+1&&
+          row.results.at(-1)?.receipt?.format===W.storyHosts.format;
         check(integer(row.step,0,steps.length)&&
           (row.phase==='succeeded'?row.step===steps.length:row.step<steps.length)&&
           (row.phase!=='settling'||steps[row.step].op==='transfer')&&
           (row.phase!=='working'||steps[row.step].op==='work')&&
           (row.phase!=='interacting'||steps[row.step].op==='interact')&&
-          row.results.length===row.step+Number(blockedTransfer)&&row.results.every((result,i)=>{
+          row.results.length===row.step+Number(blockedTransfer||blockedHost)&&row.results.every((result,i)=>{
             if(!record(result)||!tick(result.tick)||result.op!==steps[i]?.op)return false;
             if(result.op==='move')return vector(result.at);
             if(result.op==='emit')return result.kind===steps[i].kind;
@@ -386,7 +391,8 @@
               result.batch===(steps[i].batch??1);
             if(result.op==='interact'){
               const {target,verb}=offering(steps[i],row.params);
-              return W.targetedInteractions.validToken(result.attempt)&&result.target===target&&result.verb===verb;
+              return W.targetedInteractions.validToken(result.attempt)&&result.target===target&&result.verb===verb&&
+                (result.receipt===undefined||W.storyHosts.validReceipt(result.receipt,result.attempt,result.tick,i===row.step?'blocked':'applied'));
             }
             if(result.op!=='transfer')return true;
             const request=transfer(steps[i],row), receipt=result.receipt;

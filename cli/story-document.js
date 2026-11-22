@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateStoryDocument, inspectStoryDocument } = require('../src/story-document.js');
 const { analyze } = require('../src/story-analysis.js');
+const { write } = require('./asset-files.js');
 
 function readDefinition(file, check = value => value) {
   try {
@@ -51,8 +52,34 @@ function embedStoryDocuments(world, file, dependency) {
   return { ...world, ...(documents && {storyDocuments:documents}), ...(templates && {storyTemplates:templates}) };
 }
 
+function eventCommand(file, rest, options, library) {
+  const {format = 'json', story, out} = options;
+  if (!file || rest.length || !['json','markdown','timeline','events'].includes(format) ||
+    Object.keys(options).some(key=>!['format','story','out'].includes(key)) ||
+    story!==undefined&&(typeof story!=='string'||format==='events') || out!==undefined&&typeof out!=='string')
+    throw new TypeError('Use story events <recording.json> [--story document/story] [--format json|markdown|timeline|events] [--out file]');
+  const source = readDefinition(file), api = library().KIT.world.storyEvents;
+  const value = format==='events'?api.read(source):format==='timeline'?api.timeline(source,{story}):api.analyze(source,{story});
+  let output;
+  if (format==='markdown') {
+    const escape = value => value.replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]))
+      .replace(/[\[\]\\`*_#|]/g,ch=>'\\'+ch);
+    const rows = value.timeline.map(({time,label,event})=>
+      '| '+time.toFixed(6)+' | '+event.tick+' | '+escape(event.id)+' | '+escape(label)+' |');
+    output = ['# Story events for '+escape(value.story??value.source.id),'',
+      'Coverage '+value.source.coverage+' · ticks '+value.source.from+'–'+value.source.to+
+      ' · '+rows.length+' events · '+value.source.dropped+' dropped upstream','',
+      '| Seconds | Tick | Event | Recorded activity |','| --- | --- | --- | --- |',...rows,''].join('\n');
+  } else output = JSON.stringify(value,null,2)+'\n';
+  if (out!==undefined) {
+    if (path.resolve(file)===path.resolve(out)) throw new TypeError('Choose an output different from the event recording');
+    write(path.resolve(out),output);
+  } else process.stdout.write(output);
+}
+
 function storyCommand([mode, file, id, ...rest], options, library) {
-  const usage = 'Usage: ink-studio story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
+  if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
+  const usage = 'Usage: ink-studio story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
     const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));

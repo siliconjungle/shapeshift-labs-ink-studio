@@ -769,6 +769,107 @@ node cli/ink-studio.js probe withdraw.run.json --field world/story-lifecycle
 node cli/ink-studio.js probe permanent.run.json --field workshop/worksite --args '{"process":"frames"}'
 ```
 
+## Connect a host runtime
+
+A story can use Ink's [agent orders](agent-orders.md) and [world queries](headless-worlds.md#query-a-revision)
+directly. A host can provide the simulation behind those same interfaces.
+In a Node host, wrap synchronous, versioned capabilities with
+`KIT.world.storyHosts.adapter({version:1, read, step, perform})` and register
+the resulting factory through the normal world implementation options.
+
+```js
+const { runtime, storyHosts } = KIT.world;
+const implementations = { 'story-host': storyHosts.adapter(capabilities) };
+const run = runtime.create(world, { implementations });
+run.advance(12);
+const checked = runtime.replay(run.recording(), { implementations });
+```
+
+Use that implementation name as the system's `kind`. Its JSON config
+can declare `initial` state, typed `fields`, named `operations`,
+`events`, and transfer `accounts`. Implement the callbacks your config uses.
+
+| Capability | Contract |
+| --- | --- |
+| `read(state, request)` | Sample `{field,args,target,tick,time}`. Return `{status:"ok",value}` of the declared type or `{status:"missing",reason}`. `unavailable` and `outside` are also valid miss statuses. |
+| `step(state, clock)` | Return `{state, events?}` as the host advances. The clock contains `system`, `tick`, `time`, and `dt`. |
+| `perform(state, request, clock)` | Apply a declared operation. The request identifies `operation`, `args`, interaction `service`, `attempt`, `actor`, `target`, and `verb`. Return `{status:"applied",state,receipt,events?}` or `{status:"blocked",reason,receipt}`. |
+
+Fields use `number`, `vector` (XYZ), `boolean`, `categorical`,
+`record`, or `records` (an array of records). An optional `selector:true`
+passes the requested selector to the host. By default Ink resolves targets
+to world points. Events are `{kind,detail?}` records with kinds declared
+in the system config. A receipt supplies an `id` and optional `detail`
+record. Ink stamps the host system, operation, interaction attempt, tick,
+and applied or blocked status.
+
+Callbacks evaluate immutable JSON snapshots. Return a proposed snapshot
+from `step` or `perform` and keep external side effects outside the
+callbacks. This lets Ink discard a failed tick and restore or replay a
+checkpoint with the same implementation. Subscribe to committed events
+when the host needs to do something outside the simulation.
+
+To run an operation from an order, author the usual `interact` step.
+Bind the [targeted interaction](targeted-interactions.md#commit-effects)
+to a declared host operation with an effect like
+`{"action":"station/approve","args":{"amount":2}}`. The native interaction
+still owns range, duration, access, and cancellation. Ink publishes
+the committed host receipt in the interaction outcome and carries it into
+the agent's order results. Story objectives can retain the interaction
+event and receipt as evidence. A blocked operation preserves its refusal
+receipt and leaves the host state untouched.
+
+Declare optional accounts with the usual `resource`, `units`, and `type`
+descriptors and optional `min`, `max`, and `at`. Put their opening values in
+`initial.balances` under the matching account IDs. Ink's exact transfers can
+then move resources between native and host accounts, including during
+story settlement. Story documents can use the same account names in both
+worlds.
+
+[Bench Inspection](../examples/story-documents/bench-inspection.json) runs
+the same questlet with an Ink transfer effect or with a host that publishes
+an inspection receipt. Both verify the bench interaction and deliver two
+approved parts through a native settlement transfer. The host setup and
+callbacks are included in the [Node example](../examples/story-documents/bench-inspection.host.cjs).
+
+## Analyze and present event recordings
+
+Use `story events` to open a standalone event recording, a native run with
+embedded checkpoints, or a checkpoint. It reads recorded activity without
+running the originating simulation or loading its host implementation.
+
+```sh
+node cli/ink-studio.js story events inspection.run.json --format events --out inspection.events.json
+node cli/ink-studio.js story events inspection.events.json --story bench-inspection/release --out analysis.json
+node cli/ink-studio.js story events inspection.events.json --format markdown --out review.md
+node cli/ink-studio.js story events inspection.events.json --format timeline --out timeline.json
+```
+
+An imported `ink-studio/story-events` version 1 file contains an `id`,
+fixed timestep `dt`, inclusive `from` and `to` ticks, `coverage`,
+`dropped`, and an `events` array. Give events unique IDs and write them
+in tick order, retaining publication order within each tick. Rows have
+`id`, `kind`, `system`, `tick`, and any event-specific JSON fields. Set
+`coverage:"complete"` and `dropped:0` when the file covers the declared
+span. Ink labels extraction from a saved run or checkpoint
+`coverage:"retained"` because world history may have been filtered or
+truncated. To record a full stream, collect `run.events` after each
+committed tick via `run.advance(to, {onTick})`.
+
+The report counts recorded transitions, branches, objectives, and
+intervention windows, and retains the events and host receipts that
+support the summary. A story filter also follows source event IDs in
+recorded objective and trigger evidence. The Markdown view presents a
+chronological transcript. Timeline export provides Ink scene `markers` and
+`story-cue` events at the recorded tick times. Add the exported object
+under `timeline` to drive presentation event actions using the source
+event, story, branch, or outcome. This playback works in a world without
+the original story document or host.
+
+See the [imported relay recording](../examples/story-documents/bench-inspection.imported.events.json)
+for a standalone input. Node and browser bundle hosts can use
+`KIT.world.storyEvents.read`, `analyze`, and `timeline`.
+
 ## Replay the demos
 
 **The Burned Mill** starts an incident from a survey report, opens a grain questlet after three shortages, and activates an arc only after the stock ledger stays low. A brief recovery resets the hold. The questlet start also schedules a bell event on the next tick.

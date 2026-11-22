@@ -1,0 +1,41 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "bench-inspection",
+  "title": "Inspect and release a spare-parts crate",
+  "stories": {
+    "release": {
+      "kind": "questlet",
+      "title": "Send approved parts to the harbor",
+      "entry": "inspection",
+      "triggers": { "stocked": { "hold": 0.1, "state": {
+        "field": "world/account", "args": { "account": "station/raw" },
+        "when": { "path": "/balance", "op": "gte", "value": 2 }
+      } } },
+      "lifecycle": {
+        "progression": true,
+        "commitment": {
+          "actor": { "system": "crew", "agent": "mira", "generation": 1 },
+          "order": { "id": "inspect-spares", "task": "inspect" }
+        },
+        "settlement": { "outcomes": { "shipped": { "ship": { "transfer": {
+          "from": "station/approved", "to": "harbor/pier", "amount": 2
+        } } } } }
+      },
+      "stages": {
+        "inspection": {
+          "title": "Have the bench inspect the crate",
+          "decision": { "mode": "autonomous" },
+          "objectives": {
+            "approved": { "title": "Verify the bench receipt", "type": "observe", "params": {
+              "event": { "kind": "interaction-completed", "system": "bench",
+                "where": { "path": "/verb", "value": "inspect" } }
+            } }
+          },
+          "next": { "send": { "outcome": "shipped", "auto": true } }
+        }
+      },
+      "outcomes": { "shipped": { "title": "The pier has two approved spare parts" } }
+    }
+  }
+}

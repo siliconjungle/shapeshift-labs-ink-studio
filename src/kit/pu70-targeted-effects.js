@@ -50,6 +50,8 @@
       const request={...args,mode:'exact'}, {from,to}=transfers.validate(request);
       return {kind:'transfer',destinations:[from.system,to.system],request};
     }
+    const host = own(systems,system)&&systems[system].storyHostOperations?.get(key);
+    if (host) return {kind:'story-host',destination:system,host,args};
     const hooks=own(systems,system)&&systems[system].workEffects;
     const handler=own(hooks,key)&&hooks[key];
     check(handler,'Unsupported targeted interaction effect '+raw.action);

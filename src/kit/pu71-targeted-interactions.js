@@ -157,7 +157,10 @@
         check(record(outcome)&&validToken(outcome.id)&&!used.has(outcome.id)&&handle(outcome.actor)&&
           ['completed','rejected','cancelled','failed'].includes(outcome.status)&&tick(outcome.ended)&&
           (outcome.started===null||tick(outcome.started)&&outcome.started<=outcome.ended)&&
-          (outcome.reason===null||id(outcome.reason))&&offers.get(outcome.target)?.bindings.has(outcome.verb),
+          (outcome.reason===null||id(outcome.reason))&&offers.get(outcome.target)?.bindings.has(outcome.verb)&&
+          (outcome.receipt?.format!==W.storyHosts.format||
+            ['completed','failed'].includes(outcome.status)&&
+            W.storyHosts.validReceipt(outcome.receipt,outcome.id,outcome.ended,outcome.status==='completed'?'applied':'blocked')),
           'Invalid saved interaction outcome');
         used.add(outcome.id);
       }

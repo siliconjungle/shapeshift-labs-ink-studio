@@ -123,7 +123,7 @@
           if(due>ctx.tick)continue;
           const binding=offers.get(target), result=E.adjust(values[target],binding.attributes,binding.bindings.get(verb).changes);
           const effect=effects.get(target+'/'+verb);
-          const settled=result.reason?result:effect?ctx.effect(name,effect,snapshot()):{};
+          const settled=result.reason?result:effect?ctx.effect(name,effect,snapshot(),{attempt:job.id,actor:job.actor,target,verb}):{};
           const {reason:failure,...detail}=settled;
           if(failure){finish(job,'failed',failure,detail);continue;}
           if(effect)query=undefined;

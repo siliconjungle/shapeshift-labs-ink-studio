@@ -1,0 +1,26 @@
+{
+  "format": "ink-studio/story-events",
+  "version": 1,
+  "id": "archive-signal",
+  "dt": 0.25,
+  "from": 0,
+  "to": 12,
+  "coverage": "complete",
+  "dropped": 0,
+  "events": [
+    { "id": "opening", "kind": "story-transition", "system": "world", "tick": 1,
+      "document": "archive", "story": "send-signal", "from": null, "to": "available" },
+    { "id": "activation", "kind": "story-transition", "system": "world", "tick": 2,
+      "document": "archive", "story": "send-signal", "from": "available", "to": "active" },
+    { "id": "switch-confirmed", "kind": "relay-closed", "system": "relay", "tick": 6, "channel": "north" },
+    { "id": "proof-retained", "kind": "story-objective-resolved", "system": "world", "tick": 6,
+      "document": "archive", "story": "send-signal", "objective": "close-relay",
+      "receipt": { "kind": "event", "event": {
+        "id": "switch-confirmed", "kind": "relay-closed", "system": "relay", "tick": 6, "channel": "north"
+      } } },
+    { "id": "transmission", "kind": "story-branch-chosen", "system": "world", "tick": 7,
+      "document": "archive", "story": "send-signal", "branch": "transmit", "decision": { "mode": "autonomous", "by": "autonomous" } },
+    { "id": "finished", "kind": "story-transition", "system": "world", "tick": 7,
+      "document": "archive", "story": "send-signal", "from": "active", "to": "completed", "outcome": "sent" }
+  ]
+}

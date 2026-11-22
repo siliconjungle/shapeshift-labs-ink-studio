@@ -6,6 +6,8 @@ from JavaScript and the CLI. Each query reads one published revision.
 
 [Story triggers](story-documents.md#trigger-a-story-from-a-world) activate authored
 incidents, questlets, and arcs from committed events or measured world conditions.
+[Story host adapters](story-documents.md#connect-a-host-runtime) add typed
+queries, operations, and receipts from an external simulation.
 
 For editable SDF-biome scenes, the
 [biome revision API](procedural.md#biome-revisions) stages terrain, water,
