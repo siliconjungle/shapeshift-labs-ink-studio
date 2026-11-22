@@ -1,0 +1,3 @@
+[
+  { "tick": 4, "action": "standing/resolve-obligation", "args": { "obligation": "lantern-pledge", "status": "broken" } }
+]

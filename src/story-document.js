@@ -452,9 +452,22 @@ const StoryDocument = (() => {
       if (rules.length>16) invalid(at+'.consider','expected up to 16 consideration rules');
       for (const [id,rule] of rules) {
         const place=at+'.consider.'+id;
-        fields(rule,place,['when','otherwise']);
+        fields(rule,place,['when','otherwise'],['callback']);
         condition(rule.when,place+'.when');
         if (!['defer','refuse'].includes(rule.otherwise)) invalid(place+'.otherwise','expected defer or refuse');
+        if (Object.hasOwn(rule,'callback')) {
+          const use = rule.callback, path = place+'.callback';
+          fields(use,path,['id'],['with','on']);
+          if (!worldName(use.id)) invalid(path+'.id','expected a callback ID');
+          if (Object.hasOwn(use,'on')&&!['matched','missed'].includes(use.on)) invalid(path+'.on','expected matched or missed');
+          if (Object.hasOwn(use,'with')) {
+            const counterpart = use.with;
+            fields(counterpart,path+'.with',['kind','id']);
+            if (!['actor','faction'].includes(counterpart.kind)||typeof counterpart.id!=='string'||
+              counterpart.id.length>512||!counterpart.id.split('/').every(worldName))
+              invalid(path+'.with','expected an actor or faction identity');
+          }
+        }
       }
     }
   }

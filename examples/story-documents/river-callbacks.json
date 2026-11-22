@@ -1,0 +1,81 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "river-callbacks",
+  "title": "A rescue and a broken promise affect later choices",
+  "stories": {
+    "rescue": {
+      "kind": "questlet", "title": "Bring Aya to safety",
+      "triggers": { "distress": { "event": { "kind": "skiff-overturned" } } },
+      "lifecycle": { "progression": true },
+      "entry": "rescue",
+      "stages": { "rescue": {
+        "title": "Reach the riverbank",
+        "decision": { "mode": "autonomous" },
+        "objectives": { "safe": { "title": "Aya is ashore", "evidence": { "event": { "kind": "aya-reached-bank" } } } },
+        "next": { "safe": { "outcome": "aya-safe", "auto": true } }
+      } },
+      "outcomes": { "aya-safe": { "title": "Aya was rescued by the river watch" } }
+    },
+    "aya-volunteers": {
+      "kind": "questlet", "title": "Ask Aya to volunteer",
+      "triggers": { "call": { "event": { "kind": "ask-for-volunteers" } } },
+      "lifecycle": {
+        "progression": true,
+        "commitment": {
+          "actor": { "system": "crew", "agent": "aya", "generation": 1 },
+          "order": { "id": "aya-volunteers", "task": "watch" },
+          "terms": { "guarantee": 0 },
+          "consider": { "guarantee": {
+            "callback": { "id": "past-rescue", "with": { "kind": "faction", "id": "river-watch" }, "on": "missed" },
+            "when": { "path": "/terms/guarantee", "op": "gte", "value": 1 }, "otherwise": "refuse"
+          } }
+        }
+      },
+      "entry": "volunteer",
+      "stages": { "volunteer": { "title": "Accept the watch duty", "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "volunteered", "auto": true } } } },
+      "outcomes": { "volunteered": { "title": "Aya volunteered" } }
+    },
+    "ivo-volunteers": {
+      "kind": "questlet", "title": "Ask Ivo to volunteer",
+      "triggers": { "call": { "event": { "kind": "ask-for-volunteers" } } },
+      "lifecycle": {
+        "progression": true,
+        "commitment": {
+          "actor": { "system": "crew", "agent": "ivo", "generation": 2 },
+          "order": { "id": "ivo-volunteers", "task": "watch" },
+          "terms": { "guarantee": 0 },
+          "consider": { "guarantee": {
+            "callback": { "id": "past-rescue", "with": { "kind": "faction", "id": "river-watch" }, "on": "missed" },
+            "when": { "path": "/terms/guarantee", "op": "gte", "value": 1 }, "otherwise": "refuse"
+          } }
+        }
+      },
+      "entry": "volunteer",
+      "stages": { "volunteer": { "title": "Accept the watch duty", "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "volunteered", "auto": true } } } },
+      "outcomes": { "volunteered": { "title": "Ivo volunteered" } }
+    },
+    "negotiate": {
+      "kind": "questlet", "title": "Negotiate a new shift with Aya",
+      "triggers": { "proposal": { "event": { "kind": "open-new-negotiation" } } },
+      "lifecycle": {
+        "progression": true,
+        "commitment": {
+          "actor": { "system": "crew", "agent": "aya", "generation": 1 },
+          "order": { "id": "new-shift", "task": "watch" },
+          "terms": { "bond": 0 },
+          "consider": { "bond-after-breach": {
+            "callback": { "id": "broken-pledge", "with": { "kind": "faction", "id": "river-watch" } },
+            "when": { "path": "/terms/bond", "op": "gte", "value": 4 }, "otherwise": "refuse"
+          } }
+        }
+      },
+      "entry": "agree",
+      "stages": { "agree": { "title": "Agree to the new shift", "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "agreed", "auto": true } } } },
+      "outcomes": { "agreed": { "title": "Aya accepted the terms" } }
+    }
+  }
+}

@@ -273,6 +273,8 @@ Ink checks existing orders, assigned movement, shared travel, formations, and au
 
 `terms` is author-defined JSON. Each named `consider` condition can read `actor`, `needs`, `activity`, `phase`, and `terms`. Use `otherwise: "refuse"` for a hard requirement and `otherwise: "defer"` for a condition that may improve. Story authors can route wages or other consequences through normal ledger actions.
 
+A `consider` rule can also use a [story callback](#let-past-events-change-later-decisions) to apply a term only when the actor's history warrants it. Handoff proposals use the same consideration rules.
+
 | Response | What happens |
 | --- | --- |
 | Accepted | Ink starts the native order and grants the entire requested reservation bundle in the same tick, then activates the story. The next solver visit begins the order's work. |
@@ -295,6 +297,73 @@ node cli/ink-studio.js sim run examples/story-documents/dock-dispatch.world.json
 node cli/ink-studio.js probe dispatch.run.json --ticks 8 --field world/story-commitments --args '{"story":"dispatch/unload"}'
 node cli/ink-studio.js probe dispatch.run.json --ticks 11 --field booking/claims
 node cli/ink-studio.js sim replay dispatch.run.json
+```
+
+## Let past events change later decisions
+
+Name reusable history checks in `world.storyCallbacks`. A callback
+reads a world query, selects a value, and evaluates a condition.
+An optional `evidence` selector copies the matching receipts into
+the report. Use a memory, relationship, obligation, site history,
+or another registered source query.
+
+```json
+"storyCallbacks": {
+  "past-rescue": {
+    "field": "world/memories",
+    "args": { "holder": { "$actor": true }, "about": { "$with": true }, "type": "rescued-by", "limit": 4 },
+    "select": "/matched",
+    "when": { "op": "gt", "value": 0 },
+    "evidence": "/records"
+  }
+}
+```
+
+In `args`, `{"$actor":true}` expands to an actor holder with ID
+`system/agent/generation`. Use that ID when recording the memory
+to tie it to one lifetime. `{"$with":true}` expands to the counterpart
+holder supplied by the caller. Fixed holders and other query arguments
+can also be authored directly.
+
+Use a `callback` requirement in `sim cast` to check each candidate
+with its live lifetime handle. The example below qualifies candidates
+who remember being rescued by the river watch.
+
+```json
+"requirements": {
+  "remembers-rescuer": {
+    "callback": { "id": "past-rescue", "with": { "kind": "faction", "id": "river-watch" } }
+  }
+}
+```
+
+In a commitment's `consider` table, attach the same callback to a
+term. It applies when the callback reports `matched` by default.
+Set `on: "missed"` inside the callback reference to apply the term
+when there is no match. A memory that fades or is evicted stops
+matching when the source query no longer returns it. An unavailable
+source makes a casting check unavailable and defers a commitment.
+The decision records whether the term applied and the historical
+evidence behind it. Use `sim preflight` to inspect the definitions.
+
+Probe `world/story-callbacks` with `callback`, an optional `actor`
+lifetime handle, and an optional `with` holder to test a rule on a
+snapshot. The report distinguishes `matched`, `missed`, and
+`unavailable`. It copies selected values and evidence up to 4,096
+JSON characters each and flags any omitted value. Story state checks
+can use the same query and select `/status`.
+
+In the [river callback demo](../examples/story-documents/river-callbacks.world.json),
+Aya remembers the river watch's rescue and volunteers on the same
+terms that Ivo declines. If the watch later breaks its lantern pledge,
+the obligation's closing event creates a memory. Aya then requires
+a bond in a separate negotiation.
+
+```sh
+ink-studio sim run examples/story-documents/river-callbacks.world.json \
+  --actions examples/story-documents/river-callbacks.broken.actions.json --ticks 14 --record callbacks.run.json
+ink-studio sim cast callbacks.run.json --ticks 5 --spec examples/story-documents/river-callbacks.casting.json
+ink-studio probe callbacks.run.json --field world/story-commitments --args '{"story":"river-callbacks/negotiate"}'
 ```
 
 ## Delegate or hand off an active story
@@ -397,8 +466,8 @@ table. Use `standing/obligations` to read the open and closed records. The nativ
 actions `adjust-reputation`, `open-obligation`, and `resolve-obligation`
 can also be called by other world systems and event actions. Resolve an
 obligation without an evidence rule with
-`{ "obligation": "<id>", "status": "fulfilled" }`, or use `released`
-to waive it. The world records the close tick and emits
+`{ "obligation": "<id>", "status": "fulfilled" }`. Use `released`
+to waive it or `broken` to record an unmet promise. The world records the close tick and emits
 `obligation-resolved` for downstream rules. See
 [promises, debts, and obligations](headless-worlds.md#track-promises-debts-and-obligations)
 for evidence rules, succession, and a linked story demo.

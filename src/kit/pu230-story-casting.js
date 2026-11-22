@@ -95,6 +95,14 @@
         return compared(actual.state === rule, actual, 'different-availability');
       };
     },
+    callback(rule,query) {
+      W.storyCallbacks.checkUse(rule,undefined,'casting');
+      return ({system,agent,generation})=>{
+        const history = W.storyCallbacks.run(query,rule,{system,agent,generation});
+        return history.status==='unavailable'?unavailable('callback-unavailable',history):
+          compared(history.status===(rule.on??'matched'),history,'callback-condition-mismatch');
+      };
+    },
     where(rule) {
       const matches = condition(rule);
       const path = rule.path === undefined ? null : selector(rule.path);

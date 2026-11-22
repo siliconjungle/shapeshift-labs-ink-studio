@@ -122,6 +122,7 @@
     const base = {world, states:visible, signals, tick, time:view.time ?? tick * world.dt};
     const locations = new Map(), active = new Set();
     let spatialIndex, spatialBatchRead, aliases, appearance, picker, renderScene, continuityReport;
+    let evaluatingCallback = false;
     const navigationSources=new Map();
     const scene = () => renderScene ??= (visual ? visual() : W.visual({makeBuilder,makeSculpt},view,api));
     const transfers = () => W.transfers.bind(systems);
@@ -303,6 +304,13 @@
       'incident-selections':{type:'record',qualified:true,read:({args})=>
         W.incidentSelection.inspect(view.incidentCandidates,tick,args)},
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
+      ...(world.storyCallbacks!==undefined&&{'story-callbacks':{type:'record',qualified:true,read:({args})=>{
+        if (!view.storyCallbacks) return missing('Story callbacks are unavailable');
+        if (evaluatingCallback) return missing('Story callbacks cannot evaluate recursively');
+        evaluatingCallback = true;
+        try { return W.storyCallbacks.inspect(view.storyCallbacks,args,api); }
+        finally { evaluatingCallback = false; }
+      }}}),
       'story-commitments':{type:'record',qualified:true,read:({args})=>
         W.storyCommitments.inspect(view.storyCommitmentDefinitions,view.storyLifecycle,args)},
       'story-handoffs':{type:'record',qualified:true,read:({args})=>

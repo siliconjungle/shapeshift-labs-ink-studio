@@ -1,0 +1,8 @@
+{
+  "rosters": ["crew"],
+  "requirements": {
+    "free": { "availability": "free" },
+    "remembers-rescue": { "callback": { "id": "past-rescue", "with": { "kind": "faction", "id": "river-watch" } } }
+  },
+  "binding": { "kind": "river-guide" }
+}

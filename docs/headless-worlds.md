@@ -999,8 +999,10 @@ A `transfer` rule requires a full transfer from the native account
 system. Use `where` to choose the amount or resource to accept. The
 fulfillment retains both the event receipt and the actual payer,
 payee, and amount under `resolution.payment`. Other event kinds retain
-their source receipt. An evidence-based agreement can still be waived
-with `resolve-obligation` and status `released`.
+their source receipt. Use `resolve-obligation` with `released` to
+waive an agreement or `broken` to record a breach. The
+`obligation-resolved` event can feed a memory and a later
+[story callback](story-documents.md#let-past-events-change-later-decisions).
 
 Define each monitored party in the ledger's `config.parties`. Its
 `departure` matcher can use a native event such as `agent-despawned`

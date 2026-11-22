@@ -14,14 +14,14 @@
   const blockers = report => report.checks.filter(item=>item.status!=='pass').map(({name,status,reason})=>[name,status,reason]);
   const stageOf = row => row.flow?.current ? {stage:row.flow.current.stage,visit:row.flow.current.visit} : null;
 
-  function compile(documents,systems) {
+  function compile(documents,systems,callbacks) {
     const definitions = {};
     for (const document of documents) for (const [story,definition] of Object.entries(document.stories)) {
       const proposals = definition.lifecycle?.handoffs;
       if (!proposals) continue;
       const key = document.id+'/'+story;
       for (const [name,proposal] of Object.entries(proposals))
-        W.storyCommitments.checkProposal(proposal.commitment,systems,key+'/'+name);
+        W.storyCommitments.checkProposal(proposal.commitment,systems,key+'/'+name,callbacks);
       definitions[key] = proposals;
     }
     return Object.keys(definitions).length?freeze(definitions):undefined;
@@ -95,7 +95,8 @@
         (item.stage!==null&&(!keys(item.stage,['stage','visit'])||typeof item.stage.stage!=='string'||!positive(item.stage.visit)))||
         !Array.isArray(item.checks)||!item.checks.length||item.checks.length>24||
         !item.checks.every(check=>keys(check,['name','status','reason','actual'])&&typeof check.name==='string'&&
-          ['pass','defer','refuse'].includes(check.status)&&(check.status==='pass'?check.reason===undefined:typeof check.reason==='string'))) return false;
+          ['pass','defer','refuse'].includes(check.status)&&(check.status==='pass'?check.reason===undefined:typeof check.reason==='string'))||
+        !W.storyCommitments.validCallbacks(definition[item.proposal].commitment.consider,item.checks)) return false;
       if (item.decision==='accepted') {
         const {actor} = definition[item.proposal].commitment;
         return item.checks.every(check=>check.status==='pass')&&owner(item.order)&&!sameActor(item.order,item.from)&&

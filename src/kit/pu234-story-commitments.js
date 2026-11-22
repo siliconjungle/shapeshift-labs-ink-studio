@@ -11,7 +11,7 @@
     checks.some(row=>row.status==='defer')?'deferred':'accepted';
   const reasons = report => report.checks.filter(row=>row.status!=='pass').map(({name,status,reason})=>[name,status,reason]);
 
-  function checkProposal(spec,systems,key) {
+  function checkProposal(spec,systems,key,callbacks) {
     const {actor:{system,...actor},order} = spec;
     const roster = own(systems,system)&&systems[system];
     check(roster?.fields?.['commitment-terms']&&roster.actions?.['issue-order']&&roster.actions?.['cancel-order'],
@@ -22,15 +22,17 @@
       const board = order.reservation.board;
       check(own(systems,board)&&systems[board].reservationBoard,'Unknown story commitment reservation board '+board);
     }
+    for (const [name,rule] of Object.entries(spec.consider??{}))
+      if (rule.callback) W.storyCallbacks.checkUse(rule.callback,callbacks,key+'/'+name);
   }
 
-  function compile(documents, systems) {
+  function compile(documents, systems,callbacks) {
     const definitions = {};
     for (const document of documents) for (const [story,definition] of Object.entries(document.stories)) {
       const spec = definition.lifecycle?.commitment;
       if (!spec) continue;
       const key = document.id+'/'+story;
-      checkProposal(spec,systems,key);
+      checkProposal(spec,systems,key,callbacks);
       definitions[key] = spec;
     }
     return Object.keys(definitions).length?freeze(definitions):undefined;
@@ -64,9 +66,18 @@
     }
     const context = {actor:actual.actor,needs:actual.needs,activity:actual.activity,phase:actual.phase,terms};
     for (const name of Object.keys(consider).sort()) {
-      const {when,otherwise} = consider[name], label = 'term/'+name;
+      const {when,otherwise,callback} = consider[name], label = 'term/'+name;
+      const history = callback&&W.storyCallbacks.run(query,callback,actual.actor);
+      if (history?.status==='unavailable') {
+        checks.push(blocked(label,'defer','callback-unavailable',{callback:history}));
+        continue;
+      }
+      if (history&&history.status!==(callback.on??'matched')) {
+        checks.push(pass(label,{callback:history,applied:false}));
+        continue;
+      }
       const observed = when.path===undefined?undefined:read(context,selector(when.path));
-      const proof = {when,...(observed!==undefined&&{value:observed})};
+      const proof = {when,...(observed!==undefined&&{value:observed}),...(history&&{callback:history,applied:true})};
       checks.push(Q.condition(when,context)?pass(label,proof):blocked(label,otherwise,'terms-unmet',proof));
     }
     return {tick,actor:actual.actor,checks};
@@ -89,6 +100,28 @@
     });
   }
 
+  function validCallbacks(consider,checks) {
+    for (const [name,rule] of Object.entries(consider??{})) {
+      if (!rule.callback) continue;
+      const matching = checks.filter(item=>item.name==='term/'+name);
+      if (!matching.length&&!checks.some(item=>item.name==='availability')) continue;
+      if (matching.length!==1) return false;
+      const {status,reason,actual} = matching[0], history = actual?.callback;
+      if (history?.callback!==rule.callback.id) return false;
+      if (history.status==='unavailable') {
+        if (status!=='defer'||reason!=='callback-unavailable'||actual.applied!==undefined) return false;
+        continue;
+      }
+      if (!['matched','missed'].includes(history.status)||typeof history.field!=='string') return false;
+      const applies = history.status===(rule.callback.on??'matched');
+      if (actual.applied!==applies) return false;
+      if (!applies) {
+        if (status!=='pass') return false;
+      } else if (!equal(actual.when,rule.when)||status!=='pass'&&(status!==rule.otherwise||reason!=='terms-unmet')) return false;
+    }
+    return true;
+  }
+
   function valid(spec,row,tick) {
     const report = row.commitment;
     if (!spec) return report===undefined;
@@ -105,6 +138,7 @@
       !Array.isArray(report.checks)||!report.checks.length||report.checks.length>24||
       !report.checks.every(item=>keys(item,['name','status','reason','actual'])&&typeof item.name==='string'&&
         ['pass','defer','refuse'].includes(item.status)&&(item.status==='pass'?item.reason===undefined:typeof item.reason==='string'))||
+      !validCallbacks(spec.consider,report.checks)||
       report.decision!==decision(report.checks)) return false;
     if (report.decision==='accepted') return keys(report.order,['system','agent','generation','sequence'])&&
       positive(report.actor.generation)&&positive(report.order.sequence)&&equal(report.order,{...report.actor,sequence:report.order.sequence})&&
@@ -123,5 +157,5 @@
     return Q.ok(Object.fromEntries(Object.keys(definitions??{}).sort().map(key=>[key,row(key)])));
   }
 
-  W.storyCommitments = Object.freeze({compile,checkProposal,attempt,blocked,pass,reasons,releases,valid,inspect});
+  W.storyCommitments = Object.freeze({compile,checkProposal,attempt,blocked,pass,reasons,releases,validCallbacks,valid,inspect});
 })(KIT);

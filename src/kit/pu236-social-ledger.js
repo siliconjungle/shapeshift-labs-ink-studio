@@ -8,7 +8,7 @@
     'open-obligation': 'obligation-opened',
     'resolve-obligation': 'obligation-resolved'
   };
-  const closed = value => value==='fulfilled'||value==='released';
+  const closed = value => ['fulfilled','released','broken'].includes(value);
   const keys = (value,names) => record(value)&&Object.keys(value).every(key=>names.includes(key));
   const termsOK = value => record(value)&&JSON.stringify(value).length<=4096;
   const partyId = value => W.worldFacts.qualified(value);

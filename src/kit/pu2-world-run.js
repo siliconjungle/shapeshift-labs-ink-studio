@@ -352,6 +352,7 @@
     plan.worldMemories = W.worldMemories.compile(world.memories);
     plan.worldCustody = W.worldCustody.compile(world.custody);
     plan.worldSiteHistory = W.worldSiteHistory.compile(world.siteHistory);
+    plan.storyCallbacks = W.storyCallbacks.compile(world,systems);
     const templates = world.storyTemplates === undefined ? undefined : W.storyTemplates.compile(world);
     if (templates || world.storyDocuments !== undefined || world.storyBindings !== undefined) {
       plan.storyRoles = W.storyRoles.compile(templates?.documents ?? (world.storyDocuments === undefined ? [] : world.storyDocuments),
@@ -362,8 +363,8 @@
       plan.incidentCatalog = W.incidentCatalog.compile(documents,plan.storyTemplates);
       plan.incidentVariety = W.incidentVariety.compile(documents);
       plan.storyReferences = W.storyReferences.compile(documents, world, systems);
-      plan.storyCommitments = W.storyCommitments.compile(documents, systems);
-      plan.storyHandoffs = W.storyHandoffs.compile(documents, systems);
+      plan.storyCommitments = W.storyCommitments.compile(documents,systems,plan.storyCallbacks);
+      plan.storyHandoffs = W.storyHandoffs.compile(documents,systems,plan.storyCallbacks);
       plan.storySettlement = W.storySettlement.compile(documents, systems, transfers);
       plan.storyLifecycle = W.storyLifecycle.compile(documents, world, systems);
       plan.incidentCooldowns = W.incidentCooldowns.compile(documents,world.dt);
@@ -518,6 +519,7 @@
       ...(plan.worldCustody && {custody:plan.worldCustody.policy}),
       ...(plan.worldSiteHistory && {siteHistory:plan.worldSiteHistory.policy}),
       ...(plan.regionContinuity && {regionContinuity:plan.world.regionContinuity}),
+      ...(plan.storyCallbacks && {callbacks:plan.storyCallbacks.definitions}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
       ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
@@ -554,7 +556,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,worldCustody,worldSiteHistory,regionContinuity,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,worldCustody,worldSiteHistory,regionContinuity,storyCallbacks,navigationSources} = plan;
     const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
       documents:storyRoles?.documents??[]});
     let composition, inspection;
@@ -631,6 +633,7 @@
         ...(custodyState && {custody:custodyState,custodyPolicy:worldCustody.policy}),
         ...(siteHistoryState && {siteHistory:siteHistoryState,siteHistoryPolicy:worldSiteHistory.policy}),
         ...(regionContinuity&&{regionContinuity}),
+        ...(storyCallbacks&&{storyCallbacks}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),

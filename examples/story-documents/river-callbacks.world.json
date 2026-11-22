@@ -1,0 +1,69 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "river-callbacks",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "causality": { "limit": 128 },
+  "storyDocuments": [{ "file": "river-callbacks.json" }],
+  "systems": {
+    "standing": { "kind": "social-ledger" },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-4, -1, -4], "max": [4, 2, 4] },
+      "species": { "walker": { "mode": "walk", "speed": 1 } },
+      "agents": {
+        "aya": { "species": "walker", "position": [0, 0, 0] },
+        "ivo": { "species": "walker", "position": [1, 0, 0] }
+      },
+      "orders": { "tasks": { "watch": { "steps": [{ "op": "wait", "ticks": 3 }] } } }
+    } }
+  },
+  "memories": { "types": {
+    "rescued-by": { "durable": true, "data": { "outcome": "id" } },
+    "pledge-broken": { "durable": true, "data": { "obligation": "id" } }
+  } },
+  "storyCallbacks": {
+    "past-rescue": {
+      "field": "world/memories",
+      "args": { "holder": { "$actor": true }, "about": { "$with": true }, "type": "rescued-by", "limit": 4 },
+      "select": "/matched", "when": { "op": "gt", "value": 0 }, "evidence": "/records"
+    },
+    "broken-pledge": {
+      "field": "world/memories",
+      "args": { "holder": { "$actor": true }, "about": { "$with": true }, "type": "pledge-broken", "limit": 4 },
+      "select": "/matched", "when": { "op": "gt", "value": 0 }, "evidence": "/records"
+    }
+  },
+  "eventActions": {
+    "remember-rescuer": {
+      "on": { "kind": "story-transition", "where": { "all": [
+        { "path": "/document", "value": "river-callbacks" }, { "path": "/story", "value": "rescue" },
+        { "path": "/outcome", "value": "aya-safe" }
+      ] } },
+      "actions": [{ "action": "world/remember", "args": {
+        "type": "rescued-by", "holder": { "kind": "actor", "id": "crew/aya/1" },
+        "about": { "kind": "faction", "id": "river-watch" }, "source": "2.0", "data": { "outcome": "aya-safe" }
+      }, "bindings": { "/source": "/id", "/data/outcome": "/outcome" } }]
+    },
+    "remember-breach": {
+      "on": { "kind": "obligation-resolved", "system": "standing", "where": { "all": [
+        { "path": "/status", "value": "broken" }, { "path": "/obligation", "value": "lantern-pledge" }
+      ] } },
+      "actions": [{ "action": "world/remember", "args": {
+        "type": "pledge-broken", "holder": { "kind": "actor", "id": "crew/aya/1" },
+        "about": { "kind": "faction", "id": "river-watch" }, "source": "4.0",
+        "data": { "obligation": "lantern-pledge" }
+      }, "bindings": { "/source": "/id", "/holder/id": "/creditor", "/about/id": "/debtor", "/data/obligation": "/obligation" } }]
+    }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "skiff-overturned" } },
+    { "tick": 1, "action": "standing/open-obligation", "args": {
+      "obligation": "lantern-pledge", "category": "promise", "debtor": "river-watch", "creditor": "crew/aya/1",
+      "terms": { "deliverable": "Return Aya's borrowed lantern" }
+    } },
+    { "tick": 2, "action": "world/event", "args": { "kind": "aya-reached-bank" } },
+    { "tick": 6, "action": "world/event", "args": { "kind": "ask-for-volunteers" } },
+    { "tick": 12, "action": "world/event", "args": { "kind": "open-new-negotiation" } }
+  ]
+}
