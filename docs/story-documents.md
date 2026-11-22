@@ -48,6 +48,31 @@ dot -Tsvg breakwater-survey.routes.dot -o breakwater-survey.routes.svg
 
 Ink exports DOT directly. The last command uses Graphviz to render it. The diagram describes structural possibilities using the preflight analysis. Availability of live evidence, actor decisions, and event timing is resolved during simulation.
 
+### Run a story or scheduler to a breakpoint
+
+Use `sim run` with a world and `--seed` for a fresh run, or `sim resume` with a checkpoint or recording to continue from its saved tick and seed. A world run advances the authored scheduler. Add `--start-story document/story` to request a specific root story with a lifecycle on the next tick. The request runs inside the authored world and goes through its feasibility, live reference, commitment, and settlement rules. An explicit launch can start before the authored trigger. Start the owning arc for a nested questlet, and use [candidate dispatch](#queue-incident-opportunities) for an individual queued incident.
+
+| Stop option | Match |
+| --- | --- |
+| `--until-stage document/story/stage` | The current stage visit, or a visit entered and left in the same committed tick. For a story without progression, use its entry stage. |
+| `--until-outcome document/story/outcome` | A recorded named ending, with the terminal status and resolution tick. |
+| `--until-condition condition.json` | An available world query result that passes `when`. The file contains `field`, `when`, and optional `args` and `at`. |
+| `--ticks N`, `--steps N`, or `--t seconds` | An absolute tick, relative number of ticks, or world time. With a breakpoint this sets the maximum advance. |
+
+Breakpoints check the starting snapshot and then each committed tick. Supply more than one kind to pause at the first matching tick and report all matches at that tick. With no time bound or authored scenario limit, a breakpoint run advances up to 1,000 ticks. An explicit launch by itself advances one tick by default. A missed breakpoint exits with status 2 and still writes the requested checkpoint, recording, and report. A start request waiting for feasibility is saved with the checkpoint. Host code can call `advance(tick, {until: (view, query) => boolean})` or use the asynchronous equivalent.
+
+The [relief relay](../examples/story-documents/dispatch-rehearsal.world.json) receives its first crate at tick 2, reaches handover with two crates at tick 4, and delivers them when the depot acknowledges the shipment at tick 8.
+
+```sh
+story=dispatch-rehearsal/relay
+node cli/ink-studio.js sim run examples/story-documents/dispatch-rehearsal.world.json \
+  --seed 71 --start-story "$story" --until-stage "$story/handover" --ticks 20 --checkpoint handover.json
+node cli/ink-studio.js sim resume handover.json --until-outcome "$story/delivered" --record delivered.run.json
+node cli/ink-studio.js sim verify delivered.run.json
+```
+
+The same run can stop on the authored [stock condition](../examples/story-documents/dispatch-rehearsal.stocked.condition.json). Rehearse a full scheduler with `sim run` and select one of its authored profiles with `--storyteller`. Inspect the stopped scheduler or its live accounts with the ordinary `sim scheduler` and `probe` commands.
+
 ### Describe a story package before running it
 
 `story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.
@@ -1253,6 +1278,8 @@ Add `"lifecycle": {}` to a story definition to track its state and transition re
 For manual activation, `offerFor` specifies how many seconds an offer stays available and remains supported in version 1 story documents. Use [deadlines](#set-story-deadlines) to author and inspect the three clocks. An active or suspended story can expire explicitly through a command from the host or an event action.
 
 Schedule `world/story-transition` through ordinary world commands, through `sim run --actions`, or from an event action. Provide the document and story IDs, destination `to`, and a `reason` of up to 256 characters. A `completed` or `failed` transition can also include a declared `outcome` ID.
+
+Use `world/story-start` with `document`, `story`, and `reason` to explicitly admit and activate a root story. The feasibility request and the resulting lifecycle retain `source.launch` with the original request tick and reason. A story already active can receive the request again. A suspended or closed story emits `story-start-rejected` with the current state and reason.
 
 ```json
 {"tick":3,"action":"world/story-transition","args":{"document":"winter-crossing","story":"repair","to":"active","reason":"crew-accepted"}}

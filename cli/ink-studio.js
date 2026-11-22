@@ -1029,6 +1029,8 @@ const CMD = {
         '    scene sync-prefab <release.json> <world ...> --out NEW_DIRECTORY | --dry-run',
         '    scene apply <scene> <edits.json> --dry-run   preview edited paths and look targets',
         '  sim run|resume|fork|reset|replay|verify|scrub|take|diff|sweep|render ...  run or compare fixed-tick simulations',
+        '    sim run|resume <world|checkpoint|run> [--start-story document/story] [--until-stage document/story/stage]',
+        '      [--until-outcome document/story/outcome] [--until-condition condition.json] [--ticks N]   stop at a story breakpoint',
         '    sim plan <world|model|checkpoint|recording>  inspect rates, signal crossings, feedback, baked inputs and resource estimates',
         '    sim model validate|inspect|compile <model.json>  check, describe, or lower a versioned simulation model',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',

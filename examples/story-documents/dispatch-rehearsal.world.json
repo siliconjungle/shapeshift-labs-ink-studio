@@ -1,0 +1,24 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "dispatch-rehearsal",
+  "seed": 17,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "dispatch-rehearsal.json" }],
+  "systems": {
+    "supplies": {
+      "kind": "store",
+      "config": { "accounts": {
+        "source": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 2 },
+        "staging": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 },
+        "depot": { "resource": "supplies", "units": "crate", "type": "integer", "initial": 0 }
+      } }
+    }
+  },
+  "commands": [
+    { "tick": 2, "action": "world/transfer", "args": { "from": "supplies/source", "to": "supplies/staging", "amount": 1 } },
+    { "tick": 4, "action": "world/transfer", "args": { "from": "supplies/source", "to": "supplies/staging", "amount": 1 } },
+    { "tick": 8, "action": "world/event", "args": { "kind": "depot-acknowledged" } },
+    { "tick": 15, "action": "world/event", "args": { "kind": "public-order" } }
+  ]
+}

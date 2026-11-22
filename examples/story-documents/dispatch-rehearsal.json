@@ -1,0 +1,42 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "dispatch-rehearsal",
+  "title": "Rehearse the relief relay",
+  "stories": {
+    "relay": {
+      "kind": "questlet",
+      "title": "Dispatch relief supplies",
+      "entry": "load",
+      "triggers": { "scheduled": { "event": { "kind": "public-order" } } },
+      "lifecycle": {
+        "activation": "manual",
+        "progression": true,
+        "feasibility": { "supply-arrived": { "state": {
+          "field": "world/account", "args": { "account": "supplies/staging" },
+          "when": { "path": "/balance", "op": "gte", "value": 1 }
+        } } },
+        "settlement": { "outcomes": { "delivered": { "release-crates": { "transfer": {
+          "from": "supplies/staging", "to": "supplies/depot", "amount": 2
+        } } } } }
+      },
+      "stages": {
+        "load": {
+          "title": "Load two crates",
+          "decision": { "mode": "autonomous" },
+          "objectives": { "stocked": { "title": "Both crates are staged", "type": "acquire",
+            "params": { "account": "supplies/staging", "amount": 2 } } },
+          "next": { "packed": { "stage": "handover", "auto": true } }
+        },
+        "handover": {
+          "title": "Wait for the depot acknowledgment",
+          "decision": { "mode": "autonomous" },
+          "objectives": { "ack": { "title": "Depot acknowledged the relay", "type": "observe",
+            "params": { "event": { "kind": "depot-acknowledged", "system": "world" } } } },
+          "next": { "accepted": { "outcome": "delivered", "auto": true } }
+        }
+      },
+      "outcomes": { "delivered": { "title": "Relief supplies arrived", "status": "completed" } }
+    }
+  }
+}

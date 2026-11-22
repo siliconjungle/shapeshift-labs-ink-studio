@@ -8,7 +8,8 @@
     completed: [], failed: [], withdrawn: [], expired: []
   });
   const limit = 64;
-  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose', 'story-select', 'story-handoff', 'story-cancel-handoff']);
+  const actions = Object.freeze(['story-transition', 'story-objective', 'story-choose', 'story-select', 'story-handoff',
+    'story-cancel-handoff', 'story-start']);
   const reasonOK = value => typeof value === 'string' && value.length <= 256 && value.trim().length > 0;
   const fields = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
   const allowed = (from, to) => from === null ? to === 'available' : own(destinations, from) && destinations[from].includes(to);
@@ -61,10 +62,16 @@
     const commitmentKeys = order.filter(key => entries.get(key).commitment);
     const handoffKeys = order.filter(key => entries.get(key).handoffs);
     const feasibility = gateKeys.length ? freeze(Object.fromEntries(gateKeys.map(key => [key,entries.get(key).feasibility]))) : undefined;
+    function validSource(key,source,tick) {
+      const def = entries.get(key);
+      if (!own(source,'launch')) return W.storyTriggers.validEvidence(def.triggers,source,tick);
+      return !parents.has(key)&&!def.candidate&&fields(source,['launch'])&&fields(source.launch,['tick','reason'])&&
+        Number.isSafeInteger(source.launch.tick)&&source.launch.tick>0&&source.launch.tick<=tick&&reasonOK(source.launch.reason);
+    }
 
     function checkAction(action, args) {
       const handoff = action==='story-handoff'||action==='story-cancel-handoff';
-      const extra = handoff ? ['revision',...(action==='story-handoff'?['proposal']:[])] : action === 'story-transition' ? ['to', 'outcome'] :
+      const extra = action==='story-start' ? [] : handoff ? ['revision',...(action==='story-handoff'?['proposal']:[])] : action === 'story-transition' ? ['to', 'outcome'] :
         action === 'story-choose' ? ['stage', 'visit', 'branch'] :
         ['stage', 'visit', 'objective', action === 'story-select' ? 'option' : 'result'];
       check(fields(args, ['document', 'story', 'reason', ...extra]) &&
@@ -72,6 +79,12 @@
         typeof args.story === 'string' && !args.story.includes('/'), 'Story transition needs document and story IDs');
       const def = entries.get(keyOf(args));
       check(def, 'Unknown story with lifecycle ' + keyOf(args));
+      if (action==='story-start') {
+        check(reasonOK(args.reason),'Story start needs a reason');
+        check(!parents.has(keyOf(args)),'Start the owning arc to open a child questlet');
+        check(!def.candidate,'Use world/dispatch-candidate to release an eligible queued incident');
+        return;
+      }
       if (handoff) {
         check(def.handoffs&&Number.isSafeInteger(args.revision)&&args.revision>=0&&reasonOK(args.reason)&&
           (action==='story-cancel-handoff'||typeof args.proposal==='string'&&own(def.handoffs,args.proposal)),
@@ -145,7 +158,8 @@
           W.storyHandoffs.valid(def.handoffs,row,tick,reasonOK) &&
           W.storySettlement.valid(def.settlement,row,tick) &&
           W.storyConsequences.valid(row.consequences,def.consequences,key,previous,id=>state[def.info.document+'/'+id]) &&
-          (cutOffBeforeOffer ? row.source === undefined : W.storyTriggers.validEvidence(def.triggers,row.source,tick)), message);
+          (cutOffBeforeOffer ? row.source === undefined : validSource(key,row.source,tick)) &&
+          (!row.source?.launch||row.dropped>0||row.transitions[0].reason==='explicit-start'), message);
       }
       check(feasibility ? record(gates) && equal(Object.keys(gates).sort(),gateKeys) : gates === undefined,
         'Invalid story feasibility checkpoint table');
@@ -166,8 +180,9 @@
           validateParent(request.parent,owner,def.info.story,state[owner]?.flow,request.tick,message);
           check(request.parent.tick===request.tick && request.source===undefined,message);
         } else {
-          check(request.parent===undefined && W.storyTriggers.validEvidence(def.triggers,request.source,request.tick) &&
-            (!def.triggers || trigger?.tick===request.tick && trigger.trigger===request.source?.trigger),message);
+          const launch = request.source?.launch;
+          check(request.parent===undefined && validSource(key,request.source,request.tick) &&
+            (launch ? launch.tick===request.tick : !def.triggers || trigger?.tick===request.tick && trigger.trigger===request.source?.trigger),message);
         }
         if (offered) check((row.dropped || report.tick===first.tick) &&
           equal(request.source,row.source) && equal(request.parent,row.parent),message);
@@ -212,6 +227,9 @@
       publishConsequences) {
       let state = previous, gates = previousGates, queuedOpens = [];
       const requests = new Map(), handoffRequests = new Map(), H = W.storyHandoffs;
+      const launches = new Map(), offeredByLaunch = new Set();
+      for (const command of commands) if (command.action==='story-start'&&!launches.has(keyOf(command.args)))
+        launches.set(keyOf(command.args),command);
       const sourceLength = events.length;
       let indexed;
       const eventsOf = kind => (indexed ??= W.storyEvidence.index(events, sourceLength)).get(kind) ?? [];
@@ -269,22 +287,38 @@
           transition(key,'active','live-reference-restored',undefined,{publish,reference:last.reference});
         return true;
       }
+      function requestStart(key,reason,publish) {
+        const status = statusOf(state[key]);
+        if (status==='active'||status===null&&gates?.[key]?.request.source?.launch) return;
+        const reference = status==='available'?policy(key):undefined;
+        if (status!=='available'||reference) {
+          publish('story-start-rejected',{...entries.get(key).info,from:status,
+            reason:reference?'live-reference-blocked':'story-not-available',requestedReason:reason,...(reference&&{reference})});
+          return;
+        }
+        if (entries.get(key).commitment) {
+          if (!requests.has(key)) requests.set(key,{reason,publish});
+        } else activate(key,reason,publish);
+      }
       function offer(key, source, parent, publish = emit, candidate) {
         const def = entries.get(key);
         if (def.feasibility) {
           const prior = gates[key];
           if (prior?.report.tick === tick) return;
-          const request = prior?.request ?? {tick:candidate?.queuedAt??tick,...(source&&{source}),...(parent&&{parent})};
+          const replace = source?.launch&&!prior?.request.source?.launch;
+          const request = (!replace&&prior?.request) || {tick:candidate?.queuedAt??tick,...(source&&{source}),...(parent&&{parent})};
           const report = candidate?.report??W.storyFeasibility.evaluate(def.feasibility,tick,query());
           if (gates === previousGates) gates = {...previousGates};
           gates[key] = {request,report};
           if (!report.ready) return;
           ({source,parent} = request);
         }
-        const reason = candidate ? 'candidate-dispatched' : parent ? 'parent-stage-opened' : source ? 'trigger-matched' : 'authored-offer';
+        const reason = candidate ? 'candidate-dispatched' : parent ? 'parent-stage-opened' : source?.launch ? 'explicit-start' :
+          source ? 'trigger-matched' : 'authored-offer';
         transition(key,'available',reason,undefined,{publish,source,parent});
-        if (applyReference(key,publish) && def.activation === 'automatic' && !def.commitment)
-          activate(key,'automatic-activation',publish);
+        if (!applyReference(key,publish)) return;
+        if (source?.launch) requestStart(key,source.launch.reason,publish);
+        else if (def.activation === 'automatic' && !def.commitment) activate(key,'automatic-activation',publish);
       }
       function openChildren(ids, parent, publish) {
         for (const id of ids) {
@@ -371,8 +405,10 @@
           continue;
         }
         if (prior !== null && !applyReference(key)) continue;
-        if (status==='available' && (def.liveReferences||def.settlement?.costs) && def.activation==='automatic' && !def.commitment) {
-          activate(key,'automatic-activation');
+        const launch = prior?.source?.launch;
+        if (status==='available' && !def.commitment &&
+          (launch||(def.liveReferences||def.settlement?.costs)&&def.activation==='automatic')) {
+          activate(key,launch?.reason??'automatic-activation');
           continue;
         }
         if (status === 'active' && prior.flow?.current) {
@@ -386,8 +422,13 @@
             }
           }
         }
-        if (prior===null&&!def.candidate&&(gates?.[key] || !parents.has(key) && (!def.triggers || source)))
-          offer(key,source);
+        if (prior===null&&!def.candidate) {
+          const command = launches.get(key);
+          if (command) {
+            offeredByLaunch.add(command);
+            offer(key,{launch:{tick,reason:command.args.reason}},undefined,command.publish);
+          } else if (gates?.[key] || !parents.has(key) && (!def.triggers || source)) offer(key,source);
+        }
       }
       for (const [key,candidate] of Object.entries(released??{}))
         if (state[key]===null) offer(key,candidate.source,undefined,emit,candidate);
@@ -406,8 +447,13 @@
         if (step.event) emit(step.event,{...def.info,stage:current.stage,visit:current.visit,mode:policy.mode,
           window:W.storyDecisions.describeWindow(policy,step.window)});
       }
-      for (const { action, args, publish } of commands) {
+      for (const command of commands) {
+        const {action,args,publish} = command;
         const { to, reason, outcome } = args, key = keyOf(args), from = statusOf(state[key]);
+        if (action==='story-start') {
+          if (!offeredByLaunch.has(command)) requestStart(key,reason,publish);
+          continue;
+        }
         if (action==='story-handoff'||action==='story-cancel-handoff') {
           const row = state[key], def = entries.get(key), cancel = action==='story-cancel-handoff';
           const queued = handoffRequests.get(key)?.request;

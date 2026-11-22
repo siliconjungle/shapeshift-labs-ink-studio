@@ -7,7 +7,7 @@
   const validDt = dt => Number.isFinite(dt)&&dt>0&&dt<=1;
   const storyOf = ({document,story}) => id(document)&&id(story)?document+'/'+story:null;
   const storyKinds = new Set([
-    'story-started','story-transition','story-stage-entered','story-beat-entered','story-objective-resolved','story-progress-rejected',
+    'story-started','story-start-rejected','story-transition','story-stage-entered','story-beat-entered','story-objective-resolved','story-progress-rejected',
     'story-branch-chosen','story-decision-opened','story-decision-elapsed','story-commitment-decision',
     'story-handoff-decision','story-handoff-accepted','story-settlement','story-settlement-blocked',
     'story-cooldown-started','story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-selected','story-candidate-expired','story-candidate-rejected'

@@ -1,0 +1,5 @@
+{
+  "field": "world/account",
+  "args": { "account": "supplies/staging" },
+  "when": { "path": "/balance", "op": "gte", "value": 2 }
+}

@@ -1825,28 +1825,34 @@
       advanceBlocks(to,values,eventValues);
       return eventValues;
     }
-    function advance(to, {onTick,stopOnOutcome = false} = {}) {
+    function advance(to, {onTick,stopOnOutcome = false,until} = {}) {
       check(!asyncActive,'A simulation advance is already in progress');
       check(tickOK(to) && to >= tick, 'Target tick precedes current state or exceeds the run budget');
-      if (blockSystem && onTick === undefined) return advanceBlocks(to);
+      check(until===undefined||typeof until==='function','Expected an until callback');
+      if (blockSystem && onTick === undefined && until===undefined) return advanceBlocks(to);
+      if (until?.(view(),query())) return view();
       while (tick < to && (!stopOnOutcome || scenario.status === 'running')) {
         step();
         onTick?.(view(),query());
+        if (until?.(view(),query())) break;
       }
       return view();
     }
-    async function advanceAsync(to,{onTick,stopOnOutcome=false}={}){
+    async function advanceAsync(to,{onTick,stopOnOutcome=false,until}={}){
       check(!asyncActive,'A simulation advance is already in progress');
       check(tickOK(to)&&to>=tick,'Target tick precedes current state or exceeds the run budget');
+      check(until===undefined||typeof until==='function','Expected an until callback');
       asyncActive=true;
       try{
+        if (until&&await until(view(),query())) return view();
         while(tick<to&&(!stopOnOutcome||scenario.status==='running')){
-          if (blockSystem && onTick === undefined && runBlock(blockEnd(to))) {
+          if (blockSystem && onTick === undefined && until===undefined && runBlock(blockEnd(to))) {
             await Promise.resolve();
             continue;
           }
           const completed=await stepInBackground();
           if(onTick)await onTick(completed,query());
+          if(until&&await until(completed,query())) break;
         }
         return view();
       }finally{asyncActive=false;}

@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const CheckpointStore = require('../src/simulation-checkpoint-store.js');
 const {embedModels} = require('./simulation-model-files.js');
 const {embedStoryDocuments} = require('./story-document.js');
+const StoryRun = require('./story-run-controls.js');
 
 const read = file => JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const parse = input => JSON.parse(String(input));
@@ -323,12 +324,12 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const processing = run.processing();
     return Object.keys(processing).length ? {processing} : {};
   }
-  function finish(run, sourceStore) {
+  function finish(run, sourceStore, detail) {
     const checks = opt.assert ? assert(run,read(opt.assert)) : null;
     const { storage, save } = saveCheckpoints(sourceStore);
     if (opt.checkpoint) save('checkpoint',opt.checkpoint,run.checkpoint());
     if (opt.record) save('record',opt.record,run.recording());
-    respond({...summary(run,checks),...(Object.keys(storage).length&&{storage})});
+    respond({...summary(run,checks),...(Object.keys(storage).length&&{storage}),...detail});
     if (checks?.some(row => !row.pass) || opt.scenario && ['fail','timeout'].includes(run.scenario.status))
       process.exitCode = 2;
   }
@@ -787,6 +788,18 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const run = runtime(input,!!(opt.profile||opt.assert),undefined,recordOptions());
         if (mode === 'run' && !input.checkpoint) for (const issue of run.storyDiagnostics())
           console.error(`Story warning [${issue.code}] ${issue.document} ${issue.path}: ${issue.message}`);
+        if (StoryRun.enabled(opt)) {
+          ensure(other===undefined,'Use one world, checkpoint, or recording with story run controls');
+          const controls = StoryRun.create(W,run,opt,read), {tick,world} = run.view();
+          const timed = [opt.ticks,opt.steps,opt.t,world.scenario?.until].some(value=>value!==undefined);
+          const limit = timed?to(run):Math.min(R.maxTick,tick+(controls.hasStops?1000:1));
+          controls.schedule();
+          schedule(run);
+          const {unmet,...detail} = controls.advance(limit,!!opt.scenario);
+          finish(run,input.store,detail);
+          if (unmet) process.exitCode = 2;
+          break;
+        }
         schedule(run);
         run.advance(to(run),{stopOnOutcome:!!opt.scenario});
         finish(run,input.store);
