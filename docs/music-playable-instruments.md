@@ -26,6 +26,8 @@ use `music.instrumentLibrary` and `music.loadInstrumentPack`. Send a pack's kit
 and assets to `music.renderSampleKit`. The same assets and named patches can
 feed `music.renderProduction` or a live edit session.
 
+For recorded reed, metal, drums and bass with a portable WAV bank and stock mix racks, see the [native sound library](native-sound-library.md).
+
 ## Cinder Flute
 
 A pitched tube resonator and a sine reed sit beside filtered air noise. A

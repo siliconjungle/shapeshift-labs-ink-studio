@@ -1206,6 +1206,8 @@ const CMD = {
         '  music production instrument-pack NAME [settings.json] --out DIR   export a stock instrument and its WAVs',
         '  music production play-kit <instrument.json> <performance.json> --out DIR   play a portable pad kit',
         '  music production instrument-presets   list ready-to-play phrase-aware patches',
+        '  music production sound-library   list the recorded native sound packs',
+        '  music production sound-pack ID --out DIR   export patches, WAVs, provenance and a mix rack',
         '  music production groove <recipe.json> [mapping.json]   transfer performance timing, accents and gates',
         '  music mix render recipe.json --out directory   render routed audio, inserts, automation and taps',
         '  music mix meter input.wav [--out report.json]   measure loudness, true peak and mono compatibility',

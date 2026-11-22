@@ -187,6 +187,7 @@ module.exports = {
   readAudiovisualTake: require('./cli/audiovisual-take.js').open,
   ...require('./cli/graph-host.js'),
   readWav: require('./cli/wav.js').read,
+  loadSoundPack: require('./cli/music-sound-library.js').loadSoundPack,
   decodeWav: require('./cli/wav.js').decode,
   encodeWav: require('./cli/wav.js').encode,
   ...require('./cli/graph-render.js'),

@@ -150,6 +150,18 @@ function writeLockedSearch(folder,engine,source,brief,assets,paths,options) {
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.music.production;
+  if (mode==='sound-library' || mode==='sound-pack') {
+    const library=require('./music-sound-library.js');
+    if (mode==='sound-library') {
+      if (typeof opt.out==='string') write(opt.out,library.catalog);
+      else process.stdout.write(JSON.stringify(library.catalog,null,2)+'\n');
+      return library.catalog;
+    }
+    if (typeof opt.out!=='string') throw new TypeError('Use --out with a sound pack directory');
+    const manifest=library.exportSoundPack(file,opt.out);
+    process.stdout.write(manifest+'\n');
+    return {manifest};
+  }
   if (mode==='instrument-presets') {
     if (typeof opt.out==='string') write(opt.out,P.instrumentPresets);
     else process.stdout.write(JSON.stringify(P.instrumentPresets,null,2)+'\n');

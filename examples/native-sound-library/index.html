@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Shift · Ink Studio sound library</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #141813;
+    --panel: #1e251d;
+    --ink: #f6f3e8;
+    --soft: #bdc8b5;
+    --line: #4a5646;
+    --accent: #d9ef9d;
+    font: 16px/1.55 system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); }
+  main { max-width: 1150px; margin: auto; padding: 42px max(22px, 4vw) 55px; }
+  header { border-top: 1px solid var(--line); padding-top: 14px; }
+  .label { color: var(--accent); font: 680 .78rem/1.3 ui-monospace, monospace; letter-spacing: .085em; text-transform: uppercase; }
+  h1, h2 { font-family: Georgia, serif; font-weight: 400; letter-spacing: -.035em; line-height: 1.04; }
+  h1 { font-size: clamp(4rem, 11vw, 8.5rem); margin: .19em 0 .065em; }
+  h2 { font-size: clamp(1.85rem, 3vw, 2.55rem); margin: 0; }
+  p { color: var(--soft); margin: .5em 0 1em; }
+  a { color: var(--accent); text-underline-offset: .16em; }
+  .feature { border-bottom: 1px solid var(--line); padding-bottom: 25px; margin-bottom: 25px; }
+  .feature audio { max-width: 640px; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  article { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); padding: 20px; }
+  article p { flex: 1; margin: 0; min-height: 4.65em; }
+  audio { width: 100%; display: block; min-width: 0; margin: 0 0 4px; }
+  .buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+  button {
+    border: 1px solid #697666; border-radius: 2px; color: var(--ink); font: inherit; font-size: .86rem;
+    background: #303a2e; padding: 7px 10px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: var(--accent); color: #1b260e; border-color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  details { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 11px; }
+  details .buttons { margin-block: 10px 3px; }
+  summary { cursor: pointer; }
+  .link { font-size: .85rem; }
+  footer { margin-top: 28px; color: var(--soft); font-size: .85rem; }
+  @media (max-width: 875px) { .cards { grid-template-columns: 1fr; } article p { min-height: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="feature">
+    <div class="label">Ink Studio · Native sound library</div>
+    <h1>Night Shift</h1>
+    <p>A 32-second cue with harmonica, resonant steel, drums and electric bass.</p>
+    <audio controls preload="metadata" src="night-shift.wav" aria-label="Play Night Shift"></audio>
+    <a class="link" href="night-shift.json">Editable cue</a>
+  </header>
+  <div class="cards">
+    <article>
+      <h2>Breath &amp; Reed</h2>
+      <p>Hear the same harmonica phrase with and without a breath-driven resonator. Listen to the space after the last note for the recorded key-up.</p>
+      <div class="buttons" role="group" aria-label="Reed phrase versions">
+        <button type="button" data-audio="reed-recorded.wav" aria-pressed="true">Recorded</button>
+        <button type="button" data-audio="reed-modelled.wav" aria-pressed="false">Breath model</button>
+      </div>
+      <audio controls preload="metadata" src="reed-recorded.wav" aria-label="Play Breath and Reed"></audio>
+      <details>
+        <summary>Porcelain Room rack</summary>
+        <div class="buttons" role="group" aria-label="Reed rack comparison">
+          <button type="button" data-audio="reed-bypass.wav" aria-pressed="true">Bypass</button>
+          <button type="button" data-audio="reed-rack.wav" aria-pressed="false">Rack</button>
+        </div>
+        <audio controls preload="none" src="reed-bypass.wav" aria-label="Play the reed rack comparison"></audio>
+      </details>
+      <a class="link" href="packs/breath-and-reed/pack.json">Patch and recording credits</a>
+    </article>
+    <article>
+      <h2>Struck &amp; Scraped</h2>
+      <p>Compare a brake-drum phrase with the same hits driving a pitched modal body. Cymbal, gong and bell-tree scrapes have their own study.</p>
+      <div class="buttons" role="group" aria-label="Metal phrase versions">
+        <button type="button" data-audio="metal-recorded.wav" aria-pressed="true">Recorded</button>
+        <button type="button" data-audio="metal-modelled.wav" aria-pressed="false">Tuned model</button>
+        <button type="button" data-audio="metal-scrapes.wav" aria-pressed="false">Scrapes</button>
+      </div>
+      <audio controls preload="metadata" src="metal-recorded.wav" aria-label="Play Struck and Scraped Metal"></audio>
+      <details>
+        <summary>Pocket Repeater rack</summary>
+        <div class="buttons" role="group" aria-label="Metal rack comparison">
+          <button type="button" data-audio="metal-bypass.wav" aria-pressed="true">Bypass</button>
+          <button type="button" data-audio="metal-rack.wav" aria-pressed="false">Rack</button>
+        </div>
+        <audio controls preload="none" src="metal-bypass.wav" aria-label="Play the metal rack comparison"></audio>
+      </details>
+      <a class="link" href="packs/struck-and-scraped-metal/pack.json">Patches and recording credits</a>
+    </article>
+    <article>
+      <h2>Drums &amp; Bass</h2>
+      <p>A four-bar pocket with alternating kick and snare hits, a closed hat that cuts the open hat short, and fingered and picked bass.</p>
+      <audio controls preload="metadata" src="rhythm-study.wav" aria-label="Play Drums and Bass"></audio>
+      <details>
+        <summary>Steel Bus rack</summary>
+        <div class="buttons" role="group" aria-label="Rhythm rack comparison">
+          <button type="button" data-audio="rhythm-bypass.wav" aria-pressed="true">Bypass</button>
+          <button type="button" data-audio="rhythm-rack.wav" aria-pressed="false">Rack</button>
+        </div>
+        <audio controls preload="none" src="rhythm-bypass.wav" aria-label="Play the rhythm rack comparison"></audio>
+      </details>
+      <a class="link" href="packs/drums-and-bass/pack.json">Patches, pad kit and recording credits</a>
+    </article>
+  </div>
+  <footer>Recordings from Versilian Studios and FreePats, released under CC0. <a href="report.json">Render measurements</a></footer>
+</main>
+<script>
+  const players = [...document.querySelectorAll('audio')];
+  for (const player of players) player.addEventListener('play', () => {
+    for (const other of players) if (other !== player) other.pause();
+  });
+  for (const group of document.querySelectorAll('.buttons')) {
+    const player = group.nextElementSibling;
+    let pending;
+    group.addEventListener('click', event => {
+      const button = event.target.closest('button[data-audio]');
+      if (!button || button.getAttribute('aria-pressed') === 'true') return;
+      const position = pending?.position ?? player.currentTime;
+      const resume = pending?.resume ?? !player.paused;
+      pending = {position, resume};
+      const next = button.dataset.audio;
+      for (const choice of group.querySelectorAll('button')) choice.setAttribute('aria-pressed', String(choice === button));
+      player.onloadedmetadata = () => {
+        if (!pending) return;
+        player.currentTime = Math.min(pending.position, player.duration);
+        if (pending.resume) player.play().catch(() => {});
+        pending = undefined;
+      };
+      player.src = next;
+      player.load();
+    });
+  }
+</script>
+</body>
+</html>

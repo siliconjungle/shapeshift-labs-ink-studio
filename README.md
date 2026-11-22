@@ -1155,6 +1155,10 @@ Visual baselines are created explicitly by `snap`; no baseline images are bundle
 
 The package is currently version `0.1.0` and marked private.
 
+## Music production
+
+The [native sound library](docs/native-sound-library.md) ships recorded reed, metal, and rhythm packs with editable performance studies and modeled instruments. Export a pack with `ink-studio music production sound-pack ID --out DIR`.
+
 ## License
 
 Licensed under the [MIT License](LICENSE).

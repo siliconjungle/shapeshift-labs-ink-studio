@@ -1,0 +1,456 @@
+{
+  "reed-soft-c4": {
+    "file": "recordings/reed-soft-c4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Soft/Hohner-Special20_Soft_C4.wav",
+    "root": 60,
+    "tune": -2,
+    "loop": [
+      0.49,
+      1.46628125
+    ],
+    "loopFade": 0.071
+  },
+  "reed-soft-c4-off": {
+    "file": "recordings/reed-soft-c4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Soft/Hohner-Special20_Soft_rel_C4.wav",
+    "root": 60
+  },
+  "reed-soft-e4": {
+    "file": "recordings/reed-soft-e4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Soft/Hohner-Special20_Soft_E4.wav",
+    "root": 64,
+    "tune": -1,
+    "loop": [
+      0.49,
+      1.47109375
+    ],
+    "loopFade": 0.071
+  },
+  "reed-soft-e4-off": {
+    "file": "recordings/reed-soft-e4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Soft/Hohner-Special20_Soft_rel_E4.wav",
+    "root": 64
+  },
+  "reed-soft-g4": {
+    "file": "recordings/reed-soft-g4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Soft/Hohner-Special20_Soft_G4.wav",
+    "root": 67,
+    "tune": 2,
+    "loop": [
+      0.49,
+      1.4720625
+    ],
+    "loopFade": 0.071
+  },
+  "reed-soft-g4-off": {
+    "file": "recordings/reed-soft-g4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Soft/Hohner-Special20_Soft_rel_G4.wav",
+    "root": 67
+  },
+  "reed-soft-c5": {
+    "file": "recordings/reed-soft-c5.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Soft/Hohner-Special20_Soft_C5.wav",
+    "root": 72,
+    "tune": -3,
+    "loop": [
+      0.49,
+      1.471125
+    ],
+    "loopFade": 0.071
+  },
+  "reed-soft-c5-off": {
+    "file": "recordings/reed-soft-c5-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Soft/Hohner-Special20_Soft_rel_C5.wav",
+    "root": 72
+  },
+  "reed-soft-e5": {
+    "file": "recordings/reed-soft-e5.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Soft/Hohner-Special20_Soft_E5.wav",
+    "root": 76,
+    "tune": -1,
+    "loop": [
+      0.49,
+      1.47134375
+    ],
+    "loopFade": 0.071
+  },
+  "reed-soft-e5-off": {
+    "file": "recordings/reed-soft-e5-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Soft/Hohner-Special20_Soft_rel_E5.wav",
+    "root": 76
+  },
+  "reed-normal-c4": {
+    "file": "recordings/reed-normal-c4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Normal/Hohner-Special20_Normal_C4.wav",
+    "root": 60,
+    "tune": -2,
+    "loop": [
+      0.49,
+      1.472375
+    ],
+    "loopFade": 0.071
+  },
+  "reed-normal-c4-off": {
+    "file": "recordings/reed-normal-c4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Normal/Hohner-Special20_Normal_rel_C4.wav",
+    "root": 60
+  },
+  "reed-normal-e4": {
+    "file": "recordings/reed-normal-e4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Normal/Hohner-Special20_Normal_E4.wav",
+    "root": 64,
+    "tune": 0,
+    "loop": [
+      0.49,
+      1.47140625
+    ],
+    "loopFade": 0.071
+  },
+  "reed-normal-e4-off": {
+    "file": "recordings/reed-normal-e4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Normal/Hohner-Special20_Normal_rel_E4.wav",
+    "root": 64
+  },
+  "reed-normal-g4": {
+    "file": "recordings/reed-normal-g4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Normal/Hohner-Special20_Normal_G4.wav",
+    "root": 67,
+    "tune": 2,
+    "loop": [
+      0.49,
+      1.46840625
+    ],
+    "loopFade": 0.071
+  },
+  "reed-normal-g4-off": {
+    "file": "recordings/reed-normal-g4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Normal/Hohner-Special20_Normal_rel_G4.wav",
+    "root": 67
+  },
+  "reed-normal-c5": {
+    "file": "recordings/reed-normal-c5.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Normal/Hohner-Special20_Normal_C5.wav",
+    "root": 72,
+    "tune": 1,
+    "loop": [
+      0.49,
+      1.4719375
+    ],
+    "loopFade": 0.071
+  },
+  "reed-normal-c5-off": {
+    "file": "recordings/reed-normal-c5-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Normal/Hohner-Special20_Normal_rel_C5.wav",
+    "root": 72
+  },
+  "reed-normal-e5": {
+    "file": "recordings/reed-normal-e5.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Normal/Hohner-Special20_Normal_E5.wav",
+    "root": 76,
+    "tune": 3,
+    "loop": [
+      0.49,
+      1.47075
+    ],
+    "loopFade": 0.071
+  },
+  "reed-normal-e5-off": {
+    "file": "recordings/reed-normal-e5-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Normal/Hohner-Special20_Normal_rel_E5.wav",
+    "root": 76
+  },
+  "reed-vib-c4": {
+    "file": "recordings/reed-vib-c4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Vib/Hohner-Special20_Vib_C4.wav",
+    "root": 60,
+    "tune": -2,
+    "loop": [
+      0.49,
+      1.46846875
+    ],
+    "loopFade": 0.071
+  },
+  "reed-vib-c4-off": {
+    "file": "recordings/reed-vib-c4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Vib/Hohner-Special20_Vib_rel_C4.wav",
+    "root": 60
+  },
+  "reed-vib-e4": {
+    "file": "recordings/reed-vib-e4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Vib/Hohner-Special20_Vib_E4.wav",
+    "root": 64,
+    "tune": -1,
+    "loop": [
+      0.49,
+      1.4695
+    ],
+    "loopFade": 0.071
+  },
+  "reed-vib-e4-off": {
+    "file": "recordings/reed-vib-e4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Vib/Hohner-Special20_Vib_rel_E4.wav",
+    "root": 64
+  },
+  "reed-vib-g4": {
+    "file": "recordings/reed-vib-g4.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Vib/Hohner-Special20_Vib_G4.wav",
+    "root": 67,
+    "tune": 1,
+    "loop": [
+      0.49,
+      1.468125
+    ],
+    "loopFade": 0.071
+  },
+  "reed-vib-g4-off": {
+    "file": "recordings/reed-vib-g4-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Vib/Hohner-Special20_Vib_rel_G4.wav",
+    "root": 67
+  },
+  "reed-vib-c5": {
+    "file": "recordings/reed-vib-c5.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Vib/Hohner-Special20_Vib_C5.wav",
+    "root": 72,
+    "tune": -1,
+    "loop": [
+      0.49,
+      1.4693125
+    ],
+    "loopFade": 0.071
+  },
+  "reed-vib-c5-off": {
+    "file": "recordings/reed-vib-c5-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Vib/Hohner-Special20_Vib_rel_C5.wav",
+    "root": 72
+  },
+  "reed-vib-e5": {
+    "file": "recordings/reed-vib-e5.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Sustains/Vib/Hohner-Special20_Vib_E5.wav",
+    "root": 76,
+    "tune": 3,
+    "loop": [
+      0.49,
+      1.46878125
+    ],
+    "loopFade": 0.071
+  },
+  "reed-vib-e5-off": {
+    "file": "recordings/reed-vib-e5-off.wav",
+    "source": "vcsl",
+    "original": "Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Vib/Hohner-Special20_Vib_rel_E5.wav",
+    "root": 76
+  },
+  "metal-iron-soft-a": {
+    "file": "recordings/metal-iron-soft-a.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Brake Drum/BrakeDrum1_Hammer_v1_rr1_Mid.wav"
+  },
+  "metal-iron-soft-b": {
+    "file": "recordings/metal-iron-soft-b.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Brake Drum/BrakeDrum1_Hammer_v2_rr1_Mid.wav"
+  },
+  "metal-iron-hard-a": {
+    "file": "recordings/metal-iron-hard-a.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Brake Drum/BrakeDrum1_Hammer_v3_rr1_Mid.wav"
+  },
+  "metal-iron-hard-b": {
+    "file": "recordings/metal-iron-hard-b.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Brake Drum/BrakeDrum2_Hammer1_v2_rr1_Mid.wav"
+  },
+  "metal-gong-drag": {
+    "file": "recordings/metal-gong-drag.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Gong 1/gong_scrape_mf.wav"
+  },
+  "metal-cymbal-drag-a": {
+    "file": "recordings/metal-cymbal-drag-a.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_scrape_1.wav"
+  },
+  "metal-cymbal-drag-b": {
+    "file": "recordings/metal-cymbal-drag-b.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Suspended Cymbal 2/susCymb2_scrape_2.wav"
+  },
+  "metal-bells-drag-a": {
+    "file": "recordings/metal-bells-drag-a.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Bell Tree - Legacy/bell_tree_scrape1.wav"
+  },
+  "metal-bells-drag-b": {
+    "file": "recordings/metal-bells-drag-b.wav",
+    "source": "vcsl",
+    "original": "Idiophones/Struck Idiophones/Bell Tree - Legacy/bell_tree_scrape2.wav"
+  },
+  "rhythm-kick-soft-a": {
+    "file": "recordings/rhythm-kick-soft-a.wav",
+    "source": "vcsl",
+    "original": "Membranophones/Struck Membranophones/Bass Drum 1/BDrumNew_hit_v2_rr1_Sum.wav"
+  },
+  "rhythm-kick-soft-b": {
+    "file": "recordings/rhythm-kick-soft-b.wav",
+    "source": "vcsl",
+    "original": "Membranophones/Struck Membranophones/Bass Drum 1/BDrumNew_hit_v2_rr2_Sum.wav"
+  },
+  "rhythm-kick-hard-a": {
+    "file": "recordings/rhythm-kick-hard-a.wav",
+    "source": "vcsl",
+    "original": "Membranophones/Struck Membranophones/Bass Drum 1/BDrumNew_hit_v5_rr1_Sum.wav"
+  },
+  "rhythm-kick-hard-b": {
+    "file": "recordings/rhythm-kick-hard-b.wav",
+    "source": "vcsl",
+    "original": "Membranophones/Struck Membranophones/Bass Drum 1/BDrumNew_hit_v5_rr2_Sum.wav"
+  },
+  "bass-finger-28": {
+    "file": "recordings/bass-finger-28.wav",
+    "source": "freepats",
+    "original": "Finger/samples/finger/E.wav",
+    "root": 28,
+    "tune": -2
+  },
+  "bass-finger-31": {
+    "file": "recordings/bass-finger-31.wav",
+    "source": "freepats",
+    "original": "Finger/samples/finger/G.wav",
+    "root": 31,
+    "tune": -11
+  },
+  "bass-finger-33": {
+    "file": "recordings/bass-finger-33.wav",
+    "source": "freepats",
+    "original": "Finger/samples/finger/A.wav",
+    "root": 33,
+    "tune": -3
+  },
+  "bass-finger-35": {
+    "file": "recordings/bass-finger-35.wav",
+    "source": "freepats",
+    "original": "Finger/samples/finger/B.wav",
+    "root": 35,
+    "tune": -8
+  },
+  "bass-finger-36": {
+    "file": "recordings/bass-finger-36.wav",
+    "source": "freepats",
+    "original": "Finger/samples/finger/C.wav",
+    "root": 36,
+    "tune": -3
+  },
+  "bass-finger-39": {
+    "file": "recordings/bass-finger-39.wav",
+    "source": "freepats",
+    "original": "Finger/samples/finger/D#.wav",
+    "root": 39,
+    "tune": 1
+  },
+  "bass-pick-28": {
+    "file": "recordings/bass-pick-28.wav",
+    "source": "freepats",
+    "original": "Picked/samples/pick/E.wav",
+    "root": 28,
+    "tune": -19
+  },
+  "bass-pick-31": {
+    "file": "recordings/bass-pick-31.wav",
+    "source": "freepats",
+    "original": "Picked/samples/pick/G.wav",
+    "root": 31,
+    "tune": -17
+  },
+  "bass-pick-33": {
+    "file": "recordings/bass-pick-33.wav",
+    "source": "freepats",
+    "original": "Picked/samples/pick/A.wav",
+    "root": 33,
+    "tune": -3
+  },
+  "bass-pick-35": {
+    "file": "recordings/bass-pick-35.wav",
+    "source": "freepats",
+    "original": "Picked/samples/pick/B.wav",
+    "root": 35,
+    "tune": -13
+  },
+  "bass-pick-36": {
+    "file": "recordings/bass-pick-36.wav",
+    "source": "freepats",
+    "original": "Picked/samples/pick/C.wav",
+    "root": 36,
+    "tune": -10
+  },
+  "bass-pick-39": {
+    "file": "recordings/bass-pick-39.wav",
+    "source": "freepats",
+    "original": "Picked/samples/pick/D#.wav",
+    "root": 39,
+    "tune": -6
+  },
+  "snare-main": {
+    "file": "../music-production/samples/snare-main.wav",
+    "source": "ink-vcsl",
+    "original": "Membranophones/Struck Membranophones/Legacy Snares/OldSnare/snare_f1.wav"
+  },
+  "snare-alt": {
+    "file": "../music-production/samples/snare-alt.wav",
+    "source": "ink-vcsl",
+    "original": "Membranophones/Struck Membranophones/Legacy Snares/OldSnare/snare_f2.wav"
+  },
+  "snare-ghost": {
+    "file": "../music-production/samples/snare-ghost.wav",
+    "source": "ink-vcsl",
+    "original": "Membranophones/Struck Membranophones/Legacy Snares/OldSnare/snare_p1.wav"
+  },
+  "snare-rim": {
+    "file": "../music-production/samples/snare-rim.wav",
+    "source": "ink-vcsl",
+    "original": "Membranophones/Struck Membranophones/Legacy Snares/OldSnare/snare_rim.wav"
+  },
+  "hat-open": {
+    "file": "../music-production/samples/hat-open.wav",
+    "source": "ink-vcsl",
+    "original": "Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitO_rr1_Mid.wav"
+  },
+  "hat-closed": {
+    "file": "../music-production/samples/hat-closed.wav",
+    "source": "ink-vcsl",
+    "original": "Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v2_rr1_Mid.wav"
+  },
+  "hat-closed-alt": {
+    "file": "../music-production/samples/hat-closed-alt.wav",
+    "source": "ink-vcsl",
+    "original": "Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v2_rr2_Mid.wav"
+  }
+}
