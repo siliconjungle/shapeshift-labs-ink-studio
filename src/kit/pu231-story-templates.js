@@ -82,7 +82,7 @@
       at + ' needs an ink-studio/story-template version 1 with an ID and positive revision');
     check(spec.revision === undefined || spec.revision === template.revision,
       at + ' expected template revision ' + spec.revision + ', got ' + template.revision);
-    check(keys(template.document, ['title', 'stories', 'references', 'objectiveTypes']) && record(template.document.stories),
+    check(keys(template.document, ['title', 'stories', 'references', 'objectiveTypes','requirements']) && record(template.document.stories),
       at + ' needs a story document body with a stories map');
     const {id:instance} = spec;
     const {parameters, defaults} = values(own(template, 'parameters') ? template.parameters : {},

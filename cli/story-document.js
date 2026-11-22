@@ -1,7 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateStoryDocument, inspectStoryDocument } = require('../src/story-document.js');
+const schema = require('../src/story-document.js');
+const { validateStoryDocument, inspectStoryDocument } = schema;
 const { analyze } = require('../src/story-analysis.js');
+const {collect} = require('../src/story-inventory.js');
 const { write } = require('./asset-files.js');
 
 function readDefinition(file, check = value => value) {
@@ -21,7 +23,8 @@ function preflightStoryDocument(document, {story} = {}) {
     throw new TypeError('story preview: unknown story ' + JSON.stringify(story));
   const analyzed = inspected.shapeValid ? analyze(document, {story, preview:true}) : {diagnostics:[], stories:[]};
   return {format:'ink-studio/story-preview', version:1, documentId:typeof document?.id === 'string' ? document.id : null,
-    valid:inspected.diagnostics.length === 0, diagnostics:[...inspected.diagnostics,...analyzed.diagnostics], stories:analyzed.stories};
+    valid:inspected.diagnostics.length === 0, diagnostics:[...inspected.diagnostics,...analyzed.diagnostics], stories:analyzed.stories,
+    ...(inspected.shapeValid&&{inventory:collect([document],{schema,story})})};
 }
 
 function embedStoryDocuments(world, file, dependency) {
@@ -100,15 +103,16 @@ function catalogCommand(files, options, library) {
 function storyCommand([mode, file, id, ...rest], options, library) {
   if (mode==='catalog') return catalogCommand([file,id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
-  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
+  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | story preview <file.json> [story-id] [--strict] | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
     const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));
     console.log(JSON.stringify(materialized, null, 2));
     return;
   }
-  if (rest.length || Object.keys(options).some(key => key !== 'strict') ||
-    (options.strict !== undefined && (options.strict !== true || mode === 'describe'))) throw new TypeError(usage);
+  if (rest.length || Object.keys(options).some(key => !['strict','inventory'].includes(key)) ||
+    (options.strict !== undefined && (options.strict !== true || mode === 'describe')) ||
+    (options.inventory !== undefined && (options.inventory !== true || mode !== 'describe'))) throw new TypeError(usage);
   if ((!mode || mode === 'help') && file === undefined) return console.log(usage);
   if (!file || !['validate', 'describe', 'preview'].includes(mode) || mode === 'validate' && id !== undefined)
     throw new TypeError(usage);
@@ -119,6 +123,13 @@ function storyCommand([mode, file, id, ...rest], options, library) {
     return;
   }
   const document = readStoryDocument(file);
+  if (mode==='describe'&&id!==undefined&&!Object.hasOwn(document.stories,id))
+    throw new TypeError('story describe: unknown story ' + JSON.stringify(id));
+  if (options.inventory) {
+    console.log(JSON.stringify({format:'ink-studio/story-inventory',version:1,documentId:document.id,
+      ...collect([document],{schema,story:id})},null,2));
+    return;
+  }
   let output = document;
   if (mode === 'validate') {
     const { format, version, id } = document;
@@ -127,7 +138,6 @@ function storyCommand([mode, file, id, ...rest], options, library) {
     output = { format, version, id, valid: true, stories, ...(diagnostics.length && {diagnostics}) };
     if (options.strict && diagnostics.length) process.exitCode = 1;
   } else if (id !== undefined) {
-    if (!Object.hasOwn(document.stories, id)) throw new TypeError('story describe: unknown story ' + JSON.stringify(id));
     output = { documentId: document.id, version: document.version, id, definition: document.stories[id],
       references: document.references ?? {},
       ...(document.objectiveTypes !== undefined && { objectiveTypes: document.objectiveTypes }) };

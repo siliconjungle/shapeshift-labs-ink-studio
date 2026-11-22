@@ -64,7 +64,7 @@
       return action === raw.action && args === raw.args ? raw : { ...raw, action, args };
     }
 
-    return { documents:resolved, roles, resolve, command };
+    return { documents:resolved, authored:documents, roles, resolve, command };
   }
 
   W.storyRoles = Object.freeze({ compile });

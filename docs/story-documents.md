@@ -32,6 +32,35 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 
 The preview uses authored structure and static conditions. It considers possible child openings across incoming paths and checks explicit choice and outcome conflicts. World events, query values, and the order of arrivals are resolved during a run.
 
+### Describe a story package before running it
+
+`story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.
+
+`sim preflight` checks the assembled world, including generated template instances. Its inventory reports which capabilities, story documents, and asset revisions are available, how role slots are bound, and which dependency files the CLI loaded. The CLI lists file paths relative to the world manifest. Runtime provider factories can register interfaces during compilation. Preflight checks those interfaces without calling solver initialization, stepping, dispatching actions, or reading query values.
+
+Declare requirements at the document or story level, including in a template body. A capability uses a system ID or a slash-qualified ID for a registered `query`, `action`, transfer `account`, or host `operation`. An asset requirement can name a whole pack or specify an exact revision and a named material, family, look, environment, or environment image. Document dependencies use story document IDs.
+
+```json
+{
+  "requirements": {
+    "capabilities": [{ "kind": "query", "id": "crew/commitment-terms" }],
+    "assets": [{ "pack": "canal-kit", "revision": 2, "kind": "material", "id": "canal-kit/stone" }],
+    "documents": ["canal-support"]
+  }
+}
+```
+
+Missing declared requirements make the world report invalid and cause `sim preflight` to exit with status 1. They also block `sim run` before initialization. Inferred entries help trace which fields, actions, and dependencies the story uses. Events and logical references can appear with status `reference` when the inventory has no registry that confirms their availability. Existing world compilation checks still apply.
+
+The [canal inspection](../examples/story-documents/canal-inspection.world.json) uses a worker role, a chalk account, a companion story document, and a versioned masonry asset. Run the second command again with the pack to clear the reported missing asset.
+
+```sh
+node cli/ink-studio.js story describe examples/story-documents/canal-inspection.json inspect --inventory
+node cli/ink-studio.js sim preflight examples/story-documents/canal-inspection.world.json
+node cli/ink-studio.js sim preflight examples/story-documents/canal-inspection.world.json --strict \
+  --asset-pack examples/story-documents/canal-kit.asset-pack.json
+```
+
 ### Inspect The Breakwater Survey
 
 [The draft](../examples/story-documents/breakwater-draft.json) contains missing links, an ambiguous automatic decision, an unreachable dock, a loop with an exit, a loop with no ending, and a wait placed before its child opens. [The reviewed story](../examples/story-documents/breakwater-survey.json) has two exclusive routes based on the sounding's outcome.
@@ -47,8 +76,8 @@ node cli/ink-studio.js sim run examples/story-documents/breakwater-survey.world.
 
 | Level | Required fields | Optional fields |
 | --- | --- | --- |
-| Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map |
-| Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle`, `incident` metadata on an incident |
+| Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map, `objectiveTypes` map, `requirements` |
+| Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle`, `incident` metadata on an incident, `requirements` |
 | Role | `kind` | `ref` to a document reference of the same kind, `required` for a required world binding or reference default |
 | Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document, `objectives` and `decision` when stage progression is enabled, `children` on a progressing arc |
 | Objective | `title` | `summary`, `refs`, `optional`, `evidence`, `type` with its `params` |

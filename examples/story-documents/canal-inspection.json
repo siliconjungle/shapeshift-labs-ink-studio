@@ -1,0 +1,40 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "canal-inspection",
+  "title": "Prepare the canal inspection",
+  "requirements": {
+    "documents": ["canal-support"],
+    "assets": [{ "pack": "canal-kit", "revision": 2, "kind": "material", "id": "canal-kit/stone" }]
+  },
+  "stories": {
+    "inspect": {
+      "kind": "questlet",
+      "title": "Inspect the canal masonry",
+      "requirements": {
+        "capabilities": [
+          { "kind": "query", "id": "crew/commitment-terms" },
+          { "kind": "action", "id": "crew/issue-order" },
+          { "kind": "account", "id": "supply/store" }
+        ]
+      },
+      "roles": { "guide": { "kind": "worker", "required": true } },
+      "triggers": { "commission": { "event": { "kind": "inspection-commissioned", "system": "world" } } },
+      "lifecycle": {
+        "progression": true,
+        "commitment": { "actor": { "$role": "guide" }, "order": { "id": "inspect-masonry", "task": "inspect" } },
+        "feasibility": { "stocked": { "state": {
+          "field": "world/account", "args": { "account": "supply/store" },
+          "select": "/balance", "when": { "op": "gte", "value": 1 }
+        } } }
+      },
+      "entry": "check",
+      "stages": { "check": {
+        "title": "Review the masonry", "roles": ["guide"],
+        "decision": { "mode": "autonomous" },
+        "next": { "ready": { "outcome": "reviewed", "auto": true } }
+      } },
+      "outcomes": { "reviewed": { "title": "The masonry was inspected" } }
+    }
+  }
+}

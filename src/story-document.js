@@ -827,8 +827,44 @@ const StoryDocument = (() => {
     }
   }
 
+  function requirements(value, at) {
+    fields(value,at,[],['capabilities','assets','documents']);
+    function list(key,validate) {
+      if (!Object.hasOwn(value,key)) return;
+      const rows = value[key], location = at+'.'+key;
+      if (!Array.isArray(rows)||!rows.length||rows.length>128) invalid(location,'expected 1–128 requirements');
+      const seen = new Set();
+      for (const [index,row] of rows.entries()) {
+        const place = location+'['+index+']', identity = validate(row,place);
+        if (seen.has(identity)) invalid(place,'duplicate requirement');
+        seen.add(identity);
+      }
+    }
+    list('capabilities',(row,place)=>{
+      fields(row,place,['kind','id']);
+      const {kind,id} = row;
+      if (!['system','query','action','account','operation'].includes(kind)||
+        !(kind==='system'?worldName(id):qualified(id))) invalid(place,'expected a system or qualified query, action, account, or operation');
+      return kind+'/'+id;
+    });
+    list('assets',(row,place)=>{
+      fields(row,place,['pack'],['revision','kind','id']);
+      const {pack,revision,kind,id} = row;
+      if (typeof pack!=='string'||!/^[a-z][a-z0-9-]{0,47}$/.test(pack)||
+        revision!==undefined&&(!Number.isSafeInteger(revision)||revision<1))
+        invalid(place,'expected an asset pack ID and optional positive revision');
+      if ((Object.hasOwn(row,'kind')||Object.hasOwn(row,'id'))&&
+        (!['family','look','material','environment','environment-image'].includes(kind)||
+        !qualified(id)||id.split('/')[0]!==pack)) invalid(place,'expected an asset kind and ID in the named pack');
+      return [pack,revision,kind,id].join('#');
+    });
+    list('documents',(row,place)=>{
+      if (!safeId(row)) invalid(place,'expected a story document ID');
+      return row;
+    });
+  }
   function validate(document, report) {
-    fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes']);
+    fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references', 'objectiveTypes','requirements']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
     if (document.version !== version) invalid('story.version', `unsupported version ${JSON.stringify(document.version)}; expected ${version}`);
     if (!safeId(document.id)) invalid('story.id', 'invalid document ID');
@@ -837,6 +873,7 @@ const StoryDocument = (() => {
     const types = Object.hasOwn(document, 'objectiveTypes') ? document.objectiveTypes : {};
     objectiveTypes(types);
     const { stories } = document, owners = new Map();
+    if (Object.hasOwn(document,'requirements')) requirements(document.requirements,'story.requirements');
     for (const [id, reference] of entries(references, 'story.references')) {
       const at = `story.references.${id}`;
       fields(reference, at, ['kind', 'id']);
@@ -846,7 +883,9 @@ const StoryDocument = (() => {
     }
     for (const [id, story] of entries(stories, 'story.stories', true)) {
       const at = `story.stories.${id}`;
-      fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle', 'incident']);
+      fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'],
+        ['summary', 'refs', 'roles', 'triggers', 'lifecycle', 'incident','requirements']);
+      if (Object.hasOwn(story,'requirements')) requirements(story.requirements,at+'.requirements');
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
       labelsAndRefs(story, at, references, report);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
@@ -991,6 +1030,7 @@ const StoryDocument = (() => {
     }
   }
 
-  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, cooldownScopes, cooldownId, isStoryId:safeId, pressureUnits, objectiveRule, mapRoleValues, roleToken });
+  return Object.freeze({ validateStoryDocument, inspectStoryDocument, incidentCategories, cooldownScopes, cooldownId,
+    isStoryId:safeId, isBuiltinObjective:type=>objectiveKinds.has(type), pressureUnits, objectiveRule, mapRoleValues, roleToken });
 })();
 if (typeof module !== 'undefined') module.exports = StoryDocument;

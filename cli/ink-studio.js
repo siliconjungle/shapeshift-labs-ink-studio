@@ -1256,6 +1256,7 @@ const CMD = {
         '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
         '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
+        '  story describe <file.json> [story-id] --inventory      list role schemas and required interfaces',
         '  story instantiate <template.json> <instance.json>   expand typed story parameters and inspect the result',
         '  sim preflight <world.json> [--strict]   check world bindings and story routes before stepping',
         '  sim scheduler <world|checkpoint|run> [--ticks N] [--incident document/story]   explain incident eligibility and commitments',

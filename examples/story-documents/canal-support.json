@@ -1,0 +1,15 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "canal-support",
+  "title": "Canal supply notes",
+  "stories": {
+    "supplies": {
+      "kind": "incident",
+      "title": "The inspection stores issue a note",
+      "entry": "posted",
+      "stages": { "posted": { "title": "List the supplies", "next": { "close": { "outcome": "listed" } } } },
+      "outcomes": { "listed": { "title": "The supplies are listed" } }
+    }
+  }
+}

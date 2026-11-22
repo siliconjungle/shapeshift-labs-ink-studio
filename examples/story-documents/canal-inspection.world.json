@@ -1,0 +1,26 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "canal-inspection",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "canal-inspection.json" }, { "file": "canal-support.json" }],
+  "storyBindings": {
+    "canal-inspection/inspect": {
+      "guide": { "kind": "worker", "value": { "system": "crew", "agent": "guide", "generation": 1 } }
+    }
+  },
+  "systems": {
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-3, -1, -3], "max": [3, 2, 3] },
+      "species": { "inspector": { "mode": "walk", "speed": 1 } },
+      "agents": { "guide": { "species": "inspector", "position": [0, 0, 0] } },
+      "orders": { "tasks": { "inspect": { "steps": [{ "op": "wait", "ticks": 3 }] } } }
+    } },
+    "supply": { "kind": "store", "config": { "accounts": {
+      "store": { "resource": "chalk", "units": "piece", "type": "integer", "initial": 2 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "inspection-commissioned" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "format": "ink-studio/asset-pack",
+  "version": 1,
+  "id": "canal-kit",
+  "revision": 2,
+  "title": "Canal inspection kit",
+  "materials": [{ "id": "canal-kit/stone", "label": "Canal masonry", "density": 2300 }]
+}

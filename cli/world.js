@@ -57,25 +57,28 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     if (opt.out) write(opt.out,value);
     else process.stdout.write(JSON.stringify(value,null,opt.json?0:2)+'\n');
   };
-  function document(world, file) {
-    if (file !== undefined) world = embedModels(world, file, shot?.dependency);
+  function document(world, file, dependency) {
+    const track = source=>{shot?.dependency(source); dependency?.(source);};
+    if (file !== undefined) world = embedModels(world, file, track);
     if (world.format === W.models.format) world = W.models.compile(world);
-    if (file !== undefined) world = embedStoryDocuments(world, file, shot?.dependency);
+    if (file !== undefined) world = embedStoryDocuments(world, file, track);
     if (file !== undefined && world.dataInputs !== undefined) world = { ...world,
-      dataInputs: require('./data-inputs.js').embed(kit.KIT.dataInputs, world.dataInputs, file, shot?.dependency) };
+      dataInputs: require('./data-inputs.js').embed(kit.KIT.dataInputs, world.dataInputs, file, track) };
     if (opt['asset-pack'] === undefined) return {world};
     const packs = require('./asset-pack.js').install(kit.KIT.authoring.assetPacks, world.assetPacks, opt['asset-pack']);
+    dependency?.(path.resolve(opt['asset-pack']));
     return {world:{...world,assetPacks:packs}};
   }
-  function load(file, { lookPreview = false } = {}) {
+  function load(file, { lookPreview = false, dependency } = {}) {
     ensure(typeof file === 'string','Expected a scene or run file');
     if (/\.(js|cjs)$/i.test(file)) {
       const factory = require(path.resolve(file)), value = typeof factory === 'function' ? factory(kit) : factory;
-      return [W.format,W.models.format].includes(value.format) ? document(value,file) : value.simulation ? document(value.simulation,file) : {legacy:file};
+      return [W.format,W.models.format].includes(value.format) ? document(value,file,dependency) :
+        value.simulation ? document(value.simulation,file,dependency) : {legacy:file};
     }
     if (/\.json$/i.test(file)) {
       const { value,store } = readCheckpointFile(file);
-      if ([W.format,W.models.format].includes(value.format)) return document(value,file);
+      if ([W.format,W.models.format].includes(value.format)) return document(value,file,dependency);
       if (!lookPreview && [R.checkpointFormat,R.runFormat].includes(value.format))
         ensure(opt['asset-pack']===undefined,'Recorded runs and checkpoints keep their original asset packs');
       if (value.format === R.checkpointFormat) return {world:value.world,checkpoint:value,store};
@@ -806,12 +809,15 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         return respond(result.value);
       }
       case 'preflight': {
-        const input = load(file);
+        ensure(typeof file==='string','Use sim preflight <world.json> [--strict]');
+        const source = path.resolve(file), directory = path.dirname(source), files = new Set([source]);
+        const input = load(file,{dependency:filename=>files.add(path.resolve(filename))});
         ensure(!input.checkpoint && other===undefined && (opt.strict===undefined || opt.strict===true),
           'Use sim preflight <world.json> [--strict]');
         const report = R.storyPreflight(sourceWorld(input),{workerPool});
-        respond(report);
-        if (opt.strict && report.diagnostics.length) process.exitCode = 1;
+        const relative = [...files].map(filename=>path.relative(directory,filename).split(path.sep).join('/')).sort();
+        respond({...report,inventory:{...report.inventory,files:relative}});
+        if (!report.valid||opt.strict&&report.diagnostics.length) process.exitCode = 1;
         break;
       }
       case 'plan': return respond(runtime(load(file)).composition());

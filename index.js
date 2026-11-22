@@ -22,7 +22,7 @@ const bakeKit = new Set([
 ]);
 const files = () =>
   [
-    'src/story-analysis.js',
+    'src/story-analysis.js', 'src/story-inventory.js',
     'src/story-document.js', 'src/stippling.js', 'src/splat-footprints.js', 'src/curve-splat.js', 'src/surface-brush.js', 'src/brushwork.js', 'src/screen-print.js', 'src/engraving.js', 'src/render-grid.js', 'src/randomness.js', 'src/fft.js', 'src/math-fields.js', 'src/typography-truetype.js', 'src/typography.js', 'src/frame-budget.js', 'src/target-inspection.js', 'src/drawing-primitives.js', 'src/palette-cycles.js', 'src/raster-schedule.js', 'src/texture-address.js', 'src/view-annotations.js', 'src/frame-composite.js', 'src/composite-video.js', 'src/frame-bank.js', 'src/motion-smear.js', 'src/ink-veil.js', 'src/textured-surface.js', 'src/palette-resampling.js', 'src/shadow-shell.js', 'src/sprite-surface.js', 'src/sprite-scanline-budget.js', 'src/render-outputs.js', 'src/camera-atlas.js', 'src/sprite-cels.js', 'src/sprite-fringe.js', 'src/sprite-transitions.js', 'src/atlas-sprites.js', 'src/target-selectors.js', 'src/sprite-reconstruction.js', 'src/camera-lens.js', 'src/camera-impulses.js', 'src/camera-staging.js', 'src/splat-provenance.js',
     'src/art-passes.js', 'src/art-direction.js', 'src/art-ink.js', 'src/art-effects.js', 'src/art-stability.js', 'src/cluster-coherence.js', 'src/color-clusters.js', 'src/shot-corrections.js', 'src/stable-detail.js', 'src/edge-filter.js', 'src/curve-width.js', 'src/curve-lod.js', 'src/translucent-silhouettes.js', 'src/motional-coverage.js', 'src/material-pixel-style.js', 'src/glitter-burst-cels.js', 'src/pixel-tile-cels.js', 'src/reconnecting-tile-cels.js', 'src/contact-mark-cels.js', 'src/highlight-cel-presets.js', 'src/shore-foam-presets.js', 'src/boundary-cel-presets.js', 'src/pixel-stamp-presets.js', 'src/pixel-stamps.js', 'src/boundary-cels.js',
     'src/color-space.js', 'src/paint-corrections.js', 'src/color-curves.js', 'src/color-lut.js', 'src/color-stack.js', 'src/pixel-look.js', 'src/curve-pattern.js', 'src/palette-fields.js', 'src/palette-extract.js', 'src/palette-distributions.js', 'src/reflection-plane.js', 'src/reflection-detail.js', 'src/airflow.js', 'src/wind-field.js', 'src/light-schedule.js', 'src/geometric-caustics.js', 'src/light-cookies.js', 'src/area-lights.js', 'src/shadow-cutouts.js', 'src/emissive-finishes.js',
@@ -56,7 +56,7 @@ function bundle({ format = 'script', profile = 'development' } = {}) {
   }
   if (profile !== 'development' && profile !== 'bake') throw Error('Ink bundle profile must be development, bake or playback');
   const inputs = files();
-  const sources = (profile === 'bake' ? inputs.filter(file => !['story-document.js', 'story-analysis.js'].includes(path.basename(file)) &&
+  const sources = (profile === 'bake' ? inputs.filter(file => !['story-document.js', 'story-analysis.js', 'story-inventory.js'].includes(path.basename(file)) &&
     (path.dirname(file) !== KIT_DIR || bakeKit.has(path.basename(file)))) : inputs)
     .map(read).join('\n');
   if (format === 'module') return sources + '\nexport { ' + EXPORTS + ' };\n';

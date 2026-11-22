@@ -163,7 +163,7 @@
         ...(rates.length > 1 && {sampleRates:rates})});
     }
   }
-  function compile(world, implementations = {}, interfacesOnly = false) {
+  function compile(world, implementations = {}, interfacesOnly = false, reportRequirements = false) {
     const systems = {};
     const catalog = W.materials.catalog(world);
     const ports = {inputs:{},outputs:{}};
@@ -377,12 +377,19 @@
     plan.incidentPressure = plan.incidentCandidates?.pressure??W.incidentPressure.compile(world.incidentPressure,{});
     plan.regionContinuity = W.regionContinuity.compile(world,systems,transfers,plan.storyLifecycle);
     const eventActions = templates ? templates.eventActions : world.eventActions;
-    if (eventActions !== undefined) plan.eventActions = K.eventActions.compile(
-      plan.storyRoles ? plan.storyRoles.resolve(eventActions, 'world.eventActions') : eventActions, {
-      dt: world.dt, validateAction: command => actionCheck(command, plan, 1, false),
-      validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
-        'Unknown event action source ' + system)
-    });
+    if (eventActions !== undefined) {
+      plan.storyEventActions = plan.storyRoles ? plan.storyRoles.resolve(eventActions,'world.eventActions') : eventActions;
+      plan.eventActions = K.eventActions.compile(plan.storyEventActions,{
+        dt: world.dt, validateAction: command => actionCheck(command, plan, 1, false),
+        validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
+          'Unknown event action source ' + system)
+      });
+    }
+    if (W.storyInventory.hasRequirements(plan)) {
+      plan.storyRequirementIssues = W.storyInventory.create(plan,worldAction).audit();
+      if (!reportRequirements) check(!plan.storyRequirementIssues.length,
+        plan.storyRequirementIssues.map(({message,document,path})=>message+' in '+document+' at '+path).join('\n'));
+    }
     return plan;
   }
   function actionCheck(raw, plan, min = 1, resolveRoles = true) {
@@ -473,9 +480,9 @@
       return { tick, action: 'world/event', args: { ...detail, kind, timeline: { id, path, time } } };
     });
   }
-  function prepare(source,{implementations} = {}) {
+  function prepare(source,{implementations,reportRequirements=false} = {}) {
     const world = source?.format === W.models.format ? W.models.compile(source) : W.manifest(W.models.expand(source));
-    const plan = compile(world,implementations);
+    const plan = compile(world,implementations,false,reportRequirements);
     for (const command of world.commands) actionCheck(command,plan);
     scenarioCheck(world.scenario,plan);
     const catalog = W.materials.catalog(world);
@@ -507,11 +514,13 @@
   const validate=(source,{implementations,workerPool}={})=>
     prepare(source,{implementations:implementationsFor(implementations,workerPool)}).world;
   function storyPreflight(source,{implementations,workerPool}={}) {
-    const options = {implementations:implementationsFor(implementations,workerPool)};
+    const options = {implementations:implementationsFor(implementations,workerPool),reportRequirements:true};
     let {world,plan} = prepare(source,options);
     if (world.scenario?.start?.length) ({world,plan} = prepare(W.apply(world,world.scenario.start).world,options));
-    return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:true,
-      documents:plan.storyRoles?.documents.map(document => document.id) ?? [], diagnostics:plan.storyDiagnostics ?? [],
+    const requirementIssues = plan.storyRequirementIssues??[];
+    return freeze({format:'ink-studio/story-preflight',version:1,world:world.id,valid:requirementIssues.length===0,
+      documents:plan.storyRoles?.documents.map(document => document.id) ?? [],
+      diagnostics:[...(plan.storyDiagnostics??[]),...requirementIssues],inventory:W.storyInventory.create(plan,worldAction).inspect(),
       ...(plan.storyTemplates && {templates:plan.storyTemplates}),
       ...(plan.incidentCatalog?.length && {incidentCatalog:W.incidentCatalog.find(plan.incidentCatalog)}),
       ...(plan.worldFacts && {facts:plan.worldFacts.policy}),
