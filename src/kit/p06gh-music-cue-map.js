@@ -160,7 +160,7 @@
       if (span.value===1) continue;
       const groups=new Map(), keep=new Set(span.keep.map(round));
       for (const row of rows) {
-        if (row.midi===null || !row.velocity || !row.frequency) continue;
+        if (row.played || row.midi===null || !row.velocity || !row.frequency) continue;
         const beat=round(row.beat);
         if (beat<span.from-eps || beat>=span.to-eps) continue;
         if (!groups.has(beat)) groups.set(beat,{beat,rows:[],priority:0});
@@ -176,7 +176,7 @@
     }
     return rows.filter(row=>!removed.has(row)).map(row=>{
       const offset=within(local.register,row.beat)?.semitones;
-      if (!offset || row.midi===null) return row;
+      if (row.played || !offset || row.midi===null) return row;
       const midi=row.midi+offset;
       check(integer(midi,0,127),'Cue register moves '+name+' outside the MIDI range');
       return {...row,midi,frequency:row.frequency*2**(offset/12)};

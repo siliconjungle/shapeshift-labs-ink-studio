@@ -217,12 +217,12 @@
       const drafts=[];
       for (const row of rows) {
         if (row.midi===null || !row.frequency || !row.velocity) continue;
-        const beat=round(row.beat), beatStyle=grooveAt(track.groove,row.beat);
-        const style=G.perform(track.gestures,row.beat,row.play,track.color), play=style.play;
+        const beat=round(row.beat), beatStyle=row.played ? {delay:0,accent:1} : grooveAt(track.groove,row.beat);
+        const style=G.perform(row.played ? [] : track.gestures,row.beat,row.play,track.color), play=style.play;
         const phrase=F.at(track.phrases,beat), authoredNote=phrase?.overrides.get(F.noteKey(row));
         if (authoredNote?.articulation!==undefined) style.play={...play,articulation:authoredNote.articulation};
-        const inherited=performance?.style(name,style.play.articulation,beat,clock);
-        const phrasing=ensemble?.style(name,beat,row.midi,clock);
+        const inherited=row.played ? null : performance?.style(name,style.play.articulation,beat,clock);
+        const phrasing=row.played ? null : ensemble?.style(name,beat,row.midi,clock);
         const authored=row.time+beatStyle.delay+(play.delay ?? 0)+(inherited?.delay ?? 0)+(phrasing?.delay ?? 0)+
           (authoredNote?.delay ?? 0);
         const proposed=performance?.anchor(row.beat) ? row.time : Math.max(0,authored);
@@ -244,7 +244,7 @@
         const articulation=authoredNote?.articulation ?? phrasing?.articulation;
         let play=articulation ? {...style.play,articulation} : style.play;
         const proposed=authored+adjustment;
-        const time=Math.max(0,performance?.anchor(row.beat) ? row.time : follow ? follow(proposed,row.beat) : proposed);
+        const time=Math.max(0,row.played || performance?.anchor(row.beat) ? row.time : follow ? follow(proposed,row.beat) : proposed);
         const connection=round(time);
         if (silent(connection)) continue;
         const writtenGate=(row.end-row.time)*(row.ties ? 1 : play.gate ?? 1), length=inherited?.gate;
@@ -254,7 +254,7 @@
           if (takeGate) shapedGate+=(takeGate.target-shapedGate)*takeGate.strength;
           shapedGate*=phrasing.length;
         }
-        const gate=Math.max(.001,shapedGate*(authoredNote?.gate ?? 1));
+        const gate=Math.max(row.played ? 1e-5 : .001,shapedGate*(authoredNote?.gate ?? 1));
         const voice=row.voice ?? 0, retrigger=row.ties ? 1 : play.retrigger ?? 1, fromFrequency=last.get(voice);
         const previous=lastNotes.get(voice);
         const connected=!track.performance && style.legato && velocity>0 && plan.parts[name].role!=='percussion' &&
@@ -277,7 +277,7 @@
             frequency:row.frequency,velocity,play,fromFrequency,salt,roundRobin:notes.length,
             ...(row.clip && {clip:row.clip,voice:row.voice,note:row.note,...(row.ties && {ties:row.ties})}),
             ...(track.performance && !row.clip && row.voice!==undefined && {voice:row.voice}),
-            ...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
+            ...(row.played && {played:true}),...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
           const cut=next(cuts,onset)?.startTime;
           if (cut!==undefined && (track.external || track.performance || track.phrases.length || onset+track.play.prepare(note,48000,note.gate).duration>cut))
             note.choke=cut;

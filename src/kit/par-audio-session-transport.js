@@ -22,7 +22,7 @@
       typeof (options.preroll ?? true)==='boolean' && finite(options.gain ?? 1,0,2),
     'Invalid live session settings');
     let plan=initial, time=timeline(plan);
-    const {rate}=plan, key=clockKey(plan), gain=options.gain ?? 1;
+    const {rate}=plan, gain=options.gain ?? 1;
     const defaultFade=options.fadeSamples ?? Math.round(.012*rate);
     check(integer(defaultFade,0,rate/2),'A take fade needs up to half a second');
     let loop=time.range(options.from ?? samples(0),options.to ?? samples(plan.frames));
@@ -211,16 +211,24 @@
     function applyPrepared(prepared) {
       const next=editor.materialize(prepared);
       const nextTime=timeline(next);
-      check(clockKey(next)===key,'Reopen the live transport after changing its tracks, clock or mixer routing');
+      const added=next.lanes.slice(plan.lanes.length);
+      const appended=added.length>0 && plan.lanes.every((name,index)=>name===next.lanes[index]) &&
+        added.every(name=>Object.hasOwn(next.session.audio ?? {},name) &&
+          !Object.hasOwn(plan.mixer.strips,name) && !Object.keys(next.mixer.strips[name]).length);
+      check(clockKey(appended ? {...next,lanes:plan.lanes} : next)===clockKey(plan),
+        'Reopen the live transport after changing its tracks, clock or mixer routing');
       let revised;
       if (signature(next.mixer)!==signature(plan.mixer)) {
         revised=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host);
+        const order=report=>Object.keys(report.strips).filter(name=>report.strips[name].inserts.length);
+        check(signature(order(desk.report))===signature(order(revised.report)),'Reopen the live desk after changing insert order');
         revised.restore(desk.snapshot());
       }
       const resized={from:Math.min(loop.from,next.frames-1),
         to:loop.to===plan.frames ? next.frames : Math.min(loop.to,next.frames)};
       for (const [lane,control] of Object.entries(lanes)) if (control.selected!==null)
         nextTime.choice({lane,take:control.selected,from:samples(resized.from),to:samples(resized.to)});
+      for (const name of added) feeds[name]=[0,0];
       prepare(next);
       if (resized.from!==loop.from || resized.to!==loop.to) {
         loop=resized;

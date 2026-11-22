@@ -1,28 +1,87 @@
 const http=require('node:http'), fs=require('node:fs'), path=require('node:path');
-const {randomBytes}=require('node:crypto');
+const {randomBytes,createHash}=require('node:crypto');
+const WAV=require('./wav.js'), {write}=require('./asset-files.js');
+const Recording=require('./music-session-recording.js');
 
 const files=new Map([
   ['/', ['music-session-player.html','text/html; charset=utf-8']],
-  ['/player.mjs', ['music-session-player.mjs','text/javascript; charset=utf-8']]
+  ...Object.entries({
+    'player':'music-session-player',
+    'recording':'music-session-recording',
+    'recording-clock':'music-session-recording-clock',
+    'instrument-worklet':'music-session-instrument-worklet',
+    'sample-capture':'sample-capture',
+    'sample-capture-worklet':'sample-capture-worklet',
+    'rolling-audio':'rolling-audio'
+  }).map(([route,file])=>['/'+route+'.mjs',[file+'.mjs','text/javascript; charset=utf-8']])
 ]);
 
-module.exports=function play(transport,{port,prepare,recipe,save}) {
+module.exports=function play(transport,{port,prepare,discard,editor,assets,P,recordings,recipe,save}) {
   const key=randomBytes(24).toString('hex');
   const staticFiles=new Map([...files].map(([route,[file,type]])=>
     [route,{body:fs.readFileSync(path.join(__dirname,'../src/show',file)),type}]));
+  const recorded=Object.create(null), commits=new Map();
+  staticFiles.set('/instrument-core.mjs',{body:Recording.instrumentCore(),type:'text/javascript; charset=utf-8'});
   let listener,lastPull=0,queued=Promise.resolve();
-  function edit(changes) {
-    const result=queued.then(async()=>{
-      const ready=await prepare(transport.document(),changes);
-      return transport.applyPrepared(ready);
-    });
+  function enqueue(job) {
+    const result=queued.then(job);
     queued=result.catch(()=>{});
     return result;
+  }
+  const edit=changes=>enqueue(async()=>transport.applyPrepared(await prepare(transport.document(),changes)));
+  function record(payload) {
+    return enqueue(async()=>{
+      const {meta,audio}=Recording.unpack(payload);
+      if (!listener || listener!==meta?.client) throw new RangeError('Play this loop in the recording window first');
+      const digest=createHash('sha256').update(payload).digest('hex'), prior=commits.get(meta.id);
+      if (prior) {
+        if (prior.digest!==digest) throw new RangeError('Capture ID already used');
+        return prior.ack;
+      }
+      const {take,changes,asset,micLane,range,pass}=Recording.capture(P,transport.document(),
+        transport.state(),meta,audio,transport.inspect().pins);
+      let staged=false, written;
+      try {
+        if (asset) {
+          editor.addAsset(asset.name,asset.pcm);
+          staged=true;
+          const target=path.join(recordings,asset.name+'.wav');
+          if (fs.existsSync(target)) throw new RangeError('Recording file already exists');
+          write(target,WAV.encode(asset.pcm,{encoding:'float32'}));
+          written=target;
+        }
+        const ready=await prepare(transport.document(),changes,asset);
+        transport.applyPrepared(ready);
+      } catch (error) {
+        if (staged) {
+          editor.discardAsset(asset.name);
+          discard(asset.name);
+        }
+        if (written) fs.unlinkSync(written);
+        throw error;
+      }
+      if (written) recorded[asset.name]=written;
+      const ack={take,range,pass,...(micLane && {micLane})};
+      commits.set(meta.id,{digest,ack});
+      return ack;
+    });
+  }
+  function instrument(lane) {
+    const {production}=transport.document(), track=Object.hasOwn(production.tracks,lane) && production.tracks[lane];
+    const patch=track && production.patches[track.patch];
+    if (!patch || patch.type==='clap') throw new RangeError('Choose a native instrument lane');
+    const {performance,echo,gestures,...voice}=patch;
+    return {patch:voice,assets:[...new Set(P.musicInstruments.assetNames(voice))],gain:Math.min(1,10**((track.gain ?? 0)/20))};
   }
   const command=({op,...args})=>{
     switch (op) {
       case 'state': return transport.state();
       case 'inspect': return transport.inspect();
+      case 'instrument': return instrument(args.lane);
+      case 'recording-lanes': {
+        const {production}=transport.document();
+        return Object.keys(production.tracks).filter(lane=>production.patches[production.tracks[lane].patch].type!=='clap');
+      }
       case 'trace': return transport.trace(args.preview);
       case 'switch': return transport.switchTake(args);
       case 'loop': return transport.setLoop(args);
@@ -30,7 +89,7 @@ module.exports=function play(transport,{port,prepare,recipe,save}) {
       case 'keep': return edit([transport.keepEdit(args)]);
       case 'edit': return edit(args.changes);
       case 'pause': if (listener===args.client) listener=undefined; return transport.state();
-      case 'save': return queued.then(()=>save ? save(transport.document()) : recipe(transport.document()));
+      case 'save': return queued.then(()=>save ? save(transport.document(),recorded) : recipe(transport.document(),recorded));
       default: throw new RangeError('Unknown live session command');
     }
   };
@@ -52,18 +111,27 @@ module.exports=function play(transport,{port,prepare,recipe,save}) {
       return res.end(entry.body);
     }
     if (req.method==='GET' && req.url==='/session') return respond(200,{key,state:transport.state()});
-    if (req.method!=='POST' || !['/audio','/command'].includes(req.url)) return respond(404,{error:'Unknown route'});
+    if (req.method!=='POST' || !['/audio','/command','/record','/instrument-asset'].includes(req.url)) return respond(404,{error:'Unknown route'});
     if (req.headers['x-ink-session']!==key) return respond(403,{error:'Session key required'});
+    const limit=req.url==='/record' ? Recording.bodyBudget : 65536;
     let bytes=0, chunks=[];
     try {
       for await (const chunk of req) {
         bytes+=chunk.length;
-        if (bytes<=65536) chunks.push(chunk);
+        if (bytes<=limit) chunks.push(chunk);
         else chunks=[];
       }
-      if (bytes>65536) return respond(413,{error:'Session command exceeds 64 KiB'});
-      const body=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (bytes>limit) return respond(413,{error:'Session request exceeds its size limit'});
+      const payload=Buffer.concat(chunks);
+      if (req.url==='/record') return respond(200,await record(payload));
+      const body=JSON.parse(payload.toString('utf8'));
       if (req.url==='/command') return respond(200,await command(body));
+      if (req.url==='/instrument-asset') {
+        const audio=instrument(body.lane).assets.includes(body.asset) && assets[body.asset];
+        if (!audio) return respond(404,{error:'Unknown instrument WAV'});
+        res.writeHead(200,{'Content-Type':'audio/wav'});
+        return res.end(WAV.encode(audio,{encoding:'float32'}));
+      }
       if (typeof body.client!=='string' || !/^[a-zA-Z0-9-]{1,80}$/.test(body.client))
         return respond(400,{error:'Provide a player ID'});
       if (listener && listener!==body.client && Date.now()-lastPull<2500)

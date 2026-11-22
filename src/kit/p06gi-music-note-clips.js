@@ -5,8 +5,8 @@
   const epsilon=1e-8, round=n=>Number(n.toFixed(9));
 
   function clip(raw) {
-    check(fields(raw,['id','beat','length','voices','mode']) && id(raw.id) && finite(raw.beat,0,65536) &&
-      finite(raw.length,.0625,256) && [undefined,'layer','attacks'].includes(raw.mode) && Array.isArray(raw.voices) && raw.voices.length>=1 && raw.voices.length<=8,
+    check(fields(raw,['id','beat','length','voices','mode','timing']) && id(raw.id) && finite(raw.beat,0,65536) &&
+      finite(raw.length,.0625,256) && [undefined,'layer','attacks'].includes(raw.mode) && (raw.timing===undefined || raw.timing==='played') && Array.isArray(raw.voices) && raw.voices.length>=1 && raw.voices.length<=8,
     'A note clip needs a name, beat range and one to eight named voices');
     const voices=Array.from(raw.voices,voice=>{
       check(fields(voice,['id','notes']) && id(voice.id) && Array.isArray(voice.notes) && voice.notes.length<=512,
@@ -25,7 +25,7 @@
     });
     check(new Set(voices.map(voice=>voice.id)).size===voices.length,'Note clip voice IDs must be unique');
     return P.data.freeze({id:raw.id,beat:raw.beat,length:raw.length,voices,
-      ...(raw.mode!==undefined && {mode:raw.mode})});
+      ...(raw.mode!==undefined && {mode:raw.mode}),...(raw.timing!==undefined && {timing:raw.timing})});
   }
 
   function rows(raw,clock,program,end) {
@@ -61,7 +61,7 @@
             continue;
           }
           const entry={beat,time,end:stop,midi:note.midi,frequency:program.chordPitch(note.midi,time),
-            velocity:note.velocity,voice:voice.id,clip:span.id,note:note.id,play:note.play ?? {}};
+            velocity:note.velocity,voice:voice.id,clip:span.id,note:note.id,play:note.play ?? {},...(span.timing==='played' && {played:true})};
           (index===0 ? notes : extra).push(entry);
           active.set(voice.id,entry);
         }

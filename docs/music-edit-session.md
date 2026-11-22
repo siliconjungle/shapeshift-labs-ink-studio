@@ -264,6 +264,50 @@ The browser usually owns the audio listener. A headless player can instead
 use `POST /audio` with `{frames,client}`. Its response is little-endian
 interleaved float32 stereo with the chunk address in `X-Ink-Transport`.
 
+## Record straight into take lanes
+
+In the live desk, choose a native instrument lane and **Enable MIDI** in a
+browser with Web MIDI support. The **On-screen keys** and breath slider work
+without a controller. The dry native instrument monitor plays on the browser
+audio device. Saved takes use the regular score renderer and mixer.
+
+- **MIDI notes and expression** records note timing, velocity, sustain,
+  pressure, breath (CC2), contact (CC1 or CC74), expression (CC11) and
+  pitch bend (±2 semitones). Captured notes are editable in a played note clip.
+  The melodic clip replaces the lane inside the pass when auditioned. Drum clips
+  layer over the score's drum events. Existing groove templates leave captured
+  timing alone.
+- **Gesture on written notes** records the same controllers as editable
+  phrase drivers over the existing notes. Hear the gesture by auditioning the
+  captured take. Separate passes can use the phrase-comp workflow below.
+- **Enable mic** adds a mono input to either recording mode. **Microphone
+  only** also works without a native instrument. Select an existing audio
+  lane or let Ink create a new mic lane when it saves the first take. Use
+  headphones and adjust **Mic offset** if the device introduces an audible
+  delay. A positive offset reads the microphone that many milliseconds later
+  and places the result at the same loop start.
+
+Press **Play**. **Record passes** saves each full pass starting at the next
+loop boundary. **Recover last pass** saves the most recent complete pass
+from the enabled inputs. Enable inputs before the start of the pass. A
+lead-in, half pass, or playback gap will be skipped. Recording loops range
+from 0.25 seconds to 26 seconds. At higher sample rates, the rolling
+microphone buffer can require a shorter loop.
+
+The score and mic takes use the same name when recorded together. Select
+them in **Live takes**, then use **Keep range** to include them in the saved
+mix. The mic gets its own WAV in a recordings folder beside the output
+recipe, or beside the input recipe when no `--out` was set. **Save session**
+writes the editable takes and their WAV paths. Existing capture history stays
+in the browser's rolling window until a pass is saved.
+
+Generate the Take Room example and launch the desk:
+
+```sh
+node examples/music-production/session-recording.cjs output/take-room
+node cli/ink-studio.js music session play output/take-room/session.json output/take-room/loop.json --out output/take-room/my-takes.json
+```
+
 ## Capture and comp phrase performances
 
 A phrase take stores continuous control traces on the score clock. One

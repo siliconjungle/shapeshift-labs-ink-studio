@@ -39,6 +39,13 @@
       (!row.velocity || velocity>=row.velocity[0] && velocity<=row.velocity[1]));
     for (const note of notes) {
       const voice=note.voice ?? 0, prev=byVoice.get(voice);
+      if (note.played) {
+        const release=select('release',null,note.velocity);
+        if (release) note.performance={kind:'attack',interval:null,attackLead:0,requestedLead:0,
+          release:{articulation:release.articulation,level:release.level ?? 1,...(release.curves && {curves:release.curves})}};
+        byVoice.set(voice,note);
+        continue;
+      }
       const cleared=silence.findLast(row=>row.endTime<=note.time+eps);
       const floor=cleared?.endTime ?? 0;
       const available=prev && prev.time>=floor-eps && prev.time<note.time-eps &&

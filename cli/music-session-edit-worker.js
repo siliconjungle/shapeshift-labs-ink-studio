@@ -18,15 +18,15 @@ if (isMainThread) {
     }
     worker.on('error',stop);
     worker.on('exit',code=>stop(new Error('Session preparation worker ended ('+code+')')));
-    function prepare(session,edits) {
+    function prepare(session,edits,asset) {
       if (failure) return Promise.reject(failure);
       const id=++sequence;
       return new Promise((resolve,reject)=>{
-        worker.postMessage({id,session,edits});
+        worker.postMessage({id,session,edits,asset});
         pending.set(id,{resolve,reject});
       });
     }
-    return {prepare,close:()=>worker.terminate()};
+    return {prepare,discardAsset:name=>worker.postMessage({discard:name}),close:()=>worker.terminate()};
   };
 } else {
   const P=require('..').load().KIT.procedural;
@@ -43,14 +43,20 @@ if (isMainThread) {
     }
     return value;
   }
-  parentPort.on('message',({id,session,edits})=>{
+  parentPort.on('message',({id,session,edits,asset,discard})=>{
+    if (discard) {editor.discardAsset(discard);return;}
+    let added=false;
     try {
+      if (asset) {editor.addAsset(asset.name,asset.pcm);added=true;}
       const prepared=editor.prepareLive(edits===undefined ? session : editor.edit(session,edits));
       for (const {materials} of Object.values(prepared.media ?? {})) for (const row of Object.values(materials)) {
         const {dry,roomLevel,echoLevel}=row.value;
         row.value={...row.value,dry:{...dry,samples:share(dry.samples)},roomLevel:share(roomLevel),echoLevel:share(echoLevel)};
       }
       parentPort.postMessage({id,value:prepared});
-    } catch (error) { parentPort.postMessage({id,error:error.message}); }
+    } catch (error) {
+      if (added) editor.discardAsset(asset.name);
+      parentPort.postMessage({id,error:error.message});
+    }
   });
 }

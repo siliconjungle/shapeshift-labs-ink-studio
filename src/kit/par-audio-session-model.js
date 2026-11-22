@@ -120,7 +120,7 @@
       for (const [take,source] of takes) {
         const shared=editorial!==undefined && fields(source,['clips','sourceEdits','track']) && Array.isArray(source.clips) &&
           (source.track===undefined || id(source.track));
-        const valid=shared || fields(source,['asset','at','fromSample','toSample']) && id(source.asset) ||
+        const valid=shared || fields(source,['silence']) && source.silence===true || fields(source,['asset','at','fromSample','toSample']) && id(source.asset) ||
           fields(source,['editorial','track','at']) && record(source.editorial) && (source.track===undefined || id(source.track)) ||
           fields(source,['kit','performance','at']) && record(source.kit) && record(source.performance) ||
           fields(source,['motif','at']) && fields(source.motif,['source','score','plan','role']) &&

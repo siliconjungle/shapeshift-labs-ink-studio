@@ -20,6 +20,14 @@ output{font:13px ui-monospace,monospace;color:var(--muted)}.lane{display:grid;gr
 #comp{margin:.5em 0 0;color:var(--muted);font-size:13px}#note{width:min(250px,100%)}
 textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-height:24em;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 #timeline-edits button{margin-top:10px}
+#recording .row + .row{margin-top:12px}
+#record-status{display:block;color:var(--accent);overflow-wrap:anywhere;margin-top:10px;min-height:1.4em}
+#record-toggle[aria-pressed="true"]{background:#f2b49c;color:#352013;border-color:#f2b49c}
+#piano{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:6px}
+#piano-keys{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.piano-key{touch-action:none;flex:1;white-space:nowrap;padding-inline:8px}
+.piano-key.down,.piano-key:active{background:var(--accent);color:#17221a}
+#breath{padding:0;width:min(250px,100%)}
 </style>
 <script type="module" src="/player.mjs"></script>
 </head>
@@ -35,6 +43,28 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 <label>Lead-in · sec<input id="lead-in" type="number" min="0" step="any" placeholder="Optional"></label>
 <button>Set loop</button>
 </form>
+</section>
+<section id="recording">
+<h2>Record a take</h2>
+<div class="row">
+<label>Capture<select id="record-mode"><option value="notes">MIDI notes and expression</option><option value="gesture">Gesture on written notes</option><option value="mic">Microphone only</option></select></label>
+<label>Instrument lane<select id="record-lane"></select></label>
+<label>MIDI input<select id="midi-port" disabled></select></label>
+<button type="button" id="midi-enable">Enable MIDI</button>
+<button type="button" id="keys-enable">On-screen keys</button>
+</div>
+<div id="piano" tabindex="0" hidden aria-label="Play notes with A W S E D F T G Y H U J K">
+<div id="piano-keys"></div>
+<label>Breath<input id="breath" type="range" min="0" max="127" value="0"></label>
+</div>
+<div class="row">
+<button type="button" id="mic-toggle">Enable mic</button>
+<label>Recording lane<select id="mic-lane"><option value="">New mic lane</option></select></label>
+<label>Mic offset · ms<input id="mic-offset" type="number" min="-250" max="250" step="1" value="0"></label>
+<button type="button" id="record-toggle" aria-pressed="false">Record passes</button>
+<button type="button" id="recover-pass">Recover last pass</button>
+</div>
+<output id="record-status" aria-live="polite">Choose an input, then play a loop.</output>
 </section>
 <section><h2>Live takes</h2><div id="lanes"></div>
 <form id="monitor" class="row">

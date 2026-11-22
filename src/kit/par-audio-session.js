@@ -19,12 +19,20 @@
   function create(input={},host) {
     check(record(input) && Object.keys(input).length<=128 && Object.keys(input).every(id),'Expected named session audio assets');
     let count=0;
-    const assets=Object.fromEntries(Object.entries(input).map(([name,raw])=>{
+    const assets=Object.create(null);
+    function addAsset(name,raw) {
+      check(id(name) && !Object.hasOwn(assets,name) && Object.keys(assets).length<128,'Choose a new session asset name');
       const pcm=M.audio(raw);
+      check(pcm.channels<=2 && pcm.samples.length>0 && count+pcm.samples.length<=pcmBudget,'Session asset PCM budget exceeded');
+      assets[name]={...pcm,samples:Float64Array.from(pcm.samples)};
       count+=pcm.samples.length;
-      check(pcm.channels<=2 && pcm.samples.length>0 && count<=pcmBudget,'Session asset PCM budget exceeded');
-      return [name,{...pcm,samples:Float64Array.from(pcm.samples)}];
-    }));
+    }
+    function discardAsset(name) {
+      if (!Object.hasOwn(assets,name)) return;
+      count-=assets[name].samples.length;
+      delete assets[name];
+    }
+    for (const [name,raw] of Object.entries(input)) addAsset(name,raw);
     const load=name=>{
       check(Object.hasOwn(assets,name),'Missing session asset '+name);
       return assets[name];
@@ -71,6 +79,7 @@
     }
     function prepareAudio(plan,lane,take) {
       const row=plan.audio.get(lane).takes.get(take);
+      if (row.silence===true) return {from:0,duration:0,write() {}};
       const placed=plan.placed.get(lane+'/'+take);
       if (placed) return {...placed,from:0,duration:plan.editorialClock.end};
       let pcm, kitEvents, fallback=0, level=1;
@@ -442,7 +451,7 @@
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
     return Object.freeze({inspect,trace,edit,render,compare,compose,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,listeningRound,
       listeningEvidence:listeningEvidence.listen,keepListeningRepair:listeningEvidence.keep,experiment:experiments.run,keepExperiment:experiments.keep,
-      open,prepareTransport,prepareLive,openPreparedTransport});
+      open,prepareTransport,prepareLive,openPreparedTransport,addAsset,discardAsset});
   }
   M.musicSession=Object.freeze({create});
 })(KIT.procedural);

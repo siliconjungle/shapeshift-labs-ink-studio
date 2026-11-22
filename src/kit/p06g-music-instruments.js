@@ -266,7 +266,7 @@
 
   function express(player,note,rate,gate,phraseOffset=0) {
     const authoredGate=(note.gate ?? gate)+(note.start===undefined ? 0 : note.time-note.start);
-    const expression=P.musicNoteExpression.compile(note.play.curves,Math.max(gate,authoredGate),rate,note.phrase,phraseOffset);
+    const expression=note.expression ?? P.musicNoteExpression.compile(note.play.curves,Math.max(gate,authoredGate),rate,note.phrase,phraseOffset);
     const body=player.prepare(expression ? {...note,expression} : note,rate,gate);
     const fadeIn=note.performance?.fadeIn;
     if (!expression?.gain && !expression?.filter && !expression?.roughness && !fadeIn) return body;

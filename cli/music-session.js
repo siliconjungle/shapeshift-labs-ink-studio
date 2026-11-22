@@ -19,7 +19,8 @@ module.exports=function command([mode,file,config],opt,kit) {
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
-  const editor=P.mediaGraph.musicSession.create(readAssets(paths,file,P),host);
+  const assets=readAssets(paths,file,P);
+  const editor=P.mediaGraph.musicSession.create(assets,host);
   let session=recipe.session, previous;
   if (mode==='handoff') {
     check(typeof opt.out==='string','Use --out for the DAW package');
@@ -27,10 +28,10 @@ module.exports=function command([mode,file,config],opt,kit) {
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  function save(target,value=session) {
+  function save(target,value=session,recorded={}) {
     check(typeof target==='string','Use an output path for the session recipe');
     const folder=path.dirname(path.resolve(target)), source=path.dirname(path.resolve(file));
-    const assets=Object.fromEntries(Object.entries(paths).map(([name,ref])=>[name,path.relative(folder,path.resolve(source,ref))]));
+    const assets=Object.fromEntries(Object.entries({...paths,...recorded}).map(([name,ref])=>[name,path.relative(folder,path.resolve(source,ref))]));
     json(target,{session:value,assets});
     return {session:path.resolve(target)};
   }
@@ -148,6 +149,7 @@ module.exports=function command([mode,file,config],opt,kit) {
     }
   }
   if (mode==='play') {
+    check(opt.out===undefined || typeof opt.out==='string','Use --out with a session recipe filename');
     const port=Number(opt.port ?? 0);
     check(Number.isInteger(port) && port>=0 && port<=65535,'Choose a session port from 0 to 65535');
     const absolute=Object.fromEntries(Object.entries(paths).map(([name,ref])=>[name,path.resolve(path.dirname(file),ref)]));
@@ -158,8 +160,10 @@ module.exports=function command([mode,file,config],opt,kit) {
         const prepared=await preparer.prepare(session);
         const transport=editor.openPreparedTransport(prepared,settings);
         await require('./music-session-player.js')(transport,{
-          port,prepare:preparer.prepare,recipe:value=>({session:value,assets:absolute}),
-          save:opt.out===undefined ? null : value=>save(opt.out,value)
+          port,prepare:preparer.prepare,discard:preparer.discardAsset,editor,assets,P,
+          recordings:path.resolve(opt.out ?? file).replace(/\.json$/i,'')+'-recordings',
+          recipe:(value,recorded)=>({session:value,assets:{...absolute,...recorded}}),
+          save:opt.out===undefined ? null : (value,recorded)=>save(opt.out,value,recorded)
         });
       } finally { await preparer.close(); }
     })();
