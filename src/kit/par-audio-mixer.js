@@ -285,9 +285,10 @@
       states.set(row.name,{input,pre,post});
       const routes=row.routes.map(edge=>({samples:read(edge.from,edge.tap),level:edge.level.reader()}));
       const inserts=row.inserts.flatMap(({id,processor,key})=>{
-        if (processor.wet.max===0 && (stream || !processor.wet.automated)) return [];
-        if (stream && (!processor.make || processor.latency!==0)) return [null];
-        check(processor.make && processor.latency===0,'Insert '+id+' ('+processor.type+
+        const causal=processor.make && processor.latency===0;
+        if (processor.wet.max===0 && (stream || !processor.wet.automated || !causal)) return [];
+        if (stream && !causal) return [null];
+        check(causal,'Insert '+id+' ('+processor.type+
           ') needs offline rendering. Use a causal, zero-lookahead insert or bypass it for live playback.');
         return [{process:processor.make(),wet:processor.wet.reader(),key:key && read(key.strip,key.tap)}];
       });
