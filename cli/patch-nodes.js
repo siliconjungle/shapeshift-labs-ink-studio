@@ -110,15 +110,15 @@ function patchNodes(kit, media = {}, gpu) {
       run({ source, layer, opacity }) { return { value: after(source, layer, opacity) }; }
     },
     'patch.shader': {
-      inputs: { source: 'raster', wgsl: 'string', amount: scalar(1) }, outputs: raster, time: true,
+      inputs: { source: 'raster', wgsl: 'string', amount: scalar(1), position: { type: 'vec3', default: [0, 0, 0] } }, outputs: raster, time: true,
       description: 'Run a WGSL image kernel using an optional native WebGPU device.',
       instantiate() {
         const run = () => { throw new Error('Use ink-studio patch run for asynchronous WGSL nodes'); };
-        run.async = async ({ source, wgsl, amount }, { time }) => {
+        run.async = async ({ source, wgsl, amount, position }, { time }) => {
           if (!gpu) throw new Error('Patch shader runtime is unavailable');
           const { width, height } = source;
           const rgba = P.raster.rgba(source);
-          const data = await gpu.process({ width, height, data: rgba.data, wgsl, amount, time });
+          const data = await gpu.process({ width, height, data: rgba.data, wgsl, amount, time, position });
           return { value: { width, height, channels:4, data } };
         };
         return run;

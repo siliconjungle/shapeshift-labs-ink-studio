@@ -305,6 +305,10 @@ const specifications = {
   'sdf.facets': { inputs: { options: { size: .3 } } },
   'sdf.render': { inputs: { options: { width: 16, height: 16 } } },
   'scene.diorama': { inputs: { definition: diorama } },
+  'scene.eventEffects': { inputs: { sheet: {
+    format: 'ink-studio/event-visual-effects', version: 1, id: 'signal',
+    presentationCues: { format: 'ink-studio/presentation-cues', version: 1, id: 'signal', cues: [] }
+  } } },
   'scene.actorPerformance': { inputs: { actor: 'pilot', sheet: {
     format: 'ink-studio/actor-performance', version: 1, id: 'signal',
     cast: { pilot: { actor: 'pilot', label: 'Pilot' } }, props: {},

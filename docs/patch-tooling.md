@@ -164,13 +164,15 @@ The final `show-report` line is the same JSON written by `--report`. A rehearsal
 
 ## Author a WGSL node
 
-`patch.shader` accepts a raster, the WGSL source as a string, and an optional numeric `amount`. Insert the shader text into the graph with a JSON edit or by generating an edit journal from a `.wgsl` file. The runtime reuses a compiled pipeline for a shader and set of dimensions within the run.
+`patch.shader` accepts a raster, the WGSL source as a string, an optional numeric `amount`, and an optional XYZ `position` that defaults to zero. Insert the shader text into the graph with a JSON edit or by generating an edit journal from a `.wgsl` file. The runtime reuses a compiled pipeline for a shader and set of dimensions within the run.
 
 | Binding | WGSL declaration |
 | --- | --- |
 | 0 | `texture_2d<f32>` source image, read with `textureLoad` |
 | 1 | `texture_storage_2d<rgba8unorm,write>` destination |
 | 2 | `var<uniform> controls: vec4f` with seconds, amount, width and height |
+
+To read position, declare binding 2 as a struct containing two `vec4f` fields. The first keeps the controls above and the second holds XYZ with a zero fourth component. A `scene.eventEffects` node can supply both `amount` and `position`. [Event-driven visual effects](event-visual-effects.md)
 
 Use entry point `main` with `@workgroup_size(8,8)`, and guard coordinates outside the image. `patch.shader` returns the computed RGBA image as a normal raster port. Group instances can use shader nodes as direct graph operations and expose their outputs to the parent. This path uses the optional [Dawn Node bindings](https://github.com/dawn-gpu/node-webgpu) and an available GPU adapter. It runs without a browser.
 

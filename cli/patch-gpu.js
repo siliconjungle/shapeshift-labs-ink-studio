@@ -24,16 +24,16 @@ function createPatchGpu(baseDir, modulePath) {
     ({ createWebGPUGraph } = await import('../webgpu.mjs'));
   }
   return {
-    async process({ width, height, data, wgsl, amount, time }) {
+    async process({ width, height, data, wgsl, amount, time, position = [0, 0, 0] }) {
       if (width * height > 1048576 || Buffer.byteLength(wgsl) > 65536 || !wgsl.trim() ||
-          ![amount, time].every(n=>Number.isFinite(Math.fround(n)))) throw new RangeError('Patch shader inputs exceed their limits');
+          ![amount, time, ...position].every(n=>Number.isFinite(Math.fround(n)))) throw new RangeError('Patch shader inputs exceed their limits');
       await initialize();
       const key = JSON.stringify([width,height,wgsl]);
       let graph = programs.get(key);
       if (!graph) {
         const texture = { type:'texture', width, height, format:'rgba8unorm' };
         graph = await createWebGPUGraph(device, {
-          resources:{ source:texture, result:texture, settings:{ type:'buffer', size:16 } },
+          resources:{ source:texture, result:texture, settings:{ type:'buffer', size:32 } },
           nodes:[{ id:'shader', shader:wgsl, workgroups:[Math.ceil(width/8),Math.ceil(height/8)], bindings:[
             { resource:'source', mode:'read-texture' }, { resource:'result', mode:'write-texture' },
             { resource:'settings', mode:'uniform' }
@@ -47,7 +47,7 @@ function createPatchGpu(baseDir, modulePath) {
         programs.set(key, graph);
       }
       graph.writeTexture('source', data);
-      graph.writeBuffer('settings', new Float32Array([time, amount, width, height]));
+      graph.writeBuffer('settings', new Float32Array([time, amount, width, height, ...position, 0]));
       graph.run(['result']);
       return graph.readTexture('result');
     },

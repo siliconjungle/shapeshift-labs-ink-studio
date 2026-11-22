@@ -1,0 +1,165 @@
+{
+  "format": "ink-studio/event-visual-effects-plan",
+  "version": 1,
+  "id": "spillway-fx",
+  "rules": {
+    "lamp": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "light",
+        "detail": {
+          "value": 0,
+          "duration": 0.8,
+          "release": 0.43,
+          "offset": [
+            0,
+            0.84,
+            0
+          ],
+          "radius": 2,
+          "intensity": 3.8,
+          "color": "#ffffff"
+        },
+        "bindings": {
+          "/value": "/payload/load",
+          "/color": "/payload/color"
+        }
+      }
+    },
+    "mist": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "fog",
+        "detail": {
+          "value": 0,
+          "duration": 0.82,
+          "attack": 0.08,
+          "release": 0.43,
+          "offset": [
+            0,
+            0.24,
+            0
+          ],
+          "radius": 1.23,
+          "height": 0.42,
+          "density": 1.12,
+          "color": "#ffffff"
+        },
+        "bindings": {
+          "/value": "/payload/load",
+          "/color": "/payload/color"
+        }
+      }
+    },
+    "droplets": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "particles",
+        "detail": {
+          "value": 0,
+          "duration": 0.47,
+          "release": 0.34,
+          "radius": 0.061,
+          "count": 84,
+          "speed": 2.1,
+          "color": "#ffffff",
+          "offset": [
+            0,
+            0.06,
+            0
+          ]
+        },
+        "bindings": {
+          "/value": "/payload/load",
+          "/color": "/payload/color"
+        }
+      }
+    },
+    "impact": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "contact",
+        "detail": {
+          "value": 0,
+          "duration": 0.39,
+          "release": 0.29,
+          "radius": 0.042,
+          "count": 34,
+          "speed": 2.5,
+          "color": "#ffffff"
+        },
+        "bindings": {
+          "/value": "/payload/load",
+          "/color": "/payload/color"
+        }
+      }
+    },
+    "wear": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "mark",
+        "detail": {
+          "value": 0,
+          "duration": 3.6,
+          "release": 0.32,
+          "pattern": "tide-line",
+          "length": 1.32,
+          "width": 0.58,
+          "reach": 0.12,
+          "color": "#173047"
+        },
+        "bindings": {
+          "/value": "/payload/load"
+        }
+      }
+    },
+    "palette": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "palette",
+        "detail": {
+          "value": 0,
+          "duration": 0.72,
+          "release": 0.15,
+          "channel": "sky",
+          "colors": [
+            "#ffffff"
+          ],
+          "threshold": 0
+        },
+        "bindings": {
+          "/value": "/payload/load",
+          "/colors": "/payload/ramp"
+        }
+      }
+    },
+    "shader": {
+      "on": {
+        "kind": "spillway-impact"
+      },
+      "cue": {
+        "kind": "shader",
+        "detail": {
+          "value": 0,
+          "duration": 0.8,
+          "release": 0.38
+        },
+        "bindings": {
+          "/value": "/payload/load"
+        }
+      }
+    }
+  }
+}

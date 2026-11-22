@@ -1274,6 +1274,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     shadowNext,
     count: () => n,
     describeOptical,
+    renderSdfSources: () => renderSdfs.slice(),
     keepRenderSdf(source) {
       for (const ranges of source.rows.values()) for (const range of ranges) {
         const [start,end] = range, points = new Float32Array((end-start)*3);

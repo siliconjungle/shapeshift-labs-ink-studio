@@ -1168,7 +1168,15 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const run=recording ? initial : snapshotRun(input,initial,tick);
         ensure(typeof opt.out==='string','Simulation render needs --out image.png');
         const output=path.resolve(opt.out), diagnostics=require('./look-preview.js').preview(opt);
-        const suffixes=[...(diagnostics?.suffixes??[]),...(beat?['-beat.json']:[])];
+        const effectsFile = opt['event-effects'];
+        const effectsReport = effectsFile === undefined ? undefined : output.replace(/\.png$/i, '') + '-effects.json';
+        if (effectsReport) {
+          ensure(typeof effectsFile === 'string' && effectsFile.trim() && /\.png$/i.test(output),
+            'Use --event-effects SHEET with a PNG output');
+          checkReportPath([file, effectsFile], output, 'render inputs');
+          checkReportPath([file, effectsFile, output], effectsReport, 'render inputs');
+        }
+        const suffixes=[...(diagnostics?.suffixes??[]),...(beat?['-beat.json']:[]),...(effectsReport?['-effects.json']:[])];
         const beatReport=beat&&output.replace(/\.(?:a?png)$/i,'')+'-beat.json';
         if(beat){
           ensure(/\.png$/i.test(output),'Beat render needs a PNG output');
@@ -1185,7 +1193,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
           shot.seed(run.view().world.seed);
           shot.runtime(run.recording());
         }
-        const world=W.visual(kit,run.view(),run.query(),{controls:opt.params===undefined?undefined:parse(opt.params)});
+        const eventEffects = effectsReport && require('./story-effects.js').readSheet(effectsFile);
+        const world=W.visual(kit,run.view(),run.query(),{controls:opt.params===undefined?undefined:parse(opt.params),eventEffects});
         if (atmospherePose) world.atmospherePose=atmospherePose;
         const studio=require('../index.js');
         const image=studio.render(world,{w:Number(opt.w??720),h:Number(opt.h??475),colored:!!opt.colored,
@@ -1209,6 +1218,8 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         diagnostics?.write(output,{times:[run.view().time]});
         if(event)write(beatReport,{format:'ink-studio/beat-render',version:1,beatId:opt.beat,
           tick,time:run.view().time,event,file:path.basename(output),width:image.w,height:image.h});
+        if (effectsReport) write(effectsReport, { format: 'ink-studio/event-visual-effects-frame', version: 1,
+          world: run.view().world.id, tick, file: path.basename(output), ...world.eventEffects });
         shot?.finish(output,{suffixes});
         break;
       }
