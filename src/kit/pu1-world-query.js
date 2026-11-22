@@ -272,6 +272,8 @@
         {lifecycle:view.storyLifecycle,triggers:view.storyTriggers,candidates:view.incidentCandidates}))},
       'incident-candidates':{type:'record',qualified:true,read:({args})=>
         W.incidentCandidates.inspect(view.incidentCandidatePolicies,view.incidentCandidates,tick,args)},
+      ...(view[W.schedulerInspector.source]&&{scheduler:{type:'record',qualified:true,read:({args})=>
+        W.schedulerInspector.inspect(view,api,args)}}),
       'incident-pressure':{type:'record',qualified:true,read:()=>
         W.incidentPressure.inspect(view.incidentPressure,view.storyLifecycle,tick)},
       'incident-cooldowns':{type:'record',qualified:true,read:({args})=>

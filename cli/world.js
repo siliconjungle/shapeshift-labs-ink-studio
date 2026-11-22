@@ -202,7 +202,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const input = load(file, { lookPreview: true });
     return input.world ? visualSnapshot(input) : null;
   }
-  function view(file) {
+  function view(file, {worldOnly=false} = {}) {
     const input = load(file);
     if (input.world) {
       let run = runtime(input);
@@ -213,6 +213,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       }
       return run.query();
     }
+    ensure(!worldOnly,'The inspector needs an Ink Studio world, checkpoint, or recording');
     const world = build(input.legacy);
     const t = Number(opt.t ?? 0);
     ensure(Number.isFinite(t) && t>=0,'Invalid probe time');
@@ -792,6 +793,15 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         ensure(typeof file==='string' && other===undefined && typeof opt.spec==='string' && opt.args===undefined,
           'Use sim cast <world|checkpoint|run> --spec casting.json');
         const result = view(file).probe(W.storyCasting.field,undefined,read(opt.spec));
+        ensure(result.status==='ok',result.reason);
+        return respond(result.value);
+      }
+      case 'scheduler': {
+        ensure(typeof file==='string'&&other===undefined&&opt.args===undefined&&
+          (opt.incident===undefined||typeof opt.incident==='string'),
+        'Use sim scheduler <world|checkpoint|run> [--ticks N] [--incident document/story]');
+        const result = view(file,{worldOnly:true}).probe(W.schedulerInspector.field,undefined,
+          opt.incident===undefined?{}:{incident:opt.incident});
         ensure(result.status==='ok',result.reason);
         return respond(result.value);
       }

@@ -511,6 +511,8 @@
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
       interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,navigationSources} = plan;
+    const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
+      documents:storyRoles?.documents??[]});
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -818,7 +820,7 @@
     regions?.publish(view());
     debug?.publish(origin);
     function query() {
-      return currentQuery ?? (currentQuery = Q.create(view(),systems,projection));
+      return currentQuery ?? (currentQuery = Q.create({...view(),[W.schedulerInspector.source]:schedulerSource},systems,projection));
     }
     function projectEntities(overlay){
       if(!overlay||!Object.keys(overlay.entities).length)return Object.freeze({view:view(),query:query()});

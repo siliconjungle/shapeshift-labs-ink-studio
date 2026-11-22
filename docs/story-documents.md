@@ -1015,6 +1015,55 @@ node cli/ink-studio.js sim run examples/story-documents/low-bank-sluice.world.js
   --ticks 13 --record low-bank-repaired.run.json
 ```
 
+## Inspect the scheduler at a tick
+
+Use `sim scheduler` to read the current incident queue, its
+commitments, and the decisions it would make at the next boundary.
+The command accepts a world, checkpoint, or run recording. Pick a
+published tick or focus the candidate list on a single incident.
+
+```sh
+node cli/ink-studio.js sim scheduler examples/story-documents/pressure-shifts.world.json \
+  --ticks 2 --incident pressure-shifts/ridge-watch
+node cli/ink-studio.js sim scheduler crossing.run.json --ticks 3 --out scheduler.json
+node cli/ink-studio.js probe crossing.run.json --ticks 3 --field world/scheduler
+```
+
+- **Actual** lists dispatches and expirations recorded at the
+  inspected tick. Each candidate's `observed` status comes from the
+  saved queue, including the tick of its last evaluation.
+- **Forecast** runs the real candidate scheduler on a copy of the
+  queue for the next tick. It treats the published world as fixed
+  while evaluating state triggers, feasibility, cooldowns, cadence,
+  and anchor timing. It also applies expiry follow-ups, variety,
+  and seeded draws. Commands, new events, or solver changes at the
+  actual next tick can change the result. Manual options are checked
+  individually against available capacity before automatic releases.
+- **Commitments** lists the live stories and their pressure holds,
+  along with assigned actors, native orders, deferred requests, and
+  pending handoffs. A completed story can still show an order due
+  for release at the next boundary.
+- **Candidates** explain what has to change. A feasibility blocker
+  shows the authored check and observed value. Capacity blockers
+  show the deficit, the limit, and the holders. Recovery and anchor
+  blockers show their clock or condition. The automatic decision
+  identifies a preferred variety alternative, a draw winner, or a
+  reserved beat. An expiry shows the last saved checks and follow-up.
+
+The inspector reads a published runtime query. Its forecast leaves
+the queue, random draws, and world revision intact. On a focused
+report, forecast and commitment summaries still cover the full queue
+so the other incidents keep their effects on the candidate.
+
+In the [crossing demo](../examples/story-documents/pressure-shifts.world.json),
+tick 2 shows the rescue and supply convoy using both commitment
+slots. The ridge watch needs another danger unit held by the rescue.
+Tick 3 shows that the convoy has closed, so mediation can use the
+opening at tick 4. In the
+[quay relay](../examples/story-documents/quay-relay.world.json),
+ticks 7 and 8 show the deferred handoff and the accepted assignment
+to a different courier.
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

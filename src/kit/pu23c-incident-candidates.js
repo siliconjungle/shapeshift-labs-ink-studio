@@ -79,7 +79,7 @@
       };
     }
 
-    function advance(previous,starts,commands,tick,query,lifecycle,emit) {
+    function advance(previous,starts,commands,tick,query,lifecycle,emit,capture) {
       const state = {...previous}, released = {}, normal = [];
       const budget = pressurePolicy&&W.incidentPressure.begin(pressurePolicy,lifecycle);
       const cooldownAt = cooldownReports(lifecycle);
@@ -157,20 +157,30 @@
             ...(overBudget&&{pressure:row.pressure}),...(cooling&&{cooldown:row.cooldown})});
         }
       }
+      if (capture) capture.checked = {...state};
       const pinned = schedule.map(([key])=>state[key]).filter(row=>row?.status==='ready')
         .sort((a,b)=>a.expiresAt-b.expiresAt||before(a,b))[0];
       if (pinned) {
+        if (capture) capture.hold = {code:'anchor-priority',candidate:pinned.candidate};
         dispatch(pinned,W.incidentAnchors.reason,emit,'automatic');
         return {state:freeze(state),starts:normal,released};
       }
       if (storyteller) {
         const next = W.storyteller.nextAt(storyteller,previousAutomaticAt);
-        if ((next!==null&&tick<next)||(anchors&&W.incidentAnchors.reservation(anchors,state,tick,W.storyteller.nextAt(storyteller,tick))))
+        if (next!==null&&tick<next) {
+          if (capture) capture.hold = {code:'cadence',opensAt:next};
           return {state:freeze(state),starts:normal,released};
+        }
+        const reserved = anchors&&W.incidentAnchors.reservation(anchors,state,tick,W.storyteller.nextAt(storyteller,tick));
+        if (reserved) {
+          if (capture) capture.hold = {code:'anchor-reservation',...reserved};
+          return {state:freeze(state),starts:normal,released};
+        }
       }
       const variety = varietyPolicy&&W.incidentVariety.rank(varietyPolicy,varietyModel,state,
         ready.filter(key=>state[key].status==='ready'&&selectionFor(key)?.weight!==0),tick);
       const deferred = variety&&W.incidentVariety.deferred(variety);
+      if (capture&&variety) capture.variety = variety;
       const eligible = deferred?key=>canSelect(key)&&!deferred.has(key):canSelect;
       function release(key,choice) {
         if (choice) publish(emit,'selected',state[key],{selection:choice});
@@ -195,6 +205,12 @@
           if (state[key].status==='ready'&&(!selectionFor(key)||choices.has(key))) release(key,choices.get(key));
       }
       return {state:freeze(state),starts:normal,released};
+    }
+
+    function preview(previous,starts,lifecycle,tick,query) {
+      const capture = {};
+      const {state,released} = advance(previous,starts,[],tick,()=>query,lifecycle,()=>{},capture);
+      return {...capture,state,dispatched:Object.keys(released)};
     }
 
     function validate(state,tick,triggers,lifecycle,gates) {
@@ -262,7 +278,7 @@
       validateSelections(state,seed,selectionFor,cooldownAt,(key,tick)=>canSelect(key)&&!deferred.get(tick)?.has(key));
       if (pressurePolicy) W.incidentPressure.validate(pressurePolicy,lifecycle);
     }
-    return {policies,pressure:pressurePolicy,anchors,direction,initial:()=>freeze({}),advance,validate,checkAction};
+    return {policies,pressure:pressurePolicy,anchors,direction,initial:()=>freeze({}),advance,preview,validate,checkAction};
   }
 
   function inspect(policies,state,tick,args) {
