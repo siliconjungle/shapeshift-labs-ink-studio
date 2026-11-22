@@ -1,0 +1,128 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "winter-crossing",
+  "title": "The Winter Crossing",
+  "stories": {
+    "repair": {
+      "kind": "questlet",
+      "title": "Repair the crossing",
+      "lifecycle": {
+        "activation": "manual"
+      },
+      "entry": "inspect",
+      "stages": {
+        "inspect": {
+          "title": "Repair the crossing",
+          "next": {
+            "resolved": {
+              "outcome": "done"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "done": {
+          "title": "Resolved"
+        }
+      },
+      "triggers": {
+        "notice": {
+          "event": {
+            "kind": "bridge-damaged",
+            "system": "world"
+          }
+        }
+      }
+    },
+    "scout": {
+      "kind": "incident",
+      "title": "Send a ridge scout",
+      "lifecycle": {
+        "activation": "automatic"
+      },
+      "entry": "depart",
+      "stages": {
+        "depart": {
+          "title": "Send a ridge scout",
+          "next": {
+            "resolved": {
+              "outcome": "done"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "done": {
+          "title": "Resolved"
+        },
+        "blocked": {
+          "title": "The ridge route was lost"
+        }
+      },
+      "triggers": {
+        "notice": {
+          "event": {
+            "kind": "ridge-open",
+            "system": "world"
+          }
+        }
+      }
+    },
+    "escort": {
+      "kind": "arc",
+      "title": "Escort the cargo over the ford",
+      "lifecycle": {
+        "activation": "automatic"
+      },
+      "entry": "organize",
+      "stages": {
+        "organize": {
+          "title": "Escort the cargo over the ford",
+          "next": {
+            "resolved": {
+              "outcome": "done"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "done": {
+          "title": "Resolved"
+        }
+      }
+    },
+    "guest": {
+      "kind": "questlet",
+      "title": "Offer shelter to the visitor",
+      "lifecycle": {
+        "activation": "manual",
+        "offerFor": 0.3
+      },
+      "entry": "offer",
+      "stages": {
+        "offer": {
+          "title": "Offer shelter to the visitor",
+          "next": {
+            "resolved": {
+              "outcome": "done"
+            }
+          }
+        }
+      },
+      "outcomes": {
+        "done": {
+          "title": "Resolved"
+        }
+      },
+      "triggers": {
+        "notice": {
+          "event": {
+            "kind": "visitor-arrived",
+            "system": "world"
+          }
+        }
+      }
+    }
+  }
+}

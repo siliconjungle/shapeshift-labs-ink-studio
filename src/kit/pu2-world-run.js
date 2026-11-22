@@ -8,6 +8,8 @@
   const tickOK = value => Number.isSafeInteger(value) && value >= 0 && value <= maxTick;
   const ordered = value => Object.keys(value).sort();
   const worldActions = ['input','patch','event','transfer'];
+  const worldAction = (plan, name) => worldActions.includes(name) || plan.chunks?.actions.includes(name) ||
+    name === 'story-transition' && plan.storyLifecycle;
   const checkpointFormat = 'ink-studio/checkpoint', runFormat = 'ink-studio/run';
   const savedCheckpoints=new WeakSet(), branchToken=Symbol('live checkpoint');
 
@@ -330,12 +332,15 @@
     const population = W.populationRuntime.bind({systems,transfers,chunks});
     const plan = {world,systems,ports,incoming,order,names,transfers,couplings,dependencies,schedule,rates,timedSolvers,chunks,aggregates,reservations,worksites,
       interactions,influence,population,causePolicy,contracts,phaseEdges,navigationSources};
+    if (world.storyDocuments !== undefined) {
+      plan.storyTriggers = W.storyTriggers.compile(world.storyDocuments, world, systems);
+      plan.storyLifecycle = W.storyLifecycle.compile(world.storyDocuments, world.dt);
+    }
     if (world.eventActions !== undefined) plan.eventActions = K.eventActions.compile(world.eventActions, {
       dt: world.dt, validateAction: command => actionCheck(command, plan),
       validateSource: ({ system }) => check(system === undefined || system === 'world' || own(systems, system),
         'Unknown event action source ' + system)
     });
-    if (world.storyDocuments !== undefined) plan.storyTriggers = W.storyTriggers.compile(world.storyDocuments, world, systems);
     return plan;
   }
   function actionCheck(raw, plan, min = 1) {
@@ -344,7 +349,7 @@
     const [system,key] = endpoint(raw.action);
     let args = raw.args ?? {};
     if (system === 'world') {
-      check(worldActions.includes(key)||plan.chunks?.actions.includes(key), 'Unknown world action ' + key);
+      check(worldAction(plan,key), 'Unknown world action ' + key);
       if (key === 'input') {
         args={...args,port:portOf(plan.world,args.port)};
         check(!plan.incoming.has(args.port), 'A connected input is driven by its source: ' + args.port);
@@ -356,6 +361,7 @@
         'Live patches may change entities and metadata');
       } else if(plan.chunks?.actions.includes(key))plan.chunks.checkAction(key,args);
       else if (key === 'transfer') plan.transfers.validate(args);
+      else if (key === 'story-transition') plan.storyLifecycle.checkAction(args);
       else {
         check(id(args.kind), 'An event needs a kind');
         W.timedEvents.timeOf(args);
@@ -374,7 +380,7 @@
       (scenario.until === undefined || tickOK(scenario.until)), 'Invalid scenario specification');
     for (const name of scenario.allow ?? []) {
       const [system,action] = endpoint(name);
-      check(system === 'world' ? worldActions.includes(action)||plan.chunks?.actions.includes(action) : own(plan.systems[system]?.actions,action),
+      check(system === 'world' ? worldAction(plan,action) : own(plan.systems[system]?.actions,action),
         'Unknown allowed action ' + name);
     }
     const ids = new Set();
@@ -457,7 +463,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,navigationSources} = plan;
     let composition, inspection;
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
@@ -493,6 +499,7 @@
     let causalState, weatherTrackState, chunkState;
     let currentQuery, lastTransfers = [], lastSignals = {...rootInputs,...rootOutputs};
     let lastCheckpoint, eventActionCounts = freeze({}), storyTriggerState, asyncActive=false, inFlightTick=0;
+    let storyLifecycleState = storyLifecycle?.initial();
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -517,6 +524,7 @@
         ...(receipts.length && {transfers:receipts}),...(causes && {causality:causes}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
+        ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function phaseReader(name,snapshot,staged) {
@@ -599,6 +607,7 @@
         signals:lastSignals,events:lastEvents,pending:packCommands(),scenario,
         ...(eventActions && {eventActionCounts}),
         ...(storyTriggers && {storyTriggerState}),
+        ...(storyLifecycle && {storyLifecycleState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -611,6 +620,7 @@
       ({tick,states,outputs,manual,delays,history,dropped,scenario,signals:lastSignals,events:lastEvents}=payload);
       eventActionCounts = payload.eventActionCounts ?? freeze({});
       storyTriggerState = payload.storyTriggerState;
+      storyLifecycleState = payload.storyLifecycleState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -653,6 +663,8 @@
       else check(!own(payload, 'eventActionCounts'), 'Unexpected event action checkpoint data');
       if (storyTriggers) storyTriggers.validate(payload.storyTriggerState,payload.tick);
       else check(!own(payload, 'storyTriggerState'), 'Unexpected story trigger checkpoint data');
+      if (storyLifecycle) storyLifecycle.validate(payload.storyLifecycleState,payload.tick);
+      else check(!own(payload, 'storyLifecycleState'), 'Unexpected story lifecycle checkpoint data');
       transfers.validateBalances(payload.states);
       reservations?.validate(payload.states,payload.tick);
       if (own(payload,'transfers')) transfers.validateReceipts(payload.transfers,payload.tick);
@@ -722,7 +734,7 @@
     const blockSize = authoredBlockSize===undefined ? undefined :
       Math.min(authoredBlockSize,systems[names[0]].processingLimit?.()??authoredBlockSize);
     const blockSystem = blockSize !== undefined && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
-      !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
+      !storyLifecycle && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
     if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
     debug?.publish(origin);
@@ -762,7 +774,7 @@
       return freeze(next);
     }
     function* tickWork() {
-      const at = tick+1, commands = scheduled.get(at) ?? [], events = [];
+      const at = tick+1, commands = scheduled.get(at) ?? [], events = [], storyCommands = storyLifecycle && [];
       check(tickOK(at),'Tick budget exceeded');
       debug?.start();
       const observedSteps=debug?[]:null;
@@ -856,6 +868,7 @@
             requests.push({name,request:item.args,root});
             if(commanded)for(const port of [item.args.from,item.args.to])commanded.add(endpoint(port)[0]);
           }
+          if (key === 'story-transition') storyCommands.push({args:item.args,publish:emit});
           if(chunks?.actions.includes(key))nextChunkState=chunks.action(nextChunkState,key,item.args,at);
         } else {
           commanded?.add(name);
@@ -1163,14 +1176,19 @@
       const nextDelays = Object.fromEntries([...incoming.values()].filter(edge => edge.delay && !edge.crossing).map(edge =>
         [edge.to,[...delays[edge.to].slice(1),delayedSamples?.[edge.to] ?? nextOutputs[edge.from]]]));
       publishedSignals = freeze(publishedSignals);
-      let nextStoryTriggers;
+      let nextStoryTriggers, nextStoryLifecycle, storyStarts = [];
       if (storyTriggers) {
         let completed;
         const activated = storyTriggers.advance(storyTriggerState, events, at, () => completed ??= Q.create(
           view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState),systems,projection));
         nextStoryTriggers = activated.state;
+        storyStarts = activated.starts;
+      }
+      if (storyLifecycle) {
+        nextStoryLifecycle = storyLifecycle.advance(storyLifecycleState,storyStarts,storyCommands,at,makeEmit('world'));
+      } else if (storyStarts.length) {
         const emit = makeEmit('world');
-        for (const row of activated.starts) emit('story-started',row);
+        for (const row of storyStarts) emit('story-started',row);
       }
       const routed = eventActions?.route(eventActionCounts, events, at);
       if (routed?.commands.length) {
@@ -1205,7 +1223,7 @@
       const dependencyReport = trace && trace.report();
       const nextCausal = causal?.finish();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
-        ...(storyTriggers && {storyTriggers:nextStoryTriggers})};
+        ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle})};
       if (navigationBefore) for (const notice of navigationChanges(navigationBefore,Q.create(nextView,systems,projection))) {
         check(nextWrites.length<P.spatialDependencies.limit,'Spatial write budget exceeded');
         nextWrites.push(dependencies.write(notice.writer,notice.field,notice.bounds,notice.reason));
@@ -1229,6 +1247,7 @@
       causalState = nextCausal;
       chunkState = nextChunkState;
       storyTriggerState = nextStoryTriggers;
+      storyLifecycleState = nextStoryLifecycle;
       sampling = nextSampling;
       spatialSampling = nextSpatial;
       pendingWrites = freeze(nextWrites);

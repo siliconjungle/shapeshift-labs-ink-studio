@@ -130,6 +130,15 @@ const StoryDocument = (() => {
     }
   }
 
+  function lifecycle(value, at) {
+    fields(value, at, [], ['activation', 'offerFor']);
+    if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
+      invalid(`${at}.activation`, 'expected automatic or manual');
+    if (Object.hasOwn(value, 'offerFor') &&
+      (value.activation !== 'manual' || !Number.isFinite(value.offerFor) || value.offerFor <= 0))
+      invalid(`${at}.offerFor`, 'expected a positive offer duration in seconds for manual activation');
+  }
+
   function validateStoryDocument(document) {
     fields(document, 'story', ['format', 'version', 'id', 'stories'], ['title', 'references']);
     if (document.format !== format) invalid('story.format', `expected ${format}`);
@@ -147,10 +156,11 @@ const StoryDocument = (() => {
     }
     for (const [id, story] of entries(stories, 'story.stories', true)) {
       const at = `story.stories.${id}`;
-      fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers']);
+      fields(story, at, ['kind', 'title', 'entry', 'stages', 'outcomes'], ['summary', 'refs', 'roles', 'triggers', 'lifecycle']);
       if (!kinds.has(story.kind)) invalid(`${at}.kind`, 'expected incident, questlet or arc');
       labelsAndRefs(story, at, references);
       if (Object.hasOwn(story, 'triggers')) triggers(story, at);
+      if (Object.hasOwn(story, 'lifecycle')) lifecycle(story.lifecycle, `${at}.lifecycle`);
       const roles = Object.hasOwn(story, 'roles') ? story.roles : {};
       const { stages, outcomes } = story;
       for (const [name, role] of entries(roles, `${at}.roles`)) {

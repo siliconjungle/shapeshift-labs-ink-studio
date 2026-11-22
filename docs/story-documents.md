@@ -20,7 +20,7 @@ node cli/ink-studio.js patch run examples/story-documents/inspect.graph.json --w
 | Level | Required fields | Optional fields |
 | --- | --- | --- |
 | Document | `format` (`ink-studio/story`), `version` (`1`), `id`, nonempty `stories` map | `title`, `references` map |
-| Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map |
+| Story | `kind` (`incident`, `questlet`, or `arc`), `title`, `entry` stage ID, nonempty `stages` and `outcomes` maps | `summary`, local `roles` map, `refs`, named `triggers` map, `lifecycle` |
 | Role | `kind` | `ref` to a document reference of the same kind |
 | Stage | `title`, nonempty `next` map | `summary`, `roles` as local role IDs, `refs`, `story` as a linked story ID in this document |
 | Outcome | `title` | `summary`, `refs` |
@@ -45,9 +45,43 @@ Add `storyDocuments` to a world manifest. The library accepts an array of embedd
 
 `where` tests an event record. `when` tests a query result. Both use [world conditions](headless-worlds.md#query-a-revision), including JSON Pointers, comparisons, and `all`, `any`, or `not`. For state rules, `field` must be qualified. `at` can select a world point, entity, or socket, and `args` are passed to the query. Rules read the tick's solver and transfer publications before derived event actions and observer updates. Hold durations round up to a whole tick. Repeat windows count ticks within the authored duration, with machine-rounding tolerance at an exact tick boundary.
 
-Each story starts at most once per run. Its named triggers are alternatives. When several match on the same tick, the first trigger ID in lexical order wins. A start publishes `story-started` in the normal world event stream with document, story, entry stage, trigger, and either the source event IDs or the field and matching interval. Use [event actions](event-actions.md) to turn that into a cue or command. The checkpoint stores pending trigger progress and the first start. Branch choice and stage progression are separate runtime work.
+Each story starts at most once per run. Its named triggers are alternatives. When several match on the same tick, the first trigger ID in lexical order wins. A story starts when a trigger matches or, with manual activation, when it is accepted. `story-started` includes the document, story, and entry stage, plus the trigger and its evidence when applicable. Use [event actions](event-actions.md) to turn that into a cue or command. The checkpoint stores pending trigger progress and the first match. Branch choice and stage progression are separate runtime work.
 
-### Replay the demos
+## Offer, activate, and resolve a story
+
+Add `"lifecycle": {}` to a story definition to track its state and transition reasons. When a trigger matches, the lifecycle marks the story `available`. With the default `"activation": "automatic"`, it becomes `active` on the same tick. Use `"activation": "manual"` to wait for a command. A lifecycle-enabled story without triggers becomes available on the first tick. While a story waits for its trigger, the lifecycle probe returns `null` for it.
+
+| Current state | Allowed destinations |
+| --- | --- |
+| `available` | `active`, `withdrawn`, `expired` |
+| `active` | `suspended`, `completed`, `failed`, `withdrawn`, `expired` |
+| `suspended` | `active`, `failed`, `withdrawn`, `expired` |
+| `completed`, `failed`, `withdrawn`, `expired` | Terminal states |
+
+For manual activation, `offerFor` optionally specifies how many seconds an offer stays available. The runtime rounds it up to a whole tick. At the deadline, expiration takes precedence over a command on the same tick. An active or suspended story can expire explicitly through a command from the host or an event action.
+
+Schedule `world/story-transition` through ordinary world commands, through `sim run --actions`, or from an event action. Provide the document and story IDs, destination `to`, and a `reason` of up to 256 characters. A `completed` or `failed` transition can also include a declared `outcome` ID.
+
+```json
+{"tick":3,"action":"world/story-transition","args":{"document":"winter-crossing","story":"repair","to":"active","reason":"crew-accepted"}}
+```
+
+The runtime resolves new offers and automatic expiration before applying transition commands in their scheduled order. A well-formed command against the wrong current state emits `story-transition-rejected` with the current and requested state and the caller's reason. The rejected command leaves the story state as it was. The first activation emits `story-started`. Resuming after a suspension emits the transition only.
+
+Each successful change publishes `story-transition` with `from`, `to`, `tick`, and `reason`. Inspect current state, first-trigger evidence, and the last 64 successful transitions per story with `world/story-lifecycle`. Like other world state, this data survives checkpoints, forks, and replay. It is also available when world event history is disabled. Definitions that omit `lifecycle` retain their existing start-event behavior and recording format.
+
+### Replay The Winter Crossing
+
+[The Winter Crossing](../examples/story-documents/winter-crossing.world.json) exercises every state. The repair is offered, accepted, suspended for ice, resumed, and completed by a routed inspection event. The scout fails, the escort is withdrawn, and the visitor's offer expires.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/winter-crossing.world.json --ticks 10 --record crossing.run.json
+node cli/ink-studio.js probe crossing.run.json --field world/story-lifecycle
+node cli/ink-studio.js probe crossing.run.json --field world/history --args '{"where":{"path":"/kind","value":"story-transition"}}'
+node cli/ink-studio.js sim replay crossing.run.json
+```
+
+## Replay the demos
 
 **The Burned Mill** starts an incident from a survey report, opens a grain questlet after three shortages, and activates an arc only after the stock ledger stays low. A brief recovery resets the hold. The questlet start also schedules a bell event on the next tick.
 

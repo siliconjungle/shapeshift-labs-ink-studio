@@ -144,5 +144,5 @@
     return { initial, validate, advance };
   }
 
-  W.storyTriggers = Object.freeze({ compile });
+  W.storyTriggers = Object.freeze({ compile, ticks });
 })(KIT);

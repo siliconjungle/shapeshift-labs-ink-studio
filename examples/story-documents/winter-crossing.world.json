@@ -1,0 +1,112 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "winter-crossing",
+  "dt": 0.1,
+  "storyDocuments": [
+    {
+      "file": "winter-crossing.json"
+    }
+  ],
+  "commands": [
+    {
+      "tick": 1,
+      "action": "world/event",
+      "args": {
+        "kind": "ridge-open"
+      }
+    },
+    {
+      "tick": 2,
+      "action": "world/event",
+      "args": {
+        "kind": "bridge-damaged"
+      }
+    },
+    {
+      "tick": 2,
+      "action": "world/event",
+      "args": {
+        "kind": "visitor-arrived"
+      }
+    },
+    {
+      "tick": 3,
+      "action": "world/story-transition",
+      "args": {
+        "document": "winter-crossing",
+        "story": "repair",
+        "to": "active",
+        "reason": "crew-accepted"
+      }
+    },
+    {
+      "tick": 3,
+      "action": "world/story-transition",
+      "args": {
+        "document": "winter-crossing",
+        "story": "escort",
+        "to": "withdrawn",
+        "reason": "ford-route-withdrawn"
+      }
+    },
+    {
+      "tick": 4,
+      "action": "world/story-transition",
+      "args": {
+        "document": "winter-crossing",
+        "story": "repair",
+        "to": "suspended",
+        "reason": "ice-on-deck"
+      }
+    },
+    {
+      "tick": 5,
+      "action": "world/story-transition",
+      "args": {
+        "document": "winter-crossing",
+        "story": "scout",
+        "to": "failed",
+        "reason": "ridge-blocked",
+        "outcome": "blocked"
+      }
+    },
+    {
+      "tick": 6,
+      "action": "world/story-transition",
+      "args": {
+        "document": "winter-crossing",
+        "story": "repair",
+        "to": "active",
+        "reason": "deck-cleared"
+      }
+    },
+    {
+      "tick": 7,
+      "action": "world/event",
+      "args": {
+        "kind": "bridge-inspected"
+      }
+    }
+  ],
+  "eventActions": {
+    "close-repair": {
+      "on": {
+        "kind": "bridge-inspected",
+        "system": "world"
+      },
+      "actions": [
+        {
+          "action": "world/story-transition",
+          "args": {
+            "document": "winter-crossing",
+            "story": "repair",
+            "to": "completed",
+            "reason": "inspection-passed",
+            "outcome": "done"
+          }
+        }
+      ]
+    }
+  }
+}

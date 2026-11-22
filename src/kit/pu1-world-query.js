@@ -259,6 +259,7 @@
       transfers:{type:'record',read:()=>ok({tick:view.transfers?.[0]?.tick??tick,receipts:view.transfers??[]})},
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
+      ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle))} }),
       signal:{type:'value',read:({args}) => {
         const port=typeof args.port==='string'?portOf(world,args.port):null;
         return own(signals,port)?ok(signals[port]):missing('unknown signal port');
@@ -401,6 +402,7 @@
         id,...world.systems[id],inputs:systems[id].inputs ?? {},outputs:systems[id].outputs ?? {},
         actions:sorted(systems[id].actions ?? {})
       })),actions:['world/input','world/patch','world/event',...(accounts.length ? ['world/transfer'] : []),
+        ...(view.storyLifecycle ? ['world/story-transition'] : []),
         ...(world.simulationChunks?W.simulationChunks.actions.map(name=>'world/'+name):[])]};
     }
     function spatial({point,radius,where} = {}) {
