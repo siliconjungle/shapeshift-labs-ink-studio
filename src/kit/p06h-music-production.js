@@ -258,7 +258,7 @@
         const voice=row.voice ?? 0, retrigger=row.ties ? 1 : play.retrigger ?? 1, fromFrequency=last.get(voice);
         const previous=lastNotes.get(voice);
         const connected=!track.performance && style.legato && velocity>0 && plan.parts[name].role!=='percussion' &&
-          !track.pad && previous?.velocity>0 && connection<end && connection>previous.time+.005 &&
+          !track.pad && previous?.velocity>0 && previous.time>=(row.clipLaunch ?? -Infinity)-epsilon && connection<end && connection>previous.time+.005 &&
           connection-previous.time-previous.gate<=.14 &&
           (next(silence,previous.time)?.startTime ?? Infinity)>connection;
         if (connected) {
@@ -277,9 +277,11 @@
             frequency:row.frequency,velocity,play,fromFrequency,salt,roundRobin:notes.length,
             ...(row.clip && {clip:row.clip,voice:row.voice,note:row.note,...(row.ties && {ties:row.ties})}),
             ...(track.performance && !row.clip && row.voice!==undefined && {voice:row.voice}),
+            ...(row.clipLaunch!==undefined && {clipLaunch:row.clipLaunch}),
+            ...(row.clipEnd!==undefined && {clipEnd:row.clipEnd,choke:row.clipEnd+.006,chokeFade:.006}),
             ...(row.played && {played:true}),...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
           const cut=next(cuts,onset)?.startTime;
-          if (cut!==undefined && (track.external || track.performance || track.phrases.length || onset+track.play.prepare(note,48000,note.gate).duration>cut))
+          if (cut!==undefined && cut<(note.choke ?? Infinity) && (track.external || track.performance || track.phrases.length || onset+track.play.prepare(note,48000,note.gate).duration>cut))
             note.choke=cut;
           notes.push(note);
           if (r===0 && phrasing?.reference) hits.push({beat:note.beat,midi:note.midi,time:note.time,...phrasing.reference});
@@ -394,6 +396,8 @@
   function prepareVoice(track,note,gateEnd,sampleRate,tails) {
     const start=note.start ?? note.time;
     const first=Math.ceil(start*sampleRate-1e-7);
+    // A truncated loop keeps the authored envelope and expression up to its cut.
+    if (note.clipEnd!==undefined) gateEnd=Math.max(gateEnd,note.time+note.gate);
     const gate=Math.min(note.gate,gateEnd-note.time)+note.time-start;
     const nativeGate=note.start===undefined ? Math.min(note.gate,gateEnd-note.time) : gate;
     const cropped=note.performance?.release && gateEnd<note.time+note.gate-1e-8;

@@ -56,6 +56,11 @@ Use common [note expressions](music-production.md) and the production's
 existing track effects. Clips on one track have disjoint ranges. Voices
 within each clip can contain gaps.
 
+Use `loopBeats` to repeat one editable cycle over the clip's placed
+`length`. A partial last cycle plays up to the clip edge. Notes cut at
+the edge retain their original expression phase. [Clip jams](music-clip-jam.md)
+write this format when you record launches into an arrangement.
+
 ## Search voicings with fixed outer lines
 
 Give the search a target track, melody and bass tracks, a window in beats,

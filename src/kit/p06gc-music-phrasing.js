@@ -50,7 +50,7 @@
     for (const note of notes) {
       const voice=note.voice ?? 0, prev=byVoice.get(voice);
       const cleared=silence.findLast(row=>row.endTime<=note.time+eps);
-      const floor=cleared?.endTime ?? 0;
+      const floor=Math.max(cleared?.endTime ?? 0,note.clipLaunch ?? 0);
       const available=prev && prev.time>=floor-eps && prev.time<note.time-eps &&
         (!prev.choke || prev.choke>=note.time-eps);
       const interval=available ? note.midi-prev.midi : null;

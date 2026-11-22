@@ -57,6 +57,8 @@ ink-studio music mix render session.json --out take
   An insert can take its compressor detector from another strip's
   `input`, `pre`, or `post` tap. Leave the sidechain out to detect the
   insert's own input. An inaudible key strip can use `output: null`.
+- **Input gain** takes a linear 0–1 value before inserts and before the
+  input tap. It can be automated with `inputGain`.
 - **Faders** take a linear gain, with 1 at unity and 0 at silence. Stereo
   balance runs from −1 to 1. A `pre` send reads the output of the insert
   chain just before fader and balance. A `post` send reads after both.
@@ -83,7 +85,7 @@ sample, the later point wins.
 }
 ```
 
-Fader, balance, send level, and insert automation use the session
+Input gain, fader, balance, send level, and insert automation use the session
 timeline. Clip gain automation moves with its clip and starts at
 the placed clip onset, including when the clip uses a trimmed source range.
 Beat, second, and sample lanes can coexist in one mixer.

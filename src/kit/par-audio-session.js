@@ -458,8 +458,8 @@
     }
     const prepareLive=session=>prepareTransport(session,'deferred');
     const materialize=prepared=>prepared.incremental ? prepareTransport(prepared.session,'blocks') : prepared;
-    const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
-      {assets,host,edit,trace,prepareLive,materialize});
+    const openPreparedTransport=(prepared,options,liveControl)=>S.openSessionTransport(materialize(prepared),options,
+      {assets,host,edit,trace,prepareLive,materialize},liveControl);
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
     return Object.freeze({inspect,trace,edit,render,compare,compose,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,listeningRound,
       listeningEvidence:listeningEvidence.listen,keepListeningRepair:listeningEvidence.keep,experiment:experiments.run,keepExperiment:experiments.keep,

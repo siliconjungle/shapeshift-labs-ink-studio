@@ -35,7 +35,7 @@
       const {strip,send,processor,parameter}=row.target;
       let target;
       if (fields(row.target,['strip','send','parameter']) && id(strip) && get(strips,strip)) {
-        if (send===undefined && ['fader','pan'].includes(parameter)) target=strips[strip];
+        if (send===undefined && ['inputGain','fader','pan'].includes(parameter)) target=strips[strip];
         if (id(send) && parameter==='level') target=get(strips[strip].sends ?? {},send);
       }
       if (fields(row.target,['processor','parameter']) && id(processor) && id(parameter) &&
@@ -49,7 +49,7 @@
         ids.add(point.id);
         return {at:point.at,value:point.value};
       })};
-      const [low,high]=parameter==='pan' ? [-1,1] : parameter==='fader' ? [0,4] : send ? [0,2] : [-1e9,1e9];
+      const [low,high]=parameter==='pan' ? [-1,1] : parameter==='fader' ? [0,4] : parameter==='inputGain' ? [0,1] : send ? [0,2] : [-1e9,1e9];
       time.lane(lane,0,low,high,'session automation '+name);
       target[parameter]=lane;
     }
@@ -153,7 +153,7 @@
       'Use a native mixer desk keyed by session lane names');
     const strips=Object.fromEntries(table(desk.strips,48,'mixer strips')), processors=desk.processors ?? {};
     check(get(strips,desk.output) && !sourceLanes.includes(desk.output) && Object.values(strips).every(row=>
-      fields(row,['inserts','fader','pan','sends','output'])),'Place audio on session lanes and use a separate master strip');
+      fields(row,['inserts','inputGain','fader','pan','sends','output'])),'Place audio on session lanes and use a separate master strip');
     for (const name of sourceLanes) strips[name] ??= {};
     table(processors,64,'processors');
     automation(session,strips,processors,time);

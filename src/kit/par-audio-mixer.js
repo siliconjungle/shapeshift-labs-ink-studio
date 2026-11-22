@@ -62,7 +62,7 @@
       return {id:row.processor,processor,key:key && {strip:key.strip,tap:key.tap ?? 'post'}};
     }
     for (const [name,raw] of named(source.strips,48,'strips')) {
-      check(fields(raw,['clips','inserts','fader','pan','sends','output']) &&
+      check(fields(raw,['clips','inserts','inputGain','fader','pan','sends','output']) &&
         (raw.output===undefined || raw.output===null || id(raw.output)) &&
         (name!==source.output || raw.output==null && Object.keys(raw.sends ?? {}).length===0),
       'Invalid strip or outgoing route on mixer output');
@@ -77,7 +77,7 @@
       const placed=Array.from(clips,clip);
       check(new Set(placed.map(row=>row.id)).size===placed.length,'Clip IDs must be unique on a strip');
       const row={name,clips:placed,inserts:Array.from(inserts,insert),routes:[],uses:new Set(),
-        fader:time.lane(raw.fader,1,0,4,'fader'),pan:time.lane(raw.pan,0,-1,1,'pan')};
+        inputGain:time.lane(raw.inputGain,1,0,1,'input gain'),fader:time.lane(raw.fader,1,0,4,'fader'),pan:time.lane(raw.pan,0,-1,1,'pan')};
       strips.set(name,row);
     }
     check(strips.has(source.output),'Mixer output strip is missing');
@@ -189,6 +189,18 @@
           if (stem) {stem[i*2]+=l;stem[i*2+1]+=r;}
         }
       }
+      if (row.inputGain.min!==1 || row.inputGain.max!==1) {
+        const gain=row.inputGain.reader();
+        for (let i=arrival;i<input.length/2;i++) {
+          const scale=gain(i-arrival);
+          input[i*2]*=scale;
+          input[i*2+1]*=scale;
+          if (separate) for (const stem of Object.values(stems)) {
+            stem[(i-arrival)*2]*=scale;
+            stem[(i-arrival)*2+1]*=scale;
+          }
+        }
+      }
       if (separate) premaster={samples:input,latency:arrival};
       let processed=input;
       for (const insert of row.inserts) {
@@ -273,17 +285,22 @@
     renderForDelivery:(source,assets,roles={},buses)=>render(source,assets,undefined,buses,roles),
     deliveryRoles});
   S.renderMixerTransport=(source,assets,ranges,host)=>render(source,assets,host,undefined,undefined,ranges);
-  S.prepareSessionMixer=(source,assets,clock,stream,host)=>{
+  S.prepareSessionMixer=(source,assets,clock,stream,host,liveControl)=>{
     const spec=stream ? source : {...source,end:{samples:1},tail:'cut'};
     const {order,master,exports,routes,frames,sourceEnd}=compile(spec,assets,
       host,undefined,undefined,()=>clock,stream);
     const states=new Map(), scratch=[0,0];
     const read=(name,tap)=>states.get(name)[tap];
+    const controlled=(lane,key)=>{
+      const reader=lane.reader();
+      return liveControl ? frame=>liveControl(key,frame,reader(frame)) : reader;
+    };
     const strips=order.map(row=>{
       check(!row.clips.length,'Live session desk receives its clips from the transport');
       const input=[0,0],pre=[0,0],post=[0,0];
       states.set(row.name,{input,pre,post});
-      const routes=row.routes.map(edge=>({samples:read(edge.from,edge.tap),level:edge.level.reader()}));
+      const routes=row.routes.map(edge=>({samples:read(edge.from,edge.tap),
+        level:edge.kind==='send' ? controlled(edge.level,edge.from+'/'+edge.to) : edge.level.reader()}));
       const inserts=row.inserts.flatMap(({id,processor,key})=>{
         const causal=processor.make && processor.latency===0;
         if (processor.wet.max===0 && (stream || !processor.wet.automated || !causal)) return [];
@@ -292,7 +309,7 @@
           ') needs offline rendering. Use a causal, zero-lookahead insert or bypass it for live playback.');
         return [{process:processor.make(),wet:processor.wet.reader(),key:key && read(key.strip,key.tap)}];
       });
-      return {name:row.name,input,pre,post,routes,inserts,fader:row.fader.reader(),pan:row.pan.reader(),
+      return {name:row.name,input,pre,post,routes,inserts,inputGain:controlled(row.inputGain,row.name),fader:row.fader.reader(),pan:row.pan.reader(),
         inputEnd:row.timing.input.end,end:row.timing.post.end};
     });
     const processes=strips.flatMap(row=>row.inserts.map(insert=>insert?.process));
@@ -305,13 +322,13 @@
           tail:processor.tail,outputLatency:processor.latency,mainDelay:0,
           ...(key && {sidechain:{...key,compensation:0}})}))
       }]))};
-    const controls=order.flatMap(({fader,pan,routes})=>[fader,pan,...routes.filter(edge=>edge.kind==='send').map(edge=>edge.level)]);
+    const controls=order.flatMap(({inputGain,fader,pan,routes})=>[inputGain,fader,pan,...routes.filter(edge=>edge.kind==='send').map(edge=>edge.level)]);
     return {report,controls,
       snapshot:()=>processes.map(process=>process.snapshot()),
       restore:states=>processes.forEach((process,i)=>process.restore(states[i])),
       output:read(master.name,'post'),taps:Object.fromEntries(exports.map(([name,row])=>[name,read(row.strip,row.tap)])),
       process(frame,feeds) {
-        for (const {name,input,pre,post,routes,inserts,fader,pan,inputEnd,end} of strips) {
+        for (const {name,input,pre,post,routes,inserts,inputGain,fader,pan,inputEnd,end} of strips) {
           if (stream && frame>=end) {
             input[0]=input[1]=pre[0]=pre[1]=post[0]=post[1]=0;
             continue;
@@ -322,7 +339,8 @@
             const gain=route.level(frame);
             l+=route.samples[0]*gain;r+=route.samples[1]*gain;
           }
-          input[0]=l; input[1]=r;
+          const level=inputGain(frame);
+          input[0]=l*=level; input[1]=r*=level;
           if (stream && frame>=inputEnd) input[0]=input[1]=l=r=0;
           for (const insert of inserts) {
             const amount=insert.wet(frame);

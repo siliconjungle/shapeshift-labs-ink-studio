@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>After the Bell · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#191b20;color:#f2ede4;--muted:#c5c5ce;--line:#555660;--pane:#22252d;--accent:#f0c7a1;--play:#fff0d7;--kick:#dcab91;--drums:#b6c4f2;--bass:#b9d3ae;--lead:#f0c990}
+*{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:auto;padding:42px max(18px,4.5vw) 55px}
+header{border-top:1px solid var(--line);padding:13px 0 24px}header small{font:700 .76rem ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+h1,h2{font:400 clamp(3.6rem,11vw,8.5rem)/.97 Georgia,serif;letter-spacing:-.06em;margin:.12em 0 .12em}h2{font-size:clamp(1.8rem,5vw,3.1rem)}
+p{margin:.48em 0 1em;color:var(--muted)}audio{width:100%;max-width:660px;display:block}
+section,footer{border:1px solid var(--line);background:var(--pane);padding:clamp(14px,3.6vw,28px)}footer{margin-top:13px;background:transparent}
+.scroll{overflow-x:auto;margin:15px 0 10px}#arrangement{min-width:620px}
+.line{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:stretch;gap:9px;margin-bottom:5px}
+.name{color:var(--muted);font-size:.82rem;align-self:center}.runs,.ruler{min-height:28px;position:relative}
+.runs{height:28px;background:repeating-linear-gradient(90deg,#353a45 0 1px,transparent 1px calc(100% / var(--bars))),#1a1e24}
+.clip{position:absolute;top:3px;height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:3px;padding:1px 6px;color:#252626;font-weight:650;font-size:.75rem}
+.playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--play);pointer-events:none;z-index:1}
+.ruler{display:grid;grid-template-columns:repeat(var(--bars),minmax(0,1fr));gap:2px}
+button{border:1px solid var(--line);background:#333842;color:#efebdf;border-radius:3px;font:inherit;cursor:pointer;padding:0 2px;text-align:center}
+.ruler button{min-height:32px;font:12px ui-monospace,monospace}.ruler button[data-empty=true]{color:var(--accent);border-style:dashed}
+a,summary{color:var(--accent);text-underline-offset:.2em}a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+canvas{display:block;width:100%;height:35px}.automation{margin-top:7px}
+aside{font-size:.87rem;color:var(--muted);margin-top:12px}pre{padding:11px;background:var(--pane);overflow:auto;font-size:.82rem}
+.links{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px 17px;font-size:.86rem}
+</style>
+</head>
+<body><main>
+<header>
+<small>Ink Studio · Clip jam</small><h1>After the Bell</h1>
+<p>A twelve-bar pass on acoustic drums, bass, and electric keys. The bar breaks, clip swaps, mute, and echo ride came from the jam desk.</p>
+<audio controls preload="metadata" src="after-the-bell.wav" aria-label="Play After the Bell"></audio>
+</header>
+<section aria-labelledby="timeline-heading">
+<h2 id="timeline-heading">The captured pass</h2>
+<p>Jump to a bar to hear the change. Every clip stops in bar 5 while the echo rings out.</p>
+<div class="scroll"><div id="arrangement" aria-label="Recorded clips and automation"></div></div>
+<aside>Bar 4 changes the kick on beat 3. The bass drops out across bars 6 and 7 while the lead echo rises.</aside>
+</section>
+<footer>
+<details><summary>Play your own pass in Ink Studio</summary>
+<p>Run this in the demo folder. Start the pass, click clip slots, mute tracks, and ride the sends. Finish on a bar and save to open your arrangement in the regular session desk.</p>
+<pre><code>ink-studio music session jam source.json bank.json --out my-jam.json
+ink-studio music session play my-jam.json</code></pre>
+</details>
+<div class="links"><a href="arrangement.json">Editable arrangement</a><a href="bank.json">Clip bank</a><a href="performance.json">Launches and control points</a><a href="sample-credits.json">Sample credits</a></div>
+</footer>
+</main>
+<script>
+const data=/*CAPTURE*/ null;
+if (data) {
+  const track=document.querySelector('#arrangement'), player=document.querySelector('audio'), bars=(data.beats.length-1)/4;
+  track.style.setProperty('--bars',bars);
+  const position=beat=>beat/(bars*4)*100;
+  const heads=[];
+  const addRow=(name,type)=>{
+    const line=document.createElement('div'), title=document.createElement('span'), body=document.createElement('div');
+    line.className='line';title.className='name';title.textContent=name;
+    body.className=type;line.append(title,body);track.append(line);
+    if (type==='runs') {
+      const head=document.createElement('i');
+      head.className='playhead';body.append(head);heads.push(head);
+    }
+    return body;
+  };
+  const ruler=addRow('Bar','ruler');
+  for (let i=0;i<bars;i++) {
+    const key=document.createElement('button');
+    key.type='button';key.textContent=i+1;
+    key.setAttribute('aria-label','Play from bar '+(i+1));
+    key.dataset.empty=String(i===4);
+    key.addEventListener('click',()=>{player.currentTime=data.beats[i*4]/data.sampleRate;player.play().catch(()=>{});});
+    ruler.append(key);
+  }
+  for (const [lane,clips] of Object.entries(data.clips)) {
+    const body=addRow(lane[0].toUpperCase()+lane.slice(1),'runs');
+    for (const {label,beat,length} of clips) {
+      const clip=document.createElement('span');
+      clip.className='clip';clip.textContent=label.replace(/-/g,' ');clip.title=clip.textContent;
+      clip.style.cssText='left:'+position(beat)+'%; width:'+position(length)+'%; background:var(--'+lane+')';
+      body.append(clip);
+    }
+  }
+  const beatAt=sample=>{
+    let beat=data.beats.findLastIndex(at=>at<=sample);
+    if (beat<0) return 0;
+    return beat===data.beats.length-1 ? beat :
+      beat+(sample-data.beats[beat])/(data.beats[beat+1]-data.beats[beat]);
+  };
+  const draw=(name,row,colour,scale)=>{
+    const body=addRow(name,'runs automation'), graph=document.createElement('canvas'), ctx=graph.getContext('2d');
+    graph.setAttribute('role','img');graph.setAttribute('aria-label',name+' automation over the arrangement');
+    graph.width=1120;graph.height=70;
+    body.prepend(graph);
+    ctx.strokeStyle=colour;
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    const points=[...row.points,{...row.points.at(-1),at:data.beats.at(-1)}];
+    for (const [i,knot] of points.entries()) {
+      const at=position(beatAt(knot.at))*graph.width/100, y=56-knot.value*scale;
+      if (i) ctx.lineTo(at,y); else ctx.moveTo(at,y);
+    }
+    ctx.stroke();
+  };
+  const lanes=Object.values(data.automation);
+  draw('Lead echo',lanes.find(row=>row.target.send==='echo'),'#f0c990',40);
+  draw('Bass input',lanes.find(row=>row.target.parameter==='inputGain'),'#b9d3ae',42);
+  function cursor() {
+    const at=position(beatAt(player.currentTime*data.sampleRate));
+    for (const head of heads) head.style.left=at+'%';
+    requestAnimationFrame(cursor);
+  }
+  cursor();
+}
+</script>
+</body>
+</html>

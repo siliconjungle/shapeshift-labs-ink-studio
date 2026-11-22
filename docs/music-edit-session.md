@@ -264,6 +264,8 @@ The browser usually owns the audio listener. A headless player can instead
 use `POST /audio` with `{frames,client}`. Its response is little-endian
 interleaved float32 stereo with the chunk address in `X-Ink-Transport`.
 
+To launch clips and record a fresh arrangement, open the [clip jam](music-clip-jam.md).
+
 ## Audition sounds in the track
 
 Set the loop around the phrase you want to hear and select a native score

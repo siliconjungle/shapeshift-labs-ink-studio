@@ -162,7 +162,7 @@
         }
       }
       const dependency=(source,index)=>source ? source.keys?.[index] ?? source.key : null;
-      const strips=Object.fromEntries(Object.entries(mixer.strips).map(([name,{fader,pan,sends={},...strip}])=>
+      const strips=Object.fromEntries(Object.entries(mixer.strips).map(([name,{inputGain,fader,pan,sends={},...strip}])=>
         [name,{...strip,sends:Object.fromEntries(Object.entries(sends).map(([bus,{level,...route}])=>[bus,route]))}]));
       const controls=desk.controls;
       let prefix=store.identify(signature(['desk',rate,map,{...mixer,strips},sourceLanes,plan.frames,withSources]));

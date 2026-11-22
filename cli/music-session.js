@@ -14,8 +14,8 @@ module.exports=function command([mode,file,config],opt,kit) {
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  check(file && ['inspect','trace','edit','render','preview','compare','compose','audition-phrase','arrange-performance','performance-ballot','listening-round','listening-evidence','keep-listening-repair','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, trace, edit, render, preview, compare, compose, audition-phrase, arrange-performance, performance-ballot, record-ballot, listening-round, listening-evidence, keep-listening-repair, record-round, keep-round, experiment, keep-experiment, stream, play or handoff');
+  check(file && ['inspect','trace','edit','render','preview','compare','compose','audition-phrase','arrange-performance','performance-ballot','listening-round','listening-evidence','keep-listening-repair','experiment','keep-experiment','stream','play','jam','handoff'].includes(mode),
+    'Choose music session inspect, trace, edit, render, preview, compare, compose, audition-phrase, arrange-performance, performance-ballot, record-ballot, listening-round, listening-evidence, keep-listening-repair, record-round, keep-round, experiment, keep-experiment, stream, play, jam or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -147,6 +147,17 @@ module.exports=function command([mode,file,config],opt,kit) {
         return render(row.out,row.preview);
       default: throw new RangeError('Unknown session command');
     }
+  }
+  if (mode==='jam') {
+    check(opt.out===undefined || typeof opt.out==='string','Use --out for the captured arrangement');
+    const port=Number(opt.port ?? 0);
+    check(Number.isInteger(port) && port>=0 && port<=65535,'Choose a session port from 0 to 65535');
+    const bank=config ? read(config) : {};
+    const absolute=Object.fromEntries(Object.entries(paths).map(([name,ref])=>[name,path.resolve(path.dirname(file),ref)]));
+    return require('./music-session-player.js')(P.mediaGraph.musicSessionJam.open(editor,session,bank),{
+      jam:true,port,recipe:value=>({session:value,assets:absolute}),
+      save:opt.out===undefined ? null : value=>save(opt.out,value)
+    });
   }
   if (mode==='play') {
     check(opt.out===undefined || typeof opt.out==='string','Use --out with a session recipe filename');

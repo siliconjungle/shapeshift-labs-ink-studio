@@ -17,7 +17,7 @@
     });
   }
 
-  S.openSessionTransport=function openSessionTransport(initial,options={},editor) {
+  S.openSessionTransport=function openSessionTransport(initial,options={},editor,liveControl) {
     check(fields(options,['from','to','at','preroll','gain','fadeSamples','leadInSamples','monitor']) &&
       typeof (options.preroll ?? true)==='boolean' && finite(options.gain ?? 1,0,2),
     'Invalid live session settings');
@@ -39,7 +39,7 @@
     let runFrame=0, frame=0, pass=0, clippedFrames=0, monitor=null;
     function reset(next,at,preroll,selection=monitor) {
       clock=S.sessionMixerTime(rate,next.map);
-      desk=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host);
+      desk=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host,liveControl);
       monitor=selection===null ? null : S.sessionMonitor(selection,desk.taps,next.lanes);
       effects=S.sessionEffects(rate,feeds);
       lanes=undefined;
@@ -258,7 +258,7 @@
         'Reopen the live transport after changing its tracks, clock or mixer routing');
       let revised;
       if (signature(next.mixer)!==signature(plan.mixer)) {
-        revised=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host);
+        revised=S.prepareSessionMixer(next.mixer,editor.assets,clock,undefined,editor.host,liveControl);
         const order=report=>Object.keys(report.strips).filter(name=>report.strips[name].inserts.length);
         check(signature(order(desk.report))===signature(order(revised.report)),'Reopen the live desk after changing insert order');
         revised.restore(desk.snapshot());

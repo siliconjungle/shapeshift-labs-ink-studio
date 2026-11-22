@@ -18,13 +18,18 @@ const files=new Map([
   }).map(([route,file])=>['/'+route+'.mjs',[file+'.mjs','text/javascript; charset=utf-8']])
 ]);
 
-module.exports=function play(transport,{port,prepare,searchSounds,discard,editor,assets,paths,P,recordings,recipe,save}) {
+const jamFiles=new Map([
+  ['/', ['music-session-jam.html','text/html; charset=utf-8']],
+  ['/jam.mjs',['music-session-jam.mjs','text/javascript; charset=utf-8']]
+]);
+
+module.exports=function play(transport,{port,prepare,searchSounds,discard,editor,assets,paths,P,recordings,recipe,save,jam=false}) {
   const key=randomBytes(24).toString('hex');
-  const staticFiles=new Map([...files].map(([route,[file,type]])=>
+  const staticFiles=new Map([...(jam ? jamFiles : files)].map(([route,[file,type]])=>
     [route,{body:fs.readFileSync(path.join(__dirname,'../src/show',file)),type}]));
   const recorded=Object.create(null), commits=new Map();
-  const browser=createSoundBrowser(P,assets,paths);
-  staticFiles.set('/instrument-core.mjs',{body:Recording.instrumentCore(),type:'text/javascript; charset=utf-8'});
+  const browser=jam ? null : createSoundBrowser(P,assets,paths);
+  if (!jam) staticFiles.set('/instrument-core.mjs',{body:Recording.instrumentCore(),type:'text/javascript; charset=utf-8'});
   let listener,lastPull=0,queued=Promise.resolve();
   function enqueue(job) {
     const result=queued.then(job);
@@ -152,6 +157,21 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
     }
   };
 
+  function jamCommand({op,...args}) {
+    switch (op) {
+      case 'state': return transport.state();
+      case 'launch': return {at:transport.launch(args),state:transport.state()};
+      case 'control': return {at:transport.move(args),state:transport.state()};
+      case 'finish': return {at:transport.finish(),state:transport.state()};
+      case 'pause': if (listener===args.client) listener=undefined; return transport.state();
+      case 'save': {
+        const result=transport.arrangement();
+        return save ? save(result,{}) : recipe(result,{});
+      }
+      default: throw new RangeError('Unknown clip jam command');
+    }
+  }
+
   const server=http.createServer({requestTimeout:10000},async(req,res)=>{
     res.setHeader('Cache-Control','no-store');
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -169,7 +189,7 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
       return res.end(entry.body);
     }
     if (req.method==='GET' && req.url==='/session') return respond(200,{key,state:transport.state()});
-    if (req.method!=='POST' || !['/audio','/command','/record','/instrument-asset'].includes(req.url)) return respond(404,{error:'Unknown route'});
+    if (req.method!=='POST' || !['/audio','/command',...(!jam ? ['/record','/instrument-asset'] : [])].includes(req.url)) return respond(404,{error:'Unknown route'});
     if (req.headers['x-ink-session']!==key) return respond(403,{error:'Session key required'});
     const limit=req.url==='/record' ? Recording.bodyBudget : 65536;
     let bytes=0, chunks=[];
@@ -183,7 +203,7 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
       const payload=Buffer.concat(chunks);
       if (req.url==='/record') return respond(200,await record(payload));
       const body=JSON.parse(payload.toString('utf8'));
-      if (req.url==='/command') return respond(200,await command(body));
+      if (req.url==='/command') return respond(200,await (jam ? jamCommand(body) : command(body)));
       if (req.url==='/instrument-asset') {
         const audio=instrument(body.lane).assets.includes(body.asset) && assets[body.asset];
         if (!audio) return respond(404,{error:'Unknown instrument WAV'});
@@ -194,13 +214,13 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
         return respond(400,{error:'Provide a player ID'});
       if (listener && listener!==body.client && Date.now()-lastPull<2500)
         return respond(409,{error:'The session already has an audio listener'});
-      const {value,start,clippedFrames}=transport.pull(body.frames);
+      const {value,start,clippedFrames,done}=transport.pull(body.frames);
       listener=body.client;
       lastPull=Date.now();
       const pcm=Buffer.allocUnsafe(value.samples.length*4);
       for (let i=0;i<value.samples.length;i++) pcm.writeFloatLE(value.samples[i],i*4);
       res.writeHead(200,{'Content-Type':'application/octet-stream',
-        'X-Ink-Transport':JSON.stringify({...start,clippedFrames})});
+        'X-Ink-Transport':JSON.stringify({...start,clippedFrames,...(jam && {done})})});
       return res.end(pcm);
     } catch (error) {
       if (!res.destroyed && !res.headersSent) respond(400,{error:error.message});
