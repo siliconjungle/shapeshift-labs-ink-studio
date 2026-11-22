@@ -44,6 +44,33 @@
     return index<0 ? null : {sample:audio.firstSample+index*block,peak};
   }
 
+  function describeAttack(score,part,note,rate,searchMs) {
+    const trigger=start(note,rate), grid=Math.round(score.clock.timeAt({beat:note.beat})*rate);
+    const pcm=score.tracks[part].external ? null : playVoice(score,part,note,rate,searchMs);
+    const hit=onset(pcm);
+    return {info:{part,...(note.clip && address(note)),beat:note.beat,velocity:note.velocity,
+      gridSample:grid,triggerSample:trigger,audibleSample:hit?.sample ?? null,
+      gridToTriggerMs:round((trigger-grid)*1000/rate,3),
+      triggerToAudioMs:hit ? round((hit.sample-trigger)*1000/rate,3) : null},pcm,hit};
+  }
+
+  function trimAttack(score,part,note,rate,searchMs,measured,keepMs=3) {
+    const {info,hit}=measured;
+    if (!hit || info.triggerToAudioMs<keepMs+3) return null;
+    const baseOffset=note.play.offset ?? 0, step=(info.triggerToAudioMs-keepMs)/1000;
+    let best;
+    for (const scale of [.25,.5,.75,1,1.25,1.5,2,3,4]) {
+      const offset=round(Math.min(5,baseOffset+step*scale),9);
+      if (offset<=baseOffset) break;
+      const trial=describeAttack(score,part,{...note,play:{...note.play,offset}},rate,searchMs);
+      const latency=trial.info.triggerToAudioMs;
+      if (!trial.hit || trial.hit.peak<hit.peak*.72 || latency>=info.triggerToAudioMs-3) continue;
+      if (!best || Math.abs(latency-keepMs)<Math.abs(best.latency-keepMs)) best={offset,latency};
+      if (Math.abs(latency-keepMs)<=2) break;
+    }
+    return best ?? null;
+  }
+
   const active=(score,part,focus)=>score.events[part].filter(row=>row.velocity>0 &&
     row.time<focus.end && row.time+row.gate>focus.start);
   function masking(source,score,review,raw) {
@@ -97,15 +124,7 @@
     check(target && anchors.length,'Choose a written target note and an audible anchor in the focus');
     const anchor=nearest(anchors,target);
     const lanes=[{role:'anchor',name:raw.anchor,note:anchor},{role:'target',name:raw.track,note:target}];
-    const describe=(compiled,name,note)=> {
-      const trigger=start(note,rate), grid=Math.round(compiled.clock.timeAt({beat:note.beat})*rate);
-      const pcm=compiled.tracks[name].external ? null : playVoice(compiled,name,note,rate,raw.searchMs ?? 150);
-      const hit=onset(pcm);
-      return {info:{part:name,...(note.clip && address(note)),beat:note.beat,velocity:note.velocity,
-        gridSample:grid,triggerSample:trigger,audibleSample:hit?.sample ?? null,
-        gridToTriggerMs:round((trigger-grid)*1000/rate,3),
-        triggerToAudioMs:hit ? round((hit.sample-trigger)*1000/rate,3) : null},pcm,hit};
-    };
+    const describe=(compiled,name,note)=>describeAttack(compiled,name,note,rate,raw.searchMs ?? 150);
     const baseline=lanes.map(row=>describe(score,row.name,row.note));
     const written=source.tracks[raw.track].clips.find(row=>row.id===target.clip).voices
       .find(row=>row.id===target.voice).notes.find(row=>row.id===target.note);
@@ -120,22 +139,8 @@
     if (Math.abs(delay-(written.play?.delay ?? 0))>=.5/rate)
       candidates.push(edit('timing','Move the trigger against the anchor',{play:{...written.play,delay}}));
     else unavailable.push({id:'timing',reason:'Scheduled triggers already match the requested relationship'});
-    const {info,hit}=baseline[1];
     const patch=source.patches[source.tracks[raw.track].patch];
-    let trimmed;
-    if (hit && info.triggerToAudioMs>=6 && sampleZones(patch).length) {
-      const baseOffset=written.play?.offset ?? 0, step=Math.max(1,info.triggerToAudioMs-3)/1000;
-      for (const scale of [.25,.5,.75,1,1.25,1.5,2,3,4]) {
-        const offset=round(Math.min(5,baseOffset+step*scale),9);
-        if (offset<=baseOffset) break;
-        const trial={...target,play:{...target.play,offset}};
-        const next=describe(score,raw.track,trial);
-        if (!next.hit || next.hit.peak<hit.peak*.72 || next.info.triggerToAudioMs>=info.triggerToAudioMs-3) continue;
-        if (!trimmed || next.info.triggerToAudioMs<trimmed.latency)
-          trimmed={offset,latency:next.info.triggerToAudioMs};
-        if (trimmed.latency<=5) break;
-      }
-    }
+    const trimmed=sampleZones(patch).length ? trimAttack(score,raw.track,target,rate,raw.searchMs ?? 150,baseline[1]) : null;
     if (trimmed) candidates.push(edit('sample-attack','Skip the measured sample lead-in',{play:{...written.play,offset:trimmed.offset}}));
     else unavailable.push({id:'sample-attack',reason:'No supported sample offset measurably advanced this voice attack'});
     const pair=(compiled)=> {
@@ -155,5 +160,5 @@
         {pcm,range:addressInScore(score,pcm,rate),track:lanes[i].name}]] : []))};
   }
 
-  P.musicCritiqueDiagnosis=Object.freeze({masking,groove});
+  P.musicCritiqueDiagnosis=Object.freeze({masking,groove,describeAttack,trimAttack});
 })(KIT.procedural);

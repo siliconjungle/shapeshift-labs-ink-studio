@@ -69,7 +69,8 @@ function extract(file,kit) {
   return {template:result.value,take:result.take,report:result.report};
 }
 
-module.exports=function grooveCommand([mode,file],opt,kit) {
+module.exports=function grooveCommand([mode,file,settings],opt,kit) {
+  if (['inspect','edit','audition'].includes(mode)) return require('./music-groove-editor.js')([mode,file,settings],opt,kit);
   if (mode!=='extract' || !file) throw new TypeError('Use music groove extract recipe.json');
   const result=extract(file,kit);
   if (typeof opt.out==='string') json(opt.out,result);

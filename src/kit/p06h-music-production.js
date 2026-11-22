@@ -183,7 +183,7 @@
       decay:number(roomSpec,'decay',.42,.05,2),damping:number(roomSpec,'damping',.65,0,1)};
     const tracks=Object.fromEntries(table(source.tracks,8,'production track').map(([name,raw])=>{
       check(name!=='room' && Object.hasOwn(plan.parts,name) &&
-        fields(raw,['patch','gain','pan','highpass','lowpass','send','groove','pad','choke','duck','gestures','clips','phrases']) &&
+        fields(raw,['patch','gain','pan','highpass','lowpass','send','groove','pad','choke','duck','gestures','clips','phrases','timingEdits']) &&
         Object.hasOwn(patches,raw.patch) && (raw.choke===undefined || id(raw.choke)), 'Track needs a score part and an instrument patch');
       check(raw.clips===undefined || plan.parts[name].role!=='percussion' ||
         Array.isArray(raw.clips) && raw.clips.every(clip=>clip?.mode==='layer'),
@@ -199,7 +199,7 @@
       const compiled={patch:raw.patch,play:patch.player,external:patch.external,performance:patch.performance,mix,echo:patch.echo,color:patch.color,
         gestures:G.score(raw.gestures,patch,plan,clock),
         clips:raw.clips===undefined ? null : N.rows(raw.clips,clock,program,plan.sections.at(-1).end),
-        groove:groove(raw.groove),pad:raw.pad===undefined ? null : pad(raw.pad,plan.sections)};
+        timingEdits:P.musicTimingEdits.compile(raw.timingEdits),groove:groove(raw.groove),pad:raw.pad===undefined ? null : pad(raw.pad,plan.sections)};
       compiled.phrases=F.compile(raw.phrases,plan.sections.at(-1).end,clock,compiled);
       return [name,compiled];
     }));
@@ -244,7 +244,10 @@
         const articulation=authoredNote?.articulation ?? phrasing?.articulation;
         let play=articulation ? {...style.play,articulation} : style.play;
         const proposed=authored+adjustment;
-        const time=Math.max(0,row.played || performance?.anchor(row.beat) ? row.time : follow ? follow(proposed,row.beat) : proposed);
+        const anchored=performance?.anchor(row.beat);
+        const performed=row.played || anchored ? row.time : follow ? follow(proposed,row.beat) : proposed;
+        const delay=anchored || !track.timingEdits.size ? 0 : track.timingEdits.get(P.musicTimingEdits.key(row))?.delay ?? 0;
+        const time=delay ? Math.max(row.clipLaunch ?? 0,performed+delay) : Math.max(0,performed);
         const connection=round(time);
         if (silent(connection)) continue;
         const writtenGate=(row.end-row.time)*(row.ties ? 1 : play.gate ?? 1), length=inherited?.gate;
@@ -279,7 +282,7 @@
             ...(track.performance && !row.clip && row.voice!==undefined && {voice:row.voice}),
             ...(row.clipLaunch!==undefined && {clipLaunch:row.clipLaunch}),
             ...(row.clipEnd!==undefined && {clipEnd:row.clipEnd,choke:row.clipEnd+.006,chokeFade:.006}),
-            ...(row.played && {played:true}),...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
+            ...(r>0 && {retrigger:r}),...(row.played && {played:true}),...(style.gesture && {gesture:style.gesture}),...(connected && r===0 && {connected:true})};
           const cut=next(cuts,onset)?.startTime;
           if (cut!==undefined && cut<(note.choke ?? Infinity) && (track.external || track.performance || track.phrases.length || onset+track.play.prepare(note,48000,note.gate).duration>cut))
             note.choke=cut;
@@ -298,6 +301,10 @@
     for (const name of names) {
       const track=tracks[name];
       if (track.performance) P.musicPhrasing.releases(events[name]);
+      if (track.timingEdits.size) for (const note of events[name]) {
+        const offset=track.timingEdits.get(P.musicTimingEdits.key(note))?.offset;
+        if (offset!==undefined) note.play={...note.play,offset};
+      }
       if (!track.phrases.length) continue;
       const patch=source.patches[track.patch];
       const release=[patch,...Object.values(patch.instruments ?? {})].some(voice=>voice.type==='sample' &&

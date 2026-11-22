@@ -198,3 +198,64 @@ inspect or render `played.json`. The ensemble report lists reference hit IDs,
 articulation assignments, and the proposed, target, and realized offsets
 for paired attacks. Edge clamping, overlapping partnerships and later
 directed links can affect realized offsets.
+
+## Edit the gap you hear
+
+Use the groove editor on a production or music edit session. The CLI shows
+the written beat projected onto the score clock, the played note time, the
+instrument trigger, and the estimated audible attack. The instrument
+trigger can precede the played note when the patch has attack compensation.
+The attack estimate measures a sustained energy rise in the isolated
+rendered voice before the mixer. The audition prints the actual mix,
+including its routing, effects and sidechains.
+
+```sh
+ink-studio music groove inspect score.json focus.json
+ink-studio music groove edit score.json edits.json --out edited.json --report timing.json
+ink-studio music groove audition score.json edits.json --out comparison
+```
+
+Example `edits.json` for a four-bar phrase:
+
+```json
+{
+  "range": {"from": {"beat": 0}, "to": {"beat": 16}},
+  "pair": {"anchor": "kick", "track": "bass", "within": 0.07},
+  "searchMs": 160,
+  "edits": [
+    {"op": "trim", "track": "bass", "keepMs": 4},
+    {"op": "gap", "metric": "audible", "targetMs": [[0, 38], [8, 10], [16, 13]]}
+  ]
+}
+```
+
+Use the same settings without `edits` for inspection. Range endpoints
+accept beat numbers or the session's beat, bar, seconds and sample
+addresses. Supply `tracks` when inspecting more lanes. The pair finds the
+nearest unused anchor by written beat, with `within` measured in beats.
+A positive gap places the target after the anchor. Use a single
+`targetMs` value for a fixed gap, or interpolate over absolute written
+beats. Choose `"trigger"` to target the trigger gap.
+
+The trim changes playback position inside the sample and keeps the
+trigger, written note and expression timing. It tests that the earlier
+attack retains enough energy. Use the `at` address from `inspect --json`
+to trim just one attack; its beat distinguishes occurrences of the same
+looped clip note. A gap edit applies after existing groove links and works
+on played clips. It moves the target and remeasures the result, including
+any constraints from timing anchors or the start of a clip. Edits remain
+addressable under `tracks.<name>.timingEdits` in the recipe.
+
+A session uses its saved comp by default. Use `take` to inspect or edit
+a named score take, including `reference`. The report names the take
+that supplies each attack. Edits keep fully pinned lanes and avoid edits
+during comp fades or across a comp boundary. Auditions of a named take
+select it on the inspected tracks for the requested range.
+
+Use `inspect --json` for sample positions and note addresses. The audition
+folder contains `before.wav`, `after.wav`, `timing.txt`, `report.json`, and
+an editable recipe. Generate the Pocket Clock study with:
+
+```sh
+node examples/music-production/groove-editor.cjs output/pocket-clock
+```
