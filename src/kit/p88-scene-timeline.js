@@ -15,9 +15,9 @@
   const maxItems = 10000;
 
   function compile(definition, { channel, exact = false } = {}) {
-    const T = K.procedural.takeTime;
+    const T = K.procedural.takeTime, { record, check, id, selector } = K.world.data;
     const ops = exact ? T : {
-      read: value => value, seconds: value => value,
+      read: value => record(value) ? T.seconds(T.read(value)) : value, seconds: value => value,
       compare: (a, b) => a - b, add: (a, b) => a + b, sub: (a, b) => a - b,
       mul: (a, b) => a * b, div: (a, b) => a / b
     };
@@ -34,7 +34,6 @@
       check(valid(value), 'Invalid timeline time');
       return value;
     }
-    const { record, check, id, selector } = K.world.data;
     const root = clone(definition);
     const catalog = root?.sequences ?? {};
     const rootClock = root?.tempoMap === undefined ? undefined : timing.compile(root.tempoMap);
@@ -99,10 +98,13 @@
       check(new Set(tracks.map(({ target }) => JSON.stringify(target))).size === tracks.length,
         'A timeline sequence needs one track per target');
       const markers = items(input.markers, 'marker', clock, row => {
-        check(has(row, ['id', 'time', 'label', 'beatId']) && (row.label === undefined || typeof row.label === 'string') &&
-          (row.beatId===undefined||K.world.inspectionLinks.parse(row.beatId)),
-          'Invalid timeline marker label');
-        return { ...(row.label!==undefined&&{label:row.label}),...(row.beatId!==undefined&&{beatId:row.beatId}) };
+        const { label, category, beatId, source } = row;
+        check(has(row, ['id', 'time', 'label', 'category', 'beatId', 'source']) &&
+          (label === undefined || typeof label === 'string') && (category === undefined || id(category)) &&
+          (beatId === undefined || K.world.inspectionLinks.parse(beatId)) &&
+          (source === undefined || K.world.storySceneTimeline.validSource(source, beatId)),
+          'Invalid timeline marker label, category or source');
+        return Object.fromEntries(Object.entries({ label, category, beatId, source }).filter(([, value]) => value !== undefined));
       });
       const events = items(input.events, 'event', clock, row => {
         check(has(row, ['id', 'time', 'kind', 'detail']) && id(row.kind) && record(row.detail ?? {}), 'Invalid timeline world event');
@@ -161,7 +163,7 @@
     function mappedPoint(item, path, time, fields) {
       const { cueTrack, ...entry } = item;
       const row = { ...entry, ...fields, path: cueTrack === undefined ? path : [...path, cueTrack], time: seconds(time),
-        ...(item.type==='presentation'&&{timecode:T.pack(exact?time:T.read(time))}) };
+        ...((item.type==='presentation'||item.type==='marker'&&item.source!==undefined)&&{timecode:T.pack(exact?time:T.read(time))}) };
       if (exact) precise.set(row, time);
       points.push(row);
     }

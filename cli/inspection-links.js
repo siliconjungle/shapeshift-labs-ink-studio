@@ -23,7 +23,14 @@ function records(file) {
   });
 }
 
-function locate(api,beatId,files,base) {
+function locate(api,beatId,files,base,timing) {
+  function seconds(value) {
+    if(timing&&value&&typeof value==='object'&&Object.hasOwn(value,'numerator')&&Object.hasOwn(value,'denominator')){
+      try { return timing.seconds(timing.read(value)); }
+      catch { return; }
+    }
+    return value;
+  }
   const matches=[],unmatched=[];
   for(const file of files){
     const report=relative(base,file), start=matches.length, folder=path.dirname(file);
@@ -39,7 +46,7 @@ function locate(api,beatId,files,base) {
         const context={...inherited};
         if(!Array.isArray(row)){
           const frame=row.frame??row.edited?.frame??row.at?.showFrame??row.detail?.showFrame;
-          const time=row.time??row.edited?.seconds??row.at?.seconds;
+          const time=seconds(row.time??row.edited?.seconds??row.at?.seconds);
           const tick=row.tick??row.event?.tick??row.anchor?.event?.tick??row.source?.tick??
             row.clockCue?.anchor?.event?.tick??row.sourceTick;
           for(const [key,value] of Object.entries({frame,time,tick,scheduledFrame:row.scheduledFrame}))
@@ -76,13 +83,13 @@ function locate(api,beatId,files,base) {
 }
 
 function command([beatId,...inputs],options,kit) {
-  const api=kit.KIT.world.inspectionLinks, {out}=options;
+  const {world,procedural}=kit.KIT, api=world.inspectionLinks, {out}=options;
   if(!api.parse(beatId)||!inputs.length||inputs.length>64||Object.keys(options).some(key=>key!=='out')||
     out!==undefined&&(typeof out!=='string'||!out.trim()))
     throw new TypeError('Use beat <beat-id> <report.json|watch.ndjson> [...] [--out inspection.json]');
   const files=[...new Set(inputs.map(file=>path.resolve(file)))], destination=out&&path.resolve(out);
   if(destination)graphOutputs(files).protect(fs.statSync(destination,{throwIfNoEntry:false}));
-  const result=locate(api,beatId,files,destination?path.dirname(destination):process.cwd());
+  const result=locate(api,beatId,files,destination?path.dirname(destination):process.cwd(),procedural.takeTime);
   if(destination)json(destination,result);
   else process.stdout.write(JSON.stringify(result,null,2)+'\n');
   if(!result.matches.length)process.exitCode=2;

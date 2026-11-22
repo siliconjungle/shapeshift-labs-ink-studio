@@ -253,8 +253,12 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
   }
   function inspectTimeline(file) {
     const input = load(file);
+    const standalone = input.document?.format === undefined && Array.isArray(input.document?.markers) &&
+      !Object.hasOwn(input.document, 'timeline') && !Object.hasOwn(input.document, 'solids');
+    if (standalone) checkReportPath([file], opt.out, 'timeline definition');
     const timeline = input.world ? W.sceneTimeline(input.world) :
-      input.document?.format === W.scrub.takeFormat ? W.scrub.openTake(input.document) : build(input.legacy).timeline;
+      input.document?.format === W.scrub.takeFormat ? W.scrub.openTake(input.document) :
+      standalone ? kit.KIT.timeline.compile(input.document, { exact: true }) : build(input.legacy).timeline;
     ensure(timeline, 'This scene has no unified timeline');
     const at = Number(opt.at ?? 0), from = Number(opt.from ?? -1), to = Number(opt.to ?? timeline.duration);
     ensure(![opt.at, opt.from, opt.to].includes(true), 'Timeline times need numeric values');

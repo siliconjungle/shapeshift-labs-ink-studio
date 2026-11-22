@@ -115,6 +115,40 @@ function eventCommand(file, rest, options, library) {
   } else process.stdout.write(output);
 }
 
+const timelineUsage = 'story timeline <recording|fixture|envelopes|story-run-bundle> [--story document/story] '+
+  '[--from-tick N --to-tick N] [--plan markers.json] [--out timeline.json]';
+
+async function timelineCommand(file, extra, options, library) {
+  const { story, plan, out, 'from-tick': from, 'to-tick': to } = options;
+  if (!file || extra.length || Object.keys(options).some(key => !['story','plan','out','from-tick','to-tick'].includes(key)) ||
+      [story, plan, out].some(value => value !== undefined && (typeof value !== 'string' || !value.trim())) ||
+      [from, to].some(value => value !== undefined && (typeof value !== 'string' || !/^\d+$/.test(value))))
+    throw new TypeError('Use '+timelineUsage);
+  const W = library().KIT.world, { input } = readStoryEvents(file, library);
+  const dependencies = [file, ...(plan ? [plan] : [])];
+  const source = require('./checkpoint-file.js').resolveCheckpoint(path.resolve(file), input, {
+    onBlock: block => dependencies.push(block)
+  });
+  const destination = out && path.resolve(out);
+  if (destination) require('./graph-outputs.js').graphOutputs(dependencies)
+    .protect(fs.statSync(destination, { throwIfNoEntry: false }));
+  const settings = { story, plan: plan && readDefinition(plan),
+    fromTick: from === undefined ? undefined : Number(from), toTick: to === undefined ? undefined : Number(to) };
+  const api = W.storySceneTimeline, native = source?.format === W.runtime.runFormat;
+  const log = source?.format === SimulationFixture.format
+    ? W.storyEvents.envelopes(SimulationFixture.eventRecording(W, source), {
+      stream: source.checkpoint.eventStream, simulationRate: source.checkpoint.world.takeClock?.simulationRate
+    }) : source;
+  const value = native ? await api.replay(source, settings) : api.project(log, settings);
+  const retained = native ? (settings.fromTick ?? 0) < source.origin.tick :
+    log.format === W.runtime.checkpointFormat || log.coverage === 'retained';
+  if (retained)
+    process.stderr.write('Story timeline includes retained history for part or all of its source range.\n');
+  const output = JSON.stringify(value, null, 2)+'\n';
+  if (destination) write(destination, output);
+  else process.stdout.write(output);
+}
+
 function cueCommand(file,plan,rest,options,library) {
   const {format='sheet',out,'asset-registry':registry}=options;
   if (!file||!plan||rest.length||!['sheet','timeline'].includes(format)||
@@ -197,8 +231,9 @@ function storyCommand([mode, file, id, ...rest], options, library) {
   if (mode==='catalog') return catalogCommand([file,id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='cues') return cueCommand(file,id,rest,options,library);
+  if (mode==='timeline') return timelineCommand(file,[id,...rest].filter(value => value !== undefined),options,library);
   if (mode==='preview') return previewCommand(file,id,rest,options);
-  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story cues <recording> <plan.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
+  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | '+timelineUsage+' | story cues <recording> <plan.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).some(key=>key!=='template')||
       (options.template!==undefined&&typeof options.template!=='string'))throw new TypeError(usage);

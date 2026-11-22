@@ -5,7 +5,7 @@ Add `timeline` to a JSON diorama, an authored simulation world, or a scene built
 | Timeline field | Entry fields |
 | --- | --- |
 | `tracks` | `target` is a JSON Pointer or path array. Each key has `time`, `value`, and optional `ease`. |
-| `markers` | A unique `id`, a `time`, and an optional `label`. |
+| `markers` | A unique `id`, a `time`, and optional `label` and `category`. Exported story markers carry a `beatId` and a committed `source` reference. |
 | `audio` | A unique `id`, a `time`, and a `cue` resolved by the host. Optional `duration`, source `offset`, and `gain` default to zero, zero, and one. |
 | `cueTracks` | Named portable musical tracks or pulse recordings, with optional offsets and channel filters. [Audio cue routing](event-actions.md#route-audio-cue-tracks) |
 | `events` | A unique `id`, a `time`, a world event `kind`, and optional JSON object `detail`. |
@@ -17,6 +17,8 @@ Keys hold their first and last values within the sequence. The easing on a key c
 Each clip maps track samples, cue ranges, and point events through the same trim and rate. Nested clips can reuse the same source under different instance IDs. Cue records carry the instance IDs in `path`. A clip overrides a parent track while its range is active. If sibling clips overlap on a target, the later-listed clip takes precedence. Point events at either trim boundary are included.
 
 Use [editable musical event tracks](graph-media.md#editable-musical-event-tracks) to place named markers and world events at detected or edited times in a soundtrack.
+
+Export editable scene markers from a committed run. [Story scene timeline export](story-scene-timeline.md)
 
 ## Beat, bar, and phrase timing
 
