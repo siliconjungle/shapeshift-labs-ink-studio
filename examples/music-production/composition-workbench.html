@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Relay · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:16px/1.55 system-ui,sans-serif;color:#f2ebde;background:#161517;--line:#51454a;--key:#efc58c;--soft:#cec0b9}
+*{box-sizing:border-box}body{max-width:860px;margin:auto;padding:32px 20px 42px}
+header{padding-bottom:15px;border-bottom:1px solid var(--line)}h1{font-size:clamp(42px,12vw,86px);line-height:.95;margin:17px 0 12px}
+h2{font-size:1.08rem;margin:0 0 8px}header p,p{max-width:65ch;margin:0 0 10px}header>p:first-child{font-size:14px;color:var(--key)}
+main{display:grid;gap:13px;margin-top:18px}.panel{border:1px solid var(--line);padding:15px;background:#201e21}a{color:var(--key)}
+button{font:inherit;color:inherit;background:#29242a;border:1px solid #716367;border-radius:4px;padding:6px 10px;cursor:pointer}
+button[aria-pressed=true]{background:var(--key);color:#252023;border-color:var(--key);font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:7px}.controls{position:sticky;top:0;z-index:1}
+audio{width:100%;display:block}#heard{margin:0 0 8px;color:var(--soft);min-height:2.9em}
+#range{height:5px;width:100%;margin:12px 0;background:#524850}#travel{background:var(--key);display:block;height:5px;width:0}
+small{color:var(--soft)}.files{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+<p>Ink Studio · Composition workbench</p><h1>Night Relay</h1>
+<p>A sound from the machine room becomes a hook. Hear different ways to reveal it, then change the groove or the touch without rewriting the tune.</p>
+</header>
+<main>
+<section class="panel controls" aria-label="Audition playback">
+<h2 id="current">Kept cue</h2>
+<p id="heard">The metal gives the hint, the reed takes the return, and the kit plays the displaced pattern with its performed offsets.</p>
+<audio id="audio" controls preload="metadata" src="kept.wav"></audio>
+<div id="range" aria-hidden="true"><span id="travel"></span></div>
+<div class="row">
+<button data-take="kept" aria-pressed="true">Kept cue</button>
+<button data-take="reference" aria-pressed="false">Reference</button>
+<button data-jump="0">Opening</button><button data-jump="9.06">Return</button><button data-jump="13.61">Last phrase</button>
+</div>
+</section>
+<section class="panel">
+<h2>Cue</h2>
+<div class="row"><button data-take="late-call">Withhold the lead</button><button data-take="piano-return">Give the return to keys</button></div>
+</section>
+<section class="panel">
+<h2>Phrase</h2>
+<div class="row">
+<button data-take="phrase-pedal">Bass pedal</button><button data-take="phrase-contrary">Contrary line</button>
+<button data-take="phrase-drum-answer">Percussion answer</button><button data-take="phrase-empty-beat">Empty beat</button>
+<button data-take="voicing-connected">Connected voicing</button><button data-take="voicing-suspensions">Suspension voicing</button><button data-take="voicing-counterline">Counterline voicing</button>
+</div>
+</section>
+<section class="panel">
+<h2>Gesture</h2>
+<div class="row"><button data-take="touch">Earlier breath, shorter release</button></div>
+</section>
+<section class="panel">
+<h2>Written rhythm and played timing</h2>
+<div class="row">
+<button data-take="pocket-grid">Original grid</button><button data-take="pocket-written">Written changes</button>
+<button data-take="pocket-timing">Played offsets</button><button data-take="pocket-both">Both</button>
+</div>
+<p><small>Each comparison uses the same kit, pitched voices and Foley slices. The kit alternates strikes, and the closed hat chokes the open one.</small></p>
+</section>
+<section class="panel">
+<h2>Editable files</h2>
+<div class="files"><a href="kept.json">Kept session</a><a href="source.json">Reference session</a><a href="brief.json">Workbench brief</a>
+<a href="report.json">Candidate reports</a><a href="kept-trace.json">Print trace</a><a href="decisions.json">Kept changes</a></div>
+</section>
+</main>
+<script type="application/json" id="takes">__TAKES__</script>
+<script>
+const notes={
+  kept:'The metal gives the hint, the reed takes the return, and the kit plays the displaced pattern with its performed offsets.',
+  reference:'The reed states the theme during the climb, then plays it again at the return.',
+  'late-call':'Metal hints first and the bass recalls the fragment. The reed is withheld until the full return.',
+  'piano-return':'The keys own the full return. The ensemble makes a cut at the ending.',
+  'phrase-pedal':'The bass holds one pitch through the change. The reed stays in place.',
+  'phrase-contrary':'An inner line moves in the opposite direction to the reed through the first moves of the hook.',
+  'phrase-drum-answer':'Metal answers in gaps between performed reed notes.',
+  'phrase-empty-beat':'The band leaves one clear beat open during the return.',
+  'voicing-connected':'Inner voices favor small moves and shared tones.',
+  'voicing-suspensions':'An inner voice holds across the change before resolving.',
+  'voicing-counterline':'Inner voices favor an answer in the gaps around the melody.',
+  touch:'In the last phrase, hear the early breath before the first note and the faster release at the end.',
+  'pocket-grid':'The original written pattern with all played offsets set to zero.',
+  'pocket-written':'Three written attacks move on the beat grid. Played offsets are zero.',
+  'pocket-timing':'The original written attacks stay in place. The kick, rim, metal and hat play their authored offsets.',
+  'pocket-both':'The displaced written pattern plays with the same authored offsets.'
+};
+const audio=document.querySelector('#audio'), title=document.querySelector('#current'), heard=document.querySelector('#heard');
+const buttons=[...document.querySelectorAll('[data-take]')], choices=new Set(['kept',...JSON.parse(document.querySelector('#takes').textContent)]);
+let active='kept', pending=null;
+function seek(time) {
+  if (pending) pending.time=time;
+  else if (audio.readyState>=1) audio.currentTime=Math.min(audio.duration,time);
+}
+for (const button of buttons) {
+  const id=button.dataset.take;
+  if (!choices.has(id)) {button.hidden=true;continue;}
+  button.setAttribute('aria-pressed',String(id===active));
+  button.addEventListener('click',()=>{
+    if (id===active) return;
+    pending ??= {time:audio.currentTime,play:!audio.paused};
+    active=id;
+    audio.src=id+'.wav';
+    title.textContent=button.textContent;
+    heard.textContent=notes[id] ?? '';
+    for (const button of buttons) button.setAttribute('aria-pressed',String(button.dataset.take===active));
+  });
+}
+audio.addEventListener('loadedmetadata',()=>{
+  if (!pending) return;
+  const {time,play}=pending;
+  pending=null;
+  seek(time);
+  if (play) audio.play().catch(()=>{});
+});
+for (const button of document.querySelectorAll('[data-jump]'))
+  button.addEventListener('click',()=>seek(Number(button.dataset.jump)));
+audio.addEventListener('timeupdate',()=>{
+  document.querySelector('#travel').style.width=(Math.min(1,audio.currentTime/(audio.duration||1))*100)+'%';
+});
+</script>
+</body>
+</html>

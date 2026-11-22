@@ -300,6 +300,11 @@
       inputs:{source:'record',assets:sessionAssets,edits:scoreRequests},outputs:{value:'record'},
       run({source,assets,edits}) {return {value:A.musicSession.create(assets).edit(source,edits)};}
     },
+    'music.composeInSession': {
+      description:'Audition cue form, locked phrase changes, voicing, note gestures and timing forks through an editable session.',
+      inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{value:'record',sessions:'record',clips:'record'},
+      run({source,brief,assets},{host}) {return A.musicSession.create(assets,host).compose(source,brief);}
+    },
     'music.auditionPhraseTakes': {
       description:'Audition whole-phrase control takes in context with one score clock, mixer and playback gain.',
       inputs:{source:'record',settings:'record',assets:sessionAssets},outputs:{audio:'record',report:'record'},
@@ -402,6 +407,16 @@
       run({source,options}) {
         const result=A.padPattern.perform(source,options);
         return {...result,options:result.value.options};
+      }
+    },
+    'music.projectRhythm': {
+      description:'Share one written pad rhythm and its played offsets between notes, a sample kit and Foley.',
+      inputs:{source:'record',routes:'record',options},
+      outputs:{value:'record',clip:'record',pads:'record',events:'array<record>',kitOptions:'record',foley:'record',report:'record'},
+      run({source,routes,options}) {
+        const value=A.rhythmProjection.project(source,routes,options);
+        return {value,clip:value.clip ?? {},pads:value.pads,events:value.pads.performance.events,
+          kitOptions:value.pads.performance.options,foley:value.foley,report:value.report};
       }
     },
     'music.composeSlices': {

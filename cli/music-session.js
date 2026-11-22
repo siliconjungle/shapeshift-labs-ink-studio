@@ -9,8 +9,8 @@ module.exports=function command([mode,file,config],opt,kit) {
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  check(file && ['inspect','trace','edit','render','preview','compare','audition-phrase','arrange-performance','performance-ballot','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, trace, edit, render, preview, compare, audition-phrase, arrange-performance, performance-ballot, record-ballot, experiment, keep-experiment, stream, play or handoff');
+  check(file && ['inspect','trace','edit','render','preview','compare','compose','audition-phrase','arrange-performance','performance-ballot','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, trace, edit, render, preview, compare, compose, audition-phrase, arrange-performance, performance-ballot, record-ballot, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -64,6 +64,15 @@ module.exports=function command([mode,file,config],opt,kit) {
     const report=writer.report({...result.report,listeningGain:Object.fromEntries(names.map(name=>[name,files[name].gain]))});
     return {...Object.fromEntries(names.map(name=>[name,files[name].target])),report};
   }
+  function compose(folder,brief) {
+    const writer=audioWriter(folder), directory=path.resolve(folder);
+    const {value,sessions,clips}=editor.compose(session,brief);
+    const takes=Object.fromEntries(Object.entries(sessions).map(([id,take])=>
+      [id,path.relative(directory,save(path.join(directory,'sessions',id+'.json'),take).session)]));
+    const audio=Object.fromEntries(Object.entries(clips).map(([id,pcm])=>
+      [id,path.relative(directory,writer.audio(pcm,id).target)]));
+    return {report:writer.report({...value,files:{sessions:takes,audio}}),sessions:takes,audio};
+  }
   function auditionPhrase(folder,settings) {
     const writer=audioWriter(folder), {audio,report}=editor.auditionPhrase(session,settings);
     const clips=Object.fromEntries(Object.entries(audio).map(([name,pcm])=>[name,writer.audio(pcm,name).target]));
@@ -112,6 +121,7 @@ module.exports=function command([mode,file,config],opt,kit) {
       case 'save': return save(row.out);
       case 'render': return render(row.out);
       case 'compare': return compare(row.out,previous,row.preview);
+      case 'compose': return compose(row.out,row.brief);
       case 'audition-phrase': return auditionPhrase(row.out,row.settings);
       case 'arrange-performance': return arrangePerformance(row.out,row.brief);
       case 'performance-ballot':
@@ -179,7 +189,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   }
   const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(['preview','trace'].includes(mode) && {preview:settings}),
     ...(mode==='audition-phrase' && {settings}),
-    ...(['arrange-performance','performance-ballot'].includes(mode) && {brief:settings}),
+    ...(['compose','arrange-performance','performance-ballot'].includes(mode) && {brief:settings}),
     ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});
   process.stdout.write(JSON.stringify(result)+'\n');
   return result;

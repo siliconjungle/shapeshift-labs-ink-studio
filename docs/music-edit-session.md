@@ -7,7 +7,9 @@ editable recipe. Use [producer revisions](music-producer.md),
 as sources. Use [DAW handoff](clap-instruments-and-handoff.md#hand-the-edit-to-a-daw)
 to export the active comp, routing, automation, and aligned prints.
 Use [session experiments](music-session-experiments.md) to compare combinations
-of sound, phrase, and cue decisions through the same desk.
+of sound, phrase, and cue decisions through the same desk. The
+[composition workbench](composition-workbench.md) auditions and saves cue
+forms, locked phrase moves, note gestures and timing forks as session recipes.
 
 ## Assemble a session
 

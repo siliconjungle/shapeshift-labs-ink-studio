@@ -17,6 +17,8 @@ editable revisions.
 | Phrase | `pedal` | Sustain one bass pitch across a chord change |
 | Phrase | `suspension` | Prepare a pitch against the incoming chord, hold it through the change, and resolve by step between fixed outer parts |
 | Phrase | `drum-answer` | Put a percussion response in performed lead gaps and remove near-unison hits on that percussion track |
+| Phrase | `contrary` | Move an inner line in the opposite direction to the lead through local chord tones |
+| Phrase | `empty-beat` | Find an empty beat in fixed parts and cut the supporting parts for that beat |
 | Note | `note-gesture` | Try an early pickup, an accented lean, or short gates on up to six attacks |
 
 ## Set the brief
@@ -54,8 +56,8 @@ editable revisions.
 Only `section` is required. `range` uses absolute beats within the
 section, defaults to its first two bars, and spans up to 32 beats. The
 late pulse may also reach one bar into the lead-in. Unspecified tracks
-are inferred from their production roles. Choose up to seven kinds.
-The default tries every kind except `late-pulse`.
+are inferred from their production roles. Choose which kinds to try. The default tries exposed, handoff, bass-move,
+pedal, suspension, drum-answer, and note-gesture.
 
 - `scale.mode` accepts a named scale or an increasing list of semitone
   offsets starting at zero. The scale and per-track ranges constrain
@@ -74,7 +76,8 @@ The default tries every kind except `late-pulse`.
 - `preferences.articulation` can name a supported articulation from the
   melody patch. When omitted, the note move uses the first available
   articulation if the patch has one. `gesture` chooses the preferred
-  phrasing profile. `seed` breaks ranking ties.
+  phrasing profile. Use `pickup`, `lean`, `short`, `attack`, `breath` or
+  `release`. `seed` breaks ranking ties.
 
 The report lists attempted candidates, the parts that actually changed,
 attack counts, and reasons for rejected choices. Hard constraints apply
@@ -115,3 +118,6 @@ The JavaScript entry point is
 The graph node `music.searchComposition` exposes the shortlist, producer
 session, and report. Connect its `session` output to `music.reviewProducer`
 or `music.keepProducer`.
+
+Use the [composition workbench](composition-workbench.md) to hear these choices
+alongside cue forms, voicings, gestures and written rhythm comparisons.

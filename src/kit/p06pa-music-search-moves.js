@@ -20,6 +20,8 @@
     pedal:['phrase','Hold one bass pitch through a harmonic change.'],
     suspension:['phrase','Prepare an inner voice, hold it across a change, and resolve by step.'],
     'drum-answer':['phrase','Move percussion from the lead attacks into gaps in its phrase.'],
+    contrary:['phrase','Move an inner voice against the lead without moving the hook.'],
+    'empty-beat':['phrase','Clear one open beat in the hook for silence.'],
     'note-gesture':['note','Refine the pickup, gates and accents on a small run of notes.']
   };
   const make=(id,revision,merit,details)=>({id,revision,merit,details});
@@ -207,6 +209,52 @@
         {from,to,percussion,lead,beats:hits.map(row=>row.beat)});
     }));
   }
+  function contrary(ctx) {
+    const {from,to,tracks:{inner,lead},score,pins,ranges,harmonies,scale}=ctx;
+    check(inner && lead && !pins[inner],'Choose a melody and unlocked inner track');
+    const line=score.events[lead].filter(row=>inside(row.beat,from,to));
+    const leadNotes=[...new Map(line.map(row=>[row.beat,row])).values()].slice(0,10);
+    check(leadNotes.length>=2,'Contrary motion needs at least two melody attacks');
+    const anchor=score.events[inner].find(row=>inside(row.beat,from,to))?.midi ?? Math.max(0,leadNotes[0].midi-7);
+    const range=ranges[inner] ?? [Math.max(0,anchor-8),Math.min(127,anchor+8)];
+    return [-4,0,4].map((shift,index)=>attempt('line-'+index,()=>{
+      const notes=[];
+      let pitch=anchor+shift, oppositeMoves=0;
+      for (const [i,note] of leadNotes.entries()) {
+        const target=harmonies.findLast(row=>row.beat<=note.beat+eps);
+        const direction=i ? Math.sign(note.midi-leadNotes[i-1].midi) : 0;
+        const pool=(target?.tones ?? []).filter(pc=>!scale || scale.has(pc));
+        const candidates=near(pitch,pool,range).filter(value=>
+          value<note.midi-1 && (!notes.length || !direction || direction*(value-pitch)<0));
+        if (!candidates.length) break;
+        const midi=candidates[0], duration=round(Math.min(.54,(leadNotes[i+1]?.beat ?? to)-note.beat,to-note.beat));
+        if (duration<.0625) break;
+        if (notes.length && direction) oppositeMoves++;
+        notes.push({id:'line-'+i,beat:round(note.beat-from),duration,midi,velocity:.51});
+        pitch=midi;
+      }
+      check(oppositeMoves>0,'No contrary steps fit the active chords and register');
+      return make('line-'+index,clipRevision(ctx,inner,'contrary',notes),.55+Math.min(.36,oppositeMoves*.08),
+        {from,to,inner,lead,oppositeMoves,pitches:notes.map(row=>row.midi)});
+    }));
+  }
+  function emptyBeat(ctx) {
+    const {from,to,tracks:{lead},score,pins}=ctx;
+    const voices=Object.keys(score.tracks), fixed=voices.filter(name=>name===lead || pins[name]);
+    const support=voices.filter(name=>!fixed.includes(name));
+    check(support.length,'Choose at least one unlocked supporting track');
+    const intersects=(name,first,last)=>score.events[name].some(note=>note.time<last-eps &&
+      Math.min(note.time+note.gate,note.choke ?? Infinity)>first+eps);
+    const slots=[];
+    for (let start=Math.ceil(from);start+1<=to+eps;start++) {
+      const stop=start+1, a=score.clock.timeAt({beat:start}), b=score.clock.timeAt({beat:stop});
+      if (fixed.some(name=>intersects(name,a,b)) || !support.some(name=>intersects(name,a,b))) continue;
+      slots.push({start,stop});
+    }
+    check(slots.length,'No one-beat gap in the hook and protected parts');
+    return slots.slice(0,6).map(({start,stop},index)=>attempt('rest-'+index,()=>make('rest-'+index,
+      {cueMap:silence(ctx,support,start,stop,'rest')},.94-index*.035,{from:start,to:stop,parts:support,lead})));
+  }
   function detail(ctx) {
     const {source,score,tracks,pins,from,to,preferences}=ctx, lead=tracks.lead;
     check(lead && pins[lead]!=='all','Choose an editable melody track');
@@ -220,6 +268,14 @@
       {id:'lean',delay:.018,gate:1.18,accent:[.96,1.18,.81]},
       {id:'short',delay:.004,gate:.55,accent:[1.17,.81,1.05]}
     ];
+    const expressive={
+      attack:{attackFade:.10},
+      breath:{curves:{breath:[[0,.85],[.33,.32],[.78,.25],[1,.82]],
+        amplitude:[[0,.44],[.25,.86],[.7,1],[1,.72]]}},
+      release:{releaseLimit:.055}
+    };
+    if (Object.hasOwn(expressive,preferences.gesture))
+      profiles.push({id:preferences.gesture,delay:0,gate:1,accent:[1,1,1],play:expressive[preferences.gesture]});
     const native=clips.some(clip=>clip.beat<to && clip.beat+clip.length>from);
     return profiles.map(profile=>{
       let changed=0;
@@ -227,10 +283,10 @@
         const beat=origin+note.beat;
         if (!inside(beat,from,to) || note.tie || notes[i+1]?.tie || changed>=6) return note;
         const ordinal=changed++, old=note.play ?? {};
-        const play={...old,delay:Math.max(-.125,Math.min(.125,(old.delay ?? 0)+
+        const play={...old,...profile.play,...(profile.play?.curves && {curves:{...old.curves,...profile.play.curves}}),delay:Math.max(-.125,Math.min(.125,(old.delay ?? 0)+
           profile.delay*(ordinal===0 ? 1 : ordinal%3===2 ? .6 : -.25))),
-          gate:Math.max(.05,Math.min(2,(old.gate ?? 1)*(ordinal%3===1 ? profile.gate*.88 : profile.gate))),
-          ...(articulation && ordinal%3===1 && {articulation})};
+          gate:Math.max(.05,Math.min(2,(old.gate ?? 1)*(ordinal%3===1 && !profile.play ? profile.gate*.88 : profile.gate))),
+          ...(articulation && ordinal%3===1 && !profile.play && {articulation})};
         return {...note,velocity:clamp((note.velocity ?? .8)*profile.accent[ordinal%3]),play};
       });
       const revision=native ? {tracks:{[lead]:{clips:clips.map(clip=>({...clip,
@@ -244,6 +300,6 @@
 
   const moves={exposed:ctx=>opening(ctx,'exposed'),'late-pulse':ctx=>opening(ctx,'late-pulse'),handoff,
     'bass-move':ctx=>accompaniment(ctx,'bass-move'),pedal:ctx=>accompaniment(ctx,'pedal'),suspension,
-    'drum-answer':drumAnswer,'note-gesture':detail};
+    'drum-answer':drumAnswer,contrary,'empty-beat':emptyBeat,'note-gesture':detail};
   P.musicCompositionMoves=Object.freeze({moves,description,intervals,round,pc});
 })(KIT.procedural);

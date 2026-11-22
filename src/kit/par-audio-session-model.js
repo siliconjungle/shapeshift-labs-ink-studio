@@ -122,6 +122,7 @@
           (source.track===undefined || id(source.track));
         const valid=shared || fields(source,['asset','at','fromSample','toSample']) && id(source.asset) ||
           fields(source,['editorial','track','at']) && record(source.editorial) && (source.track===undefined || id(source.track)) ||
+          fields(source,['kit','performance','at']) && record(source.kit) && record(source.performance) ||
           fields(source,['motif','at']) && fields(source.motif,['source','score','plan','role']) &&
             id(source.motif.source) && id(source.motif.score) && record(source.motif.plan) &&
             ['raw','lead','accent','texture'].includes(source.motif.role);
@@ -286,6 +287,21 @@
         next.pins ??= {};
         if (row.mode===null) delete next.pins[row.lane];
         else next.pins[row.lane]=row.mode;
+      } else if (row?.op==='revise-score') {
+        check(fields(row,['op','revision']) && record(row.revision) && row.revision.unpin===undefined,
+          'Supply a production revision that respects session pins');
+        next.production=clone(A.revise(next.production,row.revision,instruments(assets,next.production,row.revision)));
+      } else if (row?.op==='audio-select') {
+        const lane=get(next.audio ?? {},row.lane);
+        check(fields(row,['op','lane','take']) && id(row.lane) && id(row.take) && lane && get(lane.takes,row.take) &&
+          (plan.pins[row.lane]!=='all' || lane.take===row.take),'Choose an existing take on an editable audio lane');
+        lane.take=row.take;
+      } else if (row?.op==='pad-events') {
+        check(fields(row,['op','lane','take','edits']) && id(row.lane) && id(row.take) &&
+          plan.pins[row.lane]!=='all','Address an editable kit take');
+        const lane=get(next.audio ?? {},row.lane), take=lane && get(lane.takes,row.take);
+        check(take?.kit,'Unknown sample kit take');
+        take.performance=M.padPattern.edit(take.performance,row.edits);
       } else if (row?.op==='score-take') {
         check(fields(row,['op','take','revision']) && id(row.take) && row.take!==reference && record(row.revision),
           'Supply a named production revision');
@@ -359,6 +375,23 @@
         const pitches=rows=>rows.map(({address,midi})=>[address,midi]).sort((a,b)=>signature(a[0]).localeCompare(signature(b[0])));
         const key=plan.pins[row.lane]==='pitch' ? pitches : rows=>rows;
         check(signature(key(before))===signature(key(after)), 'Edit changes pinned material on '+row.lane);
+      }
+      if (row.op==='revise-score') {
+        const before=plan.producers.get(reference), after=updated.producers.get(reference);
+        check(signature(Object.keys(before.score.tracks))===signature(Object.keys(after.score.tracks)) &&
+          plan.frames===updated.frames && signature(plan.map)===signature(updated.map),
+        'A session score revision must keep its tracks and clock');
+        for (const [lane,mode] of Object.entries(plan.pins)) if (Object.hasOwn(before.score.tracks,lane)) {
+          const track=before.source.tracks[lane], revised=after.source.tracks[lane];
+          const pitches=score=>addressed(score,lane).map(({address,midi,beat})=>[address,beat,midi])
+            .sort((a,b)=>signature(a[0]).localeCompare(signature(b[0])));
+          const voice=entry=>[entry.score.events[lane],entry.score.cue?.perTrack[lane],entry.score.gain,
+            entry.score.room,entry.score.cue?.roomCuts,entry.score.arrangement.score.endFade];
+          check(mode==='pitch' ? signature(pitches(before.score))===signature(pitches(after.score)) :
+            signature([track,before.source.patches[track.patch],voice(before)])===
+              signature([revised,after.source.patches[revised.patch],voice(after)]),
+          'Revision changes pinned score material on '+lane);
+        }
       }
       if (row.op==='editorial') check(plan.pins[row.lane]!=='all','Lane is pinned '+row.lane);
       if (row.op==='picture' || row.op==='world-spot') for (const lane of plan.audio.keys()) {

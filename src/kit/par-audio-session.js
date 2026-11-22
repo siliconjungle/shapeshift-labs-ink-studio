@@ -73,12 +73,18 @@
       const row=plan.audio.get(lane).takes.get(take);
       const placed=plan.placed.get(lane+'/'+take);
       if (placed) return {...placed,from:0,duration:plan.editorialClock.end};
-      let pcm, fallback=0;
+      let pcm, kitEvents, fallback=0, level=1;
       if (row.motif) {
         const {source,score,plan:saved,role}=row.motif;
         const {stem,report}=M.sampleMotif.render(saved,load(source),load(score),role);
         pcm=stem;
         fallback=Math.floor(report.firstSample*plan.rate/report.sampleRate);
+      } else if (row.kit) {
+        const take=M.padPattern.validate(row.performance);
+        const rendered=M.sampleKit.render(row.kit,assets,take.events,{...take.options,sampleRate:plan.rate,stems:false});
+        pcm=rendered.value;
+        kitEvents=rendered.report.events;
+        level=1/rendered.report.gain;
       } else if (row.editorial) {
         const {value,stems}=M.audioEditorial.render(row.editorial,assets,{stems:row.track!==undefined});
         pcm=row.track===undefined ? value : stems[row.track];
@@ -92,12 +98,12 @@
       const duration=Math.min(plan.frames-from,Math.ceil((last-first)/step));
       const reader=S.pcmReader(pcm,first,last,step);
       check(duration*reader.cost<=80e6,'Audio take exceeds its resampling budget');
-      return {from,duration,write(out,start,end) {
+      return {from,duration,kitEvents,write(out,start,end) {
         const pair=[0,0];
         for (let at=Math.max(start,from);at<Math.min(end,from+duration);at++) {
           reader.read(first+(at-from)*step,pair);
           const i=(at-start)*2;
-          out[i]=pair[0]; out[i+1]=pair[1];
+          out[i]=pair[0]*level; out[i+1]=pair[1]*level;
         }
       }};
     }
@@ -190,8 +196,10 @@
           }
           return spots.get(address).filter(({sessionRange:span})=>!span || span.fromSample<to && span.toSample>from);
         }
-        const {from:at,duration}=prepareAudio(plan,lane,take);
-        return at<to && at+duration>from ? [{source:row,sessionRange:{fromSample:at,toSample:at+duration}}] : [];
+        const {from:at,duration,kitEvents}=prepareAudio(plan,lane,take);
+        return at<to && at+duration>from ? [{source:row,sessionRange:{fromSample:at,toSample:at+duration},
+          ...(kitEvents && {kitEvents:kitEvents.filter(hit=>at+hit.at>=from && at+hit.at<to)
+            .map(hit=>({...hit,sessionSample:at+hit.at}))})}] : [];
       };
       for (const {from:begin,to,choices} of segments) {
         const from=Math.max(begin,begin+warmup-lead), at=lead+from-begin-warmup;
@@ -394,6 +402,7 @@
       return S.musicHandoff(plan,recipe,material,M.mixer.render(recipe,material,host));
     }
     const edit=(session,changes)=>edits(session,assets,changes,host);
+    const compose=S.createCompositionWorkbench({assets,compile:session=>compile(session,assets,host),edit,render});
     const accompaniment=S.createPerformanceAccompaniment({
       compile:session=>compile(session,assets,host),render:renderPlan});
     const experiments=S.createSessionExperiment({compile:session=>compile(session,assets,host),render:renderPlan,edit,assets});
@@ -429,7 +438,7 @@
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
       {assets,host,edit,trace,prepareLive,materialize});
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
-    return Object.freeze({inspect,trace,edit,render,compare,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,experiment:experiments.run,keepExperiment:experiments.keep,
+    return Object.freeze({inspect,trace,edit,render,compare,compose,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,experiment:experiments.run,keepExperiment:experiments.keep,
       open,prepareTransport,prepareLive,openPreparedTransport});
   }
   M.musicSession=Object.freeze({create});

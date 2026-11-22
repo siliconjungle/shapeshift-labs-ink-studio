@@ -39,8 +39,8 @@
     check(new Set(voices).size===voices.length,'The melody, bass and inner voice need distinct tracks');
     const tracks=Object.fromEntries(Object.entries({lead,bass,inner,percussion,pulse}).filter(([,name])=>name!==undefined));
     const kinds=brief.kinds ?? order;
-    check(Array.isArray(kinds) && integer(kinds.length,1,7) && new Set(kinds).size===kinds.length &&
-      Array.from(kinds).every(name=>Object.hasOwn(moves,name)),'Choose up to seven distinct kinds of composition move');
+    check(Array.isArray(kinds) && integer(kinds.length,1,Object.keys(moves).length) && new Set(kinds).size===kinds.length &&
+      Array.from(kinds).every(name=>Object.hasOwn(moves,name)),'Choose distinct supported kinds of composition move');
     const constraints=brief.constraints ?? {}, preferences=brief.preferences ?? {};
     check(fields(constraints,['scale','chord','dissonance','pins','ranges']) &&
       fields(preferences,['dissonance','harmonyWeight','suspensionBeats','gesture','articulation']),
@@ -69,7 +69,7 @@
     }
     const prefs={dissonance:.22,harmonyWeight:.6,suspensionBeats:.57,gesture:'lean',...preferences};
     check(finite(prefs.dissonance,0,1) && finite(prefs.harmonyWeight,0,4) && finite(prefs.suspensionBeats,.125,2) &&
-      ['pickup','lean','short'].includes(prefs.gesture) && (prefs.articulation===undefined || id(prefs.articulation)),
+      ['pickup','lean','short','breath','attack','release'].includes(prefs.gesture) && (prefs.articulation===undefined || id(prefs.articulation)),
     'Invalid dissonance target, weighting or note-gesture preferences');
     const harmonies=score.program.events.map(row=>({...row,beat:round(score.clock.sample(row.time).beat),
       tones:intervals(row,score)}));

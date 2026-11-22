@@ -624,6 +624,9 @@ const specifications = {
   'music.traceEditSession': {inputs:{source:editSession}},
   'music.inspectEditSession': {inputs:{source:editSession}},
   'music.editSession': {inputs:{source:editSession,edits:[{op:'pin',lane:'lead',mode:'pitch'}]}},
+  'music.composeInSession': {inputs:{source:accompanimentSession,brief:{moves:[
+    {id:'release',gesture:{lane:'lead',clip:'call',voice:'line',notes:[{note:'pick',play:{releaseLimit:.065}}]}}
+  ]}}},
   'music.auditionPhraseTakes': {nodes:{capture:phraseCapture},inputs:{source:link('capture'),
     settings:{lane:'lead',phrase:'opening',takes:['soft']}}},
   'music.arrangePerformance': {inputs:{source:accompanimentSession,brief:accompanimentBrief}},
@@ -653,6 +656,8 @@ const specifications = {
   'music.routeSampleKit': {nodes:{played:{op:'music.inspectProduction',inputs:{source:production}}},
     inputs:{tracks:link('played','events'),routes:{lead:{pad:'reed'}}}},
   'music.programPads': {inputs:padPattern.inputs},
+  'music.projectRhythm': {inputs:{source:{id:'call',length:1,steps:[{id:'tap',beat:.25,pad:'ring',offset:.014}]},
+    routes:{notes:{voice:{from:'ring',pitches:[{degree:1}]}},pads:{ring:{pad:'metal'}}}}},
   'music.composeSlices': {inputs:{source:{id:'slice-canon',output:'duet',slices:{
     tick:{pad:'metal',play:{sample:'hit'}}
   },patterns:{

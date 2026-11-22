@@ -1253,6 +1253,7 @@ const CMD = {
         '  music rehearsal run <timeline.json> <suite.json> --out directory   audit and audition the same recorded traces',
         '  music rehearsal regression <timeline.json> <routes.json> --out directory [--assert version]',
         '  music rehearsal keep <timeline.json> <revision.json> [trace.json] --out recipe.json   save a timeline variant',
+        '  music session compose <session.json> <brief.json> --out directory',
         '  music session audition-phrase <session.json> <settings.json> --out directory',
         '  music session arrange-performance <session.json> <brief.json> --out directory',
         '  music session performance-ballot <session.json> <brief.json> --out directory',

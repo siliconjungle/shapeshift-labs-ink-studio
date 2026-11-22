@@ -399,8 +399,11 @@
     const cropped=note.performance?.release && gateEnd<note.time+note.gate-1e-8;
     const sound=track.play.prepare(cropped ? {...note,suppressRelease:true} : note,sampleRate,nativeGate);
     const naturalEnd=Math.min(note.choke ?? Infinity,start+sound.duration);
-    const shortened=tails?.length ? Q.tailLimit(tails,note.time+note.gate,naturalEnd) : null;
-    const endTime=shortened?.stop ?? naturalEnd;
+    const {attackFade=0,releaseLimit=Infinity}=note.play ?? {};
+    const limitedEnd=Math.min(naturalEnd,start+nativeGate+releaseLimit);
+    const shortened=tails?.length ? Q.tailLimit(tails,note.time+note.gate,limitedEnd) : null;
+    const endTime=shortened?.stop ?? limitedEnd;
+    const releaseFade=limitedEnd<naturalEnd && endTime===limitedEnd ? Math.min(.02,Math.max(.004,releaseLimit*.5)) : 0;
     const last=Math.ceil(endTime*sampleRate);
     const placementGain=note.renderGain ?? 1, entryFade=note.renderFade;
     return {first,last,write(data,from,to) {
@@ -413,9 +416,11 @@
         const frame=at-first;
         const placement=entryFade ? placementGain*Math.sin(Math.PI*.5*
           clamp((at/sampleRate-entryFade.at)/entryFade.duration)) : placementGain;
-        const left=sound.signal(t,frame,0)*fade*placement;
+        const fadeIn=attackFade ? Math.sin(Math.PI*.5*clamp(t/attackFade)) : 1;
+        const fadeOut=releaseFade ? Math.sin(Math.PI*.5*clamp(remaining/releaseFade)) : 1;
+        const left=sound.signal(t,frame,0)*fade*placement*fadeIn*fadeOut;
         data[2*(at-from)]+=left;
-        data[2*(at-from)+1]+=sound.stereo ? sound.signal(t,frame,1)*fade*placement : left;
+        data[2*(at-from)+1]+=sound.stereo ? sound.signal(t,frame,1)*fade*placement*fadeIn*fadeOut : left;
       }
     }};
   }
