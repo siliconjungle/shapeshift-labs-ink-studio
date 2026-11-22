@@ -240,6 +240,7 @@ const StoryAnalysis = (() => {
         return {id, title:stage.title, reachable:reachable.distance.has(id), canReachOutcome:reachesEnding.has(id),
           ...(stage.children && {children:stage.children}),
           ...(stage.decision && {decision:stage.decision}),
+          ...(stage.beat && {beat:stage.beat}),
           ...(stage.roles && {roles:stage.roles}),
           ...(stage.objectives && {objectives:keys(stage.objectives).map(id => {
             const {title, type, optional = false} = stage.objectives[id];

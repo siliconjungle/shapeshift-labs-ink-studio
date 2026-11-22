@@ -480,6 +480,7 @@
         candidates:plan.incidentCandidates?.direction??{}}}),
       ...(plan.storyLifecycle?.feasibility && {feasibility:plan.storyLifecycle.feasibility}),
       ...(plan.storyLifecycle?.decisions && {decisions:plan.storyLifecycle.decisions}),
+      ...(plan.storyLifecycle?.beats && {beats:plan.storyLifecycle.beats}),
       ...(plan.storyReferences && {liveReferences:plan.storyReferences.definitions}),
       ...(plan.storyCommitments && {commitments:plan.storyCommitments}),
       ...(plan.storyHandoffs && {handoffs:plan.storyHandoffs}),
@@ -582,8 +583,9 @@
         ...(storyteller && {storyteller,storytellerCandidates:incidentCandidates?.direction}),
         ...(incidentCandidates && {incidentCandidatePolicies:incidentCandidates.policies,incidentCandidates:incidentCandidateState}),
         ...(storyTemplates && {storyTemplates}),
-        ...((storyTemplates||storyLifecycle?.decisions) && {storyDocuments:storyRoles.documents}),
+        ...((storyTemplates||storyLifecycle?.decisions||storyLifecycle?.beats) && {storyDocuments:storyRoles.documents}),
         ...(storyLifecycle?.decisions && {storyDecisions:storyLifecycle.decisions}),
+        ...(storyLifecycle?.beats && {storyBeats:storyLifecycle.beats}),
         ...(weatherTrackState && {weatherTrackState})});
     }
     function phaseReader(name,snapshot,staged) {

@@ -1,0 +1,60 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "low-bank-sluice",
+  "title": "Rising water at the low bank",
+  "stories": {
+    "rising-water": {
+      "kind": "incident",
+      "title": "Keep the low bank sluice working",
+      "incident": { "category": "environmental-change", "intensity": 4 },
+      "triggers": { "rise": { "event": { "kind": "river-rising" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 2, "release": "automatic", "pressure": { "danger": 1 } },
+        "cooldown": { "for": { "world": 0.2 }, "on": ["failed"] },
+        "settlement": { "outcomes": {
+          "repaired": { "release-crew": { "transfer": { "from": "stock/working-crews", "to": "stock/available-crews", "amount": 1 } } },
+          "outage": { "release-crew": { "transfer": { "from": "stock/working-crews", "to": "stock/available-crews", "amount": 1 } } }
+        } }
+      },
+      "entry": "seepage",
+      "stages": {
+        "seepage": {
+          "title": "Water starts seeping through the bank",
+          "beat": { "kind": "hint", "for": 0.3, "otherwise": "call-crew", "resolve": ["early-bracing"] },
+          "objectives": {
+            "bank-braced": { "title": "Put two braces on the bank", "type": "acquire", "optional": true,
+              "params": { "account": "stock/bracing", "amount": 2 } }
+          },
+          "next": {
+            "early-bracing": { "outcome": "secured", "requires": ["bank-braced"] },
+            "call-crew": { "stage": "repair-shift" }
+          }
+        },
+        "repair-shift": {
+          "title": "The harbor crew mobilizes to shore up the bank",
+          "beat": { "kind": "commitment", "for": 0.4, "otherwise": "lose-sluice", "resolve": ["crew-bracing"] },
+          "objectives": {
+            "braces-delivered": { "title": "Deliver the crew two braces", "type": "deliver", "optional": true,
+              "params": { "from": "stock/depot", "to": "stock/bracing", "amount": 2 } }
+          },
+          "next": {
+            "crew-bracing": { "outcome": "repaired", "requires": ["braces-delivered"] },
+            "lose-sluice": { "stage": "shutdown" }
+          }
+        },
+        "shutdown": {
+          "title": "The sluice loses power",
+          "beat": { "kind": "consequence", "for": 0.2, "otherwise": "record-outage" },
+          "next": { "record-outage": { "outcome": "outage" } }
+        }
+      },
+      "outcomes": {
+        "secured": { "title": "The bank holds and the sluice stays online" },
+        "repaired": { "title": "The crew shores up the bank and returns to the harbor" },
+        "outage": { "title": "The low bank sluice is out of service", "status": "failed" }
+      }
+    }
+  }
+}

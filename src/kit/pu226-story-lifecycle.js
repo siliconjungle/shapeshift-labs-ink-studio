@@ -36,7 +36,7 @@
         for (const child of spec.children?.open ?? []) parents.set(document.id + '/' + child, key);
       }
       entries.set(key, { info, activation, candidate, outcomes: definition.outcomes, triggers: definition.triggers,
-        stages, automatic, decisions:W.storyDecisions.compile(stages,world.dt), evidence: compileEvidence(stages, key, document.objectiveTypes),
+        stages, automatic, beats:W.storyBeats.compile(stages,world.dt), decisions:W.storyDecisions.compile(stages,world.dt), evidence: compileEvidence(stages, key, document.objectiveTypes),
         feasibility: compileFeasibility(definition.lifecycle.feasibility, key),
         liveReferences: definition.lifecycle.liveReferences,
         commitment: definition.lifecycle.commitment,
@@ -51,6 +51,8 @@
     const interventionOrder = autoOrder.filter(key=>Object.values(entries.get(key).decisions).some(policy=>policy.mode==='intervene'));
     const decisionKeys = order.filter(key=>Object.keys(entries.get(key).decisions).length);
     const decisions = decisionKeys.length?freeze(Object.fromEntries(decisionKeys.map(key=>[key,entries.get(key).decisions]))):undefined;
+    const beatOrder = order.filter(key=>Object.keys(entries.get(key).beats).length);
+    const beats = beatOrder.length?freeze(Object.fromEntries(beatOrder.map(key=>[key,entries.get(key).beats]))):undefined;
     const cleanupOrder = order.filter(key => entries.get(key).cleanup);
     const gateKeys = order.filter(key => entries.get(key).feasibility);
     const commitmentKeys = order.filter(key => entries.get(key).commitment);
@@ -290,6 +292,7 @@
         const { info } = def;
         const decision = own(def.decisions,stage)?def.decisions[stage]:undefined;
         publish('story-stage-entered', { ...info, stage, visit, reason, ...(decision&&{decision}) });
+        if (flow.current.beat) publish('story-beat-entered',{...info,stage,visit,reason,beat:def.beats[stage]});
         const ids = def.stages[stage].children?.open;
         if (ids) {
           const parent = { document: info.document, story: info.story, stage, visit, tick };
@@ -310,7 +313,7 @@
           }
         }
         const started = from === 'available' && to === 'active';
-        const flow = started && stages ? W.storyStages.initial(info.stage,tick) :
+        const flow = started && stages ? W.storyStages.initial(info.stage,tick,def.beats) :
           to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
         const deadlines = W.storyDeadlines.transition(clock, prior?.deadlines, from, to, tick);
         const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }), ...(deadline && { deadline }),
@@ -500,12 +503,26 @@
           }
         }
       }
+      for (const key of beatOrder) {
+        const def = entries.get(key), row = state[key], current = row?.flow?.current;
+        if (!current?.beat||current.enteredAt===tick||statusOf(row)!=='active'||statusOf(previous[key])!=='active') continue;
+        const {stage,visit} = current, spec = def.stages[stage];
+        const update = W.storyBeats.step(def.beats[stage],current,
+          branch=>!W.storyStages.eligibility(spec,spec.next[branch],current.objectives).rejected);
+        if (update.beat!==current.beat) save(key,{...row,flow:{...row.flow,current:{...current,beat:update.beat}}});
+        if (update.branch!==undefined) {
+          const paced = state[key];
+          const result = W.storyStages.advance('story-choose',def,paced.flow,
+            {stage,visit,branch:update.branch,reason:update.reason},tick,readChild(def),undefined,update.by);
+          progress(key,def,paced,result,emit);
+        }
+      }
       return {state:freeze(state),gates:gates&&freeze(gates)};
     }
 
     return { initial: () => freeze(Object.fromEntries(order.map(key => [key, null]))), validate, advance, checkAction,
       ...(feasibility&&{feasibility,initialFeasibility:()=>freeze(Object.fromEntries(gateKeys.map(key=>[key,null])))}),
-      ...(cleanupOrder.length && {cleanup}),...(decisions&&{decisions}) };
+      ...(cleanupOrder.length && {cleanup}),...(decisions&&{decisions}),...(beats&&{beats}) };
   }
 
   function inspect(state, at, documents) {

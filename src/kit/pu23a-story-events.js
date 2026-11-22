@@ -7,7 +7,7 @@
   const validDt = dt => Number.isFinite(dt)&&dt>0&&dt<=1;
   const storyOf = ({document,story}) => id(document)&&id(story)?document+'/'+story:null;
   const storyKinds = new Set([
-    'story-started','story-transition','story-stage-entered','story-objective-resolved','story-progress-rejected',
+    'story-started','story-transition','story-stage-entered','story-beat-entered','story-objective-resolved','story-progress-rejected',
     'story-branch-chosen','story-decision-opened','story-decision-elapsed','story-commitment-decision',
     'story-handoff-decision','story-handoff-accepted','story-settlement','story-settlement-blocked',
     'story-cooldown-started','story-candidate-queued','story-candidate-checked','story-candidate-dispatched','story-candidate-selected','story-candidate-expired','story-candidate-rejected'
@@ -63,14 +63,15 @@
     function label(value) {
       return typeof value==='string'?value.replace(/[\r\n\t]/g,' ').slice(0,80):undefined;
     }
-    const {kind,stage,branch,objective,to,outcome,decision,reason} = event;
+    const {kind,stage,branch,objective,to,outcome,decision,reason,beat} = event;
     const detail = kind==='story-transition'?label(outcome??to):
       kind==='story-branch-chosen'?label(branch):
+      kind==='story-beat-entered'?label(beat?.kind):
       kind==='story-objective-resolved'?label(objective):
       kind==='story-stage-entered'||kind==='story-decision-opened'||kind==='story-decision-elapsed'?label(stage):
       kind==='story-candidate-selected'?label(event.selection?.reason):
       kind==='story-progress-rejected'?label(reason):undefined;
-    const by = kind==='story-branch-chosen'&&label(decision?.by);
+    const by = kind==='story-branch-chosen'&&label(decision?.by??beat?.by);
     return title+(detail?' · '+detail:'')+(by?' ('+by+')':'');
   }
 

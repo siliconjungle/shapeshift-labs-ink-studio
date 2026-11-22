@@ -632,6 +632,35 @@ const StoryDocument = (() => {
     }
   }
 
+  function beatPolicy(value, stage, at, report) {
+    fields(value, at, ['kind', 'for', 'otherwise'], ['resolve']);
+    const {kind, for:seconds, otherwise, resolve = []} = value;
+    if (!safeId(kind)) invalid(at+'.kind', 'expected a beat kind ID');
+    if (!Number.isFinite(seconds) || seconds <= 0) invalid(at+'.for', 'expected positive finite seconds');
+    if (Object.hasOwn(stage,'decision')) invalid(at, 'a beat controls its own decision window');
+    if (!Array.isArray(resolve) || resolve.length > 16) invalid(at+'.resolve', 'expected up to 16 resolution branches');
+    const objectives = stage.objectives ?? {};
+    if (Object.values(objectives).some(objective => !objective.optional))
+      invalid(at, 'beat objectives must be optional at the stage level and required by individual branches');
+    if (link(otherwise,stage.next,at+'.otherwise','branch',report)) {
+      const fallback = stage.next[otherwise];
+      if (['requires','requiresFailed','requiresChoice'].some(key => Object.hasOwn(fallback,key)))
+        invalid(at+'.otherwise', 'the timeout branch must be unconditional');
+    }
+    links(resolve,stage.next,at+'.resolve','branch',report);
+    for (const id of resolve) {
+      if (id === otherwise) invalid(at+'.resolve', 'the timeout branch cannot also resolve the beat');
+      if (!Object.hasOwn(stage.next,id)) continue;
+      const target = stage.next[id], place = at+'.resolve.'+id;
+      automaticObjectives(target,objectives,place);
+      const evidence = [...(target.requires??[]),...(target.requiresFailed??[])].some(name => {
+        const objective = Object.hasOwn(objectives,name) && objectives[name];
+        return objective && (objective.evidence || objective.type && objective.type !== 'choose');
+      });
+      if (!evidence) invalid(place, 'a world resolution branch needs evidence-backed objectives');
+    }
+  }
+
   function candidatePolicy(value, at, kind) {
     if (kind!=='incident') invalid(at,'candidate queues require an incident');
     fields(value,at,['for'],['release','onExpire','selection','pressure']);
@@ -777,7 +806,8 @@ const StoryDocument = (() => {
       for (const [name, stage] of stageRows) {
         const location = `${at}.stages.${name}`;
         fields(stage, location, ['title', 'next'], ['summary', 'roles', 'refs', 'story',
-          ...(progression ? ['objectives', 'decision'] : []), ...(nesting ? ['children'] : [])]);
+          ...(progression ? ['objectives', 'decision'] : []), ...(nesting ? ['children'] : []),
+          ...(progression && story.kind==='incident' ? ['beat'] : [])]);
         labelsAndRefs(stage, location, references, report);
         if (Object.hasOwn(stage, 'roles')) links(stage.roles, roles, `${location}.roles`, 'role', report);
         if (Object.hasOwn(stage, 'story')) link(stage.story, stories, `${location}.story`, 'story', report);
@@ -840,6 +870,7 @@ const StoryDocument = (() => {
               invalid(edge+'.auto','an automatic arc branch needs a child wait or outcome condition');
           }
         }
+        if (Object.hasOwn(stage,'beat')) beatPolicy(stage.beat,stage,location+'.beat',report);
         if (mode==='intervene'&&!automatic) invalid(location+'.decision','intervene needs an automatic fallback branch');
       }
     }

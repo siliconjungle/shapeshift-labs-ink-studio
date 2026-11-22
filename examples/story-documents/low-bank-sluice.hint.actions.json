@@ -1,0 +1,5 @@
+[
+  { "tick": 4, "action": "world/transfer", "args": {
+    "from": "stock/depot", "to": "stock/bracing", "amount": 2, "mode": "exact"
+  } }
+]

@@ -1,0 +1,42 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "low-bank-sluice",
+  "seed": 6,
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "low-bank-sluice.json" }],
+  "storyteller": {
+    "active": "harbor-watch",
+    "profiles": { "harbor-watch": { "cadence": { "minInterval": 0.4 }, "challenge": { "maxIntensity": 4 } } }
+  },
+  "incidentPressure": { "commitments": 1, "limits": { "danger": 1 } },
+  "systems": {
+    "stock": { "kind": "store", "config": { "accounts": {
+      "depot": { "resource": "braces", "units": "brace", "type": "integer", "initial": 3 },
+      "bracing": { "resource": "braces", "units": "brace", "type": "integer", "initial": 0 },
+      "available-crews": { "resource": "shift", "units": "crew", "type": "integer", "initial": 1 },
+      "working-crews": { "resource": "shift", "units": "crew", "type": "integer", "initial": 0 },
+      "powered": { "resource": "sluice-service", "units": "sluice", "type": "integer", "initial": 1 },
+      "offline": { "resource": "sluice-service", "units": "sluice", "type": "integer", "initial": 0 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "river-rising" } }
+  ],
+  "eventActions": {
+    "commit-crew": {
+      "on": { "kind": "story-beat-entered", "system": "world", "where": { "path": "/beat/kind", "value": "commitment" } },
+      "limit": 1,
+      "actions": [{ "action": "world/transfer", "args": {
+        "from": "stock/available-crews", "to": "stock/working-crews", "amount": 1, "mode": "exact"
+      } }]
+    },
+    "isolate-sluice": {
+      "on": { "kind": "story-beat-entered", "system": "world", "where": { "path": "/beat/kind", "value": "consequence" } },
+      "limit": 1,
+      "actions": [{ "action": "world/transfer", "args": {
+        "from": "stock/powered", "to": "stock/offline", "amount": 1, "mode": "exact"
+      } }]
+    }
+  }
+}

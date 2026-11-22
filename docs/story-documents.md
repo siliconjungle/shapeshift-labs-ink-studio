@@ -795,6 +795,82 @@ node cli/ink-studio.js probe glass-coast.run.json --ticks 2 --field world/storyt
 node cli/ink-studio.js probe glass-coast.run.json --field world/incident-selections
 ```
 
+## Escalate an incident across beats
+
+For an incident with `lifecycle.progression` enabled, put a `beat` on
+each stage that needs an escalation window. Use stable kind IDs such
+as `hint`, `commitment`, and `consequence`. A beat can redirect to
+another stage or end the incident through a named outcome.
+
+```json
+{
+  "title": "Water starts seeping through the bank",
+  "beat": {
+    "kind": "hint",
+    "for": 0.3,
+    "otherwise": "call-crew",
+    "resolve": ["early-bracing"]
+  },
+  "objectives": {
+    "bank-braced": {
+      "title": "Put two braces on the bank",
+      "type": "acquire",
+      "optional": true,
+      "params": { "account": "stock/bracing", "amount": 2 }
+    }
+  },
+  "next": {
+    "early-bracing": { "outcome": "secured", "requires": ["bank-braced"] },
+    "call-crew": { "stage": "repair-shift" }
+  }
+}
+```
+
+The clock starts at zero on entry. Positive durations round up to
+whole active world ticks. Suspension pauses the clock and a resumed
+incident starts counting again on the following tick. Each visit has
+its own clock. On the cutoff tick, the engine considers evidence
+first and takes `otherwise` only if no resolution qualifies.
+
+List up to 16 `resolve` branches in priority order. Each needs a
+world-backed objective result, such as a state query, a delivery
+event, or a failed protection objective. Put requirements on the
+individual branches and mark objectives optional at the stage
+level. The `otherwise` branch is unconditional. Authored outcomes
+use native settlements. If one is blocked, the beat retains its
+objective receipt and retries until settlement can finish or the
+incident closes through another lifecycle rule.
+
+A beat owns its timing and reserved branches. Ordinary branches
+outside `resolve` and `otherwise` can still be selected explicitly.
+For other decision modes, use a separate stage. Story deadlines
+and live-reference rules continue to apply.
+
+The `story-beat-entered` event includes the named beat and its
+compiled window. Use event actions to react to a hint, reserve
+resources when a crew commits, or make the consequence visible
+in the world. Branch receipts show `resolution`, `timeout`, or
+`player` and preserve the elapsed ticks. Probe `world/story-beats`
+for the current window, pending resolution objectives, and the last
+closed beat. Story preview and preflight expose the authored route
+and its compiled timers.
+
+The [low bank demo](../examples/story-documents/low-bank-sluice.world.json)
+uses the storyteller queue and a pressure commitment to open the
+warning. Adding braces at the hint cutoff keeps the crew free.
+Adding them at the commitment cutoff lets the crew finish and
+return. Without delivery, a consequence event takes the sluice
+offline and the failed outcome starts a recovery cooldown.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/low-bank-sluice.world.json \
+  --ticks 13 --record low-bank.run.json
+node cli/ink-studio.js probe low-bank.run.json --ticks 6 --field world/story-beats
+node cli/ink-studio.js sim run examples/story-documents/low-bank-sluice.world.json \
+  --actions examples/story-documents/low-bank-sluice.commitment.actions.json \
+  --ticks 13 --record low-bank-repaired.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.
