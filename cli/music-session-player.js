@@ -18,7 +18,7 @@ const files=new Map([
   }).map(([route,file])=>['/'+route+'.mjs',[file+'.mjs','text/javascript; charset=utf-8']])
 ]);
 
-module.exports=function play(transport,{port,prepare,discard,editor,assets,paths,P,recordings,recipe,save}) {
+module.exports=function play(transport,{port,prepare,searchSounds,discard,editor,assets,paths,P,recordings,recipe,save}) {
   const key=randomBytes(24).toString('hex');
   const staticFiles=new Map([...files].map(([route,[file,type]])=>
     [route,{body:fs.readFileSync(path.join(__dirname,'../src/show',file)),type}]));
@@ -131,7 +131,7 @@ module.exports=function play(transport,{port,prepare,discard,editor,assets,paths
   const command=({op,...args})=>{
     switch (op) {
       case 'state': return transport.state();
-      case 'sounds': return browser.search(transport.document(),{...transport.state(),pins:transport.inspect().pins},args);
+      case 'sounds': return searchSounds(transport.document(),{...transport.state(),pins:transport.inspect().pins},args);
       case 'audition-sound': return audition(args);
       case 'keep-sound': return keepSound(args);
       case 'inspect': return transport.inspect();
