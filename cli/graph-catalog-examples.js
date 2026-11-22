@@ -94,6 +94,11 @@ const performanceBallot={op:'music.performanceBallot',inputs:{source:accompanime
   accompaniment:{bass:'bass',metal:'metal',response:accompanimentBrief.response,hook:accompanimentBrief.hook},
   arrangements:[{id:'pedal',return:'withheld',change:'Put a low pedal under the new delivery.'}]
 }}};
+const roundShow={op:'music.runListeningRound',inputs:{source:accompanimentSession,brief:{
+  id:'study',lead:'lead',context:performanceRange(0,12),call:performanceRange(0,2.5),recall:performanceRange(8,11),
+  sources:[{id:'bell',patch:{type:'fm',index:2.4}},{id:'reed',patch:{type:'subtractive'}}],
+  relationships:[{id:'plain'},{id:'lighter',revision:{tracks:{metal:{gain:-27}}}}]
+}}};
 const sessionExperiment={op:'music.experimentEditSession',inputs:{source:editSession,brief:{
   focus:{from:{beat:0},to:{beat:2}},scout:{from:{beat:0},to:{beat:1}},roles:{hook:'lead'},
   axes:{sound:[{id:'lighter',revision:{patches:{pluck:{type:'fm',index:.34}}}}]}
@@ -635,6 +640,13 @@ const specifications = {
     audio:link('listen','audio'),token:link('listen','token'),ballot:{listener:'example',
       answers:{identity:{choices:['a','c'],reason:'Both contours were equally memorable.'}}}}},
 
+  'music.runListeningRound': {inputs:roundShow.inputs},
+  'music.listeningEvidence': {inputs:{source:accompanimentSession,request:{focus:performanceRange(8,11),
+    context:performanceRange(6,12),solo:['lead'],mute:['metal'],repairs:[{id:'short',edits:[
+      {op:'note',lane:'lead',take:'reference',clip:'call',voice:'line',note:'return-a',set:{play:{releaseLimit:.08}}}
+    ]}]}}},
+  'music.recordListeningRound': {nodes:{round:roundShow},inputs:{key:link('round','key'),audio:link('round','audio'),
+    token:link('round','token'),ballot:{listener:'example',answers:{replay:{choices:['a'],reason:'The entrance leaves room for the call.'}}}}},
   'music.experimentEditSession': {inputs:sessionExperiment.inputs},
   'music.keepSessionExperiment': {nodes:{trial:sessionExperiment},inputs:{source:editSession,report:link('trial'),
     choice:{candidate:'take-001',reason:'Keep the lighter onset for this example.'}}},

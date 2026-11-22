@@ -1,11 +1,11 @@
 /* The public player gets anonymous labels and linked excerpts without the edit key. */
-module.exports=function ballotPage(test) {
+module.exports=function ballotPage(test,title='Four-way listening ballot') {
   const manifest=JSON.stringify(test).replace(/</g,'\\u003c');
   return `<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ink Studio · Four-way listening ballot</title>
+<title>Ink Studio · ${title}</title>
 <style>
 :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background:#171b20; color:#f0f0ea; }
 * { box-sizing:border-box; }
@@ -24,7 +24,7 @@ nav, .choices { display:flex; flex-wrap:wrap; gap:.7rem; }
 textarea { min-height:4rem; resize:vertical; }
 </style>
 <main>
-<h1>Four-way listening ballot</h1>
+<h1>${title}</h1>
 <p>Play at the same volume. Select one favorite or mark every take that ties. The letter labels reset for each question.</p>
 <form id="review">
 <div id="questions"></div>
@@ -50,7 +50,7 @@ for (const question of test.questions) {
   panel.append(legend,buttons,player);
   if (question.sequence.length>1) panel.append(make('p',
     'The call returns at '+(question.sequence[1].firstFrame/test.sampleRate).toFixed(2)+' s in each take.'));
-  else panel.append(make('p','Each take includes the lead-in and aftermath.'));
+  else if (question.id==='replay') panel.append(make('p','Each take includes the lead-in and aftermath.'));
   const controls=[];
   for (const label of test.labels) {
     const button=make('button','Play '+label.toUpperCase());

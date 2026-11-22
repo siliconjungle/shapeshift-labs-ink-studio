@@ -52,6 +52,54 @@
       foreground:round(foreground),pocket:round(pocket),gain:report.mixer.headroom};
   }
 
+  function integrity(result,tap,span,checks,rate) {
+    const master=result.value.samples, hook=tap ? result.taps[tap]?.samples : null;
+    const {attacks,joins,attackWindowMs,attackFloorDb,joinJump,peakLimit}=checks;
+    const frames=master.length/2, missing=[], broken=[];
+    let peak=0;
+    for (const value of master) peak=Math.max(peak,Math.abs(value));
+    if (hook) {
+      const width=Math.ceil(rate*attackWindowMs/1000), floor=10**(attackFloorDb/20);
+      for (const at of attacks) {
+        if (at<span.from || at+width>span.to) continue;
+        const first=(at-span.from)*2, end=first+2*width;
+        let strength=0;
+        for (let i=first;i<end;i++) strength=Math.max(strength,Math.abs(hook[i]));
+        if (strength<floor) missing.push({sample:at,peak:round(strength)});
+      }
+    }
+    const radius=Math.ceil(rate*.0015);
+    const jump=(frame)=>Math.max(Math.abs(master[frame*2]-master[(frame-1)*2]),
+      Math.abs(master[frame*2+1]-master[(frame-1)*2+1]));
+    for (const at of joins) {
+      const frame=at-span.from;
+      if (frame-radius<1 || frame+radius>=frames) continue;
+      let power=0;
+      for (let i=frame-radius;i<=frame+radius;i++) if (i!==frame) power+=jump(i)**2;
+      const value=jump(frame), local=Math.sqrt(power/(2*radius));
+      if (value>joinJump && value>local*8) broken.push({sample:at,jump:round(value),neighborRms:round(local)});
+    }
+    return {peak:round(peak),over:peak>peakLimit,missing,broken};
+  }
+
+  function sketch(pcm) {
+    const {samples}=pcm, stride=Math.max(2,Math.floor(samples.length/4096)&~1);
+    const values=[];
+    let sum=0;
+    for (let i=0;i<samples.length;i+=stride) {
+      const l=samples[i], r=samples[i+1];
+      values.push(l,r);
+      sum+=l*l+r*r;
+    }
+    return {values,norm:Math.sqrt(sum)};
+  }
+  function near(a,b,threshold) {
+    if (!a.norm || !b.norm || a.values.length!==b.values.length) return false;
+    let cross=0;
+    for (let i=0;i<a.values.length;i++) cross+=a.values[i]*b.values[i];
+    return cross/(a.norm*b.norm)>=1-threshold**2/2;
+  }
+
   function advance(candidates,{limit,disagreement,diversity},seed) {
     const tie=row=>P.musicInstruments.hash([seed,row.id])>>>0;
     const by=(rank)=>[...candidates].sort((a,b)=>b.metrics[rank]-a.metrics[rank] || tie(a)-tie(b) || a.id.localeCompare(b.id));
@@ -113,5 +161,5 @@
     }
     return [...kept.values()];
   }
-  P.mediaGraphSupport.sessionExperimentEvidence=Object.freeze({measure,advance});
+  P.mediaGraphSupport.sessionExperimentEvidence=Object.freeze({measure,advance,integrity,sketch,near});
 })(KIT.procedural);

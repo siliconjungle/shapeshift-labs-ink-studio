@@ -32,7 +32,7 @@
         check(audio.channels<=2 && integer(audio.sampleRate,8000,rateLimit) &&
           frames>=audio.sampleRate*.15 && frames<=audio.sampleRate*15 &&
           integer(firstSample,0,Number.MAX_SAFE_INTEGER-frames),'Listener clips need .15 to 15 seconds of mono or stereo PCM');
-        chosen.set(name,{audio,frames,firstSample,hash:R.audioHash(audio.samples)});
+        chosen.set(name,{audio,frames,firstSample,hash:R.audioHash(audio.samples),excerptHash:R.excerptHash(audio.samples)});
       }
       return chosen.get(name);
     }
@@ -68,14 +68,16 @@
           for (let k=0;k<audio.samples.length;k++) samples[at*channels+k]=audio.samples[k]*gain;
           halves[label]={firstSample:at,endSample:at+width};
         }
-        const publicRow={id:name,criterion:row.criterion,question:row.question,sampleRate,halves};
+        const publicRow={id:name,criterion:row.criterion,question:row.question,sampleRate,halves,
+          audioHash:R.excerptHash(samples)};
         trials.push(publicRow);
         audio[name]={sampleRate,channels,samples};
         return {id:name,order,control:i===2 ? 'identical' : i===1 ? 'swapped' : 'forward',
           origins:order.map(side=>pair[side].firstSample)};
       });
       cases.push({id:row.id,kind:row.kind,criterion:row.criterion,expected:expect(row),votes:row.votes ?? [],
-        clips:{left:row.left,right:row.right},hashes:Object.values(pair).map(row=>row.hash),records});
+        clips:{left:row.left,right:row.right},hashes:Object.values(pair).map(row=>row.hash),
+        excerptHashes:Object.values(pair).map(row=>row.excerptHash),sampleRate,channels,records});
     }
     // Interleave controls and orientations so adjacent trial IDs are not clues.
     trials.sort((a,b)=>(hash([settings.seed ?? 0,'mix',a.id])>>>0)-(hash([settings.seed ?? 0,'mix',b.id])>>>0) ||
@@ -91,7 +93,7 @@
       Array.isArray(key.trials) && integer(key.trials.length,3,96) && Array.isArray(key.cases) &&
       integer(key.cases.length,1,32) && Array.isArray(input.responses) && input.responses.length<=key.trials.length &&
       new Set(input.responses.map(row=>row?.trial)).size===input.responses.length &&
-      fields(settings,['minLabeled']) && integer(settings.minLabeled ?? 5,2,32),'Open a paired listener key and unique responses');
+      fields(settings,['minLabeled','humanVotes']) && integer(settings.minLabeled ?? 5,2,32),'Open a paired listener key and unique responses');
     const {token,...body}=key;
     check(token==='listener-'+hash(JSON.stringify(body)).toString(36),'Listener key contents do not match the batch token');
     const trials=new Map(key.trials.map(row=>[row.id,row]));
@@ -100,12 +102,18 @@
       (row.raw===undefined || typeof row.raw==='string' && row.raw.length<=6000) &&
       (row.evidence===undefined || Array.isArray(row.evidence) && row.evidence.length<=8)),
     'Invalid listener response');
+    const votes=settings.humanVotes ?? {}, known=new Set(key.cases.filter(row=>row.kind==='preference').map(row=>row.id));
+    check(record(votes) && Object.entries(votes).every(([id,rows])=>known.has(id) && Array.isArray(rows) &&
+      integer(rows.length,1,512) && Array.from(rows).every(label=>sides.includes(label))),
+    'Human labels must name preference cases and choose left, right or tie');
     const replies=new Map(input.responses.map(row=>[row.trial,row]));
     const aggregate=new Map(), minLabeled=settings.minLabeled ?? 5;
     const ratio=(top,bottom)=>bottom ? round(top/bottom) : null;
-    const cases=key.cases.map(row=>{
+    const cases=key.cases.map(item=>{
+      const added=votes[item.id] ?? [], combined=[...item.votes,...added];
+      const row={...item,votes:combined,expected:expect({...item,votes:combined})};
       const group=aggregate.get(row.criterion) ?? {criterion:row.criterion,labeled:0,humanLabeled:0,unlabeled:0,
-        completed:0,covered:0,correct:0,knownCorrect:0,humanCorrect:0,orderPairs:0,orderStable:0,controlCount:0,controlTies:0,
+        completed:0,covered:0,correct:0,knownCorrect:0,humanCovered:0,humanCorrect:0,orderPairs:0,orderStable:0,controlCount:0,controlTies:0,
         falsePreferences:0,responses:0,abstained:0,missing:0,addressed:0,rejectedAddresses:0};
       aggregate.set(row.criterion,group);
       if (row.expected) group.labeled++;
@@ -151,7 +159,10 @@
       if (covered) {group.orderPairs++;if (orderStable) group.orderStable++;}
       const correct=row.expected!==null && orderStable && first.preference===row.expected;
       if (row.expected && first.choice!=='missing' && swapped.choice!=='missing') group.completed++;
-      if (row.expected && covered) group.covered++;
+      if (row.expected && covered) {
+        group.covered++;
+        if (row.kind==='preference') group.humanCovered++;
+      }
       if (correct) {
         group.correct++;
         if (row.kind==='known') group.knownCorrect++;
@@ -165,7 +176,9 @@
       const order=ratio(row.orderStable,row.orderPairs), ties=ratio(row.controlTies,row.controlCount);
       const status=row.completed<minLabeled || row.controlCount<minLabeled ?
         'insufficient' : accuracy>=.8 && coverage>=.75 && order>=.8 && ties>=.8 ? 'passed' : 'failed';
-      return {...row,accuracy,coverage,orderConsistency:order,identityTieRate:ties,status};
+      return {...row,accuracy,coverage,humanAccuracy:ratio(row.humanCorrect,row.humanLabeled),
+        humanCoverage:ratio(row.humanCovered,row.humanLabeled),
+        humanAgreementWhenAnswered:ratio(row.humanCorrect,row.humanCovered),orderConsistency:order,identityTieRate:ties,status};
     });
     return P.data.freeze({format:'ink-studio/listener-evaluation',version:1,id:key.id,token,model:input.model,
       minLabeled,criteria,cases});

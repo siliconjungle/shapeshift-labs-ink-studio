@@ -406,6 +406,8 @@
     const accompaniment=S.createPerformanceAccompaniment({
       compile:session=>compile(session,assets,host),render:renderPlan});
     const experiments=S.createSessionExperiment({compile:session=>compile(session,assets,host),render:renderPlan,edit,assets});
+    const listeningRound=S.createListeningRound({assets,compile:session=>compile(session,assets,host),experiments});
+    const listeningEvidence=S.createListeningEvidence({assets,compile:session=>compile(session,assets,host),render:renderPlan,edit});
     const performanceBallot=S.createPerformanceBallot({compile:session=>compile(session,assets,host),
       edit,experiments,accompaniment});
     function prepareTransport(session,mode='buffered') {
@@ -438,7 +440,8 @@
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
       {assets,host,edit,trace,prepareLive,materialize});
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
-    return Object.freeze({inspect,trace,edit,render,compare,compose,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,experiment:experiments.run,keepExperiment:experiments.keep,
+    return Object.freeze({inspect,trace,edit,render,compare,compose,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,listeningRound,
+      listeningEvidence:listeningEvidence.listen,keepListeningRepair:listeningEvidence.keep,experiment:experiments.run,keepExperiment:experiments.keep,
       open,prepareTransport,prepareLive,openPreparedTransport});
   }
   M.musicSession=Object.freeze({create});

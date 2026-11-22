@@ -75,7 +75,7 @@
     for (const axis of levels) {
       if (!Object.hasOwn(brief.axes,axis)) continue;
       const variants=brief.axes[axis];
-      check(Array.isArray(variants) && integer(variants.length,1,24) &&
+      check(Array.isArray(variants) && integer(variants.length,1,64) &&
         new Set(variants.map(row=>row?.id)).size===variants.length &&
         Array.from(variants).every(row=>fields(row,['id','label','family','revision','edits']) && id(row.id) &&
           id(row.family ?? row.id) && text(row.label ?? row.id,120) &&
@@ -98,9 +98,24 @@
     const screen={floorDb:-75,allowNormalization:false,...brief.screen};
     check(fields(brief.targets ?? {},['hookDb','contrastDb','kickBass','levelDb']) &&
       finite(targets.hookDb,-36,36) && finite(targets.contrastDb,0,50) && finite(targets.kickBass,0,1) &&
-      finite(targets.levelDb,-64,0) && fields(brief.screen ?? {},['floorDb','allowNormalization']) &&
+      finite(targets.levelDb,-64,0) && fields(brief.screen ?? {},['floorDb','allowNormalization','integrity']) &&
       finite(screen.floorDb,-120,-18) && typeof screen.allowNormalization==='boolean','Invalid experiment acoustic targets or screen');
-    return {focus,scout,context,matrix,roles,sentinels,targets,screen,advance:{limit,disagreement,diversity}};
+    let checks;
+    if (screen.integrity!==undefined) {
+      const raw=screen.integrity;
+      check(fields(raw,['attackWindowMs','attackFloorDb','joinJump','joins','nearDistance','peakLimit']),
+        'Choose bounded integrity checks');
+      const {attackWindowMs=110,attackFloorDb=-57,joinJump=.11,joins=[],nearDistance=.007,peakLimit=1}=raw;
+      check(finite(attackWindowMs,10,450) && finite(attackFloorDb,-100,-25) &&
+        finite(joinJump,.01,1) && finite(nearDistance,.0001,.08) && finite(peakLimit,.1,1) &&
+        Array.isArray(joins) && joins.length<=128,'Invalid experiment integrity thresholds');
+      const hook=roles.hook && !base.audio.has(roles.hook) ? roles.hook : null;
+      const attacks=hook ? [...new Set(protectedLane(base,hook,context,'onsets').map(row=>Math.ceil(row[1]*base.rate-1e-7)))].sort((a,b)=>a-b) : [];
+      checks={attackWindowMs,attackFloorDb,joinJump,nearDistance,peakLimit,attacks,
+        joins:joins.map(at=>base.at(at))};
+      check(checks.joins.every(at=>integer(at,0,base.frames-1)),'An expected join is outside the session');
+    }
+    return {focus,scout,context,matrix,roles,sentinels,targets,screen,checks,advance:{limit,disagreement,diversity}};
   }
 
   S.createSessionExperiment=({compile,render,edit,assets})=>{
@@ -133,7 +148,8 @@
     function audition(source,brief,options={},fork) {
       check(fields(options,['onScout']) && (options.onScout===undefined || typeof options.onScout==='function'),
         'Invalid experiment output callback');
-      const base=compile(source), model=setup(base,brief,fork?.lockHook), {scout,focus,context,roles,matrix,sentinels,targets,screen}=model;
+      const base=compile(source), model=setup(base,brief,fork?.lockHook);
+      const {scout,focus,context,roles,matrix,sentinels,targets,screen,checks}=model;
       const taps={...base.mixer.taps}, probe={};
       for (const [kind,lane] of Object.entries(roles)) {
         let name=Object.keys(taps).find(key=>taps[key].strip===lane && (taps[key].tap ?? 'post')==='post');
@@ -148,6 +164,11 @@
       const hear=(plan,span)=>render({...plan,mixer:{...plan.mixer,taps,
         ...(!screen.allowNormalization && {peakPolicy:'error'})}},at(span));
       const metric=result=>E.measure(result,probe,targets);
+      const validate=(result,plan,span)=>checks && E.integrity(result,probe.hook,span,{...checks,
+        joins:[...new Set([...checks.joins,...plan.choices.flatMap(({from,to})=>[from,to])])]},plan.rate);
+      const invalid=measured=>measured && (measured.over || measured.missing.length || measured.broken.length);
+      const reason=measured=>measured.over ? 'Peak exceeds the screening limit' : measured.missing.length ?
+        'An expected hook attack has insufficient energy' : 'An expected join has an isolated sample jump';
       const spans=result=>{
         const a=focus.from-context.from,b=focus.to-context.from;
         return {whole:metric(result),focus:E.measure(result,probe,targets,a,b),
@@ -160,13 +181,21 @@
         result.value.samples.length,metrics.rmsDb,metrics.peakDb,metrics.gain]);
       const exact=new Map([[serial(source),'reference']]), fingerprints=new Map([
         [fingerprintOf(baseScout,baseline),'reference']]);
-      const candidates=[], eligible=[], sessions={};
+      const candidates=[], eligible=[], sessions={}, scoutShapes=[];
+      const matchShape=(pool,audio,id)=>{
+        if (!checks) return undefined;
+        const shape=E.sketch(audio);
+        const match=pool.find(row=>E.near(shape,row.shape,checks.nearDistance));
+        if (!match) pool.push({id,shape});
+        return match?.id;
+      };
+      matchShape(scoutShapes,baseScout.value,'reference');
       const forks=new Map();
       function branch(variants) {
         if (!fork) return apply(source,variants);
-        const name=variants[0].id;
-        if (!forks.has(name)) forks.set(name,fork.build(name));
-        return forks.get(name);
+        const key=serial(variants.map(row=>row.id));
+        if (!forks.has(key)) forks.set(key,fork.build(variants[0].id,variants));
+        return forks.get(key);
       }
       let renders=0;
       for (const [index,variants] of matrix.entries()) {
@@ -186,18 +215,26 @@
           exact.set(spec,id);
           row.metrics=metric(audible);
           row.renderPath=audible.report.renderPath;
-          if (row.metrics.rmsDb<screen.floorDb || roles.hook && row.metrics.hookToBedDb===null ||
+          const measured=validate(audible,plan,scout);
+          if (measured) row.integrity=measured;
+          if (invalid(measured)) {
+            row.status='rejected';
+            row.reason=reason(measured);
+          } else if (row.metrics.rmsDb<screen.floorDb || roles.hook && row.metrics.hookToBedDb===null ||
             !screen.allowNormalization && row.metrics.gain<1) {
             row.status='rejected';
             row.reason=row.metrics.rmsDb<screen.floorDb ? 'Below the scout floor' : roles.hook && row.metrics.hookToBedDb===null ?
               'Hook is silent in scout' : 'Scout needed peak normalization';
           } else {
             const fingerprint=fingerprintOf(audible,row.metrics), match=fingerprints.get(fingerprint);
-            if (match) row.scoutTwinOf=match;
-            else fingerprints.set(fingerprint,id);
+            const near=matchShape(scoutShapes,audible.value,id);
+            if (match || near) row.scoutTwinOf=match ?? near;
+            if (near && !match) row.scoutNearOf=near;
+            if (!match) fingerprints.set(fingerprint,id);
             row.status='scouted';
-            row.fingerprint=fingerprint;
-            eligible.push(row);
+            row.fingerprint=near ? 'near/'+near : checks ? 'near/'+id : fingerprint;
+            if (checks && row.scoutTwinOf==='reference' && !row.axes.cue) row.status='duplicate';
+            else eligible.push(row);
           }
         } catch (error) {
           Object.assign(row,{status:'rejected',reason:error.message});
@@ -208,7 +245,8 @@
       const shortlist=E.advance(eligible,model.advance,brief.seed ?? 0);
       const listening=audio=>({audio:audio.value,headroom:audio.report.mixer.headroom});
       const heard=new Map([['reference',listening(referenceContext)]]), baselineContext=spans(referenceContext);
-      const fullFingerprints=new Map([[fingerprintOf(referenceContext,baselineContext.whole),'reference']]);
+      const fullFingerprints=new Map([[fingerprintOf(referenceContext,baselineContext.whole),'reference']]), fullShapes=[];
+      matchShape(fullShapes,referenceContext.value,'reference');
       let contextRenders=0;
       for (const row of shortlist) {
         const candidate=candidates.find(entry=>entry.id===row.id);
@@ -218,8 +256,14 @@
           const audio=hear(plan,context);
           contextRenders++;
           row.metrics=spans(audio);
-          const signature=fingerprintOf(audio,row.metrics.whole), twin=fullFingerprints.get(signature);
-          if (!screen.allowNormalization && row.metrics.whole.gain<1) {
+          const measured=validate(audio,plan,context);
+          if (measured) row.integrity=measured;
+          const signature=fingerprintOf(audio,row.metrics.whole);
+          const twin=fullFingerprints.get(signature) ?? (!invalid(measured) && matchShape(fullShapes,audio.value,row.id));
+          if (invalid(measured)) {
+            row.status='rejected';
+            row.error=reason(measured);
+          } else if (!screen.allowNormalization && row.metrics.whole.gain<1) {
             row.status='rejected';
             row.error='Context needed peak normalization';
           } else if (twin) {
@@ -245,7 +289,8 @@
       }));
       const value=freeze({format,version:1,id:brief.id ?? 'experiment',brief:clone(brief),scope:signature(source,brief),
         sampleRate:base.rate,ranges:{focus,scout,context},attempted:matrix.length,scoutRenders:renders,
-        contextRenders,contextHeard:heard.size-1,gain,baseline:{scout:baseline,context:baselineContext},candidates,shortlist});
+        contextRenders,contextHeard:heard.size-1,gain,baseline:{scout:baseline,context:baselineContext,
+          ...(checks && {integrity:validate(baseScout,base,scout)})},candidates,shortlist});
       return {value,clips,...(fork && {sessions})};
     }
 
@@ -262,7 +307,7 @@
       return {value:freeze(clone(session)),decision:freeze({experiment:report.id,candidate:choice.candidate,reason:choice.reason,
         axes:Object.fromEntries(matrix[index].map(row=>[row.axis,row.id])),scope:report.scope})};
     }
-    return {run:(source,brief,options)=>audition(source,brief,options),keep,
+    return {run:(source,brief,options)=>audition(source,brief,options),keep,apply,
       sweep:(source,brief,fork)=>audition(source,brief,{},fork)};
   };
 })(KIT.procedural);

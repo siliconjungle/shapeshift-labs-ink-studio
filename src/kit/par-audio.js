@@ -329,6 +329,28 @@
       inputs:{key:'record',ballot:'record',audio:'record',token:{type:'string',default:''}},outputs:{value:'record'},
       run({key,ballot,audio,token}) {return {value:A.performanceBallot.archive(key,{token,...ballot},audio)};}
     },
+    'music.runListeningRound': {
+      description:'Scout instrument builds on one performance, cross the finalists with ensemble choices, and publish a blind listening ballot.',
+      inputs:{source:'record',brief:'record',assets:sessionAssets},
+      outputs:{value:'record',sessions:'record',clips:'record',test:'record',key:'record',audio:'record',token:'string'},
+      run({source,brief,assets},{host}) {
+        const {value,sessions,clips,ballot}=A.musicSession.create(assets,host).listeningRound(source,brief);
+        return {value,sessions,clips,test:ballot?.test ?? {},key:ballot?.key ?? {},audio:ballot?.audio ?? {},token:ballot?.test.token ?? ''};
+      }
+    },
+    'music.listeningEvidence': {
+      description:'Hear a lead-in, a rendered solo, a true source mute and a specific repair through the original session desk.',
+      inputs:{source:'record',request:'record',assets:sessionAssets},outputs:{value:'record',clips:'record',reference:'audio'},
+      run({source,request,assets},{host}) {
+        const result=A.musicSession.create(assets,host).listeningEvidence(source,request);
+        return {...result,reference:result.clips.reference};
+      }
+    },
+    'music.recordListeningRound': {
+      description:'Verify blind excerpts and preserve a listener’s exact choices, ties, and reasons.',
+      inputs:{key:'record',ballot:'record',audio:'record',token:'string'},outputs:{value:'record'},
+      run({key,ballot,audio,token}) {return {value:A.listeningRound.archive(key,{...ballot,token},audio)};}
+    },
     'music.experimentEditSession': {
       description:'Scout a matrix of sound, phrase and cue edits through a shared session and hear diverse finalists in context.',
       inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{value:'record',clips:'record'},

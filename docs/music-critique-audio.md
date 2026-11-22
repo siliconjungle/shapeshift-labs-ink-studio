@@ -228,3 +228,9 @@ Audition decisions remain explicit edits. JavaScript exposes
 `critique.listener.pack` and `critique.listener.evaluate`. The graph
 equivalents are `music.packListenerCalibration` and
 `music.evaluateListenerCalibration`.
+
+Use [Listening rounds](music-listening-rounds.md) to collect human choices
+against the exact same excerpts and import them later with
+`listener-score --ballots history`. The calibration token keeps the original
+trial audio and order. The report tracks agreement and coverage on imported
+human labels separately.

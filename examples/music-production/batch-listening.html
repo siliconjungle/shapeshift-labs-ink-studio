@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breakwater · Ink Studio Listening Round</title>
+<style>
+:root{color-scheme:dark;background:#10181c;color:#efe8d9;font:16px/1.55 system-ui,sans-serif;--line:#42555a;--key:#a8dfc4;--soft:#c2d1ce}
+*{box-sizing:border-box}body{max-width:900px;margin:auto;padding:35px 20px 52px}
+header{border-bottom:1px solid var(--line);padding-bottom:15px}
+h1{font-size:clamp(44px,12vw,90px);line-height:1;margin:6px 0 12px;letter-spacing:-.06em}
+h2{font-size:1.11rem;margin:0 0 8px}p{max-width:66ch;margin:0 0 10px}header>p:first-child{color:var(--key);font-size:14px}
+main{display:grid;gap:14px;margin-top:15px}.panel{border:1px solid var(--line);background:#182629;padding:15px}a{color:var(--key)}
+.row{display:flex;flex-wrap:wrap;gap:8px}button,a.primary{font:inherit;color:inherit;background:#203335;border:1px solid #637f81;border-radius:4px;padding:6px 11px;cursor:pointer}
+a.primary,button[aria-pressed=true]{background:var(--key);color:#122924;font-weight:700;text-decoration:none}
+audio{width:100%;display:block;margin:10px 0}.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin:0;gap:7px}
+.readouts div{border:1px solid var(--line);padding:8px 10px}dt{color:var(--soft);font-size:.85rem}dd{margin:0;font:26px/1.2 ui-monospace,monospace}
+#what{margin-top:8px;color:var(--soft)}small{color:var(--soft)}
+</style>
+</head>
+<body>
+<header>
+<p>Ink Studio · Listening round</p><h1>Breakwater</h1>
+<p>A hollow call returns over bass and struck metal. Compare what happens when the instrument changes, then when the players change how they meet.</p>
+</header>
+<main>
+<section class="panel">
+<h2>Listen blind</h2>
+<p>Pick the call you remember, the pocket that feels right, and the return you want to hear again. Ties are welcome.</p>
+<a class="primary" href="round/public/index.html">Open the blind ballot</a>
+</section>
+<section class="panel">
+<h2>From first pass to full context</h2>
+<dl class="readouts">
+<div><dt>Instrument builds</dt><dd id="instruments"></dd></div>
+<div><dt>Builds advanced</dt><dd id="advanced"></dd></div>
+<div><dt>Ensemble crosses</dt><dd id="crosses"></dd></div>
+<div><dt>Heard in context</dt><dd id="heard"></dd></div>
+<div><dt>Checks disagreed</dt><dd id="disagreement"></dd></div>
+</dl>
+</section>
+<section class="panel">
+<h2>Hear the cause of a mix change</h2>
+<div class="row">
+<button data-view="reference">In context</button>
+<button data-view="lead-in">Lead-in</button>
+<button data-view="solo-0">Solo the call</button>
+<button data-view="solo-1">Solo the keys</button>
+<button data-view="mute-0">Mute the keys</button>
+<button data-view="duck-keys">Repair at the pickup</button>
+<button data-view="late-ride">Repair a beat later</button>
+</div>
+<audio id="audio" controls preload="metadata" src="evidence/reference.wav"></audio>
+<p id="what">This mix includes the approach to the return.</p>
+</section>
+<section class="panel">
+<h2>Inspect the round</h2>
+<p>The calibration includes swapped orders, identical controls and deliberately rough sounds. Model scores and human ballots have their own evidence.</p>
+<div class="row">
+<a href="calibration/public/manifest.json">Calibration pack</a>
+<a href="model-report.json" data-model hidden>Model score</a>
+<a href="model-responses.json" data-model hidden>Raw answers</a>
+<a href="round/report.json">Screening report</a>
+<a href="evidence/report.json">Audition evidence and edits</a>
+<a href="evidence/session.json">Editable session</a>
+</div>
+</section>
+</main>
+<script type="application/json" id="review">__REVIEW__</script>
+<script>
+const review=JSON.parse(document.querySelector('#review').textContent);
+for (const [key,count] of Object.entries(review.counts)) document.getElementById(key).textContent=count;
+if (review.model) for (const link of document.querySelectorAll('[data-model]')) link.hidden=false;
+const descriptions={
+  reference:'This mix includes the approach to the return.',
+  'lead-in':'Hear what the listener heard before the focus.',
+  'solo-0':'Only the rendered lead tap, at its place in the focus.',
+  'solo-1':'Only the rendered keys tap, at its place in the focus.',
+  'mute-0':'The keys are removed at the source, including their pre-fader compressor key.',
+  'duck-keys':'An editable fader move lowers the keys during the pickup. Their pre-fader key stays active.',
+  'late-ride':'The keys fader move starts one beat later.'
+};
+const audio=document.getElementById('audio'), buttons=[...document.querySelectorAll('[data-view]')];
+const views=new Map(review.views.map(row=>[row.id,row]));
+let selected='reference', pending=null;
+function show() {
+  for (const button of buttons) button.setAttribute('aria-pressed',String(button.dataset.view===selected));
+  document.getElementById('what').textContent=descriptions[selected];
+}
+for (const button of buttons) button.addEventListener('click',()=>{
+  const next=button.dataset.view;
+  if (selected===next) return;
+  const before=views.get(selected), after=views.get(next);
+  const absolute=pending?.absolute ?? before.range.from/review.rate+(audio.ended ? 0 : audio.currentTime);
+  pending={absolute,playing:pending?.playing ?? !audio.paused};
+  pending.time=Math.max(0,absolute-after.range.from/review.rate);
+  selected=next;
+  audio.src='evidence/'+review.files[next];
+  show();
+});
+audio.addEventListener('loadedmetadata',()=>{
+  if (!pending) return;
+  const {time,playing}=pending;
+  pending=null;
+  audio.currentTime=time<audio.duration ? time : 0;
+  if (playing) audio.play().catch(()=>{});
+});
+show();
+</script>
+</body>
+</html>

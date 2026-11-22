@@ -4,13 +4,18 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.procedural,{fields,check}=P.musicInstruments;
+  if (['record-round','keep-round'].includes(mode)) {
+    const result=require('./music-session-listening').vote(mode,file,config,opt.out,P);
+    process.stdout.write(JSON.stringify(result)+'\n');
+    return result;
+  }
   if (mode==='record-ballot') {
     const result=require('./music-session-ballot.js').archive(file,config,opt.out,P);
     process.stdout.write(JSON.stringify(result)+'\n');
     return result;
   }
-  check(file && ['inspect','trace','edit','render','preview','compare','compose','audition-phrase','arrange-performance','performance-ballot','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, trace, edit, render, preview, compare, compose, audition-phrase, arrange-performance, performance-ballot, record-ballot, experiment, keep-experiment, stream, play or handoff');
+  check(file && ['inspect','trace','edit','render','preview','compare','compose','audition-phrase','arrange-performance','performance-ballot','listening-round','listening-evidence','keep-listening-repair','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, trace, edit, render, preview, compare, compose, audition-phrase, arrange-performance, performance-ballot, record-ballot, listening-round, listening-evidence, keep-listening-repair, record-round, keep-round, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -127,6 +132,12 @@ module.exports=function command([mode,file,config],opt,kit) {
       case 'performance-ballot':
         check(typeof row.out==='string','Use an output directory for the listening ballot');
         return require('./music-session-ballot.js').publish(row.out,editor.performanceBallot(session,row.brief),save);
+      case 'listening-round':
+        check(typeof row.out==='string','Use an output directory for the listening round');
+        return require('./music-session-listening').publish(row.out,editor.listeningRound(session,row.brief),save);
+      case 'listening-evidence':
+        check(typeof row.out==='string','Use an output directory for listening evidence');
+        return require('./music-session-listening').evidence(row.out,editor.listeningEvidence(session,row.settings));
       case 'experiment':
         check(typeof (row.emitScouts ?? false)==='boolean','emitScouts must be true or false');
         return experiment(row.out,row.brief,row.emitScouts);
@@ -167,6 +178,21 @@ module.exports=function command([mode,file,config],opt,kit) {
   }
   check(['inspect','trace'].includes(mode) || typeof opt.out==='string','Use --out for session edits and audio');
   const settings=config && read(config);
+  if (mode==='keep-listening-repair') {
+    check(fields(settings,['report','take','reason']) && typeof settings.report==='string' &&
+      P.musicInstruments.id(settings.take),'Choose a listening evidence report and a repair');
+    const reportPath=path.resolve(path.dirname(config),settings.report);
+    const {files,...report}=read(reportPath);
+    check(files?.[settings.take]===settings.take+'.wav','Choose a WAV from the evidence report');
+    const clip=WAV.read(path.join(path.dirname(reportPath),settings.take+'.wav'));
+    const kept=editor.keepListeningRepair(session,report,{take:settings.take,reason:settings.reason},clip);
+    const decision=path.resolve(opt.out,'decision.json'), excerpt=path.resolve(opt.out,'excerpt.wav');
+    const result={...save(path.resolve(opt.out,'session.json'),kept.value),decision,excerpt};
+    write(excerpt,WAV.encode(clip,{encoding:'pcm24'}));
+    json(decision,{...kept.decision,file:'excerpt.wav'});
+    process.stdout.write(JSON.stringify(result)+'\n');
+    return result;
+  }
   if (mode==='keep-experiment') {
     check(fields(settings,['report','candidate','reason']) && typeof settings.report==='string','Choose an experiment report and candidate');
     const report=read(path.resolve(path.dirname(config),settings.report));
@@ -188,8 +214,8 @@ module.exports=function command([mode,file,config],opt,kit) {
     return result;
   }
   const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(['preview','trace'].includes(mode) && {preview:settings}),
-    ...(mode==='audition-phrase' && {settings}),
-    ...(['compose','arrange-performance','performance-ballot'].includes(mode) && {brief:settings}),
+    ...(['audition-phrase','listening-evidence'].includes(mode) && {settings}),
+    ...(['compose','arrange-performance','performance-ballot','listening-round'].includes(mode) && {brief:settings}),
     ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});
   process.stdout.write(JSON.stringify(result)+'\n');
   return result;

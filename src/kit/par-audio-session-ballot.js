@@ -7,7 +7,7 @@
     identity:'Which call do you remember after the gap?',
     replay:'Which return would you play again?'
   };
-  const format='ink-studio/performance-ballot', keyFormat=format+'-key';
+  const format='ink-studio/performance-ballot';
   const signature=value=>{
     const text=serial(value);
     return 'ballot-'+(hash(text)>>>0).toString(36)+'-'+(hash(text,0x9e3779b9)>>>0).toString(36);
@@ -82,18 +82,20 @@
   }
 
   function blind(rows,context,questions,settings) {
-    const {rate,seed,target,ceiling,name}=settings, audio={}, manifest=[], map={};
+    const {rate,seed,target,ceiling,name,kind=format}=settings, audio={}, manifest=[], map={};
+    const options=labels.slice(0,rows.length);
     for (const {id,prompt,ranges,gap} of questions) {
       const waves=rows.map(({clip})=>waveform(clip,context,ranges,gap));
       const order=rows.map(({stage},index)=>({index,rank:hash(serial([seed,id,stage]))>>>0}))
         .sort((a,b)=>a.rank-b.rank || a.index-b.index).map(row=>row.index);
       const matched=P.adaptiveRehearsalEvidence.matched(waves,target,ceiling);
       check(matched.every(row=>row.playback.lufs!==null),'One of the four excerpts is too quiet to level match for '+id);
-      audio[id]=Object.fromEntries(labels.map((label,i)=>[label,matched[order[i]].value]));
-      map[id]=Object.fromEntries(labels.map((label,i)=>{
+      audio[id]=Object.fromEntries(options.map((label,i)=>[label,matched[order[i]].value]));
+      map[id]=Object.fromEntries(options.map((label,i)=>{
         const row=rows[order[i]], print=matched[order[i]];
         return [label,{stage:row.stage,variant:row.variant,change:row.change,
-          audioHash:R.excerptHash(print.value.samples),playback:print.playback}];
+          audioHash:R.excerptHash(print.value.samples),playback:print.playback,
+          ...(row.sessionHash && {sessionHash:row.sessionHash})}];
       }));
       const frames=matched[0].value.samples.length/2;
       const sequence=ranges.map((range,index)=>{
@@ -102,10 +104,10 @@
       });
       manifest.push({id,prompt,frames,sequence,lufs:matched[0].playback.lufs});
     }
-    const publicInfo={format,version:1,id:name,sampleRate:rate,labels:[...labels],questions:manifest};
+    const publicInfo={format:kind,version:1,id:name,sampleRate:rate,labels:options,questions:manifest};
     const token=signature([publicInfo,map]);
     const test=freeze({...publicInfo,token});
-    return {test,key:freeze({format:keyFormat,version:1,test,map}),audio};
+    return {test,key:freeze({format:kind+'-key',version:1,test,map}),audio};
   }
 
   S.createPerformanceBallot=({compile,edit,experiments,accompaniment})=>function evaluate(session,brief) {
@@ -191,39 +193,42 @@
       sampleRate:rate,ranges:{context,scout,call,recall},search:reports})};
   };
 
-  function archive(key,vote,audio) {
-    const {test,map}=key ?? {};
-    check(fields(key,['format','version','test','map']) && key.format===keyFormat && key.version===1 &&
-      test?.format===format && test.version===1 && integer(test.sampleRate,8000,96000) && id(test.id) &&
-      serial(test.labels)===serial(labels) && Array.isArray(test.questions) &&
-      serial(test.questions.map(row=>row.id))===serial(Object.keys(prompts)) &&
-      fields(map,Object.keys(prompts)) && fields(audio,Object.keys(prompts)),'Use the private key and audio from a four-way ballot');
+  function archive(key,vote,audio,settings={}) {
+    const {test,map}=key ?? {}, {kind=format,questions=Object.keys(prompts),stages=names,flexible=false}=settings;
+    const options=flexible && Array.isArray(test?.labels) ? labels.slice(0,test.labels.length) : labels;
+    check(fields(key,['format','version','test','map']) && key.format===kind+'-key' && key.version===1 &&
+      test?.format===kind && test.version===1 && integer(test.sampleRate,8000,96000) && id(test.id) &&
+      integer(options.length,2,4) && serial(test.labels)===serial(options) && Array.isArray(test.questions) &&
+      serial(test.questions.map(row=>row.id))===serial(questions) &&
+      fields(map,questions) && fields(audio,questions),'Use the private key and audio from a blind ballot');
     const {token,...publicInfo}=test;
     check(token===signature([publicInfo,map]) && fields(vote,['token','listener','answers']) && vote.token===token &&
-      id(vote.listener) && fields(vote.answers,Object.keys(prompts)) && Object.keys(vote.answers).length>0,
+      id(vote.listener) && fields(vote.answers,questions) && Object.keys(vote.answers).length>0,
     'Supply answers and a listener ID for this blind ballot');
-    for (const {id,frames} of test.questions) {
-      check(integer(frames,1,3e6) && fields(audio[id],labels) && fields(map[id],labels) &&
-        labels.every(label=>fields(map[id][label],['stage','variant','change','audioHash','playback']) &&
-          typeof map[id][label].audioHash==='string') &&
-        serial(Object.values(map[id]).map(row=>row.stage).sort())===serial(names.slice().sort()),
-      'Four excerpt labels must match the private key');
-      for (const label of labels) {
-        const clip=P.mediaGraph.audio(audio[id][label]);
+    for (const {id:question,frames} of test.questions) {
+      check(integer(frames,1,3e6) && fields(audio[question],options) && fields(map[question],options) &&
+        options.every(label=>fields(map[question][label],['stage','variant','change','audioHash','playback','sessionHash']) &&
+          id(map[question][label].stage) && typeof map[question][label].audioHash==='string' &&
+          (!flexible || typeof map[question][label].sessionHash==='string')) &&
+        serial(Object.values(map[question]).map(row=>row.stage).sort())===serial(stages.slice().sort()),
+      'Excerpt labels must match the private key');
+      for (const label of options) {
+        const clip=P.mediaGraph.audio(audio[question][label]);
         check(clip.sampleRate===test.sampleRate && clip.channels===2 && clip.samples.length===2*frames &&
-          R.excerptHash(clip.samples)===map[id][label].audioHash,'The audio no longer matches this ballot');
+          R.excerptHash(clip.samples)===map[question][label].audioHash,'The audio no longer matches this ballot');
       }
     }
     const answers=Object.fromEntries(Object.entries(vote.answers).map(([question,row])=>{
-      check(fields(row,['choices','reason']) && Array.isArray(row.choices) && integer(row.choices.length,1,4) &&
-        new Set(row.choices).size===row.choices.length && Array.from(row.choices).every(label=>labels.includes(label)) &&
+      check(fields(row,['choices','reason']) && Array.isArray(row.choices) && integer(row.choices.length,1,options.length) &&
+        new Set(row.choices).size===row.choices.length && Array.from(row.choices).every(label=>options.includes(label)) &&
         R.prose(row.reason,2000),'Choose a favorite or tied favorites and write what you heard');
       const choices=row.choices.slice().sort();
       return [question,{choices,tie:choices.length>1,reason:row.reason.trim(),
         versions:choices.map(label=>({label,...map[question][label]}))}];
     }));
-    return freeze({format:format+'-record',version:1,test:clone(test),listener:vote.listener,answers});
+    return freeze({format:kind+'-record',version:1,test:clone(test),listener:vote.listener,answers});
   }
 
-  P.mediaGraph.performanceBallot=Object.freeze({archive});
+  S.sessionListeningBallot=Object.freeze({build:blind,archive,swap,distinct,signature});
+  P.mediaGraph.performanceBallot=Object.freeze({archive:(key,vote,audio)=>archive(key,vote,audio)});
 })(KIT.procedural);

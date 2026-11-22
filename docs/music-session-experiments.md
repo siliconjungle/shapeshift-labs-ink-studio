@@ -63,7 +63,7 @@ or release.
 
 The scout defaults to the focus. Specify a shorter span to screen a brief
 window before spending time on longer context. The context defaults to
-the focus. Extend it to hear the lead-in and the aftermath. Up to 256
+the focus. Extend it to hear the lead-in and the aftermath. Up to 64 variants per axis and 256
 combinations can render, subject to the sample budget. Omit an axis to
 leave that scale fixed.
 
@@ -201,3 +201,6 @@ or `music.recordPerformanceBallot`.
 Run `node examples/music-production/performance-ballot.cjs output` to
 reproduce the Blackwater comparison. An optional second argument points
 to the earlier accompaniment demo's `source-session.json`.
+
+Use [Listening rounds](music-listening-rounds.md) to scout instruments before
+crossing ensemble relationships, publish a blind ballot, and keep exact excerpts.

@@ -46,9 +46,12 @@ async function run(file,out,opt,kit) {
       ['A','B'].every(side=>integer(trial.halves?.[side]?.firstSample,0,32e6) &&
         integer(trial.halves?.[side]?.endSample,trial.halves[side].firstSample+1,32e6)),
     'Invalid public listener trial or WAV path');
-    if (retired.has(trial.id)) continue;
     const audio=fs.realpathSync(path.join(folder,trial.id+'.wav'));
     check(path.dirname(audio)===fs.realpathSync(folder),'Listener WAV must stay in the public pack');
+    if (trial.audioHash!==undefined) check(
+      kit.KIT.procedural.musicCritiqueReferences.excerptHash(WAV.read(audio).samples)===trial.audioHash,
+      'Listener WAV has changed since this trial was packed');
+    if (retired.has(trial.id)) continue;
     const at=(side,field)=>(trial.halves[side][field]/trial.sampleRate).toFixed(3);
     const prompt=[
       `Listen to A from ${at('A','firstSample')} to ${at('A','endSample')} seconds, then B from ${at('B','firstSample')} to ${at('B','endSample')} seconds.`,
@@ -59,7 +62,7 @@ async function run(file,out,opt,kit) {
     ].join(' ');
     const response=await fetch(new URL('/v1/audio/transcriptions',endpoint),{
       method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(150000),
-      body:JSON.stringify({model,audio,prompt,options:{instruct:prompt,max_tokens:'188',do_sample:'false'}})
+      body:JSON.stringify({model,audio,audio_path:audio,prompt,options:{instruct:prompt,max_tokens:'188',do_sample:'false'}})
     });
     if (!response.ok) {
       const detail=await response.text();
@@ -73,6 +76,23 @@ async function run(file,out,opt,kit) {
   return done({responses:out,count:result.responses.length,model:modelLabel});
 }
 
+function ballots(file,check) {
+  if (!fs.statSync(file).isDirectory()) return read(file);
+  const result=[];
+  function visit(folder,depth) {
+    for (const entry of fs.readdirSync(folder,{withFileTypes:true})) {
+      const name=path.join(folder,entry.name);
+      if (entry.isDirectory() && depth<3) visit(name,depth+1);
+      else if (entry.isFile() && entry.name.endsWith('.json')) {
+        check(result.length<512,'Choose no more than 512 archived ballots');
+        result.push(read(name));
+      }
+    }
+  }
+  visit(file,0);
+  return result;
+}
+
 module.exports=function command(mode,file,config,opt,kit) {
   const K=kit.KIT, {fields,check,record,id}=K.procedural.musicInstruments, L=K.music.production.critique.listener;
   check(file && typeof opt.out==='string','Supply a listener input and --out');
@@ -80,7 +100,10 @@ module.exports=function command(mode,file,config,opt,kit) {
   if (mode==='listener-run') return run(file,out,opt,kit);
   if (mode==='listener-score') {
     check(config,'Supply the private listener key and responses');
-    const grade=L.evaluate(read(file),read(config));
+    const key=read(file);
+    const settings=opt.ballots===undefined ? {} : {humanVotes:K.procedural.mediaGraph.listeningRound.calibrationVotes(key,
+      ballots(opt.ballots,check))};
+    const grade=L.evaluate(key,read(config),settings);
     json(out,grade);
     return done({report:out,criteria:grade.criteria});
   }
