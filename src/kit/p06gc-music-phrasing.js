@@ -1,6 +1,6 @@
 /* Contextual articulation and release on a score voice's performed clock. */
 (function (P) {
-  const {fields,finite,integer,id,check,articulationNames}=P.musicInstruments;
+  const {fields,finite,integer,id,check,articulationNames,zoneFor}=P.musicInstruments;
   const round=n=>Number(n.toFixed(9)), eps=1e-7;
 
   function compile(raw,patch) {
@@ -27,7 +27,9 @@
       return {...row,...(row.curves!==undefined && {curves:P.musicNoteExpression.validate(row.curves)})};
     });
     check(rules.filter(row=>row.when==='release').length<=1,'Use one release articulation per patch');
-    return {gap,interval,fade,repeatGap,rules};
+    return {gap,interval,fade,repeatGap,rules,...(patch.type==='zoned' &&
+      patch.zones.some(zone=>zone.articulation!==undefined) && {zones:patch.zones,
+      defaultArticulation:patch.defaultArticulation})};
   }
 
   function apply(model,notes,silence,percussion) {
@@ -51,15 +53,18 @@
       const lead=rule?.attackLead ?? 0;
       const minimum=prev && !percussion ? Math.max(floor,Math.min(note.time,(prev.start ?? prev.time)+.001)) : floor;
       const start=round(Math.min(note.time,Math.max(minimum,note.time-lead)));
-      const take=articulation ?? '';
+      const velocity=Math.min(1,note.velocity*(rule?.level ?? 1));
+      const zone=model.zones && zoneFor(model.zones,note.midi,velocity,articulation ?? model.defaultArticulation);
+      const group=zone ? zone.instrument+'/'+(articulation ?? model.defaultArticulation ?? '') : null;
+      const take=group ?? articulation ?? '';
       const counter=turns.get(take) ?? 0;
       turns.set(take,counter+1);
       note.roundRobin=counter;
       if (start<note.time) note.start=start;
       note.performance={kind,interval,attackLead:round(note.time-start),requestedLead:lead,
-        ...(kind==='legato' && model.fade && {fadeIn:model.fade})};
+        ...(kind==='legato' && model.fade && {fadeIn:model.fade}),...(group && {roundRobinGroup:group})};
       if (rule) {
-        note.velocity=Math.min(1,note.velocity*(rule.level ?? 1));
+        note.velocity=velocity;
         note.play={...note.play,...(articulation && {articulation}),
           ...(note.play.glide===undefined && rule.glide!==undefined && {glide:rule.glide}),
           ...(rule.curves && {curves:{...rule.curves,...note.play.curves}})};
@@ -81,12 +86,16 @@
     }
   }
   function releases(notes) {
-    let releaseTurn=0;
+    const turns=new Map();
     for (const note of notes) {
       const row=note.performance?.release;
       if (!row) continue;
       if (note.choke!==undefined && note.choke<=note.time+note.gate+eps) delete note.performance.release;
-      else row.roundRobin=releaseTurn++;
+      else {
+        const group=note.performance.roundRobinGroup ?? '', turn=turns.get(group) ?? 0;
+        row.roundRobin=turn;
+        turns.set(group,turn+1);
+      }
     }
   }
   P.musicPhrasing=Object.freeze({compile,apply,releases});

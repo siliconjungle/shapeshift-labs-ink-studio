@@ -11,6 +11,10 @@ ink-studio music instrument audition instrument-recipe.json --out range-review
 ink-studio music instrument build instrument-recipe.json --out instrument
 ```
 
+Use [instrument recording sessions](instrument-recording-sessions.md)
+for long, aligned multi-take recordings with register, dynamics, and
+articulation coverage, fitted bodies, and captured key-up groups.
+
 ## Choose and inspect the takes
 
 The `assets` table accepts relative WAV paths and explicit WAV slices.

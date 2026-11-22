@@ -137,10 +137,10 @@
       raw.zones.length<=96,'A sampler needs a bounded list of sample zones');
     const e=envelope(raw.env ?? {attack:.002,decay:.4,sustain:1,release:.08});
     const zones=Array.from(raw.zones,zone=>{
-      check(fields(zone,['samples','levels','root','low','high','velocity','articulation','oneShot','tune','gain','loop']) &&
+      check(fields(zone,['samples','levels','root','low','high','velocity','articulation','oneShot','tune','gain','loop','loopFade']) &&
         Array.isArray(zone.samples) && zone.samples.length>=1 && zone.samples.length<=16 &&
         Array.from(zone.samples).every(name=>id(name) && Object.hasOwn(assets,name)), 'Unknown sampler zone asset');
-      const {samples,levels,root,low=0,high=127,velocity=[0,1],articulation,oneShot=true,tune=0,gain=0,loop}=zone;
+      const {samples,levels,root,low=0,high=127,velocity=[0,1],articulation,oneShot=true,tune=0,gain=0,loop,loopFade=0}=zone;
       check(integer(low,0,127) && integer(high,low,127) && Array.isArray(velocity) && velocity.length===2 &&
         finite(velocity[0],0,1) && finite(velocity[1],velocity[0],1) &&
         (articulation===undefined || id(articulation)) && typeof oneShot==='boolean' &&
@@ -148,11 +148,12 @@
         (levels===undefined || Array.isArray(levels) && levels.length===samples.length &&
           Array.from(levels).every(level=>finite(level,-24,24))) &&
         (loop===undefined || (!oneShot && Array.isArray(loop) && loop.length===2 &&
-          finite(loop[0],0,30) && finite(loop[1],loop[0]+.005,30))), 'Invalid sampler zone');
+          finite(loop[0],0,30) && finite(loop[1],loop[0]+.005,30))) &&
+        finite(loopFade,0,loop ? (loop[1]-loop[0])*.5 : 0),'Invalid sampler zone');
       const buffers=samples.map(name=>assets[name]);
       check(!loop || buffers.every(b=>loop[1]*b.sampleRate<=b.samples.length/b.channels),'Sample loop is outside the asset');
       return {buffers,levels:levels?.map(db),root:root===undefined ? null : H.midi(root),low,high,
-        velocity,articulation,oneShot,tune,gain:db(gain),loop};
+        velocity,articulation,oneShot,tune,gain:db(gain),loop,loopFade};
     });
     return {prepare(note,rate,gate) {
       const midi=note.midi, articulation=note.play.articulation;
@@ -169,21 +170,38 @@
       const span=P.musicNoteExpression.duration(travel,Math.max(0,(frames-offset)/(ratio*sampleRate)));
       const duration=zone.oneShot ? span : zone.loop ? gate+e.release : Math.min(span,gate+e.release);
       const gain=zone.gain*(zone.levels?.[alternate] ?? 1)*note.velocity**.72;
-      return {duration,stereo:channels===2,signal(t,frame,channel) {
-        let pos=offset+(travel?.(t) ?? t)*ratio*sampleRate;
-        if (zone.loop && pos>=zone.loop[1]*sampleRate)
-          pos=zone.loop[0]*sampleRate+(pos-zone.loop[0]*sampleRate)%((zone.loop[1]-zone.loop[0])*sampleRate);
-        const at=Math.floor(pos), blend=pos-at, ch=channels===1 ? 0 : channel;
+      const start=zone.loop?.[0]*sampleRate, end=zone.loop?.[1]*sampleRate, fade=zone.loopFade*sampleRate;
+      const sample=(pos,ch)=>{
+        const at=Math.floor(pos), blend=pos-at;
         if (at>=frames) return 0;
         const current=samples[at*channels+ch], next=samples[(at+1)*channels+ch] ?? 0;
+        return current+(next-current)*blend;
+      };
+      return {duration,stereo:channels===2,signal(t,frame,channel) {
+        let pos=offset+(travel?.(t) ?? t)*ratio*sampleRate;
+        if (zone.loop && pos>=end)
+          pos=fade ? start+fade+(pos-end)%(end-start-fade) : start+(pos-start)%(end-start);
+        const ch=channels===1 ? 0 : channel;
+        let value=sample(pos,ch);
+        if (fade && pos>=end-fade) {
+          const progress=pos-end+fade, mix=progress/fade;
+          value=value*(1-mix)+sample(start+progress,ch)*mix;
+        }
         const shape=zone.oneShot ? clamp(t*1100)*clamp((duration-t)*250) : level(e,t,gate);
-        return (current+(next-current)*blend)*gain*shape;
+        return value*gain*shape;
       }};
     }};
   }
 
+  function zoneFor(zones,midi,velocity,articulation) {
+    const matches=row=>midi>=row.low && midi<=row.high && velocity>=row.velocity[0] &&
+      (velocity<row.velocity[1] || row.velocity[1]===1);
+    return (articulation===undefined ? undefined : zones.find(row=>row.articulation===articulation && matches(row))) ??
+      zones.find(row=>row.articulation===undefined && matches(row));
+  }
   function zoned(raw,assets) {
-    check(fields(raw,['type','instruments','zones','fallback']) && record(raw.instruments) &&
+    check(fields(raw,['type','instruments','zones','fallback','defaultArticulation']) &&
+      (raw.defaultArticulation===undefined || id(raw.defaultArticulation)) && record(raw.instruments) &&
       integer(Object.keys(raw.instruments).length,1,16) && Array.isArray(raw.zones) &&
       integer(raw.zones.length,1,96),'A zoned patch needs named instruments and key and velocity zones');
     const players=new Map(Object.entries(raw.instruments).map(([name,child])=>{
@@ -192,21 +210,22 @@
     }));
     check(raw.fallback===undefined || players.has(raw.fallback),'Unknown fallback zone instrument');
     const zones=Array.from(raw.zones,row=>{
-      check(fields(row,['instrument','low','high','velocity','gainDb']) && players.has(row.instrument) &&
+      check(fields(row,['instrument','low','high','velocity','gainDb','articulation']) && players.has(row.instrument) &&
+        (row.articulation===undefined || id(row.articulation)) &&
         integer(row.low,0,127) && integer(row.high,row.low,127) && Array.isArray(row.velocity) &&
         row.velocity.length===2 && row.velocity.every(value=>finite(value,0,1)) &&
         row.velocity[0]<row.velocity[1] && finite(row.gainDb ?? 0,-24,12),'Invalid key or velocity zone');
       return {...row,player:players.get(row.instrument),gain:db(row.gainDb ?? 0)};
     });
     for (const [i,a] of zones.entries()) for (const b of zones.slice(i+1)) {
-      check(a.high<b.low || b.high<a.low || a.velocity[1]<=b.velocity[0] || b.velocity[1]<=a.velocity[0],
+      check(a.articulation!==b.articulation || a.high<b.low || b.high<a.low || a.velocity[1]<=b.velocity[0] || b.velocity[1]<=a.velocity[0],
         'Key and velocity zones cannot overlap');
     }
     const fallback=players.get(raw.fallback);
     return {prepare(note,rate,gate) {
       const {midi,zoneVelocity:velocity=note.velocity}=note;
-      const zone=zones.find(row=>midi>=row.low && midi<=row.high && velocity>=row.velocity[0] &&
-        (velocity<row.velocity[1] || row.velocity[1]===1));
+      const articulation=note.zoneArticulation ?? note.play.articulation ?? raw.defaultArticulation;
+      const zone=zoneFor(zones,midi,velocity,articulation);
       const player=zone?.player ?? fallback;
       if (!player) return {duration:0,signal:()=>0};
       const body=player.prepare(note,rate,gate), gain=zone?.gain ?? 1;
@@ -275,7 +294,7 @@
       const start=note.start ?? note.time;
       if (!release || note.suppressRelease || (note.choke ?? Infinity)<=start+gate+1e-8) return body;
       const tail=express(player,{...note,performance:null,gate:.075,start:undefined,roundRobin:release.roundRobin,
-        zoneVelocity:note.velocity,velocity:clamp(note.velocity*release.level),
+        zoneArticulation:note.play.articulation ?? raw.defaultArticulation,zoneVelocity:note.velocity,velocity:clamp(note.velocity*release.level),
         play:{articulation:release.articulation,curves:release.curves}},rate,.075,gate);
       if (!tail.duration) return body;
       const stereo=body.stereo || tail.stereo, releaseFrame=Math.ceil(gate*rate-1e-7);
@@ -312,11 +331,12 @@
   function articulationNames(patch) {
     const nested=patch.type==='zoned' ? Object.values(patch.instruments ?? {}).filter(child=>child && child.type!=='zoned')
       .flatMap(child=>[...articulationNames(child)]) : [];
-    return new Set([...nested,...Object.keys(patch.articulations ?? {}),
+    return new Set([...nested,...(patch.type==='zoned' ? (patch.zones ?? []).flatMap(zone=>zone.articulation ? [zone.articulation] : []) : []),
+      ...Object.keys(patch.articulations ?? {}),
       ...sampleZones(patch).flatMap(zone=>zone.articulation ? [zone.articulation] : []),
       ...(patch.type==='drum' && patch.kind==='hat' ? ['open'] : [])]);
   }
   const assetNames=patch=>sampleZones(patch).flatMap(zone=>Array.isArray(zone?.samples) ? zone.samples : []);
 
-  P.musicInstruments=Object.freeze({compile,sampler,noise,sampleZones,articulationNames,assetNames,record,fields,finite,integer,id,check,clamp,db,hz,hash,options,envelope,level,phase});
+  P.musicInstruments=Object.freeze({compile,sampler,noise,zoneFor,sampleZones,articulationNames,assetNames,record,fields,finite,integer,id,check,clamp,db,hz,hash,options,envelope,level,phase});
 })(KIT);

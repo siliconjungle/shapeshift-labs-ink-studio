@@ -161,6 +161,26 @@
       inputs:{assets:'record',source:'record'},outputs:{value:'record',assets:'record',report:'record'},
       run({assets,source}) {return A.sampleInstrument.build(assets,source);}
     },
+    'audio.analyzeInstrumentSession': {
+      description:'Propose attacks, key-up, and loops for related takes on one recording clock.',
+      inputs:{source:'record',assets:'record'},outputs:{value:'record',report:'record'},
+      run({source,assets}) {return A.instrumentSession.analyze(source,assets);}
+    },
+    'audio.buildInstrumentSession': {
+      description:'Build playable register, dynamics, and articulation zones with captured attacks and key-up samples.',
+      inputs:{source:'record',assets:'record',options},outputs:{value:'record',assets:'record',report:'record',session:'record'},
+      run({source,assets,options}) {return A.instrumentSession.build(source,assets,options);}
+    },
+    'audio.auditionInstrumentSession': {
+      description:'Play a session instrument coverage grid and report quiet probes and borrowed cells.',
+      inputs:{instrument:'record',assets:'record',options},outputs:{value:'audio',report:'record',production:'record'},
+      run({instrument,assets,options}) {return A.instrumentSession.audition(instrument,assets,options);}
+    },
+    'audio.auditionInstrumentSessionTakes': {
+      description:'Hear addressed original takes across synchronized microphone perspectives.',
+      inputs:{source:'record',assets:'record',options},outputs:{value:'audio',report:'record'},
+      run({source,assets,options}) {return A.instrumentSession.auditionTakes(source,assets,options);}
+    },
     'audio.fitInstrument': {
       description:'Fit editable oscillator, resonator and recorded-attack patches to one recording.',
       inputs:{source:'audio',options},outputs:{value:'record',assets:'record',reference:'audio',report:'record'},

@@ -40,10 +40,10 @@
         shape([]);
         break;
       case 'sample': {
-        shape(['zones','env','channel']);
-        const {zones,env,channel='mix'}=raw;
-        check(['mix','left','right'].includes(channel),'Unknown sample channel on '+name);
-        args={channel,player:I.sampler({type,zones,env},assets)};
+        shape(['zones','env','channel','startSeconds']);
+        const {zones,env,channel='mix',startSeconds=0}=raw;
+        check(['mix','left','right'].includes(channel) && finite(startSeconds,0,6),'Invalid sample channel or start on '+name);
+        args={channel,startSeconds,player:I.sampler({type,zones,env},assets)};
         break;
       }
       case 'envelope':
@@ -229,10 +229,11 @@
         process=()=>I.noise(state.frame,salt);break;
       }
       case 'sample': {
-        const sound=row.player.prepare(note,rate,gate);
+        const sound=row.player.prepare(note,rate,Math.max(0,gate-row.startSeconds));
+        const first=Math.ceil(row.startSeconds*rate-1e-7);
         process=()=>{
-          if (state.t>=sound.duration) return 0;
-          const {t,frame}=state;
+          const t=state.t-row.startSeconds, frame=state.frame-first;
+          if (frame<0 || t>=sound.duration) return 0;
           if (!sound.stereo || row.channel==='left') return sound.signal(t,frame,0);
           const right=sound.signal(t,frame,1);
           return row.channel==='right' ? right : (right+sound.signal(t,frame,0))*.5;
