@@ -92,8 +92,8 @@
     }
     function sequence(input, name, depth) {
       check(depth <= 32 && record(input) && has(input, name === null ?
-        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'cueTracks', 'clips', 'sequences'] :
-        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'cueTracks', 'clips']), 'Invalid timeline sequence ' + (name ?? '(root)'));
+        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'cueTracks', 'presentationCues', 'clips', 'sequences'] :
+        ['duration', 'tempoMap', 'tracks', 'markers', 'audio', 'events', 'cueTracks', 'presentationCues', 'clips']), 'Invalid timeline sequence ' + (name ?? '(root)'));
       const clock = name === null || input.tempoMap === undefined ? rootClock : timing.compile(input.tempoMap);
       const tracks = list(input.tracks, 'tracks').map(row => track(row, clock));
       check(new Set(tracks.map(({ target }) => JSON.stringify(target))).size === tracks.length,
@@ -107,6 +107,10 @@
         check(has(row, ['id', 'time', 'kind', 'detail']) && id(row.kind) && record(row.detail ?? {}), 'Invalid timeline world event');
         return { kind: row.kind, detail: row.detail ?? {} };
       });
+      const presentationRows = input.presentationCues===undefined?[]:
+        K.world.presentationCues.read(input.presentationCues).cues.map(({timecode,...row})=>
+          ({...row,time:exact?(timecode??row.time):row.time}));
+      const presentation = items(presentationRows, 'presentation', clock, ({id,time,...row})=>row);
       const audio = items(input.audio, 'audio', clock, row => {
         const { cue, duration: rawDuration = 0, offset: rawOffset = 0, gain = 1 } = row;
         const duration = point(rawDuration), offset = point(rawOffset);
@@ -131,7 +135,7 @@
         .map(row => exact ? row : { ...row, time: T.seconds(row.time) });
       check(cueTracks === undefined || clips.every(clip => !own(cueTracks, clip.id)),
         'Timeline clips and cue tracks need distinct names within a sequence');
-      const content = [...markers, ...audio, ...events, ...imported];
+      const content = [...markers, ...audio, ...events, ...imported, ...presentation];
       let end = tracks.reduce((end, track) => max(end, track.duration), zero);
       for (const item of [...content, ...clips]) end = max(end, add(item.time, item.duration ?? zero));
       const duration = input.duration == null ? end : point(input.duration, clock);
@@ -235,6 +239,7 @@
       audioSchedule,
       duration: seconds(graph.duration), targets: [...targets.values()], markers: points.filter(row => row.type === 'marker'),
       events: points.filter(row => row.type === 'event'), audio: sounds.map(row => row.clip),
+      presentationCues: points.filter(row => row.type === 'presentation'),
       sample(time) {
         check(timeOK(time), 'Timeline sample time must be finite and nonnegative');
         return sampleAt(read(time));

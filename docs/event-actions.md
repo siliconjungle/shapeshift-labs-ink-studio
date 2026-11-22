@@ -1,10 +1,20 @@
 # Event actions for staged sequences
 
-Use event actions to connect a scene timeline to the same commands an
-interactive host can run. A cue can start a weather change or launch a
-body. A later command can wait for a measured contact, tear, or release.
+Use event actions to connect authored timeline inputs to the same commands
+an interactive host can run. A timeline event can start a weather change
+or launch a body. A later command can wait for a measured contact, tear, or release.
 Each reaction names the event it consumed and the tick its commands are
 due, so the result can be reviewed alongside pose and simulation state.
+
+## Commands, committed results, and presentation
+
+| Record | Role |
+| --- | --- |
+| Scheduled command | An `action` and its arguments ask the world to do work at a tick. A queued transfer can succeed, apply partially, or be blocked. |
+| Committed event | A [world event envelope](simulation-checkpoints.md#committed-event-envelopes) records what the tick published. Use the transfer receipt's applied amount and status to describe what happened. |
+| Presentation cue | A cue proposes a time, label, target, and presentation details. It can reference a committed event by world, branch, and ID. Scene timelines carry these cues in `presentationCues`. |
+
+Use `eventActions` for world reactions and the [presentation cue workflow](story-documents.md#project-presentation-cues) to show recorded results. The timeline compiler keeps `presentationCues` on its presentation track. The simulation and staged event routers consume the timeline's world `events` track.
 
 ## Author a world rule
 

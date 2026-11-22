@@ -67,13 +67,9 @@ function eventCommand(file, rest, options, library) {
   const source = input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
   let value;
   if (format==='envelopes') {
-    const {events:rows,id:world,dt,from,to,coverage,dropped}=api.read(source);
     if (story!==undefined&&!(story.split('/').length===2&&story.split('/').every(schema.isStoryId)))
       throw new TypeError('Story event filter needs a document/story ID');
-    const stream=input.checkpoint?.eventStream??input.end?.eventStream??input.eventStream;
-    const events=rows.map(row=>W.committedEvents.read(row,world,stream))
-      .filter(row=>story===undefined||row.story===story);
-    value={format:'ink-studio/committed-events',version:1,world,dt,from,to,coverage,dropped,events};
+    value=api.envelopes(source,{story,stream:input?.checkpoint?.eventStream});
   } else value = format==='events'?api.read(source):format==='timeline'?api.timeline(source,{story}):api.analyze(source,{story});
   let output;
   if (format==='markdown') {
@@ -88,6 +84,28 @@ function eventCommand(file, rest, options, library) {
   } else output = JSON.stringify(value,null,2)+'\n';
   if (out!==undefined) {
     if (path.resolve(file)===path.resolve(out)) throw new TypeError('Choose an output different from the event recording');
+    write(path.resolve(out),output);
+  } else process.stdout.write(output);
+}
+
+function cueCommand(file,plan,rest,options,library) {
+  const {format='sheet',out}=options;
+  if (!file||!plan||rest.length||!['sheet','timeline'].includes(format)||
+    Object.keys(options).some(key=>!['format','out'].includes(key))||
+    out!==undefined&&(typeof out!=='string'||!out.trim()))
+    throw new TypeError('Use story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline] [--out file]');
+  const input=readDefinition(file), W=library().KIT.world, E=W.storyEvents;
+  const source=input?.format===SimulationFixture.format?SimulationFixture.eventRecording(W,input):input;
+  const events=source?.format===E.envelopeFormat?source:E.envelopes(source,{stream:input?.checkpoint?.eventStream});
+  const sheet=W.presentationCues.project(events,readDefinition(plan));
+  const output=JSON.stringify(format==='timeline'?{presentationCues:sheet}:sheet,null,2)+'\n';
+  if (out!==undefined) {
+    const existing=fs.existsSync(out)?fs.statSync(out):null;
+    for (const source of [file,plan]) {
+      const stat=existing&&fs.statSync(source);
+      if (path.resolve(out)===path.resolve(source)||stat&&stat.dev===existing.dev&&stat.ino===existing.ino)
+        throw new TypeError('Choose a cue output different from its input files');
+    }
     write(path.resolve(out),output);
   } else process.stdout.write(output);
 }
@@ -133,8 +151,9 @@ function previewCommand(file, id, rest, options) {
 function storyCommand([mode, file, id, ...rest], options, library) {
   if (mode==='catalog') return catalogCommand([file,id,...rest].filter(value=>value!==undefined),options,library);
   if (mode==='events') return eventCommand(file,[id,...rest].filter(value=>value!==undefined),options,library);
+  if (mode==='cues') return cueCommand(file,id,rest,options,library);
   if (mode==='preview') return previewCommand(file,id,rest,options);
-  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
+  const usage = 'Usage: ink-studio story catalog <story.json> [story.json ...] | story events <recording.json> | story cues <recording> <plan.json> | story validate <file.json> [--strict] | story describe <file.json> [story-id] [--inventory] | '+previewUsage+' | story instantiate <template.json> <instance.json>';
   if (mode === 'instantiate') {
     if (!file || !id || rest.length || Object.keys(options).length) throw new TypeError(usage);
     const materialized = library().KIT.world.storyTemplates.instantiate(readDefinition(file), readDefinition(id));

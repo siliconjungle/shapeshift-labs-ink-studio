@@ -1859,15 +1859,49 @@ The report counts recorded transitions, branches, objectives, and
 intervention windows, and retains the events and host receipts that
 support the summary. A story filter also follows source event IDs in
 recorded objective and trigger evidence. The Markdown view presents a
-chronological transcript. Timeline export provides Ink scene `markers` and
-`story-cue` events at the recorded tick times. Add the exported object
-under `timeline` to drive presentation event actions using the source
-event, story, branch, or outcome. This playback works in a world without
-the original story document or host.
+chronological transcript. The existing `--format timeline` export supplies
+markers and routable `story-cue` timeline events for playback recipes that
+use event actions. Use `story cues` for an independent presentation track.
 
 See the [imported relay recording](../examples/story-documents/bench-inspection.imported.events.json)
 for a standalone input. Node and browser bundle hosts can use
 `KIT.world.storyEvents.read`, `analyze`, and `timeline`.
+
+### Project presentation cues
+
+Use a versioned cue plan to turn committed events from a recording, fixture, or envelope export into presentation cues. Each rule selects an event kind and can refine it by system, branch, story, stage, or a condition on the envelope. Cue details can copy values from the committed payload. The cue time defaults to the event's tick time, with an optional delay in seconds.
+
+```json
+{
+  "format": "ink-studio/presentation-cue-plan",
+  "version": 1,
+  "id": "dock-captions",
+  "rules": {
+    "loaded": {
+      "on": {"kind": "transfer", "where": {"path": "/payload/status", "value": "full"}},
+      "cue": {
+        "kind": "caption", "label": "Cargo loaded", "target": "lower-third",
+        "detail": {"crates": 0}, "bindings": {"/crates": "/payload/applied"}
+      }
+    }
+  }
+}
+```
+
+```sh
+ink-studio story cues dock.run.json dock.plan.json --out dock.cues.json
+ink-studio story cues dock.run.json dock.plan.json --format timeline --out dock.timeline.json
+```
+
+The cue sheet includes the source recording's coverage and a source event reference per cue. Bindings use JSON Pointers into the cue detail template and event envelope. Each destination must already exist in the cue detail. Missing source values fail the projection before it is written. A plan can produce up to 4,096 cues, ordered by presentation time.
+
+Use the timeline export as a scene's `timeline` or add the cue sheet under an existing timeline's `presentationCues`. The existing `timeline` CLI shows the compiled track. JavaScript hosts can use `KIT.world.presentationCues.project(envelopes, plan)`, then read `timeline.presentationCues` or collect points with `type: "presentation"` from `timeline.between(from, to)` and exact take frames. Cue sheets include a rational timecode when it fits in safe integers. Clip trims and retiming affect the cue's playback time, while the source reference keeps its original tick. A host decides how to render each kind and target.
+
+```sh
+node examples/presentation-cues/demo.cjs ./studio/out/presentation-cues
+```
+
+The dock demo captions successful and blocked transfer receipts and compares the world with the cue track attached. The quay demo projects a caption and a delayed audio cue from the same story stage event.
 
 ## Replay the demos
 

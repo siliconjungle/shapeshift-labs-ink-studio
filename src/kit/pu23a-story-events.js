@@ -1,7 +1,7 @@
 /* Analyze and present recorded world events without loading their simulation. */
 (function(K) {
   const W = K.world, {check,copy,equal,id,record} = W.data, {freeze} = K.procedural.data;
-  const format = 'ink-studio/story-events', version = 1;
+  const format = 'ink-studio/story-events', envelopeFormat = 'ink-studio/committed-events', version = 1;
   const maxHistory = 100000, maxBatch = 10000, maxData = 32*1024*1024, maxCues = 4096;
   const validTick = tick => Number.isSafeInteger(tick)&&tick>=0&&tick<=W.runtime.maxTick;
   const validDt = dt => Number.isFinite(dt)&&dt>0&&dt<=1;
@@ -134,5 +134,15 @@
     return freeze({duration:recording.to*recording.dt,markers,events:cues});
   }
 
-  W.storyEvents = Object.freeze({format,read,analyze,timeline});
+  function envelopes(source,{story,stream} = {}) {
+    const {events:rows,id:world,dt,from,to,coverage,dropped}=read(source);
+    check(story===undefined||typeof story==='string'&&story.split('/').length===2&&story.split('/').every(id),
+      'Story event filter needs a document/story ID');
+    const lineage=stream??source.end?.eventStream??source.eventStream;
+    const events=rows.map(row=>W.committedEvents.read(row,world,lineage))
+      .filter(row=>story===undefined||row.story===story);
+    return freeze({format:envelopeFormat,version,world,dt,from,to,coverage,dropped,events});
+  }
+
+  W.storyEvents = Object.freeze({format,envelopeFormat,read,analyze,timeline,envelopes});
 })(KIT);

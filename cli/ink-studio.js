@@ -1275,6 +1275,7 @@ const CMD = {
         '    sim run|preflight <world.json> --storyteller ID   select an authored incident profile',
         '  story catalog <story.json> [story.json ...]   discover authored incidents',
         '  story events <recording|fixture> [--format json|markdown|timeline|events|envelopes]   inspect or present recorded story events',
+        '  story cues <recording|fixture|envelopes> <plan.json> [--format sheet|timeline] [--out file]   project committed results into presentation cues',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
         '  graph nodes [--json]   list registered graph operations and their ports',
