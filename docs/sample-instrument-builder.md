@@ -146,3 +146,7 @@ The [recording fitter](recording-instrument-fit.md) proposes editable
 oscillator, resonator, and recorded-attack graph patches from a single
 slice. Use it when you want to reshape the model and play it in another
 register or at another length.
+
+Use the [playable sound workshop](playable-sound-workshop.md) to compare
+these source-based approaches on a shared performance, keep playable
+zones, and derive a motif from the chosen sound.

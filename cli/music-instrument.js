@@ -3,7 +3,10 @@ const {json,write}=require('./asset-files.js');
 const {openSampleLibrary}=require('./sample-library.js');
 const {resolveSampleAssets}=require('./music-sample-assets.js');
 
-module.exports=function instrumentCommand([mode,file],opt,kit) {
+module.exports=function instrumentCommand([mode,file,config],opt,kit) {
+  if (['workshop','audition-workshop','keep-workshop'].includes(mode)) {
+    return workshop(mode,file,config,opt,kit);
+  }
   if (!file || !['analyze','audition','build','fit','audition-fit'].includes(mode) || (mode!=='analyze' && typeof opt.out!=='string'))
     throw new TypeError('Use music instrument analyze, audition, build, fit, or audition-fit with a recipe and --out');
   const P=kit.KIT.procedural,{fields,check,record}=P.musicInstruments, A=P.mediaGraph.sampleInstrument;
@@ -66,4 +69,59 @@ function writeAssets(dir,assets) {
     write(path.join(dir,file),WAV.encode(value,{encoding:'float32'}));
     return [name,file];
   }));
+}
+
+function workshop(mode,file,config,opt,kit) {
+  const P=kit.KIT.procedural,{fields,check,record}=P.musicInstruments, lab=P.mediaGraph.playableSound;
+  check(file && typeof opt.out==='string','Use a playable sound recipe or manifest and --out');
+  const read=name=>JSON.parse(fs.readFileSync(name,'utf8'));
+  const recipe=read(file), dir=path.resolve(opt.out), report=path.join(dir,'report.json');
+  const send=value=>{process.stdout.write(JSON.stringify(value)+'\n');return value;};
+  if (mode==='workshop') {
+    check(fields(recipe,['source','library','options']) && recipe.source!==undefined &&
+      (recipe.library===undefined || typeof recipe.library==='string'),'Choose a workshop source');
+    const library=recipe.library===undefined ? undefined :
+      openSampleLibrary(path.resolve(path.dirname(file),recipe.library),{kit});
+    const ref=recipe.source;
+    let source, provenance;
+    if (fields(ref,['gesture']) && record(ref.gesture)) {
+      const generated=P.mediaGraph.synthesizeGesture(ref.gesture);
+      source=generated.value;
+      provenance={gesture:generated.report};
+    } else {
+      const {assets,sources}=resolveSampleAssets({source:ref},file,library,kit,{allowWav:true});
+      source=assets.source;
+      provenance=sources.source;
+    }
+    const built=lab.build(source,recipe.options), manifest=path.join(dir,'workshop.json');
+    json(manifest,{workshop:built.value,assets:writeAssets(dir,built.assets),source:provenance});
+    json(report,{...built.report,provenance});
+    return send({workshop:manifest,report});
+  }
+  check(fields(recipe,['workshop','assets','source']) && record(recipe.assets) &&
+    Object.keys(recipe.assets).length<=128,'Use a saved playable sound workshop manifest');
+  const {assets}=resolveSampleAssets(recipe.assets,file,undefined,kit,{allowWav:true});
+  if (mode==='audition-workshop') {
+    const result=lab.audition(recipe.workshop,assets,config===undefined ? {} : read(config));
+    const audio=path.join(dir,'audition.wav'), takes={};
+    write(audio,WAV.encode(result.value,{encoding:'pcm24'}));
+    for (const [build,cells] of Object.entries(result.clips)) {
+      takes[build]=Object.fromEntries(Object.entries(cells).map(([id,clip])=>{
+        const name='takes/'+build+'/'+id+'.wav';
+        write(path.join(dir,name),WAV.encode(clip,{encoding:'pcm24'}));
+        return [id,name];
+      }));
+    }
+    json(report,{...result.report,takes});
+    return send({audio,report});
+  }
+  check(config,'Give keep-workshop an editable selection JSON');
+  const selection=lab.keep(recipe.workshop,assets,read(config)), instrument=path.join(dir,'instrument.json');
+  const motif=path.join(dir,'motif.json'), audio=path.join(dir,'motif-source.wav');
+  write(audio,WAV.encode(selection.reference,{encoding:'pcm24'}));
+  const {patch,zones}=selection.value;
+  json(instrument,{patch,zones,assets:writeAssets(dir,selection.assets),motif:'motif.json'});
+  json(motif,selection.value.motif);
+  json(report,{...selection.report,source:recipe.source});
+  return send({instrument,motif,audio,report});
 }

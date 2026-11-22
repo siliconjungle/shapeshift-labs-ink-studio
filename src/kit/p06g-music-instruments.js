@@ -182,10 +182,43 @@
     }};
   }
 
+  function zoned(raw,assets) {
+    check(fields(raw,['type','instruments','zones','fallback']) && record(raw.instruments) &&
+      integer(Object.keys(raw.instruments).length,1,16) && Array.isArray(raw.zones) &&
+      integer(raw.zones.length,1,96),'A zoned patch needs named instruments and key and velocity zones');
+    const players=new Map(Object.entries(raw.instruments).map(([name,child])=>{
+      check(id(name) && record(child) && child.type!=='zoned','A zone needs a native instrument patch');
+      return [name,articulated(child,assets)];
+    }));
+    check(raw.fallback===undefined || players.has(raw.fallback),'Unknown fallback zone instrument');
+    const zones=Array.from(raw.zones,row=>{
+      check(fields(row,['instrument','low','high','velocity','gainDb']) && players.has(row.instrument) &&
+        integer(row.low,0,127) && integer(row.high,row.low,127) && Array.isArray(row.velocity) &&
+        row.velocity.length===2 && row.velocity.every(value=>finite(value,0,1)) &&
+        row.velocity[0]<row.velocity[1] && finite(row.gainDb ?? 0,-24,12),'Invalid key or velocity zone');
+      return {...row,player:players.get(row.instrument),gain:db(row.gainDb ?? 0)};
+    });
+    for (const [i,a] of zones.entries()) for (const b of zones.slice(i+1)) {
+      check(a.high<b.low || b.high<a.low || a.velocity[1]<=b.velocity[0] || b.velocity[1]<=a.velocity[0],
+        'Key and velocity zones cannot overlap');
+    }
+    const fallback=players.get(raw.fallback);
+    return {prepare(note,rate,gate) {
+      const {midi,zoneVelocity:velocity=note.velocity}=note;
+      const zone=zones.find(row=>midi>=row.low && midi<=row.high && velocity>=row.velocity[0] &&
+        (velocity<row.velocity[1] || row.velocity[1]===1));
+      const player=zone?.player ?? fallback;
+      if (!player) return {duration:0,signal:()=>0};
+      const body=player.prepare(note,rate,gate), gain=zone?.gain ?? 1;
+      return gain===1 ? body : {...body,signal:(...args)=>body.signal(...args)*gain};
+    }};
+  }
+
   function instrument(raw,assets) {
     check(record(raw),'Expected a music instrument');
     if (raw.type==='sample') return sampler(raw,assets);
     if (raw.type==='graph') return P.musicInstrumentGraph.compile(raw,assets);
+    if (raw.type==='zoned') return zoned(raw,assets);
     if (raw.type==='drum') return drum(raw);
     if (raw.type==='keys') return keys(raw);
     if (raw.type==='subtractive') return P.musicSubtractive.compile(raw);
@@ -196,7 +229,7 @@
     check(record(raw),'Expected a music instrument');
     const {articulations,...base}=raw, patch=instrument(base,assets);
     if (articulations===undefined) return patch;
-    check(base.type!=='sample' && record(articulations) && Object.keys(articulations).length<=16 &&
+    check(!['sample','zoned'].includes(base.type) && record(articulations) && Object.keys(articulations).length<=16 &&
       Object.entries(articulations).every(([name,value])=>id(name) && record(value) && value.type===undefined),
       'Invalid instrument articulations');
     function override(value) {
@@ -242,7 +275,8 @@
       const start=note.start ?? note.time;
       if (!release || note.suppressRelease || (note.choke ?? Infinity)<=start+gate+1e-8) return body;
       const tail=express(player,{...note,performance:null,gate:.075,start:undefined,roundRobin:release.roundRobin,
-        velocity:clamp(note.velocity*release.level),play:{articulation:release.articulation,curves:release.curves}},rate,.075);
+        zoneVelocity:note.velocity,velocity:clamp(note.velocity*release.level),
+        play:{articulation:release.articulation,curves:release.curves}},rate,.075);
       if (!tail.duration) return body;
       const stereo=body.stereo || tail.stereo, releaseFrame=Math.ceil(gate*rate-1e-7);
       let bodyFrame=-1, tailFrame=-1, dry=0, off=0;
@@ -270,12 +304,15 @@
   function sampleZones(patch) {
     const zones=row=>Array.isArray(row?.zones) ? row.zones : [];
     if (patch?.type==='sample') return zones(patch);
+    if (patch?.type==='zoned') return Object.values(patch.instruments ?? {}).filter(child=>child?.type!=='zoned').flatMap(sampleZones);
     if (patch?.type==='graph') return [patch,...Object.values(patch.articulations ?? {})].flatMap(row=>
       Object.values(row?.nodes ?? {}).flatMap(zones));
     return [];
   }
   function articulationNames(patch) {
-    return new Set([...Object.keys(patch.articulations ?? {}),
+    const nested=patch.type==='zoned' ? Object.values(patch.instruments ?? {}).filter(child=>child && child.type!=='zoned')
+      .flatMap(child=>[...articulationNames(child)]) : [];
+    return new Set([...nested,...Object.keys(patch.articulations ?? {}),
       ...sampleZones(patch).flatMap(zone=>zone.articulation ? [zone.articulation] : []),
       ...(patch.type==='drum' && patch.kind==='hat' ? ['open'] : [])]);
   }

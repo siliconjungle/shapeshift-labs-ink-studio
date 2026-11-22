@@ -98,12 +98,17 @@
   }
 
   function fit(source,settings={}) {
-    check(fields(settings,['analysis','root','partials','modes','attackMs']) &&
+    check(fields(settings,['analysis','root','partials','modes','attackMs','pitchTrack']) &&
       integer(settings.partials ?? 4,1,5) && integer(settings.modes ?? 6,1,8) &&
       finite(settings.attackMs ?? 55,8,180),'Invalid recording instrument fit settings');
     const {partials=4,modes=6,attackMs=55}=settings, pcm=S.instrumentAudio(source);
     check(finite(pcm.samples.length/pcm.channels/pcm.sampleRate,.02,6),'Fit a recording slice from 20 ms to 6 seconds');
-    const body=measure(pcm,{analysis:settings.analysis,partials,modes,
+    const {pitchTrack}=settings, frames=pcm.samples.length/pcm.channels;
+    check(pitchTrack===undefined || Array.isArray(pitchTrack) && integer(pitchTrack.length,3,224) &&
+      Array.from(pitchTrack).every((row,i)=>fields(row,['sample','midi','confidence']) &&
+        integer(row.sample,0,frames-1) && finite(row.midi,0,160) && finite(row.confidence,0,1) &&
+        (!i || row.sample>pitchTrack[i-1].sample)),'Invalid measured fit pitch track');
+    const body=measure(pcm,{analysis:settings.analysis,partials,modes,pitchTrack,
       root:settings.root===undefined ? undefined : H.midi(settings.root)});
     const {sampleRate,signal}=body, attackFrames=Math.min(signal.length,Math.max(2,Math.round(sampleRate*attackMs/1000)));
     const attackTime=attackFrames/sampleRate, fade=Math.min(attackFrames/2,sampleRate*.014);

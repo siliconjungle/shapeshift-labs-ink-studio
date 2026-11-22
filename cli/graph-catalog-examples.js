@@ -15,6 +15,8 @@ const audio = { sampleRate: 8000, channels: 1, samples: Array.from({ length: 128
 const fitTone={sampleRate:8000,channels:1,samples:Array.from({length:1600},(_,i)=>
   .5*Math.sin(2*Math.PI*280*i/8000)*Math.min(1,i/40)*Math.exp(-i/1200))};
 const fittedTone={op:'audio.fitInstrument',inputs:{source:fitTone}};
+const playableSound={op:'music.buildPlayableSound',inputs:{source:fitTone,options:{
+  variants:[{id:'body',family:'contour'},{id:'air',family:'handoff'}]}}};
 const event = { time: 0, channel: 'held', value: true };
 const sampleCapture = {op:'audio.captureSample',inputs:{source:audio,settings:{
   sample:{id:'tone',label:'Bench tone',material:'synth',pitch:'A4',license:{id:'CC0-1.0'}},
@@ -493,6 +495,11 @@ const specifications = {
   'audio.auditionInstrumentFit': {nodes:{fit:fittedTone},inputs:{
     fit:link('fit'),assets:link('fit','assets'),reference:link('fit','reference'),
     options:{candidates:['synth'],sampleRate:8000,cases:[{id:'match',midi:61,velocity:.8,gate:.2}]}}},
+  'music.buildPlayableSound': {inputs:playableSound.inputs},
+  'music.auditionPlayableSound': {nodes:{build:playableSound},inputs:{workshop:link('build'),assets:link('build','assets'),
+    options:{pitches:[61],velocities:[.8],sampleRate:8000}}},
+  'music.keepPlayableSound': {nodes:{build:playableSound},inputs:{workshop:link('build'),assets:link('build','assets'),
+    selection:{candidate:'body',from:'source',projection:{beats:.75}}}},
   'audio.warp': {nodes:{edited:{op:'audio.renderSampleEdit',inputs:{source:audio,edit:slicedAudio}}},
     inputs:{source:link('edited'),options:{mode:'repitch',speed:.8}}},
   'music.planSampleMotif': {inputs:sampleMotifPlan.inputs},

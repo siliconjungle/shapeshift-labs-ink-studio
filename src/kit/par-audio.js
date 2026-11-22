@@ -171,6 +171,25 @@
       inputs:{fit:'record',assets:'record',reference:'audio',options},outputs:{value:'audio',report:'record'},
       run({fit,assets,reference,options}) {return A.instrumentFit.audition(fit,assets,options,reference);}
     },
+    'music.buildPlayableSound': {
+      description:'Build a source-derived bank of recorded, fitted and tail-handoff instrument patches.',
+      inputs:{source:'audio',options},outputs:{value:'record',assets:'record',report:'record'},
+      run({source,options},{seed}) {return A.playableSound.build(source,{seed,...options});}
+    },
+    'music.auditionPlayableSound': {
+      description:'Play identical diagnostic phrases across builds, keys and dynamics with phase-specific comparisons.',
+      inputs:{workshop:'record',assets:'record',options},outputs:{value:'audio',clips:'record',report:'record'},
+      run({workshop,assets,options}) {return A.playableSound.audition(workshop,assets,options);}
+    },
+    'music.keepPlayableSound': {
+      description:'Save key and velocity zones with native instruments and project a held source gesture into editable motifs.',
+      inputs:{workshop:'record',assets:'record',selection:'record'},
+      outputs:{value:'record',patch:'record',motif:'record',assets:'record',reference:'audio',report:'record'},
+      run({workshop,assets,selection}) {
+        const kept=A.playableSound.keep(workshop,assets,selection);
+        return {...kept,patch:kept.value.patch,motif:kept.value.motif};
+      }
+    },
     'audio.warp': {
       description: 'Fit audio to tempo or sample and picture pins with beat, tonal, speech or varispeed processing.',
       inputs: {source:'audio',options}, outputs: {value:'audio',report:'record'},

@@ -84,8 +84,8 @@
     return found.sort((a,b)=>b.strength-a.strength).slice(0,limit);
   }
 
-  function pitchedFrames(rows,reference,root,noteHz) {
-    const track=reference.pitchTrack.filter(row=>row.confidence>=.75);
+  function pitchedFrames(rows,track,root,noteHz) {
+    track=track.filter(row=>row.confidence>=.75);
     return rows.map(row=>{
       if (!root || !track.length) return noteHz;
       const i=track.findIndex(point=>point.sample>=row.at);
@@ -97,12 +97,12 @@
     });
   }
 
-  function harmonics(rows,step,trajectory,count) {
+  function harmonics(rows,step,trajectory,count,evidence) {
     const candidates=Array.from({length:Math.min(12,count*2)},(_,i)=>{
       const index=i+1, bins=trajectory.map(hz=>Math.round(hz*index/step));
       const levels=rows.map(({spectrum},i)=>{
         const bin=bins[i];
-        if (bin<2 || bin>=spectrum.length-3) return 0;
+        if (bin<2 || bin>=spectrum.length-3 || evidence && !evidence[i]) return 0;
         return Math.max(spectrum[bin-1],spectrum[bin],spectrum[bin+1]);
       });
       return {index,bins,levels,strength:Math.sqrt(mean(levels.map(value=>value**2)))};
@@ -133,13 +133,19 @@
     });
   }
 
-  function measure(pcm,{analysis,root:override,partials,modes}) {
+  function measure(pcm,{analysis,root:override,partials,modes,pitchTrack}) {
     const source=isolate(pcm), {sampleRate,signal}=source, duration=signal.length/sampleRate;
     const reference=S.analyzeInstrumentBank({fit:{samples:signal,channels:1,sampleRate}},analysis).takes.fit;
-    const tuned=reference.voicedFraction>=.42 && reference.root && reference.root.confidence>=.32 ? reference.root : null;
+    const tracked=pitchTrack?.filter(row=>row.confidence>=.75 && row.sample>=source.firstSample && row.sample<source.endSample)
+      .map(row=>({...row,sample:row.sample-source.firstSample,hz:P.musicInstruments.hz(row.midi)}));
+    const useTrack=tracked?.length>=3;
+    const voiced=useTrack ? tracked.map(row=>row.midi).sort((a,b)=>a-b) : null;
+    const trackedRoot=voiced?.[voiced.length>>1];
+    const tuned=useTrack ? {hz:P.musicInstruments.hz(trackedRoot),suggestedNote:Math.round(trackedRoot)} :
+      reference.voicedFraction>=.42 && reference.root && reference.root.confidence>=.32 ? reference.root : null;
     const key=override ?? bounded(tuned?.suggestedNote ?? 60,0,127), rootHz=P.musicInstruments.hz(key);
     const {rows,step}=scans(signal,sampleRate);
-    const observed=pitchedFrames(rows,reference,tuned,rootHz);
+    const observed=pitchedFrames(rows,useTrack ? tracked : reference.pitchTrack,tuned,rootHz);
     const resonances=stableModes(rows,step,duration,modes,rootHz);
     let modalPower=0, inharmonicPower=0;
     for (const mode of resonances) {
@@ -155,8 +161,9 @@
     const jump=reference.pitchTrack.some((point,i,track)=>i>0 &&
       point.sample-track[i-1].sample<=sampleRate*.055 && Math.abs(midi(point.hz)-midi(track[i-1].hz))>7);
     const ringing=resonances.filter(mode=>mode.decay!==null).length>=2;
-    const pitched=tuned && inharmonicPower<=modalPower*.13 && !(ringing && jump);
-    const tones=pitched ? harmonics(rows,step,observed,partials) : [];
+    const pitched=useTrack || tuned && inharmonicPower<=modalPower*.13 && !(ringing && jump);
+    const evidence=useTrack ? rows.map(row=>tracked.some(point=>Math.abs(point.sample-row.at)<=sampleRate*.05)) : null;
+    const tones=pitched ? harmonics(rows,step,observed,partials,evidence) : [];
     const trajectory=tuned && override!==undefined ? observed.map(hz=>hz*rootHz/tuned.hz) : observed;
     const residual=noiseBands(rows,step,tones,tones.length ? [] : resonances.slice(0,Math.min(3,partials)));
     const amplitude=rows.map(({phase,at})=>{
