@@ -806,8 +806,8 @@ and applied or blocked status.
 Callbacks evaluate immutable JSON snapshots. Return a proposed snapshot
 from `step` or `perform` and keep external side effects outside the
 callbacks. This lets Ink discard a failed tick and restore or replay a
-checkpoint with the same implementation. Subscribe to committed events
-when the host needs to do something outside the simulation.
+checkpoint with the same implementation. Use an `onTick` callback to consume committed events when the host needs
+to do something outside the simulation.
 
 To run an operation from an order, author the usual `interact` step.
 Bind the [targeted interaction](targeted-interactions.md#commit-effects)

@@ -1,8 +1,8 @@
 /* Analyze and present recorded world events without loading their simulation. */
 (function(K) {
-  const W = K.world, {check,copy,equal,id,own,record} = W.data, {freeze} = K.procedural.data;
+  const W = K.world, {check,copy,equal,id,record} = W.data, {freeze} = K.procedural.data;
   const format = 'ink-studio/story-events', version = 1;
-  const maxEvents = 100000, maxData = 32*1024*1024, maxCues = 4096;
+  const maxHistory = 100000, maxBatch = 10000, maxData = 32*1024*1024, maxCues = 4096;
   const validTick = tick => Number.isSafeInteger(tick)&&tick>=0&&tick<=W.runtime.maxTick;
   const validDt = dt => Number.isFinite(dt)&&dt>0&&dt<=1;
   const storyOf = ({document,story}) => id(document)&&id(story)?document+'/'+story:null;
@@ -16,7 +16,7 @@
     const frame = source.format===W.runtime.runFormat?source.end:source;
     check(source.version===version&&frame?.format===W.runtime.checkpointFormat&&frame.version===version&&
       id(frame.world?.id)&&validDt(frame.world.dt)&&validTick(frame.tick)&&
-      Array.isArray(frame.history)&&Array.isArray(frame.events)&&frame.history.length+frame.events.length<=maxEvents&&
+      Array.isArray(frame.history)&&frame.history.length<=maxHistory&&Array.isArray(frame.events)&&frame.events.length<=maxBatch&&
       Number.isSafeInteger(frame.dropped)&&frame.dropped>=0,
       'Invalid native event history source');
     const rows = new Map();
@@ -38,7 +38,7 @@
       Object.keys(source).every(key=>['format','version','id','dt','from','to','coverage','dropped','events'].includes(key))&&
       validTick(source.from)&&validTick(source.to)&&source.to>=source.from&&
       ['complete','retained'].includes(source.coverage)&&Number.isSafeInteger(source.dropped)&&source.dropped>=0&&
-      (source.coverage!=='complete'||source.dropped===0)&&Array.isArray(source.events)&&source.events.length<=maxEvents,
+      (source.coverage!=='complete'||source.dropped===0)&&Array.isArray(source.events)&&source.events.length<=maxHistory+maxBatch,
       'Expected a version 1 story event recording with a clock and coverage');
     const events = [], seen = new Set();
     let last = source.from, size = 0;

@@ -1066,7 +1066,7 @@
           })})});
           const prepared = effect.kind==='story-host' ?
             effect.host(drafts[destination],args,staged,{service:source,...interaction}) : handler.run(drafts[destination],args,1,staged);
-          const detail = prepared.receipt ? {receipt:prepared.receipt} : {};
+          const detail = effect.kind==='story-host' ? {receipt:prepared.receipt} : {};
           if(prepared.reason)return {reason:prepared.reason,...detail};
           drafts[destination]=rootedState(prepared.state);
           for(const publish of notes)publish();
