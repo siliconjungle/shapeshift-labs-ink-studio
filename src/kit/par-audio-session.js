@@ -444,6 +444,18 @@
       }));
       return {session,rate,map,frames,lanes,sourceLanes,mixer,pins,choices,media,cache,report:inspect(session,plan)};
     }
+    function prepareSound(session,{lane,revision,from,to,warmAt},extraAssets={}) {
+      // Compile a temporary score take without using a slot in the editable session.
+      const take='sound-preview';
+      const scratch={...session,takes:{[take]:revision},comp:[]};
+      const plan=compile(scratch,{...assets,...extraAssets},host);
+      const range=plan.choice({lane,take,from,to});
+      check(!plan.audio.has(lane) && !plan.producers.get(take).score.tracks[lane].external,
+        'Choose a native score lane for sound audition');
+      const material=incremental.prepareSource(plan,lane,take);
+      if (warmAt>=range.from && warmAt<range.to) material.block(Math.floor(warmAt/S.sessionBlocks.blockFrames));
+      return {range,material};
+    }
     const prepareLive=session=>prepareTransport(session,'deferred');
     const materialize=prepared=>prepared.incremental ? prepareTransport(prepared.session,'blocks') : prepared;
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
@@ -451,7 +463,7 @@
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
     return Object.freeze({inspect,trace,edit,render,compare,compose,auditionPhrase,handoff,arrangePerformance:accompaniment.run,performanceBallot,listeningRound,
       listeningEvidence:listeningEvidence.listen,keepListeningRepair:listeningEvidence.keep,experiment:experiments.run,keepExperiment:experiments.keep,
-      open,prepareTransport,prepareLive,openPreparedTransport,addAsset,discardAsset});
+      open,prepareTransport,prepareLive,prepareSound,openPreparedTransport,addAsset,discardAsset});
   }
   M.musicSession=Object.freeze({create});
 })(KIT.procedural);

@@ -256,4 +256,4 @@ function exportSoundPack(id, directory) {
   return path.join(folder, 'pack.json');
 }
 
-module.exports = {catalog, loadSoundPack, exportSoundPack};
+module.exports = {catalog, describe, loadSoundPack, exportSoundPack};

@@ -1,10 +1,11 @@
 import {setupRecording} from './recording.mjs';
+import {setupSoundBrowser} from './sound-browser.mjs';
 
 const $=id=>document.getElementById(id);
 const option=(value,label=value)=>new Option(label,value);
 const seconds=value=>({seconds:Number(value)});
 const client=crypto.randomUUID();
-let key,state,context,recorder,playing=false,pulling=false,timer,nextAt=0,heard=[],clippedFrames=0;
+let key,state,context,recorder,sounds,playing=false,pulling=false,timer,nextAt=0,heard=[],clippedFrames=0;
 const desks=new Map();
 let scoreNotes,reading=false,notesRevision;
 
@@ -83,6 +84,7 @@ function show(next) {
   monitorTargets();
   if (loopChanged) recorder?.newLoop();
   recorder?.show();
+  sounds?.show();
 }
 function monitorTargets() {
   const mode=$('monitor-mode').value, target=$('monitor-target'), selected=target.value;
@@ -101,7 +103,7 @@ async function refresh(readNotes=false) {
   }
   if (state && next.revision<state.revision) return;
   if (!state || readNotes || next.revision!==state.revision || next.loop.from!==state.loop.from ||
-    next.loop.to!==state.loop.to || Object.entries(next.lanes).some(([name,lane])=>lane.take!==state.lanes[name]?.take))
+    next.loop.to!==state.loop.to || JSON.stringify(next.sound)!==JSON.stringify(state.sound) || Object.entries(next.lanes).some(([name,lane])=>lane.take!==state.lanes[name]?.take))
     show(next);
 }
 async function pump() {
@@ -247,6 +249,8 @@ try {
   bounds();
   recorder=setupRecording({state:()=>({...state,recordingPlayback:playing}),inspect:()=>scoreNotes,
     context:getContext,post,command,refresh,client,status});
+  sounds=setupSoundBrowser({state:()=>state,command,refresh,status,act});
+  sounds.show();
   $('play').disabled=false;
   requestAnimationFrame(cursor);
   setInterval(async()=>{

@@ -264,6 +264,44 @@ The browser usually owns the audio listener. A headless player can instead
 use `POST /audio` with `{frames,client}`. Its response is little-endian
 interleaved float32 stereo with the chunk address in `X-Ink-Transport`.
 
+## Audition sounds in the track
+
+Set the loop around the phrase you want to hear and select a native score
+track in **Browse sounds**. Search by name or description, or filter by
+role. **Match source sound** ranks by timbre against the source patch.
+**Match a WAV** ranks against the first half-second of a short clip after
+trimming its leading silence. The browser compares spectral balance,
+attack, and decay. Isolated hits and notes make good examples.
+
+Click a result while the loop is playing. The candidate plays the source
+take's pattern at the current playhead, through the same track, buses,
+sends, and mixer inserts. A bass compressor keyed from the kick strip
+continues to receive the kick as you audition. **Original mix** clears the
+temporary audition. Use **Keep sound** to create an editable score take
+and comp it into the selected loop, then **Save session** to write it.
+The browser uses the currently auditioned take or the saved take covering
+the loop. Choose a **Source take** explicitly when the loop crosses a comp
+boundary. Tracks pinned in full are excluded.
+
+Run the four-bar Backpressure demo from the repository:
+
+```sh
+node examples/music-production/sound-browser.cjs output/backpressure
+node cli/ink-studio.js music session play output/backpressure/session.json output/backpressure/loop.json --out output/backpressure/my-take.json
+```
+
+Open `output/backpressure/index.html` for matched full mix and bass tap
+comparisons. Upload `kick-example.wav` in the live desk to try matching
+against an actual recorded stroke. Saved recipes retain the WAV paths for
+any kept stock sounds. Include the referenced WAVs when sharing a recipe.
+
+The loopback API supports `sounds` with `lane`, optional `source`,
+`role`, `query`, and `sample`. Use `"current"` for the source sound or
+base64-encoded 8 kHz mono 16-bit little-endian PCM (64–4096 frames).
+Use `audition-sound` with `{lane,source,id}` to queue a candidate at the
+next unrendered sample, or `{id:null}` to clear it. Use `keep-sound` with
+the same candidate and an optional `take` name to save it into the edit.
+
 ## Record straight into take lanes
 
 In the live desk, choose a native instrument lane and **Enable MIDI** in a

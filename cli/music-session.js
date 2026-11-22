@@ -160,7 +160,7 @@ module.exports=function command([mode,file,config],opt,kit) {
         const prepared=await preparer.prepare(session);
         const transport=editor.openPreparedTransport(prepared,settings);
         await require('./music-session-player.js')(transport,{
-          port,prepare:preparer.prepare,discard:preparer.discardAsset,editor,assets,P,
+          port,prepare:preparer.prepare,discard:preparer.discardAsset,editor,assets,paths:absolute,P,
           recordings:path.resolve(opt.out ?? file).replace(/\.json$/i,'')+'-recordings',
           recipe:(value,recorded)=>({session:value,assets:{...absolute,...recorded}}),
           save:opt.out===undefined ? null : (value,recorded)=>save(opt.out,value,recorded)

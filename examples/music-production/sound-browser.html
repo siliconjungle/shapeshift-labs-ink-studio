@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backpressure · Ink Studio</title>
+<style>
+:root{color-scheme:dark;font:16px/1.58 system-ui,sans-serif;background:#1a1717;color:#f4e8df;--muted:#c4afaa;--line:#664d48;--accent:#ffb291;--pane:#241e1e;--surface:#312726}
+*{box-sizing:border-box}body{margin:0}main{max-width:920px;margin:auto;padding:40px max(22px,5vw) 44px}
+header{border-top:1px solid var(--line);padding:13px 0 20px}header small{font:700 .75rem ui-monospace,monospace;letter-spacing:.10em;text-transform:uppercase;color:var(--accent)}
+h1,h2{font-family:Georgia,serif;line-height:1;letter-spacing:-.055em;font-weight:400;margin:0}h1{font-size:clamp(2.9rem,13vw,8.5rem);margin:.12em 0 .09em}h2{font-size:clamp(1.85rem,5vw,3.15rem)}
+p{color:var(--muted);margin:.62em 0 1em}section{border:1px solid var(--line);padding:clamp(16px,4vw,30px);background:var(--pane)}
+audio{display:block;width:100%;max-width:100%;margin-top:17px}a{color:var(--accent);text-underline-offset:.22em}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.switches{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:18px}
+button{background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:3px;font:inherit;font-weight:600;text-align:left;cursor:pointer;padding:8px 10px}
+button small{display:block;color:var(--muted);font-size:.75rem;font-weight:400}
+button[aria-pressed=true]{background:var(--accent);color:#332020;border-color:var(--accent)}button[aria-pressed=true] small{color:#4a2d2b}
+.modes{display:flex;flex-wrap:wrap;gap:7px}.modes button{padding:5px 10px;font-size:.81rem}
+footer{margin-top:17px;border:1px solid var(--line);padding:16px clamp(16px,4vw,30px)}
+summary{cursor:pointer;color:var(--accent);font-weight:600}pre{padding:11px;background:var(--pane);overflow:auto;font-size:.82rem}
+.links{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.84rem}
+@media(max-width:620px){.switches{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body><main>
+<header>
+<small>Ink Studio · In-track sound browser</small>
+<h1>Backpressure</h1>
+<p>Four bars of bass, drums, and electric keys. Each kick plays the same pattern and drives the same bass compressor.</p>
+</header>
+<section aria-labelledby="comparison">
+<h2 id="comparison">Swap the kick</h2>
+<p>Start playback and switch kicks mid-loop. Then select the bass tap to hear how each kick changes the ducking.</p>
+<div class="switches" role="group" aria-label="Kick sound">
+<button type="button" data-name="rubber" aria-pressed="true">Rubber<small>Round and short</small></button>
+<button type="button" data-name="acoustic" aria-pressed="false">Acoustic<small>Recorded beater</small></button>
+<button type="button" data-name="circuit" aria-pressed="false">Circuit<small>Hard transient</small></button>
+<button type="button" data-name="low" aria-pressed="false">Low<small>Long sub tail</small></button>
+</div>
+<div class="modes" role="group" aria-label="Mix tap">
+<button type="button" data-mode="" aria-pressed="true">Full mix</button>
+<button type="button" data-mode="-bass" aria-pressed="false">Bass after sidechain</button>
+</div>
+<audio src="rubber.wav" controls loop preload="metadata" aria-label="Backpressure comparison"></audio>
+</section>
+<footer>
+<details><summary>Open the live session in Ink Studio</summary>
+<p>Run this command from the demo folder. Press <strong>Play</strong>, choose the kick track in <strong>Browse sounds</strong>, then search for <strong>kick</strong> or use <strong>Match a WAV</strong> with <code>kick-example.wav</code>. Click a result to hear it in the mix. Use <strong>Keep sound</strong> and <strong>Save session</strong> to write the editable take.</p>
+<pre><code>ink-studio music session play session.json loop.json --out my-kick-take.json</code></pre>
+</details>
+<div class="links"><a href="session.json">Original session</a><a href="kept-session.json">Session with Acoustic Kick kept</a><a href="kick-example.wav">WAV search example</a><a href="sample-credits.json">Sample credits</a></div>
+</footer>
+</main>
+<script>
+const player=document.querySelector('audio');
+let name='rubber',mode='',pending;
+for (const group of document.querySelectorAll('[role=group]')) group.addEventListener('click',event=>{
+  const button=event.target.closest('button');
+  if (!button || button.getAttribute('aria-pressed')==='true') return;
+  for (const item of group.querySelectorAll('button')) item.setAttribute('aria-pressed',String(item===button));
+  name=button.dataset.name ?? name;
+  mode=button.dataset.mode ?? mode;
+  pending ??={position:player.currentTime,resume:!player.paused};
+  player.src=name+mode+'.wav';
+  player.load();
+});
+player.addEventListener('loadedmetadata',()=>{
+  if (!pending) return;
+  player.currentTime=Math.min(pending.position,player.duration);
+  if (pending.resume) player.play().catch(()=>{});
+  pending=undefined;
+});
+</script>
+</body></html>

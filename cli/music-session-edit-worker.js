@@ -45,9 +45,12 @@ if (isMainThread) {
   }
   parentPort.on('message',({id,session,edits,asset,discard})=>{
     if (discard) {editor.discardAsset(discard);return;}
-    let added=false;
+    const added=[];
     try {
-      if (asset) {editor.addAsset(asset.name,asset.pcm);added=true;}
+      for (const {name,pcm} of [].concat(asset ?? [])) {
+        editor.addAsset(name,pcm);
+        added.push(name);
+      }
       const prepared=editor.prepareLive(edits===undefined ? session : editor.edit(session,edits));
       for (const {materials} of Object.values(prepared.media ?? {})) for (const row of Object.values(materials)) {
         const {dry,roomLevel,echoLevel}=row.value;
@@ -55,7 +58,7 @@ if (isMainThread) {
       }
       parentPort.postMessage({id,value:prepared});
     } catch (error) {
-      if (added) editor.discardAsset(asset.name);
+      for (const name of added) editor.discardAsset(name);
       parentPort.postMessage({id,error:error.message});
     }
   });

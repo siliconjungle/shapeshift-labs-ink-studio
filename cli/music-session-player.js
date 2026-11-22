@@ -2,11 +2,13 @@ const http=require('node:http'), fs=require('node:fs'), path=require('node:path'
 const {randomBytes,createHash}=require('node:crypto');
 const WAV=require('./wav.js'), {write}=require('./asset-files.js');
 const Recording=require('./music-session-recording.js');
+const {createSoundBrowser}=require('./music-sound-browser.js');
 
 const files=new Map([
   ['/', ['music-session-player.html','text/html; charset=utf-8']],
   ...Object.entries({
     'player':'music-session-player',
+    'sound-browser':'music-session-sound-browser',
     'recording':'music-session-recording',
     'recording-clock':'music-session-recording-clock',
     'instrument-worklet':'music-session-instrument-worklet',
@@ -16,11 +18,12 @@ const files=new Map([
   }).map(([route,file])=>['/'+route+'.mjs',[file+'.mjs','text/javascript; charset=utf-8']])
 ]);
 
-module.exports=function play(transport,{port,prepare,discard,editor,assets,P,recordings,recipe,save}) {
+module.exports=function play(transport,{port,prepare,discard,editor,assets,paths,P,recordings,recipe,save}) {
   const key=randomBytes(24).toString('hex');
   const staticFiles=new Map([...files].map(([route,[file,type]])=>
     [route,{body:fs.readFileSync(path.join(__dirname,'../src/show',file)),type}]));
   const recorded=Object.create(null), commits=new Map();
+  const browser=createSoundBrowser(P,assets,paths);
   staticFiles.set('/instrument-core.mjs',{body:Recording.instrumentCore(),type:'text/javascript; charset=utf-8'});
   let listener,lastPull=0,queued=Promise.resolve();
   function enqueue(job) {
@@ -75,9 +78,62 @@ module.exports=function play(transport,{port,prepare,discard,editor,assets,P,rec
     return {patch:voice,...(recorded?.length && {performance:{connect:performance.connect,rules:recorded}}),
       assets:[...new Set(P.musicInstruments.assetNames(voice))],gain:Math.min(1,10**((track.gain ?? 0)/20))};
   }
+  const soundRange=({from,to})=>({from:{samples:from},to:{samples:to}});
+  function audition(args) {
+    return enqueue(()=>{
+      if (args.id===null) return transport.setSound(null);
+      const session=transport.document(), {lane,source,id}=args, {loop,scoreSample}=transport.state();
+      const {revision,additions}=browser.candidate(session,args);
+      const {range,material}=editor.prepareSound(session,{lane,revision,warmAt:scoreSample,...soundRange(loop)},
+        Object.fromEntries(additions.map(({name,pcm})=>[name,pcm])));
+      return transport.setSound({lane,source,id,from:range.from,to:range.to,material});
+    });
+  }
+  function keepSound(args) {
+    return enqueue(async()=>{
+      const before=transport.state(), {sound}=before, session=transport.document(), {fields,id}=P.musicInstruments;
+      if (!fields(args,['lane','id','source','take']) || !sound || args.id!==sound.id ||
+        args.lane!==sound.lane || args.source!==sound.source)
+        throw new RangeError('Audition this sound before keeping it');
+      const take=args.take ?? browser.nameTake(session,sound.id);
+      if (!id(take) || take==='reference' || Object.hasOwn(session.takes ?? {},take))
+        throw new RangeError('Choose a new take name using letters, digits, hyphens or underscores');
+      const {revision,additions}=browser.candidate(session,sound), changes=[
+        {op:'score-take',take,revision},
+        {op:'comp',lane:sound.lane,take,...soundRange(sound)}
+      ], staged=[];
+      let workerStaged=false;
+      try {
+        for (const asset of additions) {
+          editor.addAsset(asset.name,asset.pcm);
+          staged.push(asset);
+        }
+        const ready=await prepare(session,changes,additions.map(({name,pcm})=>({name,pcm})));
+        workerStaged=true;
+        transport.applyPrepared(ready);
+      } catch (error) {
+        for (const {name} of staged) {
+          editor.discardAsset(name);
+          if (workerStaged) discard(name);
+        }
+        throw error;
+      }
+      for (const {name,pcm,file} of staged) {
+        recorded[name]=file;
+        assets[name]=pcm;
+      }
+      const {loop,lanes}=transport.state(), selection=lanes[sound.lane].take;
+      if (selection && selection===before.lanes[sound.lane].take && loop.from===sound.from && loop.to===sound.to)
+        transport.switchTake({lane:sound.lane,take:null});
+      return {lane:sound.lane,take,from:sound.from,to:sound.to};
+    });
+  }
   const command=({op,...args})=>{
     switch (op) {
       case 'state': return transport.state();
+      case 'sounds': return browser.search(transport.document(),{...transport.state(),pins:transport.inspect().pins},args);
+      case 'audition-sound': return audition(args);
+      case 'keep-sound': return keepSound(args);
       case 'inspect': return transport.inspect();
       case 'instrument': return instrument(args.lane);
       case 'recording-lanes': {

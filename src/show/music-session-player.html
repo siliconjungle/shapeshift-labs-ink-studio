@@ -28,6 +28,16 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 .piano-key{touch-action:none;flex:1;white-space:nowrap;padding-inline:8px}
 .piano-key.down,.piano-key:active{background:var(--accent);color:#17221a}
 #breath,#pressure-level,#room-level{padding:0;width:min(250px,100%)}
+#sound-fields{border:0;padding:0;margin:0;min-width:0}
+#sound-query{width:min(15em,100%)}#sound-name{width:min(13em,100%)}#sound-file{width:min(15em,100%)}
+#sound-fields .row + .row{margin-top:10px}
+#sound-results{list-style:none;padding:0;margin:12px 0;max-height:232px;overflow:auto;display:grid;gap:5px}
+#sound-results button{width:100%;display:flex;align-items:baseline;justify-content:space-between;gap:6px 16px;flex-wrap:wrap;text-align:left}
+#sound-results button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:#26352b}
+#sound-results small{color:var(--muted)}
+#sound-count{color:var(--muted);font-size:13px;margin:10px 0 0}
+#sound-status{display:block;min-height:1.5em;margin-top:11px;overflow-wrap:anywhere}
+#sound-example{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 </style>
 <script type="module" src="/player.mjs"></script>
 </head>
@@ -43,6 +53,31 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 <label>Lead-in · sec<input id="lead-in" type="number" min="0" step="any" placeholder="Optional"></label>
 <button>Set loop</button>
 </form>
+</section>
+<section id="sound-browser" aria-labelledby="sound-heading">
+<h2 id="sound-heading">Browse sounds</h2>
+<fieldset id="sound-fields" disabled>
+<div class="row">
+<label>Track<select id="sound-lane"></select></label>
+<label>Source take<select id="sound-source"></select></label>
+<label>Role<select id="sound-role"></select></label>
+<label>Search<input id="sound-query" type="search" maxlength="120" autocomplete="off" placeholder="e.g. short kick"></label>
+</div>
+<div class="row">
+<button type="button" id="sound-match">Match source sound</button>
+<label>Match a WAV<input id="sound-file" type="file" accept=".wav,audio/wav"></label>
+<span id="sound-example"></span>
+<button type="button" id="sound-clear-example" hidden>Clear example</button>
+</div>
+<p id="sound-count" aria-live="polite"></p>
+<ol id="sound-results" aria-label="Sound candidates"></ol>
+<div class="row">
+<button type="button" id="sound-original" disabled>Original mix</button>
+<label>Take name<input id="sound-name" maxlength="48" placeholder="Optional"></label>
+<button type="button" id="sound-keep" disabled>Keep sound</button>
+</div>
+</fieldset>
+<output id="sound-status" role="status"></output>
 </section>
 <section id="recording">
 <h2>Record a take</h2>
