@@ -200,6 +200,49 @@ node cli/ink-studio.js probe sluice.run.json --field world/story-feasibility
 node cli/ink-studio.js sim replay sluice.run.json
 ```
 
+## Declare live reference policies
+
+Put named watches under `lifecycle.liveReferences` to react to changes in the world. Watches can start with concrete targets, `$role` bindings, or template parameters. Sample an agent with `{"agent":{"system":"crew","agent":"pilot","generation":2}}` or an entity with `{"entity":"dock","socket":"landing"}`. The generation pins an agent's lifetime. Without one, Ink pins the first observed generation.
+
+Each watch has an optional `on` map. These are the supported changes.
+
+| Change | Detection |
+| --- | --- |
+| `moved` | The current position is farther from the anchor than `moveTolerance` in world units. The default is 0.25. |
+| `faction-changed` | The target's faction differs from its anchor. Ink reads `metadata.faction` or a custom `factionPath`. |
+| `inaccessible` | The position or identity is unavailable, the agent is dormant, or an authored access check fails. |
+| `missing` | The entity or agent can no longer be found by its ID. |
+| `died` | A matching death event identifies this target's lifetime. |
+| `replaced` | The same agent ID now has a different generation, or an entity's optional `identityPath` now has a different ID or positive integer. |
+
+Set `access.routeFrom` to an agent handle to test a native route to the current target position. Use `access.state` for a world query condition with optional `select`. For death, give `death.event` a normal event selector and `death.target` a path to the affected identity. For example, `{"event":{"kind":"population-death","system":"harbor"},"target":"/actor"}` checks the event's `{system,agent,generation}` handle. Entity events carry the entity ID, or `{entity,identity}` when the watch has an `identityPath`. Death stays latched to that lifetime.
+
+| Policy | Effect |
+| --- | --- |
+| `track` | The default for unlisted changes. Keeps the lifecycle going and records the change. Movement and faction tracking update their anchors. |
+| `suspend` | Holds activation and pauses active stories. The same policy resumes its suspension once all blockers clear. An existing manual suspension still requires a manual resume. |
+| `fail` | Fails an active or suspended story. An unaccepted offer is withdrawn. |
+| `withdraw` | Withdraws an available, active, or suspended story. |
+| `adopt` | Applies to `replaced`. Accepts the new lifetime, establishes fresh movement and faction anchors, and clears the previous lifetime's death. A death observed that tick is handled before adoption. |
+
+Suspending on movement or faction keeps the anchor fixed until the target returns within tolerance or regains its original faction. When several policies apply, failure takes priority over withdrawal, which takes priority over suspension. Normal world and offer deadlines still apply. Live policy transitions run before that tick's objective checks and user story commands. Use [feasibility checks](#check-feasibility-before-offering-a-story) to hold publication of the offer itself.
+
+`world/story-references` exposes observed identities, anchors, current issues, and adoption receipts. Pass `story` and optionally `reference` to narrow the report. `world/story-reference-target` takes both arguments and returns the accepted target's current position, faction, identity, and accessibility. Add an optional `from` agent handle to include its distance to the target. Missing, dead, and unadopted lifetimes have no live target. Story objectives and feasibility checks can read this field. The original `$role` binding continues to identify the authored cast.
+
+Ink emits `story-reference-changed` events with the reference ID, change, policy action, disposition, and observed details. Event actions can act on the new target, for example by binding a new movement destination from `/target/position` on an adoption event. `sim preflight` lists the resolved watches. Checkpoints and recordings preserve the original identity, current target, and decisions. A closed story retains its final observation.
+
+### Run the harbor handoff example
+
+In [The Harbor Handoff](../examples/story-documents/live-passage.json), a dock and a pilot both move. Closing a passage suspends the story and reopening it resumes the work clock. The pilot then dies. Ink adopts a replacement under the same roster ID at its new generation, and the handoff objective records proof against that replacement.
+
+```sh
+node cli/ink-studio.js sim preflight examples/story-documents/live-passage.world.json --strict
+node cli/ink-studio.js sim run examples/story-documents/live-passage.world.json --actions examples/story-documents/live-passage.actions.json --ticks 27 --record passage.run.json
+node cli/ink-studio.js probe passage.run.json --ticks 9 --field world/story-references --args '{"story":"live-passage/escort","reference":"pilot"}'
+node cli/ink-studio.js probe passage.run.json --field world/story-reference-target --args '{"story":"live-passage/escort","reference":"pilot"}'
+node cli/ink-studio.js sim replay passage.run.json
+```
+
 ## Trigger a story from a world
 
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.

@@ -36,6 +36,7 @@
       entries.set(key, { info, activation, outcomes: definition.outcomes, triggers: definition.triggers,
         stages, automatic, evidence: compileEvidence(stages, key, document.objectiveTypes),
         feasibility: compileFeasibility(definition.lifecycle.feasibility, key),
+        liveReferences: definition.lifecycle.liveReferences,
         clock: W.storyDeadlines.compile(definition.lifecycle, world.dt),
         cleanup: W.storyCleanup.compile(definition.lifecycle.cleanup, systems, key) });
     }
@@ -91,6 +92,18 @@
       check(opening ? opening.stage === parent.stage && opening.enteredAt === parent.tick : parent.visit <= route.dropped, message);
     }
 
+    function validReference(change, def) {
+      const reference = change.reference;
+      if (reference===undefined) return true;
+      if (!fields(reference,['reference','cause','action']) || !own(def.liveReferences,reference.reference) ||
+          def.liveReferences[reference.reference].on?.[reference.cause]!==reference.action) return false;
+      if (reference.action==='suspend') return change.to==='suspended'&&change.reason==='live-reference-suspended' ||
+        change.from==='suspended'&&change.to==='active'&&change.reason==='live-reference-restored';
+      return change.to==='withdrawn'&&change.reason==='live-reference-withdrawn'&&
+        (reference.action==='withdraw'||reference.action==='fail'&&change.from==='available') ||
+        change.to==='failed'&&change.reason==='live-reference-failed'&&reference.action==='fail';
+    }
+
     function validate(state, tick, gates, triggers) {
       check(record(state) && Object.keys(state).length === entries.size, 'Malformed story lifecycle checkpoint');
       for (const [key, def] of entries) {
@@ -107,11 +120,13 @@
           (!row.dropped || row.transitions.length === limit), message);
         let previous;
         for (const change of row.transitions) {
-          check(fields(change, ['from', 'to', 'tick', 'reason', 'outcome', 'deadline']) &&
+          check(fields(change, ['from', 'to', 'tick', 'reason', 'outcome', 'deadline', 'reference']) &&
             (allowed(change.from, change.to) ||
               (change.from === null && change.to === 'expired' && change.deadline?.clock === 'world')) &&
             Number.isSafeInteger(change.tick) && change.tick > 0 && change.tick <= tick && reasonOK(change.reason) &&
-            outcomeOK(def, change.to, change.outcome) &&
+            outcomeOK(def, change.to, change.outcome) && validReference(change,def) &&
+            (change.reason!=='live-reference-restored'||!change.reference||
+              (previous ? equal(previous.reference,change.reference) : row.dropped>0)) &&
             (previous ? change.from === previous.to && change.tick >= previous.tick : (change.from === null) === (row.dropped === 0)), message);
           previous = change;
         }
@@ -179,7 +194,7 @@
       return state;
     }
 
-    function advance(previous, starts, commands, tick, emit, events, query, previousGates) {
+    function advance(previous, starts, commands, tick, emit, events, query, previousGates, references) {
       let state = previous, gates = previousGates, queuedOpens = [];
       const sourceLength = events.length;
       let indexed;
@@ -193,6 +208,24 @@
       function save(key, row) {
         if (state === previous) state = { ...previous };
         state[key] = row;
+      }
+      const policy = key => W.storyReferences.decision(references?.[key]);
+      function applyReference(key,publish = emit) {
+        if (!entries.get(key).liveReferences) return true;
+        const from = statusOf(state[key]);
+        if (!W.storyReferences.open.has(from)) return true;
+        const reference = policy(key);
+        if (reference) {
+          const {action} = reference;
+          const to = action==='suspend' ? (from==='active'?'suspended':null) :
+            action==='fail'&&from!=='available' ? 'failed' : 'withdrawn';
+          if (to) transition(key,to,'live-reference-'+to,undefined,{publish,reference});
+          return false;
+        }
+        const last = state[key].transitions.at(-1);
+        if (from==='suspended'&&last.reference?.action==='suspend')
+          transition(key,'active','live-reference-restored',undefined,{publish,reference:last.reference});
+        return true;
       }
       function offer(key, source, parent, publish = emit) {
         const def = entries.get(key);
@@ -208,7 +241,8 @@
         }
         const reason = parent ? 'parent-stage-opened' : source ? 'trigger-matched' : 'authored-offer';
         transition(key,'available',reason,undefined,{publish,source,parent});
-        if (def.activation === 'automatic') transition(key,'active','automatic-activation',undefined,{publish});
+        if (applyReference(key,publish) && def.activation === 'automatic')
+          transition(key,'active','automatic-activation',undefined,{publish});
       }
       function openChildren(ids, parent, publish) {
         for (const id of ids) {
@@ -230,12 +264,13 @@
       }
       function transition(key, to, reason, outcome, options = {}) {
         const prior = state[key], from = statusOf(prior), def = entries.get(key), { info, stages, clock } = def;
-        const { publish = emit, source = prior?.source, deadline, parent = prior?.parent } = options;
+        const { publish = emit, source = prior?.source, deadline, parent = prior?.parent, reference } = options;
         const started = from === 'available' && to === 'active';
         const flow = started && stages ? W.storyStages.initial(info.stage,tick) :
           to === 'suspended' ? W.storyStages.clearProgress(prior?.flow) : prior?.flow;
         const deadlines = W.storyDeadlines.transition(clock, prior?.deadlines, from, to, tick);
-        const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }), ...(deadline && { deadline }) };
+        const change = { from, to, tick, reason, ...(outcome !== undefined && { outcome }), ...(deadline && { deadline }),
+          ...(reference && {reference}) };
         const cleanup = W.storyCleanup.begin(def.cleanup, change);
         const transitions = [...(prior?.transitions ?? []), change];
         const overflow = Math.max(0, transitions.length - limit);
@@ -269,6 +304,11 @@
         if (prior !== before) save(key, prior);
         if (expired) {
           transition(key, 'expired', expired.reason, undefined, { deadline: expired.receipt });
+          continue;
+        }
+        if (prior !== null && !applyReference(key)) continue;
+        if (status==='available' && def.liveReferences && def.activation==='automatic') {
+          transition(key,'active','automatic-activation');
           continue;
         }
         if (status === 'active' && prior.flow?.current) {
@@ -308,6 +348,11 @@
         }
         if (!allowed(from, to)) {
           publish('story-transition-rejected', { ...entries.get(key).info, from, to, reason: 'transition-not-allowed', requestedReason: reason });
+          continue;
+        }
+        const reference = to==='active' ? policy(key) : undefined;
+        if (reference) {
+          publish('story-transition-rejected', { ...entries.get(key).info, from, to, reason:'live-reference-blocked', requestedReason:reason, reference });
           continue;
         }
         transition(key, to, reason, outcome, { publish });

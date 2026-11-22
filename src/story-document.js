@@ -380,8 +380,59 @@ const StoryDocument = (() => {
     }
   }
 
+  function liveReferences(rules, at, roles, report) {
+    const rows = entries(rules, at, true);
+    if (rows.length > 16) invalid(at, 'expected up to 16 live references');
+    const causes = ['died', 'missing', 'replaced', 'inaccessible', 'faction-changed', 'moved'];
+    function actor(value, at) {
+      fields(value, at, ['system', 'agent'], ['generation']);
+      if (!worldName(value.system) || !worldName(value.agent) ||
+          Object.hasOwn(value, 'generation') && (!Number.isSafeInteger(value.generation) || value.generation < 1))
+        invalid(at, 'expected a roster and agent ID with an optional positive generation');
+    }
+    for (const [id, rule] of rows) {
+      const place = at + '.' + id;
+      fields(rule, place, ['target'], ['moveTolerance', 'factionPath', 'identityPath', 'death', 'access', 'on']);
+      if (roleUses(rule, roles, place, report)) continue;
+      record(rule.target, place + '.target');
+      if (Object.hasOwn(rule.target, 'agent')) {
+        fields(rule.target, place + '.target', ['agent']);
+        actor(rule.target.agent, place + '.target.agent');
+        if (Object.hasOwn(rule, 'identityPath')) invalid(place + '.identityPath', 'agents use their native generation');
+      } else {
+        fields(rule.target, place + '.target', ['entity'], ['socket']);
+        if (!worldName(rule.target.entity) || Object.hasOwn(rule.target, 'socket') && !worldName(rule.target.socket))
+          invalid(place + '.target', 'expected an entity ID and optional socket');
+      }
+      for (const key of ['identityPath', 'factionPath']) if (Object.hasOwn(rule, key)) dataPath(rule[key], place + '.' + key);
+      if (Object.hasOwn(rule, 'moveTolerance') && (!Number.isFinite(rule.moveTolerance) || rule.moveTolerance < 0))
+        invalid(place + '.moveTolerance', 'expected a nonnegative finite distance');
+      if (Object.hasOwn(rule, 'death')) {
+        fields(rule.death, place + '.death', ['event','target']);
+        eventSource(rule.death.event, place + '.death.event');
+        dataPath(rule.death.target, place + '.death.target');
+      }
+      if (Object.hasOwn(rule, 'access')) {
+        fields(rule.access, place + '.access', [], ['routeFrom','state']);
+        if (Object.keys(rule.access).length !== 1) invalid(place + '.access', 'expected one access check');
+        if (Object.hasOwn(rule.access,'routeFrom')) actor(rule.access.routeFrom, place + '.access.routeFrom');
+        else {
+          stateSource(rule.access.state, place + '.access.state', true);
+          if (['world/story-references','world/story-reference-target'].includes(rule.access.state.field))
+            invalid(place + '.access.state.field', 'recursive live reference access query');
+        }
+      }
+      if (Object.hasOwn(rule, 'on')) {
+        fields(rule.on, place + '.on', [], causes);
+        for (const [cause, action] of Object.entries(rule.on))
+          if (!['track','suspend','fail','withdraw',...(cause==='replaced'?['adopt']:[])].includes(action) ||
+              cause==='died' && !rule.death) invalid(place + '.on.' + cause, 'invalid live reference response or missing death event');
+      }
+    }
+  }
+
   function lifecycle(value, at, roles, report) {
-    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility']);
+    fields(value, at, [], ['activation', 'offerFor', 'progression', 'deadlines', 'cleanup', 'feasibility', 'liveReferences']);
     if (Object.hasOwn(value, 'activation') && !['automatic', 'manual'].includes(value.activation))
       invalid(`${at}.activation`, 'expected automatic or manual');
     if (Object.hasOwn(value, 'offerFor') &&
@@ -403,6 +454,7 @@ const StoryDocument = (() => {
       }
     }
     if (Object.hasOwn(value, 'feasibility')) feasibility(value.feasibility, at + '.feasibility', roles, report);
+    if (Object.hasOwn(value, 'liveReferences')) liveReferences(value.liveReferences, at + '.liveReferences', roles, report);
   }
 
   const terminalStates = ['completed', 'failed', 'withdrawn', 'expired'];

@@ -1,0 +1,12 @@
+[
+  { "tick": 1, "action": "world/input", "args": { "port": "passage/gate", "value": true } },
+  { "tick": 2, "action": "crew/seek", "args": { "agent": "pilot", "generation": 2, "to": [1, 0, 0.3] } },
+  { "tick": 3, "action": "world/patch", "args": { "edits": [{ "op": "set", "path": "/entities/dock/position", "value": [1.85, 0, -0.5] }] } },
+  { "tick": 5, "action": "world/input", "args": { "port": "passage/gate", "value": false } },
+  { "tick": 6, "action": "world/story-transition", "args": { "document": "live-passage", "story": "escort", "to": "active", "reason": "attempt-closed-passage" } },
+  { "tick": 7, "action": "world/input", "args": { "port": "passage/gate", "value": true } },
+  { "tick": 9, "action": "harbor/death", "args": { "resident": "original-pilot" } },
+  { "tick": 11, "action": "crew/spawn", "args": {
+    "agent": "pilot", "species": "walker", "position": [1.3, 0, 0.3], "metadata": { "faction": "harbor" }
+  } }
+]

@@ -1,0 +1,47 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "live-passage",
+  "title": "The harbor handoff",
+  "stories": {
+    "escort": {
+      "kind": "questlet",
+      "title": "Reach the assigned harbor pilot",
+      "entry": "meet",
+      "roles": { "pilot": { "kind": "pilot", "required": true } },
+      "lifecycle": {
+        "progression": true,
+        "deadlines": { "work": { "for": 3 } },
+        "liveReferences": {
+          "pilot": {
+            "target": { "agent": { "$role": "pilot" } },
+            "moveTolerance": 0.2,
+            "death": { "event": { "kind": "population-death", "system": "harbor" }, "target": "/actor" },
+            "access": { "state": { "field": "world/signal", "args": { "port": "passage/open" }, "when": { "value": true } } },
+            "on": { "moved": "track", "inaccessible": "suspend", "missing": "suspend", "died": "suspend", "replaced": "adopt" }
+          },
+          "dock": {
+            "target": { "entity": "dock", "socket": "landing" },
+            "identityPath": "/metadata/incarnation",
+            "on": { "moved": "track", "faction-changed": "withdraw", "missing": "withdraw" }
+          }
+        }
+      },
+      "stages": {
+        "meet": {
+          "title": "Meet the live pilot",
+          "roles": ["pilot"],
+          "objectives": {
+            "handoff": { "title": "Escort is within handoff range", "type": "observe", "params": { "state": {
+              "field": "world/story-reference-target",
+              "args": { "story": "live-passage/escort", "reference": "pilot", "from": { "system": "crew", "agent": "escort", "generation": 1 } },
+              "when": { "path": "/distance", "op": "lte", "value": 0.18 }
+            } } }
+          },
+          "next": { "done": { "outcome": "met" } }
+        }
+      },
+      "outcomes": { "met": { "title": "Pilot contacted" } }
+    }
+  }
+}

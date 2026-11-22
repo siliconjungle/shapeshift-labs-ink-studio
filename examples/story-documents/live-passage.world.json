@@ -1,0 +1,49 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "live-passage",
+  "dt": 0.1,
+  "storyDocuments": [{ "file": "live-passage.json" }],
+  "storyBindings": { "live-passage/escort": { "pilot": { "kind": "pilot", "value": { "system": "crew", "agent": "pilot", "generation": 2 } } } },
+  "entities": { "dock": {
+    "position": [1.5, 0, -0.5], "sockets": { "landing": [-0.1, 0, 0] },
+    "metadata": { "faction": "harbor", "incarnation": 1 }
+  } },
+  "systems": {
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-3, -0.5, -2], "max": [3, 1, 2] },
+      "ground": 0, "cell": 0.2,
+      "species": { "walker": { "mode": "walk", "radius": 0.1, "speed": 2 } },
+      "agents": {
+        "escort": { "species": "walker", "position": [-1.3, 0, 0.3] },
+        "pilot": { "species": "walker", "position": [0.3, 0, 0.3], "metadata": { "faction": "harbor" } }
+      }
+    } },
+    "harbor": { "kind": "population", "config": {
+      "groups": { "adult": {} },
+      "districts": { "docks": { "at": { "entity": "dock" }, "capacity": 4 } },
+      "households": { "pilots": { "district": "docks", "residents": {
+        "original-pilot": { "group": "adult", "actor": { "system": "crew", "agent": "pilot" } }
+      } } },
+      "rosters": ["crew"]
+    } },
+    "passage": { "kind": "puzzle", "config": { "inputs": { "gate": "bool" }, "outputs": { "open": "gate" } } }
+  },
+  "eventActions": {
+    "dispatch-to-replacement": { "on": { "kind": "story-reference-changed", "system": "world", "where": { "all": [
+      { "path": "/document", "value": "live-passage" }, { "path": "/story", "value": "escort" },
+      { "path": "/reference", "value": "pilot" }, { "path": "/disposition", "value": "adopted" }
+    ] } }, "actions": [{
+      "action": "crew/seek", "args": { "agent": "escort", "generation": 1, "to": [0, 0, 0] },
+      "bindings": { "/to": "/target/position" }
+    }] },
+    "confirm-handoff": { "on": { "kind": "story-objective-resolved", "system": "world", "where": { "all": [
+      { "path": "/document", "value": "live-passage" }, { "path": "/story", "value": "escort" },
+      { "path": "/objective", "value": "handoff" }
+    ] } }, "actions": [{
+      "action": "world/story-choose", "args": {
+        "document": "live-passage", "story": "escort", "stage": "meet", "visit": 1, "branch": "done", "reason": "handoff-verified"
+      }
+    }] }
+  }
+}

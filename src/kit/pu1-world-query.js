@@ -204,7 +204,10 @@
       }
     }
     add(fields,'world',{
-      entity:{type:'record',read:({target:site}) => own(world.entities,site.entity) ? ok(world.entities[site.entity]) : missing('unknown entity','missing')},
+      entity:{type:'record',read:({target:site,args}) => {
+        const entity = args.entity ?? site.entity;
+        return own(world.entities,entity) ? ok(world.entities[entity]) : missing('unknown entity','missing');
+      }},
       ...(world.simulationChunks&&{chunks:{type:'record',selector:true,read({target:site,args}){
         const snapshot=view.simulationChunks;
         if(!snapshot)return missing('simulation chunks are unavailable');
@@ -268,6 +271,8 @@
       'story-candidates':{type:'record',qualified:true,read:({args})=>ok(W.storyCasting.cast(args,api,base))},
       'story-feasibility':{type:'record',qualified:true,read:({args})=>
         W.storyFeasibility.inspect(view.storyFeasibilityRules,view.storyFeasibility,tick,api,args)},
+      'story-references':{type:'record',qualified:true,read:({args})=>W.storyReferences.inspect(view.storyReferences,args)},
+      'story-reference-target':{type:'record',qualified:true,read:({args})=>W.storyReferences.target(view.storyReferences,api,args)},
       ...(world.storyTemplates !== undefined && { 'story-templates':{type:'record',qualified:true,read:({args:{id}}) => {
         const records = view.storyTemplates ?? {};
         return id === undefined ? ok(records) : own(records,id) ? ok(records[id]) :

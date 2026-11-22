@@ -229,6 +229,7 @@ const StoryAnalysis = (() => {
     return {id, kind:story.kind, title:story.title, entry:story.entry, completeTopology:intact,
       ...(story.roles && {roles:story.roles}),
       ...(story.lifecycle?.feasibility && {feasibility:story.lifecycle.feasibility}),
+      ...(story.lifecycle?.liveReferences && {liveReferences:story.lifecycle.liveReferences}),
       stages:keys(story.stages).map(id => {
         const stage = story.stages[id], available = new Set(possible.graph.get(id).map(edge => edge.id));
         return {id, title:stage.title, reachable:reachable.distance.has(id), canReachOutcome:reachesEnding.has(id),
