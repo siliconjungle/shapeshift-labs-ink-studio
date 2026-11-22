@@ -1,3 +1,4 @@
+import { gaussianProxyVertex, gaussianProxyFragment } from './gaussian-part-proxies.mjs';
 import { gaussianHarmonicGLSL } from './gaussian-harmonics.mjs';
 import {engravingVertexUniforms,engravingVertex,engravingFragment} from './engraving-shaders.mjs';
 // Shared draw and resolve shaders extracted from Inkwell Rebirth's WebGL renderer.
@@ -32,7 +33,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -45,6 +46,7 @@ precision highp float; precision highp int;
 uniform highp sampler2D u_data;
 ${facingColors ? facingColors.splatVertexGLSL : ''}
 ${gaussianDegree !== undefined ? gaussianHarmonicGLSL(gaussianDegree) : ''}
+${gaussianProxy ? gaussianProxyVertex : ''}
 ${spriteReconstruction ? 'uniform highp sampler2D u_spriteLod; uniform int u_spriteLodCount; flat out int v_spriteLod;' : ''}
 uniform mat4 u_view, u_proj;
 uniform bool u_geometryDepth;
@@ -113,6 +115,12 @@ void main(){
   int row = record >> 9, col = (record & 511) << 2; v_ix = float(a_index);
   ${spriteReconstruction ? `v_spriteLod=a_index<u_spriteLodCount
     ? int(texelFetch(u_spriteLod,ivec2((a_index&511)>>2,a_index>>9),0)[a_index&3]) : 0;` : ''}
+  ${gaussianProxy ? `
+  int proxyIndex=a_index;
+  v_gaussianProxy=proxyIndex<u_gaussianProxyCount
+    ? int(texelFetch(u_gaussianProxyRows,ivec2((proxyIndex>>2)&511,proxyIndex>>11),0)[proxyIndex&3]) : 0;
+  if (v_gaussianProxy<0) { gl_Position=vec4(2,2,2,1); return; }
+  ` : ''}
   vec4 t0 = texelFetch(u_data, ivec2(col, row), 0);
   vec4 t1 = texelFetch(u_data, ivec2(col + 1, row), 0);
   vec4 t2 = texelFetch(u_data, ivec2(col + 2, row), 0);
@@ -427,6 +435,7 @@ ${ascii ? ascii.vsMain : ''}  gl_Position = vec4(ndc + a_corner * extN, u_geomet
 }`;
   const SPLAT_FS = `#version 300 es
 precision highp float; precision highp int;
+${gaussianProxy ? gaussianProxyFragment : ''}
 ${spriteReconstruction ? `flat in int v_spriteLod; uniform vec2 u_spriteLodGrid;
 ${spriteReconstruction}` : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footprintColumns; flat in vec4 v_footprintMap; flat in vec2 v_footprintStyle, v_footprintZ; flat in vec4 v_footprintPlane;' : ''}
@@ -537,6 +546,24 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     if(!footprintPlane||v_coverage==${softMode}||v_color.a<1.0||g<0.5${optical?'||hasOptical':''})discard;
     o=vec4(0.0);od=vec4(0.0);oa=vec4(0.0);return;
   }` : ''}
+  ${gaussianProxy ? `
+  ${cutaway || footprints ? '' : 'gl_FragDepth=gl_FragCoord.z;'}
+  float proxyDepth = v_depth, proxyGain = 1.0;
+  bool proxyOwnsDepth = false;
+  if (v_gaussianProxy > 0) {
+    int layer=(v_gaussianProxy&15)-1, role=v_gaussianProxy>>4;
+    vec4 surface=texelFetch(u_gaussianProxyLayers,ivec3(ivec2(gl_FragCoord.xy*u_proxyGrid),layer),0);
+    bool hit=surface.r>0.0;
+    if (role==2 && !hit) discard;
+    if (hit && role==3) {
+      proxyOwnsDepth=true;
+      proxyDepth=dot(round(surface.ba*255.0),vec2(256,1))/65535.0;
+      vec4 p=u_proxyProjection*vec4(0,0,-mix(u_proxyDepthRange.x,u_proxyDepthRange.y,proxyDepth),1);
+      gl_FragDepth=p.z/p.w*0.5+0.5;
+    }
+    if (hit && role==4) proxyGain=proxyLighting(proxyNormal(surface.rg),u_proxyLights[layer]);
+  }
+  ` : ''}
   ${layeredGlass ? `
   ${cutaway || footprints ? '' : 'gl_FragDepth = gl_FragCoord.z;'}
   if (u_idx > 2.5) {
@@ -565,12 +592,12 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   `}
   if (u_idx > 0.5) {
     ${engraving ? 'if(v_engravingSlot>0)discard;' : ''}   // the index pass (colour per pixel): which solid dab is in front here, its number in three bytes
-    if (v_color.a < 1.0 || (continuous ? surfaceAlpha <= 0.5 : g < 0.5) || v_depth < 0.0) discard;
+    if (v_color.a < 1.0 ${gaussianProxy ? '&& !proxyOwnsDepth' : ''} || (continuous ? surfaceAlpha <= 0.5 : g < 0.5) || v_depth < 0.0) discard;
     ${cutaway ? 'if (cutInk > 0.0) { o = vec4(0.0); od = vec4(0.0); oa = vec4(0.0); return; }' : ''}
     float k = v_ix + 1.0;
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(0.0); ${masked ? `if (v_policySlot > 0) {${ownerMaskWrite}}` : ''}
-    float graphDepth = round(clamp(${cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
+    float graphDepth = round(clamp(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
     oa = vec4(mod(graphDepth,256.0), mod(floor(graphDepth/256.0),256.0), floor(graphDepth/65536.0),255.0)/255.0; return; }
   bool solid = u_crisp > 0.5 && v_color.a >= 1.0 && v_coverage != ${softMode};
   float a = continuous ? surfaceAlpha :
@@ -624,6 +651,7 @@ ${cutaway ? 'rgb = mix(rgb, u_sectionEdge.rgb, cutInk);' : ''}
 ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
     ${cutaway ? 'sectionAxial' : portal ? 'clipped ? axial : v_portalDepth.x' : 'v_waterAxial'}, mark);` : ''}
   ${environment ? 'rgb = envMedia(rgb, gl_FragCoord.xy, u_viewport, ' + (cutaway ? 'sectionAxial' : 'v_envAxial') + ');' : ''}
+  ${gaussianProxy ? 'rgb*=proxyGain;' : ''}
   if (u_paintPass) {
     // Every fragment attenuates the overlay behind it.
     bool overlay = v_paint != 0 ${optical ? '|| hasOptical' : ''};
@@ -638,8 +666,8 @@ ${water ? `  vec3 mark; rgb = waterPaint(rgb, gl_FragCoord.xy, u_viewport,
   bool behind = pane.a > 0.0 && splitDepth > glassDepth(pane)+0.0000001;
   o_back = behind ? o : vec4(0.0);
   o_through = pane.a > 0.0 && !behind ? vec4(0.0,0.0,0.0,a) : vec4(0.0);` : ''}
-  float a2 = v_color.a >= 1.0 && v_depth >= 0.0 ? a : 0.0;   // only solid splats write depth
-  od = vec4(${cutaway ? 'sectionDepth' : 'v_depth'} * a2, v_gl * a * 0.5, v_lit * a2, a2);   // (green: how much glass lies over this pixel, in front of the last solid thing; a solid splat wipes it)
+  float a2 = (v_color.a >= 1.0 ${gaussianProxy ? '|| proxyOwnsDepth' : ''}) && v_depth >= 0.0 ? a : 0.0;   // only solid splats write depth
+  od = vec4(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'} * a2, v_gl * a * 0.5, v_lit * a2, a2);   // (green: how much glass lies over this pixel, in front of the last solid thing; a solid splat wipes it)
   oa = ${water ? 'vec4(mark * a, a)' : 'vec4(v_as * a, v_ast * 0.25 * a, 0.0, a)'};
 }`;
   return { vertex: SPLAT_VS, fragment: SPLAT_FS };

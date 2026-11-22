@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pelagic · Part proxies</title>
+<style>
+:root { color-scheme:dark; color:#e9eff4; background:#101827; font:15px system-ui,sans-serif; }
+body { margin:0; }
+main { width:min(950px,calc(100% - 32px)); margin:clamp(25px,7vh,74px) auto; }
+header { margin-bottom:24px; }
+h1 { font-size:clamp(34px,7vw,64px); line-height:.94; letter-spacing:-.055em; margin:0 0 12px; }
+p { color:#b9c6d4; margin:0; max-width:48em; }
+.views { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+figure { margin:0; background:#0b1523; border:1px solid #34495d; border-radius:8px; overflow:hidden; }
+canvas { display:block; width:100%; height:auto; image-rendering:pixelated; }
+figcaption { padding:12px 14px; border-top:1px solid #34495d; font-weight:650; }
+.controls { display:grid; grid-template-columns:auto minmax(0,1fr) 4ch; gap:12px; align-items:center; margin-top:20px; }
+button { color:inherit; font:inherit; border:1px solid #527085; border-radius:5px; background:#22374c; padding:6px 13px; }
+input { width:100%; accent-color:#8fcbc9; margin:0; }
+output { text-align:right; font-variant-numeric:tabular-nums; }
+#status { margin:16px 0; }
+@media(max-width:550px) { .views { gap:6px; } figcaption { font-size:13px; padding:9px; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Pelagic</h1>
+  <p>Orbit the same cloud. On the right, three painted tentacles use tapered depth-tested strokes. Their color and the bell’s color still turn with the camera.</p>
+</header>
+<div class="views">
+  <figure><canvas width="152" height="154" aria-label="Pelagic rendered with Gaussian splats"></canvas><figcaption>Gaussian splats</figcaption></figure>
+  <figure><canvas width="152" height="154" aria-label="Pelagic with three solid tentacle strokes"></canvas><figcaption>Tentacle proxies</figcaption></figure>
+</div>
+<div class="controls">
+  <button id="play" type="button" aria-pressed="false">Play</button>
+  <input id="angle" type="range" min="-180" max="180" value="-25" aria-label="Orbit angle">
+  <output id="degrees" for="angle">-25°</output>
+</div>
+<p id="status" role="status">Loading WebGL…</p>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

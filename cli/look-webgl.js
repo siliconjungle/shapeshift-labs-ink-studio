@@ -17,10 +17,10 @@ function runWebGL({ chrome, hardware }, buildFixture, runFixtures, inputs) {
     fs.writeFileSync(page, `<!doctype html><pre id="result">pending</pre>
 <script src="bundle.js"></script>
 <script type="module">
-import { createRenderer, createCameraAtlas } from ${JSON.stringify(renderer)};
+import { createRenderer, createCameraAtlas, compileGaussianPartProxies } from ${JSON.stringify(renderer)};
 const result = document.querySelector('#result');
 try {
-  const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages };
+  const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages, compileGaussianPartProxies };
   const cases = (${runFixtures.toString()})(kit, ${buildFixture.toString()},
     (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${JSON.stringify(inputs)});
   result.textContent = encodeURIComponent(JSON.stringify({ ...cases, browser: navigator.userAgent }));

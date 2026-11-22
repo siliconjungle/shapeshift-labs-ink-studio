@@ -1,3 +1,4 @@
+import { createGaussianProxyRenderer, gaussianProxyPlan } from './gaussian-part-proxies.mjs';
 import { captureGaussianTurntable, gaussianCoverageFrame } from './gaussian-turntable.mjs';
 import { createSplatPaintPass, splatPaintStyle } from './splat-paint-pass.mjs';
 import { createGaussianHarmonics } from './gaussian-harmonics.mjs';
@@ -136,6 +137,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const { target, table, textureUnit } = targets;
     let splatPaintPass;
     // The material-controls pass uses unit 31 before the splat draw.
+    let gaussianProxies;
     const bindGaussians = createGaussianHarmonics(gl, resources, 31, maxSize);
     const environment = createEnvironment(gl,resources,targets,maxSize,toolkit);
     const emitterLighting=createLightEmitters(gl,resources,targets,maxSize,toolkit);
@@ -574,8 +576,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       const surfaces = options.surfaces, previews = options.scaleSurfaces, spriteRows = options.spriteRows;
       const hasSurfaces = Boolean(surfaces || previews?.some(Boolean) || spriteRows?.length);
+      const hasProxies = !!options.proxy && gaussianProxies.hasGeometry;
       const hasPlanes = !!shader.footprints && footprintBinding.hasPlanes && options.u_idx!==3;
-      if (hasSurfaces || hasPlanes || options.surfaceFrame?.lighting?.display) {
+      if (hasSurfaces || hasProxies || hasPlanes || options.surfaceFrame?.lighting?.display) {
         const surfaceOptions = { geometryUpdatesSince: toolkit.SpriteSurface?.geometryUpdatesSince,
           updatesSince: toolkit.SpriteSurface?.updatesSince ?? toolkit.KIT?.ecology?.atlasUpdates, cutaway: cutawayAPI?.glsl,
           projectionPlan: toolkit.SpriteSurface?.projectionPlan,
@@ -603,6 +606,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           });
         }
         if(options.surfaceFrame?.lighting?.display){emitterSurfacePipeline??=createSurfacePipeline(gl,{cutaway:cutawayAPI?.glsl});emitterSurfacePipeline.draw(options.surfaceFrame.lighting.display,{...options.surfaceFrame,lighting:null,water,wet,width,height});}
+        if (hasProxies) {
+          if (options.u_splatPaintPass) gl.colorMask(true,true,true,true);
+          gaussianProxies.draw({ ...options.proxy, width, height, scale: options.u_materialGridScale ?? 1 },
+            options.u_paintPass ? 3 : options.u_idx || 0);
+        }
         data.bind();
         if (options.u_splatPaintPass) gl.colorMask(true,true,true,true);
         gl.depthMask(false);
@@ -611,7 +619,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (shader.footprints) footprintBinding.rebind();
       gl.useProgram(shader.p);
       shader.set({
-        ...options,u_geometryDepth:+(hasSurfaces||hasPlanes),
+        ...options,u_geometryDepth:+(hasSurfaces||hasProxies||hasPlanes),
+        u_proxyGrid: options.proxy ? [options.proxy.width/width, options.proxy.height/height] : [1,1],
         u_portalCoverPlane: options.u_portalCoverPlane ?? zero,
         u_paintPass: !!options.u_paintPass, u_splatPaintPass: !!options.u_splatPaintPass,
         u_materialGridScale: options.u_materialGridScale ?? 1,
@@ -760,6 +769,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const colorMode = frame.gaussianColor ?? harmonics?.colorMode ?? 'baked';
       if (!['baked', 'rgb', 'palette'].includes(colorMode) || colorMode !== 'baked' && !harmonics)
         throw new TypeError('Gaussian RGB and palette modes need live imported harmonics');
+      const proxyPlan = gaussianProxyPlan(world, frame.gaussianPartProxies ?? world.gaussianPartProxies);
       const raw = colorMode === 'baked' ? frame.raw ?? false : colorMode === 'rgb';
       const { outline = true, dither = 0.35, scale = 1 } = frame;
       const look = world.look ?? {};
@@ -1174,10 +1184,16 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       gl.colorMask(true, true, true, true);
       gl.depthMask(true);
       gl.blendEquation(gl.FUNC_ADD);
+      if (proxyPlan) gaussianProxies ??= createGaussianProxyRenderer(gl, resources, table, maxSize);
       const gaussianUniforms = bindGaussians(harmonics, colorMode !== 'baked');
+      const proxy = proxyPlan && { width, height, scale: 1, camera, clip, plane, gaussian: gaussianUniforms,
+        degree: harmonics.degree, range: [...camera.depthRange, fog.start ?? 1, fog.max ?? 0],
+        fog: rgb(world.pal[fog.c ?? 0] ?? 0) };
+      const proxyUniforms = proxy && gaussianProxies.prepare(proxyPlan, proxy);
+      if (proxy) historyValid = false;
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
-        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint,
+        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
         engraving:engraved, footprints, materialStyles, facingColors:facing && facingAPI, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section, spriteReconstruction:!!spriteMask
       });
@@ -1187,6 +1203,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       shader.set({
         u_data: 0, u_bones: 4, u_fine: 7,
         ...(gaussianUniforms && { ...gaussianUniforms, u_eye: camera.eye }),
+        ...proxyUniforms,
         ...(facing && { u_facingRows: facingUnit, u_facingCount: facing.count, u_disabledViewColors: disabledViewColors, u_facingPattern: patterned }), ...(spriteMask && {u_spriteLod:spriteLodUnit,u_spriteLodCount:spriteMask.codes.length}), ...(plan && { u_instances: 15 }), u_fineOn: +hasFine, u_fpal: pal, u_view: camera.view,
         ...(materialStyles && { u_materialStyles: 16, u_materialPatterned: patterned, u_materialStylesOn: !raw }),
         u_proj: camera.projection, u_time: time, u_scale: scale, u_ortho: +camera.ortho,
@@ -1234,15 +1251,15 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         textureUnit(13,glassBoundary.textures[0]);
       }
       drawGeometry(shader, geometry, rw, rh, { u_idx: 0, u_snap: +(!raw && !colored), u_hard: 0,
-        u_materialGridScale: samples, background, tangent, lookGrid:coverage&&[width,height],layeredGlass,surfaces,scaleSurfaces,spriteRows,spriteGrid:[width/rw,height/rh],surfaceFrame }, water, wet, env);
+        u_materialGridScale: samples, background, tangent, proxy, lookGrid:coverage&&[width,height],layeredGlass,surfaces,scaleSurfaces,spriteRows,spriteGrid:[width/rw,height/rh],surfaceFrame }, water, wet, env);
       if (colored)
-        drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, background, tangent,surfaces,scaleSurfaces,spriteRows,surfaceFrame }, water, wet, env);
+        drawGeometry(shader, contours, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, background, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame }, water, wet, env);
       if (captureSplatCoverage) captureSplatCoverage((colored ? contours : geometry).framebuffer);
       if (splatPaint) {
         shader.set({ u_splatPaintRows: splatPaintPass.bind(splatPaint.mask), u_splatPaintCount: splatPaint.mask.count });
         drawGeometry(shader, splatPaintPass.mask, width, height, {
           u_idx: 0, u_snap: 1, u_hard: 0, u_paintPass: true, u_splatPaintPass: true,
-          tangent, surfaces, scaleSurfaces, spriteRows, surfaceFrame
+          tangent, proxy, surfaces, scaleSurfaces, spriteRows, surfaceFrame
         }, water, wet, env);
       }
       if (paintOnPatterns) {
@@ -1250,11 +1267,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           tangent, lookGrid: coverage && [width, height] }, water, wet, env);
       }
       if (ownsPixels)
-        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,surfaces,scaleSurfaces,spriteRows,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
+        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (cover)
         drawGeometry(shader, cover.buffer, width, height,
-          { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_portalCoverPlane: cover.plane, tangent,
+          { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_portalCoverPlane: cover.plane, tangent, proxy:proxy && {...proxy,clip:cover.plane},
             surfaces, scaleSurfaces, spriteRows, surfaceFrame: { ...surfaceFrame, index: true, portalCover: true, clip: cover.plane } });
       gl.disable(gl.BLEND);
       textureUnit(1, geometry.textures[0]);
