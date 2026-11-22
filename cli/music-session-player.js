@@ -3,6 +3,7 @@ const {randomBytes,createHash}=require('node:crypto');
 const WAV=require('./wav.js'), {write}=require('./asset-files.js');
 const Recording=require('./music-session-recording.js');
 const {createSoundBrowser}=require('./music-sound-browser.js');
+const SoundKeep=require('./music-sound-keep.js');
 
 const files=new Map([
   ['/', ['music-session-player.html','text/html; charset=utf-8']],
@@ -23,14 +24,14 @@ const jamFiles=new Map([
   ['/jam.mjs',['music-session-jam.mjs','text/javascript; charset=utf-8']]
 ]);
 
-module.exports=function play(transport,{port,prepare,searchSounds,discard,editor,assets,paths,P,recordings,recipe,save,jam=false}) {
+module.exports=function play(transport,{port,prepare,searchSounds,discard,editor,assets,paths,P,kit,recordings,soundExports,recipe,save,jam=false}) {
   const key=randomBytes(24).toString('hex');
   const staticFiles=new Map([...(jam ? jamFiles : files)].map(([route,[file,type]])=>
     [route,{body:fs.readFileSync(path.join(__dirname,'../src/show',file)),type}]));
   const recorded=Object.create(null), commits=new Map();
   const browser=jam ? null : createSoundBrowser(P,assets,paths);
   if (!jam) staticFiles.set('/instrument-core.mjs',{body:Recording.instrumentCore(),type:'text/javascript; charset=utf-8'});
-  let listener,lastPull=0,queued=Promise.resolve();
+  let listener,lastPull=0,queued=Promise.resolve(), auditionContext, lastShot;
   function enqueue(job) {
     const result=queued.then(job);
     queued=result.catch(()=>{});
@@ -86,12 +87,42 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
   const soundRange=({from,to})=>({from:{samples:from},to:{samples:to}});
   function audition(args) {
     return enqueue(()=>{
-      if (args.id===null) return transport.setSound(null);
+      if (args.id===null) {
+        auditionContext=lastShot=undefined;
+        return transport.setSound(null);
+      }
       const session=transport.document(), {lane,source,id}=args, {loop,scoreSample}=transport.state();
       const {revision,additions}=browser.candidate(session,args);
       const {range,material}=editor.prepareSound(session,{lane,revision,warmAt:scoreSample,...soundRange(loop)},
         Object.fromEntries(additions.map(({name,pcm})=>[name,pcm])));
-      return transport.setSound({lane,source,id,from:range.from,to:range.to,material});
+      const ack=transport.setSound({lane,source,id,from:range.from,to:range.to,material});
+      auditionContext={session:session.id,...ack.sound,frame:ack.frame,scoreSample:ack.scoreSample,pass:ack.pass};
+      lastShot=undefined;
+      return ack;
+    });
+  }
+  function selected(args) {
+    const {sound}=transport.state();
+    if (!sound || !auditionContext || args.id!==sound.id || args.lane!==sound.lane || args.source!==sound.source)
+      throw new RangeError('Audition this sound before keeping it');
+    return sound;
+  }
+  function printShot(args) {
+    const sound=selected(args), candidate=browser.isolated(transport.document(),sound);
+    return SoundKeep.preview(P,candidate,auditionContext,args.settings);
+  }
+  function oneShot(args) {
+    if (!P.musicInstruments.fields(args,['lane','id','source','settings'])) throw new RangeError('Invalid one-shot preview');
+    return enqueue(()=>{
+      lastShot=printShot(args);
+      return lastShot.bytes;
+    });
+  }
+  function exportSound({lane,id,source,...options}) {
+    return enqueue(()=>{
+      const match={lane,id,source};
+      selected(match);
+      return SoundKeep.publish(kit,soundExports,lastShot ?? printShot(match),options);
     });
   }
   function keepSound(args) {
@@ -139,6 +170,7 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
       case 'sounds': return searchSounds(transport.document(),{...transport.state(),pins:transport.inspect().pins},args);
       case 'audition-sound': return audition(args);
       case 'keep-sound': return keepSound(args);
+      case 'export-sound': return exportSound(args);
       case 'inspect': return transport.inspect();
       case 'instrument': return instrument(args.lane);
       case 'recording-lanes': {
@@ -189,7 +221,7 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
       return res.end(entry.body);
     }
     if (req.method==='GET' && req.url==='/session') return respond(200,{key,state:transport.state()});
-    if (req.method!=='POST' || !['/audio','/command',...(!jam ? ['/record','/instrument-asset'] : [])].includes(req.url)) return respond(404,{error:'Unknown route'});
+    if (req.method!=='POST' || !['/audio','/command',...(!jam ? ['/record','/instrument-asset','/sound-preview'] : [])].includes(req.url)) return respond(404,{error:'Unknown route'});
     if (req.headers['x-ink-session']!==key) return respond(403,{error:'Session key required'});
     const limit=req.url==='/record' ? Recording.bodyBudget : 65536;
     let bytes=0, chunks=[];
@@ -204,6 +236,11 @@ module.exports=function play(transport,{port,prepare,searchSounds,discard,editor
       if (req.url==='/record') return respond(200,await record(payload));
       const body=JSON.parse(payload.toString('utf8'));
       if (req.url==='/command') return respond(200,await (jam ? jamCommand(body) : command(body)));
+      if (req.url==='/sound-preview') {
+        const bytes=await oneShot(body);
+        res.writeHead(200,{'Content-Type':'audio/wav'});
+        return res.end(bytes);
+      }
       if (req.url==='/instrument-asset') {
         const audio=instrument(body.lane).assets.includes(body.asset) && assets[body.asset];
         if (!audio) return respond(404,{error:'Unknown instrument WAV'});

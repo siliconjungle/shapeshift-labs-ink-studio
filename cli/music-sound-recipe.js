@@ -7,6 +7,7 @@ const { readSoundDocument } = require('./sound-source.js');
 
 const usage = 'music sound render <recipe.json> --out directory';
 const mutationUsage = 'music sound mutate <recipe.json> [settings.json] --out directory';
+const replayUsage = 'music sound replay <audition.json> --out directory';
 const files = { audio: 'sound.wav', recipe: 'recipe.sound.json', report: 'report.json' };
 
 function artifacts({ value, recipe, report }) {
@@ -51,10 +52,15 @@ function mutate(sound, source, settings, inputs, output) {
 
 function command(pos, opt, kit) {
   const [mode, input, config] = pos;
-  if (!input || !(mode === 'render' && pos.length === 2 || mode === 'mutate' && pos.length <= 3) ||
+  if (!input || !((mode === 'render' || mode === 'replay') && pos.length === 2 || mode === 'mutate' && pos.length <= 3) ||
       typeof opt.out !== 'string' || !opt.out.trim() || Object.keys(opt).some(key => key !== 'out'))
-    throw new TypeError('Use ' + usage + ' or ' + mutationUsage);
+    throw new TypeError('Use ' + usage + ', ' + mutationUsage + ', or ' + replayUsage);
   const sound = kit.KIT.procedural.mediaGraph.soundRecipe, output = path.resolve(opt.out);
+  if (mode === 'replay') {
+    const summary = require('./music-sound-keep.js').replay(kit, input, output);
+    process.stdout.write(JSON.stringify(summary) + '\n');
+    return summary;
+  }
   const source = readSoundDocument(input);
   const summary = mode === 'render' ? render(sound, source, input, output) :
     mutate(sound, source, config && readSoundDocument(config), config ? [input, config] : [input], output);
@@ -62,4 +68,4 @@ function command(pos, opt, kit) {
   return summary;
 }
 
-module.exports = { command, usage, mutationUsage };
+module.exports = { command, usage, mutationUsage, replayUsage };

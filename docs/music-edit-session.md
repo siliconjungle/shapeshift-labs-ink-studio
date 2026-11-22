@@ -304,6 +304,44 @@ Use `audition-sound` with `{lane,source,id}` to queue a candidate at the
 next unrendered sample, or `{id:null}` to clear it. Use `keep-sound` with
 the same candidate and an optional `take` name to save it into the edit.
 
+### Export the candidate
+
+Click a sound, then open **Export the candidate**. **Preview one-shot**
+plays the isolated sound. For instrument patches, set the MIDI note,
+velocity, or gate before previewing. Pause the loop to hear the isolated
+preview by itself.
+
+Choose **WAV cue**, **Playable sample**, or **Event-sound family**, then
+click **Save asset**. Ink uses the last isolated preview, or its default
+one-shot settings when you save straight from a loop audition. The files
+go into a `-sounds` directory beside the file named by `--out` or the
+source session when no output was specified.
+
+- A **WAV cue** contains the preview WAV, audition settings, and the
+  source patch and its WAVs or the editable seeded recipe.
+- A **Playable sample** adds a content-addressed sample catalog, a MIDI
+  pad kit, and a one-hit performance.
+- An **Event-sound family** adds an asset registry with a pinned
+  `event/<name>` reference. Seeded candidates also generate four
+  mutation variants with duration and attack locked. Each member has
+  its own pinned sound reference at the chosen revision. Instrument
+  candidates keep the audition as the default member.
+
+List a `.sound.json` file in the session's named `assets` table to browse
+it under **Session sound recipes** or the **Effect** role. The original
+recipe travels with each saved copy. For any kind of kept sound, rebuild
+the preview WAV with `ink-studio music sound replay audition.json --out rebuilt`.
+
+For automation, send the current `{lane,source,id}` to the authenticated
+`POST /sound-preview` endpoint. Instrument previews accept an optional
+`settings` record with `midi`, `velocity`, `gate`, `roundRobin`, and
+`seed`. The `export-sound` command takes the same candidate identity,
+`kind`, optional `name`, and optional family `revision`.
+
+Run the [Keep Browser Sound demo](../examples/music-production/keep-browser-sound.cjs)
+to export a seeded candidate from the loopback browser, play it from
+the sample kit, and trigger the pinned family from recorded world events.
+
 ## Record straight into take lanes
 
 In the live desk, choose a native instrument lane and **Enable MIDI** in a

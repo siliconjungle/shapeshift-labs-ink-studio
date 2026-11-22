@@ -34,10 +34,12 @@ if (isMainThread) {
   };
 } else {
   const P=require('..').load().KIT.procedural;
+  const path=require('node:path');
   const {readAssets}=require('./music-mixer.js');
   const {createSoundBrowser}=require('./music-sound-browser.js');
   const host=workerData.hostFile===undefined ? undefined : require('./clap-adapter').load(workerData.hostFile);
   const assets=readAssets(workerData.paths,workerData.file,P), shared=new WeakMap();
+  const paths=Object.fromEntries(Object.entries(workerData.paths).map(([name,file])=>[name,path.resolve(path.dirname(workerData.file),file)]));
   const editor=P.mediaGraph.musicSession.create(assets,host);
   let browser;
   function drop(name) {
@@ -59,7 +61,7 @@ if (isMainThread) {
     const added=[];
     try {
       if (search) {
-        browser ??= createSoundBrowser(P,assets,{});
+        browser ??= createSoundBrowser(P,assets,paths);
         parentPort.postMessage({id,value:browser.search(session,search.state,search.query)});
         return;
       }

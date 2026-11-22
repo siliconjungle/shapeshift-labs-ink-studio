@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 const option=(value,label=value)=>new Option(label,value);
 const seconds=value=>({seconds:Number(value)});
 const client=crypto.randomUUID();
-let key,state,context,recorder,sounds,playing=false,pulling=false,timer,nextAt=0,heard=[],clippedFrames=0;
+let key,state,context,recorder,sounds,shot,playing=false,pulling=false,timer,nextAt=0,heard=[],clippedFrames=0;
 const desks=new Map();
 let scoreNotes,reading=false,notesRevision;
 
@@ -164,6 +164,19 @@ function getContext(create=true) {
   if (context && context.sampleRate!==state.sampleRate) throw new Error('Audio device did not open at the session sample rate');
   return context;
 }
+async function previewSound(args) {
+  const ctx=getContext();
+  await ctx.resume();
+  const response=await post('/sound-preview',args);
+  const buffer=await ctx.decodeAudioData(await response.arrayBuffer());
+  shot?.stop();
+  const source=ctx.createBufferSource();
+  source.buffer=buffer;
+  source.connect(ctx.destination);
+  source.onended=()=>{if (shot===source) shot=undefined;};
+  shot=source;
+  source.start();
+}
 
 $('play').addEventListener('click',act(async()=>{
   getContext();
@@ -249,7 +262,7 @@ try {
   bounds();
   recorder=setupRecording({state:()=>({...state,recordingPlayback:playing}),inspect:()=>scoreNotes,
     context:getContext,post,command,refresh,client,status});
-  sounds=setupSoundBrowser({state:()=>state,command,refresh,status,act});
+  sounds=setupSoundBrowser({state:()=>state,command,refresh,status,act,preview:previewSound});
   sounds.show();
   $('play').disabled=false;
   requestAnimationFrame(cursor);

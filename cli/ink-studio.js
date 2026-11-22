@@ -1220,6 +1220,7 @@ const CMD = {
         '  music rack plugin-info|plugin-state alias [settings.json] --clap-host manifest.json   inspect or save CLAP state',
         '  '+require('./music-sound-recipe.js').usage+'   render reproducible one-shot audio',
         '  '+require('./music-sound-recipe.js').mutationUsage+'   generate a bounded family of one-shots',
+        '  '+require('./music-sound-recipe.js').replayUsage+'   rebuild a kept sound audition',
         '  music instrument analyze|audition|build recipe.json --out path   turn a take bank into labeled playable zones',
         '  music instrument discover|keep-discovery file.json [selection.json] --out dir',
         '  music instrument workshop|audition-workshop|keep-workshop file.json [settings.json] --out dir',

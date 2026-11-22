@@ -1,5 +1,6 @@
 const WAV=require('./wav.js');
 const {catalog,describe}=require('./music-sound-library.js');
+const {isSoundRecipe,readSoundDocument}=require('./sound-source.js');
 
 const stockTags={
   'recorded-reed':['Recorded Harmonica','lead','reed acoustic key-up vibrato'],
@@ -54,6 +55,12 @@ function createSoundBrowser(P,assets,paths) {
       return {id:'stock-'+key,title,roles:role ? [role] : [],tags,group:pack.title,patch,sources};
     });
   })];
+  const recipes=Object.entries(paths).filter(([name,file])=>Object.hasOwn(assets,name) && isSoundRecipe(file)).map(([name,file])=>{
+    const recipe=P.mediaGraph.soundRecipe.normalize(readSoundDocument(file));
+    return {id:'recipe-'+name,title:pretty(name),roles:['effect'],tags:'seeded one-shot '+recipe.family,
+      group:'Session sound recipes',recipe,patch:{type:'sample',zones:[{samples:[name]}]}};
+  });
+  const rowsIn=context=>[...context.project,...stock,...recipes];
   function sourcesIn(session,lane,source) {
     const base=session.production, revision=source===reference ? {} : get(session.takes,source);
     const tracks={...base.tracks};
@@ -138,7 +145,7 @@ function createSoundBrowser(P,assets,paths) {
     const view=options(session,state,query.lane);
     if (!view.lane) return view;
     const context=sourcesIn(session,view.lane,query.source || view.source || reference);
-    const rows=[...context.project,...stock], requested=query.sample;
+    const rows=rowsIn(context), requested=query.sample;
     const roles=[...new Set(rows.flatMap(row=>row.roles))].sort();
     let example;
     if (requested==='current') example=timbre(context.current,context.currentRole);
@@ -158,16 +165,20 @@ function createSoundBrowser(P,assets,paths) {
       const comparison=example && timbre(row,role);
       const distance=comparison ? example.reduce((sum,value,i)=>sum+(value-comparison[i])**2,0) : Infinity;
       const preferred=row.roles.includes(context.currentRole);
-      return {id:row.id,title:row.title,roles:row.roles,group:row.group,distance,preferred};
+      return {id:row.id,title:row.title,roles:row.roles,group:row.group,...(row.recipe && {recipe:true}),distance,preferred};
     }).sort((a,b)=>(example ? a.distance-b.distance || 0 : 0) ||
       Number(b.preferred)-Number(a.preferred) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
     return {...view,roles,results:results.map(({distance,preferred,...row})=>row)};
   }
-  function candidate(session,{lane,source,id:which}) {
+  function choose(session,{lane,source,id:which}) {
     check(id(lane) && (source===reference || get(session.takes,source)) && typeof which==='string','Choose a source take and a sound');
     const context=sourcesIn(session,lane,source);
-    const row=[...context.project,...stock].find(row=>row.id===which);
+    const row=rowsIn(context).find(row=>row.id===which);
     check(row,'Unknown sound');
+    return {context,row};
+  }
+  function candidate(session,args) {
+    const {lane}=args, {context,row}=choose(session,args);
     const revision=structuredClone(context.revision), patch=structuredClone(row.patch);
     // Stock WAVs can share names with user recordings. Keep references distinct.
     const names=new Map(), additions=[];
@@ -198,8 +209,17 @@ function createSoundBrowser(P,assets,paths) {
     revision.tracks={...revision.tracks,[lane]:{...revision.tracks?.[lane],patch:key}};
     return {revision,additions,title:row.title};
   }
+  function isolated(session,args,settings) {
+    const {context,row}=choose(session,args);
+    if (row.recipe) return {title:row.title,source:{kind:'recipe',recipe:row.recipe},settings:{}};
+    const {performance,echo,gestures,...patch}=row.patch;
+    const bank=Object.fromEntries([...new Set(I.assetNames(patch))].map(name=>[name,asset(row,name)]));
+    const role=row.roles.find(role=>role===context.currentRole) ?? row.roles[0];
+    return {title:row.title,source:{kind:'instrument',patch},assets:bank,
+      settings:{midi:pitch[role] ?? 60,velocity:.76,gate:.24,roundRobin:0,seed:9121,sampleRate:session.sampleRate,...settings}};
+  }
   const nameTake=(session,which)=>boundedName('sound-'+which.replace(/^(stock|session)-/,''),name=>Object.hasOwn(session.takes ?? {},name));
-  return {search,candidate,nameTake};
+  return {search,candidate,isolated,nameTake};
 }
 
 module.exports={createSoundBrowser};

@@ -31,6 +31,7 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 #sound-fields{border:0;padding:0;margin:0;min-width:0}
 #sound-query{width:min(15em,100%)}#sound-name{width:min(13em,100%)}#sound-file{width:min(15em,100%)}
 #sound-fields .row + .row{margin-top:10px}
+#sound-fields [hidden]{display:none}
 #sound-results{list-style:none;padding:0;margin:12px 0;max-height:232px;overflow:auto;display:grid;gap:5px}
 #sound-results button{width:100%;display:flex;align-items:baseline;justify-content:space-between;gap:6px 16px;flex-wrap:wrap;text-align:left}
 #sound-results button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:#26352b}
@@ -76,6 +77,21 @@ textarea{width:100%;min-height:8em;font:13px ui-monospace,monospace}pre{max-heig
 <label>Take name<input id="sound-name" maxlength="48" placeholder="Optional"></label>
 <button type="button" id="sound-keep" disabled>Keep sound</button>
 </div>
+<details>
+<summary>Export the candidate</summary>
+<div class="row" id="sound-note-settings">
+<label>MIDI note<input id="sound-midi" type="number" min="0" max="127" placeholder="Auto"></label>
+<label>Velocity<input id="sound-velocity" type="number" min="0.001" max="1" step="any" placeholder="0.76"></label>
+<label>Gate · sec<input id="sound-gate" type="number" min="0.01" max="2" step="any" placeholder="0.24"></label>
+</div>
+<div class="row">
+<button type="button" id="sound-preview" disabled>Preview one-shot</button>
+<label>Save as<select id="sound-export-kind"><option value="cue">WAV cue</option><option value="sample">Playable sample</option><option value="family">Event-sound family</option></select></label>
+<label>Name<input id="sound-export-name" maxlength="48" placeholder="Candidate name"></label>
+<label id="sound-revision-label" hidden>Revision<input id="sound-revision" type="number" min="1" max="999999" value="1" required></label>
+<button type="button" id="sound-export" disabled>Save asset</button>
+</div>
+</details>
 </fieldset>
 <output id="sound-status" role="status"></output>
 </section>

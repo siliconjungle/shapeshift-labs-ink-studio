@@ -27,18 +27,22 @@ async function audioExample(file) {
   return btoa(String.fromCharCode(...bytes));
 }
 
-export function setupSoundBrowser({state,command,refresh,status,act}) {
+export function setupSoundBrowser({state,command,refresh,status,act,preview}) {
   const track=$('sound-lane'), basis=$('sound-source'), role=$('sound-role'), input=$('sound-query');
   const list=$('sound-results'), count=$('sound-count'), info=$('sound-status'), original=$('sound-original'), keep=$('sound-keep');
   const reference=$('sound-example'), upload=$('sound-file'), name=$('sound-name');
+  const exportKind=$('sound-export-kind'), audition=$('sound-preview'), save=$('sound-export');
   let sample,sampleName='', basisChosen=false, request=0, stamp,pending=false,timer,candidates=[];
   const message=text=>{info.textContent=text;};
   const selected=()=>state().sound?.lane===track.value ? state().sound : null;
+  const isRecipe=()=>Boolean(selected()?.id.startsWith('recipe-'));
 
   function active() {
     const sound=selected();
     original.disabled=pending || !sound;
     keep.disabled=pending || !sound;
+    audition.disabled=save.disabled=pending || !sound;
+    $('sound-note-settings').hidden=!sound || isRecipe();
     for (const button of list.querySelectorAll('button')) {
       button.setAttribute('aria-pressed',String(sound?.id===button.dataset.sound));
       button.disabled=pending || !basis.value;
@@ -141,6 +145,30 @@ export function setupSoundBrowser({state,command,refresh,status,act}) {
     await refresh(true);
     name.value='';
     const text='Kept '+ack.take+' in '+ack.lane+' · Save session to write the editable take';
+    message(text);
+    status(text);
+  })));
+  exportKind.addEventListener('change',()=>{
+    $('sound-revision-label').hidden=exportKind.value!=='family';
+  });
+  audition.addEventListener('click',act(()=>change(async()=>{
+    const {lane,id,source}=selected();
+    const settings={};
+    if (!isRecipe()) for (const field of ['midi','velocity','gate']) {
+      const input=$('sound-'+field);
+      if (!input.reportValidity()) return;
+      if (input.value!=='') settings[field]=Number(input.value);
+    }
+    await preview({lane,id,source,settings});
+    message('One-shot preview');
+  })));
+  save.addEventListener('click',act(()=>change(async()=>{
+    const {lane,id,source}=selected(), kind=exportKind.value, name=$('sound-export-name').value.trim();
+    const revision=$('sound-revision');
+    if (kind==='family' && !revision.reportValidity()) return;
+    const ack=await command('export-sound',{lane,id,source,kind,...(name && {name}),
+      ...(kind==='family' && {revision:Number(revision.value)})});
+    const text='Saved '+ack.directory;
     message(text);
     status(text);
   })));

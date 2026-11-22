@@ -1,5 +1,5 @@
 const test=require('node:test'), assert=require('node:assert/strict');
-const fs=require('node:fs'), os=require('node:os'), path=require('node:path'), {spawn}=require('node:child_process');
+const fs=require('node:fs'), os=require('node:os'), path=require('node:path'), {spawn,execFileSync}=require('node:child_process');
 const {once}=require('node:events'), ink=require('..');
 const {createSoundBrowser}=require('../cli/music-sound-browser.js');
 const {fixture,loop}=require('../examples/music-production/sound-browser.cjs');
@@ -93,6 +93,22 @@ test('the live browser searches by role and example and saves a sampled winner a
   assert.deepEqual((await cmd('state')).lanes.kick.takes,['reference',basisTake]);
   await cmd('save');
   assert.deepEqual(JSON.parse(fs.readFileSync(out)).session,source);
+  const preview=await post('/sound-preview',{...match,settings:{midi:38,velocity:.64,gate:.18}});
+  assert.equal(preview.headers.get('content-type'),'audio/wav');
+  const previewBytes=Buffer.from(await preview.arrayBuffer());
+  const exported=await cmd('export-sound',{...match,kind:'cue',name:'acoustic-kick'});
+  assert.deepEqual(fs.readFileSync(exported.audio),previewBytes);
+  const audition=path.join(exported.directory,'audition.json');
+  const receipt=JSON.parse(fs.readFileSync(audition));
+  assert.equal(receipt.audition.midi,38);
+  assert.equal(receipt.audition.velocity,.64);
+  assert.equal(receipt.candidate.scoreSample,before.scoreSample);
+  assert.equal(receipt.source.kind,'instrument');
+  assert(Object.values(receipt.source.assets).every(file=>fs.existsSync(path.join(exported.directory,file))));
+  const rebuilt=path.join(dir,'replay');
+  execFileSync(process.execPath,[path.join(__dirname,'../cli/ink-studio.js'),
+    'music','sound','replay',audition,'--out',rebuilt]);
+  assert.deepEqual(fs.readFileSync(path.join(rebuilt,'sound.wav')),previewBytes);
   assert.equal((await cursor(400)).scoreSample,before.scoreSample);
   const keep=await cmd('keep-sound',{...match,take:'closer'});
   assert.deepEqual(keep,{lane:'kick',take:'closer',from:before.loop.from,to:before.loop.to});
@@ -111,4 +127,69 @@ test('the live browser searches by role and example and saves a sampled winner a
   const tweaked=reopened.edit(kept.session,[{op:'note',lane:'kick',take:'closer',clip:'kick-phrase',
     voice:'phrase',note:'note-0',set:{velocity:.65}}]);
   assert.equal(reopened.inspect(tweaked).lanes.kick.takes.closer[0].velocity,.65);
+});
+
+test('the live browser keeps seeded recipes as playable pads and pinned, portable family revisions',async t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-browser-recipe-'));
+  const file=name=>path.join(dir,name), write=(name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const read=file=>JSON.parse(fs.readFileSync(file));
+  const seeded={format:P.mediaGraph.soundRecipe.format,version:1,family:'jump',seed:781,
+    render:{sampleRate:rate},synth:{pulseWidth:.25},retro:{bits:5,rateHz:4000}};
+  write('latch.sound.json',seeded);
+  write('session.json',{session:fixture(rate),assets:{latch:'latch.sound.json'}});
+  write('loop.json',loop);
+  const tool=path.join(__dirname,'../cli/ink-studio.js');
+  const run=(...args)=>execFileSync(process.execPath,[tool,...args],{cwd:dir,encoding:'utf8'});
+  const cli=spawn(process.execPath,[tool,'music','session','play',file('session.json'),file('loop.json'),'--out',file('saved.json')],
+    {stdio:['ignore','pipe','pipe']});
+  t.after(async()=>{
+    if (cli.exitCode===null && cli.signalCode===null) {
+      const done=once(cli,'exit'); cli.kill(); await done;
+    }
+    fs.rmSync(dir,{recursive:true,force:true});
+  });
+  const [banner]=await once(cli.stdout,'data'), {url}=JSON.parse(banner);
+  const {key,state}=await (await fetch(url+'/session')).json();
+  const post=(route,body)=>fetch(url+route,{method:'POST',headers:{'content-type':'application/json','x-ink-session':key},
+    body:JSON.stringify(body)});
+  const cmd=async(op,args={})=>{
+    const response=await post('/command',{op,...args}), result=await response.json();
+    assert(response.ok,JSON.stringify(result));
+    return result;
+  };
+  const match={lane:'kick',source:'reference',id:'recipe-latch'};
+  const results=await cmd('sounds',{lane:'kick',query:'latch',role:'effect'});
+  assert.deepEqual(results.results.map(({id,recipe})=>[id,recipe]),[[match.id,true]]);
+  assert.equal((await post('/command',{op:'export-sound',...match,kind:'cue'})).status,400);
+  await cmd('audition-sound',match);
+  const response=await post('/sound-preview',match);
+  assert(response.ok);
+  const heard=Buffer.from(await response.arrayBuffer());
+  const cue=await cmd('export-sound',{...match,kind:'cue',name:'latch'});
+  const sample=await cmd('export-sound',{...match,kind:'sample',name:'latch'});
+  const family=await cmd('export-sound',{...match,kind:'family',name:'latch',revision:2});
+  assert.deepEqual(await cmd('export-sound',{...match,kind:'family',name:'latch',revision:2}),family);
+  assert.equal((await post('/command',{op:'export-sound',...match,kind:'cue',name:'../escape'})).status,400);
+  for (const exported of [cue,sample,family]) {
+    assert.deepEqual(fs.readFileSync(exported.audio),heard);
+    assert.deepEqual(read(path.join(exported.directory,'recipe.sound.json')),P.mediaGraph.soundRecipe.normalize(seeded));
+    const receipt=read(path.join(exported.directory,'audition.json'));
+    assert.equal(receipt.source.kind,'recipe');
+    assert.equal(receipt.candidate.from,state.loop.from);
+    assert.equal(receipt.candidate.to,state.loop.to);
+  }
+  const sampleManifest=read(sample.manifest), library=path.join(sample.directory,sampleManifest.library);
+  const loaded=JSON.parse(run('music','samples','get',library,'latch'));
+  assert.deepEqual(loaded.entry.source.recipe,P.mediaGraph.soundRecipe.normalize(seeded));
+  run('music','samples','kit',library,path.join(sample.directory,'kit.json'),path.join(sample.directory,'performance.json'),'--out','pad');
+  assert(ink.readWav(file('pad/kit.wav')).samples.some(x=>Math.abs(x)>.1));
+  const manifest=read(family.manifest), registry=path.join(family.directory,manifest.registry);
+  assert.equal(manifest.members.length,5);
+  assert.equal(manifest.ref.revision,2);
+  assert.equal(JSON.parse(run('assets','validate',registry)).entries.length,5);
+  write('cue.graph.json',{format:'ink-studio/graph-project',version:1,assetRegistry:path.relative(dir,registry),
+    assets:{latch:{format:'wav',file:manifest.ref}},nodes:{source:{op:'audioAsset',inputs:{name:'latch'}}},
+    outputs:{value:{node:'source'}},exports:{effect:{output:'value',format:'wav',encoding:'pcm24'}}});
+  run('graph','run','cue.graph.json','--out','graph');
+  assert.deepEqual(fs.readFileSync(file('graph/artifacts/effect.wav')),heard);
 });
