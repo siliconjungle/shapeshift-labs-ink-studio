@@ -77,5 +77,13 @@ test('the CLI measures and edits the active score take and exports a sample-alig
     assert.ok(report.operations[1].entries.every(row=>Math.abs(row.errorMs)<.2));
     assert.equal(ink.readWav(files.before).samples.length,ink.readWav(files.after).samples.length);
     assert.match(fs.readFileSync(files.timing,'utf8'),/Δ Trigger\s+Δ Attack/);
+
+    const sound=P.mediaGraph.soundRecipe;
+    fs.writeFileSync(path.join(dir,'bass.sound.json'),JSON.stringify({
+      format:sound.format,version:1,family:'pickup',seed:32,render:{sampleRate:rate}}));
+    fs.writeFileSync(file,JSON.stringify({session,assets:{'bass-tape':'bass.sound.json'}}));
+    const seeded=JSON.parse(run('inspect',file,request,'--json'));
+    assert.equal(bassRows(seeded).length,4);
+    assert.ok(bassRows(seeded).every(row=>Number.isInteger(row.audibleSample)));
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });

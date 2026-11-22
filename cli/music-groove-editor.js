@@ -1,5 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'), WAV=require('./wav.js');
-const {write,json}=require('./asset-files.js'), {assetPaths}=require('./music-production.js');
+const {write,json}=require('./asset-files.js'), {assetPaths,readProductionAssets}=require('./music-production.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const human=(value,places=2)=>value==null ? '—' : Number(value).toFixed(places);
 const signed=value=>value==null ? '—' : (value>=0 ? '+' : '')+human(value);
@@ -51,7 +51,7 @@ module.exports=function command([mode,file,settings],opt,kit) {
   const P=kit.KIT.procedural,{check}=P.musicInstruments;
   check(file && ['inspect','edit','audition'].includes(mode),'Use music groove inspect, edit or audition with a production or session recipe');
   const recipe=read(file), source=recipe.session ?? recipe.production ?? recipe;
-  const paths=assetPaths(recipe,file), assets=Object.fromEntries(Object.entries(paths).map(([id,file])=>[id,WAV.read(file)]));
+  const paths=assetPaths(recipe,file), assets=readProductionAssets(paths,P);
   const editor=P.musicGrooveEditor.open(source,assets);
   const focus=settings ? read(settings) : {};
   if (!recipe.session && source.format!=='ink-studio/music-edit-session' && focus.sampleRate===undefined && recipe.options?.sampleRate!==undefined)
