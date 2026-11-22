@@ -91,6 +91,11 @@ const diorama = { id: 'node-catalog', seed: 1, style: 'slate', solids: [
 ] };
 
 const link = (node, port = 'value') => ({ node, port });
+const listenerPack={op:'music.packListenerCalibration',inputs:{
+  clips:{full:fitTone,quiet:{...fitTone,samples:fitTone.samples.map(sample=>sample*.45)}},
+  settings:{cases:[{id:'level',kind:'known',criterion:'level',question:'Which clip is louder?',
+    left:'full',right:'quiet',expected:'left'}]}
+}};
 const outputGrid={format:'ink-studio/grid-field',version:1,shape:[2,2],components:1,origin:[0,0],
   spacing:[1,1],unit:'m',frame:'world',data:[0,.2,.3,.1]};
 const outputTrace={format:'ink-studio/sample-trace',version:1,sampleRate:8000,startSample:5,frames:3,
@@ -427,6 +432,11 @@ const specifications = {
   'music.auditionForegroundMix': {inputs:foregroundMix},
   'music.inspectCritiqueAudio': {inputs:{source:production,request:critiqueProbe}},
   'music.compareCritiqueEdits': {inputs:critiqueCompare.inputs},
+  'music.diagnoseCritiqueAudio': {inputs:{source:foregroundScore,request:{...critiqueProbe,
+    test:{kind:'masking',track:'keys'}}}},
+  'music.packListenerCalibration': {inputs:listenerPack.inputs},
+  'music.evaluateListenerCalibration': {nodes:{pack:listenerPack},inputs:{key:link('pack','key'),
+    token:link('pack','token'),responses:{model:'Example without responses',responses:[]}}},
   'music.applyCritiqueEdit': {nodes:{comparison:critiqueCompare},inputs:{source:production,key:link('comparison','key'),
     token:link('comparison','token'),selection:{take:'trim',reason:'The adjusted opening leaves room for the answer.'}}},
   'music.planCritique': {inputs:critiquePlan.inputs},

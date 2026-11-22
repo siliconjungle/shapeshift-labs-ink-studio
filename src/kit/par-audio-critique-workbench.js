@@ -29,9 +29,9 @@
     return {fromBeat:a.beat,toBeat:b.beat,firstSample:a.frame,endSample:b.frame,start:a.frame/rate,end:b.frame/rate};
   }
 
-  function requestRange(score,raw) {
+  function requestRange(score,raw,maximumRate=48000) {
     const {range,context={},sampleRate=24000,lead}=raw;
-    check(integer(sampleRate,8000,48000) && fields(context,['beforeBeats','afterBeats']) &&
+    check(integer(sampleRate,8000,maximumRate) && fields(context,['beforeBeats','afterBeats']) &&
       finite(context.beforeBeats ?? 1,0,32) && finite(context.afterBeats ?? 1,0,32) &&
       (lead===undefined || id(lead) && Object.hasOwn(score.tracks,lead)),'Invalid critique preview context, clock or lead');
     const focus=placement(score,sampleRate,range), endBeat=score.arrangement.sections.at(-1).end;
@@ -196,20 +196,66 @@
     });
   }
 
-  const sourceStamp=(source,assets)=>digest([source,Object.keys(source.tracks ?? {}),R.assetSignature(assets)]);
+  const isSession=input=>input?.format==='ink-studio/music-edit-session';
+  const sourceStamp=(source,assets)=>digest([source,Object.keys((isSession(source) ? source.production : source).tracks ?? {}),R.assetSignature(assets)]);
 
   function open(input,assets={}) {
-    const source=P.data.clone(input), score=A.compile(source,assets);
+    const document=P.data.clone(input), native=isSession(document), source=native ? document.production : document;
+    const planning=native ? S.musicSessionModel.compile(document,assets) : null;
+    const bank=production=>native ? S.musicSessionModel.instruments(assets,production) : assets;
+    const score=native ? planning.producers.get('reference').score : A.compile(source,assets);
+    const studio=native ? P.mediaGraph.musicSession.create(assets) : null;
+    const meters={}, stems={};
+    if (native) for (const [i,track] of [...Object.keys(score.tracks),'room'].entries()) {
+      const name='critique-'+i;
+      meters[name]={strip:track==='room' ? 'score-room' : track,tap:'post'};
+      stems[track]=name;
+    }
+    function print(compiled,review,production=source) {
+      if (!native) return render(compiled,review);
+      const {span,rate}=review;
+      const desk=document.mixer ?? {output:'master',strips:{master:{}}};
+      const result=studio.render({...document,production,mixer:{...desk,taps:meters}},
+        {from:{samples:span.firstSample},to:{samples:span.endSample}});
+      check(result.report.sampleRate===rate && result.report.frames===span.endSample-span.firstSample,
+        'Critique audio must stay on the session sample grid');
+      return {value:result.value,stems:Object.fromEntries(Object.entries(stems).map(([track,name])=>[track,result.taps[name]])),
+        report:{firstSample:span.firstSample,endSample:span.endSample}};
+    }
+    function getRange(raw) {
+      check(!native || raw.sampleRate===undefined || raw.sampleRate===document.sampleRate,
+        'Use the native session sample rate for a session critique');
+      return native ? requestRange(score,{...raw,sampleRate:document.sampleRate},96000) : requestRange(score,raw);
+    }
+    function requireReference(parts,span) {
+      if (native) for (const lane of parts)
+        check(!planning.choices.some(pick=>pick.lane===lane && pick.take!=='reference' &&
+          pick.from<span.endSample && pick.to>span.firstSample),'Active alternate take on '+lane+' overlaps the critique range');
+    }
+    function checkEdit(candidate,review) {
+      if (!native) return;
+      for (const edit of candidate.edits) {
+        const parts=edit.op==='note' ? [edit.part] : edit.parts ?? Object.keys(score.tracks);
+        const range=edit.range ? placement(score,review.rate,edit.range) : edit.op==='note' ? review.span : review.focus;
+        requireReference(parts,range);
+        for (const part of parts) {
+          const mode=planning.pins[part];
+          check(mode!=='all','Session pins protect '+part);
+          if (mode==='pitch') check(edit.op!=='register' && edit.op!=='silence' && edit.op!=='density' &&
+            (edit.op!=='note' || edit.set.midi===undefined),'Session pins protect pitches on '+part);
+        }
+      }
+    }
     let last;
     function baseline(review) {
       const key=JSON.stringify([review.rate,review.span.firstSample,review.span.endSample]);
-      if (last?.key!==key) last={key,rendered:render(score,review)};
+      if (last?.key!==key) last={key,rendered:print(score,review)};
       return last.rendered;
     }
     const evidence=(compiled,review,rendered)=>E.measure(compiled,review.span,review.focus,review.lead,review.rivals,review.rate,rendered).report;
     function inspect(raw) {
       check(fields(raw,[...scope,'views','ceiling']) && finite(raw.ceiling ?? -1,-12,-.1),'Invalid audio critique probe');
-      const review=requestRange(score,raw), rendered=baseline(review), measured=evidence(score,review,rendered);
+      const review=getRange(raw), rendered=baseline(review), measured=evidence(score,review,rendered);
       const views=raw.views ?? [{id:'focus',mode:'mix'},{id:'context',mode:'mix',span:'context'},
         {id:'mono',mode:'mono'},...(review.lead ? [{id:'lead',mode:'solo',tracks:[review.lead]}] : [])];
       check(Array.isArray(views) && integer(views.length,1,16) &&
@@ -223,12 +269,12 @@
             range:row.span==='context' ? review.span : review.focus}))}};
     }
 
-    function compare(raw) {
+    function compare(raw,sidecar) {
       check(fields(raw,[...scope,'candidates','level','target','ceiling','targets']) &&
         ['matched','fixed'].includes(raw.level ?? 'matched') && finite(raw.target ?? -18,-35,-9) &&
         finite(raw.ceiling ?? -1,-12,-.1) && Array.isArray(raw.candidates) && integer(raw.candidates.length,0,6) &&
         new Set(Array.from(raw.candidates,row=>row?.id)).size===raw.candidates.length,'Invalid audio critique comparison');
-      const review=requestRange(score,raw);
+      const review=getRange(raw);
       check((review.span.endSample-review.span.firstSample)*(raw.candidates.length+1)*(review.rivals.length+3)*2<=48e6,
         'Critique comparison exceeds the combined listening sample budget');
       const rows=[], blocked=[], moments=targets(raw.targets ?? [],score,review);
@@ -238,14 +284,23 @@
         const focusWindows=measured.windows.filter(({range})=>
           range.firstSample>=review.focus.firstSample && range.endSample<=review.focus.endSample);
         return {...entry,pcm:rendered.value,mix:measured.mix,focus:stats(clip,review.focus),focusWindows,
-          issues:issues(measured,review.lead),...(moments.length && {moments:momentMeters(rendered,review.span,moments)})};
+          issues:issues(measured,review.lead),...(moments.length && {moments:momentMeters(rendered,review.span,moments)}),
+          ...(sidecar?.pair && {timing:sidecar.pair(compiled)})};
       }
       const original=baseline(review);
       rows.push(analyze(score,original,{id:'reference',label:'Original'}));
       for (const candidate of raw.candidates) {
         try {
-          const change=revision(source,score,candidate,review), production=A.revise(source,change,assets);
-          const compiled=A.compile(production,assets), rendered=render(compiled,review);
+          const change=revision(source,score,candidate,review);
+          checkEdit(candidate,review);
+          const production=A.revise(source,change,native ? S.musicSessionModel.instruments(assets,source,change) : assets);
+          const compiled=A.compile(production,bank(production));
+          if (native) for (const [part,mode] of Object.entries(planning.pins)) if (mode==='pitch') {
+            const pitches=compiled=>compiled.events[part].slice().sort((a,b)=>a.beat-b.beat ||
+              String(a.voice).localeCompare(String(b.voice))).map(row=>[row.voice,row.midi]);
+            check(canon(pitches(score))===canon(pitches(compiled)),'Session pins protect pitches on '+part);
+          }
+          const rendered=print(compiled,review,production);
           let power=0;
           for (let i=0;i<rendered.value.samples.length;i++)
             power+=(rendered.value.samples[i]-original.value.samples[i])**2;
@@ -267,12 +322,42 @@
         return {...row,previewGainDb:round(gainDb,6),previewLufs:row.mix.integratedLufs===null ? null :
           round(row.mix.integratedLufs+gainDb,3)};
       });
-      const report={sampleRate:review.rate,context:review.span,focus:review.focus,lead:review.lead ?? null,level,target,takes,blocked};
-      const content={format:keyFormat,version:1,source:sourceStamp(source,assets),report,
+      const report={sampleRate:review.rate,context:review.span,focus:review.focus,lead:review.lead ?? null,level,target,takes,
+        blocked:[...blocked,...sidecar?.unavailable ?? []]};
+      if (sidecar) {
+        const {focus,span}=review, originalGain=db(takes[0].previewGainDb);
+        const clips=[];
+        const monitor=(id,pcm,range,track,stage)=>{
+          const peak=S.mixerPeak.peak(pcm.samples,pcm.channels);
+          const gain=Math.min(originalGain,db(ceiling)/Math.max(peak,1e-10));
+          audio[id]=clipScale(pcm,gain);
+          clips.push({id,range,stage,...(track && {track}),gainDb:round(20*Math.log10(gain),6)});
+        };
+        if (span.firstSample<focus.firstSample) {
+          const before={...span,toBeat:focus.fromBeat,end:focus.start,endSample:focus.firstSample};
+          monitor('previous',slice(original.value,span,before),before,null,'lead-in');
+        }
+        for (const [i,track] of sidecar.tracks.entries())
+          monitor(i ? 'solo-target' : 'solo-anchor',slice(original.stems[track],span,focus),focus,track,'rendered-stem');
+        for (const [id,{pcm,range,track}] of Object.entries(sidecar.voices ?? {})) monitor(id,pcm,range,track,'isolated-voice');
+        report.diagnosis={kind:sidecar.kind,question:sidecar.question,range:focus,observations:sidecar.evidence,
+          clips,tests:sidecar.candidates.map(row=>({take:row.id,label:row.label,range:focus,edits:row.edits,
+            audio:audio[row.id] ? ['reference',row.id] : []}))};
+      }
+      const content={format:keyFormat,version:1,source:sourceStamp(document,assets),report,
         candidates:rows.filter(row=>row.revision).map(({id,label,revision})=>({id,label,revision}))};
       return {audio,report,key:{...content,token:'edit-'+digest(content)}};
     }
-    return Object.freeze({inspect,compare});
+    function diagnose(raw) {
+      check(fields(raw,[...scope,'test','level','target','ceiling']) && ['masking','groove'].includes(raw.test?.kind),
+        'Choose a masking or groove comparison');
+      const {test,...request}=raw;
+      const context={beforeBeats:4,afterBeats:1,...request.context}, review=getRange({...request,context});
+      const hearing=P.musicCritiqueDiagnosis[test.kind](source,score,review,test);
+      requireReference(hearing.tracks,review.focus);
+      return compare({...request,context,candidates:hearing.candidates,targets:hearing.targets ?? []},{...hearing,kind:test.kind});
+    }
+    return Object.freeze({inspect,compare:raw=>compare(raw),diagnose});
   }
 
   function apply(source,key,decision,assets={}) {
@@ -285,8 +370,9 @@
       id(decision.id ?? decision.take) && R.prose(decision.reason,2000),'Choose an auditioned take and record a reason');
     const choice=key.candidates.find(row=>row.id===decision.take);
     check(choice && R.prose(decision.title ?? choice.label,160),'Choose a valid comparison take and title');
-    const production=A.revise(source,choice.revision,assets);
-    return {production,revision:choice.revision,reference:{format:R.decisionFormat,version:1,
+    const native=isSession(source), base=native ? source.production : source;
+    const production=A.revise(base,choice.revision,native ? S.musicSessionModel.instruments(assets,base,choice.revision) : assets);
+    return {production,...(native && {session:{...source,production}}),revision:choice.revision,reference:{format:R.decisionFormat,version:1,
       id:decision.id ?? choice.id,title:decision.title ?? choice.label,tags:R.tags(decision.tags ?? []),
       reason:decision.reason,range:key.report.context,focus:key.report.focus,token,move:choice.id,take:choice.id,
       revision:choice.revision}};

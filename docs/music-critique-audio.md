@@ -124,3 +124,107 @@ comparison and `value.blocked` explains unavailable alternatives.
 
 Use [foreground mixing](music-foreground-mix.md) to propose moves that follow
 a sequence of foreground tracks and compare rendered balance per moment.
+
+## Test what causes a problem
+
+Run a controlled comparison on a production recipe or a music edit session
+recipe with `music critique diagnose source.json request.json --out evidence`.
+Use the same native session for diagnosis, keeping the winning edit, and
+the final print. Its mixer and warmed effects run through the ordinary
+session renderer. The audition adds private post-fader taps for analysis.
+A pinned lane or an overlapping alternate take on an edited lane can
+block a proposal. Select the reference in that span before diagnosing
+an active alternate take on a target lane.
+
+```json
+{
+  "range": {"from": {"beat": 8}, "to": {"beat": 12}},
+  "context": {"beforeBeats": 4, "afterBeats": 1},
+  "lead": "hook",
+  "level": "fixed",
+  "test": {"kind": "masking", "track": "keys", "duckDb": -8, "holdMs": 165}
+}
+```
+
+Masking returns the same passage with the rival cut, transposed away from
+the lead, or briefly ducked around the lead's attacks. Set `semitones` to
+choose the interval yourself. Listen to the lead-in (`previous`) and the
+two rendered track solos (`solo-anchor` and `solo-target`) for context.
+Read `diagnosis.tests` for the cue-map or note edits behind each WAV and
+`diagnosis.range` for the focus inside that audio. Use `apply` with the
+comparison token and chosen take to save the addressed edit. Applying to
+a session writes an editable `session.json` recipe.
+
+```json
+{
+  "range": {"from": {"beat": 8}, "to": {"beat": 12}},
+  "level": "fixed",
+  "test": {
+    "kind": "groove", "anchor": "kick", "track": "bass",
+    "note": {"clip": "return", "voice": "line", "note": "downbeat"},
+    "targetMs": 0, "accent": 0.48
+  }
+}
+```
+
+Groove compares accent, trigger timing relative to the anchor, and
+sample start independently. A sample-start edit is offered when the
+engine can render the addressed note earlier using a supported offset
+and still retain its attack energy. The per-take timing separates the
+written grid, trigger, and estimated audible onset. That estimate uses
+a short energy rise in the isolated rendered voice before the mix.
+The two isolated voices (`voice-anchor` and `voice-target`) and the
+actual in-context mix are available for listening. A slow attack can
+still be the preferred performance.
+
+In JavaScript call `critique.openAudio(productionOrSession, assets).diagnose(request)`.
+The graph operation is `music.diagnoseCritiqueAudio`. It exposes the
+report, reference audio, all comparison clips, and the key and token for
+`music.applyCritiqueEdit`.
+
+## Calibrate a listening model
+
+The example renders an original cue, controlled edits, and a bank of
+short listener tests. It includes one artistic roughness question left
+unlabeled until someone records a preference.
+
+```sh
+node examples/music-production/audio-critique-diagnosis.cjs critique-demo
+ink-studio music critique listener-pack critique-demo/listener-recipe.json --out listener
+ink-studio music critique listener-run listener/public/manifest.json \
+  --endpoint http://127.0.0.1:8767 --model music-flamingo --out listener/responses.json
+ink-studio music critique listener-score listener/key.json listener/responses.json --out listener/report.json
+```
+
+Each recipe case names two equal-length WAV clips on the same sample
+grid, a listening question and a criterion. `kind: "known"` uses an
+`expected` side (`left`, `right`, or `tie`). For a preference case,
+`kind: "preference"` accepts optional human `votes` using those same
+labels. A strict majority supplies the human label. The packer makes
+two counterbalanced A/B pairs and one exact identity control for
+each case. Keep `key.json` private during listening.
+
+The optional runner targets a loopback [audio.cpp
+server](https://github.com/0xShug0/audio.cpp/blob/v0.9.6/docs/models/audio_flamingo.md)
+with an Audio Flamingo family model loaded under the selected alias.
+The example uses 16 kHz WAVs. Other rates require SOXR in that server.
+That backend downmixes stereo for inference. Run stereo judgments with
+a backend that preserves the stereo image. Model weights are supplied
+separately. `listener-run` saves and resumes from the response file.
+
+Other listeners can use the public manifest and return a record with
+`token`, `model`, and `responses`. Each response uses a `trial` ID and
+`choice` (`A`, `B`, `tie`, or `abstain`), an optional `reason`, and
+optional `evidence` with `side`, `from` and `to` in seconds relative
+to that side, and an `observation`. Valid times map back to source
+samples. Timestamp validation checks the bounds of a claim.
+
+The score reports agreement across A/B orders, false preferences on
+identical audio, abstentions, missing responses and per-criterion
+accuracy. A preference with no votes or a split vote remains unlabeled.
+The default gate requires at least five completed labeled pairs and
+five identity responses per criterion before reporting a pass or fail.
+Audition decisions remain explicit edits. JavaScript exposes
+`critique.listener.pack` and `critique.listener.evaluate`. The graph
+equivalents are `music.packListenerCalibration` and
+`music.evaluateListenerCalibration`.

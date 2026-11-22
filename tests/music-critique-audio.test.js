@@ -114,3 +114,47 @@ test('CLI writes playable context and A/B, saves the choice, and reopens in prod
   const print=cli('production','render',kept.production,'--out','print');
   assert.equal(WAV.read(print.mix).sampleRate,rate);
 });
+
+test('masking probes the real native desk and keeps a scoped edit without modifying the lead or routing',()=>{
+  const production=source(), session={format:'ink-studio/music-edit-session',version:1,id:'masking',
+    sampleRate:rate,production,pins:{hook:'pitch'},mixer:{output:'master',strips:{master:{},
+      hook:{output:'lead-group'},'lead-group':{fader:.7}}}};
+  const M=P.mediaGraph.musicSession.create(), studio=C.openAudio(session);
+  const request={...configuration,test:{kind:'masking',track:'keys',duckDb:-9},level:'fixed'};
+  const {report,audio,key}=studio.diagnose(request);
+  assert.deepEqual(report.takes.map(take=>take.id),['reference','mute-rival','move-register','duck-rival']);
+  assert.deepEqual(report.diagnosis.clips.map(({id})=>id),['previous','solo-anchor','solo-target']);
+  assert(report.diagnosis.tests.every(test=>test.edits.every(({parts})=>parts.join()==='keys')));
+  const {firstSample,endSample}=report.context;
+  const at={from:{samples:firstSample},to:{samples:endSample}};
+  assert.deepEqual(audio.reference.samples,M.render(session,at).value.samples);
+  const kept=C.applyEdit(session,key,{token:key.token,take:'duck-rival',reason:'Make room for the lead attacks.'}).session;
+  assert.deepEqual(audio['duck-rival'].samples,M.render(kept,at).value.samples);
+  assert.deepEqual(kept.production.tracks.hook,session.production.tracks.hook);
+  assert.deepEqual(kept.mixer,session.mixer);
+  const locked=C.openAudio({...session,pins:{keys:'all'}}).diagnose(request);
+  assert(locked.report.blocked.every(row=>/pins protect keys/.test(row.reason)));
+  assert.equal(locked.report.takes.length,1);
+  const withTake={...session,takes:{quiet:{tracks:{keys:{gain:-15}}}}};
+  const comp=M.edit(withTake,[{op:'comp',lane:'keys',take:'quiet',...span(4,6)}]);
+  assert.throws(()=>C.openAudio(comp).diagnose(request),/Active alternate take on keys/);
+});
+
+test('the diagnostic demo separates accent, scheduled timing, and audible sample lead-in',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-critique-diagnosis-'));
+  try {
+    execFileSync(process.execPath,[path.resolve(__dirname,'../examples/music-production/audio-critique-diagnosis.cjs'),dir]);
+    const report=JSON.parse(fs.readFileSync(path.join(dir,'groove/report.json')));
+    const [original,accent,timing,attack]=report.takes.map(row=>row.timing);
+    assert(original.triggerGapMs>80 && original.target.triggerToAudioMs>60);
+    assert.equal(accent.triggerGapMs,original.triggerGapMs);
+    assert.equal(accent.audibleGapMs,original.audibleGapMs);
+    assert(accent.target.velocity<original.target.velocity);
+    assert.equal(timing.triggerGapMs,0);
+    assert.equal(timing.target.triggerToAudioMs,original.target.triggerToAudioMs);
+    assert.equal(attack.triggerGapMs,original.triggerGapMs);
+    assert(attack.target.triggerToAudioMs<5);
+    assert(report.diagnosis.clips.some(({id,range})=>id==='voice-target' &&
+      range.firstSample===original.target.triggerSample));
+  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
+});

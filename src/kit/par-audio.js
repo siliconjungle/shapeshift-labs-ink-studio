@@ -758,13 +758,37 @@
           audio,key,token:key.token};
       }
     },
+    'music.diagnoseCritiqueAudio': {
+      description:'Audition controlled masking or groove edits in context with measured evidence, stems and addressed revisions.',
+      inputs:{source:'record',request:'record',assets:options},
+      outputs:{value:'record',original:'audio',audio:'record',key:'record',token:'string'},
+      run({source,request,assets}) {
+        const {report,audio,key}=P.musicProduction.critique.openAudio(source,assets).diagnose(request);
+        return {value:report,original:audio.reference,audio,key,token:key.token};
+      }
+    },
+    'music.packListenerCalibration': {
+      description:'Create blind audio comparisons with swapped order and identical controls, plus a private answer key.',
+      inputs:{clips:'record',settings:'record'},outputs:{value:'record',audio:'record',key:'record',token:'string'},
+      run({clips,settings}) {
+        const pack=P.musicProduction.critique.listener.pack(clips,settings);
+        return {...pack,token:pack.value.token};
+      }
+    },
+    'music.evaluateListenerCalibration': {
+      description:'Score a listener by question, answer stability, identical controls, coverage and valid audio addresses.',
+      inputs:{key:'record',token:'string',responses:'record',settings:options},outputs:{value:'record'},
+      run({key,token,responses,settings}) {
+        return {value:P.musicProduction.critique.listener.evaluate(key,{...responses,token},settings)};
+      }
+    },
     'music.applyCritiqueEdit': {
-      description:'Apply one auditioned edit to its original production and retain an authored listening decision.',
+      description:'Apply one auditioned edit to its original production or session and retain an authored listening decision.',
       inputs:{source:'record',key:'record',token:'string',selection:'record',assets:options},
       outputs:{value:'record',revision:'record',reference:'record'},
       run({source,key,token,selection,assets}) {
-        const {production,revision,reference}=P.musicProduction.critique.applyEdit(source,key,{...selection,token},assets);
-        return {value:production,revision,reference};
+        const {production,session,revision,reference}=P.musicProduction.critique.applyEdit(source,key,{...selection,token},assets);
+        return {value:session ?? production,revision,reference};
       }
     },
     'music.rememberListeningPreference': {

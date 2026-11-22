@@ -236,6 +236,6 @@
     return {...result,producerReference:result.reference,reference};
   }
 
-  P.musicProduction=Object.freeze({...A,critique:Object.freeze({plan,blind,keep,openAudio:P.musicCritiqueWorkbench.open,applyEdit:P.musicCritiqueWorkbench.apply,tagReference:R.tag,findReferences:R.search,
+  P.musicProduction=Object.freeze({...A,critique:Object.freeze({plan,blind,keep,openAudio:P.musicCritiqueWorkbench.open,listener:P.musicCritiqueListener,applyEdit:P.musicCritiqueWorkbench.apply,tagReference:R.tag,findReferences:R.search,
     rememberPreference:M.remember,recallPreferences:M.recall})});
 })(KIT.procedural);

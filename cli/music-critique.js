@@ -19,9 +19,11 @@ function readMemory(file,check) {
 }
 
 module.exports=function command([mode,file,config,settingsFile],opt,kit) {
+  if (['listener-pack','listener-run','listener-score'].includes(mode))
+    return require('./music-critique-calibration.js')(mode,file,config,opt,kit);
   const C=kit.KIT.music.production.critique,{check,fields}=kit.KIT.procedural.musicInstruments;
-  check(typeof file==='string' && ['plan','listen','keep','tag','find','inspect','compare','apply','foreground','remember','recall'].includes(mode),
-    'Use music critique inspect, compare, apply, foreground, plan, listen, keep, remember, recall, tag or find');
+  check(typeof file==='string' && ['plan','listen','keep','tag','find','inspect','compare','diagnose','apply','foreground','remember','recall'].includes(mode),
+    'Use music critique inspect, compare, diagnose, apply, foreground, plan, listen, keep, remember, recall, tag or find');
   const out=typeof opt.out==='string' ? path.resolve(opt.out) : undefined;
   const output=(result,target)=>{
     if (target) json(target,result);
@@ -62,7 +64,7 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
     return output(C.findReferences(entries,config && read(config))
       .map(hit=>({...hit,...(paths.has(hit.id) && {file:paths.get(hit.id)})})),out);
   }
-  const recipe=read(file), source=recipe.production ?? recipe, paths=assetPaths(recipe,file);
+  const recipe=read(file), source=recipe.session ?? recipe.production ?? recipe, paths=assetPaths(recipe,file);
   const assets=Object.fromEntries(Object.entries(paths).map(([id,at])=>[id,WAV.read(at)]));
   function publishPreview(result,folder) {
     const files=Object.fromEntries(Object.entries(result.audio).map(([id,value])=>{
@@ -77,7 +79,7 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
     json(key,result.key);
     return {report,files,key,token:result.key.token};
   }
-  if (mode==='inspect' || mode==='compare') {
+  if (mode==='inspect' || mode==='compare' || mode==='diagnose') {
     check(config && out,'Supply a listening request and output directory');
     return output(publishPreview(C.openAudio(source,assets)[mode](read(config)),out));
   }
@@ -93,12 +95,13 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
   if (mode==='apply') {
     check(config && settingsFile && out,'Supply a comparison, decision and output directory');
     const result=C.applyEdit(source,read(config),read(settingsFile),assets);
-    const reference=path.join(out,'reference.json'), production=path.join(out,'production.json');
+    const reference=path.join(out,'reference.json'), session=Boolean(result.session), name=session ? 'session' : 'production';
+    const target=path.join(out,name+'.json');
     publishJson(reference,result.reference,'A different critique decision already uses this directory');
     json(path.join(out,'revision.json'),result.revision);
-    json(production,{production:result.production,assets:Object.fromEntries(Object.entries(paths)
-      .map(([name,at])=>[name,path.relative(out,at)])),...(recipe.options && {options:recipe.options})});
-    return output({reference,production});
+    json(target,{[name]:result[name],assets:Object.fromEntries(Object.entries(paths)
+      .map(([name,at])=>[name,path.relative(out,at)])),...(!session && recipe.options && {options:recipe.options})});
+    return output({reference,[name]:target});
   }
   if (mode==='plan') {
     check(config,'Supply a critique brief');
