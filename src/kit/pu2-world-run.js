@@ -547,6 +547,7 @@
     const regions=regionRevisions===undefined?null:W.regionRevisions.capture(world,regionRevisions,systems);
     const debug=traceSteps===undefined?null:W.stepDebug.capture(traceSteps);
     const observers=names.filter(name=>systems[name].afterStep);
+    const socialObservers=names.filter(name=>systems[name].storySocial?.observe);
     const partitioned=workerPool&&new Set(names.filter(name=>{
       const spec=world.systems[name], {kind}=spec;
       return systems[name].partitionStep===true&&!plan.timedSolvers.has(name)&&!Object.keys(contracts.get(name)?.reads??{}).length&&
@@ -868,7 +869,7 @@
     const authoredBlockSize = world.simulationModel?.blockSize;
     const blockSize = authoredBlockSize===undefined ? undefined :
       Math.min(authoredBlockSize,systems[names[0]].processingLimit?.()??authoredBlockSize);
-    const blockSystem = blockSize !== undefined && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
+    const blockSystem = blockSize !== undefined && !socialObservers.length && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
       !storyLifecycle && !worldFacts && !worldMemories && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
     if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
@@ -953,6 +954,7 @@
       const knowledgeLedger = worldKnowledge?.begin(knowledgeState,at);
       const beliefLedger = worldBeliefs?.begin(beliefState);
       const memoryLedger = worldMemories?.begin(memoryState,at);
+      const nativeTransfers = socialObservers.length?new Set():null;
       const makeEmit = (system,scope,root,token) => (kind,detail = {},parents) => {
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
         const typed = token===typedFact;
@@ -1147,6 +1149,7 @@
         const accounts=[request.from,request.to];
         const before=causal?.balance&&accounts.map(account=>transfers.inspect(drafts,account));
         const receipt=transfers.settle(drafts,request,at,name,rootedState);
+        nativeTransfers?.add(at+'.'+events.length);
         const ref=emit('transfer',receipt);
         if (before&&receipt.status!=='blocked')
           balanceChanges(before,accounts.map(account=>transfers.inspect(drafts,account)),ref,
@@ -1392,6 +1395,24 @@
       publishedSignals = freeze(publishedSignals);
       let nextStoryTriggers, nextStoryLifecycle, nextStoryFeasibility, nextStoryReferences, storyStarts = [];
       let completed;
+      let socialCursor = 0;
+      function observeSocial() {
+        if (!socialObservers.length||socialCursor===events.length) return;
+        const incoming = events.slice(socialCursor);
+        for (const name of socialObservers) {
+          const emit = systemEmit(name);
+          const state = systems[name].storySocial.observe(nextStates[name],incoming,(kind,detail,source)=>{
+            const parent = causal?.eventReference(source);
+            emit(kind,detail,parent?[parent]:undefined);
+          },nativeTransfers);
+          if (state!==nextStates[name]) {
+            nextStates = {...nextStates,[name]:rootedState(state)};
+            completed = undefined;
+          }
+        }
+        socialCursor = events.length;
+      }
+      observeSocial();
       const completedView = () => {
         const frame = view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState);
         return nextStoryReferences||factLedger||memoryLedger?{...frame,...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
@@ -1425,6 +1446,7 @@
             transfersAtBoundary.push(receipt);
             const after = before&&accounts.map(account=>transfers.inspect(trial,account));
             notes.push(()=>{
+              nativeTransfers?.add(at+'.'+events.length);
               const ref = systemEmit('world')('transfer',receipt);
               if (before) balanceChanges(before,after,ref,query);
             });
@@ -1523,6 +1545,7 @@
         for (const row of storyStarts) emit('story-started',row);
       }
       if (incidentCooldowns) W.incidentCooldowns.publish(incidentCooldowns,nextStoryLifecycle,at,makeEmit('world'));
+      observeSocial();
       const routed = eventActions?.route(eventActionCounts, events, at);
       if (routed?.commands.length) {
         check(routed.commands.length + packCommands().length - commands.length <= maxPendingCommands, 'Pending command budget exceeded');

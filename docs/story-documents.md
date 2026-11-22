@@ -370,7 +370,7 @@ template parameters in these effects.
 | `work` | Require an outcome to use a retained `work-completed` objective receipt from `stage` and `objective`. Name the native `site` and `batch`, and optionally the contributing `actor` by roster, agent, and generation. The order and recipe perform the labor and consume its inputs. |
 | `access` | Post a genuine single-use reservation `job` on a `board`. Optional `holder`, `at`, `leaseTicks`, `expires`, and `metadata` are native job fields. |
 | `reputation` | Add a signed integer `delta` to a `subject`'s standing with a `faction` on a `social-ledger`. |
-| `obligation` | Open a named `obligation` from `debtor` to `creditor` on a `social-ledger`. Provide a `terms` record for downstream rules. |
+| `obligation` | Open a named `obligation` from `debtor` to `creditor` on a `social-ledger`. Provide `terms` and optionally a `category`, `fulfillment` rule, or `onDeparture` policies. |
 
 An unaffordable activation leaves the story available. When the story has a
 commitment, the order, the reservation, and the costs commit together.
@@ -396,9 +396,12 @@ query `standing/reputation` with `subject` and `faction` or read the whole
 table. Use `standing/obligations` to read the open and closed records. The native
 actions `adjust-reputation`, `open-obligation`, and `resolve-obligation`
 can also be called by other world systems and event actions. Resolve an
-obligation with `{ "obligation": "<id>", "status": "fulfilled" }` or set
-the status to `released`. The world records the close tick and emits
-`obligation-resolved` for downstream rules.
+obligation without an evidence rule with
+`{ "obligation": "<id>", "status": "fulfilled" }`, or use `released`
+to waive it. The world records the close tick and emits
+`obligation-resolved` for downstream rules. See
+[promises, debts, and obligations](headless-worlds.md#track-promises-debts-and-obligations)
+for evidence rules, succession, and a linked story demo.
 
 The [harbor signal contract](../examples/story-documents/signal-contract.json)
 uses a two-coin fee and two timber bundles to commission a signal frame.

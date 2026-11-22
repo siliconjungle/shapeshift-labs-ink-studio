@@ -1,0 +1,53 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "bridge-credit",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "causality": { "limit": 128 },
+  "storyDocuments": [{ "file": "bridge-credit.json" }],
+  "systems": {
+    "standing": { "kind": "social-ledger", "config": { "parties": {
+      "funds/porter": {
+        "departure": { "kind": "agent-despawned", "system": "crew", "where": { "all": [
+          { "path": "/agent", "value": "porter" }, { "path": "/generation", "value": 2 }
+        ] } },
+        "successor": "funds/guild"
+      },
+      "clerk": { "departure": { "kind": "agent-despawned", "system": "crew", "where": { "all": [
+        { "path": "/agent", "value": "clerk" }, { "path": "/generation", "value": 1 }
+      ] } } }
+    } } },
+    "crew": { "kind": "agents", "config": {
+      "bounds": { "min": [-4, -1, -4], "max": [4, 3, 4] },
+      "species": { "walker": { "mode": "walk", "speed": 1 } },
+      "agents": {
+        "porter": { "species": "walker", "position": [0, 0, 0] },
+        "clerk": { "species": "walker", "position": [1, 0, 0] }
+      }
+    } },
+    "funds": { "kind": "store", "config": { "accounts": {
+      "porter": { "resource": "money", "units": "coin", "type": "integer", "initial": 0 },
+      "guild": { "resource": "money", "units": "coin", "type": "integer", "initial": 4 },
+      "wardens": { "resource": "money", "units": "coin", "type": "integer", "initial": 10 }
+    } } }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "advance-approved" } },
+    { "tick": 1, "action": "standing/open-obligation", "args": {
+      "obligation": "inspection", "category": "promise", "debtor": "funds/porter", "creditor": "clerk",
+      "terms": { "deliverable": "Show the replaced bridge pin to the clerk" },
+      "fulfillment": { "event": { "kind": "pin-inspected" }, "creditorPath": "/inspector" },
+      "onDeparture": { "creditor": "release" }
+    } },
+    { "tick": 1, "action": "standing/open-obligation", "args": {
+      "obligation": "return-tools", "category": "duty", "debtor": "funds/porter", "creditor": "funds/wardens",
+      "terms": { "deliverable": "Return the borrowed tools" },
+      "fulfillment": { "event": { "kind": "tools-returned" }, "debtorPath": "/returnedBy" },
+      "onDeparture": { "debtor": "retain" }
+    } },
+    { "tick": 2, "action": "standing/resolve-obligation", "args": { "obligation": "bridge-advance", "status": "fulfilled" } },
+    { "tick": 3, "action": "crew/despawn", "args": { "agent": "clerk", "generation": 1 } },
+    { "tick": 3, "action": "crew/despawn", "args": { "agent": "porter", "generation": 2 } }
+  ]
+}

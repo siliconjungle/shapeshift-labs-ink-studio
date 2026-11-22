@@ -113,7 +113,8 @@
       detail.faction===args.faction&&detail.delta===args.delta&&Number.isSafeInteger(detail.previous)&&
       Number.isSafeInteger(detail.value)&&detail.value===detail.previous+args.delta;
     return detail.ledger===args.ledger&&detail.obligation===args.obligation&&detail.debtor===args.debtor&&
-      detail.creditor===args.creditor&&equal(detail.terms,args.terms)&&detail.status==='open'&&detail.opened===at;
+      detail.creditor===args.creditor&&equal(detail.terms,args.terms)&&detail.status==='open'&&detail.opened===at&&
+      ['category','fulfillment','onDeparture'].every(option=>equal(detail[option],args[option]));
   }
 
   const keys = (row,names) => record(row)&&Object.keys(row).every(key=>names.includes(key));

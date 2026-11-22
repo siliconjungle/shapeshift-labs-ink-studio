@@ -1,0 +1,5 @@
+[
+  { "tick": 5, "action": "world/transfer", "args": {
+    "from": "funds/guild", "to": "funds/wardens", "amount": 4, "mode": "exact"
+  } }
+]

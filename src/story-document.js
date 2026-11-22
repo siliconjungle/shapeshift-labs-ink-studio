@@ -494,7 +494,23 @@ const StoryDocument = (() => {
           }
         } else if (type==='access') fields(value,place,['board','job'],['at','holder','metadata','leaseTicks','expires']);
         else if (type==='reputation') fields(value,place,['ledger','subject','faction','delta']);
-        else fields(value,place,['ledger','obligation','debtor','creditor','terms']);
+        else {
+          fields(value,place,['ledger','obligation','debtor','creditor','terms'],['category','fulfillment','onDeparture']);
+          if (Object.hasOwn(value,'category')&&!['promise','debt','duty'].includes(value.category))
+            invalid(place+'.category','expected promise, debt, or duty');
+          if (Object.hasOwn(value,'fulfillment')) {
+            const source = place+'.fulfillment';
+            fields(value.fulfillment,source,['event'],['debtorPath','creditorPath']);
+            eventSource(value.fulfillment.event,source+'.event');
+            for (const key of ['debtorPath','creditorPath'])
+              if (Object.hasOwn(value.fulfillment,key)) dataPath(value.fulfillment[key],source+'.'+key);
+          }
+          if (Object.hasOwn(value,'onDeparture')) {
+            fields(value.onDeparture,place+'.onDeparture',[],['debtor','creditor']);
+            for (const [role,policy] of Object.entries(value.onDeparture))
+              if (!['retain','release','transfer'].includes(policy)) invalid(place+'.onDeparture.'+role,'invalid departure policy');
+          }
+        }
       }
     }
     if (Object.hasOwn(table,'costs')) effects(table.costs,at+'.costs',true);

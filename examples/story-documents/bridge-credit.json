@@ -1,0 +1,55 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "bridge-credit",
+  "title": "The bridge advance changes hands",
+  "stories": {
+    "advance": {
+      "kind": "questlet",
+      "title": "Issue the bridge work advance",
+      "triggers": { "approval": { "event": { "kind": "advance-approved" } } },
+      "lifecycle": {
+        "progression": true,
+        "settlement": { "costs": {
+          "coins": { "transfer": { "from": "funds/wardens", "to": "funds/porter", "amount": 4 } },
+          "debt": { "obligation": {
+            "ledger": "standing", "obligation": "bridge-advance", "category": "debt",
+            "debtor": "funds/porter", "creditor": "funds/wardens",
+            "terms": { "amount": 4, "units": "coin", "purpose": "Bridge pin replacement" },
+            "fulfillment": {
+              "event": { "kind": "transfer", "system": "world", "where": { "path": "/applied", "value": 4 } },
+              "debtorPath": "/from", "creditorPath": "/to"
+            },
+            "onDeparture": { "debtor": "transfer" }
+          } }
+        } }
+      },
+      "entry": "issued",
+      "stages": { "issued": {
+        "title": "Hand over the advance",
+        "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "issued", "auto": true } }
+      } },
+      "outcomes": { "issued": { "title": "The advance was issued" } }
+    },
+    "clear-account": {
+      "kind": "questlet",
+      "title": "Clear the guild's crossing account",
+      "triggers": { "payment": { "event": { "kind": "obligation-resolved", "system": "standing", "where": { "all": [
+        { "path": "/obligation", "value": "bridge-advance" },
+        { "path": "/status", "value": "fulfilled" }
+      ] } } } },
+      "lifecycle": { "progression": true, "feasibility": { "paid": { "state": {
+        "field": "standing/obligations", "args": { "obligation": "bridge-advance" },
+        "select": "/status", "when": { "value": "fulfilled" }
+      } } } },
+      "entry": "clear",
+      "stages": { "clear": {
+        "title": "Clear the account to cross",
+        "decision": { "mode": "autonomous" },
+        "next": { "done": { "outcome": "cleared", "auto": true } }
+      } },
+      "outcomes": { "cleared": { "title": "The account is cleared" } }
+    }
+  }
+}

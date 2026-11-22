@@ -963,6 +963,83 @@ ink-studio probe river.run.json --ticks 6 --field world/relationship \
 ink-studio probe river.run.json --field world/memories --args '{"type":"river-rescue"}'
 ```
 
+## Track promises, debts, and obligations
+
+A `social-ledger` system records agreements. Open one with
+`<ledger>/open-obligation` or a story settlement's `obligation` effect.
+Give it a stable `obligation` ID, `debtor`, `creditor`, and a `terms`
+record describing what is owed. Use an optional `category` of `promise`,
+`debt`, or `duty`. Party IDs can name an actor, faction, exposed account,
+or another identity in the world.
+
+```json
+{
+  "obligation": "bridge-advance",
+  "category": "debt",
+  "debtor": "funds/porter",
+  "creditor": "funds/wardens",
+  "terms": { "amount": 4, "units": "coin" },
+  "fulfillment": {
+    "event": { "kind": "transfer", "system": "world", "where": { "path": "/applied", "value": 4 } },
+    "debtorPath": "/from",
+    "creditorPath": "/to"
+  },
+  "onDeparture": { "debtor": "transfer" }
+}
+```
+
+An evidence rule uses a world event's `kind`, optional `system`, and
+optional `where` condition. `debtorPath` and `creditorPath` compare
+event fields with the current parties, including after a handoff.
+Evidence starts counting on the tick after the obligation opens. One
+event can fulfill one agreement per ledger. If several open agreements
+match, the first by obligation ID receives the receipt.
+
+A `transfer` rule requires a full transfer from the native account
+system. Use `where` to choose the amount or resource to accept. The
+fulfillment retains both the event receipt and the actual payer,
+payee, and amount under `resolution.payment`. Other event kinds retain
+their source receipt. An evidence-based agreement can still be waived
+with `resolve-obligation` and status `released`.
+
+Define each monitored party in the ledger's `config.parties`. Its
+`departure` matcher can use a native event such as `agent-despawned`
+scoped to a roster, agent ID, and generation, or a host-authored event.
+An optional `successor` names the party that can inherit an agreement.
+Each party ID records one departure. Use distinct party IDs when the same
+actor name represents different lifetimes.
+
+| Policy | On the current party's departure |
+| --- | --- |
+| `retain` | Keep the original assignment open. This is the default for either side. |
+| `release` | Close the agreement as released and keep the departure receipt. |
+| `transfer` | Assign that side to the configured successor and keep a handoff receipt. The agreement stays open. If the successor is unavailable or would owe itself, the ledger reports the blocker and keeps the current assignment. |
+
+Probe `<ledger>/obligations` with `obligation` for one agreement, or
+filter the table by `debtor`, `creditor`, `status`, and `category`.
+`<ledger>/departures` returns the recorded departure receipts, with an
+optional `party` filter. Stories and event actions can respond to
+`obligation-transferred`, `obligation-resolved`, or
+`obligation-departure-blocked`. A native event observed before story
+evaluation can fulfill an agreement and trigger a story in that tick.
+Events produced by story settlement are also processed before world
+event actions run. Checkpoints and recordings keep the agreement and
+its receipts independently of ordinary event history.
+
+In the [bridge credit demo](../examples/story-documents/bridge-credit.world.json),
+a questlet issues an advance. The porter leaves and the guild inherits
+the debt. The clerk's departure releases an inspection promise, while
+the duty to return tools stays assigned to the porter. Run with the
+payment actions to see the guild's transfer clear the debt and start
+the crossing questlet.
+
+```sh
+ink-studio sim run examples/story-documents/bridge-credit.world.json \
+  --actions examples/story-documents/bridge-credit.payment.actions.json --ticks 7 --record bridge.run.json
+ink-studio probe bridge.run.json --ticks 3 --field standing/obligations
+ink-studio probe bridge.run.json --field standing/obligations --args '{"obligation":"bridge-advance"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families
