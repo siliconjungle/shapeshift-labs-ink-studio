@@ -299,6 +299,8 @@
       ...(view.weatherTrackState && { 'weather-tracks':{type:'record',read:()=>ok(view.weatherTrackState)} }),
       ...(view.storyTriggers && { 'story-triggers':{type:'record',read:()=>ok(view.storyTriggers)} }),
       ...(view.storyLifecycle && { 'story-lifecycle':{type:'record',read:()=>ok(W.storyLifecycle.inspect(view.storyLifecycle,tick,view.storyDocuments ?? world.storyDocuments))} }),
+      'story-objective':{type:'record',qualified:true,read:({args})=>
+        W.storyLifecycle.objective(view.storyLifecycle,view.storyDocuments??world.storyDocuments,args,tick)},
       'incident-catalog':{type:'record',qualified:true,read:({args})=>ok(W.incidentCatalog.find(view.incidentCatalog,args,
         {lifecycle:view.storyLifecycle,triggers:view.storyTriggers,candidates:view.incidentCandidates}))},
       'incident-candidates':{type:'record',qualified:true,read:({args})=>

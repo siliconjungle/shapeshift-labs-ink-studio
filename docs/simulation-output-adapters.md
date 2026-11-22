@@ -22,6 +22,30 @@ ports alongside their original `field` raster and `points` records.
 Use a longer recorded log if a consumer needs events from every tick
 between two graph samples.
 
+## Typed world graph ports
+
+`sim.world` samples a native world, model, checkpoint, or recording once per graph evaluation. Its `worldFrame` port shares committed events and named query samples with downstream nodes. Load a standalone JSON source through `jsonAsset`. Embed linked story definitions in a world asset or use a portable native recording. A fixture can be replayed to a native recording first.
+
+| Graph operation | Value port | Missing behavior |
+| --- | --- | --- |
+| `sim.worldPulse` | `eventLog` with one timestamped entry per matching committed event | Emits an empty log when the frame is unavailable. A valid frame with no matching occurrence also emits an empty log, with report status `empty`. Set `missing: "error"` to require a frame. |
+| `sim.worldScalar` | `unitScalar` in [0, 1], compatible with ordinary number inputs | Normalizes a finite query value over an authored `range` and clamps outside it. Uses `fallback` (default 0) on loss. Set `missing: "hold"` for the last live value, or `"error"` to require a live value. |
+| `sim.worldRecord` | `record` with the selected structured query value | Uses `fallback` (default `{}`) on loss. Also supports `missing: "hold"` or `"error"`. |
+
+Every adapter has a `report` port. The scalar report includes the raw reading and whether it was clamped. Missing value reports explain why the sample was unavailable and held values give their original tick. A hold starts with the fallback and clears on a source or query change, rewind, take cut, graph reset, or new playback sequence.
+
+Define queries in `sim.world.inputs.options.queries`. Each named entry uses the native `field` and optional `args` and `at`. A `when` condition tests the full result for availability. Apply `select` afterward to read a JSON Pointer such as `/tension`. The scalar or record node names that entry with `options.query`. `world/story-objective` takes `{story, objective}` and returns the objective's stage, visit, title, status, and any progress or result receipt. Its sample is unavailable before activation, after closure, and when the current stage has no objective with that ID.
+
+An ordinary graph sample takes events from its selected tick. Set `options.eventFrom` on `sim.world` to include earlier committed ticks. On an exact take the default window covers ticks since the preceding picture frame through the selected world tick. A picture frame that advances no world ticks has an empty window. These intervals replay committed events even with history disabled. Pulse filters can match `kind`, `system`, `story`, `branch`, and a `where` condition on the [event envelope](simulation-checkpoints.md#committed-event-envelopes).
+
+```sh
+node examples/world-graph-ports/demo.cjs ./studio/out/world-graph-ports
+ink-studio graph run ./studio/out/world-graph-ports/dock.graph.json --at 0.1 --out arrival
+ink-studio graph describe sim.worldScalar
+```
+
+The dock demo publishes an arrival, a mooring tension gauge, and a story objective. As the cable loses its anchor and the stage closes, the gauge holds its previous value and the record uses its fallback. A second trace shows the arrival crossing from a 10 Hz world into a 5 fps take.
+
 ## Fields, surfaces, and points
 
 An `ink-studio/grid-field` version 1 has a `shape` of one to three

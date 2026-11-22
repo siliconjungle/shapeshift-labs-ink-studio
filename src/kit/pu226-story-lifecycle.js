@@ -1,6 +1,6 @@
 /* Story offers, commitments and terminal outcomes at the world tick boundary. */
 (function (K) {
-  const W = K.world, { check, record, own, equal } = W.data, { freeze } = K.procedural.data;
+  const W = K.world, { check, record, own, equal, id } = W.data, { freeze } = K.procedural.data;
   const destinations = Object.freeze({
     available: ['active', 'withdrawn', 'expired'],
     active: ['suspended', 'completed', 'failed', 'withdrawn', 'expired'],
@@ -596,5 +596,20 @@
     }));
   }
 
-  W.storyLifecycle = Object.freeze({ compile, inspect, actions });
+  function objective(state,documents,args,tick) {
+    const {story,objective}=args;
+    const [document,name,...rest]=typeof story==='string'?story.split('/'):[];
+    check(id(document)&&id(name)&&!rest.length&&id(objective),'Story objective needs a document/story and objective ID');
+    const row=own(state,story)?state[story]:undefined, current=row?.flow?.current;
+    if (row?.transitions.at(-1).to!=='active'||!current)
+      return {status:'missing',reason:'story has no active stage'};
+    const objectives=documents?.find(entry=>entry.id===document)?.stories[name]?.stages[current.stage]?.objectives;
+    if (!own(objectives,objective)) return {status:'missing',reason:'objective is absent from the active stage'};
+    const definition=objectives[objective], result=current.objectives[objective], progress=current.progress?.[objective];
+    return {status:'ok',value:{story,stage:current.stage,visit:current.visit,objective,tick,enteredAt:current.enteredAt,
+      title:definition.title,required:!definition.optional,status:result?.result??'pending',
+      ...(definition.type!==undefined&&{type:definition.type}),...(result&&{result}),...(progress&&{progress})}};
+  }
+
+  W.storyLifecycle = Object.freeze({ compile, inspect, objective, actions });
 })(KIT);

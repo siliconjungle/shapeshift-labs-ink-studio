@@ -178,6 +178,21 @@ const dynamic = {
   'anim.retime': { inputs: { timing: { phase: .1, cues: [{ time: .5, rate: 0 }, { time: 1, seek: 'parent', rate: 1 }] } },
     callback: group({}, 'time', {}) }
 };
+function worldPortsExample(port) {
+  const sample={op:'sim.world',inputs:{
+    source:{format:'ink-studio/world',version:1,id:'catalog-dock',dt:.25,systems:{
+      stock:{kind:'store',config:{accounts:{dock:{resource:'cargo',units:'crate',type:'integer',initial:3}}}}
+    }},
+    commands:[{tick:1,action:'world/event',args:{kind:'arrival'}}],
+    options:{tick:1,queries:{
+      account:{field:'world/account',args:{account:'stock/dock'}},
+      amount:{field:'world/account',args:{account:'stock/dock'},select:'/balance'}
+    }}
+  }};
+  if (port===undefined) return {inputs:sample.inputs};
+  const options={pulse:{kind:'arrival'},scalar:{query:'amount',range:[0,4]},record:{query:'account'}};
+  return {nodes:{frame:sample},inputs:{source:link('frame'),options:options[port]}};
+}
 const specifications = {
   'coord.pixelToUV': { inputs: { point: [.5, .5], width: 64, height: 48 } },
   'coord.uvToPixel': { inputs: { point: [.5, .5], width: 64, height: 48 } },
@@ -339,6 +354,10 @@ const specifications = {
   'sim.traceWindow': {inputs:{source:outputTrace,options:{from:6,to:8}}},
   'sim.pointRecords': {inputs:{source:outputPoints}},
   'sim.eventWindow': {inputs:{source:outputEvents,options:{from:0,to:.2}}},
+  'sim.world': worldPortsExample(),
+  'sim.worldPulse': worldPortsExample('pulse'),
+  'sim.worldScalar': worldPortsExample('scalar'),
+  'sim.worldRecord': worldPortsExample('record'),
   'sim.define': { inputs: { kind: 'particles' } },
   'sim.run': { nodes: { recipe: { op: 'sim.define', inputs: { kind: 'particles' } } }, inputs: { recipe: link('recipe') } },
   'audio.soundMeasurements': {inputs:{rows:[{at:0,value:[0,0]},{at:.5,value:[.6,0]}],

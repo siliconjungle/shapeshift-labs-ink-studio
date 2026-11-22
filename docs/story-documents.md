@@ -172,6 +172,8 @@ Use `sim fixture` to share a short replay keyed to a story event, such as a reje
 
 Use `story events <recording|fixture> --format envelopes` to inspect the story, stage, subject, branch, and causal references for each committed event. [Committed event envelopes](simulation-checkpoints.md#committed-event-envelopes)
 
+Use `world/story-objective` to expose one current objective as a graph record and `sim.worldPulse` to publish story or world events to graph consumers. [Typed world graph ports](simulation-output-adapters.md#typed-world-graph-ports)
+
 ```sh
 node cli/ink-studio.js sim seed-matrix examples/story-documents/lantern-ferry.world.json \
   examples/story-documents/lantern-ferry.seed-matrix.json --out ferry-matrix.json

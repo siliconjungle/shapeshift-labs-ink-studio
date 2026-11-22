@@ -1,0 +1,50 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "dock-ports",
+  "dt": 0.1,
+  "history": {"enabled": false},
+  "entities": {
+    "pier": {"position": [0, 0, 0]},
+    "boat": {"position": [4, 0, 0]}
+  },
+  "systems": {
+    "line": {"kind": "routed-links", "config": {"links": {
+      "mooring": {"from": {"entity": "pier"}, "to": {"entity": "boat"}, "length": 2, "stiffness": 40}
+    }}}
+  },
+  "storyDocuments": [{
+    "format": "ink-studio/story", "version": 1, "id": "dock",
+    "stories": {
+      "delivery": {
+        "kind": "questlet", "title": "Dock delivery", "entry": "unload",
+        "triggers": {"notice": {"event": {"kind": "arrival"}}},
+        "lifecycle": {"progression": true},
+        "stages": {
+          "unload": {
+            "title": "Unload supplies",
+            "objectives": {"moor": {"title": "Secure the boat"}},
+            "next": {"done": {"outcome": "delivered"}}
+          }
+        },
+        "outcomes": {"delivered": {"title": "Delivered"}}
+      }
+    }
+  }],
+  "commands": [
+    {"tick": 1, "action": "world/event", "args": {"kind": "arrival", "entity": "boat", "crates": 2}},
+    {"tick": 2, "action": "world/patch", "args": {"edits": [
+      {"op": "set", "path": "/entities/boat/position", "value": [6, 0, 0]}
+    ]}},
+    {"tick": 2, "action": "world/story-objective", "args": {
+      "document": "dock", "story": "delivery", "stage": "unload", "visit": 1,
+      "objective": "moor", "result": "completed", "reason": "mooring-checked"
+    }},
+    {"tick": 3, "action": "world/patch", "args": {"edits": [
+      {"op": "remove", "path": "/entities/boat"}
+    ]}},
+    {"tick": 3, "action": "world/story-choose", "args": {
+      "document": "dock", "story": "delivery", "stage": "unload", "visit": 1, "branch": "done", "reason": "unloading-finished"
+    }}
+  ]
+}

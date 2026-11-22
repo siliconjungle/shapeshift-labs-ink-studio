@@ -132,6 +132,21 @@
       const ticks = seconds / dt, nearest = Math.round(ticks);
       return seek(Math.abs(ticks - nearest) <= Number.EPSILON * Math.max(1, ticks) ? nearest : Math.floor(ticks));
     }
+    function scan(from,to,onTick) {
+      checkTick(from);
+      checkTick(to);
+      check(to>=from&&typeof onTick==='function','Expected an ordered scrub range and a committed tick callback');
+      const base=start(from), {run}=base, next=new Map(cached);
+      run.advance(from,{onTick(){}});
+      onTick(run.view());
+      run.advance(to,{onTick});
+      checkEnd(run);
+      current=run;
+      remember(next,run.checkpoint());
+      cached=next;
+      last={checkpointTick:base.tick,replayedTicks:to-base.tick};
+      return run.view();
+    }
     function recordTake({ from = current.view().tick, to, every = 1, tracks } = {}) {
       checkTick(from);
       checkTick(to);
@@ -170,7 +185,7 @@
       return freeze(take);
     }
     return Object.freeze({
-      seek, seekTime, recordTake,
+      seek, seekTime, scan, recordTake,
       view: () => current.view(), query: () => current.query(),
       checkpoint: () => current.checkpoint(), events: () => current.events,
       status: () => ({ tick: current.view().tick, fromTick: origin.tick, toTick, checkpointEvery, checkpointCache,

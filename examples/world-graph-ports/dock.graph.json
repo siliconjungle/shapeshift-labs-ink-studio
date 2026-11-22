@@ -1,0 +1,40 @@
+{
+  "format": "ink-studio/graph-project",
+  "version": 1,
+  "time": 0.1,
+  "assets": {"recording": {"format": "json", "file": "dock.run.json"}},
+  "nodes": {
+    "file": {"op": "jsonAsset", "inputs": {"name": "recording"}},
+    "world": {"op": "sim.world", "inputs": {
+      "source": {"node": "file"},
+      "options": {"queries": {
+        "tension": {
+          "field": "line/links", "args": {"link": "mooring"},
+          "when": {"path": "/active", "value": true}, "select": "/tension"
+        },
+        "objective": {"field": "world/story-objective", "args": {"story": "dock/delivery", "objective": "moor"}}
+      }}
+    }},
+    "arrival": {"op": "sim.worldPulse", "inputs": {"source": {"node": "world"}, "options": {"kind": "arrival"}}},
+    "tension": {"op": "sim.worldScalar", "inputs": {
+      "source": {"node": "world"}, "options": {"query": "tension", "range": [0, 100], "missing": "hold", "fallback": 0.1}
+    }},
+    "objective": {"op": "sim.worldRecord", "inputs": {
+      "source": {"node": "world"}, "options": {"query": "objective", "fallback": {"status": "unavailable"}}
+    }},
+    "gauge": {"op": "multiply", "inputs": {"a": {"node": "tension"}, "b": 100}}
+  },
+  "outputs": {
+    "arrival": {"node": "arrival"},
+    "arrivalStatus": {"node": "arrival", "port": "report"},
+    "tension": {"node": "tension"},
+    "tensionStatus": {"node": "tension", "port": "report"},
+    "objective": {"node": "objective"},
+    "objectiveStatus": {"node": "objective", "port": "report"},
+    "gaugePercent": {"node": "gauge"}
+  },
+  "exports": {
+    "arrival": {"output": "arrival", "format": "json"},
+    "objective": {"output": "objective", "format": "json"}
+  }
+}

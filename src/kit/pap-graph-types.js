@@ -136,6 +136,12 @@
   const checks = {
     any: () => true,
     number: Number.isFinite,
+    unitScalar: unit,
+    worldFrame: value => value===null||value?.format==='ink-studio/world-graph-frame'&&value.version===1&&
+      name(value.world)&&name(value.branch)&&Number.isSafeInteger(value.seed)&&
+      Number.isSafeInteger(value.tick)&&value.tick>=0&&Number.isFinite(value.dt)&&value.dt>0&&value.dt<=1&&
+      Number.isSafeInteger(value.eventFrom)&&value.eventFrom>=0&&value.eventFrom<=value.tick+1&&
+      Array.isArray(value.events)&&value.events.length<=maxEvents&&record(value.samples),
     boolean: value => typeof value === 'boolean',
     string: value => typeof value === 'string',
     vec2: value => vector(value, 2),
@@ -166,6 +172,7 @@
   };
   // Semantic ports retain compatibility with legacy numeric and raster sockets.
   const semantics = {
+    unitScalar: ['normalized scalar in [0,1]', 'number'],
     pixels: ['top-left pixel coordinates', 'vec2'],
     uv: ['normalized top-left UV coordinates', 'vec2'],
     worldPosition: ['world XYZ position', 'vec3'],
