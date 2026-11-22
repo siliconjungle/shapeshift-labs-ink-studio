@@ -1083,6 +1083,15 @@ can also drive a story. Use a `belief-updated` trigger and query
 `world/beliefs` for the holder and topic. A convoy reroute can require
 the harbor watch's belief to reach `verified` with the value `closed`.
 
+[Memories and relationships](headless-worlds.md#remember-outcomes-and-query-relationships)
+let one story's outcome affect later decisions. Route a matching
+`story-transition` through `eventActions` to `world/remember`, then
+use `world/memories` or `world/relationship` in story conditions. A
+candidate can wait for trust to reach a threshold as an earlier
+memory fades. A casting query can use the same field and bind its
+`with` argument from a candidate's `{kind, id}` reference using the
+existing `query` criterion.
+
 Add `storyDocuments` to a world manifest. The library accepts an array of embedded story documents. The CLI also accepts entries such as `{ "file": "burned-mill.json" }` relative to the world file. An Ink run recording or checkpoint embeds those documents so it can replay without the original paths. Older story files without `triggers` remain valid.
 
 | Trigger | Example | When it starts |

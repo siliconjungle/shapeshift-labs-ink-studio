@@ -889,6 +889,80 @@ ink-studio probe channel.run.json --ticks 4 --field world/beliefs
 ink-studio trace channel.run.json world/cause --args '{"event":"4.1"}'
 ```
 
+## Remember outcomes and query relationships
+
+Declare the outcomes worth remembering under `memories.types`. A
+memory belongs to an actor or faction. It can name another actor or
+faction as its subject and affect how its holder views that subject.
+
+```json
+"memories": {
+  "limit": 512,
+  "durableLimit": 128,
+  "types": {
+    "missed-signal": { "decayTicks": 8, "effects": { "trust": -40 } },
+    "river-rescue": {
+      "durable": true,
+      "effects": { "trust": 30 },
+      "data": { "story": "id", "outcome": "id" }
+    }
+  }
+}
+```
+
+Schedule `world/remember` with `type` and
+`holder: {"kind":"actor","id":"crew/ilya"}`. Supply `about` in the same
+format when the memory affects a relationship. Types can declare data
+fields using the typed fact value shapes. Each memory supplies those
+fields as `data`. A memory can carry an earlier event receipt ID in
+`source`. Reusing that receipt for the same retained type, holder, and
+subject leaves the original memory in place. When causality is enabled
+and the event is retained, a `world/cause` trace links the memory back
+to that event. The memory keeps its source ID after the event ages out.
+A source at or after the memory's event position is rejected with
+`source-not-earlier`.
+
+Use `eventActions` to turn a native questlet outcome, settlement,
+order result, fact, or belief update into a memory. Filter the event
+with `on.where` and bind `"/source": "/id"` to retain its receipt.
+The action runs on the next tick by default. An accepted action
+publishes `memory-recorded` with the resulting record.
+
+| Query | Arguments | Returns |
+| --- | --- | --- |
+| `world/memories` | Optional `holder`, `about`, `type`, `id`, `limit` | Retained records with typed outcome data, source IDs, current strength and effects, and ledger counts for expiry and eviction. |
+| `world/relationship` | `holder`, `with` | A directed view with signed scores for each configured axis and the memories that contribute to them. An unknown relationship has zero scores and no contributors. |
+
+Relationship scores add the current effects from matching memories.
+Effects are integers from −100 to 100 per axis. A fading memory starts
+at full effect and declines linearly over `decayTicks`, defaulting to
+600 simulation ticks. The query truncates each signed effect toward
+zero and rounds the displayed strength up to a whole percent. The
+memory expires at its recorded tick plus `decayTicks`. A durable
+memory stays at full strength.
+
+The two storage limits each accept 1–4,096 entries. When ordinary
+storage fills up, new memories evict the oldest fading memory. A full
+durable ledger emits `memory-rejected` with reason `durable-capacity`
+and keeps the formative memories already recorded. The ledgers survive
+checkpoints and recordings with ordinary event history disabled.
+
+In the [river crossing demo](../examples/story-documents/river-memories.world.json),
+a missed signal lowers the wardens’ trust in Ilya. A rescue creates
+a durable positive memory. The crossing contract waits until the
+missed signal fades enough for Ilya to meet the trust threshold.
+Without the rescue, trust returns to neutral and the contract expires
+while still ineligible. The demo also fills the ordinary memory ledger with supply
+logs so you can see that the rescue is retained.
+
+```sh
+ink-studio sim run examples/story-documents/river-memories.world.json \
+  --actions examples/story-documents/river-memories.rescue.actions.json --ticks 13 --record river.run.json
+ink-studio probe river.run.json --ticks 6 --field world/relationship \
+  --args '{"holder":{"kind":"faction","id":"river-wardens"},"with":{"kind":"actor","id":"crew/ilya"}}'
+ink-studio probe river.run.json --field world/memories --args '{"type":"river-rescue"}'
+```
+
 ## Physical material assets
 
 A versioned asset pack can carry a `materials` list alongside families

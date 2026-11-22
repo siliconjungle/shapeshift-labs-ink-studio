@@ -1,0 +1,48 @@
+{
+  "format": "ink-studio/story",
+  "version": 1,
+  "id": "river-memories",
+  "title": "The river wardens decide whom to trust",
+  "stories": {
+    "rescue": {
+      "kind": "questlet",
+      "title": "Bring the skiff crew to safety",
+      "triggers": { "distress": { "event": { "kind": "skiff-overturned" } } },
+      "lifecycle": { "progression": true },
+      "entry": "rescue-crew",
+      "stages": { "rescue-crew": {
+        "title": "Get the crew to the riverbank",
+        "decision": { "mode": "autonomous" },
+        "objectives": { "safe-bank": {
+          "title": "The courier reaches the bank with the crew",
+          "evidence": { "event": { "kind": "crew-reached-bank", "where": { "path": "/courier", "value": "crew/ilya" } } }
+        } },
+        "next": { "safe": { "outcome": "crew-safe", "auto": true } }
+      } },
+      "outcomes": { "crew-safe": { "title": "The crew is safe" } }
+    },
+    "crossing-contract": {
+      "kind": "incident",
+      "title": "Hire Ilya for the river crossing",
+      "incident": { "category": "opportunity", "intensity": 1 },
+      "triggers": { "offer": { "event": { "kind": "crossing-contract" } } },
+      "lifecycle": {
+        "progression": true,
+        "candidate": { "for": 1, "release": "automatic" },
+        "feasibility": { "trusted": { "state": {
+          "field": "world/relationship",
+          "args": { "holder": { "kind": "faction", "id": "river-wardens" }, "with": { "kind": "actor", "id": "crew/ilya" } },
+          "select": "/scores/trust",
+          "when": { "op": "gte", "value": 10 }
+        } } }
+      },
+      "entry": "hire",
+      "stages": { "hire": {
+        "title": "Arrange the crossing",
+        "decision": { "mode": "autonomous" },
+        "next": { "arranged": { "outcome": "hired", "auto": true } }
+      } },
+      "outcomes": { "hired": { "title": "Ilya is hired for the crossing" } }
+    }
+  }
+}

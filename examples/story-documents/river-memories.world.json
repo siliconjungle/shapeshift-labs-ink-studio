@@ -1,0 +1,60 @@
+{
+  "format": "ink-studio/world",
+  "version": 1,
+  "id": "river-memories",
+  "dt": 0.1,
+  "history": { "enabled": false },
+  "causality": { "limit": 128 },
+  "storyDocuments": [{ "file": "river-memories.json" }],
+  "memories": {
+    "limit": 2,
+    "durableLimit": 2,
+    "types": {
+      "missed-signal": { "decayTicks": 8, "effects": { "trust": -40 } },
+      "river-rescue": {
+        "durable": true,
+        "effects": { "trust": 30 },
+        "data": { "document": "id", "story": "id", "outcome": "id" }
+      },
+      "supply-log": { "decayTicks": 20, "data": { "bundles": "integer" } }
+    }
+  },
+  "eventActions": {
+    "remember-the-missed-signal": {
+      "on": { "kind": "signal-missed", "system": "world" },
+      "actions": [{
+        "action": "world/remember",
+        "args": { "type": "missed-signal", "holder": { "kind": "faction", "id": "river-wardens" },
+          "about": { "kind": "actor", "id": "crew/ilya" }, "source": "1.0" },
+        "bindings": { "/source": "/id", "/about/id": "/courier" }
+      }]
+    },
+    "remember-the-rescue": {
+      "on": { "kind": "story-transition", "system": "world", "where": { "all": [
+        { "path": "/document", "value": "river-memories" },
+        { "path": "/story", "value": "rescue" },
+        { "path": "/outcome", "value": "crew-safe" }
+      ] } },
+      "actions": [{
+        "action": "world/remember",
+        "args": { "type": "river-rescue", "holder": { "kind": "faction", "id": "river-wardens" },
+          "about": { "kind": "actor", "id": "crew/ilya" }, "source": "1.0",
+          "data": { "document": "river-memories", "story": "rescue", "outcome": "crew-safe" } },
+        "bindings": { "/source": "/id", "/data/document": "/document", "/data/story": "/story", "/data/outcome": "/outcome" }
+      }]
+    }
+  },
+  "commands": [
+    { "tick": 1, "action": "world/event", "args": { "kind": "signal-missed", "courier": "crew/ilya" } },
+    { "tick": 3, "action": "world/event", "args": { "kind": "crossing-contract" } },
+    { "tick": 11, "action": "world/remember", "args": {
+      "type": "supply-log", "holder": { "kind": "faction", "id": "river-wardens" }, "data": { "bundles": 3 }
+    } },
+    { "tick": 12, "action": "world/remember", "args": {
+      "type": "supply-log", "holder": { "kind": "faction", "id": "river-wardens" }, "data": { "bundles": 5 }
+    } },
+    { "tick": 13, "action": "world/remember", "args": {
+      "type": "supply-log", "holder": { "kind": "faction", "id": "river-wardens" }, "data": { "bundles": 7 }
+    } }
+  ]
+}

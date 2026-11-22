@@ -173,5 +173,6 @@
   }
 
   const valueOK = (shape,value)=>own(types,shape)&&types[shape](value);
-  W.worldFacts = Object.freeze({action,kind,compile,inspect,trace,qualified,eventId,compare,atOK,valueOK});
+  W.worldFacts = Object.freeze({action,kind,compile,inspect,trace,qualified,eventId,compare,atOK,valueOK,
+    valueTypes:Object.freeze(Object.keys(types))});
 })(KIT);

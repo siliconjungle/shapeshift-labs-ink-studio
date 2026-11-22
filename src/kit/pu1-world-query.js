@@ -260,6 +260,10 @@
         W.worldKnowledge.inspect(view.knowledge,view.knowledgePolicy,tick,args)}}),
       ...(world.beliefs!==undefined&&{beliefs:{type:'record',qualified:true,read:({args})=>
         W.worldBeliefs.inspect(view.beliefs,view.beliefPolicy,tick,args)}}),
+      ...(world.memories!==undefined&&{
+        memories:{type:'record',qualified:true,read:({args})=>W.worldMemories.inspect(view.memories,view.memoryPolicy,tick,args)},
+        relationship:{type:'record',qualified:true,read:({args})=>W.worldMemories.relationship(view.memories,view.memoryPolicy,tick,args)}
+      }),
       account:{type:'record',read:({args}) => {
         const balance = transfers().inspect(states,args.account);
         return balance ? ok(balance.at===undefined?balance:{...balance,position:W.worksites.frame(api,balance.at)?.point??null}) :
@@ -466,6 +470,7 @@
         ...(view.worldFacts ? ['world/'+W.worldFacts.action] : []),
         ...(view.knowledge ? ['world/'+W.worldKnowledge.action] : []),
         ...(view.beliefs ? W.worldBeliefs.actions.map(action=>'world/'+action) : []),
+        ...(view.memories ? ['world/'+W.worldMemories.action] : []),
         ...(view.storyLifecycle ? W.storyLifecycle.actions.map(name=>'world/'+name) : []),
         ...(view.incidentCandidatePolicies ? ['world/'+W.incidentCandidates.action] : []),
         ...(world.simulationChunks?W.simulationChunks.actions.map(name=>'world/'+name):[])]};

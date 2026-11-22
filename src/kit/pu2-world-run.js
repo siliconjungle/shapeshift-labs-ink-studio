@@ -12,6 +12,7 @@
     plan.worldFacts && name===W.worldFacts.action ||
     plan.worldKnowledge && name===W.worldKnowledge.action ||
     plan.worldBeliefs && W.worldBeliefs.actions.includes(name) ||
+    plan.worldMemories && name===W.worldMemories.action ||
     plan.storyLifecycle && W.storyLifecycle.actions.includes(name) ||
     plan.incidentCandidates && name===W.incidentCandidates.action;
   const checkpointFormat = 'ink-studio/checkpoint', runFormat = 'ink-studio/run';
@@ -19,6 +20,7 @@
   const typedFact=Symbol('typed fact event');
   const typedLearning=Symbol('knowledge event');
   const typedBelief=Symbol('belief event');
+  const typedMemory=Symbol('memory event');
 
   function stepTiming(world,at,timing) {
     const baseDt=world.dt, substeps=timing?.substeps??1, detail=timing?.detail;
@@ -343,6 +345,7 @@
     plan.worldFacts = W.worldFacts.compile(world.facts,world.dt);
     plan.worldKnowledge = W.worldKnowledge.compile(world.knowledge,plan.worldFacts?.policy);
     plan.worldBeliefs = W.worldBeliefs.compile(world.beliefs,plan.worldFacts?.policy,plan.worldKnowledge?.policy);
+    plan.worldMemories = W.worldMemories.compile(world.memories);
     const templates = world.storyTemplates === undefined ? undefined : W.storyTemplates.compile(world);
     if (templates || world.storyDocuments !== undefined || world.storyBindings !== undefined) {
       plan.storyRoles = W.storyRoles.compile(templates?.documents ?? (world.storyDocuments === undefined ? [] : world.storyDocuments),
@@ -401,6 +404,7 @@
       }
       else if (key===W.worldKnowledge.action) plan.worldKnowledge.checkAction(args);
       else if (W.worldBeliefs.actions.includes(key)) plan.worldBeliefs.checkAction(key,args);
+      else if (key===W.worldMemories.action) plan.worldMemories.checkAction(args);
       else if (key===W.incidentCandidates.action) plan.incidentCandidates.checkAction(args);
       else if (W.storyLifecycle.actions.includes(key)) plan.storyLifecycle.checkAction(key,args);
       else {
@@ -408,6 +412,7 @@
         check(!plan.worldFacts||args.kind!==W.worldFacts.kind,'Use world/fact to publish a typed world fact');
         check(!plan.worldKnowledge||args.kind!==W.worldKnowledge.kind,'Use fact witnessing or world/share-fact to record learning');
         check(!plan.worldBeliefs||!W.worldBeliefs.eventKinds.includes(args.kind),'Use world belief actions to publish belief events');
+        check(!plan.worldMemories||!W.worldMemories.eventKinds.includes(args.kind),'Use world/remember to publish memory events');
         W.timedEvents.timeOf(args);
       }
     } else {
@@ -498,6 +503,7 @@
       ...(plan.worldFacts && {facts:plan.worldFacts.policy}),
       ...(plan.worldKnowledge && {knowledge:plan.worldKnowledge.policy}),
       ...(plan.worldBeliefs && {beliefs:plan.worldBeliefs.policy}),
+      ...(plan.worldMemories && {memories:plan.worldMemories.policy}),
       ...(plan.incidentCandidates && {incidentCandidates:plan.incidentCandidates.policies}),
       ...(plan.incidentCandidates?.anchors && {incidentAnchors:plan.incidentCandidates.anchors}),
       ...(plan.incidentPressure && {incidentPressure:plan.incidentPressure}),
@@ -534,7 +540,7 @@
     }
     const {plan, weather = weatherProgram(world), timeline = W.sceneTimeline(world)}=result;
     const {systems,ports,incoming,order,names,transfers,couplings,dependencies,rates,chunks,aggregates,reservations,worksites,
-      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,navigationSources} = plan;
+      interactions,influence,population,causePolicy,contracts,phaseEdges,eventActions,storyTriggers,storyLifecycle,storyReferences,storyCommitments,storyHandoffs,storySettlement,storyRoles,storyTemplates,incidentCatalog,incidentCandidates,incidentPressure,incidentCooldowns,incidentVariety,storyteller,worldFacts,worldKnowledge,worldBeliefs,worldMemories,navigationSources} = plan;
     const schedulerSource = Object.freeze({preview:incidentCandidates?.preview,triggers:storyTriggers?.advance,
       documents:storyRoles?.documents??[]});
     let composition, inspection;
@@ -578,6 +584,7 @@
     let worldFactState = worldFacts?.initial();
     let knowledgeState = worldKnowledge?.initial();
     let beliefState = worldBeliefs?.initial();
+    let memoryState = worldMemories?.initial();
 
     const stateViews=names.filter(name=>systems[name].viewState), viewCache=new WeakMap();
     function visibleStates(values){
@@ -603,6 +610,7 @@
         ...(worldFactState && {worldFacts:worldFactState}),
         ...(knowledgeState && {knowledge:knowledgeState,knowledgePolicy:worldKnowledge.policy}),
         ...(beliefState && {beliefs:beliefState,beliefPolicy:worldBeliefs.policy}),
+        ...(memoryState && {memories:memoryState,memoryPolicy:worldMemories.policy}),
         ...(chunkView&&{simulationChunks:chunkView}),
         ...(storyTriggerState && {storyTriggers:storyTriggerState}),
         ...(storyLifecycleState && {storyLifecycle:storyLifecycleState}),
@@ -712,6 +720,7 @@
         ...(worldFactState && {worldFactState}),
         ...(knowledgeState && {knowledgeState}),
         ...(beliefState && {beliefState}),
+        ...(memoryState && {memoryState}),
         ...(lastTransfers.length && {transfers:lastTransfers}),
         ...(weatherTrackState && {weatherTrackState}),
         ...(pendingWrites.length && {dependencyWrites:pendingWrites}),...(rates && {sampling}),
@@ -731,6 +740,7 @@
       worldFactState = payload.worldFactState;
       knowledgeState = payload.knowledgeState;
       beliefState = payload.beliefState;
+      memoryState = payload.memoryState;
       chunkState=payload.simulationChunks;
       sampling=payload.sampling;
       lastTransfers=payload.transfers??[];
@@ -785,6 +795,8 @@
       else check(!own(payload,'knowledgeState'),'Unexpected knowledge checkpoint data');
       if (worldBeliefs) worldBeliefs.validate(payload.beliefState,payload.tick,payload.worldFactState,payload.knowledgeState,payload.events);
       else check(!own(payload,'beliefState'),'Unexpected belief checkpoint data');
+      if (worldMemories) worldMemories.validate(payload.memoryState,payload.tick,payload.events);
+      else check(!own(payload,'memoryState'),'Unexpected world memory checkpoint data');
       if (storyReferences) storyReferences.validate(payload.storyReferenceState,payload.tick,payload.storyLifecycleState);
       else check(!own(payload,'storyReferenceState'),'Unexpected story live reference checkpoint data');
       transfers.validateBalances(payload.states);
@@ -857,7 +869,7 @@
     const blockSize = authoredBlockSize===undefined ? undefined :
       Math.min(authoredBlockSize,systems[names[0]].processingLimit?.()??authoredBlockSize);
     const blockSystem = blockSize !== undefined && !world.scenario && !weather && !timeline && !eventActions && !storyTriggers &&
-      !storyLifecycle && !worldFacts && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
+      !storyLifecycle && !worldFacts && !worldMemories && !causePolicy && !regions && !evidence && !playback && !debug ? names[0] : undefined;
     if(!skipInitialSubmission&&playback?.has(tick))enqueue(playback.get(tick),true);
     regions?.publish(view());
     debug?.publish(origin);
@@ -940,6 +952,7 @@
       const factLedger = worldFacts?.begin(worldFactState,at);
       const knowledgeLedger = worldKnowledge?.begin(knowledgeState,at);
       const beliefLedger = worldBeliefs?.begin(beliefState);
+      const memoryLedger = worldMemories?.begin(memoryState,at);
       const makeEmit = (system,scope,root,token) => (kind,detail = {},parents) => {
         check(id(kind) && record(detail) && events.length < 10000, 'Invalid event or per-tick event budget exceeded');
         const typed = token===typedFact;
@@ -948,6 +961,8 @@
           'Use fact witnessing or world/share-fact to record learning');
         check(!beliefLedger||!W.worldBeliefs.eventKinds.includes(kind)||token===typedBelief,
           'Use world belief actions to publish belief events');
+        check(!memoryLedger||!W.worldMemories.eventKinds.includes(kind)||token===typedMemory,
+          'Use world/remember to publish memory events');
         W.timedEvents.timeOf(detail);
         const row=freeze({...copy(detail),kind,system,tick:at,id:at+'.'+events.length});
         events.push(row);
@@ -1047,6 +1062,15 @@
               publish(W.worldBeliefs.kind,{belief},parent?[root,parent]:undefined);
             }
             if (rejected) publish(W.worldBeliefs.rejection,{action:item.action,args:item.args,reason:rejected});
+          }
+          if (key===W.worldMemories.action) {
+            const {memory,rejected} = memoryLedger.remember(item.args,at+'.'+events.length);
+            const publish = makeEmit(name,undefined,root,typedMemory);
+            if (memory) {
+              const parent = memory.source&&causal?.eventReference(memory.source);
+              publish(W.worldMemories.kind,{memory},parent?[root,parent]:undefined);
+            }
+            if (rejected) publish(W.worldMemories.rejection,{args:item.args,reason:rejected});
           }
           if (key === 'transfer') {
             requests.push({name,request:item.args,root});
@@ -1370,9 +1394,9 @@
       let completed;
       const completedView = () => {
         const frame = view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,causalState,nextChunkState);
-        return nextStoryReferences||factLedger?{...frame,...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
+        return nextStoryReferences||factLedger||memoryLedger?{...frame,...(nextStoryReferences&&{storyReferences:nextStoryReferences}),
           ...(factLedger&&{worldFacts:factLedger.snapshot()}),...(knowledgeLedger&&{knowledge:knowledgeLedger.snapshot()}),
-          ...(beliefLedger&&{beliefs:beliefLedger.snapshot()})}:frame;
+          ...(beliefLedger&&{beliefs:beliefLedger.snapshot()}),...(memoryLedger&&{memories:memoryLedger.snapshot()})}:frame;
       };
       const completedQuery = () => completed ??= Q.create(
         completedView(),systems,projection);
@@ -1533,10 +1557,12 @@
       const nextFacts = factLedger?.finish();
       const nextKnowledge = knowledgeLedger?.snapshot();
       const nextBeliefs = beliefLedger?.snapshot();
+      const nextMemories = memoryLedger?.snapshot();
       const nextView = {...view(nextWorld,freeze(nextStates),publishedSignals,at,receipts,nextCausal,nextChunkState),...memory,
         ...(nextFacts && {worldFacts:nextFacts}),
         ...(nextKnowledge && {knowledge:nextKnowledge}),
         ...(nextBeliefs && {beliefs:nextBeliefs}),
+        ...(nextMemories && {memories:nextMemories}),
         ...(storyTriggers && {storyTriggers:nextStoryTriggers}),...(storyLifecycle && {storyLifecycle:nextStoryLifecycle}),
         ...(nextStoryFeasibility && {storyFeasibility:nextStoryFeasibility}),
         ...(nextStoryReferences && {storyReferences:nextStoryReferences}),
@@ -1565,6 +1591,7 @@
       worldFactState = nextFacts;
       knowledgeState = nextKnowledge;
       beliefState = nextBeliefs;
+      memoryState = nextMemories;
       chunkState = nextChunkState;
       storyTriggerState = nextStoryTriggers;
       storyLifecycleState = nextStoryLifecycle;

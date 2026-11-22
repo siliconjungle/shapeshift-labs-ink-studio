@@ -1,0 +1,4 @@
+[
+  { "tick": 1, "action": "world/event", "args": { "kind": "skiff-overturned" } },
+  { "tick": 2, "action": "world/event", "args": { "kind": "crew-reached-bank", "courier": "crew/ilya" } }
+]
