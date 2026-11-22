@@ -5,6 +5,7 @@ const CheckpointStore = require('../src/simulation-checkpoint-store.js');
 const {embedModels} = require('./simulation-model-files.js');
 const {embedStoryDocuments} = require('./story-document.js');
 const StoryRun = require('./story-run-controls.js');
+const StoryWatch = require('./story-watch.js');
 
 const read = file => JSON.parse(fs.readFileSync(path.resolve(file),'utf8'));
 const parse = input => JSON.parse(String(input));
@@ -324,14 +325,36 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
     const processing = run.processing();
     return Object.keys(processing).length ? {processing} : {};
   }
-  function finish(run, sourceStore, detail) {
+  function finish(run, sourceStore, detail, output = respond) {
     const checks = opt.assert ? assert(run,read(opt.assert)) : null;
     const { storage, save } = saveCheckpoints(sourceStore);
     if (opt.checkpoint) save('checkpoint',opt.checkpoint,run.checkpoint());
     if (opt.record) save('record',opt.record,run.recording());
-    respond({...summary(run,checks),...(Object.keys(storage).length&&{storage}),...detail});
+    const report = {...summary(run,checks),...(Object.keys(storage).length&&{storage}),...detail};
+    output(report);
     if (checks?.some(row => !row.pass) || opt.scenario && ['fail','timeout'].includes(run.scenario.status))
       process.exitCode = 2;
+    return report;
+  }
+  async function watchSimulation(input, mode, sources, play) {
+    let watch, run;
+    try {
+      async function onStart(engine) {
+        run = engine;
+        watch = await StoryWatch.open(W,run.view(),opt,mode,[...sources,opt.actions,opt.assert,
+          opt.observations,opt['until-condition'],opt.out,opt.checkpoint,opt.record]);
+        await watch.begin();
+        await watch.sample(run.view(),run.query());
+      }
+      const onTick = (frame,query)=>watch.sample(frame,query,run.events);
+      const {unmet,...detail} = await play(onStart,onTick)??{};
+      const output = opt['watch-out']!==undefined||opt.out?respond:()=>{};
+      const report = finish(run,input.store,detail,output);
+      await watch.end(report);
+      if (unmet) process.exitCode = 2;
+    } finally {
+      await watch?.close();
+    }
   }
   function getCheckpoint(file) {
     const input = load(file);
@@ -420,7 +443,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       fromTick:start,toTick:end,declarations:run.dependencies().declarations,ticks,
       ...(workerPool&&{partitions:run.partitions()})});
   }
-  function sim(args) {
+  async function sim(args) {
     ensure(opt['checkpoint-store']===undefined||typeof opt['checkpoint-store']==='string'&&
       opt['checkpoint-store'].length>0,'--checkpoint-store needs a directory or off');
     if(opt.workers!==undefined){
@@ -428,7 +451,7 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       workerPool=require('../index.js').createSimulationWorkers(Number(opt.workers));
     }
     try {
-      return runSimulation(args);
+      return await runSimulation(args);
     } finally {
       workerPool?.close();
       workerPool=undefined;
@@ -517,6 +540,9 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       ...(world.simulationModel.exposedParameters && {exposedParameters:world.simulationModel.exposedParameters})});
   }
   function runSimulation([mode,file,other]) {
+    const watching = StoryWatch.enabled(opt);
+    if (watching) ensure(['run','resume','fork','replay'].includes(mode)&&other===undefined,
+      'Use sim run, resume, fork, or replay with '+StoryWatch.usage);
     ensure(opt.storyteller===undefined||['run','preflight'].includes(mode),
       'Use --storyteller with a fresh world in sim run or preflight');
     switch (mode) {
@@ -783,25 +809,37 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
       case 'run':
       case 'resume':
       case 'fork': {
-        const input = load(file);
+        const sources = new Set([file]);
+        const input = load(file,{dependency:watching?source=>sources.add(source):undefined});
         ensure(mode==='run' || input.checkpoint,'Expected a checkpoint or recording to resume or fork');
         const run = runtime(input,!!(opt.profile||opt.assert),undefined,recordOptions());
         if (mode === 'run' && !input.checkpoint) for (const issue of run.storyDiagnostics())
           console.error(`Story warning [${issue.code}] ${issue.document} ${issue.path}: ${issue.message}`);
-        if (StoryRun.enabled(opt)) {
+        const stopping = StoryRun.enabled(opt);
+        let controls, limit = to(run);
+        if (stopping) {
           ensure(other===undefined,'Use one world, checkpoint, or recording with story run controls');
-          const controls = StoryRun.create(W,run,opt,read), {tick,world} = run.view();
+          controls = StoryRun.create(W,run,opt,read);
+          const {tick,world} = run.view();
           const timed = [opt.ticks,opt.steps,opt.t,world.scenario?.until].some(value=>value!==undefined);
-          const limit = timed?to(run):Math.min(R.maxTick,tick+(controls.hasStops?1000:1));
+          if (!timed) limit = Math.min(R.maxTick,tick+(controls.hasStops?1000:1));
           controls.schedule();
-          schedule(run);
+        }
+        schedule(run);
+        if (watching) {
+          return watchSimulation(input,mode,sources,async (onStart,onTick)=>{
+            await onStart(run);
+            if (controls) return controls.advanceAsync(limit,!!opt.scenario,onTick);
+            await run.advanceAsync(limit,{stopOnOutcome:!!opt.scenario,onTick});
+          });
+        }
+        if (controls) {
           const {unmet,...detail} = controls.advance(limit,!!opt.scenario);
           finish(run,input.store,detail);
           if (unmet) process.exitCode = 2;
           break;
         }
-        schedule(run);
-        run.advance(to(run),{stopOnOutcome:!!opt.scenario});
+        run.advance(limit,{stopOnOutcome:!!opt.scenario});
         finish(run,input.store);
         break;
       }
@@ -890,8 +928,11 @@ module.exports = function createCLI({kit,build,pose,dataScene,opt,renderOptions,
         const input=load(file);
         ensure(input.log,'Expected a run recording');
         ensure(opt.observations===undefined,'The replay uses the observation plan saved with the run');
-        finish(R.replay(input.log,{profile:!!(opt.profile||opt.assert),workerPool,traceSteps:traceRetention(),
-          recordRun:recordOptions()}),input.store);
+        const options = {profile:!!(opt.profile||opt.assert),workerPool,traceSteps:traceRetention(),recordRun:recordOptions()};
+        if (watching) return watchSimulation(input,mode,[file],async (onStart,onTick)=>{
+          await R.replayAsync(input.log,{...options,onStart,onTick});
+        });
+        finish(R.replay(input.log,options),input.store);
         break;
       }
       case 'verify': {

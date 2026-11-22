@@ -73,6 +73,32 @@ node cli/ink-studio.js sim verify delivered.run.json
 
 The same run can stop on the authored [stock condition](../examples/story-documents/dispatch-rehearsal.stocked.condition.json). Rehearse a full scheduler with `sim run` and select one of its authored profiles with `--storyteller`. Inspect the stopped scheduler or its live accounts with the ordinary `sim scheduler` and `probe` commands.
 
+### Stream story watches
+
+Add `--watch-story document/story` to `sim run`, `sim resume`, `sim fork`, or `sim replay`. Give a comma-separated list to watch several stories, or use `all` for every assembled definition, including template instances. Watches sample the starting snapshot and each committed tick, including a tick that hits a breakpoint.
+
+| Watch value | What it reports |
+| --- | --- |
+| `stage` | Lifecycle status, current stage and visit, child waits, transition reason, and the named ending. |
+| `evidence` | Trigger or launch provenance, current and previous visit evidence, unresolved evidence progress, and new receipts on the sampled tick. |
+| `roles` | Concrete role values and whether they came from a world binding or a reference. |
+| `blockers` | Feasibility checks, branch requirements, commitment or handoff decisions, unsettled effects, live references, candidate constraints, and assigned work orders that are blocked. |
+| `choices` | Player choices, branch eligibility, and remaining time on intervention windows or escalation beats. |
+| `changes` | Newly committed story events, including lifecycle transitions, objective resolutions, decisions, and rejections. |
+
+The stream is newline-delimited JSON. The `story-watch-start` record identifies the world, seed, starting tick, and selection. Each `story-watch` record identifies a story and carries the selected values that changed. A value present on a row replaces that channel’s prior value. The tick’s `changes` and `evidence.receipts` are event batches that apply only to that row. The starting snapshot contains current values. Subsequent rows emit new events, even when retained world history is disabled. A completed stream ends with `story-watch-end` and its run summary.
+
+Use `--watch-values stage,evidence,choices` to limit the stream, or omit it for all six values. By default the stream goes to stdout. With `--watch-out file.ndjson` the stream goes to a file and the normal JSON summary is available on stdout or through `--out`.
+
+```sh
+node cli/ink-studio.js sim run examples/story-documents/breakwater-watch.world.json \
+  --watch-story breakwater-watch/dispatch --until-stage breakwater-watch/dispatch/plan-route \
+  --checkpoint route.checkpoint.json --watch-out route.ndjson
+node cli/ink-studio.js sim resume route.checkpoint.json \
+  --actions examples/story-documents/breakwater-watch.intervene.actions.json \
+  --watch-story breakwater-watch/dispatch --watch-values choices,evidence,changes --ticks 14
+```
+
 ### Describe a story package before running it
 
 `story describe <file.json> [story-id] --inventory` lists definitions, entry stages, outcomes, role schemas, capability references, assets, and dependencies. Each requirement shows the fields that declared or referenced it. Role schemas identify required slots, use sites, and reference defaults. `story preview` includes the same inventory alongside its route analysis.

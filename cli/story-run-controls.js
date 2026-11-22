@@ -58,7 +58,7 @@ function create(W,run,options,read) {
     if (activation&&(last.to==='active'||last.to==='suspended'||activation.tick===now))
       return {kind:'stage',story:key,stage:id,enteredAt:activation.tick};
   }
-  function advance(limit,stopOnOutcome) {
+  function preparedAdvance(limit,stopOnOutcome) {
     let matches = [], observed, rejected;
     function until(frame,query) {
       if (launch&&frame.tick===requestTick) rejected = run.events.find(event=>
@@ -73,16 +73,26 @@ function create(W,run,options,read) {
       matches = [foundStage,foundOutcome,foundCondition].filter(Boolean);
       return matches.length>0;
     }
-    const frame = run.advance(limit,{until,stopOnOutcome}), {tick} = frame;
-    const lifecycle = launch&&frame.storyLifecycle?.[launch.key]?.transitions.at(-1);
-    return {stop:{reason:matches.length?'matched':stopOnOutcome&&run.scenario.status!=='running'?'scenario-outcome':'tick-limit',
-      from:initial.tick,limit,tick,matches,...(observed&&{lastCondition:observed.status})},
-    ...(launch&&{launch:{story:launch.key,requestedAt:requestTick,
-      status:tick<requestTick?'scheduled':rejected?'rejected':lifecycle?.to??'waiting',
-      ...(rejected&&{reason:rejected.reason})}}),
-    unmet:hasStops&&!matches.length||Boolean(rejected)};
+    function report(frame) {
+      const {tick} = frame, lifecycle = launch&&frame.storyLifecycle?.[launch.key]?.transitions.at(-1);
+      return {stop:{reason:matches.length?'matched':stopOnOutcome&&run.scenario.status!=='running'?'scenario-outcome':'tick-limit',
+        from:initial.tick,limit,tick,matches,...(observed&&{lastCondition:observed.status})},
+      ...(launch&&{launch:{story:launch.key,requestedAt:requestTick,
+        status:tick<requestTick?'scheduled':rejected?'rejected':lifecycle?.to??'waiting',
+        ...(rejected&&{reason:rejected.reason})}}),
+      unmet:hasStops&&!matches.length||Boolean(rejected)};
+    }
+    return {until,report};
   }
-  return {hasStops,schedule,advance};
+  function advance(limit,stopOnOutcome) {
+    const {until,report} = preparedAdvance(limit,stopOnOutcome);
+    return report(run.advance(limit,{until,stopOnOutcome}));
+  }
+  async function advanceAsync(limit,stopOnOutcome,onTick) {
+    const {until,report} = preparedAdvance(limit,stopOnOutcome);
+    return report(await run.advanceAsync(limit,{until,stopOnOutcome,onTick}));
+  }
+  return {hasStops,schedule,advance,advanceAsync};
 }
 
 module.exports = {enabled,create};

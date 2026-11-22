@@ -1031,6 +1031,8 @@ const CMD = {
         '  sim run|resume|fork|reset|replay|verify|scrub|take|diff|sweep|render ...  run or compare fixed-tick simulations',
         '    sim run|resume <world|checkpoint|run> [--start-story document/story] [--until-stage document/story/stage]',
         '      [--until-outcome document/story/outcome] [--until-condition condition.json] [--ticks N]   stop at a story breakpoint',
+        '    sim run|resume|fork|replay <file> --watch-story document/story[,document/story...]|all   stream story values as NDJSON',
+        '      [--watch-values stage,evidence,roles,blockers,choices,changes] [--watch-out file.ndjson]',
         '    sim plan <world|model|checkpoint|recording>  inspect rates, signal crossings, feedback, baked inputs and resource estimates',
         '    sim model validate|inspect|compile <model.json>  check, describe, or lower a versioned simulation model',
         '    sim run <world> --workers N [--profile]   advance eligible systems in deterministic Node worker partitions',

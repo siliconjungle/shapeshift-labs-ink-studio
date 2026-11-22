@@ -662,7 +662,7 @@
         ...(incidentCandidates && {incidentCandidatePolicies:incidentCandidates.policies,incidentCandidates:incidentCandidateState}),
         ...(incidentCandidates?.anchors && {incidentAnchors:incidentCandidates.anchors}),
         ...(storyTemplates && {storyTemplates}),
-        ...((storyTemplates||storyLifecycle?.decisions||storyLifecycle?.beats) && {storyDocuments:storyRoles.documents}),
+        ...(storyRoles && {storyDocuments:storyRoles.documents}),
         ...(storyLifecycle?.decisions && {storyDecisions:storyLifecycle.decisions}),
         ...(storyLifecycle?.beats && {storyBeats:storyLifecycle.beats}),
         ...(weatherTrackState && {weatherTrackState})});
@@ -1941,7 +1941,8 @@
   }
   async function replayAsync(log,options){
     const run=prepareReplay(log,options);
-    await run.advanceAsync(log.end.tick);
+    if(options?.onStart)await options.onStart(run);
+    await run.advanceAsync(log.end.tick,{onTick:options?.onTick});
     return assertReplay(run,log,options);
   }
   function verification(log,mismatch){
