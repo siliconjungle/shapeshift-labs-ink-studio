@@ -1051,7 +1051,7 @@ const CMD = {
         '    sim diagnose <plan.json> [--out report.json --fail-on warning|error]   locate stability and conservation issues',
         '    sim measure <run.json> [--out report.json]   named simulation measurements and CI assertions',
         '    sim review <recipe.json> --out directory [--require-match]   matched audio, traces, plots, cutaways and first divergence',
-        '    sim budget <plan.json> [--out report.json --require-budget]   measure simulation timing, work, memory and queues',
+        '    sim budget <plan.json> [--out report.json --require-budget]   measure simulation and story performance against limits',
         '    sim reference [experiment] [--suite suite.json --out report.json]   run the shipped physics benchmarks',
         '    sim sensors <run.json> [--out report.json --wav microphones.wav]   record calibrated virtual sensors',
         '    sim physical-audio <run.json> [--out report.json --stems directory]   route simulation signals into aligned WAV stems',

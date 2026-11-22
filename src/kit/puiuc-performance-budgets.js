@@ -8,7 +8,9 @@
   const defaultNow=()=>typeof performance==='undefined'?Date.now():performance.now();
   const maxDetails=4096, maxSamples=1000000;
   const gates=['maxStepMs','maxRequestMs','maxBlockMs','maxMissedDeadlines','maxNativeMisses','maxPendingCommands',
-    'maxQueuedEvents','maxQueueOverflows','maxPreparedBytes','maxTypedStateBytes','maxWorkPerBlock','maxRssBytes'];
+    'maxQueuedEvents','maxQueueOverflows','maxPreparedBytes','maxTypedStateBytes','maxWorkPerBlock','maxRssBytes',
+    'maxPendingStoryCandidates','maxPendingStoryRequests','maxRetainedStoryRecords','maxRetainedHistoryEvents',
+    'maxStoryEvaluationMs','maxStoryDeadlineMisses','maxCandidateExpirations','maxUnrelatedCallLoss','maxUnrelatedChangedProbes'];
 
   function meter(detail,deadlineOverride){
     const durations=[], rows=[];
@@ -113,28 +115,51 @@
     return {planned:plan.resources.work,declared,observedPeakPreparedUnits:native.peakWork};
   }
 
-  function measuredWorld(source,spec,now,gauge){
-    const run=W.runtime.create(source,{profile:true}), time=meter(spec.detail,spec.deadlineMs), queue=queueGauge();
-    const world=run.view().world, initialTick=run.view().tick, period=world.dt*1000;
+  function measuredWorld(source,spec,now,gauge,baselineSource){
+    const storySpec=spec.stories, run=W.runtime.create(source,{profile:true,...(storySpec&&{storyClock:now})});
+    const time=meter(spec.detail,spec.deadlineMs), queue=queueGauge(), initial=run.view();
+    const world=initial.world, initialTick=initial.tick, period=world.dt*1000;
+    const story=storySpec&&W.storyBudgets.create(storySpec,meter(spec.detail));
+    const baseline=storySpec?.baseline===undefined?null:W.runtime.create(baselineSource,{profile:true});
+    const comparison=baseline&&W.storyBudgets.unrelated(storySpec,run,baseline);
+    const baselineTime=baseline&&meter(spec.detail,spec.deadlineMs), sampleEvery=storySpec?.sampleEvery??64;
     gauge.sample();
     queue.capture(run.queues());
-    let fault=null;
+    story?.observe(initial);
+    comparison?.sample(initialTick);
+    let fault=null, baselineFault=null, alignedTick=initialTick;
     for(let i=0;i<spec.steps;i++){
       const tick=initialTick+i+1, start=now();
       try{run.step();}catch(error){fault={tick,message:error.message};}
       const elapsedMs=now()-start;
       time.add({tick,elapsedMs,status:fault?'fault':'ok'},period);
+      if(!fault){
+        story?.observe(run.view(),run.storyTiming());
+        if(baseline){
+          const controlStart=now();
+          try{baseline.step();}catch(error){baselineFault={tick,scope:'baseline',message:error.message};}
+          baselineTime.add({tick,elapsedMs:now()-controlStart,status:baselineFault?'fault':'ok'},period);
+          if(!baselineFault){
+            alignedTick=tick;
+            if(tick%sampleEvery===0||i+1===spec.steps)comparison.sample(tick);
+          }
+        }
+      }
       queue.capture(run.queues());
       if((i+1)%64===0)gauge.sample();
-      if(fault)break;
+      if(fault||baselineFault)break;
     }
+    // The case can stop between scheduled samples. Only compare synchronized states.
+    if(comparison&&run.view().tick===alignedTick)comparison.sample(alignedTick);
+    const stories=story?.report();
+    if(comparison)stories.unrelated=comparison.report(baselineTime.summary(true),baselineFault,!fault&&!baselineFault);
     gauge.sample();
     const plan=run.composition().execution, native=processorSummary(processors(run.processing()));
     return {clock:{dt:world.dt},steps:time.summary(true),completedSteps:run.view().tick-initialTick,initialTick,
       systems:run.profile(),queues:{scope:'committed-tick-boundaries',...queue.report(),overflows:null},
       work:worldWork(plan,native),
       memory:{...plan.resources.memory,preparedAllocatedBytes:native.preparedAllocatedBytes,host:gauge.report()},
-      native,fault};
+      native,...(stories&&{stories}),fault:fault??baselineFault};
   }
 
   function measuredBlocks(source,spec,now,gauge){
@@ -186,7 +211,7 @@
     for(const [name,row] of Object.entries(plan.cases)){
       check(id(name)&&record(row)&&['world','blocks'].includes(row.mode)&&typeof row.source==='string'&&row.source.length>0,
         'Invalid performance case '+name);
-      const block=row.mode==='blocks', allowed=block?['samples','requests','path','events']:['steps'];
+      const block=row.mode==='blocks', allowed=block?['samples','requests','path','events']:['steps','stories'];
       check(fields(row,['mode','source','deadlineMs','limits','detail',...allowed])&&
         (row.detail===undefined||typeof row.detail==='boolean')&&(row.deadlineMs===undefined||positive(row.deadlineMs))&&
         fields(row.limits??{},gates)&&Object.values(row.limits??{}).every(nonnegative),'Invalid budget or deadline on '+name);
@@ -196,8 +221,11 @@
           fields(row.events??{},['capacity','drainEvery'])&&
           integer(row.events?.capacity??W.rates.maxEvents,1,W.rates.maxEvents)&&integer(row.events?.drainEvery??1,0,maxSamples),
         'Invalid block samples, request pattern or event consumer on '+name);
-      }else check(integer(row.steps,1,10000),'World performance case needs one to 10000 steps');
-      total+=block?row.samples:row.steps;
+      }else{
+        check(integer(row.steps,1,10000),'World performance case needs one to 10000 steps');
+        if(row.stories!==undefined)W.storyBudgets.validate(row.stories);
+      }
+      total+=block?row.samples:row.steps*(row.stories?.baseline===undefined?1:2);
     }
     check(total<=4000000,'Performance suite exceeds its total step and sample budget');
   }
@@ -208,12 +236,19 @@
     validate(plan);
     const cases=Object.fromEntries(Object.entries(plan.cases).map(([name,spec])=>{
       const source=resolve(spec.source,spec.mode), measure=spec.mode==='world'?measuredWorld:measuredBlocks;
-      const value=measure(source,spec,now,memoryGauge(memory)), {steps,requests,blocks,native,work,queues,memory:footprint}=value;
+      const baseline=spec.stories?.baseline===undefined?undefined:resolve(spec.stories.baseline,'world');
+      const value=measure(source,spec,now,memoryGauge(memory),baseline);
+      const {steps,requests,blocks,native,work,queues,memory:footprint,stories}=value;
       const metrics={maxStepMs:steps?.maxMs,maxRequestMs:requests?.maxMs,maxBlockMs:blocks?.maxMs??native.maxProcessorMs,
         maxMissedDeadlines:(steps??requests).deadlines.missed,maxNativeMisses:native.nativeMisses,
         maxPendingCommands:queues.maxPendingCommands,maxQueuedEvents:queues.maxQueuedEvents,maxQueueOverflows:queues.overflows,
         maxPreparedBytes:footprint.preparedAllocatedBytes,maxTypedStateBytes:footprint.typedStateBytes,
-        maxWorkPerBlock:work.observedPeakPreparedUnits,maxRssBytes:footprint.host?.sampledPeak.rss};
+        maxWorkPerBlock:work.observedPeakPreparedUnits,maxRssBytes:footprint.host?.sampledPeak.rss,
+        maxPendingStoryCandidates:stories?.queues.candidates.peak,maxPendingStoryRequests:stories?.queues.requests.peak,
+        maxRetainedStoryRecords:stories?.retention.storyRecords.peak,maxRetainedHistoryEvents:stories?.retention.worldEvents.peak,
+        maxStoryEvaluationMs:stories?.evaluation.maxMs,maxStoryDeadlineMisses:stories?.deadlines.stories.count,
+        maxCandidateExpirations:stories?.deadlines.candidates.count,maxUnrelatedCallLoss:stories?.unrelated?.callLoss,
+        maxUnrelatedChangedProbes:stories?.unrelated?.changedProbes};
       const limits=Object.fromEntries(Object.entries(spec.limits??{}).map(([key,max])=>{
         const actual=metrics[key]??null;
         return [key,{max,actual,available:actual!==null,passed:actual!==null&&actual<=max}];

@@ -166,6 +166,8 @@ The breakwater comparison shows two crates sent to the pier on the default route
 
 The [Lantern Ferry matrix](../examples/story-documents/lantern-ferry.seed-matrix.json) uses one scheduler profile and twelve seeds. The recorded draw sends four relays east to completion. Eight go west and wait for the landing through tick 12. The [Sluice Relief matrix](../examples/story-documents/sluice-relief.seed-matrix.json) shows how shared stock, route, and worksite blockers recur across seeds.
 
+Use `sim budget` to measure queue growth, retained history, story evaluation time, deadline misses, and the effect on unrelated world systems over longer runs. [Long-running story budgets](simulation-performance-budgets.md#long-running-stories)
+
 ```sh
 node cli/ink-studio.js sim seed-matrix examples/story-documents/lantern-ferry.world.json \
   examples/story-documents/lantern-ferry.seed-matrix.json --out ferry-matrix.json

@@ -46,7 +46,57 @@ In a world, queue depths are sampled at committed tick boundaries for scheduled 
 
 Available limits are `maxStepMs`, `maxRequestMs`, `maxBlockMs`, `maxMissedDeadlines`, `maxNativeMisses`, `maxPendingCommands`, `maxQueuedEvents`, `maxQueueOverflows`, `maxPreparedBytes`, `maxTypedStateBytes`, `maxWorkPerBlock`, and `maxRssBytes`. Limits require the selected mode to have the corresponding measurement. `--require-budget` writes the report, then exits with code 2 for a failed limit or an execution fault. This lets CI gate stable capacities separately from wall time measured on the target host.
 
+## Long-running stories
+
+Add `stories: {}` to a world case to measure native story work over up to 10,000 ticks. A world can reference linked story documents and templates as usual. The report samples before the first tick, every `sampleEvery` ticks (64 by default), and at the last committed tick. It retains up to 4,096 points and always includes the last one. High-water marks and deadline counts cover every committed tick.
+
+```json
+{
+  "mode": "world",
+  "source": "bounded.world.json",
+  "steps": 3600,
+  "stories": {
+    "sampleEvery": 100,
+    "baseline": "quiet.world.json",
+    "systems": ["workshop"],
+    "probes": {
+      "completed-crates": {"field": "world/account", "args": {"account": "workshop/output"}, "select": "/balance"}
+    }
+  },
+  "limits": {
+    "maxPendingStoryCandidates": 2,
+    "maxRetainedStoryRecords": 480,
+    "maxRetainedHistoryEvents": 64,
+    "maxStoryDeadlineMisses": 60,
+    "maxCandidateExpirations": 60,
+    "maxUnrelatedCallLoss": 0,
+    "maxUnrelatedChangedProbes": 0
+  }
+}
+```
+
+| Report section | Measurements and limits |
+| --- | --- |
+| `stories.queues` | Initial and ending depth, high-water tick, and net growth for ready or blocked candidates, pending admissions, open offers, deferred commitments and handoffs, and pending cleanup. Gate the candidates with `maxPendingStoryCandidates` and the sum of the other queues with `maxPendingStoryRequests`. |
+| `stories.retention` | Kept world events, lifecycle transitions, closed stage visits, candidate records, accepted handoffs, and trigger window entries. Dropped counters cover world events, transitions, and closed visits. Use `maxRetainedHistoryEvents` for world events and `maxRetainedStoryRecords` for the sum of the story counters. These are record counts. Host memory remains in the case's memory report. |
+| `stories.evaluation` | Milliseconds per committed tick across story maintenance, live references, triggers, scheduler evaluation, lifecycle work, and cooldown publication. Includes phase totals, maximums, and call counts. The report collector and the paired run execute outside the primary step timer. Use `maxStoryEvaluationMs` for the worst tick and `detail: true` for individual timings. |
+| `stories.deadlines.stories` | Authored world, offer, and work clock expirations, with counts by clock and first and last receipts. Use `maxStoryDeadlineMisses`. |
+| `stories.deadlines.candidates` | Candidate expirations, with counts by reason and first and last occurrences. Use `maxCandidateExpirations`. Each deadline counter has its own scope. Host cadence misses appear in `steps.deadlines` and use `maxMissedDeadlines`. |
+| `stories.unrelated` | Paired baseline timing, solver call and time differences, and output probe differences. Use `maxUnrelatedCallLoss` to cap the sum of call shortfalls across selected systems. Use `maxUnrelatedChangedProbes` to cap the number of probes that diverged in any sample. |
+
+An optional baseline runs the same number of ticks alongside the measured world. Use a quiet world with the same seed, timestep, and configuration for each listed system. Keep the workload and inputs for those systems equivalent across the pair. For a probe, provide its query `field` and any `at` or `args` it requires. An optional `select` points into its value. `tolerance` allows a difference in numeric values. The comparison includes the initial and final samples and records the first difference. Use `sampleEvery: 1` to catch differences that disappear before the next scheduled sample. The changed-probe limit needs at least one observed value for each probe. Baseline execution faults fail the case.
+
+```sh
+node examples/simulation-performance-budgets/stories.cjs ./studio/out/story-budgets
+```
+
+The demo benchmarks 120 incidents over 3,600 ticks in two worlds. The bounded run keeps the candidate queue at a peak of two and completes all 120 workshop transfers. A second run diverts stock through a story settlement and completes 60 transfers. Both workshops still receive the same number of solver calls. The failed budget identifies the changed output and keeps its full report.
+
+## Run benchmarks from JavaScript
+
 The library entry is `KIT.world.performanceBudgets.run(plan, {resolve, now, memory})`. Pass a resolver that returns a loaded native world or model. The optional clock supplies monotonic milliseconds. The optional memory sampler returns byte counts.
+
+## Simulation and audio demo
 
 ```sh
 node examples/simulation-performance-budgets/demo.cjs ./studio/out/simulation-budgets

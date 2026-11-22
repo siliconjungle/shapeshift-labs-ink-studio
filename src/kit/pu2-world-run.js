@@ -552,10 +552,11 @@
     return {world,systems,ports};
   }
   function create(source, {checkpoint,implementations,profile = false,validated = false,workerPool,regionRevisions,traceSteps,
-    recordRun,playback,skipInitialSubmission=false,validateEntities} = {}, token) {
+    recordRun,playback,skipInitialSubmission=false,validateEntities,storyClock} = {}, token) {
     check(workerPool===undefined||typeof workerPool?.solve==='function'&&
       (workerPool.async===undefined||typeof workerPool.async==='boolean'),'Invalid simulation worker pool');
     check(validateEntities===undefined||typeof validateEntities==='function','Invalid entity validation callback');
+    check(storyClock===undefined||typeof storyClock==='function','Invalid story evaluation clock');
     const modules=workerPool?.implementations;
     const installed=implementationsFor(implementations,workerPool);
     let result=validated?{world:source,plan:compile(source,installed)}:prepare(source,{implementations:installed});
@@ -595,6 +596,7 @@
     const rootDelays = Object.fromEntries([...incoming.values()].filter(edge => edge.delay && !edge.crossing).map(edge =>
       [edge.to,Array(edge.delay).fill(W.rates.buffered(edge)?W.rates.zero(ports.outputs[edge.from].type):rootOutputs[edge.from])]));
     const metrics = new Map();
+    let lastStoryTiming;
     const scheduled = new Map();
     let eventInputs;
     let commandTicks;
@@ -954,6 +956,12 @@
     function* tickWork() {
       const at = tick+1, commands = scheduled.get(at) ?? [], events = [], storyCommands = storyLifecycle && [];
       const candidateCommands = incidentCandidates && [];
+      const storyTiming = storyClock&&{};
+      function finishStoryPhase(name,start) {
+        const elapsed = storyClock()-start;
+        check(Number.isFinite(elapsed)&&elapsed>=0,'Story evaluation clock must be finite and monotonic');
+        storyTiming[name] = elapsed;
+      }
       check(tickOK(at),'Tick budget exceeded');
       debug?.start();
       const observedSteps=debug?[]:null;
@@ -1046,6 +1054,8 @@
           return emit(kind,detail,parents);
         };
       }
+      const measuringMaintenance = storyClock&&(storyLifecycle?.cleanup||storyCommitments);
+      const maintenanceStarted = measuringMaintenance ? storyClock() : undefined;
       const cleanedStories = storyLifecycle?.cleanup ? storyLifecycle.cleanup(storyLifecycleState, at, ({kind,target}) => {
         const {system} = target, before = drafts[system];
         const query = Q.create(view(nextWorld,{...drafts}),systems,projection);
@@ -1069,6 +1079,7 @@
         commanded?.add(system);
         makeEmit('world')('story-commitment-released',{story,order});
       }
+      if (measuringMaintenance) finishStoryPhase('maintenance',maintenanceStarted);
       for (const item of commands) {
         const [name,key] = endpoint(item.action);
         if(debug)debug.enter({system:W.stepDebug.actionSystem(item),inputs:item.args});
@@ -1607,26 +1618,41 @@
         return {order:owner,...(settlement&&{settlement}),...(reservation&&{check:reservation}),...(release&&{release})};
       }
       if (storyReferences) {
+        const started = storyClock?.();
         nextStoryReferences = storyReferences.advance(storyReferenceState,at,completedQuery(),events,storyLifecycleState,makeEmit('world'));
         completed = undefined;
+        if (storyClock) finishStoryPhase('references',started);
       }
       if (storyTriggers) {
+        const started = storyClock?.();
         const activated = storyTriggers.advance(storyTriggerState, events, at, completedQuery);
         nextStoryTriggers = activated.state;
         storyStarts = activated.starts;
+        if (storyClock) finishStoryPhase('triggers',started);
       }
-      const queueUpdate = incidentCandidates?.advance(incidentCandidateState,storyStarts,candidateCommands,at,completedQuery,cleanedStories,makeEmit('world'));
+      let queueUpdate;
+      if (incidentCandidates) {
+        const started = storyClock?.();
+        queueUpdate = incidentCandidates.advance(incidentCandidateState,storyStarts,candidateCommands,at,completedQuery,cleanedStories,makeEmit('world'));
+        if (storyClock) finishStoryPhase('scheduler',started);
+      }
       if (queueUpdate) storyStarts = queueUpdate.starts;
       if (storyLifecycle) {
+        const started = storyClock?.();
         ({state:nextStoryLifecycle,gates:nextStoryFeasibility} =
           storyLifecycle.advance(cleanedStories,storyStarts,storyCommands,at,makeEmit('world'),events,completedQuery,
             storyFeasibilityState,nextStoryReferences,dispatchCommitment,settleStory,queueUpdate?.released,
             makeEmit('world',undefined,undefined,typedConsequences)));
+        if (storyClock) finishStoryPhase('lifecycle',started);
       } else if (storyStarts.length) {
         const emit = makeEmit('world');
         for (const row of storyStarts) emit('story-started',row);
       }
-      if (incidentCooldowns) W.incidentCooldowns.publish(incidentCooldowns,nextStoryLifecycle,at,makeEmit('world'));
+      if (incidentCooldowns) {
+        const started = storyClock?.();
+        W.incidentCooldowns.publish(incidentCooldowns,nextStoryLifecycle,at,makeEmit('world'));
+        if (storyClock) finishStoryPhase('cooldowns',started);
+      }
       observeSocial();
       const routed = eventActions?.route(eventActionCounts, events, at);
       if (routed?.commands.length) {
@@ -1695,6 +1721,7 @@
       history = memory.history;
       dropped = memory.dropped;
       lastEvents = freeze(events);
+      if (storyTiming) lastStoryTiming = freeze(storyTiming);
       lastTransfers = receipts;
       causalState = nextCausal;
       worldFactState = nextFacts;
@@ -1881,6 +1908,7 @@
     return Object.freeze({view,query,projectEntities,step,advance,stepAsync,advanceAsync,...(blockSystem&&{[W.models.heldAdvance]:advanceHeld}),...(timeline&&{timeline}),...(regions&&{regions:regions.api}),
       ...(debug&&{stepFrame:debug.latest,stepAttempt:debug.attempt}),
       get scenario(){return scenario;}, get history(){return history;}, get events(){return lastEvents;},
+      ...(storyClock&&{storyTiming:()=>lastStoryTiming}),
       schedule:commands => enqueue(commands,true),checkpoint:save,recording,queues,
       storyDiagnostics:() => plan.storyDiagnostics ?? [],
       commandCounts:() => {
@@ -1911,7 +1939,7 @@
       fork:() => branch(save(),playback),
       reset:() => branch(origin)});
     function branch(checkpoint,remaining){
-      return create(checkpoint.world,{checkpoint,implementations,profile,validated:true,workerPool,traceSteps,
+      return create(checkpoint.world,{checkpoint,implementations,profile,validated:true,workerPool,traceSteps,storyClock,
         recordRun:evidence?.plan,playback:remaining,skipInitialSubmission:true,validateEntities},
         checkpoint.world===plan.world?branchToken:undefined);
     }

@@ -1,6 +1,7 @@
 /* Run an authored simulation budget on the Node host's monotonic clock. */
 const fs=require('node:fs'),path=require('node:path');
 const {performance}=require('node:perf_hooks'),{embedModels}=require('./simulation-model-files.js');
+const {embedStoryDocuments}=require('./story-document.js');
 
 function run(kit,file,{destination,dependency=()=>{}}={}){
   const W=kit.KIT.world,{check}=W.data, owner=path.resolve(file);
@@ -21,6 +22,7 @@ function run(kit,file,{destination,dependency=()=>{}}={}){
     if(!documents.has(file)){
       register(file);
       let value=embedModels(read(file),file,register);
+      if(value?.format===W.format)value=embedStoryDocuments(value,file,register);
       if(value?.dataInputs!==undefined)value={...value,dataInputs:require('./data-inputs.js')
         .embed(kit.KIT.dataInputs,value.dataInputs,file,register)};
       documents.set(file,value);
