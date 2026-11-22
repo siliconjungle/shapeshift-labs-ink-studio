@@ -49,6 +49,11 @@ test('one pad pattern preserves roles, articulation and identity and spots notes
   assert.deepEqual(alternate.report.hits,played.report.hits);
   assert.deepEqual(played.clip.voices.map(voice=>voice.notes.map(note=>note.midi)),[[65,69],[77,81]]);
   assert.deepEqual(alternate.clip.voices.map(voice=>voice.notes.map(note=>note.midi)),[[66,69],[78,81]]);
+  const crossed=R.project({...pattern,steps:pattern.steps.map(step=>step.id==='pick' ? {...step,beat:1.65} : step)},
+    bindings,settings);
+  const pitches=clip=>Object.fromEntries(clip.voices[0].notes.map(note=>[note.id,note.midi]));
+  assert.deepEqual(pitches(crossed.clip),pitches(played.clip));
+  assert.notEqual(crossed.clip.voices[0].notes[0].id,played.clip.voices[0].notes[0].id);
   const {events,options}=played.pads.performance, rendered=M.sampleKit.render(kit,assets,events,options);
   assert.equal(rendered.report.events[0].layers[0].take,'other');
   assert.equal(rendered.report.events[0].play.tune,-150);

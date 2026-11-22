@@ -41,7 +41,9 @@
       if (!byPad.has(row.event.pad)) byPad.set(row.event.pad,[]);
       byPad.get(row.event.pad).push(row);
     }
-    const logical=new Set([...pattern.steps,...(pattern.fills ?? []).flatMap(fill=>fill.steps)].map(step=>step.pad));
+    const authored=[...pattern.steps,...(pattern.fills ?? []).flatMap(fill=>fill.steps)];
+    const order=new Map(authored.map((step,index)=>[step.id,index]));
+    const logical=new Set(authored.map(step=>step.pad));
     check(logical.size>0 && [...logical].every(id),'Choose named logical pads for the rhythm');
     const hits=name=>{
       check(logical.has(name),'Unknown logical rhythm pad '+name);
@@ -59,13 +61,16 @@
         (row.play===undefined || record(row.play)),'A note voice needs a logical pad and a pitch sequence');
       const pitches=Array.from(row.pitches,value=>H.midi(pitch(value)+(row.transpose ?? 0)));
       const list=hits(row.from);
+      const writtenOrder=list.map(({event})=>trace.get(event.id)).sort((a,b)=>
+        a.cycle-b.cycle || order.get(a.step)-order.get(b.step) || a.sub-b.sub);
+      const pitchByHit=new Map(writtenOrder.map(({id},index)=>[id,pitches[index%pitches.length]]));
       const notes=list.map(({event,beat,sample,gate},index)=>{
         const local=round(beat-origin), next=list[index+1]?.beat ?? origin+length;
         const duration=round(Math.min(gate ?? .2,next-beat,origin+length-beat));
         check(duration>=1e-5,'Use distinct written attacks within each pitched rhythm voice');
         // Allow for decimal beat rounding while keeping the native attack on the shared sample.
         const delay=round((sample-.125)/sampleRate-clock.timeAt({beat}));
-        return {id:event.id,beat:local,duration,midi:pitches[index%pitches.length],velocity:event.velocity ?? .8,
+        return {id:event.id,beat:local,duration,midi:pitchByHit.get(event.id),velocity:event.velocity ?? .8,
           play:{...row.play,delay}};
       });
       return {id:name,notes};

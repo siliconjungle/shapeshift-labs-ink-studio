@@ -43,7 +43,8 @@ Use a step's `pad` as its logical label. The same step can drive a pitched
 note, a named pad of a sample kit, and an editorial Foley clip. Use
 `written` to move existing steps by ID while keeping the pattern seed,
 conditional hits, and per-hit parameters. `settings.timing` scales the
-authored offsets independently of the written beats. Zero leaves the
+authored offsets independently of the written beats, from zero to twice
+their original size. Zero leaves the
 tempo and swing grid intact. With both dimensions specified the workbench
 renders grid, written only, timing only, and both.
 
@@ -78,7 +79,9 @@ The native kit supplies alternate strikes, choke behavior, inserts, buses
 and release behavior. The pattern's per-hit overrides and any triggered
 rolls and fills survive routing. Named pitched voices can play scale
 degrees or specified MIDI pitches, with independent transposition and
-expression. Scale choices apply to degree-based pitches. Foley routes can
+expression. Pitch sequences follow the order of the step declarations in
+each cycle, so a named hit retains its pitch when it moves in time. Scale
+choices apply to degree-based pitches. Foley routes can
 use source ranges and sync markers in a session with shared picture.
 The generated clip syncs match the projected kit attacks on the sample
 grid. Existing instrument attack compensation and groove on a score

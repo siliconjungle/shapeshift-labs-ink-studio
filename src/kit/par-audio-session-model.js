@@ -385,8 +385,11 @@
           const track=before.source.tracks[lane], revised=after.source.tracks[lane];
           const pitches=score=>addressed(score,lane).map(({address,midi,beat})=>[address,beat,midi])
             .sort((a,b)=>signature(a[0]).localeCompare(signature(b[0])));
-          const voice=entry=>[entry.score.events[lane],entry.score.cue?.perTrack[lane],entry.score.gain,
-            entry.score.room,entry.score.cue?.roomCuts,entry.score.arrangement.score.endFade];
+          const voice=entry=>{
+            const {score}=entry, duck=score.tracks[lane].mix.duck;
+            return [score.events[lane],score.cue?.perTrack[lane],score.gain,score.room,score.cue?.roomCuts,
+              score.arrangement.score.endFade,duck && score.events[duck.from].map(({time,velocity})=>[time,velocity])];
+          };
           check(mode==='pitch' ? signature(pitches(before.score))===signature(pitches(after.score)) :
             signature([track,before.source.patches[track.patch],voice(before)])===
               signature([revised,after.source.patches[revised.patch],voice(after)]),
