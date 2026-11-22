@@ -1192,6 +1192,7 @@ const CMD = {
         '  music rehearsal regression <timeline.json> <routes.json> --out directory [--assert version]',
         '  music rehearsal keep <timeline.json> <revision.json> [trace.json] --out recipe.json   save a timeline variant',
         '  music session audition-phrase <session.json> <settings.json> --out directory',
+        '  music session arrange-performance <session.json> <brief.json> --out directory',
         '  music session inspect|edit|render|preview recipe.json [settings.json] --out output   comp and audition score and audio takes',
         '  music session handoff recipe.json --out directory [--clap-host manifest.json]   export a DAW project, MIDI and stems',
         '  music session play recipe.json [settings.json] [--port N] [--out kept.json]   open the shared live audition desk',

@@ -305,3 +305,65 @@ under each lane's `performances`. Listen through
 Run `node examples/music-production/phrase-performance.cjs output` for
 the Split Reed played three ways and a comp that carries the held note
 through a bass pickup. [Gesture mapping research](https://nime.org/proc/nime2002_hunt/) · [Ableton comping](https://www.ableton.com/en/manual/comping/)
+
+## Accompaniment that follows a kept take
+
+Use `editor.arrangePerformance(session, brief)`, the
+`music.arrangePerformance` graph operation, or the CLI.
+
+```sh
+ink-studio music session arrange-performance cue.json brief.json --out returns
+```
+
+```json
+{
+  "lead": "reed",
+  "bass": "bass",
+  "metal": "click",
+  "response": {"from": {"beat": 4}, "to": {"beat": 17.35}},
+  "hook": {"from": {"beat": 20}, "to": {"beat": 24}},
+  "context": {"from": {"beat": 4}, "to": {"beat": 31}},
+  "withhold": {"beat": 18},
+  "returnMidi": 29
+}
+```
+
+Choose three score lanes and give the response at least two lead attacks.
+The arranger reads the native instrument and takes selected by the
+comp. It measures the dry attacks and effective gates, including any
+performed delay, phrasing, and comp fades. It looks for space on the bass
+lane after a held note and for a place where a metal strike can carry
+on the spacing between two lead attacks. Leave some room on those lanes
+for the new notes. The report gives the source notes, measured sample
+positions, chosen intervals, and addresses of the editable responses.
+
+The three alternatives share that accompaniment.
+
+- **Exposed** brings the lead forward by cutting the supporting mixer
+  strips for the hook range.
+- **Withheld** cuts the bass for the lead-in and brings it back with the
+  hook. It can reuse a bass note already at the entrance or write a low
+  pedal from the local harmony. Set `returnMidi` to specify the pitch of a
+  new note and leave enough room for it.
+- **Handoff** cuts the lead strip for the hook and gives the lead's
+  measured rhythm, relative pitch, and accents to the metal lane.
+  Use a pitched patch or a native drum for an audible pitched contour.
+
+Optional `bassMidi` selects the answer pitch and `metalMidi` sets the
+metal register. `support` defaults to all session lanes except the lead.
+It can name a smaller set, including bass and metal, to retain some
+elements while making room. The shared production room continues to run
+during all three takes. You can include its `score-room` strip in
+`support` to attenuate it over the hook range as well.
+
+The API returns `report`, stereo PCM `clips`, and ordinary editable
+`sessions` keyed by return type. The CLI writes all three WAVs and
+session recipes. The same contextual playback range and shared
+headroom apply to every excerpt. Use a saved recipe as the input to
+the regular session editor to move the generated notes, change their
+articulation, or modify the automated gain inserts. The lead notes,
+comp, and phrase drivers stay available in every recipe.
+
+Run `node examples/music-production/performance-accompaniment.cjs output`
+to rebuild the Blackwater demonstration. You can pass the existing
+`kept-session.json` as a second argument to use that saved performance.

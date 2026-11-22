@@ -4,8 +4,8 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.procedural,{fields,check}=P.musicInstruments;
-  check(file && ['inspect','edit','render','preview','compare','audition-phrase','experiment','keep-experiment','stream','play','handoff'].includes(mode),
-    'Choose music session inspect, edit, render, preview, compare, audition-phrase, experiment, keep-experiment, stream, play or handoff');
+  check(file && ['inspect','edit','render','preview','compare','audition-phrase','arrange-performance','experiment','keep-experiment','stream','play','handoff'].includes(mode),
+    'Choose music session inspect, edit, render, preview, compare, audition-phrase, arrange-performance, experiment, keep-experiment, stream, play or handoff');
   const recipe=read(file);
   check(fields(recipe,['session','assets']),'Expected a music edit session and WAV asset table');
   const paths=recipe.assets ?? {}, hostFile=opt['clap-host'], host=hostFile===undefined ? undefined : require('./clap-adapter').load(hostFile);
@@ -64,6 +64,15 @@ module.exports=function command([mode,file,config],opt,kit) {
     const clips=Object.fromEntries(Object.entries(audio).map(([name,pcm])=>[name,writer.audio(pcm,name).target]));
     return {clips,report:writer.report({...report,files:clips})};
   }
+  function arrangePerformance(folder,brief) {
+    const writer=audioWriter(folder), directory=path.resolve(folder);
+    const {report,clips,sessions}=editor.arrangePerformance(session,brief);
+    const audio=Object.fromEntries(Object.entries(clips).map(([id,pcm])=>[id,writer.audio(pcm,id).target]));
+    const takes=Object.fromEntries(Object.entries(sessions).map(([id,take])=>
+      [id,save(path.join(directory,'sessions',id+'.json'),take).session]));
+    const relative=files=>Object.fromEntries(Object.entries(files).map(([id,file])=>[id,path.relative(directory,file)]));
+    return {report:writer.report({...report,files:{audio:relative(audio),sessions:relative(takes)}}),audio,sessions:takes};
+  }
   function experiment(folder,brief,emitScouts=false) {
     const writer=audioWriter(folder), directory=path.resolve(folder), scouts={};
     const options=emitScouts ? {onScout(id,pcm) {
@@ -94,6 +103,7 @@ module.exports=function command([mode,file,config],opt,kit) {
       case 'render': return render(row.out);
       case 'compare': return compare(row.out,previous,row.preview);
       case 'audition-phrase': return auditionPhrase(row.out,row.settings);
+      case 'arrange-performance': return arrangePerformance(row.out,row.brief);
       case 'experiment':
         check(typeof (row.emitScouts ?? false)==='boolean','emitScouts must be true or false');
         return experiment(row.out,row.brief,row.emitScouts);
@@ -156,6 +166,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   }
   const result=execute({op:mode,out:opt.out,...(mode==='edit' && {changes:settings}),...(mode==='preview' && {preview:settings}),
     ...(mode==='audition-phrase' && {settings}),
+    ...(mode==='arrange-performance' && {brief:settings}),
     ...(mode==='experiment' && {brief:settings,emitScouts:opt.scouts===true})});
   process.stdout.write(JSON.stringify(result)+'\n');
   return result;

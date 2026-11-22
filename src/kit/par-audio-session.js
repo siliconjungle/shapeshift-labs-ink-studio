@@ -305,6 +305,8 @@
       return S.musicHandoff(plan,recipe,material,M.mixer.render(recipe,material,host));
     }
     const edit=(session,changes)=>edits(session,assets,changes,host);
+    const arrangePerformance=S.createPerformanceAccompaniment({
+      compile:session=>compile(session,assets,host),render:renderPlan});
     const experiments=S.createSessionExperiment({compile:session=>compile(session,assets,host),render:renderPlan,edit,assets});
     function prepareTransport(session,mode='buffered') {
       const plan=compile(session,assets,host);
@@ -336,7 +338,7 @@
     const openPreparedTransport=(prepared,options)=>S.openSessionTransport(materialize(prepared),options,
       {assets,edit,prepareLive,materialize});
     const open=(session,options)=>openPreparedTransport(prepareLive(P.data.freeze(P.data.clone(session))),options);
-    return Object.freeze({inspect,edit,render,compare,auditionPhrase,handoff,experiment:experiments.run,keepExperiment:experiments.keep,
+    return Object.freeze({inspect,edit,render,compare,auditionPhrase,handoff,arrangePerformance,experiment:experiments.run,keepExperiment:experiments.keep,
       open,prepareTransport,prepareLive,openPreparedTransport});
   }
   M.musicSession=Object.freeze({create});

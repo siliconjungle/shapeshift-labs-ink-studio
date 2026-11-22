@@ -280,6 +280,11 @@
       inputs:{source:'record',settings:'record',assets:sessionAssets},outputs:{audio:'record',report:'record'},
       run({source,settings,assets},{host}) {return A.musicSession.create(assets,host).auditionPhrase(source,settings);}
     },
+    'music.arrangePerformance': {
+      description:'Write a bass and metal response to the active lead comp and render three editable returns in context.',
+      inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{report:'record',clips:'record',sessions:'record'},
+      run({source,brief,assets},{host}) {return A.musicSession.create(assets,host).arrangePerformance(source,brief);}
+    },
     'music.experimentEditSession': {
       description:'Scout a matrix of sound, phrase and cue edits through a shared session and hear diverse finalists in context.',
       inputs:{source:'record',brief:'record',assets:sessionAssets},outputs:{value:'record',clips:'record'},

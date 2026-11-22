@@ -64,6 +64,19 @@ const editSession={format:'ink-studio/music-edit-session',version:1,id:'bench',s
 const phraseCapture={op:'music.editSession',inputs:{source:editSession,edits:[{op:'record-phrase',lane:'lead',take:'soft',
   phrase:{id:'opening',from:0,to:2,drivers:{effort:[{id:'begin',beat:0,value:.2},{id:'lift',beat:1,value:.85}]},
     mapping:{amplitude:{base:.06,from:{effort:.9}},pitchCents:{base:-21,from:{effort:24}}}}}]}};
+const performanceRange=(from,to)=>({from:{beat:from},to:{beat:to}});
+const performanceLead=[['pick',.25,.18,60],['lift',1.1,.22,63],['hold',3.2,1.25,65],
+  ['return-a',8.15,.35,60],['return-b',9.15,.42,63]].map(([id,beat,duration,midi])=>
+  ({id,beat,duration,midi,velocity:.75}));
+const accompanimentSession={...editSession,production:{...production,arrangement:{...arrangement,
+  parts:{...arrangement.parts,bass:{role:'bass',material:'melody'},metal:{role:'percussion',material:'melody'}},
+  motifs:{melody:{length:2,events:[{beat:0,duration:.1,degree:1,velocity:0}]}},
+  sections:[{id:'opening',bars:3,harmony:'home'}]},patches:{...production.patches,metal:{type:'drum',kind:'metal'}},
+  tracks:{lead:{patch:'pluck',gain:-13,clips:[{id:'call',beat:0,length:12,voices:[{id:'line',notes:performanceLead}]}]},
+    bass:{patch:'pluck',gain:-16,clips:[{id:'rest',beat:0,length:12,voices:[{id:'line',notes:[]}]}]},
+    metal:{patch:'metal',gain:-20}}}};
+const accompanimentBrief={lead:'lead',bass:'bass',metal:'metal',response:performanceRange(0,7.5),
+  hook:performanceRange(8,11),context:performanceRange(0,12)};
 const sessionExperiment={op:'music.experimentEditSession',inputs:{source:editSession,brief:{
   focus:{from:{beat:0},to:{beat:2}},scout:{from:{beat:0},to:{beat:1}},roles:{hook:'lead'},
   axes:{sound:[{id:'lighter',revision:{patches:{pluck:{type:'fm',index:.34}}}}]}
@@ -556,6 +569,7 @@ const specifications = {
   'music.editSession': {inputs:{source:editSession,edits:[{op:'pin',lane:'lead',mode:'pitch'}]}},
   'music.auditionPhraseTakes': {nodes:{capture:phraseCapture},inputs:{source:link('capture'),
     settings:{lane:'lead',phrase:'opening',takes:['soft']}}},
+  'music.arrangePerformance': {inputs:{source:accompanimentSession,brief:accompanimentBrief}},
   'music.experimentEditSession': {inputs:sessionExperiment.inputs},
   'music.keepSessionExperiment': {nodes:{trial:sessionExperiment},inputs:{source:editSession,report:link('trial'),
     choice:{candidate:'take-001',reason:'Keep the lighter onset for this example.'}}},
