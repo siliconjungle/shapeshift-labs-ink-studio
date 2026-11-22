@@ -53,7 +53,10 @@ a peak from 0.01 to 1 in linear amplitude, and one of `pcm16`,
   path in a named asset table wherever the mixer, racks, editorial
   sessions, music production, or live score uses loaded PCM. An
   editable Ink session travels with the recipe during a DAW handoff.
-  Use the exported WAV for DAW media or paged live streams.
+  Rehearsal, atmosphere, and critique use the same production assets.
+  REAPER editorial handoff keeps the recipe in the Ink project and
+  prints WAV media for the workstation. Use the exported WAV for
+  paged live streams.
 - **Samples and pads.** Use the path as an input to the instrument
   builder or sample kit. Sample catalog capture accepts it as a
   `file` input and stores the resolved recipe in the sample provenance.

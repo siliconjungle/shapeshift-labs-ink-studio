@@ -1,5 +1,5 @@
 const fs=require('node:fs'),path=require('node:path');
-const WAV=require('./wav.js'),MIDI=require('./midi-notes.js');
+const {readAudioSource}=require('./sound-source.js'),MIDI=require('./midi-notes.js');
 const {json}=require('./asset-files.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const filename=value=>typeof value==='string' && value.trim();
@@ -44,18 +44,18 @@ function extract(file,kit) {
     check(fields(input,['kind','lanes']) && record(input.lanes) &&
       Object.keys(input.lanes).length<=32 && Object.entries(input.lanes).every(([key,row])=>id(key) &&
         (filename(row) || fields(row,['file','lane','articulation']) && filename(row.file))),
-      'Provide named WAV lanes in the audio recipe');
+      'Provide named audio lanes in the recipe');
     let samples=0;
     const sources=Object.fromEntries(Object.entries(input.lanes).map(([key,row])=>{
       const tagged=record(row), file=tagged ? row.file : row;
-      const audio=WAV.read(path.resolve(folder,file));
+      const audio=readAudioSource(path.resolve(folder,file),P);
       samples+=audio.samples.length;
       check(samples<=32e6,'Audio groove sources exceed their sample budget');
       return [key,tagged ? {audio,lane:row.lane,articulation:row.articulation} : audio];
     }));
     result=P.mediaGraph.extractGroove(sources,{grid,detect,gate});
   } else {
-    check(detect===undefined && gate===undefined,'Transient and envelope settings apply to WAV sources');
+    check(detect===undefined && gate===undefined,'Transient and envelope settings apply to audio sources');
     if (input.kind==='midi') {
       const {source,events}=importNotes(input,folder,P);
       result=P.performanceGroove.fit(events,grid);

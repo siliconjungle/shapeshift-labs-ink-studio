@@ -1,5 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),WAV=require('./wav.js');
-const {write,json,publishJson}=require('./asset-files.js'),{assetPaths}=require('./music-production.js');
+const {write,json,publishJson}=require('./asset-files.js'),{assetPaths,readProductionAssets}=require('./music-production.js');
+const {readAudioSource}=require('./sound-source.js');
 const listeningPage=require('./music-critique-listen.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const relative=(file,ref)=>path.resolve(path.dirname(path.resolve(file)),ref);
@@ -61,8 +62,8 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
     return output(C.recallPreferences(readMemory(file,check),read(config)),out);
   }
   if (mode==='tag') {
-    check(out && config,'Tag a source WAV with a settings file and output directory');
-    const {reference,value}=C.tagReference(WAV.read(file),read(config));
+    check(out && config,'Tag an audio source with a settings file and output directory');
+    const {reference,value}=C.tagReference(readAudioSource(file,kit.KIT.procedural),read(config));
     const label=path.join(out,'reference.json');
     publishJson(label,{...reference,audio:'clip.wav'},'A different listening reference already uses this directory');
     audio(path.join(out,'clip.wav'),value);
@@ -81,7 +82,7 @@ module.exports=function command([mode,file,config,settingsFile],opt,kit) {
       .map(hit=>({...hit,...(paths.has(hit.id) && {file:paths.get(hit.id)})})),out);
   }
   const recipe=read(file), source=recipe.session ?? recipe.production ?? recipe, paths=assetPaths(recipe,file);
-  const assets=Object.fromEntries(Object.entries(paths).map(([id,at])=>[id,WAV.read(at)]));
+  const assets=readProductionAssets(paths,kit.KIT.procedural);
   function publishPreview(result,folder) {
     const files=Object.fromEntries(Object.entries(result.audio).map(([id,value])=>{
       const name=id+'.wav';

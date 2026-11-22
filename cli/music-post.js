@@ -1,6 +1,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const WAV=require('./wav.js'), {json}=require('./asset-files.js'), {stageAt}=require('./recorded-presentation.js');
 const Reaper=require('./post-reaper.js'), {print}=require('./post-print.js');
+const {readAudioSource}=require('./sound-source.js');
 const {read}=Reaper;
 const usage='music post from-story | relink | room | repair | review | export | import ... --out path';
 const output=value=>{process.stdout.write(JSON.stringify(value,null,2)+'\n');return value;};
@@ -9,13 +10,13 @@ function project(P,file) {
   const {check,fields,record,id}=P.musicInstruments;
   const raw=read(file);
   check(fields(raw,['session','assets']) && record(raw.assets) && Object.keys(raw.assets).length<=256,
-    'Expected an Ink editorial session and WAV asset paths');
+    'Expected an Ink editorial session and audio asset paths');
   const paths=Object.fromEntries(Object.entries(raw.assets).map(([name,ref])=>{
     check(id(name) && typeof ref==='string' && ref.length<=2048,'Invalid editorial asset path');
     return [name,path.resolve(path.dirname(file),ref)];
   }));
   return {session:raw.session,paths,assets:Object.fromEntries(Object.entries(paths).map(([name,at])=>
-    [name,WAV.read(at,{metadata:true})]))};
+    [name,readAudioSource(at,P,{metadata:true})]))};
 }
 function pathsFor(out,paths) {
   return Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,path.relative(out,file)]));
@@ -82,9 +83,9 @@ module.exports=function command([mode,file,changes],opt,kit) {
   const settings=changes ? read(path.resolve(changes)) : {};
   if (mode==='room') {
     check(fields(settings,['reference','options']) && typeof settings.reference==='string',
-      'Specify a reference WAV and quiet source ranges');
+      'Specify a reference audio source and quiet source ranges');
     const reference=path.resolve(path.dirname(changes),settings.reference);
-    const result=Q.matchRoom(WAV.read(input),WAV.read(reference),settings.options);
+    const result=Q.matchRoom(readAudioSource(input,P),readAudioSource(reference,P),settings.options);
     const stage=stageAt(out);
     try {
       const room=asset(stage,'room-tone',result.value);

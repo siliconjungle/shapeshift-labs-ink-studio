@@ -13,6 +13,9 @@ function assetPaths(recipe,file) {
     return [name,path.resolve(folder,spec)];
   }));
 }
+function readProductionAssets(paths,P) {
+  return Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,readAudioSource(file,P)]));
+}
 function writeAssetBank(folder,assets) {
   fs.mkdirSync(path.join(folder,'assets'),{recursive:true});
   return Object.fromEntries(Object.entries(assets).map(([name,audio])=>{
@@ -197,7 +200,7 @@ module.exports=function command([mode,file,config],opt,kit) {
   if (!file) throw new TypeError('Use music production with a mode and a recipe. Producer modes are plan-audition, review-audition and keep-audition');
   const recipe=read(file);
   const {sources,paths,timeline}=mode==='timeline' ? timelineBank(recipe,file) : {paths:assetPaths(recipe,file)};
-  const assets=Object.fromEntries(Object.entries(paths).map(([name,file])=>[name,readAudioSource(file,kit.KIT.procedural)]));
+  const assets=readProductionAssets(paths,kit.KIT.procedural);
   const production=recipe.lockedArrangement?.production ?? recipe.production ?? recipe;
   if (mode==='search-locked') {
     if (!config || typeof opt.out!=='string') throw new TypeError('Use a production, a locked brief, and --out directory');
@@ -316,3 +319,4 @@ module.exports=function command([mode,file,config],opt,kit) {
 };
 module.exports.assetPaths = assetPaths;
 module.exports.timelineBank = timelineBank;
+module.exports.readProductionAssets = readProductionAssets;

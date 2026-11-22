@@ -2,6 +2,7 @@
 const fs=require('node:fs'), path=require('node:path'), {createHash}=require('node:crypto');
 const WAV=require('./wav.js'), {stageAt}=require('./recorded-presentation.js'), {guid,dec}=require('./handoff-reaper.js');
 const {print}=require('./post-print.js');
+const {isSoundRecipe,readAudioSource}=require('./sound-source.js');
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const token=value=>typeof value==='string' && value.length>0 && value.length<=2048 && !/[\0\r\n]/.test(value);
 const q=value=>'"'+value+'"'; // IDs and generated relative media paths use a restricted alphabet.
@@ -108,7 +109,7 @@ function publish(P,session,assets,originalPaths,config,out) {
     for (const [name,source] of Object.entries(originalPaths)) {
       size+=fs.statSync(source).size;
       check(size<=550e6,'Ink editorial sources exceed the handoff media budget');
-      const bytes=fs.readFileSync(source), file='ink/sources/'+name+'.wav';
+      const bytes=fs.readFileSync(source), file='ink/sources/'+name+(isSoundRecipe(source) ? '.sound.json' : '.wav');
       stage.save(file,bytes);
       originals[name]={file,sha256:digest(bytes)};
     }
@@ -170,10 +171,11 @@ function addressed(P,folder,capture) {
     return full;
   }
   for (const [name,row] of originals) {
-    check(id(name) && row.file==='ink/sources/'+name+'.wav' && project.assets[name]==='sources/'+name+'.wav',
+    const file='sources/'+name+(isSoundRecipe(row.file) ? '.sound.json' : '.wav');
+    check(id(name) && row.file==='ink/'+file && project.assets[name]===file,
       'Original source address differs from the Ink archive');
     sourcePaths[name]=checkMedia(row.file,row.sha256);
-    assets[name]=WAV.read(sourcePaths[name],{metadata:true});
+    assets[name]=readAudioSource(sourcePaths[name],P,{metadata:true});
   }
   const identity=digest(JSON.stringify([project.session,JSON.stringify(originals.map(([name,row])=>[name,row.sha256])),
     manifest.picture?.sha256 ?? null]));

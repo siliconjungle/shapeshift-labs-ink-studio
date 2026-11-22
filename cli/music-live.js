@@ -1,6 +1,5 @@
 const fs=require('node:fs'), path=require('node:path'), WAV=require('./wav.js');
-const {write,json}=require('./asset-files.js'), {timelineBank}=require('./music-production.js');
-const { readAudioSource } = require('./sound-source.js');
+const {write,json}=require('./asset-files.js'), {timelineBank,readProductionAssets}=require('./music-production.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 
 module.exports=async function command([mode,file,routePath],opt,kit) {
@@ -23,7 +22,7 @@ module.exports=async function command([mode,file,routePath],opt,kit) {
       streams[name]={frames:page.frames,sampleRate:page.sampleRate,channels:page.channels,...mix};
     }
     const result=await live.replay(sources,timeline,route.format ? live.fromTrace(route,settings.traceOptions) : route,{
-      ...settings.options,assets:Object.fromEntries(Object.entries(paths).map(([name,at])=>[name,readAudioSource(at,kit.KIT.procedural)])),
+      ...settings.options,assets:readProductionAssets(paths,kit.KIT.procedural),
       streams,readPage:(name,first,frames)=>opened.get(name).readPage(first,frames)
     });
     const audio=path.join(folder,'score.wav'), report=path.join(folder,'listen.json');

@@ -1,6 +1,7 @@
 const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), path=require('node:path'), os=require('node:os');
 const {KIT}=require('..').load(), P=KIT.procedural, A=P.mediaGraph, Q=A.postProduction, E=A.audioEditorial;
 const WAV=require('../cli/wav.js'), Reaper=require('../cli/post-reaper.js');
+const {execFileSync}=require('node:child_process');
 const rate=8000;
 const take=(asset,sync=500)=>({asset,sync:{sample:sync},fromSample:300,toSample:1100});
 const tone=(frames=1800,hz=210,gain=.24)=>({sampleRate:rate,channels:1,
@@ -85,6 +86,27 @@ function capture(manifest,folder) {
       position:row.first/rate,length:row.frames/rate,itemGain:1,mute:0,allTakes:0,loop:0,fadeIn:0,
       fadeOut:0,autoIn:-1,autoOut:-1,offset:0,rate:1,takeGain:1,pan:0,pitch:0,channelMode:0,fx:0,envelopes:0}))};
 }
+
+test('REAPER editorial handoff keeps a seeded foley recipe and rebuilds the same print on return',t=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ink-post-recipe-'));
+  t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const file=name=>path.join(directory,name), save=(name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const cli=path.resolve(__dirname,'../cli/ink-studio.js');
+  const run=(...args)=>execFileSync(process.execPath,[cli,'music','post',...args],{cwd:directory,stdio:'pipe'});
+  const recipe={format:A.soundRecipe.format,version:1,family:'impact',seed:72,render:{sampleRate:rate}};
+  save('metal.sound.json',recipe);
+  fs.writeFileSync(file('guide.wav'),WAV.encode(guide));
+  save('project.json',{session,assets:{guide:'guide.wav',metal:'metal.sound.json'}});
+  run('export','project.json','--out','handoff');
+  const manifest=Reaper.read(file('handoff/handoff.json'));
+  assert.equal(manifest.originals.metal.file,'ink/sources/metal.sound.json');
+  assert.deepEqual(Reaper.read(file('handoff/'+manifest.originals.metal.file)),recipe);
+  const hinge=manifest.items.find(row=>row.clip==='hinge');
+  assert(WAV.read(file('handoff/'+hinge.takes[0].file)).samples.some(sample=>Math.abs(sample)>.02));
+  save('capture.json',capture(manifest,file('handoff')));
+  run('import','handoff','capture.json','--out','returned');
+  assert(fs.readFileSync(file('handoff/ink/prints/mix.wav')).equals(fs.readFileSync(file('returned/mix.wav'))));
+});
 
 test('REAPER return applies addressed take and Foley offsets without replacing exact Ink state',()=>{
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ink-post-'));

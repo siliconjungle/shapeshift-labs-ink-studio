@@ -2,7 +2,8 @@ const fs=require('node:fs'),path=require('node:path');
 const WAV=require('./wav.js'),{write,json}=require('./asset-files.js');
 const {openSampleLibrary}=require('./sample-library.js');
 const {resolveSampleAssets}=require('./music-sample-assets.js');
-const {assetPaths}=require('./music-production.js');
+const {assetPaths,readProductionAssets}=require('./music-production.js');
+const {readAudioSource}=require('./sound-source.js');
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const pathText=n=>typeof n==='string' && n.trim().length>0;
 
@@ -17,10 +18,10 @@ module.exports=function command([mode,file,settingsFile],opt,kit) {
     [recipe.score,recipe.performance,recipe.production,recipe.library].every(n=>n===undefined || pathText(n)) &&
     (recipe.production!==undefined ? recipe.performance===undefined : recipe.score!==undefined && recipe.performance!==undefined) &&
     record(recipe.assets) && Object.keys(recipe.assets).length<=128,'Atmosphere needs a production or a score WAV with performed events');
-  let score=recipe.score && WAV.read(at(recipe.score)), performance;
+  let score=recipe.score && readAudioSource(at(recipe.score),P), performance;
   if (recipe.production!==undefined) {
     const name=at(recipe.production), document=read(name), source=document.production ?? document;
-    const assets=Object.fromEntries(Object.entries(assetPaths(document,name)).map(([id,file])=>[id,WAV.read(file)]));
+    const assets=readProductionAssets(assetPaths(document,name),P);
     performance=kit.KIT.music.production.inspect(source,assets);
     if (!score) {
       const options={...document.options,...recipe.productionOptions,stems:false};

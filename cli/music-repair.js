@@ -1,11 +1,12 @@
 const fs=require('node:fs'),path=require('node:path');
 const WAV=require('./wav.js'),{write,json}=require('./asset-files.js');
+const {readAudioSource}=require('./sound-source.js');
 
 module.exports=function repairCommand([file,settings],opt,kit) {
   if (!file || !settings || typeof opt.out!=='string')
-    throw new TypeError('Use music repair input.wav settings.json --out directory');
-  const A=kit.KIT.procedural.mediaGraph;
-  const result=A.repairDialogue(WAV.read(file),JSON.parse(fs.readFileSync(settings,'utf8')));
+    throw new TypeError('Use music repair <audio-source> settings.json --out directory');
+  const P=kit.KIT.procedural;
+  const result=P.mediaGraph.repairDialogue(readAudioSource(file,P),JSON.parse(fs.readFileSync(settings,'utf8')));
   const directory=path.resolve(opt.out), report=path.join(directory,'report.json');
   const emit=(name,audio)=>{
     const file=path.join(directory,name+'.wav');

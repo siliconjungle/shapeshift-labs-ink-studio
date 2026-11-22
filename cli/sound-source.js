@@ -14,7 +14,7 @@ function readSoundRecipe(file, P) {
   if (fs.statSync(file).size > limit) throw new RangeError('Sound recipe exceeds 64 KiB');
   return decodeSoundRecipe(fs.readFileSync(file), P);
 }
-function readAudioSource(file, P) {
-  return isSoundRecipe(file) ? readSoundRecipe(file, P).value : WAV.read(file);
+function readAudioSource(file, P, options) {
+  return isSoundRecipe(file) ? readSoundRecipe(file, P).value : WAV.read(file, options);
 }
 module.exports = { isSoundRecipe, decodeSoundRecipe, readSoundRecipe, readAudioSource, limit };
