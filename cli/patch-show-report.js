@@ -7,7 +7,8 @@ function showReport(config, rehearse) {
     const tick=clockCue?.anchor?.event?.tick;
     return [frame,{beatId,preset,scheduledFrame:frame,status:'not-reached',...(tick!==undefined&&{tick})}];
   }));
-  const graphLinks=[];
+  const graphLinks=[], outcomes={};
+  let inputMode;
   const video = { received: 0, repeated: 0, fallback: 0 };
   let rendered = 0, displayed = 0, assertionFailures = 0, frame = 0, unlogged = 0;
   const elapsed = () => performance.now() - began;
@@ -52,6 +53,8 @@ function showReport(config, rehearse) {
       if(link)Object.assign(link,{frame,status});
     },
     graphLink(output,link) { append(graphLinks,{...link,output,frame,status:'observed'}); },
+    interventionMode(mode) { inputMode = mode; },
+    intervention(status, count = 1) { outcomes[status] = (outcomes[status] ?? 0) + count; },
     finish(reason, error) {
       const slow = [...stages.values()].some(value => value.slowFrames > 0);
       const offline = [...sources.values()].some(value => value.outages > 0);
@@ -63,6 +66,7 @@ function showReport(config, rehearse) {
         stages: Object.fromEntries([...stages].map(([name, { totalMs, ...entry }]) => [name, { ...entry, meanMs: totalMs / entry.samples }])),
         ...(config.assetBindings?.length && { assetBindings: config.assetBindings }),
         ...(beatLinks.length&&{beatLinks}),
+        ...(inputMode && { interventions: { mode: inputMode, outcomes } }),
         sourceEvents, presets, samples, unlogged, ...(error && { error: error.message }) };
     }
   };

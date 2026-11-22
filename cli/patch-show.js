@@ -13,6 +13,7 @@ const { openProjector } = require('./patch-projector.js');
 const { showReport } = require('./patch-show-report.js');
 const { readShow, int } = require('./patch-show-config.js');
 const { feed } = require('./live-world.js');
+const InterventionInput = require('./patch-interventions.js');
 
 function presetControl(config, project, report) {
   const worldInput = config.liveWorld && { [config.liveWorld.input]: null };
@@ -168,6 +169,8 @@ async function showSlot(first, start, period, signal) {
 async function runShow(file, opt, settings, emit) {
   const config = await readShow(file, opt.rehearse, settings.kit), report = showReport(config, opt.rehearse);
   const { fps, frames, projector, video, audio, dimensions, liveWorld } = config, period = 1000 / fps;
+  const output = opt.report && path.resolve(opt.report);
+  const interventionInput = InterventionInput.settings(opt, liveWorld, output);
   const media = {}, gpu = createPatchGpu(path.dirname(config.patch), opt['gpu-module']);
   const operations = { ...settings.operations, ...patchNodes(settings.kit, media, gpu) };
   const project = readGraphProject(config.patch, { ...settings, operations });
@@ -177,13 +180,13 @@ async function runShow(file, opt, settings, emit) {
     throw new TypeError('Show liveWorld needs a liveSnapshot patch input');
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
-  const output = opt.report && path.resolve(opt.report);
-  const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, video, audio].filter(source =>
+  const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, video, audio,
+    interventionInput?.source].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
   const writer = output && graphOutputs(protectedFiles);
   writer?.protect(fs.statSync(output, { throwIfNoEntry: false }));
   const abort = new AbortController(), { signal } = abort, raster = settings.kit.KIT.procedural.raster;
-  let interrupted, projection, osc, capture, failure, attached = false;
+  let interrupted, projection, osc, capture, interventions, failure, attached = false;
   const midi = config.midi && midiControl(config.midi, control, report);
   const mediaOptions = { ...dimensions, rate: String(config.rate), executable: opt.ffmpeg, signal };
   const interrupt = code => { interrupted = code; abort.abort(new Error('Show interrupted')); };
@@ -197,6 +200,11 @@ async function runShow(file, opt, settings, emit) {
     osc?.check(start);
   }
   try {
+    if (interventionInput) {
+      interventions = InterventionInput.open(settings.kit.KIT, interventionInput, liveWorld,
+        { fps, rehearse: opt.rehearse, report });
+      report.interventionMode(interventions.mode);
+    }
     report.source('projector', 'waiting');
     if (midi) report.source('midi', 'waiting');
     projection = await openProjector(projector, config.midi, {
@@ -205,7 +213,8 @@ async function runShow(file, opt, settings, emit) {
       onMidi: value => midi.push(value)
     });
     if (config.osc) osc = await openOsc(config.osc, control, report);
-    await emit({ event: 'show-ready', projector: projection.url, wait: projector.wait, fps, oscPort: osc?.port });
+    await emit({ event: 'show-ready', projector: projection.url, wait: projector.wait, fps, oscPort: osc?.port,
+      ...(interventions && { interventions: interventions.mode }) });
     if (projector.wait) await projection.wait(signal);
     if (audio) {
       try {
@@ -248,8 +257,10 @@ async function runShow(file, opt, settings, emit) {
       projection.publish(index, raster.rgba(picture));
       report.stage('output', performance.now() - drawn);
       report.rendered(result.report.passed);
+      interventions?.observe(index, live.cursor(), result.report.passed);
       next = index + 1;
     }
+    interventions?.stop();
     projection.end();
     if (projection.connected) await delay(Math.max(100, period), undefined, { signal });
     checkSources(start, true);
@@ -259,13 +270,17 @@ async function runShow(file, opt, settings, emit) {
     process.off('SIGTERM', onTerm);
     abort.abort(new Error('Show ended'));
     try {
-      const closed = await Promise.allSettled([capture?.done, projection?.close(), osc?.close(), live?.close()]);
+      const closed = await Promise.allSettled([capture?.done, projection?.close(), osc?.close(), live?.close(),
+        interventions?.close()]);
       failure ??= closed.find(result => result.status === 'rejected')?.reason;
       project.clear();
     } catch (error) { failure ??= error; }
     finally { gpu.dispose(); }
     const summary = report.finish(interrupted ? 'interrupted' : failure ? 'failed' : 'completed', failure);
-    if (writer) writer.write(path.dirname(output), [{ file: path.basename(output), document: summary }]);
+    if (writer) {
+      if (interventions) graphOutputs([interventionInput.file]).protect(fs.statSync(output, { throwIfNoEntry: false }));
+      writer.write(path.dirname(output), [{ file: path.basename(output), document: summary }]);
+    }
     await emit(summary);
     process.exitCode = interrupted ?? (failure ? 1 : opt.rehearse && !summary.passed ? 2 : 0);
   }

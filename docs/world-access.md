@@ -52,6 +52,8 @@ ink-studio sim live examples/world-access/harbor.world.json \
 
 Declare named principals with a `view`. Each can also list its `interventions` grants. The service emits one bearer token per principal in the operator's `live-ready.principals` object. Give a subscriber its own token and the service URL. Use that token with the usual `GET /snapshot`, `GET /live?after=…`, or a patch show's `liveWorld` input. Each view has its own cursor stream. `GET /permissions` returns the recipient's view, intervention IDs, and whether submissions are open. With no policy, `sim live` still issues a single read-only world credential.
 
+[Recorded operator input for patch shows](story-integration-inputs.md) uses the same grants, cursor checks, and scheduler. Patch shows follow the live view with read-only defaults.
+
 An intervention declares a fixed native `action` and `args`. The following principals and intervention would join the policy example above.
 
 ```json

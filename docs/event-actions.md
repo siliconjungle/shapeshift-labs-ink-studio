@@ -73,6 +73,8 @@ scripted impacts accumulate in order, including when the system updates
 less often than the rest of the world. Cloth detach events include the last
 committed attachment point.
 
+[Recorded patch operator input](story-integration-inputs.md) enters through a named live intervention. It follows the normal native command scheduler.
+
 ## Route audio cue tracks
 
 Add a named `cueTracks` table to a world or scene timeline. Put the

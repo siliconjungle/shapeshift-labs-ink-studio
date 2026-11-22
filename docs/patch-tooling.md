@@ -4,6 +4,8 @@ Use `ink-studio patch` to edit and inspect the wiring of an Ink graph from a ter
 
 [Shared beat inspection links](inspection-links.md) connect event watches and rehearsal cues to the same committed world event.
 
+[Recorded story inputs](story-integration-inputs.md) let a patch follow live story state and let an operator explicitly propose a scoped intervention.
+
 ## Run Night Current
 
 The included generator writes a six-second source video with sound, a separate WAV, an edit journal for each patch, and two graphs. The CPU graph uses Ink's composite-video effect. The WGSL graph replaces the finish with a shader that uses the bass band to displace the image. Both route the same FFT band into the half-life of tracked trails.

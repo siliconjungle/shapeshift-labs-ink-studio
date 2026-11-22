@@ -18,14 +18,15 @@ const usage = [
   'ink-studio patch nodes [--json] | patch describe <operation>',
   'ink-studio patch run <project.json> [--video file|-] [--audio file.wav|video] [--watch name=node:port,...]',
   '  [--frames 120] [--fps 12] [--size 320x180] [--controls controls.json] [--out folder] [--keep] [--progress]',
-  'ink-studio patch show <cues.json> [--rehearse] [--report rehearsal.json] [--ffmpeg path] [--gpu-module path]'
+  'ink-studio patch show <cues.json> [--rehearse] [--report rehearsal.json] [--ffmpeg path] [--gpu-module path]',
+  '  [--intervention-input <recording.json|-> --record-interventions journal.ndjson]'
 ].join('\n');
 
 const booleanOptions = new Set(['json','dot','keep','progress','rehearse']);
 const flags = {
   init:[], apply:['out'], wire:['out'], bind:['id','from','to','out'], plan:['json','dot'], nodes:['json'], describe:['json'],
   run:['video','audio','frames','fps','size','controls','out','keep','progress','ffmpeg','gpu-module','watch'],
-  show:['rehearse','report','ffmpeg','gpu-module']
+  show:['rehearse','report','ffmpeg','gpu-module','intervention-input','record-interventions']
 };
 const counts = { init:2, apply:3, wire:4, bind:4, plan:2, nodes:1, describe:2, run:2, show:2 };
 

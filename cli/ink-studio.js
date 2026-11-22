@@ -1292,6 +1292,7 @@ const CMD = {
         '  story cues <recording|fixture|envelopes|story-run-bundle> <plan.json> [--format sheet|timeline] [--out file]',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
+        '    [--intervention-input <recording.json|-> --record-interventions journal.ndjson]',
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
