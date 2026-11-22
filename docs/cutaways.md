@@ -17,4 +17,6 @@ Native splats and cutout surfaces participate in clipping. Analytic water, atmos
 
 Pass the same frame to WebGL `renderer.pick(world, ray, frame)` to pick the remaining splats. `createSplatPicker(world)` also accepts a `cutaway` on each ray. For a camera-relative interval in a headless ray, supply `camera: { eye, back, setback }` where `back` points out of the camera and `setback` defaults to zero. Without a camera, a headless pick measures the interval along the ray.
 
+Draft a section plane from a sightline blocked by foreground geometry in a recorded scene. [Story camera suggestions](story-camera-suggestions.md)
+
 `KIT.cutaway.prepare(definition)` validates and normalizes a reusable definition for scripted callers.

@@ -94,8 +94,10 @@
       const source = { world, branch, id, tick: at, kind, system, ...(owner && { story: owner }),
         ...(stage && { stage }), ...(Number.isSafeInteger(visit) && visit > 0 && { visit }), timecode: T.pack(point) };
       check(validSource(source, beatId), 'Invalid committed story marker source');
-      converted.push({ point, marker: { id: markerId, time: portableTime(point),
-        label: rule?.label ?? label(category, event), category, beatId, source } });
+      const marker = { id: markerId, time: portableTime(point),
+        label: rule?.label ?? label(category, event), category, beatId, source };
+      converted.push({ point, marker });
+      return marker;
     }
     return { add, finish() {
       converted.sort((a, b) => T.compare(a.point, b.point));
@@ -112,16 +114,30 @@
     return output.finish();
   }
 
-  async function replay(source, options) {
-    const output = collector({ dt: source.origin.world.dt, simulationRate: source.origin.world.takeClock?.simulationRate,
+  function forRun(source, options) {
+    return collector({ dt: source.origin.world.dt, simulationRate: source.origin.world.takeClock?.simulationRate,
       to: source.end.tick }, options);
+  }
+
+  async function scan(source, visit) {
     const { world, eventStream } = source.end;
-    for (const row of W.storyEvents.envelopes(source.origin).events) output.add(row);
-    await W.runtime.replayAsync(source, { onTick(frame) {
-      for (const row of frame.events) output.add(W.committedEvents.read(row, world.id, eventStream));
-    } });
+    await W.runtime.replayAsync(source, {
+      onStart(run) {
+        const frame = run.view(), query = run.query();
+        for (const event of W.storyEvents.envelopes(source.origin).events)
+          visit(event, ...(event.tick === frame.tick ? [frame, query] : []));
+      },
+      onTick(frame, query) {
+        for (const row of frame.events) visit(W.committedEvents.read(row, world.id, eventStream), frame, query);
+      }
+    });
+  }
+
+  async function replay(source, options) {
+    const output = forRun(source, options);
+    await scan(source, output.add);
     return output.finish();
   }
 
-  W.storySceneTimeline = Object.freeze({ planFormat, project, replay, validSource });
+  W.storySceneTimeline = Object.freeze({ planFormat, project, replay, validSource, forRun, scan });
 })(KIT);

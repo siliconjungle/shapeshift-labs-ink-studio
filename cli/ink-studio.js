@@ -1292,6 +1292,8 @@ const CMD = {
         '  story cues <recording|fixture|envelopes|story-run-bundle> <plan.json> [--format sheet|timeline] [--out file]',
         '  story timeline <recording|fixture|envelopes|story-run-bundle> [--story id/name] [--from-tick N --to-tick N]',
         '    [--plan markers.json] [--out timeline.json]   export editable scene markers',
+        '  story shots <recording> [--timeline file --story id/name --from-tick N --to-tick N --limit N --out plan.json]',
+        '  story shots-review <recording> <plan.json> --out directory [--all --w N --h N]',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
         '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
         '    [--intervention-input <recording.json|-> --record-interventions journal.ndjson]',

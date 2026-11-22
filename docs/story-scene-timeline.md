@@ -83,6 +83,8 @@ for verified native replay and `project(source, options)` for recorded event
 logs or retained checkpoints. The existing `story events --format timeline`
 workflow also emits routable playback events when a scene needs them.
 
+Use an edited marker timeline as the input for shot suggestions and visibility review. [Story camera suggestions](story-camera-suggestions.md)
+
 ## Run the demos
 
 ```sh

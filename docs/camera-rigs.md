@@ -29,6 +29,8 @@ Interpolated rails accept `{interpolated:{points,options}}`, where the contents 
 
 Named targets can follow a live hierarchy frame with `{node,socket?,offset?,fallback?}`. Hidden/missing nodes use the framing fallback. See [live scene hierarchy](live-scene-hierarchy.md).
 
+Draft camera poses and an editable cut sequence from a committed story run. [Story camera suggestions](story-camera-suggestions.md)
+
 ## Export staging
 
 The Node renderer accepts a staging profile as `cameraStaging` in its options, or from the scene's `look.cameraStaging` (`finish.look.cameraStaging` in diorama JSON). Use `--camera-staging profile.json` to override it in the CLI, or `--camera-staging off` to disable it. A profile can contain any of the following.
