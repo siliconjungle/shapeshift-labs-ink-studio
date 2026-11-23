@@ -64,6 +64,49 @@ Use `steps` to draw an explicit staircase. Pick a major axis and an X/Y sign,
 then specify each run length. Consecutive runs move one cell along the minor
 axis and meet diagonally without an extra pixel at the corner.
 
+## Open existing artwork in the editor
+
+Pass a parsed document or JSON text to the Node package's
+`createPixelEditor(source)`. A version 1 drawing opens as a version 2
+document with square pixels and one 100 ms frame named `artwork`. Each
+original layer keeps its ID, position in the stack, clipping link, and
+protection. Its cel, named `artwork/<layer-id>`, keeps the original marks
+and indexed slots. Staircase runs remain editable as `steps`. Extra fields
+from the original document are retained as `legacyMetadata`.
+
+```js
+const fs = require('node:fs');
+const { createPixelEditor } = require('.');
+const editor = createPixelEditor(fs.readFileSync('examples/pixel-art-tooling/relay.json', 'utf8'));
+const pixel = editor.inspect([13, 22], { cel: 'artwork/freckles' });
+editor.apply({
+  revision: pixel.revision,
+  id: 'fix-freckle',
+  cel: pixel.cel,
+  edits: [{ at: pixel.at, layer: pixel.layer, from: pixel.swatch, to: pixel.underneath.swatch }]
+});
+fs.writeFileSync('relay-edited.json', editor.serialize());
+```
+
+`describe()` lists the document revision and stable IDs. `snapshot()` returns
+a copy of the editable document, and `stamp({ frame, cel })` exports the
+chosen frame as an indexed stamp. `inspect` reports the visible owner of a
+pixel. Passing a cel ID selects the frame containing that cel.
+`apply(patch)` uses the same guarded edits as the CLI. The original revision
+can still be used by a legacy patch when the version 1 source is freshly
+opened. After a successful edit, inspect the current revision before applying
+another patch.
+
+The CLI can also save the upgraded document.
+
+```sh
+node cli/ink-studio.js pixel-art upgrade examples/pixel-art-tooling/relay.json --out relay-v2.json
+node cli/ink-studio.js pixel-art validate relay-v2.json
+```
+
+The existing `pixel-art edit` command also accepts version 1 documents and
+their revision-guarded patches directly.
+
 ## Author a version 2 document
 
 Version 2 keeps canvas size, pixel aspect, palette, and the layer stack at the

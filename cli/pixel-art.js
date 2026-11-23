@@ -65,9 +65,11 @@ function documentShape(design) {
     throw new RangeError('Pixel art needs a native grid, a palette and up to 64 bounded layers');
   if (design.version === 1) return;
 
-  const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations } = design;
+  const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations'])) throw new TypeError('Unknown pixel document field');
+    'selections','protectedDetails','sceneBindings','destinations','legacyMetadata']))
+    throw new TypeError('Unknown pixel document field');
+  if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
   if (!Array.isArray(pixelAspect) || pixelAspect.length !== 2 ||
       !integer(pixelAspect[0],1,Number.MAX_SAFE_INTEGER) || !integer(pixelAspect[1],1,Number.MAX_SAFE_INTEGER))
     throw new RangeError('Pixel aspect needs two positive integers [width,height]');
@@ -218,13 +220,14 @@ function compileFrame(design, frame, revision, palette) {
 function compile(design, frameId, targetCel) {
   documentShape(design);
   const frames = design.version === 2 ? design.frames : [];
+  const hasCel = item => Object.entries(item.cels).some(([layer,cel]) => celId(item,layer,cel) === targetCel);
   let frame;
   if (frameId !== undefined) frame = frames.find(item => item.id === frameId);
-  else if (targetCel !== undefined) frame = frames.find(item => Object.entries(item.cels)
-    .some(([layer,cel]) => celId(item,layer,cel) === targetCel));
+  else if (targetCel !== undefined) frame = frames.find(hasCel);
   else frame = frames[0];
   if (frameId !== undefined && !frame) throw new RangeError('Unknown pixel frame ' + frameId);
-  if (targetCel !== undefined && !frame) throw new RangeError('Unknown pixel cel ' + targetCel);
+  if (targetCel !== undefined && (!frame || !hasCel(frame)))
+    throw new RangeError('Unknown pixel cel ' + targetCel + (frame ? ' on frame ' + frame.id : ''));
   return compileFrame(design,frame,fingerprint(design),paletteEntries(design.palette,design.version));
 }
 
@@ -263,6 +266,12 @@ function cell(frame,p) {
     underneath:{ layer:under, ...(frame.cels && { cel:frame.cels.get(under) ?? null }),
       swatch:frame.swatches[frame.underSlots[p]] ?? null }
   };
+}
+
+function inspect(frame,coordinate) {
+  if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use a pixel coordinate inside the native grid');
+  const [x,y] = coordinate;
+  return { revision:frame.revision, ...frameMetadata(frame), ...cell(frame,y*frame.width+x) };
 }
 
 function image(frame) {
@@ -370,6 +379,49 @@ function edit(design, frame, patch, context) {
   return revised;
 }
 
+function upgradeLegacy(design) {
+  const { format,version,width,height,palette,layers,...legacyMetadata } = design;
+  const cels = Object.fromEntries(layers.map(({ id,marks,slots }) =>
+    [id,{ id:'artwork/'+id, marks, ...(slots !== undefined && { slots }) }]));
+  return { format, version:2, width, height, pixelAspect:[1,1], palette,
+    layers:layers.map(({ marks,slots,...layer }) => layer),
+    frames:[{ id:'artwork', durationMs:100, cels }],
+    ...(Object.keys(legacyMetadata).length && { legacyMetadata })
+  };
+}
+
+function createEditor(source) {
+  const input = typeof source === 'string' ? JSON.parse(source) : source;
+  const original = validate(input);
+  let design = structuredClone(input);
+  let legacyRevision;
+  if (original.version === 1) {
+    legacyRevision = original.revision;
+    design = upgradeLegacy(design);
+  }
+  return Object.freeze({
+    snapshot: () => structuredClone(design),
+    serialize: (space = 2) => JSON.stringify(design,null,space),
+    describe: () => validate(design),
+    inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(design,frame,cel),coordinate),
+    stamp: ({ frame,cel } = {}) => stamp(compile(design,frame,cel)),
+    apply(patch,context) {
+      const request = structuredClone(patch);
+      if (legacyRevision !== undefined && request?.revision === legacyRevision) {
+        request.revision = fingerprint(design);
+        if (request.frame === undefined && request.cel === undefined) request.frame = 'artwork';
+      }
+      const frame = compile(design,request?.frame,request?.cel);
+      const result = edit(design,frame,request,context);
+      if (Destinations.resolve(design,request.destination).destination.kind === 'raster') {
+        design = result;
+        legacyRevision = undefined;
+      }
+      return structuredClone(result);
+    }
+  });
+}
+
 function stamp(frame) {
   return {
     width:frame.width, height:frame.height, origin:'top-left',
@@ -418,8 +470,8 @@ function trace(frame, object, scene) {
 
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
-  if (!['trace','validate','targets','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, validate, targets, draw, inspect, or edit. See ink-studio help.');
+  if (!['trace','upgrade','validate','targets','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
+    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, inspect, or edit. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -430,6 +482,13 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const design = read(source);
+  if (action === 'upgrade') {
+    if (typeof opt.out !== 'string' || !opt.out.trim())
+      throw new TypeError('Use pixel-art upgrade <design.json> --out <document.json>');
+    const editor = createEditor(design);
+    files.json(path.resolve(opt.out),editor.snapshot());
+    return;
+  }
   if (action === 'validate') {
     process.stdout.write(JSON.stringify(validate(design),null,2)+'\n');
     return;
@@ -462,8 +521,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   if (action === 'inspect') {
     const coordinate = /^\d+,\d+$/.test(opt.at ?? '') ? opt.at.split(',').map(Number) : null;
     if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use --at x,y inside the native grid');
-    const [x,y] = coordinate;
-    process.stdout.write(JSON.stringify({ revision:frame.revision, ...frameMetadata(frame), ...cell(frame,y*frame.width+x) },null,2)+'\n');
+    process.stdout.write(JSON.stringify(inspect(frame,coordinate),null,2)+'\n');
     return;
   }
   if (action === 'draw') {
@@ -476,4 +534,4 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   files.json(out,edit(design,frame,changes,context));
 }
 
-module.exports = { compile, validate, stamp, image, review, edit, draw, trace, command };
+module.exports = { createEditor, compile, validate, stamp, image, review, edit, draw, trace, command };

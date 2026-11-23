@@ -1393,6 +1393,7 @@ const CMD = {
         '  paint cause <id> <recipe.json> [--events <run.json>] [--replace]   bake geometry or committed events into paint layers',
         '    layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off',
         '  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing from a scene',
+        '  pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels',
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',

@@ -279,6 +279,9 @@ module.exports = {
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },
+  createPixelEditor(source) {
+    return require('./cli/pixel-art.js').createEditor(source);
+  },
   createSplatPicker(world, options = {}) {
     const K = module.exports.load().KIT;
     const time = options.time ?? world.lookSnapshot?.time ?? 0;

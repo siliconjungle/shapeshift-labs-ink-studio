@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { createPixelEditor } = require('..');
 const { compile, edit, review, stamp, validate } = require('../cli/pixel-art.js');
 const PixelStamps = require('../src/pixel-stamps.js');
 const PNG = require('../cli/png.js');
@@ -46,6 +47,70 @@ test('exact edits require the expected revision, owner and color and leave prote
   assert.throws(()=>edit(draft,frame,{...patch,edits:[{at:[23,28],layer:'approved-accents',from:'spark',to:'ink'}]}),/no longer applies/);
   for (let p = 0; p < frame.slots.length; p++) if (frame.locks[p]) assert.equal(frame.slots[p],clean.slots[p]);
   assert.deepEqual(stamp(clean).slots.map(n=>n===null?-1:n),[...clean.slots]);
+});
+
+test('opening a legacy design preserves live clips, staircases, indexed slots and protected details', t => {
+  const source = structuredClone(fixture);
+  source.note = { author:'relay workshop' };
+  source.layers[0].slots = Array(source.width*source.height).fill(null);
+  source.layers[0].slots[0] = 'ink';
+  const old = compile(source);
+  const editor = createPixelEditor(JSON.stringify(source));
+  const upgraded = editor.snapshot();
+  assert.equal(upgraded.version,2);
+  assert.deepEqual(upgraded.pixelAspect,[1,1]);
+  assert.deepEqual(upgraded.palette,source.palette);
+  assert.deepEqual(upgraded.legacyMetadata,{ note:source.note });
+  assert.deepEqual(upgraded.layers,source.layers.map(({marks,slots,...layer})=>layer));
+  assert.equal(upgraded.frames.length,1);
+  const { id, durationMs, cels } = upgraded.frames[0];
+  assert.deepEqual([id,durationMs],['artwork',100]);
+  for (const layer of source.layers) {
+    assert.equal(cels[layer.id].id,id+'/'+layer.id);
+    assert.deepEqual(cels[layer.id].marks,layer.marks);
+    assert.deepEqual(cels[layer.id].slots,layer.slots);
+  }
+  const current = compile(upgraded);
+  for (const key of ['slots','owners','locks','underSlots','underOwners'])
+    assert.deepEqual(current[key],old[key]);
+
+  const gap = editor.inspect([3,3]);
+  assert.deepEqual([gap.cel,gap.swatch,gap.protected],['artwork/opening',null,true]);
+  assert.throws(()=>editor.apply({ revision:gap.revision, frame:gap.frame, id:'close-gap',
+    edits:[{ at:[3,3], layer:gap.layer, from:gap.swatch, to:'ink' }]
+  }),/no longer applies/);
+  assert.deepEqual(editor.snapshot(),upgraded);
+
+  const rim = editor.inspect([1,1],{ cel:'artwork/rim' });
+  editor.apply({ revision:rim.revision, id:'bright-rim', cel:rim.cel,
+    edits:[{ at:[1,1], layer:rim.layer, from:rim.swatch, to:'light' }]
+  });
+  const reopened = createPixelEditor(editor.serialize());
+  assert.equal(reopened.inspect([1,1]).swatch,'light');
+  assert.equal(reopened.inspect([0,1]).swatch,null);
+  assert.deepEqual(reopened.snapshot().frames[0].cels.rim.marks[0],source.layers[1].marks[0]);
+  assert.equal(reopened.inspect([3,3]).protected,true);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-legacy-upgrade-'));
+  t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const file = path.join(directory,'legacy.json'), out = path.join(directory,'new.json');
+  fs.writeFileSync(file,JSON.stringify(source));
+  execFileSync(process.execPath,['cli/ink-studio.js','pixel-art','upgrade',file,'--out',out],
+    {cwd:path.resolve(__dirname,'..')});
+  assert.deepEqual(JSON.parse(fs.readFileSync(out,'utf8')),upgraded);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')),source);
+});
+
+test('the package API applies existing guarded repair files to freshly opened legacy artwork', () => {
+  const editor = createPixelEditor(draft);
+  const result = editor.apply(patch);
+  const original = compile(draft);
+  assert.equal(result.version,2);
+  assert.deepEqual(editor.stamp(),stamp(compile(edit(draft,original,patch))));
+  assert.throws(()=>editor.apply(patch),/observed revision/);
+  result.layers[0].id = 'copied';
+  assert.notEqual(editor.snapshot().layers[0].id,'copied');
+  assert.equal(draft.version,1);
 });
 
 test('CLI output can be inspected and round-trips through the existing pixel stamp path', t => {
@@ -104,6 +169,16 @@ const document = {
   ],
   sceneBindings:[{ id:'lamp', scene:'relay-stage', object:'relay', part:'lamp', revision:'asset-v1', frame:'blink', layer:'lit' }]
 };
+
+test('opening a version 2 document preserves its authored frames and scene bindings', () => {
+  const source = structuredClone(document);
+  const editor = createPixelEditor(source);
+  source.sceneBindings[0].object = 'mutated';
+  assert.deepEqual(editor.snapshot(),document);
+  assert.deepEqual(JSON.parse(editor.serialize()),document);
+  assert.equal(editor.inspect([0,0],{ cel:'blink/lit' }).frame,'blink');
+  assert.throws(()=>editor.inspect([0,0],{ frame:'idle', cel:'blink/lit' }),/Unknown pixel cel blink\/lit on frame idle/);
+});
 
 test('document validation checks frame and layer references and cels outside the current frame', () => {
   const legacy = validate(draft);
