@@ -202,3 +202,63 @@ Use `rehearsal.seedTraces(score, scenarios, seed)` and
 JavaScript, or use `music.regressAdaptiveScore` in a graph. To reproduce
 both workflows and their audio, run
 `node examples/music-production/listening-regression.cjs demo-output`.
+
+## Compare live and offline playback
+
+Pass a captured trace, an explicit [live route](music-live-adaptive.md#rehearse-the-actual-live-output),
+or a native tick-zero world recording to the same timeline recipe. The
+comparison replays the causal live mixer and renders the offline timeline
+on the same zero-based sample grid. The live pass uses each recorded
+arrival time and the offline pass schedules from the original intent time.
+A native recording uses the `score` system unless `--capture` names another
+system in capture settings.
+
+```sh
+ink-studio music rehearsal compare score.json scene.run.json --capture capture.json --out comparison
+ink-studio music rehearsal compare score.json late.json --out comparison
+```
+
+The output contains `live.wav`, `offline.wav`, both renderer reports, and
+`comparison.json`. Its input indices pair even duplicate requests at the
+same time. Each cue shows the first admitted voice sample, its outcome, and
+the resources, score sources, or sample assets each pass used. Cues can have
+several variants when a live rule adds an accent. Cue onset is a voice start
+and can precede a slow attack. A PCM underrun appears in `live.json`. Both
+WAVs preserve the pass levels, with playback copies clipped to the WAV
+range if the report counts over-range samples. Signal metrics use the
+original rendered values.
+
+Transition rows show the chosen passage and phrase, the source positions at
+the splice, and the difference in landing samples. Each path reports the
+outgoing direct release span at its own join, excluding persistent performers
+whose held notes are listed separately. Three consecutive 80 ms windows
+show peak and RMS in the full mix after each landing. Those windows can include
+the incoming passage and effects. The full-run signal difference is measured
+on the common sample grid. Layer rows include the start, target, and end of
+each base or factor ramp and compare their combined effective gain at the
+requested sample, ramp boundaries, and midpoints.
+
+Use `live.traceOptions.worldCues` to bind recorded `audio-cue` names to the
+same stingers or file-backed PCM on both paths. An optional `arrivalOffset`
+tests a uniform delay on the live trace. Use a live route to supply varying
+delays with `observedAt`. A receipt's committed beat ID can be inspected with
+`ink-studio beat <beat-id> comparison/comparison.json`.
+
+Both passes use the authored native instruments, PCM cues, loop phase, and
+layer inputs. The report identifies path-specific rules. The offline
+timeline uses its own splice at a live matched-performance edge and prints
+the original cue at a live scoring-rule request. Offline PCM stems use
+their direct source mix in place of the live acoustic ambience filters.
+Offline world rhythm and space rules remain part of the offline render.
+The offline mixer applies layer ramps to score and PCM stems. Its native
+room is rendered by the offline production pipeline, while live ramps
+also affect new room and tape sends.
+
+```sh
+node examples/music-production/audio-path-comparison.cjs ./signal-crossing
+```
+
+Signal Crossing prints the same six-second recording both ways. Listen for
+the change in bell, the delayed wheel cues, and the different landing of
+the crossing theme. The demo includes the world recording, timeline,
+PCM source, and a beat inspection for the warning.

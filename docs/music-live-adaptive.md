@@ -396,3 +396,7 @@ The alert at 2.25 s waits until the 3.00 s opening, a repeat loses its turn
 to cooldown, and the 3.20 s request expires before the next opening. The
 next fresh alert answers at 4.50 s. Compare against
 `signal-hatch/bypassed/score.wav` to hear the same Foley with the score rules bypassed.
+
+Use [live and offline playback comparison](music-adaptive-rehearsal.md#compare-live-and-offline-playback)
+to render a recording through both mixers and compare cue onsets, selected
+takes, joins, layer ramps, and releases on the same sample grid.

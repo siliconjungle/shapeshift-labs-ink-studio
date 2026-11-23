@@ -7,7 +7,7 @@
     check(finite(value,lo,hi),'Invalid transition '+label);
     return value;
   };
-  function prepare(sources,spec,assets,host,bank,liveResources) {
+  function prepare(sources,spec,assets,host,bank,liveResources,offlineStreams) {
     const live=liveResources!==undefined;
     check(record(sources) && Object.keys(sources).length<=32 && Object.keys(sources).every(id) &&
       fields(spec,['entry','segments','transitions','stingers','stingerRules','end','thematic','phrasing','performers','scoring']) && record(spec.segments) &&
@@ -69,7 +69,7 @@
       Object.entries(stingers).every(([key,value])=>id(key) && known(value)),'Invalid transition or stinger table');
     const holds=spec.stingerRules ?? [];
     check(Array.isArray(holds) && holds.length<=128 && Array.from(holds).every(row=>
-      fields(row,['resource','section','linked']) && (Object.hasOwn(stingers,row.resource) || liveResources?.has(row.resource)) && known(row.section) &&
+      fields(row,['resource','section','linked']) && (Object.hasOwn(stingers,row.resource) || (liveResources ?? offlineStreams)?.has(row.resource)) && known(row.section) &&
       (row.linked===undefined || typeof row.linked==='boolean')),
     'Stinger rules need a mapped resource and a section in which to withhold it');
     const rules=new Map();
@@ -115,10 +115,10 @@
     return {compiled,segments,end,known,memory,routes,phrasing,stingers,holds,rules};
   }
 
-  function schedule(sources,spec,intents=[],assets={},host,bank=new Map()) {
-    check(Array.isArray(intents) && intents.length<=2048,'Invalid production timeline');
+  function schedule(sources,spec,intents=[],assets={},host,bank=new Map(),evidence) {
+    check(Array.isArray(intents) && intents.length<=(evidence ? 8192 : 2048),'Invalid production timeline');
     const {compiled,segments,end,known,memory,routes,phrasing,stingers,holds,rules}=
-      prepare(sources,spec,assets,host,bank);
+      prepare(sources,spec,assets,host,bank,undefined,evidence?.streams);
     const decisions=[];
     const eligible=intents.filter(intent=>intent?.kind==='music-transition' || intent?.kind==='music-cue');
     check(eligible.every(event=>finite(event.time,0,1e9)),'Music intents need nonnegative times');
@@ -136,6 +136,7 @@
       placements.push(placement);
       memory?.add(placement);
       phrasing?.remember(placement);
+      return placement;
     }
     let via=[], incomingRule=null;
     function choose(name,time,reason='entry') {
@@ -175,14 +176,17 @@
         const resource=event.resource ?? event.cue;
         const clip=Object.hasOwn(stingers,resource) && stingers[resource];
         const section=landing.get(event.time) ?? name;
-        const withheld=clip && holds.some(row=>row.resource===resource && row.section===section &&
+        const stream=evidence?.streams?.has(resource);
+        const withheld=(clip || stream) && holds.some(row=>row.resource===resource && row.section===section &&
           (row.linked===undefined || row.linked===(event.transition!==undefined)));
-        cueDecisions.push({time:event.time,serial:event.serial ?? null,eventIndex,resource,section,
+        const decision={time:event.time,serial:event.serial ?? null,eventIndex,resource,section,
           cue:event.cue ?? resource,linked:event.transition ?? null,segment:clip || null,
-          status:withheld ? 'withheld' : clip ? 'played' : 'unmapped'});
-        if (clip && !withheld) {
+          status:withheld ? 'withheld' : clip || stream ? 'played' : 'unmapped'};
+        cueDecisions.push(decision);
+        if (decision.status==='played' && clip) {
           const segment=segments[clip];
-          place(clip,event.time,segment.start,segment.end,{kind:'stinger'});
+          const placement=place(clip,event.time,segment.start,segment.end,{kind:'stinger'});
+          if (placement) evidence?.cues.set(eventIndex,placement);
         }
         continue;
       }
@@ -190,7 +194,9 @@
       const to=segments[event.to], from=segments[name];
       const edge=rules.get(name+'>'+event.to) ??
         {exit:from.end,entry:to.start,tail:0,fadeIn:0,pickup:0};
+      const first=placements.length;
       playRegion(name,selection,offset,start,event.time,fadeIn,layers,edge);
+      if (placements.length>first) evidence?.exits.set(eventIndex,placements.at(-1));
       if (edge.bridge) {
         const bridge=segments[edge.bridge], pickup=Math.min(edge.pickup,event.time-start);
         place(edge.bridge,event.time-pickup,bridge.start,bridge.end,{kind:'bridge'});
@@ -207,6 +213,7 @@
       via=[...via.slice(-7),name]; incomingRule=event.rule ?? null;
       name=event.to; start=event.time; offset=edge.entry; fadeIn=edge.fadeIn;
       selection=choose(name,start);
+      evidence?.entries.set(eventIndex,selection);
       layers=event.layers ?? {};
       check(record(layers) && Object.values(layers).every(level=>finite(level,0,1)),'Invalid adaptive intent layer levels');
     }
@@ -219,7 +226,7 @@
       ...(phrasing && {phrasing:phrasing.report()})};
   }
 
-  function renderScheduled(timeline,spec,options={},shared) {
+  function renderScheduled(timeline,spec,options={},shared,comparison) {
     check(fields(options,['sampleRate','start','end','stems','world']),'Invalid production timeline render options');
     const {sampleRate=48000,start:beginPoint=0,end:endPoint=timeline.duration,stems=false}=options;
     const start=T.seconds(T.read(beginPoint)),end=T.seconds(T.read(endPoint));
@@ -229,9 +236,9 @@
     check(count>0 && count<=16e6,'Production timeline exceeds its sample budget');
     const world=options.world===undefined ? null : P.musicWorldScore.prepare(options.world,timeline,spec,sampleRate,begin,last);
     const value={sampleRate,channels:2,samples:new Float32Array(count*2)}, buffers={}, cache=new Map();
-    const envelopes=new Map();
+    const envelopes=new Map(), placementEvidence=comparison && new Map();
     let cached=0, work=0;
-    function add(part,stem,first,{gain:level=1,span=Infinity,fadeIn=0,tail=0}={}) {
+    function add(part,stem,first,{gain:level=1,span=Infinity,fadeIn=0,tail=0,automation}={}) {
       if (!level) return;
       if (world && !envelopes.has(part)) envelopes.set(part,world.envelope(part));
       const envelope=envelopes.get(part);
@@ -247,13 +254,15 @@
         if (fadeIn) gain*=Math.sin(Math.PI*.5*clamp(i/(fadeIn*sampleRate)));
         if (i>=span && tail) gain*=Math.cos(Math.PI*.5*clamp((i-span)/(tail*sampleRate)));
         if (envelope) gain*=envelope.values[i+first-envelope.first] ?? 1;
+        if (automation) gain*=automation(i+first);
         const at=(i+first-begin)*2, l=stem.samples[2*i]*gain, r=stem.samples[2*i+1]*gain;
         value.samples[at]+=l; value.samples[at+1]+=r;
         if (dry) {dry[at]+=l;dry[at+1]+=r;}
       }
     }
     const continuous=timeline.performerSpec && P.musicPersistentPerformers.render(timeline,world,{start:beginPoint,end:endPoint,sampleRate});
-    for (const [part,stem] of Object.entries(continuous?.stems ?? {})) add(part,stem,begin);
+    for (const [part,stem] of Object.entries(continuous?.stems ?? {}))
+      add(part,stem,begin,{automation:part==='room' ? undefined : comparison?.gain.read(part)});
     for (const clip of timeline.placements) {
       const first=sample(clip.at,sampleRate), span=sample(clip.to,sampleRate)-sample(clip.from,sampleRate);
       if (first>=last || first+span+Math.ceil(clip.tail*sampleRate)<=begin) continue;
@@ -279,7 +288,15 @@
           A.applyChokes(music.tracks,events);
           music={...music,events};
         }
-        const render=A.renderCompiled(music,{start:clip.from,end:clip.to,sampleRate,tail:clip.tail,stems:true,layers});
+        const captured=comparison && {first:Infinity,last:0,assets:new Set()};
+        const observe=captured && ((first,last,asset)=>{
+          captured.first=Math.min(captured.first,first);
+          captured.last=Math.max(captured.last,last);
+          if (asset) captured.assets.add(asset);
+        });
+        const render=A.renderCompiled(music,{start:clip.from,end:clip.to,sampleRate,tail:clip.tail,stems:true,layers},
+          false,undefined,observe);
+        if (captured) placementEvidence.set(key,captured);
         tracks=render.stems;
         cached+=Object.values(tracks).reduce((sum,stem)=>sum+stem.samples.length,0);
         check(cached<=48e6,'Production timeline exceeds its source audio budget');
@@ -288,7 +305,12 @@
           shared?.keep(sampleRate,key,tracks);
         }
       }
-      for (const [part,stem] of Object.entries(tracks)) add(part,stem,first,{...clip,span});
+      const captured=placementEvidence?.get(key);
+      if (captured && captured.first<Infinity && first+captured.first<last)
+        comparison.placements.set(clip,{first:first+captured.first,end:Math.min(last,first+captured.last),
+          assets:[...captured.assets].sort()});
+      for (const [part,stem] of Object.entries(tracks))
+        add(part,stem,first,{...clip,span,automation:clip.kind==='segment' && part!=='room' ? comparison?.gain.read(part) : undefined});
     }
     return {value,stems:buffers,report:{start,end,sampleRate,placements:timeline.placements,markers:timeline.markers,
       cueDecisions:timeline.cueDecisions,

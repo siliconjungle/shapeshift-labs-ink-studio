@@ -12,10 +12,10 @@
       Array.isArray(value.events) && value.events.length<=8192,
     'Live replay needs a bounded end, block size, and event list');
   }
-  async function replay(sources,spec,route,options={}) {
+  async function replay(sources,spec,route,options={},observe,endFrame) {
     settings(route);
     const {end,blockFrames=512,lookaheadFrames,events}=route;
-    const {sampleRate=48000,startTime=0}=options, frames=Math.round(end*sampleRate);
+    const {sampleRate=48000,startTime=0}=options, frames=endFrame ?? Math.round(end*sampleRate);
     check(frames>=1 && frames*2<=32000000,'Live replay exceeds its PCM output budget');
     check(record(options) && (options.layerGains===undefined || record(options.layerGains)) &&
       (options.layerFactors===undefined || traceTools.layerFactors(options.layerFactors)) &&
@@ -23,18 +23,18 @@
     const score=A.live.open(sources,spec,{...options,
       ...(route.layerGains!==undefined && {layerGains:{...options.layerGains,...route.layerGains}}),
       ...(route.layerFactors!==undefined && {layerFactors:traceTools.mergeLayerFactors(options.layerFactors,route.layerFactors)}),
-      ...(route.ambienceGains!==undefined && {ambienceGains:{...options.ambienceGains,...route.ambienceGains}})});
+      ...(route.ambienceGains!==undefined && {ambienceGains:{...options.ambienceGains,...route.ambienceGains}})},observe);
     const samples=new Float32Array(frames*2);
-    const scheduled=events.map(event=>{
+    const scheduled=events.map((event,index)=>{
       check(fields(event,['observedAt','intent']) && finite(event.observedAt,startTime,startTime+end),
         'A live replay event needs its observed arrival time');
-      return {...event,frame:Math.round((event.observedAt-startTime)*sampleRate)};
+      return {...event,index,frame:Math.round((event.observedAt-startTime)*sampleRate)};
     }).sort((a,b)=>a.frame-b.frame);
     let cursor=0,event=0;
     while (cursor<frames) {
       while (event<scheduled.length && scheduled[event].frame<=cursor) {
         const row=scheduled[event++];
-        score.dispatch(row.intent,{observedAt:row.observedAt});
+        score.dispatch(row.intent,{observedAt:row.observedAt},row.index);
       }
       const size=Math.min(blockFrames,frames-cursor,(scheduled[event]?.frame ?? frames)-cursor);
       if (options.streams && Object.keys(options.streams).length)

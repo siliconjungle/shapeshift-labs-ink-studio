@@ -45,13 +45,13 @@ function writeWholePiece(folder,{value,assets},engine,{render,sampleRate}) {
   write(manifest,{format:value.format,version:value.version,report:value.report,candidates});
   return {manifest,candidates};
 }
-function timelineBank(recipe,file) {
+function timelineBank(recipe,file,onFile=value=>value) {
   const paths=assetPaths(recipe,file);
   const maps={};
   const sources=Object.fromEntries(Object.entries(recipe.sources ?? {}).map(([name,spec])=>{
     if (!nameValid(name)) throw new TypeError('Use a named production source');
     const at=typeof spec==='string' ? path.resolve(path.dirname(file),spec) : file;
-    const source=typeof spec==='string' ? read(at) : spec;
+    const source=typeof spec==='string' ? read(onFile(at)) : spec;
     for (const [key,value] of Object.entries(assetPaths(source,at))) {
       if (Object.hasOwn(paths,key) && paths[key]!==value)
         throw new RangeError('Production sources disagree on asset '+key);

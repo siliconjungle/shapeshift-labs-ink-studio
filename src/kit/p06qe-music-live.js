@@ -3,7 +3,7 @@
   const P=K.procedural, A=P.musicProduction, F=P.musicPhraseRoutes;
   const {check,fields,record,finite,integer,id,clamp,db}=P.musicInstruments;
   const {layerFactors:validLayerFactors,mergeLayerFactors}=P.adaptiveRehearsalTrace;
-  const onset=F.onset, eps=1e-8;
+  const onset=F.onset, eps=1e-8, gainAtFrame=P.musicLayerGain.at;
   const ordered=(a,b)=>a.frame-b.frame || a.intent.time-b.intent.time ||
     Number(b.intent.kind==='music-transition')-Number(a.intent.kind==='music-transition') ||
     (a.intent.serial ?? 0)-(b.intent.serial ?? 0) || a.order-b.order;
@@ -12,7 +12,7 @@
     rows.push(value);
   }
 
-  function open(sources,spec,options={}) {
+  function open(sources,spec,options={},observe) {
     check(fields(options,['assets','sampleRate','maxVoices','reservedVoices','foreground','priorities','traceLimit',
       'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','layerFactors','stemGroups','ambienceGains']),
     'Invalid live score options');
@@ -68,21 +68,28 @@
       starts:0,foregroundStarts:0,dropped:0,foregroundDropped:0,stolen:0,choked:0,delayed:0,latePickups:0,
       streamGaps:0,peakVoices:0,peakClips:0,peak:0,clippedFrames:0,blocks:0};
     let frame=0, order=0, clipId=0, incomingRule=null, active, pending, newest, lastBlock=null, roomLastInput=null;
+    const observedInputs=observe && new WeakMap();
+    function evidence(kind,intent,detail) {
+      if (!observedInputs || !intent || !observedInputs.has(intent)) return;
+      observe(kind,observedInputs.get(intent),frame,detail);
+    }
     const diagnostics=P.musicLiveDiagnostics.create(Math.min(traceLimit,256));
     function missed(intent,resource,reason,part) {
+      evidence('cue-missed',intent,{resource,reason});
       diagnostics.issue('missed-audio-cue',frame,frame+1,{cue:intent.cue ?? resource,resource,reason,
         requestedSample:inputFrame(intent.time),...(part!==undefined && {part})},intent);
     }
     function log(kind,detail) {
       boundedPush(trace,{kind,frame,time:time(),...detail},traceLimit);
+      if (kind==='layer-gain' || kind==='layer-ignored' || kind==='score-accent' || kind==='transition-cancelled' ||
+          kind==='transition-ignored' || kind==='transition-planned')
+        evidence(kind,detail.trigger,detail);
       if (kind==='score-accent' && detail.status==='dropped' && detail.reason==='queue-budget')
         missed(detail.trigger,detail.resource,detail.reason);
     }
     const ambience=options.ambienceGains===undefined ? null : P.musicAmbience.open(rate,options.ambienceGains,stemGroups,log);
     function gainAt(row) {
-      if (!row) return 1;
-      if (frame>=row.endFrame) return row.target;
-      return row.from+(row.target-row.from)*(frame-row.startFrame)/(row.endFrame-row.startFrame);
+      return gainAtFrame(row,frame);
     }
     function layerGain(part) {
       const layer=layers.get(part);
@@ -231,6 +238,14 @@
       const choked=voice.choke ? voices.filter(row=>row.choke===voice.choke && row.first<frame && row.last>frame) : [];
       for (const row of choked) retire(row,frame+edgeFade);
       profile.choked+=choked.length;
+      if (observedInputs) {
+        const clip=voice.clip, trigger=request.trigger ?? clip?.trigger;
+        if (trigger) {
+          const resource=request.stream?.name ?? clip.resource;
+          evidence('cue-voice',trigger,{resource,segment:clip?.section ?? null,source:clip?.source ?? null,
+            asset:voice.asset ?? request.stream?.name ?? null});
+        }
+      }
       voices.push({...voice,foreground:request.foreground,priority:request.priority,strength:request.strength ?? 1,fadeEnd:Infinity});
       profile.starts++;
       profile.foregroundStarts+=Number(request.foreground);
@@ -328,6 +343,7 @@
         }
         const destination=outcomes.get(linkKey(intent.time,intent.transition));
         if (destination!==active.section) {
+          evidence('cue-decision',intent,{resource,status:'transition-did-not-land'});
           log('cue-skipped',{resource,reason:'transition-did-not-land',trigger:intent});
           return;
         }
@@ -335,9 +351,13 @@
       const rule=scoring?.ruleFor(intent);
       if (rule) {
         scoring.offer(rule,intent,frame);
-        if (!rule.passThrough) return;
+        if (!rule.passThrough) {
+          evidence('cue-decision',intent,{resource,status:'scoring-rule'});
+          return;
+        }
       }
       const status=playCue(resource,intent);
+      evidence('cue-decision',intent,{resource,status});
       if (status==='unmapped' || status==='withheld') log('cue-skipped',{resource,reason:status});
       else log('cue',{resource,section:active.section,trigger:intent,status});
     }
@@ -346,8 +366,11 @@
       profile.cancellations++;
       linkOutcome(pending.row.intent,null);
       for (const accessory of pending.accessories) if (accessory.playing) finish(accessory.playing,.08);
-      for (const intent of pending.cues)
-        log('cue-skipped',{resource:intent.resource ?? intent.cue,reason:'transition-did-not-land',trigger:intent});
+      for (const intent of pending.cues) {
+        const resource=intent.resource ?? intent.cue;
+        evidence('cue-decision',intent,{resource,status:'transition-did-not-land'});
+        log('cue-skipped',{resource,reason:'transition-did-not-land',trigger:intent});
+      }
       log('transition-cancelled',{target:pending.row.intent.to,trigger:pending.row.intent,reason});
       pending=null;
     }
@@ -461,6 +484,10 @@
         ...(switchPoint && {switchPoint:switchPoint.id})
       },intent);
       log('transition',detail);
+      if (observedInputs) {
+        const lastVoiceFrame=voices.reduce((last,voice)=>voice.clip===outgoing && !voice.persistent ? Math.max(last,voice.last) : last,frame);
+        evidence('transition',intent,{...detail,lastVoiceFrame});
+      }
       pending=null;
       linkOutcome(intent,active.section);
       for (const linked of cues) cue(linked);
@@ -513,7 +540,7 @@
     profile.peakClips=1;
 
     const token=value=>typeof value==='string' && value.length>0 && value.length<=256;
-    function dispatch(intent,{observedAt=startTime+time()}={}) {
+    function dispatch(intent,{observedAt=startTime+time()}={},comparisonInput) {
       check(record(intent) && finite(intent.time,0,1e9) && finite(observedAt,startTime,1e9) &&
         (intent.beatId===undefined || K.world.inspectionLinks.parse(intent.beatId)) &&
         (intent.serial===undefined || integer(intent.serial,0,Number.MAX_SAFE_INTEGER)) &&
@@ -525,7 +552,9 @@
       'Invalid live adaptive score intent');
       check(intents.length<maxEvents,'Live adaptive event queue is full');
       const received=Math.max(frame,inputFrame(observedAt));
-      intents.push({frame:Math.max(received,inputFrame(intent.time)),received,intent:P.data.clone(intent),order:++order});
+      const copy=P.data.clone(intent);
+      if (observedInputs && comparisonInput!==undefined) observedInputs.set(copy,comparisonInput);
+      intents.push({frame:Math.max(received,inputFrame(intent.time)),received,intent:copy,order:++order});
       intents.sort(ordered);
       profile.scheduled++;
     }

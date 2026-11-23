@@ -70,6 +70,14 @@ function locate(api,beatId,files,base,timing) {
                 cue,resource,reason,status};
             }
           }
+          if (format==='ink-studio/music-path-comparison' && /^\/(cues|transitions|layers)\/\d+$/.test(pointer)) {
+            const {input,requestedSample,arrivalSample,onsetDeltaSamples,live,offline,variantStatus,tail}=row;
+            const playbackPath=value=>({status:value?.status,sample:value?.sample,
+              ...(Number.isSafeInteger(value?.startSample) && {startSample:value.startSample,endSample:value.endSample})});
+            context.audioComparison={input,sampleRate:document.sampleRate,requestedSample,arrivalSample,onsetDeltaSamples,
+              variantStatus,live:playbackPath(live),offline:playbackPath(offline),
+              ...(tail && {directReleaseDeltaSamples:tail.directReleaseDeltaSamples})};
+          }
           if(local(row.file))context.file=row.file;
           if(local(row.frameFolder))context.frameFolder=row.frameFolder;
           if(pointer===''&&local(row.animation?.file))context.file=row.animation.file;

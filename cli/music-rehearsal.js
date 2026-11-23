@@ -4,9 +4,10 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const relative=(file,ref)=>path.resolve(path.dirname(path.resolve(file)),ref);
 
 module.exports=function command([mode,file,config,traceFile],opt,kit) {
+  if (mode==='compare') return require('./music-path-comparison.js')([file,config,traceFile],opt,kit);
   const {check,fields}=kit.KIT.procedural.musicInstruments, R=kit.KIT.music.production.rehearsal;
   check(typeof file==='string' && ['capture','capture-score','run','regression','keep'].includes(mode),
-    'Use music rehearsal capture, capture-score, run, regression or keep');
+    'Use music rehearsal capture, capture-score, compare, run, regression or keep');
   const out=typeof opt.out==='string' ? path.resolve(opt.out) : undefined;
   const output=value=>{
     if (out) json(out,value);

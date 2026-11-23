@@ -152,7 +152,7 @@
         finite(loopFade,0,loop ? (loop[1]-loop[0])*.5 : 0),'Invalid sampler zone');
       const buffers=samples.map(name=>assets[name]);
       check(!loop || buffers.every(b=>loop[1]*b.sampleRate<=b.samples.length/b.channels),'Sample loop is outside the asset');
-      return {buffers,levels:levels?.map(db),root:root===undefined ? null : H.midi(root),low,high,
+      return {buffers,samples,levels:levels?.map(db),root:root===undefined ? null : H.midi(root),low,high,
         velocity,articulation,oneShot,tune,gain:db(gain),loop,loopFade};
     });
     return {prepare(note,rate,gate) {
@@ -177,7 +177,7 @@
         const current=samples[at*channels+ch], next=samples[(at+1)*channels+ch] ?? 0;
         return current+(next-current)*blend;
       };
-      return {duration,stereo:channels===2,signal(t,frame,channel) {
+      return {duration,asset:zone.samples[alternate],stereo:channels===2,signal(t,frame,channel) {
         let pos=offset+(travel?.(t) ?? t)*ratio*sampleRate;
         if (zone.loop && pos>=end)
           pos=fade ? start+fade+(pos-end)%(end-start-fade) : start+(pos-start)%(end-start);

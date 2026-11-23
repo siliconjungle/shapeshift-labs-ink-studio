@@ -119,8 +119,7 @@
       const identity=row=>W.inspectionLinks.identify(W.committedEvents.read(row,world.id,stream));
       const events=run.events.filter(row=>(row.system===system && ['music-transition','music-cue','music-layer'].includes(row.kind)) ||
         (ambience!==undefined && row.system===ambience && row.kind==='music-ambience'))
-        .map(row=>({...row,time:timeOf(row,frame.time),
-          ...(['music-transition','music-cue'].includes(row.kind) && {beatId:identity(row)})}));
+        .map(row=>({...row,time:timeOf(row,frame.time),beatId:identity(row)}));
       const hits=run.events.filter(row=>row.kind==='audio-cue' && text(row.cue))
         .map(row=>({cue:row.cue,time:timeOf(row,frame.time),beatId:identity(row),
           ...(row.strength!==undefined && {strength:row.strength}),...(row.duration!==undefined && {duration:row.duration})}));

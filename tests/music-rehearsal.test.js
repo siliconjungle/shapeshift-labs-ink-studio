@@ -145,3 +145,119 @@ test('seeded regression groups real joins, compares revisions over the same rout
   assert(audition.every((value,i)=>Math.abs(value-samples[i]*gain)<.000001));
   assert.equal(join.takes[1].issues.length,0);
 });
+
+test('live and offline comparison pairs captured beat IDs and measures joins, source tails and cue onsets',async()=>{
+  const options={live:{sampleRate:rate,traceLimit:1},traceOptions:{arrivalOffset:.125,worldCues:{latch:'strike'}}};
+  const result=await R.compare(sources,timeline,early,options);
+  const {report,liveReport,value}=result;
+  assert.equal(report.format,'ink-studio/music-path-comparison');
+  assert.equal(report.endSample,54400);
+  assert.equal(report.input.count,3);
+  assert.equal(liveReport.trace.length,1);
+  const [join]=report.transitions;
+  assert.equal(join.beatId,'ink:beat:test-score/main/80.0');
+  assert.equal(join.offline.sample,32000);
+  assert.equal(join.live.sample,40800);
+  assert.equal(join.onsetDeltaSamples,8800);
+  assert.equal(join.tail.live[0].firstSample,40800);
+  assert.equal(join.tail.offline[0].firstSample,32000);
+  assert.equal(join.tail.directReleaseDeltaSamples,join.live.tail.directReleaseEndSample-40800-
+    (join.offline.tail.directReleaseEndSample-32000));
+  assert.equal(join.variantStatus,'same');
+  assert.deepEqual(report.cues.map(row=>[row.cue,row.live.sample,row.offline.sample,row.variantStatus]),
+    [['hit',34200,33200,'same'],['latch',34600,33600,'same']]);
+  assert.equal(report.cues[1].beatId,'ink:beat:test-score/main/84.0');
+  assert.equal(report.audio.live.endSample,value.live.samples.length/2);
+  assert.equal(value.offline.samples.length,value.live.samples.length);
+  const repeated=await R.compare(sources,timeline,early,options);
+  assert.deepEqual(repeated.report,report);
+  assert.deepEqual(repeated.value,value);
+});
+
+test('comparison retains duplicate cues, records selected sample assets and distinguishes voice budget drops',async()=>{
+  const samples=new Float32Array(1024).fill(.1), wave={samples,channels:1,sampleRate:rate};
+  const sampled={...sources.accent,patches:{bow:{type:'sample',zones:[{samples:['bright','soft']}]}}};
+  const route={end:1.2,events:[
+    {observedAt:.15,intent:{kind:'music-cue',time:.15,cue:'sample',resource:'strike'}},
+    {observedAt:.4,intent:{kind:'music-cue',time:.4,cue:'drop',resource:'pcm'}},
+    {observedAt:.4,intent:{kind:'music-cue',time:.4,cue:'drop',resource:'pcm'}},
+    {observedAt:1.5,intent:{kind:'music-cue',time:.9,cue:'late',resource:'pcm'}}
+  ]};
+  const options={sampleRate:rate,traceLimit:1,maxVoices:1,reservedVoices:0,
+    assets:{bright:wave,soft:wave},
+    streams:{pcm:{frames:1024,channels:1,sampleRate:rate,foreground:true}},
+    readPage:(_name,first,frames)=>samples.slice(first,first+frames)};
+  const spec={...timeline,segments:{...timeline.segments,search:{...timeline.segments.search,layers:{lead:0}}}};
+  const {report}=await R.compare({...sources,accent:sampled},spec,route,{live:options});
+  assert.deepEqual(report.cues.map(row=>[row.input,row.live.status,row.offline.status]),
+    [[0,'played','played'],[1,'played','played'],[2,'dropped','played'],[3,'not-arrived','played']]);
+  assert.equal(report.cues[0].variantStatus,'same');
+  assert.equal(report.cues[0].live.variants[0].assets.length,1);
+  assert.deepEqual(report.cues[1].offline.variants[0].assets,['pcm']);
+  assert.equal(report.cues[1].onsetDeltaSamples,0);
+  assert.equal(report.cues[2].onsetDeltaSamples,null);
+  assert.deepEqual(report.cues[2].live.misses,['voice-budget']);
+  assert.equal(report.cues[3].arrivalSample,12000);
+});
+
+test('comparison measures interrupted base and factor ramps on the native mix and phase-aligned PCM stems',async()=>{
+  const constant=new Float32Array(256).fill(.25);
+  const segments={...timeline.segments,search:{...timeline.segments.search,layers:{lead:0}}};
+  const events=[
+    {observedAt:.25,intent:{kind:'music-layer',time:.125,part:'wind',gain:1,ramp:.25}},
+    {observedAt:.375,intent:{kind:'music-layer',time:.375,part:'wind',factor:'cover',gain:.5,ramp:.25}},
+    {observedAt:.4375,intent:{kind:'music-layer',time:.4375,part:'wind',gain:.5,ramp:.25}}
+  ];
+  const result=await R.compare(sources,{...timeline,segments},
+    {end:1.00107,events,layerGains:{wind:0},layerFactors:{wind:{cover:1}}},
+    {live:{sampleRate:rate,masterGain:0,traceLimit:1,
+      streams:{gust:{frames:256,channels:1,sampleRate:rate}},
+      readPage:(_name,first,frames)=>constant.slice(first,first+frames),
+      stemGroups:{loop:{frames:256,parts:{wind:{stream:'gust'}}}}}});
+  const {report,value}=result;
+  assert.equal(report.endSample,8008);
+  assert.deepEqual(report.layers.map(row=>[row.live.startSample,row.offline.startSample]),
+    [[2000,1000],[3000,3000],[3500,3500]]);
+  assert.equal(report.layers[2].live.from,.75);
+  assert.equal(report.layers[2].offline.from,1);
+  assert.deepEqual(report.layers[1].effectiveGains.at(-1),{sample:5000,live:.28125,offline:.3125,delta:-.03125});
+  assert.equal(value.live.samples[3000],0);
+  assert(value.offline.samples[3000]>.04);
+  assert.equal(value.live.samples.at(-1),value.offline.samples.at(-1));
+});
+
+test('comparison CLI renders a native recording with paths that can be inspected by beat',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-audio-paths-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const write=(file,value)=>fs.writeFileSync(path.join(dir,file),JSON.stringify(value));
+  const argv=[path.resolve(__dirname,'../cli/ink-studio.js')], cli=(...args)=>execFileSync(process.execPath,
+    [...argv,...args],{cwd:dir,encoding:'utf8'});
+  write('score.json',{sources,timeline,live:{options:{sampleRate:rate},traceOptions:{worldCues:{latch:'strike'}}}});
+  write('world.run.json',log);
+  write('capture.json',{id:'beat-audit'});
+  cli('music','rehearsal','compare','score.json','world.run.json','--capture','capture.json','--out','pass');
+  const manifest=JSON.parse(fs.readFileSync(path.join(dir,'pass','comparison.json'),'utf8'));
+  const beat='ink:beat:test-score/main/84.0';
+  const inspection=JSON.parse(cli('beat',beat,'pass/comparison.json'));
+  assert.equal(manifest.input.id,'beat-audit');
+  assert.equal(inspection.matches[0].audioComparison.offline.sample,33600);
+  assert(fs.existsSync(path.join(dir,'pass',manifest.files.live.audio)));
+  assert(fs.existsSync(path.join(dir,'pass',manifest.files.offline.audio)));
+  fs.linkSync(path.join(dir,'score.json'),path.join(dir,'pass','comparison.json.tmp'));
+  fs.renameSync(path.join(dir,'pass','comparison.json.tmp'),path.join(dir,'pass','comparison.json'));
+  assert.throws(()=>execFileSync(process.execPath,[...argv,'music','rehearsal','compare','score.json','world.run.json',
+    '--out','pass'],{cwd:dir,stdio:'pipe'}),/separate from source files/);
+});
+
+test('comparison distinguishes substituted score accents from the original printed cue',async()=>{
+  const scoring={cues:{hit:{accent:{resource:'alternate'}}}};
+  const stingers={...timeline.stingers,alternate:'thread'};
+  const route={end:1,events:[{observedAt:.125,intent:{kind:'music-cue',time:.125,cue:'hit',resource:'strike'}}]};
+  const {report}=await R.compare(sources,{...timeline,scoring,stingers},route,{live:{sampleRate:rate}});
+  const [cue]=report.cues;
+  assert.equal(cue.onsetDeltaSamples,0);
+  assert.equal(cue.variantStatus,'different');
+  assert.equal(cue.live.variants[0].source,'tone');
+  assert.equal(cue.offline.variants[0].source,'accent');
+  assert.deepEqual(report.notices,['offline-does-not-run-live-scoring-rules']);
+});

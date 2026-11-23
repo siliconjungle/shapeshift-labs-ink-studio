@@ -438,7 +438,7 @@
       out[0]=sound.signal(t,frame,0)*fade*placement*fadeIn*fadeOut;
       out[1]=sound.stereo ? sound.signal(t,frame,1)*fade*placement*fadeIn*fadeOut : out[0];
     }
-    return {first,last,read,write(data,from,to) {
+    return {first,last,asset:sound.asset,read,write(data,from,to) {
       const out=[0,0];
       for (let at=first;at<Math.min(last,to);at++) {
         read(at,out);
@@ -549,7 +549,7 @@
       }
     };
   }
-  function renderCompiled(music,options={},sessionSource=false,performanceEnd) {
+  function renderCompiled(music,options={},sessionSource=false,performanceEnd,observeVoice) {
     check(fields(options,['start','end','sampleRate','stems','tail','layers']),'Invalid production render options');
     const {start:beginPoint=0,end:endPoint=music.end,sampleRate=48000,stems=false,tail=0,layers={}}=options;
     const start=T.seconds(T.read(beginPoint)),end=T.seconds(T.read(endPoint));
@@ -580,6 +580,8 @@
         if (onset(note)>=end) break;
         const voice=prepareVoice(track,note,gateEnd,sampleRate,tails);
         if (voice.first>=stop) break;
+        if (observeVoice && voice.last>Math.max(begin,voice.first) && note.velocity && track.mix.gain && layers[name]!==0)
+          observeVoice(Math.max(begin,voice.first)-begin,Math.min(stop,voice.last)-begin,voice.asset);
         voice.write(data,0,stop);
       }
       const strip=scoreStrip(music,name,sampleRate,{end,withEcho:!sessionSource,layer:layers[name] ?? 1});

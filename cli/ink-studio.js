@@ -1269,6 +1269,7 @@ const CMD = {
         '  music critique find <index.json> [query.json]   find listening clips and past decisions by intent',
         '  music live replay <timeline.json> <route.json> --out directory   render live engine audio and explanations',
         '  music rehearsal capture <world.run.json> <settings.json>   capture exact world music and cue events',
+        '  music rehearsal compare <timeline.json> <trace|route|world-run.json> --out directory [--capture settings.json]',
         '  music rehearsal capture-score <timeline.json> <settings.json>   capture standalone clock updates',
         '  music rehearsal run <timeline.json> <suite.json> --out directory   audit and audition the same recorded traces',
         '  music rehearsal regression <timeline.json> <routes.json> --out directory [--assert version]',
