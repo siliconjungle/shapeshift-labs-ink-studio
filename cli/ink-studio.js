@@ -459,6 +459,9 @@ function splatFieldsOption() {
 
 function spriteAtlasOption() {
   const value=opt['sprite-atlas'];
+  const clip=opt['sprite-clip'];
+  if (clip!==undefined && (typeof clip!=='string' || typeof value!=='string' || ['on','off'].includes(value)))
+    die('--sprite-clip needs a clip ID and an atlas file passed with --sprite-atlas');
   if (value===undefined) return undefined;
   if (value==='off') return false;
   if (value==='on' || value===true) return true;
@@ -468,7 +471,8 @@ function spriteAtlasOption() {
     const atlas=require('./sprite-atlas.js').readSpriteAtlas(path.resolve(value),
       { cels: edits==='off'?false:edits&&path.resolve(edits) });
     inputSpriteAtlas=[lib().KIT.sprite.placeAtlas({
-      atlas,at:opt['sprite-at']?list('sprite-at'):[0,0,0],scale:num('sprite-scale',1),playback:opt['sprite-playback']
+      atlas,at:opt['sprite-at']?list('sprite-at'):[0,0,0],scale:num('sprite-scale',1),
+      playback:clip===undefined?opt['sprite-playback']:{clip,mode:opt['sprite-playback']}
     })];
   }
   return inputSpriteAtlas;
@@ -1176,6 +1180,7 @@ const CMD = {
         '  sweep nearby <pin.json> <offsets.json> --out directory   vary numeric settings around the saved case',
         '  variants <id> --seeds 3,7,12 [--group silhouette|openness|wear --motion]  render a ranked seed contact sheet',
         '  atlas <id> [--directions 8 --pitches 0,0.7 --w 96 --h 96 --fps 12 --maps depth,normal,emission,silhouette]',
+        '           [--clips plan.json] bake named sprite clips from one seekable source',
         '             [--cutout-mipmaps coverage|average --alpha-cutoff 0.5]  export a transparent sprite atlas',
         '  camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96   export-sized frames and framing checks',
         '  silhouette-review <scene> --directions 8 --w 96 --h 96   paired export-size views and edge contrast',
@@ -2276,6 +2281,9 @@ const CMD = {
   },
   atlas() {
     const w = build(pos[0]);
+    if (opt.clips !== undefined && (typeof opt.clips !== 'string' || ['from','to','t'].some(key=>opt[key]!==undefined)))
+      die('--clips needs a JSON plan path and supplies its own times');
+    const clips = opt.clips===undefined ? undefined : JSON.parse(fs.readFileSync(path.resolve(opt.clips),'utf8'));
     const fps = num('fps', 12), from = num('from', num('t', 0)), to = num('to', from);
     if (!Number.isFinite(fps) || fps <= 0 || fps > 240 || !Number.isFinite(from) || !Number.isFinite(to) || to < from)
       die('atlas needs a positive frame rate and an ordered time range');
@@ -2290,7 +2298,8 @@ const CMD = {
     const atlas = spriteAtlas(w, { width: num('w', 96), height: num('h', 96), directions: num('directions', 8),
       columns: num('cols', num('directions', 8)), maps: opt.maps ? String(opt.maps).split(',') : [],
       pivot: opt.pivot ? list('pivot') : w.cam.target, view: view(), yaw: num('yaw', w.cam.yaw),
-      pitches:opt.pitches===undefined?undefined:list('pitches'),times,fps,pose,cutoutMipmaps,normalSpace:opt['normal-space'] });
+      pitches:opt.pitches===undefined?undefined:list('pitches'),...(clips===undefined?{times}:{clips}),
+      fps,pose,cutoutMipmaps,normalSpace:opt['normal-space'] });
     writeAtlas(directory, atlas);
     console.log('wrote', directory, atlas.metadata.frames.length, 'frames');
   },

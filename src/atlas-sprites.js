@@ -191,6 +191,26 @@ const AtlasSprites = (() => {
       groups.get(frame).push(view);
       timing.push({frame,time:entry.time,duration:entry.duration});
     }
+    const clips = new Map();
+    if (m.clips !== undefined) {
+      if (!Array.isArray(m.clips) || !m.clips.length || m.clips.length>64)
+        throw new RangeError('Sprite atlas needs 1–64 named clips');
+      for (const clip of m.clips) {
+        const {id, playback='loop', frames:ids}=clip??{};
+        if (typeof id!=='string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || clips.has(id) ||
+            !['loop','once'].includes(playback) || !Array.isArray(ids) || !ids.length ||
+            Array.from(ids).some((frame,i)=>!groups.has(frame) || (i>0 && frame<=ids[i-1])))
+          throw new RangeError('Sprite clip needs a unique ID and increasing frame IDs present in the atlas');
+        const members = new Set(ids);
+        clips.set(id, {playback, timing:timing.filter(entry=>members.has(entry.frame))});
+      }
+    }
+    function playback(settings) {
+      if (typeof settings!=='object' || settings===null) return cels.playback(timing,fps,settings);
+      const clip = clips.get(settings.clip);
+      if (!clip) throw new RangeError('Unknown sprite atlas clip: '+settings.clip);
+      return cels.playback(clip.timing,fps,settings.mode??clip.playback);
+    }
     if (scenery && m.cels !== undefined) throw new TypeError('Sprite cel edits apply to animated atlases');
     const edits=cels.prepare(sourceCels,groups,{
       width,color:maps.color,depthRange:validRange,copyRgba,pixelBudget:32e6-pixels
@@ -290,7 +310,7 @@ const AtlasSprites = (() => {
       ...(transition&&{transition:transition.frame}),
       ...(transition?.silhouetteIds.length&&{silhouettes:transition.silhouetteIds,
         silhouette:(view,time,id)=>transition.silhouetteIds.includes(id) ? transition.frame(view,time,id) : null}),
-      playback:mode=>cels.playback(timing,fps,mode),
+      playback,
       snapshot:()=>({metadata:structuredClone(metadata),images:structuredClone(sourceMaps)}),
       width,height,normalSpace,emissionMode,swatches,largestView:frames.reduce((max,{rect})=>Math.max(max,rect.width*rect.height),0),hasDepth:Boolean(maps.depth||scenery||editedDepth||edits?.transition?.hasDepth),sceneryPlanes:scenery?.planes});
   }

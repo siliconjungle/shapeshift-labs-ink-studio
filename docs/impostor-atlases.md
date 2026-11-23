@@ -63,6 +63,46 @@ right, Y up, and +Z toward the viewer of each baked tile. The default is
 Build the relightable Signal Courier example with
 `node examples/baked-sprite-normals.cjs courier-normals.html`.
 
+### Bake a set of moves from one rig
+
+Pass `--clips plan.json` to bake named moves into a single atlas. Each move
+uses the same orthographic framing and world pivot across its poses and views.
+Change the rig or the timing plan and run the same export again.
+
+```sh
+ink-studio atlas examples/pose-blocking.js --clips examples/signal-courier-sprite-clips.json \
+  --directions 4 --w 60 --h 60 --pivot 0,1.58,0 --maps normal,silhouette \
+  --normal-space view --out courier-atlas
+node examples/rig-sprite-bake.cjs courier-bake.html
+```
+
+The plan is a JSON array. Give each move an `id` and optional display `name`.
+Use either `range: [from, to]` with a sample rate in `fps`, or a list of
+`cels: [{ at, duration }]` for selected source poses and their exposure
+lengths. All times are in seconds. A range includes its start and ends at
+its exclusive upper bound. Its last cel can have a shorter exposure.
+For both formats, `playback` defaults to `"loop"`. Use `"once"` to hold
+the final cel after playback.
+
+Use this with a source rig that can seek to any pose time. The Node API
+accepts the plan as `spriteAtlas(world, { clips, ...options })` and can use
+the scene's normal animator or a custom `pose(world, sourceTime)` callback.
+The PNGs share tile rectangles and the manifest retains each frame's source
+time, playback time, and exposure. The manifest also names the frame IDs
+belonging to each clip.
+
+```js
+const atlas = studio.readSpriteAtlas('courier-atlas/atlas.json');
+const signal = K.sprite.placeAtlas({
+  atlas, at: [0, 1.58, 0], playback: { clip: 'right-call' }
+});
+```
+
+The placement uses the current camera direction and the selected clip's
+clock. Supply `mode: "loop"` or `"once"` in the playback object to override
+the clip default. With a manifest passed to `render --sprite-atlas`, select
+its move with `--sprite-clip right-call`.
+
 A JSON diorama can put an array of placements in `finish.spriteAtlases` and refer to each `atlas` by a path relative to the diorama. Use `--sprite-atlas off` to hide the authored placements in a comparison. A manifest passed with `--sprite-atlas` replaces the scene's placements for that render and defaults to the world origin. Set `--sprite-at x,y,z` and `--sprite-scale n` to place it.
 
 Depth positions each texel along its draw ray and participates in the scene's depth, fog, and emission passes. The renderer uses the silhouette of the selected view. The [survey drone example](../examples/relightable-impostor.js) demonstrates both placement modes under changing camera and lighting angles.

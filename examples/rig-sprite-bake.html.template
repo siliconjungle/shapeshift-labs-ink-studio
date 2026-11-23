@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signal Courier · Sprite bake</title>
+<style>
+  :root { color-scheme:dark; --base:#101a23; --ink:#edf1e7; --dim:#9bb2b9; --line:#314a52; --panel:#172731; --accent:#f6c783; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--base); color:var(--ink); font:15px/1.4 system-ui,sans-serif; }
+  main { max-width:1040px; margin:auto; padding:clamp(15px,4vw,34px); }
+  header { display:flex; justify-content:space-between; align-items:end; gap:16px; margin-bottom:20px; }
+  h1 { margin:0 0 2px; font-size:clamp(32px,6vw,58px); letter-spacing:-.06em; line-height:1; }
+  p { color:var(--dim); margin:0; text-wrap:pretty; }
+  nav { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:11px; }
+  button, a[download] { color:var(--ink); background:#233846; border:1px solid #446371; border-radius:4px;
+    padding:7px 12px; font:inherit; text-decoration:none; cursor:pointer; }
+  button[aria-pressed="true"] { color:#ffdfab; background:#513d30; border-color:#ba925d; }
+  :is(button,a,input,summary):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .stage { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  figure { margin:0; padding:9px 11px 11px; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+  figcaption { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px; color:#d7e3df; font-size:.9rem; }
+  figcaption span { color:var(--dim); }
+  figure canvas { display:block; width:min(100%,300px); margin:6px auto 0; border:1px solid var(--line); background:#13222e; }
+  canvas,.sheet { image-rendering:pixelated; }
+  .timeline { display:grid; grid-template-columns:auto minmax(72px,1fr) auto; gap:10px; align-items:center;
+    padding:10px 0; font-variant-numeric:tabular-nums; }
+  input { width:100%; margin:0; accent-color:var(--accent); }
+  output { min-width:90px; text-align:right; color:#c4d7d8; white-space:nowrap; }
+  #play { min-width:80px; }
+  #angles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+  #angles button { display:grid; justify-items:center; gap:3px; padding:5px 2px; }
+  #angles canvas { width:min(86%,72px); aspect-ratio:1; }
+  .downloads { display:flex; flex-wrap:wrap; gap:7px; margin:12px 0; }
+  .downloads a { font-size:.87rem; }
+  details { margin-top:12px; border-top:1px solid var(--line); padding-top:8px; }
+  summary { cursor:pointer; }
+  .sheet { margin-top:10px; display:block; width:min(100%,720px); height:auto; background:var(--panel); }
+  @media(max-width:500px) {
+    body { font-size:13px; }
+    header { margin-bottom:13px; }
+    figure { padding:6px; }
+    figcaption { font-size:.76rem; }
+    nav button { flex:1; padding-inline:6px; }
+    .timeline { gap:7px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Signal Courier</h1>
+      <p>Three moves baked from one 3D rig. Switch the angle to check how each pose reads.</p>
+    </div>
+  </header>
+  <nav id="clips" aria-label="Animation clip"></nav>
+  <div class="stage">
+    <figure><figcaption>3D rig render <span>120 × 120</span></figcaption><canvas id="rig" width="120" height="120"></canvas></figure>
+    <figure><figcaption>Baked sprite <span>60 × 60</span></figcaption><canvas id="sprite" width="60" height="60"></canvas></figure>
+  </div>
+  <div class="timeline">
+    <button id="play" type="button" disabled>Play</button>
+    <input id="time" type="range" min="0" value="0" step=".001" aria-label="Clip time" disabled>
+    <output id="exposure" for="time" aria-live="off">Loading…</output>
+  </div>
+  <div id="angles" role="group" aria-label="Camera angle"></div>
+  <div id="downloads" class="downloads" aria-label="Exported files"></div>
+  <details><summary>View sprite sheet</summary><img id="sheet" class="sheet" alt="Color atlas, with directions in columns and poses in rows"></details>
+</main>
+<script>
+(async () => {
+  const { metadata, files, rig: rigFile } = /* DATA */;
+  const byId = id => document.getElementById(id);
+  const slider = byId('time'), play = byId('play'), exposure = byId('exposure');
+  const contexts = [byId('rig'), byId('sprite')].map(canvas => canvas.getContext('2d'));
+  const load = source => { const image = new Image(); image.src = source; return image.decode().then(() => image); };
+  const [rig, sprite] = await Promise.all([load(rigFile), load(files.color)]);
+  const clips = metadata.clips, { directions } = metadata;
+  const button = (parent, label, activate) => {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.textContent = label;
+    element.setAttribute('aria-pressed', 'false');
+    element.addEventListener('click', activate);
+    parent.append(element);
+    return element;
+  };
+  let clip = clips[0], direction = 0, time = 0, playing = false, previous;
+  let drawnFrame, drawnDirection;
+  const buttons = clips.map(value => button(byId('clips'), value.name, () => {
+    clip = value;
+    time = 0;
+    previous = undefined;
+    slider.max = clip.duration;
+    draw();
+  }));
+  const angles = ['Front ¾', 'Left', 'Back ¾', 'Right'].map((label, index) => {
+    const element = button(byId('angles'), label, () => { direction = index; draw(); });
+    const preview = document.createElement('canvas');
+    preview.width = preview.height = 60;
+    element.prepend(preview);
+    return { element, ctx: preview.getContext('2d') };
+  });
+  const highlight = (element, on) => element.setAttribute('aria-pressed', String(on));
+
+  function tile(ctx, image, rect, factor = 1) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.drawImage(image, rect.x*factor, rect.y*factor, rect.width*factor, rect.height*factor,
+      0, 0, ctx.canvas.width, ctx.canvas.height);
+  }
+  function draw() {
+    const origin = metadata.frames[clip.frames[0] * directions].time;
+    const frame = clip.frames.findLast(id => metadata.frames[id * directions].time - origin <= time + 1e-8) ?? clip.frames[0];
+    const entry = metadata.frames[frame * directions + direction];
+    if (frame !== drawnFrame || direction !== drawnDirection) {
+      tile(contexts[0], rig, entry.rect, 2);
+      tile(contexts[1], sprite, entry.rect);
+      if (frame !== drawnFrame) angles.forEach(({ctx}, i) =>
+        tile(ctx, sprite, metadata.frames[frame * directions + i].rect));
+      drawnFrame = frame;
+      drawnDirection = direction;
+    }
+    buttons.forEach((element, i) => highlight(element, clips[i] === clip));
+    angles.forEach(({element}, i) => highlight(element, i === direction));
+    slider.value = time;
+    exposure.textContent = time.toFixed(2) + ' s · ' + Math.round(entry.duration * 1000) + ' ms cel';
+  }
+  function setPlaying(on) {
+    playing = on;
+    previous = undefined;
+    play.textContent = on ? 'Pause' : 'Play';
+  }
+  function tick(now) {
+    if (playing) {
+      time += previous === undefined ? 0 : Math.min(.1, (now - previous) / 1000);
+      previous = now;
+      if (time >= clip.duration) {
+        if (clip.playback === 'loop') time %= clip.duration;
+        else { time = clip.duration; setPlaying(false); }
+      }
+      draw();
+    }
+    requestAnimationFrame(tick);
+  }
+  play.addEventListener('click', () => {
+    if (!playing && time >= clip.duration) time = 0;
+    setPlaying(!playing);
+    draw();
+  });
+  slider.addEventListener('input', () => { setPlaying(false); time = Number(slider.value); draw(); });
+  function download(name, label, href) {
+    const anchor = document.createElement('a');
+    anchor.download = name;
+    anchor.href = href;
+    anchor.textContent = label;
+    byId('downloads').append(anchor);
+  }
+  const names = { color: 'Color PNG', normal: 'Normals PNG', silhouette: 'Silhouette PNG' };
+  for (const [key, label] of Object.entries(names)) download(key + '.png', label, files[key]);
+  const manifest = { ...metadata, files: Object.fromEntries(Object.keys(names).map(key => [key, key + '.png'])) };
+  download('atlas.json', 'Atlas JSON', URL.createObjectURL(new Blob([JSON.stringify(manifest, null, 2) + '\n'],
+    { type:'application/json' })));
+  byId('sheet').src = files.color;
+  slider.max = clip.duration;
+  slider.disabled = play.disabled = false;
+  setPlaying(!matchMedia('(prefers-reduced-motion: reduce)').matches);
+  draw();
+  requestAnimationFrame(tick);
+})().catch(error => { document.getElementById('exposure').textContent = error.message; });
+</script>
+</body>
+</html>

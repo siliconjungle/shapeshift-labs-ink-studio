@@ -5,6 +5,8 @@ const { render, FOV } = require('./render.js');
 const ArtEffects = require('../src/art-effects.js');
 const AtlasSprites = require('../src/atlas-sprites.js');
 const CutoutMipmaps = require('../src/sprite-cutout-mipmaps.js');
+const CameraLens = require('../src/camera-lens.js');
+const { schedule } = require('./sprite-clips.js');
 
 const mapNames = ['depth', 'normal', 'emission', 'silhouette'];
 const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
@@ -22,10 +24,14 @@ function exportViews(world,{directions=8,yaw=world.cam.yaw,pitch=world.cam.pitch
 
 function spriteAtlas(world, options = {}) {
   const {
-    width = 96, height = 96, directions = 8, times = [0], fps = 12, columns = directions,
+    width = 96, height = 96, directions = 8, times: takeTimes = [0], fps = 12, columns = directions,
     pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view = {}, depthRange, sourceTimes, pitches,
-    cutoutMipmaps, normalSpace = 'asset'
+    cutoutMipmaps, normalSpace = 'asset', clips
   } = options;
+  if (clips !== undefined && (options.times !== undefined || sourceTimes !== undefined || world.anim?.stateful))
+    throw new RangeError('Sprite clip plans need a seekable scene and provide their own timing');
+  const plan = clips === undefined ? null : schedule(clips, fps);
+  const times = plan ? plan.samples.map(sample => sample.time) : takeTimes;
   if (!integer(width, 1, 2048) || !integer(height, 1, 2048) ||
       !integer(columns, 1, 256) || !Number.isFinite(fps) || fps <= 0 || fps > 240 ||
       !Array.isArray(times) || !times.length || times.length > 512 ||
@@ -43,6 +49,13 @@ function spriteAtlas(world, options = {}) {
     throw new RangeError('Cutout mipmaps support up to 262144 pixels per view');
   const passes = requested.filter(name => name !== 'silhouette');
   const angles=exportViews(world,{directions,yaw,pitch:view.pitch,pitches}), views=angles.length;
+  const anchor = plan ? pivot.slice() : pivot;
+  const camera = plan && CameraLens.view(world.cam, view.camera, { pose: null, composition: [.5,.5] });
+  const fixedView = camera && { camera, cameraTime: 0, cameraStaging: false, lockCamera: true,
+    composition: [.5,.5], dist: view.dist ?? camera.dist / (view.zoom ?? 1) };
+  const framing = fixedView && angles.map(({ yaw, pitch }) =>
+    CameraLens.frame(world, { ...view, ...fixedView, target: anchor, yaw, pitch, ortho: true }, width, height));
+  const poseContext = plan && !pose && world.anim && { kit: require('..').load() };
   const count = times.length * views, cols = Math.min(count, columns);
   const rows = Math.ceil(count / cols), w = width * cols, h = height * rows;
   if (w * h * (requested.length + 1) > 32e6) throw new RangeError('Sprite atlas exceeds its pixel budget');
@@ -54,21 +67,28 @@ function spriteAtlas(world, options = {}) {
   const depths = requested.includes('depth') ? new Float32Array(w * h).fill(Infinity) : null;
   let minDepth = Infinity, maxDepth = -Infinity;
   const entries = [];
-  const history = Array.from({ length: views }, () => ArtEffects.history({ frames: 24 }));
+  const artHistory = () => ArtEffects.history({ frames: 24 });
+  const history = Array.from({ length: views }, artHistory);
   const { volumeHistory } = require('../src/scene-optics.js');
   const volumes = view.volumeQuality?.jitter === 'spatiotemporal' || world.volumeQuality?.jitter === 'spatiotemporal'
     ? Array.from({ length: views }, () => volumeHistory()) : [];
   for (let f = 0; f < times.length; f++) {
-    const time = times[f], sourceTime = sourceTimes?.[f] ?? time;
+    const exposure = plan?.samples[f];
+    const time = times[f], sourceTime = exposure?.sourceTime ?? sourceTimes?.[f] ?? time;
+    if (f && exposure?.reset) {
+      history.forEach((_, i) => { history[i] = artHistory(); });
+      volumes.forEach((_, i) => { volumes[i] = volumeHistory(); });
+    }
     if (pose) pose(world, sourceTime);
+    else if (poseContext) require('./diarama-pose.js').pose(world, sourceTime, poseContext);
     else world.anim?.update?.(f ? time - times[f - 1] : 0, time);
-    const duration = f + 1 < times.length ? times[f + 1] - time : 1 / fps;
+    const duration = exposure?.duration ?? (f + 1 < times.length ? times[f + 1] - time : 1 / fps);
     for (let angle=0;angle<views;angle++) {
       const {direction,yaw,pitch}=angles[angle];
       const axes = images.normal && normalSpace === 'view' ? AtlasSprites.basis(yaw, pitch) : null;
       const i = f * views + angle, ox = i % cols * width, oy = Math.floor(i / cols) * height;
-      const image = render(world, { spriteReconstruction: false, ...view, t: sourceTime, w: width, h: height, px: 1,
-        yaw, pitch, ortho: true, target: pivot,
+      const image = render(world, { spriteReconstruction: false, ...view, ...fixedView, t: sourceTime, w: width, h: height, px: 1,
+        yaw, pitch, ortho: true, target: anchor,
         transparent: true, passes, artHistory: history[angle], volumeHistory: volumes[angle] });
       const data = image.passes;
       let pixels = 0, left = width, top = height, right = -1, bottom = -1;
@@ -106,10 +126,13 @@ function spriteAtlas(world, options = {}) {
           images.emission[k + 3] = Math.max(images.emission[k], images.emission[k + 1], images.emission[k + 2]);
         }
       }
-      const distance=(view.dist||world.cam.dist/(view.zoom||1))/(world.anim?.zoom||1);
+      const cameraFrame = framing?.[angle];
+      const distance = cameraFrame?.dist ?? (view.dist||world.cam.dist/(view.zoom||1))/(world.anim?.zoom||1);
       const entry = { frame: f, direction, yaw, pitch,
-        unitsPerPixel:2*distance*Math.tan(FOV/2)/((view.lensScale??1)*height),
-        depthOrigin:distance+2*world.radius+4, time, duration, ...(sourceTimes && { sourceTime }),
+        unitsPerPixel: cameraFrame ? 2 * distance * cameraFrame.tangent / height :
+          2*distance*Math.tan(FOV/2)/((view.lensScale??1)*height),
+        depthOrigin: cameraFrame?.distance ?? distance+2*world.radius+4,
+        time, duration, ...((exposure || sourceTimes) && { sourceTime }),
         rect: { x: ox, y: oy, width, height }, pivot: { x: width / 2, y: height / 2 } };
       if (images.silhouette) entry.silhouette = { pixels, bounds: pixels ? [left, top, right, bottom] : null,
         touchesBorder: left === 0 || top === 0 || right === width - 1 || bottom === height - 1 };
@@ -129,7 +152,7 @@ function spriteAtlas(world, options = {}) {
     }
   }
   const metadata = { width: w, height: h, tileWidth: width, tileHeight: height, directions, fps, ...(pitches && { pitches:pitches.slice() }),
-    pivot: pivot.slice(), frames: entries, normalSpace, emissionMode:'baked',
+    pivot: anchor.slice(), frames: entries, normalSpace, emissionMode:'baked', ...(plan && { clips: plan.tracks }),
     ...(cutout && { cutoutMipmaps: cutout }),
     encodings: {
       color: 'straight RGBA',
