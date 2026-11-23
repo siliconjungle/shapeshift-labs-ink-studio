@@ -27,11 +27,14 @@
     return P.data.freeze({ format: formats.recipe, version: 1, kind, seed, dt, maxTicks, settings: portable(settings) });
   }
 
-  function session(source, { checkpoint, every = 16, cache = 12, firstTick = checkpoint?.firstTick ?? 0 } = {}) {
+  function session(source, { checkpoint, every = 16, cache = 12, firstTick = checkpoint?.firstTick ?? 0,
+    materialPasses = false } = {}) {
     const raw = source ?? checkpoint?.recipe;
     if (raw?.format !== formats.recipe || raw.version !== 1 || !int(every, 1, 12000) || !int(cache, 1, 64))
       throw new TypeError('Expected a version 1 raster simulation recipe and bounded cache settings');
     const recipe = define(raw.kind, raw.settings, raw);
+    if (typeof materialPasses !== 'boolean' || materialPasses && recipe.kind !== 'mpm')
+      throw new TypeError('Material passes need an MPM simulation recipe');
     if (!int(firstTick, 0, recipe.maxTicks) || firstTick !== 0 && recipe.kind !== 'feedback')
       throw new RangeError('Only feedback can start at a nonzero raster simulation tick');
     const engine = kinds[recipe.kind](recipe.settings, recipe, firstTick);
@@ -75,11 +78,12 @@
             if (newlySaved.size > cache) newlySaved.delete(newlySaved.keys().next().value);
           }
         }
-        const frame = engine.frame(tick), state = newlySaved.get(tick) ?? capture();
+        const frame = engine.frame(tick, materialPasses), state = newlySaved.get(tick) ?? capture();
         for (const [key, value] of newlySaved) at.set(key, value);
         while (at.size > cache + (savedTick !== firstTick ? 2 : 1)) at.delete([...at.keys()].find(n => n !== firstTick && n !== savedTick));
-        const { value, field = coverage(value), points = [], ...metrics } = frame;
+        const { value, field = coverage(value), points = [], passes, ...metrics } = frame;
         return { value, field, points, checkpoint: { format: formats.checkpoint, version: 1, recipe, tick, state, ...(firstTick && { firstTick }) },
+          ...(passes && { passes }),
           report: { kind: recipe.kind, time: tick * recipe.dt, tick, from: start, replayed: tick - start,
             cached: [...at.keys()].sort((a, b) => a - b), ...metrics } };
       } catch (error) {
@@ -134,13 +138,16 @@
   }
 
   // Transit through masked cells by checking each sub-pixel increment separately.
-  function move(row, dt, open, bounce = 0) {
-    const count = Math.ceil(Math.max(Math.abs(row[2]), Math.abs(row[3])) * dt * 2) || 1, h = dt / count;
+  function move(row, dt, open, bounce = 0, walls) {
+    const speed = walls?.maxSpeed ?? Math.max(Math.abs(row[2]), Math.abs(row[3]));
+    const count = Math.ceil(speed * dt * 2) || 1, h = dt / count;
     for (let i = 0; i < count; i++) {
       const x = row[0] + row[2] * h, y = row[1] + row[3] * h;
       if (open(x, row[1])) row[0] = x;
+      else if (walls) row[2] = walls.rebound(row[2], x, row[1], 0, bounce);
       else row[2] *= -bounce;
       if (open(row[0], y)) row[1] = y;
+      else if (walls) row[3] = walls.rebound(row[3], row[0], y, 1, bounce);
       else row[3] *= -bounce;
     }
   }

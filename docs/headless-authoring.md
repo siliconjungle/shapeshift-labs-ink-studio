@@ -2086,7 +2086,7 @@ Cloth and strands also accept Z and a two-axis `projection` offset per Z unit.
 | `grain` | A falling-cell material solver with seeded emitters, diagonal settling, optional initial rectangular fills and a grain palette. |
 | `rigid` | Ink’s native rigid-body mechanics rasterized from an XY camera. Author boxes, fixed colliders, gravity, floor and tick-indexed `impulses`. A body specifies `id`, pixel `at`, pixel `size` and optional `velocity`, `spin`, `mass` and `fixed`. |
 | `flip` | Planar free-surface liquid with raster `fill` regions, gravity, particle density, pressure iterations and optional baffles. `flip: 0` gathers PIC velocities, `flip: 1` applies FLIP velocity increments, and intermediate values blend the two. |
-| `mpm` | Planar material points with an affine particle-grid transfer, compressible fluid and fixed-corotated elastic materials. Rectangles or explicit point arrays can release at authored times and interact through the same grid. |
+| `mpm` | Planar material points with an affine particle-grid transfer, compressible fluid and fixed-corotated elastic materials. Use [`sim.mpm`](material-point-impacts.md) for per-material passes, compression and contact, with timed impulses and moving masks. |
 | `feedback` | The equivalent recipe for `anim.feedback`, with the input frame array in `settings.frames`. |
 
 Particles, smoke, grain, FLIP and MPM accept `walls` as
@@ -2152,6 +2152,8 @@ the raster density and per-point position, velocity and body index. Set
 `cell`, `substeps` and `maxSpeed` to fit the fixed clock. Increasing speed or
 stiffness can require a smaller step. A `release` time holds the body's
 initial pose before letting its points join the shared grid.
+See [Material-point passes and impacts](material-point-impacts.md) for
+coverage, mass, compression, contact, timed impulses and moving obstacles.
 
 ## 3D scenes, signed fields and sprite rigs
 

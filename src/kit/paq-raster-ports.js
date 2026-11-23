@@ -17,6 +17,15 @@
       outputs: {value: 'displayRaster'}, run(inputs) { return {value: R.canvas(inputs)}; }
     },
     'raster.rgba': unary(R.rgba, {}),
+    'raster.select': {
+      description:'Select one raster from an ordered set of graph passes.',
+      inputs:{sources:'array<raster>',index:'number'}, outputs:{value:'raster'},
+      run({sources,index}) {
+        if (!Number.isSafeInteger(index) || index<0 || index>=sources.length)
+          throw new RangeError('Raster selection index is out of range');
+        return {value:sources[index]};
+      }
+    },
     'raster.channel': unary(R.channel),
     'raster.crop': unary(R.crop),
     'raster.resize': unary(R.resize),

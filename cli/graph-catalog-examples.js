@@ -396,6 +396,10 @@ const specifications = {
   'sim.worldRecord': worldPortsExample('record'),
   'sim.define': { inputs: { kind: 'particles' } },
   'sim.run': { nodes: { recipe: { op: 'sim.define', inputs: { kind: 'particles' } } }, inputs: { recipe: link('recipe') } },
+  'sim.mpm': { nodes: { recipe: { op: 'sim.define', inputs: { kind: 'mpm', settings: {
+    width: 32, height: 24, walls: [[0, 21, 32, 3]], bodies: [{ rect: [12, 5, 8, 8] }] } } } },
+    inputs: { recipe: link('recipe') } },
+  'raster.select': { inputs: { sources: [rgba, mask], index: 1 } },
   'audio.soundMeasurements': {inputs:{rows:[{at:0,value:[0,0]},{at:.5,value:[.6,0]}],
     options:{unit:'m/s',project:'magnitude'}}},
   'audio.measureRender': {nodes:{
