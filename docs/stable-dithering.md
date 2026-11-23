@@ -1,6 +1,6 @@
 # Stable dithering and camera review
 
-Choose how the headless renderer places its dither pattern.
+Choose how Ink places its dither pattern on the native art grid.
 
 | Space | Where the pattern lands |
 | --- | --- |
@@ -27,7 +27,7 @@ Set `look.stable` on a built world, `finish.look.stable` in a diorama, or `visua
 
 `spacing` is the size of a pattern cell in world, rest, or projected scene units. `origin` shifts the pattern grid independently of the camera snap `anchor`. A target can specify an object, a material, or both. The last matching target wins. Omitted target settings inherit from the scene. An empty `targets` array clears scene target rules when overriding them.
 
-Anchors are used for the scene dither, tone maps, local palette constraints, the palette render stage, and effect ramp dithering where there is a surface hit. The same spaces work with native, coverage, and cluster resolve. The settings place the pattern. Set the dither strength on the scene, palette, or effect to decide how much of it appears.
+The headless renderer uses anchors for the scene dither, tone maps, local palette constraints, the palette render stage, and effect ramp dithering where there is a surface hit. The same spaces work with its native, coverage, and cluster resolves. The settings place the pattern. Set the dither strength on the scene, palette, or effect to decide how much of it appears.
 
 The CLI accepts `--stable on|off|file.json`, `--dither-space screen|world|object|view`, `--dither-spacing n`, and `--dither-origin x,y,z`. Put per-target rules in the scene or JSON file. Orthographic camera snapping is a separate `--snap` option.
 
@@ -90,9 +90,15 @@ the space to inherit the existing target or scene anchor. World, view,
 and object policies default to cells of 0.08 scene units and origin
 `[0, 0, 0]`. Pixels without a surface hit use screen coordinates.
 
-The headless library and CLI resolve all four spaces. WebGL uses
-screen space for palette dither. Use `look inspect --renderer webgl`
-to identify authored palette policies that request a spatial anchor.
+The headless library and CLI resolve all four spaces. In the native WebGL
+resolve, scene dithering and tone maps follow opaque indexed meshes,
+finite curves, and native splats. Scene and per-target anchors work across
+these representations. WebGL palette rows attached to native draw rows
+can supply their own space, spacing, and origin. The WebGL path uses
+`EXT_color_buffer_float` to store per-pixel world and rest coordinates.
+Blended fragments without an opaque owner and reconstructed impostors
+fall back to the screen grid. Coverage-aware and portable render-stage
+resolves continue to use their existing browser resolve paths.
 
 The [print and cloth workshop](../examples/palette-dither-spaces.js)
 shows screen-space print dots, a cloak with a rest-space weave, and
@@ -143,13 +149,24 @@ including perspective, surface angle and the object's pose. Screen
 cells have a fixed size at a given art resolution. Omit `fade` to keep
 the authored pattern density at every distance.
 
-The headless renderer uses all these settings. WebGL scene targets use
-the base scale and fade on the screen grid. `look inspect --renderer webgl`
-identifies policies with regional or spatial settings outside that path.
+The headless renderer uses all these settings. The native WebGL resolve
+uses base scale and fade, with a footprint estimated from adjacent pixels
+on the same anchor rule. Regional overrides use the headless renderer.
 
 ```sh
 ink-studio render examples/palette-dither-scale.js --w 300 --h 162 --px 1 --t 0.35 --out near.png
 ink-studio clip examples/palette-dither-scale.js --w 300 --h 162 --px 1 --fps 12 --out dither-scale.png
+```
+
+## Review the interactive renderer
+
+The [Rest Marks Cabinet](../examples/interactive-rest-marks.js) turns an
+indexed copper astrolabe and deforms a splat coat with finite-curve seams.
+Its review command captures raw engraving, object-space dither, and
+screen-space dither through the same motion and reports the browser and GPU.
+
+```sh
+node examples/interactive-rest-marks-review.js rest-marks-review --hardware
 ```
 
 ## Check a slow camera move

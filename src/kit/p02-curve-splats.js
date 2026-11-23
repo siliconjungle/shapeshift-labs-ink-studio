@@ -702,7 +702,7 @@
       const chartNormals = framed && up === undefined && section !== undefined ? strand.normals : undefined;
       const initial = up ?? strand.up ?? [0, 1, 0];
       check(!framed || point(initial) && K.V.len(initial) > 1e-8, 'invalid path frame up vector');
-      const frames = (framed && (!retainedFrame || retain) || chartWidth && retain) ? K.curve.frames(knots, Array.from(initial)) : null;
+      const frames = (retain || framed && !retainedFrame) ? K.curve.frames(knots, Array.from(initial)) : null;
       const rest = retain && K.procedural.data.freeze({
         id, index: strand.index ?? index, family: strand.family, clump: strand.clump, points: knots, closed, autoClosed: Boolean(autoClosed),
         up: Array.from(initial), ...(strand.uvs && { uvs: strand.uvs.map(v => Array.from(v)) }),
@@ -804,7 +804,9 @@
               pattern: patternRow,
               ...(timing && { timeRange: [(distance + previous * length) / total, (distance + next * length) / total,
                 times ? mix(times[i], times[i + 1], previous) : 0, times ? mix(times[i], times[i + 1], next) : 0] }),
-              ...(retain && { attachment: { segment: i, first: previous, last: next, roll, twist: twistAngle, patternRoll } }) });
+              ...(retain && { attachment: { segment: i, first: previous, last: next, roll, twist: twistAngle, patternRoll,
+                restMajor:profile?.major ?? majorAxis(K.V.lerp(frames[i].N,frames[i+1].N,middle),
+                  K.V.norm(K.V.sub(end,start)),0) } }) });
           }
           previous = next;
         } while (previous < 1);
@@ -813,7 +815,8 @@
       return { id, rows, rest, length: total, followNormals: Boolean(chartNormals), ...((lod?.aggregate || shadowGroup) && { knots,
         maxRadius: rows.reduce((best, row) => Math.max(best, row.radius), 0) }) };
     });
-    const plan = { object, material, target, edge, strands, segments, examined, timing, pattern, shadows, lod, shadowTransmittance };
+    const plan = { object, material, target, edge, strands, segments, examined, timing, pattern, shadows, lod, shadowTransmittance,
+      engraving:options.engraving };
     if (lod?.aggregate) {
       plan.proxy = aggregatePlan(plan, lod.aggregate, palette, maxSegments - plan.examined);
       plan.examined += plan.proxy.plan.examined;
@@ -837,11 +840,12 @@
       const group = nextGroup && rows.length ? nextGroup++ : undefined;
       const strand = rows.length && builder.registerCurveStrand?.({ name: id, object: plan.object,
         material: plan.material, length, ...(isProxy && { aggregate: true }) });
-      for (const { from, to, shade, radius, opacity, profile, clips, finish, lighting, timeRange, pattern, arc } of rows)
+      for (const { from, to, shade, radius, opacity, profile, clips, finish, lighting, timeRange, pattern, arc, attachment } of rows)
         builder.curveSplat(from, to, radius, shade, opacity, profile, plan.edge, group, clips, finish, lighting,
           timing && [timing, ...timeRange], pattern && { ...pattern, program }, plan.shadows, strand ? [strand, ...arc] : undefined,
-          plan.shadowTransmittance);
+          plan.shadowTransmittance,attachment?.restMajor);
       const end = builder.count();
+      if (end>start && plan.engraving!==undefined) builder.describeEngraving?.(start,end,plan.engraving);
       builder.describeSplats?.(start, end, {
         object: plan.object, material: plan.material, target: { entity: plan.object, ...plan.target, surface: id }
       });
@@ -883,7 +887,7 @@
       const data = world?.anim?.bones && world.rest ? world.rest : world?.data;
       check(data instanceof Float32Array && world.count >= ranges.end && data.length >= ranges.end * 16,
         'a bound strand must be posed on its original splat range');
-      const posed = plan.strands.map(({ rest, rows: rowsOfStrand, followNormals }) => {
+      const posed = plan.strands.map(({ rest, followNormals }) => {
         const result = sample(rest, { world, ...context });
         const current = points(Array.isArray(result) ? result : result?.points);
         check(current.length === rest.points.length &&
@@ -895,9 +899,7 @@
           'invalid posed normals, up vector or active spans');
         const ends = current.slice(1).map((p, i) => K.V.sub(p, current[i]));
         const lengths = ends.map(v => K.V.len(v));
-        const needsFrames = rowsOfStrand.some(row => row.profile) && !(normals && followNormals) ||
-          !normals && rowsOfStrand.some(row => row.pattern?.side);
-        const frames = needsFrames ? K.curve.frames(current, up) : null;
+        const frames = K.curve.frames(current, up);
         return { current, normals, active, ends, lengths, frames, followNormals };
       });
       for (let i = ranges.first; i < (ranges.lod?.aggregate?.proxy[0] ?? ranges.lod?.shadow?.proxy[0] ?? ranges.end); i++)
@@ -930,6 +932,11 @@
               profile = { ...profile, major: majorAxis(facing, axis, chart ? twist : roll) };
             }
             const geometry = CurveSplat.carrier(from, to, row.radius, profile);
+            if (world.curveRest) {
+              const u=profile?.major ?? majorAxis(K.V.lerp(frames[segment].N,frames[segment+1].N,(first+last)*.5),
+                geometry.axis,0);
+              world.curveRest.set(u,indexOfRow*16+12);
+            }
             data.set(geometry.center, q);
             if (geometry.normal) world.renderMetadata?.normals?.set(geometry.normal, indexOfRow * 3);
             for (let k = 0; k < slots.length; k++) data[q + slots[k]] = geometry.covariance[k];

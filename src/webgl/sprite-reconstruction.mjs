@@ -64,7 +64,7 @@ uniform vec3 u_eye,u_plane,u_back,u_fog,u_sun;
 uniform vec4 u_range,u_splatPlane;
 uniform vec2 u_surfaceViewport,u_artScale,u_sunGain,u_size;
 uniform int u_phase,u_step;
-uniform bool u_ortho,u_depth,u_normal,u_emission,u_baked,u_effect,u_index,u_graphDepth,u_portalCover;
+uniform bool u_ortho,u_depth,u_normal,u_emission,u_baked,u_effect,u_index,u_graphDepth,u_portalCover,u_markPass;
 uniform float u_scale,u_effectDepth;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
 ${section ? cutaway : ''}
@@ -95,6 +95,7 @@ void main(){
   float z=0.5+0.5*projected.z/projected.w;
   if(z<0.0||z>1.0||projected.w<=0.0)discard;
   gl_FragDepth=z;
+  if(u_markPass){color=vec4(0);depth=vec4(0);return;}
   float axial=-camera.z;
   ${section ? 'float margin=sectionMargin(position,axial);if(margin<0.0)discard;' : ''}
   float d=clamp((axial-u_range.x)/(u_range.y-u_range.x),0.0,1.0);
@@ -143,6 +144,7 @@ void main(){
         section,
         index,
         graphDepth,
+        anchors,
         glassLayers,
         portalCover,
         arrivalPlane,
@@ -166,6 +168,7 @@ void main(){
         u_fog: fog,
         u_surfaceViewport: [width, height],
         u_index: !!index,
+        u_markPass:!!anchors,
         u_glassBoundary: 13,
         u_graphDepth: !!graphDepth,
         u_portalCover: !!portalCover,

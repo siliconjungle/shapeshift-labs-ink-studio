@@ -97,10 +97,10 @@ const SpriteSurface = (() => {
       return region;
     }
     function faceOptions(options = {}, surface, planar) {
-      const { id, objectId = id, materialId, partId, sampling, projection, shadowShell,
+      const { id, objectId = id, materialId, partId, sampling, projection, shadowShell, engraving,
         castsShadow = shadowShell !== undefined && shadowShell !== false } = options ?? {};
       if (!options || ![Object.prototype,null].includes(Object.getPrototypeOf(options)) ||
-          Object.keys(options).some(key => !['id', 'objectId', 'materialId', 'partId', 'sampling', 'projection', 'castsShadow', 'shadowShell'].includes(key)) ||
+          Object.keys(options).some(key => !['id', 'objectId', 'materialId', 'partId', 'sampling', 'projection', 'castsShadow', 'shadowShell','engraving'].includes(key)) ||
           id !== undefined && (typeof id !== 'string' || !id.trim() || faces.has(id)))
         throw new TypeError('A named surface needs a distinct nonempty ID and valid options');
       if ([objectId,materialId,partId].some(value=>value!==undefined&&(typeof value!=='string'||!value.trim())))
@@ -119,9 +119,11 @@ const SpriteSurface = (() => {
       const style = projectionSettings(projection);
       if (style.subdivisions > 1 && vertices.length / 15 + surface.triangles.length / 3 * style.subdivisions ** 2 > 2000000)
         throw new RangeError('Surface projection exceeds the two-million-triangle subdivision budget');
-      return { id, objectId, materialId, partId, rule: resampling.settings(sampling), castsShadow, shell, style };
+      const marks=engraving===undefined ? undefined : engraving===false ? false :
+        (typeof Engraving==='undefined' ? require('./engraving.js') : Engraving).prepare(engraving);
+      return { id, objectId, materialId, partId, rule: resampling.settings(sampling), castsShadow, shell, style, engraving:marks };
     }
-    function writeMesh(surface, region, { id, objectId, materialId, partId, rule, castsShadow, shell, style }) {
+    function writeMesh(surface, region, { id, objectId, materialId, partId, rule, castsShadow, shell, style, engraving }) {
       const { x, y, width, height } = region;
       const { mapping, vertexSnap, subdivisions } = style;
       const first = vertices.length / 5, count = surface.triangles.length * subdivisions ** 2;
@@ -147,6 +149,7 @@ const SpriteSurface = (() => {
         vertex((data,stride,k)=>data[a*stride+k]*wa+data[b*stride+k]*wb+data[c*stride+k]*wc);
       });
       if (count) charts.push(Object.freeze({first,end:first+count,region,id,objectId,materialId,partId,
+        ...(engraving!==undefined && {engraving}),
         ...(chartUV && {uv:Float32Array.from(chartUV)}),...(rest && {rest:Float32Array.from(rest)})}));
       return surface;
     }

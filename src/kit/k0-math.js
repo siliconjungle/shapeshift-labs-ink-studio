@@ -3,6 +3,7 @@
 const KIT = {};
 KIT.material = MaterialControls;
 KIT.sceneMeshes = SceneMeshes;
+KIT.artStability = ArtStability;
 KIT.detailBudgets = DetailBudgets;
 KIT.passQuality = PassQuality;
 KIT.renderContract = RenderContract;

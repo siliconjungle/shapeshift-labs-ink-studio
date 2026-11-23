@@ -33,7 +33,7 @@ const SceneMeshes = (() => {
     return { min, max };
   }
 
-  function materialOf({ id, color = 0xffffff, texture, normal, alphaCutoff = .5, sampling } = {}) {
+  function materialOf({ id, color = 0xffffff, texture, normal, alphaCutoff = .5, sampling, engraving } = {}) {
     const { width = 1, height = 1, pixels } = texture ?? {};
     if (!name(id) || !Number.isInteger(color) || color < 0 || color > 0xffffff || !unit(alphaCutoff))
       throw new RangeError('Mesh materials need an ID, RGB24 tint, and alpha cutoff in [0,1]');
@@ -51,7 +51,7 @@ const SceneMeshes = (() => {
       for (let c = 0; c < 3; c++) ink = ink * 256 + Math.round(pixels[at+c] * tint[c] / 255);
       return ink;
     }
-    return { id, width, height, paint, normal, sampling };
+    return { id, width, height, paint, normal, sampling, engraving };
   }
 
   function atlasWidth(materials) {
@@ -107,7 +107,8 @@ const SceneMeshes = (() => {
       }
       const material = rows[index];
       atlas.meshRegion({ points:positions, restPoints:positions, uvs, triangles:drawIndices.subarray(offset,cursor) },
-        regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling});
+        regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling,
+          engraving:material.engraving});
     }
     const layer = atlas.finish();
     layer.sceneMeshId = id;

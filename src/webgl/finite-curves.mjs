@@ -30,7 +30,8 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
   const lens = { view, near, focal: camera.projection[5]*height*.5, width, height, ortho };
   const columns = Math.ceil(width/tileSize), lines = Math.ceil(height/tileSize);
   const tiles = Array.from({ length: columns*lines }, () => []);
-  const rows = new Uint8Array(world.count), spans = [];
+  const rows = new Uint8Array(world.count), spans = [], marks=[];
+  const marking=options.restMarks || options.engraving;
   const posed = world.anim?.rig || world.anim?.bones || world.reconstructionPose;
   const pose = posed && kit.splatFrames.create(world,options.time,kit.M);
   const selected = options.drawOrder && new Set(options.drawOrder);
@@ -38,11 +39,13 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     (!options.visible || options.visible(data[i*16+11]));
   const subdivision = kit.curveSplats.subdivision;
   const strandLOD = kit.curveSplats.strandLod;
+  const retained=i=>options.engraving?.curve(i) || options.restMarks && world.curveRest?.[i*16+3];
   const strands = options.strandLod && strandLOD.coverageFrame(world,lens,{data,keep,
-    partitionAt:options.geometryCode,forbidden:options.strandForbidden});
+    partitionAt:options.geometryCode,forbidden:i=>retained(i) || options.strandForbidden?.(i)});
   const settings = subdivision.prepare(options.curveSubdivision);
   const detail = subdivision.frame(world,lens,settings,{ data, planes:options.planes, partitionAt:options.geometryCode,
-    keep:i=>keep(i) && !strands?.hidden?.has(i) && !strands?.codes?.has(i) && !strands?.opacity?.has(i) });
+    keep:i=>keep(i) && !strands?.hidden?.has(i) && !strands?.codes?.has(i) && !strands?.opacity?.has(i) &&
+      !retained(i) });
   const programs = new Map();
   let references = 0, peakTile = 0, masked = false, strandMasked = false;
 
@@ -100,6 +103,19 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
       ...(caps[0]?.plane ?? zero),...(caps[1]?.plane ?? zero),
       ...color,i+1,span.group,span.tau,geometryCode,strandCode,
       ...(caps[0]?.at ?? zero),...(caps[1]?.at ?? zero));
+    if (marking) {
+      const {V}=kit, stored=!replacement && world.curveRest?.[at+3] ? world.curveRest.subarray(at,at+16) : undefined;
+      const shape=kernel.spanShape(replacement?.data ?? data,replacement ? 0 : at,1);
+      const authored=world.curveStations?.subarray(i*kernel.stationStride+4,i*kernel.stationStride+7);
+      const axis=!replacement && authored?.some(Boolean) && dot(authored,shape.axis)<0 ? V.mul(shape.axis,-1) : shape.axis;
+      const restAxis=stored ? Array.from(stored.subarray(4,7)) : axis;
+      const liveU=stored ? Array.from(stored.subarray(12,15)) : span.major ?? V.perp(axis);
+      const restU=stored ? Array.from(stored.subarray(8,11)) : liveU;
+      marks.push(...point(view,center),shape.half,...vector(view,axis),(stored?.[7]??shape.radius)/shape.radius,
+        ...vector(view,liveU),options.restMarks?.slot(i)??0,
+        ...(stored?.subarray(0,3)??center),stored?.[3]??shape.half,
+        ...restAxis,options.engraving?.curve(i)??0,...restU,0);
+    }
   }
   const starts = tiles.length*4, tileData = new Float32Array(starts + references);
   let cursor = starts;
@@ -111,23 +127,27 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
   }
   return { spans:Float32Array.from(spans), tiles:tileData, columns, rows,
     count:spans.length/spanStride, references, peakTile, masked, strandMasked,
+    ...(marking && {marks:Float32Array.from(marks)}),
     ...(detail && { subdivision:detail.stats }), ...(strands && { strandLod:strands.stats }) };
 }
 
-export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD, strandLOD }) {
+export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD, strandLOD, print }) {
   const spans = table(rowWidth,tableUnits.spans,maxSize);
   const tiles = table(rowWidth,tableUnits.tiles,maxSize);
   const programs = new Map();
   const owner = target(3);
+  let anchorTarget, markTable;
   // The ordinary splat pipeline uses some of these units as well. Curve
   // compositing runs after all its geometry draws and before the art resolve.
   function draw(plan, buffer, base, camera, options) {
-    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy } = options;
+    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors } = options;
     const isOwner = mode === 'owner';
-    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked].join('/');
+    const etched=mode==='color' && !!engraving;
+    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked,etched].join('/');
     if (!programs.has(key)) programs.set(key,program(finiteCurveFragment({
       mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined,
-      spriteLOD:plan.masked ? spriteLOD : undefined,strandLOD:plan.strandMasked ? strandLOD : undefined
+      spriteLOD:plan.masked ? spriteLOD : undefined,strandLOD:plan.strandMasked ? strandLOD : undefined,
+      engraving:etched,print
     })));
     const shader = programs.get(key), { width, height } = base;
     textureUnit(tableUnits.solid,base.textures[2]);
@@ -137,6 +157,12 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
       textureUnit(tableUnits.mask,base.textures[1]);
     }
     if (glass) textureUnit(tableUnits.glass,glass);
+    if (etched) engraving.bind();
+    if (anchors) {
+      textureUnit(10,anchors.textures[0]);
+      textureUnit(11,anchors.textures[1]);
+    }
+    if (etched || anchors) markTable.bind();
     gl.disable(gl.DEPTH_TEST);
     if (mode === 'color') {
       gl.enable(gl.BLEND);
@@ -151,13 +177,26 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
       u_curveEntry:clip,u_curveCover:cover ?? zero,u_curveView:camera.view,u_curveProjection:camera.projection,
       u_curveNear:camera.clipNear,u_curveFar:camera.clipFar,u_curveSetback:camera.setback,
       u_curveOrtho:camera.ortho,u_curveHasProxy:!!proxy,u_curveFog:fog.color,u_curveFogRange:fog.range,
-      ...water,...env?.uniforms,...section
+      u_curveMarks:12,u_curveBaseWorld:10,u_curveBaseRest:11,
+      ...water,...env?.uniforms,...section,...(etched && engraving.uniforms)
     });
     gl.disable(gl.BLEND);
   }
   return {
-    prepare(plan) { spans.upload(plan.spans); tiles.upload(plan.tiles); },
+    prepare(plan) {
+      if (plan.marks) {
+        markTable??=table(rowWidth,12,maxSize);
+        markTable.upload(plan.marks);
+      }
+      spans.upload(plan.spans); tiles.upload(plan.tiles);
+    },
     draw,
+    anchors(plan,base,camera,options,anchors) {
+      anchorTarget??=target(2,{floating:true});
+      anchorTarget.resize(base.width,base.height);
+      draw(plan,anchorTarget,base,camera,{...options,mode:'anchors',anchors});
+      return anchorTarget;
+    },
     owner(plan, base, camera, options) {
       owner.resize(base.width,base.height);
       draw(plan,owner,base,camera,{ ...options, mode: 'owner' });

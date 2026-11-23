@@ -1,5 +1,6 @@
 import { waterGLSL } from './water-optics.mjs';
 import { environmentMediaSource } from './environment-shaders.mjs';
+import { surfaceEngravingFragment } from './engraving-shaders.mjs';
 
 const rays = `
 const float farRay = 1e20;
@@ -159,8 +160,8 @@ bool curveHit(int id, vec3 origin, vec3 ray, vec2 viewInterval, out Hit hit) {
   return alpha >= 1e-5;
 }`;
 
-export function finiteCurveFragment({ tileSize, layers, mode, wet, layeredGlass, environment, section, spriteLOD, strandLOD }) {
-  const owner = mode === 'owner', mask = mode === 'mask', color = !owner && !mask;
+export function finiteCurveFragment({ tileSize, layers, mode, wet, layeredGlass, environment, section, spriteLOD, strandLOD, engraving, print }) {
+  const owner=mode==='owner', mask=mode==='mask', anchors=mode==='anchors', color=mode==='color';
   return `#version 300 es
 precision highp float;
 precision highp int;
@@ -174,11 +175,13 @@ uniform bool u_curveOrtho,u_curveHasProxy;
 uniform highp sampler2D u_curveTiles,u_curveSolid,u_curveProxy;
 uniform int u_curveTileColumns;
 ${owner ? 'uniform sampler2D u_curveOwner,u_curveOwnerMask;' : ''}
+${anchors ? 'uniform highp sampler2D u_curveBaseWorld,u_curveBaseRest;' : ''}
 ${color && wet ? waterGLSL(wet.airPockets,wet.layered,wet.atlas) : ''}
 ${color && environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${section ?? ''}
 ${spriteLOD ?? ''}
 ${strandLOD ?? ''}
+${engraving ? surfaceEngravingFragment(print) : ''}
 layout(location=0) out vec4 o_color;
 ${!mask ? 'layout(location=1) out vec4 o_depth;' : ''}
 ${owner || color && wet ? 'layout(location=2) out vec4 o_aux;' : ''}
@@ -186,6 +189,23 @@ ${color && layeredGlass ? `uniform sampler2D u_curveGlass;
 layout(location=${wet ? 3 : 2}) out vec4 o_back;
 layout(location=${wet ? 4 : 3}) out vec4 o_through;` : ''}
 ${rays}
+${anchors || engraving ? `
+uniform highp sampler2D u_curveMarks;
+vec4 curveMark(int id,int field){
+  int at=id*6+field;return texelFetch(u_curveMarks,ivec2(at&511,at>>9),0);
+}
+void curveChart(int id,vec3 at,vec3 ray,out vec3 point,out vec3 localNormal,out vec3 normal,out float stretch){
+  vec4 c=curveMark(id,0),a=curveMark(id,1),u=curveMark(id,2),p=curveMark(id,3),t=curveMark(id,4),r=curveMark(id,5);
+  vec3 q=at-c.xyz,v=cross(a.xyz,u.xyz),s=cross(t.xyz,r.xyz);
+  float along=dot(q,a.xyz),ratio=p.w/max(1e-8,c.w);
+  point=p.xyz+t.xyz*(along*ratio)+a.w*(r.xyz*dot(q,u.xyz)+s*dot(q,v));
+  vec3 radial=q-a.xyz*clamp(along,-c.w,c.w);
+  if(dot(radial,radial)<1e-12)radial=-ray;
+  radial=normalize(radial);
+  localNormal=normalize(t.xyz*dot(radial,a.xyz)+r.xyz*dot(radial,u.xyz)+s*dot(radial,v));
+  normal=transpose(mat3(u_curveView))*radial;
+  stretch=max(ratio,a.w)/max(.3,abs(dot(radial,ray)));
+}` : ''}
 vec4 tileRow(int i) { return texelFetch(u_curveTiles,ivec2(i & 511,i >> 9),0); }
 float decode(vec3 rgb) { return dot(round(rgb*255.0),vec3(1,256,65536)); }
 vec4 encode(float v) { return vec4(mod(v,256.0),mod(floor(v/256.0),256.0),floor(v/65536.0),255.0)/255.0; }
@@ -198,16 +218,17 @@ void main() {
   vec4 base = texelFetch(u_curveSolid,pixel,0);
   vec2 tile = tileRow((pixel.y/${tileSize})*u_curveTileColumns + pixel.x/${tileSize}).xy;
   ${owner ? 'o_color=texelFetch(u_curveOwner,pixel,0); o_depth=texelFetch(u_curveOwnerMask,pixel,0); o_aux=base;' : ''}
-  if (tile.y <= 0.0) ${owner ? 'return;' : 'discard;'}
+  ${anchors ? 'o_color=texelFetch(u_curveBaseWorld,pixel,0);o_depth=texelFetch(u_curveBaseRest,pixel,0);' : ''}
+  if (tile.y <= 0.0) ${owner || anchors ? 'return;' : 'discard;'}
   vec2 film = (gl_FragCoord.xy*2.0/u_curveViewport-1.0)*u_curveInvProjection;
   vec3 origin = u_curveOrtho ? vec3(film,0) : vec3(0);
   vec3 ray = u_curveOrtho ? vec3(0,0,-1) : normalize(vec3(film,-1));
   float opaque = base.a > 0.0 ? mix(u_curveRange.x,u_curveRange.y,decode(base.rgb)/16777215.0) : u_curveFar;
   vec2 interval = vec2(u_curveNear, min(u_curveFar,opaque+1e-4))/(-ray.z);
   if (!clipRay(u_curveEntry,origin,ray,interval) || !clipRay(u_curveCover,origin,ray,interval))
-    ${owner ? 'return;' : 'discard;'}
+    ${owner || anchors ? 'return;' : 'discard;'}
   float proxyDepth = u_curveHasProxy ? texelFetch(u_curveProxy,pixel,0).r : 1.0;
-  ${owner || mask ? `
+  ${owner || mask || anchors ? `
   float nearest = opaque+1e-4; int row = -1;
   ` : `
   Hit hits[${layers}];
@@ -229,7 +250,7 @@ void main() {
     vec3 world = transpose(mat3(u_curveView))*(at-u_curveView[3].xyz);
     if (sectionMargin(world, hit.depth-u_curveSetback) < 0.0) continue;
     ` : ''}
-    ${owner || mask ? `
+    ${owner || mask || anchors ? `
     if (hit.group > 0.0 && hit.alpha >= 1.0 && hit.depth <= nearest) {
       nearest = hit.depth; row = id;
     }` : `
@@ -265,6 +286,12 @@ void main() {
     o_color = encode(spanRow(row,6).a);
     o_depth = vec4(0);
     o_aux = encode(round(clamp((nearest-u_curveRange.x)/(u_curveRange.y-u_curveRange.x),0.0,1.0)*16777215.0));
+  }` : anchors ? `
+  if(row>=0){
+    vec3 at=origin+ray*(nearest/(-ray.z)), rest, rn,n;float footprint;
+    curveChart(row,at,ray,rest,rn,n,footprint);
+    o_color=vec4(transpose(mat3(u_curveView))*(at-u_curveView[3].xyz),curveMark(row,2).w);
+    o_depth=vec4(rest,1);
   }` : mask ? `
   if (row < 0) discard;
   o_color=vec4(1);` : `
@@ -277,6 +304,14 @@ void main() {
     vec4 pigment = spanRow(hit.row,6);
     float normalized = clamp((hit.depth-u_curveRange.x)/(u_curveRange.y-u_curveRange.x),0.0,1.0);
     vec3 rgb = pigment.rgb;
+    ${engraving ? `
+    int slot=int(curveMark(hit.row,4).w);
+    if(slot>0){
+      vec3 at=origin+ray*(hit.depth/(-ray.z)),rest,rn,n;float stretch;
+      curveChart(hit.row,at,ray,rest,rn,n,stretch);
+      float footprint=2.*u_curveInvProjection.y/u_curveViewport.y*(u_curveOrtho?1.:hit.depth)*stretch;
+      rgb=surfaceEngraving(slot,rgb,rest,rn,curveMark(hit.row,4).xyz,n,footprint,1.,0.,vec3(0));
+    }` : ''}
     if (u_curveFogRange.x < 1.0) rgb = mix(rgb,u_curveFog,smoothstep(u_curveFogRange.x,1.0,normalized)*u_curveFogRange.y);
     ${wet ? 'vec3 mark; rgb = waterPaint(rgb,gl_FragCoord.xy,u_curveViewport,hit.depth,mark);' : ''}
     ${environment?.media ? 'rgb = envMedia(rgb,gl_FragCoord.xy,u_curveViewport,hit.depth);' : ''}

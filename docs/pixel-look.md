@@ -429,7 +429,8 @@ optional `default` policy to cover foreground surfaces without a target.
 - Explicit target palettes take precedence over a surface layer's
   `outputPalette` in CLI renders. Layer palettes take precedence over
   `default`. Outlines and finish overlays use their existing paths.
-  Standard WebGL targets use solid splat ownership and screen art pixels.
+  Native WebGL targets use solid draw-row ownership and support spatial
+  dither anchors.
 
 In JavaScript, `PixelLook.preparePalette(policy, { palette, roles, blueNoise })`
 returns packed swatches and `index(rgb, x, y)` for sampling normalized

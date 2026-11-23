@@ -421,6 +421,7 @@ const Engraving = (() => {
     return b;
   }
   function bindMany(world, assignments) {
+    const kernel = world?.curveStations && (typeof CurveSplat === 'undefined' ? require('./curve-splat.js') : CurveSplat);
     if (
       !Number.isSafeInteger(world?.count) ||
       world.count < 0 ||
@@ -474,7 +475,11 @@ const Engraving = (() => {
         const useFlow = p.brushwork && flowFrame && !authoredFrames?.subarray(i * 6, i * 6 + 6).some(Boolean);
         if (useFlow) f.set(flowFrame);
         if (!f.some(Boolean)) {
-          const n = normals && Array.from(normals.subarray(i * 3, i * 3 + 3));
+          let n = normals && Array.from(normals.subarray(i * 3, i * 3 + 3));
+          if ((!n || Math.hypot(...n)<1e-8) && kernel?.isRow(world.data,q)) {
+            const axis=world.curveStations?.subarray(i*kernel.stationStride+4,i*kernel.stationStride+7);
+            if (axis?.some(Boolean)) n=cross(axis,Math.abs(axis[2])<.8?[0,0,1]:[0,1,0]);
+          }
           if (!n || Math.hypot(...n) < 1e-8) continue;
           const normal = unit(n),
             axis = Math.abs(normal[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0],

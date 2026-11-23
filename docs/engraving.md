@@ -56,6 +56,31 @@ Triplanar projection blends three fixed charts using the retained normal, with s
 
 At render time, `engravingLight: [x,y,z]` supplies a finite nonzero direction. The default is `[-.45,.8,.55]`. It changes normal-driven shading without rebuilding maps or uploading charts. `engraving: false` bypasses the pass for comparison. `normal` uses the animated surface normal, `luminance` follows baked or live lit color including shadows, and `hybrid` combines both. Geometry coverage, opacity, ownership and picking remain the native geometry's; paper areas remain surfaces. Fog and later palette/compositing stages still apply. Choose colors present in your palette when using quantized output.
 
+## Interactive meshes and curves
+
+Assign `engraving` to an indexed mesh material or to a curve's appearance.
+The WebGL renderer uses the same engraving styles and tone maps as retained
+splats. Mesh marks follow the rest vertices through `K.sceneMeshes.pose` and
+skinning. For moving curves, use `K.curveSplats.bind` so the analytic hit can be
+mapped through the live strand frame into the authored frame. This also works
+with UV- and SDF-grown strands. Ink retains individual authored spans when
+they carry engraving or a bound rest anchor.
+
+```js
+const cord = K.curveSplats.bind(B, { kind: 'path', points }, reference =>
+  reference.points.map(bend), {
+  width: .04,
+  edge: 'hard',
+  color: '#bb7655',
+  engraving: { style: 'woodcut', scale: .18, tone: 'luminance' }
+});
+cord.pose(world);
+```
+
+Use `engraving: false` in the browser render options for comparison.
+See [Stable dithering](stable-dithering.md#review-the-interactive-renderer)
+for the turning prop and deforming coat demo.
+
 ## Shared maps and live edits
 
 `K.engraving.prepare(settings)` validates and normalizes settings. `maps(settings)` returns eight nested tone images at each of three resolutions. Each darker image retains the earlier marks, and line/dot locations are related across scales. `sample(settings,u,v,darkness,footprint)` blends adjacent tones and scales, with a mean-tone fallback once the coarsest detail becomes subpixel. Its coverage is in `0–1`; it is also used by the software renderer.

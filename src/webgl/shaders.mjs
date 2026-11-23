@@ -1,3 +1,4 @@
+import {markVertexUniforms,markVertex,markFragmentUniforms,markSplatWrite,markResolve} from './rest-marks.mjs';
 import { gaussianProxyVertex, gaussianProxyFragment } from './gaussian-part-proxies.mjs';
 import { gaussianHarmonicGLSL } from './gaussian-harmonics.mjs';
 import { surfaceOrderVertex, surfaceOrderFragment } from './surface-order.mjs';
@@ -35,7 +36,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -112,6 +113,7 @@ ${contributions || masked ? `${policyUniforms}flat out int v_policySlot;` : ''}
 ${masked ? maskUniforms + maskVaryings(textured).replaceAll('LOOK_IO','out') + maskVertex(textured) : ''}
 ${materialStyles ? 'uniform highp sampler2D u_materialStyles; uniform bool u_materialPatterned, u_materialStylesOn; flat out vec4 v_pixelStyle; flat out float v_pixelFog;' : ''}
 ${engraving ? engravingVertexUniforms : ''}
+${marks ? markVertexUniforms : ''}
 void main(){
   int record = a_index;
   ${instances ? `ivec2 inst = ivec2((a_instance & 15) * 16, a_instance >> 4);
@@ -351,6 +353,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
     : mat3(u_focal * iz, 0.0, 0.0,   0.0, u_focal * iz, 0.0,   u_focal * tx * iz * iz, u_focal * ty * iz * iz, 0.0);
   mat3 T = J * mat3(u_view);
   ${engraving ? engravingVertex : ''}
+  ${marks ? markVertex : ''}
   mat3 c2 = T * cov * transpose(T);
   float variance = continuous ? ${variance} * u_materialGridScale * u_materialGridScale : u_dilate;
   float A = c2[0][0] + variance, B = c2[0][1], C = c2[1][1] + variance;
@@ -492,6 +495,7 @@ ${water || portal || environment || cutaway || footprints || facingColors ? 'uni
 ${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
 ${footprints ? footprintGLSL : ''}
+${marks ? markFragmentUniforms : ''}
 ${engraving ? engravingFragment.replace('/*SCREEN_PRINT*/', screenPrintGLSL??'vec3 screenPrintShade(int start,vec2 uv,vec3 rgb,float footprint,float light){return rgb;}') : ''}
 ${coverageSource(coverageRules)}
 ${contributions || masked ? `${policyUniforms}flat in int v_policySlot;` : ''}
@@ -611,13 +615,14 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   }
   `}
   if (u_idx > 0.5) {
-    ${engraving ? 'if(v_engravingSlot>0)discard;' : ''}   // the index pass (colour per pixel): which solid dab is in front here, its number in three bytes
+    // The owner pass keeps depth for engraved dabs and leaves their color to the paint pass.
     if (u_gaussianNormalCutoff > 0.0) {
       float alpha = continuous ? surfaceAlpha : contributionAlpha(power, v_color.a, false);
       if (alpha < u_gaussianNormalCutoff || v_depth < 0.0) discard;
     } else if (v_color.a < 1.0 ${gaussianProxy ? '&& !proxyOwnsDepth' : ''} || (continuous ? surfaceAlpha <= 0.5 : g < 0.5) || v_depth < 0.0) discard;
     ${cutaway ? 'if (cutInk > 0.0) { o = vec4(0.0); od = vec4(0.0); oa = vec4(0.0); return; }' : ''}
-    float k = v_ix + 1.0;
+    ${marks ? markSplatWrite : ''}
+    float k = ${engraving ? 'v_engravingSlot>0 ? 0.0 : ' : ''}v_ix + 1.0;
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(0.0); ${masked ? `if (v_policySlot > 0) {${ownerMaskWrite}}` : ''}
     float graphDepth = round(clamp(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
@@ -841,8 +846,17 @@ vec3 paletteRow(int slot, vec3 inputColor, ivec2 p) {
 }
 `;
 
-function constraintGlsl(masked) {
-  return `${policyUniforms}${paletteRowGlsl}
+function constraintGlsl(masked, marks) {
+  const spatial = marks ? paletteRowGlsl.replace(
+    'float gain = texelFetch(u_constraintRows, ivec2(7, row), 0).a;', 'float gain = 1.0;').replace('ivec2 grid = ivec2(floor(vec2(p) / scale));',
+    `ivec2 pixel=ivec2(p.x,textureSize(u_markWorld,0).y-1-p.y);
+  vec4 rule=texelFetch(u_constraintRows,ivec2(u_constraintAnchor,row),0);
+  vec3 placement=texelFetch(u_constraintRows,ivec2(u_constraintAnchor+1,row),0).xyz;
+  int space=int(placement.x);
+  gain=markGain(pixel,rule,space,scale,placement.yz);
+  if(gain<=0.)return color;
+  ivec2 grid=positiveGrid(markCoordinates(pixel,p,rule,space,scale),size);`) : paletteRowGlsl;
+  return `${policyUniforms}${marks ? 'uniform int u_constraintAnchor;' : ''}${spatial}
 bool g_constrained = false;
 ${masked ? `${maskUniforms}
 uniform highp sampler2D u_maskOwner;
@@ -881,7 +895,7 @@ bool constrainPalette(ivec2 p, vec3 inputColor, out vec3 color) {
 export function pixelShaderSources(PixelLook, { water = false, airPockets = false, layered = false, atlas = false,
   paletteConstraints = false, masked = false, contributions = false, layeredGlass = false, materialStyles = false,
   environment = false, emitterFog=false, relighting = false, packedTone = false, cutaway, facingColors = false,
-  protectGaps = false, patternedResolve = true, coloredResolve = true, paintResolve = true } = {}) {
+  protectGaps = false, marks = false, patternedResolve = true, coloredResolve = true, paintResolve = true } = {}) {
   const waterPixelGLSL = `
 uniform highp sampler2D u_waterMask;
 ivec2 waterPixel(ivec2 p) {
@@ -1350,7 +1364,8 @@ vec3 refractContributions(ivec2 p, vec3 color) {
   return clamp(color + (shifted-texelFetch(u_glassBack,p,0).rgb)*through,0.0,1.0);
 }` : ''}
 ${PixelLook.glsl}
-${paletteConstraints ? constraintGlsl(masked) : ''}
+${marks ? markResolve : ''}
+${paletteConstraints ? constraintGlsl(masked,marks) : ''}
 ${protectGaps ? detailFlagsGLSL : ''}
 // a hole a pixel across in a surface (its dabs, seen nearly edge on, leave gaps, and what lies under it or far behind shows through, as
 // dark broken lines across the ground): it is drawn as the nearer of the pixels either side of it, which lie on the surface
@@ -1367,7 +1382,8 @@ vec3 toneAt(vec3 c, ivec2 p) {
     float lu = dot(c, vec3(0.30, 0.55, 0.15)); if (lu <= u_toneCut) return vec3(0.0);
     float v = (lu - u_toneCut) / (1.0 - u_toneCut); int lo = 0; for (int i = 0; i < 46; i++) { if (lo >= u_toneN - 2 || v <= texelFetch(u_toneStops, ivec2(lo + 1, 0), 0).a) break; lo++; }
     vec4 s0 = texelFetch(u_toneStops, ivec2(lo, 0), 0), s1 = texelFetch(u_toneStops, ivec2(lo + 1, 0), 0); ivec2 th = ${packedTone ? 'u_toneThSize' : 'textureSize(u_toneTh, 0)'}, sz = textureSize(u_depth, 0);
-    ivec2 rankAt = ivec2(p.x % th.x, (sz.y - 1 - p.y) % th.y);
+    ivec2 screen=ivec2(p.x,sz.y-1-p.y);
+    ivec2 rankAt=${marks ? 'positiveGrid(markCoordinates(p,screen),th)' : 'screen%th'};
     float share = (v - s0.a) / max(1e-5, s1.a - s0.a),
       rank = ${packedTone ? 'texelFetch(u_toneStops, rankAt + ivec2(0, 1), 0).r' : 'texelFetch(u_toneTh, rankAt, 0).r'};
     return share >= 0.5 + (rank - 0.5) * u_toneAmt ? s1.rgb : s0.rgb; }
@@ -1423,7 +1439,8 @@ ${water || environment || relighting ? '      vec4 sl = texelFetch(u_sprLayer, p
   ${contributions ? '' : 'else {'}
 ${paletteConstraints ? '    vec3 constrained; if (constrainPalette(p, c, constrained)) { g_constrained = true; return constrained; }' : ''}
     if (u_toneOn > 0.5) return toneAt(c, artPixel);
-    float th = (BAYER[(p.x & 3) + ((p.y & 3) << 2)] + 0.5) / 16.0 - 0.5;
+    ivec2 grid=${marks ? 'markCoordinates(p,artPixel)' : 'p'};
+    float th = (BAYER[(grid.x & 3) + ((grid.y & 3) << 2)] + 0.5) / 16.0 - 0.5;
     c = clamp(c + th * u_dither, 0.0, 1.0);
   ${contributions ? '' : '}'}
   vec3 best = u_pal[0]; float bd = 1e9; int bi = 0;

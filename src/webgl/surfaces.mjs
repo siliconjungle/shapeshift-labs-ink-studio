@@ -3,6 +3,7 @@ import { emitterGLSL } from './light-emitters.mjs';
 import { waterGLSL } from './water-optics.mjs';
 import { glassSurfaceOutputs } from './hybrid-depth.mjs';
 import { createResources } from './resources.mjs';
+import { surfaceEngravingFragment } from './engraving-shaders.mjs';
 
 const uvSlip = Symbol.for('ink-studio.spriteSurface.uvSlip');
 const eyeFromView = view => [0, 1, 2].map(
@@ -10,13 +11,15 @@ const eyeFromView = view => [0, 1, 2].map(
 );
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
-export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD, sharedShaders } = {}) {
+export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD, sharedShaders, print } = {}) {
   const resources = createResources(gl);
   try {
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
-    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers) {
+    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
+      anchors,engraving) {
       const chart = lighting && !normalMapped;
+      const marks=anchors || engraving;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -30,7 +33,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers
+        glassLayers,anchors,engraving
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -42,12 +45,14 @@ uniform mat4 u_view,u_proj;
 out vec2 v_texel;
 out vec3 v_world;
 ${chart ? 'layout(location=2)in vec2 a_light;out vec2 v_light;' : ''}
+${marks ? 'layout(location=3)in vec3 a_rest;layout(location=4)in vec2 a_marks;out vec3 v_rest;flat out vec2 v_marks;' : ''}
 out float v_depth;
 out vec3 v_camera;
 ${styledProjection ? 'uniform vec2 u_surfaceViewport;uniform float u_vertexSnap;out vec2 v_affine;' : ''}
 void main(){
   vec4 p=u_view*vec4(a_point,1.0);
   ${chart ? 'v_light=a_light;' : ''}
+  ${marks ? 'v_rest=a_rest;v_marks=a_marks;' : ''}
   v_texel=a_texel;v_world=a_point;v_depth=-p.z;v_camera=p.xyz;
   gl_Position=u_proj*p;
   ${styledProjection ? `
@@ -78,6 +83,8 @@ ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
 ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
 ${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
+${marks ? 'in vec3 v_rest;flat in vec2 v_marks;' : ''}
+${engraving ? `uniform float u_engravingArtScale;${surfaceEngravingFragment(print)}` : ''}
 in vec2 v_texel;
 in vec3 v_world;
 in float v_depth;
@@ -127,8 +134,10 @@ void main(){
   vec2 scaleUV=u_uvSlip?u_uvTransform.xy:vec2(1);
   vec2 uvDx=dFdx(v_texel)*scaleUV,uvDy=dFdy(v_texel)*scaleUV;
   ` : ''}
+  ${engraving ? 'vec3 restX=dFdx(v_rest),restY=dFdy(v_rest),worldX=dFdx(v_world),worldY=dFdy(v_world);vec2 texX=dFdx(v_texel),texY=dFdy(v_texel);' : ''}
   if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
   ${section ? 'float margin=sectionMargin(v_world,v_depth); if(margin<0.0)discard;' : ''}
+  ${anchors ? 'color=vec4(v_world,v_marks.x);depth=vec4(v_rest,1);return;' : ''}
   float d=clamp((v_depth-u_range.x)/(u_range.y-u_range.x),0.0,1.0);
   float fog=u_range.z<1.0?smoothstep(u_range.z,1.0,d)*u_range.w:0.0;
   vec3 mark=vec3(0.0), rgb=ink.rgb;
@@ -139,6 +148,18 @@ void main(){
   vec3 irradiance=eLighting(v_world,normal,false,vec3(0),geometricNormal);
   rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));
   ` : ''}
+  ${engraving ? `
+  if(v_marks.y>0.0){
+    vec3 restN=cross(restX,restY),liveN=cross(worldX,worldY);
+    if(length(restN)>1e-12&&length(liveN)>1e-12){
+      restN=normalize(restN);
+      float det=texX.x*texY.y-texX.y*texY.x;
+      vec3 tangent=abs(det)>1e-9 ? (restX*texY.y-restY*texX.y)*sign(det) :
+        cross(abs(restN.x)<.8?vec3(1,0,0):vec3(0,1,0),restN);
+      rgb=surfaceEngraving(int(v_marks.y),rgb,v_rest,restN,normalize(tangent),normalize(liveN),
+        max(length(restX),length(restY)),u_engravingArtScale,0.,vec3(0));
+    }
+  }` : ''}
   ${wet ? 'if(!u_index)rgb=waterPaint(rgb,gl_FragCoord.xy,u_surfaceViewport,v_depth,mark);' : ''}
   ${environment?.media ? 'if(!u_index)rgb=envMedia(rgb,gl_FragCoord.xy,u_surfaceViewport,v_depth);' : ''}
   rgb=mix(rgb,u_fog,fog);
@@ -299,6 +320,30 @@ void main(){
       gl.vertexAttribDivisor(i, 1);
     }
     gl.bindVertexArray(null);
+    let markBuffer, activeMarkAtlas, markSignature, markRevision;
+    function bindMarks(atlas,anchors,engraving) {
+      const signature=(anchors?.key??'')+'|'+(engraving?.key??''), rev=atlas.geometryRevision??0;
+      const charts=atlas.surfaceCharts??[];
+      const needsRevision=!atlas.sceneMeshId || charts.some(chart=>!chart.rest);
+      if(markBuffer && activeMarkAtlas===atlas && markSignature===signature && (!needsRevision || rev===markRevision))return;
+      const count=atlas.vertices.length/5, data=new Float32Array(count*5);
+      let cursor=0;
+      for(let i=0;i<count;i++){
+        while(charts[cursor]?.end<=i)cursor++;
+        const chart=charts[cursor]?.first<=i ? charts[cursor] : undefined;
+        const j=(i-(chart?.first??0))*3;
+        data.set(chart?.rest?.subarray(j,j+3)??atlas.vertices.subarray(i*5,i*5+3),i*5);
+        data[i*5+3]=anchors?.select(chart?.objectId,chart?.materialId)??0;
+        data[i*5+4]=engraving?.mesh(chart)??0;
+      }
+      markBuffer??=resources.allocate('Buffer');
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER,markBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER,data,needsRevision ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+      gl.vertexAttribPointer(3,3,gl.FLOAT,false,20,0);
+      gl.vertexAttribPointer(4,2,gl.FLOAT,false,20,12);
+      activeMarkAtlas=atlas;markSignature=signature;markRevision=rev;
+    }
     function shadeAtlas(atlas, lighting, view) {
       const resolution = lighting.frame.emitterSurfaceResolution ?? 16;
       if (!Number.isSafeInteger(resolution) || resolution < 4 || resolution > 64)
@@ -462,7 +507,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
-        section
+        section, anchors, engraving
       }
     ) {
       upload(atlas);
@@ -498,7 +543,11 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers);
+      const etched=!index && engraving && atlas.surfaceCharts?.some(chart=>engraving.mesh(chart)) ? engraving : null;
+      if(etched || anchors)bindMarks(atlas,anchors,etched);
+      if(etched)etched.bind();
+      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
+        !!anchors,!!etched);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -518,12 +567,14 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_splatPlane: clip,
         u_surfaceViewport: [width, height],
         u_geometryCode: geometryCode, u_partGrid: partGrid,
+        ...(etched && {...etched.uniforms,u_engravingArtScale:samplingScale}),
         ...water,
         ...section,
         ...environment?.uniforms,
         ...lighting?.uniforms
       });
       gl.bindVertexArray(vao);
+      for(const i of [3,4]) if(etched||anchors)gl.enableVertexAttribArray(i);else gl.disableVertexAttribArray(i);
       if (lit && !normalMapped) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);
       let projectionIndex = 0;

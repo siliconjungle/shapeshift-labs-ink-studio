@@ -4,7 +4,9 @@ export function createTargets(gl, resources) {
     gl.bindTexture(gl.TEXTURE_2D, texture);
   };
 
-  function target(colors = 1, { integer = false, depth = false } = {}) {
+  function target(colors = 1, { integer = false, floating = false, depth = false } = {}) {
+    if (floating && !gl.getExtension('EXT_color_buffer_float'))
+      throw new Error('Spatial dither needs WebGL floating-point render attachments');
     const framebuffer = resources.allocate('Framebuffer');
     const textures = Array.from({ length: colors }, () => resources.texture());
     let depthBuffer = depth ? resources.allocate('Renderbuffer') : null;
@@ -43,6 +45,7 @@ export function createTargets(gl, resources) {
         for (const texture of textures) {
           textureUnit(0, texture);
           if (integer) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32I, width, height, 0, gl.RGBA_INTEGER, gl.INT, null);
+          else if (floating) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, null);
           else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
         }
         if (depthBuffer) {

@@ -199,7 +199,7 @@ test('palette anchor validation and compatibility use the same policy in native 
   const { palette } = K.authoring.looks.bind('dither/weave', catalog);
   assert.deepEqual(PixelLook.preparePalette(palette).anchor, { ...on, dither: 'object' });
   assert.deepEqual(K.world.lookReport.standalone({ palette }, undefined, 'headless').issues, []);
-  assert.match(K.world.lookReport.standalone({ palette }, undefined, 'webgl').issues[0].message, /screen space/);
+  assert.deepEqual(K.world.lookReport.standalone({ palette }, undefined, 'webgl').issues, []);
   for (const dither of [{ space: 'camera' }, { space: 'world', spacing: 0 }, { space: 'object', origin: [0, 0] }])
     assert.throws(() => PixelLook.preparePalette({ ...candidates, dither }), /Invalid dither space/);
   assert.throws(() => PixelLook.preparePalette({ ...candidates, dither: { spacing: .2 } }), /Set a dither space/);
@@ -235,5 +235,5 @@ test('view-anchored palette rules hold their phase through a pan in the headless
   const staged = space => plate({renderStages:[{stage:'palette',select:{object:'probe'},palette:anchorPolicy(space)}]});
   assert(changes(...pan(staged('view'),{}),-1)<4);
   assert(changes(...pan(staged('screen'),{}),-1)>30);
-  assert.match(K.world.lookReport.standalone({palette:anchorPolicy('view')},undefined,'webgl').issues[0].message,/screen space/);
+  assert.deepEqual(K.world.lookReport.standalone({palette:anchorPolicy('view')},undefined,'webgl').issues,[]);
 });

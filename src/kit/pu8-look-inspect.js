@@ -103,8 +103,8 @@
         if (renderer === 'webgl') {
           if (explicit) unsupported(path, 'does not evaluate explicit ' + stage + ' stages');
           else if (mode === 'surface') unsupported(path, 'does not evaluate surface look layers');
-          else if (['world', 'object', 'view'].includes(definition.palette?.dither?.space))
-            unsupported(path, 'uses screen space for palette dither');
+          else if (look.coverageAware && ['world', 'object', 'view'].includes(definition.palette?.dither?.space))
+            unsupported(path, 'uses screen space for coverage-aware palette dither');
           else if (definition.palette?.dither?.regions?.length)
             unsupported(path, 'uses base palette dither settings without regional tuning');
           else if (definition.mask && !ContributionRules.supportsMask(definition.mask))
@@ -232,8 +232,6 @@
       issues.push({ code: 'unsupported-renderer', message: 'webgl does not evaluate explicit ' + stage + ' stages' });
     else if (mask && renderer === 'webgl')
       issues.push({ code: 'unsupported-renderer', message: 'webgl does not evaluate spatial look masks' });
-    else if (renderer === 'webgl' && ['world', 'object', 'view'].includes(palette?.dither?.space))
-      issues.push({ code: 'unsupported-renderer', message: 'webgl uses screen space for palette dither' });
     else if (renderer === 'webgl' && palette?.dither?.regions?.length)
       issues.push({ code: 'unsupported-renderer', message: 'webgl uses base palette dither settings without regional tuning' });
     return { ...definitionInfo(definition, params), stage: stage ?? null, issues };
