@@ -17,7 +17,7 @@ uniform bool u_semanticOn,u_semanticLevels,u_semanticNormals,u_semanticOrtho;
 uniform int u_semanticMax;
 uniform vec4 u_semanticRect;
 uniform vec3 u_semanticLight,u_semanticEye,u_semanticBack;
-uniform float u_semanticScale,u_semanticStrength,u_semanticSpecular;
+uniform float u_semanticScale,u_semanticStrength,u_semanticSpecular,u_semanticAmbient;
 vec3 semanticLinear(vec3 c){
   return mix(pow((c+.055)/1.055,vec3(2.4)),c/12.92,lessThanEqual(c,vec3(.04045)));
 }
@@ -55,7 +55,8 @@ vec3 semanticFinish(vec3 pigment,vec3 normal,float roughness,vec3 emission,vec3 
   float gloss=1.-roughness;
   float shine=dot(normal,view)>0.&&dot(normal,u_semanticLight)>0.?
     u_semanticSpecular*gloss*pow(max(0.,dot(normal,h)),4.+96.*gloss*gloss):0.;
-  return semanticDisplay(semanticLinear(pigment)+emission+shine);
+  float diffuse=mix(max(0.,dot(normal,u_semanticLight)),1.,u_semanticAmbient);
+  return semanticDisplay(semanticLinear(pigment)*diffuse+emission+shine);
 }
 `;
 
@@ -722,7 +723,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
             bindSemantic(chain);
             shader.set({u_semanticOn:true,u_semanticRect:[r.x,r.y,r.width,r.height],u_semanticMax:chain.levels.length-1,
               u_semanticStrength:chain.emissionStrength,u_semanticLight:chain.rule.light,
-              u_semanticSpecular:chain.rule.specular,u_semanticNormals:chain.normal});
+              u_semanticSpecular:chain.rule.specular,u_semanticAmbient:chain.rule.ambient,u_semanticNormals:chain.normal});
           } else if(semantic)shader.set({u_semanticOn:false});
           drawProjected(first,stop);
           first=stop;

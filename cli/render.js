@@ -1059,7 +1059,11 @@ function renderFrame(world, o, preparedPalettes) {
   const proxyRejected = passSelection.has('proxyRejected') && new Uint32Array(W*H);
   const proxyRemoved = passSelection.has('proxyRemovedCoverage') && new Float32Array(W*H);
   const proxyDepthPass = passSelection.has('proxyDepth');
-  const meshLayers = SceneMeshes.layers(world,o.meshes);
+  const reliefGrid=o.artGridScale || 1;
+  const reliefMeshes=world.reliefLOD!==undefined ? require('../index.js').load().KIT.procedural.lod.relief.frame(world,o,{
+    view:V,width:W/reliefGrid,height:H/reliefGrid,focal:focal/reliefGrid,ortho:Boolean(ortho),near,far:camera.clipFar
+  },!reflectionPlane&&!probeView&&(!o.samples||o.worked)?o.reliefLODFrame:undefined) : [];
+  const meshLayers = SceneMeshes.layers(world,o.meshes,reliefMeshes);
   const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
   const decals = o.surfaceDecals !== false && world.surfaceDecals?.sample(sceneTime,o).layers;
   const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?

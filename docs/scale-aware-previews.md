@@ -94,3 +94,7 @@ at two orthographic camera distances.
 node cli/ink-studio.js render examples/scale-aware-previews.js --w 420 --h 230 --px 1 --ortho --dist 58 --out far.png
 node cli/ink-studio.js render examples/scale-aware-previews.js --w 420 --h 230 --px 1 --ortho --dist 7 --out near.png
 ```
+
+[Distance-dependent relief](distance-relief.md) uses the same screen
+projection for a depth-tested mesh, normal-mapped surface, and painted
+carrier.

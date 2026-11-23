@@ -65,6 +65,7 @@ const RenderContract = (() => {
     if (rules.some(rule => rule.mask || rule.driver?.inputs?.mask)) issues.push('spatial-stage-mask');
     if (world.pix || world.fine || world.materialPixelStyles) issues.push('textured-splat-color');
     if (world.spriteAtlases?.length || world.spriteSurfaces || frame.surfaceDecals!==false && world.surfaceDecals || frame.meshes !== false && world.meshes?.length ||
+        (frame.meshes!==false && frame.reliefLOD!==false && world.reliefLOD?.length) ||
         (frame.scalePreviews !== false && world.scalePreviews?.length) || world.surfaces?.some(({ settings }) => Object.keys(settings.layers ?? {}).length))
       issues.push('surface-finish');
     if (world.opticalSplats || frame.water !== false && world.water?.count ||

@@ -153,5 +153,5 @@
     return selected.map(({ asset }) => asset);
   }
 
-  P.lod.preview = Object.freeze({ create, camera, tiling, menger, surfaces });
+  P.lod.preview = Object.freeze({ create, camera, project:(bounds,view,basis)=>screen(bounds,basis,checkedView(view)), tiling, menger, surfaces });
 })(KIT);

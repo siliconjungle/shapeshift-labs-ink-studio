@@ -208,7 +208,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const previewPipelines = [];
     const surfacePipelines = [], brickPipelines=new Map();
     const brickShaders={cache:new Map(),program:resources.program};
-    let lastBrickLayers=[];
+    let lastBrickLayers=[],lastReliefMeshes=[];
     let depthMeshPass, finiteCurvePass, lastDepthProxy = false;
     let emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let artPixelFinish, correctionStage;
@@ -1302,8 +1302,17 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if(source.spriteReconstruction&&!reflectionCapture&&plane===zero)
         frame.spriteReconstructionFrame?.(spritePlan??{geometryRows:source.count,states:[]});
       const withdrawal = sampleCoverage?.amount(frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0) ?? 0;
-      const meshLayers = world.meshes === undefined || frame.meshes === false ? [] :
-        toolkit.KIT.sceneMeshes.layers(world,frame.meshes)
+      const reliefMeshes=world.reliefLOD!==undefined ? toolkit.KIT.procedural.lod.relief.frame(world,frame,{
+        view:camera.view,width,height,focal:camera.projection[5]*height*.5,ortho:camera.ortho,
+        near:camera.clipNear,far:camera.clipFar
+      },!reflectionCapture&&plane===zero?frame.reliefLODFrame:undefined) : [];
+      if(!reflectionCapture&&plane===zero){
+        if(reliefMeshes.length!==lastReliefMeshes.length || reliefMeshes.some((mesh,index)=>mesh!==lastReliefMeshes[index]))
+          historyValid=false;
+        lastReliefMeshes=reliefMeshes;
+      }
+      const meshLayers = frame.meshes===false || (world.meshes===undefined&&!reliefMeshes.length) ? [] :
+        toolkit.KIT.sceneMeshes.layers(world,frame.meshes,reliefMeshes)
           .filter(atlas=>!spriteLOD?.hidden(spriteMask?.meshCodes.get(atlas.sceneMeshId)));
       const brickAPI=toolkit.KIT?.procedural?.brickMeshes;
       const brickLayers=world.brickMeshes ? brickAPI.layers(brickAPI.frame(world,frame.brickMeshes)) : [];
@@ -2242,6 +2251,14 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       const spriteLOD=toolkit.KIT?.sprite?.reconstruction;
       const pickFrame={water:frame.water!==false,...ray,meshes:frame.meshes!==false&&ray?.meshes!==false,
         brickMeshes:frame.brickMeshes!==false&&ray?.brickMeshes!==false,cutaway:section,camera,footprintView};
+      if(world.reliefLOD!==undefined&&pickFrame.meshes){
+        const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
+        const view=makeCamera(world,frame,width,height);
+        pickFrame.additionalMeshes=toolkit.KIT.procedural.lod.relief.frame(world,frame,{
+          view:view.view,width,height,focal:view.projection[5]*height*.5,ortho:view.ortho,
+          near:view.clipNear,far:view.clipFar
+        });
+      }
       if(world.spriteReconstruction&&spriteLOD){
         const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
         const view=makeCamera(world,frame,width,height);

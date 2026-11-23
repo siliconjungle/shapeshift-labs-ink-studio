@@ -18,15 +18,15 @@ const SemanticTextureMipmaps = (() => {
     if(value===undefined || value===false)return null;
     const s=value===true?{}:value;
     if(!s || Object.getPrototypeOf(s)!==Object.prototype ||
-      Object.keys(s).some(key=>!['protect','protectCoverage','variance','light','specular'].includes(key)))
+      Object.keys(s).some(key=>!['protect','protectCoverage','variance','light','specular','ambient'].includes(key)))
       throw new TypeError('Invalid semantic mipmap settings');
-    const {protect=[],protectCoverage=.06,variance=1,light=[-.45,.66,.60],specular=.28}=s;
+    const {protect=[],protectCoverage=.06,variance=1,light=[-.45,.66,.60],specular=.28,ambient=1}=s;
     if(!Array.isArray(protect)||protect.length>16||!Array.from(protect).every(rgb24)||new Set(protect).size!==protect.length ||
       !unit(protectCoverage)||protectCoverage===0 || !Number.isFinite(variance)||variance<0||variance>4 ||
       !Array.isArray(light)||light.length!==3||!Array.from(light).every(Number.isFinite)||Math.hypot(...light)<1e-8 ||
-      !Number.isFinite(specular)||specular<0||specular>4)
+      !Number.isFinite(specular)||specular<0||specular>4||!unit(ambient))
       throw new RangeError('Invalid protected colors, normal variance or specular light');
-    return Object.freeze({protect:protect.slice(),protectCoverage,variance,light:normalized(light),specular});
+    return Object.freeze({protect:protect.slice(),protectCoverage,variance,light:normalized(light),specular,ambient});
   }
 
   function texture(input) {
@@ -159,7 +159,9 @@ const SemanticTextureMipmaps = (() => {
     const gloss=1-roughness;
     const shine=dot(normal,light)>0 && dot(normal,view)>0 ?
       rule.specular*gloss*Math.max(0,dot(normal,h))**(4+96*gloss**2):0;
-    return color.map((ink,c)=>display(bound(linear(ink)+emission[c]+shine,0,1)));
+    const ambient=rule.ambient??1;
+    const diffuse=ambient+(1-ambient)*Math.max(0,dot(normal,light));
+    return color.map((ink,c)=>display(bound(linear(ink)*diffuse+emission[c]+shine,0,1)));
   }
 
   return Object.freeze({settings,texture,build,levelAt,sample,shade,rank});

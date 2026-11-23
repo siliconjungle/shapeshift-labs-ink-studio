@@ -266,10 +266,13 @@ const SceneMeshes = (() => {
     }});
   }
 
-  function list(world, enabled) {
-    const meshes = world.meshes;
-    if (enabled === false || meshes === undefined) return [];
-    if (!Array.isArray(meshes) || meshes.length > 32)
+  function list(world, enabled, additional=[]) {
+    if (enabled===false) return [];
+    const authored=world.meshes;
+    if (authored!==undefined && !Array.isArray(authored))
+      throw new RangeError('A scene needs an array of indexed meshes');
+    const meshes=additional.length ? (authored??[]).concat(additional) : authored??[];
+    if (meshes.length > 32)
       throw new RangeError('A scene supports up to 32 indexed meshes');
     const ids = new Set();
     let triangles = 0, texels = 0;
@@ -284,8 +287,8 @@ const SceneMeshes = (() => {
     return meshes;
   }
 
-  function layers(world, enabled) {
-    return list(world,enabled).map(mesh => read(mesh).layer);
+  function layers(world, enabled, additional) {
+    return list(world,enabled,additional).map(mesh => read(mesh).layer);
   }
 
   function proxyPlan(world, enabled, toleranceOverride) {

@@ -32,7 +32,9 @@ swatches. Optional coverage takes one byte per texel and uses the material's
 works. A normal map takes matching tangent-space RGBA8 pixels. Roughness
 accepts a scalar in [0, 1] or a matching grayscale byte map. Emission takes
 matching sRGB RGB8 or RGBA8 pixels. `emissionStrength` scales the decoded
-radiance. The material texture and all supplied maps must share dimensions.
+radiance. `ambient` defaults to 1. Reducing it adds directional diffuse shading from
+the material's `light`, using the same filtered normal as the highlight.
+The material texture and all supplied maps must share dimensions.
 Each semantic map can be up to 1024 pixels per edge.
 
 - **Indexed pigment** votes by covered source area. A protected swatch can
