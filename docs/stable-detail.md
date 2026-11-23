@@ -36,3 +36,5 @@ node cli/ink-studio.js shimmer examples/stable-detail.js --mode pan \
 ```
 
 For zoom, substitute `--mode zoom --step .012`. The command reports the share of pixels that change and then return to their previous color. Use `--stable-detail file.json` to compare custom ranges.
+
+Use [protected one-pixel details](protected-pixels.md) to retain named marks with a native-pixel shot budget.

@@ -591,9 +591,9 @@ function renderFrame(world, o, preparedPalettes) {
       o.boundaryCelsFrame?.(result.report);
       if (result.rgb !== frame.rgb) frame = ArtEffects.paletteUse({ ...frame, rgb: result.rgb }, world.pal);
     }
-    if (nativeCelRows.length) {
+    if (nativeCelRows.length || protectedPlan) {
       let painted = false;
-      celKit.nativeCelPixels.pixels(nativeCelRows, frame.w, frame.h, (x, y, depth, r, g, b) => {
+      function paintCel(x, y, depth, r, g, b, retain = false) {
         const p = y * frame.w + x;
         if (depth > passes.depth[p] + .0001) return;
         const i = p * 3;
@@ -601,9 +601,17 @@ function renderFrame(world, o, preparedPalettes) {
         frame.rgb[i + 1] = g;
         frame.rgb[i + 2] = b;
         if (frame.alpha) frame.alpha[p] = 255;
+        if (retain && passes.protected) passes.protected[p] = 1;
         paletteInventory?.declared.add(r * 65536 + g * 256 + b);
         painted = true;
-      });
+      }
+      celKit.nativeCelPixels.pixels(nativeCelRows, frame.w, frame.h, paintCel);
+      if (protectedPlan) {
+        const result = celKit.protectedPixels.resolve(protectedPlan, pixel => passes?.depth?.[pixel]);
+        for (const row of result.pixels) paintCel(...row,true);
+        frame.protectedPixels = result.report;
+        o.protectedPixelsFrame?.(result.report);
+      }
       if (painted) frame = ArtEffects.paletteUse(frame, world.pal);
     }
     if (captureCorrection) {
@@ -703,7 +711,9 @@ function renderFrame(world, o, preparedPalettes) {
   const celView = !o.samples && !o.captureCoverage && !o.captureLightPlate && !o.reflectionPlane && !probeView;
   const highlightDefinition = celView && (o.highlightCels ?? world.highlightCels);
   const foamDefinition = celView && (o.shoreFoam ?? world.shoreFoam);
-  const celKit = (highlightDefinition || foamDefinition) && require('../index.js').load().KIT;
+  const protectedDefinition = celView && (o.protectedPixels ?? look.protectedPixels);
+  const celKit = (highlightDefinition || foamDefinition || protectedDefinition) && require('../index.js').load().KIT;
+  let protectedPlan;
   const nativeCelRows = [];
   if (celKit) {
     const view = CameraLens.artView(camera, H, stable, undefined, o.artGridScale || 1);
@@ -722,7 +732,12 @@ function renderFrame(world, o, preparedPalettes) {
         spriteAtlasMode: o.spriteAtlasMode
       }));
     }
-    if (nativeCelRows.length) passSelection.add('depth');
+    if (protectedDefinition) {
+      const authored=celKit.protectedPixels.prepare(look.protectedPixels,o.protectedPixels,{scenePalette:world.pal,paletteRoles:world.paletteRoles});
+      if (authored) protectedPlan=celKit.protectedPixels.project(authored,world,drawCamera,
+        {w:W,h:H,time:t,clip,positions:sampleFrames(world,t)});
+    }
+    if (nativeCelRows.length || protectedPlan?.coordinates.size) passSelection.add('depth');
   }
   if (o.captureLightPlate && !o.samples && !o.captureCoverage && W*H > 1_000_000)
     throw new RangeError('Light group plates support up to one million pixels');

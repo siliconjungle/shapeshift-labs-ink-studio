@@ -14,7 +14,7 @@ import { createRenderGrid } from './render-grid.mjs';
 import { createMaterialControls } from './material-controls.mjs';
 import { applyDiffuseRamps } from './diffuse-ramps.mjs';
 import { createLightEmitters } from './light-emitters.mjs';
-import { createNativeCelDraw } from './native-cel-pixels.mjs';
+import { createNativeCelDraw, createNativeDepthProbe } from './native-cel-pixels.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { readHybridDepth } from './hybrid-depth.mjs';
@@ -156,7 +156,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const highlightAPI = toolkit.KIT?.highlightCels;
     const foamAPI = toolkit.KIT?.shoreFoam;
     const nativeCelAPI = toolkit.KIT?.nativeCelPixels;
-    let drawNativeCels;
+    const retainedAPI = toolkit.KIT?.protectedPixels;
+    let drawNativeCels, probeNativeDepth;
     const materialControls=createMaterialControls(gl,resources,targets,maxSize,toolkit);
     const skyPrograms = new Map();
     const dryGeometry = target(2), dryContours = target(2), plainOwner = target(), key = target(1, { integer: true });
@@ -962,10 +963,16 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const masked = Boolean(constraints?.masked);
       if (masked && !coverage) maskOwner ??= target(2);
       const celView = !reflectionCapture && plane === zero;
+      const retainedDefinition = (frame.protectedPixels ?? look.protectedPixels);
+      if(celView && retainedDefinition && !retainedAPI)
+        throw new Error('Protected pixels need the Ink Studio KIT');
+      const retained = celView && retainedDefinition && retainedAPI.prepare(
+        look.protectedPixels, frame.protectedPixels, {scenePalette:world.pal,paletteRoles:world.paletteRoles});
       const highlightDefinition = celView && (frame.highlightCels ?? world.highlightCels);
       const foamDefinition = celView && !coverage && (frame.shoreFoam ?? world.shoreFoam);
       const celClip = cutaway && (at => cutawayAPI.margin(cutaway, ...at,
         -(camera.view[2]*at[0] + camera.view[6]*at[1] + camera.view[10]*at[2] + camera.view[14]) - camera.setback) >= 0);
+      const projectedMarks = retained ? retainedAPI.project(retained,world,camera,{w:width,h:height,time,clip:celClip}) : null;
       const foamRows = foamDefinition && foamAPI?.frame(foamDefinition, world, camera,
         { w: width, h: height, time: t, clip: celClip });
       const highlightPlan = highlightDefinition && highlightAPI?.prepare(highlightDefinition, {
@@ -975,7 +982,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (finiteCurves && !toolkit.KIT?.curveSplats?.renderKernel)
         throw new Error('Finite curves need the Ink Studio KIT');
       const hybridDepthCapture = typeof frame.hybridDepthFrame === 'function';
-      const needsPresentationDepth = Boolean(foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || finishShotArt);
+      const needsPresentationDepth = Boolean(projectedMarks?.coordinates.size || foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || finishShotArt);
       const packedDepth = needsPresentationDepth || hybridDepthCapture || finiteCurves;
       let owner = packedDepth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
       const sourceWater = frame.water !== false && world.water?.count ? world.water : null;
@@ -1770,10 +1777,22 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         previousVP = vp;
       }
       const nativeRows = [...(foamRows || []), ...(highlightRows || [])];
+      let protectedRows = [];
+      if (projectedMarks) {
+        let visible;
+        if(projectedMarks.coordinates.size){
+          probeNativeDepth ??= createNativeDepthProbe(gl,resources,target,textureUnit);
+          visible=probeNativeDepth(projectedMarks.coordinates,owner.textures[2],camera.depthRange);
+        }
+        const result=retainedAPI.resolve(projectedMarks,key=>visible?.get(key));
+        protectedRows=result.pixels;
+        frame.protectedPixelsFrame?.(result.report);
+      }
+
       function drawCels(to) {
-        if (!nativeRows.length) return;
+        if (!nativeRows.length && !protectedRows.length) return;
         drawNativeCels ??= createNativeCelDraw(gl, resources, textureUnit, nativeCelAPI.pixels);
-        drawNativeCels(nativeRows, width, height, to, owner.textures[2], camera.depthRange);
+        drawNativeCels(nativeRows, width, height, to, owner.textures[2], camera.depthRange, protectedRows);
       }
       if (finishArt) {
         let project;
@@ -1812,7 +1831,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           frame.shotCorrectionsFrame?.(report);
           return correctionAPI.apply(art.rgb, edits);
         }
-        if (finishShotArt && nativeRows.length) {
+        if (finishShotArt && (nativeRows.length || protectedRows.length)) {
           let source = artPixelFinish.buffer;
           if (finishSceneArt) {
             correctionStage ??= target();

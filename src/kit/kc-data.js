@@ -675,6 +675,11 @@
     } catch (error) {
       bad('finish.pixelStamps', error.message);
     }
+    if (look?.protectedPixels !== undefined) try {
+      K.protectedPixels.prepare(look.protectedPixels,undefined,{scenePalette:st.palette,paletteRoles:st.roles});
+    } catch (error) {
+      bad('finish.look.protectedPixels',error.message);
+    }
     if (st.finish.highlightCels !== undefined) try {
       K.highlightCels.prepare(st.finish.highlightCels, { scenePalette: st.palette, paletteRoles: st.roles });
     } catch (error) {

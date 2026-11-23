@@ -50,7 +50,7 @@ function assessAtlas(world,view,angle,pivot,width,height,time,protect) {
 function spriteAtlas(world, options = {}) {
   const {
     width = 96, height = 96, directions = 8, times: takeTimes = [0], fps = 12, columns = directions,
-    pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view = {}, depthRange, sourceTimes, pitches,
+    pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view: authoredView = {}, depthRange, sourceTimes, pitches,
     cutoutMipmaps, normalSpace = 'asset', clips, curveSurface = false
   } = options;
   if (clips !== undefined && (options.times !== undefined || sourceTimes !== undefined || world.anim?.stateful))
@@ -68,6 +68,7 @@ function spriteAtlas(world, options = {}) {
       !['asset', 'view'].includes(normalSpace) ||
       (pose !== undefined && typeof pose !== 'function'))
     throw new RangeError('Invalid sprite atlas dimensions, timing, directions, pivot or maps');
+  const view = {protectedPixels:false,...authoredView};
   const requested = [...new Set(maps)];
   const cutout = CutoutMipmaps.prepare(cutoutMipmaps);
   if (cutout && width*height > CutoutMipmaps.pixelLimit)
