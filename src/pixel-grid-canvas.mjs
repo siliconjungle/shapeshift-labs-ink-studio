@@ -66,11 +66,14 @@ export function mountPixelGridCanvas(host) {
   function fit() {
     fitting = true;
     if (!width || !height) return;
-    zoom = clamp(Math.floor(Math.min((viewport.clientWidth - 28) / width,
+    const next = clamp(Math.floor(Math.min((viewport.clientWidth - 28) / width,
       (viewport.clientHeight - 28) / height)),1,maxZoom);
-    left = Math.round((viewport.clientWidth - width * zoom) / 2);
-    top = Math.round((viewport.clientHeight - height * zoom) / 2);
-    showPoint(null);
+    const x = Math.round((viewport.clientWidth - width * next) / 2);
+    const y = Math.round((viewport.clientHeight - height * next) / 2);
+    if (next !== zoom || x !== left || y !== top) showPoint(null);
+    zoom = next;
+    left = x;
+    top = y;
     paintView();
   }
 

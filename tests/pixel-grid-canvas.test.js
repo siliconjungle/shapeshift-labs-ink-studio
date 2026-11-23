@@ -65,10 +65,10 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.equal(initial.w / initial.width,Math.floor(initial.w / initial.width));
     assert.equal(normal.w,normal.width);
     assert.equal(normal.h,normal.height);
-    const hit = place(initial,24,24);
+    const hit = place(initial,24,26);
     const mouse = (type,position,extra = {}) => browser.send('Input.dispatchMouseEvent',{ type,...position,...extra });
     await mouse('mouseMoved',hit);
-    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-coordinates').value"),'X 24 · Y 24');
+    await until(browser,"document.querySelector('.ink-grid-coordinates').value === 'X 24 · Y 26'");
     assert.equal(await browser.evaluate("document.querySelector('.ink-grid-lines').hidden"),false);
     await click(browser,'.ink-grid-toggle input');
     assert.equal(await browser.evaluate("document.querySelector('.ink-grid-lines').hidden"),true);
