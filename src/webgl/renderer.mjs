@@ -600,7 +600,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         const weightsOnly = options.u_splatPaintPass || options.u_coverageVotePass || options.u_gaussianMaterialPass;
         const surfaceOptions = { geometryUpdatesSince: toolkit.SpriteSurface?.geometryUpdatesSince,
           updatesSince: toolkit.SpriteSurface?.updatesSince ?? toolkit.KIT?.ecology?.atlasUpdates, cutaway: cutawayAPI?.glsl,
-          projectionPlan: toolkit.SpriteSurface?.projectionPlan,
+          projectionPlan: toolkit.SpriteSurface?.projectionPlan, spriteLOD:spriteLOD?.glsl,
           samplingPlan: toolkit.SpriteSurface?.samplingPlan, samplingGLSL: toolkit.SpriteSurface?.samplingGLSL };
         buffer.ensureDepth();
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
@@ -610,7 +610,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           if (!atlas) continue;
           surfacePipelines[i] ??= createSurfacePipeline(gl, surfaceOptions);
           if (atlas.sceneMeshId) gl.depthFunc(gl.LESS);
-          surfacePipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
+          surfacePipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height,
+            samplingScale: options.u_materialGridScale ?? 1,
+            geometryCode: options.surfaceFrame?.meshCodes?.get(atlas.sceneMeshId),
+            partGrid: options.spriteGrid });
           if (atlas.sceneMeshId) gl.depthFunc(gl.LEQUAL);
         }
         if (previews) {
@@ -1264,7 +1267,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (proxy) historyValid = false;
       const spriteSurfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
       const meshLayers = world.meshes === undefined || frame.meshes === false ? [] :
-        toolkit.KIT.sceneMeshes.layers(world,frame.meshes);
+        toolkit.KIT.sceneMeshes.layers(world,frame.meshes)
+          .filter(atlas=>!spriteLOD?.hidden(spriteMask?.meshCodes.get(atlas.sceneMeshId)));
       const surfaces = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
       const depthProxy = toolkit.KIT?.sceneMeshes?.proxyPlan(world,frame.splatDepthProxies,frame.splatProxyTolerance);
       if (depthProxy || lastDepthProxy) historyValid=false;
@@ -1343,7 +1347,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         view: camera.view, width, height, focal: height / (2 * tangent), ortho: camera.ortho,
         near: camera.clipNear, far: camera.clipFar
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
-      const surfaceFrame={depthProxy,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
+      const surfaceFrame={depthProxy,meshCodes:spriteMask?.meshCodes,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
         fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,
         surfaceNormals:frame.surfaceNormals,eye:camera.eye,back,ortho:camera.ortho,
         sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
@@ -1998,7 +2002,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
             toolkit.KIT.cutaway.margin(section,...point,axial(point)-view.setback)>=0);
           const accept=ray?.accept;
           pickFrame.accept=hit=>{
-            const code=hit.kind === 'mesh' ? 0 : plan.mask.codes[hit.index], pixel=code&&pixelAt(hit.point);
+            const code=hit.kind==='mesh' ? plan.mask.meshCodes.get(hit.mesh) : plan.mask.codes[hit.index], pixel=code&&pixelAt(hit.point);
             return (!code||pixel&&spriteLOD.geometry(code,...pixel))&&(!accept||accept(hit));
           };
           pickFrame.extraHits=ray=>spriteLOD.hits(plan,{...ray,pixelAt,clip});

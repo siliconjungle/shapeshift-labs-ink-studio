@@ -10,6 +10,7 @@ const SpriteReconstruction = (() => {
     stride = bins + 1,
     pixelLimit = 262144,
     tileCacheBytes = 16 * 1024 * 1024;
+  const curveAPI=typeof CurveSplat === 'undefined' ? require('./curve-splat.js') : CurveSplat;
   const clamp = n => Math.max(0, Math.min(1, n));
   const dot = atlasAPI.dot;
   const plus = (a, b, factor = 1) => a.map((n, i) => n + b[i] * factor);
@@ -48,79 +49,112 @@ bool spriteGeometry(int code, vec2 at) {
     assets.add(result);
     return result;
   }
+  const partKey = (object,part) => JSON.stringify([object,part]);
+
   function bindingsFor(world, configuration) {
     const plan = bindings.get(configuration);
-    if (!plan) throw new TypeError('Use K.sprite.reconstruction.bind to attach a sprite reconstruction');
-    if (plan.metadata === world.renderMetadata && plan.count === world.count) return plan;
-    const { objects, objectIds } = world.renderMetadata ?? {};
-    const index = new Map(plan.entries.map((entry, i) => [entry.placement.objectId, i]));
-    const slots = new Uint8Array(world.count),
-      counts = new Uint32Array(plan.entries.length);
+    if (!plan) throw new TypeError('Use the sprite reconstruction binding API');
+    if (plan.metadata === world.renderMetadata && plan.count === world.count && plan.meshes === world.meshes) return plan;
+    const { objects, objectIds, materials, materialIds, targets, targetIds } = world.renderMetadata ?? {};
+    const legacy = new Map(), parts = new Map();
+    for (const [i,entry] of plan.entries.entries()) {
+      if (entry.part === undefined) legacy.set(entry.object,i);
+      else {
+        if (entry.mesh && !world.meshes?.includes(entry.mesh))
+          throw new RangeError('Part mesh must be present in world.meshes: '+entry.object+'/'+entry.part);
+        parts.set(partKey(entry.object,entry.part),i);
+      }
+    }
+    const slots = new Uint8Array(world.count), counts = new Uint32Array(plan.entries.length);
     for (let i = 0; i < world.count; i++) {
-      const slot = index.get(objects?.[objectIds?.[i]]);
-      if (slot === undefined) continue;
-      slots[i] = slot + 1;
+      const object=objects?.[objectIds?.[i]];
+      if (!object) continue;
+      const target=targets?.[targetIds?.[i]];
+      const slot=legacy.get(object) ?? (target?.part===undefined ? undefined : parts.get(partKey(object,target.part)));
+      if (slot===undefined) continue;
+      const entry=plan.entries[slot];
+      if (entry.part!==undefined) {
+        const isCurve=Boolean(world.curveStations?.[i*curveAPI.stationStride]);
+        if (entry.mesh || isCurve!==(entry.representation==='curves') || materials?.[materialIds?.[i]]!==entry.material ||
+            target.entity!==undefined && target.entity!==object)
+          throw new RangeError('Native geometry disagrees with the part representation or material: '+object+'/'+target.part);
+      }
+      slots[i]=slot+1;
       counts[slot]++;
     }
-    for (const [i, n] of counts.entries())
-      if (!n)
-        throw new RangeError(
-          'Sprite reconstruction cannot find native splats for ' + plan.entries[i].placement.objectId
-        );
-    return Object.assign(plan, {
-      metadata: world.renderMetadata,
-      count: world.count,
-      slots,
-      counts,
-      mask: null,
-      key: ''
-    });
+    for (const [i,entry] of plan.entries.entries())
+      if (!counts[i] && !entry.mesh)
+        throw new RangeError('Sprite reconstruction cannot find native splats for '+entry.object+(entry.part ? '/'+entry.part : ''));
+    return Object.assign(plan,{metadata:world.renderMetadata,count:world.count,meshes:world.meshes,slots,counts,mask:null,key:''});
   }
 
-  function bind(world, entries) {
-    if (
-      !Number.isSafeInteger(world?.count) ||
-      world.count < 0 ||
-      !(world.data instanceof Float32Array) ||
-      !Array.isArray(entries) ||
-      entries.length > 128
-    )
-      throw new TypeError('Sprite reconstruction needs a native world and up to 128 placements');
-    if (!entries.length) {
+  function placementFor(object,material,part,spec) {
+    const {asset:source,at,yaw,scale,frame,playback,depth,lighting,emission}=spec;
+    if (!assets.has(source)) throw new TypeError('Sprite reconstruction needs a registered asset');
+    let hash=0;
+    const label=part===undefined ? object : partKey(object,part);
+    for (let i=0;i<label.length;i++) hash=(Math.imul(hash,31)+label.charCodeAt(i))|0;
+    const placement=atlasAPI.place({atlas:source.atlas,mode:'impostor',at,yaw,scale,frame,playback,
+      depth,lighting,emission,objectId:object,materialId:material});
+    return {source,placement,phase:hash&63};
+  }
+
+  function attach(world,entries,partBinding) {
+    if (!Number.isSafeInteger(world?.count) || world.count<0 || !(world.data instanceof Float32Array))
+      throw new TypeError('Sprite reconstruction needs a native world');
+    const previous=world.spriteReconstruction && bindings.get(world.spriteReconstruction);
+    const merged=[...(previous?.entries.filter(entry=>(entry.part!==undefined)!==partBinding)??[]),...entries];
+    if (merged.length>128) throw new RangeError('Sprite reconstruction supports up to 128 placements and parts');
+    const legacy=new Set(merged.filter(entry=>entry.part===undefined).map(entry=>entry.object));
+    if (merged.some(entry=>entry.part!==undefined&&legacy.has(entry.object)))
+      throw new RangeError('Use one reconstruction binding per object or bind its parts separately');
+    if (!merged.length) {
       delete world.spriteReconstruction;
       return world;
     }
-    const names = new Set();
-    const items = Array.from(
-      entries,
-      ({ asset: source, object, material, at, yaw, scale, frame, playback, depth, lighting, emission } = {}) => {
-        if (!assets.has(source) || !selectors.name(object) || names.has(object))
-          throw new TypeError('Sprite reconstruction needs a registered asset and a unique native object name');
-        names.add(object);
-        let hash = 0;
-        for (let i = 0; i < object.length; i++) hash = (Math.imul(hash, 31) + object.charCodeAt(i)) | 0;
-        const placement = atlasAPI.place({
-          atlas: source.atlas,
-          mode: 'impostor',
-          at,
-          yaw,
-          scale,
-          frame,
-          playback,
-          depth,
-          lighting,
-          emission,
-          objectId: object,
-          materialId: material
-        });
-        return { source, placement, phase: hash & 63 };
-      }
-    );
-    const configuration = Object.freeze({});
-    bindings.set(configuration, { entries: items });
-    bindingsFor(world, configuration);
-    world.spriteReconstruction = configuration;
+    const configuration=Object.freeze({});
+    bindings.set(configuration,{entries:merged});
+    bindingsFor(world,configuration);
+    world.spriteReconstruction=configuration;
     return world;
+  }
+
+  function bind(world,entries) {
+    if (!Array.isArray(entries) || entries.length>128)
+      throw new TypeError('Sprite reconstruction needs up to 128 placements');
+    const names=new Set();
+    return attach(world,Array.from(entries,(spec={})=>{
+      const {object,material}=spec;
+      if (!selectors.name(object) || names.has(object))
+        throw new TypeError('Sprite reconstruction needs a registered asset and a unique native object name');
+      names.add(object);
+      return {object,material,...placementFor(object,material,undefined,spec)};
+    }),false);
+  }
+
+  function bindParts(world,entries) {
+    if (!Array.isArray(entries) || entries.length>128)
+      throw new TypeError('Part representations need up to 128 parts');
+    const names=new Set(), meshes=new Set();
+    return attach(world,Array.from(entries,({object,part,material,representation,mesh,sprite}={})=>{
+      const key=partKey(object,part);
+      if (![object,part,material].every(selectors.name) || names.has(key) ||
+          !['mesh','curves','splats'].includes(representation))
+        throw new TypeError('Part representations need unique object and part IDs, a material, and a native representation');
+      names.add(key);
+      if (representation==='mesh') {
+        if (meshes.has(mesh) || mesh?.objectId!==object || mesh.partId!==part ||
+            mesh.materials?.length!==1 || mesh.materials[0]!==material)
+          throw new RangeError('A part mesh needs matching object, part and material IDs');
+        meshes.add(mesh);
+      } else if (mesh!==undefined) throw new TypeError('Only mesh parts can bind a native mesh');
+      return {object,part,material,representation,mesh,...(sprite && placementFor(object,material,part,sprite))};
+    }),true);
+  }
+
+  function labels(world) {
+    const entries=bindings.get(world.spriteReconstruction)?.entries ?? [];
+    return entries.filter(row=>row.part!==undefined).map(({object,part,material})=>({object,part,material}));
   }
 
   function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime } = {}) {
@@ -134,7 +168,13 @@ bool spriteGeometry(int code, vec2 at) {
       steps = [];
     const observer = ortho ? plus(eye, back, -setback) : eye;
     let geometryRows = world.count;
-    for (const [i, { placement, source, phase }] of plan.entries.entries()) {
+    for (const [i, { object, part, material, representation, placement, source, phase }] of plan.entries.entries()) {
+      const tags=part===undefined ? {object} : {object,part,material,representation};
+      if (!placement) {
+        steps.push(bins);
+        states.push({...tags,geometry:1,sprite:0});
+        continue;
+      }
       const clock = atlasTime?.(placement) ?? time;
       const at =
         typeof placement.at === 'function'
@@ -147,7 +187,7 @@ bool spriteGeometry(int code, vec2 at) {
         step = mode === 'sprite' ? 0 : Math.round(bins * x * x * (3 - 2 * x));
       steps.push(step);
       if (!step) geometryRows -= plan.counts[i];
-      const state = { object: placement.objectId, distance, geometry: step / bins, sprite: 1 - step / bins };
+      const state = { ...tags, distance, geometry: step / bins, sprite: 1 - step / bins };
       states.push(state);
       if (step === bins) continue;
       const direction = ortho || distance < 1e-9 ? back : delta.map(n => n / distance);
@@ -166,7 +206,7 @@ bool spriteGeometry(int code, vec2 at) {
       );
       state.view = { frame: view.frame, yaw: view.yaw, pitch: view.pitch };
       rows.push({
-        placement,
+        placement,part,
         at,
         view,
         axes,
@@ -181,7 +221,9 @@ bool spriteGeometry(int code, vec2 at) {
     if (!plan.mask || plan.key !== key) {
       const codes = plan.entries.map(({ phase }, i) => (steps[i] === bins ? 0 : 1 + steps[i] + stride * phase));
       const mask = Uint16Array.from(plan.slots, slot => (slot ? codes[slot - 1] : 0));
-      plan.mask = { codes: mask, hasFar: steps.includes(0) };
+      const meshCodes = new Map();
+      for (const [i,{mesh}] of plan.entries.entries()) if (mesh && codes[i]) meshCodes.set(mesh.id,codes[i]);
+      plan.mask = { codes: mask, meshCodes, hasFar:steps.some((step,i)=>step===0&&plan.counts[i]>0) };
       plan.key = key;
     }
     return { rows, states, geometryRows, mask: rows.length ? plan.mask : null };
@@ -212,6 +254,7 @@ bool spriteGeometry(int code, vec2 at) {
       if (x < 0 || x >= view.rect.width || y < 0 || y >= view.rect.height) continue;
       const target = {
         kind: 'sprite',
+        ...(row.part !== undefined && {part:row.part}),
         entity: objectId,
         object: objectId,
         ...(materialId !== undefined && { material: materialId })
@@ -299,6 +342,6 @@ bool spriteGeometry(int code, vec2 at) {
     tileBytes += values.byteLength;
     return image;
   }
-  return Object.freeze({ asset, bind, resolve, hidden, geometry, sprite, alpha, tile, light, hits, glsl });
+  return Object.freeze({ asset, bind, bindParts, labels, resolve, hidden, geometry, sprite, alpha, tile, light, hits, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = SpriteReconstruction;

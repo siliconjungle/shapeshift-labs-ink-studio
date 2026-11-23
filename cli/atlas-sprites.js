@@ -62,7 +62,8 @@ function rasterize(placements, settings) {
       placement.clock === 'interface' ? interfaceTime ?? sceneTime : shutterTime?.(placement) ?? sceneTime;
     const {atlas,opacity}=placement, mode=lod?'impostor':override??placement.mode;
     const protection=subject?.({object:placement.objectId,entity:placement.objectId,material:placement.materialId});
-    const ids = captureIds && { objectId: placement.objectId, materialId: placement.materialId };
+    const ids = (captureIds || lod?.part !== undefined) &&
+      { objectId:placement.objectId, materialId:placement.materialId, partId:lod?.part };
     if (!opacity || placement.visibleAt && !placement.visibleAt(time)) continue;
     const at=lod?.at??(typeof placement.at==='function'?vector(placement.at(time),'Sprite atlas anchor'):placement.at);
     const fixed=mode==='scenery';

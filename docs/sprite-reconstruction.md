@@ -46,3 +46,73 @@ Depth, alpha, baked or additive emission, normal maps, and edited cels come from
 For lace and foliage, enable [cutout coverage mipmaps](impostor-atlases.md#cutout-coverage-at-a-distance)
 in the atlas manifest. The same registered level is used for color, depth,
 and picking throughout the reconstruction pass.
+
+## Mixed representations on one asset
+
+Use `bindParts` for an object with independently rendered parts. Each
+part has one canonical material and an optional distant sprite. Build
+the near parts using their native APIs and give them the same object,
+part, and material labels as the binding. When an asset has several
+materials, author one bound part for each region that needs its own
+material assignment in the distant view.
+
+```js
+const object = 'lantern';
+const shell = K.sceneMeshes.create({
+  id: 'lantern-shell-draw', objectId: object, partId: 'shell',
+  positions, indices, uvs,
+  materials: [{ id: 'enamel', texture }]
+});
+K.curveSplats.draw(B, cablePath, {
+  object, material: 'copper', target: { part: 'cables' },
+  color: '#e2aa72', width: .12, edge: 'hard'
+});
+const first = B.count();
+// Add the glow splats to B.
+B.describeSplats(first, B.count(), {
+  object, material: 'mint', target: { entity: object, part: 'halo' }
+});
+const world = B.finish({ meshes: [shell] });
+const sprites = K.sprite.reconstruction;
+const distant = (atlas, range) => ({ asset: sprites.asset({ atlas, range }), at: [0, 1.4, 0] });
+sprites.bindParts(world, [
+  { object, part: 'shell', material: 'enamel', representation: 'mesh', mesh: shell,
+    sprite: distant(shellAtlas, [9, 13]) },
+  { object, part: 'cables', material: 'copper', representation: 'curves',
+    sprite: distant(cableAtlas, [7.6, 11]) },
+  { object, part: 'halo', material: 'mint', representation: 'splats',
+    sprite: distant(haloAtlas, [6.4, 9.8]) }
+]);
+```
+
+A mesh binding refers to a mesh in `world.meshes`. Its mesh draw ID
+identifies the submission and its `objectId` and `partId` identify
+the asset. Curve and splat bindings select authored rows by the
+object and part labels. Each fallback atlas uses the same labels as
+its source part and requires an anchor in the same coordinate space.
+Leave out `sprite` to keep a part native at every distance. Parts
+can share an object ID and have different handoff intervals.
+Whole-object bindings can coexist on other objects.
+
+Both renderers apply a complementary native-grid coverage pattern
+during each handoff. A distant mesh part leaves the mesh draw list.
+Distant curve and splat rows leave their native submission. The
+sprite atlas provides the distant material's baked appearance,
+coverage, and optional depth and normal maps. The headless buffers
+and browser ray picks preserve the object, part, and material
+labels. Soft pixels follow their usual depth ownership rule.
+The frame report includes the representation, part, material,
+native coverage share, and selected sprite view for each binding.
+
+The [Brine lantern scene](../examples/part-representations.js) bakes
+the three atlases from their original native geometry.
+
+```sh
+ink-studio passes examples/part-representations.js \
+  --channels opaque-surface,partId --t 1.6 --w 244 --h 160 --px 1 --px1 --out lantern
+ink-studio surface-pixel examples/part-representations.js \
+  --at 122,78 --t 3.2 --w 244 --h 160 --px 1
+```
+
+Use `--sprite-reconstruction geometry` or
+`--sprite-reconstruction sprite` for fixed-camera comparisons.

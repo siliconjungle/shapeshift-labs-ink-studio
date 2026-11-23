@@ -9,11 +9,11 @@ const eyeFromView = view => [0, 1, 2].map(
 );
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
-export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan } = {}) {
+export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD } = {}) {
   const resources = createResources(gl);
   try {
     const shaders = new Map();
-    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection) {
+    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart) {
       const chart = lighting && !normalMapped;
       const key = [
         wet?.airPockets,
@@ -26,7 +26,8 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         !!environment?.media,
         !!environment?.lit,
         paletteSampling,
-        styledProjection
+        styledProjection,
+        maskedPart
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = resources.program(
@@ -65,6 +66,7 @@ uniform vec2 u_surfaceViewport;
 uniform vec3 u_fog;
 uniform bool u_index, u_graphDepth, u_portalCover;
 uniform bool u_uvSlip;
+${maskedPart ? 'uniform int u_geometryCode;uniform vec2 u_partGrid;'+spriteLOD : ''}
 uniform vec4 u_uvTransform, u_uvBounds;
 ${paletteSampling ? `uniform float u_samplingScale;
 ${samplingGLSL}` : ''}
@@ -95,6 +97,7 @@ vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map){
 }
 ` : ''}
 void main(){
+  ${maskedPart ? 'if(!spriteGeometry(u_geometryCode,gl_FragCoord.xy*u_partGrid))discard;' : ''}
   vec2 uv=${styledProjection ? 'u_affine?v_affine*gl_FragCoord.w:v_texel' : 'v_texel'};
   vec2 rawTexel=u_uvSlip?uv*u_uvTransform.xy+u_uvTransform.zw:uv;
   vec2 texel=u_uvSlip?clamp(rawTexel,u_uvBounds.xy,u_uvBounds.zw):rawTexel;
@@ -451,6 +454,8 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         paletteSampling,
         surfaceNormals = true,
         samplingScale = 1,
+        geometryCode = 0,
+        partGrid = [1,1],
         section
       }
     ) {
@@ -487,7 +492,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0);
+      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode));
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -505,6 +510,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_arrivalPlane: arrivalPlane,
         u_splatPlane: clip,
         u_surfaceViewport: [width, height],
+        u_geometryCode: geometryCode, u_partGrid: partGrid,
         ...water,
         ...section,
         ...environment?.uniforms,

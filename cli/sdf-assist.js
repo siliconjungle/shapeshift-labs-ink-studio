@@ -52,7 +52,7 @@ function bind(world, data, settings) {
 }
 
 const facing = (row,normal) => !row.normal || dot(row.normal,row.normal)<1e-8 || dot(row.normal,normal)>.25;
-function trace(source, ray, near, far, settings, clip) {
+function trace(source, ray, near, far, settings, clip, visible, x, y) {
   const {origin,direction,axial} = ray, {min,max} = source.bounds, {epsilon,steps} = settings;
   const range = [near/axial,far/axial];
   for (let k=0;k<3;k++) if (!slab(range,origin[k],direction[k],min[k],max[k])) return null;
@@ -72,7 +72,7 @@ function trace(source, ray, near, far, settings, clip) {
       const part = source.parts.get(owner) ?? source.parts.get(body);
       if (part && (normal=normalAt(field,point,epsilon))) {
         const row = part.nearest.sample(point,i=>facing(part.records[i],normal))?.values;
-        if (row && settings.allows(row.target,point)) return {z:along*axial,position:point,normal,row};
+        if (row && (!visible || visible(row.i,x,y)) && settings.allows(row.target,point)) return {z:along*axial,position:point,normal,row};
       }
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
@@ -80,7 +80,7 @@ function trace(source, ray, near, far, settings, clip) {
   return null;
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip}) {
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible}) {
   const {sources,rows} = bind(world,data,settings);
   if (!sources.length) return null;
   const hits = new Array(w*h), samples=[];
@@ -88,7 +88,7 @@ function rasterize(world, data, settings, {w,h,rayAt,near,clip}) {
     const ray=rayAt(x+.5,y+.5);
     let closest;
     for (const source of sources) {
-      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip);
+      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y);
       if (hit && (!closest || closest.z>hit.z)) closest=hit;
     }
     if (!closest) continue;

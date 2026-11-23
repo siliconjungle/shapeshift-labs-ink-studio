@@ -51,6 +51,7 @@ const ArtPasses = (() => {
     const tuple = (array,n) => array && Array.from(array.subarray(p*n,(p+1)*n));
     return { kind:surfaceKinds[passes.surfaceKind[p]], depth:depth[p],
       object:passes.objects?.[passes.objectId?.[p]] ?? null, material:passes.materials?.[passes.materialId?.[p]] ?? null,
+      ...(passes.partId && {part:passes.parts?.[passes.partId[p]]?.part ?? null}),
       coverage:passes.surfaceCoverage?.[p], position:tuple(passes.position,3), restPosition:tuple(passes.objectPosition,3),
       geometricNormal:tuple(passes.geometricNormal,3), shadingNormal:tuple(passes.shadingNormal,3),
       uv:passes.surfaceUVValid?.[p] ? tuple(passes.surfaceUV,2) : null };

@@ -150,7 +150,13 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
     }
     const parts = (capturePartMotion || selected.has('partId')) && PartMotion.catalog(world);
     if (selected.has('partId')) {
-      result.partId = topDown(Uint32Array.from(owner, i=>parts.rows[i] ?? 0),1);
+      for (const {object,part} of [...(geometry.representationLabels ?? []),...(geometry.surfaceLabels?.parts ?? [])])
+        parts.authored(object,part);
+      result.partId = topDown(Uint32Array.from(owner,(i,p)=>{
+        const hit=atlasOwners?.get(p), part=hit?.mesh?.part ?? hit?.partId;
+        if (part!==undefined) return parts.authored(hit.mesh?.object ?? hit.objectId,part);
+        return parts.rows[i] ?? 0;
+      }),1);
       result.parts = parts.parts;
     }
     const normalOut = (selected.has('normal')||selected.has('shadingNormal')) ? new Float32Array(size * 3) : null;
@@ -248,12 +254,15 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       if (!selected.has(channel)) continue;
       const ids = world.renderMetadata?.[channel + 's'];
       const defaults=world.renderMetadata?.[names] || [null];
-      const appended=geometry.surfaceLabels?.[names].filter(name=>!defaults.includes(name));
+      const key=channel==='objectId' ? 'object' : 'material';
+      const declared=(geometry.representationLabels ?? []).map(row=>row[key]);
+      const appended=[...new Set([...(geometry.surfaceLabels?.[names] ?? []),...declared])]
+        .filter(name=>!defaults.includes(name)).sort();
       const table=appended?.length ? [...defaults,...appended] : defaults;
       const byName=new Map(table.map((name,i)=>[name,i]));
-      const key=channel==='objectId' ? 'object' : 'material';
       result[channel]=topDown(Uint32Array.from(owner,(i,p)=>{
-        const name=atlasOwners?.get(p)?.mesh?.[key];
+        const hit=atlasOwners?.get(p);
+        const name=hit?.mesh?.[key] ?? (hit?.partId!==undefined ? hit[channel] : undefined);
         return name===undefined ? ids?.[i] || 0 : byName.get(name) ?? 0;
       }),1);
       result[names]=table;

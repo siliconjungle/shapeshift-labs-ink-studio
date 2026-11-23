@@ -717,7 +717,7 @@ function renderFrame(world, o, preparedPalettes) {
   const surfaceReset=o.resetRenderHistory||o.resetSurfaceMotion;
   if (partView&&!captureSurfaceMotion&&surfaceReset) o.surfaceMotionHistory?.clear();
   const captureTexturedSurface=captureSurfaceMotion||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
-    'surfaceKind'].some(channel=>passSelection.has(channel));
+    'surfaceKind','partId'].some(channel=>passSelection.has(channel));
   const captureStrandMotion = partView && (!!o.captureStrandMotion || ArtPasses.needsStrandMotion(requestedPasses));
   const strandReset = o.resetRenderHistory || o.resetStrandMotion;
   if (partView && !captureStrandMotion && strandReset) o.strandMotionHistory?.clear();
@@ -994,8 +994,9 @@ function renderFrame(world, o, preparedPalettes) {
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
-      capture:captureTexturedSurface, motion:captureSurfaceMotion });
-  const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip}) : null;
+      capture:captureTexturedSurface, motion:captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD });
+  const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
+    visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
@@ -3063,7 +3064,8 @@ function renderFrame(world, o, preparedPalettes) {
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, scale:SC, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, ditherView, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
-    surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers) : undefined });
+    surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers) : undefined,
+    representationLabels:captureTexturedSurface && spriteLOD ? spriteLOD.labels(world) : undefined });
   if (proxyDepthPass || proxyRejected || proxyRemoved) {
     const native = {w:W,h:H,...passes};
     const rows = (source, Result, fill) => source ?

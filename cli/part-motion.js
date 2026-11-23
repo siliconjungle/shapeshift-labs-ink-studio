@@ -5,6 +5,16 @@ function catalog(world) {
   const rig = world.anim?.rig, bones = world.anim?.bones;
   const rest = world.rest ?? world.data;
   const parts = [null], keys = [null], groups = new Map(), rows = new Uint32Array(world.count);
+  function register(source,entity,object,part,bone) {
+    const key = JSON.stringify([source, entity ?? (source !== 'rig' ? object : null), part ?? bone]);
+    if (!groups.has(key)) {
+      groups.set(key, parts.length);
+      keys.push(key);
+      parts.push({ source, ...(entity != null && {entity}), ...(object != null && source !== 'rig' && {object}),
+        ...(part !== undefined && {part}), ...(source === 'bone' && {part:'bone '+bone, bone}) });
+    }
+    return groups.get(key);
+  }
   for (let i = 0; i < rows.length; i++) {
     const object = objects?.[objectIds?.[i]], target = targets?.[targetIds?.[i]], entity = target?.entity;
     const rigSlot = rig?.bid?.[i] || 0, q = i*16;
@@ -13,16 +23,9 @@ function catalog(world) {
     const part = target?.part ?? (rigSlot ? rig.names?.[rigSlot] ?? String(rigSlot) : undefined);
     const source = target?.part ? 'authored' : rigSlot ? 'rig' : bone != null ? 'bone' : 'object';
     if (part === undefined && bone == null && object == null && entity == null) continue;
-    const key = JSON.stringify([source, entity ?? (source !== 'rig' ? object : null), part ?? bone]);
-    if (!groups.has(key)) {
-      groups.set(key, parts.length);
-      keys.push(key);
-      parts.push({ source, ...(entity != null && {entity}), ...(object != null && source !== 'rig' && {object}),
-        ...(part !== undefined && {part}), ...(source === 'bone' && {part:'bone '+bone, bone}) });
-    }
-    rows[i] = groups.get(key);
+    rows[i] = register(source,entity,object,part,bone);
   }
-  return { parts, keys, rows };
+  return { parts, keys, rows, authored: (object,part) => register('authored',object,object,part,null) };
 }
 
 function history() {

@@ -160,6 +160,7 @@ function writePasses(directory, frame, scale = 1) {
     if (passes.proxyDepth) manifest.proxyDepth=depthRange(passes.proxyDepth);
   }
   if (passes.strands) manifest.strandData=writeStrandData(passes,writeData);
+  if (passes.partId) manifest.partData=writePassData(passes,['partId'],writeData);
   if (['surfaceKind','surfaceCoverage','geometricNormal','shadingNormal','surfaceUV','surfaceUVValid','surfaceMotion','surfaceMotionValid']
       .some(channel=>passes[channel])) manifest.opaqueSurface=writePassData(passes,opaque,writeData);
   fs.writeFileSync(path.join(directory, 'passes.json'), JSON.stringify(manifest, null, 2) + '\n');

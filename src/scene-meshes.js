@@ -70,8 +70,9 @@ const SceneMeshes = (() => {
     return width;
   }
 
-  function create({ id, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {}) {
-    if (!name(id)) throw new TypeError('An indexed scene mesh needs a nonempty ID');
+  function create({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {}) {
+    if (!name(id) || !name(objectId) || partId !== undefined && !name(partId))
+      throw new TypeError('An indexed scene mesh needs nonempty mesh, object and optional part IDs');
     const positions = positionsOf(authored), vertices = positions.length / 3;
     if (!array(uvInput) || uvInput.length !== vertices * 2 || !every(uvInput,unit) ||
         !array(indices) || !indices.length || indices.length % 3 || indices.length / 3 > maxTriangles ||
@@ -105,13 +106,14 @@ const SceneMeshes = (() => {
       }
       const material = rows[index];
       atlas.meshRegion({ points:positions, restPoints:positions, uvs, triangles:drawIndices.subarray(offset,cursor) },
-        regions[index], {id:material.id, objectId:id, materialId:material.id, sampling:material.sampling});
+        regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling});
     }
     const layer = atlas.finish();
     layer.sceneMeshId = id;
     const data = { positions, rest:positions, uvs, indices:source, drawIndices, layer, regions,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:bounds(positions) };
-    return Object.freeze({ id, vertices, triangles, [state]:data });
+    return Object.freeze({ id, objectId, partId, vertices, triangles,
+      materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });
   }
 
   function depthProxy({id,positions,indices} = {}) {
@@ -196,7 +198,8 @@ const SceneMeshes = (() => {
       const y = region.y+Math.floor(.5+(region.height-1)*uv[1]);
       if (layer.pixels[(y*layer.width+x)*4+3] < 128) continue;
       const normal = V.norm(V.cross(ab,ac).map(n => n*Math.sign(det)));
-      const hit = { kind:'mesh', index:-1, id:mesh.id, triangle, target:{object:mesh.id,material:materials[slot]},
+      const hit = { kind:'mesh', index:-1, id:mesh.objectId, mesh:mesh.id, triangle,
+        target:{object:mesh.objectId,material:materials[slot],...(mesh.partId && {entity:mesh.objectId,part:mesh.partId})},
         distance, point:V.mad(origin,direction,distance), normal, uv, restPosition:interpolate(rest,3), alpha:1, solid:true };
       if (accept && !accept(hit)) continue;
       closest = hit;

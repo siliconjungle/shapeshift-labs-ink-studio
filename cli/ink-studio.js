@@ -2715,7 +2715,7 @@ const CMD = {
       die('Use surface-pixel <scene> --at x,y [--t seconds] [--out inspection.json]');
     const world = buildPreview(), t = num('t', 0), [x,y] = list('at');
     const art = require('../src/art-passes.js');
-    const passes = art.opaque.filter(channel => !art.needsSurfaceMotion([channel]));
+    const passes = [...art.opaque.filter(channel => !art.needsSurfaceMotion([channel])), 'partId'];
     pose(world,t);
     const frame = R.render(world,view({t,passes}));
     const report = {scene:world.id,time:t,at:[x,y],hit:art.pick(frame.passes,x,y)};

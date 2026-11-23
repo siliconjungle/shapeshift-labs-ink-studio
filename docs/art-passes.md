@@ -514,3 +514,9 @@ blending the remaining fragments. Other occluders in the scene can
 also affect the final color at that pixel. The CLI saves the previews
 and lossless data in the `proxyData` section of `passes.json`.
 Headless graphs can read the same channels through `scene.pass`.
+
+For [mixed asset representations](sprite-reconstruction.md#mixed-representations-on-one-asset),
+request `partId` alongside `opaque-surface`. Use the `parts` table
+to read the authored part on a visible mesh, curve, splat, or distant
+sprite. The CLI saves the lossless part IDs under `partData` in
+`passes.json`. `surface-pixel` includes the visible part label.

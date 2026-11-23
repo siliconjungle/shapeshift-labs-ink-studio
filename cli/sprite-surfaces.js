@@ -16,7 +16,7 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false,depthOnly=false}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -42,6 +42,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
   const identity = [[1,0,0],[0,1,0],[0,0,1]];
   for (const [slot,layer] of (Array.isArray(atlas) ? atlas : [atlas]).entries()) {
     if (!layer) continue;
+    const code=meshMask?.get(layer.sceneMeshId);
+    if (code && spriteLOD.hidden(code)) continue;
     const {vertices,pixels,normalPixels,width,height}=layer;
     if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
       !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
@@ -67,7 +69,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
         motion || chart ? weights : undefined));
-      const mesh=capture && {object:chart?.objectId,material:chart?.materialId,
+      const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
         ...(motion && {key:JSON.stringify(['mesh',layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
@@ -101,6 +103,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           gradients = [weighted(b.sy-c.sy,c.sy-a.sy,a.sy-b.sy), weighted(c.sx-b.sx,a.sx-c.sx,b.sx-a.sx)];
         }
         for(let y=loY;y<=hiY;y++)for(let x=loX;x<=hiX;x++){
+          if (code && !spriteLOD.geometry(code,x,y)) continue;
           const weights=[edge(b,c,x+.5,y+.5)/area,edge(c,a,x+.5,y+.5)/area,edge(a,b,x+.5,y+.5)/area];
           if(weights.some(n=>n < -1e-7))continue;
           const w=weights.map((n,k)=>ortho?n:n/row[k].z),sum=w[0]+w[1]+w[2];
@@ -159,12 +162,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
   return depthOnly ? depth : fragments.filter(Boolean);
 }
 function labels(atlas) {
-  const objects=new Set(), materials=new Set();
+  const objects=new Set(), materials=new Set(), parts=new Map();
   for (const layer of Array.isArray(atlas) ? atlas : [atlas]) for (const chart of layer?.surfaceCharts ?? []) {
     if (chart.objectId!==undefined) objects.add(chart.objectId);
     if (chart.materialId!==undefined) materials.add(chart.materialId);
+    if (chart.objectId!==undefined && chart.partId!==undefined)
+      parts.set(JSON.stringify([chart.objectId,chart.partId]),{object:chart.objectId,part:chart.partId});
   }
-  return {objects:[...objects].sort(),materials:[...materials].sort()};
+  return {objects:[...objects].sort(),materials:[...materials].sort(),parts:[...parts.values()]};
 }
 
 module.exports={rasterize,labels};
