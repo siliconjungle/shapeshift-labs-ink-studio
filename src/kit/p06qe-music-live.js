@@ -37,7 +37,7 @@
     const parts=new Set(Object.values(compiled).flatMap(score=>Object.keys(score.tracks)));
     for (const group of stemGroups) for (const {part} of group.parts) parts.add(part);
     const entrySource=compiled[segments[spec.entry].source];
-    const room=A.makeSessionRoom(persistent?.room ?? entrySource.room,rate);
+    const roomSpec=persistent?.room ?? entrySource.room, room=A.makeSessionRoom(roomSpec,rate);
     check([...streams.streams.keys()].every(name=>!Object.hasOwn(stingers,name)),
       'A live cue resource must name either a score segment or a PCM stream');
     const machine=options.clock && K.music.create(options.clock);
@@ -116,6 +116,11 @@
     }
     const frameAt=(phase,position)=>phase.frame+snap(position-phase.position);
     const playhead=clip=>clip.phase.position+(frame-clip.phase.frame)/rate;
+    const scoring=spec.scoring===undefined ? null : P.musicLiveScoring.open(spec.scoring,{
+      segments,compiled,stingers,streams:streams.streams,rate,maxEvents,frameAt,inputFrame,log,
+      play:(resource,intent)=>playCue(resource,intent,true)
+    });
+    const foleyRoom=scoring?.hasSpace ? A.makeSessionRoom(roomSpec,rate) : null;
     function begin(section,position,layers={},fadeIn=0,kind='segment',reason='entry',phase={frame,position}) {
       const segment=segments[section];
       const selection=kind==='segment' ? choose(section,reason) : {source:segment.source,phrase:null};
@@ -209,7 +214,8 @@
       return voice;
     }
     function start(request) {
-      const voice=request.stream ? {...streams.voice(request.stream,frame),stream:request.stream} : addNote(request);
+      const voice=request.stream ? {...streams.voice(request.stream,frame),stream:request.stream,
+        scoreAccent:request.scoreAccent} : addNote(request);
       if (!voice) return 'silent';
       const choked=voice.choke ? voices.filter(row=>row.choke===voice.choke && row.first<frame && row.last>frame) : [];
       for (const row of choked) retire(row,frame+edgeFade);
@@ -276,6 +282,17 @@
       if (outcomes.size===traceLimit) outcomes.delete(outcomes.keys().next().value);
       outcomes.set(key,destination);
     }
+    function playCue(resource,intent,scoreAccent=false) {
+      const stream=streams.streams.get(resource), segment=Object.hasOwn(stingers,resource) ? stingers[resource] : null;
+      if (!stream && !segment) return 'unmapped';
+      if (holds.some(row=>row.resource===resource && row.section===active.section &&
+        (row.linked===undefined || row.linked===(intent.transition!==undefined)))) return 'withheld';
+      const strength=intent.data?.strength;
+      if (segment) return accent(segment,'stinger') ? 'scheduled' : 'dropped';
+      if (strength===0) return 'silent';
+      return admit({stream,scoreAccent,foreground:stream.foreground,priority:stream.priority,
+        strength:finite(strength,0,1) ? strength : 1},!scoreAccent);
+    }
     function cue(intent) {
       const resource=intent.resource ?? intent.cue;
       if (intent.transition!==undefined) {
@@ -290,18 +307,14 @@
           return;
         }
       }
-      const stream=streams.streams.get(resource), segment=Object.hasOwn(stingers,resource) ? stingers[resource] : null;
-      const withheld=(segment || stream) && holds.some(row=>row.resource===resource &&
-        row.section===active.section && (row.linked===undefined || row.linked===(intent.transition!==undefined)));
-      if (withheld || (!stream && !segment)) {
-        log('cue-skipped',{resource,reason:withheld ? 'withheld' : 'unmapped'});
-        return;
+      const rule=scoring?.ruleFor(intent);
+      if (rule) {
+        scoring.offer(rule,intent,frame);
+        if (!rule.passThrough) return;
       }
-      const strength=intent.data?.strength;
-      const status=segment ? (accent(segment,'stinger') ? 'scheduled' : 'dropped') :
-        strength===0 ? 'silent' : admit({stream,foreground:stream.foreground,
-          priority:stream.priority,strength:finite(strength,0,1) ? strength : 1});
-      log('cue',{resource,section:active.section,trigger:intent,status});
+      const status=playCue(resource,intent);
+      if (status==='unmapped' || status==='withheld') log('cue-skipped',{resource,reason:status});
+      else log('cue',{resource,section:active.section,trigger:intent,status});
     }
     function cancel(reason) {
       if (!pending) return;
@@ -436,6 +449,7 @@
       if (frame===active.stop) finish(active);
       repeat();
       if (cues) for (const request of cues) cue(request);
+      scoring?.step(frame,active);
       while (waiting[0]?.at<=frame) admit(waiting.shift(),false);
       playNotes(active);
       for (const clip of accents) playNotes(clip);
@@ -475,16 +489,22 @@
         'Invalid live PCM lookahead');
       const windows=voices.filter(row=>row.stream).map(row=>({source:row.stream,first:Math.max(0,frame-row.first),frames:ahead,active:true}));
       streams.prefetchStems(stemGroups,frame,ahead,windows);
+      function prime(resource) {
+        const source=streams.streams.get(resource);
+        if (source) windows.push({source,first:0,frames:ahead});
+      }
+      function primeCue(intent) {
+        const rule=scoring?.ruleFor(intent);
+        if (!rule || rule.passThrough) prime(intent.resource ?? intent.cue);
+        if (rule?.accent) prime(rule.accent.resource);
+      }
       for (const row of intents) {
         if (row.frame>frame+ahead) break;
-        const source=streams.streams.get(row.intent.resource ?? row.intent.cue);
-        if (source) windows.push({source,first:0,frames:ahead});
+        if (row.intent.kind==='music-cue') primeCue(row.intent);
       }
-      for (const intent of pending?.cues ?? []) {
-        const source=streams.streams.get(intent.resource ?? intent.cue);
-        if (source) windows.push({source,first:0,frames:ahead});
-      }
-      for (const name of names) windows.push({source:streams.streams.get(name),first:0,frames:ahead});
+      for (const intent of pending?.cues ?? []) primeCue(intent);
+      for (const resource of scoring?.resources() ?? []) prime(resource);
+      for (const name of names) prime(name);
       windows.sort((a,b)=>Number(b.source.foreground)-Number(a.source.foreground) || b.source.priority-a.source.priority);
       return streams.prefetch(windows);
     }
@@ -495,7 +515,7 @@
       for (let i=0;i<count;i++,frame++) {
         step();
         blockVoices=Math.max(blockVoices,voices.length);
-        let l=0,r=0,sendL=0,sendR=0;
+        let l=0,r=0,sendL=0,sendR=0,foleyL=0,foleyR=0,foleySendL=0,foleySendR=0;
         for (const voice of voices) {
           const gap=voice.read(frame,pair);
           const gain=fadeAt(voice,frame)*voice.strength, vl=pair[0]*gain,vr=pair[1]*gain;
@@ -511,6 +531,9 @@
             }
             lane.l+=vl; lane.r+=vr;
             lane.until=frame+rate*.12;
+          } else if (foleyRoom && !voice.scoreAccent) {
+            foleyL+=vl; foleyR+=vr;
+            foleySendL+=vl*voice.stream.send; foleySendR+=vr*voice.stream.send;
           } else {
             l+=vl; r+=vr;
             sendL+=vl*voice.stream.send; sendR+=vr*voice.stream.send;
@@ -569,7 +592,13 @@
         if (cut) roomLastInput=null;
         else if (Math.max(Math.abs(sendL),Math.abs(sendR))>1e-7) roomLastInput=frame;
         const wet=room(sendL,sendR,cut);
-        l=(l+wet[0])*scale; r=(r+wet[1])*scale;
+        if (foleyRoom) {
+          const gain=scoring.level(frame), foleyWet=foleyRoom(foleySendL,foleySendR,false);
+          l=((l+wet[0])*gain+foleyL+foleyWet[0])*scale;
+          r=((r+wet[1])*gain+foleyR+foleyWet[1])*scale;
+        } else {
+          l=(l+wet[0])*scale; r=(r+wet[1])*scale;
+        }
         samples[2*i]=l; samples[2*i+1]=r;
         const magnitude=Math.max(Math.abs(l),Math.abs(r));
         peak=Math.max(peak,magnitude);
@@ -601,6 +630,7 @@
         ...(memory && {themes:memory.at(time())}),
         ...(Object.keys(layerGains).length && {layerGains}),
         ...(Object.keys(layerFactors).length && {layerFactors}),
+        ...(scoring && {scoring:scoring.inspect(frame)}),
         ...(stemGroups.length && {stemGroups:Object.fromEntries(stemGroups.map(group=>[group.name,{
           frames:group.frames,phaseFrames:group.phaseFrames,positionFrame:group.position(frame),
           parts:Object.fromEntries(group.parts.map(({part,source,start})=>[part,{stream:source.name,startFrame:start}]))

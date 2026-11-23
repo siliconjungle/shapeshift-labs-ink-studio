@@ -463,3 +463,69 @@ test('matched joins pick the next compatible point without moving the original s
     from:'restrained',to:'energetic',switchPoints:{a:.12,b:.12}
   }]},options),/distinct positions/);
 });
+
+test('score space ducks the live score and its returns while Foley keeps its own sound',async()=>{
+  const assets={air:cue([[0,3.8,57]])};
+  const arranged={entry:'bank',segments:{bank:{source:'air',end:2}},
+    scoring:{cues:{
+      latch:{passThrough:true,space:{attack:.05,hold:.16,release:.1}},
+      hush:{space:{gain:.25,attack:0,hold:.15,release:.06}}
+    }}};
+  const settings={...options,masterGain:0,streams:{latch:{frames:3000,sampleRate:rate,channels:1,send:.55}},
+    readPage:async(name,first,count)=>Float32Array.from({length:count},(_,i)=>.2*Math.sin((first+i)*.027))};
+  const route={end:1.15,events:[event(trigger('latch',.25)),event(trigger('hush',.49))]};
+  const [mix,score,foley]=await Promise.all([
+    live.replay(assets,arranged,route,settings),
+    live.replay(assets,arranged,{...route,events:[]},settings),
+    live.replay({air:cue([])},arranged,{...route,events:route.events.slice(0,1)},settings)
+  ]);
+  function expectedGain(frame) {
+    const latch=frame<2000 || frame>=4480 ? 1 : frame<2400 ? 1-(frame-2000)/400 :
+      frame<3680 ? 0 : (frame-3680)/800;
+    const hush=frame<3920 || frame>=5600 ? 1 : frame<5120 ? .25 : .25+.75*(frame-5120)/480;
+    return Math.min(latch,hush);
+  }
+  for (let i=0;i<mix.value.samples.length;i++) {
+    const expected=score.value.samples[i]*expectedGain(i>>1)+foley.value.samples[i];
+    assert(Math.abs(mix.value.samples[i]-expected)<3e-8,`mix at sample ${i}`);
+  }
+  assert(hasAudio(foley.value.samples.slice(.3*rate*2,.46*rate*2)));
+  assert.equal(mix.report.profile.starts,2);
+  assert.equal(mix.report.profile.streamGaps,0);
+  assert.equal(mix.report.scoring.gain,1);
+  assert.deepEqual(mix.report.trace.filter(row=>row.kind==='score-space')
+    .map(({cue,startFrame,endFrame})=>[cue,startFrame,endFrame]),[['latch',2000,4480],['hush',3920,5600]]);
+});
+
+test('scored accents wait for actual openings, honor cooldowns, and expire on the audio clock',async()=>{
+  const assets={silent:cue([])};
+  const arranged={entry:'bank',segments:{bank:{source:'silent',end:1.5},tower:{source:'silent',end:1.5}},
+    scoring:{openings:{bank:{breath:[{beat:1},{beat:2}]},tower:{breath:[.25,.75]}},
+      cues:{spark:{accent:{resource:'bell',opening:'breath',cooldown:.4,expiresAfter:.45}},
+        tap:{accent:{resource:'bell'}}}}};
+  const settings={...options,streams:{bell:{frames:420,sampleRate:rate,channels:1}},
+    readPage:async(name,first,count)=>Float32Array.from({length:count},(_,i)=>.4*Math.sin((first+i)*.1))};
+  const events=[event(trigger('spark',.19)),event(trigger('spark',.32)),event(trigger('spark',.51)),
+    event(trigger('spark',.58)),event(transition('bank','tower',.78)),event(trigger('tap',1.1)),
+    event(trigger('spark',.7),1.25)];
+  const route={end:1.4,events};
+  const [small,wide]=await Promise.all([
+    live.replay(assets,arranged,{...route,blockFrames:117},settings),
+    live.replay(assets,arranged,{...route,blockFrames:407},settings)
+  ]);
+  assert.deepEqual(small.value.samples,wide.value.samples);
+  assert.equal(small.report.profile.streamGaps,0);
+  assert.equal(small.report.profile.starts,3);
+  assert(!hasAudio(small.value.samples.slice(0,.5*rate*2)));
+  assert.deepEqual(small.report.scoring.outcomes,{queued:4,played:3,cooldown:1,expired:2});
+  assert.deepEqual(small.report.scoring.pending,[]);
+  const decisions=small.report.trace.filter(row=>row.kind==='score-accent' && row.status!=='queued');
+  assert.deepEqual(decisions.map(({cue,frame,status,section})=>[cue,frame,status,section]),[
+    ['spark',4000,'played','bank'],['spark',4000,'cooldown',undefined],['spark',7681,'expired',undefined],
+    ['spark',8240,'played','tower'],['tap',8800,'played','tower'],['spark',10000,'expired',undefined]
+  ]);
+  assert.equal(decisions[3].expiresFrame,8240);
+  assert.throws(()=>live.open(assets,{...arranged,scoring:{...arranged.scoring,cues:{
+    spark:{accent:{resource:'bell',opening:'missing'}}
+  }}},settings),/known opening/);
+});

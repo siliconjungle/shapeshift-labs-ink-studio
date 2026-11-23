@@ -238,6 +238,57 @@ on the take still apply.
 records the point, arrival and landing frames, and carried voices and effects.
 Use `music live replay` to render a route with matched performance switches.
 
+## Leave space for Foley and place accents
+
+Set `timeline.scoring` to name musical openings and respond to world cues at
+the live playhead. A rule is keyed by the incoming `music-cue` name.
+
+```json
+{
+  "openings": {
+    "hall": { "breath": [{ "beat": 6 }, { "beat": 9 }] }
+  },
+  "cues": {
+    "hatch": {
+      "passThrough": true,
+      "space": { "gain": 0, "attack": 0.035, "hold": 0.53, "release": 0.32 }
+    },
+    "alert": {
+      "accent": { "resource": "signal-bell", "opening": "breath", "cooldown": 1.35, "expiresAfter": 0.86 }
+    },
+    "clear": {
+      "accent": { "resource": "clear-bell" }
+    }
+  }
+}
+```
+
+- **Space** lowers the score on the sample clock when the rule arrives.
+  `gain: 0` gives silence during the hold. Attack, hold, and release are in
+  seconds. Overlapping spaces use the lowest current gain. The score
+  playhead, instruments, and effect state continue through the gap.
+- **Foley** plays the cue's original resource when `passThrough` is true.
+  Streamed Foley and its room return stay audible through score space.
+  Use `live.traceOptions.worldCues` to map recorded world cue names to their
+  Foley files or to pass a rule-only cue name through to the scorer.
+- **Accent** starts a named stinger or PCM stream. With an `opening`, it
+  waits for that opening in the section actually playing. Each opening can
+  have several beat or source-second positions. A new section or loop
+  pass supplies its own opening positions. An accent with no opening
+  attempts playback when requested.
+
+`expiresAfter` is the cue's maximum age in seconds, measured from its
+original intent time, with a default of two seconds. At an opening, an
+accent at its exact deadline can still play. `cooldown` measures from the
+last admitted accent for the same rule. A candidate that arrives at an
+opening during cooldown loses its turn. Among requests with the same
+opening and frame, the oldest queued request gets the first chance.
+
+`inspect().scoring` reports the current score gain, pending accents, and
+outcome counts. `score-space` and `score-accent` trace rows show the sample
+positions and why an accent played, waited, or was skipped. Render the
+same decisions from a recording with `music live replay`.
+
 ## Budgets and prefetch
 
 Background playback can use `maxVoices - reservedVoices` slots. Protected
@@ -332,3 +383,13 @@ node examples/music-production/matched-performances.cjs ./copper-steps
 `copper-steps/mix/score.wav` switches from restrained to energetic at 2.00 s
 and back at 6.00 s. Listen for the struck lead and held pad ringing across
 each change. The folder also contains both complete takes for comparison.
+
+```sh
+node examples/music-production/scoring-decisions.cjs ./signal-hatch
+```
+
+In `signal-hatch/mix/score.wav`, the score gives the hatch room at 1.10 s.
+The alert at 2.25 s waits until the 3.00 s opening, a repeat loses its turn
+to cooldown, and the 3.20 s request expires before the next opening. The
+next fresh alert answers at 4.50 s. Compare against
+`signal-hatch/bypassed/score.wav` to hear the same Foley with the score rules bypassed.

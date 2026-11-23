@@ -10,8 +10,9 @@
   function prepare(sources,spec,assets,host,bank,liveResources) {
     const live=liveResources!==undefined;
     check(record(sources) && Object.keys(sources).length<=32 && Object.keys(sources).every(id) &&
-      fields(spec,['entry','segments','transitions','stingers','stingerRules','end','thematic','phrasing','performers']) && record(spec.segments) &&
+      fields(spec,['entry','segments','transitions','stingers','stingerRules','end','thematic','phrasing','performers','scoring']) && record(spec.segments) &&
       Object.keys(spec.segments).length<=64 && Object.keys(spec.segments).every(id),'Invalid production timeline');
+    check(spec.scoring===undefined || live,'Render live scoring cue rules with music live replay');
     const end=live ? Infinity : numeric(spec.end,.001,300,'end'), compiled=Object.create(null);
     const load=name=>{
       check(Object.hasOwn(sources,name),'Unknown production source');
