@@ -140,3 +140,4 @@ module.exports = function command(id,opt,kit) {
   process.stdout.write(JSON.stringify({manifest:manifestFile,studies:manifest.map(row=>row.id)})+'\n');
   return manifest;
 };
+module.exports.sampleBank = sampleBank;

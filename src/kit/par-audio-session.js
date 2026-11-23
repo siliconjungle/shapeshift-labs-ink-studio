@@ -361,7 +361,7 @@
       return audio(a.sampleRate,Float64Array.from(a.samples,(sample,i)=>sample-b.samples[i]));
     }
     function auditionPhrase(session,settings) {
-      check(fields(settings,['lane','phrase','takes','from','to','reference']) && id(settings.lane) && id(settings.phrase) &&
+      check(fields(settings,['lane','phrase','takes','from','to','reference','loudness']) && id(settings.lane) && id(settings.phrase) &&
         typeof (settings.reference ?? true)==='boolean','Choose a score lane and recorded phrase to audition');
       const plan=compile(session,assets,host), {lane,phrase}=settings;
       const names=settings.takes ?? [...plan.producers.keys()].filter(take=>take!==reference && phraseTake(plan,lane,take,phrase));
@@ -383,11 +383,17 @@
         const result=renderPlan({...plan,choices:replace(plan.choices,choice)},preview);
         return {take,value:result.value,headroom:result.report.mixer.headroom ?? 1};
       });
+      const report={lane,phrase,takes:all,sampleRate:plan.rate,firstSample:window.from,endSample:window.to,
+        phraseRange:plan.range(from,to)};
+      if (settings.loudness!==undefined) {
+        const matched=M.mixerMonitor.match(prints.map(({value,headroom})=>({value,report:{headroom}})),settings.loudness);
+        const {takes:measurements,...level}=matched.report;
+        return {audio:Object.fromEntries(all.map((take,i)=>[take,matched.audio[i]])),
+          report:{...report,loudness:{...level,takes:Object.fromEntries(all.map((take,i)=>[take,measurements[i]]))}}};
+      }
       const gain=Math.min(...prints.map(row=>row.headroom));
       return {audio:Object.fromEntries(prints.map(({take,value,headroom})=>[take,headroom===gain ? value : {
-        ...value,samples:value.samples.map(value=>value*gain/headroom)}])),
-        report:{lane,phrase,takes:all,sampleRate:plan.rate,firstSample:window.from,endSample:window.to,
-          phraseRange:plan.range(from,to),gain}};
+        ...value,samples:value.samples.map(value=>value*gain/headroom)}])),report:{...report,gain}};
     }
 
     function compare(before,after,preview) {

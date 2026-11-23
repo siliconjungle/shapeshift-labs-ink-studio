@@ -73,12 +73,14 @@
     }
     return {value,report};
   }
-  function compare(dry,wet,settings={}) {
+  const scale=(audio,gain)=>({...audio,samples:audio.samples.map(x=>x*gain)});
+  function prepareMatch(takes,settings) {
     check(fields(settings,['targetLufs','ceilingDbTP']),'Invalid audition settings');
     const {targetLufs=-18,ceilingDbTP=-1}=settings;
     check(finite(targetLufs,-36,-9) && finite(ceilingDbTP,-12,-.1),'Invalid audition loudness target or ceiling');
-    const takes=[dry,wet], source=takes.map(take=>pcm(take.value)), {sampleRate,channels}=source[0];
-    check(source[1].sampleRate===sampleRate && source[1].channels===channels,'Audition prints must share a sample format');
+    const source=takes.map(take=>pcm(take.value)), {sampleRate,channels}=source[0];
+    check(source.every(audio=>audio.sampleRate===sampleRate && audio.channels===channels),
+      'Audition prints must share a sample format');
     const length=Math.max(...source.map(audio=>audio.samples.length));
     const tapes=source.map((audio,i)=>{
       const samples=new Float64Array(length), headroom=takes[i].report?.headroom ?? 1;
@@ -88,12 +90,24 @@
     const meters=tapes.map(audio=>measure(audio));
     const matching=meters.every(row=>row.integratedLufs!==null) ? 'integratedLufs' :
       meters.every(row=>row.rmsDbFS!==null) ? 'rmsDbFS' : null;
-    // For a sub-gate phrase, retain the bypass RMS as the reference.
+    // For a sub-gate phrase, retain the first print's RMS as the reference.
     const target=matching==='rmsDbFS' ? meters[0].rmsDbFS : targetLufs;
     const floor=matching ? Math.min(target,...meters.map(row=>row[matching]+ceilingDbTP-row.truePeakDbTP)) : null;
     const gains=meters.map(row=>matching ? floor-row[matching] :
       row.truePeakDbTP===null ? 0 : Math.min(0,ceilingDbTP-row.truePeakDbTP));
-    const scale=(audio,gain)=>({...audio,samples:audio.samples.map(x=>x*gain)});
+    return {sampleRate,channels,length,tapes,meters,matching,floor,gains,ceilingDbTP};
+  }
+  function match(takes,settings={}) {
+    check(Array.isArray(takes) && integer(takes.length,1,9),'Match one to nine audition prints');
+    const {sampleRate,channels,length,tapes,meters,matching,floor,gains,ceilingDbTP}=prepareMatch(takes,settings);
+    const audio=tapes.map((take,i)=>scale(take,db(gains[i])));
+    return {audio,report:{sampleRate,frames:length/channels,matching,ceilingDbTP,
+      matchingLufs:matching==='integratedLufs' ? round(floor) : null,
+      matchingRmsDbFS:matching==='rmsDbFS' ? round(floor) : null,
+      takes:audio.map((take,i)=>({before:meters[i],gainDb:round(gains[i]),playback:measure(take)}))}};
+  }
+  function compare(dry,wet,settings={}) {
+    const {sampleRate,channels,length,tapes,meters,matching,floor,gains,ceilingDbTP}=prepareMatch([dry,wet],settings);
     const subtract=(a,b)=>({...a,samples:a.samples.map((x,i)=>x-b.samples[i])});
     const peakTrim=audio=>db(ceilingDbTP)/Math.max(db(ceilingDbTP),S.mixerPeak.peak(audio.samples,channels));
     let [bypass,value]=tapes.map((take,i)=>scale(take,db(gains[i])));
@@ -112,5 +126,5 @@
       difference:{polarity:'processed-minus-bypass',sharedGainDb:level(trim)},
       effect:{polarity:'processed-minus-bypass',gainDb:level(effectTrim)}}};
   }
-  A.mixerMonitor=Object.freeze({meter,preview,compare});
+  A.mixerMonitor=Object.freeze({meter,preview,match,compare});
 })(KIT.procedural);

@@ -79,3 +79,40 @@ test('a comp retains the attack from one take and gate and continuous release co
   assert.throws(()=>E.edit({...session,pins:{lead:'all'}},[operation]),/unpinned/);
   assert.throws(()=>E.edit(session,[{...operation,sections:[sections[0],{...sections[1],from:1.84}]}]),/contiguous/);
 });
+
+test('a loudness-matched phrase audition keeps one aligned playback target across all takes',()=>{
+  const session=setup(), settings={lane:'lead',phrase:'call',takes:['push','carry'],
+    from:address(.12),to:address(3.91),loudness:{targetLufs:-21,ceilingDbTP:-1.5}};
+  const {audio,report}=E.auditionPhrase(session,settings), {loudness}=report;
+  assert.equal(loudness.matching,'integratedLufs');
+  assert.equal(loudness.matchingLufs,-21);
+  assert.equal(loudness.frames,report.endSample-report.firstSample);
+  assert.deepEqual(Object.keys(loudness.takes),['reference','push','carry']);
+  assert.ok(new Set(Object.values(loudness.takes).map(row=>row.gainDb)).size>1);
+  for (const [take,print] of Object.entries(audio)) {
+    const meter=P.mediaGraph.mixerMonitor.meter(print);
+    assert.equal(print.samples.length,loudness.frames*2);
+    assert.deepEqual(meter,loudness.takes[take].playback);
+    assert.ok(Math.abs(meter.integratedLufs-loudness.matchingLufs)<.02);
+    assert.ok(meter.truePeakDbTP<=-1.5);
+  }
+  assert.throws(()=>E.auditionPhrase(session,{...settings,loudness:{targetLufs:1}}),/target or ceiling/);
+});
+
+test('addressed phrase timing moves an already played clip on the same written score',()=>{
+  const source=score();
+  source.production.tracks.lead.clips[0].timing='played';
+  const points=[[.25,.4],[3.75,.4]];
+  const session=E.edit(source,[capture('early',points,{delay:-.032,gate:.9}),capture('late',points,{delay:.026})]);
+  const spans=[{take:'early',from:.25,to:1.8},{take:'late',from:1.8,to:3.75,blend:.1}];
+  const comp=E.edit(session,[{op:'comp-phrase',lane:'lead',phrase:'call',take:'comp',sections:spans}]);
+  const holds=E.inspect(comp).lanes.lead.takes;
+  const [reference,early,late,kept]=['reference','early','late','comp'].map(take=>
+    holds[take].find(row=>row.address[3]==='hold'));
+  assert.deepEqual([early,late,kept].map(note=>[note.beat,note.midi]),
+    Array.from({length:3},()=>[reference.beat,reference.midi]));
+  assert.ok(Math.abs(early.time-reference.time+.032)<1e-7);
+  assert.ok(Math.abs(late.time-reference.time-.026)<1e-7);
+  assert.equal(kept.time,early.time);
+  assert.equal(kept.gate,late.gate);
+});

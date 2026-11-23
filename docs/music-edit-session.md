@@ -443,8 +443,12 @@ ink-studio music session audition-phrase takes.json listen.json --out review
 Use a listening request such as
 `{"lane":"reed","phrase":"call","takes":["lean","carry"]}`. Optional
 `from` and `to` select the preview context with normal mixer addresses.
-The alternatives use one desk and share a playback gain. Set
-`reference: false` to hear only the requested takes.
+The alternatives use one desk and share a playback gain by default. To
+compare the played shape at a common listening level, add
+`"loudness":{"targetLufs":-15,"ceilingDbTP":-1.5}` to the listening request.
+Ink lowers the common target if a take would otherwise exceed the true
+peak ceiling. The report gives the gain and measured playback level for
+each take. Set `reference: false` to hear only the requested takes.
 
 ```json
 [

@@ -41,3 +41,41 @@ The LFO base is `142 / 60` Hz in both patches. Set it to the new BPM divided by 
 ## Arc Lamp · rave · 150 BPM
 
 A seven-oscillator supersaw plays the whole hook over four-on-the-floor kick and offbeat bass. A quiet octave inside the lead lane lifts selected notes in the second pass. The shared oscillator anchors the stereo lead in mono. Short room and filtered tempo delay carry the note tails.
+
+## Underbite gesture takes
+
+```sh
+ink-studio music production drop-gestures --out underbite-takes
+ink-studio music session inspect underbite-takes/kept-session.json
+ink-studio music session audition-phrase underbite-takes/kept-session.json underbite-takes/performances-settings.json --out new-audition
+```
+
+The study replays three authored controller passes into Ink’s loop-capture
+format on the session sample clock. The captures add note delays, gates
+and accents to the written call. Breath moves the vowel filter, pitch
+bend shapes the scoops, and contact and pressure control the pulse. The
+written pitches, kit, sub and growl response carry through every pass.
+
+| Pass | Playing |
+| --- | --- |
+| Bloom | Slower openings and longer notes while the first call establishes the hook |
+| Bite | A clipped gate, hard accents and a quicker pulse |
+| Coil | Bends that curl up, then fall into the answer |
+
+The comp takes Bloom up to beat 7.82, Bite to 12.40 and Coil through the rest
+of the first drop. The second splice happens inside a held call. The
+oscillator stays running as the controller traces blend over 0.17 beats.
+The comp retains the attack's timing and accent and picks up the incoming
+take's gate.
+
+- `reference-and-comp.wav` plays the original then the comp, level matched.
+- `performances.wav` plays the original, each capture, then the comp.
+- `sounds.wav` puts the comp through the original patch, Hollow and Folded
+  Brass. All three patch files are under `instruments/`. Sound choice
+  is independent from the gesture comp.
+- `kept-session.json` holds the active comp, original capture takes and
+  alternate sound takes on the same clock. `capture-events.json` retains the
+  raw controller points. `record.json`, `comp.json` and `sound-swaps.json`
+  replay the edits in order from `reference-session.json`.
+- `timing.json` holds the groove inspector's note, trigger and estimated
+  attack addresses for the original and comp.

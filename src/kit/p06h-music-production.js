@@ -245,7 +245,10 @@
         let play=articulation ? {...style.play,articulation} : style.play;
         const proposed=authored+adjustment;
         const anchored=performance?.anchor(row.beat);
-        const performed=row.played || anchored ? row.time : follow ? follow(proposed,row.beat) : proposed;
+        // Played clips skip automatic groove, but explicit take edits still apply.
+        const performed=anchored ? row.time : row.played ?
+          Math.max(row.clipLaunch ?? 0,row.time+(authoredNote?.delay ?? 0)) :
+          follow ? follow(proposed,row.beat) : proposed;
         const delay=anchored || !track.timingEdits.size ? 0 : track.timingEdits.get(P.musicTimingEdits.key(row))?.delay ?? 0;
         const time=delay ? Math.max(row.clipLaunch ?? 0,performed+delay) : Math.max(0,performed);
         const connection=round(time);
