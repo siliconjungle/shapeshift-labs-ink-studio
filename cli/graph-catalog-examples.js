@@ -273,7 +273,19 @@ const specifications = {
   'proc.discharge': { inputs:{options:{width:36,height:24,points:[[5,18],[30,7]],amplitude:3,branchReach:5,detail:3}} },
   'proc.cellEdges': { inputs:{options:{width:32,height:24,spacing:7}} },
   'proc.flowPlume': { inputs:{options:{width:36,height:24,start:[5,13],end:[34,13],widths:[2,5,2,0],bands:3}} },
-  'proc.fieldSprite': { inputs:{options:{width:32,height:24}} },
+  'proc.fieldSprite': { nodes:{
+    paint:{op:'proc.fieldMaterial',inputs:{texture:rgba,ramp:palette}},
+    names:{op:'data.record',inputs:{paint:link('paint')}},
+    slots:{op:'data.collect',inputs:{source:link('names'),keys:['paint']}}
+  }, inputs:{materials:link('slots'),options:{width:32,height:24}} },
+  'proc.fieldMaterial': { inputs:{texture:rgba,ramp:palette} },
+  'proc.fieldSpriteShade': { nodes:{
+    field:{op:'sdf.shape'},
+    trace:{op:'proc.fieldSprite',inputs:{source:link('field'),options:{width:32,height:24}}},
+    paint:{op:'proc.fieldMaterial',inputs:{texture:rgba,options:{projection:'xy'}}},
+    names:{op:'data.record',inputs:{paint:link('paint')}},
+    slots:{op:'data.collect',inputs:{source:link('names'),keys:['paint']}}
+  },inputs:{surface:link('trace','surface'),materials:link('slots')} },
   'proc.vortex': { inputs:{options:{width:48,height:36,radii:[2,4,9,13],layers:9,segments:10,thickness:1,lean:2}} },
   'proc.plasma': { inputs: { options: { width: 16, height: 12 }, motion: { rings: { rate: .25 } } } },
   'warp.scanlines': { inputs: { source: rgba, options: { rows: [{ row: 1, offset: [1, 0] }] } } },

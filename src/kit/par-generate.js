@@ -6,6 +6,8 @@
   const value = (type, generate) => ({ outputs: { value: type }, run: (inputs, context) => ({ value: generate(inputs, context) }) });
   const seeded = (options, context) => ({ seed: context.seed, ...options });
   const timed = (options, context) => ({ time: context.time, ...seeded(options, context) });
+  const fieldMaterials=input('array<fieldSpriteMaterial>',[]);
+  const fieldPaint={value:'raster',materialId:'raster'};
 
   G.operations = Object.freeze({
     'proc.noise': {
@@ -39,9 +41,23 @@
       run: ({ steps, options }, context) => G.reaction({ ...seeded(options, context), steps })
     },
     'proc.fieldSprite': {
-      description: 'Raymarch a bounded signed field to a native-grid shaded sprite, with depth and normals.',
-      inputs: { source:'field', options }, outputs:{ value:'raster', depth:'raster', normal:'raster' }, time:true,
-      run: ({ source, options }, { time }) => G.fieldSprite(source, { time, ...options })
+      description: 'Trace a signed field with editable materials and expose native-grid position, normal, depth, light and coverage.',
+      inputs:{source:'field',materials:fieldMaterials,options},
+      outputs:{...fieldPaint,depth:'raster',normal:'raster',position:'raster',
+        illumination:'raster',coverage:'raster',surface:'fieldSpriteSurface'},time:true,
+      run({source,materials,options},{time}){return G.fieldSprite(source,{time,...options,materials});}
+    },
+    'proc.fieldMaterial': {
+      description:'Prepare a reusable field-sprite material with object-space texture, optional masks and a light ramp.',
+      inputs:{texture:input('raster',P.generatorSupport.fieldMaterialTexture),
+        mask:input('any',null),maskTexture:input('any',null),ramp:input('any',null),options},
+      ...value('fieldSpriteMaterial',({texture,mask,maskTexture,ramp,options})=>
+        G.fieldMaterial({...options,texture,mask,maskTexture,ramp}))
+    },
+    'proc.fieldSpriteShade': {
+      description:'Repaint an existing field-sprite trace without evaluating the signed field again.',
+      inputs:{surface:'fieldSpriteSurface',materials:fieldMaterials,options},outputs:fieldPaint,time:true,
+      run({surface,materials,options},{time}){return G.shadeFieldSprite(surface,materials,{time,...options});}
     },
     'proc.sphereMap': {
       description: 'Project an orthographic sphere into a UV atlas, with view normals, depth and banded light.',

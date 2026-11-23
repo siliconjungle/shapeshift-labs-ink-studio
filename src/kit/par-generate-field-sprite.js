@@ -1,4 +1,4 @@
-/* A fixed art-grid view of a bounded signed field, with depth and normals. */
+/* Trace a bounded signed field to a reusable native-pixel surface. */
 (function (K) {
   const P = K.procedural;
   const { dimensions, raster, vector, range, integer, sampleField, unit, color } = P.generatorSupport;
@@ -6,14 +6,16 @@
 
   function fieldSprite(source, { bounds = source?.bounds, center, orbit = [0,.18], roll = 0, scale,
     steps = 64, epsilon = .007, safety = .75, light = [-.6,.8,.6], ambient = .24,
-    bands = 6, ink = '#b7c7d1', paint, time = 0, ...options } = {}) {
+    bands = 6, ink = '#b7c7d1', paint, materials = [], time = 0, ...options } = {}) {
     const { width,height } = dimensions(options), area=width*height;
     if (area>262144 || !P.graphTypes.validator('field')(source) ||
         !vector(bounds?.min,3) || !vector(bounds?.max,3) ||
         !bounds.min.every((v,i)=>v<bounds.max[i]) || !vector(orbit,2) || !Number.isFinite(roll) ||
         !range(epsilon,1e-6,1) || !range(safety,.1,1) || !integer(steps,8,128) ||
         !vector(light,3) || !range(Math.hypot(...light),1e-8,1e9) || !range(ambient,0,1) ||
-        !integer(bands,1,64) || !Number.isFinite(time) || paint!==undefined&&typeof paint!=='function')
+        !integer(bands,1,64) || !Number.isFinite(time) || paint!==undefined&&typeof paint!=='function' ||
+        !Array.isArray(materials) || materials.length>16 ||
+        !Array.from(materials).every(P.graphTypes.validator('fieldSpriteMaterial')))
       throw new RangeError('A field sprite needs bounded geometry, a finite view and limited steps');
     const pivot=bounds.min.map((n,i)=>(n+bounds.max[i])*.5), radius=K.V.dist(bounds.max,pivot);
     const tint=parseInt(color(ink).slice(1),16), rgb=[tint>>16,tint>>8&255,tint&255];
@@ -28,6 +30,8 @@
     const right=across.map((n,i)=>n*cr+vertical[i]*sr);
     const up=vertical.map((n,i)=>n*cr-across[i]*sr);
     const rgba=new Uint8Array(area*4),normal=new Float32Array(area*3),depth=new Float32Array(area);
+    const position=new Float64Array(area*3),lightMap=new Float64Array(area),coverage=new Float32Array(area);
+    const materialId=new Int16Array(area).fill(-1);
     const value=(x,y,z)=>sampleField(source,x,y,z,time);
     for(let row=0,i=0;row<height;row++)for(let col=0;col<width;col++,i++){
       const u=(col+.5-center[0])/scale,v=(center[1]-row-.5)/scale;
@@ -50,10 +54,23 @@
       if(!vector(shaded,3)||!shaded.every(c=>range(c,0,255)))throw new RangeError('Field sprite paint needs RGB8 channels');
       depth[i]=(distance/radius+1)*.5;
       normal.set(n,i*3);
+      position.set([x,y,z],i*3);
+      lightMap[i]=illumination;
+      coverage[i]=1;
+      materialId[i]=0;
       rgba.set(shaded,i*4);
       rgba[i*4+3]=255;
     }
-    return {value:raster(width,height,rgba,4),depth:raster(width,height,depth),normal:raster(width,height,normal,3)};
+    const surface=Object.freeze({
+      format:'ink-studio/field-sprite-surface',time,
+      bounds:Object.freeze({min:Object.freeze(bounds.min.slice()),max:Object.freeze(bounds.max.slice())}),
+      value:raster(width,height,rgba,4),position:raster(width,height,position,3),normal:raster(width,height,normal,3),
+      illumination:raster(width,height,lightMap),coverage:raster(width,height,coverage)
+    });
+    const painted=materials.length ? P.generator.shadeFieldSprite(surface,materials,{time}) :
+      {value:surface.value,materialId:raster(width,height,materialId)};
+    return {...painted,depth:raster(width,height,depth),position:surface.position,normal:surface.normal,
+      illumination:surface.illumination,coverage:surface.coverage,surface};
   }
   P.generator.fieldSprite=fieldSprite;
 })(KIT);

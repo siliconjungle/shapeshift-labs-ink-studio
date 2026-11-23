@@ -151,6 +151,10 @@
     record: value => record(value) && [Object.prototype,null].includes(Object.getPrototypeOf(value)),
     geometry: value => record(value) && ((value.points && value.faces) || (value.pos && value.tri) || value.positions || mesh(value)),
     field: value => typeof value === 'function' || typeof value?.sample === 'function',
+    fieldSpriteMaterial: value => value?.format === 'ink-studio/field-sprite-material' && typeof value.sample === 'function',
+    fieldSpriteSurface: value => value?.format === 'ink-studio/field-sprite-surface' &&
+      raster(value.value) && raster(value.position) && raster(value.normal) &&
+      raster(value.illumination) && raster(value.coverage),
     points: Array.isArray,
     world: value => record(value) && Number.isSafeInteger(value.count) && value.count >= 0 &&
       list(value.data) && value.data.length >= value.count * 16,

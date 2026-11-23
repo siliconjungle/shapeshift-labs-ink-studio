@@ -1,4 +1,5 @@
 /* Revolving pixel forms and layered projections. */
+const {barrelShape,hoops,nStaves}=require('./barrel-shape');
 module.exports = function forms(D) {
   const {generator, fields, rasterSimulation, size, width, height, tau, clamp, smooth, wrap, rgb,
     hash, noise, texture, band, pixel, layer} = D;
@@ -40,25 +41,8 @@ module.exports = function forms(D) {
     });
   }
 
-  const hoops=[-.77,-.17,.44,.86];
-  const nStaves=15;
   const oak=[0x282133,0x3b2435,0x58313b,0x793e3e,0xa05245,0xbd694d,0xdb8b5d,0xf3b476];
   const steel=[0x1b2239,0x2a334b,0x424d68,0x5c6b85,0x7b8ba4,0x9bacc1,0xc2cdd8,0xe2e6e3];
-  function section(y){
-    return .688+.264*Math.cos(clamp(y,-1.1,1.1)*1.52)**2;
-  }
-  function barrelShape(x,y,z){
-    const r=Math.hypot(x,z),theta=Math.atan2(x,z);
-    const furrow=smooth(.095,.015,Math.abs(wrap(theta*nStaves/tau+.5,1)-.5));
-    const wood=Math.max(r-section(y)+.013*furrow,Math.abs(y)-(1+.036*smooth(.60,.74,r)));
-    let hoop=Infinity;
-    for(const h of hoops) {
-      const dy=Math.abs(y-h);
-      hoop=Math.min(hoop,Math.max(dy-.096,r-section(h)-.068+.024*smooth(.064,.093,dy)));
-    }
-    return Math.min(wood,hoop);
-  }
-  barrelShape.bounds={min:[-1.03,-1.06,-1.03],max:[1.03,1.06,1.03]};
   const cellar = pixel((x,y)=>{
     const row=Math.floor(y/12),xx=wrap(x+(row%2)*8.0,16),yy=wrap(y,12);
     const grain=noise(x*.13,y*.12,0);

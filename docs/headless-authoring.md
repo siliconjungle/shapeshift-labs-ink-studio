@@ -2138,7 +2138,8 @@ examples of these native-grid generators and the material-point solver.
 | --- | --- |
 | `proc.sphereMap` | Set pixel center, radius, and yaw, pitch and roll in radians. Exports UV and coverage, view-space normals, front-hemisphere depth, and banded illumination. |
 | `proc.projectSphere` | Map an equirectangular image onto that sphere. Longitude wraps and latitude clamps. Nearest and linear sampling are available. Reuse depth, UV and illumination to layer separate terrain, cloud and atmospheric passes. |
-| `proc.fieldSprite` | Raymarch a bounded signed field at an orthographic pose. Set width, height, orbit, roll, lighting and art-pixel scale. Exports RGBA, depth and normals. The JS API additionally accepts a paint function at each sample hit. |
+| `proc.fieldSprite` | Raymarch a bounded signed field at an orthographic pose. Connect [graph-authored material slots](field-sprite-materials.md). Outputs RGBA, depth, normal, hit position, illumination, coverage, and material ID. |
+| `proc.fieldMaterial` / `proc.fieldSpriteShade` | Prepare object-space textures, field masks, and palette ramps. Repaint a shared surface trace to compare finishes on the same geometry. |
 | `proc.discharge` | Trace a seeded, continuously jittering branch path through authored pixel points. Exports paths, filament, colored fringe, halo, and the composite. All parts share the same looping clock. |
 | `proc.cellEdges` | Sample seeded jittered Voronoi tiles. Exports distance to the closest boundary, distance to the owning site, and a stable lattice index. Drive the geometry or color of a seam independently of each tile. |
 | `proc.flowPlume` | Animate a taper and turbulent advection along an authored axis. Use the width profile, pressure-band count, palette, and time to author plume and thrust layers. Exports color, heat, and coverage. |

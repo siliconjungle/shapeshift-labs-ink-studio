@@ -96,6 +96,6 @@
     return raster(width,height,4,rgba);
   }
 
-  P.rasterWarp={field,sample};
+  P.rasterWarp={field,sample,createSampler:sampler};
   P.rasterWarpSupport={size,view,output,tuple,int,finite,bounded,fraction,clamp,wrap,raster,sampler,paint,mix,fieldFrom};
 })(KIT.procedural);

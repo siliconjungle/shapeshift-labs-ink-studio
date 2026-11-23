@@ -363,6 +363,8 @@ Use a colored emission pass to light nearby raised or painted raster surfaces an
 
 Read per-material coverage, density and compression, apply timed impulses, and use measured contact with moving masks to drive effects. [Material-point passes and impacts](docs/material-point-impacts.md)
 
+Paint signed-field sprites with graph-authored textures and light ramps, and reuse the same trace to compare finishes. [Signed-field sprite materials](docs/field-sprite-materials.md)
+
 Capture independent cameras under a shared budget and compose their feeds into overlays and textured world panels. [Multi-camera render atlases](docs/camera-atlas.md)
 
 Encode categories with patterns and shapes, label scale endpoints, and navigate linked records with a keyboard. [Accessible data encodings](docs/linked-views.md#accessible-encodings)
