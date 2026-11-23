@@ -1250,7 +1250,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         frame.spriteReconstructionFrame?.(spritePlan??{geometryRows:source.count,states:[]});
       const withdrawal = sampleCoverage?.amount(frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0) ?? 0;
       const curvePlan = finiteCurves && prepareFiniteCurves(toolkit.KIT,world,geometryData,camera,width,height,{
-        time, drawOrder:frame.order,
+        time, drawOrder:frame.order, planes:[clip,cover?.plane],
+        curveSubdivision:cutaway ? false : frame.curveSubdivision ?? look.curveSubdivision,
         keep:i=>(!selection || selection.keep[i]) && !spriteLOD?.hidden(spriteMask?.codes[i]),
         visible:sampleCoverage && (flags=>sampleCoverage.visible(flags,withdrawal))
       });
@@ -1498,7 +1499,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         }
       }
       if (curvePlan && typeof frame.curveFrame === 'function')
-        frame.curveFrame({ segments:curvePlan.count, tileReferences:curvePlan.references, peakTile:curvePlan.peakTile });
+        frame.curveFrame({ segments:curvePlan.count, tileReferences:curvePlan.references, peakTile:curvePlan.peakTile,
+          ...(curvePlan.subdivision && { subdivision:curvePlan.subdivision }) });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (hybridDepthCapture) {
         const depth = readHybridDepth(gl, owner.framebuffer, width, height, camera.depthRange);
@@ -1804,6 +1806,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           ...(reflection && { water: false, reflections: false, [hybridReflection]: frame[hybridReflection] }),
           curveMode: portal.destinationFrame?.curveMode ?? frame.curveMode,
           curveSplats: portal.destinationFrame?.curveSplats ?? frame.curveSplats,
+          curveSubdivision: portal.destinationFrame?.curveSubdivision ?? frame.curveSubdivision,
           hybridDepthFrame: frame.hybridDepthFrame, damp: false, [portalDepth]: depth + 1 }, expand);
         // Resolve the deeper view before reusing the source and coverage targets.
         present(destination.world, destination.frame, width, height, destinationBuffer.framebuffer,

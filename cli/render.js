@@ -7,6 +7,7 @@ const FOV = (38 * Math.PI) / 180;
 const RenderGrid = require('../src/render-grid.js');
 const SplatFootprints = require('../src/splat-footprints.js');
 const CurveSplat = require('../src/curve-splat.js');
+const CurveSubdivision = require('../src/curve-subdivision.js');
 const Engraving=require('../src/engraving.js');
 const PixelLook = require('../src/pixel-look.js');
 const RenderStages = require('../src/render-stages.js');
@@ -377,6 +378,7 @@ function renderFrame(world, o, preparedPalettes) {
   const curves = world.curveSplats && (o.curveMode === undefined ? (o.curveSplats ?? look.curveSplats ?? true) : o.curveMode === 'curves');
   const matchedCarriers = world.curveSplats && o.curveMode === 'splats';
   const curveScene = curves || matchedCarriers;
+  const subdivisionSettings = CurveSubdivision.prepare(o.curveSubdivision ?? look.curveSubdivision);
   const curveQualityLayers = CurveQuality.prepare(o.curveQuality ?? look.curveQuality);
   const curveWidthAt = CurveWidth.prepare(o.curveWidth ?? look.curveWidth)?.bind(world);
   const deepPlan = o[deepScope];
@@ -1497,6 +1499,16 @@ function renderFrame(world, o, preparedPalettes) {
       counters.curveLod[key] = (counters.curveLod[key] ?? 0) + value;
     }
   }
+  const subdivision = curves && !shutterRows && !cutaway && !probeView && !reflectionPlane?.select &&
+    CurveSubdivision.frame(world, curveCamera, subdivisionSettings, {
+      data:d, positionAt:i=>[X[i],Y[i],Z[i]], alphaAt:i=>AL[i], scaleAt:i=>SC[i],
+      planes:reflectionPlane ? [CurveSubdivision.viewPlane(V,reflectionPlane)] : [],
+      keep:i=>(!qualityRows || qualityRows.keep[i]) && !spriteLOD?.hidden(geometryMask?.codes[i]) &&
+        !curveWidthAt?.(i) && !curveLod?.hidden?.has(i) && !curveLod?.geometry?.has(i) && !curveLod?.choices?.has(i)
+    });
+  if (subdivision && counters) counters.curveSubdivision = subdivision.stats;
+  const subdividedGeometry = i => subdivision?.geometry?.get(i) ?? curveLod?.geometry?.get(i);
+  const hiddenCurve = i => subdivision?.hidden?.has(i) || curveLod?.hidden?.has(i);
   function rasterCurve(i, coarse) {
     const carrier = shutterRows?.pose(i) ?? world;
     const curve = prepareCurve(i, curveCamera, carrier, false, coarse);
@@ -1506,9 +1518,9 @@ function renderFrame(world, o, preparedPalettes) {
     if (bounds) return { curve, carrier, strength, bounds };
   }
   const curveQuality = curves ? CurveQuality.plan(world, curveQualityLayers, d, i => {
-    if (AL[i] <= 0 || qualityRows && !qualityRows.keep[i] || curveLod?.hidden?.has(i) ||
+    if (AL[i] <= 0 || qualityRows && !qualityRows.keep[i] || hiddenCurve(i) ||
         geometryMask && spriteLOD.hidden(geometryMask.codes[i])) return;
-    return rasterCurve(i, curveLod?.geometry?.get(i));
+    return rasterCurve(i, subdividedGeometry(i));
   }, curveLod?.choices) : undefined;
   if (counters && curveQuality) (counters.curveQuality ??= []).push({
     width: W, height: H, artScale: o.artGridScale || 1,
@@ -1523,7 +1535,7 @@ function renderFrame(world, o, preparedPalettes) {
   let orderCount = 0;
   for (let i = 0; i < N; i++)
     if ((!qualityRows || qualityRows.keep[i]) && !(geometryMask && spriteLOD.hidden(geometryMask.codes[i])) &&
-        !curveLod?.hidden?.has(i) && !curveQuality?.omitted.has(i)) orderRows[orderCount++] = i;
+        !hiddenCurve(i) && !curveQuality?.omitted.has(i)) orderRows[orderCount++] = i;
   const order = orderRows.subarray(0,orderCount);
   order.sort((a, b) => depth[a] - depth[b]);
   if (transparency && !blendDepth && !deep) {
@@ -1883,7 +1895,7 @@ function renderFrame(world, o, preparedPalettes) {
     const i = order[n];
     const motion = shutterRows?.clock(i) ?? sceneMotion, t = motion.scene;
     if ((!sortedSurfaces || !deferred) && spriteIndex<sprites.length) playSprites(-depth[i],false);
-    const coarse = curveLod?.geometry?.get(i), representation = curveLod?.choices?.get(i);
+    const coarse = subdividedGeometry(i), representation = curveLod?.choices?.get(i);
     const q = i * 16,
       al = AL[i],
       x = coarse?.center[0] ?? X[i],

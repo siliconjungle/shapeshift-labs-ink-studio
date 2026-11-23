@@ -77,4 +77,4 @@ function run(directory, options = {}) {
   return report;
 }
 
-module.exports = { run };
+module.exports = { run, difference };

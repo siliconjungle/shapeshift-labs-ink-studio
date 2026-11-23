@@ -964,6 +964,7 @@
     const { seed = 1, background = '#172332', palette = [], paletteRoles, camera = {}, look = {}, liveSun, charts = {},
       atmosphere } = recipe;
     CurveWidth.prepare(look?.curveWidth);
+    CurveSubdivision.prepare(look?.curveSubdivision);
     check(Number.isSafeInteger(seed) && Array.isArray(palette) && palette.length <= 255, 'invalid seed or palette');
     const colors = [packed(background), ...Array.from(palette, packed)];
     check(charts && Object.getPrototypeOf(charts) === Object.prototype && Object.keys(charts).length <= 1024,
@@ -1005,5 +1006,5 @@
     });
   }
 
-  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, drivers: CurvePoseDrivers, world });
+  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, subdivision: CurveSubdivision, drivers: CurvePoseDrivers, world });
 })(KIT);

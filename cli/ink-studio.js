@@ -684,6 +684,17 @@ function curveWidthOption() {
   return curveWidthOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
 }
 
+function curveSubdivisionOption() {
+  const value = opt['curve-subdivision'];
+  if (value === undefined) return;
+  if (value === 'on') return true;
+  if (value === 'off') return false;
+  const pixels = Number(value);
+  if (typeof value !== 'string' || !Number.isFinite(pixels) || pixels <= 0 || pixels > 4)
+    die('--curve-subdivision needs on, off, or an art-pixel budget in (0, 4]');
+  return { pixels };
+}
+
 let curveQualityOverride;
 function curveQualityOption() {
   const value = opt['curve-quality'];
@@ -824,6 +835,7 @@ const view = extra =>
       curveSplats: onOffOption('curve-splats'),
       curveMode: opt['curve-mode'],
       curveLod: onOffOption('curve-lod'),
+      curveSubdivision: curveSubdivisionOption(),
       curveWidth: curveWidthOption(),
       curveQuality: curveQualityOption(),
       paletteSampling: onOffOption('palette-sampling'),
@@ -1441,6 +1453,7 @@ const CMD = {
         '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
         '  project verify <experiment-or-story-bundle.json> [--out report.json --compare-engine]',
+        '  curve-subdivision-review [--out directory --chrome executable --hardware]  compare dense and adaptive finite spans',
         '  finite-curve-review [--out directory --chrome executable --hardware --orbit]  compare interactive GPU curves with the headless renderer',
         '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
@@ -1469,6 +1482,7 @@ const CMD = {
         'translucent silhouette options: --translucent-silhouettes file.json|off',
         'curve splats: render or clip a curve-splat-scene JSON with --curve-mode splats|curves. --curve-splats off shows the legacy carriers.',
         '    --curve-width file.json|off   art-pixel width rules for curve materials',
+        '    --curve-subdivision on|off|pixels   refine finite spans for the target art grid',
         '    --curve-lod on|off   authored curve distance simplification and aggregation',
         'motional pixel coverage: --motional-coverage on|off|file.json',
         'celestial options: --celestial-tracks on|off|file.json',
@@ -2764,6 +2778,13 @@ const CMD = {
   },
   retarget() {
     require('./retarget.js').run({ K: lib().KIT, build, pos, options: opt, view: view() });
+  },
+  'curve-subdivision-review'() {
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'curve-subdivision-review');
+    const report = require('./curve-subdivision-review.js').run(directory,{ chrome:opt.chrome,hardware:opt.hardware });
+    for (const { distance,webgl } of report.views)
+      console.log(distance, webgl.dense.segments, 'to', webgl.adaptive.segments, 'spans, mean byte error', webgl.error.mean.toFixed(3));
+    console.log('wrote',directory);
   },
   'finite-curve-review'() {
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'finite-curve-review');

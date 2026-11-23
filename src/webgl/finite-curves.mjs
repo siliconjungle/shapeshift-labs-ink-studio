@@ -34,6 +34,11 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
   const posed = world.anim?.rig || world.anim?.bones || world.reconstructionPose;
   const pose = posed && kit.splatFrames.create(world,options.time,kit.M);
   const selected = options.drawOrder && new Set(options.drawOrder);
+  const keep = i => (!options.keep || options.keep(i)) && (!selected || selected.has(i)) &&
+    (!options.visible || options.visible(data[i*16+11]));
+  const subdivision = kit.curveSplats.subdivision;
+  const settings = subdivision.prepare(options.curveSubdivision);
+  const detail = subdivision.frame(world,lens,settings,{ data, keep, planes:options.planes });
   const programs = new Map();
   let references = 0, peakTile = 0;
 
@@ -41,10 +46,11 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     const at = i*16;
     if (!kernel.isRow(data,at)) continue;
     rows[i] = 1;
-    if (options.keep && !options.keep(i) || selected && !selected.has(i)) continue;
-    const center = Array.from(data.subarray(at,at+3));
+    if (!keep(i) || detail?.hidden.has(i)) continue;
+    const replacement = detail?.geometry.get(i);
+    const center = replacement?.center ?? Array.from(data.subarray(at,at+3));
     let opacity = Math.min(1,data[at+3]);
-    if (!(opacity > 0) || options.visible && !options.visible(data[at+11])) continue;
+    if (!(opacity > 0)) continue;
 
     const tag = data[at+15], timedAt = i*kernel.timingStride, timing = world.curveTiming;
     const program = timing?.[timedAt] && world.curveTimePrograms?.[timing[timedAt]-1];
@@ -58,7 +64,7 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
       if (basis) window = { ...window, direction:kit.M.app(basis.basis().anchor,window.direction) };
     }
     const clips = kernel.clipPlanes(world.curveClips,i,center,1,basis);
-    const span = kernel.prepare(data,at,center,1,opacity,lens,clips,window);
+    const span = kernel.prepare(replacement?.data ?? data,replacement ? 0 : at,center,1,opacity,lens,clips,window);
     if (!span) continue;
     const [x0,y0,x1,y1] = span.bounds;
     if (x0 >= width || x1 < 0 || y0 >= height || y1 < 0) continue;
@@ -96,7 +102,7 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     cursor += bin.length;
   }
   return { spans:Float32Array.from(spans), tiles:tileData, columns, rows,
-    count:spans.length/spanStride, references, peakTile };
+    count:spans.length/spanStride, references, peakTile, ...(detail && { subdivision:detail.stats }) };
 }
 
 export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway }) {

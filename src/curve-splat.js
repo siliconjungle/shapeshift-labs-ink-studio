@@ -122,6 +122,17 @@ const CurveSplat = (() => {
       radius: radius * size, half: half * size };
   }
 
+  function supportFactor(section, group, beta) {
+    return group ? (section === 2 ? 2 : 1) : beta ? betaRadius + Number(section === 2) : 5;
+  }
+
+  function spanShape(data, at, scale) {
+    if (!isRow(data, at)) return;
+    const tag = data[at + 15], section = sectionOf(tag), group = hardGroup(tag);
+    const shape = dimensions(data, at, scale, section), beta = !group && marker - tag >= 3;
+    return shape && { ...shape, section, group, support:supportFactor(section, group, beta) };
+  }
+
   function roundSpan(data, at, scale, center) {
     if (!isRow(data, at) || sectionOf(data[at + 15]) !== 0) return;
     const shape = dimensions(data, at, scale, 0);
@@ -255,8 +266,7 @@ const CurveSplat = (() => {
     const ends = [first, last].map(u => a.map((v, i) => v + u * (b[i] - v)));
     const projectedWidth = widthPolicy ? projectWidth(widthPolicy, shape, radius, data[at + 14], flattened, camera, ends) : undefined;
     if (projectedWidth === null) return null;
-    const support = radius * (projectedWidth?.bound ?? 1) *
-      (group ? (flattened ? 2 : 1) : beta ? betaRadius + Number(flattened) : 5);
+    const support = radius * (projectedWidth?.bound ?? 1) * supportFactor(section, group, beta);
     for (const [x, y, z] of ends) {
       const depth = Math.max(near, -z), magnification = ortho ? focal : focal / depth;
       const reach = ortho ? focal * support : focal * support / Math.max(near, depth - support);
@@ -609,6 +619,6 @@ const CurveSplat = (() => {
   }
   return Object.freeze({ tag, joinGroups, axialUnits, minimum, castShadow, receiveShadow, overlapsDepth,
     clipStride, materialStride, lightingStride, timingStride, stationStride, clipPlanes,
-    emissionAt, lightingAt, isRow, carrier, roundSpan, writeClips, timeWindow, timedOpacity, timedCarrier, prepare, sample, sampleAt, specular, directional });
+    emissionAt, lightingAt, isRow, carrier, spanShape, roundSpan, writeClips, timeWindow, timedOpacity, timedCarrier, prepare, sample, sampleAt, specular, directional });
 })();
 if (typeof module !== 'undefined') module.exports = CurveSplat;
