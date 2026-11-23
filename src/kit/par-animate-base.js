@@ -9,7 +9,7 @@
   const wrap = (n, span) => n - span * Math.floor(n / span);
   const kinds = Object.create(null);
   const A = P.rasterSimulation = {};
-  const names = ['particles', 'cloth', 'strand', 'smoke', 'grain', 'rigid', 'flip', 'feedback'];
+  const names = ['particles', 'cloth', 'strand', 'smoke', 'grain', 'rigid', 'flip', 'mpm', 'feedback'];
 
   function portable(value) {
     if (Object.is(value, -0)) return 0;

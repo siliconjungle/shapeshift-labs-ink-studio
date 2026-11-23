@@ -38,6 +38,42 @@
       outputs: { value: 'raster', u: 'raster', report: 'record' },
       run: ({ steps, options }, context) => G.reaction({ ...seeded(options, context), steps })
     },
+    'proc.fieldSprite': {
+      description: 'Raymarch a bounded signed field to a native-grid shaded sprite, with depth and normals.',
+      inputs: { source:'field', options }, outputs:{ value:'raster', depth:'raster', normal:'raster' }, time:true,
+      run: ({ source, options }, { time }) => G.fieldSprite(source, { time, ...options })
+    },
+    'proc.sphereMap': {
+      description: 'Project an orthographic sphere into a UV atlas, with view normals, depth and banded light.',
+      inputs: { options }, outputs:{ value:'raster', normal:'raster', depth:'raster', illumination:'raster' },
+      run: ({ options }) => G.sphereMap(options)
+    },
+    'proc.projectSphere': {
+      description: 'Rotate and light a equirectangular source on the native pixel grid.',
+      inputs: { source:'raster', options }, outputs:{ value:'raster', uv:'raster', normal:'raster', depth:'raster', illumination:'raster' },
+      run: ({ source, options }) => G.projectSphere(source, options)
+    },
+    'proc.discharge': {
+      description: 'Trace a seeded looping discharge along a path and return independently composable core, edge and halo rasters.',
+      seed:'options', time:true, inputs: { options },
+      outputs:{ value:'raster', filament:'raster', fringe:'raster', halo:'raster', paths:'array<record>' },
+      run: ({ options }, context) => G.discharge(timed(options, context))
+    },
+    'proc.cellEdges': {
+      description: 'Sample seeded Voronoi boundary distances, center distances and stable cell addresses.',
+      seed:'options', inputs:{ options }, outputs:{ value:'raster', center:'raster', index:'raster' },
+      run: ({ options }, context) => G.cellEdges(seeded(options, context))
+    },
+    'proc.flowPlume': {
+      description: 'Draw an oriented, shaped plume with looping turbulence, pressure bands and separate heat and coverage.',
+      seed:'options', time:true, inputs:{ options }, outputs:{ value:'raster', heat:'raster', coverage:'raster' },
+      run: ({ options }, context) => G.flowPlume(timed(options, context))
+    },
+    'proc.vortex': {
+      description: 'Advect a layer of shaded looped contours around a tapered vortex, with reusable near and far passes.',
+      seed:'options', time:true, inputs:{ options }, outputs:{ value:'raster', back:'raster', front:'raster', paths:'array<record>' },
+      run: ({ options }, context) => G.vortex(timed(options, context))
+    },
     'proc.repeat': {
       inputs: { source: 'raster', options },
       ...value('raster', ({ source, options }) => G.repeat(source, options))

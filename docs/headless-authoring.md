@@ -2082,17 +2082,17 @@ Cloth and strands also accept Z and a two-axis `projection` offset per Z unit.
 | `grain` | A falling-cell material solver with seeded emitters, diagonal settling, optional initial rectangular fills and a grain palette. |
 | `rigid` | Ink’s native rigid-body mechanics rasterized from an XY camera. Author boxes, fixed colliders, gravity, floor and tick-indexed `impulses`. A body specifies `id`, pixel `at`, pixel `size` and optional `velocity`, `spin`, `mass` and `fixed`. |
 | `flip` | Planar free-surface liquid with raster `fill` regions, gravity, particle density, pressure iterations and optional baffles. `flip: 0` gathers PIC velocities, `flip: 1` applies FLIP velocity increments, and intermediate values blend the two. |
+| `mpm` | Planar material points with an affine particle-grid transfer, compressible fluid and fixed-corotated elastic materials. Rectangles or explicit point arrays can release at authored times and interact through the same grid. |
 | `feedback` | The equivalent recipe for `anim.feedback`, with the input frame array in `settings.frames`. |
 
-Particles, smoke, grain and liquid accept `walls` as
+Particles, smoke, grain, FLIP and MPM accept `walls` as
 `[x, y, width, height]` rectangles or an aligned raster `mask`. Solid pixels
 are selected by `maskChannel` and `maskThreshold` (alpha at least 128 by
 default). Cloth and strands accept spherical 3D colliders by `at` and `r`.
 Settings are captured in each recipe. Changes to a recipe start a new solve.
 
 Every workflow returns transparent RGBA `value`, a numeric `field`,
-`points`, `report` and a portable `checkpoint`. The field reports smoke or
-liquid density, grain occupancy, or alpha coverage for the other workflows.
+`points`, `report` and a portable `checkpoint`. The field reports smoke, FLIP or MPM density, grain occupancy, or alpha coverage for the other workflows.
 Point records expose positions and available velocities or pin state. The
 report records the sampled tick, checkpoint used, and replayed steps. The
 liquid report also includes divergence before and after pressure projection.
@@ -2115,7 +2115,7 @@ const branch = rasterSimulation.session(undefined, { checkpoint })
 const frame = branch.seek(1.25)
 ```
 
-The Tideworks review renders all eight workflows. A second CLI run restores
+The Tideworks review renders eight workflows. A second CLI run restores
 three checkpoints and verifies that their PNGs match the original graph
 byte for byte.
 
@@ -2123,6 +2123,31 @@ byte for byte.
 node examples/raster-simulations.cjs tideworks-review
 ink-studio graph run tideworks-review/resume-tideworks.json --out tideworks-review/branch
 ```
+
+## Procedural pixel effects
+
+Use [the Effects Atlas](../examples/pixel-effects-atlas/README.md) to find
+examples of these native-grid generators and the material-point solver.
+`ink-studio graph describe <operation> --example` prints runnable inputs.
+
+| Node | Controls and outputs |
+| --- | --- |
+| `proc.sphereMap` | Set pixel center, radius, and yaw, pitch and roll in radians. Exports UV and coverage, view-space normals, front-hemisphere depth, and banded illumination. |
+| `proc.projectSphere` | Map an equirectangular image onto that sphere. Longitude wraps and latitude clamps. Nearest and linear sampling are available. Reuse depth, UV and illumination to layer separate terrain, cloud and atmospheric passes. |
+| `proc.fieldSprite` | Raymarch a bounded signed field at an orthographic pose. Set width, height, orbit, roll, lighting and art-pixel scale. Exports RGBA, depth and normals. The JS API additionally accepts a paint function at each sample hit. |
+| `proc.discharge` | Trace a seeded, continuously jittering branch path through authored pixel points. Exports paths, filament, colored fringe, halo, and the composite. All parts share the same looping clock. |
+| `proc.cellEdges` | Sample seeded jittered Voronoi tiles. Exports distance to the closest boundary, distance to the owning site, and a stable lattice index. Drive the geometry or color of a seam independently of each tile. |
+| `proc.flowPlume` | Animate a taper and turbulent advection along an authored axis. Use the width profile, pressure-band count, palette, and time to author plume and thrust layers. Exports color, heat, and coverage. |
+| `proc.vortex` | Draw rotating, shaded contours along a tapered vortex with editable radius knots, lean, tilt, twist, and breakup. Exports composited RGBA, near and far layers, and the projected paths. |
+
+For `mpm`, define materials as `{ type: 'fluid' | 'elastic', color, density,
+stiffness, shear }`. A body takes `{ rect, material, spacing, velocity,
+release }` or uses an explicit `points` array in place of the rectangle.
+Pixel spacing determines each point's mass and volume. The solver returns
+the raster density and per-point position, velocity and body index. Set
+`cell`, `substeps` and `maxSpeed` to fit the fixed clock. Increasing speed or
+stiffness can require a smaller step. A `release` time holds the body's
+initial pose before letting its points join the shared grid.
 
 ## 3D scenes, signed fields and sprite rigs
 
