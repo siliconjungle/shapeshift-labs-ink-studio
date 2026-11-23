@@ -137,8 +137,9 @@ const CurveSplat = (() => {
     if (!isRow(data, at) || sectionOf(data[at + 15]) !== 0) return;
     const shape = dimensions(data, at, scale, 0);
     if (!shape) return;
-    const { axis, half, radius } = shape;
-    return { radius, from: center.map((v, i) => v - half * axis[i]), to: center.map((v, i) => v + half * axis[i]) };
+    const { axis, half, radius } = shape, tag = data[at+15], group = hardGroup(tag);
+    return { radius, support:supportFactor(0,group,!group && marker-tag>=3),
+      from: center.map((v, i) => v - half * axis[i]), to: center.map((v, i) => v + half * axis[i]) };
   }
 
   function erf(x) {

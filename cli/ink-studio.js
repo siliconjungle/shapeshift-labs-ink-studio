@@ -370,6 +370,9 @@ function liveSunOption() {
     ...(opt['shadow-bias'] !== undefined && { bias: num('shadow-bias') }),
     ...(opt['sun-shadows'] !== undefined && { shadows: opt['sun-shadows'] !== 'off' })
   };
+  for (const [flag,key] of [['shadow-strand-spans','maxSpans'],['shadow-strand-layers','maxLayers']]) {
+    if (opt[flag]!==undefined) (overrides.strandShadows ??= {})[key]=opt[flag]===true ? NaN : num(flag);
+  }
   for (const [flag, key] of [['sky-bounce', 'skyBounce'], ['ground-bounce', 'groundBounce']]) {
     const choice = opt[flag], strength = opt[flag + '-intensity'];
     if (choice === undefined && strength === undefined) continue;
@@ -1471,6 +1474,7 @@ const CMD = {
         '  curve-bake <scene> [--object name --part part --normals on --out directory]  bake curve cards and depth ribbons',
         '  curve-bake-review [--out directory --chrome executable --hardware]  compare native curves, ribbons, and rebuilt cards',
         '  strand-lod-review [--out directory --chrome executable --hardware --motion]  compare individual strands, groups and cards',
+        '  strand-shadow-review [--out directory --motion]  compare full and budgeted strand shadows and layered transmission',
         '  finite-curve-review [--out directory --chrome executable --hardware --orbit]  compare interactive GPU curves with the headless renderer',
         '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
@@ -1483,7 +1487,7 @@ const CMD = {
         '                              against the pixel-art references (--map: where the stray pixels and drawn edges are)',
         '',
         'any command that plays a diorama takes --poke 2:x,y,z (tap it at 2 seconds, toward that point; several with ;)',
-        'sun options: --live-sun on|off --sun-direction x,y,z --sun-ambient n --sun-intensity n --shadow-map-size n --shadow-bias n --sun-shadows off',
+        'sun options: --live-sun on|off --sun-direction x,y,z --sun-ambient n --sun-intensity n --shadow-map-size n --shadow-bias n --sun-shadows off --shadow-strand-spans n --shadow-strand-layers n',
         'shadow art: --shadow-art file.json|off for baked JSON scenes and live sun',
         'color clusters: --color-clusters file.json|off for material-specific cluster size, grain and protection',
         'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
@@ -2877,6 +2881,13 @@ const CMD = {
     const report = require('./strand-lod-review.js').run(directory,{chrome:opt.chrome,hardware:opt.hardware,motion:opt.motion});
     for (const {id,webgl} of report.views)
       console.log(id,webgl.native.segments,'to',webgl.lod.segments,'finite curve spans');
+    console.log('wrote',directory);
+  },
+  'strand-shadow-review'() {
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'strand-shadow-review');
+    const {views,visibleSpans} = require('./strand-shadow-review.js').run(directory,{motion:opt.motion});
+    console.log(visibleSpans,'visible curve spans,',views.detail.submittedSpans,'to',views.budget.submittedSpans,'shadow spans');
+    console.log(views.layers.peakLayers,'independent translucent layers');
     console.log('wrote',directory);
   },
   'finite-curve-review'() {

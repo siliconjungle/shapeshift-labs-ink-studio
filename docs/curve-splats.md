@@ -682,6 +682,46 @@ default to false and can be set independently.
 Run `node examples/curve-depth-crossings.cjs studio/out/curve-depth-crossings`
 to render the woven crossings, the mist pass, and the shadow switches.
 
+### Budget strand shadows separately
+
+```js
+K.curveSplats.draw(builder, ropeBundle, {
+  object: 'rope', material: 'hemp', edge: 'hard', width: 0.026,
+  shadow: {
+    cast: true,
+    transmittance: 0.62,
+    group: { samples: 12, maxError: 1.5 }
+  }
+});
+```
+
+`shadow.group` builds a shadow-only guide from the strands in one draw.
+Use separate draws for groups that should cast separate silhouettes.
+`samples` sets the number of spans on the guide (4–64). `maxError` sets a
+limit in light-map texels (0.01–32) for variation from the guide, including
+depth and width. The guide estimates opacity from the authored cast coverage.
+Set an explicit `width` in world units or `opacity` from 0 to 1 to tune the guide.
+
+Set `liveSun.strandShadows.maxSpans` in the scene or render options to let the
+headless sun choose guides. It chooses the largest eligible reductions
+first. A budget may stay over target when the light resolves a group or
+some strands use a cast mask, a dash pattern, clips, a timed reveal, or a
+profiled section. Runtime rigs and multi-time exposure also keep physical
+detail for the shadow pass. Directly posed curve bindings update their
+shadow guides along with their strands.
+
+`transmittance` sets the nominal direct-light fraction of an active fibre
+independently of its picture opacity. On a hard fibre, 0 blocks direct light
+and 1 passes it. Soft fibres use the value to set the strength of their
+integrated profile. Omit it to derive shadow opacity from visible opacity.
+Overlapping fibres multiply their transmission. Touching spans of one hard
+fibre share a layer, while separate crossings can create their own layers.
+
+The picture's strand LOD and depth cards leave the physical cast in place.
+Read the number of submitted shadow spans, the ray tests, and retained
+layers from `renderStats.strandShadows`. See the
+[live sun controls](live-sun.md#strand-shadow-budgets) for layer limits.
+
 ## Simplify strands at a distance
 
 Set `lod` on a strand appearance or a grouped source such as a bundle or

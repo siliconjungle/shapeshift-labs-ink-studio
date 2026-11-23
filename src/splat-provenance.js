@@ -8,7 +8,8 @@ const SplatProvenance = (() => {
     ['pix', 8, Float32Array], ['surfaceData', 8, Float32Array], ['materialAlbedo', 1, Uint32Array],
     ['opticalSplats', 12, Float32Array], ['curveClips', 12, Float32Array], ['curveMaterials', 4, Float32Array],
     ['curveLighting', 7, Float32Array], ['curveTiming', 8, Float64Array], ['curvePattern', 16, Float64Array], ['curveShadows', 1, Uint8Array],
-    ['curveStations', 7, Float64Array], ['materialPixelStyles', 4, Float32Array], ['shadowLod', 6, Float32Array]];
+    ['curveStations', 7, Float64Array], ['curveShadowOptics', 1, Float32Array], ['materialPixelStyles', 4, Float32Array],
+    ['shadowLod', 6, Float32Array]];
   function targetKey(target) {
     const labels = [target.entity, target.surface, target.prefabs, target.tags, target.medium, target.mediumKind];
     if (target.mark !== undefined || target.markLayer !== undefined || target.part !== undefined) labels.push(target.mark, target.markLayer);

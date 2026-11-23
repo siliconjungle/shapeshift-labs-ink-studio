@@ -58,6 +58,29 @@ The map fits opaque scene splats independently of the viewing camera, so perspec
 casting and receiving shadow independently. Their cast follows the posed curve
 and can transmit light through translucent sections and authored gaps.
 
+### Strand shadow budgets
+
+Set `strandShadows: { maxSpans: 320, maxLayers: 12 }` inside `liveSun` on a
+headless frame or scene. `maxSpans` is a nonnegative target for submitted finite
+shadow spans. Ink can substitute [authored shadow guides](curve-splats.md#budget-strand-shadows-separately)
+within their light-space error bounds. A target of zero tries all eligible
+groups. Omit the target to use the authored physical strands.
+
+`maxLayers` limits the retained translucent depth layers per shadow texel
+to 1–64. With a limit, Ink preserves the nearest layers and combines the
+deepest layers into one at the front of that tail. A receiver behind the
+tail gets the full combined attenuation. A receiver inside it samples the
+combined layer. Omit this limit to keep each depth layer.
+
+Use `--shadow-strand-spans 320` and `--shadow-strand-layers 12` for CLI renders.
+`strandShadows: false` on a frame clears the scene's limits. Opaque casters
+keep using the normal shadow map, and the strand budgets are independent of
+camera resolution, strand LOD, and card selection.
+
+```sh
+node cli/ink-studio.js strand-shadow-review --motion --out out/strand-shadows
+```
+
 ## Art-directed shadows
 
 Set `finish.look.shadowArt` in a JSON diorama or pass `shadowArt` in the third argument to `makeBuilder` before sculpting. The same settings guide baked lighting and headless live sun. The CLI accepts `--shadow-art file.json` for JSON bakes and live-sun renders.

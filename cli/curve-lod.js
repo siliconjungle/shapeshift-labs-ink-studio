@@ -64,7 +64,7 @@ function flatten(path, range, projection, write) {
 }
 
 function frame(records, camera, { data, x, y, z, alpha, scale, windows, rig }) {
-  if (!records?.length) return;
+  if (!records?.some(row=>row.aggregate || row.runs.length)) return;
   const projection = projector(camera), hidden = new Set(), choices = new Map(), geometry = new Map();
   const stats = { removedSegments: 0, aggregateGroups: 0, blendingGroups: 0, aggregateSegments: 0 };
   const center = i => [x[i], y[i], z[i]];

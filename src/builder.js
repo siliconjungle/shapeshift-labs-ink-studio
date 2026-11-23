@@ -1067,7 +1067,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       else fallingSnowRanges.push({ first, end });
     }
   }
-  let hasCurveSplats = false, curveGroups = 0, curveClips, curveMaterials, curveLighting, curveTiming, curvePattern, curveShadows;
+  let hasCurveSplats = false, curveGroups = 0, curveClips, curveMaterials, curveLighting, curveTiming, curvePattern, curveShadows,
+    curveShadowOptics;
   const curveTimePrograms = [], curvePatternPrograms = [];
   const curveLod = [], curveStrands = [];
   let curveStations;
@@ -1080,7 +1081,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     storage.set(values, (n - 1) * stride);
     return storage;
   }
-  function curveSplat(from, to, radius, color, opacity, profile, edge, group, clips, finish, lighting, timing, pattern, shadows, station) {
+  function curveSplat(from, to, radius, color, opacity, profile, edge, group, clips, finish, lighting, timing, pattern, shadows, station,
+    shadowTransmittance) {
     const { center, half, axis, normal, covariance } = CurveSplat.carrier(from, to, radius, profile);
     const section = profile ? (profile.flattened ? 2 : 1) : 0;
     push(...center, ...covariance, color, opacity,
@@ -1091,6 +1093,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     if (finish) curveMaterials = writeCurveRow(curveMaterials, CurveSplat.materialStride, finish);
     if (lighting) curveLighting = writeCurveRow(curveLighting, CurveSplat.lightingStride, lighting);
     if (shadows) curveShadows = writeCurveRow(curveShadows, 1, [shadows], Uint8Array);
+    if (shadowTransmittance !== undefined)
+      curveShadowOptics = writeCurveRow(curveShadowOptics, 1, [1+shadowTransmittance], Float32Array);
     if (timing) curveTiming = writeCurveRow(curveTiming, CurveSplat.timingStride, [...timing, ...axis], Float64Array);
     if (pattern) {
       const { program, arc, uv, side, gradient } = pattern;
@@ -1139,6 +1143,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
         ...(curveTiming && { curveTiming: curveTiming.slice(0, n * CurveSplat.timingStride), curveTimePrograms: curveTimePrograms.slice() }),
         ...(curvePattern && { curvePattern: curvePattern.slice(0, n * CurvePattern.stride), curvePatternPrograms: curvePatternPrograms.slice() }),
         ...(curveShadows && { curveShadows: curveShadows.slice(0, n) }),
+        ...(curveShadowOptics && { curveShadowOptics: curveShadowOptics.slice(0,n) }),
         ...(curveLod.length && { curveLod: curveLod.slice() }),
         ...(curveClips && { curveClips: curveClips.slice(0, n * CurveSplat.clipStride) }),
         ...(paintDecals.length && { paintDecals }),
@@ -1221,7 +1226,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     n = 0;
     hasCurveSplats = false;
     curveGroups = 0;
-    curveClips = curveMaterials = curveLighting = curveTiming = curvePattern = curveShadows = undefined;
+    curveClips = curveMaterials = curveLighting = curveTiming = curvePattern = curveShadows = curveShadowOptics = undefined;
     curveTimePrograms.length = curvePatternPrograms.length = 0;
     curveLod.length = curveStrands.length = 0;
     curveStations = undefined;

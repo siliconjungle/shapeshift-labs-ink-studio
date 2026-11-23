@@ -48,27 +48,24 @@ const CurveLod = (() => {
       for (let i = first + 1; i < end; i++) if (indexAt(i) !== start + i - first) return;
       return [start, start + end - first];
     }
-    return records.flatMap(({ simplify, runs, aggregate }) => {
+    return records.flatMap(({ simplify, runs, aggregate, shadow }) => {
       const kept = runs.map(span).filter(Boolean);
-      let coarse;
-      if (aggregate) {
-        const proxy = span(aggregate.proxy), detail = aggregate.detail.map(span);
-        if (proxy && detail.every(Boolean)) coarse = { ...aggregate, proxy, detail };
+      function remapGroup(group) {
+        if (!group) return;
+        const proxy = span(group.proxy), detail = group.detail.map(span);
+        if (proxy && detail.every(Boolean)) return { ...group, proxy, detail };
       }
-      return kept.length || coarse ? [{ simplify, runs: kept, aggregate: coarse }] : [];
+      const coarse = remapGroup(aggregate), caster = remapGroup(shadow);
+      return kept.length || coarse || caster ? [{ simplify, runs: kept, aggregate: coarse, shadow: caster }] : [];
     });
   }
 
   const length = (a,b) => Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);
   const lerp = (a,b,t) => a.map((v,k)=>v+(b[k]-v)*t);
 
-  function coverageFrame(world, camera, { data, keep, positionAt, scaleAt, alphaAt, partitionAt, forbidden }) {
-    const records = world.curveLod?.filter(row=>row.aggregate?.coverage);
-    if (!records?.length || world.anim?.rig || world.anim?.bones || world.reconstructionPose) return;
+  function measureGroup(world, camera, { data, positionAt, scaleAt, alphaAt, forbidden, shadow = false }) {
     const { view, near, ortho, focal, artScale = 1 } = camera;
     const magnification = focal / artScale;
-    const hidden = new Set(), opacity = new Map(), codes = new Map();
-    const stats = { groups:0, grouped:0, blending:0, individual:0, proxySpans:0, replacedSpans:0 };
     const stations = world.curveStations;
     const patternStride = world.curvePattern && (typeof CurvePattern === 'undefined' ? require('./curve-pattern.js') : CurvePattern).stride;
     const viewPoint = p => [0,1,2].map(k=>view[k]*p[0]+view[k+4]*p[1]+view[k+8]*p[2]+view[k+12]);
@@ -81,36 +78,34 @@ const CurveLod = (() => {
       // Covariance carries an unoriented axis. The station restores path order.
       let { from,to } = row;
       if (from.reduce((sum,v,k)=>sum+(to[k]-v)*stations[station+4+k],0) < 0) [from,to] = [to,from];
-      return { from:viewPoint(from),to:viewPoint(to),radius:row.radius,
+      return { from:viewPoint(from),to:viewPoint(to),radius:row.radius*(shadow ? row.support : 1),
         start:stations[station+1]/total,end:stations[station+2]/total };
     }
-    function measure(aggregate, code) {
-      const [first,end] = aggregate.proxy, guide = [];
-      const {width,spacing} = aggregate.coverage;
+    return (group, compatible, widthLimit, spacingLimit) => {
+      const [first,end] = group.proxy, guide = [];
       let widthPx=0, spacingPx=0;
-      const compatible = i => keep(i) && (partitionAt?.(i) ?? 0) === code;
       for (let i=first; i<end; i++) {
         const section = compatible(i) && span(i);
-        if (!section || Math.abs(section.start-(guide.at(-1)?.end ?? 0))>1e-8) return 16;
+        if (!section || Math.abs(section.start-(guide.at(-1)?.end ?? 0))>1e-8) return;
         guide.push(section);
       }
-      if (guide.at(-1).end < 1-1e-8) return 16;
-      for (const [start,end] of aggregate.detail) {
+      if (!(guide.at(-1)?.end >= 1-1e-8)) return;
+      for (const [start,end] of group.detail) {
         let cursor=0, covered=0;
         for (let i=start; i<end; i++) {
           const at = i*16;
           if (!compatible(i) || forbidden?.(i) || world.curveTiming?.[i*kernel.timingStride] ||
               world.curvePattern?.[i*patternStride] || kernel.clipPlanes(world.curveClips,i,[0,0,0],1) ||
-              !kernel.hardGroup(data[at+15]) ||
-              (alphaAt?.(i) ?? data[at+3]) <= 0) return 16;
+              (!shadow && !kernel.hardGroup(data[at+15])) ||
+              (alphaAt?.(i) ?? data[at+3]) <= 0) return;
           const fine = span(i);
-          if (!fine || Math.abs(fine.start-covered)>1e-8) return 16;
+          if (!fine || Math.abs(fine.start-covered)>1e-8) return;
           covered = fine.end;
           const depth = Math.min(-fine.from[2],-fine.to[2]) - fine.radius;
-          if (depth < near) return 16;
+          if (depth < near) return;
           const widthScale = ortho ? 1 : Math.max(rayStretch(fine.from),rayStretch(fine.to))/depth;
           widthPx = Math.max(widthPx,2*fine.radius*magnification*widthScale);
-          if (widthPx >= width[1]) return 16;
+          if (widthPx >= widthLimit) return;
           while (cursor+1 < guide.length && guide[cursor].end <= fine.start) cursor++;
           // Compare every breakpoint of both piecewise-linear paths. This
           // bounds a local hole by twice the largest offset from the guide.
@@ -121,25 +116,38 @@ const CurveLod = (() => {
               const a = lerp(fine.from,fine.to,(arc-fine.start)/(fine.end-fine.start));
               const b = lerp(coarse.from,coarse.to,(arc-coarse.start)/(coarse.end-coarse.start));
               nearDepth = Math.min(nearDepth,-a[2]-fine.radius,-b[2]-coarse.radius);
-              if (nearDepth < near) return 16;
+              if (nearDepth < near) return;
               offset = Math.max(offset,length(a,b));
               if (!ortho) stretch = Math.max(stretch,rayStretch(a),rayStretch(b));
             }
-            const deviation = Math.max(offset,coarse.radius-fine.radius);
+            const radiusChange = coarse.radius-fine.radius;
+            const deviation = Math.max(offset,shadow ? Math.abs(radiusChange) : radiusChange);
             spacingPx = Math.max(spacingPx,2*magnification*deviation*(ortho ? 1 : stretch/nearDepth));
-            if (spacingPx >= spacing[1]) return 16;
+            if (spacingPx >= spacingLimit) return;
             if (coarse.end >= fine.end-1e-9) break;
           }
         }
-        if (covered < 1-1e-8) return 16;
+        if (covered < 1-1e-8) return;
       }
-      return Math.round(16*Math.max(detailWeight(width,widthPx),detailWeight(spacing,spacingPx)));
-    }
+      return [widthPx,spacingPx];
+    };
+  }
+
+  const posedParts = world => world.anim?.rig || world.anim?.bones || world.reconstructionPose;
+  function coverageFrame(world, camera, options) {
+    const records = world.curveLod?.filter(row=>row.aggregate?.coverage);
+    if (!records?.length || posedParts(world)) return;
+    const {keep, partitionAt} = options;
+    const measure = measureGroup(world,camera,options);
+    const hidden = new Set(), opacity = new Map(), codes = new Map();
+    const stats = { groups:0, grouped:0, blending:0, individual:0, proxySpans:0, replacedSpans:0 };
     for (const { aggregate } of records) {
       const [first,end] = aggregate.proxy;
       if (!aggregate.opacity || !keep(first)) continue;
       stats.groups++;
-      const step = measure(aggregate,partitionAt?.(first) ?? 0);
+      const code = partitionAt?.(first) ?? 0, {width,spacing} = aggregate.coverage;
+      const measured = measure(aggregate,i=>keep(i) && (partitionAt?.(i) ?? 0) === code,width[1],spacing[1]);
+      const step = measured ? Math.round(16*Math.max(detailWeight(width,measured[0]),detailWeight(spacing,measured[1]))) : 16;
       if (step === 16) { stats.individual++; continue; }
       stats[step ? 'blending' : 'grouped']++;
       stats.proxySpans += end-first;
@@ -170,6 +178,6 @@ bool strandVisible(int code, vec2 at) {
   return code>0 ? rank<code : rank>=-code;
 }
 `;
-  return Object.freeze({ prepare, remap, coverageFrame, visible, glsl });
+  return Object.freeze({ prepare, remap, coverageFrame, measureGroup, posedParts, visible, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = CurveLod;

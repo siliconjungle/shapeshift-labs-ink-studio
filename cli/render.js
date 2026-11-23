@@ -1288,6 +1288,13 @@ function renderFrame(world, o, preparedPalettes) {
   const sceneMotion = motion;
   const timePrograms = curveScene && (world.curveTiming || shutterRows) && new Map();
   const curveWindows = curves && timePrograms && new Array(baseCount);
+  const castCurves = curves && sun?.shadows && sun.intensity && (world.curveShadows || shutterRows);
+  const hiddenCastOpacity = castCurves ? new Map() : undefined;
+  const shadowProxies = castCurves && sun.strandShadows.maxSpans!==undefined && !shutterRows ? new Set() : undefined;
+  if (shadowProxies) for (const {shadow} of world.curveLod ?? []) {
+    if (!shadow) continue;
+    for (let i=shadow.proxy[0];i<shadow.proxy[1];i++) shadowProxies.add(i);
+  }
   let carrierDataCopied = d !== baseData;
   function posedDirection(direction, frame) {
     if (!frame) return direction;
@@ -1299,7 +1306,9 @@ function renderFrame(world, o, preparedPalettes) {
     return { ...window, direction: posedDirection(window.direction, frame) };
   }
   for (let i = 0, q = 0; i < N; i++, q += 16) {
-    if (qualityRows && !qualityRows.keep[i] || geometryMask && spriteLOD.hidden(geometryMask.codes[i])) continue;
+    const hidden = qualityRows && !qualityRows.keep[i] || geometryMask && spriteLOD.hidden(geometryMask.codes[i]);
+    if (hidden && !(castCurves && i<baseCount &&
+        ((shutterRows?.pose(i) ?? world).curveShadows?.[i] & CurveSplat.castShadow || shadowProxies?.has(i)))) continue;
     const motion = shutterRows?.clock(i) ?? sceneMotion, t = motion.scene;
     let x = d[q],
       y = d[q + 1],
@@ -1439,16 +1448,17 @@ function renderFrame(world, o, preparedPalettes) {
     X[i] = x;
     Y[i] = y;
     Z[i] = z;
-    AL[i] = al;
+    if (hidden) hiddenCastOpacity.set(i,al);
+    else AL[i] = al;
     SC[i] = sc;
     depth[i] = V[2] * x + V[6] * y + V[10] * z + V[14];
   }
-  function prepareCurve(i, camera, carrier, forShadow = false, replacement) {
+  function prepareCurve(i, camera, carrier, forShadow = false, replacement, opacity=AL[i]) {
     const position = replacement?.center ?? [X[i], Y[i], Z[i]], frame = curveFrames ? curveFrames(i) : null;
     const clips = CurveSplat.clipPlanes(carrier.curveClips, i, position, SC[i], frame);
     const window = posedWindow(curveWindows?.[i], frame);
     const pattern = CurvePattern.attach(carrier, i, frame, camera, forShadow);
-    return CurveSplat.prepare(replacement?.data ?? d, replacement ? 0 : i * 16, position, replacement ? 1 : SC[i], AL[i], camera, clips, window,
+    return CurveSplat.prepare(replacement?.data ?? d, replacement ? 0 : i * 16, position, replacement ? 1 : SC[i], opacity, camera, clips, window,
       forShadow ? undefined : curveWidthAt?.(i), pattern, !forShadow && strandTrace);
   }
   const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, { x:X, y:Y, z:Z, alpha:AL });
@@ -1470,14 +1480,20 @@ function renderFrame(world, o, preparedPalettes) {
   if (sun) {
     const frames = sampleFrames(world, t), normals = [];
     const normalAt = i => normals[i] ?? (normals[i] = frames(i).normal ?? false);
-    const curveAt = curves && (world.curveShadows || shutterRows) ? (i, camera) => {
-      if (i >= baseCount) return;
+    const curveAt = castCurves ? (i, camera) => {
+      if (i >= baseCount || !CurveSplat.isRow(d,i*16)) return;
+      const active=hiddenCastOpacity.get(i) ?? AL[i];
+      if (!(active>0 && Number.isFinite(active))) return;
       const carrier = shutterRows?.pose(i) ?? world;
-      if ((carrier.curveShadows?.[i] & CurveSplat.castShadow) && CurveSplat.isRow(d, i * 16))
-        return prepareCurve(i, camera, carrier, true);
+      if (!(carrier.curveShadows?.[i] & CurveSplat.castShadow)) return;
+      const optics=carrier.curveShadowOptics?.[i];
+      const opacity=optics ? (2-optics)*Math.min(1,active/d[i*16+3]) : active;
+      if (opacity>0) return prepareCurve(i,camera,carrier,true,undefined,opacity);
     } : undefined;
     live = LiveSun.create(sun, world, { x: X, y: Y, z: Z, alpha: AL, scale: SC }, normalAt, cloudShadow, exposure?.light,
-      { shadowArt: o.shadowArt, footprint: shadowFootprint, curveAt,
+      { shadowArt: o.shadowArt, footprint: shadowFootprint, curveAt, curveData:d,
+        curveProxyAt:shadowProxies?.size ? (i,camera,opacity)=>prepareCurve(i,camera,world,true,undefined,opacity) : undefined,
+        curveStats:counters && !reflectionPlane && !probeView ? stats=>{counters.strandShadows=stats;} : undefined,
         probes: probes && ((i,x,y,z,n) => n && probeReceiver(i) ? probes.sample([x,y,z],n) : null) });
   }
   const contact = contactSettings && ContactDepth.create(contactSettings, world, d, { x:X, y:Y, z:Z, alpha:AL, scale:SC },
