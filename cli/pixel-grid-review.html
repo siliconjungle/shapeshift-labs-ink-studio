@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel canvas · Ink Studio</title>
+<style>
+:root { color-scheme:dark; background:#10161b; color:#e6eeea; font:15px system-ui,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { max-width:1120px; margin:auto; padding:clamp(16px,4vw,48px); }
+header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+h1 { margin:0; font:400 clamp(32px,5vw,52px)/1 Georgia,serif; }
+select { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 8px; }
+select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
+#canvas { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+/*PIXEL_GRID_CSS*/
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Pixel canvas</h1><label id="frame-control" hidden>Frame <select id="frames"></select></label></header>
+  <div id="canvas"></div>
+  <p id="error" role="status" hidden></p>
+</main>
+<script type="module">
+/*PIXEL_GRID_MODULE*/
+const frames = /*PIXEL_GRID_DATA*/;
+const view = mountPixelGridCanvas(document.querySelector('#canvas'));
+const select = document.querySelector('#frames'), status = document.querySelector('#error');
+const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
+let request = 0;
+async function draw() {
+  const serial = ++request, frame = frames[select.selectedIndex];
+  const image = new Image();
+  try {
+    image.src = 'data:image/png;base64,' + frame.png;
+    await image.decode();
+    if (serial !== request) return;
+    scratch.width = image.naturalWidth;
+    scratch.height = image.naturalHeight;
+    context.drawImage(image,0,0);
+    view.setFrame({ width:scratch.width, height:scratch.height,
+      rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
+    status.hidden = true;
+  } catch (error) {
+    if (serial !== request) return;
+    status.textContent = 'Could not display the native frame. ' + error.message;
+    status.hidden = false;
+  }
+}
+select.replaceChildren(...frames.map(({ label },index) => new Option(label,index)));
+document.querySelector('#frame-control').hidden = frames.length < 2;
+select.addEventListener('change',draw);
+draw();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const { isDeepStrictEqual:equal } = require('node:util');
-const { paint } = require('../src/pixel-stamps.js');
+const { paint, image:stampImage } = require('../src/pixel-stamps.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
 const files = require('./asset-files.js');
@@ -813,6 +813,25 @@ function draw(frame,directory) {
   return result.report;
 }
 
+function canvasReview(design,frameId,file) {
+  documentShape(design);
+  const palette = paletteEntries(design.palette,design.version), revision = fingerprint(design);
+  const frames = design.version === 1 ? [undefined] : design.frames;
+  if (frameId !== undefined && !frames.some(frame => frame?.id === frameId))
+    throw new RangeError('Unknown pixel frame ' + frameId);
+  const chosen = frameId === undefined ? frames : frames.filter(frame => frame.id === frameId);
+  const deck = chosen.map(frame => {
+    const { width,height,rgba } = stampImage(stamp(compileFrame(design,frame,revision,palette)));
+    return { label:frame?.label ?? frame?.id ?? 'Drawing', png:PNG.encode(width,height,rgba,4).toString('base64') };
+  });
+  const template = fs.readFileSync(path.join(__dirname,'pixel-grid-review.html'),'utf8');
+  const browserSource = ext => fs.readFileSync(path.join(__dirname,'../src/pixel-grid-canvas.'+ext),'utf8');
+  const data = JSON.stringify(deck).replaceAll('<','\\u003c');
+  files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
+    .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
+    .replace('/*PIXEL_GRID_DATA*/',() => data));
+}
+
 function trace(frame, object, scene) {
   const { w:width, h:height, rgb, passes } = frame;
   if (!integer(width,1,512) || !integer(height,1,512) || rgb?.length !== width*height*3 ||
@@ -843,9 +862,9 @@ function trace(frame, object, scene) {
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
-  if (!['trace','upgrade','validate','targets','draw','inspect','preview','edit','replay'].includes(action) ||
+  if (!['trace','upgrade','validate','targets','draw','canvas','inspect','preview','edit','replay'].includes(action) ||
       pos.length !== (writing || action === 'preview' ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, inspect, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, canvas, inspect, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -856,6 +875,14 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const design = read(source);
+  if (action === 'canvas') {
+    if (typeof opt.out !== 'string' || !/\.html$/i.test(opt.out) || path.resolve(opt.out) === path.resolve(source))
+      throw new TypeError('Use pixel-art canvas <design.json> --out <canvas.html>');
+    const file = path.resolve(opt.out);
+    canvasReview(design,opt.frame,file);
+    console.log('wrote',file);
+    return;
+  }
   if (action === 'upgrade') {
     if (typeof opt.out !== 'string' || !opt.out.trim())
       throw new TypeError('Use pixel-art upgrade <design.json> --out <document.json>');

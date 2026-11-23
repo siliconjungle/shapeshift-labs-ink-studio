@@ -1,8 +1,11 @@
+import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
+
 const stamp = KIT.pixelStamps;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, fill, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
-const art = $('art'), ctx = art.getContext('2d');
+const view = mountPixelGridCanvas($('canvas-view')), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
+let drawingPointer;
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const notify = message => { $('status').textContent = message; };
 const saveUndo = () => {
@@ -50,14 +53,7 @@ function frameSlots(current) {
 function draw() {
   const { width, height, palette } = state.doc;
   const current = state.doc.frames[state.frame];
-  const rendered = stamp.image({ width,height,palette,slots:frameSlots(current) });
-  if (art.width !== width || art.height !== height) { art.width = width; art.height = height; }
-  const scale = limit(Math.floor(480/Math.max(width,height)),1,48);
-  art.style.setProperty('--canvas-width',`${width*scale}px`);
-  $('grid').hidden = !$('show-grid').checked || scale < 5;
-  $('grid').style.setProperty('--cols',width);
-  $('grid').style.setProperty('--rows',height);
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(rendered.rgba),width,height),0,0);
+  view.setFrame(stamp.image({ width,height,palette,slots:frameSlots(current) }));
   const count = state.doc.frames.length;
   $('scrub').max = count;
   $('scrub').value = state.frame+1;
@@ -88,6 +84,8 @@ function update() {
     return b;
   }));
   $('undo').disabled = !state.undo.length;
+  $('canvas-width').value = state.doc.width;
+  $('canvas-height').value = state.doc.height;
   $('add-color').disabled = state.doc.palette.length >= 48;
   $('playback').value = state.doc.playback ?? 'loop';
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
@@ -116,10 +114,24 @@ function commitStroke() {
   });
 }
 
-function point(event) {
-  const box = art.getBoundingClientRect();
-  return [limit(Math.floor((event.clientX-box.left-art.clientLeft)*art.width/art.clientWidth),0,art.width-1),
-    limit(Math.floor((event.clientY-box.top-art.clientTop)*art.height/art.clientHeight),0,art.height-1)];
+function resizeCanvas(width,height) {
+  const doc = state.doc;
+  if (![width,height].every(size => Number.isSafeInteger(size) && size >= 1 && size <= 512) ||
+      width * height * doc.frames.length > 2 ** 20)
+    throw new RangeError('Canvas size exceeds the stamp grid or animation budget.');
+  if (width === doc.width && height === doc.height) return;
+  const columns = Math.min(width,doc.width), rows = Math.min(height,doc.height);
+  const frames = doc.frames.map(({ slots,rows:sourceRows,strokes,...hold }) => {
+    const before = stamp.paint(doc.width,doc.height,{ slots,rows:sourceRows,strokes });
+    const resized = Array(width * height).fill(null);
+    for (let y = 0; y < rows; y++)
+      for (let x = 0; x < columns; x++) resized[y * width + x] = before[y * doc.width + x];
+    return { ...hold, slots:resized };
+  });
+  edit(() => {
+    state.doc = { ...doc,width,height,frames };
+    state.points = [];
+  });
 }
 
 function pencilSegment([x,y],[toX,toY]) {
@@ -135,28 +147,47 @@ function pencilSegment([x,y],[toX,toY]) {
 }
 
 art.addEventListener('pointerdown',event => {
-  if (event.button !== 0) return;
+  if (event.button !== 0 || drawingPointer !== undefined) return;
+  const at = view.pixelAt(event.clientX,event.clientY);
+  if (!at) return;
   stop();
   if (state.tool === 'polygon') {
-    if (state.points.length < 120) state.points.push(point(event));
+    if (state.points.length < 120) state.points.push(at);
   } else {
     art.setPointerCapture(event.pointerId);
-    state.points = [point(event)];
+    drawingPointer = event.pointerId;
+    state.points = [at];
   }
   draw();
 });
 art.addEventListener('pointermove',event => {
-  if (state.tool === 'polygon' || !art.hasPointerCapture(event.pointerId) || state.points.length >= (state.tool === 'pencil' ? 4096 : 120)) return;
-  const at=point(event), last=state.points.at(-1);
-  if (!last || last[0]===at[0] && last[1]===at[1]) return;
+  if (drawingPointer !== event.pointerId || state.points.length >= (state.tool === 'pencil' ? 4096 : 120)) return;
+  const at=view.pixelAt(event.clientX,event.clientY,{ clamp:true }), last=state.points.at(-1);
+  if (!at || !last || last[0]===at[0] && last[1]===at[1]) return;
   if (state.tool === 'pencil') pencilSegment(last,at);
   else state.points.push(at);
   draw();
 });
-art.addEventListener('pointerup',() => { if (state.tool !== 'polygon') commitStroke(); });
-art.addEventListener('pointercancel',()=>{ state.points=[]; draw(); });
+art.addEventListener('pointerup',event => {
+  if (drawingPointer !== event.pointerId) return;
+  drawingPointer = undefined;
+  commitStroke();
+});
+art.addEventListener('lostpointercapture',event => {
+  if (drawingPointer !== event.pointerId) return;
+  drawingPointer = undefined;
+  state.points = [];
+  draw();
+});
 $('finish-shape').addEventListener('click',commitStroke);
-$('show-grid').addEventListener('change',draw);
+$('canvas-size').addEventListener('submit',event => {
+  event.preventDefault();
+  try {
+    const width = $('canvas-width').valueAsNumber, height = $('canvas-height').valueAsNumber;
+    resizeCanvas(width,height);
+    notify(`Canvas ${width} × ${height} px`);
+  } catch (error) { notify(error.message); }
+});
 $('tools').addEventListener('click',event => {
   const { tool } = event.target.dataset;
   if (!tool) return;

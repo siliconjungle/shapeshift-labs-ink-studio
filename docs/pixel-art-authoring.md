@@ -7,6 +7,7 @@ review and a stamp that works in the existing material, mask and scene paths.
 
 ```sh
 node cli/ink-studio.js pixel-art draw examples/pixel-art-tooling/relay.json --out draft
+node cli/ink-studio.js pixel-art canvas examples/pixel-art-tooling/relay.json --out relay-canvas.html
 node cli/ink-studio.js pixel-art inspect examples/pixel-art-tooling/relay.json --at 13,22
 node cli/ink-studio.js pixel-art edit examples/pixel-art-tooling/relay.json \
   examples/pixel-art-tooling/relay-cleanup.json --out revised.json
@@ -14,6 +15,13 @@ node cli/ink-studio.js pixel-art draw revised.json --out revised
 node cli/ink-studio.js render examples/pixel-art-tooling/relay-stage.js \
   --w 160 --h 94 --px 1 --px1 --out relay-in-ink.png
 ```
+
+Open the generated HTML to inspect the document offline. The canvas has
+integer zoom, pan, an optional grid, cursor coordinates, and a synchronized
+1× view. Version 2 documents include a frame picker when they have several
+frames. Use `--frame <id>` to export a single frame. The HTML is a review
+artifact. Use the pixel editor API for document edits or the
+[Pixel Stamp Workshop](pixel-stamps.md) to draw and resize exported stamps.
 
 ## Author a drawing
 

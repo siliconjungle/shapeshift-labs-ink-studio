@@ -10,6 +10,18 @@ static server. The workshop has a one-pixel pencil, an optional pixel grid,
 and a brush, eraser and polygon for larger marks. It previews holds and saves
 the same JSON the renderer reads. The star, glint, and bubble studies let you
 open each separately drawn size.
+
+The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
+Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
+or focus the canvas and use the arrow keys to move it. The grid appears at
+4× and above when **Grid** is on. Cursor coordinates start at zero in the
+upper left. The second view stays at one CSS pixel per art pixel and
+updates during drawing and animation playback.
+
+Use **Canvas size** to resize all frames together. Resize keeps pixels at
+their existing coordinates, pads new space with transparency, and crops
+outside the new bounds. Undo restores the previous dimensions and pixels.
+
 The built-in studies include the two layers of the Red Spring spell, so
 the ink and the eye can be edited separately.
 The [animated tile library](pixel-tiles.md) uses the same editable cels
@@ -57,6 +69,12 @@ const stamp = {
 `KIT.pixelStamps.paint(width, height, cel)` resolves the marked slots.
 `KIT.pixelStamps.image(stamp, { time, scenePalette, paletteRoles })` gives a
 straight RGBA preview. Both methods work in the browser bundle and Node.
+
+To use the same viewport in another browser tool, import
+`mountPixelGridCanvas` from `src/pixel-grid-canvas.mjs` and load the matching
+CSS. Pass each native `{ width, height, rgba }` frame to `view.setFrame()`.
+Use `view.pixelAt(clientX, clientY)` to get the art coordinate for an edit
+and `view.dispose()` when removing the canvas.
 
 ## Marking a surface
 

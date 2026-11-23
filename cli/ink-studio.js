@@ -1401,6 +1401,7 @@ const CMD = {
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
+        '  pixel-art canvas <design.json> --out canvas.html [--frame id]   inspect native art and its 1× preview',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
         '  pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options',
