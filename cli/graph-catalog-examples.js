@@ -265,6 +265,7 @@ const specifications = {
   'fx.paletteCycle': { inputs: { source: slots, cycles: { shimmer: { range: [0, 1], period: 2 } } } },
   'fx.paletteFault': { inputs: { source: slots, options: { swaps: [[0, 1]] } } },
   'fx.moveRegions': { inputs: { source: rgba, labels: slots, transforms: [{ id: 1, offset: [1, 0], depth: -1 }] } },
+  'fx.relight': { inputs: { emission: rgba, height: slots, options: { radius: 6, emitterHeight: 2 } } },
   'fx.regionObservations': { inputs: { frames: [mask, mask] } },
   'fx.analyze': { output: 'paths' },
   'proc.sphereMap': { inputs:{options:{width:32,height:24}} },

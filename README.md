@@ -354,6 +354,8 @@ Map textures onto tapered curves and route along, across, tangent, and coverage 
 
 Move labeled pieces with their paint attached, composite overlaps by depth, and fill newly exposed gaps. [Move raster regions](docs/raster-region-move.md)
 
+Use a colored emission pass to light nearby raised or painted raster surfaces and route the light into palette effects. [Raster relighting](docs/raster-relight.md)
+
 Capture independent cameras under a shared budget and compose their feeds into overlays and textured world panels. [Multi-camera render atlases](docs/camera-atlas.md)
 
 Encode categories with patterns and shapes, label scale endpoints, and navigate linked records with a keyboard. [Accessible data encodings](docs/linked-views.md#accessible-encodings)
