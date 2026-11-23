@@ -122,7 +122,7 @@ function load(file) {
     try {
       const job=path.join(temp,'job.bin'), output=path.join(temp,'output.bin'), meta=path.join(temp,'meta.txt');
       fs.writeFileSync(job,encodeJob(request));
-      execFileSync(worker,[mode,row.binary,row.entry,row.id,job,output,meta],{timeout:45000,maxBuffer:2*1024*1024,encoding:'utf8'});
+      execFileSync(worker,[mode,row.binary,row.entry,row.id,job,output,meta,...(request.preset ? [request.preset] : [])],{timeout:45000,maxBuffer:2*1024*1024,encoding:'utf8'});
       return read(output,meta);
     } finally {fs.rmSync(temp,{recursive:true,force:true});}
   }
@@ -157,9 +157,13 @@ function load(file) {
     });
   }
   function snapshot(alias,settings={}) {
-    check(fields(settings,['sampleRate','state','parameters','kind']),'Invalid plugin state settings');
-    const {sampleRate=48000,state,parameters={},kind}=settings, row=plugin(alias);
-    const saved=execute('snapshot',row,{sampleRate,state,kind,parameters:initial(parameters)},output=>fs.readFileSync(output,'base64'));
+    check(fields(settings,['sampleRate','state','parameters','kind','preset']) &&
+      (settings.preset===undefined || text(settings.preset) && settings.state===undefined),
+      'Invalid plugin state settings. Use either state or a preset file');
+    const {sampleRate=48000,state,parameters={},kind,preset}=settings, row=plugin(alias);
+    const presetFile=preset===undefined ? undefined : path.resolve(preset);
+    if (presetFile) check(fs.statSync(presetFile).isFile(),'Expected a regular CLAP preset file');
+    const saved=execute('snapshot',row,{sampleRate,state,kind,preset:presetFile,parameters:initial(parameters)},output=>fs.readFileSync(output,'base64'));
     return {plugin:alias,identity:row.identity,state:saved};
   }
   function inspect(plugin,settings={}) {

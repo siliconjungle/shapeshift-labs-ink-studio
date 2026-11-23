@@ -26,6 +26,10 @@ or `music rack plugin-state` a settings file with
 `{"kind":"instrument","sampleRate":48000}`. Copy the saved `state` and
 `identity` fields into the patch. Authored parameter lanes run over that
 state. They use numeric CLAP IDs and accept beats, seconds, or samples.
+To initialize a snapshot from a preset file, set \`preset\` in the settings
+for \`plugin-state\`. Resolve it relative to the settings file. The registered
+plugin must support the CLAP preset-load extension. The resulting snapshot
+contains the plugin state, so score recipes can keep using the normal state field.
 
 ```sh
 ink-studio music production render cue.json --clap-host manifest.json --out print
@@ -53,8 +57,10 @@ pitches. Choose a native CLAP note port for independent expression and unison
 overlap. The worker uses the first compatible native port, or the first
 standard MIDI port when a native one is unavailable.
 
-The offline contract is one mono or stereo output, no audio inputs, fixed
-layout and latency, and a bounded declared tail. The worker compensates
+The offline worker prints the main mono or stereo output. It provides buffers
+for up to 15 additional mono or stereo outputs on an instrument and supplies
+silence to an optional mono or stereo instrument input. Layout and latency
+stay fixed through the render, and the instrument declares a bounded tail. The worker compensates
 latency before the common Ink track mix. A production render's `tail` option
 sets the release time after the render range. The session's desk uses its
 usual tail policy. `music session play` prepares instrument takes offline
@@ -69,6 +75,9 @@ receives `kind: "instrument"` with the normal describe and render contract.
 It declares a `notes` dialect of `clap` or `midi` and receives `notes` and
 `transport` in place of input audio. Native-only sessions can also use the
 headless `music.handoffEditSession` node.
+
+Use the [instrument benchmark](instrument-benchmark.md) to compare a native
+patch with a CLAP instrument on one performance and backing.
 
 ## Hand the edit to a DAW
 

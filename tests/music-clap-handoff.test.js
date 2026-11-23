@@ -129,6 +129,7 @@ test('native worker renders a CLAP instrument and preserves the old effect contr
     const file=path.join(tmp,'manifest.json');
     fs.writeFileSync(file,JSON.stringify({worker:'worker',plugins:{
       glass:{file:'Glass.clap',id:'org.ink.glass-reed'},
+      aux:{file:'Glass.clap',id:'org.ink.glass-reed-aux'},
       midi:{file:'Glass.clap',id:'org.ink.glass-reed-midi'},relay:{file:'Relay.clap',id:'org.ink.rack-fixture'}
     }}));
     const {load}=require('../cli/clap-adapter.js'), host=load(file);
@@ -150,6 +151,37 @@ test('native worker renders a CLAP instrument and preserves the old effect contr
     p.tracks.reed.clips[0].voices[1].notes[0].midi=64;
     assert(A.render(p,{}, {sampleRate:rate},host).value.samples.some(Boolean));
     assert(elapsed.some(Boolean));
+    const preset=path.join(tmp,'color.txt');
+    fs.writeFileSync(preset,'0.81');
+    const presetSaved=host.snapshot('aux',{kind:'instrument',sampleRate:rate,preset});
+    assert.equal(Buffer.from(presetSaved.state,'base64').readDoubleLE(),.81);
+    assert.throws(()=>host.snapshot('aux',{kind:'instrument',preset,state:presetSaved.state}),/either state or a preset/);
+    p.patches.reed={type:'clap',...presetSaved};
+    const aux=A.render(p,{},{sampleRate:rate,stems:true},host);
+    assert(aux.stems.reed.samples.some(Boolean));
+    assert(aux.stems.reed.samples.every(x=>Math.abs(x)<.75));
+    const backing={sampleRate:rate,channels:1,samples:Float32Array.from({length:rate*2},(_,i)=>.04*Math.sin(i*.12))};
+    fs.writeFileSync(path.join(tmp,'bed.wav'),WAV.encode(backing));
+    const suite=path.join(tmp,'suite.json'), output=path.join(tmp,'bench');
+    const baseline=source();
+    baseline.patches.reed={type:'subtractive'};
+    fs.writeFileSync(suite,JSON.stringify({format:'ink-studio/instrument-benchmark',version:1,reference:'Fixture',cases:[{
+      id:'fixture',title:'Playable tone',production:baseline,preset:'color.txt',reference:{type:'clap',plugin:'aux'},
+      mixer:{id:'fixed-bed',sampleRate:rate,output:'out',end:{seconds:2},tail:'cut',strips:{
+        out:{clips:[{id:'voice',source:'instrument'},{id:'backing',source:'bed'}]}}},
+      assets:{bed:'bed.wav'}
+    }]}));
+    const cli=path.join(repo,'cli/ink-studio.js');
+    const runSuite=(...args)=>execFileSync(process.execPath,[cli,'music','production','instrument-benchmark',suite,
+      '--clap-host',file,'--out',output,...args],{encoding:'utf8'});
+    runSuite('--case','fixture');
+    const result=JSON.parse(fs.readFileSync(path.join(output,'report.json'),'utf8')).cases[0];
+    assert.equal(result.notes,3);
+    assert.equal(result.referenceInstrument.latencySamples,11);
+    assert(Math.abs(result.context.native.integratedLufs-result.context.reference.integratedLufs)<.1);
+    assert(WAV.read(path.join(output,result.audio.context.reference)).samples.some(Boolean));
+    const performance=require('../cli/midi-notes.js').decode(fs.readFileSync(path.join(output,'fixture','performance.mid')));
+    assert(performance.notes.some(note=>note.pitch===65));
     execFileSync(process.execPath,[path.join(repo,'examples/audio-racks/clap-smoke.cjs'),file,'relay']);
   } finally {fs.rmSync(tmp,{recursive:true,force:true});}
 });

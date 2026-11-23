@@ -1,9 +1,12 @@
 // An offline-capable polyphonic CLAP instrument for the handoff example.
 #include <clap/clap.h>
+#include <clap/ext/preset-load.h>
+#include <clap/factory/preset-discovery.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 
 namespace {
 constexpr double tau=6.283185307179586;
@@ -23,7 +26,7 @@ struct Voice {
 
 struct Reed {
   double rate=48000,color=.46;
-  bool midiOnly=false;
+  bool midiOnly=false,auxiliary=false;
   uint32_t history=0;
   std::array<Voice,32> voices{};
   std::array<std::array<float,latency>,2> line{};
@@ -79,6 +82,15 @@ struct Reed {
     }
   }
   clap_process_status process(const clap_process_t &job) {
+    if (auxiliary) {
+      if (job.audio_inputs_count!=1 || job.audio_outputs_count!=2 ||
+          job.audio_inputs[0].channel_count!=2 || job.audio_outputs[1].channel_count!=1)
+        return CLAP_PROCESS_ERROR;
+      for (uint32_t ch=0;ch<2;ch++)
+        for (uint32_t i=0;i<job.frames_count;i++) if (job.audio_inputs[0].data32[ch][i]!=0)
+          return CLAP_PROCESS_ERROR;
+      std::fill_n(job.audio_outputs[1].data32[0],job.frames_count,0.75f);
+    }
     uint32_t index=0;
     for (uint32_t i=0;i<job.frames_count;i++) {
       while (index<job.in_events->size(job.in_events)) {
@@ -123,11 +135,14 @@ struct Reed {
     [](const clap_plugin_t *p,const clap_process_t *job){return get(p).process(*job);},
     [](const clap_plugin_t *,const char *extension)->const void * {
       static const clap_plugin_audio_ports_t audio{
-        [](const clap_plugin_t *,bool input)->uint32_t {return input ? 0 : 1;},
-        [](const clap_plugin_t *,uint32_t index,bool input,clap_audio_port_info_t *info) {
-          if (index || input) return false;
-          *info={};info->channel_count=2;info->flags=CLAP_AUDIO_PORT_IS_MAIN;info->port_type=CLAP_PORT_STEREO;
-          info->in_place_pair=CLAP_INVALID_ID;std::strcpy(info->name,"Main");return true;
+        [](const clap_plugin_t *p,bool input)->uint32_t {
+          return input ? uint32_t(get(p).auxiliary) : 1+uint32_t(get(p).auxiliary);
+        },
+        [](const clap_plugin_t *p,uint32_t index,bool input,clap_audio_port_info_t *info) {
+          if ((input && (!get(p).auxiliary || index)) || (!input && index>uint32_t(get(p).auxiliary))) return false;
+          *info={};info->id=index;info->channel_count=index ? 1 : 2;
+          info->flags=index ? 0 : CLAP_AUDIO_PORT_IS_MAIN;info->port_type=index ? CLAP_PORT_MONO : CLAP_PORT_STEREO;
+          info->in_place_pair=CLAP_INVALID_ID;std::strcpy(info->name,index ? "Aux" : "Main");return true;
         }
       };
       static const clap_plugin_note_ports_t notes{
@@ -163,6 +178,16 @@ struct Reed {
           return in->read(in,&get(p).color,sizeof(double))==sizeof(double);
         }
       };
+      static const clap_plugin_preset_load_t preset{
+        [](const clap_plugin_t *p,uint32_t kind,const char *file,const char *key) {
+          if (kind!=CLAP_PRESET_DISCOVERY_LOCATION_FILE || !file || key) return false;
+          double color;
+          std::ifstream in(file);
+          if (!(in >> color) || !(color>=0 && color<=1)) return false;
+          get(p).color=color;return true;
+        }
+      };
+      if (!std::strcmp(extension,CLAP_EXT_PRESET_LOAD)) return &preset;
       if (!std::strcmp(extension,CLAP_EXT_AUDIO_PORTS)) return &audio;
       if (!std::strcmp(extension,CLAP_EXT_NOTE_PORTS)) return &notes;
       if (!std::strcmp(extension,CLAP_EXT_LATENCY)) return &delay;
@@ -175,17 +200,21 @@ struct Reed {
 };
 const clap_plugin_descriptor_t midiDescription{
   CLAP_VERSION,"org.ink.glass-reed-midi","Glass Reed MIDI","Ink","","","","1","MIDI note-port fixture",features};
+const clap_plugin_descriptor_t auxDescription{
+  CLAP_VERSION,"org.ink.glass-reed-aux","Glass Reed Aux","Ink","","","","1","Preset and aux-port fixture",features};
+const std::array<const clap_plugin_descriptor_t *,3> descriptions{&description,&midiDescription,&auxDescription};
 const clap_plugin_factory_t factory{
-  [](const clap_plugin_factory_t *)->uint32_t{return 2;},
+  [](const clap_plugin_factory_t *)->uint32_t{return descriptions.size();},
   [](const clap_plugin_factory_t *,uint32_t i)->const clap_plugin_descriptor_t * {
-    return i==0 ? &description : i==1 ? &midiDescription : nullptr;
+    return i<descriptions.size() ? descriptions[i] : nullptr;
   },
   [](const clap_plugin_factory_t *,const clap_host_t *,const char *id)->const clap_plugin_t * {
-    const bool midi=!std::strcmp(id,midiDescription.id);
-    if (!midi && std::strcmp(id,description.id)) return nullptr;
+    const auto found=std::find_if(descriptions.begin(),descriptions.end(),[&](const auto *d){return !std::strcmp(id,d->id);});
+    if (found==descriptions.end()) return nullptr;
     auto &reed=*new Reed;
-    reed.midiOnly=midi;
-    if (midi) reed.plugin.desc=&midiDescription;
+    reed.midiOnly=*found==&midiDescription;
+    reed.auxiliary=*found==&auxDescription;
+    reed.plugin.desc=*found;
     return &reed.plugin;
   }};
 } // namespace

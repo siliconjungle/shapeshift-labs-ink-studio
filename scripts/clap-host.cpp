@@ -1,5 +1,7 @@
 // Offline CLAP worker. Build against the upstream CLAP SDK headers.
 #include <clap/clap.h>
+#include <clap/ext/preset-load.h>
+#include <clap/factory/preset-discovery.h>
 #include <dlfcn.h>
 #include <algorithm>
 #include <array>
@@ -18,6 +20,7 @@
 namespace {
 void need(bool ok, const char *message) { if (!ok) throw std::runtime_error(message); }
 constexpr uint32_t magic = 0x314b4e49, instrumentMagic = 0x324b4e49, blockSize = 256, stateLimit = 4*1024*1024, maxFrames = 8000000;
+constexpr uint32_t maxOutputs = 16;
 thread_local bool audioThread = false;
 
 template <class T> T read(std::ifstream &file) {
@@ -177,6 +180,11 @@ struct Host {
         [](const clap_host_t *) {}
       };
       static const clap_host_tail_t tail{[](const clap_host_t *) {}};
+      static const clap_host_preset_load_t preset{
+        [](const clap_host_t *,uint32_t,const char *,const char *,int32_t,const char *) {},
+        [](const clap_host_t *,uint32_t,const char *,const char *) {}
+      };
+      if (!std::strcmp(ext,CLAP_EXT_PRESET_LOAD) || !std::strcmp(ext,CLAP_EXT_PRESET_LOAD_COMPAT)) return &preset;
       if (!std::strcmp(ext,CLAP_EXT_THREAD_CHECK)) return &thread;
       if (!std::strcmp(ext,CLAP_EXT_LATENCY)) return &latency;
       if (!std::strcmp(ext,CLAP_EXT_PARAMS)) return &params;
@@ -243,6 +251,14 @@ bool loadState(Instance &instance,const std::vector<char> &bytes) {
   }};
   return ext->load(instance.plugin,&stream);
 }
+void loadPreset(Instance &instance,const char *file) {
+  auto *ext=instance.extension<clap_plugin_preset_load_t>(CLAP_EXT_PRESET_LOAD);
+  if (!ext) ext=instance.extension<clap_plugin_preset_load_t>(CLAP_EXT_PRESET_LOAD_COMPAT);
+  need(ext,"CLAP plugin does not expose preset loading");
+  need(ext->from_location(instance.plugin,CLAP_PRESET_DISCOVERY_LOCATION_FILE,file,nullptr),
+    "CLAP preset could not be loaded");
+  instance.callback();
+}
 void saveState(Instance &instance,const char *file) {
   const auto *ext=instance.extension<clap_plugin_state_t>(CLAP_EXT_STATE);
   need(ext,"CLAP plugin does not expose state");
@@ -286,17 +302,33 @@ Catalog parameters(Instance &instance,Job &job,Events &events) {
   instance.callback();
   return rows;
 }
-struct Ports {uint32_t input=0,key=0,output=0,dialect=0;uint16_t note=0;};
+struct Ports {
+  uint32_t input=0,inputChannels=2,key=0,dialect=0,outputs=0;
+  uint16_t note=0;
+  std::array<uint32_t,maxOutputs> channels{};
+};
 Ports ports(Instance &instance,bool instrument) {
   const auto *ext=instance.extension<clap_plugin_audio_ports_t>(CLAP_EXT_AUDIO_PORTS);
   const auto *plugin=instance.plugin;
   clap_audio_port_info_t input{},output{},key{};
-  need(ext && ext->count(plugin,false)==1 && ext->get(plugin,0,false,&output),"Host requires one CLAP audio output");
-  const auto count=ext->count(plugin,true);
   Ports result;
-  result.output=output.channel_count;
+  result.outputs=ext ? ext->count(plugin,false) : 0;
+  need(result.outputs>=1 && result.outputs<=(instrument ? maxOutputs : 1),
+    "Unsupported CLAP audio output count");
+  for (uint32_t i=0;i<result.outputs;i++) {
+    need(ext->get(plugin,i,false,&output) && (output.channel_count==1 || output.channel_count==2),
+      "CLAP audio outputs must be mono or stereo");
+    if (result.outputs>1) need(bool(output.flags&CLAP_AUDIO_PORT_IS_MAIN)==(i==0),
+      "A multi-output CLAP instrument needs a declared main output at index zero");
+    result.channels[i]=output.channel_count;
+  }
+  const auto count=ext->count(plugin,true);
   if (instrument) {
-    need(count==0 && (result.output==1 || result.output==2),"CLAP instrument needs no audio inputs and a mono or stereo output");
+    need(count<=1 && (!count || (ext->get(plugin,0,true,&input) &&
+      (input.channel_count==1 || input.channel_count==2))),
+      "CLAP instrument can have at most one mono or stereo audio input");
+    result.input=count;
+    if (count) result.inputChannels=input.channel_count;
     const auto *notes=instance.extension<clap_plugin_note_ports_t>(CLAP_EXT_NOTE_PORTS);
     need(notes,"CLAP instrument needs a note input");
     const auto n=notes->count(plugin,true);
@@ -317,7 +349,7 @@ Ports ports(Instance &instance,bool instrument) {
     need(result.dialect,"No supported CLAP or MIDI note dialect");
   } else {
     need((count==1 || count==2) && ext->get(plugin,0,true,&input) &&
-      input.channel_count==2 && result.output==2,"Host requires stereo main input and output");
+      input.channel_count==2 && result.channels[0]==2,"Host requires stereo main input and output");
     result.input=count;
     if (count==2) {
       need(ext->get(plugin,1,true,&key) && (key.channel_count==1 || key.channel_count==2),
@@ -331,10 +363,17 @@ Ports ports(Instance &instance,bool instrument) {
 void render(Instance &instance,Job &job,Events &events,const Catalog &params,const Ports &ports,const char *file) {
   std::ofstream out(file,std::ios::binary);
   need(bool(out) && (job.key.empty() || ports.key),"Invalid CLAP output or sidechain");
-  std::array<std::array<float,blockSize>,2> main{},side{},output{};
-  float *pMain[]={main[0].data(),main[1].data()}, *pSide[]={side[0].data(),side[1].data()},
-    *pOut[]={output[0].data(),output[1].data()};
-  clap_audio_buffer_t inputs[2]={{pMain,nullptr,2,0,0},{pSide,nullptr,ports.key,0,0}}, result{pOut,nullptr,ports.output,0,0};
+  using Block=std::array<std::array<float,blockSize>,2>;
+  Block main{},side{};
+  std::array<Block,maxOutputs> output{};
+  std::array<std::array<float *,2>,maxOutputs> channels{};
+  std::array<clap_audio_buffer_t,maxOutputs> buffers{};
+  for (uint32_t i=0;i<ports.outputs;i++) {
+    channels[i]={output[i][0].data(),output[i][1].data()};
+    buffers[i]={channels[i].data(),nullptr,ports.channels[i],0,0};
+  }
+  float *pMain[]={main[0].data(),main[1].data()}, *pSide[]={side[0].data(),side[1].data()};
+  const clap_audio_buffer_t inputs[2]={{pMain,nullptr,ports.inputChannels,0,0},{pSide,nullptr,ports.key,0,0}};
   const auto frames=uint64_t(job.frames)+job.latency;
   audioThread=true;
   instance.processing=instance.plugin->start_processing(instance.plugin);
@@ -369,7 +408,6 @@ void render(Instance &instance,Job &job,Events &events,const Catalog &params,con
       for (size_t ch=0;ch<2;ch++) {
         main[ch][i]=offset+ch<job.input.size() ? job.input[offset+ch] : 0;
         side[ch][i]=offset+ch<job.key.size() ? job.key[offset+ch] : 0;
-        output[ch][i]=0;
       }
       if (ports.key==1) side[0][i]=(side[0][i]+side[1][i])*.5f;
       for (auto &lane:job.lanes) if (lane.points.size()>1) {
@@ -379,8 +417,12 @@ void render(Instance &instance,Job &job,Events &events,const Catalog &params,con
       while (eventIndex<job.notes.size() && job.notes[eventIndex].at==sample)
         events.push(i,job.notes[eventIndex++],ports.note,ports.dialect);
     }
-    result.constant_mask=0;
-    const clap_process_t process{int64_t(base),count,job.changes.empty() ? nullptr : &transport,ports.input ? inputs : nullptr,&result,ports.input,1,&events.in,&events.out};
+    for (uint32_t i=0;i<ports.outputs;i++) {
+      for (uint32_t ch=0;ch<ports.channels[i];ch++) std::fill_n(output[i][ch].begin(),count,0);
+      buffers[i].constant_mask=0;
+    }
+    const clap_process_t process{int64_t(base),count,job.changes.empty() ? nullptr : &transport,
+      ports.input ? inputs : nullptr,buffers.data(),ports.input,ports.outputs,&events.in,&events.out};
     audioThread=true;
     const auto status=instance.plugin->process(instance.plugin,&process);
     audioThread=false;
@@ -390,8 +432,8 @@ void render(Instance &instance,Job &job,Events &events,const Catalog &params,con
     interleaved.clear();
     for (uint32_t i=0;i<count;i++) if (base+i>=job.latency) {
       for (size_t ch=0;ch<2;ch++) {
-        const auto channel=ports.output==1 ? 0 : ch;
-        const float value=output[channel][result.constant_mask&(1u<<channel) ? 0 : i];
+        const auto channel=ports.channels[0]==1 ? 0 : ch;
+        const float value=output[0][channel][buffers[0].constant_mask&(1u<<channel) ? 0 : i];
         need(std::isfinite(value),"Nonfinite CLAP output");
         interleaved.push_back(value);
       }
@@ -405,13 +447,16 @@ void render(Instance &instance,Job &job,Events &events,const Catalog &params,con
 
 int main(int argc,char **argv) {
   try {
-    need(argc==8,"Use worker mode binary entry-path plugin-id job output metadata");
+    need(argc==8 || argc==9,"Use worker mode binary entry-path plugin-id job output metadata [preset]");
     const std::string mode=argv[1];
     need(mode=="probe" || mode=="snapshot" || mode=="render","Invalid CLAP worker mode");
     Job job(argv[5]);
     Instance instance;
     instance.open(argv[2],argv[3],argv[4]);
-    need(loadState(instance,job.state),"CLAP state could not be restored");
+    if (argc==9) {
+      need(mode=="snapshot" && job.state.empty(),"A CLAP preset can only initialize a new snapshot");
+      loadPreset(instance,argv[8]);
+    } else need(loadState(instance,job.state),"CLAP state could not be restored");
     Events events;
     const auto params=parameters(instance,job,events);
     const auto layout=ports(instance,job.instrument);

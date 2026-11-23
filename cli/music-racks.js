@@ -15,7 +15,10 @@ function rackCommand([mode,name,file],opt,kit) {
   const host=opt['clap-host']===undefined ? undefined : require('./clap-adapter').load(opt['clap-host']);
   if (mode==='plugin-info' || mode==='plugin-state') {
     if (!host) throw new TypeError('Plugin commands need --clap-host manifest.json');
-    const saved=host[mode==='plugin-info' ? 'inspect' : 'snapshot'](name,file ? read(file) : {});
+    const settings=file ? read(file) : {};
+    if (mode==='plugin-state' && typeof settings?.preset==='string' && settings.preset.length)
+      settings.preset=path.resolve(path.dirname(path.resolve(file)),settings.preset);
+    const saved=host[mode==='plugin-info' ? 'inspect' : 'snapshot'](name,settings);
     if (typeof opt.out==='string') json(opt.out,saved);
     return print(saved);
   }
