@@ -208,7 +208,7 @@ fs.writeFileSync(path.join(output,'index.html'),`<!doctype html>
 main{max-width:1190px;margin:auto;padding:24px 16px 56px}h1{font-size:clamp(32px,6vw,64px);margin:0;letter-spacing:-.05em}
 p{max-width:64ch;color:#bbb3b1;margin:0 0 18px}h2{font-size:16px;margin:22px 0 8px}img{width:100%;height:auto;display:block;image-rendering:pixelated;border:1px solid #2c3542}
 </style><main><h1>Cask Study</h1><p>Each frame traces the barrel once. The middle version changes the wood, and the right version also changes the hoops.</p>
-<img src="cask-study.png" width="1176" height="438" alt="A synchronized turntable of oak and iron, ash and iron, and ash and copper">
-<h2>Trace and material passes</h2><img src="cask-passes.png" width="1176" height="438" alt="Hit position, banded illumination, and material slot IDs">
+<img src="cask-study.png" width="${sheet.w*3}" height="${sheet.h*3}" alt="A synchronized turntable of oak and iron, ash and iron, and ash and copper">
+<h2>Trace and material passes</h2><img src="cask-passes.png" width="${sheet.w*3}" height="${sheet.h*3}" alt="Hit position, banded illumination, and material slot IDs">
 </main></html>`);
 console.log(path.join(output,'index.html'));
