@@ -88,7 +88,7 @@ const ShotCorrections = (() => {
     return Object.keys(target).some(key => key !== 'material') ? target : undefined;
   }
 
-  function resolve(art, passes, plan, world, { time = 0, shotCorrectionFrame, project } = {}) {
+  function resolve(art, passes, plan, world, { time = 0, shotCorrectionFrame, project, shotCorrectionHits } = {}) {
     const { w, h } = art;
     check(dimensions([w, h]) && w === plan.size[0] && h === plan.size[1],
       'native frame must match the authored grid');
@@ -107,9 +107,15 @@ const ShotCorrections = (() => {
       }
       const rule = integer(row, 0, world.count - 1) ? target(row) : null;
       const domain = rule && targetOf(rule);
-      const center = rule && (!anchor.target || selectors.matches(anchor.target, rule)) && project(row, w, h);
+      const inScope = rule && (!anchor.target || selectors.matches(anchor.target, rule));
+      const center = inScope && project(row, w, h);
+      const skippedHits = id === shotCorrectionHits ? [] : undefined;
       if (!center) {
-        corrections.push({ id, at: null, painted: 0, clipped: ink.length });
+        if (skippedHits) {
+          const reason = !rule ? 'missing-anchor' : !inScope ? 'anchor-outside-target' : 'anchor-not-projected';
+          for (const [dx,dy] of ink) skippedHits.push({ offset:[dx,dy], at:null, reason });
+        }
+        corrections.push({ id, at: null, painted: 0, clipped: ink.length, ...(skippedHits && { skippedHits }) });
         continue;
       }
       const [u, v, scale, z] = center;
@@ -119,16 +125,25 @@ const ShotCorrections = (() => {
       const matches = new Map();
       for (const [dx, dy, color] of ink) {
         const x = x0 + dx, y = y0 + dy;
-        if (x < 0 || x >= w || y < 0 || y >= h) continue;
         const p = y * w + x, owner = owners[p];
-        if (owner < 1 || owner > world.count || art.alpha?.[p] === 0 || !Number.isFinite(depth[p]) ||
-            Math.abs(depth[p] - plane) > distance) continue;
-        if (!matches.has(owner)) matches.set(owner, domain ? selectors.matches(domain, target(owner - 1)) : owner - 1 === row);
-        if (!matches.get(owner)) continue;
+        let reason;
+        if (x < 0 || x >= w || y < 0 || y >= h) reason = 'outside-grid';
+        else if (owner < 1 || owner > world.count || art.alpha?.[p] === 0 || !Number.isFinite(depth[p]))
+          reason = 'no-surface';
+        else if (Math.abs(depth[p] - plane) > distance) reason = 'depth-mismatch';
+        else {
+          if (!matches.has(owner)) matches.set(owner, domain ? selectors.matches(domain, target(owner - 1)) : owner - 1 === row);
+          if (!matches.get(owner)) reason = 'different-owner';
+        }
+        if (reason) {
+          skippedHits?.push({ offset:[dx,dy], at:[x,y], reason });
+          continue;
+        }
         edits.set(p, parseInt(color.slice(1), 16));
         painted++;
       }
-      corrections.push({ id, at: [x0, y0], painted, clipped: ink.length - painted });
+      corrections.push({ id, at: [x0, y0], painted, clipped: ink.length - painted,
+        ...(skippedHits && { skippedHits }) });
     }
     return { edits, frame, corrections };
   }

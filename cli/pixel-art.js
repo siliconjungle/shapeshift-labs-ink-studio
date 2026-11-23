@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
+const { isDeepStrictEqual:equal } = require('node:util');
 const { paint } = require('../src/pixel-stamps.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
@@ -12,6 +13,7 @@ const Preview = require('./pixel-edit-preview.js');
 const { isRevision } = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/pixel-art';
+const receiptFormat = 'ink-studio/pixel-edit-receipt';
 const name = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
 const integer = (n, lo, hi) => Number.isSafeInteger(n) && n >= lo && n <= hi;
@@ -404,6 +406,91 @@ function edit(design, frame, patch, context) {
   return revised;
 }
 
+const jsonValue = value => JSON.parse(JSON.stringify(value));
+
+function replayReceipt(raw, runner) {
+  if (raw?.format !== receiptFormat || raw.version !== 1 || raw.status !== 'applied' ||
+      raw.command?.runner !== runner || raw.command.action !== 'edit' ||
+      !record(raw.command.patch) || !record(raw.command.options) ||
+      !isRevision(raw.inputs?.documentRevision) || !isRevision(raw.outputs?.artifactRevision))
+    throw new TypeError('Replay needs an applied version 1 pixel edit receipt from the ' + runner);
+  return raw;
+}
+
+function editWithReceipt(design, patch, context, { runner, options, frameId, shotHitFrame, expected, rawPatch = patch }) {
+  const documentRevision = fingerprint(design);
+  const command = { runner, action:'edit', options, patch:null };
+  const inputs = { documentRevision };
+  const common = { format:receiptFormat, version:1, command, inputs };
+  const splats = [];
+  let world;
+  try {
+    command.patch = jsonValue(rawPatch ?? null);
+    if (expected && !equal(options,expected.command.options))
+      throw Preview.conflict('receipt-arguments','Replay needs the same edit options recorded in the receipt');
+    if (expected && documentRevision !== expected.inputs.documentRevision)
+      throw Preview.conflict('stale-document','Receipt was recorded against a different pixel document',
+        { expected:expected.inputs.documentRevision, actual:documentRevision });
+    const frame = compile(design,frameId,patch?.cel);
+    command.frame = frame.id ?? null;
+    const route = Destinations.resolve(design,patch?.destination), { destination,binding } = route;
+    if (shotHitFrame !== undefined && (destination.kind !== 'shot-correction' || !integer(shotHitFrame,0,1e9)))
+      throw new TypeError('A shot hit sample needs a shot-correction edit and a nonnegative shot frame');
+    const result = edit(design,frame,patch,{
+      ...context,
+      onSource(sourceRevision,source) {
+        inputs.sourceRevision = sourceRevision;
+        if (source.revision !== undefined) inputs.sourceContentRevision = source.revision;
+        world = source.world;
+        if (expected && !equal(inputs,expected.inputs))
+          throw Preview.conflict('stale-source','Receipt was recorded against a different scene source',
+            { binding:binding.id, expected:expected.inputs.sourceRevision, actual:sourceRevision });
+      },
+      onSplat: splat => splats.push(splat)
+    });
+    let target = Preview.sourceTarget(route,patch), shotHits, skippedHits = [];
+    if (destination.kind === 'raster') {
+      const layer = patch.cel === undefined ? patch.id : [...frame.cels].find(([,id]) => id === patch.cel)[0];
+      target = { destination:destination.id, kind:'raster', frame:command.frame, layer,
+        cel:frame.id === undefined ? null : patch.cel ?? frame.id+'/'+layer,
+        pixels:patch.edits.map(({ at }) => at) };
+    } else if (destination.kind === 'shot-correction') {
+      target.anchor = splats[0];
+      shotHits = { status:'deferred-to-render' };
+      if (shotHitFrame !== undefined) {
+        const [w,h] = result.size, t = result.startTime + shotHitFrame / result.fps;
+        const view = require('./render.js').render(world,{ w,h,px:1,t,raw:true,renderGrid:false,
+          renderGraph:false,shutter:false,shotCorrections:result,shotCorrectionFrame:shotHitFrame,shotCorrectionHits:patch.id });
+        if (!view.shotCorrections) throw new Error('The native render did not produce a shot correction report');
+        const hit = view.shotCorrections.corrections.find(row => row.id === patch.id);
+        shotHits = hit ? { status:'sampled', frame:shotHitFrame, time:t, at:hit.at, painted:hit.painted }
+          : { status:'outside-frame-range', frame:shotHitFrame, time:t };
+        skippedHits = hit?.skippedHits ?? [];
+      }
+    } else if (destination.kind === 'splat-attributes') {
+      target.splats = splats;
+    } else {
+      target.node = 'solid:' + binding.object;
+      if (patch.operation.modifier) target.modifier = patch.id;
+      if (patch.operation.updateModifier) target.modifier = patch.operation.updateModifier.id;
+    }
+    const artifactRevision = fingerprint(result);
+    const receipt = jsonValue({ ...common, status:'applied', affectedTargets:[target], skippedHits,
+      ...(shotHits && { shotHits }), outputs:{ kind:destination.kind,
+        documentRevision:binding ? documentRevision : artifactRevision, artifactRevision } });
+    if (expected && !equal(receipt,expected))
+      throw Preview.conflict('receipt-mismatch','Replay did not reproduce the recorded targets, hits, or output revisions');
+    return { result,receipt };
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    const conflicts = Preview.conflicts(error);
+    error.receipt = jsonValue({ ...common, status:'rejected', affectedTargets:[],
+      skippedHits:conflicts.filter(issue => issue.at !== undefined || issue.splat !== undefined),
+      conflicts, outputs:null });
+    throw error;
+  }
+}
+
 function upgradeLegacy(design) {
   const { format,version,width,height,palette,layers,...legacyMetadata } = design;
   const cels = Object.fromEntries(layers.map(({ id,marks,slots }) =>
@@ -458,7 +545,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
 }
 
 function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
-  const baseline = { ...openDesign(source), renderOutputs:{} };
+  const baseline = { ...openDesign(source), renderOutputs:{}, receipts:[] };
   const { authoring } = require('../index.js').load().KIT;
   const journal = sceneEditor === undefined
     ? authoring.document(undefined,{ historyLimit })
@@ -526,28 +613,31 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     };
   }
 
-  function apply(patch,context) {
+  function apply(patch,context,expected) {
     const grouped = journal.pending();
     const perform = () => {
       const draft = state(), { design } = draft;
       const request = requestFor(draft,patch);
-      const frame = compile(design,request?.frame,request?.cel);
-      const adapter = editContext(context,grouped);
-      let sourceRevision;
-      if (grouped) adapter.onSource = revision => { sourceRevision = revision; };
-      const result = edit(design,frame,request,adapter);
+      const adapter = editContext(context,grouped || !!expected);
+      const shotHitFrame = expected ? expected.command.options.shotHitFrame : context?.shotHitFrame;
+      const options = shotHitFrame === undefined ? {} : { shotHitFrame };
+      const { result,receipt } = editWithReceipt(design,request,adapter,
+        { runner:'sdk', options, frameId:request?.frame, shotHitFrame, expected, rawPatch:patch });
       const route = Destinations.resolve(design,request.destination), { destination,binding } = route;
-      if (destination.kind === 'raster') store({ ...draft, design:result, legacyRevision:null });
+      const next = { ...draft, receipts:[...draft.receipts,receipt] };
+      if (destination.kind === 'raster') Object.assign(next,{ design:result, legacyRevision:null });
       const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
-      if (option) store({ ...draft, renderOutputs:{ ...draft.renderOutputs,
+      if (option) next.renderOutputs = { ...draft.renderOutputs,
         [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
-      } });
+      };
+      store(next);
       if (grouped && binding) {
         const base = journal.transactionBase();
         let targets = stagedTargets.get(base);
         if (!targets) stagedTargets.set(base,targets = new Map());
         targets.set(JSON.stringify([binding.scene,destination.id,request.id]),{
-          ...Preview.sourceTarget(route,request), sourceRevision, sourceChecked:request.sourceRevision !== undefined
+          ...Preview.sourceTarget(route,request), sourceRevision:receipt.inputs.sourceRevision,
+          sourceChecked:request.sourceRevision !== undefined || !!expected
         });
       }
       return structuredClone(result);
@@ -591,7 +681,12 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     targets(destination,options = {}) {
       return inspectTargets(state().design,destination,editContext(options,false),options.limit);
     },
-    apply,
+    apply: (patch,context) => apply(patch,context),
+    receipts: () => structuredClone(state().receipts),
+    replay(raw,context) {
+      const receipt = replayReceipt(raw,'sdk');
+      return apply(receipt.command.patch,context,receipt);
+    },
     begin: label => { journal.begin(label); },
     preview() { journal.preview(); return editor.snapshot(); },
     previewChanges,
@@ -668,9 +763,10 @@ function trace(frame, object, scene) {
 
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
-  if (!['trace','upgrade','validate','targets','draw','inspect','preview','edit'].includes(action) ||
-      pos.length !== (['edit','preview'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, inspect, preview, or edit. See ink-studio help.');
+  const writing = action === 'edit' || action === 'replay';
+  if (!['trace','upgrade','validate','targets','draw','inspect','preview','edit','replay'].includes(action) ||
+      pos.length !== (writing || action === 'preview' ? 3 : 2))
+    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, inspect, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -691,7 +787,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     process.stdout.write(JSON.stringify(validate(design),null,2)+'\n');
     return;
   }
-  const out = action === 'edit' && typeof opt.out === 'string' ? path.resolve(opt.out) : undefined;
+  const out = writing && typeof opt.out === 'string' ? path.resolve(opt.out) : undefined;
   function sourceFor(binding) {
     const sameFile = typeof opt.scene === 'string' && /\.(?:js|json)$/i.test(binding.scene) &&
       path.resolve(opt.scene) === path.resolve(binding.scene);
@@ -720,8 +816,30 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     if (!report.valid) process.exitCode = 2;
     return;
   }
-  const changes = action === 'edit' ? read(patch) : undefined;
-  const frame = compile(design,opt.frame ?? (design.version === 2 ? changes?.frame : undefined),changes?.cel);
+  if (writing) {
+    if (!out) throw new TypeError('Use --out revised.json to save the edit');
+    if (action === 'replay' && [source,patch].some(file => path.resolve(file) === out))
+      throw new RangeError('Write the replay to a separate output from its inputs');
+    const input = read(patch);
+    const expected = action === 'replay' ? replayReceipt(input,'cli') : undefined;
+    const changes = expected ? expected.command.patch : input;
+    const options = Object.fromEntries(Object.entries(opt).filter(([key]) => key !== 'out'));
+    const sample = opt['shot-hit-frame'];
+    const shotHitFrame = sample === undefined ? undefined : typeof sample === 'string' && /^\d+$/.test(sample)
+      ? Number(sample) : NaN;
+    let receipt, result;
+    try {
+      ({ receipt,result } = editWithReceipt(design,changes,context,{ runner:'cli', options,
+        frameId:opt.frame ?? (design.version === 2 ? changes?.frame : undefined), shotHitFrame, expected }));
+    } catch (error) {
+      if (error.receipt) process.stdout.write(JSON.stringify(error.receipt,null,2)+'\n');
+      throw error;
+    }
+    files.json(out,result);
+    process.stdout.write(JSON.stringify(receipt,null,2)+'\n');
+    return;
+  }
+  const frame = compile(design,opt.frame);
   if (action === 'inspect') {
     const coordinate = /^\d+,\d+$/.test(opt.at ?? '') ? opt.at.split(',').map(Number) : null;
     if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use --at x,y inside the native grid');
@@ -734,8 +852,6 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     console.log('wrote',directory);
     return;
   }
-  if (!out) throw new TypeError('Use --out revised.json to save the edit');
-  files.json(out,edit(design,frame,changes,context));
 }
 
 function inspectTargets(design,destination,context,limit = 128) {

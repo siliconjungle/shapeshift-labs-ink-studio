@@ -230,6 +230,48 @@ Existing scene patches can still use a revision pinned in the binding.
 Previews flag patches that omit the per-edit guard as `unverified-source`
 and supply the digest to use when reviewing the edit.
 
+## Record and replay edit receipts
+
+`pixel-art edit` writes the native artifact to `--out` and prints a version 1
+receipt as JSON. Save the receipt alongside the original inputs to reproduce the edit.
+
+```sh
+node cli/ink-studio.js pixel-art edit examples/pixel-art-tooling/relay.json \
+  examples/pixel-art-tooling/relay-cleanup.json --out revised.json > receipt.json
+node cli/ink-studio.js pixel-art replay examples/pixel-art-tooling/relay.json \
+  receipt.json --out replayed.json
+```
+
+The receipt records the patch and effective frame, the command flags, the
+input document and observed source revisions, the resolved targets, skipped hits,
+and the resulting document and artifact revisions. Depending on the destination,
+the targets identify the raster cel, the scene binding and resolved splat rows
+and IDs, the surface chart and channel, or the solid and modifier.
+The artifact revision hashes the
+resulting JSON before formatting. Replay uses the embedded patch and checks the
+inputs and the reproduced receipt before writing. Repeat the original CLI
+flags, such as `--scene`. The output path can change.
+
+Shot corrections resolve visibility at render time. For a reference sample,
+add `--shot-hit-frame 12` to both commands. This runs a headless native-grid
+render with the input world's current pose and the shot clock at frame 12.
+The receipt includes skipped offsets, projected coordinates when available,
+and the reason for each skip. A sample outside the correction's frame range
+reports that status. Without a sample the receipt marks hits as deferred.
+When the CLI rejects a patch during application, it prints a receipt with its
+conflicts and any rejected hit coordinates or IDs. It exits with an error and
+leaves the artifact unwritten.
+
+With the Node editor, use `pixels.receipts()` to read receipts from the
+current working state. Their lifetime follows the edit transaction through
+cancel, undo, and redo. An edit rejected during application exposes its
+receipt on `error.receipt`. For a shot sample, pass `{ shotHitFrame: 12 }`
+as the second argument to `pixels.apply`. To reproduce a successful SDK
+receipt, call `pixels.replay(receipt)` on an editor opened on the original
+inputs. Attach the original scene to replay surface or SDF edits and supply
+any host world callback used by the original edit. Replay multiple receipts in
+their recorded order to reproduce a sequence of edits.
+
 ## Author a version 2 document
 
 Version 2 keeps canvas size, pixel aspect, palette, and the layer stack at the

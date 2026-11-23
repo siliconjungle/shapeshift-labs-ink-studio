@@ -1908,7 +1908,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             correctionAPI.capture(art, passes, world, artProject()));
           if (!corrections) return art.rgb;
           const { edits, ...report } = correctionAPI.resolve(art, passes, corrections, world,
-            { time:t, shotCorrectionFrame:frame.shotCorrectionFrame, project:artProject() });
+            { time:t, shotCorrectionFrame:frame.shotCorrectionFrame, project:artProject(),
+              shotCorrectionHits:frame.shotCorrectionHits });
           frame.shotCorrectionsFrame?.(report);
           return correctionAPI.apply(art.rgb, edits);
         }

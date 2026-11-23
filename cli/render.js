@@ -699,7 +699,8 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (shotCorrections) {
       const { edits, ...report } = ShotCorrections.resolve(frame, passes, shotCorrections, world,
-        { time: sceneTime, shotCorrectionFrame: o.shotCorrectionFrame, project: artProject() });
+        { time: sceneTime, shotCorrectionFrame: o.shotCorrectionFrame, project: artProject(),
+          shotCorrectionHits: o.shotCorrectionHits });
       for (const color of edits.values()) paletteInventory?.declared.add(color);
       function applyCorrection(target) {
         target.shotCorrections = report;

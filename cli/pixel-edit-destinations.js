@@ -58,7 +58,7 @@ function sceneTarget(binding) {
   return Targets.prepare({ object:binding.object, ...(binding.part !== undefined && { part:binding.part }) });
 }
 
-function splatRows(world, binding) {
+function splatRows(world, binding, onSplat) {
   const target = sceneTarget(binding), { row } = Targets.index(world);
   let ids;
   return function resolveSplat(source) {
@@ -67,11 +67,15 @@ function splatRows(world, binding) {
     if (!scope)
       throw conflict('unavailable-splat','Splat ' + source + ' is missing, ambiguous, or outside binding ' + binding.id,
         { binding:binding.id, splat:source });
+    if (onSplat) {
+      const id = (ids ??= Provenance.identities(world,{ fresh:true })).idAt(index);
+      onSplat({ requested:source, row:index, id:id ?? null });
+    }
     return { index, scope };
   };
 }
 
-function shot(frame, edit, binding, world, marks) {
+function shot(frame, edit, binding, world, marks, onSplat) {
   const operation = edit.operation;
   if (!fields(operation,['at','fps','startTime','frames','anchor','depthTolerance']) ||
       !Array.isArray(operation.at) || operation.at.length !== 2 ||
@@ -83,7 +87,7 @@ function shot(frame, edit, binding, world, marks) {
   const { at:[x,y], fps, startTime, frames, anchor, depthTolerance } = operation;
   const colors = new Map(frame.swatches.map((swatch,i) => [swatch,'#'+frame.colors[i].toString(16).padStart(6,'0')]));
   const pixels = marks.map(mark => [mark.at[0]-x,mark.at[1]-y,colors.get(mark.swatch)]);
-  const { scope } = splatRows(world,binding)(anchor.splat);
+  const { scope } = splatRows(world,binding,onSplat)(anchor.splat);
   const base = world.look?.shotCorrections;
   const size = [frame.width,frame.height];
   const prior = ShotCorrections.prepare(base);
@@ -96,11 +100,11 @@ function shot(frame, edit, binding, world, marks) {
   });
 }
 
-function splats(edit, binding, world, bake) {
+function splats(edit, binding, world, bake, onSplat) {
   const operation = edit.operation;
   if (!fields(operation,['splats']) || !Array.isArray(operation.splats) || !operation.splats.length)
     throw new TypeError('A splat attribute edit needs a list of explicit source splats');
-  const row = splatRows(world,binding);
+  const row = splatRows(world,binding,onSplat);
   const seen = new Set();
   const edits = operation.splats.map(change => {
     if (!fields(change,['splat','footprintScale','visible']) ||
@@ -191,10 +195,10 @@ function apply(frame, edit, route, context, readMarks) {
     throw new TypeError('Destination ' + destination.kind + ' needs explicit source coordinates or IDs in operation');
   const marks = isShot ? readMarks(frame,edit) : undefined;
   const source = observe(route,context,{ guard:edit.sourceRevision !== undefined || !!context.onSource });
-  context.onSource?.(source.sourceRevision);
+  context.onSource?.(source.sourceRevision,source);
   checkRevision(binding,source,edit.sourceRevision);
-  if (isShot) return shot(frame,edit,binding,source.world,marks);
-  if (destination.kind === 'splat-attributes') return splats(edit,binding,source.world,source.revision);
+  if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
+  if (destination.kind === 'splat-attributes') return splats(edit,binding,source.world,source.revision,context.onSplat);
   return solidEdit(edit,destination,binding,source.editor);
 }
 

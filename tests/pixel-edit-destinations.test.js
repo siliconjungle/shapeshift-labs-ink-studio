@@ -69,7 +69,7 @@ function setup(t) {
   }
   const targets = (destination, limit = 128) => JSON.parse(cli('pixel-art','targets',filename('document'),
     '--destination',destination,'--scene',filename('source'),'--limit',String(limit)));
-  return { document, filename, write, request, apply, reject, targets };
+  return { document, filename, write, read, request, apply, reject, targets };
 }
 
 test('pixel destinations route raster, shot and splat edits through their native consumers', t => {
@@ -136,6 +136,60 @@ test('a stable splat edit resolves the same sample after a scene reorder', t => 
   assert.throws(()=>SplatFit.prepare(missing,asset),/unavailable splat fit target/);
 });
 
+test('CLI receipts replay authored and sampled shot edits on the original inputs', t => {
+  const { filename, write, read, request, targets } = setup(t);
+  const world = KIT.diorama.build(source), at = [20,16], offSurface = [0,31];
+  const frame = ink.render(world,{ ...view, captureShotCorrectionSurface:true });
+  const { target,...anchor } = frame.shotCorrectionSurface.pin(...at);
+  assert.equal(target.object,'gate');
+  const shot = request({ destination:'one-shot',
+    edits:[at,offSurface].map(at=>({ at,layer:null,from:null,to:'amber' })),
+    operation:{ at, fps:10, frames:[0,0], anchor }
+  });
+  write('patch',shot);
+  const args = ['--scene',filename('source'),'--shot-hit-frame','0'];
+  const run = (action,name,output,options = args) => ['pixel-art',action,filename('document'),filename(name),
+    ...options,'--out',filename(output)];
+  const receipt = JSON.parse(cli(...run('edit','patch','shot')));
+  assert.equal(receipt.format,'ink-studio/pixel-edit-receipt');
+  assert.deepEqual(receipt.command.patch,shot);
+  assert.equal(receipt.inputs.documentRevision,shot.revision);
+  assert.equal(receipt.inputs.sourceRevision,targets('one-shot').sourceRevision);
+  assert.equal(receipt.affectedTargets[0].anchor.id,anchor.splat);
+  assert.equal(receipt.shotHits.painted,1);
+  assert.deepEqual(receipt.skippedHits.map(hit=>[hit.at,hit.reason]),[[offSurface,'no-surface']]);
+  assert.equal(receipt.outputs.documentRevision,shot.revision);
+  assert.match(receipt.outputs.artifactRevision,/^[a-f0-9]{64}$/);
+  write('receipt',receipt);
+  assert.deepEqual(JSON.parse(cli(...run('replay','receipt','replayed'))),receipt);
+  assert.deepEqual(read('replayed'),read('shot'));
+
+  const changedOptions = spawnSync(process.execPath,
+    cliArgs(...run('replay','receipt','wrong-options',args.slice(0,2))),{ cwd, encoding:'utf8' });
+  assert.equal(changedOptions.status,1);
+  assert.equal(JSON.parse(changedOptions.stdout).conflicts[0].code,'receipt-arguments');
+  assert.equal(fs.existsSync(filename('wrong-options')),false);
+
+  const unguarded = JSON.parse(cli(...run('edit','patch','deferred',args.slice(0,2))));
+  assert.equal(unguarded.shotHits.status,'deferred-to-render');
+  assert.deepEqual(read('deferred'),read('shot'));
+  write('source',{ ...source, camera:{ ...source.camera, yaw:.25 } });
+  const stale = spawnSync(process.execPath,cliArgs(...run('replay','receipt','stale')),{ cwd, encoding:'utf8' });
+  assert.equal(stale.status,1);
+  assert.equal(JSON.parse(stale.stdout).conflicts[0].code,'stale-source');
+  assert.equal(fs.existsSync(filename('stale')),false);
+
+  write('patch',{ ...shot, edits:[{ ...shot.edits[0], at:[0,0] }] });
+  const rejected = spawnSync(process.execPath,cliArgs(...run('edit','patch','rejected')),{ cwd, encoding:'utf8' });
+  assert.equal(rejected.status,1);
+  const failure = JSON.parse(rejected.stdout);
+  assert.equal(failure.status,'rejected');
+  assert.equal(failure.outputs,null);
+  assert.equal(failure.skippedHits[0].code,'protected-pixel');
+  assert.deepEqual(failure.skippedHits[0].at,[0,0]);
+  assert.equal(fs.existsSync(filename('rejected')),false);
+});
+
 test('pixel destinations retain edits on a rest chart and the selected SDF solid', t => {
   const { document, filename, write, request, apply, reject, targets } = setup(t);
   const baseline = ink.render(KIT.diorama.build(source),view);
@@ -194,19 +248,46 @@ test('a shared transaction commits, undoes and redoes the pixel cel and the SDF 
     });
   });
   const committed = scene.snapshot(), painted = pixels.snapshot();
+  const receipts = pixels.receipts();
   assert.equal(committed.solids[0].modifiers[0].id,'notch-cut');
   assert.equal(pixels.inspect(at).swatch,'amber');
   assert.deepEqual(pixels.history().undo,['Set solid material','Carve the gate and mark the cel']);
+  assert.equal(receipts[0].affectedTargets[0].cel,'front/cut-mark');
+  assert.deepEqual(receipts[0].affectedTargets[0].pixels,[at]);
+  assert.equal(receipts[0].outputs.documentRevision,receipts[1].inputs.documentRevision);
+  assert.equal(receipts[1].affectedTargets[0].node,'solid:gate');
+  assert.equal(receipts[1].affectedTargets[0].modifier,'notch-cut');
+  assert.deepEqual(receipts[1].skippedHits,[]);
 
   assert.equal(scene.undo(),true);
   assert.deepEqual(scene.snapshot(),baseline);
   assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(pixels.receipts(),[]);
   assert.equal(pixels.redo(),true);
   assert.deepEqual(scene.snapshot(),committed);
   assert.deepEqual(pixels.snapshot(),painted);
+  assert.deepEqual(pixels.receipts(),receipts);
   assert.deepEqual(events,[
     ['commit','amber','notch-cut'],['undo',null,null],['redo','amber','notch-cut']
   ]);
+
+  const replayScene = ink.createSceneEditor(baseline);
+  const replay = ink.createPixelEditor(document,{ sceneEditor:replayScene, sceneRef:filename('source') });
+  const tampered = structuredClone(receipts[1]);
+  tampered.outputs.artifactRevision = '0'.repeat(64);
+  assert.throws(()=>replay.transact('Tampered receipt',editor=>{
+    editor.replay(receipts[0]);
+    editor.replay(tampered);
+  }),/did not reproduce/);
+  assert.deepEqual(replay.receipts(),[]);
+  assert.deepEqual(replay.snapshot(),document);
+  assert.deepEqual(replayScene.snapshot(),baseline);
+  replay.transact('Replay the gate',editor=>{
+    for (const receipt of receipts) editor.replay(receipt);
+  });
+  assert.deepEqual(replay.receipts(),receipts);
+  assert.deepEqual(replay.snapshot(),painted);
+  assert.deepEqual(replayScene.snapshot(),committed);
 });
 
 test('preview shows exact pixel and source changes before commit and leaves cancel reversible', t => {
@@ -236,6 +317,7 @@ test('preview shows exact pixel and source changes before commit and leaves canc
   assert.deepEqual(events,[]);
   assert.equal(pixels.cancel(),true);
   assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(pixels.receipts(),[]);
   assert.deepEqual(scene.snapshot(),source);
   assert.deepEqual(events,[]);
 
@@ -409,6 +491,11 @@ test('a splat source revision notices in-place packed changes and ownership chan
   assert.notEqual(fresh.revision,original.revision);
   const fit = pixels.apply({ ...revised, sourceRevision:fresh.sourceRevision },options);
   assert.deepEqual(fit.edits,[['replacement-dab',0]]);
+  const [receipt] = pixels.receipts();
+  assert.deepEqual(receipt.affectedTargets[0].splats,[{ requested:'replacement-dab', row, id:'replacement-dab' }]);
+  const replay = ink.createPixelEditor(document);
+  assert.deepEqual(replay.replay(receipt,options),fit);
+  assert.deepEqual(replay.receipts(),[receipt]);
 });
 
 test('a failed scene or pixel operation rolls back the entire shared draft', t => {
