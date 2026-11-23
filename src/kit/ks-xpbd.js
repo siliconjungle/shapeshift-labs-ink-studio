@@ -390,6 +390,40 @@
     }
   };
 
+  K.xpbd.contactField = (sdf, { friction, tolerance, fallback }) => {
+    const V=K.V;
+    function distance(p, time) {
+      const d = sdf(...p, time);
+      if (!Number.isFinite(d) && d !== Infinity) throw new RangeError('Contact field must return a signed distance');
+      return d;
+    }
+    function hit(p, time, radius) {
+      const d = distance(p, time);
+      if (d > radius + tolerance) return null;
+      const gradient = p.map((_, axis) => {
+        const a = p.slice(), b = p.slice();
+        const e = Math.max(.0001, radius * .01);
+        a[axis] += e;
+        b[axis] -= e;
+        return distance(a, time) - distance(b, time);
+      });
+      const length = V.len(gradient);
+      // A point at the center of a solid has no unique outward normal.
+      const normal = length > 1e-8 && Number.isFinite(length) ? V.mul(gradient, 1 / length) : fallback.slice();
+      return { distance: d, normal, point: V.mad(p, normal, -d) };
+    }
+    function project(_, p, previous, clearance, time) {
+      const contact = hit(p, time, clearance);
+      if (!contact || contact.distance >= clearance) return null;
+      const { normal, distance: d } = contact;
+      const push = V.mad(p, normal, clearance - d);
+      const movement = V.sub(p, previous);
+      const tangent = V.mad(movement, normal, -V.dot(movement, normal));
+      return V.mad(push, tangent, -friction);
+    }
+    return { hit, project };
+  };
+
   K.xpbd.clothGrid = ({nu,nv,at,u,v,stretch=1e-6,shear=1e-5,bend=2e-3,tear=0}) => {
     const points=[], links=[], faces=[], horizontal=[], vertical=[];
     const link=(a,b,compliance,ratio,kind)=>links.push({a,b,compliance,ratio,kind})-1;

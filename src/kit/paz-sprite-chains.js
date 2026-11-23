@@ -64,39 +64,6 @@
     } : () => target];
   }
 
-  function contactField(sdf, radius, friction, tolerance) {
-    function distance(p, time) {
-      const d = sdf(...p, time);
-      check(Number.isFinite(d) || d === Infinity, 'contact field must return a signed distance');
-      return d;
-    }
-    function hit(p, time) {
-      const d = distance(p, time);
-      if (d > radius + tolerance) return null;
-      const gradient = p.map((_, axis) => {
-        const a = p.slice(), b = p.slice();
-        const e = Math.max(.0001, radius * .01);
-        a[axis] += e;
-        b[axis] -= e;
-        return distance(a, time) - distance(b, time);
-      });
-      const length = V.len(gradient);
-      // A point at the center of a solid has no unique outward normal.
-      const normal = length > 1e-8 && Number.isFinite(length) ? V.mul(gradient, 1 / length) : [0, -1, 0];
-      return { distance: d, normal, point: V.mad(p, normal, -d) };
-    }
-    function project(_, p, previous, clearance, time) {
-      const contact = hit(p, time);
-      if (!contact || contact.distance >= clearance) return null;
-      const { normal, distance: d } = contact;
-      const push = V.mad(p, normal, clearance - d);
-      const movement = V.sub(p, previous);
-      const tangent = V.mad(movement, normal, -V.dot(movement, normal));
-      return V.mad(push, tangent, -friction);
-    }
-    return { hit, project };
-  }
-
   function blit(rgba, w, h, cel, origin, dx, dy, length, flip) {
     const { width, height, start, ux, uy } = cel;
     const scale = length / cel.length;
@@ -143,7 +110,7 @@
     const lengths = rest.slice(1).map((p, i) => V.dist(p, rest[i]));
     check(lengths.every(n => n > .0001), 'adjacent rest joints must be separated');
     const choose = lengths.map((_, i) => styles.get(linkStyles?.[i] ?? common));
-    const contacts = sdf && contactField(sdf, radius, friction, contactTolerance);
+    const contacts = sdf && K.xpbd.contactField(sdf, {friction,tolerance:contactTolerance,fallback:[0,-1,0]});
     const solver = K.xpbd.sim({ gravity: gravity.slice(), damp, substeps, fixedStep: true,
       substepPins: true, project: contacts?.project });
     for (const p of rest) solver.point(p, 1, radius);
@@ -169,7 +136,7 @@
         const pose = rest.map((_, i) => Array.from(solver.X.subarray(i * 3, i * 3 + 3)));
         check(pose.every(p => vector(p, 3)), 'chain exceeded its finite coordinate range');
         return { time: tick / hz, points: pose,
-          contacts: pose.map((p, i) => !fixed.has(i) && contacts ? contacts.hit(p, tick / hz) : null) };
+          contacts: pose.map((p, i) => !fixed.has(i) && contacts ? contacts.hit(p, tick / hz, radius) : null) };
       } catch (error) {
         // Replaying a failing driver must start from an intact simulation state.
         checkpoints.clear();

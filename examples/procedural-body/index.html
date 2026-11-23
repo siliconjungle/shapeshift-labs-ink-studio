@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sluice Diver · Ink Studio</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; color:#f2f1dc; background:#0b151e; font:15px/1.43 system-ui,sans-serif; }
+  main { width:min(920px,calc(100% - 28px)); margin:0 auto; padding:clamp(14px,4vw,29px) 0 26px; }
+  h1 { margin:0 0 4px; font-size:clamp(33px,7vw,56px); line-height:1; letter-spacing:-.058em; }
+  p { margin:0; color:#afc5c6; text-wrap:balance; }
+  .stage { position:relative; margin-top:15px; border:1px solid #34515b; border-radius:7px; overflow:hidden; }
+  canvas { width:100%; height:auto; display:block; image-rendering:pixelated; }
+  #guides { position:absolute; inset:0; touch-action:none; cursor:crosshair; }
+  .controls { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:10px 0; }
+  button { padding:6px 10px; border:1px solid #586f70; border-radius:4px; background:#213741; color:#e8efdc;
+    font:inherit; cursor:pointer; }
+  button[aria-pressed=true] { background:#3a5149; color:#e6f7bd; border-color:#91ba99; }
+  :is(button,canvas):focus-visible { outline:2px solid #ffdc8c; outline-offset:2px; }
+  #contact-status { margin-left:auto; color:#c1d1c3; font-variant-numeric:tabular-nums; }
+  @media(max-width:520px) { body{font-size:13px} main{width:calc(100% - 20px)} #contact-status{margin:0} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sluice Diver</h1>
+  <p>Drag to steer the head through the gate. Show the rig to see how the spine and tendrils follow.</p>
+  <div class="stage">
+    <canvas id="view" width="260" height="148" aria-label="Sluice Diver body and gate"></canvas>
+    <canvas id="guides" width="260" height="148" tabindex="0" aria-label="Steer the diver with a pointer or arrow keys"></canvas>
+  </div>
+  <div class="controls">
+    <button id="replay" disabled>Replay passage</button>
+    <button id="pause" disabled>Pause</button>
+    <button id="rig" aria-pressed="false" disabled>Show rig</button>
+    <button id="contacts" aria-pressed="true" disabled>Gate contacts</button>
+    <output id="contact-status" aria-live="off">Preparing the scene…</output>
+  </div>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script src="scene.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>
