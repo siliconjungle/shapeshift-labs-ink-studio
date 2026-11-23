@@ -1,7 +1,7 @@
 /* Validated, renderer-independent keyframe tracks on a seconds-based clock. */
 (function (K) {
   const modes = ['number', 'vector', 'radians', 'positive', 'orientation', 'quaternion'];
-  const eases = Object.freeze(['linear', 'smooth', 'step', 'in-sine', 'out-sine', 'in-out-sine']);
+  const eases = Object.freeze(['linear', 'smooth', 'step', 'step-start', 'in-sine', 'out-sine', 'in-out-sine']);
   const turn = 2 * Math.PI;
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
   const angle = value => Math.atan2(Math.sin(value), Math.cos(value));
@@ -9,6 +9,33 @@
   const orientation = value => Array.isArray(value) && value.length === 9 &&
     Array.from(value).every(Number.isFinite) && Math.abs(K.M.det(value) - 1) < 1e-4 &&
     K.M.mul(K.M.tr(value), value).every((n, i) => Math.abs(n - (i % 4 === 0 ? 1 : 0)) < 1e-4);
+
+  function cubicEase([x1,y1,x2,y2], progress) {
+    const curve = (a,b,t) => {
+      const s=1-t;
+      return t*(3*s*s*a + 3*s*t*b + t*t);
+    };
+    let t=progress;
+    // Match the editor's usual Newton solve, with a bracketed fallback for flat tangents.
+    for (let i=0;i<8;i++) {
+      const s=1-t, error=curve(x1,x2,t)-progress;
+      if (Math.abs(error)<1e-4) return curve(y1,y2,t);
+      const slope=3*(s*s*x1+2*s*t*(x2-x1)+t*t*(1-x2));
+      t-=error/slope;
+      if (!(t>0 && t<1)) break;
+    }
+    let low=0, high=1;
+    for (let i=0;i<24;i++) {
+      t=(low+high)*.5;
+      if (curve(x1,x2,t)<progress) low=t;
+      else high=t;
+    }
+    return curve(y1,y2,t);
+  }
+  const usableEase = ease => eases.includes(ease) || Array.isArray(ease) && ease.length===4 &&
+    Array.from(ease).every((n,i)=>Number.isFinite(n) && (i%2 ? Math.abs(n)<=16 : n>=0 && n<=1));
+  const sampleEase = (progress,ease) => Array.isArray(ease) ? cubicEase(ease,progress) :
+    ease==='step-start' ? 1 : K.anim.ease(progress,ease);
 
   function create(schema, input = []) {
     if (!record(schema) || !Array.isArray(input)) throw Error('Expected channel modes and a keyframe array');
@@ -21,7 +48,7 @@
           Object.keys(key.value).length !== entries.length)
         throw Error('Each keyframe needs a nonnegative time and every channel');
       const ease = key.ease ?? 'smooth';
-      if (!eases.includes(ease)) throw Error('Unknown keyframe easing');
+      if (!usableEase(ease)) throw Error('Unknown keyframe easing');
       const pairs = entries.map(([name, mode]) => {
         const value = Object.hasOwn(key.value, name) ? key.value[name] : undefined;
         if (mode === 'quaternion') return [name, Object.freeze(K.Q.normalize(value))];
@@ -37,7 +64,8 @@
           throw Error('Invalid keyframe channel: ' + name);
         return [name, value];
       });
-      return Object.freeze({ time: key.time, value: Object.freeze(Object.fromEntries(pairs)), ease });
+      return Object.freeze({ time: key.time, value: Object.freeze(Object.fromEntries(pairs)),
+        ease:Array.isArray(ease) ? Object.freeze(ease.slice()) : ease });
     }).sort((a, b) => a.time - b.time);
     if (keys.some((key, i) => i > 0 && keys[i - 1].time === key.time))
       throw Error('Keyframe times must be unique');
@@ -67,7 +95,7 @@
         else high = mid;
       }
       const a = keys[low], b = keys[high];
-      const u = t === a.time ? 0 : t === b.time ? 1 : K.anim.ease((t - a.time) / (b.time - a.time), a.ease);
+      const u = t === a.time ? 0 : t === b.time ? 1 : sampleEase((t - a.time) / (b.time - a.time), a.ease);
       return Object.fromEntries(columns.map(({ name, mode, values }) => {
         const start = values[low], end = values[high];
         if (mode === 'quaternion') return [name, K.Q.slerp(start, end, u)];

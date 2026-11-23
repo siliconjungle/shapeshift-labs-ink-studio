@@ -136,7 +136,11 @@ async function graphCommand(pos,opt,settings) {
     };
     return send(diffGraphs(read(file),read(caseFile)),opt.json);
   }
-  if (Object.hasOwn(host.commands,mode)) return send(await host.execute(pos,opt,settings),opt.json);
+  if (Object.hasOwn(host.commands,mode)) {
+    const result=await host.execute(pos,opt,settings);
+    if (result.passed===false) process.exitCode=2;
+    return send(result,opt.json);
+  }
   if (!Object.hasOwn(flags,mode) || pos.length!==(mode==='batch'?3:2) ||
       Object.entries(opt).some(([key,value])=>key!=='adapters' && !flags[mode].includes(key) ||
         (['json','resume','memory'].includes(key) ? value!==true : key==='progress' ? value!=='ndjson' :

@@ -45,6 +45,11 @@
       inputs: {background: 'raster', foreground: 'raster', options}, outputs: {value: 'raster'},
       run({background, foreground, options}) { return {value: R.blend(background, foreground, options)}; }
     },
+    'raster.mix': {
+      description:'Crossfade aligned raster samples with optional alpha or RGB-mean coverage.',
+      inputs:{source:'raster',edited:'raster',mask:{type:'any',default:null},options},
+      outputs:{value:'raster'},run({source,edited,mask,options}){return {value:R.mix(source,edited,mask,options)};}
+    },
     'raster.stack': stack('stack'),
     'raster.depth': stack('depth'),
     'raster.height': stack('height'),

@@ -253,6 +253,8 @@ const specifications = {
   } } } },
   'palette.resolve': { inputs: { policy: { palette } } },
   'color.gradient': { inputs: { ramp: palette } },
+  'color.posterize': { inputs:{palette:[[30,20,50,255],[210,130,120,255]]} },
+  'raster.mix': { inputs:{source:rgba,edited:rgba,mask,options:{amount:.6}} },
   'color.stack': { inputs: { stack: { name: 'Sample', steps: [] } } },
   'color.key': { inputs: { options: { color: '#3c87be' } } },
   'fx.bitplane': { inputs: { source: slots } },

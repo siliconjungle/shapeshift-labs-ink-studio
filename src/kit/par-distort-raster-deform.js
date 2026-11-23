@@ -83,18 +83,27 @@
     return {value:W.sample(source,field,{...settings,...(strip && {edgeU:settings.edgeU ?? 'wrap'})}),field};
   }
 
-  function displace(source,map,{units='pixels',center=0,scale=[1,0],...settings}={}) {
+  function displace(source,map,{units='pixels',center=0,scale=[1,0],amount=1,continuousEdges=false,...settings}={}) {
     view(source);
     const {width,height,data,channels}=view(map);
     const offset=Array.isArray(center) ? center : [center,center];
-    if (![1,2].includes(channels) || !['pixels','normalized'].includes(units) || !tuple(offset,2,bounded) || !tuple(scale,2,bounded))
+    if (![1,2].includes(channels) || !['pixels','normalized'].includes(units) || !tuple(offset,2,bounded) ||
+        !tuple(scale,2,bounded) || !bounded(amount) || typeof continuousEdges!=='boolean')
       throw new RangeError('Displacement needs one or two numeric channels and a finite centre and scale');
-    const sx=scale[0]/(units==='pixels' ? source.width : 1),sy=scale[1]/(units==='pixels' ? source.height : 1);
-    const field=fieldFrom(width,height,2,(u,v,_x,_y,p,out)=>{
-      out[0]=u-(data[p*channels]-offset[0])*sx;
-      out[1]=v-(data[p*channels+channels-1]-offset[1])*sy;
+    const sx=amount*scale[0]/(units==='pixels' ? source.width : 1),sy=amount*scale[1]/(units==='pixels' ? source.height : 1);
+    const edge=settings.edge ?? 'clamp';
+    if (continuousEdges && (!['transparent','clamp','wrap'].includes(edge) || settings.edgeU || settings.edgeV))
+      throw new RangeError('Continuous UV edges need one empty, clamp, or wrap policy');
+    const field=fieldFrom(width,height,continuousEdges ? 3 : 2,(u,v,_x,_y,p,out)=>{
+      const x=u-(data[p*channels]-offset[0])*sx, y=v-(data[p*channels+channels-1]-offset[1])*sy;
+      out[0]=x; out[1]=y;
+      if (!continuousEdges) return;
+      const inside=x>=0 && x<=1 && y>=0 && y<=1;
+      out[2]=Number(edge!=='transparent'||inside);
+      out[0]=edge==='wrap'&&(x<0||x>1) ? wrap(x) : clamp(x);
+      out[1]=edge==='wrap'&&(y<0||y>1) ? wrap(y) : clamp(y);
     });
-    return {value:W.sample(source,field,settings),field};
+    return {value:W.sample(source,field,continuousEdges ? {...settings,edge:'clamp'} : settings),field};
   }
 
   function refract(source,map,{channel=0,heightScale=1/255,index=1.33,depth=8,...settings}={}) {

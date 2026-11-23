@@ -128,6 +128,38 @@
     return pivot ? {...value, pivot: pivot.slice()} : value;
   }
 
+  function mix(source, edited, mask, {amount=1,maskMode='alpha',invert=false,keepTransparentRGB=false,channels=15}={}) {
+    const value=R.rgba(source), {width,height,data}=value;
+    aligned(edited,width,height);
+    if (!Number.isFinite(amount) || amount<0 || amount>1 || !['alpha','mean'].includes(maskMode) ||
+        typeof invert!=='boolean' || typeof keepTransparentRGB!=='boolean' ||
+        !Number.isSafeInteger(channels) || channels<0 || channels>15)
+      throw new RangeError('Invalid raster mix amount, channel selection or mask mode');
+    const next=R.rgba(edited).data;
+    let gate;
+    if (mask!=null) {
+      aligned(mask,width,height);
+      gate=R.rgba(mask).data;
+    }
+    for (let i=0;i<data.length;i+=4) {
+      let weight=1;
+      if (gate) {
+        const a=gate[i+3]/255;
+        weight=maskMode==='alpha' ? a : (gate[i]+gate[i+1]+gate[i+2])*a/765;
+        if (invert) weight=1-weight;
+      }
+      const t=weight*amount;
+      const fromAlpha=data[i+3], toAlpha=next[i+3];
+      for (let c=0;c<4;c++) {
+        if (!(channels&(1<<c))) continue;
+        if (c<3 && keepTransparentRGB && !toAlpha) continue;
+        data[i+c]=c<3 && keepTransparentRGB && !fromAlpha ? next[i+c] :
+          byte(data[i+c]+(next[i+c]-data[i+c])*t);
+      }
+    }
+    return value;
+  }
+
   function rotated(source, angle) {
     const input = view(R.rgba(source)), {width, height} = input;
     const pivot = input.pivot ?? [width / 2, height / 2];
@@ -184,5 +216,5 @@
     return {...value, pivot: [-x, -y]};
   }
 
-  Object.assign(R, {blend, stack, spriteLayer, spriteStack});
+  Object.assign(R, {blend, mix, stack, spriteLayer, spriteStack});
 })(KIT.procedural);

@@ -122,6 +122,126 @@ test('native translation samples pixel-position keys and synchronous frame count
   assert.deepEqual(Array.from(b['partial-pxc-5'].data.slice(4, 8)), [188, 0, 0, 191]);
 });
 
+test('an unmodified bundled Canvas project translates and matches its saved render across its timeline', async () => {
+  const file=path.join(__dirname,'fixtures/pixel-composer/Canvas.pxc');
+  const {project,report}=await translate(fs.readFileSync(file),file);
+  assert(report.complete,JSON.stringify(report));
+  assert.equal(report.translated.length,4);
+  assert(report.translated.some(row=>row.type==='Node_Group_Output' && row.group===report.targets[0].id));
+  const graph=ink.createGraphProject(project);
+  for (const frame of [0,7,15,29]) {
+    const {image,'saved-preview':reference}=graph.run({time:frame/report.timeline.fps}).outputs;
+    assert.equal(image.width,reference.width);
+    assert.equal(image.height,reference.height);
+    assert.deepEqual(Array.from(image.data),Array.from(reference.data));
+  }
+});
+
+test('verify-pxc compares named outputs and original node IDs at authored frames', t => {
+  const dir = folder(t), source = path.join(dir, 'motion.pxc');
+  const references = path.join(dir, 'frames.json'), reportFile = path.join(dir, 'verification.json');
+  const empty = rgba(0, 0, 0, 0);
+  fs.writeFileSync(path.join(dir, 'mark.png'), PNG.encode(2, 1, pixels([red, empty]), 4));
+  fs.writeFileSync(source, pxc([
+    node('mark', 'Image', { 0: saved('mark.png') }),
+    node('move', 'Transform', { 0: ref('mark'), 1: saved([3, 1]),
+      2: track([key(0, [0, 0]), key(6, [2, 0])], { unit: 0 }), 3: saved([0, 0]), 9: saved(1) }),
+    node('export', 'Export', { 0: ref('move') })
+  ]));
+  for (const [i, frame] of [0,3,6].entries()) {
+    const line = Array(3).fill(empty);
+    line[i] = red;
+    fs.writeFileSync(path.join(dir, 'ref-' + frame + '.png'), PNG.encode(3, 1, pixels(line), 4));
+  }
+  const checks = [{ frame: 0, source: 'ref-0.png' }, { frame: 3, source: 'ref-3.png', node: 'move' },
+    { frame: 6, source: 'ref-6.png', output: 'image' }];
+  fs.writeFileSync(references, JSON.stringify({ frames: checks }));
+  const invoke = output => spawnSync(process.execPath, [cli, 'graph', 'verify-pxc', source, references,
+    '--out', output, '--json'], { encoding: 'utf8', cwd: dir });
+  const success = invoke(reportFile);
+  assert.equal(success.status, 0, success.stderr);
+  assert.deepEqual(JSON.parse(success.stdout), JSON.parse(fs.readFileSync(reportFile)));
+  assert.deepEqual(JSON.parse(success.stdout).checks.map(row => [row.time, row.differentPixels]), [[0,0],[.25,0],[.5,0]]);
+
+  const overwrite = invoke(path.join(dir, 'ref-0.png'));
+  assert.equal(overwrite.status, 1);
+  assert.match(overwrite.stderr, /separate from its inputs/);
+  checks[1].source = 'ref-6.png';
+  fs.writeFileSync(references, JSON.stringify({ frames: checks }));
+  const mismatch = invoke(reportFile);
+  assert.equal(mismatch.status, 2, mismatch.stderr);
+  assert.deepEqual(JSON.parse(mismatch.stdout).checks[1], { ...checks[1], time: .25, passed: false,
+    size: [3,1], differentPixels: 2, maxChannelError: 255 });
+});
+
+test('nested group ports route independently and fence direct cross-group links', async () => {
+  const boundary=(id,group,dep,port=0)=>node(id,'Group_Output',{0:ref(dep,port)},{group});
+  const scope=(id,group,inside,outside,slots)=>node(id,'Group',slots,{
+    ...(group&&{group}),attri:{custom_input_list:inside,custom_output_list:outside}
+  });
+  const {project,report}=await translate(pxc([
+    node('target','Export',{0:ref('outer',1)}),
+    node('paint','Solid',{0:saved([3,2]),1:saved(0xff3214dc)}),
+    scope('outer',null,['outer-in'],['outer-bad','outer-good'],{0:ref('paint')}),
+    node('outer-in','Group_Input',{}, {group:'outer'}),
+    boundary('outer-bad','outer','unknown'),
+    boundary('outer-good','outer','inner'),
+    node('unknown','Shader',{0:ref('outer-in')},{group:'outer'}),
+    scope('inner','outer',['inner-in'],['inner-out'],{0:ref('outer-in')}),
+    node('inner-in','Group_Input',{}, {group:'inner'}),
+    node('invert','Invert',{0:ref('inner-in')},{group:'inner'}),
+    boundary('inner-out','inner','invert'),
+    node('cross','Invert',{0:ref('invert')})
+  ]));
+  assert(report.unsupported.some(row=>row.id==='cross'&&row.reason==='unsupported-context'));
+  assert(report.blocked.some(row=>row.id==='outer'));
+  assert.deepEqual(report.targets,[{id:'target',output:'image'}]);
+  const graph=ink.createGraphProject(project);
+  assert.deepEqual(Array.from(graph.run({time:.5}).outputs.image.data),Array(6).fill([35,235,205,255]).flat());
+});
+
+test('saved cubic handles survive editable translation and outgoing holds jump only after the source key', async () => {
+  const from=key(0,0,0,1),to=key(12,1,1,2);
+  from[3]=[1/3,0]; to[2]=[1/3,0];
+  const {project,report}=await translate(pxc([
+    node('track','Number_Simple',{0:track([from,to,key(24,2)])})
+  ]));
+  assert(report.complete,JSON.stringify(report));
+  assert.deepEqual(project.nodes['pxc-1'].inputs.value.keys[0].ease,[1/3,0,1-1/3,0]);
+  const graph=ink.createGraphProject(project);
+  for (const [frame,expected] of [[0,0],[3,.015625],[6,.125],[9,.421875],[12,1],[13,2],[21,2],[24,2]]) {
+    const actual=graph.run({time:frame/12}).outputs['partial-pxc-1'];
+    assert(Math.abs(actual-expected)<1e-8,JSON.stringify({frame,actual,expected}));
+  }
+});
+
+test('masked displacement and RGB palettes translate through editable raster nodes at authored frames', async t => {
+  const dir=folder(t),filename=path.join(dir,'graded.pxc');
+  fs.writeFileSync(path.join(dir,'source.png'),PNG.encode(4,1,pixels([red,green,blue,yellow]),4));
+  fs.writeFileSync(path.join(dir,'mask.png'),PNG.encode(4,1,pixels([
+    rgba(255,255,255),rgba(255,255,255),rgba(0,0,0),rgba(0,0,0)
+  ]),4));
+  const source=pxc([
+    node('image','Image',{0:saved('source.png')}),
+    node('mask','Image',{0:saved('mask.png')}),
+    node('white','Solid',{0:saved([4,1]),1:saved(0xffffffff)}),
+    node('warp','Displace',{0:ref('image'),1:ref('white'),2:saved([2,0],{unit:0}),3:track([key(0,0),key(12,1)]),
+      8:ref('mask')},{attri:{oversample:3}}),
+    node('swatches','Palette',{0:saved([0xffff0000,0xff00ff00,0xff0000ff,0xff00ffff,0xff000001]),1:saved([0,.8])}),
+    node('posterize','Posterize',{0:ref('warp'),1:ref('swatches'),6:saved(false)}),
+    node('output','Export',{0:ref('posterize')})
+  ]);
+  fs.writeFileSync(filename,source);
+  const {project,report}=await translate(source,filename);
+  assert(report.complete,JSON.stringify(report));
+  for (const op of ['raster.mix','warp.displace','color.posterize'])
+    assert(Object.values(project.nodes).some(node=>node.op===op));
+  const graph=ink.createGraphProject(project);
+  const R=rgba(255,0,0),G=rgba(0,255,0),B=rgba(0,0,255),Y=rgba(255,255,0);
+  for (const [frame,expected] of [[0,[R,G,B,Y]],[3,[R,G,B,Y]],[6,[G,B,B,Y]],[12,[G,B,B,Y]]])
+    assert.deepEqual(Array.from(graph.run({time:frame/12}).outputs.image.data),expected.flat());
+});
+
 test('partial conversion identifies blocked and unsupported source IDs and retains the saved preview', async () => {
   const savedArt = pixels([green]);
   const { project, report } = await translate(pxc([

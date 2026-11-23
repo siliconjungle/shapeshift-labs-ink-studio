@@ -1,6 +1,7 @@
 /* Read the tested Pixel Composer save schema into stock Ink graph nodes. */
 const fs = require('node:fs');
 const path = require('node:path');
+const { inflateSync } = require('node:zlib');
 const PNG = require('./png.js');
 const { inspectPxc, rasterLiteral } = require('./pxc.js');
 
@@ -20,6 +21,8 @@ const socket = (node, index) => node.inputs?.[index] ?? {};
 const boundedSize = value => vector(value, 2, n => integer(n) && n > 0 && n <= 8192) &&
   value[0] * value[1] <= maxRasterPixels;
 const unit = n => Number.isFinite(n) && n >= 0 && n <= 1;
+const groupType = type => type === 'Node_Group' || type === 'Node_Canvas_Group';
+const scope = row => row.group == null || row.group === -4 ? null : row.group;
 
 class Untranslated extends Error {
   constructor(reason, detail, related) {
@@ -31,6 +34,37 @@ class Untranslated extends Error {
 
 function requireSetting(ok, detail, reason = 'unsupported-setting') {
   if (!ok) throw new Untranslated(reason, detail);
+}
+
+function keyEase(first, last, index) {
+  if (!last) return 'linear';
+  if (last.incoming === 2) return 'step';
+  if (first.outgoing === 2) return 'step-start';
+  if (first.outgoing === 0 && last.incoming === 0) return 'linear';
+  requireSetting([0,1].includes(first.outgoing) && [0,1].includes(last.incoming) &&
+    vector(first.right,2) && vector(last.left,2), 'Input '+index+' uses unsupported key tangents');
+  let [x1,y1]=first.right, [x2,y2]=last.left;
+  if (x1>1 && x2>1) {
+    const shared=Math.min(x1,x2);
+    x1/=shared; x2/=shared;
+  }
+  const clamp = (n, ceiling) => Math.max(0,Math.min(ceiling,n));
+  y2-=clamp(x1-1,1);
+  x1=clamp(x1,.9);
+  y1+=clamp(x2-1,1);
+  x2=1-clamp(x2,.9);
+  requireSetting(Math.abs(y1)<=16 && Math.abs(y2)<=16, 'Input '+index+' has out-of-range key tangents');
+  return [x1,y1,x2,y2];
+}
+
+function trackBounds(track) {
+  const samples=track.keys.map(key=>key.value);
+  for (let i=0;i+1<track.keys.length;i++) {
+    const {ease,value}=track.keys[i];
+    if (Array.isArray(ease)) for (const t of [ease[1],ease[3]])
+      samples.push(value+(track.keys[i+1].value-value)*t);
+  }
+  return [Math.min(...samples), Math.max(...samples)];
 }
 
 function inputValue(slot, fallback, index, fps, test, convert = value => value) {
@@ -50,14 +84,13 @@ function inputValue(slot, fallback, index, fps, test, convert = value => value) 
     requireSetting(Array.isArray(key) && vector(key[0], 2, integer) && key[0][0] === 0 &&
       key[0][1] >= 0 && key[0][1] <= 1e6 && !key[7] && test(key[1]),
     'Input ' + index + ' uses an unsupported keyframe or driver');
-    return { frame: key[0][1], value: convert(key[1]), incoming: key[4] ?? 0, outgoing: key[5] ?? 0 };
+    return { frame: key[0][1], value: convert(key[1]), left:key[2],right:key[3],
+      incoming: key[4] ?? 0, outgoing: key[5] ?? 0 };
   });
   if (!slot.anim || keys.length === 1) return keys[0].value;
-  requireSetting(keys.every(({ frame, incoming }, i) => !i ||
-    frame > keys[i - 1].frame && (incoming === 2 || incoming === 0 && keys[i - 1].outgoing === 0)),
-  'Input ' + index + ' needs ordered linear or incoming hold keys');
+  requireSetting(keys.every(({ frame }, i) => !i || frame>keys[i-1].frame), 'Input '+index+' needs ordered keys');
   return { ...(Array.isArray(keys[0].value) && { mode: 'vector' }), keys: keys.map(({ frame, value }, i) =>
-    ({ time: frame / fps, value, ease: keys[i + 1]?.incoming === 2 ? 'step' : 'linear' })) };
+    ({ time: frame / fps, value, ease:keyEase(keys[i],keys[i+1],index) })) };
 }
 
 function color(value) {
@@ -108,6 +141,63 @@ function translatePxc(bytes, { file } = {}) {
     registry.set(row.id, { row, name: 'pxc-' + (index + 1) });
   }
 
+  function groupPath(row) {
+    const parents=[];
+    for (let id=scope(row);id!==null;) {
+      const parent=registry.get(id)?.row;
+      requireSetting(parent && groupType(parent.type) && parents.length<16 && !parents.includes(id),
+        'Invalid or unsupported enclosing group','unsupported-context');
+      requireSetting(parent.version===undefined || parent.version===saveVersion,'Enclosing group uses an unsupported save version',
+        'unsupported-version');
+      requireSetting((parent.ictx==null || parent.ictx===-4) && !parent.is_instancer &&
+        (parent.instanceBase==null || parent.instanceBase===-4) && !parent.attri?.timeline_override,
+      'Instanced or independently timed group needs manual conversion','unsupported-context');
+      parents.push(id);
+      id=scope(parent);
+    }
+    return parents.reverse();
+  }
+
+  function attached(group, direction, index) {
+    const ids=group.attri?.['custom_'+direction+'_list'];
+    const row=Array.isArray(ids) && registry.get(ids[index])?.row;
+    requireSetting(row?.type==='Node_Group_'+(direction==='input' ? 'Input' : 'Output') && scope(row)===group.id,
+      'Group socket '+index+' has no matching boundary node','unsupported-connection');
+    return row;
+  }
+
+  function groupOutput(row,index) {
+    groupPath(row);
+    requireSetting(versionOK && (row.version===undefined || row.version===saveVersion) &&
+      !row.is_instancer && (row.instanceBase==null || row.instanceBase===-4) &&
+      (row.ictx==null || row.ictx===-4) && !row.attri?.timeline_override &&
+      ![false,0].includes(row.attri?.process) && ![false,0].includes(row.render),
+    'Group has an unsupported version, instance, bypass or local clock','unsupported-context');
+    const boundary=attached(row,'output',index);
+    return checkedSource(boundary.id,0,undefined,'Group output '+index);
+  }
+
+  function checkedSource(dep,index,kind,label) {
+    const row=registry.get(dep)?.row;
+    if (visiting.has(dep) && !groupType(row?.type))
+      throw new Untranslated('cycle', 'The connection to '+label+' is cyclic', dep);
+    const result=groupType(row?.type) ? groupOutput(row,index) : convert(dep);
+    if (result.reason) throw new Untranslated('blocked', label+' depends on an untranslated node', dep);
+    requireSetting(kind===undefined || result.kind===kind,label+' needs a '+kind,'unsupported-connection');
+    return result;
+  }
+
+  function readConnection(row,index,kind) {
+    const slot=socket(row,index), dep=slot.from_node, from=registry.get(dep)?.row;
+    const port=slot.from_index ?? 0;
+    requireSetting(!slot.global_use && !slot.bypass && !slot.attri?.mapped && (slot.from_tag ?? 0)===0 &&
+      integer(port) && port>=0 && port<512 && (port===0 || groupType(from?.type)),
+    'Input '+index+' needs a standard connection to an output');
+    requireSetting(from,'Input '+index+' needs a connected '+(kind ?? 'node'),'missing-source');
+    requireSetting(scope(row)===scope(from),'Input '+index+' crosses a group boundary without a port','unsupported-context');
+    return checkedSource(dep,port,kind,'Input '+index);
+  }
+
   function convert(id) {
     if (states.has(id)) return states.get(id);
     const { row, name } = registry.get(id);
@@ -129,17 +219,10 @@ function translatePxc(bytes, { file } = {}) {
       requireSetting(!isTrack(result), 'Input ' + index + ' must be static');
       return result;
     };
-    const connected = (index, kind) => {
-      const slot = socket(row, index), dep = slot.from_node;
-      requireSetting(!slot.global_use && !slot.bypass && !slot.attri?.mapped &&
-        (slot.from_index ?? 0) === 0 && (slot.from_tag ?? 0) === 0,
-      'Input ' + index + ' needs a standard connection from output 0');
-      requireSetting(registry.has(dep), 'Input ' + index + ' needs a connected ' + kind, 'missing-source');
-      if (visiting.has(dep)) throw new Untranslated('cycle', 'The connection to input ' + index + ' is cyclic', dep);
-      const result = convert(dep);
-      if (result.reason) throw new Untranslated('blocked', 'Input ' + index + ' depends on an untranslated node', dep);
-      requireSetting(result.kind === kind, 'Input ' + index + ' needs a ' + kind, 'unsupported-connection');
-      return result;
+    const connected = (index, kind) => readConnection(row,index,kind);
+    const route = result => {
+      ({kind,extent,numericBounds}=result);
+      alias=result.ref;
     };
     const binding = (index, kind, fallback, test, map) => socket(row, index).from_node === undefined ?
       value(index, fallback, test, map) : connected(index, kind).ref;
@@ -162,24 +245,53 @@ function translatePxc(bytes, { file } = {}) {
       extent = size;
       return { width: size[0], height: size[1] };
     };
+    const attribute = key => row.attri?.[key] || groupPath(row).reverse()
+      .map(id=>registry.get(id).row.attri?.[key]).find(Boolean) || (source.attributes?.[key] ?? 0)+1;
     const filter = () => {
-      const mode = row.attri?.interpolate || (source.attributes?.interpolate ?? 0) + 1;
+      const mode = attribute('interpolate');
       requireSetting(mode === 1 || mode === 2, 'Only pixel or bilinear sampling is supported');
       return mode === 1 ? 'nearest' : 'bilinear';
     };
+    const amount = (index,fallback=1) => {
+      const result=binding(index,'number',fallback,unit);
+      const bounds=result?.node ? connected(index,'number').numericBounds :
+        isTrack(result) ? trackBounds(result) : [result,result];
+      requireSetting(bounds?.every(unit),'Mix must stay in the range 0 to 1');
+      return result;
+    };
+    const processor = (original,config,edit) => {
+      const {maskIndex,mixIndex,invertIndex,channels=15,preselected=false}=config;
+      fixed(invertIndex+1,0);
+      const invert=Boolean(staticValue(invertIndex,false,bool));
+      const ratio=amount(mixIndex);
+      const matte=socket(row,maskIndex).from_node===undefined ? (emptySurface(maskIndex),null) : connected(maskIndex,'raster');
+      if (matte) requireSetting(equal(matte.extent,extent),'Mask must align with the translated image');
+      if (!matte && ratio===1 && (channels===15 || preselected)) return edit('');
+      const mode=socket(row,maskIndex).attri?.mask_alpha_only ?? false;
+      requireSetting(bool(mode),'Unknown mask channel mode');
+      const options={amount:ratio,invert,maskMode:mode ? 'alpha' : 'mean',keepTransparentRGB:true,channels};
+      const edited=edit('-edited');
+      add('raster.mix',{source:original,edited,...(matte && {mask:matte.ref}),
+        options:ratio?.node || isTrack(ratio) ? add('data.record',options,'-mix') : options});
+    };
+    const paletteInput = index => binding(index,'palette',source.attributes?.palette,
+      values=>Array.isArray(values)&&values.length>=1&&values.length<=256&&values.every(packedColor),
+      values=>values.map(color));
 
     visiting.add(id);
     let kind = 'raster', result;
     try {
       requireSetting(versionOK && (row.version === undefined || row.version === saveVersion),
         'Translation is tested with Pixel Composer save version ' + saveVersion, 'unsupported-version');
-      requireSetting((row.group == null || row.group === -4) && (row.ictx == null || row.ictx === -4) &&
+      groupPath(row);
+      requireSetting((row.ictx == null || row.ictx === -4) &&
         !row.is_instancer && (row.instanceBase == null || row.instanceBase === -4) && !row.attri?.timeline_override,
-      'Grouped, instanced and independently timed nodes need manual conversion', 'unsupported-context');
+      'Instanced and independently timed nodes need manual conversion', 'unsupported-context');
       requireSetting(![0, false].includes(row.attri?.process) && ![0, false].includes(row.render),
         'Disabled bypass behavior needs manual conversion');
       const depth = row.attri?.color_depth;
-      if (!['Node_Number', 'Node_Number_Simple', 'Node_Color', 'Node_Counter', 'Node_Export'].includes(row.type))
+      if (!groupType(row.type) && !['Node_Group_Input','Node_Group_Output','Node_Number', 'Node_Number_Simple',
+        'Node_Color', 'Node_Palette', 'Node_Counter', 'Node_Export'].includes(row.type))
         requireSetting(depth === 0 || depth === 3 || (depth === undefined || depth === 1) &&
           (source.attributes?.color_depth ?? 1) === 1, 'Only 8-bit RGBA surfaces are supported');
 
@@ -187,6 +299,36 @@ function translatePxc(bytes, { file } = {}) {
         row.inputs.every(slot => slot == null || typeof slot === 'object' && !Array.isArray(slot)),
       'Invalid saved node inputs');
       switch (row.type) {
+        case 'Node_Group':
+        case 'Node_Canvas_Group': {
+          route(groupOutput(row,0));
+          break;
+        }
+        case 'Node_Group_Output': {
+          requireSetting(scope(row)!==null,'Group output is outside a group','unsupported-context');
+          route(connected(0));
+          break;
+        }
+        case 'Node_Group_Input': {
+          const parent=registry.get(scope(row))?.row;
+          const port=parent?.attri?.custom_input_list?.indexOf?.(row.id) ?? -1;
+          requireSetting(port>=0 && attached(parent,'input',port)===row,'Input has no parent group port','unsupported-connection');
+          const slot=socket(parent,port);
+          if (slot.from_node!==undefined) {
+            route(readConnection(parent,port));
+            break;
+          }
+          const type=socket(row,2).r?.d ?? 0;
+          requireSetting([0,1,3].includes(type),'Local group input needs a scalar number or color','unsupported-connection');
+          requireSetting((slot.unit ?? 0)===0,'Local group input needs a unitless value');
+          kind=type===3 ? 'color' : 'number';
+          const input=inputValue(slot,kind==='color' ? 0xffffffff : 0,port,fps,
+            type===3 ? packedColor : type===0 ? integer : Number.isFinite,kind==='color' ? color : undefined);
+          requireSetting(kind!=='color' || !isTrack(input),'Animated packed group colors need manual conversion');
+          if (kind==='number') numericBounds=isTrack(input) ? trackBounds(input) : [input,input];
+          add('data.typed',{value:input},'',kind==='color' ? 'rgb8' : 'number');
+          break;
+        }
         case 'Node_Solid': {
           emptySurface(3);
           emptySurface(5);
@@ -195,6 +337,48 @@ function translatePxc(bytes, { file } = {}) {
           const paint = empty ? [0, 0, 0, 0] : binding(1, 'color', 0xffffffff, packedColor, color);
           requireSetting(!isTrack(paint), 'Animated packed colors need manual conversion');
           add('raster.canvas', { ...imageDimensions(dimensions(0)), color: paint });
+          break;
+        }
+        case 'Node_Canvas': {
+          staticValue(12,1,n=>n===1 || n===true);
+          emptySurface(19);
+          const background=Boolean(staticValue(10,true,bool));
+          if (background) {fixed(4,0);emptySurface(8);}
+          const size=imageDimensions(dimensions(0));
+          const stored=row.surfaces;
+          requireSetting(Array.isArray(stored)&&stored.length===1&&typeof stored[0]==='string'&&
+            stored[0].length<=8*maxRasterPixels&&/^[A-Za-z0-9+/]+={0,2}$/.test(stored[0]),
+          'Canvas needs one embedded RGBA8 frame','unsupported-asset');
+          const expected=size.width*size.height*4;
+          let data;
+          try { data=inflateSync(Buffer.from(stored[0],'base64'),{maxOutputLength:expected}); }
+          catch { throw new Untranslated('unsupported-asset','Canvas frame could not be decoded'); }
+          requireSetting(data.length===expected,'Canvas frame size does not match its declared dimensions','unsupported-asset');
+          for (let i=0;i<data.length;i+=4) if (!data[i+3]) data.fill(0,i,i+3);
+          draft[name]=rasterLiteral({...size,data});
+          break;
+        }
+        case 'Node_Composite': {
+          requireSetting(row.input_fix_len===4 && row.data_length===8 && row.inputs?.length===12,
+            'Composite needs one unscaled, unrotated layer');
+          fixed(0,[0,0,0,0]); fixed(1,0);
+          const layer=connected(4,'raster');
+          extent=layer.extent;
+          fixed(6,0); fixed(7,[1,1]); fixed(8,0); fixed(9,1); fixed(11,0);
+          const at=staticValue(5,[.5,.5],point=>vector(point,2));
+          const anchor=staticValue(10,[.5,.5],point=>vector(point,2,unit));
+          const unitMode=socket(row,5).unit ?? 1;
+          requireSetting((unitMode===0 || unitMode===1) && ![false,0].includes(row.attri?.layer_visible?.[0]) &&
+            !(row.attri?.layer_effect?.[0]?.length),'Composite needs a visible relative layer with no style effects');
+          const round=Boolean(staticValue(3,false,bool));
+          const position=at.map((n,i)=>(unitMode===1 ? n*extent[i] : n)-anchor[i]*extent[i]);
+          const [x,y]=round ? position.map(Math.round) : position;
+          requireSetting(integer(x)&&integer(y),'Composite needs pixel-aligned placement');
+          if (!x && !y) alias=layer.ref;
+          else add('raster.stack',{width:extent[0],height:extent[1],
+            layers:add('data.collect',{source:add('data.record',{
+              layer:add('data.record',{source:layer.ref,x,y},'-layer')
+            },'-named'),keys:['layer']},'-layers')});
           break;
         }
         case 'Node_Image': {
@@ -212,6 +396,21 @@ function translatePxc(bytes, { file } = {}) {
           add('data.typed', { value: paint }, '', 'rgb8');
           break;
         }
+        case 'Node_Palette': {
+          kind='palette';
+          const colors=paletteInput(0);
+          const trim=staticValue(1,[0,1],n=>vector(n,2,unit));
+          requireSetting(!isTrack(colors),'Animated packed palettes need manual conversion');
+          if (colors?.node) {
+            requireSetting(equal(trim,[0,1]),'Linked palette trimming needs manual conversion');
+            alias=colors;
+          } else {
+            const start=Math.floor(Math.min(...trim)*colors.length), end=Math.floor(Math.max(...trim)*colors.length);
+            requireSetting(end>start,'Empty palette needs manual conversion');
+            add('data.typed',{value:colors.slice(start,end)},'','array<rgb8>');
+          }
+          break;
+        }
         case 'Node_Number':
         case 'Node_Number_Simple': {
           kind = 'number';
@@ -220,8 +419,7 @@ function translatePxc(bytes, { file } = {}) {
           const number = binding(0, kind, 0, Number.isFinite);
           if (number?.node) numericBounds = connected(0, kind).numericBounds;
           else {
-            const samples = number?.keys?.map(key => key.value) ?? [number];
-            numericBounds = [Math.min(...samples), Math.max(...samples)];
+            numericBounds = isTrack(number) ? trackBounds(number) : [number,number];
           }
           add('data.typed', { value: number }, '', kind);
           break;
@@ -241,14 +439,74 @@ function translatePxc(bytes, { file } = {}) {
         }
         case 'Node_Invert': {
           const source = sourceRaster();
-          emptySurface(1);
-          fixed(2, 1);
           fixed(3, true);
           const mask = staticValue(4, 15, n => integer(n) && n >= 0 && n <= 15);
           const alpha = Boolean(staticValue(7, false, bool));
           const order = ['r', 'g', 'b', 'alpha'].map((channel, i) => (i < 3 || alpha) && (mask & (1 << i)) ?
             { channel, gain: -1, bias: 255 } : channel);
-          add('color.channels', { source, options: { order } });
+          processor(source,{maskIndex:1,mixIndex:2,invertIndex:5,channels:mask,preselected:true},
+            suffix=>add('color.channels',{source,options:{order}},suffix));
+          break;
+        }
+        case 'Node_Posterize': {
+          const source=sourceRaster();
+          fixed(2,true);
+          fixed(5,true);
+          fixed(8,0);
+          fixed(10,0);
+          emptySurface(11);
+          const palette=paletteInput(1);
+          requireSetting(!isTrack(palette),'Animated packed palettes need manual conversion');
+          const alpha=Boolean(staticValue(6,true,bool));
+          processor(source,{maskIndex:12,mixIndex:13,invertIndex:14},
+            suffix=>add('color.posterize',{source,palette,options:{alpha}},suffix));
+          break;
+        }
+        case 'Node_Displace': {
+          const source=sourceRaster(), map=connected(1,'raster');
+          requireSetting(filter()==='nearest','Displacement currently supports pixel sampling');
+          for (const index of [15,17,22,24]) emptySurface(index);
+          fixed(6,false); fixed(10,true); fixed(11,0); fixed(16,false); fixed(21,1); fixed(29,false);
+          requireSetting(!socket(row,3).attri?.curved,'Displacement strength uses a per-pixel curve');
+          const channelMask=staticValue(12,15,n=>integer(n)&&n>=0&&n<=15);
+          const mode=staticValue(5,0,n=>n===0 || n===1);
+          const oversample=attribute('oversample'), edge={1:'transparent',3:'clamp',4:'wrap'}[oversample];
+          requireSetting(edge,'Displacement edge mode needs empty, clamp, or repeat');
+          const validStrength=n=>Number.isFinite(n)&&Math.abs(n)<=1024;
+          const amount=binding(3,'number',1,validStrength);
+          const middle=binding(4,'number',.5,unit,n=>n*255);
+          if (amount?.node || isTrack(amount))
+            requireSetting((amount?.node ? connected(3,'number').numericBounds : trackBounds(amount))?.every(validStrength),
+              'Animated displacement strength exceeds its range');
+          if (middle?.node)
+            requireSetting(connected(4,'number').numericBounds?.every(unit),'Linked mid value must stay within zero and one');
+          else if (isTrack(middle))
+            requireSetting(trackBounds(middle).every(n=>n>=0 && n<=255),'Animated mid value must stay within zero and one');
+          const center=middle?.node ? add('multiply',{a:middle,b:255},'-mid') : middle;
+          let scale=[-1/255,-1/255];
+          if (!mode) {
+            const unitMode=Number(socket(row,2).unit ?? 0);
+            requireSetting(unitMode===0 || unitMode===1,'Unsupported displacement position unit');
+            scale=staticValue(2,[1,0],point=>vector(point,2,n=>Number.isFinite(n)&&Math.abs(n)<=16384))
+              .map((n,i)=>-n*(unitMode===1 ? extent[i] : 1)/255);
+          }
+          const aligned=equal(map.extent,extent) ? map.ref : add('raster.resize',{source:map.ref,
+            options:{width:extent[0],height:extent[1],filter:'nearest'}},'-resize-map');
+          const channel=(which,suffix)=>add('raster.channel',{source:aligned,options:{channel:which}},suffix);
+          let displacement;
+          if (mode) displacement=add('raster.channels',{planes:add('data.collect',{
+            source:add('data.record',{x:channel(0,'-red'),y:channel(1,'-green')},'-axes'),keys:['x','y']
+          },'-maps')},'-vector');
+          else {
+            const alpha=add('raster.math',{a:channel('alpha','-alpha'),b:255,op:'divide'},'-normalized-alpha');
+            displacement=add('raster.math',{a:channel('luma','-luma'),b:alpha,op:'multiply'},'-brightness');
+          }
+          const settings={units:mode ? 'normalized' : 'pixels',center,scale,amount,filter:'nearest',
+            edge,continuousEdges:true};
+          const dynamic=[center,amount].some(n=>n?.node || isTrack(n));
+          const options=dynamic ? add('data.record',settings,'-displacement') : settings;
+          processor(source,{maskIndex:8,mixIndex:9,invertIndex:13,channels:channelMask},
+            suffix=>add('warp.displace',{source,map:displacement,options},suffix));
           break;
         }
         case 'Node_Scale': {
@@ -402,7 +660,8 @@ function translatePxc(bytes, { file } = {}) {
   }
   const translated = [], unsupported = [], blocked = [];
   for (const [id, { row }] of registry) {
-    const result = states.get(id), sourceNode = { id, type: row.type, ...(typeof row.name === 'string' && { name: row.name }) };
+    const result = states.get(id), sourceNode = { id, type: row.type, ...(typeof row.name === 'string' && { name: row.name }),
+      ...(scope(row)!==null && {group:scope(row)}) };
     if (result.reason) {
       (result.reason === 'blocked' ? blocked : unsupported).push({ ...sourceNode, ...result });
     } else translated.push({ ...sourceNode, node: result.ref.node });

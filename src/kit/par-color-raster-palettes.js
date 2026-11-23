@@ -58,6 +58,27 @@
     return quantize(value,plan,options,readMask(value,options));
   }
 
+  function posterize(source,palette,{alpha=false}={}) {
+    const value=rgba(source), {width,height,data}=value;
+    const swatch=P.graphTypes.validator('rgb8');
+    if (!Array.isArray(palette) || palette.length<1 || palette.length>256 || !Array.from(palette).every(swatch) ||
+        typeof alpha!=='boolean' || width*height*palette.length>64e6)
+      throw new RangeError('Posterize needs a bounded RGB(A) palette and a boolean alpha policy');
+    for (let i=0;i<data.length;i+=4) {
+      const weight=alpha ? data[i+3]/255 : 1;
+      const r=data[i]*weight,g=data[i+1]*weight,b=data[i+2]*weight;
+      let closest=palette[0],min=Infinity;
+      for (const color of palette) {
+        const error=(r-color[0])**2+(g-color[1])**2+(b-color[2])**2;
+        if (error<min) {min=error;closest=color;}
+        if (!min) break;
+      }
+      for (let c=0;c<3;c++) data[i+c]=Math.round(closest[c]);
+      if (alpha) data[i+3]=Math.round(closest[3] ?? 255);
+    }
+    return value;
+  }
+
   function look(source, pack, binding, options={}) {
     if (binding===false) return {value:rgba(source),metadata:{id:null,revision:null,stack:false,ramp:false,palette:false}};
     const ctx=context(options), value=rgba(source), mask=readMask(value,options);
@@ -87,5 +108,5 @@
     return {value,metadata};
   }
 
-  Object.assign(R,{resolve,look});
+  Object.assign(R,{resolve,look,posterize});
 })(KIT);

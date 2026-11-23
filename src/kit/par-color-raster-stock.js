@@ -14,6 +14,11 @@
       inputs:{source:'raster',policy:'record',options},outputs:{value:'raster',indices:'raster',palette:'palette'},
       run({source,policy,options}) { return R.resolve(source,policy,options); }
     },
+    'color.posterize': {
+      description:'Assign pixels to the nearest ordered RGB swatch with an optional swatch alpha policy.',
+      inputs:{source:'raster',palette:'array<rgb8>',options},outputs:{value:'raster'},
+      run({source,palette,options}){return {value:R.posterize(source,palette,options)};}
+    },
     'color.look': {
       inputs:{source:'raster',pack:'any',binding:'any',options},outputs:{value:'raster',metadata:'record'},time:true,
       run({source,pack,binding,options},{time}) { return R.look(source,pack,binding,{...options,time}); }

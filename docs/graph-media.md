@@ -324,11 +324,15 @@ ink-studio graph run editable.json --out review
 | Pixel Composer node | Editable Ink translation |
 | --- | --- |
 | Image | A relative PNG beside the project or in a subdirectory, embedded as RGBA8. The source must stay inside that directory tree during import. |
+| Group, Canvas Group | Nested groups with explicit input and output ports. Ink flattens the wiring into editable nodes and records source group membership in the receipt. Each output is resolved independently. |
+| Canvas, Composite | One embedded RGBA8 canvas frame and a single visible composite layer without scaling, rotation, or layer effects. |
 | Solid, Color | An unmasked solid or empty canvas, and packed RGBA colour values. |
 | Scale, Crop, Flip | Fixed nearest or bilinear scaling, whole-pixel crop margins, and axis flips. |
 | Transform | Pixel or relative translation with a fixed anchor on the source canvas or an explicit output canvas with pixel sampling. The position can be keyframed. |
-| Invert, Blend | Channel inversion and normal compositing with whole-pixel placement. Blend opacity can use a key track or a compatible number node. |
-| Number, Counter | Unitless numbers with linear and incoming-hold keys, and synchronous frame or progress counters. The import receipt includes the source frame rate and frame count. |
+| Invert, Blend | Channel inversion with an optional mask, and normal compositing with whole-pixel placement. Blend opacity can use a key track or a compatible number node. |
+| Palette, Posterize | Saved RGB(A) swatches, RGB nearest-colour mapping, optional palette alpha, and masking. Other colour spaces, reference surfaces, and bias modes require manual conversion. |
+| Displace | Single-pass, pixel-sampled linear or RG vector displacement. Supports channel selection, centre and strength, empty/clamp/repeat edges, and masking. |
+| Number, Counter | Unitless numbers and synchronous frame or progress counters. Supported numeric and position tracks retain linear, Bézier, and hold segments. |
 | Export | A named image output. Use Ink's export directory and `graph clip` controls for frame ranges, codecs, and file names. |
 
 The conversion receipt keeps original node IDs. `unsupported` identifies
@@ -336,10 +340,49 @@ unmapped classes, settings, contexts, and connections. `blocked` records
 nodes that depend on an untranslated input. When an export or selected
 preview translates, it becomes an Ink output. If none translates, the
 graph exposes the usable endpoints as `partial-*` outputs. Saved art stays
-available as `saved-preview` in the same graph. This makes it possible to
-run the editable branches and compare against the original while filling
-gaps manually. Pixel Composer's groups, driver expressions, shaders,
-nonlinear key curves, and non-hold track endings require manual conversion.
+available as `saved-preview` in the same graph. Masked processors use aligned
+masks with alpha or mean-RGBA weighting, optional inversion, and a mix control.
+Instanced or independently timed groups, driver expressions, separated axes,
+shaders, and non-hold track endings require manual conversion.
+
+### Source frame verification
+
+Export reference PNGs from Pixel Composer at the project resolution. List the
+zero-based authored frame numbers and PNG paths relative to the manifest.
+Each check can select an Ink output from the conversion receipt or use the
+original ID of an internal translated Pixel Composer node. The default output
+is `image`.
+
+```json
+{
+  "frames": [
+    { "frame": 0, "source": "start.png" },
+    { "frame": 8, "source": "warp-mid.png", "node": "pxc-source-node-id" },
+    { "frame": 16, "source": "end.png", "output": "image" }
+  ]
+}
+```
+
+```sh
+ink-studio graph verify-pxc source.pxc references.json --out verification.json
+```
+
+The verifier samples the saved frame rate and reports dimension mismatches,
+changed pixels, and the largest RGBA8 channel error. A mismatch exits with
+status 2. The `complete` field describes overall translation coverage,
+independently of whether the selected branches match. For visual timing
+review, use the [reference-clip workbench](reference-clip-review.md).
+
+Ink validates the imported graphs from 33 upstream projects. The Canvas
+template translates in full, 10 other files yield editable branches, and 22
+retain their saved art. The Canvas regression fixture compares the translated
+pixels to its saved static preview at frames 0, 7, 15, and 29. Separate
+regression tests exercise animated values and branch routing. Six published
+operator captures were reproduced over
+12,809 sampled opaque pixels covering displacement, masked displacement,
+and RGB posterization. These captures validate stills and a subset of
+operator settings. Native animated source PNGs are needed for animated
+pixel-for-pixel parity. [Displace captures](https://docs.pixel-composer.com/nodes/_examples/Node_Displace.html) · [Posterize captures](https://docs.pixel-composer.com/nodes/_examples/Node_Posterize.html)
 
 A host can call `createGraphHost().importPxc(bytes, {translate: true, file})`
 with the original source filename for local image resolution. The CLI
