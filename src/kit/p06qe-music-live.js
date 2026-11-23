@@ -13,7 +13,7 @@
 
   function open(sources,spec,options={}) {
     check(fields(options,['assets','sampleRate','maxVoices','reservedVoices','foreground','priorities','traceLimit',
-      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains']),
+      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','stemGroups']),
     'Invalid live score options');
     const {assets={},sampleRate:rate=48000,maxVoices=32,reservedVoices=Math.min(4,maxVoices-1),
       foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0,layerGains={}}=options;
@@ -24,6 +24,7 @@
       Object.entries(priorities).every(([name,priority])=>id(name) && integer(priority,-100,100)),
     'Invalid live score clock or voice limits');
     const streams=P.musicLiveStreams.open(rate,options.streams,options.readPage,options.pageSize,options.maxPages);
+    const stemGroups=streams.stemGroups(options.stemGroups);
     const {compiled,segments,known,memory,routes,phrasing,stingers,holds,rules}=
       P.musicTimeline.prepare(sources,spec,assets,undefined,new Map(),streams.streams);
     const musicNames=[...new Set([...Object.values(segments).map(row=>row.source),
@@ -33,6 +34,7 @@
       {sources,compiled,segments,entry:spec.entry,placements:musicNames.map(source=>({source,kind:'segment'}))});
     const carries=new Set(persistent?.names);
     const parts=new Set(Object.values(compiled).flatMap(score=>Object.keys(score.tracks)));
+    for (const group of stemGroups) for (const {part} of group.parts) parts.add(part);
     const entrySource=compiled[segments[spec.entry].source];
     const room=A.makeSessionRoom(persistent?.room ?? entrySource.room,rate);
     check([...streams.streams.keys()].every(name=>!Object.hasOwn(stingers,name)),
@@ -422,6 +424,7 @@
       check(integer(ahead,1,rate*30) && Array.isArray(names) && names.every(name=>streams.streams.has(name)),
         'Invalid live PCM lookahead');
       const windows=voices.filter(row=>row.stream).map(row=>({source:row.stream,first:Math.max(0,frame-row.first),frames:ahead,active:true}));
+      streams.prefetchStems(stemGroups,frame,ahead,windows);
       for (const row of intents) {
         if (row.frame>frame+ahead) break;
         const source=streams.streams.get(row.intent.resource ?? row.intent.cue);
@@ -461,6 +464,21 @@
           } else {
             l+=vl; r+=vr;
             sendL+=vl*voice.stream.send; sendR+=vr*voice.stream.send;
+          }
+        }
+        for (const group of stemGroups) {
+          const position=group.position(frame);
+          for (const stem of group.parts) {
+            const gap=stem.read(position,pair);
+            if (gap) {
+              profile.streamGaps++;
+              log('stream-underrun',{name:gap.name,sourceFrame:gap.frame,group:group.name,
+                part:stem.part,positionFrame:position});
+            }
+            const gain=gainAt(layerLevels.get(stem.part));
+            const left=pair[0]*gain, right=pair[1]*gain;
+            l+=left; r+=right;
+            sendL+=left*stem.source.send; sendR+=right*stem.source.send;
           }
         }
         for (const [key,lane] of desk) {
@@ -523,6 +541,10 @@
         ...(layerLevels.size && {layerGains:Object.fromEntries([...layerLevels].map(([part,row])=>[
           part,{gain:gainAt(row),target:row.target,startFrame:row.startFrame,endFrame:row.endFrame}
         ]))}),
+        ...(stemGroups.length && {stemGroups:Object.fromEntries(stemGroups.map(group=>[group.name,{
+          frames:group.frames,phaseFrames:group.phaseFrames,positionFrame:group.position(frame),
+          parts:Object.fromEntries(group.parts.map(({part,source,start})=>[part,{stream:source.name,startFrame:start}]))
+        }]))}),
         profile:{...profile,activeVoices:voices.length,queued:intents.length,waiting:waiting.length,
           maxVoices,reservedVoices,stream:streams.profile(),lastBlock},joins,trace});
     }

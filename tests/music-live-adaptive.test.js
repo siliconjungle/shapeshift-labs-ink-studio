@@ -255,3 +255,78 @@ test('world recordings and live clock updates share initial layers, ramps, and h
   assert.throws(()=>engine.dispatch({kind:'music-layer',time:1.3,part:'absent',gain:1}),/Invalid live adaptive score intent/);
   assert.throws(()=>engine.dispatch({kind:'music-layer',time:1.3,part:'reed',gain:-1}),/Invalid live adaptive score intent/);
 });
+
+test('muted stems reveal the common playhead through wraps, ramps and section changes',async()=>{
+  const assets={silent:cue([])};
+  const arranged={entry:'bank',segments:{bank:{source:'silent',end:.075},tower:{source:'silent',end:.05}}};
+  const loopFrames=607, phaseFrames=73, bassStart=117, rhythmStart=701, frames=2143;
+  const pcm={
+    bottom:Float32Array.from({length:1200},(_,i)=>.24*Math.sin(i*.075)),
+    drums:Float32Array.from({length:1540},(_,i)=>.1+.25*Math.cos(i*.023))
+  };
+  const settings={...options,masterGain:0,pageSize:256,maxPages:12,
+    streams:{bottom:{frames:pcm.bottom.length,channels:1,sampleRate:rate,pan:-1},
+      drums:{frames:pcm.drums.length,channels:1,sampleRate:rate,pan:1}},
+    readPage:async(name,first,count)=>pcm[name].slice(first,first+count),
+    stemGroups:{bed:{frames:loopFrames,phaseFrames,parts:{
+      bass:{stream:'bottom',startFrame:bassStart},rhythm:{stream:'drums',startFrame:rhythmStart}
+    }}}};
+  const layer=(at,gain,ramp)=>event({kind:'music-layer',part:'bass',time:at/rate,gain,ramp:ramp/rate});
+  const route={end:frames/rate,layerGains:{bass:0},events:[
+    layer(998,1,286),event(transition('bank','tower',1100/rate)),layer(1810,0,120)
+  ]};
+  const small=await live.replay(assets,arranged,{...route,blockFrames:73},settings);
+  const wide=await live.replay(assets,arranged,{...route,blockFrames:301},settings);
+  assert.deepEqual(small.value.samples,wide.value.samples);
+  assert.equal(small.report.profile.streamGaps,0);
+  assert.equal(small.report.profile.starts,0);
+  assert.equal(small.report.joins[0].frame,1100);
+  assert.equal(small.report.stemGroups.bed.positionFrame,(frames+phaseFrames)%loopFrames);
+
+  for (let frame=0;frame<frames;frame++) {
+    const phase=(frame+phaseFrames)%loopFrames;
+    const gain=Math.max(0,Math.min(1,(frame-998)/286,1-(frame-1810)/120));
+    assert.equal(small.value.samples[2*frame],gain ? Math.fround(pcm.bottom[bassStart+phase]*gain) : 0);
+    assert.equal(small.value.samples[2*frame+1],pcm.drums[rhythmStart+phase]);
+  }
+});
+
+test('stem prefetch wraps within the authored PCM region and resumes from current phase after a miss',async()=>{
+  const assets={silent:cue([])}, arranged={entry:'bank',segments:{bank:{source:'silent'}}};
+  const pcm=Float32Array.from({length:2000},(_,i)=>i/2500);
+  const reads=[];
+  const settings={...options,masterGain:0,pageSize:256,maxPages:2,
+    streams:{tape:{frames:pcm.length,channels:1,sampleRate:rate,pan:-1}},
+    readPage:async(name,first,count)=>{
+      reads.push([name,first]);
+      return pcm.slice(first,first+count);
+    },
+    stemGroups:{room:{frames:1280,parts:{ambience:{stream:'tape',startFrame:300}}}}};
+  const engine=live.open(assets,arranged,settings);
+  const seam=live.open(assets,arranged,{...settings,
+    stemGroups:{room:{...settings.stemGroups.room,phaseFrames:1240}}});
+  await seam.prefetch(90);
+  assert.deepEqual(reads,[['tape',1536],['tape',256]]);
+  const across=seam.pull(90).samples;
+  for (let frame=0;frame<90;frame++) assert.equal(across[frame*2],pcm[300+(1240+frame)%1280]);
+
+  assert(!hasAudio(engine.pull(349).samples));
+  await engine.prefetch(100);
+  const recovered=engine.pull(100).samples;
+  assert.equal(recovered[0],pcm[649]/32);
+  assert.equal(recovered[62],pcm[680]);
+  assert.equal(recovered[158],pcm[728]);
+  const report=engine.inspect();
+  assert.equal(report.profile.stream.pages,2);
+  assert.equal(report.profile.streamGaps,1);
+  assert.deepEqual(report.trace[0],{
+    kind:'stream-underrun',frame:0,time:0,name:'tape',sourceFrame:300,group:'room',part:'ambience',positionFrame:0
+  });
+
+  assert.throws(()=>live.open(assets,arranged,{...settings,stemGroups:{
+    room:{frames:1280,parts:{ambience:{stream:'tape',startFrame:900}}}
+  }}),/full loop range/);
+  assert.throws(()=>live.open(assets,arranged,{...settings,stemGroups:{
+    room:{...settings.stemGroups.room,phaseFrames:1280}
+  }}),/Invalid live stem group/);
+});

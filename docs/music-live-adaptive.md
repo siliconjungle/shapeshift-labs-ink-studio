@@ -77,6 +77,50 @@ ramp on the next available sample. `ramp: 0` applies an immediate change.
 Omit `ramp` for a 50 ms fade. `inspect().layerGains` shows current and target
 gains, and the `layer-gain` trace rows include the start and end frames.
 
+## Loop phase-aligned stems
+
+Use a stem group to play printed bass, percussion, or ambience beside the
+production score. Give the group one loop length in sample frames. Each
+part names a PCM stream and can select its first source frame.
+
+```js
+const score = live.open(sources, timeline, {
+  sampleRate: 48000,
+  streams,
+  readPage,
+  stemGroups: {
+    relay: {
+      frames: 192000,
+      parts: {
+        kick: { stream: 'kick-loop' },
+        bass: { stream: 'bass-print', startFrame: 4096 }
+      }
+    }
+  },
+  layerGains: { bass: 0 }
+});
+```
+
+Each stream must contain the full loop window at the engine's sample rate.
+Print the loops from a common grid and choose clean seams in the source
+audio. All parts read the same position in their respective windows. The
+group starts at position zero unless you set `phaseFrames` to a position
+inside its loop. The phase advances with the output clock through section
+changes, zero gain, and missing data. A new engine can use `phaseFrames`
+to start from a saved position.
+
+Use `music-layer` or an adaptive `layerControls` binding with the stem part
+name. A native track using the same name shares that fader. Stem part names
+are unique across groups. Up to 16 groups and 64 stem parts can play alongside
+the regular note and cue voice budget. The stream gain, pan, and room send
+apply before the usual master stage.
+
+Prefetch before the first pull and keep enough cache pages for the lookahead
+of every stem, including muted ones. Prefetch looks across the loop seam.
+If a page is late, its stem fades back in from the current position when data
+returns. `inspect().stemGroups` shows each group's current frame and source
+windows. Underrun rows include the group, part, source frame, and loop position.
+
 ## What plays through a join
 
 An edge with an explicit `exit` waits for the next occurrence of that marker in
@@ -152,9 +196,9 @@ changes for live replay. Route gains take precedence for those parts.
 Change `observedAt` to simulate late delivery and leave `intent.time` intact.
 The replay feeds the same causal `pull` path and measures PCM around each
 retained join, including the sample-to-sample step and local levels.
-For file-backed streamed cues, add `live.streams` to the timeline recipe with
+For file-backed stems and cues, add `live.streams` to the timeline recipe with
 the resource's `file` and optional mix settings, and put engine settings in
-`live.options`. A captured trace can use `live.traceOptions.worldCues` and
+`live.options`, including `stemGroups`. A captured trace can use `live.traceOptions.worldCues` and
 `live.traceOptions.arrivalOffset`.
 
 ```sh
@@ -179,3 +223,11 @@ In `signal-watch/mix/score.wav`, danger begins to rise at 1.90 s and reaches
 its highest target at 3.80 s. It starts to fall at 6.05 s. The pulse starts
 silently with the score and plays as one held note throughout the fade.
 `signal-watch/mix/listen.json` has the sample positions for each ramp.
+
+```sh
+node examples/music-production/phase-aligned-stems.cjs ./night-relay
+```
+
+In `night-relay/mix/score.wav`, bass fades in at 2.35 s, percussion joins at
+5.10 s, and the live melody changes section at 8.50 s. The printed stems
+stay on the same four-second loop throughout.
