@@ -55,3 +55,5 @@ for (const { world, time, camera, cut } of frames) {
 ```
 
 If the host supplies new world buffers each frame, pass a stable `motionalCoverageSource` token for that stream while splat indices still refer to the same geometry. Use `resetMotionalCoverage`, `resetRenderHistory`, or `motionalCoverageHistory.clear()` for a seek or cut. Without a history, rendering uses the stationary footprint.
+
+Use [surface-checked motion history](surface-history.md) to blend actual shaded color and coverage on matching native surface owners.

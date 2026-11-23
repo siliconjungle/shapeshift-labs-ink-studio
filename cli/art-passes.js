@@ -28,9 +28,9 @@ function sampleFrames(world, time) {
   };
 }
 
-function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captureSurfaceMotion) {
+function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captureSurfaceMotion, captureHistory) {
   const selected = new Set(ArtPasses.select(request));
-  if (!selected.size && !capturePartMotion && !captureSurfaceMotion) return null;
+  if (!selected.size && !capturePartMotion && !captureSurfaceMotion && !captureHistory) return null;
   const size = w * h;
   const coverage = selected.has('coverage') ? new Float32Array(size) : null;
   const surfaceCoverage=selected.has('surfaceCoverage') ? new Float32Array(size) : null;
@@ -39,7 +39,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
   const scopedOwners = emissiveSlots && new Uint8Array(size);
   const scopedCoverage = emissiveSlots && new Float32Array(size);
   const emissionDepth = selected.has('emissionDepth') || emissionOwner || scopedOwners ? new Float32Array(size).fill(Infinity) : null;
-  const needsOwner = capturePartMotion || captureSurfaceMotion ||
+  const needsOwner = captureHistory || capturePartMotion || captureSurfaceMotion ||
     [...selected].some(channel => !['emission', 'emissionDepth', 'emissionMotion', 'coverage', 'protected'].includes(channel));
   const owner = needsOwner ? new Int32Array(size).fill(-1) : null;
   const depth = needsOwner ? new Float32Array(size).fill(Infinity) : null;
@@ -132,6 +132,18 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       geometry.motionReference.surfaceMotion=motion.snapshot;
       if (motion.vectors) result.surfaceMotion=motion.vectors;
       if (motion.valid) result.surfaceMotionValid=motion.valid;
+    }
+    if(captureHistory){
+      const labels=new Map(), keys=[null], ids=new Uint32Array(size);
+      for(let p=0;p<size;p++){
+        const hit=atlasOwners?.get(p), i=owner[p];
+        const key=hit ? hit.mesh?.key && hit.mesh.key+'/'+hit.mesh.triangle : i>=0 ? i+1 : null;
+        if(!key)continue;
+        if(!labels.has(key)){labels.set(key,keys.length);keys.push(key);}
+        ids[p]=labels.get(key);
+      }
+      result.historyOwners=topDown(ids,1);
+      result.historyKeys=keys;
     }
     if (selected.has('surfaceKind')) {
       result.surfaceKind=topDown(Uint8Array.from(owner,(i,p)=>{

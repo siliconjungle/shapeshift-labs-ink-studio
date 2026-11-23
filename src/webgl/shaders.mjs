@@ -477,7 +477,7 @@ flat in vec4 v_fm; flat in vec4 v_ft; flat in float v_fk; flat in float v_lit; f
 ${materialStyles ? `flat in vec4 v_pixelStyle; flat in float v_pixelFog; uniform float u_materialGridScale;
 ${materialStyleThreshold}` : ''}
 uniform float u_idx, u_gaussianNormalCutoff;
-uniform bool u_paintPass; flat in int v_paint;
+uniform bool u_paintPass,u_historyOwner; flat in int v_paint;
 ${depthMeshProxy ? 'uniform highp sampler2D u_meshDepthProxy;' : ''}
 ${coverageVote ? 'uniform bool u_coverageVotePass;' : ''}
 ${coverageFilter ? filterMatte : ''}
@@ -627,6 +627,10 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     float k = ${engraving ? 'v_engravingSlot>0 ? 0.0 : ' : ''}v_ix + 1.0;
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(0.0); ${masked ? `if (v_policySlot > 0) {${ownerMaskWrite}}` : ''}
+    if(u_historyOwner){
+      float key=v_ix+1.0;
+      od=vec4(mod(key,256.),mod(floor(key/256.),256.),floor(key/65536.),255.)/255.;
+    }
     float graphDepth = round(clamp(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
     oa = vec4(mod(graphDepth,256.0), mod(floor(graphDepth/256.0),256.0), floor(graphDepth/65536.0),255.0)/255.0; ${layeredGlass && !water ? 'o_back = oa;' : ''} return; }
   bool solid = u_crisp > 0.5 && v_color.a >= 1.0 && v_coverage != ${softMode};
@@ -1544,23 +1548,6 @@ void main(){
   }
   o = vec4(c0, 1.0);
 }`;
-  const DAMP_FS = `#version 300 es
-precision highp float;
-uniform sampler2D u_cur, u_hist, u_dep; uniform vec3 u_pal[${scenePaletteSize}]; uniform int u_n; uniform float u_have;
-uniform mat4 u_iview, u_pvp; uniform vec4 u_cam; uniform vec2 u_rng;
-out vec4 o;
-int idxOf(vec3 c) { for (int i = 0; i < u_pal.length(); i++) { if (i >= u_n) break; vec3 d = abs(c - u_pal[i]); if (max(d.r, max(d.g, d.b)) < 0.5 / 255.0 + 0.00001) return i; } return -1; }
-void main() {
-  ivec2 p = ivec2(gl_FragCoord.xy), sz = textureSize(u_cur, 0); vec3 c = texelFetch(u_cur, p, 0).rgb; int ci = idxOf(c);
-  o = vec4(c, float(ci + 1) / 255.0);
-  if (u_have < 0.5 || ci < 0) return;
-  float dn = texelFetch(u_dep, p, 0).r; ivec2 q = p;
-  if (dn < 0.995) { float z = -(u_rng.x + dn * (u_rng.y - u_rng.x)); vec2 ndc = (vec2(p) + 0.5) / vec2(sz) * 2.0 - 1.0;
-    vec3 v = u_cam.z > 0.5 ? vec3(ndc.x * u_cam.x * u_cam.y, ndc.y * u_cam.x, z) : vec3(ndc.x * u_cam.x * u_cam.y * -z, ndc.y * u_cam.x * -z, z);
-    vec4 pc = u_pvp * (u_iview * vec4(v, 1.0)); q = ivec2(floor((pc.xy / pc.w * 0.5 + 0.5) * vec2(sz))); }
-  if (q.x < 0 || q.y < 0 || q.x >= sz.x || q.y >= sz.y) return;
-  vec4 h = texelFetch(u_hist, q, 0); int prev = int(h.a * 255.0 + 0.5) - 1;
-  if (prev >= 0 && ci != prev) o.rgb = h.rgb; }`;
   const COPY_FS = `#version 300 es
 precision highp float;
 uniform sampler2D u_src; out vec4 o;
@@ -1659,5 +1646,5 @@ void main() {
   o = vec4(color,1.0);` :
     'o = vec4(float(v), float(v_i.z), float(v_i.w), 255.0) / 255.0;'} }`;
   const KEY_FS = POST_FS.replace('out vec4 o;', 'out ivec4 o;').replace(/void main\(\)\{[\s\S]*$/, 'void main(){ ivec2 p = ivec2(gl_FragCoord.xy); ivec3 k = keyCalc(p); o = ivec4(k, k.x == -99999 ? 0 : 1); }');
-  return { POST_VS, POST_FS, KEY_FS, CLEAN_FS, DAMP_FS, COPY_FS, SPR_VS, SPR_FS };
+  return { POST_VS, POST_FS, KEY_FS, CLEAN_FS, COPY_FS, SPR_VS, SPR_FS };
 }

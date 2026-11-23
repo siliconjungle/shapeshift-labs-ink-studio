@@ -175,7 +175,7 @@ uniform bool u_curveOrtho,u_curveHasProxy,u_filterMatte;
 uniform float u_curveArtScale;
 uniform highp sampler2D u_curveTiles,u_curveSolid,u_curveProxy;
 uniform int u_curveTileColumns;
-${owner ? 'uniform sampler2D u_curveOwner,u_curveOwnerMask;' : ''}
+${owner ? 'uniform sampler2D u_curveOwner,u_curveOwnerMask;uniform bool u_historyOwner;' : ''}
 ${anchors ? 'uniform highp sampler2D u_curveBaseWorld,u_curveBaseRest;' : ''}
 ${color && wet ? waterGLSL(wet.airPockets,wet.layered,wet.atlas) : ''}
 ${color && environment?.media ? environmentMediaSource(environment.lit) : ''}
@@ -285,7 +285,7 @@ void main() {
   ${owner ? `
   if (row >= 0) {
     o_color = encode(spanRow(row,6).a);
-    o_depth = vec4(0);
+    o_depth = u_historyOwner ? o_color : vec4(0);
     o_aux = encode(round(clamp((nearest-u_curveRange.x)/(u_curveRange.y-u_curveRange.x),0.0,1.0)*16777215.0));
   }` : anchors ? `
   if(row>=0){

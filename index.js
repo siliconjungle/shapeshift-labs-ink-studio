@@ -172,6 +172,7 @@ module.exports = {
   sampleReframe: require('./cli/subject-reframe.js').sampleReframe,
   reframeRaster: require('./cli/subject-reframe.js').reframeRaster,
   createMotionalCoverageHistory: require('./src/motional-coverage.js').history,
+  createSurfaceHistory: require('./src/surface-history.js').history,
   createPartMotionHistory: require('./cli/part-motion.js').history,
   createStrandMotionHistory: require('./cli/part-motion.js').history,
   createSurfaceMotionHistory: require('./cli/part-motion.js').history,

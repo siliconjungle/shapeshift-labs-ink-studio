@@ -145,7 +145,7 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
   // The ordinary splat pipeline uses some of these units as well. Curve
   // compositing runs after all its geometry draws and before the art resolve.
   function draw(plan, buffer, base, camera, options) {
-    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors, filterMatte, artScale = 1 } = options;
+    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors, filterMatte, historyOwner, artScale = 1 } = options;
     const isOwner = mode === 'owner';
     const etched=mode==='color' && !!engraving && !filterMatte;
     const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked,etched].join('/');
@@ -183,7 +183,7 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
       u_curveInvProjection:[1/camera.projection[0],1/camera.projection[5]],u_curveTileColumns:plan.columns,
       u_curveEntry:clip,u_curveCover:cover ?? zero,u_curveView:camera.view,u_curveProjection:camera.projection,
       u_curveNear:camera.clipNear,u_curveFar:camera.clipFar,u_curveSetback:camera.setback,
-      u_curveOrtho:camera.ortho,u_curveHasProxy:!!proxy,u_curveArtScale:artScale,u_filterMatte:!!filterMatte,u_curveFog:fog.color,u_curveFogRange:fog.range,
+      u_curveOrtho:camera.ortho,u_curveHasProxy:!!proxy,u_curveArtScale:artScale,u_filterMatte:!!filterMatte,u_historyOwner:!!historyOwner,u_curveFog:fog.color,u_curveFogRange:fog.range,
       u_curveMarks:12,u_curveBaseWorld:10,u_curveBaseRest:11,
       ...water,...env?.uniforms,...section,...(etched && engraving.uniforms)
     });

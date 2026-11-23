@@ -64,7 +64,7 @@ uniform vec3 u_eye,u_plane,u_back,u_fog,u_sun;
 uniform vec4 u_range,u_splatPlane;
 uniform vec2 u_surfaceViewport,u_artScale,u_sunGain,u_size;
 uniform int u_phase,u_step;
-uniform bool u_ortho,u_depth,u_normal,u_emission,u_baked,u_effect,u_index,u_graphDepth,u_portalCover,u_markPass;
+uniform bool u_ortho,u_depth,u_normal,u_emission,u_baked,u_effect,u_index,u_graphDepth,u_portalCover,u_markPass,u_historyOwner;
 uniform float u_scale,u_effectDepth,u_filterSoftness;
 uniform bool u_filterMatte;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
@@ -112,7 +112,7 @@ void main(){
   rgb=mix(rgb,u_fog,fog);
   ${section ? 'rgb=mix(rgb,u_sectionEdge.rgb,sectionInk(margin));' : ''}
   color=u_filterMatte?vec4(vec3(u_filterSoftness),1):u_index?vec4(float(u_portalCover)):vec4(rgb,1);
-  depth=vec4(d,0,0,1);
+  depth=u_historyOwner?vec4(0):vec4(d,0,0,1);
   water=vec4(mark,1);
   ${glassLayers ? 'splitOpaqueSurface(color,z);' : ''}
   if(u_index&&u_graphDepth){
@@ -147,6 +147,7 @@ void main(){
         graphDepth,
         anchors,
         coverageFilter,
+        historyOwner,
         glassLayers,
         portalCover,
         arrivalPlane,
@@ -171,6 +172,7 @@ void main(){
         u_surfaceViewport: [width, height],
         u_index: !!index,
         u_markPass:!!anchors,
+        u_historyOwner:!!historyOwner,
         u_filterMatte:!!coverageFilter,
         u_glassBoundary: 13,
         u_graphDepth: !!graphDepth,

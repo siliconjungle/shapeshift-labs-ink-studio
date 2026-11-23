@@ -54,6 +54,7 @@ const { ditherFootprint } = require('./dither-footprint.js');
 const StableDetail = require('../src/stable-detail.js');
 const EdgeFilter = require('../src/edge-filter.js');
 const CoverageFilter = require('../src/coverage-filter.js');
+const SurfaceHistory = require('../src/surface-history.js');
 const MotionalCoverage = require('../src/motional-coverage.js');
 const TranslucentSilhouettes = require('../src/translucent-silhouettes.js');
 const SdfAssist = require('../src/sdf-assist.js');
@@ -154,6 +155,7 @@ function sequenceHistory(kit) {
     transparencyHistory: kit.stableTransparency.history(),
     colorClusterHistory: ColorClusters.history(),
     motionalCoverageHistory: MotionalCoverage.history(),
+    surfaceHistoryState: SurfaceHistory.history(),
     partMotionHistory: PartMotion.history(),
     strandMotionHistory: PartMotion.history(),
     surfaceMotionHistory: PartMotion.history()
@@ -441,7 +443,10 @@ function renderFrame(world, o, preparedPalettes) {
   const stable = ArtStability.prepare(look.stable, o.stable, o.ditherSpaceOverride);
   const filter = legacyLook && !probeView && CoverageFilter.prepare(o.coverageFilter ?? look.coverageFilter);
   const filterSettings = o[coverageFilterSample] ?? filter;
-  const specializedResolve = legacyLook && !filter && stable && stable.resolve !== 'native';
+  const eligibleHistory=legacyLook&&!probeView&&!o.reflectionPlane&&o.surfaceHistoryState;
+  const temporal=eligibleHistory&&SurfaceHistory.prepare(o.surfaceHistory??look.surfaceHistory);
+  if(!temporal&&!o.samples&&!o.captureCoverage&&!o.reflectionPlane&&!probeView)o.surfaceHistoryState?.clear();
+  const specializedResolve = legacyLook && !filter && !temporal && stable && stable.resolve !== 'native';
   const anchoring = !o.raw && !o.captureCoverage && !!stable?.anchorSpaces.size;
   const paletteRules = legacyLook || coverageAware ? PixelLook.preparePaletteConstraints(o.paletteConstraints ?? look.paletteConstraints, {
     palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
@@ -450,6 +455,7 @@ function renderFrame(world, o, preparedPalettes) {
   }) : preparedPalettes;
   const requestedPasses = ArtPasses.select(o.passes);
   const passSelection = new Set(requestedPasses);
+  if(temporal)passSelection.add('depth');
   const captureHybridDepth = typeof o.hybridDepthFrame === 'function' && !probeView &&
     !o[matteScope] && o[subjectFocusPass] !== false && (!o.samples || o[nativePartMotion]);
   if (captureHybridDepth) passSelection.add('depth');
@@ -515,6 +521,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (specializedResolve || (legacyLook && stable?.protect.size)) {
     for (const channel of ['objectId', 'materialId', 'emission', 'protected']) passSelection.add(channel);
   }
+  let temporalReport;
   const finishLook = (frame, passes, fog, effectSignals, source, paletteState, paletteInventory, beforePalette, paintStage) => {
     let project;
     function artProject() {
@@ -649,6 +656,7 @@ function renderFrame(world, o, preparedPalettes) {
         graded:legacyLook ? null : {w,h,rgb:frameGrade??litStage,alpha},
         final:{w,h,rgb:frame.rgb.slice(),alpha}};
     }
+    if (temporalReport) frame.surfaceHistory = temporalReport;
     if (paletteTrace) frame.palettePixel = paletteTrace.finish(frame,passes);
     if (readabilitySelectors) frame.readabilityMask = selectVisibleSubjects(world,passes.splatId,readabilitySelectors);
     if (paletteDiagnostic && !passes?.paletteOwner)
@@ -759,7 +767,7 @@ function renderFrame(world, o, preparedPalettes) {
   const captureSurfaceMotion=partView&&(!!o.captureSurfaceMotion||ArtPasses.needsSurfaceMotion(requestedPasses));
   const surfaceReset=o.resetRenderHistory||o.resetSurfaceMotion;
   if (partView&&!captureSurfaceMotion&&surfaceReset) o.surfaceMotionHistory?.clear();
-  const captureTexturedSurface=Boolean(deepPlan)||captureSurfaceMotion||filterSettings?.varied||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
+  const captureTexturedSurface=Boolean(deepPlan)||captureSurfaceMotion||temporal||filterSettings?.varied||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
     'surfaceKind','partId'].some(channel=>passSelection.has(channel));
   const captureStrandMotion = partView && (!!o.captureStrandMotion || ArtPasses.needsStrandMotion(requestedPasses));
   const strandReset = o.resetRenderHistory || o.resetStrandMotion;
@@ -774,7 +782,7 @@ function renderFrame(world, o, preparedPalettes) {
       reflections:false, atmosphere:false, precipitation:false, rainImpacts:false, captureFog:false, volumeHistory:null,
       [captureCamera]:undefined, [deepScope]:null, [matteScope]:null
     })));
-  if (legacyLook && !filter && (specializedResolve || (o.colored && !tone))) {
+  if (legacyLook && !filter && !temporal && (specializedResolve || (o.colored && !tone))) {
     const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], [scopedGlowPass]: trackGlow, [coverageLane]: 'native', artInkActive: !!ink,
       [subjectFocusPass]:focus,
       captureMotion, motionFrom, [nativePartMotion]: true, maskGrade: !tone && grade, reflectionTint: effects?.reflection,
@@ -1001,7 +1009,7 @@ function renderFrame(world, o, preparedPalettes) {
     previous:o.motionFrom?.strandMotion ?? o.strandMotionHistory?.previous()
   });
   const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' &&
-    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name) && !ArtPasses.proxies.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture);
+    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name) && !ArtPasses.proxies.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture, temporal);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
   const reflectPass = environmentPasses?.passes.reflections;
@@ -1041,7 +1049,7 @@ function renderFrame(world, o, preparedPalettes) {
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
-      capture:captureTexturedSurface, motion:captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
+      capture:captureTexturedSurface, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
       omit:useSdf && brickFrames.length ? (object,material,point)=>sdfSettings.allows({object,entity:object,material},point) : undefined });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
     editable:brickFrames,visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
@@ -3242,6 +3250,16 @@ function renderFrame(world, o, preparedPalettes) {
       surfaceMotionHistory:undefined, lookAudit:false, [captureCamera]:undefined
     });
     CoverageFilter.filter(col,alpha,samples,W,H,filterMatte);
+  }
+  if(temporal){
+    const current={w:W,h:H,time:sceneTime,camera:{view:V,tangent:ortho?oh:tangent,ortho,clipNear:near,clipFar:400},
+      source:o.surfaceHistorySource??o.renderHistoryKey??o[reconstructionSource]??world,
+      layout:world.count+'/'+Number(!!alpha),color:col,alpha,depth:passes.depth,owners:passes.historyOwners,keys:passes.historyKeys};
+    temporalReport=o.surfaceHistoryState.resolve(current,temporal,{
+      cut:o.resetRenderHistory===true||o.resetSurfaceHistory===true,
+      capture:o.captureSurfaceHistory===true||typeof o.surfaceHistoryFrame==='function'
+    });
+    if(temporalReport)o.surfaceHistoryFrame?.(temporalReport);
   }
   const masks = overlay && createMaskResolve(world, { w: W, h: H, time: t, x: X, y: Y, z: Z, depth, rayAt, span: R,
     ditherView, ditherPixelStep: artScale },

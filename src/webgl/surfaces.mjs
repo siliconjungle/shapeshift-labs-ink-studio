@@ -42,6 +42,8 @@ precision highp float;
 layout(location=0) in vec3 a_point;
 layout(location=1) in vec2 a_texel;
 uniform mat4 u_view,u_proj;
+uniform highp int u_historyFirst;
+flat out highp int v_historyId;
 out vec2 v_texel;
 out vec3 v_world;
 ${chart ? 'layout(location=2)in vec2 a_light;out vec2 v_light;' : ''}
@@ -51,6 +53,7 @@ out vec3 v_camera;
 ${styledProjection ? 'uniform vec2 u_surfaceViewport;uniform float u_vertexSnap;out vec2 v_affine;' : ''}
 void main(){
   vec4 p=u_view*vec4(a_point,1.0);
+  v_historyId=u_historyFirst>0 ? u_historyFirst+gl_VertexID/3 : 0;
   ${chart ? 'v_light=a_light;' : ''}
   ${marks ? 'v_rest=a_rest;v_marks=a_marks;' : ''}
   v_texel=a_texel;v_world=a_point;v_depth=-p.z;v_camera=p.xyz;
@@ -67,6 +70,8 @@ void main(){
 }`,
         `#version 300 es
 precision highp float;
+precision highp int;
+flat in highp int v_historyId;
 uniform sampler2D u_atlas;
 uniform vec4 u_range,u_splatPlane;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
@@ -169,6 +174,9 @@ void main(){
   color=u_index?vec4(float(u_portalCover)):vec4(rgb,1.0);
   depth=vec4(d,0.0,0.0,1.0);water=vec4(mark,1.0);
   ${glassLayers ? 'splitOpaqueSurface(color,gl_FragCoord.z);' : ''}
+  if(u_index&&v_historyId>0){
+    depth=vec4(float(v_historyId&255),float((v_historyId>>8)&255),float(v_historyId>>16),255.)/255.;
+  }
   if(u_index&&u_graphDepth){float z=round(d*16777215.0);water=vec4(mod(z,256.0),mod(floor(z/256.0),256.0),floor(z/65536.0),255.0)/255.0;}
 }`
       );
@@ -509,7 +517,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
-        section, anchors, engraving, coverageFilter
+        section, anchors, engraving, coverageFilter, historyFirst = 0
       }
     ) {
       upload(atlas);
@@ -562,6 +570,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLit: 24,
         ...(normalMapped && { u_surfaceNormalMap: 24, u_surfaceNormals: surfaceNormals, u_surfaceEye: eyeFromView(view) }),
         u_index: +index,
+        u_historyFirst:historyFirst,
         u_filterMatte: !!coverageFilter,
         u_glassBoundary: 13,
         u_graphDepth: graphDepth,
