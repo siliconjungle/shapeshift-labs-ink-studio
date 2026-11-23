@@ -1,0 +1,69 @@
+{
+  "revision": "044f6347c15761d281a78f700e29adebf639d74bf192aaf493cdf8e6ba7e75ed",
+  "id": "ceramic-cleanup",
+  "edits": [
+    {
+      "at": [
+        13,
+        22
+      ],
+      "from": "yellow",
+      "layer": "freckles",
+      "to": "ceramic-light"
+    },
+    {
+      "at": [
+        18,
+        19
+      ],
+      "from": "spark",
+      "layer": "freckles",
+      "to": "ceramic-light"
+    },
+    {
+      "at": [
+        26,
+        19
+      ],
+      "from": "yellow",
+      "layer": "freckles",
+      "to": "ceramic-light"
+    },
+    {
+      "at": [
+        36,
+        16
+      ],
+      "from": "ceramic-rim",
+      "layer": "freckles",
+      "to": "ceramic-light"
+    },
+    {
+      "at": [
+        49,
+        34
+      ],
+      "from": "spark",
+      "layer": "freckles",
+      "to": "crease"
+    },
+    {
+      "at": [
+        41,
+        36
+      ],
+      "from": "copper",
+      "layer": "freckles",
+      "to": "crease"
+    },
+    {
+      "at": [
+        31,
+        38
+      ],
+      "from": "yellow",
+      "layer": "freckles",
+      "to": "ceramic-shadow"
+    }
+  ]
+}

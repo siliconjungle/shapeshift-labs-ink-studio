@@ -54,7 +54,7 @@ function backgroundMask(img, bg) {
 function lint(img, o = {}) {
   const { w, h, rgb } = img,
     N = w * h,
-    bgm = backgroundMask(img, o.bg),
+    bgm = o.background ?? backgroundMask(img, o.bg),
     C = new Int32Array(N),
     L = new Float32Array(N);
   for (let i = 0; i < N; i++) ((C[i] = colOf(rgb, i)), (L[i] = lumOf(rgb, i)));

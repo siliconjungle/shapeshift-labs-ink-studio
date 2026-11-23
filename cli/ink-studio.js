@@ -1368,6 +1368,8 @@ const CMD = {
         '  paint layers|tune|clear <id> [--layer name]  list, adjust or clear corrections',
         '  paint cause <id> <recipe.json> [--events <run.json>] [--replace]   bake geometry or committed events into paint layers',
         '    layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off',
+        '  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing from a scene',
+        '  pixel-art draw|inspect|edit <design.json>   draw, inspect and revise native indexed artwork',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
@@ -3944,6 +3946,13 @@ const CMD = {
   /* a diorama beside a reference picture, both at true pixel size: the reference brought down to its art pixels (--px: how many of
      its pixels make one, as 2 for a picture shown at twice its size), the diorama drawn at the same size in art pixels, the two side
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
+  'pixel-art'() {
+    require('./pixel-art.js').command(pos,opt,outputFile, id => {
+      const world = buildPreview(id), t = num('t',0);
+      pose(world,t);
+      return R.render(world, view({ w:num('w',160), h:num('h',96), px:1, t, passes:['objectId'] }));
+    });
+  },
   /* pixel-art lint: the mistakes pixel artists name, at a diorama's own pixel size, beside what the references come to (the medians
      of the pixel-art references at their own size): orphan pixels, doubles (lines two pixels thick at a step), jaggies (uneven steps
      along an edge), banding (tones that only echo an edge), pillow shading (darker all round the rim, whichever way it faces), noise
