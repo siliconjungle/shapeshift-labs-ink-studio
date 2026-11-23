@@ -209,6 +209,6 @@ const SceneMeshes = (() => {
     return closest;
   }
 
-  return Object.freeze({create,pose,list,layers,depthProxy,proxyPlan,intersect});
+  return Object.freeze({create,pose,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

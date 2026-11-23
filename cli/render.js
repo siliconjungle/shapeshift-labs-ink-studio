@@ -366,7 +366,9 @@ function renderFrame(world, o, preparedPalettes) {
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
   const shotLighting = ShotLighting.frame(world.shotLighting, o.shotLighting, t);
   const probeView = o[probeCamera];
-  const useSdf = sdfSettings && world.renderSdfs?.length && !o.reflectionPlane?.select && !probeView?.allow;
+  const brickAPI=world.brickMeshes && require('../index.js').load().KIT.procedural.brickMeshes;
+  const brickFrames=brickAPI?.frame(world,o.brickMeshes) ?? [];
+  const useSdf = sdfSettings && (world.renderSdfs?.length || brickFrames.length) && !o.reflectionPlane?.select && !probeView?.allow;
   const transparency = SplatOrder.transparency(o.stableTransparency ?? look.stableTransparency);
   const blendDepth = transparency?.mode === 'blend' ? transparency.depthTolerance : 0;
   const planarFootprints=(o.splatFootprints??look.splatFootprints)!==false&&world.splatFootprints?.styles?.some(p=>p.depth==='plane');
@@ -990,13 +992,16 @@ function renderFrame(world, o, preparedPalettes) {
   const proxyRemoved = passSelection.has('proxyRemovedCoverage') && new Float32Array(W*H);
   const proxyDepthPass = passSelection.has('proxyDepth');
   const meshLayers = SceneMeshes.layers(world,o.meshes);
-  const surfaceLayers = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
+  const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
+  const surfaceLayers = meshLayers.length || brickLayers.length ?
+    [spriteSurfaces].flat().concat(meshLayers,brickLayers) : spriteSurfaces;
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
-      capture:captureTexturedSurface, motion:captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD });
+      capture:captureTexturedSurface, motion:captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
+      omit:useSdf && brickFrames.length ? (object,material,point)=>sdfSettings.allows({object,entity:object,material},point) : undefined });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
-    visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
+    editable:brickFrames,visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
@@ -3064,7 +3069,7 @@ function renderFrame(world, o, preparedPalettes) {
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, scale:SC, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, ditherView, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
-    surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers) : undefined,
+    surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers,brickFrames) : undefined,
     representationLabels:captureTexturedSurface && spriteLOD ? spriteLOD.labels(world) : undefined });
   if (proxyDepthPass || proxyRejected || proxyRemoved) {
     const native = {w:W,h:H,...passes};

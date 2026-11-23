@@ -5,11 +5,15 @@
 
   function dualGrid(field, rawBounds, {
     method = 'dualContour', cell = 0.12, iso = 0, normal, refine = 2,
-    maxCells = 250000, maxSamples = 3800000, latticeBounds, topology = true, captureField = false
+    maxCells = 250000, maxSamples = 3800000, latticeBounds, ownedEdges, topology = true, captureField = false
   } = {}) {
     if (latticeBounds !== undefined && ![latticeBounds?.min, latticeBounds?.max].every(p =>
       Array.isArray(p) && p.length === 3 && Array.from(p).every(Number.isSafeInteger)))
       throw new Error('An aligned lattice needs integer XYZ bounds');
+    if (ownedEdges !== undefined && (!latticeBounds || !topology ||
+        ![ownedEdges?.min,ownedEdges?.max].every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isSafeInteger)) ||
+        ownedEdges.min.some((n,i)=>n<latticeBounds.min[i] || n>=ownedEdges.max[i] || ownedEdges.max[i]>latticeBounds.max[i])))
+      throw new Error('Owned dual edges need integer bounds within the extraction lattice');
     const bounds = latticeBounds ? P.spatial.bounds({
       min: latticeBounds.min.map(v => v * cell), max: latticeBounds.max.map(v => v * cell)
     }) : P.spatial.bounds(rawBounds),
@@ -64,8 +68,10 @@
       errors.push(fit.error);
       active.push({ key:[x,y,z].join('/'), bounds:box });
     }
-    const quads=[], triangles=[];
-    if (topology) for (const { a,axis,inside } of hitCache.values()) {
+    const quads=[], triangles=[], crossings=ownedEdges && [];
+    if (topology) for (const { a,axis,inside,hit } of hitCache.values()) {
+      if (ownedEdges && a.some((n,i)=>n+latticeBounds.min[i]<ownedEdges.min[i] ||
+        n+latticeBounds.min[i]>=ownedEdges.max[i])) continue;
       const u=(axis+1)%3, v=(axis+2)%3,
         around=[[-1,-1],[0,-1],[0,0],[-1,0]].map(([i,j])=>{
           const q=a.slice();
@@ -78,10 +84,12 @@
       if (face.some(i=>i<0)) continue;
       if (!inside) face.reverse();
       quads.push(face);
+      crossings?.push(hit);
       triangles.push(...H.trianglesFor(face,points));
     }
     work.active=points.length;
     return P.data.freeze({ method, bounds, counts, spacing, points, normals, errors, active, quads, triangles, work,
+      ...(crossings && {crossings}),
       ...(captureField ? { fieldSamples: () => grid.slice() } : {}),
       mesh: metadata=>H.meshFor(points,normals,triangles,metadata) });
   }

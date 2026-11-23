@@ -49,3 +49,8 @@ node cli/ink-studio.js render examples/sdf-gatehouse.js \
 ```
 
 The authored comparison covers the gatehouse sandstone. Its arched cut remains open, and lantern washes retain their splat color. The standard depth, coverage, position, normal, object ID and material ID passes report the traced surface. Tracing costs additional render time and still needs painted samples on each visible side of the sculpt.
+
+[Editable brick meshes](brick-meshes.md) also support headless tracing.
+The same object, material, and bounds rules select the current signed
+brick field for close-ups. The affected mesh samples yield to the
+trace while other parts of the scene use their cached geometry.

@@ -18,7 +18,7 @@ function bind(world, data, settings) {
   const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
   const { nearest } = require('../index.js').load().KIT.procedural.attributes;
   const sources = [];
-  for (const [sourceIndex,source] of world.renderSdfs.entries()) {
+  for (const [sourceIndex,source] of (world.renderSdfs ?? []).entries()) {
     if (!(source.rows instanceof Map) || typeof source.distance !== 'function' || typeof source.locate !== 'function') continue;
     const parts = new Map();
     let selected = false, partIndex=0;
@@ -63,25 +63,47 @@ function trace(source, ray, near, far, settings, clip, visible, x, y) {
     const distance = field(...point);
     if (!Number.isFinite(distance)) return null;
     if (Math.abs(distance)>epsilon) {
-      along+=Math.abs(distance)*.7;
+      along+=Math.min(source.maxStep ?? Infinity,Math.abs(distance)*.7);
       continue;
     }
     let normal;
     if ((!clip || clip(point)) && (!source.accepts || source.accepts(...point))) {
-      const {body,owner} = source.locate(...point);
-      const part = source.parts.get(owner) ?? source.parts.get(body);
-      if (part && (normal=normalAt(field,point,epsilon))) {
-        const row = part.nearest.sample(point,i=>facing(part.records[i],normal))?.values;
-        if (row && (!visible || visible(row.i,x,y)) && settings.allows(row.target,point)) return {z:along*axial,position:point,normal,row};
+      let row;
+      if (source.surfaceAt) {
+        normal=normalAt(field,point,epsilon);
+        if (normal) row=source.surfaceAt(point,normal);
+      } else {
+        const {body,owner} = source.locate(...point);
+        const part = source.parts.get(owner) ?? source.parts.get(body);
+        if (part && (normal=normalAt(field,point,epsilon)))
+          row=part.nearest.sample(point,i=>facing(part.records[i],normal))?.values;
       }
+      if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point))
+        return {z:along*axial,position:point,normal,row};
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
   }
   return null;
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible}) {
+function editableSource(field) {
+  const part={key:JSON.stringify(['brick-sdf',field.objectId])}, byMaterial=new Map();
+  return {...field,surfaceAt(point,normal) {
+    const material=field.material(point,normal);
+    if (!byMaterial.has(material.id)) {
+      const target={object:field.objectId,entity:field.objectId,material:material.id};
+      byMaterial.set(material.id,{i:-1,part,target,color:[material.color>>16,material.color>>8&255,material.color&255].map(n=>n/255)});
+    }
+    return byMaterial.get(material.id);
+  }};
+}
+
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,editable=[]}) {
   const {sources,rows} = bind(world,data,settings);
+  for (const field of editable) {
+    if (field.materials.some(material=>settings.candidates({object:field.objectId,entity:field.objectId,material})))
+      sources.push(editableSource(field.trace));
+  }
   if (!sources.length) return null;
   const hits = new Array(w*h), samples=[];
   for (let y=0,p=0;y<h;y++) for (let x=0;x<w;x++,p++) {
@@ -92,7 +114,9 @@ function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible}) {
       if (hit && (!closest || closest.z>hit.z)) closest=hit;
     }
     if (!closest) continue;
-    const sample={...closest,p,alpha:1,sdf:true,objectPosition:closest.position};
+    const sample={...closest,p,alpha:1,sdf:true,objectPosition:closest.position,
+      ...(closest.row.i<0 && {surface:true,color:closest.row.color,objectId:closest.row.target.object,
+        materialId:closest.row.target.material})};
     samples.push(sample);
     hits[p]=sample;
   }

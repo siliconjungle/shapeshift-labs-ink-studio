@@ -1692,6 +1692,9 @@ brick data and remain readable.
   compiler samples its continuous field, applies the brick offsets and emits
   Gaussian splats at the resulting zero crossings.
 
+For live indexed scene geometry driven by sparse edits, see
+[Local SDF-to-mesh updates](brick-meshes.md).
+
 ### Traversal graph
 
 Pass aligned, nonoverlapping XZ span tiles to

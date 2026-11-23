@@ -16,7 +16,7 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -53,7 +53,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
     const filtered = depthOnly || paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
     const projections = depthOnly ? [] : SpriteSurface.projectionPlan(layer);
-    const charts=capture && layer.surfaceCharts;
+    const omitLayer=omit && layer.brickField;
+    const charts=(capture || omitLayer) && layer.surfaceCharts;
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
       const first=offset/5;
@@ -70,7 +71,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
         motion || chart ? weights : undefined));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
-        ...(motion && {key:JSON.stringify(['mesh',layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
+        ...(motion && {key:JSON.stringify(['mesh',layer.surfaceMotionKey ?? layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
@@ -134,7 +135,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ink = (pixels[texel] << 16) | (pixels[texel + 1] << 8) | pixels[texel + 2];
           }
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
-          if(clip&&!clip(position))continue;
+          if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
           let mapped;
           if (bitangent && normalPixels[texel+3]>=128) {
             const local = [0,1,2].map(k => Math.max(-127, normalPixels[texel+k]-128));
@@ -161,13 +162,17 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
   }
   return depthOnly ? depth : fragments.filter(Boolean);
 }
-function labels(atlas) {
+function labels(atlas,bricks=[]) {
   const objects=new Set(), materials=new Set(), parts=new Map();
   for (const layer of Array.isArray(atlas) ? atlas : [atlas]) for (const chart of layer?.surfaceCharts ?? []) {
     if (chart.objectId!==undefined) objects.add(chart.objectId);
     if (chart.materialId!==undefined) materials.add(chart.materialId);
     if (chart.objectId!==undefined && chart.partId!==undefined)
       parts.set(JSON.stringify([chart.objectId,chart.partId]),{object:chart.objectId,part:chart.partId});
+  }
+  for (const row of bricks) {
+    objects.add(row.objectId);
+    for (const material of row.materials) materials.add(material);
   }
   return {objects:[...objects].sort(),materials:[...materials].sort(),parts:[...parts.values()]};
 }

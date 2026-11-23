@@ -262,7 +262,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       const byName=new Map(table.map((name,i)=>[name,i]));
       result[channel]=topDown(Uint32Array.from(owner,(i,p)=>{
         const hit=atlasOwners?.get(p);
-        const name=hit?.mesh?.[key] ?? (hit?.partId!==undefined ? hit[channel] : undefined);
+        const name=hit?.mesh?.[key] ?? (hit?.partId!==undefined || hit?.sdf ? hit?.[channel] : undefined);
         return name===undefined ? ids?.[i] || 0 : byName.get(name) ?? 0;
       }),1);
       result[names]=table;

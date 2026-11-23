@@ -111,7 +111,7 @@
     const indices=Uint32Array.from(selected),tree=orderedTree(rows,indices,footprintPlan?.reach??3);
     let provenance;
     function ray({origin,direction,maxDistance=100,threshold=R.minimum,limit=64,soft=false,water=true,accept,
-      cutaway=defaultCutaway,camera:sectionCamera=camera,footprintView,extraHits,meshes=true}={}){
+      cutaway=defaultCutaway,camera:sectionCamera=camera,footprintView,extraHits,meshes=true,brickMeshes=true}={}){
       if(!valid(origin)||!valid(direction)||V.len(direction)<=1e-8||!Number.isFinite(maxDistance)||maxDistance<=0||
           !Number.isFinite(threshold)||threshold<0||threshold>1||!Number.isInteger(limit)||limit<1||limit>256||
           accept!==undefined&&typeof accept!=='function')
@@ -177,7 +177,9 @@
       }
       visit(tree);
       const meshOptions={V,rayBox:P.spatial.rayBox};
-      for (const mesh of K.sceneMeshes.list(world,meshes)) {
+      const fields=P.brickMeshes?.frame(world,brickMeshes) ?? [];
+      const fieldMeshes=fields.flatMap(field=>field.chunks.filter(chunk=>chunk.mesh).map(chunk=>chunk.mesh));
+      for (const mesh of [...K.sceneMeshes.list(world,meshes),...fieldMeshes]) {
         const hit=K.sceneMeshes.intersect(mesh,{origin,direction:d,maxDistance},meshOptions,row=>{
           const depth=back ? V.dot(V.sub(sectionCamera.eye,row.point),back)-(sectionCamera.setback??0) : row.distance;
           return (!section || Cutaway.margin(section,...row.point,depth)>=0) && (!accept || accept(row));

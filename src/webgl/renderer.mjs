@@ -194,7 +194,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const sort = createDepthSorter(), transparencyAPI = toolkit.KIT?.procedural?.splatOrder;
     const afterimagesAPI = toolkit.KIT?.afterimages;
     const previewPipelines = [];
-    const surfacePipelines = [];
+    const surfacePipelines = [], brickPipelines=new Map();
+    const brickShaders={cache:new Map(),program:resources.program};
+    let lastBrickLayers=[];
     let depthMeshPass, lastDepthProxy = false;
     let emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let artPixelFinish, correctionStage;
@@ -608,9 +610,14 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         if (weightsOnly) gl.colorMask(false,false,false,false);
         if (surfaces) for (const [i, atlas] of (Array.isArray(surfaces) ? surfaces : [surfaces]).entries()) {
           if (!atlas) continue;
-          surfacePipelines[i] ??= createSurfacePipeline(gl, surfaceOptions);
+          let surface;
+          if (atlas.brickField) {
+            if (!brickPipelines.has(atlas.sceneMeshId))
+              brickPipelines.set(atlas.sceneMeshId,createSurfacePipeline(gl,{...surfaceOptions,sharedShaders:brickShaders}));
+            surface=brickPipelines.get(atlas.sceneMeshId);
+          } else surface=surfacePipelines[i] ??= createSurfacePipeline(gl,surfaceOptions);
           if (atlas.sceneMeshId) gl.depthFunc(gl.LESS);
-          surfacePipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height,
+          surface.draw(atlas, { ...options.surfaceFrame, water, wet, width, height,
             samplingScale: options.u_materialGridScale ?? 1,
             geometryCode: options.surfaceFrame?.meshCodes?.get(atlas.sceneMeshId),
             partGrid: options.spriteGrid });
@@ -1269,7 +1276,20 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const meshLayers = world.meshes === undefined || frame.meshes === false ? [] :
         toolkit.KIT.sceneMeshes.layers(world,frame.meshes)
           .filter(atlas=>!spriteLOD?.hidden(spriteMask?.meshCodes.get(atlas.sceneMeshId)));
-      const surfaces = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
+      const brickAPI=toolkit.KIT?.procedural?.brickMeshes;
+      const brickLayers=world.brickMeshes ? brickAPI.layers(brickAPI.frame(world,frame.brickMeshes)) : [];
+      if (brickLayers.length!==lastBrickLayers.length || brickLayers.some((layer,index)=>layer!==lastBrickLayers[index]))
+        historyValid=false;
+      lastBrickLayers=brickLayers;
+      if (brickPipelines.size && !reflectionCapture && plane===zero) {
+        const retained=new Set(brickLayers.map(atlas=>atlas.sceneMeshId));
+        for (const [id,draw] of brickPipelines) if (!retained.has(id)) {
+          draw.dispose();
+          brickPipelines.delete(id);
+        }
+      }
+      const surfaces = meshLayers.length || brickLayers.length ?
+        [spriteSurfaces].flat().concat(meshLayers,brickLayers) : spriteSurfaces;
       const depthProxy = toolkit.KIT?.sceneMeshes?.proxyPlan(world,frame.splatDepthProxies,frame.splatProxyTolerance);
       if (depthProxy || lastDepthProxy) historyValid=false;
       lastDepthProxy=!!depthProxy;
@@ -1799,6 +1819,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     }
     return { render: presentFrame, dispose() {
       for (const pipeline of surfacePipelines) pipeline?.dispose();
+      for (const pipeline of brickPipelines.values()) pipeline.dispose();
       depthMeshPass?.dispose();
       spriteReconstructionPipeline?.dispose();
       for (const preview of previewPipelines) preview?.dispose();
@@ -1982,7 +2003,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       }
       const spriteLOD=toolkit.KIT?.sprite?.reconstruction;
       const pickFrame={water:frame.water!==false,...ray,meshes:frame.meshes!==false&&ray?.meshes!==false,
-        cutaway:section,camera,footprintView};
+        brickMeshes:frame.brickMeshes!==false&&ray?.brickMeshes!==false,cutaway:section,camera,footprintView};
       if(world.spriteReconstruction&&spriteLOD){
         const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
         const view=makeCamera(world,frame,width,height);

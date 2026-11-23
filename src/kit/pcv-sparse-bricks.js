@@ -23,7 +23,7 @@
     if (!finite(cell) || cell < 1e-6 || !integer(brickSize) || brickSize < 2 || brickSize > 32 ||
         !finite(cell * brickSize) || typeof base !== 'function')
       throw new TypeError('Sparse bricks need a positive cell size, 2–32 samples per axis and a base field');
-    const length = brickSize ** 3;
+    const length = brickSize ** 3, lineage = {};
     const pointOK = v => finite(v) && Math.abs(v / cell) < 2 ** 40 - brickSize;
     const lattice = value => {
       const q = value / cell, near = Math.round(q);
@@ -172,11 +172,12 @@
       }
       result = Object.freeze({ cell, brickSize, distance, attributes, mediumField, setBrick, edit, changesFrom, affectsColumn,
         stats: freeze({ bricks: map.size, uniform, dense: map.size - uniform, sculpted }) });
-      states.set(result, { map, cell, brickSize, box });
+      states.set(result, { map, cell, brickSize, box, lineage });
       return result;
     }
     return snapshot(new Map());
   }
 
-  P.sparseBricks = Object.freeze({ create, isSnapshot: value => states.has(value) });
+  P.sparseBricks = Object.freeze({ create, isSnapshot: value => states.has(value),
+    sharesBase: (a,b) => states.has(a) && states.get(a).lineage === states.get(b)?.lineage });
 })(KIT);

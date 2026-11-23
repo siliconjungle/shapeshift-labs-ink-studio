@@ -9,10 +9,11 @@ const eyeFromView = view => [0, 1, 2].map(
 );
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
-export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD } = {}) {
+export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD, sharedShaders } = {}) {
   const resources = createResources(gl);
   try {
-    const shaders = new Map();
+    const shaders = sharedShaders?.cache ?? new Map();
+    const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart) {
       const chart = lighting && !normalMapped;
       const key = [
@@ -30,7 +31,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         maskedPart
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
-      const shader = resources.program(
+      const shader = program(
         `#version 300 es
 precision highp float;
 layout(location=0) in vec3 a_point;
