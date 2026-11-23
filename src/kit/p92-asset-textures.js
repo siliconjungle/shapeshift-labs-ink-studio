@@ -437,5 +437,6 @@ vec3 assetAddHighlight(vec3 color, float linearGain) {
     const extra=normal&&light&&view?highlight(normal,roughness,light,view):0;
     return color.map((value,i)=>srgb(K.clamp(linear(value)*irradiance+extra+emission[i],0,1)));
   }
-  A.assetTextures=Object.freeze({validate,checkPrimitive,read,sampler,shade,highlight,highlightGLSL});
+  A.assetTextures=Object.freeze({validate,checkPrimitive,read,sampler,shade,highlight,highlightGLSL,
+    baseColor:(document,part)=>binding(document,part,'color'), embeddedImage:embedded});
 })(KIT);

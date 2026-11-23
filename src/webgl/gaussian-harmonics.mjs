@@ -1,6 +1,6 @@
 // Float RGB texels retain the decoded coefficients without repacking each cloud.
 export function createGaussianHarmonics(gl, resources, unit, maxSize) {
-  let texture, uploaded, width, height, shOffset;
+  let texture, uploaded, width, height, shOffset, colorOffset;
   function clear() {
     if (texture) resources.free(texture);
     texture = uploaded = undefined;
@@ -20,15 +20,17 @@ export function createGaussianHarmonics(gl, resources, unit, maxSize) {
       return;
     }
     if (!live) return;
-    const { count, degree, dc, sh, up } = harmonics;
+    const { count, degree, dc, sh, up, linear } = harmonics;
     if (uploaded !== harmonics) {
       const terms = (degree + 1) ** 2 - 1;
       if (!Number.isInteger(degree) || degree < 0 || degree > 4 || !Number.isInteger(count) || count < 1 ||
           !(dc instanceof Float32Array) || dc.length !== count * 3 ||
-          !(sh instanceof Float32Array) || sh.length !== count * terms * 3 || !['y', 'z'].includes(up))
+          !(sh instanceof Float32Array) || sh.length !== count * terms * 3 || !['y', 'z'].includes(up) ||
+          linear && (!(linear instanceof Uint8Array) || linear.length !== count))
         throw new TypeError('Invalid live Gaussian harmonic rows');
-      const nextWidth = Math.min(maxSize, Math.max(1024, Math.ceil(count * (terms + 1) / (maxSize - 1))));
-      const dcRows = Math.ceil(count / nextWidth), nextHeight = dcRows + Math.ceil(count * terms / nextWidth);
+      const nextWidth = Math.min(maxSize, Math.max(1024, Math.ceil(count * (terms + 1 + Number(!!linear) / 3) / (maxSize - 2))));
+      const dcRows = Math.ceil(count / nextWidth), harmonicRows = dcRows + Math.ceil(count * terms / nextWidth);
+      const nextHeight = harmonicRows + (linear ? Math.ceil(count / (3*nextWidth)) : 0);
       if (nextHeight > maxSize) throw new RangeError('Gaussian harmonics exceed this device’s WebGL texture size');
       gl.activeTexture(gl.TEXTURE0 + unit);
       texture ??= resources.texture();
@@ -40,6 +42,12 @@ export function createGaussianHarmonics(gl, resources, unit, maxSize) {
       }
       upload(0, dc);
       if (terms) upload(dcRows, sh);
+      if (linear) {
+        const values = new Float32Array(Math.ceil(count/3)*3);
+        values.set(linear);
+        upload(harmonicRows, values);
+      }
+      colorOffset = linear ? harmonicRows * width : -1;
       if (gl.getError() !== gl.NO_ERROR) {
         clear();
         throw new Error('Could not upload live Gaussian harmonics on this WebGL device');
@@ -51,7 +59,7 @@ export function createGaussianHarmonics(gl, resources, unit, maxSize) {
       gl.bindTexture(gl.TEXTURE_2D, texture);
     }
     return { u_gaussianSH: unit, u_gaussianWidth: width, u_gaussianOffset: shOffset,
-      u_gaussianCount: count, u_gaussianZUp: up === 'z' };
+      u_gaussianCount: count, u_gaussianColorOffset: colorOffset, u_gaussianZUp: up === 'z' };
   };
 }
 
@@ -87,7 +95,7 @@ export function gaussianHarmonicGLSL(degree) {
   }
   return `
 uniform highp sampler2D u_gaussianSH;
-uniform int u_gaussianWidth, u_gaussianOffset, u_gaussianCount;
+uniform int u_gaussianWidth, u_gaussianOffset, u_gaussianCount, u_gaussianColorOffset;
 uniform bool u_gaussianZUp;
 vec3 gaussianCoefficient(int offset) {
   return texelFetch(u_gaussianSH, ivec2(offset % u_gaussianWidth, offset / u_gaussianWidth), 0).rgb;
@@ -101,7 +109,11 @@ ${degree ? `  vec3 d = normalize(u_gaussianZUp ? vec3(ray.x, -ray.z, ray.y) : ra
   float x = d.x, y = d.y, z = d.z;
   int first = u_gaussianOffset + index * ${terms};
 ${lines.join('\n')}` : ''}
-  return clamp(color, 0.0, 1.0);
+  color = clamp(color, 0.0, 1.0);
+  if (u_gaussianColorOffset >= 0 && gaussianCoefficient(u_gaussianColorOffset + index / 3)[index % 3] > 0.5) {
+    color = mix(1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055, 12.92 * color, lessThanEqual(color, vec3(0.0031308)));
+  }
+  return color;
 }
 `;
 }

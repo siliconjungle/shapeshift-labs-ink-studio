@@ -298,7 +298,7 @@ export async function decodeGaussianSplat(input, options) {
   throw new Error('Unsupported Gaussian asset. Expected PLY or a file with a valid SPZ signature.');
 }
 
-function shBasis(direction, degree) {
+export function shBasis(direction, degree) {
   if (!direction) return null;
   if (direction.length !== 3 || !Array.from(direction).every(finite) || !Math.hypot(...direction))
     throw new TypeError('Gaussian viewDirection must be a nonzero XYZ vector');
@@ -320,15 +320,18 @@ function shBasis(direction, degree) {
   return basis;
 }
 
-function colorChannel(dc, sh, index, channel, basis) {
+export const srgbDisplay = value => value <= .0031308 ? value * 12.92 : 1.055 * value ** (1/2.4) - .055;
+
+function colorChannel(dc, sh, index, channel, basis, linear) {
   let value = 0.5 + SH0 * dc[index * 3 + channel];
   if (basis) for (let j = 0; j < basis.length; j++)
     value += basis[j] * sh[(index * basis.length + j) * 3 + channel];
-  return Math.round(clamp(value, 0, 1) * 255);
+  value = clamp(value, 0, 1);
+  return Math.round((linear ? srgbDisplay(value) : value) * 255);
 }
 
 export function gaussianSplatColors(world, index, { eye, back, ortho }) {
-  const { count, degree, dc, sh, up } = world.gaussianHarmonics ?? {};
+  const { count, degree, dc, sh, up, linear } = world.gaussianHarmonics ?? {};
   if (!Number.isInteger(index) || index < 0 || index >= count || !dc)
     throw new RangeError('Inspecting Gaussian color needs a live imported splat index');
   const at = index * 16;
@@ -336,8 +339,8 @@ export function gaussianSplatColors(world, index, { eye, back, ortho }) {
   const direction = up === 'z' ? [ray[0], -ray[2], ray[1]] : ray;
   const basis = Math.hypot(...direction) ? shBasis(direction, degree) : null;
   return {
-    base: [0, 1, 2].map(channel => colorChannel(dc, sh, index, channel)),
-    rgb: [0, 1, 2].map(channel => colorChannel(dc, sh, index, channel, basis))
+    base: [0, 1, 2].map(channel => colorChannel(dc, sh, index, channel, null, linear?.[index])),
+    rgb: [0, 1, 2].map(channel => colorChannel(dc, sh, index, channel, basis, linear?.[index]))
   };
 }
 

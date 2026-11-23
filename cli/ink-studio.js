@@ -40,6 +40,7 @@ let A = null;
 const importedAssets = new Map();
 const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
 const gaussianScenes = new Map();
+const gaussianGltfScenes = new Map();
 const sceneryFile = file => /\.inkscenery$/i.test(file);
 const sceneryScenes = new Map();
 const lib = () => A || (A = cfg.load ? cfg.load() : require('../index.js').load());
@@ -189,7 +190,7 @@ function scene(id) {
     if (!descriptor) throw new Error('Scenery packs are supported by render, turn, sheet, clip, snap and surface-pixel');
     return descriptor;
   }
-  if (/\.(obj|gltf|glb)$/i.test(id)) return meshScene(id);
+  if (/\.(obj|gltf|glb)$/i.test(id)) return gaussianGltfScenes.get(id) ?? meshScene(id);
   if (id.endsWith('.json')) return dataScene(id);
   if (id.endsWith('.js')) return require(path.resolve(id))(lib());
   const s = lib().SCENES.find(q => q.id === id);
@@ -918,7 +919,7 @@ const view = extra =>
       strictContract: onOffOption('strict-contract'),
       stepAnimation: onOffOption('step-animation'),
       shutter: shutterOption(),
-      raw: !!opt.raw,
+      raw: opt.raw ? true : undefined,
       paintCorrections: opt['paint-corrections'] !== 'off',
       colored: !!opt.colored,
       splatOrder: opt['splat-order'],
@@ -1564,6 +1565,7 @@ const CMD = {
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
         '  passes <id> [--channels opaque-surface,part-motion,strands] [--previous seconds]   save art-pixel render passes',
+        '  inspect-gltf <asset.gltf|asset.glb> [--scene N] [--ray ox,oy,oz,dx,dy,dz] [--out inspection.json]   list Gaussian and mesh parts',
         '  surface-pixel <id> --at x,y [--t seconds]   inspect the opaque native art-pixel owner',
         '  strand-pixel <id> --at x,y [--t seconds] [--previous seconds]   inspect visible strand hits on the native art grid',
         '  strand-review <id> --w 160 --h 96 [--curve-quality file.json] [--from 0 --to 3 --camera-orbit 20] [--out directory]',
@@ -3136,6 +3138,22 @@ const CMD = {
     require('./pass-preview.js').writePasses(directory, im, opt.px1 ? 1 : im.px);
     console.log('wrote', directory);
   },
+  'inspect-gltf'() {
+    if (pos.length !== 1 || opt.out === true) die('Use inspect-gltf <asset.gltf|asset.glb> [--scene N] [--ray ox,oy,oz,dx,dy,dz] [--out inspection.json]');
+    const world = gaussianGltfScenes.get(pos[0])?.build();
+    if (!world) die('The file has no KHR_gaussian_splatting primitives');
+    const report = { ...world.gltfParts };
+    if (opt.ray !== undefined) {
+      const values = list('ray');
+      if (values.length !== 6 || !values.every(Number.isFinite)) die('--ray needs an XYZ origin and XYZ direction');
+      const picker = lib().KIT.procedural.contributions.create(world);
+      const origin = values.slice(0,3), direction = values.slice(3);
+      report.ray = { origin, direction, ...picker.ray({ origin, direction,
+        maxDistance:Math.hypot(...origin.map((n,i)=>n-world.cam.target[i]))+world.radius*2, soft:true }) };
+    }
+    if (opt.out) require('./asset-files.js').json(path.resolve(opt.out),report);
+    else process.stdout.write(JSON.stringify(report,null,2) + '\n');
+  },
   'surface-pixel'() {
     if (pos.length !== 1 || typeof opt.at !== 'string' || !/^\d+,\d+$/.test(opt.at) || opt.out === true)
       die('Use surface-pixel <scene> --at x,y [--t seconds] [--out inspection.json]');
@@ -4509,7 +4527,19 @@ async function run() {
       })
     });
   }
-  if (/\.glb$/i.test(pos[0] || '') && opt.uv !== 'off') {
+  const gltfInputs = cmd === 'snap' ? pos :
+    ['render','turn','sheet','clip','passes','surface-pixel','inspect-gltf'].includes(cmd) ? pos.slice(0,1) : [];
+  for (const file of new Set(gltfInputs.filter(file=>/\.(gltf|glb)$/i.test(file)))) {
+    if (opt.scene === true) die('--scene needs a glTF scene index');
+    const world = await require('../index.js').readGaussianGltf(file, {
+      optional:true, scene:opt.scene === undefined ? undefined : num('scene'), onFile:shot?.dependency
+    });
+    if (world) {
+      const name = path.basename(file);
+      gaussianGltfScenes.set(file,{ id:name.replace(/\W+/g,'-'), name, seed:1, build:()=>({ ...world }) });
+    }
+  }
+  if (/\.glb$/i.test(pos[0] || '') && opt.uv !== 'off' && !gaussianGltfScenes.has(pos[0])) {
     try {
       importedAssets.set(path.resolve(pos[0]), await require('../index.js').readAsset(path.resolve(pos[0]), { size: 3 }));
     } catch (error) {

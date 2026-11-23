@@ -27,6 +27,7 @@ export { createWebGPUGraph, planWebGPUGraph } from './webgpu.mjs';
 export { createSplatMaskPainter, createGaussianMaterialPainter } from './src/webgl/splat-mask-painter.mjs';
 export { compileGaussianMaterials } from './src/webgl/gaussian-materials.mjs';
 export { createGaussianColorInspector, gaussianSwatchJump } from './src/webgl/gaussian-color-inspector.mjs';
+export { gaussianGltfWorld } from './src/gaussian-gltf.mjs';
 export { decodeGaussianSplat, decodeGaussianPly, decodeGaussianSpz, gaussianSplatWorld } from './src/gaussian-splats.mjs';
 export {
   createLiveAudioRouter, readTimecode, timecodeAt, createMidiTimecode, createMidiBeatClock, sampleLinkClock,

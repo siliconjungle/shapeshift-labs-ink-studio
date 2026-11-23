@@ -92,7 +92,7 @@ function readGlb(bytes) {
 }
 
 // glTF containers can be packed without decoding meshes, animations, or image data.
-function embed(gltf, file, binary) {
+function embed(gltf, file, binary, onFile) {
   if (gltf.asset?.version !== '2.0') throw new Error('Expected a glTF 2.0 file');
   const pieces = [];
   let length = 0;
@@ -112,7 +112,9 @@ function embed(gltf, file, binary) {
         : Buffer.from(decodeURIComponent(uri.slice(comma + 1)));
     }
     if (/^\w+:/.test(uri)) throw new Error('Use local glTF companion files');
-    return fs.readFileSync(path.resolve(path.dirname(file), decodeURIComponent(uri)));
+    const location = path.resolve(path.dirname(file), decodeURIComponent(uri));
+    onFile?.(location);
+    return fs.readFileSync(location);
   };
   const buffers = gltf.buffers || [];
   const bases = buffers.map(({ uri, byteLength }, index) => {

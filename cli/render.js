@@ -176,6 +176,7 @@ function sequenceOutput(history, draw) {
 }
 
 function render(world, o, preparedPalettes) {
+  if (world.gltfParts && o?.raw === undefined) o = { ...o, raw:true };
   if (world.anim?.bones && (!world.rest || world.rest===world.data)) {
     const { KIT }=require('../index.js').load();
     if (KIT.poseCorrectives.forWorld(world)?.size)
@@ -1696,7 +1697,12 @@ function renderFrame(world, o, preparedPalettes) {
     if ((!qualityRows || qualityRows.keep[i]) && !(geometryMask && spriteLOD.hidden(geometryMask.codes[i])) &&
         !hiddenCurve(i) && !curveQuality?.omitted.has(i)) orderRows[orderCount++] = i;
   const order = orderRows.subarray(0,orderCount);
-  order.sort((a, b) => depth[a] - depth[b]);
+  let sortDepth = depth;
+  if (world.gaussianSort === 'cameraDistance' && !ortho) {
+    sortDepth = new Float64Array(N);
+    for (let i = 0; i < N; i++) sortDepth[i] = -((X[i]-eye[0])**2 + (Y[i]-eye[1])**2 + (Z[i]-eye[2])**2);
+  }
+  order.sort((a, b) => sortDepth[a] - sortDepth[b]);
   if (transparency && !blendDepth && !deep) {
     const { depthTolerance: tolerance } = transparency;
     const depthAt = i => depth[i];
@@ -2116,7 +2122,7 @@ function renderFrame(world, o, preparedPalettes) {
       y = coarse?.center[1] ?? Y[i],
       z = coarse?.center[2] ?? Z[i];
     const opt = i * OpticalMaterials.STRIDE, opticalActive = optical?.[opt + 3];
-    if (al <= 0 || y < -30 || opticalActive && !optical[opt]) continue;
+    if (al <= 0 || (y < -30 && !world.gltfParts) || opticalActive && !optical[opt]) continue;
     if (probeView?.allow && (i >= baseCount || !probeView.allow(i))) continue;
     if (
       reflectionPlane &&

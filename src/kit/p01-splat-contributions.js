@@ -101,7 +101,7 @@
     const back=new Set(world.back??[]),withdrawal=SampleCoverage.amount(sampleWithdrawal);
     for(let i=0;i<count;i++){
       const o=i*16,flags=Math.round(data[o+11]);
-      if(rowMask&&!rowMask[i]||data[o+3]<=0||data[o+1]<-30||back.has(i)||(flags&128)||!SampleCoverage.visible(flags,withdrawal))continue;
+      if(rowMask&&!rowMask[i]||data[o+3]<=0||(data[o+1]<-30&&!world.gltfParts)||back.has(i)||(flags&128)||!SampleCoverage.visible(flags,withdrawal))continue;
       const {x,y,z,a,angle,scale}=pose(data,i,time,world.grow,emissiveTime);
       if(!(a>=R.minimum)||![x,y,z].every(Number.isFinite))continue;
       const cov=covariance(data,o,angle,scale);

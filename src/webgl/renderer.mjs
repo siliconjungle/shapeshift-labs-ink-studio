@@ -275,7 +275,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         data: source.data, layout: frame.instances, view: camera.view, time: sceneTime, tolerance, depthAt: i => depths[i],
         transparentAt: i => transparencyAPI.isTransparent(data, i, data[i * 16 + 3], opticalSplats?.[i * 12 + 3], backRows)
       }) : undefined;
-      const order = sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind);
+      const order = sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind, camera.ortho ? undefined : camera.eye);
       pipeline.setOrder(submitted(order,!!plan), !!plan);
       sorted = canReuse ? { view: camera.view, moving: Int32Array.from(moving), back: Int32Array.from(back),
         clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality, far, curveRows } : null;
@@ -1512,7 +1512,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         ...(gaussianProfile && { u_gaussianFilter: [
           gaussianProfile.variance, +gaussianProfile.compensated + 2*gaussianProfile.ray, +!!world.gaussianCloud, camera.clipFar
         ] }),
-        u_crisp: +!raw, u_splatCoverage: splatCoverage, u_dilate: raw ? 0.3 : 0.15, u_near: camera.clipNear,
+        u_preserveSceneY: !!world.gltfParts, u_crisp: +!raw, u_splatCoverage: splatCoverage, u_dilate: raw ? 0.3 : 0.15, u_near: camera.clipNear,
         u_paintMarker: paint?.marker ?? 0, u_afterimageStart: trailStart,
         ...footprintUniforms,...engravingUniforms,...marks?.uniforms,
         u_screenPrintOn:frame.screenPrint!==false,

@@ -120,6 +120,7 @@ ${masked ? maskUniforms + maskVaryings(textured).replaceAll('LOOK_IO','out') + m
 ${materialStyles ? 'uniform highp sampler2D u_materialStyles; uniform bool u_materialPatterned, u_materialStylesOn; flat out vec4 v_pixelStyle; flat out float v_pixelFog;' : ''}
 ${engraving ? engravingVertexUniforms : ''}
 ${marks ? markVertexUniforms : ''}
+uniform bool u_preserveSceneY;
 void main(){
   int record = a_index;
   ${instances ? `ivec2 inst = ivec2((a_instance & 15) * 16, a_instance >> 4);
@@ -161,7 +162,7 @@ void main(){
   v_footprintStyle=vec2(footprintId,footprintSettings.x);
   ` : ''}
   vec3 pos = t0.xyz; float alpha = t0.w;
-  if (alpha <= 0.0 || pos.y < -30.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }   // (what is put away is put far below: it is not drawn from there)
+  if (alpha <= 0.0 || (!u_preserveSceneY && pos.y < -30.0)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }   // (what is put away is put far below: it is not drawn from there)
   mat3 cov = mat3(t1.x, t1.y, t1.z,  t1.y, t2.x, t2.y,  t1.z, t2.y, t2.z);
   ${instances ? `if (a_instance != 0) {
     int options = int(meta.w);

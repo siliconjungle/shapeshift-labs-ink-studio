@@ -144,12 +144,7 @@ module.exports = {
   },
   async readAsset(file, options = {}) {
     if (path.extname(file).toLowerCase() !== '.glb') throw Error('Portable asset import expects a GLB file');
-    const decodeImage = options.decodeImage || ((bytes, mime) => {
-      if (mime !== 'image/png') throw Error('Supply decodeImage to import embedded JPEG images');
-      const image = require('./cli/png.js').raster(Buffer.from(bytes));
-      return { width: image.w, height: image.h,
-        pixels: image.max === 255 ? image.data : Uint8Array.from(image.data, v => Math.round(v * 255 / image.max)) };
-    });
+    const decodeImage = options.decodeImage || require('./cli/gltf-image.js');
     return module.exports.load().KIT.authoring.assetMeshes.importGLB(
       new Uint8Array(fs.readFileSync(file)), { ...options, decodeImage });
   },
