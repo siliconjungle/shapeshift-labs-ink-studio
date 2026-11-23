@@ -1385,7 +1385,7 @@ const CMD = {
         '    [--source-map file.json --target-map file.json] [--travel scaled|unscaled|in-place] [--fps rate]',
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
-        '  passes <id> [--channels depth,normal,part-motion,strands] [--previous seconds]   save art-pixel render passes',
+        '  passes <id> [--channels opaque-surface,part-motion,strands] [--previous seconds]   save art-pixel render passes',
         '  strand-pixel <id> --at x,y [--t seconds] [--previous seconds]   inspect visible strand hits on the native art grid',
         '  strand-review <id> --w 160 --h 96 [--curve-quality file.json] [--from 0 --to 3 --camera-orbit 20] [--out directory]',
         '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--part-motion on] [--compositing file.json] [--out directory]   export RGBA and compositing layers',
@@ -2625,7 +2625,7 @@ const CMD = {
     const art = require('../src/art-passes.js');
     const passes = art.select(opt.channels ? String(opt.channels).split(',') : true);
     const motionFrom = priorArtReference(w, t, { captureMotion:true, capturePartMotion:true,
-      captureStrandMotion:art.needsStrandMotion(passes) });
+      captureStrandMotion:art.needsStrandMotion(passes),captureSurfaceMotion:art.needsSurfaceMotion(passes) });
     pose(w, t);
     const im = R.render(w, view({ t, passes, motionFrom }));
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT, w.id + '-passes');

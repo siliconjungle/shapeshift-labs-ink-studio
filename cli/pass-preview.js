@@ -2,13 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const { upscale } = require('./render.js');
-const { channels, environment, strands } = require('../src/art-passes.js');
+const { channels, strands, opaque } = require('../src/art-passes.js');
 
 const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
 const idColor = id => Math.imul(id, 0x9e3779b1) & 0xffffff;
 
 function labels(passes) {
-  return Object.fromEntries(['objects', 'materials', 'parts', 'strands', 'targets', 'paletteOwners'].flatMap(key => passes[key] ? [[key,
+  return Object.fromEntries(['objects', 'materials', 'parts', 'strands', 'targets', 'paletteOwners', 'surfaceKinds'].flatMap(key => passes[key] ? [[key,
     passes[key].map((label, index) => ({ label, color: '#' + idColor(index).toString(16).padStart(6, '0') }))
   ]] : []));
 }
@@ -29,11 +29,19 @@ const environmentEncodings = {
   strandTangent: 'RGB8 signed world tangent, decode as 2 * (RGB / 255) - 1',
   strandU: 'RGB8 normalized authored distance, black is the path start or empty',
   strandMotion: 'RGB8 preview, red and green encode signed XY at ±4 art pixels, black means invalid',
-  strandMotionValid: 'RGB8 grayscale, white is a valid previous sample'
+  strandMotionValid: 'RGB8 grayscale, white is a valid previous sample',
+  surfaceKind: 'RGB8 surface kind legend color',
+  surfaceCoverage: 'RGB8 depth-owner coverage, white is full coverage',
+  geometricNormal: 'RGB8 signed world-space normal, decode as 2 * (RGB / 255) - 1',
+  shadingNormal: 'RGB8 signed world-space normal, decode as 2 * (RGB / 255) - 1',
+  surfaceUV: 'RGB8 preview, red and green encode normalized UV, blue is validity',
+  surfaceUVValid: 'RGB8 grayscale, white is a valid UV coordinate',
+  surfaceMotion: 'RGB8 preview, red and green encode signed XY at ±4 art pixels, black means invalid',
+  surfaceMotionValid: 'RGB8 grayscale, white is a valid previous sample'
 };
 
 function environmentEncoding(passes) {
-  const encodings = Object.fromEntries([...environment, 'partId', 'partMotion', 'previousDepth', 'partMotionValid', ...strands].filter(channel => passes[channel])
+  const encodings = Object.fromEntries(Object.keys(environmentEncodings).filter(channel => passes[channel])
     .map(channel => [channel, environmentEncodings[channel]]));
   return Object.keys(encodings).length ? { encodings } : {};
 }
@@ -58,20 +66,24 @@ function encode(frame, channel) {
   const depth = isDepth && depthRange(data);
   for (let p = 0; p < w * h; p++) {
     const q = p * 3;
-    if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU'].includes(channel))
+    if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU', 'surfaceCoverage'].includes(channel))
       rgb.fill(byte(data[p]), q, q + 3);
-    else if (channel === 'partMotionValid' || channel === 'strandMotionValid') rgb.fill(data[p],q,q+3);
+    else if (['partMotionValid','strandMotionValid','surfaceUVValid','surfaceMotionValid'].includes(channel)) rgb.fill(data[p],q,q+3);
     else if (isDepth) {
       if (depth && Number.isFinite(data[p]))
         rgb.fill(byte(1 - .85 * (data[p] - depth.near) / (depth.far - depth.near || 1)), q, q + 3);
-    } else if (channel === 'normal' || channel === 'strandTangent') {
+    } else if (['normal','strandTangent','geometricNormal','shadingNormal'].includes(channel)) {
       if (data[q] || data[q + 1] || data[q + 2])
         for (let c = 0; c < 3; c++) rgb[q + c] = byte(data[q + c] * .5 + .5);
-    } else if (channel === 'motion' || channel === 'emissionMotion' || channel === 'partMotion' || channel === 'strandMotion') {
+    } else if (['motion','emissionMotion','partMotion','strandMotion','surfaceMotion'].includes(channel)) {
       if (channel === 'partMotion' && !passes.partMotionValid[p]) continue;
       if (channel === 'strandMotion' && !passes.strandMotionValid[p]) continue;
+      if (channel === 'surfaceMotion' && !passes.surfaceMotionValid[p]) continue;
       rgb[q] = byte(.5 + data[p * 2] / 8);
       rgb[q + 1] = byte(.5 + data[p * 2 + 1] / 8);
+    } else if (channel==='surfaceUV') {
+      if (!passes.surfaceUVValid[p]) continue;
+      rgb[q]=byte(data[p*2]); rgb[q+1]=byte(data[p*2+1]); rgb[q+2]=255;
     } else if (alpha) {
       const i = p * 4, a = data[i + 3];
       alpha[p] = byte(a);
@@ -88,12 +100,12 @@ function encode(frame, channel) {
   return { w, h, rgb, ...(alpha && {alpha}) };
 }
 
-function writeStrandData(passes, write) {
+function writePassData(passes, names, write) {
   const { w, h } = passes, files = {};
-  for (const channel of strands) {
+  for (const channel of names) {
     const data = passes[channel];
     if (!data) continue;
-    const isId = channel === 'strandId', isValid = channel === 'strandMotionValid';
+    const isId=data instanceof Uint32Array, isValid=data instanceof Uint8Array;
     const ext = isId ? 'u32le' : isValid ? 'u8' : 'f32le';
     const bytes = isValid ? Buffer.from(data) : Buffer.alloc(data.length * 4);
     if (!isValid) for (let i = 0; i < data.length; i++) {
@@ -106,6 +118,8 @@ function writeStrandData(passes, write) {
   return { width: w, height: h, rows: 'top-down', files };
 }
 
+const writeStrandData=(passes,write)=>writePassData(passes,strands,write);
+
 function writePasses(directory, frame, scale = 1) {
   const passes = frame.passes;
   const manifest = { width: frame.w, height: frame.h, scale, rows: 'top-down', files: {},
@@ -115,6 +129,7 @@ function writePasses(directory, frame, scale = 1) {
   if (passes.materials) manifest.materials = passes.materials;
   if (passes.parts) manifest.parts = passes.parts;
   if (passes.strands) manifest.strands = passes.strands;
+  if (passes.surfaceKinds) manifest.surfaceKinds=passes.surfaceKinds;
   if (passes.targets) manifest.targets = passes.targets;
   if (passes.paletteOwners) manifest.paletteOwners = passes.paletteOwners;
   manifest.legend = labels(passes);
@@ -128,11 +143,14 @@ function writePasses(directory, frame, scale = 1) {
     PNG.write(path.join(directory, file), image.w, image.h, image.rgb, image.alpha);
     manifest.files[channel] = file;
   }
-  if (passes.strands) manifest.strandData = writeStrandData(passes, (channel, ext, bytes) => {
+  function writeData(channel,ext,bytes) {
     const file = channel + '.' + ext;
     fs.writeFileSync(path.join(directory, file), bytes);
     return file;
-  });
+  }
+  if (passes.strands) manifest.strandData=writeStrandData(passes,writeData);
+  if (['surfaceKind','surfaceCoverage','geometricNormal','shadingNormal','surfaceUV','surfaceUVValid','surfaceMotion','surfaceMotionValid']
+      .some(channel=>passes[channel])) manifest.opaqueSurface=writePassData(passes,opaque,writeData);
   fs.writeFileSync(path.join(directory, 'passes.json'), JSON.stringify(manifest, null, 2) + '\n');
   return manifest;
 }

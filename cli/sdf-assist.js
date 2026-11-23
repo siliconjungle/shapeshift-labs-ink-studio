@@ -18,12 +18,12 @@ function bind(world, data, settings) {
   const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
   const { nearest } = require('../index.js').load().KIT.procedural.attributes;
   const sources = [];
-  for (const source of world.renderSdfs) {
+  for (const [sourceIndex,source] of world.renderSdfs.entries()) {
     if (!(source.rows instanceof Map) || typeof source.distance !== 'function' || typeof source.locate !== 'function') continue;
     const parts = new Map();
-    let selected = false;
+    let selected = false, partIndex=0;
     for (const [owner,ranges] of source.rows) {
-      const part = { records:[], points:[] };
+      const part = { records:[], points:[], key:JSON.stringify(['sdf',sourceIndex,partIndex++]) };
       for (const [start,end,points] of ranges) for (let i=start;i<Math.min(end,world.count);i++) {
         const q = i*16, offset = (i-start)*3;
         if (data[q] !== points[offset] || data[q+1] !== points[offset+1] || data[q+2] !== points[offset+2]) continue;

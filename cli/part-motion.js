@@ -126,4 +126,4 @@ function capture(w, h, parts, owner, depth, input, geometry, topDown, sample, at
   return { snapshot, vectors, previousDepth, valid };
 }
 
-module.exports = { catalog, capture, history };
+module.exports = { catalog, capture, history, cameraPoint };

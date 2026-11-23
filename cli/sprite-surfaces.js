@@ -16,10 +16,10 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNormals=true,artScale=1}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false}) {
   if(!atlas)return [];
   const fragments=new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
-  function transform(v, step) {
+  function transform(v, step, weights) {
     let x=V[0]*v[0]+V[4]*v[1]+V[8]*v[2]+V[12], y=V[1]*v[0]+V[5]*v[1]+V[9]*v[2]+V[13];
     const z=-(V[2]*v[0]+V[6]*v[1]+V[10]*v[2]+V[14]), w=ortho?1:z;
     if (step && w > 0) {
@@ -27,17 +27,19 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNor
       x=(Math.floor((W*.5+x*scale)/step+.5)*step-W*.5)/scale;
       y=(H*.5-Math.floor((H*.5-y*scale)/step+.5)*step)/scale;
     }
-    return {p:v.slice(0,3),uv:v.slice(3),x,y,z};
+    return {p:v.slice(0,3),uv:v.slice(3),x,y,z,weights};
   }
   function interpolate(a,b,t,affine) {
     const lerp=(x,y)=>x+(y-x)*t;
     // UV times clip W interpolates linearly across a clipped edge on the GPU.
     const uv=a.uv.map((n,k)=>affine&&!ortho?lerp(n*a.z,b.uv[k]*b.z)/near:lerp(n,b.uv[k]));
-    return {p:a.p.map((n,k)=>lerp(n,b.p[k])),uv,x:lerp(a.x,b.x),y:lerp(a.y,b.y),z:near};
+    return {p:a.p.map((n,k)=>lerp(n,b.p[k])),uv,x:lerp(a.x,b.x),y:lerp(a.y,b.y),z:near,
+      weights:a.weights?.map((n,k)=>lerp(n,b.weights[k]))};
   }
   const project=v=>({ ...v,sx:W*.5+v.x*focal/(ortho?1:v.z),sy:H*.5+v.y*focal/(ortho?1:v.z) });
   const edge=(a,b,x,y)=>(b.sx-a.sx)*(y-a.sy)-(b.sy-a.sy)*(x-a.sx);
-  for (const layer of Array.isArray(atlas) ? atlas : [atlas]) {
+  const identity = [[1,0,0],[0,1,0],[0,0,1]];
+  for (const [slot,layer] of (Array.isArray(atlas) ? atlas : [atlas]).entries()) {
     if (!layer) continue;
     const {vertices,pixels,normalPixels,width,height}=layer;
     if(!(vertices instanceof Float32Array)||vertices.length%15||!Number.isSafeInteger(width)||width<1||
@@ -48,7 +50,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNor
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
     const filtered = paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
     const projections = SpriteSurface.projectionPlan(layer);
-    let rangeIndex=0, filterIndex=0, projectionIndex=0;
+    const charts=capture && layer.surfaceCharts;
+    let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
       const first=offset/5;
       while(ranges[rangeIndex]?.end<=first)rangeIndex++;
@@ -59,7 +62,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNor
       while(projections[projectionIndex]?.end<=first)projectionIndex++;
       const style = projections[projectionIndex]?.first <= first ? projections[projectionIndex] : undefined;
       const affine = style?.affine, linearUV = affine || ortho, step = (style?.vertexSnap ?? 0) * artScale;
-      const input=[0,1,2].map(i=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step));
+      while(charts?.[chartIndex]?.end<=first)chartIndex++;
+      const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
+      const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
+        motion || chart ? weights : undefined));
+      const mesh=capture && {object:chart?.objectId,material:chart?.materialId,
+        ...(motion && {key:JSON.stringify(['mesh',slot,chart?.id ?? chart?.first ?? 0,
+          chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
+          triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
       const axes = surfaceNormals && normalPixels && textureAxes(input, uvTransform);
       const polygon=[];
@@ -121,12 +131,33 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNor
             if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
               local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
           }
+          const weights3=(motion || chart) && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
+          const at=chart && first-chart.first;
+          const value=(data,components,k)=>weights3.reduce((s,n,i)=>s+n*data[(at+i)*components+k],0);
+          let uv;
+          if (chart) {
+            const {x,y,width:w,height:h}=chart.region;
+            uv=chart.uv ? [value(chart.uv,2,0),value(chart.uv,2,1)] :
+              [0,1].map(k=>(weights3.reduce((s,n,i)=>s+n*input[i].uv[k],0)-(k?y:x)-.5)/((k?h:w)-1));
+            uv=uv.map(n=>Math.max(0,Math.min(1,n)));
+          }
+          const objectPosition=chart?.rest ? [0,1,2].map(k=>value(chart.rest,3,k)) : position;
           fragments[p]={p,z,alpha:1,color:[ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
-            normal:mapped??normal,...(mapped&&{biasNormal:normal}),objectPosition:position,surface:true};
+            normal:mapped??normal,...(mapped&&{biasNormal:normal}),objectPosition,surface:true,
+            ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
         }
       }
     }
   }
   return fragments.filter(Boolean);
 }
-module.exports={rasterize};
+function labels(atlas) {
+  const objects=new Set(), materials=new Set();
+  for (const layer of Array.isArray(atlas) ? atlas : [atlas]) for (const chart of layer?.surfaceCharts ?? []) {
+    if (chart.objectId!==undefined) objects.add(chart.objectId);
+    if (chart.materialId!==undefined) materials.add(chart.materialId);
+  }
+  return {objects:[...objects].sort(),materials:[...materials].sort()};
+}
+
+module.exports={rasterize,labels};

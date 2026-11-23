@@ -150,12 +150,15 @@ function sequenceHistory(kit) {
     colorClusterHistory: ColorClusters.history(),
     motionalCoverageHistory: MotionalCoverage.history(),
     partMotionHistory: PartMotion.history(),
-    strandMotionHistory: PartMotion.history()
+    strandMotionHistory: PartMotion.history(),
+    surfaceMotionHistory: PartMotion.history()
   };
 }
 
 function sequenceOutput(history, draw) {
-  return history.partMotionHistory.output(() => history.strandMotionHistory.output(draw));
+  const surfaces=history.surfaceMotionHistory;
+  return history.partMotionHistory.output(() => history.strandMotionHistory.output(
+    () => surfaces ? surfaces.output(draw) : draw()));
 }
 
 function render(world, o, preparedPalettes) {
@@ -258,7 +261,8 @@ function render(world, o, preparedPalettes) {
         [shutterPlan]: null, [captureCamera]: undefined, [probeCaptures]: undefined, [deepScope]: undefined, [matteScope]:null,
         [reconstructionSource]: undefined, [sampledPresentation]: false, [afterimageRows]: undefined,
         motionalCoverageHistory: undefined, colorClusterHistory: undefined, partMotionHistory: undefined, capturePartMotion: false,
-        strandMotionHistory: undefined, captureStrandMotion: false, strandPixel: undefined
+        strandMotionHistory: undefined, captureStrandMotion: false, strandPixel: undefined,
+        surfaceMotionHistory: undefined, captureSurfaceMotion: false
       }, preparedPalettes), kit) : o[Shutter.passImages];
     const frame = { ...base, ...runGraph(graph, base, world, time, kit.poly2.text, camera,
       (spec,ctx) => kit.annotations.anchor(spec,{ ...ctx,sceneTime:o?.t ?? ctx.sceneTime }),
@@ -295,12 +299,14 @@ function render(world, o, preparedPalettes) {
       render(sample, { ...settings, [shutterPlan]: null, [reconstructionSource]: undefined, [probeCaptures]: undefined,
         motionalCoverageSource: settings.motionalCoverageSource ?? (o[reconstructionSource] ?? world).data,
         partMotionSource: settings.partMotionSource ?? (o[reconstructionSource] ?? world).data,
+        surfaceMotionSource: settings.surfaceMotionSource ?? (o[reconstructionSource] ?? world).data,
         colorClusterSource: settings.colorClusterSource ?? o.renderHistoryKey ?? o[reconstructionSource] ?? world,
         ...(nominal ? { [deferredShotCorrection]: apply => { applyCorrection = apply; } } : {
           shotCorrections: false, captureShotCorrectionSurface: false, [deferredShotCorrection]: undefined,
           [captureCamera]: undefined, [deepScope]: undefined, [matteScope]:null, [sampledPresentation]: false,
           motionalCoverageHistory: undefined, colorClusterHistory: undefined, partMotionHistory: undefined, capturePartMotion: false,
-          strandMotionHistory: undefined, captureStrandMotion: false, strandPixel: undefined })
+          strandMotionHistory: undefined, captureStrandMotion: false, strandPixel: undefined,
+        surfaceMotionHistory: undefined, captureSurfaceMotion: false })
       }, preparedPalettes), kit);
     return applyCorrection ? applyCorrection(integrated) : integrated;
   }
@@ -639,7 +645,7 @@ function renderFrame(world, o, preparedPalettes) {
       frame.paletteInventory = { base:basePalette, colors:[...declared].filter(Number.isInteger) };
     }
     if (o.captureScenePalette) frame.scenePalette = legacyLook && !tone ? basePalette : null;
-    if (!o.captureMotion && !o.capturePartMotion && !o.captureStrandMotion) delete frame.motionReference;
+    if (!o.captureMotion && !o.capturePartMotion && !o.captureStrandMotion && !o.captureSurfaceMotion) delete frame.motionReference;
     if (requestedPasses.length) frame.passes = ArtPasses.subset(passes, requestedPasses);
     if (readabilitySelectors && frame.readabilityMask) o.captureReadabilityFrame?.(frame);
     return frame;
@@ -706,6 +712,11 @@ function renderFrame(world, o, preparedPalettes) {
   const partView = (!o.samples || o[nativePartMotion]) && !o.captureCoverage && !o.reflectionPlane && !probeView;
   const captureParts = partView && (!!o.capturePartMotion || ArtPasses.needsPartMotion(requestedPasses));
   if (partView && !captureParts && (o.resetRenderHistory || o.resetPartMotion)) o.partMotionHistory?.clear();
+  const captureSurfaceMotion=partView&&(!!o.captureSurfaceMotion||ArtPasses.needsSurfaceMotion(requestedPasses));
+  const surfaceReset=o.resetRenderHistory||o.resetSurfaceMotion;
+  if (partView&&!captureSurfaceMotion&&surfaceReset) o.surfaceMotionHistory?.clear();
+  const captureTexturedSurface=captureSurfaceMotion||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
+    'surfaceKind'].some(channel=>passSelection.has(channel));
   const captureStrandMotion = partView && (!!o.captureStrandMotion || ArtPasses.needsStrandMotion(requestedPasses));
   const strandReset = o.resetRenderHistory || o.resetStrandMotion;
   if (partView && !captureStrandMotion && strandReset) o.strandMotionHistory?.clear();
@@ -744,7 +755,7 @@ function renderFrame(world, o, preparedPalettes) {
         volumeHistory: null,
         artInkActive: !!ink,
         [subjectFocusPass]:focus,
-        captureMotion: false, capturePartMotion:false, captureStrandMotion:false, strandPixel:undefined,
+        captureMotion: false, capturePartMotion:false, captureStrandMotion:false, captureSurfaceMotion:false, strandPixel:undefined,
         motionFrom: undefined, effectPaletteCapture: null, reflectionTint: effects?.reflection,
         passes: specializedResolve ? ['coverage'] : false,
         lookAudit: false
@@ -925,7 +936,7 @@ function renderFrame(world, o, preparedPalettes) {
   const glassIndex = optics && TargetSelectors.index(world);
   const glassLooks = glassIndex && new Map();
   const centers = captureMotion ? new Float32Array(N * 2).fill(NaN) : null;
-  const motionReference = (centers || captureParts || captureStrandMotion) && { w: W, h: H, ...(centers && {centers}),
+  const motionReference = (centers || captureParts || captureStrandMotion || captureSurfaceMotion) && { w: W, h: H, ...(centers && {centers}),
     ...(birthIds && { birthIds, baseCount, splatSource, emitterSource }) };
   const partSource = o[reconstructionSource] ?? captureWorld;
   const partCapture = captureParts && {
@@ -933,13 +944,18 @@ function renderFrame(world, o, preparedPalettes) {
     camera:{view:V.slice(),focal,ortho,near}, time:sceneTime, reset:o.resetRenderHistory || o.resetPartMotion,
     previous:o.motionFrom?.partMotion ?? o.partMotionHistory?.previous()
   };
+  const surfaceCapture=captureSurfaceMotion&&{
+    source:o.surfaceMotionSource??partSource.rest??partSource.data,
+    camera:{view:V.slice(),focal,ortho,near},time:sceneTime,reset:surfaceReset,
+    previous:o.motionFrom?.surfaceMotion??o.surfaceMotionHistory?.previous()
+  };
   const strandTrace = captureStrands && StrandPasses.create(world, passSelection, W, H, {
     pixel:o.strandPixel, motion:captureStrandMotion, camera:{view:V,focal,ortho,near}, time:sceneTime,
     source:o.strandMotionSource ?? partSource.rest ?? partSource.data, reset:strandReset,
     previous:o.motionFrom?.strandMotion ?? o.strandMotionHistory?.previous()
   });
   const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' &&
-    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name)), W, H, trackGlow && emissive?.slots, partCapture);
+    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
   const reflectPass = environmentPasses?.passes.reflections;
@@ -967,7 +983,8 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const surfaceFragments = o.spriteSurfaces === false ? [] :
     SurfaceRaster.rasterize(spriteSurfaces, { V, W, H, focal, ortho, near, clip: geometryClip,
-      paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1 });
+      paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
+      capture:captureTexturedSurface, motion:captureSurfaceMotion });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
@@ -3030,7 +3047,9 @@ function renderFrame(world, o, preparedPalettes) {
     haze: hazeCoverage, darkAt: EffectPalettes.bindDarks(effectRules,world) };
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, scale:SC, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, ditherView, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
-    emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0 });
+    emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
+    surfaceLabels:captureTexturedSurface&&o.spriteSurfaces!==false ? SurfaceRaster.labels(spriteSurfaces) : undefined });
+  if (surfaceCapture) o.surfaceMotionHistory?.store(motionReference.surfaceMotion,surfaceReset);
   const strand = strandTrace && strandTrace.finalize();
   if (strand) {
     passes = { ...strand.passes, ...passes };

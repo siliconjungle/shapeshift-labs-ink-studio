@@ -4,7 +4,7 @@ const { layer: graphDeepLayer } = require('./deep-composite.js');
 const { objectMatte } = require('./object-mattes.js');
 const { history } = require('../src/render-graph.js');
 const { pose } = require('./diarama-pose.js');
-const { select, needsPartMotion, needsStrandMotion } = require('../src/art-passes.js');
+const { select, needsPartMotion, needsStrandMotion, needsSurfaceMotion } = require('../src/art-passes.js');
 const { encode, depthRange, labels } = require('./pass-preview.js');
 
 const defaults = ['coverage', 'depth', 'normal', 'objectId', 'materialId', 'emission'];
@@ -53,14 +53,14 @@ function createSceneSampler(kit) {
     const channels = select(settings.channels);
     const motion = channels.some(channel => channel === 'motion' || channel === 'emissionMotion');
     const parts = needsPartMotion(channels);
-    const strands = needsStrandMotion(channels);
+    const strands = needsStrandMotion(channels), surfaces=needsSurfaceMotion(channels);
     const result = renderGraphScene(source, { ...settings, time, take, kit, options: {
-      ...((motion || parts || strands) && at > previousTime && { motionFrom: previousMotion }), ...options,
+      ...((motion || parts || strands || surfaces) && at > previousTime && { motionFrom: previousMotion }), ...options,
       ...(motion && { captureMotion: true }), ...(parts && { capturePartMotion:true }),
-      ...(strands && { captureStrandMotion:true }),
+      ...(strands && { captureStrandMotion:true }), ...(surfaces && {captureSurfaceMotion:true}),
       renderHistory: retained, renderHistoryKey: retained
     } });
-    previousMotion = motion || parts || strands ? result.motionReference : undefined;
+    previousMotion = motion || parts || strands || surfaces ? result.motionReference : undefined;
     previousTime = at;
     return result;
   }
@@ -130,7 +130,7 @@ function graphRenderPass(frame, channel, { emptyDepth = 1e9, kit } = {}) {
     { image: api.rasterFrame(encode({ w: width, h: height, passes: frame.passes }, channel)),
       ...(depth && { range: depthRange(raw) }) };
   const names = { objectId: 'objects', materialId: 'materials', partId: 'parts', strandId: 'strands',
-    target: 'targets', paletteOwner: 'paletteOwners' }[channel];
+    target: 'targets', paletteOwner: 'paletteOwners', surfaceKind: 'surfaceKinds' }[channel];
   const legend = names ? labels(frame.passes)[names] : undefined;
   return { value: preview.image, data: { width, height, channels, data: buffer }, valid: { width, height, channels: 1, data: valid },
     report: { channel, width, height, ...(preview.range !== undefined && { range: preview.range }),

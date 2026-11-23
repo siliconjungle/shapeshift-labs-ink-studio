@@ -233,3 +233,12 @@ and reads a crop from another part of the atlas.
 node cli/ink-studio.js clip examples/uv-atlas-slip.js --w 424 --h 218 \
   --to 5.333333333333333 --fps 12 --out atlas-address-fault.png
 ```
+
+## Inspect the underlying surface
+
+Set `objectId` and `materialId` on a face or mesh to label its visible art
+pixels. The existing face `id` also serves as the default object label.
+On a deforming mesh you can supply `restPoints` alongside `points` to
+retain original XYZ. `points` still provide current vertex positions.
+[Shared opaque surfaces](art-passes.md#shared-opaque-surfaces) exposes these
+labels, geometric and painted normals, original UVs, depth, and motion.

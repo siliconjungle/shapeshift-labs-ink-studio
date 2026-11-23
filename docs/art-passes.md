@@ -440,3 +440,55 @@ Use [artist-authored cards and impostors](impostor-atlases.md) to place the resu
 In Node, use `spriteAtlas(world, { width, height, directions, times, fps, pivot, view, maps, pose })`. Supply a `pose(world, time)` callback for scenes that need to advance a stateful timeline or pose a rig. A separate effect history is kept for each direction.
 
 For keyed fragmentation and reassembly with stable ownership, see [world-space reveal and reconstruction](world-reconstruction.md).
+
+## Shared opaque surfaces
+
+Request `['opaque-surface']` in the headless renderer to inspect the nearest
+depth-writing owner of each native art pixel. Textured triangles and traced
+SDF hits use the same depth test and output buffers. A cutout reveals the
+surface behind it. A transparent highlight can change the image while the
+opaque owner remains visible in the pass.
+
+| Channel | Data |
+| --- | --- |
+| `depth` | Camera-axis depth in scene units. Empty pixels use positive infinity. |
+| `surfaceCoverage` | Coverage of the depth owner, from zero to one. Use the existing `coverage` for composited opacity including soft layers. |
+| `objectId`, `materialId` | Unsigned indices into `objects` and `materials`. Zero is unassigned. |
+| `geometricNormal`, `shadingNormal` | Unit world-space normals. On a two-sided mesh, the geometric face normal faces the camera and the shading normal includes the painted normal map. A traced SDF hit reports the field gradient in both. Empty normals use zero vectors. |
+| `position`, `objectPosition` | XYZ of the hit in world and rest coordinates. A static SDF uses its traced position in both channels. With a mesh, supply `restPoints` to attach a separate rest position to each vertex. Without these coordinates the mesh returns its world position. |
+| `surfaceUV`, `surfaceUVValid` | UV in the mesh's authored chart, before atlas packing, affine paint projection, or UV slip. V increases down the chart. SDF hits use rest XYZ and have zero UV validity. |
+| `surfaceKind` | An index into `surfaceKinds`. Zero is empty. Mesh and SDF owners have distinct entries. |
+| `surfaceMotion`, `surfaceMotionValid` | Current minus prior XY in native art pixels, with positive Y down. Mesh motion follows the prior triangle vertices. SDF motion reprojects the static world hit. Valid pixels use 255. Invalid vectors use zero. |
+
+Mesh and SDF motion require a visible prior hit from the same surface at
+compatible depth. Disocclusions, cuts, a rewind, a changed render source, and
+art-grid or projection changes invalidate the pair. Keep the mesh atlas
+order, named chart IDs, and triangle order stable between samples. Splats
+have their own [part motion](#part-motion-and-previous-depth) channels.
+
+```js
+const prior = ink.render(world, { ...view, t: 0, captureSurfaceMotion: true });
+// Update the mesh and camera to the next pose before sampling.
+const frame = ink.render(world, {
+  ...view, t: 0.1, passes: ['opaque-surface'], motionFrom: prior.motionReference
+});
+```
+
+For a sequence use `ink.createSurfaceMotionHistory()` as
+`surfaceMotionHistory` or pass each prior reference explicitly. A host that
+rebuilds its scene buffers can supply a stable `surfaceMotionSource` token
+while the geometry keeps the same identities. Set `resetSurfaceMotion`
+to reset that history at a cut. Recipe graphs can read the same buffers
+with `scene.render` and `scene.pass`.
+
+```sh
+ink-studio passes examples/opaque-surface-gate.js --channels opaque-surface \
+  --w 192 --h 120 --px 1 --px1 --previous .55 --t .7 --out gate-passes
+```
+
+The CLI writes PNG previews and a lossless copy of the selected opaque
+channels. Read `passes.json` → `opaqueSurface` for filenames, component
+counts, and the native dimensions. Buffers are interleaved and top-down.
+The `f32le` files are little-endian float32, `u32le` files are little-endian
+unsigned integers, and `u8` files contain bytes. Preview scaling leaves
+the raw files on the native grid.
