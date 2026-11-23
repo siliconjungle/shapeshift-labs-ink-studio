@@ -107,6 +107,54 @@ node cli/ink-studio.js pixel-art validate relay-v2.json
 The existing `pixel-art edit` command also accepts version 1 documents and
 their revision-guarded patches directly.
 
+## Undo pixel and scene edits together
+
+Attach the live scene editor when opening a pixel document. The editors then
+share one undo history. Use `transact(label, edit)` to commit a synchronous
+gesture, or use `begin`, `preview`, `commit`, and `cancel` for a gesture
+that spans multiple calls. The scene editor's history limit applies to the
+shared session. A standalone pixel editor also has undo and redo.
+
+```js
+const { createPixelEditor, createSceneEditor } = require('.');
+const scene = createSceneEditor(sceneSource);
+const pixels = createPixelEditor(pixelDocument, { sceneEditor: scene });
+
+pixels.transact('Paint the highlight and change the gate material', () => {
+  const pixel = pixels.inspect([20, 16], { frame: 'front' });
+  pixels.apply({
+    id: 'gate-highlight',
+    revision: pixel.revision,
+    frame: pixel.frame,
+    edits: [{ at: pixel.at, layer: pixel.layer, from: pixel.swatch, to: 'amber' }]
+  });
+  scene.setMaterial('accent', 'solid:gate');
+});
+
+pixels.undo();
+scene.redo();
+```
+
+Native calls on the attached editor and bound surface, SDF shape, and SDF
+material patches can take part in the same gesture. If `apply`, `preview`,
+`commit`, or the `transact` callback throws, both drafts are rolled back.
+Call undo or redo from either editor to restore the matching scene and pixel
+document.
+
+By default the attached diorama's ID matches `sceneBindings[].scene`. Pass
+`sceneRef` alongside `sceneEditor` if your bindings use a file path or
+another reference. A pinned binding on a live diorama uses the SHA-256 of its
+current JSON snapshot. Hosts with a file-backed revision can supply their
+existing `scene(binding)` adapter to `apply` and return the attached editor
+with that revision.
+
+Shot corrections and splat fits made through the pixel editor share the
+same history. Pass `pixels.renderOptions()` along with your normal view
+settings when rendering the attached scene. Undo restores the previous
+sidecars, and redo restores the revised ones. Use `renderOptions(sceneRef)`
+to retrieve options by source reference when the editor is standalone.
+The shared history belongs to the live editing session.
+
 ## Author a version 2 document
 
 Version 2 keeps canvas size, pixel aspect, palette, and the layer stack at the

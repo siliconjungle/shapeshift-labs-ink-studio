@@ -175,3 +175,113 @@ test('pixel destinations retain edits on a rest chart and the selected SDF solid
   reject({ ...request({ destination:'stone', operation:{ material:'accent' } }), revision:compile(pinned).revision },
     /scene binding is stale/);
 });
+
+test('a shared transaction commits, undoes and redoes the pixel cel and the SDF cut together', t => {
+  const { document, filename } = setup(t);
+  const scene = ink.createSceneEditor(source);
+  scene.setMaterial('accent','solid:post');
+  const baseline = scene.snapshot();
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const at = [20,16], events = [];
+  scene.onChange(({ type,snapshot }) => events.push([
+    type,pixels.inspect(at).swatch,snapshot.solids[0].modifiers?.[0].id ?? null
+  ]));
+  pixels.transact('Carve the gate and mark the cel', editor => {
+    const { revision,frame } = editor.inspect(at);
+    editor.apply({ id:'cut-mark', revision, frame, edits:[{ at, layer:null, from:null, to:'amber' }] });
+    editor.apply({ id:'notch-cut', frame, revision:editor.describe().revision, destination:'notch',
+      operation:{ modifier:{ kind:'mask', mode:'cut', shape:{ kind:'box', at:[0,0,0], half:[.2,.3,.5] } } }
+    });
+  });
+  const committed = scene.snapshot(), painted = pixels.snapshot();
+  assert.equal(committed.solids[0].modifiers[0].id,'notch-cut');
+  assert.equal(pixels.inspect(at).swatch,'amber');
+  assert.deepEqual(pixels.history().undo,['Set solid material','Carve the gate and mark the cel']);
+
+  assert.equal(scene.undo(),true);
+  assert.deepEqual(scene.snapshot(),baseline);
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.equal(pixels.redo(),true);
+  assert.deepEqual(scene.snapshot(),committed);
+  assert.deepEqual(pixels.snapshot(),painted);
+  assert.deepEqual(events,[
+    ['commit','amber','notch-cut'],['undo',null,null],['redo','amber','notch-cut']
+  ]);
+});
+
+test('a failed scene or pixel operation rolls back the entire shared draft', t => {
+  const { document, filename } = setup(t);
+  const scene = ink.createSceneEditor(source);
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const request = (id,extra) => ({ id, frame:'front', revision:pixels.describe().revision, ...extra });
+  const paint = { at:[20,16], layer:null, from:null, to:'amber' };
+
+  pixels.begin('Invalid carve');
+  pixels.apply(request('draft-paint',{ edits:[paint] }));
+  pixels.apply(request('bad-cut',{ destination:'notch', operation:{ parameters:{ half:[.3,.4] } } }));
+  assert.throws(()=>pixels.commit(),/half/);
+  assert.deepEqual(scene.snapshot(),source);
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(pixels.history(),{ undo:[], redo:[] });
+
+  scene.begin('Surface paint with a blocked pixel');
+  pixels.apply(request('patina-mark',{ destination:'patina', operation:{ stamp:{
+    value:'#ffca33', brush:{ kind:'rect', min:[.2,.2], max:[.8,.8] }
+  } } }));
+  assert.equal(scene.snapshot().solids[0].surfaceState.charts.front.stamps.length,1);
+  assert.throws(()=>pixels.apply(request('protected-mark',{ edits:[{ ...paint, at:[0,0] }] })),/no longer applies/);
+  assert.deepEqual(scene.snapshot(),source);
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(scene.history(),{ undo:[], redo:[] });
+
+  scene.begin('Direct scene edit');
+  scene.setMaterial('accent','solid:gate');
+  pixels.apply(request('draft-paint',{ edits:[paint] }));
+  assert.equal(pixels.preview().frames[0].cels['draft-paint'].marks.length,1);
+  assert.equal(pixels.cancel(),true);
+  assert.deepEqual(scene.snapshot(),source);
+  assert.deepEqual(pixels.snapshot(),document);
+
+  assert.throws(()=>pixels.transact('Invalid direct scene edit', () => {
+    pixels.apply(request('draft-paint',{ edits:[paint] }));
+    scene.updateShape({ missing:1 },'solid:gate');
+  }),/Unknown box shape parameter/);
+  assert.deepEqual(scene.snapshot(),source);
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(pixels.history(),{ undo:[], redo:[] });
+});
+
+test('shot corrections and splat assets travel with pixel undo and render the restored revision', t => {
+  const { document, filename } = setup(t);
+  const scene = ink.createSceneEditor(source);
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const world = scene.build(), at = [20,16];
+  const baseline = ink.render(world,{ ...view, captureShotCorrectionSurface:true });
+  const { target,...anchor } = baseline.shotCorrectionSurface.pin(...at);
+  const rows = require('../src/target-selectors.js').index(world);
+  const splat = Array.from({ length:world.count },(_,i)=>i).find(i=>
+    rows.row(i).object === 'gate' && SplatFit.eligible(world,i) &&
+    i !== KIT.procedural.splatProvenance.identities(world).rowOf(anchor.splat));
+  assert.equal(target.object,'gate');
+  assert.notEqual(splat,undefined);
+  const patch = (id,extra) => ({ id, frame:'front', revision:pixels.describe().revision, ...extra });
+  const edits = [{ at, layer:null, from:null, to:'amber' }];
+  pixels.transact('Paint and fit the shot', () => {
+    pixels.apply(patch('highlight',{ destination:'one-shot', edits, operation:{ at, fps:10, frames:[0,0], anchor } }));
+    pixels.apply(patch('fit-edge',{ destination:'footprint', operation:{ splats:[{ splat, footprintScale:.9 }] } }));
+    pixels.apply(patch('cel-highlight',{ edits }));
+  });
+  const options = pixels.renderOptions();
+  assert.equal(options.shotCorrections.corrections[0].id,'highlight');
+  assert.equal(Math.round(SplatFit.prepare(world,options.splatFit)[splat]*10),9);
+  const rendered = ink.render(world,{ ...view,...options });
+  const p = (at[1]*view.w+at[0])*3;
+  assert.deepEqual([...rendered.rgb.slice(p,p+3)],[255,202,51]);
+  assert.equal(pixels.undo(),true);
+  assert.deepEqual(pixels.renderOptions(),{});
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(ink.render(world,{ ...view,...pixels.renderOptions() }).rgb,baseline.rgb);
+  assert.equal(scene.redo(),true);
+  assert.deepEqual(pixels.renderOptions(),options);
+  assert.equal(pixels.inspect(at).swatch,'amber');
+});

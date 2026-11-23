@@ -279,8 +279,8 @@ module.exports = {
   createSceneEditor(source, options) {
     return module.exports.load().KIT.authoring.sceneEditor.create(source, options);
   },
-  createPixelEditor(source) {
-    return require('./cli/pixel-art.js').createEditor(source);
+  createPixelEditor(source, options) {
+    return require('./cli/pixel-art.js').createEditor(source, options);
   },
   createSplatPicker(world, options = {}) {
     const K = module.exports.load().KIT;

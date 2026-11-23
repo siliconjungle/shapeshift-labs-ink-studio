@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { paint } = require('../src/pixel-stamps.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
@@ -390,36 +390,119 @@ function upgradeLegacy(design) {
   };
 }
 
-function createEditor(source) {
+function openDesign(source) {
   const input = typeof source === 'string' ? JSON.parse(source) : source;
   const original = validate(input);
-  let design = structuredClone(input);
-  let legacyRevision;
-  if (original.version === 1) {
-    legacyRevision = original.revision;
-    design = upgradeLegacy(design);
+  const design = structuredClone(input);
+  return original.version === 1 ? { design:upgradeLegacy(design), legacyRevision:original.revision }
+    : { design, legacyRevision:null };
+}
+
+function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
+  const baseline = { ...openDesign(source), renderOutputs:{} };
+  const { authoring } = require('../index.js').load().KIT;
+  const journal = sceneEditor === undefined
+    ? authoring.document(undefined,{ historyLimit })
+    : authoring.sceneEditor.transactionDocument(sceneEditor);
+  if (!journal) throw new TypeError('Use an Ink scene editor for a shared pixel transaction');
+  const sceneName = sceneRef ?? sceneEditor?.snapshot().id;
+  const slot = 'pixel-editor-' + randomUUID();
+  let cached = baseline, text;
+
+  function state() {
+    const next = journal.get(slot)?.content;
+    if (next !== text) {
+      text = next;
+      cached = next === undefined ? baseline : JSON.parse(next);
+    }
+    return cached;
   }
-  return Object.freeze({
-    snapshot: () => structuredClone(design),
-    serialize: (space = 2) => JSON.stringify(design,null,space),
-    describe: () => validate(design),
-    inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(design,frame,cel),coordinate),
-    stamp: ({ frame,cel } = {}) => stamp(compile(design,frame,cel)),
-    apply(patch,context) {
+
+  function store(value) {
+    // Keep the original pixel JSON, including legacy keys the scene format does not use.
+    const content = JSON.stringify(value);
+    if (journal.get(slot)) journal.update(slot,{ content });
+    else journal.create('pixel-document',{ id:slot, content });
+  }
+
+  function renderOptions(scene) {
+    const outputs = state().renderOutputs;
+    return Object.hasOwn(outputs,scene) ? outputs[scene] : {};
+  }
+
+  function resolveScene(binding) {
+    if (!sceneEditor || binding.scene !== sceneName)
+      throw new RangeError('No attached scene editor for pixel binding ' + binding.id + ' (' + binding.scene + ')');
+    return sceneEditor;
+  }
+
+  function apply(patch,context) {
+    const grouped = journal.pending();
+    const perform = () => {
       const request = structuredClone(patch);
-      if (legacyRevision !== undefined && request?.revision === legacyRevision) {
+      const draft = state(), { design,legacyRevision } = draft;
+      if (legacyRevision !== null && request?.revision === legacyRevision) {
         request.revision = fingerprint(design);
         if (request.frame === undefined && request.cel === undefined) request.frame = 'artwork';
       }
       const frame = compile(design,request?.frame,request?.cel);
-      const result = edit(design,frame,request,context);
-      if (Destinations.resolve(design,request.destination).destination.kind === 'raster') {
-        design = result;
-        legacyRevision = undefined;
-      }
+      const result = edit(design,frame,request,{
+        scene(binding) {
+          if (grouped && !sceneEditor)
+            throw new Error('Attach the source scene editor to group native scene and pixel edits');
+          const supplied = context?.scene?.(binding);
+          if (supplied) {
+            if (sceneEditor && supplied.editor !== sceneEditor)
+              throw new Error('The pixel transaction must use its attached scene editor');
+            return supplied;
+          }
+          const editor = resolveScene(binding);
+          return { editor, revision:fingerprint(editor.snapshot()) };
+        },
+        world(binding) {
+          const world = context?.world?.(binding) ?? resolveScene(binding).build();
+          return { ...world, look:{ ...world.look,...renderOptions(binding.scene) } };
+        }
+      });
+      const { destination,binding } = Destinations.resolve(design,request.destination);
+      if (destination.kind === 'raster') store({ ...draft, design:result, legacyRevision:null });
+      const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
+      if (option) store({ ...draft, renderOutputs:{ ...draft.renderOutputs,
+        [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
+      } });
       return structuredClone(result);
+    };
+    if (!grouped) return journal.transact(patch?.id,perform);
+    try {
+      return perform();
+    } catch (error) {
+      journal.cancel();
+      throw error;
+    }
+  }
+
+  const editor = Object.freeze({
+    snapshot: () => structuredClone(state().design),
+    serialize: (space = 2) => JSON.stringify(state().design,null,space),
+    describe: () => validate(state().design),
+    inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
+    stamp: ({ frame,cel } = {}) => stamp(compile(state().design,frame,cel)),
+    renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
+    apply,
+    begin: label => { journal.begin(label); },
+    preview() { journal.preview(); return editor.snapshot(); },
+    commit: journal.commit,
+    cancel: journal.cancel,
+    undo: journal.undo,
+    redo: journal.redo,
+    history: journal.history,
+    transact(label,fn) {
+      if (typeof fn !== 'function' || Object.prototype.toString.call(fn) === '[object AsyncFunction]')
+        throw new TypeError('A pixel transaction needs a synchronous function');
+      return journal.transact(label,() => fn(editor));
     }
   });
+  return editor;
 }
 
 function stamp(frame) {
@@ -485,8 +568,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   if (action === 'upgrade') {
     if (typeof opt.out !== 'string' || !opt.out.trim())
       throw new TypeError('Use pixel-art upgrade <design.json> --out <document.json>');
-    const editor = createEditor(design);
-    files.json(path.resolve(opt.out),editor.snapshot());
+    files.json(path.resolve(opt.out),openDesign(design).design);
     return;
   }
   if (action === 'validate') {

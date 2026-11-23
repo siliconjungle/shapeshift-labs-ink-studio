@@ -110,6 +110,12 @@ test('the package API applies existing guarded repair files to freshly opened le
   assert.throws(()=>editor.apply(patch),/observed revision/);
   result.layers[0].id = 'copied';
   assert.notEqual(editor.snapshot().layers[0].id,'copied');
+  assert.equal(editor.undo(),true);
+  assert.deepEqual(editor.stamp(),stamp(original));
+  assert.equal(editor.redo(),true);
+  assert.equal(editor.undo(),true);
+  editor.apply(patch);
+  assert.equal(editor.redo(),false);
   assert.equal(draft.version,1);
 });
 

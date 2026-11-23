@@ -2,6 +2,7 @@
 (function (K) {
   const A = K.authoring, DIO = K.diorama;
   const { clone, freeze } = K.procedural.data;
+  const documents = new WeakMap();
   const modes = ['replace', 'add', 'toggle', 'remove'];
   const encodeSlot = key => key.replaceAll('~', '~0').replaceAll('/', '~1');
   const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -345,7 +346,7 @@
       return null;
     }
 
-    return Object.freeze({
+    const editor = Object.freeze({
       snapshot,
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
       tree: () => current().tree,
@@ -396,7 +397,9 @@
         return document.onChange(({ type, label, revision }) => listener({ type, label, revision, snapshot: snapshot() }));
       }
     });
+    documents.set(editor,document);
+    return editor;
   }
 
-  A.sceneEditor = Object.freeze({ create });
+  A.sceneEditor = Object.freeze({ create, transactionDocument: editor => documents.get(editor) });
 })(KIT);
