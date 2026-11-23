@@ -194,6 +194,42 @@ node cli/ink-studio.js pixel-art preview examples/pixel-art-tooling/relay.json \
   examples/pixel-art-tooling/relay-cleanup.json
 ```
 
+## Guard an edit against the inspected revision
+
+For raster edits, copy `revision` from pixel inspection and include the
+expected layer and swatch for each coordinate. Ink checks the entire pixel
+document, including its bindings, before touching the requested cells.
+
+For a scene edit, use `pixel-art targets` or `pixels.targets(destination)`
+to get `documentRevision` and `sourceRevision`. Copy them into the patch as
+`revision` and `sourceRevision`. A single-patch preview also returns the
+observed `sourceRevision`.
+
+```js
+const observed = pixels.targets('carve');
+const cut = {
+  id: 'gate-cut',
+  frame: 'front',
+  destination: 'carve',
+  revision: observed.documentRevision,
+  sourceRevision: observed.sourceRevision,
+  operation: { parameters: { half: [0.4, 0.5, 0.23] } }
+};
+pixels.apply(cut);
+```
+
+The source digest covers the destination and binding along with the resolved
+scene. For an editable diorama it includes the source JSON and its loaded
+mesh and prefab inputs. For shot and splat edits it includes the active
+packed geometry, source IDs and ownership, and the existing asset for that
+destination. If the digest changes, preview reports `stale-source` with
+the expected and current revisions, and `edit` rejects the patch before
+changing the source. Reinspect and review the patch before retrying.
+
+Existing scene patches can still use a revision pinned in the binding.
+Previews flag patches that omit the per-edit guard as `unverified-source`
+and supply the digest to use when reviewing the edit.
+
 ## Author a version 2 document
 
 Version 2 keeps canvas size, pixel aspect, palette, and the layer stack at the

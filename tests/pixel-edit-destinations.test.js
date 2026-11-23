@@ -297,6 +297,120 @@ test('proposed edits report conflicts without changing an open draft or writing 
   assert.deepEqual(JSON.parse(fs.readFileSync(filename('source'),'utf8')),source);
 });
 
+test('a CLI source revision guards the inspected diorama and the resolved binding', t => {
+  const { document, filename, write, request, apply, reject, targets } = setup(t);
+  const inspected = targets('notch',1);
+  assert.match(inspected.sourceRevision,/^[a-f0-9]{64}$/);
+  assert.equal(inspected.documentRevision,compile(document).revision);
+  const patch = request({ destination:'notch', operation:{ parameters:{ half:[.4,.5,.23] } } });
+  const previewArgs = ['pixel-art','preview',filename('document'),filename('patch'),'--scene',filename('source')];
+  write('patch',patch);
+  const open = JSON.parse(cli(...previewArgs));
+  assert.equal(open.sourceRevision,inspected.sourceRevision);
+  assert.equal(open.warnings[0].code,'unverified-source');
+  const guarded = { ...patch, sourceRevision:open.sourceRevision };
+  write('patch',guarded);
+  const verified = JSON.parse(cli(...previewArgs));
+  assert.equal(verified.valid,true);
+  assert.equal(verified.warnings,undefined);
+
+  const changed = structuredClone(source);
+  changed.solids[0].half[0] = .9;
+  write('source',changed);
+  const stale = spawnSync(process.execPath,cliArgs(...previewArgs),{ cwd,encoding:'utf8' });
+  assert.equal(stale.status,2);
+  const report = JSON.parse(stale.stdout);
+  assert.equal(report.conflicts[0].code,'stale-source');
+  assert.equal(report.conflicts[0].expected,guarded.sourceRevision);
+  assert.equal(report.conflicts[0].actual,report.sourceRevision);
+  reject(guarded,/Inspected scene source or binding has changed/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(filename('source'),'utf8')),changed);
+  assert.deepEqual(apply({ ...guarded, sourceRevision:targets('notch').sourceRevision },'guarded')
+    .solids[0].half,[.4,.5,.23]);
+
+  // Even a patch refreshed to the new document revision cannot reuse the old binding observation.
+  write('source',source);
+  const rebound = structuredClone(document);
+  rebound.sceneBindings[1].object = 'post';
+  write('document',rebound);
+  reject({ ...guarded, revision:compile(rebound).revision },/Inspected scene source or binding has changed/);
+});
+
+test('a stale source guard rolls back an associated pixel edit', t => {
+  const { document,filename } = setup(t);
+  const scene = ink.createSceneEditor(source);
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const observed = pixels.targets('notch');
+  const cut = { id:'new-shape', revision:observed.documentRevision, frame:'front', destination:'notch',
+    sourceRevision:observed.sourceRevision, operation:{ parameters:{ half:[.4,.5,.23] } } };
+  assert.equal(pixels.previewEdit(cut).valid,true);
+  scene.setTransform({ translation:[.1,0,0] },'solid:gate');
+  const current = scene.snapshot();
+  pixels.begin('Paint and carve');
+  pixels.apply({ id:'rim', revision:pixels.describe().revision, frame:'front',
+    edits:[{ at:[20,16], layer:null, from:null, to:'amber' }] });
+  assert.throws(()=>pixels.apply({ ...cut, revision:pixels.describe().revision }),
+    error=>error.conflicts?.[0].code === 'stale-source');
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(scene.snapshot(),current);
+  assert.deepEqual(scene.history().undo,['Transform solids']);
+  const fresh = pixels.targets('notch');
+  pixels.apply({ ...cut, sourceRevision:fresh.sourceRevision, revision:fresh.documentRevision });
+  assert.deepEqual(scene.snapshot().solids[0].half,[.4,.5,.23]);
+});
+
+test('a revised prefab dependency invalidates inspection while the scene JSON stays the same', t => {
+  const { document,filename } = setup(t);
+  const prefabs = half => ({ rail:{ revision:1, solids:{
+    slat:{ kind:'box', at:[0,0,0], half:[half,.2,.1], mat:'stone' }
+  } } });
+  const scene = ink.createSceneEditor({ ...source, prefabLibrary:'library.json', instances:{
+    end:{ prefab:'rail', transform:{ translation:[2,0,0] } }
+  } },{ env:{ prefabs:prefabs(.3) } });
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const inspected = pixels.targets('notch'), snapshot = scene.serialize();
+  scene.refreshPrefabs(prefabs(.4));
+  assert.equal(scene.serialize(),snapshot);
+  const patch = { id:'adjust-gate', frame:'front', destination:'notch', revision:inspected.documentRevision,
+    sourceRevision:inspected.sourceRevision, operation:{ parameters:{ half:[.4,.5,.23] } } };
+  assert.equal(pixels.previewEdit(patch).conflicts[0].code,'stale-source');
+  assert.deepEqual(scene.history().undo,[]);
+});
+
+test('a splat source revision notices in-place packed changes and ownership changes', t => {
+  const { document } = setup(t);
+  const world = KIT.diorama.build(source);
+  const rows = require('../src/target-selectors.js').index(world);
+  const row = Array.from({ length:world.count },(_,i)=>i)
+    .find(i=>rows.row(i).object === 'gate' && SplatFit.eligible(world,i));
+  world.splatIds = Array(world.count).fill(null);
+  world.splatIds[row] = 'inspected-dab';
+  const pixels = ink.createPixelEditor(document);
+  const options = { world:()=>world, limit:1 };
+  const original = pixels.targets('footprint',options);
+  assert.equal(original.splats[0].id,'inspected-dab');
+  const patch = { id:'hide-dab', revision:original.documentRevision, frame:'front', destination:'footprint',
+    sourceRevision:original.sourceRevision, operation:{ splats:[{ splat:'inspected-dab', visible:false }] } };
+  assert.equal(pixels.previewEdit(patch,options).valid,true);
+  world.splatIds[row] = 'replacement-dab';
+  const renamed = pixels.previewEdit(patch,options);
+  assert.equal(renamed.conflicts[0].code,'stale-source');
+  assert.equal(signature(world),original.revision);
+
+  const current = pixels.targets('footprint',options);
+  assert.equal(current.splats[0].id,'replacement-dab');
+  const revised = { ...patch, sourceRevision:current.sourceRevision,
+    operation:{ splats:[{ splat:'replacement-dab', visible:false }] } };
+  world.data[row*16] += .01;
+  const moved = pixels.previewEdit(revised,options);
+  assert.equal(moved.conflicts[0].code,'stale-source');
+  assert.deepEqual(pixels.renderOptions(document.sceneBindings[0].scene),{});
+  const fresh = pixels.targets('footprint',options);
+  assert.notEqual(fresh.revision,original.revision);
+  const fit = pixels.apply({ ...revised, sourceRevision:fresh.sourceRevision },options);
+  assert.deepEqual(fit.edits,[['replacement-dab',0]]);
+});
+
 test('a failed scene or pixel operation rolls back the entire shared draft', t => {
   const { document, filename } = setup(t);
   const scene = ink.createSceneEditor(source);

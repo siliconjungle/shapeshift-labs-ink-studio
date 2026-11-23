@@ -350,6 +350,9 @@
       snapshot,
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
       fork: () => create(snapshot(),{ env:buildEnv, historyLimit:0 }),
+      sourceDependencies: () => A.bakeCache.signature([
+        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
+      ]),
       tree: () => current().tree,
       node: key => current().nodes.get(key),
       selection: selectedKeys,

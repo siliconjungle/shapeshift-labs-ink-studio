@@ -2,13 +2,14 @@ const {createHash} = require('node:crypto');
 
 const signatures = new WeakMap();
 
-function signature(world) {
+function signature(world, { fresh = false } = {}) {
   const data=world.rest ?? world.data;
-  if (signatures.has(data)) return signatures.get(data);
+  const prior=signatures.get(data);
+  if (!fresh && prior && prior.count===world.count) return prior.value;
   const hash=createHash('sha256');
   hash.update(Buffer.from(data.buffer,data.byteOffset,world.count*16*Float32Array.BYTES_PER_ELEMENT));
   const value=hash.digest('hex');
-  signatures.set(data,value);
+  signatures.set(data,{ count:world.count, value });
   return value;
 }
 

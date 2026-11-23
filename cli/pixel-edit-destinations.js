@@ -3,7 +3,7 @@
 const ShotCorrections = require('../src/shot-corrections.js');
 const Targets = require('../src/target-selectors.js');
 const SplatFit = require('./splat-fit-asset.js');
-const { signature } = require('./render-row-assets.js');
+const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
 
@@ -45,7 +45,10 @@ function resolve(design, name = 'raster') {
   return { destination, binding };
 }
 
-function checkRevision(binding, revision) {
+function checkRevision(binding, { revision,sourceRevision }, expected) {
+  if (expected !== undefined && expected !== sourceRevision)
+    throw conflict('stale-source','Inspected scene source or binding has changed: ' + binding.id,
+      { binding:binding.id, expected, actual:sourceRevision });
   if (binding.revision !== undefined && binding.revision !== revision)
     throw conflict('stale-source','Pixel edit scene binding is stale: ' + binding.id,
       { binding:binding.id, expected:binding.revision, actual:revision });
@@ -59,7 +62,7 @@ function splatRows(world, binding) {
   const target = sceneTarget(binding), { row } = Targets.index(world);
   let ids;
   return function resolveSplat(source) {
-    const index = typeof source === 'string' ? (ids ??= Provenance.identities(world)).rowOf(source) : source;
+    const index = typeof source === 'string' ? (ids ??= Provenance.identities(world,{ fresh:true })).rowOf(source) : source;
     const scope = Number.isSafeInteger(index) && index >= 0 && index < world.count && Targets.objectScope(target,row(index));
     if (!scope)
       throw conflict('unavailable-splat','Splat ' + source + ' is missing, ambiguous, or outside binding ' + binding.id,
@@ -80,7 +83,6 @@ function shot(frame, edit, binding, world, marks) {
   const { at:[x,y], fps, startTime, frames, anchor, depthTolerance } = operation;
   const colors = new Map(frame.swatches.map((swatch,i) => [swatch,'#'+frame.colors[i].toString(16).padStart(6,'0')]));
   const pixels = marks.map(mark => [mark.at[0]-x,mark.at[1]-y,colors.get(mark.swatch)]);
-  checkRevision(binding,signature(world));
   const { scope } = splatRows(world,binding)(anchor.splat);
   const base = world.look?.shotCorrections;
   const size = [frame.width,frame.height];
@@ -94,12 +96,10 @@ function shot(frame, edit, binding, world, marks) {
   });
 }
 
-function splats(edit, binding, world) {
+function splats(edit, binding, world, bake) {
   const operation = edit.operation;
   if (!fields(operation,['splats']) || !Array.isArray(operation.splats) || !operation.splats.length)
     throw new TypeError('A splat attribute edit needs a list of explicit source splats');
-  const bake = signature(world);
-  checkRevision(binding,bake);
   const row = splatRows(world,binding);
   const seen = new Set();
   const edits = operation.splats.map(change => {
@@ -131,8 +131,7 @@ function splats(edit, binding, world) {
   return asset;
 }
 
-function boundSolid(binding, editor, revision) {
-  checkRevision(binding,revision);
+function boundSolid(binding, editor) {
   const key = 'solid:' + binding.object;
   const solid = editor.node(key)?.solid;
   if (!solid || binding.part !== undefined && solid.part !== binding.part)
@@ -149,8 +148,8 @@ function restChart(solid, chart) {
   return target;
 }
 
-function solidEdit(edit, destination, binding, editor, revision) {
-  const { key, solid } = boundSolid(binding,editor,revision);
+function solidEdit(edit, destination, binding, editor) {
+  const { key, solid } = boundSolid(binding,editor);
   const operation = edit.operation;
   if (destination.kind === 'surface-channel') {
     const state = solid.surfaceState, { chart, channel } = destination;
@@ -182,27 +181,31 @@ function solidEdit(edit, destination, binding, editor, revision) {
   return editor.snapshot();
 }
 
-function apply(frame, edit, { destination, binding }, context, readMarks) {
+function apply(frame, edit, route, context, readMarks) {
+  const { destination,binding } = route;
   if (binding.frame !== undefined && binding.frame !== edit.frame)
     throw conflict('wrong-frame','Pixel edit destination ' + destination.id + ' is bound to frame ' + binding.frame,
       { binding:binding.id, expected:binding.frame, actual:edit.frame });
-  if (destination.kind === 'shot-correction') {
-    const marks = readMarks(frame,edit);
-    return shot(frame,edit,binding,context.world(binding),marks);
-  }
-  if (edit.edits !== undefined)
+  const isShot = destination.kind === 'shot-correction';
+  if (!isShot && edit.edits !== undefined)
     throw new TypeError('Destination ' + destination.kind + ' needs explicit source coordinates or IDs in operation');
-  if (destination.kind === 'splat-attributes') return splats(edit,binding,context.world(binding));
-  const { editor, revision } = context.scene(binding);
-  return solidEdit(edit,destination,binding,editor,revision);
+  const marks = isShot ? readMarks(frame,edit) : undefined;
+  const source = observe(route,context,{ guard:edit.sourceRevision !== undefined || !!context.onSource });
+  context.onSource?.(source.sourceRevision);
+  checkRevision(binding,source,edit.sourceRevision);
+  if (isShot) return shot(frame,edit,binding,source.world,marks);
+  if (destination.kind === 'splat-attributes') return splats(edit,binding,source.world,source.revision);
+  return solidEdit(edit,destination,binding,source.editor);
 }
 
-function targets({ destination, binding }, context, limit) {
+function targets(route, context, limit) {
+  const { destination,binding } = route;
   if (!binding) throw new TypeError('Choose a scene destination. Pixel document IDs are listed by pixel-art validate.');
-  if (['shot-correction','splat-attributes'].includes(destination.kind)) {
-    const world = context.world(binding), revision = signature(world);
-    checkRevision(binding,revision);
-    const ids = Provenance.identities(world), { row } = Targets.index(world), scope = sceneTarget(binding);
+  const source = observe(route,context);
+  checkRevision(binding,source);
+  const { world,editor,revision,sourceRevision } = source;
+  if (world) {
+    const ids = Provenance.identities(world,{ fresh:true }), { row } = Targets.index(world), scope = sceneTarget(binding);
     const rest = world.rest ?? world.data, splats = [];
     let count = 0;
     for (let i = 0; i < world.count; i++) {
@@ -212,13 +215,12 @@ function targets({ destination, binding }, context, limit) {
       count++;
       if (splats.length < limit) splats.push({ id, at:Array.from(rest.subarray(i*16,i*16+3)) });
     }
-    return { destination:destination.id, binding, revision, count, splats };
+    return { destination:destination.id, binding, revision, sourceRevision, count, splats };
   }
-  const { editor, revision } = context.scene(binding);
-  const { key, solid } = boundSolid(binding,editor,revision);
+  const { key, solid } = boundSolid(binding,editor);
   const { chart, channel } = destination;
   if (destination.kind === 'surface-channel') restChart(solid,chart);
-  return { destination:destination.id, binding, revision,
+  return { destination:destination.id, binding, revision, sourceRevision,
     solid:{ id:solid.id, key, label:solid.label, part:solid.part },
     ...(channel !== undefined && { surfaceChannel:{ object:solid.id, chart, channel } }),
     modifiers:(solid.modifiers ?? []).map(({id,kind,label}) => ({ id,kind,label }))

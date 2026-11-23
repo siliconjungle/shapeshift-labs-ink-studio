@@ -63,7 +63,8 @@ function previewLimit(limit = 256) {
   return limit;
 }
 
-function report({ baseline, candidate = baseline, sources = [], targets = [], issues = [], compile, cell, limit }) {
+function report({ baseline, candidate = baseline, sources = [], targets = [], issues = [],
+  warnings = [], sourceRevision, compile, cell, limit }) {
   const maximum = previewLimit(limit);
   const pixels = [];
   let pixelCount = 0;
@@ -94,6 +95,8 @@ function report({ baseline, candidate = baseline, sources = [], targets = [], is
     }
   }
   return { format:'ink-studio/pixel-edit-preview', version:1, valid:issues.length === 0,
+    ...(sourceRevision !== undefined && { sourceRevision }),
+    ...(warnings.length && { warnings }),
     pixelCount, pixels, sources, targets, conflicts:issues };
 }
 

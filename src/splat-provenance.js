@@ -20,11 +20,11 @@ const SplatProvenance = (() => {
 
   const validId = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 4096;
 
-  function identities(world) {
+  function identities(world, { fresh = false } = {}) {
     const rest = world.rest ?? world.data;
     const authored = world.splatIds, metadata = world.renderMetadata, count = world.count;
     const prior = identityCache.get(rest);
-    if (prior && prior.authored === authored && prior.metadata === metadata && prior.count === count) return prior.index;
+    if (!fresh && prior && prior.authored === authored && prior.metadata === metadata && prior.count === count) return prior.index;
     const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
     const { row } = selectors.index(world);
     const ids = new Array(count), rows = new Map();

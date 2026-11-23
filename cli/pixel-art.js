@@ -9,6 +9,7 @@ const Critic = require('./critic.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
+const { isRevision } = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/pixel-art';
 const name = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
@@ -366,6 +367,8 @@ function edit(design, frame, patch, context) {
   if (design.version === 2 && patch.frame !== frame.id && (patch.frame !== undefined || patch.cel === undefined))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   const route = Destinations.resolve(design,patch.destination);
+  if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
+    throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
   if (route.destination.kind !== 'raster') {
     if (patch.cel !== undefined) throw new TypeError('A cel ID is a raster edit target');
     if (!context) throw new TypeError('Scene edit needs a scene context');
@@ -420,16 +423,24 @@ function openDesign(source) {
     : { design, legacyRevision:null };
 }
 
+function sourceWarning(binding) {
+  return { code:'unverified-source', binding, message:'Add the inspected sourceRevision to guard this scene edit' };
+}
+
 function previewEdit(design, patch, context, { frameId,limit } = {}) {
   Preview.previewLimit(limit);
-  const targets = [], sources = [];
-  let candidate = design, issues = [], source;
+  const targets = [], sources = [], warnings = [];
+  let candidate = design, issues = [], source, sourceRevision;
   try {
     const route = Destinations.resolve(design,patch?.destination);
     const target = Preview.sourceTarget(route,patch);
     if (target) targets.push(target);
     const frame = compile(design,frameId ?? (design.version === 2 ? patch?.frame : undefined),patch?.cel);
     const output = edit(design,frame,patch,{
+      onSource(revision) {
+        sourceRevision = revision;
+        if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
+      },
       world:binding => context.world(binding),
       scene(binding) {
         const { editor,revision } = context.scene(binding);
@@ -443,7 +454,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
   } catch (error) {
     issues = Preview.conflicts(error);
   }
-  return Preview.report({ baseline:design,candidate,sources,targets,issues,compile,cell,limit });
+  return Preview.report({ baseline:design,candidate,sources,targets,issues,warnings,sourceRevision,compile,cell,limit });
 }
 
 function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
@@ -521,7 +532,10 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
       const draft = state(), { design } = draft;
       const request = requestFor(draft,patch);
       const frame = compile(design,request?.frame,request?.cel);
-      const result = edit(design,frame,request,editContext(context,grouped));
+      const adapter = editContext(context,grouped);
+      let sourceRevision;
+      if (grouped) adapter.onSource = revision => { sourceRevision = revision; };
+      const result = edit(design,frame,request,adapter);
       const route = Destinations.resolve(design,request.destination), { destination,binding } = route;
       if (destination.kind === 'raster') store({ ...draft, design:result, legacyRevision:null });
       const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
@@ -532,7 +546,9 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
         const base = journal.transactionBase();
         let targets = stagedTargets.get(base);
         if (!targets) stagedTargets.set(base,targets = new Map());
-        targets.set(JSON.stringify([binding.scene,destination.id,request.id]),Preview.sourceTarget(route,request));
+        targets.set(JSON.stringify([binding.scene,destination.id,request.id]),{
+          ...Preview.sourceTarget(route,request), sourceRevision, sourceChecked:request.sourceRevision !== undefined
+        });
       }
       return structuredClone(result);
     };
@@ -561,7 +577,8 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
       issues = Preview.conflicts(error);
     }
     const sources = Preview.sourceChanges(sceneName,before.environment,scene);
-    return Preview.report({ baseline:original,candidate,sources,targets,issues,compile,cell,limit });
+    const warnings = targets.filter(target => !target.sourceChecked).map(target => sourceWarning(target.binding));
+    return Preview.report({ baseline:original,candidate,sources,targets,issues,warnings,compile,cell,limit });
   }
 
   const editor = Object.freeze({
@@ -571,6 +588,9 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
     stamp: ({ frame,cel } = {}) => stamp(compile(state().design,frame,cel)),
     renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
+    targets(destination,options = {}) {
+      return inspectTargets(state().design,destination,editContext(options,false),options.limit);
+    },
     apply,
     begin: label => { journal.begin(label); },
     preview() { journal.preview(); return editor.snapshot(); },
@@ -686,11 +706,10 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     scene:binding => scene(sourceFor(binding))
   };
   if (action === 'targets') {
-    documentShape(design);
-    const limit = opt.limit === undefined ? 128 : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-    if (!integer(limit,1,Number.MAX_SAFE_INTEGER) || typeof opt.destination !== 'string')
+    const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
+    if (typeof opt.destination !== 'string')
       throw new TypeError('Use pixel-art targets <design.json> --destination id --scene <bound scene> [--limit count]');
-    const report = Destinations.targets(Destinations.resolve(design,opt.destination),context,limit);
+    const report = inspectTargets(design,opt.destination,context,limit);
     process.stdout.write(JSON.stringify(report,null,2)+'\n');
     return;
   }
@@ -717,6 +736,13 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   }
   if (!out) throw new TypeError('Use --out revised.json to save the edit');
   files.json(out,edit(design,frame,changes,context));
+}
+
+function inspectTargets(design,destination,context,limit = 128) {
+  documentShape(design);
+  if (!integer(limit,1,Number.MAX_SAFE_INTEGER)) throw new RangeError('Pixel target limit must be a positive integer');
+  const targets = Destinations.targets(Destinations.resolve(design,destination),context,limit);
+  return { documentRevision:fingerprint(design), ...targets };
 }
 
 module.exports = { createEditor, compile, validate, stamp, image, review, edit, draw, trace, command };
