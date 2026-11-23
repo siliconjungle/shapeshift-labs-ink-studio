@@ -868,7 +868,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const look = world.look ?? {};
       const gaussianProfile = gaussianFilter.prepare(frame.gaussianFilter ?? look.gaussianFilter);
       const stable=!raw && stability?.prepare(look.stable,frame.stable,frame.ditherSpace);
-      const localOrder = surfaceOrderSettings(frame.splatOrder ?? look.splatOrder, frame.surfaceOrder ?? look.surfaceOrder);
+      const orderMode = frame.splatOrder ?? look.splatOrder;
+      const localOrder = surfaceOrderSettings(orderMode === 'selective' ? 'center' : orderMode, frame.surfaceOrder ?? look.surfaceOrder);
       let engraved=frame.engraving!==false&&!!world.engraving;
       let engravingUniforms;
       const clusterDefinition = raw || reflectionCapture ? false : frame.colorClusters ?? look.colorClusters;
@@ -1451,6 +1452,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       lastDepthProxy=!!depthProxy;
       const preview = frame.spriteSurfaces !== false && frame.scalePreviews !== false && world.scalePreviews;
       let ordering, orderReport;
+      if (orderMode === 'selective' && !reflectionCapture)
+        orderReport = { mode:'center', reason:'selective-backend', splats:pipeline.count, passes:0 };
       if (localOrder && !reflectionCapture) {
         const { layers, maxSplats, maxPixels, region } = localOrder;
         const count = pipeline.count;

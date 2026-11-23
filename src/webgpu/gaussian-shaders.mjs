@@ -1,7 +1,9 @@
+import { captureTransparency } from './selective-transparency.mjs';
+
 export const sortTile = 256;
 const lanes = sortTile / 2;
 
-const camera = ray => /* wgsl */ `
+const camera = (ray, local) => /* wgsl */ `
 struct Camera {
   view: mat4x4f,
   viewport: vec4f, // half width, half height, focal length in pixels, orthographic flag
@@ -14,13 +16,14 @@ struct Ellipse {
   rgb: u32,
   alpha: f32,
   ${ray ? "rayX: vec4f, rayY: vec4f, rayZ: vec4f," : ""}
+  ${local ? "localDepth: vec4f," : ""}
 }
 @group(0) @binding(0) var<uniform> camera: Camera;
 `;
 
 // One reservation per workgroup in the shared visible list. The source index
 // stays with the key so scheduling cannot change the order of equal depths.
-const perspective = /* wgsl */ `
+const perspective = local => /* wgsl */ `
 fn limits(x: f32, z: f32, variance: f32, crossTerm: f32, zz: f32, focal: f32) -> vec2f {
   let a = z*z - 9.0*zz;
   let b = x*z - 9.0*crossTerm;
@@ -64,11 +67,11 @@ fn perspectiveEllipse(center: vec3f, cov: mat3x3f, variance: f32, rgb: u32, alph
   let z = vec3f((b*e-c0*d)/(a*d*f),-e/(d*f),1.0/f);
   let halfWidth = (hi-lo)*.5;
   return Ellipse((hi+lo)*.5,vec2f(halfWidth.x,0),vec2f(0,halfWidth.y),rgb,alpha,
-    vec4f(x,dot(x,center)),vec4f(y,dot(y,center)),vec4f(z,dot(z,center)));
+    vec4f(x,dot(x,center)),vec4f(y,dot(y,center)),vec4f(z,dot(z,center))${local ? ",vec4f(0)" : ""});
 }
 `;
 
-export const projectionShader = (ray = false) => camera(ray) + (ray ? perspective : '') + /* wgsl */ `
+export const projectionShader = (ray = false, local = false) => camera(ray,local) + (ray ? perspective(local) : '') + /* wgsl */ `
 struct Point {
   position: vec4f,
   covariance0: vec4f,
@@ -142,8 +145,15 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
     let axisB = vec2f(xy, major - xx);
     axis = normalize(select(axisB, axisA, xx >= yy));
   }
+  ${local ? `
+  let axial = covariance * -back;
+  let xxz = dot(jx,axial);
+  let yyz = dot(jy,axial);
+  let slopeZ = vec2f(yy*xxz-xy*yyz,xx*yyz-xy*xxz)/(major*minor);
+  let depthModel = vec4f(slopeZ,3.0*sqrt(max(0.0,dot(-back,axial))),depth);
+  ` : ''}
   return Ellipse(center, 3.0 * sqrt(major) * axis,
-    3.0 * sqrt(minor) * vec2f(-axis.y, axis.x), rgb, alpha${ray ? ',vec4f(0),vec4f(0),vec4f(0)' : ''});
+    3.0 * sqrt(minor) * vec2f(-axis.y, axis.x), rgb, alpha${ray ? ',vec4f(0),vec4f(0),vec4f(0)' : ''}${local ? ',depthModel' : ''});
 }
 
 @compute @workgroup_size(${lanes})
@@ -266,14 +276,15 @@ fn finishTile(@builtin(workgroup_id) group: vec3u, @builtin(local_invocation_ind
 }
 `;
 
-export const rasterShader = (ray = false) => camera(ray) + /* wgsl */ `
+export const rasterShader = (ray = false, local = false) => camera(ray,local) + (local ? captureTransparency : '') + /* wgsl */ `
 @group(0) @binding(1) var<storage, read> ellipses: array<Ellipse>;
 @group(0) @binding(2) var<storage, read> keys: array<vec4u>;
 struct Vertex {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
   @location(1) @interpolate(flat) color: vec4f,
-  ${ray ? '@location(2) @interpolate(flat) slot: u32,' : ''}
+  ${ray || local ? '@location(2) @interpolate(flat) slot: u32,' : ''}
+  ${local ? '@location(3) @interpolate(flat) rank: u32,' : ''}
 }
 
 @vertex
@@ -283,12 +294,18 @@ fn vertex(@builtin(vertex_index) id: u32, @builtin(instance_index) instance: u32
   let uv = vec2f(f32(id & 1u), f32(id >> 1u)) * 2.0 - 1.0;
   let position = (ellipse.center + uv.x * ellipse.axisX + uv.y * ellipse.axisY) / camera.viewport.xy;
   let color = unpack4x8unorm(ellipse.rgb);
-  return Vertex(vec4f(position, 0.0, 1.0), uv, vec4f(color.rgb, ellipse.alpha)${ray ? ",slot" : ""});
+  return Vertex(vec4f(position, 0.0, 1.0), uv, vec4f(color.rgb, ellipse.alpha)${ray || local ? ",slot" : ""}${local ? ",instance" : ""});
 }
 
 @fragment
 fn fragment(input: Vertex) -> @location(0) vec4f {
   var power = -4.5 * dot(input.uv,input.uv);
+  ${local ? `
+  let sample = ellipses[input.slot];
+  let screenOffset = input.uv.x*sample.axisX+input.uv.y*sample.axisY;
+  var localDepth = sample.localDepth.w +
+    clamp(dot(screenOffset,sample.localDepth.xy),-sample.localDepth.z,sample.localDepth.z);
+  ` : ''}
   ${ray ? `
   if (camera.viewport.w == 0.0) {
     let ellipse = ellipses[input.slot];
@@ -297,12 +314,14 @@ fn fragment(input: Vertex) -> @location(0) vec4f {
     let r = vec3f(dot(ellipse.rayX.xyz,ray),dot(ellipse.rayY.xyz,ray),dot(ellipse.rayZ.xyz,ray));
     let p = vec3f(ellipse.rayX.w,ellipse.rayY.w,ellipse.rayZ.w);
     let depth = clamp(dot(r,p)/dot(r,r),camera.clip.x,camera.clip.y);
+    ${local ? "localDepth = depth;" : ""}
     let delta = p-r*depth;
     power = -.5*dot(delta,delta);
   }` : ''}
   let minimum = select(0.004,0.0000152587890625,camera.clip.w > 0.0);
   let alpha = min(0.99,input.color.a*exp(power));
   if (power < -4.5 || alpha < minimum) { discard; }
+  ${local ? 'captureLocal(vec2u(input.position.xy),input.rank,max(camera.clip.x,localDepth),input.color.rgb,alpha);' : ''}
   return vec4f(input.color.rgb * alpha, alpha);
 }
 `;

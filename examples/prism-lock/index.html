@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism Lock · Ink Studio</title>
+<link rel="stylesheet" href="../gaussian-gpu/style.css">
+<style>
+.views { display:grid; grid-template-columns:repeat(auto-fit,minmax(17rem,1fr)); gap:1rem; }
+.views figure { margin:0; }
+.views figcaption { margin-bottom:.5rem;color:#bee2e5; }
+.views canvas { image-rendering:pixelated; }
+#right { position:relative; }
+#tiles { position:absolute; inset:0; pointer-events:none; border-color:transparent; background:transparent; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Prism Lock</h1><p>Selective transparency on a 288 × 168 art grid</p></header>
+  <div class="controls">
+    <label for="layers">Layers per pixel</label>
+    <input id="layers" type="range" min="2" max="6" step="1" value="2">
+    <output id="count" for="layers">2</output>
+    <label><input id="diagnostics" type="checkbox"> Show budget tiles</label>
+  </div>
+  <div class="views">
+    <figure><figcaption>Center order after opaque culling</figcaption>
+      <canvas id="center" width="288" height="168" aria-label="Center-sorted glass"></canvas></figure>
+    <figure><figcaption>Selective transparency</figcaption>
+      <div id="right"><canvas id="selective" width="288" height="168" aria-label="Locally sorted glass"></canvas>
+      <canvas id="tiles" width="288" height="168" aria-hidden="true"></canvas></div></figure>
+  </div>
+  <p role="status" id="status">Opening WebGPU…</p>
+  <button id="report" type="button" disabled>Download transparency report</button>
+</main>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

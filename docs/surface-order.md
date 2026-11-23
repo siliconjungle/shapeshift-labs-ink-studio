@@ -67,3 +67,60 @@ explores stochastic point sampling for throughput on much larger scenes.
 [AbacusGS](https://arxiv.org/abs/2611.01534) explored preordered groups in a
 preprint that its authors have since withdrawn. This pass uses deterministic
 coverage and retains the existing center sorter for ordinary draws.
+
+## Selective transparency
+
+Use `splatOrder: 'selective'` in the headless renderer or the WebGPU
+Gaussian renderer, including streamed Gaussian chunks. Pass
+`selectiveTransparency` with the settings below. WebGL offers its
+explicit region-based `splatOrder: 'surface'` pass.
+
+The selective path rejects samples behind the nearest opaque depth before
+capturing transparent fragments. It tests depth inversions against their
+potential source-over color change, and sorts only where the inversion
+can affect the pixel. A local budget miss uses painter order for that
+pixel. Adjacent pixels can still be corrected.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `region` | `[0, 0, 1, 1]` | Normalized top-left rectangle eligible for local sorting. |
+| `layers` | 4 | Transparent layers per pixel, from 2 to 8. |
+| `maxPixels` | 65,536 | Headless sort-attempt cap. In WebGPU it caps pixel storage in top-left raster order within the region. |
+| `colorDelta` | `2/255` | Minimum largest-channel change in composited color. |
+| `depthBias` | `.0001` | Axial tolerance for hidden-fragment rejection in scene units. |
+| `tileSize` | 16 | Edge length of each diagnostic tile in art pixels. |
+
+Headless renders use opaque depth from their textured surfaces, sprites,
+and traced surfaces. The existing `fragmentBudget` caps retained local
+samples. Modes that already require projected mattes, deep compositing,
+refractive depth slicing, or special curve and plane-footprint ordering use their own
+composition and report the reason. Use the headless report to locate
+culled work, overlaps, corrections, and layer, fragment, and pixel budget
+misses by tile.
+
+```sh
+node cli/ink-studio.js render examples/selective-transparency.js --w 288 --h 168 --px 1 --raw --splat-order selective --transparency-report prism.json --out prism.png
+```
+
+In WebGPU, pass `opaqueSurface`, an optional sampled RGBA32F texture at
+the target art-grid dimensions. RGB is the opaque plate color and A is
+axial camera depth in scene units. Use zero A for pixels along rays
+without an opaque hit. The local affine depth comes from the projected
+covariance. When ray projection is enabled, the path uses the depth of
+the strongest contribution along each ray.
+
+```js
+const frame = await renderer.render(target, {
+  splatOrder: 'selective',
+  selectiveTransparency: { layers: 3, maxPixels: 30000 },
+  opaqueSurface,
+  profile: true
+});
+console.log(frame.transparencyReport);
+```
+
+Run `node examples/prism-lock/prepare.mjs` and
+[serve the repository](webgpu-graphs.md#run-the-gallery) to open [Prism
+Lock](../examples/prism-lock/). Its opaque plate comes from the headless
+surface pass. The slider increases the local layer budget and the tile
+overlay shows where the pass spent its work or ran out of budget.

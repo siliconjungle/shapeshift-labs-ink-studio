@@ -14,9 +14,9 @@ const fileOptions = new Set([
   'actions','adaptive-sampling','afterimages','area-lights','art-direction','asset-pack','asset-registry','atmosphere-depth-bands','atmosphere-emitters','authoring','bounce-probes','camera-staging','celestial-tracks','cloud-field',
   'color-clusters','color-stack','composite','contact-shadows','curve-width','cutaway','edge-filter','effect-palettes','event-effects','focus-track','horizon-bands','ink','inspection','lightning','look','lut','output-grade','output-palette','palette-constraints','pass-quality','plan','precipitation',
   'rain-impacts','reconstruction','relighting','render-graph','scene-exposure','sdf-assist','shadow-art','shot-lighting','shaped-atmosphere','silhouette-protection','sky-environment','sky-transitions',
-  'motional-coverage','splat-fields','sprite-atlas','sprite-cels','stable','stable-detail','translucent-silhouettes','volume-cutouts','weather-binding','wind-field'
+  'motional-coverage','splat-fields','sprite-atlas','sprite-cels','stable','stable-detail','translucent-silhouettes','transparency-settings','volume-cutouts','weather-binding','wind-field'
 ]);
-const omitted = new Set(['recipe','out','fail-on-flags','reflection-report']);
+const omitted = new Set(['recipe','out','fail-on-flags','reflection-report','transparency-report']);
 const fileDigest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const isFile = file => fs.statSync(file, {throwIfNoEntry:false})?.isFile();
 const read = file => JSON.parse(fs.readFileSync(file,'utf8'));

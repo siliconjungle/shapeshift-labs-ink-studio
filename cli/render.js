@@ -57,6 +57,8 @@ const CoverageFilter = require('../src/coverage-filter.js');
 const SurfaceHistory = require('../src/surface-history.js');
 const MotionalCoverage = require('../src/motional-coverage.js');
 const TranslucentSilhouettes = require('../src/translucent-silhouettes.js');
+const SelectiveTransparency = require('../src/selective-transparency.js');
+const LocalTransparency = require('./selective-transparency.js');
 const GaussianFilter = require('../src/gaussian-filter.js');
 const SdfAssist = require('../src/sdf-assist.js');
 const SdfRaster = require('./sdf-assist.js');
@@ -437,10 +439,15 @@ function renderFrame(world, o, preparedPalettes) {
   const curveQualityLayers = CurveQuality.prepare(o.curveQuality ?? look.curveQuality);
   const curveWidthAt = CurveWidth.prepare(o.curveWidth ?? look.curveWidth)?.bind(world);
   const deepPlan = o[deepScope];
+  const selectiveOptions = orderMode === 'selective' && SelectiveTransparency.prepare(o.selectiveTransparency ?? look.selectiveTransparency);
+  const selectiveReason = selectiveOptions &&
+    (o[matteScope]?.projected ? 'projected-mattes' :
+      curveScene || deepPlan || blendDepth > 0 || planarFootprints ? 'composition' : undefined);
+  const selectiveEnabled = selectiveOptions && !selectiveReason;
   const sortedSurfaces = curveScene || Boolean(deepPlan) || orderMode === 'surface' || blendDepth > 0 || planarFootprints;
   const fragmentBudget = o.fragmentBudget ?? 500000;
-  if (!['center', 'surface'].includes(orderMode) ||
-      ((sortedSurfaces || useSdf || areaLights.length) && (!Number.isSafeInteger(fragmentBudget) || fragmentBudget < 1 || fragmentBudget > 2e6)))
+  if (!['center', 'surface', 'selective'].includes(orderMode) ||
+      ((sortedSurfaces || selectiveEnabled || useSdf || areaLights.length) && (!Number.isSafeInteger(fragmentBudget) || fragmentBudget < 1 || fragmentBudget > 2e6)))
     throw new RangeError('Invalid splat order or fragment budget');
   const probe = typeof o.fragmentProbe === 'function' ? o.fragmentProbe : null;
   const styled = !o.raw && !o.samples && !o.captureCoverage;
@@ -894,6 +901,7 @@ function renderFrame(world, o, preparedPalettes) {
       native.silhouetteMask && { silhouetteMask:native.silhouetteMask },
       native.alpha && { alpha: native.alpha },
       (native.orderFallback || samples.orderFallback) && { orderFallback: true },
+      native.transparencyReport && { transparencyReport:native.transparencyReport },
       native.volumeStats && { volumeStats: native.volumeStats },
       o.captureFog && native.fog && { fog: native.fog }), native.passes, native.fog, native.effectSignals, native.color,
       native.paletteState,native.paletteInventory,reference,native.paintStage);
@@ -1118,7 +1126,7 @@ function renderFrame(world, o, preparedPalettes) {
   const emitterHits = areaLights.length && AreaRaster.rasterize(areaLights, { w:W, h:H, rayAt, near, capture:!!(reflectionPlane || probeView), clip:geometryClip });
   if (emitterHits) for (const hit of emitterHits) if (hit) surfaceFragments.push(hit);
   const surfaceDepth=surfaceFragments.length?new Float32Array(W*H).fill(Infinity):null;
-  for (const sample of surfaceFragments) if (!deep || sample.alpha >= 1)
+  for (const sample of surfaceFragments) if (selectiveEnabled ? sample.alpha >= 1 && !sample.effect : !deep || sample.alpha >= 1)
     surfaceDepth[sample.p] = Math.min(surfaceDepth[sample.p], sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,interfaceTime:o.interfaceTime,override:o.spriteAtlasMode,sun,
@@ -1133,7 +1141,13 @@ function renderFrame(world, o, preparedPalettes) {
     budgetFrame:!reflectionPlane && !probeView && !o.captureCoverage && (!o.samples || o[coverageLane] === 'native')
       ? o.spriteAtlasBudgetFrame : undefined
   });
-  for(const sample of surfaceFragments)if(!sample.sdf)sprites.push(sample);
+  for(const sample of surfaceFragments)if(!sample.sdf || selectiveEnabled)sprites.push(sample);
+  let opaqueDepth;
+  if (selectiveEnabled && sprites.some(sample => sample.alpha >= 1 && !sample.effect)) {
+    opaqueDepth = new Float64Array(W*H).fill(Infinity);
+    for (const sample of sprites) if (sample.alpha >= 1 && !sample.effect)
+      opaqueDepth[sample.p] = Math.min(opaqueDepth[sample.p],sample.z);
+  }
   sprites.sort((a,b)=>b.z-a.z);
   const cloudView = clouds?.view?.(nominalEye, ortho ? [V[2],V[6],V[10]] : null);
   const axialDepth = volumes.length || water || aerial || cloudView ? new Float32Array(W * H).fill(Infinity) : null;
@@ -1218,7 +1232,7 @@ function renderFrame(world, o, preparedPalettes) {
     return { ...quality, time: t, depthOffset, waterTime: motion.water, waterWind, cloudShadow, flash, media, exposure, cutouts, cloud:cloudView, effectCoverage: trackMedia,
       cloudStart:cloudView && eyeD-dist, fogTransmittance:!!fogPass, bands:direction?.bands, counters:counters?.volume };
   };
-  const geometrySample = probe || sortedSurfaces || sdf || emitterHits || aerial || cloudShadow || flash || cloudView ? sampleFrames(world, t) : null;
+  const geometrySample = probe || sortedSurfaces || selectiveEnabled || sdf || emitterHits || aerial || cloudShadow || flash || cloudView ? sampleFrames(world, t) : null;
   const captured = o.captureCoverage || transparent ? new Float32Array(W * H) : null;
   // The reflected pass uses the same projection and reads only the plane's front side.
   const reflectionTint = effects?.reflection || o.reflectionTint;
@@ -1845,7 +1859,7 @@ function renderFrame(world, o, preparedPalettes) {
   const FN =
       (defaultFine || detailBudget?.fineOn) && world.fine && world.fine.length >= baseCount * 12 ? world.fine : null,
     FPAL = FN ? world.pal.map((h, i) => hex(i)) : null;
-  let deferred = sortedSurfaces || sdf || emitterHits ? new Map() : null, deferredCount = 0, orderFallback = false;
+  let deferred = !selectiveEnabled && (sortedSurfaces || sdf || emitterHits) ? new Map() : null, deferredCount = 0, orderFallback = false;
   let curveCoverageQueued = false;
   function countDeferred() {
     if (curveScene && deferredCount >= fragmentBudget)
@@ -1956,6 +1970,7 @@ function renderFrame(world, o, preparedPalettes) {
     else if (win && !retainLayers && !coat && a > 0.5) win[p] = -1;
   }
 
+  const localTransparency = selectiveEnabled ? LocalTransparency.create(selectiveOptions,W,H,fragmentBudget,opaqueDepth,composite) : null;
   let spriteIndex=0;
   const normalizedDepth=z=>clamp((z-(eyeD-R))/(2*R),0,1);
   function spriteSample(sprite) {
@@ -2026,8 +2041,12 @@ function renderFrame(world, o, preparedPalettes) {
   }
   function playSprites(through,queued) {
     while (spriteIndex<sprites.length && sprites[spriteIndex].z>=through) {
-      const sprite=sprites[spriteIndex++], sample=spriteSample(sprite);
-      if (deferred && (queued || sdf?.hits[sprite.p] || emitterHits?.[sprite.p])) {
+      const sprite=sprites[spriteIndex++];
+      if (localTransparency?.occluded(sprite.p,sprite.z)) continue;
+      if (localTransparency && sprite.alpha >= 1 && !sprite.effect) continue;
+      const sample=spriteSample(sprite);
+      if (localTransparency) localTransparency.add(sprite.p,sprite.z,sample);
+      else if (deferred && (queued || sdf?.hits[sprite.p] || emitterHits?.[sprite.p])) {
         if (deep || blendDepth || curveScene) countDeferred();
         if (!deferred.has(sprite.p)) deferred.set(sprite.p,[]);
         deferred.get(sprite.p).push({ sort:sprite.z,index:spriteIndex-sprites.length-1,center:sprite.z,sample });
@@ -2076,8 +2095,12 @@ function renderFrame(world, o, preparedPalettes) {
     }
     deferred = null;
   }
+  if (opaqueDepth) for (const sprite of sprites) {
+    if (sprite.alpha >= 1 && !sprite.effect && sprite.z === opaqueDepth[sprite.p])
+      composite(sprite.p,...spriteSample(sprite));
+  }
   // Carriers are below the original color fragments at the same traced depth.
-  for (const sample of sdf?.samples ?? []) {
+  for (const sample of selectiveEnabled ? [] : sdf?.samples ?? []) {
     if (sample.z > surfaceDepth[sample.p]+1e-5) continue;
     if (deep || blendDepth || curveScene) countDeferred();
     deferred.set(sample.p,[{sort:sample.z,center:sample.z,index:-1e9,transparent:false,sample:spriteSample(sample)}]);
@@ -2419,7 +2442,7 @@ function renderFrame(world, o, preparedPalettes) {
     const shadeFraction = (styleKey - Math.floor(styleKey)) * 2;
     const shadeRaster = (fi < 0 || fineWeight < 1) && (styleKey & MaterialPixelStyle.PAIR) && !pixelSurface &&
       !liveNormal && !staged?.material && !add[i] && !wet[i] && pk === (shadeFraction >= .5 ? highStyle : lowStyle);
-    const wantsDepth = probe || deferred || aerial || cloudView || sdf;
+    const wantsDepth = probe || deferred || localTransparency || aerial || cloudView || sdf;
     const probeNormal = !fieldParticle && (wantsDepth || bakedCloud) ? geometrySample(i).normal : null;
     const probeCenter = wantsDepth && [x, y, z];
     const probeReach = wantsDepth ? 3 * Math.sqrt(c00 + c11 + c22) : 0;
@@ -2513,6 +2536,10 @@ function renderFrame(world, o, preparedPalettes) {
           if (margin < 0) continue;
           sectionTint = Cutaway.edgeWeight(cutaway.edge,margin);
         }
+        const surfaceZ = sectionZ ?? exact?.z ?? planeDepth ?? (wantsDepth ?
+          sampledDepth(rayAt(ix + .5, iy + .5), probeNormal, probeCenter, -cz, probeReach) : -cz);
+        if (localTransparency?.occluded(p, flags & 4 || backRows?.has(i) ? Infinity : surfaceZ)) continue;
+        if (preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) continue;
         lookPass?.begin(centerMark);
         let pr = r,
           pg = g,
@@ -2694,9 +2721,6 @@ function renderFrame(world, o, preparedPalettes) {
         if (a < minimumAlpha) continue;
         const wd = writesDepth && alpha === 1 && !exact &&
           (!curve?.group || curveFootprint?.depths || curveHit.alpha === 1);
-        const surfaceZ = sectionZ ?? exact?.z ?? planeDepth ?? (wantsDepth ?
-          sampledDepth(rayAt(ix + .5, iy + .5), probeNormal, probeCenter, -cz, probeReach) : -cz);
-        if (preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) continue;
         if (proxyDepth && (sectionZ ?? exact?.z ?? planeDepth ?? -cz) > proxyDepth[p]+proxies.tolerance+1e-6) {
           if (proxyRejected) proxyRejected[p]++;
           if (proxyRemoved) proxyRemoved[p]=a+proxyRemoved[p]*(1-a);
@@ -2708,7 +2732,14 @@ function renderFrame(world, o, preparedPalettes) {
           orderFallback = true;
         }
         const opticalDepth = planeHit || curveHit || cutaway || deep || blendDepth || rayMedia || preciseDepth ? surfaceZ : undefined;
-        if (deferred && (sortedSurfaces || preciseDepth)) {
+        if (localTransparency) {
+          localTransparency.add(p, flags & 4 || backRows?.has(i) ? Infinity : surfaceZ,
+            [i,sectionZ ?? exact?.z ?? planeDepth ?? -cz,
+              sectionZ !== undefined || exact || planeHit ? normalizedDepth(surfaceZ) : dn,
+              a,pr,pg,pb,wd,emits,highlight,paletteId,detailParticle,projected,coat,glass,lookPass && { ...lookPass.mark },
+              surfaceZ,undefined,fogMix,rule,reflected?.slice(),filteredEdge,1,sectionTint>0,claim,
+              paintStage && paintColor(samplePaint),surfaceMatte,curveEmission]);
+        } else if (deferred && (sortedSurfaces || preciseDepth)) {
           if (wantStation && !curveSpan) {
             const frame = curveFrames && curveFrames(i);
             curveSpan = strandTrace.span(i, curveWorld, curve, coarse?.endIndex ?? i, direction => posedDirection(direction, frame));
@@ -2739,6 +2770,12 @@ function renderFrame(world, o, preparedPalettes) {
   }
   if (deferred) playFragments(true);
   else if (spriteIndex<sprites.length) playSprites(-Infinity,false);
+  const transparencyReport = localTransparency ? localTransparency.finish() :
+    selectiveReason ? { mode:'center', reason:selectiveReason,width:W,height:H,tiles:[] } : undefined;
+  if (localTransparency) {
+    if (counters) counters.peakDeferredFragments = Math.max(counters.peakDeferredFragments,transparencyReport.peakFragments);
+    orderFallback ||= Boolean(transparencyReport.layerBudgetPixels+transparencyReport.fragmentBudgetPixels+transparencyReport.pixelBudgetPixels);
+  }
   /* colour per pixel. Each pixel's line of sight is met with the plane of the dab in front there (the way its surface truly faces),
      and the pixel is coloured at that exact place: by its pattern, if it has one, or by its ramp. How lit it is is the mean over the
      pixels round it that lie on the same ramp and surface, so the edges between bands are drawn by the pixels, not by the dabs */
@@ -3456,7 +3493,7 @@ function renderFrame(world, o, preparedPalettes) {
       ...(paletteInventory && {paletteInventory}),
       ...(masks && { masked: masks.output }),
       ...(paletteTrace && { paletteMaskChoices:paletteTrace.mask }),
-      ...(atmosphere?.fog && { fog: atmosphere.fog }), ...(silhouetteMask && {silhouetteMask}), ...(effectSignals && { effectSignals }), ...(volumeStats && { volumeStats }), ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
+      ...(atmosphere?.fog && { fog: atmosphere.fog }), ...(silhouetteMask && {silhouetteMask}), ...(effectSignals && { effectSignals }), ...(volumeStats && { volumeStats }), ...(alpha && { alpha }), ...(orderFallback && { orderFallback }), ...(transparencyReport && {transparencyReport})
     };
   }
   // the second pass: an outline where the picture steps back sharply, a little ordered noise, then the nearest colour of the palette
@@ -3811,7 +3848,7 @@ function renderFrame(world, o, preparedPalettes) {
     ...((localOutput || tone || evaluatedPalette) && { palette: localOutput?.packed || tone?.palette || evaluatedPalette }),
     ...(detail && { detail }), ...(motionReference && { motionReference }),
     ...(volumeStats && { volumeStats }), ...(silhouetteMask && {silhouetteMask}), ...(o.captureFog && atmosphere?.fog && { fog: atmosphere.fog }),
-    ...(alpha && { alpha }), ...(orderFallback && { orderFallback })
+    ...(alpha && { alpha }), ...(orderFallback && { orderFallback }), ...(transparencyReport && {transparencyReport})
   }, passes, atmosphere?.fog, effectSignals, effectColor, paletteState,paletteInventory,beforePalette,paintStage);
   motionCoverageFrame?.commit();
   if (partCapture) o.partMotionHistory?.store(motionReference.partMotion, partCapture.reset);

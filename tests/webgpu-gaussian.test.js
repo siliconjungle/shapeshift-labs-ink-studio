@@ -55,7 +55,7 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   const response = JSON.parse(event.data);
   assert.equal(response.error, undefined, JSON.stringify(response.error));
   assert.equal(response.result.exceptionDetails, undefined, JSON.stringify(response.result.exceptionDetails));
-  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, validation } = response.result.result.value;
+  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, validation } = response.result.result.value;
   assert.equal(validation, null);
   assert.equal(first.profile.visible, 692);
   assert.equal(first.profile.sortCapacity, 1024);
@@ -83,6 +83,14 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   assert.equal(filtered.profile.gaussianFilter.footprint, 'compensated');
   assert(exact.pixel[0] > projected.pixel[0] + 8, JSON.stringify({ exact, projected }));
   assert.equal(exact.profile.visible, 1);
+  assert(local.sorted.pixel[0] > local.center.pixel[0]+15, JSON.stringify(local));
+  assert(local.sorted.profile.transparencyReport.sortedPixels > 50);
+  assert(local.sorted.profile.transparencyReport.culledFragments > 40);
+  assert(local.opaque.pixel[1] > 195 && local.opaque.pixel[0] < 40, String(local.opaque.pixel));
+  assert(local.over.profile.transparencyReport.layerBudgetPixels > 20);
+  assert(local.capped.profile.transparencyReport.pixelBudgetPixels > 100);
+  assert(local.capped.profile.transparencyReport.tiles.some(t=>t.pixelBudgetPixels>0));
+  assert(local.ray.profile.transparencyReport.sortedPixels > 20);
 });
 
 async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussianSplatWorld }) {
@@ -143,9 +151,32 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   renderer.setWorld(subpixel);
   const projected = await capture(cameraTarget,false,13,null,{dist:3.25});
   const exact = await capture(cameraTarget,false,13,null,{dist:3.25,gaussianFilter:{footprint:'compensated',projection:'ray'}});
+  const cold = 255 << 16, warm = 255;
+  const sheets = world([row(0,0,red),row(0,0,blue),row(0,0,green)]);
+  sheets.data.set([0,0,-.03,.84,.34,0,-.31,warm,.20,0,.34],0);
+  sheets.data.set([0,0,.04,.86,.34,0,.31,cold,.20,0,.34],16);
+  sheets.data.set([.36,0,-.16,0,.11,0,0,0xbca078,.10,0,.015],32);
+  renderer.setWorld(sheets);
+  const layer = device.createTexture({ size:[size,size],format:'rgba32float',
+    usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST });
+  const plate = new Float32Array(size*size*4);
+  for (let y=27;y<38;y++)for(let x=29;x<36;x++)
+    plate.set([.08,.83,.18,1.4],(y*size+x)*4);
+  device.queue.writeTexture({texture:layer},plate,{bytesPerRow:size*16},[size,size]);
+  const settings = { splatOrder:'selective', opaqueSurface:layer, selectiveTransparency:{layers:2} };
+  const center = await capture(cameraTarget,false,25);
+  const sorted = await capture(cameraTarget,false,25,null,settings);
+  const opaque = await capture(cameraTarget,false,32,null,settings);
+  const capped = await capture(cameraTarget,false,25,null,{...settings,selectiveTransparency:{layers:2,maxPixels:4}});
+  const ray = await capture(cameraTarget,false,25,null,{...settings,gaussianFilter:{projection:'ray'}});
+  sheets.data[35]=.57;
+  renderer.setWorld(sheets);
+  const over = await capture(cameraTarget,false,45,null,settings);
+  layer.destroy();
+  const local={center,sorted,opaque,capped,ray,over};
   const error = await device.popErrorScope();
   renderer.dispose();
   readback.destroy();
   image.destroy();
-  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, validation: error ? error.message : null };
+  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, local, validation: error ? error.message : null };
 }

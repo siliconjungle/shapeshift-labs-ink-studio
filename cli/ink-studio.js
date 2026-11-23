@@ -774,6 +774,14 @@ function curveQualityOption() {
   return curveQualityOverride ??= JSON.parse(fs.readFileSync(path.resolve(value), 'utf8'));
 }
 
+let selectiveTransparencyOverride;
+function selectiveTransparencyOption() {
+  const value=opt['transparency-settings'];
+  if(value===undefined)return undefined;
+  if(typeof value!=='string')die('--transparency-settings needs a JSON filename');
+  return selectiveTransparencyOverride ??= JSON.parse(fs.readFileSync(path.resolve(value),'utf8'));
+}
+
 let translucentSilhouettesOverride;
 function translucentSilhouettesOption() {
   const value = opt['translucent-silhouettes'];
@@ -914,6 +922,7 @@ const view = extra =>
       paintCorrections: opt['paint-corrections'] !== 'off',
       colored: !!opt.colored,
       splatOrder: opt['splat-order'],
+      selectiveTransparency: selectiveTransparencyOption(),
       splatCoverage: opt['splat-coverage'],
       translucentSilhouettes: translucentSilhouettesOption(),
       gaussianFilter: opt['gaussian-footprint'] === undefined && opt['gaussian-projection'] === undefined &&
@@ -1596,6 +1605,7 @@ const CMD = {
         'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
         'shot lighting: --shot-lighting on|off|file.json   scope lights, channel ramps and spill',
         'reflection detail: --reflection-detail on|off   compare the authored core, streaks and distance clusters',
+        'selective transparency: --splat-order selective --transparency-settings file.json --transparency-report file.json',
         'reflection proxies: --reflection-proxies on|off and render --reflection-report file.json',
         'brushwork: --brushwork on|off   compare surface-aligned paint at export size',
         'shadow bands: --shadow-band-paint on|off   compare painted lighting thresholds',
@@ -1633,7 +1643,7 @@ const CMD = {
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'shared rendering: --strict-contract [on|off] --step-animation [on|off]',
         'effect palette options: --effect-palettes on|off|file.json',
-        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|off|file.json --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
+        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|off|file.json --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
   },
@@ -2567,6 +2577,11 @@ const CMD = {
     const report=opt['reflection-report'];
     if(report!==undefined&&(typeof report!=='string'||[outputFile(w.id+'.png'),path.resolve(pos[0])].includes(path.resolve(report))))
       die('--reflection-report needs a separate JSON output path');
+    const transparencyReport=opt['transparency-report'];
+    if(transparencyReport!==undefined&&(typeof transparencyReport!=='string'||
+        [outputFile(w.id+'.png'),path.resolve(pos[0]),opt['transparency-settings'] && path.resolve(opt['transparency-settings']),
+          report && path.resolve(report),opt.recipe && path.resolve(opt.recipe)].includes(path.resolve(transparencyReport))))
+      die('--transparency-report needs a separate JSON output path');
     shot?.destination(outputFile(w.id+'.png'),suffixes);
     pose(w, t);
     const t0 = Date.now(),
@@ -2576,6 +2591,9 @@ const CMD = {
       receivers:im.renderStats?.reflectionSources?.receivers??[],planarCaptures:im.renderStats?.planarCaptures??0,
       planarPixels:im.renderStats?.planarPixels??0,probeFaces:im.renderStats?.reflectionProbeFaces??0,
       probePixels:im.renderStats?.reflectionProbePixels??0
+    });
+    if(transparencyReport)require('./asset-files.js').json(path.resolve(transparencyReport),{
+      scene:w.id,time:t,...(im.transparencyReport ?? {mode:'center',width:im.w,height:im.h,tiles:[]})
     });
     diagnostics?.capture(im, opt.px1 ? 1 : im.px);
     console.log('drawn in', Date.now() - t0, 'ms');

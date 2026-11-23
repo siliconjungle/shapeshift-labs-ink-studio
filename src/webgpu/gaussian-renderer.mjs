@@ -1,4 +1,5 @@
 import { gaussianFilter } from '../webgl/gaussian-filter.mjs';
+import { createSelectiveDraw, transparencySettings } from './selective-transparency.mjs';
 import { makeCamera } from '../webgl/view.mjs';
 import { sortTile, projectionShader, dispatchShader, sortingShader, rasterShader, resolveShader } from './gaussian-shaders.mjs';
 
@@ -70,15 +71,19 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     drawPipeline('Gaussian ray blend', exactModule, format, true),
     format !== 'rgba16float' && drawPipeline('Gaussian filtered ray blend', exactModule, 'rgba16float', true)
   ]);
-  const [projection, rayProjection, prepare, seed, crossTile, finishTile, affineDraw, exactDraw, resolve] = await Promise.all([
+  const [projection, rayProjection, localProjection, localRayProjection, prepare, seed, crossTile, finishTile,
+    affineDraw, exactDraw, resolve, selectiveDraw] = await Promise.all([
     compute('Gaussian project and compact', shader('Gaussian projection', projectionShader())),
     compute('Gaussian ray bounds and compact', shader('Gaussian ray projection', projectionShader(true))),
+    compute('Selective affine projection', shader('Selective affine bounds', projectionShader(false,true))),
+    compute('Selective ray projection', shader('Selective ray bounds', projectionShader(true,true))),
     compute('Gaussian indirect counts', shader('Gaussian dispatch', dispatchShader)),
     compute('Gaussian sort tile', sortModule, 'seed', sorterPipelineLayout),
     compute('Gaussian compare across tiles', sortModule, 'crossTile', sorterPipelineLayout),
     compute('Gaussian finish tile', sortModule, 'finishTile', sorterPipelineLayout),
     affinePipelines, exactPipelines,
-    format !== 'rgba16float' && drawPipeline('Gaussian float output', shader('Gaussian float resolve', resolveShader), format, false)
+    format !== 'rgba16float' && drawPipeline('Gaussian float output', shader('Gaussian float resolve', resolveShader), format, false),
+    createSelectiveDraw(device,format,rasterShader(false,true),rasterShader(true,true))
   ]);
   const sorter = { seed, crossTile, finishTile };
   const buffer = (label, size, usage, mappedAtCreation = false) =>
@@ -142,12 +147,12 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     return { ...cloudUpload };
   }
 
-  function workFor(count, ray) {
-    const stride = ray ? rayEllipseBytes : ellipseBytes;
+  function workFor(count, ray, local) {
+    const stride = (ray ? rayEllipseBytes : ellipseBytes) + (local ? 16 : 0);
     const maxRecords = Math.floor(maxStorage / stride);
-    if (count > maxRecords) throw new RangeError('Gaussian ray projection exceeds the device workspace limit');
+    if (count > maxRecords) throw new RangeError('Gaussian projection exceeds the device workspace limit');
     const capacity = sortCapacity(Math.max(count, 1));
-    if (work?.capacity >= capacity && work.ray === ray) return work;
+    if (work?.capacity >= capacity && work.ray === ray && work.local === local) return work;
     const owned = [];
     let bytes = 0;
     function allocate(label, size, usage, mapped) {
@@ -173,7 +178,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
       settings.unmap();
       const drawModes = ray ? exactDraw : affineDraw;
       const next = {
-        capacity, bytes, ray, draw, dispatch, stages, destroy, keys, ellipses,
+        capacity, bytes, ray, local, draw, dispatch, stages, destroy, keys, ellipses,
         prepare: group(prepare, draw, dispatch),
         sort: group(seed, keys, draw, { buffer: settings, size: 16 }),
         drawModes,
@@ -208,7 +213,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     } : {};
   }
 
-  async function readProfile(staging, report) {
+  async function readProfile(staging, report, selective) {
     try {
       await staging.mapAsync(GPUMapMode.READ);
       const bytes = staging.getMappedRange();
@@ -219,7 +224,8 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
         const ms = at => Number(ticks[at + 1] - ticks[at]) / 1e6;
         gpuMs = { projectionCull: ms(0), sorting: ms(2), raster: ms(4) };
       }
-      return { ...report, visible, culled: report.input - visible, sortCapacity: sortCapacity(visible), gpuMs };
+      return { ...report, visible, culled: report.input - visible, sortCapacity: sortCapacity(visible), gpuMs,
+        ...(selective && { transparencyReport:selective.read(bytes,(timed?timestampBytes:0)+wordBytes) }) };
     } finally {
       staging.destroy();
     }
@@ -245,9 +251,17 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     const setting = gaussianFilter.prepare(frame.gaussianFilter ?? world.look?.gaussianFilter);
     const view = makeCamera(world, frame, width, height);
     const ray = setting?.ray === true && !view.ortho;
-    const workspace = workFor(input, ray);
+    const local = (frame.splatOrder ?? world.look?.splatOrder) === 'selective';
+    const workspace = workFor(input, ray, local);
     const { draw, dispatch, stages } = workspace;
-    const project = ray ? rayProjection : projection;
+    const project = local ? (ray ? localRayProjection : localProjection) : (ray ? rayProjection : projection);
+    const [r,g,b] = frame.background ?? world.bg;
+    const background = [r/255,g/255,b/255,1];
+    if (local && frame.opaqueSurface === target)
+      throw new TypeError('Use a separate texture for the opaque transparency surface');
+    const selective = local ? selectiveDraw.prepare(width,height,
+      transparencySettings.prepare(frame.selectiveTransparency ?? world.look?.selectiveTransparency),
+      frame.opaqueSurface,background,!!frame.profile) : null;
     uniform.set(view.view);
     uniform.set([width / 2, height / 2, height / (2 * view.tangent), +view.ortho, view.clipNear, view.clipFar, setting?.variance ?? -1, +(setting?.compensated ?? false)], 16);
     const time = performance.now();
@@ -277,43 +291,50 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     });
     sort.end();
 
-    const [r, g, b] = frame.background ?? world.bg;
     const output = target.createView({ mipLevelCount: 1 });
-    const floating = setting?.compensated && resolve ? floatTarget(width,height) : null;
-    const pass = encoder.beginRenderPass({
-      label: 'Rasterize visible ellipses', ...timestamps(frame.profile, 4),
-      colorAttachments: [{
-        view: floating?.view ?? output, clearValue: { r: r / 255, g: g / 255, b: b / 255, a: 1 },
-        loadOp: 'clear', storeOp: 'store'
-      }]
-    });
-    pass.setPipeline(workspace.drawModes[floating ? 1 : 0]);
-    pass.setBindGroup(0, floating ? workspace.floating : workspace.raster);
-    pass.drawIndirect(draw, 0);
-    pass.end();
-    if (floating) {
-      const finish = encoder.beginRenderPass({ label: 'Resolve Gaussian float color',
-        colorAttachments: [{ view: output, loadOp: 'clear', storeOp: 'store' }] });
-      finish.setPipeline(resolve);
-      finish.setBindGroup(0, floating.binding);
-      finish.draw(3);
-      finish.end();
+    if (selective) {
+      const rasterTimes = frame.profile && query ? {timestampWrites:{querySet:query,beginningOfPassWriteIndex:4}} : {};
+      const finishTimes = frame.profile && query ? {timestampWrites:{querySet:query,endOfPassWriteIndex:5}} : {};
+      selective.draw(encoder,workspace,camera,output,rasterTimes,finishTimes);
+    } else {
+      const floating = setting?.compensated && resolve ? floatTarget(width,height) : null;
+      const pass = encoder.beginRenderPass({
+        label: 'Rasterize visible ellipses', ...timestamps(frame.profile, 4),
+        colorAttachments: [{
+          view: floating?.view ?? output, clearValue: background,
+          loadOp: 'clear', storeOp: 'store'
+        }]
+      });
+      pass.setPipeline(workspace.drawModes[floating ? 1 : 0]);
+      pass.setBindGroup(0, floating ? workspace.floating : workspace.raster);
+      pass.drawIndirect(draw, 0);
+      pass.end();
+      if (floating) {
+        const finish = encoder.beginRenderPass({ label: 'Resolve Gaussian float color',
+          colorAttachments: [{ view: output, loadOp: 'clear', storeOp: 'store' }] });
+        finish.setPipeline(resolve);
+        finish.setBindGroup(0, floating.binding);
+        finish.draw(3);
+        finish.end();
+      }
+
     }
 
     let staging;
     if (frame.profile) {
       const offset = timed ? timestampBytes : 0;
-      staging = buffer('Gaussian profile readback', offset + wordBytes, usage.COPY_DST | usage.MAP_READ);
+      staging = buffer('Gaussian profile readback', offset + wordBytes + (selective?.statBytes ?? 0), usage.COPY_DST | usage.MAP_READ);
       if (timed) {
         encoder.resolveQuerySet(query, 0, 6, resolved, 0);
         encoder.copyBufferToBuffer(resolved, 0, staging, 0, timestampBytes);
       }
       encoder.copyBufferToBuffer(draw, wordBytes, staging, offset, wordBytes);
+      if (selective) encoder.copyBufferToBuffer(selective.stats,0,staging,offset+wordBytes,selective.statBytes);
     }
     queue.submit([encoder.finish()]);
     const report = { input, cloudUpload: { ...upload }, cameraUpload, workBytes: workspace.bytes,
-      ...(setting && { gaussianFilter: setting }) };
-    return staging ? readProfile(staging, report) : report;
+      ...(setting && { gaussianFilter: setting }), ...(local && { transparencyUniformBytes:64 }) };
+    return staging ? readProfile(staging, report, selective) : report;
   }
 
   function render(target, frame = {}) {
@@ -330,6 +351,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     for (const handle of chunks.keys()) handle.dispose();
     work?.destroy();
     accumulation?.texture.destroy();
+    selectiveDraw.dispose();
     camera.destroy();
     query?.destroy();
     resolved?.destroy();
