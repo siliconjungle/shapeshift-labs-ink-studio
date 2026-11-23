@@ -157,6 +157,50 @@ sorting, and the raster pass including fragment shading and blending. Devices
 without timestamps return `gpuMs: null` with the same counts and upload data.
 Call `dispose()` when the renderer is no longer needed.
 
+### Filter Gaussian footprints on the art grid
+
+Set `gaussianFilter` on the frame or in `world.look` for headless, WebGL,
+and WebGPU renders. The WebGPU option also works with resident chunks.
+
+```js
+const gaussianFilter = { footprint: 'compensated', projection: 'ray', variance: 0.3 };
+renderer.render(context.getCurrentTexture(), { gaussianFilter });
+```
+
+- **Compensated footprint.** Add a pixel-scale Gaussian blur to the projected
+  covariance. Lower peak opacity by the square root of the old determinant
+  divided by the new determinant. This preserves the integrated contribution
+  of an isolated Gaussian before truncation and compositing. `variance`
+  defaults to .3 and is measured in native art-pixel squared units.
+- **Ray projection.** For each pixel, sample the Gaussian at its strongest
+  contribution along that camera ray between the near and far planes.
+  The three-sigma envelope sets the screen bounds. This keeps oblique and
+  close splats from inheriting the shape of a single center Jacobian. The
+  existing center-depth draw order still applies. Orthographic shots use
+  the affine projection.
+- Set either option independently. `footprint: 'legacy'` and
+  `projection: 'affine'` are the defaults. `variance: 0` evaluates an
+  unblurred footprint with an enabled option. The scene renderers
+  apply the profile to eligible Gaussian dabs. Authored footprint masks,
+  analytic curves, and continuous opaque surface coverage keep their
+  own rules.
+
+WebGPU accumulates compensated splat color in half precision before
+resolving to the output. WebGL uses half precision for its compensated
+color attachment when supported. Choose the target or art-grid size before
+rendering. For pixel-art delivery, enlarge the resolved grid by nearest
+neighbor.
+
+```sh
+node cli/ink-studio.js render examples/gaussian-filter-distant.js --w 224 --h 128 --px 1 --raw --gaussian-footprint compensated --out distant.png
+node cli/ink-studio.js render examples/gaussian-filter-close.js --w 224 --h 128 --px 1 --raw --gaussian-footprint compensated --gaussian-projection ray --out close.png
+```
+
+[Aster Relay](../examples/gaussian-filter/) compares both settings live on
+a 224 × 128 grid and lets you shift the camera across pixels. The filter
+uses the screen-space form of the Mip-Splatting footprint. The ray mode
+uses the closest point in whitened Gaussian space. [Mip-Splatting paper](https://arxiv.org/abs/2311.16493) · [Perspective-correct Gaussian evaluation](https://onlinelibrary.wiley.com/doi/full/10.1111/cgf.70014)
+
 ### Stream Gaussian chunks
 
 Build a pack from a PLY, SPZ, or GSZ input.

@@ -1,3 +1,4 @@
+import { gaussianFilter as gaussianMath } from './gaussian-filter.mjs';
 import { filterMatte } from './coverage-filter.mjs';
 import {markVertexUniforms,markVertex,markFragmentUniforms,markSplatWrite,markResolve} from './rest-marks.mjs';
 import { gaussianProxyVertex, gaussianProxyFragment } from './gaussian-part-proxies.mjs';
@@ -37,7 +38,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false, gaussianFilter = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -97,6 +98,10 @@ layout(location=1) in int a_index;
 ${instances ? 'layout(location=2) in int a_instance; uniform highp sampler2D u_instances;' : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintRows,u_footprintParams; flat out vec4 v_footprintMap; flat out vec2 v_footprintStyle, v_footprintZ; flat out vec4 v_footprintPlane;' : ''}
 out vec2 v_d; out vec3 v_conic; out vec4 v_color; out float v_depth;
+${gaussianFilter ? `uniform vec4 u_gaussianFilter;
+flat out vec4 v_gaussianX,v_gaussianY,v_gaussianZ;
+flat out float v_gaussianGain;
+${gaussianMath.glsl}` : ''}
 ${portal ? 'flat out vec3 v_portalDepth;' : ''}
 ${!portal || layeredGlass || depthMeshProxy ? 'flat out float v_ownerDepth;' : ''}
 ${cutaway ? 'flat out vec4 v_sectionSample;' : ''}
@@ -346,9 +351,16 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
     ${optical ? '&& v_optical.w < 0.5' : ''}${footprints ? ' && !hasFootprint' : ''};
   v_coverage = continuous ? ${continuousMode} : (coverage == ${softMode} ? ${softMode} : 0);
   v_depth = coverage == ${softMode} || (flags & 1) != 0 ${optical ? '|| v_optical.w > 0.5' : ''} ? -1.0 : dn;
+  ${gaussianFilter ? `
+  bool filtered = kind == 0 && !continuous && v_paint == 0 && (alpha < 1.0 || coverage == ${softMode} || u_gaussianFilter.z > 0.5)
+    ${footprints ? '&& !hasFootprint' : ''} ${optical ? '&& v_optical.w < 0.5' : ''};
+  v_gaussianGain = filtered ? 1.0 : -1.0;
+  v_gaussianX = v_gaussianY = v_gaussianZ = vec4(0.0);
+  ` : ''}
   float iz = -1.0 / cam.z;
   vec2 lim = 1.3 * 0.5 * u_viewport / u_focal;
-  float tx = clamp(cam.x * iz, -lim.x, lim.x) / iz, ty = clamp(cam.y * iz, -lim.y, lim.y) / iz;
+  float tx = ${gaussianFilter ? 'filtered ? cam.x : ' : ''}clamp(cam.x * iz, -lim.x, lim.x) / iz;
+  float ty = ${gaussianFilter ? 'filtered ? cam.y : ' : ''}clamp(cam.y * iz, -lim.y, lim.y) / iz;
   // Jacobian of the perspective projection, then covariance into screen space
   mat3 J = u_ortho > 0.5 ? mat3(u_focal, 0.0, 0.0,   0.0, u_focal, 0.0,   0.0, 0.0, 0.0)   // (orthographic: u_focal is pixels to a unit)
     : mat3(u_focal * iz, 0.0, 0.0,   0.0, u_focal * iz, 0.0,   u_focal * tx * iz * iz, u_focal * ty * iz * iz, 0.0);
@@ -357,6 +369,11 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   ${marks ? markVertex : ''}
   mat3 c2 = T * cov * transpose(T);
   float variance = continuous ? ${variance} * u_materialGridScale * u_materialGridScale : u_dilate;
+  ${gaussianFilter ? `
+  if (filtered) {
+    variance = u_gaussianFilter.x*u_materialGridScale*u_materialGridScale;
+    if (mod(u_gaussianFilter.y,2.0)>0.5) v_gaussianGain=gaussianOpacity(vec3(c2[0][0],c2[0][1],c2[1][1]),variance);
+  }` : ''}
   float A = c2[0][0] + variance, B = c2[0][1], C = c2[1][1] + variance;
   ${stableDetail ? `
   v_detailTexture = 1.0;
@@ -420,7 +437,33 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
     }
   }` : ''}
   vec2 ndc = clip.xy / clip.w;
-  if (snap) { vec2 px = floor((ndc * 0.5 + 0.5) * u_viewport) + 0.5; ndc = px / u_viewport * 2.0 - 1.0; }
+  ${gaussianFilter ? `
+  if (filtered && u_gaussianFilter.y >= 2.0 && u_ortho < 0.5) {
+    vec3 center = vec3(cam.xy,-cam.z);
+    mat3 cameraBasis = mat3(u_view);
+    cameraBasis[0].z *= -1.0;
+    cameraBasis[1].z *= -1.0;
+    cameraBasis[2].z *= -1.0;
+    mat3 shape = cameraBasis * cov * transpose(cameraBasis);
+    float blur = variance*pow(center.z/u_focal,2.0);
+    shape[0][0] += blur;
+    shape[1][1] += blur;
+    mat3 inverseL = gaussianFactor(shape);
+    mat3 rows = transpose(inverseL);
+    v_gaussianX = vec4(rows[0],dot(rows[0],center));
+    v_gaussianY = vec4(rows[1],dot(rows[1],center));
+    v_gaussianZ = vec4(rows[2],dot(rows[2],center));
+    vec2 halfViewport = u_viewport*0.5, lo=-halfViewport, hi=halfViewport;
+    if (center.z - 3.0*sqrt(shape[2][2]) > u_near) {
+      vec2 bx=gaussianLimits(center.x,center.z,shape[0][0],shape[0][2],shape[2][2],u_focal);
+      vec2 by=gaussianLimits(center.y,center.z,shape[1][1],shape[1][2],shape[2][2],u_focal);
+      lo=max(lo,vec2(bx.x,by.x)); hi=min(hi,vec2(bx.y,by.y));
+    }
+    if(any(lessThanEqual(hi,lo))){ gl_Position=vec4(2,2,2,1); return; }
+    ndc=(lo+hi)/u_viewport;
+    ext=(hi-lo)*0.5;
+  }` : ''}
+  if (snap${gaussianFilter ? ' && !filtered' : ''}) { vec2 px = floor((ndc * 0.5 + 0.5) * u_viewport) + 0.5; ndc = px / u_viewport * 2.0 - 1.0; }
   vec2 extN = ext * 2.0 / u_viewport;
   if (any(greaterThan(abs(ndc) - extN, vec2(1.0)))) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   v_d = a_corner * ext;
@@ -457,13 +500,15 @@ ${spriteReconstruction ? `flat in int v_spriteLod; uniform vec2 u_spriteLodGrid;
 ${spriteReconstruction}` : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footprintColumns; flat in vec4 v_footprintMap; flat in vec2 v_footprintStyle, v_footprintZ; flat in vec4 v_footprintPlane;' : ''}
 in vec2 v_d; in vec3 v_conic; in vec4 v_color; in float v_depth; flat in int v_coverage;
+${gaussianFilter ? 'uniform vec4 u_gaussianFilter; flat in vec4 v_gaussianX,v_gaussianY,v_gaussianZ; flat in float v_gaussianGain;' : ''}
 ${stableDetail ? 'flat in float v_detailGeometry, v_detailTexture;' : ''}
 ${portal ? 'flat in vec3 v_portalDepth; uniform vec4 u_splatPlane, u_portalCoverPlane;' : ''}
 ${!portal || layeredGlass || depthMeshProxy ? 'flat in float v_ownerDepth;' : ''}
 ${portal || cutaway || footprints ? 'uniform mat4 u_proj;' : ''}
 ${portal || cutaway || footprints || facingColors ? 'uniform float u_ortho;' : ''}
 ${facingColors ? facingColors.splatFragmentGLSL : ''}
-${footprints || facingColors ? 'uniform float u_focal;' : ''}
+${footprints || facingColors || gaussianFilter ? 'uniform float u_focal;' : ''}
+${gaussianFilter && !cutaway ? 'uniform float u_near;' : ''}
 ${footprints && !cutaway ? 'uniform bool u_geometryDepth;' : ''}
 ${cutaway ? cutaway + `
 flat in vec4 v_sectionSample;
@@ -493,7 +538,7 @@ flat in float v_glassNearDepth;
 float glassDepth(vec4 sampleDepth) {
   return dot(floor(sampleDepth.rgb*255.0+0.5),vec3(1.0,256.0,65536.0)) / 16777215.0;
 }` : ''}
-${water || portal || environment || cutaway || footprints || facingColors ? 'uniform vec2 u_viewport;' : ''}
+${water || portal || environment || cutaway || footprints || facingColors || gaussianFilter ? 'uniform vec2 u_viewport;' : ''}
 ${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
 ${footprints ? footprintGLSL : ''}
@@ -511,6 +556,15 @@ void main(){
   ${surfaceOrder ? 'gl_FragDepth = gl_FragCoord.z;' : ''}
   ${spriteReconstruction ? 'if(!spriteGeometry(v_spriteLod,gl_FragCoord.xy*u_spriteLodGrid))discard;' : ''}
 ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + v_conic.z * v_d.y * v_d.y) - v_conic.y * v_d.x * v_d.y;
+  ${gaussianFilter ? `
+  if (v_gaussianX.x>0.0) {
+    vec3 ray=vec3((gl_FragCoord.xy-u_viewport*.5)/u_focal,1.0);
+    vec3 v=vec3(dot(v_gaussianX.xyz,ray),dot(v_gaussianY.xyz,ray),dot(v_gaussianZ.xyz,ray));
+    vec3 p=vec3(v_gaussianX.w,v_gaussianY.w,v_gaussianZ.w);
+    float depth=clamp(dot(v,p)/dot(v,v),u_near,u_gaussianFilter.w);
+    vec3 d=p-v*depth;
+    power=-.5*dot(d,d);
+  }` : ''}
   ${footprints ? `
   bool shaped=v_footprintStyle.x>0.0;
   bool footprintPlane=v_footprintZ.y>0.5;
@@ -540,6 +594,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   float g=v_color.a*profile;
   ` : `if (power > 0.0 || power < -4.5) discard;
   float g = v_color.a * exp(power);`}
+  ${gaussianFilter ? 'if(v_gaussianGain>=0.0)g*=v_gaussianGain;' : ''}
   bool continuous = v_coverage == ${continuousMode};
   float surfaceAlpha = continuous ? smoothstep(${continuousLow}, ${continuousHigh.toFixed(2)}, g) : 0.0;
   ${optical ? 'bool hasOptical = v_optical.w > 0.5; if (hasOptical && v_optical.x == 0.0) discard;' : ''}
@@ -634,7 +689,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     float graphDepth = round(clamp(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
     oa = vec4(mod(graphDepth,256.0), mod(floor(graphDepth/256.0),256.0), floor(graphDepth/65536.0),255.0)/255.0; ${layeredGlass && !water ? 'o_back = oa;' : ''} return; }
   bool solid = u_crisp > 0.5 && v_color.a >= 1.0 && v_coverage != ${softMode};
-  float a = continuous ? surfaceAlpha :
+  float a = ${gaussianFilter ? 'v_gaussianGain>=0.0 ? min(.99,g) : ' : ''}continuous ? surfaceAlpha :
     (solid && u_hard > 0.5 ? (g > 0.5 ? 1.0 : 0.0) : contributionAlpha(power,v_color.a,solid));
   ${materialStyles ? `
   if (!continuous && solid && u_hard < 0.5 && v_pixelStyle.x > 0.0) {
@@ -643,7 +698,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   }` : ''}
   ${footprints ? 'if(shaped) a=min(.99,g);' : ''}
   ${stableDetail ? 'a *= v_detailGeometry;' : ''}
-  if (a < 0.004) discard;
+  if (a < ${gaussianFilter ? '(v_gaussianGain>=0.0 && mod(u_gaussianFilter.y,2.0)>0.5 ? 0.0000152587890625 : 0.004)' : '0.004'}) discard;
   ${coverageFilter ? `if(u_filterMatte){
     o=vec4(vec3(filterSoftness(int(v_ix))*a),a);od=vec4(0);oa=vec4(0);
     return;

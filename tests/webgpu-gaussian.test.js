@@ -55,7 +55,7 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   const response = JSON.parse(event.data);
   assert.equal(response.error, undefined, JSON.stringify(response.error));
   assert.equal(response.result.exceptionDetails, undefined, JSON.stringify(response.result.exceptionDetails));
-  const { first, empty, edge, small, repeated, alternate, split, validation } = response.result.result.value;
+  const { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, validation } = response.result.result.value;
   assert.equal(validation, null);
   assert.equal(first.profile.visible, 692);
   assert.equal(first.profile.sortCapacity, 1024);
@@ -79,6 +79,10 @@ test('WebGPU keeps a multi-tile Gaussian order deterministic after offscreen cul
   assert.deepEqual(alternate.pixel, first.pixel);
   assert.deepEqual(split.pixel, first.pixel);
   assert.equal(split.profile.visible, first.profile.visible);
+  assert(filtered.pixel[0] > 12 && filtered.pixel[0] < 100, String(filtered.pixel));
+  assert.equal(filtered.profile.gaussianFilter.footprint, 'compensated');
+  assert(exact.pixel[0] > projected.pixel[0] + 8, JSON.stringify({ exact, projected }));
+  assert.equal(exact.profile.visible, 1);
 });
 
 async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussianSplatWorld }) {
@@ -106,8 +110,8 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   const image = device.createTexture({ size: [size, size], format: renderer.format,
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
   const readback = device.createBuffer({ size: rowBytes * size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-  async function capture(target, ortho = false, x = 32, chunks) {
-    const frame = { profile: true, ortho, dist: 4, target, background: [10, 20, 30] };
+  async function capture(target, ortho = false, x = 32, chunks, patch) {
+    const frame = { profile: true, ortho, dist: 4, target, background: [10, 20, 30], ...patch };
     const profile = await (chunks ? renderer.renderChunks(image, dense, chunks, frame) : renderer.render(image, frame));
     const encoder = device.createCommandEncoder();
     encoder.copyTextureToBuffer({ texture: image }, { buffer: readback, bytesPerRow: rowBytes }, [size, size]);
@@ -131,9 +135,17 @@ async function fixture({ createGaussianSplatRenderer, decodeGaussianPly, gaussia
   // The broad red Gaussian has its center just outside this frame.
   renderer.setWorld(world([row(0, 0, red, 8, 1)]));
   const edge = await capture([-1.6, 0, 0], false, 64);
+  const subpixel = world([row(0, 0, red)]);
+  subpixel.data.set([.0001,0,0,255,.0001,0,.0001],4);
+  renderer.setWorld(subpixel);
+  const filtered = await capture(cameraTarget,false,32,null,{gaussianFilter:{footprint:'compensated'}});
+  subpixel.data.set([.8,.2,0,.55,.251,.021,-.387,255,.104,-.044,.699]);
+  renderer.setWorld(subpixel);
+  const projected = await capture(cameraTarget,false,13,null,{dist:3.25});
+  const exact = await capture(cameraTarget,false,13,null,{dist:3.25,gaussianFilter:{footprint:'compensated',projection:'ray'}});
   const error = await device.popErrorScope();
   renderer.dispose();
   readback.destroy();
   image.destroy();
-  return { first, empty, edge, small, repeated, alternate, split, validation: error ? error.message : null };
+  return { first, empty, edge, small, repeated, alternate, split, filtered, exact, projected, validation: error ? error.message : null };
 }

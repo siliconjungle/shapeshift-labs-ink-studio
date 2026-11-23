@@ -1,3 +1,4 @@
+import { gaussianFilter } from './gaussian-filter.mjs';
 import { surfaceHistory, createSurfaceHistory } from './surface-history.mjs';
 import { createCoverageVote } from './coverage-vote.mjs';
 import { coverageFilter, createCoverageFilter, filterUnit } from './coverage-filter.mjs';
@@ -162,7 +163,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const materialControls=createMaterialControls(gl,resources,targets,maxSize,toolkit);
     const skyPrograms = new Map();
     const dryGeometry = target(2), dryContours = target(2), plainOwner = target(), key = target(1, { integer: true });
-    const wetVariants = new Map();
+    const wetVariants = new Map(), filteredTargets = new Map();
+    let halfColor;
     let graphOwnership, normalOwner, wetGeometry, wetContours, waterTexture, packedWater, maskOwner, glassBoundary, dryGlassGeometry, wetGlassGeometry;
     let portalSpriteLayer;
     const portalPrograms = new Map();
@@ -864,6 +866,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const raw = colorMode === 'baked' ? frame.raw ?? false : colorMode === 'rgb';
       const { outline = true, dither = 0.35, scale = 1 } = frame;
       const look = world.look ?? {};
+      const gaussianProfile = gaussianFilter.prepare(frame.gaussianFilter ?? look.gaussianFilter);
       const stable=!raw && stability?.prepare(look.stable,frame.stable,frame.ditherSpace);
       const localOrder = surfaceOrderSettings(frame.splatOrder ?? look.splatOrder, frame.surfaceOrder ?? look.surfaceOrder);
       let engraved=frame.engraving!==false&&!!world.engraving;
@@ -1116,6 +1119,17 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const resized = width !== finished.width || height !== finished.height;
       if (isNew || qualityKey !== lastQualityKey || resized || output !== lastOutput || detail !== lastDetail || !damping || waterScene !== lastWater ||
           (waterScene && frame.time !== lastWaterTime)) historyValid = false;
+      if (gaussianProfile?.compensated) {
+        halfColor ??= Boolean(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+        if (halfColor) {
+          function filteredTarget(source) {
+            if (!filteredTargets.has(source)) filteredTargets.set(source, target(source.textures.length, { halfColor: true }));
+            return filteredTargets.get(source);
+          }
+          geometry = filteredTarget(geometry);
+          if (colored) contours = filteredTarget(contours);
+        }
+      }
       geometry.resize(rw, rh);
       contours.resize(colored ? width : 1, colored ? height : 1);
       const ownsPixels = needsPresentationDepth || !!historyOwner || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
@@ -1460,7 +1474,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
-        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy, depthMeshProxy:!!depthProxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote, coverageFilter:!!filterBuffers?.centerMatte, surfaceOrder:!!ordering,
+        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, gaussianFilter:!!gaussianProfile, splatPaint: !!splatPaint, gaussianProxy:!!proxy, depthMeshProxy:!!depthProxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote, coverageFilter:!!filterBuffers?.centerMatte, surfaceOrder:!!ordering,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
         engraving:engraved, marks:!!marks, footprints, materialStyles, facingColors:facing && facingAPI, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section, spriteReconstruction:!!spriteMask
       });
@@ -1492,6 +1506,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_sampleWithdrawal: withdrawal,
         u_born: [frame.bornAt ?? 0, growth.rate ?? 1, growth.fade ?? 0.5, growth.loop ?? 0],
         u_detailTexture: detailTexture, u_detailGeometry: detailGeometry,
+        ...(gaussianProfile && { u_gaussianFilter: [
+          gaussianProfile.variance, +gaussianProfile.compensated + 2*gaussianProfile.ray, +!!world.gaussianCloud, camera.clipFar
+        ] }),
         u_crisp: +!raw, u_splatCoverage: splatCoverage, u_dilate: raw ? 0.3 : 0.15, u_near: camera.clipNear,
         u_paintMarker: paint?.marker ?? 0, u_afterimageStart: trailStart,
         ...footprintUniforms,...engravingUniforms,...marks?.uniforms,

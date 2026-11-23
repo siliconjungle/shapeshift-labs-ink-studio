@@ -906,6 +906,11 @@ const view = extra =>
       splatOrder: opt['splat-order'],
       splatCoverage: opt['splat-coverage'],
       translucentSilhouettes: translucentSilhouettesOption(),
+      gaussianFilter: opt['gaussian-footprint'] === undefined && opt['gaussian-projection'] === undefined &&
+          opt['gaussian-variance'] === undefined ? undefined : {
+        footprint: opt['gaussian-footprint'], projection: opt['gaussian-projection'],
+        variance: num('gaussian-variance', .3)
+      },
       splatFootprints: onOffOption('splat-footprints'),
       curveSplats: onOffOption('curve-splats'),
       curveMode: opt['curve-mode'],
@@ -1294,6 +1299,7 @@ const CMD = {
         '  acts                        the ready clips, reactions, easings and cues, by name',
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
         '  render <file.ply|.spz> --raw   render a Gaussian splat cloud without palette quantization',
+        '     --gaussian-footprint legacy|compensated --gaussian-projection affine|ray --gaussian-variance 0.3',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
         '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
         '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',

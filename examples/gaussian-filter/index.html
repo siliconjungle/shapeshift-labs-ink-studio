@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aster Relay · Ink Studio</title>
+<link rel="stylesheet" href="../gaussian-gpu/style.css">
+<style>
+.views { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr)); gap:1rem; }
+.views figure { margin:0; }
+.views figcaption { margin-bottom:.5rem; color:#bee2e5; }
+.views canvas { image-rendering:pixelated; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Aster Relay</h1><p>Gaussian filtering and projection on a 224 × 128 art grid</p></header>
+  <div class="controls">
+    <button id="distant" type="button">Distant filaments</button>
+    <button id="close" type="button">Close oblique bands</button>
+    <label for="phase">Pixel phase</label><input id="phase" type="range" min="-1" max="1" step=".01" value="0">
+  </div>
+  <div class="views">
+    <figure><figcaption id="beforeLabel">Legacy footprint</figcaption><canvas id="before" width="224" height="128" aria-labelledby="beforeLabel"></canvas></figure>
+    <figure><figcaption id="afterLabel">Opacity compensation</figcaption><canvas id="after" width="224" height="128" aria-labelledby="afterLabel"></canvas></figure>
+  </div>
+  <p id="status" role="status">Opening WebGPU…</p>
+</main>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

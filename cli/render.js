@@ -57,6 +57,7 @@ const CoverageFilter = require('../src/coverage-filter.js');
 const SurfaceHistory = require('../src/surface-history.js');
 const MotionalCoverage = require('../src/motional-coverage.js');
 const TranslucentSilhouettes = require('../src/translucent-silhouettes.js');
+const GaussianFilter = require('../src/gaussian-filter.js');
 const SdfAssist = require('../src/sdf-assist.js');
 const SdfRaster = require('./sdf-assist.js');
 const { footprint, exportOffsets, coverageOffsets, sampledDepth } = require('./splat-sampling.js');
@@ -389,6 +390,7 @@ function renderFrame(world, o, preparedPalettes) {
   const coverageView = (!o.samples || o[coverageLane]) && !o.captureCoverage && !o.reflectionPlane && !o[probeCamera];
   const motionCoverage = coverageView && MotionalCoverage.prepare(o.motionalCoverage ?? look.motionalCoverage);
   if (coverageView && !motionCoverage?.strength) o.motionalCoverageHistory?.clear();
+  const gaussianFilter = GaussianFilter.prepare(o.gaussianFilter ?? look.gaussianFilter);
   const silhouettes = TranslucentSilhouettes.prepare(o.translucentSilhouettes ?? look.translucentSilhouettes);
   const stableDetail = StableDetail.prepare(o.stableDetail ?? look.stableDetail);
   const coverageMode = ContributionRules.coverageMode(o.splatCoverage ?? look.splatCoverage);
@@ -2116,7 +2118,10 @@ function renderFrame(world, o, preparedPalettes) {
     const shaped = footprintPlan?.styles[(world.splatFootprints.indices[i]??0)-1];
     const continuousCoverage = !silhouette && !shaped && !softCoverage && !fieldParticle &&
       ContributionRules.continuous(mode, al, kraw, opticalActive || surface?.reveals(i));
-    const filterVariance = continuousCoverage ? ContributionRules.continuousVariance * artScale * artScale : .15;
+    const filteredGaussian = gaussianFilter && !curve && !shaped && !silhouette && !correction && !opticalActive &&
+      !continuousCoverage && !fieldParticle && !kind && (al < 1 || softCoverage || world.gaussianCloud) ? gaussianFilter : null;
+    const filterVariance = filteredGaussian ? filteredGaussian.variance * artScale * artScale :
+      continuousCoverage ? ContributionRules.continuousVariance * artScale * artScale : .15;
     const styleKey = (kraw & 32768) ? 0 : materialStyles?.[jStyle + 1] || 0;
     const staged = stages ? stages.at(fieldParticle ? -1 : i) : null;
     lookPass?.begin();
@@ -2160,8 +2165,8 @@ function renderFrame(world, o, preparedPalettes) {
     const scheduled = lamps.length && !(flags & 22) && al >= 1 ? LightSchedule.transfer(lamps, x, y, z) : null;
     const dn = clamp((-cz - (eyeD - R)) / (2 * R), 0, 1);
     const iz = -1 / cz,
-      tx = clamp(cx * iz, -limx, limx) / iz,
-      ty = clamp(cy * iz, -limy, limy) / iz,
+      tx = filteredGaussian ? cx : clamp(cx * iz, -limx, limx) / iz,
+      ty = filteredGaussian ? cy : clamp(cy * iz, -limy, limy) / iz,
       j00 = ortho ? focal : focal * iz,
       j02 = ortho ? 0 : focal * tx * iz * iz,
       j12 = ortho ? 0 : focal * ty * iz * iz;
@@ -2204,7 +2209,9 @@ function renderFrame(world, o, preparedPalettes) {
       C = projectedC + filterVariance,
       det = A * C - Bq * Bq;
     if (det <= 0) continue;
-    let opacityGain = 1;
+    let opacityGain = filteredGaussian?.compensated ? GaussianFilter.opacity(projectedA,Bq,projectedC,filterVariance) : 1;
+    const rayGaussian = filteredGaussian?.ray && !ortho ? GaussianFilter.perspective([cx,cy,-cz],
+      GaussianFilter.cameraCovariance([c00,c01,c02,c11,c12,c22],V),focal,near,camera.clipFar,filterVariance) : null;
     if (silhouette && !shaped) {
       const fit = TranslucentSilhouettes.fit(silhouette,A,Bq,C,artScale,silhouetteWeight);
       A=fit.a;
@@ -2270,7 +2277,7 @@ function renderFrame(world, o, preparedPalettes) {
       centers[i * 2] = sx;
       centers[i * 2 + 1] = H - sy;
     }
-    const motionStrength = motionCoverageAt && !fieldParticle && !opticalActive && !softCoverage && !shaped &&
+    const motionStrength = !filteredGaussian && motionCoverageAt && !fieldParticle && !opticalActive && !softCoverage && !shaped &&
       !silhouette && !correction && !PIX?.[i*8] && !coverageBack?.has(i) &&
       (kraw & ContributionRules.nonSurface) === 0 && al >= 1 && motionCoverageAt(i);
     const thin = motionStrength && MotionalCoverage.thin(projectedA,Bq,projectedC,artScale,motionCoverage.maxWidth);
@@ -2286,8 +2293,14 @@ function renderFrame(world, o, preparedPalettes) {
       ex += extra;
       ey += extra;
     }
+    if (rayGaussian) {
+      const bounds = rayGaussian.bounds;
+      ex = bounds ? Math.max(sx - W/2 - bounds[0], W/2 + bounds[1] - sx) : Math.max(sx, W - sx);
+      ey = bounds ? Math.max(sy - H/2 - bounds[2], H/2 + bounds[3] - sy) : Math.max(sy, H - sy);
+    }
     if (!curve && (sx + ex < 0 || sx - ex > W || sy + ey < 0 || sy - ey > H)) continue;
-    const minimumAlpha = curve ? CurveSplat.minimum : ContributionRules.minimum;
+    const minimumAlpha = curve ? CurveSplat.minimum :
+      filteredGaussian?.compensated ? GaussianFilter.minimum : ContributionRules.minimum;
     let coverage = 1,
       glint = 0,
       centerPalette = 0;
@@ -2404,7 +2417,8 @@ function renderFrame(world, o, preparedPalettes) {
         if (strandCode && !StrandLod.visible(strandCode,Math.floor(ix/artScale),Math.floor(iy/artScale))) continue;
         if (representation && !CurveLod.visible(representation, ix, H - 1 - iy, artScale)) continue;
         const dx = ix + 0.5 - sx,
-          pw = -0.5 * (k0 * dx * dx + k2 * dy * dy) - k1 * dx * dy;
+          pw = rayGaussian ? rayGaussian.power(ix + .5 - W/2, iy + .5 - H/2) :
+            -0.5 * (k0 * dx * dx + k2 * dy * dy) - k1 * dx * dy;
         const planeRay=planeFrame&&rayAt(ix+.5,iy+.5);
         const planeHit=planeRay&&SplatFootprints.planeSample(shapeCenter,frame,planeRay.origin,planeRay.direction);
         if(planeFrame&&!planeHit)continue;
@@ -2417,7 +2431,8 @@ function renderFrame(world, o, preparedPalettes) {
         const planeDepth = curveHit ? curveHit.depth : planeHit ? planeHit.t * planeRay.axial : undefined;
         if(planeHit&&planeDepth<near)continue;
         const centerAlpha = curveHit ? curveHit.alpha : shaped ? Math.min(.99,shapeGain*(planeHit?planeMask(planeHit):SplatFootprints.sample(shaped,shapeMap,dx,dy))**shapeExponent) :
-          ContributionRules.alpha(pw, gain, hard, edgeStyle, continuousCoverage);
+          filteredGaussian ? (pw >= -GaussianFilter.cutoff ? Math.min(.99,gain*Math.exp(pw)) : 0) :
+            ContributionRules.alpha(pw, gain, hard, edgeStyle, continuousCoverage);
         let a = centerAlpha;
         if (silhouetteFilter) {
           let average;
@@ -2436,8 +2451,8 @@ function renderFrame(world, o, preparedPalettes) {
             average=total/(exportOffsets.length**2);
           }
           a+=(average-a)*silhouetteFilter;
-        } else if (!curve && !shaped && !silhouette && integrateFootprint) a = footprint(dx, dy, k0, k1, k2, al, hard, edgeStyle, continuousCoverage);
-        else if (!shaped && edgeStrength > 0) {
+        } else if (!curve && !shaped && !silhouette && !filteredGaussian && integrateFootprint) a = footprint(dx, dy, k0, k1, k2, al, hard, edgeStyle, continuousCoverage);
+        else if (!shaped && !filteredGaussian && edgeStrength > 0) {
           const average = footprint(dx, dy, k0, k1, k2, al, hard, edgeStyle, continuousCoverage, exportOffsets);
           a += (average - a) * edgeStrength;
         }

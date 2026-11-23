@@ -1,7 +1,7 @@
 export const sortTile = 256;
 const lanes = sortTile / 2;
 
-const camera = /* wgsl */ `
+const camera = ray => /* wgsl */ `
 struct Camera {
   view: mat4x4f,
   viewport: vec4f, // half width, half height, focal length in pixels, orthographic flag
@@ -13,13 +13,62 @@ struct Ellipse {
   axisY: vec2f,
   rgb: u32,
   alpha: f32,
+  ${ray ? "rayX: vec4f, rayY: vec4f, rayZ: vec4f," : ""}
 }
 @group(0) @binding(0) var<uniform> camera: Camera;
 `;
 
 // One reservation per workgroup in the shared visible list. The source index
 // stays with the key so scheduling cannot change the order of equal depths.
-export const projectionShader = camera + /* wgsl */ `
+const perspective = /* wgsl */ `
+fn limits(x: f32, z: f32, variance: f32, crossTerm: f32, zz: f32, focal: f32) -> vec2f {
+  let a = z*z - 9.0*zz;
+  let b = x*z - 9.0*crossTerm;
+  let halfWidth = sqrt(max(0.0,9.0*(z*z*variance-2.0*z*x*crossTerm+x*x*zz-9.0*(variance*zz-crossTerm*crossTerm))));
+  return (b+vec2f(-halfWidth,halfWidth))*focal/a;
+}
+fn whiten(cov: mat3x3f) -> mat3x3f {
+  let eps = max(max(cov[0].x,cov[1].y),max(cov[2].z,1e-30))*1e-7;
+  let a = sqrt(max(cov[0].x,eps));
+  let b = cov[0].y/a;
+  let c = cov[0].z/a;
+  let d = sqrt(max(cov[1].y-b*b,eps));
+  let e = (cov[1].z-b*c)/d;
+  let f = sqrt(max(cov[2].z-c*c-e*e,eps));
+  return mat3x3f(vec3f(a,b,c),vec3f(0,d,e),vec3f(0,0,f));
+}
+fn perspectiveEllipse(center: vec3f, cov: mat3x3f, variance: f32, rgb: u32, alpha: f32) -> Ellipse {
+  let viewport = camera.viewport.xy;
+  let focal = camera.viewport.z;
+  let blur = variance*pow(center.z/focal,2.0);
+  let L = whiten(cov+mat3x3f(vec3f(blur,0,0),vec3f(0,blur,0),vec3f(0)));
+  let c = L*transpose(L);
+  var lo = -viewport;
+  var hi = viewport;
+  if (center.z - 3.0*sqrt(c[2].z) > camera.clip.x) {
+    let x = limits(center.x,center.z,c[0].x,c[0].z,c[2].z,focal);
+    let y = limits(center.y,center.z,c[1].y,c[1].z,c[2].z,focal);
+    lo = max(lo,vec2f(x.x,y.x));
+    hi = min(hi,vec2f(x.y,y.y));
+  }
+  var empty: Ellipse;
+  if (any(hi <= lo)) { return empty; }
+  let a = L[0].x;
+  let b = L[0].y;
+  let c0 = L[0].z;
+  let d = L[1].y;
+  let e = L[1].z;
+  let f = L[2].z;
+  let x = vec3f(1.0/a,0,0);
+  let y = vec3f(-b/(a*d),1.0/d,0);
+  let z = vec3f((b*e-c0*d)/(a*d*f),-e/(d*f),1.0/f);
+  let halfWidth = (hi-lo)*.5;
+  return Ellipse((hi+lo)*.5,vec2f(halfWidth.x,0),vec2f(0,halfWidth.y),rgb,alpha,
+    vec4f(x,dot(x,center)),vec4f(y,dot(y,center)),vec4f(z,dot(z,center)));
+}
+`;
+
+export const projectionShader = (ray = false) => camera(ray) + (ray ? perspective : '') + /* wgsl */ `
 struct Point {
   position: vec4f,
   covariance0: vec4f,
@@ -41,7 +90,9 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   var ellipse: Ellipse;
   if (index >= arrayLength(&chunk.points) || !(depth >= camera.clip.x && depth <= camera.clip.y)) { return ellipse; }
   let point = chunk.points[index];
-  if (point.position.w < 0.004) { return ellipse; }
+  let compensated = camera.clip.w > 0.0;
+  let minimum = select(0.004, 0.0000152587890625, compensated);
+  if (point.position.w < minimum) { return ellipse; }
   let viewport = camera.viewport.xy;
   let focal = camera.viewport.z;
   let perspective = camera.viewport.w == 0.0;
@@ -51,7 +102,8 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   let up = vec3f(camera.view[0].y, camera.view[1].y, camera.view[2].y);
   let back = vec3f(camera.view[0].z, camera.view[1].z, camera.view[2].z);
   // Bound the perspective Jacobian at the screen edges while keeping the true center for culling.
-  let slope = clamp(xyz.xy / depth, -1.3 * viewport / focal, 1.3 * viewport / focal);
+  let rawSlope = xyz.xy / depth;
+  let slope = select(clamp(rawSlope, -1.3 * viewport / focal, 1.3 * viewport / focal), rawSlope, compensated ${ray ? '|| perspective' : ''});
   let jx = pixelScale * (right + select(vec3f(0), back * slope.x, perspective));
   let jy = pixelScale * (up + select(vec3f(0), back * slope.y, perspective));
   let a = point.covariance0.xyz;
@@ -59,9 +111,23 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   let covariance = mat3x3f(a, vec3f(a.y, b.x, b.y), vec3f(a.z, b.y, b.z));
   let covX = covariance * jx;
   let covY = covariance * jy;
-  let xx = dot(jx, covX) + 0.3;
+  let rawXX = dot(jx, covX);
   let xy = dot(jy, covX);
-  let yy = dot(jy, covY) + 0.3;
+  let rawYY = dot(jy, covY);
+  let variance = select(.3,camera.clip.z,camera.clip.z >= 0.0);
+  let det = max(0.0,rawXX*rawYY - xy*xy);
+  let change = variance * (max(0.0,rawXX+rawYY) + variance);
+  var alpha = point.position.w;
+  if (compensated && change > 0.0) { alpha *= sqrt(det/(det+change)); }
+  if (!(alpha >= minimum)) { return ellipse; }
+  let rgb = u32(point.covariance0.w);
+  ${ray ? `
+  if (perspective) {
+    let basis = mat3x3f(right,up,-back);
+    return perspectiveEllipse(vec3f(xyz.xy,depth),transpose(basis)*covariance*basis,variance,rgb,alpha);
+  }` : ''}
+  let xx = rawXX + variance;
+  let yy = rawYY + variance;
   if (!(xx > 0.0 && yy > 0.0)) { return ellipse; }
   let extent = 3.0 * sqrt(vec2f(xx, yy));
   if (any(abs(center) - extent >= viewport)) { return ellipse; }
@@ -77,7 +143,7 @@ fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
     axis = normalize(select(axisB, axisA, xx >= yy));
   }
   return Ellipse(center, 3.0 * sqrt(major) * axis,
-    3.0 * sqrt(minor) * vec2f(-axis.y, axis.x), u32(point.covariance0.w), point.position.w);
+    3.0 * sqrt(minor) * vec2f(-axis.y, axis.x), rgb, alpha${ray ? ',vec4f(0),vec4f(0),vec4f(0)' : ''});
 }
 
 @compute @workgroup_size(${lanes})
@@ -200,29 +266,58 @@ fn finishTile(@builtin(workgroup_id) group: vec3u, @builtin(local_invocation_ind
 }
 `;
 
-export const rasterShader = camera + /* wgsl */ `
+export const rasterShader = (ray = false) => camera(ray) + /* wgsl */ `
 @group(0) @binding(1) var<storage, read> ellipses: array<Ellipse>;
 @group(0) @binding(2) var<storage, read> keys: array<vec4u>;
 struct Vertex {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
   @location(1) @interpolate(flat) color: vec4f,
+  ${ray ? '@location(2) @interpolate(flat) slot: u32,' : ''}
 }
 
 @vertex
 fn vertex(@builtin(vertex_index) id: u32, @builtin(instance_index) instance: u32) -> Vertex {
-  let ellipse = ellipses[keys[instance].w];
+  let slot = keys[instance].w;
+  let ellipse = ellipses[slot];
   let uv = vec2f(f32(id & 1u), f32(id >> 1u)) * 2.0 - 1.0;
   let position = (ellipse.center + uv.x * ellipse.axisX + uv.y * ellipse.axisY) / camera.viewport.xy;
   let color = unpack4x8unorm(ellipse.rgb);
-  return Vertex(vec4f(position, 0.0, 1.0), uv, vec4f(color.rgb, ellipse.alpha));
+  return Vertex(vec4f(position, 0.0, 1.0), uv, vec4f(color.rgb, ellipse.alpha)${ray ? ",slot" : ""});
 }
 
 @fragment
 fn fragment(input: Vertex) -> @location(0) vec4f {
-  let radiusSquared = dot(input.uv, input.uv);
-  let alpha = min(0.99, input.color.a * exp(-4.5 * radiusSquared));
-  if (radiusSquared > 1.0 || alpha < 0.004) { discard; }
+  var power = -4.5 * dot(input.uv,input.uv);
+  ${ray ? `
+  if (camera.viewport.w == 0.0) {
+    let ellipse = ellipses[input.slot];
+    let pixel = vec2f(input.position.x-camera.viewport.x,camera.viewport.y-input.position.y);
+    let ray = vec3f(pixel/camera.viewport.z,1);
+    let r = vec3f(dot(ellipse.rayX.xyz,ray),dot(ellipse.rayY.xyz,ray),dot(ellipse.rayZ.xyz,ray));
+    let p = vec3f(ellipse.rayX.w,ellipse.rayY.w,ellipse.rayZ.w);
+    let depth = clamp(dot(r,p)/dot(r,r),camera.clip.x,camera.clip.y);
+    let delta = p-r*depth;
+    power = -.5*dot(delta,delta);
+  }` : ''}
+  let minimum = select(0.004,0.0000152587890625,camera.clip.w > 0.0);
+  let alpha = min(0.99,input.color.a*exp(power));
+  if (power < -4.5 || alpha < minimum) { discard; }
   return vec4f(input.color.rgb * alpha, alpha);
+}
+`;
+
+export const resolveShader = /* wgsl */ `
+@group(0) @binding(0) var draw: texture_2d<f32>;
+
+@vertex
+fn vertex(@builtin(vertex_index) id: u32) -> @builtin(position) vec4f {
+  let quad = array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));
+  return vec4f(quad[id],0,1);
+}
+
+@fragment
+fn fragment(@builtin(position) pixel: vec4f) -> @location(0) vec4f {
+  return textureLoad(draw,vec2i(pixel.xy),0);
 }
 `;

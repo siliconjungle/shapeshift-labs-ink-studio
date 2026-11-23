@@ -1,9 +1,10 @@
+import { gaussianFilter } from '../webgl/gaussian-filter.mjs';
 import { makeCamera } from '../webgl/view.mjs';
-import { sortTile, projectionShader, dispatchShader, sortingShader, rasterShader } from './gaussian-shaders.mjs';
+import { sortTile, projectionShader, dispatchShader, sortingShader, rasterShader, resolveShader } from './gaussian-shaders.mjs';
 
 const wordBytes = 4;
 const splatBytes = 16 * wordBytes;
-const ellipseBytes = 8 * wordBytes;
+const ellipseBytes = 8 * wordBytes, rayEllipseBytes = 20 * wordBytes;
 const keyBytes = 4 * wordBytes;
 const drawBytes = 4 * wordBytes;
 export const gaussianChunkBytes = count => count * splatBytes + 4 * wordBytes;
@@ -48,21 +49,36 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     return device.createComputePipelineAsync({ label, layout, compute: { module, entryPoint } });
   }
   const sortModule = shader('Gaussian depth merge', sortingShader);
-  const rasterModule = shader('Gaussian ellipse raster', rasterShader);
   const blend = { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' };
-  const [projection, prepare, seed, crossTile, finishTile, raster] = await Promise.all([
-    compute('Gaussian project and compact', shader('Gaussian projection', projectionShader)),
+  function drawPipeline(label, module, targetFormat, translucent) {
+    return device.createRenderPipelineAsync({
+      label, layout: 'auto',
+      vertex: { module, entryPoint: 'vertex' },
+      fragment: { module, entryPoint: 'fragment', targets: [{ format: targetFormat,
+        ...(translucent && { blend: { color: blend, alpha: blend } }) }] },
+      primitive: { topology: translucent ? 'triangle-strip' : 'triangle-list' }
+    });
+  }
+
+  const affineModule = shader('Gaussian ellipse raster', rasterShader());
+  const exactModule = shader('Gaussian ray raster', rasterShader(true));
+  const affinePipelines = Promise.all([
+    drawPipeline('Gaussian back-to-front blend', affineModule, format, true),
+    format !== 'rgba16float' && drawPipeline('Gaussian filtered blend', affineModule, 'rgba16float', true)
+  ]);
+  const exactPipelines = Promise.all([
+    drawPipeline('Gaussian ray blend', exactModule, format, true),
+    format !== 'rgba16float' && drawPipeline('Gaussian filtered ray blend', exactModule, 'rgba16float', true)
+  ]);
+  const [projection, rayProjection, prepare, seed, crossTile, finishTile, affineDraw, exactDraw, resolve] = await Promise.all([
+    compute('Gaussian project and compact', shader('Gaussian projection', projectionShader())),
+    compute('Gaussian ray bounds and compact', shader('Gaussian ray projection', projectionShader(true))),
     compute('Gaussian indirect counts', shader('Gaussian dispatch', dispatchShader)),
     compute('Gaussian sort tile', sortModule, 'seed', sorterPipelineLayout),
     compute('Gaussian compare across tiles', sortModule, 'crossTile', sorterPipelineLayout),
     compute('Gaussian finish tile', sortModule, 'finishTile', sorterPipelineLayout),
-    device.createRenderPipelineAsync({
-      label: 'Gaussian back-to-front blend',
-      layout: 'auto',
-      vertex: { module: rasterModule, entryPoint: 'vertex' },
-      fragment: { module: rasterModule, entryPoint: 'fragment', targets: [{ format, blend: { color: blend, alpha: blend } }] },
-      primitive: { topology: 'triangle-strip' }
-    })
+    affinePipelines, exactPipelines,
+    format !== 'rgba16float' && drawPipeline('Gaussian float output', shader('Gaussian float resolve', resolveShader), format, false)
   ]);
   const sorter = { seed, crossTile, finishTile };
   const buffer = (label, size, usage, mappedAtCreation = false) =>
@@ -71,7 +87,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
   const query = timed ? device.createQuerySet({ type: 'timestamp', count: 6 }) : null;
   const resolved = timed ? buffer('Gaussian resolved timestamps', timestampBytes, usage.QUERY_RESOLVE | usage.COPY_SRC) : null;
   const uniform = new Float32Array(cameraBytes / wordBytes);
-  let scene, work, disposed = false, cloudUpload = emptyUpload;
+  let scene, work, accumulation, disposed = false, cloudUpload = emptyUpload;
   const chunks = new Map();
 
   const maxStorage = Math.min(limits.maxBufferSize, limits.maxStorageBufferBindingSize);
@@ -126,9 +142,12 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     return { ...cloudUpload };
   }
 
-  function workFor(count) {
+  function workFor(count, ray) {
+    const stride = ray ? rayEllipseBytes : ellipseBytes;
+    const maxRecords = Math.floor(maxStorage / stride);
+    if (count > maxRecords) throw new RangeError('Gaussian ray projection exceeds the device workspace limit');
     const capacity = sortCapacity(Math.max(count, 1));
-    if (work?.capacity >= capacity) return work;
+    if (work?.capacity >= capacity && work.ray === ray) return work;
     const owned = [];
     let bytes = 0;
     function allocate(label, size, usage, mapped) {
@@ -141,7 +160,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     try {
       const stages = stagesFor(capacity);
       const dispatchCount = Math.log2(capacity / sortTile) + 1;
-      const ellipses = allocate('Gaussian visible ellipses', capacity * ellipseBytes, usage.STORAGE);
+      const ellipses = allocate('Gaussian visible ellipses', Math.min(capacity,maxRecords) * stride, usage.STORAGE);
       const keys = allocate('Gaussian depth order', capacity * keyBytes, usage.STORAGE);
       const draw = allocate('Gaussian draw arguments', drawBytes,
         usage.STORAGE | usage.INDIRECT | usage.COPY_DST | usage.COPY_SRC);
@@ -152,11 +171,14 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
         params.set([width, stride], i * alignment / wordBytes);
       });
       settings.unmap();
+      const drawModes = ray ? exactDraw : affineDraw;
       const next = {
-        capacity, bytes, draw, dispatch, stages, destroy, keys, ellipses,
+        capacity, bytes, ray, draw, dispatch, stages, destroy, keys, ellipses,
         prepare: group(prepare, draw, dispatch),
         sort: group(seed, keys, draw, { buffer: settings, size: 16 }),
-        raster: group(raster, camera, ellipses, keys)
+        drawModes,
+        raster: group(drawModes[0], camera, ellipses, keys),
+        floating: drawModes[1] && group(drawModes[1], camera, ellipses, keys)
       };
       for (const chunk of chunks.values()) chunk.projection = undefined;
       work?.destroy();
@@ -166,6 +188,18 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
       destroy();
       throw error;
     }
+  }
+
+  function floatTarget(width, height) {
+    if (accumulation?.texture.width === width && accumulation.texture.height === height) return accumulation;
+    const texture = device.createTexture({ label: 'Gaussian compensated color',
+      size: [width,height], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+    const view = texture.createView();
+    const binding = device.createBindGroup({ layout: resolve.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: view }] });
+    accumulation?.texture.destroy();
+    accumulation = { texture, view, binding };
+    return accumulation;
   }
 
   function timestamps(profile, index) {
@@ -208,11 +242,14 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
       throw new TypeError('Supply a single-sampled 2D render target in the renderer format');
     }
     const { width, height } = target;
-    const workspace = workFor(input);
-    const { draw, dispatch, stages } = workspace;
+    const setting = gaussianFilter.prepare(frame.gaussianFilter ?? world.look?.gaussianFilter);
     const view = makeCamera(world, frame, width, height);
+    const ray = setting?.ray === true && !view.ortho;
+    const workspace = workFor(input, ray);
+    const { draw, dispatch, stages } = workspace;
+    const project = ray ? rayProjection : projection;
     uniform.set(view.view);
-    uniform.set([width / 2, height / 2, height / (2 * view.tangent), +view.ortho, view.clipNear, view.clipFar], 16);
+    uniform.set([width / 2, height / 2, height / (2 * view.tangent), +view.ortho, view.clipNear, view.clipFar, setting?.variance ?? -1, +(setting?.compensated ?? false)], 16);
     const time = performance.now();
     queue.writeBuffer(camera, 0, uniform);
     const cameraUpload = { bytes: cameraBytes, cpuMs: performance.now() - time };
@@ -220,10 +257,10 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     const encoder = device.createCommandEncoder({ label: 'Gaussian visibility and draw' });
     encoder.clearBuffer(draw);
     const visibility = encoder.beginComputePass({ label: 'Project and cull', ...timestamps(frame.profile, 0) });
-    visibility.setPipeline(projection);
+    visibility.setPipeline(project);
     for (const handle of handles) {
       const chunk = chunks.get(handle);
-      chunk.projection ??= group(projection, camera, chunk.points, workspace.ellipses, workspace.keys, draw);
+      chunk.projection ??= group(project, camera, chunk.points, workspace.ellipses, workspace.keys, draw);
       visibility.setBindGroup(0, chunk.projection);
       visibility.dispatchWorkgroups(Math.ceil(handle.count / (sortTile / 2)));
     }
@@ -241,17 +278,27 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     sort.end();
 
     const [r, g, b] = frame.background ?? world.bg;
+    const output = target.createView({ mipLevelCount: 1 });
+    const floating = setting?.compensated && resolve ? floatTarget(width,height) : null;
     const pass = encoder.beginRenderPass({
       label: 'Rasterize visible ellipses', ...timestamps(frame.profile, 4),
       colorAttachments: [{
-        view: target.createView({ mipLevelCount: 1 }), clearValue: { r: r / 255, g: g / 255, b: b / 255, a: 1 },
+        view: floating?.view ?? output, clearValue: { r: r / 255, g: g / 255, b: b / 255, a: 1 },
         loadOp: 'clear', storeOp: 'store'
       }]
     });
-    pass.setPipeline(raster);
-    pass.setBindGroup(0, workspace.raster);
+    pass.setPipeline(workspace.drawModes[floating ? 1 : 0]);
+    pass.setBindGroup(0, floating ? workspace.floating : workspace.raster);
     pass.drawIndirect(draw, 0);
     pass.end();
+    if (floating) {
+      const finish = encoder.beginRenderPass({ label: 'Resolve Gaussian float color',
+        colorAttachments: [{ view: output, loadOp: 'clear', storeOp: 'store' }] });
+      finish.setPipeline(resolve);
+      finish.setBindGroup(0, floating.binding);
+      finish.draw(3);
+      finish.end();
+    }
 
     let staging;
     if (frame.profile) {
@@ -264,7 +311,8 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
       encoder.copyBufferToBuffer(draw, wordBytes, staging, offset, wordBytes);
     }
     queue.submit([encoder.finish()]);
-    const report = { input, cloudUpload: { ...upload }, cameraUpload, workBytes: workspace.bytes };
+    const report = { input, cloudUpload: { ...upload }, cameraUpload, workBytes: workspace.bytes,
+      ...(setting && { gaussianFilter: setting }) };
     return staging ? readProfile(staging, report) : report;
   }
 
@@ -281,6 +329,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     disposed = true;
     for (const handle of chunks.keys()) handle.dispose();
     work?.destroy();
+    accumulation?.texture.destroy();
     camera.destroy();
     query?.destroy();
     resolved?.destroy();

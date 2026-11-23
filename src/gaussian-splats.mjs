@@ -416,7 +416,7 @@ export function gaussianSplatWorld(cloud, {
       colorChannel(dc, sh, i, 1, basis) << 8 | colorChannel(dc, sh, i, 2, basis) << 16;
   }
   return {
-    count, data, seed: 1, detail: 14, radius: size, moving: new Int32Array(), back: new Int32Array(),
+    count, data, gaussianCloud: true, seed: 1, detail: 14, radius: size, moving: new Int32Array(), back: new Int32Array(),
     bg: [pal[0] >> 16, pal[0] >> 8 & 255, pal[0] & 255], pal,
     ...(colorMode !== 'baked' && { gaussianHarmonics: { count, degree, dc, sh, normals, up, colorMode } }),
     palName: 'Imported Gaussian', dither: 0, fog: { c: 0, start: 1, max: 0 }, outline: { c: 0, edge: 0 },
