@@ -52,6 +52,11 @@ const SceneMeshes = (() => {
     if (normal !== undefined && (!bytes(normal) || normal.length !== width * height * 4))
       throw new RangeError('Mesh normal maps need matching top-down RGBA8 pixels');
     const tint = [color >> 16, color >> 8 & 255, color & 255];
+    const blockTexture = input?.blockTexture;
+    if (blockTexture && (rules || sampling || indices || !pixels || blockTexture.width !== width ||
+        blockTexture.height !== height || width % 4 || height % 4 ||
+        !(blockTexture.blocks instanceof Uint8Array) || blockTexture.blocks.length !== width * height / 2))
+      throw new RangeError('BC1 blocks need a matching opaque base-color texture');
     function paint(x, y) {
       if (!pixels) return color;
       const at = (y * width + x) * 4;
@@ -70,7 +75,7 @@ const SceneMeshes = (() => {
       return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,emission,emissionStrength},
         {...rules,protect:rules.protect.map(tintColor)});
     }
-    return { id, width, height, paint, normal, sampling, engraving, simulation, ...(rules&&{chain}) };
+    return { id, width, height, paint, normal, sampling, engraving, simulation, blockTexture, tint, ...(rules&&{chain}) };
   }
 
   function atlasWidth(materials) {
@@ -115,7 +120,7 @@ const SceneMeshes = (() => {
     const atlas = Sprite.make(atlasWidth(tiles),maxEdge), regions = [];
     for (const tile of tiles) regions[tile.index] = atlas.reserve(tile.width,tile.height,tile.paint,{normal:tile.normal});
     const uvs = Float32Array.from(uvInput), source = Uint32Array.from(indices);
-    const drawIndices = new Uint32Array(source.length), semantic=[];
+    const drawIndices = new Uint32Array(source.length), semantic=[], blocks=[];
     if(tiles.reduce((sum,tile)=>sum+(tile.chain?tile.width*tile.height:0),0)>2**20)
       throw new RangeError('Mesh semantic mipmaps exceed the texel budget');
     let cursor = 0;
@@ -130,11 +135,15 @@ const SceneMeshes = (() => {
       atlas.meshRegion({ points:positions, restPoints:positions, uvs, triangles:drawIndices.subarray(offset,cursor) },
         regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling,
           engraving:material.engraving});
+      if (material.blockTexture) blocks.push({ first:offset, end:cursor, region:regions[index],
+        texture:material.blockTexture, tint:material.tint });
       if(material.chain)semantic.push({first:offset,end:cursor,region:regions[index],chain:material.chain(),
         ...(material.simulation&&{simulation:material.simulation,materialId:material.id})});
     }
     const layer = atlas.finish();
     if(semantic.length)layer.semanticMipmaps=semantic;
+    if (blocks.length) layer.blockTextures = { revision:layer.revision, ranges:blocks,
+      complete:blocks.reduce((sum,row)=>sum+row.end-row.first,0)===source.length };
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
     const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, layer, regions, revision:0,

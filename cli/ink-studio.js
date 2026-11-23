@@ -40,6 +40,8 @@ let A = null;
 const importedAssets = new Map();
 const gaussianFile = file => /\.(ply|spz|gsz)$/i.test(file);
 const gaussianScenes = new Map();
+const sceneryFile = file => /\.inkscenery$/i.test(file);
+const sceneryScenes = new Map();
 const lib = () => A || (A = cfg.load ? cfg.load() : require('../index.js').load());
 // a diorama by its id, or a file in lab/ that exports (kit) => ({ id, name, seed, build })
 /* a mesh file is a diorama too: fitted to --size, coloured from its own materials, baked and looked at like the rest */
@@ -180,6 +182,11 @@ function scene(id) {
   if (gaussianFile(id)) {
     const descriptor = gaussianScenes.get(id);
     if (!descriptor) throw new Error('Gaussian input is supported by render, turn, sheet, clip and snap');
+    return descriptor;
+  }
+  if (sceneryFile(id)) {
+    const descriptor = sceneryScenes.get(id);
+    if (!descriptor) throw new Error('Scenery packs are supported by render, turn, sheet, clip, snap and surface-pixel');
     return descriptor;
   }
   if (/\.(obj|gltf|glb)$/i.test(id)) return meshScene(id);
@@ -1284,6 +1291,8 @@ const CMD = {
         '  render <file.ply|.spz> --raw   render a Gaussian splat cloud without palette quantization',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
         '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
+        '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',
+        '  scenery inspect <asset.inkscenery>   decode the pack and report its transfer sizes',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '    --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps',
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
@@ -2185,6 +2194,22 @@ const CMD = {
     } catch (error) {
       die(error.message);
     }
+  },
+  async scenery() {
+    const [mode, file] = pos;
+    const { encodeSceneryPack, readSceneryPack } = require('./scenery-delivery.js');
+    if (pos.length === 2 && mode === 'inspect')
+      return console.log(JSON.stringify((await readSceneryPack(file)).receipt,null,2));
+    if (pos.length === 2 && mode === 'pack' && typeof opt.out === 'string' && sceneryFile(opt.out)) {
+      if (!/\.js$/i.test(file)) die('Scenery pack expects a JavaScript scene with a scenery(seed) hook');
+      const authored = scene(file);
+      if (typeof authored.scenery !== 'function') die('The scene needs a scenery(seed) hook exposing its indexed meshes');
+      const data = await encodeSceneryPack(authored.id, authored.scenery(num('seed',authored.seed)));
+      fs.mkdirSync(path.dirname(path.resolve(opt.out)),{recursive:true});
+      fs.writeFileSync(opt.out,data);
+      return console.log(opt.out);
+    }
+    die('Usage: ink-studio scenery pack <scene.js> --out <asset.inkscenery> | scenery inspect <asset.inkscenery>');
   },
   'export-glb'() {
     const id = pos[0];
@@ -4402,6 +4427,24 @@ async function run() {
         build: () => gaussianSplatWorld(cloud, { size: num('size', 6), up: opt.up })
       });
     }
+  }
+  const sceneryFiles = cmd === 'snap' ? pos.filter(sceneryFile)
+    : ['render','turn','sheet','clip','surface-pixel'].includes(cmd) ? pos.slice(0,1).filter(sceneryFile) : [];
+  for (const file of new Set(sceneryFiles)) {
+    shot?.dependency(path.resolve(file));
+    const pack = await require('./scenery-delivery.js').readSceneryPack(path.resolve(file));
+    const low=[Infinity,Infinity,Infinity], high=[-Infinity,-Infinity,-Infinity];
+    for (const {positions} of pack.assets) for (let i=0;i<positions.length;i++) {
+      low[i%3]=Math.min(low[i%3],positions[i]);
+      high[i%3]=Math.max(high[i%3],positions[i]);
+    }
+    const span=Math.max(1,...high.map((value,i)=>value-low[i]));
+    sceneryScenes.set(file,{id:pack.id,name:pack.id,seed:1,
+      build:seed=>lib().makeBuilder(seed,[0x121c22,0x33484f,0x647e77,0xa8aa8b,0xeddfba]).finish({
+        meshes:pack.meshes,dither:0,
+        cam:{target:high.map((value,i)=>(value+low[i])/2),dist:span*2.05,yaw:.24,pitch:.22,ortho:true}
+      })
+    });
   }
   if (/\.glb$/i.test(pos[0] || '') && opt.uv !== 'off') {
     try {

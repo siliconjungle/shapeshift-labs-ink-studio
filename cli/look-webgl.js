@@ -4,7 +4,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
-function runWebGL({ chrome, hardware }, buildFixture, runFixtures, inputs) {
+function runWebGL({ chrome, hardware, asyncFixture }, buildFixture, runFixtures, inputs) {
   const executable = chrome || process.env.INK_TEST_CHROME || [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'
@@ -17,11 +17,11 @@ function runWebGL({ chrome, hardware }, buildFixture, runFixtures, inputs) {
     fs.writeFileSync(page, `<!doctype html><pre id="result">pending</pre>
 <script src="bundle.js"></script>
 <script type="module">
-import { createRenderer, createCameraAtlas, compileGaussianPartProxies, compileGaussianMaterials } from ${JSON.stringify(renderer)};
+import { createRenderer, createCameraAtlas, compileGaussianPartProxies, compileGaussianMaterials, decodeSceneryPack } from ${JSON.stringify(renderer)};
 const result = document.querySelector('#result');
 try {
-  const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages, compileGaussianPartProxies, compileGaussianMaterials };
-  const cases = (${runFixtures.toString()})(kit, ${buildFixture.toString()},
+  const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages, compileGaussianPartProxies, compileGaussianMaterials, decodeSceneryPack };
+  const cases = await (${runFixtures.toString()})(kit, ${buildFixture.toString()},
     (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${JSON.stringify(inputs)});
   result.textContent = encodeURIComponent(JSON.stringify({ ...cases, browser: navigator.userAgent }));
 } catch (error) {
@@ -30,7 +30,7 @@ try {
 </script>`);
     const software = hardware ? [] : ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'];
     const html = execFileSync(executable, ['--headless', '--no-first-run', '--disable-background-networking',
-      '--allow-file-access-from-files', ...software,
+      '--allow-file-access-from-files', ...(asyncFixture ? ['--virtual-time-budget=10000'] : []), ...software,
       '--user-data-dir=' + path.join(temp, 'profile'), '--dump-dom', pathToFileURL(page).href],
     { timeout: 120000, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     const output = /<pre id="result">([^<]*)<\/pre>/.exec(html)?.[1];

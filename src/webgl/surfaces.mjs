@@ -68,7 +68,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation) {
+      anchors,engraving,semantic,simulation,blockColor) {
       const chart = lighting && !normalMapped;
       const marks=anchors || engraving, rest=marks||simulation, needsFrame=normalMapped||semantic;
       const key = [
@@ -84,7 +84,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation
+        glassLayers,anchors,engraving,semantic,simulation,blockColor
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -128,6 +128,7 @@ precision highp float;
 precision highp int;
 flat in highp int v_historyId;
 uniform sampler2D u_atlas;
+${blockColor ? 'uniform highp sampler2D u_blockColor;uniform bool u_blockOn;uniform ivec2 u_blockOrigin;uniform vec3 u_blockTint;' : ''}
 uniform vec4 u_range,u_splatPlane;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
 uniform vec2 u_surfaceViewport;
@@ -191,6 +192,12 @@ void main(){
   vec2 dy=(dFdy(numerator)-v_texel*dFdy(q))*scale/q;
   ${styledProjection ? 'if(u_affine){dx=dFdx(uv)*scale;dy=dFdy(uv)*scale;}' : ''}
   if(u_paletteSampling)ink=samplePalette(rawTexel,dx,dy,ink);
+  ` : ''}
+  ${blockColor ? `
+  if(u_blockOn){
+    ivec2 coord=clamp(ivec2(texel)-u_blockOrigin,ivec2(0),textureSize(u_blockColor,0)-1);
+    ink=vec4(round(texelFetch(u_blockColor,coord,0).rgb*u_blockTint)/255.0,1);
+  }
   ` : ''}
   ${semantic ? `
   float semanticSpan=max(length(dFdx(rawTexel)),length(dFdy(rawTexel)))*u_semanticScale;
@@ -274,6 +281,7 @@ void main(){
     gl.bindVertexArray(null);
     let active,
       activeVertices,
+      activeBlockOnly,
       activeNormals,
       normalTexture,
       revision = -1,
@@ -282,8 +290,26 @@ void main(){
       height = 0,
       disposed = false,
       staging = new Uint8Array(0);
-    const stats = { textureBytes: 0, geometryBytes: 0 };
-    function upload(atlas) {
+    const stats = { textureBytes: 0, geometryBytes: 0, blockBytes: 0 };
+    const blockUnit = 7, blockTextures = new Map();
+    let s3tc, blockOwner;
+    function bindBlock(texture) {
+      gl.activeTexture(gl.TEXTURE0 + blockUnit);
+      const existing = blockTextures.get(texture);
+      if (existing) {
+        gl.bindTexture(gl.TEXTURE_2D,existing);
+      } else {
+        const gpu = resources.texture();
+        // The surface pass reads sRGB bytes and applies its own transfer for lighting.
+        gl.compressedTexImage2D(gl.TEXTURE_2D,0,s3tc.COMPRESSED_RGB_S3TC_DXT1_EXT,
+          texture.width,texture.height,0,texture.blocks);
+        blockTextures.set(texture,gpu);
+        stats.blockBytes+=texture.blocks.byteLength;
+        stats.textureBytes+=texture.blocks.byteLength;
+      }
+    }
+    function upload(atlas, blockOnly) {
+      stats.blockBytes = 0;
       stats.textureBytes = 0;
       stats.geometryBytes = 0;
       if (disposed) throw new Error('Surface pipeline has been disposed');
@@ -294,6 +320,7 @@ void main(){
         revision === next &&
         geometryRevision === nextGeometry &&
         activeVertices === atlas.vertices &&
+        activeBlockOnly === blockOnly &&
         activeNormals === atlas.normalPixels &&
         width === atlas.width &&
         height === atlas.height
@@ -363,9 +390,12 @@ void main(){
         stats.textureBytes += bytes;
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
-      if (replace || revision !== next) {
+      if (replace || activeBlockOnly !== blockOnly || revision !== next) {
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        uploadPixels(atlas.pixels, replace);
+        if (blockOnly) {
+          gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(4));
+          stats.textureBytes+=4;
+        } else uploadPixels(atlas.pixels, replace || activeBlockOnly !== blockOnly);
       }
       const newNormals = activeNormals !== atlas.normalPixels;
       if (atlas.normalPixels && (replace || newNormals || revision !== next)) {
@@ -376,6 +406,7 @@ void main(){
       }
       active = atlas;
       activeVertices = atlas.vertices;
+      activeBlockOnly = blockOnly;
       activeNormals = atlas.normalPixels;
       revision = next;
       geometryRevision = nextGeometry;
@@ -620,7 +651,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         width = 1,
         height = 1,
         paletteSampling,
-        surfaceNormals = true,
+        surfaceNormals = true, sceneryBlockTextures = true,
         semanticMipmaps = true, simulationLayers, eye, back=[0,0,1], ortho,
         samplingScale = 1,
         geometryCode = 0,
@@ -628,7 +659,17 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         section, anchors, engraving, coverageFilter, historyFirst = 0
       }
     ) {
-      upload(atlas);
+      const planBlocks=atlas?.blockTextures;
+      const blockReady=planBlocks && planBlocks.revision===atlas.revision && sceneryBlockTextures && !atlas[uvSlip]?.ranges.length &&
+        (s3tc===undefined ? (s3tc=gl.getExtension('WEBGL_compressed_texture_s3tc')) : s3tc);
+      const blockRanges=blockReady ? planBlocks.ranges : undefined;
+      if(blockOwner!==planBlocks || !blockReady && blockTextures.size) {
+        for(const gpu of blockTextures.values())resources.free(gpu);
+        blockTextures.clear();
+        blockOwner=planBlocks;
+      }
+      upload(atlas,Boolean(blockReady && planBlocks.complete));
+      stats.blockMode=planBlocks ? blockReady ? 'native-bc1' : 'decoded-rgba' : undefined;
       const semantic=atlas.semanticMipmaps;
       const firstSimulation=!index&&!coverageFilter&&semantic?.find(row=>simulationLayers?.get(row.simulation)?.active);
       const simulation=Boolean(firstSimulation);
@@ -674,7 +715,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched || anchors || simulation)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -682,6 +723,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_range: range,
         u_fog: fog,
         u_atlas: 6,
+        ...(blockRanges&&{u_blockColor:blockUnit}),
         u_frontOnly: Boolean(atlas.frontOnly),
         ...(useSampling && { u_sampleTotals: prefixUnits[0], u_sampleAccents: prefixUnits[1], u_samplingScale: samplingScale }),
         u_surfaceLightCount: lighting?.count ?? 0,
@@ -708,6 +750,12 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         ...lighting?.uniforms
       });
       if(semantic)bindSemantic(semantic[0].chain);
+      let previousBlock;
+      if(blockRanges){
+        gl.activeTexture(gl.TEXTURE0+blockUnit);
+        previousBlock=gl.getParameter(gl.TEXTURE_BINDING_2D);
+        bindBlock(blockRanges[0].texture);
+      }
       let previousMask;
       if(simulation){
         gl.activeTexture(gl.TEXTURE0+simulationUnit);
@@ -715,7 +763,11 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         const plan=firstSimulation.simulation;
         masks.bind(plan,simulationLayers.get(plan),surfaceNormals);
       }
-      const restoreMask=()=>{
+      const restoreTextures=()=>{
+        if(blockRanges){
+          gl.activeTexture(gl.TEXTURE0+blockUnit);
+          gl.bindTexture(gl.TEXTURE_2D,previousBlock);
+        }
         if(simulation){
           gl.activeTexture(gl.TEXTURE0+simulationUnit);
           gl.bindTexture(gl.TEXTURE_2D,previousMask);
@@ -742,9 +794,9 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           first = stop;
         }
       }
-      let chartIndex = 0, semanticIndex=0;
+      let chartIndex = 0, semanticIndex=0, blockIndex=0;
       function drawRange(first, end) {
-        if(!coverageFilter && !semantic){
+        if(!coverageFilter && !semantic && !blockRanges){
           drawProjected(first,end);
           return;
         }
@@ -754,7 +806,14 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           while(semantic?.[semanticIndex]?.end<=first)semanticIndex++;
           const next=charts[chartIndex], chart=next?.first<=first?next:null;
           const candidate=semantic?.[semanticIndex], mip=candidate?.first<=first?candidate:null;
-          const stop=Math.min(end,(chart?chart.end:next?.first)??end,(mip?mip.end:candidate?.first)??end);
+          while(blockRanges?.[blockIndex]?.end<=first)blockIndex++;
+          const nextBlock=blockRanges?.[blockIndex], block=nextBlock?.first<=first?nextBlock:null;
+          const stop=Math.min(end,(chart?chart.end:next?.first)??end,(mip?mip.end:candidate?.first)??end,
+            (block?block.end:nextBlock?.first)??end);
+          if(block){
+            bindBlock(block.texture);
+            shader.set({u_blockOn:true,u_blockOrigin:[block.region.x,block.region.y],u_blockTint:block.tint});
+          } else if(blockRanges)shader.set({u_blockOn:false});
           if(coverageFilter)shader.set({u_filterSoftness:coverageFilter.at(chart?.materialId)});
           if(mip){
             const {chain,region:r}=mip;
@@ -801,7 +860,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
             gl.activeTexture(gl.TEXTURE0 + prefixUnits[i]);
             gl.bindTexture(gl.TEXTURE_2D, previous[i]);
           }
-          restoreMask();
+          restoreTextures();
           gl.activeTexture(gl.TEXTURE0);
         }
         return;
@@ -824,7 +883,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         shader.set({ u_uvSlip: false });
         drawRange(first, count);
       }
-      restoreMask();
+      restoreTextures();
       gl.activeTexture(gl.TEXTURE0);
     }
     return {

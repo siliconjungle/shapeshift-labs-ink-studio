@@ -652,6 +652,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             samplingScale: options.u_materialGridScale ?? 1,
             geometryCode: options.surfaceFrame?.meshCodes?.get(atlas.sceneMeshId),
             partGrid: options.spriteGrid });
+          if (atlas.blockTextures && !surfaceFrame.index && !options.u_markPass)
+            surfaceFrame.sceneryDeliveryFrame?.({id:atlas.sceneMeshId,...surface.stats});
           if (atlas.sceneMeshId) gl.depthFunc(gl.LEQUAL);
         }
         if (previews) {
@@ -1501,6 +1503,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const surfaceFrame={depthProxy,meshCodes:spriteMask?.meshCodes,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
         fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,
         surfaceNormals:frame.surfaceNormals,semanticMipmaps:frame.semanticMipmaps,simulationLayers,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
+        sceneryBlockTextures:frame.sceneryBlockTextures,
+        sceneryDeliveryFrame:reflectionCapture || plane!==zero ? undefined : frame.sceneryDeliveryFrame,
         sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
       if(layeredGlass){
         textureUnit(13,null);

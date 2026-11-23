@@ -160,6 +160,7 @@ module.exports = {
     if (dataInputs === undefined) throw new TypeError('Expected a dataInputs catalog in ' + file);
     return api.prepare(require('./cli/data-inputs.js').embed(api, dataInputs, file));
   },
+  ...require('./cli/scenery-delivery.js'),
   exportGlb: require('./cli/export-glb.js'),
   ...require('./cli/gltf-asset.js'),
   render: require('./cli/render.js').render,
