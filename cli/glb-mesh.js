@@ -17,7 +17,9 @@ function meshWriter(doc, mesh, rig, { V }, options) {
   if (mesh.faceMaterials && mesh.faceMaterials.length !== mesh.faces.length)
     throw new Error('Face material count does not match faces');
   const materials = mesh.materials?.length ? mesh.materials : [{ name, color: [0.45, 0.45, 0.45] }];
-  const faces = [], faceMaterials = [], corners = [], hardNormals = [], sourceFaces = [];
+  const faces = [], faceMaterials = [], corners = [], hardNormals = [], sourceFaces = [], splits = [];
+  const {registered, meshIndex:registeredIndex} = options;
+  const source=registered?.layout(registeredIndex,mesh);
   const once = new Set();
   for (const [f, face] of mesh.faces.entries()) {
     if (!Array.isArray(face) || face.length < 3 || face.length > 4 || new Set(face).size !== face.length ||
@@ -30,11 +32,12 @@ function meshWriter(doc, mesh, rig, { V }, options) {
       throw new Error('Expected normals for every face corner');
     const m = mesh.faceMaterials?.[f] ?? 0;
     if (!Number.isInteger(m) || m < 0 || m >= materials.length) throw new Error('Invalid face material on ' + name);
+    const mainDiagonal = face.length===4 && (source?.state.splits[f] ??
+      (V.dist(points[face[0]],points[face[2]]) <= V.dist(points[face[1]],points[face[3]])));
+    splits.push(mainDiagonal);
     let split = [[0, 1, 2]];
-    if (face.length === 4) {
-      split = V.dist(points[face[0]], points[face[2]]) <= V.dist(points[face[1]], points[face[3]])
-        ? [[0, 1, 2], [0, 2, 3]] : [[0, 1, 3], [1, 2, 3]];
-    }
+    if (face.length === 4)
+      split = mainDiagonal ? [[0, 1, 2], [0, 2, 3]] : [[0, 1, 3], [1, 2, 3]];
     for (const tri of split) {
       const ids = tri.map(i => face[i]), key = ids.slice().sort((a, b) => a - b).join('/');
       if (once.has(key)) throw new Error('Duplicate triangles on ' + name);
@@ -67,12 +70,15 @@ function meshWriter(doc, mesh, rig, { V }, options) {
     return V.mul(cross, 1 / length);
   });
   const normals = (mesh.normals || vertexNormals).map(n => V.norm(n));
-  const { uvMargin } = options, textureSize = options.textureSize === 0 ? 0 : mesh.textureSize ?? options.textureSize;
+  const { uvMargin } = options;
+  const textureSize = options.textureSize === 0 ? 0 : mesh.textureSize ?? options.textureSize ?? source?.row.width ?? 1024;
   if (![0, 256, 512, 1024, 2048, 4096].includes(textureSize)) throw new Error('Invalid texture size on ' + name);
-  const generated = !mesh.uvs, atlas = generated ? unwrap(points, faces, faceNormals, {
+  const generated = !mesh.uvs;
+  const atlas = source ? {
+    uvs:source.state.uvs,padding:source.row.padding,charts:source.state.chartCount,utilization:source.state.utilization
+  } : generated ? unwrap(points, faces, faceNormals, {
     size: textureSize || 1024, margin: uvMargin, groups: mesh.chartGroups ? sourceFaces.map(i => mesh.chartGroups[i]) : undefined
   }) : { uvs: corners, padding: Math.max(2, Math.ceil(textureSize * uvMargin / 2)) };
-  const {registered, meshIndex:registeredIndex} = options;
   const uvs = registered ? atlas.uvs.map(face=>face.map(uv=>uv.map(Math.fround))) : atlas.uvs;
   if (uvs.some(uv => Math.abs(area2(...uv)) < 1e-15)) throw new Error('Degenerate UV mapping on ' + name);
   if (registered && (!textureSize || materials.some(m=>m.alphaMode && m.alphaMode!=='OPAQUE' || (m.opacity??1)!==1)))
@@ -110,19 +116,22 @@ function meshWriter(doc, mesh, rig, { V }, options) {
   let materialIds;
   let registeredBake;
   if (bakeSource) {
-    if (registered && !generated) {
+    if (registered && !generated && !source) {
       const {overlap} = MeshUV.inspect({points,triangles:faces,uvs},{size:textureSize,padding:0,maxChecks:16000000});
       if (!overlap.complete || overlap.count)
         throw new Error('Registered bake needs a non-overlapping UV atlas on '+name+'. Inspect the layout with mesh-uv.');
     }
     const sample = mesh.sampleSurface;
-    const projection = registered?.paint(registeredIndex,points,faces,{V});
     const bakeNormals = hardNormals.length ? hardNormals : mesh.smooth === false ? faceNormals.map(n=>[n,n,n]) : undefined;
-    const baked = bake({ ...mesh, materials, faceMaterials, cornerNormals: bakeNormals,
+    const bakeMesh = { ...mesh, materials, faceMaterials, cornerNormals: bakeNormals,
       sampleSurface: sample && ((p, n, f) => sample.call(mesh,p,n,sourceFaces[f]))
-    }, faces, uvs, normals, textureSize, atlas.padding, { V }, {registered:Boolean(registered),projection});
+    };
+    const {chartBake,projection} = registered?.plan(registeredIndex,{
+      mesh:{...bakeMesh,faces:mesh.faces},faces,uvs,normals,atlas,splits,size:textureSize,source
+    },{V}) ?? {};
+    const baked = bake(bakeMesh,faces,uvs,normals,textureSize,atlas.padding,{V},{registered:Boolean(registered),projection,chartBake});
     const {textures,strength,coverage}=baked;
-    if(registered)registeredBake=registered.record(registeredIndex,mesh,faces,uvs,textureSize,atlas.padding,baked,projection,{V});
+    if(registered)registeredBake=registered.record(registeredIndex,mesh,faces,uvs,textureSize,atlas.padding,baked,chartBake,projection,source,{V});
     const material = { name, pbrMetallicRoughness: {
       baseColorTexture: texture(textures.base, 'base color'), metallicFactor: 0, roughnessFactor: 0.8
     } };

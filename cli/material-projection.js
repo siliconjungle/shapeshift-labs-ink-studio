@@ -151,7 +151,7 @@ function prepare(points, faces, views, {V}) {
     return {...row,...grid,eye,back,depths,texels:0,occluded:0,paintHash:image.hash,maskHash:approval?.hash};
   });
   const pigment=[0,0,0], value=[0,0,0];
-  function sample(p,n,face,base,masks) {
+  function sample(p,n,face,masks,stamp,at) {
     let total=0, opacity=0;
     pigment.fill(0);
     for(const row of rows) {
@@ -190,9 +190,10 @@ function prepare(points, faces, views, {V}) {
       for(let c=0;c<3;c++)pigment[c]+=value[c]*score/gain;
     }
     masks['projected-paint']=opacity;
-    return total?base.map((v,c)=>v*(1-opacity)+pigment[c]/total*opacity):base;
+    for(let c=0;c<3;c++)stamp[at+c]=total?pigment[c]/total*opacity:0;
+    stamp[at+3]=opacity;
   }
-  return {views:rows.length,maskNames:['projected-paint',...rows.map(row=>'paint-'+row.id)],sample,
+  return {views:rows.length,sample,
     report:()=>rows.map(({id,width,height,camera,paintHash,maskHash,texels,occluded})=>
       ({id,width,height,camera,paintHash,...(maskHash&&{maskHash}),texels,occluded}))};
 }

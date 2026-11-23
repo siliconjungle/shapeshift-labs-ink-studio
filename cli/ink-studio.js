@@ -1282,6 +1282,7 @@ const CMD = {
         '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '    --bake-dir <folder> [--paint-views <plan.json> | --capture-paint <cameras.json>]   export registered UV material maps',
+        '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
         '  depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF',
@@ -2202,8 +2203,9 @@ const CMD = {
         source = authored.model(num('seed', options.snapshot?.seed ?? authored.seed), options);
       }
       const result = require('../index.js').exportGlb(source, {
-        out: opt.out, textureSize: num('texture-size', 1024), uvMargin: num('uv-margin', 0.008),
-        bakeDir:opt['bake-dir'],paintViews:opt['paint-views'],capturePaint:opt['capture-paint']
+        out: opt.out, textureSize: num('texture-size', undefined), uvMargin: num('uv-margin', 0.008),
+        bakeDir:opt['bake-dir'],paintViews:opt['paint-views'],capturePaint:opt['capture-paint'],
+        rebakeFrom:opt['rebake-from'],chartEdits:opt['chart-edits']
       });
       console.log(JSON.stringify(result, null, 2));
     } catch (error) {

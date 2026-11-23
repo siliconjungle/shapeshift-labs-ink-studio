@@ -99,6 +99,12 @@ test('the CLI writes registered maps from an authored material and rejects ambig
   const maps=read(path.join(bakeDir,'material-bake.json')).meshes[0];
   assert(maps.masks.body);
   assert.equal(PNG.layout(path.join(bakeDir,maps.maps.normal.file)).w,256);
+  const next=path.join(dir,'rebake'), baseline=path.join(bakeDir,'material-bake.json');
+  execFileSync(process.execPath,[path.join(__dirname,'../cli/ink-studio.js'),'export-glb',scene,'--out',out,'--res','.2',
+    '--bake-dir',next,'--rebake-from',baseline],{stdio:'pipe'});
+  const rebaked=read(path.join(next,'material-bake.json')).meshes[0];
+  assert.equal(rebaked.chartReport.sampledTexels,0);
+  assert.deepEqual(rebaked.maps,maps.maps);
   const overlap=plate();
   overlap.uvs[1]=overlap.uvs[0];
   assert.throws(()=>studio.exportGlb(overlap,{out,textureSize:256,bakeDir}),/needs a non-overlapping UV atlas/);
@@ -117,4 +123,101 @@ test('registered pigment includes a PNG texture and vertex color before export',
   assert.deepEqual(pixel(PNG.raster(path.join(dir,file)),.725,.4).slice(0,3),[200,116,120]);
   const {gltf}=readGlb(fs.readFileSync(out));
   assert.equal(gltf.meshes[0].primitives[0].attributes.COLOR_0,undefined);
+});
+
+const editPlan = (...edits) => ({format:'ink-studio/material-chart-edits',version:1,edits});
+
+test('chart rebakes lock generated UVs and quad splits, and preserve clean texels and their gutters',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-chart-rebake-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const model=plate(), sampled=[0,0], original=model.sampleSurface;
+  delete model.uvs;
+  let touchUp=false;
+  model.sampleSurface=function(p,n,face) {
+    sampled[face]++;
+    const material=original.call(this,p,n,face);
+    return face===0?{...material,color:touchUp||p[2]>.08?[.5,.22,.045]:material.color}:material;
+  };
+  const run=(id,options)=>studio.exportGlb(model,{out:path.join(dir,id+'.glb'),bakeDir:path.join(dir,id),textureSize:256,...options});
+  const first=run('first'), base=read(first.materialBake).meshes[0], total=sampled.reduce((a,b)=>a+b);
+  touchUp=true;
+  const patch=run('patch',{rebakeFrom:first.materialBake,chartEdits:editPlan({mesh:0,charts:[0]})});
+  const full=run('full');
+  assert.deepEqual(read(patch.materialBake).meshes[0].maps,read(full.materialBake).meshes[0].maps);
+  touchUp=false;
+  // Flip the shortest quad diagonal. Receiving geometry must keep the original diagonal.
+  model.points[2][2]=.7;
+  sampled.fill(0);
+  const edited=run('second',{rebakeFrom:first.materialBake}), after=read(edited.materialBake).meshes[0];
+  assert.equal(after.uvLayout,base.uvLayout);
+  assert.deepEqual(after.chartReport.updated,[0]);
+  assert.deepEqual(after.chartReport.reused,[1]);
+  assert.equal(after.chartReport.sampledTexels,sampled[0]);
+  assert(sampled[0]>0 && sampled[0]<total);
+  assert.equal(sampled[1],0);
+  assert.notEqual(after.maps.pigment.sha256,base.maps.pigment.sha256);
+  const baseDir=path.dirname(first.materialBake), editedDir=path.dirname(edited.materialBake);
+  const saved=PNG.raster(path.join(baseDir,base.maps.coverage.file)).data;
+  const ownership=require('node:zlib').inflateSync(fs.readFileSync(path.join(baseDir,base.rebakeState.owners.file)));
+  for(const slot of ['maps','masks'])for(const name of Object.keys(base[slot])) {
+    const a=PNG.raster(path.join(baseDir,base[slot][name].file)).data,b=PNG.raster(path.join(editedDir,after[slot][name].file)).data;
+    let gutters=0;
+    for(let i=0;i<256*256;i++)if(ownership.readUInt32LE(i*4)===2) {
+      if(!saved[i*4])gutters++;
+      for(let c=0;c<4;c++)assert.equal(a[i*4+c],b[i*4+c],name+' '+i);
+    }
+    assert(gutters>0);
+  }
+  const clean=run('clean',{rebakeFrom:edited.materialBake});
+  assert.deepEqual(read(clean.materialBake).meshes[0].chartReport,{updated:[],reused:[0,1],sampledTexels:0});
+  assert.deepEqual(read(clean.materialBake).meshes[0].maps,after.maps);
+  const same=run('second',{rebakeFrom:edited.materialBake,chartEdits:editPlan({mesh:0,bounds:{min:[-.2,-.2,.8],max:[.2,.2,1.1]}})});
+  assert.deepEqual(read(same.materialBake).meshes[0].chartReport.updated,[1]);
+  assert(fs.existsSync(path.join(editedDir,after.maps.pigment.file)));
+  model.faces.reverse();
+  assert.throws(()=>run('bad',{rebakeFrom:first.materialBake}),/saved face topology/);
+});
+
+test('saved camera paint follows a sculpt, and changed source paint touches only selected charts',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-chart-paint-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const model=plate();
+  model.points.slice(4).forEach(p=>{p[0]+=2;p[2]=0;});
+  const run=(id,options)=>studio.exportGlb(model,{out:path.join(dir,id+'.glb'),bakeDir:path.join(dir,id),textureSize:256,...options});
+  const capture=run('capture',{capturePaint:{format:'ink-studio/material-paint-cameras',version:1,
+    views:[{id:'front',width:64,height:64,camera:{pitch:0}}]}});
+  const planFile=path.join(path.dirname(capture.materialBake),read(capture.materialBake).paintManifest), plan=read(planFile);
+  const view=plan.views[0], imageFile=path.join(path.dirname(planFile),view.paint);
+  const paint=color=>{
+    const rgb=new Uint8Array(view.width*view.height*3);
+    for(let p=0;p<rgb.length;p+=3)rgb.set(color,p);
+    PNG.write(imageFile,view.width,view.height,rgb);
+  };
+  const at=(result,u)=>{
+    const row=read(result.materialBake).meshes[0];
+    return pixel(PNG.raster(path.join(path.dirname(result.materialBake),row.maps.pigment.file)),u,.4).slice(0,3);
+  };
+  paint([247,63,18]);
+  const first=run('first',{paintViews:planFile});
+  model.points[2][2]=.17;
+  const posed=run('posed',{rebakeFrom:first.materialBake,paintViews:planFile});
+  assert.deepEqual(at(posed,.275),[247,63,18]);
+  assert.deepEqual(at(posed,.725),[247,63,18]);
+  const source=read(posed.materialBake).meshes[0];
+  assert.deepEqual(source.chartReport.updated,[0]);
+
+  paint([23,219,159]);
+  delete view.geometry;
+  fs.writeFileSync(planFile,JSON.stringify(plan));
+  assert.throws(()=>run('undeclared',{rebakeFrom:posed.materialBake,paintViews:planFile}),/explicit chart IDs or bounds/);
+  const updated=run('updated',{rebakeFrom:posed.materialBake,paintViews:planFile,chartEdits:editPlan({mesh:0,charts:[1]})});
+  const row=read(updated.materialBake).meshes[0];
+  assert.deepEqual(row.chartReport.updated,[1]);
+  assert.deepEqual(row.paintViews[0].charts,[1]);
+  assert.deepEqual(at(updated,.275),[247,63,18]);
+  assert.deepEqual(at(updated,.725),[23,219,159]);
+  const rest=run('rest',{rebakeFrom:updated.materialBake,paintViews:planFile,chartEdits:editPlan({mesh:0,charts:[0]})});
+  assert(at(rest,.275)[1]>at(rest,.275)[0]+90);
+  assert.deepEqual(read(rest.materialBake).meshes[0].chartReport.updated,[0]);
+  assert.deepEqual(at(rest,.725),[23,219,159]);
 });

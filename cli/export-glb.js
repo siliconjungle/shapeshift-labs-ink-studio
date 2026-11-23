@@ -21,16 +21,16 @@ function summarize({ meshes = [], skins = [], accessors = [] }) {
   };
 }
 
-function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024, bakeDir, paintViews, capturePaint } = {}) {
+function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits } = {}) {
   if (!out || path.extname(out).toLowerCase() !== '.glb') throw new Error('Choose an .glb output filename');
   if (!Number.isFinite(uvMargin) || uvMargin <= 0 || uvMargin >= 0.1)
     throw new Error('UV margin must be between 0 and 0.1');
-  if (![0, 256, 512, 1024, 2048, 4096].includes(textureSize))
+  if (textureSize!==undefined && ![0, 256, 512, 1024, 2048, 4096].includes(textureSize))
     throw new Error('Texture size must be 0, 256, 512, 1024, 2048 or 4096');
   const input = typeof modelOrFile === 'string' ? path.resolve(modelOrFile) : null, output = path.resolve(out);
   if (input === output) throw new Error('Choose an output different from the input mesh');
   const studio = require('../index'), extension = input && path.extname(input).toLowerCase();
-  const registered = registeredMaterial.prepare({bakeDir,paintViews,capturePaint});
+  const registered = registeredMaterial.prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits});
   let bytes, report;
   if (extension === '.gltf' || extension === '.glb') {
     if (registered) throw new TypeError('Registered baking uses an authored model or OBJ input');
@@ -55,7 +55,7 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024, bak
     registered?.validate(geometry.length);
     const meshes = geometry.map((mesh, i) => writeMesh(doc, {
       ...mesh,
-      name: mesh.name || path.parse(output).name + (geometry.length > 1 ? ' ' + (i + 1) : '')
+      name: mesh.name || registered?.name(i) || path.parse(output).name + (geometry.length > 1 ? ' ' + (i + 1) : '')
     }, rig, K, { uvMargin, textureSize, registered, meshIndex:i }));
     bytes = doc.finish();
     report = { meshes, joints: rig.size };

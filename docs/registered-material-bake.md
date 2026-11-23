@@ -107,3 +107,56 @@ The Kestrel survey buoy uses three approved paint views and one
 256 × 256 atlas. The turntable is rendered from the exported pigment and
 normal maps. The bundle includes the GLB, all material channels, and the
 editable capture guides.
+
+## Rebake changed UV charts
+
+Preserve the first registered bake's manifest, maps, and chart sidecars as a
+baseline. Keep the receiving mesh topology when making a new revision. The
+rebake inherits the saved texture size unless the input specifies one:
+
+```sh
+node cli/ink-studio.js export-glb edited-scene.js \
+  --out revision/model.glb --bake-dir revision \
+  --rebake-from baseline/material-bake.json
+```
+
+The atlas keeps its exact UV coordinates, quad diagonals, chart IDs, and
+gutter ownership. Changed positions, shading normals, vertex colors, and
+material slots mark their affected charts automatically. Several charts can
+depend on the same shared vertex or material. For sculpt work, an authored
+receiving topology can be reused across edits through
+`KIT.model.fromSculpt(sculpt, { topology })`. Topology or UV changes require a
+fresh full bake, as does an emission edit that exceeds the saved intensity
+scale.
+
+Use `--chart-edits edits.json` to mark a change inside a procedural sampler
+or to limit an updated `--paint-views` plan to selected charts. Bounds are in
+rest-model coordinates and match either the previous or current chart bounds:
+
+```json
+{
+  "format": "ink-studio/material-chart-edits",
+  "version": 1,
+  "edits": [
+    { "mesh": 0, "charts": [12] },
+    { "mesh": 1, "bounds": { "min": [-0.3, 0.2, 0], "max": [0.3, 0.7, 0.15] } }
+  ]
+}
+```
+
+The manifest lists each chart's ID, triangle indices, and bounds. Its
+`chartReport` records updated and reused IDs and the number of material
+texels sampled. A rebake combines the new samples with the previous atlas
+and embeds the complete material PNGs into the GLB. Reused chart texels and
+gutters keep their exact bytes.
+
+Omit `--paint-views` to carry the saved approved pigment through a sculpt edit.
+Ink stores it in UV space, so it follows the surface. To apply an updated
+camera paint plan, supply the plan and select the receiving charts. Use
+cameras captured against the current geometry for reprojection. Charts can
+receive the same revised plan in separate passes. Each pass becomes a new
+baseline. The JavaScript options are `rebakeFrom` and `chartEdits`.
+
+Run `node examples/incremental-chart-rebake.js <new-directory>` for a
+512-pixel atlas demo with a local dent, retained camera paint, and an atlas
+view showing the updated chart beside the reused charts.
