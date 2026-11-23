@@ -298,11 +298,17 @@ function render(world, o, preparedPalettes) {
     const api = require('../index.js').load().KIT.frameComposite;
     const time = o?.interfaceTime ?? o?.t ?? world.lookSnapshot?.time ?? 0;
     let layers = !plan.needsCamera && api.layers(plan, world, time, undefined, undefined, o?.t);
+    const requested = plan.needsDepth && ArtPasses.select(o.passes);
     const base = render(world, { ...o, composite: false, w: plan.world.w, h: plan.world.h, px: 1,
+      ...(requested && { passes: [...new Set([...requested, 'depth'])] }),
       ...(plan.needsCamera && cameraCapture(o, view => { camera ??= view; })) }, preparedPalettes);
     layers ||= api.layers(plan, world, time, camera, undefined, o?.t);
     const frame = { ...base, ...FrameComposite.compose(base, layers, plan.w, plan.h, plan.world.filter),
       px: 1, worldSize: [base.w, base.h] };
+    if (requested) {
+      if (requested.length) frame.passes = ArtPasses.subset(base.passes,requested);
+      else delete frame.passes;
+    }
     if (frame.renderStats) frame.renderStats.frameMs = performance.now() - start;
     return frame;
   }
@@ -551,7 +557,9 @@ function renderFrame(world, o, preparedPalettes) {
       haloSource: passes.scopedEmission && (p => emissive.profiles[passes.scopedEmission.slots[p]-1]?.glow === undefined)
     });
     if (styled && trackGlow && passes.scopedEmission && emissive.profiles.some(profile => profile.glow?.strength)) {
-      frame = ArtEffects.paletteUse(EmissiveFinishes.applyGlow(frame, passes, emissive.profiles), world.pal);
+      const stats = o.captureGlowStats ? {} : undefined;
+      frame = ArtEffects.paletteUse(EmissiveFinishes.applyGlow(frame, passes, emissive.profiles, stats), world.pal);
+      if (stats) frame.glowStats = stats;
     }
     const ditherAt = anchoring ? (x,y) => ArtStability.ditherCoordinates(stable, passes, y*frame.w+x, x, y) : undefined;
     const basePalette = (paletteState || paletteInventory || o.captureScenePalette) &&

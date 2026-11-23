@@ -113,3 +113,81 @@ test('WebGL composites all four grids and alternates with normal frames cleanly'
   assert.deepEqual(result.still.top, result.normal.top);
   assert.deepEqual(result.still.world, result.mixed.world);
 });
+
+function depthFixture({makeBuilder}) {
+  const B=makeBuilder(42,[0x102030,0x78d0a1]);
+  B.disc(0,0,0,[0,0,1],.62,.03,B.P[1],3);
+  const world=B.finish({radius:2,cam:{target:[0,0,0],yaw:0,pitch:0,dist:4},dither:0});
+  const source={w:3,h:2,rgba:new Uint8Array([
+    0,0,240,255, 250,0,0,255, 250,0,0,255,
+    0,220,0,255, 250,0,0,255, 250,0,0,255
+  ]),depth:new Float32Array([3,6,6,3,6,6])};
+  return {world,layer:{source,filter:'linear',depthTest:{bias:0}}};
+}
+
+test('each raster tap uses its own depth before filtering and late lettering stays native', () => {
+  const {world,layer}=depthFixture(studio.load());
+  const options={w:35,h:21,px:1,raw:true};
+  const label={ draw:[{type:'rect',rect:[18,10,1,1],color:'#fff0fd'}] };
+  const base=studio.render(world,{...options,passes:['depth']});
+  const flat=studio.render(world,{...options,composite:{layers:[{...layer,depthTest:false}]}});
+  const guided=studio.render(world,{...options,composite:{layers:[layer,label]}});
+  assert.equal(guided.passes,undefined);
+  assert.deepEqual(pixel(guided,17,10),pixel(base,17,10));
+  assert.notDeepEqual(pixel(flat,17,10),pixel(base,17,10));
+  assert.deepEqual(pixel(guided,18,10),[255,240,253]);
+  assert.deepEqual(pixel(guided,34,10),pixel(flat,34,10));
+  assert(pixel(guided,13,10)[0] < pixel(flat,13,10)[0]);
+  assert(pixel(guided,2,1)[2] > pixel(guided,2,19)[2]);
+  const preset={...layer,depthTest:{depth:6}};
+  const graph=studio.render(world,{...options,renderGraph:{passes:[{id:'depth-layer',type:'composite',layer:preset}]}});
+  assert.deepEqual(graph.rgb,studio.render(world,{...options,composite:{layers:[preset]}}).rgb);
+  assert.throws(()=>studio.render(world,{...options,composite:{layers:[{...layer,source:{...layer.source,depth:undefined}}]}}),
+    /Float32Array matching/);
+});
+
+test('match mode keeps background transfer and falls through on unmatched native surfaces', () => {
+  const {world,layer}=depthFixture(studio.load());
+  const source={...layer.source,depth:new Float32Array([Infinity,Infinity,Infinity,Infinity,Infinity,Infinity])};
+  const mode={source,filter:'linear',depthTest:{mode:'match',bias:.17}};
+  const options={w:33,h:21,px:1,raw:true,composite:{world:{resolution:[33,21]},layers:[mode]}};
+  const frame=studio.render(world,options), base=studio.render(world,{...options,composite:false});
+  assert.deepEqual(pixel(frame,16,10),pixel(base,16,10));
+  assert.notDeepEqual(pixel(frame,2,2),pixel(base,2,2));
+});
+
+test('WebGL depth-tested coarse rasters agree with the CPU and compose through graphs', {
+  skip: !process.env.INK_TEST_CHROME
+},()=>{
+  const result=runWebGL({},depthFixture,(kit,fixture,backend)=>{
+    const {world,layer}=fixture(kit);
+    const draw=backend(35,21,{raw:true,dither:0,offscreen:true});
+    const points={center:[17,10],edge:[13,10],outer:[34,10],top:[2,1],bottom:[2,19]};
+    try {
+      draw.draw(world,{composite:{layers:[layer]}});
+      const direct=draw.sample(points);
+      const bound={...layer,source:{slot:'plate'}};
+      const slot={width:layer.source.w,height:layer.source.h,data:layer.source.rgba,channels:4,depth:layer.source.depth};
+      draw.draw(world,{renderGraph:{passes:[{type:'composite',id:'layer',layer:bound}]},renderGraphInputs:{plate:slot}});
+      const graph=draw.sample(points);
+      const match={...layer,source:{...layer.source,depth:new Float32Array(6).fill(Infinity)},depthTest:{mode:'match'}};
+      draw.draw(world,{composite:{layers:[match]}});
+      const matching=draw.sample(points);
+      draw.draw(world,{composite:{layers:[{...layer,depthTest:false}]}});
+      const disabled=draw.sample(points);
+      draw.draw(world,{});
+      return {direct,graph,matching,disabled,plain:draw.sample(points),points};
+    } finally { draw.close(); }
+  });
+  const {world,layer}=depthFixture(studio.load());
+  const cpu=studio.render(world,{w:35,h:21,px:1,raw:true,composite:{layers:[layer]}});
+  assert.deepEqual(result.direct.center,result.plain.center);
+  assert.notDeepEqual(result.disabled.center,result.plain.center);
+  assert.deepEqual(result.matching.center,result.plain.center);
+  assert.deepEqual(result.matching.outer,result.direct.outer);
+  for(const [key,[x,y]] of Object.entries(result.points)){
+    const expected=pixel(cpu,x,y);
+    for(const samples of [result.direct,result.graph])
+      assert(samples[key].every((n,i)=>Math.abs(n-expected[i])<=1), key+': '+JSON.stringify(result));
+  }
+});

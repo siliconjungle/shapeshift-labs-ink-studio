@@ -1985,11 +1985,16 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           h > Math.min(maxSize, viewportLimit[1])) || plan.layers.some(({ w, h }) => w > maxSize || h > maxSize))
         throw new RangeError('Composite frame exceeds the WebGL viewport or texture size limit');
       const time = frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0;
-      let camera;
-      const drawFrame = plan.needsCamera ? { ...frame, ...captureFrameCamera(frame, view => { camera = view; }) } : frame;
+      let camera, guide;
+      const drawFrame = { ...frame,
+        ...(plan.needsCamera && captureFrameCamera(frame, view => { camera = view; })),
+        ...(plan.needsDepth && { [graphOwner]: Object.assign((scene, owner, depth, view) => {
+          guide = { texture:depth, range:view.depthRange };
+          frame[graphOwner]?.(scene, owner, frame[graphOwner].depth ? depth : undefined, view);
+        }, { depth:true }) }) };
       const layers = plan.needsCamera ? () => api.layers(plan, world, time, camera, gl, frame.time) : api.layers(plan, world, time, undefined, gl, frame.time);
       composite ??= createFrameComposite(gl, { program, resources, target, textureUnit, fullscreen });
-      composite(world, drawFrame, plan, layers, output, present);
+      composite(world, drawFrame, plan, layers, output, present, plan.needsDepth ? () => guide : undefined);
     }
     let gridRenderer;
     function presentGrid(world, frame, width, height, output) {

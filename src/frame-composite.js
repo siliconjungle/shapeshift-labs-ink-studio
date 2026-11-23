@@ -24,6 +24,24 @@ const FrameComposite = (() => {
     return value;
   }
 
+  function depthRule(value) {
+    if (value === undefined || value === false) return null;
+    const definition = value === true ? {} : value;
+    record(definition, ['mode', 'depth', 'bias'], 'composite layer depth test');
+    const { mode = 'occlude', depth, bias = .03 } = definition;
+    if (!['occlude','match'].includes(mode) || !Number.isFinite(bias) || bias < 0 ||
+        depth !== undefined && (!Number.isFinite(depth) || depth < 0))
+      throw new RangeError('Layer depth test needs occlude or match, a nonnegative bias and optional finite nonnegative depth');
+    return { mode, depth, bias };
+  }
+
+  function depthRaster(source, w, h) {
+    const depth = source?.depth;
+    if (!(depth instanceof Float32Array) || depth.length !== w*h || !depth.every(value => value >= 0))
+      throw new RangeError('Layer depth needs a top-down Float32Array matching its raster with nonnegative depths or Infinity');
+    return depth;
+  }
+
   function image(source) {
     const { w, h, rgba, rgb, alpha } = source ?? {};
     if (!positive(w) || !positive(h)) throw new RangeError('A composite source needs positive integer dimensions');
@@ -65,8 +83,10 @@ const FrameComposite = (() => {
     record(world, ['resolution', 'filter'], 'world composite');
     if (!Array.isArray(layers)) throw new TypeError('Composite layers must be an ordered list');
     const prepared = Array.from(layers, layer => {
-      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations', 'rect', 'directionDrawing', 'needsCamera'], 'composite layer');
+      record(layer, ['resolution', 'filter', 'opacity', 'blend', 'draw', 'source', 'annotations', 'rect', 'directionDrawing',
+        'needsCamera', 'depthTest'], 'composite layer');
       const { opacity = 1, blend = 'over', draw, source, rect, directionDrawing, needsCamera = false } = layer;
+      const depthTest = depthRule(layer.depthTest);
       if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new RangeError('Layer opacity must be in [0, 1]');
       if (blend !== 'over' && blend !== 'add') throw new TypeError('Layer blend must be over or add');
       const layout = annotations.prepare(layer.annotations);
@@ -82,10 +102,14 @@ const FrameComposite = (() => {
         !Number.isFinite(rect[0] + rect[2]) || !Number.isFinite(rect[1] + rect[3])))
         throw new RangeError('A raster layer rectangle needs finite XY and positive size');
       if (source !== undefined && typeof source !== 'function') image(source);
-      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout, directionDrawing, needsCamera, rect: rect?.slice(),
+      if (depthTest && depthTest.depth === undefined && typeof source !== 'function')
+        depthRaster(source, source?.w, source?.h);
+      return { resolution: resolution(layer.resolution), filter: filter(layer.filter), opacity, blend, source, layout, directionDrawing,
+        needsCamera, depthTest, rect: rect?.slice(),
         draw: draw && Array.from(draw, command) };
     });
     return { world: { resolution: resolution(world.resolution), filter: filter(world.filter) }, layers: prepared,
+      needsDepth: prepared.some(layer => layer.depthTest && layer.opacity > 0),
       needsCamera: prepared.some(layer => layer.opacity > 0 && (layer.needsCamera || layer.directionDrawing || layer.layout?.needsCamera ||
         layer.draw?.some(draw => draw.needsCamera))) };
   }
@@ -101,7 +125,7 @@ const FrameComposite = (() => {
     const prepared = settings(value);
     if (!prepared) return null;
     size(1, w, h);
-    return { ...size(1, w, h), needsCamera: prepared.needsCamera,
+    return { ...size(1, w, h), needsCamera: prepared.needsCamera, needsDepth: prepared.needsDepth,
       world: { ...size(prepared.world.resolution ?? resolution(pixelSize), w, h), filter: prepared.world.filter },
       layers: prepared.layers.map(layer => {
         const grid = layer.resolution ?? (layer.source && typeof layer.source !== 'function' ? [layer.source.w, layer.source.h] : 1);
@@ -279,15 +303,45 @@ const FrameComposite = (() => {
       const draw = directions || layout ? [...(directions?.draw.map(command) ?? []), ...(layer.draw ?? []),
         ...(layout?.draw.map(command) ?? [])] : layer.draw;
       const gpu = gl && typeof layer.source === 'function' && layer.source[textureSource]?.(gl);
+      const source = !draw && !gpu && (typeof layer.source === 'function' ?
+        layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time, sceneTime, camera }) : layer.source);
       const result = gpu ? { w: gpu.region[2], h: gpu.region[3], gpu } :
-        draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw, false, directions ? 64e6 : undefined, false) : pixels(
-          typeof layer.source === 'function' ? layer.source({ w, h, outputWidth: plan.w, outputHeight: plan.h, world, time, sceneTime, camera }) : layer.source);
+        draw ? drawLayer(layer, plan.w, plan.h, text, camera, draw, false, directions ? 64e6 : undefined, false) : pixels(source);
       if (result.w !== w || result.h !== h) throw new RangeError('Composite raster dimensions must match the layer resolution');
-      return { ...result, dest: layer.dest, filter: layer.filter, blend: layer.blend, opacity: layer.opacity };
+      const { depthTest } = layer;
+      const depths = depthTest && depthTest.depth === undefined ? depthRaster(source,w,h) : undefined;
+      return { ...result, dest: layer.dest, filter: layer.filter, blend: layer.blend, opacity: layer.opacity, depthTest, depths };
     });
   }
 
-  function sample(layer, u, v, out) {
+  function depthAccept(receiver, source, { mode, bias }) {
+    return mode === 'match' ? receiver === source || Math.abs(receiver - source) <= bias : source <= receiver + bias;
+  }
+
+  function guidedSample(layer, u, v, out, sceneDepth) {
+    const { w, h, depthTest, depths, data } = layer;
+    if (sceneDepth === undefined) throw new Error('Depth-tested compositing needs the scene depth pass');
+    const nx = Math.max(0,Math.min(w - 1,layer.filter === 'linear' ? u - .5 : u));
+    const ny = Math.max(0,Math.min(h - 1,layer.filter === 'linear' ? v - .5 : v));
+    const x = Math.floor(nx), y = Math.floor(ny), dx = nx-x, dy = ny-y;
+    const index = y*w+x;
+    out.fill(0);
+    if (layer.filter === 'nearest') {
+      if (depthAccept(sceneDepth,depthTest.depth ?? depths[index],depthTest))
+        for (let c=0;c<4;c++) out[c] = data[index*4+c];
+      return;
+    }
+    for (let j=0;j<2;j++) for (let i=0;i<2;i++) {
+      const weight = (i ? dx : 1-dx) * (j ? dy : 1-dy);
+      if (!weight) continue;
+      const p = index+j*w+i;
+      if (!depthAccept(sceneDepth,depthTest.depth ?? depths[p],depthTest)) continue;
+      for (let c=0;c<4;c++) out[c] += data[p*4+c]*weight;
+    }
+  }
+
+  function sample(layer, u, v, out, sceneDepth) {
+    if (layer.depthTest) return guidedSample(layer,u,v,out,sceneDepth);
     const { data, w: width, h: height } = layer;
     if (layer.filter === 'linear') {
       const nx = Math.max(0, Math.min(width - 1, u - .5)), ny = Math.max(0, Math.min(height - 1, v - .5));
@@ -303,21 +357,22 @@ const FrameComposite = (() => {
     }
   }
 
-  function samplePlaced(layer, x, y, out) {
+  function samplePlaced(layer, x, y, out, sceneDepth) {
     const [left, top, width, height] = layer.dest;
     const u = x - left, v = y - top;
     if (u < 0 || v < 0 || u >= width || v >= height) return false;
-    sample(layer, u * layer.w / width, v * layer.h / height, out);
+    sample(layer, u * layer.w / width, v * layer.h / height, out, sceneDepth);
     return true;
   }
 
-  function resample(layer, w, h, visit) {
+  function resample(layer, w, h, visit, passes) {
     const color = new Float64Array(4);
     const [left, top, width, height] = layer.dest;
     const startX = Math.max(0, Math.ceil(left - .5)), startY = Math.max(0, Math.ceil(top - .5));
     const endX = Math.min(w, Math.ceil(left + width - .5)), endY = Math.min(h, Math.ceil(top + height - .5));
     for (let y = startY; y < endY; y++) for (let x = startX; x < endX; x++) {
-      sample(layer, (x + .5 - left) * layer.w / width, (y + .5 - top) * layer.h / height, color);
+      const depth = passes?.depth[Math.floor((y+.5)*passes.h/h)*passes.w+Math.floor((x+.5)*passes.w/w)];
+      sample(layer, (x + .5 - left) * layer.w / width, (y + .5 - top) * layer.h / height, color, depth);
       visit((y * w + x) * 4, color);
     }
   }
@@ -338,7 +393,7 @@ const FrameComposite = (() => {
     for (const layer of overlays) {
       const add = layer.blend === 'add', opacity = layer.opacity;
       resample(layer.dest ? layer : { ...layer, dest: [0, 0, w, h] }, w, h,
-        (p, sample) => blend(data, p, sample, opacity, add));
+        (p, sample) => blend(data, p, sample, opacity, add), layer.depthTest && base.passes?.depth ? base.passes : undefined);
     }
     return straight(data, w, h, base.alpha);
   }

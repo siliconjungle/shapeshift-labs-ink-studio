@@ -473,6 +473,8 @@ emissiveFinishes: [{
 - `spill` uses an invisible area light. Give it a fixed world-space `at` position or an `offset` from the current center of the selected emitters. Control its shape, direction, falloff, and shadows with the [area light settings](scene-optics.md). For shadow-casting spill in JavaScript sculpts, set `keepRenderSdf: true` before baking. The diorama builder retains the required shadow geometry automatically.
 - `glow` uses visible emission coverage and depth to spread light around the core on the native art grid. It supports `falloff`, source `threshold`, and `depthBias`. Below 96 art pixels on the shorter side it defaults to one art pixel of reach and 68% of the regular strength. Override the cutoff, radius, and strength with `small`, or use `small: false` to keep the same appearance at every size. Set `glow: false` to suppress the scene glow for the selected emitter as well.
 
+- Set `glow.scale` from 1 to 8 to evaluate broad glow on a cheaper grid in the headless renderer. The radius remains in native art pixels and accepts 1–48. A glow smaller than its scale uses the native path. Coarse cells keep the strongest visible source per profile, and each reconstruction tap checks that source's depth against the native receiver. The emitting core stays on the native grid. Request `captureGlowStats: true` for source counts, coarse texels, and kernel visits in `frame.glowStats`.
+
 Use `--emissive-finishes off` to disable the profiles. `--area-lights off` disables the spill, and `--raw` keeps the core and spill while bypassing the screen glow.
 
 ```sh

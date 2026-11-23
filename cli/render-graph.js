@@ -210,7 +210,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
                 }
                 let gain = amount * node.gain;
                 if (node.layer) {
-                  if (raster) FrameComposite.samplePlaced(raster, x, y, color);
+                  if (raster) FrameComposite.samplePlaced(raster, x, y, color, depth?.[at(x,y)]);
                   gain *= raster?.opacity ?? 0;
                 } else FrameComposite.sample({ data: source, w, h, filter: 'nearest' }, x, y, color);
                 if (node.threshold && color[3] > 0)
@@ -270,7 +270,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
             const q = p * 4;
             if (maskPass) {
               if (raster && weight)
-                weight *= FrameComposite.samplePlaced(raster, x, y, color) ? color[3] / 255 : 0;
+                weight *= FrameComposite.samplePlaced(raster, x, y, color, depth?.[native]) ? color[3] / 255 : 0;
               if (node.volume && weight) {
                 const z = depth?.[native];
                 const u = ((native % passes.w) + 0.5) / passes.w,
@@ -309,7 +309,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
                 let amount = weight * node.gain;
                 if (amount > 0) {
                   if (node.layer) {
-                    if (raster) FrameComposite.samplePlaced(raster, x, y, color);
+                    if (raster) FrameComposite.samplePlaced(raster, x, y, color, depth?.[native]);
                     amount *= raster?.opacity ?? 0;
                   } else for (let c = 0; c < 4; c++) color[c] = source[q + c];
                   if (node.threshold && color[3] > 0) {
@@ -375,7 +375,7 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
             } else if (node.type === 'composite') {
               if (node.layer && !raster) continue;
               if (raster) {
-                if (!FrameComposite.samplePlaced(raster, x, y, color)) continue;
+                if (!FrameComposite.samplePlaced(raster, x, y, color, depth?.[native])) continue;
               } else for (let c = 0; c < 4; c++) color[c] = source[q + c];
               FrameComposite.blend(
                 output,

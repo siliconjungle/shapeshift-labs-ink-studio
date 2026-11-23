@@ -107,7 +107,9 @@ const RenderGraph = (() => {
 
   function attachLayer(node, value) {
     const layout = node.slot ? { ...value, source() {} } : value;
-    node.needsCamera = compositor.settings({ layers: [layout] }).needsCamera || node.needsCamera;
+    const settings = compositor.settings({ layers: [layout] });
+    node.needsCamera = settings.needsCamera || node.needsCamera;
+    node.layerDepth = settings.needsDepth;
     node.layer = value;
   }
 
@@ -571,8 +573,8 @@ const RenderGraph = (() => {
       lastUse,
       historyPasses,
       budget: graphBudget(value.budget),
-      needsDepth: passes.some(node => node.enabled && (node.volume || node.depth || node.depthThreshold !== undefined)),
-      needsOwner: passes.some(node => node.enabled && (node.select || node.effect || node.depth)),
+      needsDepth: passes.some(node => node.enabled && (node.volume || node.depth || node.layerDepth || node.depthThreshold !== undefined)),
+      needsOwner: passes.some(node => node.enabled && (node.select || node.effect || node.depth || node.layerDepth)),
       needsCamera: passes.some(node => node.enabled && node.needsCamera)
     };
     if (readSnapshot && !capture.length) compiled.set(value, plan);
@@ -833,14 +835,14 @@ const RenderGraph = (() => {
     const source = sources[name];
     if (!range) {
       const { width, height, data } = raster.rgba(source);
-      return { w: width, h: height, rgba: data };
+      return { w: width, h: height, rgba: data, depth:source?.depth };
     }
     const channels = source?.channels ?? source?.data?.length / (source?.width * source?.height);
     const { width, height, data } = raster.channel(source, { channel: channel ?? (channels % 2 === 0 ? 'alpha' : 'luma') });
     const rgba = new Uint8Array(width * height * 4);
     for (let p = 0; p < data.length; p++)
       rgba[p * 4 + 3] = match === undefined ? byte(clamp((data[p] - range[0]) / (range[1] - range[0]))) : data[p] === match ? 255 : 0;
-    return { w: width, h: height, rgba };
+    return { w: width, h: height, rgba, depth:source?.depth };
   }
 
   function layer(node, w, h, world, time, text, camera, resolve, gl, sources, raster, extractDirections, sceneTime) {

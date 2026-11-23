@@ -1,4 +1,4 @@
-import { layerSamplingGLSL, captureFrameCamera } from './frame-composite.mjs';
+import { layerSamplingGLSL, depthLayerSamplingGLSL, createCompositeDepth, captureFrameCamera } from './frame-composite.mjs';
 import { createRenderEffects } from './render-effects.mjs';
 import { inspectionDepth } from './inspection.mjs';
 
@@ -65,6 +65,7 @@ uniform float u_smearElapsed;
 out vec4 color;
 
 ${layerSamplingGLSL}
+${depthLayerSamplingGLSL}
 ${tileScheduleGLSL}
 
 float depthAt(vec2 pixel) {
@@ -160,7 +161,7 @@ void main() {
     weight *= n >= 1.0 ? (u_background ? 1.0 : 0.0) : (u_depthInvert ? 1.0 - a : a);
   }
   if (u_operation == 1) {
-    if (u_layer) weight *= placedLayerAt(u_source, pixel, u_layerDest, u_layerRegion, u_layerTopDown, u_linear).a;
+    if (u_layer) weight *= guidedLayerAt(u_source, pixel, u_size, u_layerDest, u_layerRegion, u_layerTopDown, u_linear).a;
     if (u_volume) {
       ivec2 size = textureSize(u_depth, 0);
       ivec2 site = min(ivec2(pixel / u_size * vec2(size)), size - 1);
@@ -248,7 +249,7 @@ void main() {
         if (all(greaterThanEqual(sampleAt, vec2(0.0))) && all(lessThan(sampleAt, u_size)))
           previous = layerAt(u_history, sampleAt, u_size, false, u_feedbackLinear);
       }
-      vec4 fresh = u_layer ? placedLayerAt(u_source, pixel, u_layerDest, u_layerRegion, u_layerTopDown, u_linear)
+      vec4 fresh = u_layer ? guidedLayerAt(u_source, pixel, u_size, u_layerDest, u_layerRegion, u_layerTopDown, u_linear)
         : layerAt(u_source, pixel, u_size, false, false);
       float gain = weight * u_gain;
       if (u_hasThreshold && fresh.a > 0.0) {
@@ -340,7 +341,7 @@ void main() {
     vec3 lookup = (clamp(inputColor.rgb / inputColor.a, 0.0, 1.0) * (u_cubeSize - 1.0) + 0.5) / u_cubeSize;
     color.rgb = mix(inputColor.rgb, texture(u_cube, lookup).rgb * inputColor.a, weight);
   } else if (u_operation == 5) {
-    vec4 over = u_layer ? placedLayerAt(u_source, pixel, u_layerDest, u_layerRegion, u_layerTopDown, u_linear) : layerAt(u_source, pixel, u_size, false, false);
+    vec4 over = u_layer ? guidedLayerAt(u_source, pixel, u_size, u_layerDest, u_layerRegion, u_layerTopDown, u_linear) : layerAt(u_source, pixel, u_size, false, false);
     over *= weight;
     color.a = over.a + inputColor.a * (1.0 - over.a);
     color.rgb = min(vec3(color.a), over.rgb + inputColor.rgb * (u_add ? 1.0 : 1.0 - over.a));
@@ -424,6 +425,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
   const pool = [],
     historyFree = [];
   const groupsTexture = resources.texture();
+  const layerDepth = createCompositeDepth(gl, resources, textureUnit, 6, 11);
   const effects = createRenderEffects(gl, { program, target, textureUnit, fullscreen });
   const history = api.history({ release: buffer => historyFree.push(buffer), releaseAge: buffer => buffer.dispose() });
   let lastCube, ageScratch, bankShader;
@@ -641,6 +643,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
         textureUnit(8, registers ? rows : (sourceMask ?? scene).textures[0]);
         if (registers) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, addresses ? w : 2, h, 0, gl.RGBA, gl.FLOAT, registers);
         const values = {
+          ...layerDepth(layer, ownership?.depth && {texture:depth, range:depthRange}, depth ?? scene.textures[0]),
           u_input: 0,
           u_source: 1,
           u_mask: 2,

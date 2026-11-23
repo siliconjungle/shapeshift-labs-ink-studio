@@ -22,14 +22,15 @@ const EmissiveFinishes = (() => {
   }
 
   function halo(raw, palette, fallback) {
-    if (!fields(raw, ['color', 'strength', 'radius', 'falloff', 'threshold', 'depthBias', 'small']))
+    if (!fields(raw, ['color', 'strength', 'radius', 'falloff', 'threshold', 'depthBias', 'small', 'scale']))
       throw new TypeError('Invalid emissive glow settings');
-    const { radius = 3, strength = .55, falloff = 1.35, threshold = .24, depthBias = .06, small = {} } = raw;
+    const { radius = 3, strength = .55, falloff = 1.35, threshold = .24, depthBias = .06, small = {}, scale = 1 } = raw;
     if (small !== false && !fields(small, ['belowPixels', 'radius', 'strength']))
       throw new TypeError('Small emissive glow needs belowPixels, radius, or strength');
     return {
       color: raw.color === undefined ? fallback : color(raw.color, palette),
-      radius: value(radius,1,8,'Glow radius',true),
+      radius: value(radius,1,48,'Glow radius',true),
+      scale: value(scale,1,8,'Glow grid scale',true),
       strength: value(strength,0,1,'Glow strength'),
       falloff: value(falloff,.25,8,'Glow falloff'),
       threshold: value(threshold,.02,1,'Glow source coverage'),
@@ -118,7 +119,54 @@ const EmissiveFinishes = (() => {
     });
   }
 
-  function applyGlow(frame, passes, profiles) {
+  function coarseGlow(grid, layer, id, w, h, scope, depth, emissionDepth, scores, slots, spend, stats) {
+    const { cw, ch, seeds } = grid, sx = w/cw, sy = h/ch;
+    const power = new Float32Array(cw*ch), owners = new Uint32Array(cw*ch);
+    const radius = layer.radius + .35;
+    let left = cw, top = ch, right = -1, bottom = -1;
+    if (stats) {
+      stats.coarseSources += seeds.size;
+      stats.coarseTexels += cw*ch;
+    }
+    for (const p of seeds.values()) {
+      const x = p%w + .5, y = Math.floor(p/w) + .5;
+      const x0 = Math.max(0,Math.ceil((x-radius)/sx-.5)), y0 = Math.max(0,Math.ceil((y-radius)/sy-.5));
+      const x1 = Math.min(cw-1,Math.floor((x+radius)/sx-.5)), y1 = Math.min(ch-1,Math.floor((y+radius)/sy-.5));
+      if (x1 < x0 || y1 < y0) continue;
+      spend((x1-x0+1)*(y1-y0+1),true);
+      left = Math.min(left,x0); top = Math.min(top,y0);
+      right = Math.max(right,x1); bottom = Math.max(bottom,y1);
+      for (let j=y0; j<=y1; j++) for (let i=x0; i<=x1; i++) {
+        const distance = Math.hypot((i+.5)*sx-x,(j+.5)*sy-y);
+        if (distance > radius) continue;
+        const q = j*cw+i, gain = scope.coverage[p]*layer.strength*(1-distance/(layer.radius+1))**layer.falloff;
+        if (gain <= power[q]) continue;
+        power[q] = gain;
+        owners[q] = p + 1;
+      }
+    }
+    function tap(i, receiver) {
+      return owners[i] && receiver + layer.depthBias >= emissionDepth[owners[i]-1] ? power[i] : 0;
+    }
+    if (right < left) return;
+    for (let y=Math.max(0,Math.floor((top-.5)*sy)); y<Math.min(h,Math.ceil((bottom+1.5)*sy)); y++) {
+      const v = Math.max(0,Math.min(ch-1,(y+.5)/sy-.5)), j = Math.floor(v), dy = v-j;
+      const row = j*cw, next = Math.min(ch-1,j+1)*cw;
+      for (let x=Math.max(0,Math.floor((left-.5)*sx)); x<Math.min(w,Math.ceil((right+1.5)*sx)); x++) {
+        const p = y*w+x;
+        if (scope.coverage[p] > .03) continue;
+        const u = Math.max(0,Math.min(cw-1,(x+.5)/sx-.5)), i = Math.floor(u), dx = u-i;
+        const k = Math.min(cw-1,i+1), receiver = depth[p];
+        const score = ((1-dx)*tap(row+i,receiver)+dx*tap(row+k,receiver))*(1-dy) +
+          ((1-dx)*tap(next+i,receiver)+dx*tap(next+k,receiver))*dy;
+        if (score <= scores[p]) continue;
+        scores[p] = score;
+        slots[p] = id;
+      }
+    }
+  }
+
+  function applyGlow(frame, passes, profiles, stats) {
     const scope = passes?.scopedEmission;
     if (!scope) return frame;
     const { w,h,rgb,alpha } = frame, { depth, emissionDepth } = passes;
@@ -128,10 +176,27 @@ const EmissiveFinishes = (() => {
       if (!glow.small || Math.min(w,h) >= glow.small.belowPixels) return glow;
       return { ...glow, radius:Math.min(glow.radius,glow.small.radius), strength:glow.small.strength };
     });
+    const coarse = halo.map(layer => layer?.scale > 1 && layer.radius >= layer.scale ?
+      { cw:Math.ceil(w/layer.scale), ch:Math.ceil(h/layer.scale), seeds:new Map() } : null);
+    if (stats) Object.assign(stats,{ coarseSources:0, nativeSources:0, coarseTexels:0, kernelTaps:0 });
+    let broadWork = 0;
+    function spend(amount, broad) {
+      if (broad && (broadWork += amount) > 64e6) throw new RangeError('Broad emissive glow exceeds its kernel work budget');
+      if (stats) stats.kernelTaps += amount;
+    }
     for (let p=0; p<slots.length; p++) {
       const id=scope.slots[p], layer=halo[id-1], coverage=scope.coverage[p], z=emissionDepth[p];
       if (!layer?.strength || coverage<layer.threshold || !Number.isFinite(z)) continue;
       const x=p%w, y=Math.floor(p/w), radius=layer.radius;
+      const grid = coarse[id-1];
+      if (grid) {
+        const key = Math.floor((y+.5)*grid.ch/h)*grid.cw + Math.floor((x+.5)*grid.cw/w), old = grid.seeds.get(key);
+        if (old === undefined || coverage > scope.coverage[old] || coverage === scope.coverage[old] && z < emissionDepth[old])
+          grid.seeds.set(key,p);
+        continue;
+      }
+      if (stats) stats.nativeSources++;
+      if (stats || radius > 8) spend((radius*2+1)**2,radius > 8);
       for (let dy=-radius; dy<=radius; dy++) for (let dx=-radius; dx<=radius; dx++) {
         const targetX=x+dx, targetY=y+dy, distance=Math.hypot(dx,dy);
         if (targetX<0 || targetX>=w || targetY<0 || targetY>=h || distance>radius+.35) continue;
@@ -143,6 +208,8 @@ const EmissiveFinishes = (() => {
         scores[target]=score;
       }
     }
+    for (const [i,grid] of coarse.entries()) if (grid?.seeds.size)
+      coarseGlow(grid,halo[i],i+1,w,h,scope,depth,emissionDepth,scores,slots,spend,stats);
     for (let p=0; p<slots.length; p++) {
       if (!slots[p]) continue;
       const tint=halo[slots[p]-1].color, gain=scores[p], oldAlpha=alpha ? alpha[p]/255 : 1;

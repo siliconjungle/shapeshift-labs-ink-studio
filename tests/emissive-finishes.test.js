@@ -41,7 +41,7 @@ test('an emissive profile preserves core shape and its spill follows the posed s
   const dark=E.coreRgb(profiles[0].core,.15,.25,.30), bright=E.coreRgb(profiles[0].core,.35,.5,.6);
   assert(bright[0]>dark[0] && bright[0]>bright[2]);
   assert.throws(()=>E.prepare([{...look,spill:{...look.spill,offset:[1,0,0]}}]),/either at or offset/);
-  assert.throws(()=>E.prepare([{...look,glow:{radius:9}}]),/Glow radius/);
+  assert.throws(()=>E.prepare([{...look,glow:{radius:49}}]),/Glow radius/);
 });
 
 test('the screen halo preserves the core, respects depth, and tightens on small art grids', () => {
@@ -120,6 +120,28 @@ test('diorama profiles bind named luminous materials and retain the spill shadow
   assert.deepEqual(world.emissiveFinishes,[profile]);
   assert(E.bind(E.prepare(world.emissiveFinishes,world.pal),world).slots.some(Boolean));
   assert(world.renderSdfs.length);
-  profile.glow={radius:9};
+  profile.glow={radius:49};
   assert(K.diorama.check(spec).some(issue=>issue.path==='finish.emissiveFinishes' && /Glow radius/.test(issue.problem)));
+});
+
+test('a coarse halo does less spread work and leaves the foreground depth edge and emissive core intact', () => {
+  const w=71, h=43, size=w*h;
+  const depth=new Float32Array(size).fill(12), emissionDepth=new Float32Array(size).fill(Infinity);
+  const slots=new Uint8Array(size), coverage=new Float32Array(size);
+  for (let y=0; y<h; y++) depth[y*w+35]=4;
+  for (let y=17; y<25; y++) for (let x=39; x<47; x++) {
+    const p=y*w+x;
+    emissionDepth[p]=8; slots[p]=1; coverage[p]=1;
+  }
+  const render=scale => {
+    const rgb=new Uint8Array(size*3).fill(30), stats={};
+    const [profile]=E.prepare([{ id:'glow',select:look.select,glow:{radius:18,scale,small:false} }]);
+    E.applyGlow({w,h,rgb},{depth,emissionDepth,scopedEmission:{slots,coverage}},[profile],stats);
+    return {rgb,stats};
+  };
+  const native=render(1), coarse=render(4);
+  assert.ok(coarse.stats.coarseSources > 0 && coarse.stats.kernelTaps < native.stats.kernelTaps/12);
+  assert(coarse.rgb[(20*w+36)*3] > 30 && native.rgb[(20*w+36)*3] > 30);
+  for (let p=0; p<size; p++) if (depth[p]<8 || slots[p])
+    assert.deepEqual(Array.from(coarse.rgb.subarray(p*3,p*3+3)),[30,30,30]);
 });
