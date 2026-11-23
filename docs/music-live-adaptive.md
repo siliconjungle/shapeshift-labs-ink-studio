@@ -77,6 +77,48 @@ ramp on the next available sample. `ramp: 0` applies an immediate change.
 Omit `ramp` for a 50 ms fade. `inspect().layerGains` shows current and target
 gains, and the `layer-gain` trace rows include the start and end frames.
 
+## Separate pursuit, exposure, weather, and shelter
+
+Declare four independent score parameters. A pursuit layer can follow
+`pursuit` alone. Use named `factors` on an environmental layer when several
+inputs shape it at once. This example sends rainfall and roof cover from
+world fields at the listener and takes pursuit and exposure from number ports.
+
+```js
+parameters: {
+  pursuit: {},
+  exposure: { default: 1 },
+  'weather-intensity': { field: 'weather/rain', at: { entity: 'listener' }, range: [0, 20] },
+  shelter: { field: 'terrain/covered', at: { entity: 'listener' } }
+},
+layerControls: {
+  chase: { parameter: 'pursuit', attack: 0.25, release: 0.8 },
+  outside: { factors: {
+    rain: { parameter: 'weather-intensity', attack: 1.1 },
+    exposure: { parameter: 'exposure', attack: 0.5 },
+    open: { parameter: 'shelter', range: [1, 0], attack: 0.35, release: 0.2 }
+  }},
+  roof: { factors: {
+    rain: { parameter: 'weather-intensity', attack: 1.1 },
+    covered: { parameter: 'shelter', attack: 0.2, release: 0.35 }
+  }}
+}
+```
+
+Each factor maps its input target and ramps on the sample clock with its
+own attack and release. The layer gain is the product of the current
+factors and the base fader, whose default is 1. The outdoor rain falls as
+shelter rises, the roof stem fades in, and the chase layer follows pursuit.
+Both native tracks and [stem groups](#loop-phase-aligned-stems) use this mixer.
+An adaptive score can declare up to 64 controls, with at most eight factors
+on one layer.
+
+Hosts can declare initial factor gains in `live.open` as
+`layerFactors: { outside: { rain: 0.4, exposure: 1, open: 1 } }` and then
+dispatch `{ kind: 'music-layer', time: 3, part: 'outside', factor: 'open', gain: 0, ramp: 0.2 }`.
+An intent with no `factor` sets the base fader. `score.inspect().layerFactors`
+reports the resulting gain, target, and individual ramp positions.
+
 ## Loop phase-aligned stems
 
 Use a stem group to play printed bass, percussion, or ambience beside the
@@ -190,9 +232,10 @@ const route = live.fromTrace(capturedTrace, {
 const { value, report } = await live.replay(sources, timeline, route, options);
 ```
 
-A route is `{ end, events: [{ intent, observedAt }], blockFrames?, layerGains? }`.
+A route is `{ end, events: [{ intent, observedAt }], blockFrames?, layerGains?, layerFactors? }`.
 Adaptive score traces include the initial gains and the committed gain
-changes for live replay. Route gains take precedence for those parts.
+changes for live replay, including named factors. Route gains take precedence
+for the parts and factors they specify.
 Change `observedAt` to simulate late delivery and leave `intent.time` intact.
 The replay feeds the same causal `pull` path and measures PCM around each
 retained join, including the sample-to-sample step and local levels.
@@ -231,3 +274,12 @@ node examples/music-production/phase-aligned-stems.cjs ./night-relay
 In `night-relay/mix/score.wav`, bass fades in at 2.35 s, percussion joins at
 5.10 s, and the live melody changes section at 8.50 s. The printed stems
 stay on the same four-second loop throughout.
+
+```sh
+node examples/music-production/shelter-and-pursuit.cjs ./under-the-eaves
+```
+
+In `under-the-eaves/mix/score.wav`, rain strengthens at 1.80 s and the pursuit
+pulse enters at 3.30 s. The listener moves under an overhang at 5.80 s. The rain
+becomes muffled and picks up roof drips while the pulse keeps going. Pursuit
+releases at 9.95 s, then outdoor rain returns as the listener steps out at 11.70 s.

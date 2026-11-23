@@ -330,3 +330,83 @@ test('stem prefetch wraps within the authored PCM region and resumes from curren
     room:{...settings.stemGroups.room,phaseFrames:1280}
   }}),/Invalid live stem group/);
 });
+
+test('environment factors ramp independently while pursuit holds, with exact recorded replay',async()=>{
+  const arranged={entry:'bank',segments:{bank:{source:'silent',end:2}}}, assets={silent:cue([])};
+  const clock={entry:'bank',sections:{bank:{resource:'bank'}},
+    parameters:{pursuit:{default:.75},'weather-intensity':{default:.3},exposure:{default:.8},
+      shelter:{field:'terrain/cover',at:{entity:'listener'}}},
+    layerControls:{
+      chase:{parameter:'pursuit',release:.2},
+      storm:{factors:{
+        weather:{parameter:'weather-intensity',attack:.8},
+        exposure:{parameter:'exposure',release:.2},
+        cover:{parameter:'shelter',range:[1,0],attack:.15,release:.6}
+      }}
+    }};
+  const updates=[
+    {time:.25,parameters:{'weather-intensity':1,shelter:1}},
+    {time:.35,parameters:{exposure:.4}},
+    {time:.55,parameters:{shelter:0}},
+    {time:.95,parameters:{pursuit:.25}}
+  ];
+  const commands=updates.flatMap(({time,parameters})=>Object.entries(parameters).map(([key,value])=>({
+    tick:Math.round(time/.05),
+    ...(key==='shelter' ? {action:'terrain/set',args:{field:'cover',
+      region:{id:'roof',bounds:{min:[-1,-1],max:[1,1]},value}}} :
+      {action:'world/input',args:{port:'score/parameter.'+key,value}})
+  })));
+  const world=KIT.world.runtime.create({id:'storm-test',dt:.05,entities:{listener:{position:[0,0,0]}},
+    systems:{score:{kind:'adaptive-music',config:clock},terrain:{kind:'fields',config:{
+      fields:{cover:{type:'number',axes:'xz',default:0}}
+    }}},commands});
+  world.advance(26);
+  const rehearsal=KIT.music.production.rehearsal;
+  const capture=rehearsal.capture(world.recording(),{id:'storm'});
+  const standalone=rehearsal.captureScore(clock,updates,{id:'storm',end:1.3});
+  assert.deepEqual(capture.layerFactors,{storm:{weather:.3,exposure:.8,cover:1}});
+  assert.deepEqual(capture.layerGains,{chase:.75});
+  const intents=trace=>trace.intents.map(({part,factor,gain,ramp})=>[part,factor,gain,ramp]);
+  assert.deepEqual(intents(capture),intents(standalone));
+  assert.deepEqual(intents(capture),[
+    ['storm','weather',1,.8],['storm','cover',0,.6],['storm','exposure',.4,.2],
+    ['storm','cover',1,.15],['chase',undefined,.25,.2]
+  ]);
+
+  const frames=1024, settings={...options,masterGain:0,layerGains:{storm:.6},
+    streams:{rain:{frames,channels:1,sampleRate:rate,pan:-1},pulse:{frames,channels:1,sampleRate:rate,pan:1}},
+    readPage:async(name,first,count)=>new Float32Array(count).fill(name==='rain'?.5:.25),
+    stemGroups:{bed:{frames,parts:{storm:{stream:'rain'},chase:{stream:'pulse'}}}}};
+  const route=live.fromTrace(JSON.parse(JSON.stringify(capture)));
+  const replay=await live.replay(assets,arranged,{...route,blockFrames:131},{
+    ...settings,layerFactors:{storm:{weather:.9}}
+  });
+  const engine=live.open(assets,arranged,{...settings,clock});
+  await engine.prefetch(1.3*rate);
+  const livePCM=new Float32Array(replay.value.samples.length);
+  let frame=0;
+  for (const row of [...updates,{time:1.3}]) {
+    const next=Math.round(row.time*rate);
+    livePCM.set(engine.pull(next-frame).samples,2*frame);
+    if (row.parameters) engine.update(row);
+    frame=next;
+  }
+  assert.deepEqual(livePCM,replay.value.samples);
+  assert.equal(replay.report.profile.streamGaps,0);
+  const {samples}=replay.value;
+  assert(Math.abs(samples[6400]-.5*.6*.43125*.7*.75)<1e-7);
+  for (let n=1;n<.95*rate*2;n+=2) assert.equal(samples[n],.25*.75);
+  const mix=replay.report.layerFactors.storm;
+  assert.deepEqual(mix.factors.cover,{gain:1,target:1,startFrame:4400,endFrame:5600});
+  assert(Math.abs(mix.gain-.24)<1e-12);
+  engine.dispatch({kind:'music-layer',time:.4,part:'storm',factor:'weather',gain:.7});
+  engine.dispatch({kind:'music-layer',time:.4,part:'storm',factor:'cover',gain:.1});
+  engine.pull(1);
+  const settled=engine.inspect().layerFactors.storm.factors;
+  assert.equal(settled.weather.target,.7);
+  assert.equal(settled.cover.target,1);
+  assert.throws(()=>engine.dispatch({kind:'music-layer',time:1.3,part:'storm',factor:'unknown',gain:1}),
+    /Invalid live adaptive score intent/);
+  const invalid={...clock,layerControls:{storm:{parameter:'pursuit',factors:clock.layerControls.storm.factors}}};
+  assert.throws(()=>KIT.music.create(invalid),/Invalid live layer factors/);
+});

@@ -2,6 +2,7 @@
 (function (K) {
   const P=K.procedural, A=P.musicProduction, F=P.musicPhraseRoutes;
   const {check,fields,record,finite,integer,id,clamp,db}=P.musicInstruments;
+  const {layerFactors:validLayerFactors,mergeLayerFactors}=P.adaptiveRehearsalTrace;
   const onset=F.onset, eps=1e-8;
   const ordered=(a,b)=>a.frame-b.frame || a.intent.time-b.intent.time ||
     Number(b.intent.kind==='music-transition')-Number(a.intent.kind==='music-transition') ||
@@ -13,10 +14,10 @@
 
   function open(sources,spec,options={}) {
     check(fields(options,['assets','sampleRate','maxVoices','reservedVoices','foreground','priorities','traceLimit',
-      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','stemGroups']),
+      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','layerFactors','stemGroups']),
     'Invalid live score options');
     const {assets={},sampleRate:rate=48000,maxVoices=32,reservedVoices=Math.min(4,maxVoices-1),
-      foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0,layerGains={}}=options;
+      foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0,layerGains={},layerFactors={}}=options;
     check(integer(rate,8000,96000) && integer(maxVoices,1,128) && integer(reservedVoices,0,maxVoices) &&
       integer(traceLimit,1,2048) && integer(maxEvents,1,4096) && finite(masterGain,-60,6) &&
       finite(startTime,0,1e9) && record(layerGains) && Array.isArray(foreground) && foreground.every(id) &&
@@ -47,7 +48,17 @@
     const initialLayers=Object.entries({...initial?.layerGains,...layerGains});
     check(initialLayers.every(([part,gain])=>parts.has(part)&&finite(gain,0,1)),
       'Initial live layer gains need known score parts and values from zero to one');
-    const layerLevels=new Map(initialLayers.map(([part,gain])=>[part,{from:gain,target:gain,startFrame:0,endFrame:0}]));
+    check(validLayerFactors(layerFactors),'Invalid live layer factors');
+    const initialFactors=mergeLayerFactors(initial?.layerFactors,layerFactors);
+    check(validLayerFactors(initialFactors) && Object.keys(initialFactors).every(part=>parts.has(part)),
+      'Initial live layer factors need known score parts and bounded factor levels');
+    const fixedGain=gain=>({from:gain,target:gain,startFrame:0,endFrame:0});
+    const layers=new Map(initialLayers.map(([part,gain])=>[part,{base:fixedGain(gain)}]));
+    for (const [part,factors] of Object.entries(initialFactors)) {
+      const layer=layers.get(part) ?? {};
+      layer.factors=new Map(Object.entries(factors).map(([factor,gain])=>[factor,fixedGain(gain)]));
+      layers.set(part,layer);
+    }
     const time=()=>frame/rate, snap=seconds=>Math.round(seconds*rate), inputFrame=seconds=>snap(seconds-startTime);
     const fg=new Set(foreground), scale=db(masterGain), edgeFade=Math.max(2,Math.round(rate*.008));
     const desk=new Map(), echoes=new Map(), indexes=new Map(), recentNotes=new Map();
@@ -63,17 +74,30 @@
       if (frame>=row.endFrame) return row.target;
       return row.from+(row.target-row.from)*(frame-row.startFrame)/(row.endFrame-row.startFrame);
     }
+    function layerGain(part) {
+      const layer=layers.get(part);
+      let gain=gainAt(layer?.base);
+      if (layer?.factors) for (const row of layer.factors.values()) gain*=gainAt(row);
+      return gain;
+    }
+    const knowsLayer=({part,factor})=>parts.has(part) &&
+      (factor===undefined || layers.get(part)?.factors?.has(factor));
     function setLayer(intent) {
-      const {part,gain:target,ramp=.05}=intent, previous=layerLevels.get(part);
+      const {part,factor,gain:target,ramp=.05}=intent, layer=layers.get(part) ?? {};
+      const previous=factor===undefined ? layer.base : layer.factors.get(factor);
+      const address={part,...(factor!==undefined && {factor})};
       const last=previous?.intent;
       if (last && (intent.time<last.time || (intent.time===last.time && intent.serial!==undefined &&
         last.serial!==undefined && intent.serial<=last.serial))) {
-        log('layer-ignored',{part,reason:'stale-intent',trigger:intent});
+        log('layer-ignored',{...address,reason:'stale-intent',trigger:intent});
         return;
       }
       const from=gainAt(previous), startFrame=frame, endFrame=frame+snap(ramp);
-      layerLevels.set(part,{from,target,startFrame,endFrame,intent});
-      log('layer-gain',{part,from,target,startFrame,endFrame,trigger:intent});
+      const row={from,target,startFrame,endFrame,intent};
+      if (factor===undefined) layer.base=row;
+      else layer.factors.set(factor,row);
+      layers.set(part,layer);
+      log('layer-gain',{...address,from,target,startFrame,endFrame,trigger:intent});
     }
     for (const [source,score] of Object.entries(compiled)) {
       const parts=Object.entries(score.tracks);
@@ -176,7 +200,7 @@
       const persistent=carries.has(part) && clip.kind==='segment';
       const voice={...tone,part,clip,lane,persistent,off:snap(row.time+row.gate),pitch:note.midi,
         choke:track.mix.choke ? (persistent ? 'live/' : clip.source+'/')+track.mix.choke : null};
-      if (clip.kind==='segment' && gainAt(layerLevels.get(part))===0)
+      if (clip.kind==='segment' && layerGain(part)===0)
         voice.unheard={from:note.time,gain:row.renderGain,velocity:note.velocity};
       else creditNote(voice,note.time,row.renderGain,note.velocity);
       return voice;
@@ -399,7 +423,7 @@
         (intent.serial===undefined || integer(intent.serial,0,Number.MAX_SAFE_INTEGER)) &&
         (intent.kind==='music-transition' ? known(intent.from) && known(intent.to) &&
           record(intent.layers ?? {}) && Object.entries(intent.layers ?? {}).every(([key,level])=>id(key) && finite(level,0,1)) :
-          intent.kind==='music-layer' ? K.music.layerIntent(intent) && parts.has(intent.part) :
+          intent.kind==='music-layer' ? K.music.layerIntent(intent) && knowsLayer(intent) :
           intent.kind==='music-cue' && token(intent.resource ?? intent.cue)),
       'Invalid live adaptive score intent');
       check(intents.length<maxEvents,'Live adaptive event queue is full');
@@ -414,8 +438,8 @@
       check(intents.length+result.intents.length<=maxEvents,'Live adaptive event queue is full');
       check(result.intents.every(intent=>intent.kind!=='music-transition' || known(intent.from) && known(intent.to)),
         'Control clock emitted an unknown live score section');
-      check(result.intents.every(intent=>intent.kind!=='music-layer' || parts.has(intent.part)),
-        'Control clock emitted an unknown live score part');
+      check(result.intents.every(intent=>intent.kind!=='music-layer' || knowsLayer(intent)),
+        'Control clock emitted an unknown live score part or factor');
       for (const intent of result.intents) dispatch(intent);
       control=result.state;
       return machine.inspect(control);
@@ -455,7 +479,7 @@
           }
           const lane=voice.lane;
           if (lane) {
-            if (voice.unheard && gainAt(layerLevels.get(voice.part))>0) {
+            if (voice.unheard && layerGain(voice.part)>0) {
               const {from,gain,velocity}=voice.unheard;
               creditNote(voice,from,gain,velocity);
             }
@@ -475,7 +499,7 @@
               log('stream-underrun',{name:gap.name,sourceFrame:gap.frame,group:group.name,
                 part:stem.part,positionFrame:position});
             }
-            const gain=gainAt(layerLevels.get(stem.part));
+            const gain=layerGain(stem.part);
             const left=pair[0]*gain, right=pair[1]*gain;
             l+=left; r+=right;
             sendL+=left*stem.source.send; sendR+=right*stem.source.send;
@@ -491,7 +515,7 @@
           strip.tick(lane.l,lane.r,frame,mixed,local,
             track.mix.duck ? recentNotes.get(clip.source+'/'+track.mix.duck.from+(clip.kind==='segment' ? '' : '/accent')) ?? null : null);
           lane.l=lane.r=0;
-          const level=clip.kind==='segment'?gainAt(layerLevels.get(part)):1;
+          const level=clip.kind==='segment'?layerGain(part):1;
           const dryL=mixed[0]*level, dryR=mixed[1]*level;
           l+=dryL; r+=dryR;
           sendL+=dryL*mixed[2]; sendR+=dryR*mixed[2];
@@ -533,14 +557,23 @@
       return {samples,sampleRate:rate,channels:2,firstFrame};
     }
     function inspect() {
+      const layerGains={}, layerFactors={};
+      const describe=row=>({gain:gainAt(row),target:row.target,startFrame:row.startFrame,endFrame:row.endFrame});
+      for (const [part,{base,factors}] of layers) {
+        if (base) layerGains[part]=describe(base);
+        if (factors) {
+          const target=[...factors.values()].reduce((gain,row)=>gain*row.target,base?.target ?? 1);
+          layerFactors[part]={gain:layerGain(part),target,
+            factors:Object.fromEntries([...factors].map(([name,row])=>[name,describe(row)]))};
+        }
+      }
       return P.data.clone({frame,time:time(),startTime,section:active.section,source:active.source,phrase:active.phrase,
         position:Math.min(active.segment.end,active.position+(frame-active.first)/rate),
         pending:pending ? {to:pending.row.intent.to,frame:pending.at,rule:pending.row.intent.rule ?? null} : null,
         clock:control ? machine.inspect(control) : null, heard:phrasing.counts(),
         ...(memory && {themes:memory.at(time())}),
-        ...(layerLevels.size && {layerGains:Object.fromEntries([...layerLevels].map(([part,row])=>[
-          part,{gain:gainAt(row),target:row.target,startFrame:row.startFrame,endFrame:row.endFrame}
-        ]))}),
+        ...(Object.keys(layerGains).length && {layerGains}),
+        ...(Object.keys(layerFactors).length && {layerFactors}),
         ...(stemGroups.length && {stemGroups:Object.fromEntries(stemGroups.map(group=>[group.name,{
           frames:group.frames,phaseFrames:group.phaseFrames,positionFrame:group.position(frame),
           parts:Object.fromEntries(group.parts.map(({part,source,start})=>[part,{stream:source.name,startFrame:start}]))

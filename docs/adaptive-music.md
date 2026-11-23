@@ -27,6 +27,7 @@ at a listener.
 | `tempo`, `beatsPerBar`, `barsPerPhrase` | Default BPM and meter. Default values are 120, 4, and 4. Sections can override BPM while the beat count and meter continue across changes. |
 | `entry`, `sections` | Initial section ID and named sections. Each section supplies a `resource`, optional `tempo`, and optional named `layers` with levels from zero to one. |
 | `emotions`, `parameters` | Named channels from zero to one. Use emotions for authored state such as tension or relief, and parameters for controls such as rain, movement, or depth. Each channel can set `default` and exponential `attack` and `release` time constants in seconds. Zero follows its target immediately. Release defaults to attack. |
+| `layerControls` | Map a channel to a live layer or multiply independently ramped [factors for pursuit and the environment](music-live-adaptive.md#separate-pursuit-exposure-weather-and-shelter). Layer bindings use the channel targets and set their own ramp times. |
 | `transitions` | Ordered rules with `id`, `from`, `to`, a [query condition](headless-worlds.md) in `when`, and optional `quantize` and `cue`. Test paths such as `/emotions/tension` and `/parameters/rain`. The first matching rule for the current section wins. Set distinct entry and exit thresholds for hysteresis. A linked cue shares the transition's boundary. |
 | `cues` | Named intents with a `resource` and an optional `quantize`. Requests can carry an `emitter` and an extra JSON `data` record. |
 
@@ -55,7 +56,9 @@ Use the `cue` system action or send records on the `cues` event input.
 interaction, or another world event to `score/cue`. The `intents` event
 output carries `music-transition` and `music-cue` records with exact
 musical `beat`, simulation `time` in seconds, and a score-local `serial`
-for identity. World history adds the tick on which the intent was delivered.
+for identity. Configured live layers also emit `music-layer` intents with
+their target gain, ramp duration, and optional factor name. World history
+adds the tick on which the intent was delivered.
 Use `beat` and `level.emotion.<name>` / `level.parameter.<name>` for numeric
 outputs. Probe `score/state` for the section, layer levels, tempo, channel
 targets and values, winning transition and pending cues. Probe `score/intents`

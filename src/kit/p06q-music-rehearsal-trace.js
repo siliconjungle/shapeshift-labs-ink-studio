@@ -9,11 +9,27 @@
   const frozen=value=>P.data.freeze(P.data.clone(value));
   const layerGains=value=>record(value) && Object.keys(value).length<=64 &&
     Object.entries(value).every(([part,gain])=>id(part) && finite(gain,0,1));
+  function layerFactors(value) {
+    if (!record(value) || Object.keys(value).length>64) return false;
+    let count=0;
+    for (const [part,group] of Object.entries(value)) {
+      if (!id(part) || !record(group) || !integer(Object.keys(group).length,1,8)) return false;
+      for (const [factor,gain] of Object.entries(group)) {
+        if (++count>64 || !K.world.data.id(factor) || !finite(gain,0,1)) return false;
+      }
+    }
+    return true;
+  }
+  const mergeLayerFactors=(first={},second={})=>Object.fromEntries(
+    [...new Set([...Object.keys(first),...Object.keys(second)])].map(part=>[part,{
+      ...(Object.hasOwn(first,part) && first[part]),...(Object.hasOwn(second,part) && second[part])
+    }]));
 
   function validate(raw) {
-    check(fields(raw,['format','version','id','label','entry','end','intents','worldEvents','requests','origin','layerGains']) &&
+    check(fields(raw,['format','version','id','label','entry','end','intents','worldEvents','requests','origin','layerGains','layerFactors']) &&
       raw.format===format && raw.version===1 && id(raw.id) && id(raw.entry) && finite(raw.end,.001,300) &&
       (raw.layerGains===undefined || layerGains(raw.layerGains)) &&
+      (raw.layerFactors===undefined || layerFactors(raw.layerFactors)) &&
       (raw.label===undefined || text(raw.label)) && Array.isArray(raw.intents) && raw.intents.length<=2048 &&
       Array.from(raw.intents).every(row=>record(row) && finite(row.time,0,raw.end) && row.time<raw.end &&
         (row.serial===undefined || integer(row.serial,0,Number.MAX_SAFE_INTEGER)) &&
@@ -36,7 +52,7 @@
       requests:requests.slice().sort(byTime)};
   }
 
-  function collector(entry,end,initialGains) {
+  function collector({section:entry,layerGains,layerFactors},end) {
     const intents=[], worldEvents=[], requests=[];
     let pending;
     function observe(time,view,events,hits=[]) {
@@ -65,7 +81,7 @@
         requests.push({...request,outcome:'pending'});
       }
       return frozen(validate({format,version:1,id:options.id,...(options.label && {label:options.label}),entry,end,
-        intents,worldEvents,requests,origin,...(initialGains && {layerGains:initialGains})}));
+        intents,worldEvents,requests,origin,...(layerGains && {layerGains}),...(layerFactors && {layerFactors})}));
     }
     return {observe,finish};
   }
@@ -84,8 +100,7 @@
     };
     const end=options.end ?? round(log.end.tick*world.dt);
     check(finite(end,.001,Math.min(300,round(log.end.tick*world.dt))),'Trace end lies outside the recorded world');
-    const initial=view(run.query());
-    const saved=collector(initial.section,end,initial.layerGains);
+    const saved=collector(view(run.query()),end);
     const timeOf=(event,time)=>W.timedEvents.timeOf(event) ?? event.time ?? time;
     run.advance(log.end.tick,{onTick(frame,query) {
       if (frame.time>end+tolerance) return;
@@ -108,7 +123,7 @@
     'Use bounded adaptive clock updates and a trace end');
     const machine=K.music.create(score);
     let state=machine.initial();
-    const saved=collector(score.entry,options.end,machine.inspect(state).layerGains);
+    const saved=collector(machine.inspect(state),options.end);
     for (const update of [...updates,{time:options.end}]) {
       const result=machine.advance(state,update);
       state=result.state;
@@ -117,5 +132,5 @@
     const trace=saved.finish(options,{kind:'clock-updates'});
     return frozen(validate({...trace,worldEvents:options.worldEvents ?? []}));
   }
-  P.adaptiveRehearsalTrace=Object.freeze({format,validate,captureWorld,captureScore,layerGains});
+  P.adaptiveRehearsalTrace=Object.freeze({format,validate,captureWorld,captureScore,layerGains,layerFactors,mergeLayerFactors});
 })(KIT);
