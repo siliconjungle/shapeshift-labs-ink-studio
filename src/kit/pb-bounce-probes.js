@@ -46,15 +46,26 @@
     return { groups, eligible, opaque, emission };
   }
 
-  function trace(settings, sites, picker, color) {
+  function trace(settings, sites, picker, color, extraHits) {
     const { samples, reach } = settings, directions = probes.directions(samples), weight = 4 * Math.PI / samples;
+    const light=settings.geometry?.light, toward=light && K.V.norm(light.direction);
+    const tint=light && linear([1,3,5].map(i=>parseInt(light.color.slice(i,i+2),16)/255));
+    const bias=4*(settings.geometry?.epsilon??.003);
+    const rayOptions={maxDistance:reach,water:false,meshes:false,brickMeshes:false,...(extraHits&&{cutaway:false,extraHits})};
     return sites.map(site => {
       const coefficients = new Array(27).fill(0), open = [];
       for (const { direction, basis } of directions) {
-        const ray = picker.ray({ origin: site.at, direction, maxDistance: reach, water: false, meshes: false, brickMeshes: false });
+        const ray = picker.ray({ ...rayOptions, origin:site.at, direction });
         const incoming = [0, 0, 0];
         for (const hit of ray.contributions) {
-          const rgb = color(hit);
+          let rgb = hit.bounceRGB ?? color(hit);
+          if(light && hit.bounceRGB && rgb.some(Boolean)){
+            const normal=hit.normal, facing=normal ? Math.max(0,K.V.dot(toward,normal)) : 0;
+            const visibility=facing&&light.intensity ? picker.ray({
+              ...rayOptions,origin:K.V.mad(hit.point,normal,bias),direction:toward,limit:1
+            }).transmission : 0;
+            rgb=rgb.map((value,c)=>value*(light.ambient+tint[c]*light.intensity*facing*visibility));
+          }
           const transfer = hit.weight * (1 - hit.distance / reach) ** 2;
           for (let c = 0; c < 3; c++) incoming[c] += transfer * rgb[c];
         }
@@ -79,12 +90,12 @@
     if (!settings || settings.format) return settings ?? false;
     if (!settings.probes.length) return { ...settings, format: probes.format, version: 1 };
     const data = world.rest ?? world.data;
-    const { eligible } = sources(world, settings, data);
-    const color = radiance(data);
+    const selection = sources(world, settings, data), color = radiance(data);
+    const extraHits = K.bounceProxyGeometry(world, settings, data, selection, color);
     const picker = K.procedural.contributions.create({
       ...world, anim: undefined, lookSnapshot: undefined, data
-    }, { time: 0, splatCoverage: 'continuous', rowMask: eligible });
-    const baked = trace(settings, settings.probes, picker, hit => color(hit.index));
+    }, { time: 0, splatCoverage: 'continuous', rowMask: selection.eligible });
+    const baked = trace(settings, settings.probes, picker, hit => color(hit.index), extraHits);
     return { ...settings, format: probes.format, version: 1, probes: baked };
   }
 
@@ -102,6 +113,8 @@
     if (!litSites.size && !dynamic.reflect.length && !dynamic.emit.length) return noWork;
     const posed = sources(world, settings, world.data, true);
     if (!litSites.size && !posed.groups.some(group => group.indices.length)) return noWork;
+    const bakedColor = radiance(world.data);
+    const extraHits = K.bounceProxyGeometry(world, settings, world.rest ?? world.data, posed, bakedColor);
     const picker = K.procedural.contributions.create(world, {
       time, emissiveTime, splatCoverage: 'continuous', rowMask: posed.eligible
     });
@@ -109,7 +122,6 @@
     const near = sites.filter(site => litSites.has(site) || bounds.some(bounds => distanceToBounds(site.at, bounds) < reach));
     if (!near.length) return noWork;
 
-    const bakedColor = radiance(world.data);
     const frames = live.length && SplatFrames.create(world, time, K.M), normals = [];
     const casters = live.some(light => light.shadows) ? AreaLights.staticSources(world) : [];
     const shadow = casters.length ? (origin, direction, stop) => AreaLights.occludes(casters, origin, direction, stop) : undefined;
@@ -129,7 +141,7 @@
       const albedo = albedos.get(packed) ?? base;
       return base.map((n, k) => n + lit[k] * albedo[k]);
     }
-    const updated = trace(settings, near, picker, color), byId = new Map(updated.map(site => [site.id, site]));
+    const updated = trace(settings, near, picker, color, extraHits), byId = new Map(updated.map(site => [site.id, site]));
     return { probes: sites.map(site => byId.get(site.id) ?? site), updated: updated.map(site => site.id),
       rays: updated.length * settings.samples };
   }

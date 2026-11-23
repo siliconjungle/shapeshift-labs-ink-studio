@@ -75,7 +75,20 @@
       visit(node.left, point, match);
       visit(node.right, point, match);
     }
-    return (point, match) => visit(tree, point, match);
+    const lookup=(point, match) => visit(tree, point, match);
+    lookup.ray=(origin,direction,stop,match)=>{
+      function trace(node) {
+        if (!node || rayBox(node.extent,origin,direction,stop)===null) return;
+        if (node.rows) {
+          for (const row of node.rows) if (rayBox(row.box,origin,direction,stop)!==null) match(row.record);
+        } else {
+          trace(node.left);
+          trace(node.right);
+        }
+      }
+      trace(tree);
+    };
+    return lookup;
   }
   A.spatial = { bounds, overlap, contains, expand, boxOf, rayBox, pointIndex };
   function plane(raw) {

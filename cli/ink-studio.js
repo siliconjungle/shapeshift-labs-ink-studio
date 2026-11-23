@@ -241,6 +241,8 @@ function build(id, seedOverride, { paint = true, retainSdf = false, retainRefere
       ...(parameterInputs && { parameterInputs }) });
     return (s.animate && s.animate(built, seed)) || built;
   };
+  const probeOverride = bounceProbesOption();
+  retainSdf ||= Boolean(probeOverride?.geometry?.sdfs?.length && (!probeOverride.format || probeOverride.dynamic));
   const previousSdf = globalThis.INK_RETAIN_RENDER_SDF;
   const previousReferenceSdf = globalThis.INK_RETAIN_REFERENCE_SDF;
   let w;
@@ -1254,6 +1256,7 @@ const CMD = {
         '  stats <id>                  splat counts, colours used, size, cost per frame, warnings',
         '  render <id> [--t 1.5]       one PNG rendered on the CPU',
         '  bounce-probes bake <scene> [--bounce-probes settings.json] --out probes.json',
+        '  bounce-probes sample <scene> --at x,y,z --normal x,y,z [--bounce-probes probes.json]',
         '  bounce-probes review <scene> --out directory [--from 0 --to 3 --fps 12 --w 184 --h 112]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
         '  pose-correctives capture <scene> --plan sculpt.json --t 1 --out correction.json',
@@ -2049,7 +2052,16 @@ const CMD = {
       console.log('Compared', report.samples.length, 'native frames. Wrote', directory);
       return;
     }
-    if (action !== 'bake' || !id) die('Use bounce-probes bake <scene> --out probes.json or bounce-probes review <scene> --out directory');
+    if (action === 'sample' && id && pos.length === 2) {
+      const world=buildPreview(id), time=num('t',0);
+      const sky=world.skyEnvironment && lib().KIT.skyEnvironment.compile(world.skyEnvironment).frame(time).sky;
+      const sun=require('./live-sun.js').prepare(world.liveSun, liveSunOption(), time);
+      const sample=require('./bounce-probes.js').createBounceProbeSampler(world,{
+        bounceProbes:bounceProbesOption(),shotLighting:shotLightingOption(),time,sky,sun
+      });
+      return console.log(JSON.stringify(sample(list('at'),list('normal')),null,2));
+    }
+    if (action !== 'bake' || !id) die('Use bounce-probes bake, sample or review. See ink-studio help.');
     const world=build(id), override=bounceProbesOption();
     const data=lib().KIT.bounceProbes.bake(world,override===true ? world.bounceProbes : override ?? world.bounceProbes);
     if (!data?.probes.length) die('Bounce probe baking needs at least one authored probe');

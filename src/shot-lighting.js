@@ -21,13 +21,15 @@ const ShotLighting = (() => {
   function prepare(definition, { time = 0 } = {}) {
     if (definition === false || definition === undefined) return null;
     if (!Number.isFinite(time) || !record(definition) ||
-        !fields(definition, ['format', 'version', ...roles, 'negativeFill', 'exposureEV']) ||
+        !fields(definition, ['format', 'version', ...roles, 'negativeFill', 'exposureEV', 'bounceEV']) ||
         (definition.format !== undefined || definition.version !== undefined) &&
         (definition.format !== format || definition.version !== 1))
       throw new TypeError('Expected version 1 shot lighting settings with key, fill, rim or negativeFill');
-    const { exposureEV = 0 } = definition;
+    const { exposureEV = 0, bounceEV = 0 } = definition;
     if (!Number.isFinite(exposureEV) || Math.abs(exposureEV) > 4)
       throw new RangeError('Shot surface exposure needs a value from -4 to 4 EV');
+    if (!Number.isFinite(bounceEV) || Math.abs(bounceEV) > 4)
+      throw new RangeError('Shot probe bounce needs a value from -4 to 4 EV');
     const positive = [];
     for (const role of roles) {
       const value = definition[role];
@@ -55,7 +57,8 @@ const ShotLighting = (() => {
       const masks = Shadow.prepare({ receive });
       if (strength) negative = { at: point.slice(), radius, strength, receive: masks?.receive };
     }
-    return positive.length || negative || exposureEV ? { positive, negative, exposure: 2 ** exposureEV } : null;
+    return positive.length || negative || exposureEV || bounceEV
+      ? { positive, negative, exposure:2**exposureEV, ...(bounceEV&&{bounceScale:2**bounceEV}) } : null;
   }
 
   function frame(authored, override, time) {

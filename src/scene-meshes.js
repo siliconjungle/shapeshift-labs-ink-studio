@@ -4,7 +4,7 @@ const SceneMeshes = (() => {
   const Mips = typeof SemanticTextureMipmaps === 'undefined' ? require('./semantic-texture-mipmaps.js') : SemanticTextureMipmaps;
   const simulationAPI=()=>typeof SimulationMaterialLayers==='undefined'?require('./simulation-material-layers.js'):SimulationMaterialLayers;
   const state = Symbol.for('ink-studio.sceneMesh');
-  const charts = new WeakMap();
+  const charts = new WeakMap(), rayQueries = new WeakMap();
   const maxTriangles = 250000;
   const maxEdge = 2048;
   const array = value => Array.isArray(value) || ArrayBuffer.isView(value) && !(value instanceof DataView);
@@ -317,7 +317,7 @@ const SceneMeshes = (() => {
     return meshes.length ? {meshes:meshes.map(read), tolerance} : null;
   }
 
-  function intersect(mesh, {origin,direction,maxDistance}, {V,rayBox,restSpace=false,candidates}, accept) {
+  function intersect(mesh, {origin,direction,maxDistance}, {V,rayBox,restSpace=false,candidates,pigment=false}, accept) {
     const data=read(mesh), {rest,uvs,indices,materials,faceMaterials,regions,layer} = data;
     const positions=restSpace ? rest : data.positions;
     if (rayBox(restSpace ? data.restBounds : data.bounds,origin,direction,maxDistance) === null) return null;
@@ -344,11 +344,13 @@ const SceneMeshes = (() => {
       const region = regions[slot];
       const x = region.x+Math.floor(.5+(region.width-1)*uv[0]);
       const y = region.y+Math.floor(.5+(region.height-1)*uv[1]);
-      if (layer.pixels[(y*layer.width+x)*4+3] < 128) continue;
+      const at=(y*layer.width+x)*4;
+      if (layer.pixels[at+3] < 128) continue;
       const normal = V.norm(V.cross(ab,ac).map(n => n*Math.sign(det)));
       const hit = { kind:'mesh', index:-1, id:mesh.objectId, mesh:mesh.id, triangle,
         target:{object:mesh.objectId,material:materials[slot],...(mesh.partId && {entity:mesh.objectId,part:mesh.partId})},
         distance, point:V.mad(origin,direction,distance), normal, uv, restPosition:interpolate(rest,3), alpha:1, solid:true,
+        ...(pigment && {pigment:layer.pixels[at]*65536+layer.pixels[at+1]*256+layer.pixels[at+2]}),
         ...(restSpace && {vertices:[a,b,c],weights:[u,v,w]}) };
       if (accept && !accept(hit)) continue;
       closest = hit;
@@ -356,6 +358,26 @@ const SceneMeshes = (() => {
       stop = distance;
     }
     return closest;
+  }
+
+  function rayQuery(mesh,{V,procedural:{spatial}}) {
+    const {positions,indices,revision}=read(mesh), cached=rayQueries.get(mesh);
+    if(cached?.revision===revision)return cached.trace;
+    const position=i=>positions.subarray(i*3,i*3+3);
+    const lookup=spatial.pointIndex(Array.from({length:mesh.triangles},(_,triangle)=>{
+      const at=triangle*3;
+      return {triangle,bounds:spatial.expand(spatial.boxOf([
+        position(indices[at]),position(indices[at+1]),position(indices[at+2])
+      ]),1e-7)};
+    }));
+    const trace=(ray,accept)=>{
+      const candidates=[];
+      lookup.ray(ray.origin,ray.direction,ray.maxDistance,row=>candidates.push(row.triangle));
+      candidates.sort((a,b)=>a-b);
+      return candidates.length ? intersect(mesh,ray,{V,rayBox:spatial.rayBox,candidates,pigment:true},accept) : null;
+    };
+    rayQueries.set(mesh,{revision,trace});
+    return trace;
   }
 
   function projector(mesh,{at,normal,up,size,depth},{V,procedural:{spatial}}) {
@@ -390,6 +412,6 @@ const SceneMeshes = (() => {
   }
 
   return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
-    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,projector,sampleProjection,revision:mesh=>read(mesh).revision});
+    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,rayQuery,projector,sampleProjection,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

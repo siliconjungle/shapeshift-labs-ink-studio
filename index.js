@@ -257,6 +257,7 @@ module.exports = {
       return module.exports.render(world, { ...settings, ...camera, ortho, w, h, t, px: 1 });
     });
   },
+  createBounceProbeSampler: require('./cli/bounce-probes.js').createBounceProbeSampler,
   bakeBounceProbes: (world, settings) => module.exports.load().KIT.bounceProbes.bake(world, settings),
   inspectEnvironment: require('./cli/environment-inspector.js').inspectEnvironment,
   silhouetteReview: require('./cli/silhouette-review.js').silhouetteReview,

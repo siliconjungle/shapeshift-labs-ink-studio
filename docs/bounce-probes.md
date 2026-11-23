@@ -6,7 +6,7 @@ opening sees more sky in the directions that are clear.
 
 Set `bounceProbes` on a finished JavaScript world or `finish.bounceProbes`
 in a JSON diorama. Authored sites bake when the scene is built. A probe stores
-the bounced color from the scene's baked splats and a separate directional
+the bounced color from baked splats or selected geometry and a separate directional
 visibility table. The renderer uses the active sky and ground colors to update
 the open directions each frame. The bake supplies surface color and sky visibility for sites without live sources.
 
@@ -53,6 +53,69 @@ active sky profile, the probes use the authored live sun sky and ground colors.
 Both parts of the diffuse fill use nine real spherical harmonics with a
 cosine convolution. The low-order representation follows the diffuse
 irradiance method in [Ramamoorthi and Hanrahan](https://graphics.stanford.edu/papers/envmap/).
+
+## Bake mesh and SDF visibility
+
+Add `geometry` to a probe definition to include named geometry in the same
+transport rays as the splats. Choose `reflect` for a surface that returns
+color or `occlude` for a surface that blocks light and sky. The mode defaults
+to `reflect`. The closest opaque hit blocks surfaces behind it.
+
+```json
+{
+  "geometry": {
+    "meshes": [{ "id": "copper-awning" }],
+    "sdfs": [{ "object": "hood", "mode": "occlude" }]
+  }
+}
+```
+
+- Mesh IDs refer to `world.meshes` or `world.splatDepthProxies.meshes`. The
+  bake samples the surface atlas by UV, including the authored alpha cutout.
+- SDF IDs refer to retained static sculpt object IDs. JSON dioramas retain
+  the fields when this option is enabled. In a JavaScript scene, set
+  `S.keepRenderSdf = true` before `S.bake()`. The field replaces the selected
+  object's splat coverage in the bake. A reflecting SDF uses nearby baked
+  pigment or a specified `color` in `#rrggbb` form. Unknown or unretained
+  objects produce a bake error. `epsilon` and `steps` bound the field tracing.
+- Proxy pigments can act as prelit reflector colors. To model direct light
+  reaching them, add `geometry.light` with a world-space `direction`
+  pointing toward the light and optional `color`, `intensity`, and
+  `ambient`. The gather checks a second visibility ray from the reflector
+  toward the light. The bake stores a single diffuse bounce.
+- The existing cast mask scopes both geometry and splat casters. The
+  receive mask also applies to opaque native meshes and SDF surfaces on
+  the headless renderer when using a geometry bake. Use the probe bounds
+  to control interpolation at room boundaries. Rebuild when static geometry
+  or the bake light changes.
+
+## Use bounce in a palette or shot
+
+The headless renderer applies the result before pixel palette resolution.
+An existing live-sun shading ramp sees the combined light. For a separate
+palette response, read `bounceLevel` and feed it into an Ink palette ramp:
+
+```js
+const sample = ink.createBounceProbeSampler(world, { bounceProbes: bake });
+const ramp = ink.load().KIT.procedural.materials.ramp(['#222b3b', '#f7b579']);
+const light = sample([1.3, 0.48, 0.07], [0, 1, 0]);
+const swatch = light && ramp.sample(light.bounceLevel * 6);
+```
+
+The static sampler returns linear RGB in `bounce` and `sky`, the combined
+`rgb`, and a spatial `mix`. `bounceLevel` is the luminance of the bounce
+weighted by that blend. Supply a prepared `sky` or `sun` to sample open
+directions. Use `shotLighting.bounceEV` to change the bounced surface
+contribution by −4 to +4 stops. Sky fill and direct shot lights keep their
+own controls.
+
+```sh
+node cli/ink-studio.js bounce-probes bake examples/visibility-bounce.js --out copper-court.json
+node cli/ink-studio.js bounce-probes sample examples/visibility-bounce.js \
+  --at 1.3,.48,.07 --normal 0,1,0 --bounce-probes copper-court.json
+node cli/ink-studio.js render examples/visibility-bounce.js \
+  --w 328 --h 200 --px 1 --raw --bounce-probes copper-court.json --out copper-court.png
+```
 
 ## Follow moving color and light
 

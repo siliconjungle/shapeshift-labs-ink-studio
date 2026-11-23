@@ -1470,7 +1470,8 @@
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));
       S.sun = B.norm(st0.sun);
       if (st0.finish.look?.pixel) S.pixel = true;
-      S.keepRenderSdf = keepLightCasters || Boolean(st0.finish.look?.sdfAssist);
+      S.keepRenderSdf = keepLightCasters || Boolean(st0.finish.look?.sdfAssist ||
+        st0.finish.bounceProbes?.geometry?.sdfs?.length && (!st0.finish.bounceProbes.format || st0.finish.bounceProbes.dynamic));
       S.captureAlbedo = Boolean(st0.finish.liveSun) ||
         Array.isArray(st0.finish.look?.renderStages) && st0.finish.look.renderStages.some(rule => rule.stage === 'material');
       if (st0.amb !== undefined) S.amb = st0.amb;

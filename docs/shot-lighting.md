@@ -21,6 +21,7 @@ settings file as a shot dependency for replay.
 | --- | --- |
 | `key`, `fill`, `rim` | Use the [shaped emitter settings](area-lights.md) for world-space position, aim, size, shape, colour, intensity, radius, cookies, sampling, and shadow steps. The key defaults to casting shadows. Set `shadows` on each role to choose. |
 | `exposureEV` | Set a linear-light exposure adjustment for shaded opaque surfaces, from −4 to +4 stops. |
+| `bounceEV` | Scale the [baked surface-bounce signal](bounce-probes.md#use-bounce-in-a-palette-or-shot) from −4 to +4 stops in the headless renderer. |
 | `negativeFill` | Set world-space `at`, `radius`, and `strength` from 0 to 1. It reduces the existing surface light on normals facing the control and fades to zero at its radius. Positive shot roles can light the same surface independently. |
 
 Use `receive: { "include": [...], "exclude": [...] }` on any role to select

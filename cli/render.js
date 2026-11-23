@@ -1077,6 +1077,7 @@ function renderFrame(world, o, preparedPalettes) {
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
+      probeTargets:o.bounceProbes!==false && ((o.bounceProbes===true?world.bounceProbes:o.bounceProbes??world.bounceProbes)?.geometry),
       omit:useSdf && brickFrames.length ? (object,material,point)=>sdfSettings.allows({object,entity:object,material},point) : undefined });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
     editable:brickFrames,visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
@@ -1532,7 +1533,8 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, { x:X, y:Y, z:Z, alpha:AL });
   const probes = ProbeLighting.create(world, o.bounceProbes, baseSky, sun, o[reconstructionSource], {
-    time: t, emissiveTime: motion.emissive, lights: [...areaLights, ...spillLights], dynamic: o.dynamicBounce
+    time: t, emissiveTime: motion.emissive, lights: [...areaLights, ...spillLights], dynamic: o.dynamicBounce,
+    bounceScale:shotLighting?.bounceScale
   });
   if (counters && probes?.stats) {
     const stats = counters.bounceProbes ??= { sites: 0, updated: [], rays: 0 };
@@ -1941,8 +1943,11 @@ function renderFrame(world, o, preparedPalettes) {
       }
       if (staged?.lit) color=RenderStages.apply(staged.lit,color,sample,undefined,claim?.[4] && paletteTrace.forStage(claim[4]));
     }
-    if(i<0&&sprite.surface&&!sprite.emission&&directLight?.receives(-1)&&sprite.normal)
-      color=directLight(sprite.p,position,sprite.normal,color,undefined,0,undefined,sprite.biasNormal);
+    if(i<0&&sprite.surface&&!sprite.emission&&sprite.normal){
+      if(directLight?.receives(-1))color=directLight(sprite.p,position,sprite.normal,color,undefined,0,undefined,sprite.biasNormal);
+      const target=sprite.sdf?sprite.row.target:sprite.probeTarget;
+      if(target&&probes?.receivesSurface(target))color=probes.shade(position,sprite.normal,color);
+    }
     if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule);
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
