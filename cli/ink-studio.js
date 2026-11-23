@@ -1475,6 +1475,7 @@ const CMD = {
         '  curve-bake-review [--out directory --chrome executable --hardware]  compare native curves, ribbons, and rebuilt cards',
         '  strand-lod-review [--out directory --chrome executable --hardware --motion]  compare individual strands, groups and cards',
         '  strand-shadow-review [--out directory --motion]  compare full and budgeted strand shadows and layered transmission',
+        '  surface-growth-review [--out directory --chrome executable --hardware --motion]  review surface-grown strands through skinning and edits',
         '  finite-curve-review [--out directory --chrome executable --hardware --orbit]  compare interactive GPU curves with the headless renderer',
         '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
@@ -2888,6 +2889,13 @@ const CMD = {
     const {views,visibleSpans} = require('./strand-shadow-review.js').run(directory,{motion:opt.motion});
     console.log(visibleSpans,'visible curve spans,',views.detail.submittedSpans,'to',views.budget.submittedSpans,'shadow spans');
     console.log(views.layers.peakLayers,'independent translucent layers');
+    console.log('wrote',directory);
+  },
+  'surface-growth-review'() {
+    const directory=opt.out ? path.resolve(opt.out) : path.join(OUT,'surface-growth-review');
+    const report=require('./surface-growth-review.js').run(directory,{chrome:opt.chrome,hardware:opt.hardware,motion:opt.motion});
+    for (const {id,groups,webgl} of report.views)
+      console.log(id,webgl,'visible curve spans,',groups.shoots.attached,'attached clay shoots');
     console.log('wrote',directory);
   },
   'finite-curve-review'() {

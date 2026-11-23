@@ -2,6 +2,7 @@
 const SceneMeshes = (() => {
   const Sprite = typeof SpriteSurface === 'undefined' ? require('./sprite-surface.js') : SpriteSurface;
   const state = Symbol.for('ink-studio.sceneMesh');
+  const charts = new WeakMap();
   const maxTriangles = 250000;
   const maxEdge = 2048;
   const array = value => Array.isArray(value) || ArrayBuffer.isView(value) && !(value instanceof DataView);
@@ -110,7 +111,7 @@ const SceneMeshes = (() => {
     }
     const layer = atlas.finish();
     layer.sceneMeshId = id;
-    const data = { positions, rest:positions, uvs, indices:source, drawIndices, layer, regions,
+    const data = { positions, rest:positions, uvs, indices:source, drawIndices, layer, regions, revision:0,
       materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:bounds(positions) };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
       materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });
@@ -136,7 +137,98 @@ const SceneMeshes = (() => {
     Sprite.markGeometryDirty(data.layer);
     data.positions = positions;
     data.bounds = bounds(positions);
+    data.revision++;
     return mesh;
+  }
+
+  function uvAnchors(mesh, {V, procedural:{spatial}}) {
+    if (charts.has(mesh)) return charts.get(mesh);
+    const data = read(mesh), {indices,uvs} = data;
+    let lookup;
+    function uvAt(i) { return [uvs[i*2],uvs[i*2+1],0]; }
+    function triangleAt(triangle) {
+      const vertices=Array.from(indices.subarray(triangle*3,triangle*3+3));
+      const [a,b,c]=vertices.map(uvAt), ab=V.sub(b,a), ac=V.sub(c,a);
+      const det=ab[0]*ac[1]-ab[1]*ac[0];
+      if (Math.abs(det)>1e-12) return {triangle,vertices,a,ab,ac,det};
+    }
+    function anchorAt(face,uv) {
+      if (!face) return;
+      const {triangle,vertices,a,ab,ac,det}=face;
+      const x=uv[0]-a[0], y=uv[1]-a[1];
+      const b=(x*ac[1]-y*ac[0])/det, c=(ab[0]*y-ab[1]*x)/det;
+      const raw=[1-b-c,b,c];
+      if (raw.some(w=>w < -1e-7)) return;
+      const weights=raw.map(w=>Math.max(0,w)), sum=weights.reduce((total,w)=>total+w,0);
+      return {triangle,vertices,weights:weights.map(w=>w/sum),ab,ac,det};
+    }
+    function bind(uv,triangle) {
+      if (triangle!==undefined) {
+        if (!Number.isSafeInteger(triangle) || triangle<0 || triangle>=mesh.triangles)
+          throw new RangeError('A mesh UV root needs an authored triangle index');
+        return anchorAt(triangleAt(triangle),uv);
+      }
+      if (!lookup) lookup=spatial.pointIndex(Array.from({length:mesh.triangles},(_,i)=>{
+        const face=triangleAt(i);
+        if (!face) return;
+        const box=spatial.boxOf(face.vertices.map(uvAt));
+        return {...face,bounds:spatial.expand(box,1e-7)};
+      }).filter(Boolean));
+      let result;
+      lookup([uv[0],uv[1],0],face=>{
+        if (!result || face.triangle<result.triangle) result=anchorAt(face,uv) ?? result;
+      });
+      return result;
+    }
+    function sample(anchor) {
+      const {positions}=data, {vertices,weights,ab:du,ac:dv,det,triangle}=anchor;
+      const [a,b,c]=vertices.map(i=>positions.subarray(i*3,i*3+3)), ab=V.sub(b,a), ac=V.sub(c,a);
+      const normal=V.cross(ab,ac), area=V.len(normal);
+      if (area<=1e-12*Math.max(1e-6,V.len(ab)*V.len(ac))) return;
+      return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.mul(normal,1/area),
+        tangent:V.mul(V.sub(V.mul(ab,dv[1]),V.mul(ac,du[1])),1/det),
+        bitangent:V.mul(V.sub(V.mul(ac,du[0]),V.mul(ab,dv[0])),1/det),
+        triangle,weights:weights.slice()};
+    }
+    const chart=Object.freeze({bind,sample,revision:()=>data.revision});
+    charts.set(mesh,chart);
+    return chart;
+  }
+
+  function skin(mesh, influences) {
+    const {rest}=read(mesh);
+    if (!Array.isArray(influences) || influences.length!==mesh.vertices)
+      throw new RangeError('Mesh skinning needs one influence row per vertex');
+    let lastBone=0;
+    const weights=Array.from(influences,row=>{
+      const pairs=Number.isSafeInteger(row) ? [[row,1]] : row;
+      if (!Array.isArray(pairs) || !pairs.length || pairs.length>4 || !pairs.every(pair=>
+        Array.isArray(pair) && pair.length===2 && Number.isSafeInteger(pair[0]) && pair[0]>=0 && unit(pair[1])))
+        throw new RangeError('Mesh skin weights need one to four [bone, weight] pairs');
+      const total=pairs.reduce((sum,[bone,weight])=>{
+        lastBone=Math.max(lastBone,bone);
+        return sum+weight;
+      },0);
+      if (!total) throw new RangeError('Mesh skin weights need a positive sum');
+      return pairs.map(([bone,weight])=>[bone*12,weight/total]);
+    });
+    const positions=new Float32Array(rest.length);
+    return Object.freeze({mesh,pose(matrices) {
+      if (!array(matrices) || matrices.length%12 || matrices.length<(lastBone+1)*12 || !every(matrices,Number.isFinite))
+        throw new RangeError('Mesh skinning needs a finite twelve-value matrix per bone');
+      for (const [i,row] of weights.entries()) {
+        const p=i*3, x=rest[p], y=rest[p+1], z=rest[p+2];
+        for (let k=0;k<3;k++) {
+          let next=0;
+          for (const [bone,weight] of row) {
+            const at=bone+k*3;
+            next+=weight*(matrices[at]*x+matrices[at+1]*y+matrices[at+2]*z+matrices[bone+9+k]);
+          }
+          positions[p+k]=next;
+        }
+      }
+      return pose(mesh,positions);
+    }});
   }
 
   function list(world, enabled) {
@@ -209,6 +301,6 @@ const SceneMeshes = (() => {
     return closest;
   }
 
-  return Object.freeze({create,pose,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect});
+  return Object.freeze({create,pose,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

@@ -849,6 +849,7 @@
             D[q + 10] = m20 * g + m21 * h + m22 * i;
             rows[ids[j] >> 9] = 1;
           }
+          for (const binding of o.meshBindings ?? []) binding.pose(Mx);
           for (const binding of o.curveBindings ?? []) binding.pose(W, { bones: Mx, time: t, dt, rows });
           return true;
         }

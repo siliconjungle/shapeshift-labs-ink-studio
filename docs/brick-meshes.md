@@ -68,6 +68,8 @@ buffers. A revision has the following work fields.
 
 Node and WebGL 2 draw these meshes in the scene and expose their
 object and material IDs. Mesh picking follows the current revision.
+Use [surface-grown strands](surface-grown-strands.md#grow-from-an-editable-sdf)
+to attach editable curves to the signed field through cuts and undo.
 Set `brickMeshes: false` on a frame or use `--brick-meshes off`
 to hide the editable fields.
 

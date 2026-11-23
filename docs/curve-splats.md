@@ -357,6 +357,9 @@ The CLI can render the same editable study with
 
 ## Drive strands from rigs and simulation
 
+Use [surface-grown strands](surface-grown-strands.md) to grow fibres, frays,
+and stitches from roots on a posed mesh, cloth chart, or editable SDF.
+
 `K.curveSplats.bind(builder, source, driver, appearance)` prepares the
 reference path and assigns its splat rows once. Each pose moves the knots and
 rebuilds the segment geometry in those rows. Width, taper, twist, caps,

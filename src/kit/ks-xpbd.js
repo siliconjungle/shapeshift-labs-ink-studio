@@ -622,7 +622,8 @@
           const a = position(k), b = position(k + 1), c = position(k + nu), d = position(k + nu + 1);
           const top = K.V.lerp(a, b, fu), bottom = K.V.lerp(c, d, fu);
           const du = K.V.lerp(K.V.sub(b, a), K.V.sub(d, c), fv), dv = K.V.sub(bottom, top);
-          return { p: K.V.lerp(top, bottom, fv), n: K.V.norm(cross(du, dv), norm(cross(U, Vv))) };
+          return { p: K.V.lerp(top, bottom, fv), n: K.V.norm(cross(du, dv), norm(cross(U, Vv))),
+            tangent:du,bitangent:dv };
         },
         ...(torn && { intact(uv) {
           const [i, j] = cell(uv), k = j * nu + i;
@@ -649,6 +650,12 @@
       bindStroke(source, appearance) {
         const stroke = { ...source, kind: 'surface', chart: strokeChart(i => rest[i]) };
         const binding = K.curveSplats.bind(B, stroke, K.curveSplats.drivers.chart(context => context.chart), appearance);
+        strokes.push(binding);
+        return binding;
+      },
+      bindGrowth(growth, appearance) {
+        const chart=strokeChart(i=>rest[i]);
+        const binding=K.curveSplats.grow(B,{kind:'uv',chart:context=>context.chart ?? chart},growth,appearance);
         strokes.push(binding);
         return binding;
       },
