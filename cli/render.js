@@ -7,6 +7,7 @@ const FOV = (38 * Math.PI) / 180;
 const RenderGrid = require('../src/render-grid.js');
 const SplatFootprints = require('../src/splat-footprints.js');
 const CurveSplat = require('../src/curve-splat.js');
+const StrandLod = require('../src/curve-lod.js');
 const CurveSubdivision = require('../src/curve-subdivision.js');
 const Engraving=require('../src/engraving.js');
 const PixelLook = require('../src/pixel-look.js');
@@ -1498,7 +1499,17 @@ function renderFrame(world, o, preparedPalettes) {
     return [color>>16,(color>>8)&255,color&255].map(n=>n/255);
   }
   const relight = relative && SplatRelighting.rows(world, relative, sampleFrames(world, t), { x: X, y: Y, z: Z, alpha: AL });
-  const curveLod = curves && (o.curveLod ?? look.curveLod) !== false && !shutterRows && !reflectionPlane?.select && !probeView?.allow &&
+  const useCurveLod = curves && (o.curveLod ?? look.curveLod) !== false && !shutterRows && !reflectionPlane?.select && !probeView?.allow;
+  const strandLod = useCurveLod && !reflectionPlane && !probeView && !cutaway &&
+    StrandLod.coverageFrame(world,curveCamera,{data:d,positionAt:i=>[X[i],Y[i],Z[i]],alphaAt:i=>AL[i],scaleAt:i=>SC[i],
+      keep:i=>(!qualityRows || qualityRows.keep[i]) && !spriteLOD?.hidden(geometryMask?.codes[i]),
+      partitionAt:geometryMask && (i=>geometryMask.codes[i]),
+      forbidden:i=>curveWidthAt?.(i) || optical?.[i*OpticalMaterials.STRIDE+3] });
+  if (strandLod) {
+    for (const [row,opacity] of strandLod.opacity) AL[row]=opacity;
+    if (counters) counters.strandLod=strandLod.stats;
+  }
+  const curveLod = useCurveLod &&
     CurveLod.frame(world.curveLod, curveCamera, { data:d, x:X, y:Y, z:Z, alpha:AL, scale:SC, windows:curveWindows,
       rig:world.anim?.rig });
   if (counters && curveLod) {
@@ -1513,11 +1524,12 @@ function renderFrame(world, o, preparedPalettes) {
       partitionAt:geometryMask && (i=>geometryMask.codes[i]),
       planes:reflectionPlane ? [CurveSubdivision.viewPlane(V,reflectionPlane)] : [],
       keep:i=>(!qualityRows || qualityRows.keep[i]) && !spriteLOD?.hidden(geometryMask?.codes[i]) &&
-        !curveWidthAt?.(i) && !curveLod?.hidden?.has(i) && !curveLod?.geometry?.has(i) && !curveLod?.choices?.has(i)
+        !curveWidthAt?.(i) && !curveLod?.hidden?.has(i) && !curveLod?.geometry?.has(i) && !curveLod?.choices?.has(i) &&
+        !strandLod?.hidden?.has(i) && !strandLod?.codes?.has(i) && !strandLod?.opacity?.has(i)
     });
   if (subdivision && counters) counters.curveSubdivision = subdivision.stats;
   const subdividedGeometry = i => subdivision?.geometry?.get(i) ?? curveLod?.geometry?.get(i);
-  const hiddenCurve = i => subdivision?.hidden?.has(i) || curveLod?.hidden?.has(i);
+  const hiddenCurve = i => subdivision?.hidden?.has(i) || curveLod?.hidden?.has(i) || strandLod?.hidden?.has(i);
   function rasterCurve(i, coarse) {
     const carrier = shutterRows?.pose(i) ?? world;
     const curve = prepareCurve(i, curveCamera, carrier, false, coarse);
@@ -2235,12 +2247,14 @@ function renderFrame(world, o, preparedPalettes) {
       return SplatFootprints.coverage(shaped,m[0]*u+m[1]*v,m[2]*u+m[3]*v);
     }
     const geometryCode = geometryMask?.codes[i];
+    const strandCode = strandLod?.codes?.get(i);
     const lightingCurveNormal = curveReceives || (curveLight ? curveLight.needsNormal : roughness !== undefined);
     const curveNormal = lightingCurveNormal || probe && o.curveSurfaceNormals;
     for (let iy = y0; iy <= y1; iy++) {
       const dy = iy + 0.5 - sy;
       for (let ix = x0; ix <= x1; ix++) {
         if (geometryCode && !spriteLOD.geometry(geometryCode,ix,iy)) continue;
+        if (strandCode && !StrandLod.visible(strandCode,Math.floor(ix/artScale),Math.floor(iy/artScale))) continue;
         if (representation && !CurveLod.visible(representation, ix, H - 1 - iy, artScale)) continue;
         const dx = ix + 0.5 - sx,
           pw = -0.5 * (k0 * dx * dx + k2 * dy * dy) - k1 * dx * dy;

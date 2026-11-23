@@ -16,6 +16,7 @@ function selection(world, object, part) {
   const meta = world.renderMetadata;
   for (let i=0; i<world.count; i++) {
     if (!curves.isRow(world.data,i*16)) continue;
+    if (world.curveStrands?.[world.curveStations?.[i*curves.stationStride]-1]?.aggregate) continue;
     const source = meta?.objects?.[meta.objectIds?.[i]], target = meta?.targets?.[meta.targetIds?.[i]];
     if (object !== undefined && source !== object || part !== undefined && target?.part !== part) continue;
     rows.push(i);
@@ -58,7 +59,7 @@ function fit(bounds,pivot,views,width,height,padding) {
 
 function bakeCurves(world, {
   object, part, width = 96, height = 96, directions = 8, yaw = world?.cam?.yaw ?? 0,
-  pitches = [world?.cam?.pitch ?? 0], pivot, padding = 3, time = 0, normals = false, ribbon = true
+  pitches = [world?.cam?.pitch ?? 0], pivot, padding = 3, time = 0, normals = false, ribbon = true, cutoutMipmaps
 } = {}) {
   if (!Number.isSafeInteger(world?.count) || !world.curveSplats || !(world.data instanceof Float32Array))
     throw new TypeError('Curve baking needs a native world containing finite curves');
@@ -86,7 +87,7 @@ function bakeCurves(world, {
   if (Math.ceil(views.length/columns)*height > 8192)
     throw new RangeError('Curve bake views exceed the sprite atlas sheet dimensions');
   const atlas = spriteAtlas(isolated,{ width,height,directions,columns,yaw,pitches,pivot:at,
-    times:[time],maps:['depth',...(normals ? ['normal'] : [])],normalSpace:'view',
+    times:[time],maps:['depth',...(normals ? ['normal'] : [])],normalSpace:'view',cutoutMipmaps,
     curveSurface:true,view:{raw:true,edges:false,curveSubdivision:false,curveLod:false} });
   atlas.metadata.curveBake = {
     format:ribbons.format,version:1,object:source.object,...(source.part && {part:source.part}),

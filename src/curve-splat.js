@@ -619,6 +619,6 @@ const CurveSplat = (() => {
   }
   return Object.freeze({ tag, joinGroups, axialUnits, minimum, castShadow, receiveShadow, overlapsDepth,
     clipStride, materialStride, lightingStride, timingStride, stationStride, clipPlanes,
-    emissionAt, lightingAt, isRow, carrier, spanShape, roundSpan, writeClips, timeWindow, timedOpacity, timedCarrier, prepare, sample, sampleAt, specular, directional });
+    emissionAt, lightingAt, isRow, hardGroup, carrier, spanShape, roundSpan, writeClips, timeWindow, timedOpacity, timedCarrier, prepare, sample, sampleAt, specular, directional });
 })();
 if (typeof module !== 'undefined') module.exports = CurveSplat;

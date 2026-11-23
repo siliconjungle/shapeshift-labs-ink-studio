@@ -551,7 +551,7 @@
         radius = Math.max(radius, K.V.dist(center, locations[j]) + parts[j].radius);
       // Use the largest local nearest-neighbour pitch, so an isolated strand
       // can hold the detailed representation even if the rest are clustered.
-      if (settings.pitch === undefined && (i === settings.samples || i % Math.ceil(settings.samples / 5) === 0)) {
+      if (settings.pitch === undefined && !settings.coverage && (i === settings.samples || i % Math.ceil(settings.samples / 5) === 0)) {
         for (let j = 0; j < locations.length; j++) {
           let nearest = Infinity;
           for (let k = 0; k < locations.length; k++) if (j !== k) nearest = Math.min(nearest, K.V.dist(locations[j], locations[k]));
@@ -585,7 +585,9 @@
       radius: coarse.radius, color, opacity: 0, edge: 'hard', object: plan.object,
       material: plan.material, target: plan.target, maxSegments
     }, colors, true);
-    return { ...coarse, settings, plan: proxy, opacity: settings.opacity ?? opacity / area };
+    const proxyArea = proxy.strands.reduce((sum, strand)=>sum+strand.length*coarse.radius,0);
+    const proxyOpacity = settings.coverage ? Math.min(1,opacity/proxyArea) : opacity/area;
+    return { ...coarse, settings, plan: proxy, opacity: settings.opacity ?? proxyOpacity };
   }
 
   function simplificationRuns(strands, ranges) {
@@ -831,7 +833,7 @@
         proxy = emit(builder, plan.proxy.plan, true);
         aggregate = { detail: threads.filter(thread => thread.end > thread.first).map(thread => [thread.first, thread.end]),
           proxy: [proxy.first, proxy.end], pitch: plan.proxy.pitch, opacity: plan.proxy.opacity,
-          transition: plan.proxy.settings.transition };
+          transition: plan.proxy.settings.transition, coverage: plan.proxy.settings.coverage };
         if (plan.lod.simplify) runs.push(...simplificationRuns(plan.proxy.plan.strands, proxy.threads));
       }
       if (runs.length || aggregate) {
@@ -1006,5 +1008,5 @@
     });
   }
 
-  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, subdivision: CurveSubdivision, bakedRibbon: CurveRibbons.ribbon, drivers: CurvePoseDrivers, world });
+  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, subdivision: CurveSubdivision, strandLod: CurveLod, bakedRibbon: CurveRibbons.ribbon, drivers: CurvePoseDrivers, world });
 })(KIT);

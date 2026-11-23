@@ -17,6 +17,8 @@ selected spans with pixel padding. `--w`, `--h`, `--yaw`, `--pitches`,
 `--pivot`, and `--pad` control framing. `--t` samples one time, including
 curve reveals and trails. The Node API starts from the current native rows.
 The bake isolates curves from surrounding props and scene media.
+Use `--cutout-mipmaps on` or `cutoutMipmaps: true` for area-preserving hard
+cutout levels. Bakes use the individual strands of a grouped source.
 
 | File | Contents |
 | --- | --- |

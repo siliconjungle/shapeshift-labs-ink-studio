@@ -33,19 +33,18 @@ bool spriteGeometry(int code, vec2 at) {
   return code==0 || spriteRank(at,(code-1)/65)<((code-1)%65);
 }
 `;
-  function asset({ atlas, range = [12, 18] } = {}) {
+  function asset({ atlas, range, projectedRange } = {}) {
     const source = atlasAPI.compile(atlas);
     if (source.sceneryPlanes || source.largestView > pixelLimit)
       throw new RangeError('Sprite reconstruction needs a directional atlas with at most 262144 pixels per view');
-    if (
-      !Array.isArray(range) ||
-      range.length !== 2 ||
-      !Array.from(range).every(Number.isFinite) ||
-      range[0] <= 0 ||
-      range[1] <= range[0]
-    )
-      throw new RangeError('Sprite reconstruction needs increasing positive near and far distances');
-    const result = Object.freeze({ atlas: source, range: Object.freeze(range.slice()) });
+    if (range !== undefined && projectedRange !== undefined)
+      throw new RangeError('Sprite reconstruction needs either a distance range or a projected texel range');
+    const limits = projectedRange === undefined ? (range === undefined ? [12,18] : range) : projectedRange;
+    if (!Array.isArray(limits) || limits.length !== 2 || !Array.from(limits).every(Number.isFinite) ||
+        limits[0] <= 0 || limits[1] <= limits[0])
+      throw new RangeError(projectedRange === undefined ? 'Sprite reconstruction needs increasing positive near and far distances' :
+        'Sprite reconstruction needs an increasing positive projected texel range');
+    const result = Object.freeze({ atlas:source, [projectedRange===undefined ? 'range' : 'projectedRange']:Object.freeze(limits.slice()) });
     assets.add(result);
     return result;
   }
@@ -180,24 +179,34 @@ bool spriteGeometry(int code, vec2 at) {
         typeof placement.at === 'function'
           ? atlasAPI.vector(placement.at(clock), 'Sprite reconstruction anchor')
           : placement.at;
-      const delta = plus(observer, at, -1),
-        distance = length(delta),
-        [near, far] = source.range;
-      const x = clamp((far - distance) / (far - near)),
-        step = mode === 'sprite' ? 0 : Math.round(bins * x * x * (3 - 2 * x));
+      const delta = plus(observer, at, -1), distance = length(delta);
+      const direction = ortho || distance < 1e-9 ? back : delta.map(n => n / distance);
+      const rotation = atlasAPI.basis(placement.yaw, 0);
+      const selectView = () => {
+        const frame = typeof placement.frame === 'function' ? placement.frame(clock) : (placement.frame ?? placement.frameAt?.(clock));
+        return source.atlas.select(frame, 'impostor', local(rotation, direction));
+      };
+      const project = view => {
+        const depth = ortho ? 1 : dot(delta,back);
+        return depth > 0 ? (view.unitsPerPixel * placement.scale * focal) / depth : Infinity;
+      };
+      let view, step;
+      if (mode === 'sprite') step=0;
+      else {
+        if (source.projectedRange && !(focal > 0 && Number.isFinite(focal)))
+          throw new RangeError('Projected sprite reconstruction requires a positive art-grid focal length');
+        const [low,high] = source.projectedRange ?? source.range;
+        const value = source.projectedRange ? project(view=selectView()) - low : high - distance;
+        const x = clamp(value/(high-low));
+        step = Math.round(bins*x*x*(3-2*x));
+      }
       steps.push(step);
       if (!step) geometryRows -= plan.counts[i];
       const state = { ...tags, distance, geometry: step / bins, sprite: 1 - step / bins };
       states.push(state);
       if (step === bins) continue;
-      const direction = ortho || distance < 1e-9 ? back : delta.map(n => n / distance);
-      const rotation = atlasAPI.basis(placement.yaw, 0);
-      const frame =
-        typeof placement.frame === 'function'
-          ? placement.frame(clock)
-          : (placement.frame ?? placement.frameAt?.(clock));
-      const view = source.atlas.select(frame, 'impostor', local(rotation, direction));
-      const pixelsPerTexel = (view.unitsPerPixel * placement.scale * focal) / (ortho ? 1 : dot(delta, back));
+      view ??= selectView();
+      const pixelsPerTexel = project(view);
       const cutoutLevel = source.atlas.cutoutLevel?.(view, pixelsPerTexel);
       if (cutoutLevel !== undefined) state.cutoutLevel = cutoutLevel;
       const axes = atlasAPI.basis(

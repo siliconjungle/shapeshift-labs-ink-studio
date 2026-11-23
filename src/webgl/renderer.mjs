@@ -1253,6 +1253,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         time, drawOrder:frame.order, planes:[clip,cover?.plane],
         geometryCode:spriteMask && (i=>spriteMask.codes[i]),
         curveSubdivision:cutaway ? false : frame.curveSubdivision ?? look.curveSubdivision,
+        strandLod:(frame.curveLod ?? look.curveLod) !== false && !cutaway && !cover && !reflectionCapture && !clip.slice(0,3).some(Boolean),
+        strandForbidden:opticalMaterials ? i=>opticalRows[i*toolkit.KIT.optical.stride+3] : undefined,
         keep:i=>(!selection || selection.keep[i]) && !spriteLOD?.hidden(spriteMask?.codes[i]),
         visible:sampleCoverage && (flags=>sampleCoverage.visible(flags,withdrawal))
       });
@@ -1476,7 +1478,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (curvePlan?.count) {
         finiteCurvePass ??= createFiniteCurvePass(gl,{
-          target,table,program,maxSize,textureUnit,fullscreen,cutaway:cutawayAPI?.glsl,spriteLOD:spriteLOD?.glsl
+          target,table,program,maxSize,textureUnit,fullscreen,cutaway:cutawayAPI?.glsl,spriteLOD:spriteLOD?.glsl,
+          strandLOD:toolkit.KIT.curveSplats.strandLod.glsl
         });
         const baseOwner = owner;
         const curveOptions = { clip, section, wet, water, env, layeredGlass,
@@ -1501,7 +1504,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (curvePlan && typeof frame.curveFrame === 'function')
         frame.curveFrame({ segments:curvePlan.count, tileReferences:curvePlan.references, peakTile:curvePlan.peakTile,
-          ...(curvePlan.subdivision && { subdivision:curvePlan.subdivision }) });
+          ...(curvePlan.subdivision && { subdivision:curvePlan.subdivision }),
+          ...(curvePlan.strandLod && { strandLod:curvePlan.strandLod }) });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (hybridDepthCapture) {
         const depth = readHybridDepth(gl, owner.framebuffer, width, height, camera.depthRange);
@@ -1808,6 +1812,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           curveMode: portal.destinationFrame?.curveMode ?? frame.curveMode,
           curveSplats: portal.destinationFrame?.curveSplats ?? frame.curveSplats,
           curveSubdivision: portal.destinationFrame?.curveSubdivision ?? frame.curveSubdivision,
+          curveLod: portal.destinationFrame?.curveLod ?? frame.curveLod,
           hybridDepthFrame: frame.hybridDepthFrame, damp: false, [portalDepth]: depth + 1 }, expand);
         // Resolve the deeper view before reusing the source and coverage targets.
         present(destination.world, destination.frame, width, height, destinationBuffer.framebuffer,

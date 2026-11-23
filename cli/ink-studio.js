@@ -1467,6 +1467,7 @@ const CMD = {
         '  curve-subdivision-review [--out directory --chrome executable --hardware]  compare dense and adaptive finite spans',
         '  curve-bake <scene> [--object name --part part --normals on --out directory]  bake curve cards and depth ribbons',
         '  curve-bake-review [--out directory --chrome executable --hardware]  compare native curves, ribbons, and rebuilt cards',
+        '  strand-lod-review [--out directory --chrome executable --hardware --motion]  compare individual strands, groups and cards',
         '  finite-curve-review [--out directory --chrome executable --hardware --orbit]  compare interactive GPU curves with the headless renderer',
         '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
@@ -2835,7 +2836,7 @@ const CMD = {
       directions:num('directions',8),yaw:num('yaw',world.cam.yaw ?? 0),time,
       ...(opt.pitches!==undefined && { pitches:list('pitches') }),
       ...(opt.pivot!==undefined && { pivot:list('pivot') }),
-      padding:num('pad',3),normals:onOffOption('normals') ?? false,
+      padding:num('pad',3),normals:onOffOption('normals') ?? false,cutoutMipmaps:onOffOption('cutout-mipmaps'),
       ribbon:onOffOption('ribbon')===false ? false : {
         view:num('ribbon-view',0),alphaCutoff:num('alpha-cutoff',.5),depthTolerance:num('depth-tolerance',.02)
       }
@@ -2850,6 +2851,13 @@ const CMD = {
     const report = require('./curve-bake-review.js').run(directory,{ chrome:opt.chrome,hardware:opt.hardware });
     for (const asset of report.assets)
       console.log(asset.object,asset.sourceSpans,'native spans,',asset.strips,'ribbon strips,',asset.cardViews,'card views');
+    console.log('wrote',directory);
+  },
+  'strand-lod-review'() {
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'strand-lod-review');
+    const report = require('./strand-lod-review.js').run(directory,{chrome:opt.chrome,hardware:opt.hardware,motion:opt.motion});
+    for (const {id,webgl} of report.views)
+      console.log(id,webgl.native.segments,'to',webgl.lod.segments,'finite curve spans');
     console.log('wrote',directory);
   },
   'finite-curve-review'() {

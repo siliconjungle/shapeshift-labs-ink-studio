@@ -1,5 +1,7 @@
 /* Curve detail settings and row-range remapping for native world assembly. */
 const CurveLod = (() => {
+  const kernel = typeof CurveSplat === 'undefined' ? require('./curve-splat.js') : CurveSplat;
+  const detailWeight = typeof StableDetail === 'undefined' ? require('./stable-detail.js').weight : StableDetail.weight;
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const number = (value, lo, hi) => Number.isFinite(value) && lo <= value && value <= hi;
   function check(ok, message) {
@@ -19,13 +21,23 @@ const CurveLod = (() => {
     const aggregate = value.aggregate;
     if (aggregate === undefined || aggregate === false) return simplify ? { simplify } : undefined;
     check(record(aggregate) && Object.keys(aggregate).every(key =>
-      ['transition', 'pitch', 'width', 'color', 'opacity', 'samples'].includes(key)), 'invalid aggregate settings');
+      ['transition', 'pitch', 'width', 'color', 'opacity', 'samples', 'coverage'].includes(key)), 'invalid aggregate settings');
     const { pitch, width, color, opacity, samples = 24, transition = [.48, 1.35] } = aggregate;
     check((pitch === undefined || number(pitch, 1e-6, 1e5)) &&
       (width === undefined || number(width, 2e-6, 200)) &&
       (opacity === undefined || number(opacity, 0, 1)) && Number.isSafeInteger(samples) && samples >= 4 && samples <= 64,
     'invalid aggregate pitch, width, opacity or sample count');
-    return { simplify, aggregate: { pitch, width, color, opacity, samples, transition: range(transition, 'aggregate transition') } };
+    let coverage;
+    if (aggregate.coverage !== undefined) {
+      const value = aggregate.coverage === true ? {} : aggregate.coverage;
+      check(record(value) && Object.keys(value).every(key => key === 'width' || key === 'spacing') &&
+        pitch === undefined && aggregate.transition === undefined,
+      'coverage needs width and spacing ranges instead of an aggregate pitch or transition');
+      coverage = { width: range(value.width ?? [.45,.85], 'strand width'),
+        spacing: range(value.spacing ?? [.42,.85], 'strand spacing') };
+    }
+    return { simplify, aggregate: { pitch, width, color, opacity, samples, coverage,
+      transition: range(transition, 'aggregate transition') } };
   }
 
   function remap(records, indexAt) {
@@ -47,6 +59,117 @@ const CurveLod = (() => {
     });
   }
 
-  return Object.freeze({ prepare, remap });
+  const length = (a,b) => Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);
+  const lerp = (a,b,t) => a.map((v,k)=>v+(b[k]-v)*t);
+
+  function coverageFrame(world, camera, { data, keep, positionAt, scaleAt, alphaAt, partitionAt, forbidden }) {
+    const records = world.curveLod?.filter(row=>row.aggregate?.coverage);
+    if (!records?.length || world.anim?.rig || world.anim?.bones || world.reconstructionPose) return;
+    const { view, near, ortho, focal, artScale = 1 } = camera;
+    const magnification = focal / artScale;
+    const hidden = new Set(), opacity = new Map(), codes = new Map();
+    const stats = { groups:0, grouped:0, blending:0, individual:0, proxySpans:0, replacedSpans:0 };
+    const stations = world.curveStations;
+    const patternStride = world.curvePattern && (typeof CurvePattern === 'undefined' ? require('./curve-pattern.js') : CurvePattern).stride;
+    const viewPoint = p => [0,1,2].map(k=>view[k]*p[0]+view[k+4]*p[1]+view[k+8]*p[2]+view[k+12]);
+    const rayStretch = p => Math.hypot(1,p[0]/p[2],p[1]/p[2]);
+    function span(i) {
+      const at = i*16, station = i*kernel.stationStride, total = stations?.[station+3];
+      if (!(total > 0) || !(stations[station+2] > stations[station+1])) return;
+      const row = kernel.roundSpan(data,at,scaleAt?.(i) ?? 1,positionAt?.(i) ?? data.subarray(at,at+3));
+      if (!row) return;
+      // Covariance carries an unoriented axis. The station restores path order.
+      let { from,to } = row;
+      if (from.reduce((sum,v,k)=>sum+(to[k]-v)*stations[station+4+k],0) < 0) [from,to] = [to,from];
+      return { from:viewPoint(from),to:viewPoint(to),radius:row.radius,
+        start:stations[station+1]/total,end:stations[station+2]/total };
+    }
+    function measure(aggregate, code) {
+      const [first,end] = aggregate.proxy, guide = [];
+      const {width,spacing} = aggregate.coverage;
+      let widthPx=0, spacingPx=0;
+      const compatible = i => keep(i) && (partitionAt?.(i) ?? 0) === code;
+      for (let i=first; i<end; i++) {
+        const section = compatible(i) && span(i);
+        if (!section || Math.abs(section.start-(guide.at(-1)?.end ?? 0))>1e-8) return 16;
+        guide.push(section);
+      }
+      if (guide.at(-1).end < 1-1e-8) return 16;
+      for (const [start,end] of aggregate.detail) {
+        let cursor=0, covered=0;
+        for (let i=start; i<end; i++) {
+          const at = i*16;
+          if (!compatible(i) || forbidden?.(i) || world.curveTiming?.[i*kernel.timingStride] ||
+              world.curvePattern?.[i*patternStride] || kernel.clipPlanes(world.curveClips,i,[0,0,0],1) ||
+              !kernel.hardGroup(data[at+15]) ||
+              (alphaAt?.(i) ?? data[at+3]) <= 0) return 16;
+          const fine = span(i);
+          if (!fine || Math.abs(fine.start-covered)>1e-8) return 16;
+          covered = fine.end;
+          const depth = Math.min(-fine.from[2],-fine.to[2]) - fine.radius;
+          if (depth < near) return 16;
+          const widthScale = ortho ? 1 : Math.max(rayStretch(fine.from),rayStretch(fine.to))/depth;
+          widthPx = Math.max(widthPx,2*fine.radius*magnification*widthScale);
+          if (widthPx >= width[1]) return 16;
+          while (cursor+1 < guide.length && guide[cursor].end <= fine.start) cursor++;
+          // Compare every breakpoint of both piecewise-linear paths. This
+          // bounds a local hole by twice the largest offset from the guide.
+          for (let j=cursor; j<guide.length; j++) {
+            const coarse = guide[j];
+            let offset=0, nearDepth=Infinity, stretch=1;
+            for (const arc of [Math.max(fine.start,coarse.start),Math.min(fine.end,coarse.end)]) {
+              const a = lerp(fine.from,fine.to,(arc-fine.start)/(fine.end-fine.start));
+              const b = lerp(coarse.from,coarse.to,(arc-coarse.start)/(coarse.end-coarse.start));
+              nearDepth = Math.min(nearDepth,-a[2]-fine.radius,-b[2]-coarse.radius);
+              if (nearDepth < near) return 16;
+              offset = Math.max(offset,length(a,b));
+              if (!ortho) stretch = Math.max(stretch,rayStretch(a),rayStretch(b));
+            }
+            const deviation = Math.max(offset,coarse.radius-fine.radius);
+            spacingPx = Math.max(spacingPx,2*magnification*deviation*(ortho ? 1 : stretch/nearDepth));
+            if (spacingPx >= spacing[1]) return 16;
+            if (coarse.end >= fine.end-1e-9) break;
+          }
+        }
+        if (covered < 1-1e-8) return 16;
+      }
+      return Math.round(16*Math.max(detailWeight(width,widthPx),detailWeight(spacing,spacingPx)));
+    }
+    for (const { aggregate } of records) {
+      const [first,end] = aggregate.proxy;
+      if (!aggregate.opacity || !keep(first)) continue;
+      stats.groups++;
+      const step = measure(aggregate,partitionAt?.(first) ?? 0);
+      if (step === 16) { stats.individual++; continue; }
+      stats[step ? 'blending' : 'grouped']++;
+      stats.proxySpans += end-first;
+      for (let i=first; i<end; i++) {
+        opacity.set(i,aggregate.opacity);
+        if (step) codes.set(i,-step);
+      }
+      for (const [start,until] of aggregate.detail) {
+        if (!step) stats.replacedSpans += until-start;
+        for (let i=start; i<until; i++) {
+          if (step) codes.set(i,step);
+          else hidden.add(i);
+        }
+      }
+    }
+    return { hidden, opacity, codes, stats };
+  }
+
+  function visible(code,x,y) {
+    const rank=4*(2*((x^y)&1)+(y&1))+2*(((x^y)>>1)&1)+((y>>1)&1);
+    return code > 0 ? rank < code : rank >= -code;
+  }
+  const glsl = `
+bool strandVisible(int code, vec2 at) {
+  ivec2 p=ivec2(floor(at))&ivec2(3);
+  int a=p.x^p.y;
+  int rank=4*(2*(a&1)+(p.y&1))+2*((a>>1)&1)+((p.y>>1)&1);
+  return code>0 ? rank<code : rank>=-code;
+}
+`;
+  return Object.freeze({ prepare, remap, coverageFrame, visible, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = CurveLod;

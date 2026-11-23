@@ -37,19 +37,23 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
   const keep = i => (!options.keep || options.keep(i)) && (!selected || selected.has(i)) &&
     (!options.visible || options.visible(data[i*16+11]));
   const subdivision = kit.curveSplats.subdivision;
+  const strandLOD = kit.curveSplats.strandLod;
+  const strands = options.strandLod && strandLOD.coverageFrame(world,lens,{data,keep,
+    partitionAt:options.geometryCode,forbidden:options.strandForbidden});
   const settings = subdivision.prepare(options.curveSubdivision);
-  const detail = subdivision.frame(world,lens,settings,{ data, keep, planes:options.planes, partitionAt:options.geometryCode });
+  const detail = subdivision.frame(world,lens,settings,{ data, planes:options.planes, partitionAt:options.geometryCode,
+    keep:i=>keep(i) && !strands?.hidden?.has(i) && !strands?.codes?.has(i) && !strands?.opacity?.has(i) });
   const programs = new Map();
-  let references = 0, peakTile = 0, masked = false;
+  let references = 0, peakTile = 0, masked = false, strandMasked = false;
 
   for (let i=0; i<world.count; i++) {
     const at = i*16;
     if (!kernel.isRow(data,at)) continue;
     rows[i] = 1;
-    if (!keep(i) || detail?.hidden.has(i)) continue;
+    if (!keep(i) || detail?.hidden.has(i) || strands?.hidden?.has(i)) continue;
     const replacement = detail?.geometry.get(i);
     const center = replacement?.center ?? Array.from(data.subarray(at,at+3));
-    let opacity = Math.min(1,data[at+3]);
+    let opacity = Math.min(1,strands?.opacity?.get(i) ?? data[at+3]);
     if (!(opacity > 0)) continue;
 
     const tag = data[at+15], timedAt = i*kernel.timingStride, timing = world.curveTiming;
@@ -86,13 +90,15 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     const rgb = data[at+7], glow = !world.renderMetadata?.muteEmission?.[i] && kernel.emissionAt(world.curveMaterials,i);
     const color = [rgb & 255, rgb >> 8 & 255, rgb >> 16 & 255].map((byte,k) => Math.min(1,byte/255 + (glow?.[k] ?? 0)));
     const geometryCode = options.geometryCode?.(i) ?? 0;
+    const strandCode = strands?.codes?.get(i) ?? 0;
     masked ||= geometryCode !== 0;
+    strandMasked ||= strandCode !== 0;
     spans.push(...point(view,span.from),span.radius,
       ...vector(view,span.axis),span.length,
       ...(span.major ? vector(view,span.major) : none),mode,
       ...(span.minor ? vector(view,span.minor) : none),span.opacity,
       ...(caps[0]?.plane ?? zero),...(caps[1]?.plane ?? zero),
-      ...color,i+1,span.group,span.tau,geometryCode,0,
+      ...color,i+1,span.group,span.tau,geometryCode,strandCode,
       ...(caps[0]?.at ?? zero),...(caps[1]?.at ?? zero));
   }
   const starts = tiles.length*4, tileData = new Float32Array(starts + references);
@@ -104,10 +110,11 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     cursor += bin.length;
   }
   return { spans:Float32Array.from(spans), tiles:tileData, columns, rows,
-    count:spans.length/spanStride, references, peakTile, masked, ...(detail && { subdivision:detail.stats }) };
+    count:spans.length/spanStride, references, peakTile, masked, strandMasked,
+    ...(detail && { subdivision:detail.stats }), ...(strands && { strandLod:strands.stats }) };
 }
 
-export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD }) {
+export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD, strandLOD }) {
   const spans = table(rowWidth,tableUnits.spans,maxSize);
   const tiles = table(rowWidth,tableUnits.tiles,maxSize);
   const programs = new Map();
@@ -117,9 +124,10 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
   function draw(plan, buffer, base, camera, options) {
     const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy } = options;
     const isOwner = mode === 'owner';
-    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked].join('/');
+    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked].join('/');
     if (!programs.has(key)) programs.set(key,program(finiteCurveFragment({
-      mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined, spriteLOD:plan.masked ? spriteLOD : undefined
+      mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined,
+      spriteLOD:plan.masked ? spriteLOD : undefined,strandLOD:plan.strandMasked ? strandLOD : undefined
     })));
     const shader = programs.get(key), { width, height } = base;
     textureUnit(tableUnits.solid,base.textures[2]);

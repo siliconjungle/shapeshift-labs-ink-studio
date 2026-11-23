@@ -33,6 +33,13 @@ sprites.bind(world, [
 
 `asset` accepts either a compiled `K.sprite.atlas` or its source with `metadata` and RGBA `images`. Each view can contain at most 262,144 pixels. `range` holds the near and far distances in scene units. `bind` attaches up to 128 placements and replaces a previous binding. Pass an empty list to remove it. `object` matches a native object name from builder metadata, for example through `B.describeSplats(..., {object})` or a sculpt's `objectId` option. Every placement has a distinct name.
 
+Use `sprites.asset({ atlas, projectedRange: [0.30, 0.46] })` for a handoff
+based on art pixels per texel of the selected view. At or below the first
+value the card owns all pixels. At or above the second value the native
+representation owns all pixels. Zoom, field of view, the art-grid size and
+the atlas view's scale all affect the handoff. Supply one of `projectedRange`
+and `range`.
+
 Bake the near geometry at the same `at`, `yaw` and `scale` as the atlas placement. If `at(time)` moves the pivot, animate the full-detail object to match. `frame` also accepts a callback, and `playback` accepts the existing atlas time modes. Synchronize any native animation to the atlas bake's sample times. The closest baked heading and elevation are used while the atlas is active. More views reduce changes between neighbouring silhouettes.
 
 ## Render and inspect the handoff

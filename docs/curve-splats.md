@@ -685,8 +685,59 @@ to render the woven crossings, the mist pass, and the shadow switches.
 ## Simplify strands at a distance
 
 Set `lod` on a strand appearance or a grouped source such as a bundle or
-textile plan. It applies to the headless view. The source paths stay
-editable and the physical strands still cast their authored shadows.
+textile plan. The source paths stay editable and the physical strands
+still cast their authored shadows. Coverage-based grouping runs in both
+headless and WebGL. The pitch-only and chord-simplification settings below
+are available in the headless renderer.
+
+### Group unresolved strands and hand off to cards
+
+Draw each set of companion strands together. Use separate draws on the same
+object and part for neighboring coils, ropes, or tassels whose gaps should
+remain visible. Set `edge: 'hard'` and enable coverage-based aggregation.
+
+```js
+K.curveSplats.draw(builder, bundle, {
+  object: 'rigging', material: 'cord', target: { part: 'ropes' },
+  width: 0.021, edge: 'hard',
+  lod: { aggregate: { samples: 20, coverage: {
+    width: [0.45, 0.85], spacing: [0.42, 0.85]
+  } } }
+});
+```
+
+Both ranges are in native art pixels, from fully grouped to fully individual.
+The width test uses the widest strand. The spacing test bounds the separation
+by comparing the actual strand and guide paths at their span boundaries,
+including depth separation. One widely separated strand or a gap in the
+path can keep the whole group detailed. During the transition, the two
+representations use complementary art-pixel masks in the color and depth
+passes. The grouped strand estimates its opacity from the ratio of the
+original strand area to the guide area. Use `color`, `width`, or `opacity`
+on `aggregate` to author the guide's appearance explicitly.
+
+Use `coverage: true` for the ranges above. The grouped renderer handles
+continuous, hard, round strands. Timed, patterned, clipped, or profiled
+groups and runtime rig or bone groups use their individual geometry.
+Directly posed curve bindings can update the guide and its strand spans
+together. Reflection, portal clip, cutaway, and probe passes retain the
+individual strands for coverage-based groups.
+
+Bake the part with `ink.bakeCurves(world, { object: 'rigging', part: 'ropes',
+cutoutMipmaps: true, ribbon: false })` and bind its atlas using
+[`projectedRange`](sprite-reconstruction.md) to set the card handoff in
+art pixels per atlas texel. The bake uses the original strands and retains
+transparent gaps in each view. The optional cutout mips preserve the covered
+area at smaller scales. Set `curveLod: false` on the frame to inspect
+individual geometry and `spriteReconstruction: 'geometry'` to bypass the
+card for the comparison. Read group and span counts from
+`renderStats.strandLod` or WebGL's `curveFrame` callback.
+
+```sh
+node cli/ink-studio.js strand-lod-review --hardware --motion --out out/strand-lod
+```
+
+### Simplify by chord error or pitch
 
 ```json
 {

@@ -72,7 +72,7 @@ function frame(records, camera, { data, x, y, z, alpha, scale, windows, rig }) {
   const span = i => !hidden.has(i) && alpha[i] > 0 ? CurveSplat.roundSpan(data, i * 16, scale[i], center(i)) : undefined;
 
   for (const { aggregate } of records) {
-    if (!aggregate || !aggregate.opacity) continue;
+    if (!aggregate || !aggregate.opacity || aggregate.coverage) continue;
     const { detail, proxy: [start, end], pitch, opacity, transition } = aggregate;
     const parent = part(start);
     let ready = true;
@@ -106,7 +106,7 @@ function frame(records, camera, { data, x, y, z, alpha, scale, windows, rig }) {
     }
   }
 
-  for (const { runs, simplify } of records) for (const [start, end] of runs) {
+  for (const { runs, simplify, aggregate } of records) for (const [start, end] of aggregate?.coverage ? [] : runs) {
     for (let first = start; first < end; first += chunkSize) {
       const last = Math.min(first + chunkSize, end);
       let path;
