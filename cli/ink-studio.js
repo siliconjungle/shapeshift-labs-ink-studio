@@ -153,9 +153,12 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   if (cacheDirectory !== undefined && (typeof cacheDirectory !== 'string' || !cacheDirectory.length))
     die('--asset-cache expects a directory');
   const bakeCache = cacheDirectory && require('./bake-cache.js').open(path.resolve(cacheDirectory), require('../index.js'), K.authoring.bakeCache);
-  const descriptor=K.diorama.scene(spec,{assets,prefabs,bakeCache,resolveSpriteAtlas});
+  const env={assets,prefabs,bakeCache,resolveSpriteAtlas};
+  const descriptor=K.diorama.scene(spec,env);
   const atlases=new Map();
-  return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks, build(seed, options = {}) {
+  return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks,
+    ...(source === raw && source.format === undefined && { openEditor: () => K.authoring.sceneEditor.create(spec,{ env }) }),
+    build(seed, options = {}) {
     const parameterTime = opt['parameter-time'] ?? (Number.isFinite(Number(opt.t)) ? opt.t : 0);
     const world=descriptor.build(seed, { ...options, parameterInputs: { time: Number(parameterTime), ...options.parameterInputs } });
     if (Array.isArray(world.spriteAtlases)) world.spriteAtlases=world.spriteAtlases.map(placement=>{
@@ -972,6 +975,7 @@ const view = extra =>
       sdfAssist: sdfAssistOption(),
       tracedLighting: renderAssetOption('traced-lighting'),
       splatFit: renderAssetOption('splat-fit'),
+      shotCorrections: renderAssetOption('shot-corrections'),
       stableTransparency: opt['stable-transparency'] === 'blend' ? { mode: 'blend' } : onOffOption('stable-transparency'),
       fragmentBudget: num('fragment-budget'),
       inspection: opt.inspection === 'off' ? false : opt.inspection === undefined ? undefined :
@@ -1321,6 +1325,7 @@ const CMD = {
         '  bounce-probes review <scene> --out directory [--from 0 --to 3 --fps 12 --w 184 --h 112]',
         '  traced-lighting <scene> --out asset.json [--plan settings.json --t 0 --samples 32 --bounces 2]',
         '  splat-fit <scene> --plan approvals.json --out asset.json',
+        '  render/clip --shot-corrections file.json|off   load or bypass native shot corrections',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
         '  pose-correctives capture <scene> --plan sculpt.json --t 1 --out correction.json',
         '  pose-correctives review <scene> --out directory [--from 0 --to 2.4 --fps 10]',
@@ -1390,6 +1395,7 @@ const CMD = {
         '  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing from a scene',
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',
+        '  pixel-art edit <design.json> <edit.json> --scene <bound scene> --out edit.json   write a scene destination',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
@@ -4004,10 +4010,20 @@ const CMD = {
      its pixels make one, as 2 for a picture shown at twice its size), the diorama drawn at the same size in art pixels, the two side
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
   'pixel-art'() {
-    require('./pixel-art.js').command(pos,opt,outputFile, id => {
-      const world = buildPreview(id), t = num('t',0);
-      pose(world,t);
-      return R.render(world, view({ w:num('w',160), h:num('h',96), px:1, t, passes:['objectId'] }));
+    require('./pixel-art.js').command(pos,opt,outputFile,{
+      capture(id) {
+        const world = buildPreview(id), t = num('t',0);
+        pose(world,t);
+        return R.render(world, view({ w:num('w',160), h:num('h',96), px:1, t, passes:['objectId'] }));
+      },
+      world: id => buildPreview(id),
+      scene(id) {
+        if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
+        const bytes = fs.readFileSync(path.resolve(id));
+        const descriptor = dataScene(id,JSON.parse(bytes));
+        if (!descriptor.openEditor) throw new TypeError('This pixel destination needs a plain JSON diorama');
+        return { editor:descriptor.openEditor(), revision:require('./asset-references.js').hash(bytes) };
+      }
     });
   },
   /* pixel-art lint: the mistakes pixel artists name, at a diorama's own pixel size, beside what the references come to (the medians

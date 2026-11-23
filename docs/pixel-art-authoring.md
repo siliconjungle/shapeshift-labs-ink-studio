@@ -115,8 +115,8 @@ document level. Each frame holds its own cels and duration.
   gaps. A protected layer still locks its marks during compositing.
 - `sceneBindings` optionally records a `scene` and `object` with an optional
   `part`, source `revision`, and `frame` or `layer` scope. Drawing and editing
-  the pixel document operate on the stored art. The binding records the target
-  for future scene operations.
+  the pixel document operate on the stored art. Named destinations use
+  these bindings to target a scene object or part.
 - Frame, layer, swatch, selection, protected detail, and binding IDs start
   with a lowercase ASCII letter and contain at most 64 lowercase letters,
   digits, or hyphens. IDs are unique within their own lists. References to
@@ -175,6 +175,71 @@ that frame by default and checks that it matches `--frame` if supplied. The
 repair creates a cel in the chosen frame alone. The revision covers the whole
 document, including its saved selections, protected details, and scene
 bindings.
+
+## Choose an edit destination
+
+Add an optional `destinations` array to a version 2 document. The raster
+destination is always available as `raster`. Scene destinations name entries
+in `sceneBindings`. A frame-scoped binding can only be used from that frame.
+For example, given a binding called `gate`:
+
+```json
+[
+  { "id": "touch-up", "kind": "raster" },
+  { "id": "shot-paint", "kind": "shot-correction", "binding": "gate" },
+  { "id": "patina", "kind": "surface-channel", "binding": "gate", "chart": "front", "channel": "wear" },
+  { "id": "edge-splats", "kind": "splat-attributes", "binding": "gate" },
+  { "id": "carve", "kind": "sdf-shape", "binding": "gate" },
+  { "id": "stone", "kind": "sdf-material", "binding": "gate" }
+]
+```
+
+Run `pixel-art validate document.json` for the document revision, frame IDs
+and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
+`destination`. Its remaining fields depend on the destination.
+
+| Kind | Edit fields | Output |
+| --- | --- | --- |
+| `raster` | `edits` with `at`, `layer`, `from`, and `to` | Revised pixel document, with the new cel on the chosen frame |
+| `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
+| `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
+| `splat-attributes` | `operation.splats` with source row or stable splat ID and either `footprintScale` or `visible` per splat | Splat-fit asset checked against the source bake by `render --splat-fit` |
+| `sdf-shape` | `operation.parameters` with native shape fields, or one `operation.modifier` | Revised JSON diorama with edited geometry |
+| `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
+
+Omitting `destination` continues to edit raster pixels. Scene writes take
+an explicit `--scene` matching the binding and save their own output file.
+The surface and SDF routes use a plain JSON diorama and a named authored
+solid. Keep relative scene resources beside the revised diorama.
+
+```sh
+node cli/ink-studio.js pixel-art edit document.json cut.json \
+  --scene gate.json --out gate-cut.json
+node cli/ink-studio.js render gate-cut.json --out gate-cut.png
+```
+
+For a cut, use an operation such as
+`{"modifier":{"kind":"mask","mode":"cut","shape":{"kind":"box","at":[0,1,0],"half":[0.2,0.3,0.5]}}}`.
+The modifier keeps the edit ID. A surface-channel edit can use
+`{"stamp":{"value":0.6,"brush":{"kind":"rect","min":[0.2,0.1],"max":[0.7,0.4]}}}`
+on a destination bound to `wear`. See the [scene editor](scene-editor.md)
+and [rest surface charts](deformation-materials.md) for native parameters.
+
+On a splat destination, `{"splats":[{"splat":12,"footprintScale":0.7},{"splat":26,"visible":false}]}`
+scales one eligible opaque splat's footprint and hides another. The splat
+asset checks the source bake at render time. For a shot correction, pass the
+native anchor's `splat`, optional `offset` and `depthOffset`, and the grid
+coordinate where it was pinned as `operation.at`. A host can obtain the pin
+with `captureShotCorrectionSurface` and `shotCorrectionSurface.pin(x, y)`.
+The correction uses offsets from that pixel and the renderer still checks
+ownership and depth when it draws. The shot operation also accepts
+`startTime` and `depthTolerance`.
+
+An optional binding `revision` pins the scene to its file SHA-256 for
+surface and SDF destinations, or its packed rest-row signature for shot
+and splat destinations. The 3D routes take explicit UVs, splat IDs or rows,
+and shape coordinates. A raster edit remains in the document unless an edit
+explicitly targets one of the scene destinations.
 
 Use the generated `stamp.json` for a [placed stamp, indexed material
 projection, or drawing mask](pixel-stamps.md). The relay mounts the

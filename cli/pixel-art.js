@@ -7,6 +7,7 @@ const { paint } = require('../src/pixel-stamps.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
 const files = require('./asset-files.js');
+const Destinations = require('./pixel-edit-destinations.js');
 
 const format = 'ink-studio/pixel-art';
 const name = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
@@ -48,9 +49,9 @@ function documentShape(design) {
     throw new RangeError('Pixel art needs a native grid, a palette and up to 64 bounded layers');
   if (design.version === 1) return;
 
-  const { pixelAspect,frames,selections,protectedDetails,sceneBindings } = design;
+  const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings'])) throw new TypeError('Unknown pixel document field');
+    'selections','protectedDetails','sceneBindings','destinations'])) throw new TypeError('Unknown pixel document field');
   if (!Array.isArray(pixelAspect) || pixelAspect.length !== 2 ||
       !integer(pixelAspect[0],1,Number.MAX_SAFE_INTEGER) || !integer(pixelAspect[1],1,Number.MAX_SAFE_INTEGER))
     throw new RangeError('Pixel aspect needs two positive integers [width,height]');
@@ -76,7 +77,6 @@ function documentShape(design) {
   }
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   namedRegions(protectedDetails,'Protected pixel details',width,height,frameIds);
-  if (sceneBindings === undefined) return;
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
   for (const binding of sceneBindings) {
@@ -89,6 +89,7 @@ function documentShape(design) {
       throw new TypeError('Pixel scene bindings need unique IDs, scene and object references, and valid frame and layer scopes');
     bindingIds.add(binding.id);
   }
+  Destinations.validate(destinations,bindingIds);
 }
 
 function shapes(width, height, mark) {
@@ -218,7 +219,7 @@ function validate(design) {
   return { format, version:design.version, revision, grid:[design.width,design.height],
     pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
       id:frame?.id ?? null, durationMs:frame?.durationMs ?? null
-    })) };
+    })), ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
 
 function cell(frame,p) {
@@ -275,13 +276,9 @@ function review(frame) {
   };
 }
 
-function edit(design, frame, patch) {
-  if (!record(patch) || patch.revision !== frame.revision || !name(patch.id) ||
-      frame.layerIds.includes(patch.id) || !Array.isArray(patch.edits) || !integer(patch.edits.length,1,4096))
-    throw new TypeError('Pixel edit needs the observed revision, a new layer ID and a list of edits');
-  if (frame.revision !== fingerprint(design)) throw new RangeError('Pixel edit revision no longer matches the document');
-  if (design.version === 2 && patch.frame !== frame.id)
-    throw new RangeError('Pixel edit needs the observed frame ID');
+function readPixelEdits(frame, patch) {
+  if (!Array.isArray(patch.edits) || !integer(patch.edits.length,1,4096))
+    throw new TypeError('Pixel paint needs 1–4096 edits');
   const visited = new Set(), marks = [];
   for (const change of patch.edits) {
     if (!record(change) || !at(frame.width,frame.height,change.at) || ![null,...frame.swatches].includes(change.to) ||
@@ -293,6 +290,23 @@ function edit(design, frame, patch) {
     visited.add(p);
     marks.push({ swatch:change.to, at:change.at });
   }
+  return marks;
+}
+
+function edit(design, frame, patch, context) {
+  if (!record(patch) || patch.revision !== frame.revision || !name(patch.id))
+    throw new TypeError('Pixel edit needs the observed revision and a valid edit ID');
+  if (frame.revision !== fingerprint(design)) throw new RangeError('Pixel edit revision no longer matches the document');
+  if (design.version === 2 && patch.frame !== frame.id)
+    throw new RangeError('Pixel edit needs the observed frame ID');
+  const route = Destinations.resolve(design,patch);
+  if (route.destination.kind !== 'raster') {
+    if (!context) throw new TypeError('Scene edit needs a scene context');
+    return Destinations.apply(frame,patch,route,context,readPixelEdits);
+  }
+  if (frame.layerIds.includes(patch.id) || patch.operation !== undefined)
+    throw new TypeError('A raster edit needs a new layer ID and pixel edits');
+  const marks = readPixelEdits(frame,patch);
   const revised = design.version === 1
     ? { ...design, layers:[...design.layers,{ id:patch.id, marks }] }
     : { ...design, layers:[...design.layers,{ id:patch.id }], frames:design.frames.map(item =>
@@ -342,13 +356,12 @@ function trace(frame, object, scene) {
     throw new RangeError('Trace found over 255 visible colors. Choose a scoped palette in the source shot first.');
   const design = { format, version:2, width, height, pixelAspect:[1,1], palette, layers:[{ id:'projection' }],
     frames:[{ id:'capture', durationMs:100, cels:{ projection:{ slots, marks:[] } } }] };
-  if (scene !== undefined) design.sceneBindings = [
-    { id:'projection', scene, object, frame:'capture', layer:'projection' }
-  ];
+  if (scene !== undefined)
+    design.sceneBindings = [{ id:'projection', scene, object, frame:'capture', layer:'projection' }];
   return design;
 }
 
-function command(pos,opt,outputFile,capture) {
+function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
   if (!['trace','validate','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
     throw new TypeError('Use pixel-art trace <scene> --subject object-id, validate <design.json>, draw <design.json>, inspect <design.json> --at x,y, or edit <design.json> <patch.json> --out revised.json');
@@ -381,9 +394,22 @@ function command(pos,opt,outputFile,capture) {
     console.log('wrote',directory);
     return;
   }
-  if (typeof opt.out !== 'string') throw new TypeError('Use --out revised.json to save the edited design');
-  const revised=edit(design,frame,changes);
-  files.json(path.resolve(opt.out),revised);
+  if (typeof opt.out !== 'string') throw new TypeError('Use --out revised.json to save the edit');
+  const out = path.resolve(opt.out);
+  function sourceFor(binding) {
+    const sameFile = typeof opt.scene === 'string' && /\.(?:js|json)$/i.test(binding.scene) &&
+      path.resolve(opt.scene) === path.resolve(binding.scene);
+    if (opt.scene !== binding.scene && !sameFile)
+      throw new TypeError('Pass --scene ' + binding.scene + ' to edit the bound source');
+    if ([source,patch,binding.scene].some(file => path.resolve(file) === out))
+      throw new RangeError('Write the scene edit to a separate output from its inputs');
+    return opt.scene;
+  }
+  const result = edit(design,frame,changes,{
+    world:binding => world(sourceFor(binding)),
+    scene:binding => scene(sourceFor(binding))
+  });
+  files.json(out,result);
 }
 
 module.exports = { compile, validate, stamp, image, review, edit, draw, trace, command };
