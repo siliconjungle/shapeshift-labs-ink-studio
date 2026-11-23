@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference clip review</title>
+<style>
+:root { color-scheme: dark; font: 15px/1.45 system-ui,sans-serif; background: #11161d; color: #eef3ed; --line:#37434b; --dim:#abbabf; --accent:#a2e7cf; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { width:min(1160px,100% - 32px); margin:30px auto 60px; }
+h1 { font-size:clamp(26px,4vw,42px); line-height:1.1; letter-spacing:-.044em; margin:0 0 16px; }
+h2 { font-size:1rem; margin:0; }
+header { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; padding:10px 12px; }
+button, select, textarea, input[type="text"], input[type="number"] { font:inherit; color:inherit; background:#222e36; border:1px solid #465862; border-radius:5px; }
+button, select, input[type="text"], input[type="number"] { min-height:34px; padding:4px 9px; }
+button { cursor:pointer; }
+button:hover, button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+input { accent-color:var(--accent); }
+[hidden] { display:none !important; }
+.panel { border:1px solid var(--line); background:#191f27; border-radius:9px; overflow:hidden; }
+.toolbar label { display:inline-flex; gap:6px; align-items:center; }
+#divider { width:110px; }
+.stage { overflow:auto; padding:12px; background:#0b1016; min-height:160px; display:grid; align-items:center; }
+canvas { display:block; margin:auto; image-rendering:pixelated; }
+.transport { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:9px 12px 6px; }
+#seek { width:100%; min-width:0; margin:0; }
+.timeline { padding:4px 12px 12px; }
+.readouts { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 20px; color:var(--dim); font:12px/1.4 ui-monospace,monospace; padding-top:7px; }
+#selection { color:var(--accent); }
+#beats { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }
+#beats button { min-height:30px; font-size:13px; }
+.alignment { padding:10px 12px; border-top:1px solid var(--line); }
+.alignment summary { cursor:pointer; width:fit-content; }
+.alignment form { margin-top:9px; }
+.alignment label { display:inline-grid; gap:4px; padding-bottom:8px; font-size:13px; }
+.alignment input[type="number"] { width:110px; }
+.alignment input[type="text"], .alignment select { min-width:120px; max-width:220px; }
+.alignment .actions { align-items:end; }
+.notes { display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,.8fr); gap:16px; margin-top:16px; }
+.notes section { padding:13px; min-width:0; }
+textarea { width:100%; min-height:75px; padding:8px; margin:8px 0; resize:vertical; }
+.actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+#note-status, #status { color:var(--dim); font-size:13px; margin:7px 0 0; }
+#status:empty, #note-status:empty { display:none; }
+#note-list { padding:0; margin:8px 0 0; list-style:none; }
+#note-list li { border-top:1px solid var(--line); padding:8px 0; }
+#note-list p { margin:5px 0; overflow-wrap:anywhere; white-space:pre-wrap; }
+#note-list button { font-size:12px; min-height:28px; }
+@media (max-width:640px) { .notes { grid-template-columns:1fr; } main { margin-top:16px; } }
+</style>
+</head>
+<body>
+<main>
+<h1 id="title">Reference clip review</h1>
+<section class="panel" aria-label="Clip comparison">
+  <header class="toolbar">
+    <label>View <select id="mode"><option value="side-by-side">Side by side</option><option value="swipe">Swipe</option><option value="difference">Difference</option></select></label>
+    <label id="swipe" hidden>Divider <input id="divider" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>Pixel zoom <select id="zoom"><option value="auto">Fit · whole pixels</option><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option><option value="6">6×</option><option value="8">8×</option></select></label>
+  </header>
+  <div class="stage"><canvas id="image" role="img" aria-label="Aligned reference and Ink render"></canvas></div>
+  <div class="transport">
+    <button id="back" aria-label="Previous reference frame">−1 frame</button>
+    <button id="play" aria-label="Play comparison">Play</button>
+    <button id="next" aria-label="Next reference frame">+1 frame</button>
+    <label><input id="loop" type="checkbox"> Loop beat</label>
+    <label>Speed <select id="speed"><option value="1">1×</option><option value="0.5">½×</option><option value="0.25">¼×</option></select></label>
+  </div>
+  <div class="timeline">
+    <input id="seek" type="range" min="0" max="1" step="any" value="0" aria-label="Shared playhead">
+    <div class="readouts"><span id="left"></span><span id="selection"></span><span id="right"></span></div>
+    <nav id="beats" aria-label="Comparison beats"></nav>
+    <p id="status" role="status"></p>
+  </div>
+  <details class="alignment" id="alignment">
+    <summary>Edit beat alignment</summary>
+    <form id="beat-form">
+      <div class="actions">
+        <label>Edit <select id="edit-beat"></select></label>
+        <label>Beat label <input id="beat-label" type="text" maxlength="120" required></label>
+        <label>Reference frame <input id="reference-frame" type="number" step="1" required></label>
+        <label>Ink render frame <input id="candidate-frame" type="number" step="1" required></label>
+      </div>
+      <div class="actions">
+        <button>Save beat</button>
+        <button type="button" id="remove-beat" hidden>Remove beat</button>
+        <button type="button" id="download-beats">Download alignment</button>
+      </div>
+      <p id="beat-status" role="status"></p>
+    </form>
+  </details>
+</section>
+<div class="notes">
+  <section class="panel">
+    <h2><label for="note">Note at playhead</label></h2>
+    <form id="note-form">
+      <textarea id="note" maxlength="2000" required></textarea>
+      <button>Save frame note</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Frame notes</h2>
+    <p id="note-status" role="status"></p>
+    <ul id="note-list"></ul>
+    <div class="actions">
+      <button id="download">Download notes</button>
+      <button id="import">Open notes</button>
+      <input id="notes-file" type="file" accept=".json,application/json" hidden>
+    </div>
+  </section>
+</div>
+</main>
+<script id="workbench" type="application/json">/*WORKBENCH*/</script>
+<script src="ink.js"></script>
+<script src="frame-images.js"></script>
+<script src="review-ui.js"></script>
+</body>
+</html>

@@ -246,6 +246,7 @@ module.exports = {
   inspectEnvironment: require('./cli/environment-inspector.js').inspectEnvironment,
   silhouetteReview: require('./cli/silhouette-review.js').silhouetteReview,
   transitionReview: require('./cli/transition-review.js').transitionReview,
+  createReferenceClipReview: require('./cli/reference-clip-review.js').createReferenceClipReview,
   spriteAtlas: require('./cli/sprite-atlas.js').spriteAtlas,
   readSpriteAtlas: require('./cli/sprite-atlas.js').readSpriteAtlas,
   writeSpriteAtlas: require('./cli/sprite-atlas.js').writeSpriteAtlas,

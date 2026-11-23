@@ -1185,6 +1185,7 @@ const CMD = {
         '  camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96   export-sized frames and framing checks',
         '  silhouette-review <scene> --directions 8 --w 96 --h 96   paired export-size views and edge contrast',
         '  transition-review <scene> [--plan file.json] --w 160 --h 90 [--out sheet.png]',
+        '  reference-clip <plan.json> --out directory [--beat ID | --at seconds] [--mode side-by-side|swipe|difference] [--sheet]',
         '    compare native frames around midnight, weather beats, or cuts [--scale N --fail-on-flags]',
         '  pose-review <id> [--directions 8 --w 96 --h 96]  review named poses at sprite resolution',
         '  motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges',
@@ -2514,6 +2515,9 @@ const CMD = {
   },
   graph() {
     return require('./graph-cli.js')(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
+  },
+  'reference-clip'() {
+    return require('./reference-clip-review.js').command(pos,opt,lib());
   },
   music() {
     return require('./music-composer.js')(pos,opt,lib());
