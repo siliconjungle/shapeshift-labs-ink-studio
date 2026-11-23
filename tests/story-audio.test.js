@@ -249,6 +249,48 @@ test('world sound duration and level drive audio at the same beat as the hearing
   assert.deepEqual(ink.decodeWav(render(.25).waves.spatial).samples,wave.samples.subarray(4000));
 });
 
+test('recorded voice limits drop bursts, steal from loud voices and resume loops at their original phase',()=>{
+  const event=(tick,cue,gain=1)=>({tick,action:'world/event',args:{kind:'audio-cue',cue,gain}});
+  const run=R.create({id:'bounded-foley',dt:.125,commands:[
+    event(1,'collision'),event(1,'collision'),event(1,'collision'),event(2,'warning'),
+    event(2,'feedback'),event(2,'dialogue')
+  ]});
+  run.advance(9);
+  const recording=run.recording(), mix=ink.createSceneAudio({
+    format:'ink-studio/scene-audio',version:1,sampleRate:rate,post:{},spatial:{
+      voiceBudget:{maxVoices:3,reservedVoices:1,groups:{collision:1},stealFade:.008},
+      cues:{rain:{asset:'rain',bus:'ambience',priority:-3},collision:{asset:'collision',bus:'effects',group:'collision'},
+        warning:{asset:'short',bus:'effects',protected:true,priority:90,gain:.08},
+        feedback:{asset:'short',bus:'foley',protected:true,priority:45,gain:.07},
+        dialogue:{asset:'dialogue',bus:'dialogue',gain:.06}},
+      emitters:{rain:{cue:'rain'}}
+    }
+  },{kit,resolveAsset:asset=>asset==='rain'?{sampleRate:rate,channels:1,
+    samples:Float32Array.from({length:rate},(_,i)=>.15*i/rate)}:
+    audio(asset==='collision'?.3:.2,asset==='collision'?rate:2000)});
+  const render=start=>mix.render({startPoint:T.read(start),endPoint:T.read(1.125)},
+    {runtime:()=>R.openRecording(recording),recordedThrough:9,trace:true});
+  const result=render(0), {voiceBudget}=result.report;
+  assert.equal(voiceBudget.peakVoices,3);
+  assert.equal(voiceBudget.stolen,2);
+  assert.equal(voiceBudget.dropped,2);
+  assert.equal(voiceBudget.resumed,1);
+  const cuts=voiceBudget.decisions.filter(row=>row.action==='stolen');
+  assert.deepEqual(cuts.map(row=>[row.cue,row.sample]).sort(),[['collision',2000],['rain',2000]]);
+  const renderCue=result.report.storyAudio.cues;
+  assert.equal(renderCue.find(row=>row.cue==='warning').voiceBudget.action,'admitted');
+  assert.equal(renderCue.filter(row=>row.voiceBudget.action==='dropped').length,2);
+  const decode=stem=>ink.decodeWav(result.waves[stem]);
+  const ambient=decode('ambience'), effects=decode('effects'), dialog=decode('dialogue');
+  assert(select(effects,.18)[0]>.29);
+  assert(select(effects,.254)[0]>.12);
+  assert(select(effects,.26)[0]<.02);
+  assert(select(dialog,.26)[0]>.01);
+  assert.equal(select(ambient,.38)[0],0);
+  assert(Math.abs(select(ambient,.55)[0]-.15*.55)<1e-6);
+  assert.deepEqual(ink.decodeWav(render(.3).waves.mix).samples,decode('mix').samples.subarray(4800));
+});
+
 test('story audio saves per-layer take and pitch receipts and replays them with a changed seed', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-sound-receipts-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));

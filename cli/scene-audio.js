@@ -4,6 +4,7 @@ const path = require('node:path');
 const WAV = require('./wav.js');
 const { readAudioSource, isSoundRecipe, decodeSoundRecipe } = require('./sound-source.js');
 const { mix } = require('./scene-audio-mix.js');
+const { planWorldVoices } = require('./scene-voice-budget.js');
 const { createScenePost, buses, legacy } = require('./scene-audio-post.js');
 const { readEditorialProject } = require('./music-editorial.js');
 const { readGraphProject } = require('./graph-project.js');
@@ -123,6 +124,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       const at = voice.apparentSource ?? voice.position;
       const pan = right && at ? Math.max(-1, Math.min(1, V.dot(V.norm(V.sub(at, ear.position)), right))) : undefined;
       return { sample, gain: voice.gain, pan, cutoff: voice.cutoff, delay: delayed ? 0 : voice.delay,
+        ...(mixer?.voiceBudget&&{rankGain:Math.max(voice.gain,voice.contact?.targetGain??0)}),
         ...(voice.processing&&{processing:voice.processing}) };
     }
     function append(target, row) {
@@ -153,6 +155,11 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       const original = occurrence === undefined ? T.mul(T.read(tick),T.period(world.dt,world.takeClock?.simulationRate)) : T.read(occurrence);
       const source = { world:world.id, branch, id, tick, system, kind, timecode:T.pack(original) };
       return { ...source, beatId:W.inspectionLinks.identify(source), causes };
+    }
+    function budgetTag(voice,mode=voice.mode){
+      if(!mixer?.voiceBudget)return {};
+      const {priority,protected:critical,group,id,cue}=voice;
+      return {budget:{id:id??'spatial:'+voices.length,mode,cue,priority,protected:critical,group}};
     }
     function shot(voice, ear, sample, stem, source) {
       const layerDelay = Math.round((voice.startDelay ?? 0) * sampleRate);
@@ -194,7 +201,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         following.push({ row, attachment:voice.attachment, report });
         if (report) report.attachment = voice.attachment.at;
       }
-      push(Object.assign(row,{points:[p]}));
+      push(Object.assign(row,{points:[p]},budgetTag(voice),mixer?.voiceBudget&&report&&{audit:report}));
     }
     function cueFrame(query, sample, nextSample, ear) {
       while (next < cues.length && cues[next].firstSample < nextSample && cues[next].firstSample < cueLimit) {
@@ -209,7 +216,8 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         } else {
           const delay = Math.round(configured.delay * sampleRate);
           const voice={stem:'timeline',bus:configured.bus,asset:configured.asset,first:first+delay,end:endSample+delay,
-            offset:row.offset,rate:configured.rate,points:[]};
+            offset:row.offset,rate:configured.rate,points:[],
+            ...(mixer?.voiceBudget&&{cue:configured.cue,...budgetTag(configured,'clip')})};
           capture(cue,voice,configured.gain);
           if (voice.first<end) {
             push(voice);
@@ -283,7 +291,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       if (!track) {
         const {id,interaction,material} = voice.contact;
         track = push({stem:'spatial', bus:voice.bus ?? 'foley', asset:voice.asset, cue:voice.cue, first:at,
-          loop:true, points:[], contact:{id,interaction,material,voice:voice.id}});
+          loop:true, points:[], contact:{id,interaction,material,voice:voice.id},...budgetTag(voice)});
         contactTracks.set(voice.id, track);
       }
       append(track.points, {...point(voice, ear, at), sourceTime:voice.offset, rate:voice.rate});
@@ -317,7 +325,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
             track = push({ stem:'spatial', bus:voice.bus, asset:voice.asset,
               ...(voice.id.startsWith('emitter:') && {emitter:voice.id.slice('emitter:'.length)}),
               first:sample, end:Number.MAX_SAFE_INTEGER,
-              loop:true, offset:voice.offset, rate:voice.rate, points:[] });
+              loop:true, offset:voice.offset, rate:voice.rate, points:[],...budgetTag(voice) });
             looping.set(voice.id, track);
           }
           append(track.points, point(voice, state.listener, sample));
@@ -412,6 +420,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         push({stem:'music',asset:productionAsset,first:mixStart,end:stop,gain:music.gain});
       }
     }
+    const allocation=mixer?.voiceBudget&&planWorldVoices(voices,resolve,{end,sampleRate,policy:mixer.voiceBudget});
     const active=voices.filter(row => row.first < end && (postSelected || !selection ||
       (selection.kind==='stem' ? selection.name==='mix' || row.stem===selection.name :
         row.stem==='spatial' && row[selection.by]===selection.name)));
@@ -421,6 +430,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     if (selection?.kind==='world' && !result.report.stems.spatial.voices)
       throw new RangeError('No audible world source in the selected capture range');
     if (worldReport) result.report.worldScore=worldReport;
+    if (allocation) result.report.voiceBudget=allocation;
     if (history) {
       const contacts = active.filter(row=>row.contact && Math.max(row.first,start)<Math.min(row.end??end,end))
         .map(row=>({...row.contact,cue:row.cue,asset:row.asset,bus:row.bus,stem:row.stem,

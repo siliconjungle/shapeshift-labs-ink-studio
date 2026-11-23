@@ -1,15 +1,17 @@
 /* Play spatial mix frames through caller-owned Web Audio resources. */
+import * as sharedBudget from '../world-voice-budget.js';
+const voiceBudget=sharedBudget.default??globalThis[Symbol.for('ink-studio.world-voice-budget')];
 const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
 const finite=(value,min,max)=>Number.isFinite(value)&&value>=min&&value<=max;
 const buses=['dialogue','foley','effects','ambience','music'];
 const position=value=>Array.isArray(value)&&value.length===3&&value.every(Number.isFinite);
 
 export function createSpatialAudioPlayer(context, {
-  resolveAsset, destination=context?.destination, destinations={}, panning='HRTF', maxVoices=32, smoothing=.025
+  resolveAsset, destination=context?.destination, destinations={}, panning='HRTF', maxVoices, smoothing=.025
 }={}) {
   if(typeof context?.createBufferSource!=='function'||!context.listener||!destination||
     typeof resolveAsset!=='function'||!['HRTF','equalpower'].includes(panning)||
-    !Number.isSafeInteger(maxVoices)||maxVoices<1||maxVoices>128||!finite(smoothing,0,1))
+    (maxVoices!==undefined&&(!Number.isSafeInteger(maxVoices)||maxVoices<1||maxVoices>128))||!finite(smoothing,0,1))
     throw new TypeError('Spatial audio needs a Web Audio context, asset resolver, and valid mix settings');
 
   if(!destinations||![Object.prototype,null].includes(Object.getPrototypeOf(destinations))||
@@ -17,7 +19,9 @@ export function createSpatialAudioPlayer(context, {
     throw new TypeError('Spatial audio bus destinations must be AudioNodes on the player context');
   const outputs=new Map(Object.entries(destinations)), output=voice=>outputs.get(voice.bus)??destination;
   const voices=new Map(), seen=new Set(), assets=new Map(), retiring=new Set();
-  let disposed=false, previousTime=-Infinity;
+  const fallback=voiceBudget.compile({maxVoices:maxVoices??32,reservedVoices:0});
+  let disposed=false, previousTime=-Infinity, policy=fallback, configured=false;
+  let inspection=Object.freeze({selected:[],rejected:[]});
   function remember(id){
     seen.add(id);
     if(seen.size>8192)seen.delete(seen.values().next().value);
@@ -95,10 +99,16 @@ export function createSpatialAudioPlayer(context, {
   function stop(row,fade=false){
     if(voices.get(row.voice.id)===row)voices.delete(row.voice.id);
     if(!row.source)return;
-    const now=context.currentTime, tail=fade&&context.state==='running'&&row.started<=now?smoothing*3:0;
+    const now=context.currentTime, tail=fade&&context.state==='running'&&row.started<=now?
+      (configured?policy.stealFade:smoothing*3):0;
     if(tail){
-      if(retiring.size>=maxVoices)stop(retiring.values().next().value);
-      parameter(row.gain.gain,0,now);
+      while(retiring.size>=policy.maxVoices)stop(retiring.values().next().value);
+      const param=row.gain.gain;
+      if(configured){
+        if(param.cancelAndHoldAtTime)param.cancelAndHoldAtTime(now);
+        else parameter(param,param.value,now,true);
+        param.linearRampToValueAtTime(0,now+tail);
+      }else parameter(param,0,now);
       retiring.add(row);
     }
     else retiring.delete(row);
@@ -109,6 +119,7 @@ export function createSpatialAudioPlayer(context, {
     for(const row of voices.values())stop(row);
     for(const row of retiring)stop(row);
     seen.clear();
+    inspection=Object.freeze({selected:[],rejected:[]});
     previousTime=-Infinity;
   }
   function start(voice,at){
@@ -192,7 +203,7 @@ export function createSpatialAudioPlayer(context, {
     const ids=new Set();
     for(const [rows,modes] of [[frame.active,['loop','clip']],[frame.cues,['cue']]])for(const row of rows){
       if(typeof row?.id!=='string'||ids.has(row.id)||typeof row.asset!=='string'||!modes.includes(row.mode)||
-        !finite(row.gain,0,16384)||!['low','mid','high'].every(band=>finite(row.bands?.[band],0,16384))||
+        !voiceBudget.validVoice(row)||!finite(row.gain,0,16384)||!['low','mid','high'].every(band=>finite(row.bands?.[band],0,16384))||
         !finite(row.rate,.001,64)||!finite(row.offset,0,65e9)||!finite(row.cutoff,20,22000)||
         (row.contact&&(row.mode!=='loop'||!finite(row.contact.targetGain,0,16384)||
           !finite(row.contact.remaining,0,10.000001)))||
@@ -210,20 +221,37 @@ export function createSpatialAudioPlayer(context, {
     update(frame,{seek=false}={}){
       if(disposed)throw new Error('Spatial audio player is disposed');
       validate(frame);
+      const authored=frame.voiceBudget===undefined?null:voiceBudget.compile(frame.voiceBudget);
+      configured=authored!==null;
+      const capacity=maxVoices===undefined?authored?.maxVoices:Math.min(maxVoices,authored?.maxVoices??maxVoices);
+      policy=authored?{...authored,maxVoices:capacity,reservedVoices:Math.min(authored.reservedVoices,capacity)}:fallback;
       if(seek||frame.time<previousTime)reset();
       listen(frame.listener,previousTime===-Infinity);
       previousTime=frame.time;
       const desired=new Map();
       for(const row of voices.values())if(row.voice.mode==='cue')desired.set(row.voice.id,row.voice);
       for(const voice of frame.active){
-        const sustained=voice.contact&&(voice.contact.targetGain>0||voices.has(voice.id));
+        const sustained=voice.contact&&(voice.contact.targetGain>0||!configured&&voices.has(voice.id));
         if((voice.gain>0||sustained)&&!seen.has(voice.id))desired.set(voice.id,voice);
       }
       for(const voice of frame.cues)if(!seen.has(voice.id)){
         remember(voice.id);
         if(voice.gain>0)desired.set(voice.id,voice);
       }
-      const selected=new Map([...desired].sort(([,a],[,b])=>b.gain-a.gain).slice(0,maxVoices));
+      const candidates=[...desired.values()].map(voice=>({...voice,incumbent:voices.has(voice.id),
+        gain:configured?Math.max(voice.gain,voice.contact?.targetGain??0):voice.gain}));
+      const stable=configured||candidates.some(voice=>voice.priority!==undefined||voice.protected!==undefined);
+      const ranked=voiceBudget.select(candidates,policy,stable);
+      const selected=new Map([...ranked.selected].map(id=>[id,desired.get(id)]));
+      const info=(id,decision)=>{
+        const {cue,priority=0,protected:critical=false,group}=desired.get(id);
+        return Object.freeze({id,cue,priority,protected:critical,...(group!==undefined&&{group}),...decision});
+      };
+      inspection=Object.freeze({time:frame.time,limit:policy.maxVoices,reservedVoices:policy.reservedVoices,
+        selected:Object.freeze([...selected.keys()].map(id=>info(id,{}))),
+        rejected:Object.freeze([...ranked.rejected].map(([id,reason])=>info(id,{reason,
+          action:voices.has(id)?'displaced':desired.get(id).mode==='cue'?'dropped':'virtual'})))});
+      while(retiring.size>policy.maxVoices)stop(retiring.values().next().value);
       for(const row of voices.values())if(!selected.has(row.voice.id))stop(row,true);
       const pending=[], at=context.currentTime;
       for(const [id,voice] of selected){
@@ -246,6 +274,7 @@ export function createSpatialAudioPlayer(context, {
       return Promise.all(pending).then(()=>undefined);
     },
     reset,
+    inspectVoices:()=>inspection,
     dispose(){if(!disposed){disposed=true;reset();assets.clear();}}
   });
 }

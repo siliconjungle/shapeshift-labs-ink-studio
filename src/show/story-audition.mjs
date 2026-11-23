@@ -8,7 +8,9 @@ function describe(mix){
   $('voice-list').replaceChildren(...mix.voices.map(voice=>{
     const row=document.createElement('li'), detail=document.createElement('small');
     row.textContent=voice.cue+(voice.selection?' · '+voice.selection.family+'/'+voice.selection.take:'');
-    detail.textContent=voice.binding+' · '+voice.bus+' · '+second(voice.arrivalSample/session.sampleRate);
+    const admission=voice.voiceBudget;
+    detail.textContent=voice.binding+' · '+voice.bus+' · '+second(voice.arrivalSample/session.sampleRate)+
+      (admission?.action==='dropped'?' · dropped by voice budget':admission?.stolenAt!==undefined?' · displaced by voice budget':'');
     row.append(detail);
     return row;
   }));

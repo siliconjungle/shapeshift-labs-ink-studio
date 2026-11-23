@@ -470,3 +470,59 @@ playback must cover the full hearing interval. The story audio report
 includes the source beat, world sound data, and the sample range for
 played cues. Additional acoustic delay uses the existing
 `propagationDelay` option.
+
+## Prioritize world voices under load
+
+Add a `voiceBudget` to the spatial configuration to share the same
+priority policy between Web Audio and recorded mixes.
+
+```json
+{
+  "voiceBudget": {
+    "maxVoices": 6,
+    "reservedVoices": 2,
+    "groups": { "rain": 1, "crowd": 2, "collision": 2 },
+    "stealFade": 0.008
+  },
+  "cues": {
+    "rain": { "asset": "rain", "group": "rain", "priority": -10 },
+    "impact": { "asset": "impact", "group": "collision" },
+    "alarm": { "asset": "alarm", "priority": 90, "protected": true },
+    "instruction": { "asset": "instruction", "bus": "dialogue", "priority": 68 },
+    "confirm": { "asset": "confirm", "priority": 78, "protected": true }
+  }
+}
+```
+
+Protected cues rank first. Within each tier, higher authored priority
+wins, then the higher gain at the listener. When those match, Ink keeps
+an already admitted voice, then breaks ties by voice ID. `priority`
+runs from -100 to 100 and defaults to zero. Dialogue cues default to
+protected when a budget is enabled. Mark key warnings and player
+feedback with `protected: true`.
+
+`maxVoices` limits active slots. Only protected cues can use the
+reserved slots. Each group cap applies to all members of that group.
+A displaced voice has a short release, controlled by `stealFade` in
+seconds. Release tails use a separately bounded pool during the overlap.
+A dropped one-shot is skipped. A displaced loop can resume at the
+playhead it would have reached while silent.
+
+A Web Audio host can set `maxVoices` on the player to impose a smaller
+device cap. The live player decides when it receives a mix frame,
+including voices waiting for an asset or scheduled start. A recorded
+soundtrack allocates on the sample grid at arrivals, departures, and
+recorded gain changes. The budget covers spatial voices. Authored
+soundtrack beds and the score's own tracks use their existing mix
+settings. Budget decisions are playback data and world hearing still
+uses the original events.
+
+Read `player.inspectVoices()` for the latest selection and rejection
+reasons. Recorded soundtrack reports include peak admitted voices,
+drop and displacement counts, and up to 1024 decisions. Story cue rows
+also show their allocation result and any displacement sample. The
+world cue audition labels dropped and displaced cues in its loop.
+
+The demo plays one busy recording twice with six active slots. Listen
+for the warning, spoken instruction, and confirm sound in the second
+pass. [Run the world voice priorities demo](../examples/world-voice-priorities/demo.cjs)

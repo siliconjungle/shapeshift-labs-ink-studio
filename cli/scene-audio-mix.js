@@ -75,6 +75,8 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, pa
   const statistics = Object.fromEntries(buses.map(name => [name, { voices: 0, peak: 0 }]));
   let work = 0;
   for (const { stem, ...voice } of voices) {
+    const spans = voice.admissions;
+    if (spans && !spans.some(span=>span.end>start&&span.end>span.first)) continue;
     if (voice.end !== undefined && voice.end <= start) continue;
     const source = resolve(voice.asset);
     if (!source.samples.length) continue;
@@ -84,16 +86,31 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, pa
     const points = p.points, filters = Boolean(points?.some(row => row.cutoff < 22000));
     const tone = contextualFilter(points, sampleRate, parametric);
     // Restore the complete filter history for contextual audio when printing a crop.
-    const begin = tone ? p.first : filters ? Math.max(p.first, first - Math.ceil(sampleRate / 3)) : first;
-    work += (last - begin) * Math.max(2, source.channels) * (1 + (tone?.stages ?? 0));
+    const begin = tone || spans && filters ? p.first : filters ? Math.max(p.first, first - Math.ceil(sampleRate / 3)) : first;
+    const length = spans ? spans.reduce((sum,span)=>sum+Math.max(0,Math.min(span.end,last)-Math.max(span.first,begin)),0) : last-begin;
+    work += length * Math.max(2, source.channels) * (1 + (tone?.stages ?? 0));
     if (work > 240e6) throw new RangeError('Scene soundtrack exceeds its mixing work budget');
     statistics[stem].voices++;
     if (cues) {
       const source=typeof voice.asset==='string' ? voice.asset : stem;
-      cues.push({label:voice.cue ?? source,source,role:stem,fromSample:first,toSample:last});
+      for (const span of spans??[{first,end:last}]) {
+        const fromSample=Math.max(first,span.first), toSample=Math.min(last,span.end);
+        if(fromSample<toSample)cues.push({label:voice.cue??source,source,role:stem,fromSample,toSample});
+      }
     }
-    let knot = 0, low = 0;
+    let knot = 0, low = 0, spanIndex = 0;
     for (let sample = begin; sample < last; sample++) {
+      let admission = 1;
+      if (spans) {
+        while (spans[spanIndex]?.end <= sample) spanIndex++;
+        const span = spans[spanIndex];
+        if (!span) break;
+        sample = Math.max(sample,span.first);
+        if (sample>=last) break;
+        if (span.fadeIn) admission = Math.min(1,(sample-span.first)/span.fadeIn);
+        if (span.fadeFrom!==undefined && sample>=span.fadeFrom)
+          admission *= (span.end-sample)/(span.end-span.fadeFrom);
+      }
       while (points && knot + 1 < points.length && points[knot + 1].sample <= sample) knot++;
       const a = points?.[knot], b = points?.[knot + 1];
       const u = b ? clamp((sample - a.sample) / (b.sample - a.sample), 0, 1) : 0;
@@ -112,7 +129,7 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues, pa
         r = filtered[1];
       }
       const fade = p.fade ? clamp(Math.min((sample - p.first) / p.fade, (p.end - sample) / p.fade), 0, 1) : 1;
-      const n = (sample - start) * 2, scale = level * p.gain * gain * fade;
+      const n = (sample - start) * 2, scale = level * p.gain * gain * fade * admission;
       if (pan !== undefined) {
         const mono = (l + r) * .5;
         low += (!filters || cutoff >= 22000 ? 1 : 1 - Math.exp(-2 * Math.PI * cutoff / sampleRate)) * (mono - low);

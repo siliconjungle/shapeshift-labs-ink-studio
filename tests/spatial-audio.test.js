@@ -396,6 +396,29 @@ test('a world sound selects the acoustic band and retains its committed position
   assert(read('high').gain<read('low').gain*.03);
 });
 
+test('world voice allocation protects critical cues, reserves slots and caps noisy groups',()=>{
+  const api=require('../src/world-voice-budget.js');
+  const policy=api.compile({maxVoices:4,reservedVoices:2,groups:{storm:1}});
+  const voice=(id,gain,settings={})=>({id,gain,...settings});
+  const candidates=[voice('raindrop-b',.7,{group:'storm'}),voice('raindrop-a',.7,{group:'storm'}),
+    voice('collision',1),voice('crowd',.6),voice('warn',.01,{priority:90,protected:true}),
+    voice('dialogue',.08,{protected:true})];
+  const {selected,rejected}=api.select(candidates,policy);
+  assert.deepEqual([...selected],['warn','dialogue','collision','raindrop-a']);
+  assert.equal(rejected.get('raindrop-b'),'group-limit');
+  assert.equal(rejected.get('crowd'),'voice-limit');
+  const unattended=api.select(candidates.slice(0,4),policy);
+  assert.equal(unattended.rejected.get('crowd'),'reserved');
+  const audio=W.spatialAudio.create({voiceBudget:policy,cues:{
+    speech:{asset:'speech',bus:'dialogue'},quiet:{asset:'quiet',priority:72,protected:true,group:'warnings'}
+  }});
+  const frame=audio.frame({listener:[0,0,0],events:['speech','quiet'].map(cue=>({kind:'audio-cue',cue}))});
+  assert.deepEqual(frame.voiceBudget,policy);
+  assert.deepEqual(frame.cues.map(({priority,protected:important})=>[priority,important]),[[0,true],[72,true]]);
+  assert.throws(()=>api.compile({maxVoices:2,reservedVoices:3}),/Invalid world voice budget/);
+  assert.throws(()=>W.spatialAudio.create({cues:{bell:{asset:'bell',priority:101}}}),/Invalid audio cue/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
@@ -543,11 +566,34 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
     player.dispose();
     return [channel[1800],channel[5400]];
   }
+  async function priorities(){
+    const context=new OfflineAudioContext(2,rate,rate), buffer=context.createBuffer(1,rate,rate), assets=[];
+    buffer.getChannelData(0).fill(.25);
+    const player=createSpatialAudioPlayer(context,{resolveAsset:id=>{assets.push(id);return buffer;}});
+    const voiceBudget={maxVoices:3,reservedVoices:1,groups:{rain:1},stealFade:0};
+    const layer=(id,gain,settings)=>({...voice,id,cue:id,asset:id,position:null,gain,
+      bands:{low:gain,mid:gain,high:gain},...settings});
+    const rain=layer('rain',.4,{mode:'loop',group:'rain'}),
+      collisions=[layer('crate',.8,{priority:2}),layer('stones',1,{priority:1})];
+    await player.update({...base,voiceBudget,active:[rain],cues:collisions});
+    const first=player.inspectVoices();
+    const suspended=context.suspend(.25).then(async()=>{
+      const warnings=[layer('warning',.06,{protected:true,priority:90}),layer('dialogue',.1,{protected:true}),
+        layer('feedback',.08,{protected:true,priority:30})];
+      await player.update({...base,time:.25,voiceBudget,active:[rain],cues:warnings});
+      const report=player.inspectVoices();
+      await context.resume();
+      return report;
+    });
+    const [,second]=await Promise.all([context.startRendering(),suspended]);
+    player.dispose();
+    return {first,second,assets};
+  }
   try{
     const clear=await play(voice), same=await play(voice,{duplicate:true}),
       obstructed=await play({...voice,gain:.22,bands:{low:.22,mid:.22,high:.06},cutoff:1000}),
       cancelled=await play(voice,{cancel:true});
-    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact(),tone:await contextTone(),shared:await sharedSound()});
+    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact(),tone:await contextTone(),shared:await sharedSound(),priorities:await priorities()});
   }catch(error){await report({error:error.stack});}
   </script>`);
   const child=spawn(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
@@ -592,4 +638,11 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   assert(wet[0]>2*dry[0]&&wet[1]<.15*dry[1]);
   assert(report.shared[0]>.05);
   near(report.shared[1],0);
+  const allocation=report.priorities;
+  assert.deepEqual(allocation.first.selected.map(row=>row.id),['crate','stones']);
+  assert.deepEqual(allocation.first.rejected.map(row=>[row.id,row.reason]),[['rain','reserved']]);
+  assert.deepEqual(allocation.second.selected.map(row=>row.id),['warning','feedback','dialogue']);
+  assert.deepEqual(allocation.second.rejected.map(row=>[row.id,row.action]),
+    [['crate','displaced'],['stones','displaced'],['rain','virtual']]);
+  assert(!allocation.assets.includes('rain'));
 });

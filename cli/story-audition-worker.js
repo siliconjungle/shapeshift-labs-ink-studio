@@ -44,9 +44,9 @@ async function prepare({file,plan,beatId,from,to,receipts}){
     const {value,report}=soundtrack.capture({startPoint,endPoint},{...options,
       audition:{beatId,event:beat.id,binding,family,gainDb,highpass,lowpass}});
     const voices=report.storyAudio.cues.filter(row=>row.source.beatId===beatId&&row.audition)
-      .map(({cue,asset,bus,onsetSample,arrivalSample,gain,processing,selection,audition})=>({
+      .map(({cue,asset,bus,onsetSample,arrivalSample,gain,processing,selection,audition,voiceBudget})=>({
         cue,asset,bus,onsetSample,arrivalSample,gain,binding:audition.binding,
-        ...(processing&&{processing}),...(selection&&{selection})
+        ...(processing&&{processing}),...(selection&&{selection}),...(voiceBudget&&{voiceBudget})
       }));
     if(!voices.length)throw new RangeError('No spatial cue from this beat arrives inside the loop');
     return {waves:WAV.encode(value,{encoding:'pcm24'}).toString('base64'),voices,
