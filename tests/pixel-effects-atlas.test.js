@@ -91,3 +91,18 @@ test('The spark tracer stays valid at every exported frame as the impact fades',
     assert.equal(image.data.length, 96 * 96 * 4);
   }
 });
+
+test('The second material shot retains visible colored streams after basin contact', () => {
+  const studies = require('../examples/pixel-effects-atlas')({KIT});
+  const material = studies.find(study => study.id === 'material');
+  const landed = material.render(.90);
+  let brightPigment = 0;
+  for (let y = 76; y < 89; y++) for (let x = 0; x < landed.width; x++) {
+    const i = (y * landed.width + x) * 4;
+    const [r,g,b] = landed.data.subarray(i,i+3);
+    if ((r > 100 && g > 65) || (g > 105 && b > 75)) brightPigment++;
+  }
+  assert(brightPigment > 200, 'the streams should spread across the basin after landing');
+  material.render(.10);
+  assert.deepEqual(material.render(.90).data, landed.data);
+});

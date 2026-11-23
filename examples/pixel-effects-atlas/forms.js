@@ -168,13 +168,13 @@ module.exports = function forms(D) {
     [0x72344e,0xb64b50,0xe77253,0xffad6d,0xffcc8b]
   ];
   const materialRecipe=bodyPigment.map((ramp,i)=>({
-    type:i%2?'fluid':'elastic',stiffness:[1280,465,1730,560][i],shear:i%2?0:368,
+    type:i%2?'fluid':'elastic',stiffness:[4200,3100,5350,3500][i],shear:i%2?0:1050,
     color:D.hex(ramp[2])
   }));
   let matter, fountain;
   const bottom=x=>89-Math.max(0,Math.abs(x-48)-24)**1.17*.56;
   const bowl=pixel((x,y)=>y>bottom(x)?0x000000:undefined);
-  const settings={...size,cell:1.75,maxSpeed:108,substeps:6,gravity:[0,120],damping:.33,bounce:.44,mask:bowl};
+  const settings={...size,cell:1.75,maxSpeed:96,substeps:9,gravity:[0,103],damping:.19,bounce:.54,mask:bowl};
   function material(u){
     const jetShot=u>.57;
     if(!matter){
@@ -198,8 +198,8 @@ module.exports = function forms(D) {
         {rect:[55,15,8,29],spacing:.66,velocity:[-11,57],material:2},
         {rect:[68,33,9,23],spacing:.51,velocity:[-37,26],material:3}
       ];
-      const wash=materialRecipe.map((ink,i)=>({...ink,type:'fluid',stiffness:470+45*i,shear:0}));
-      const recipe=rasterSimulation.define('mpm',{...settings,materials:wash,bodies,bounce:.64},{seed:91,dt:1/48});
+      const wash=materialRecipe.map((ink,i)=>({...ink,type:'fluid',stiffness:7200+500*i,shear:0}));
+      const recipe=rasterSimulation.define('mpm',{...settings,materials:wash,bodies,bounce:.33},{seed:91,dt:1/48});
       fountain=rasterSimulation.session(recipe,{every:12,cache:20});
     }
     const state=jetShot?fountain.seek((u-.57)/.43*1.05):matter.seek(u/.57*1.90);
