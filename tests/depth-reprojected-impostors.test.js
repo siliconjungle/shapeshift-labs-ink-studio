@@ -64,7 +64,8 @@ test('aligns color, depth and normals to the same surface and preserves the near
   assert(Math.abs(z-.65)<.018,'target depth must describe the same surface: '+z);
   assert.equal(Atlas.reproject(placement,primary,direction,{distance:Infinity,pixelsPerTexel:2}),resolved);
   assert.equal(Atlas.reproject(placement,primary,direction,{blend:'nearest'}),null);
-  assert.equal(Atlas.reproject(placement,primary,primary.basis.normal,{distance:Infinity}),null);
+  const authoredDirection=Float32Array.from(primary.basis.normal,v=>v*.9999999);
+  assert.equal(Atlas.reproject(placement,primary,authoredDirection,{distance:Infinity}),null);
   const perspective=Atlas.reproject(placement,primary,direction,{distance:2.9,pixelsPerTexel:2});
   assert(perspective && perspective.view.rect.width>resolved.view.rect.width);
 });

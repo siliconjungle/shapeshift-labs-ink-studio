@@ -179,7 +179,10 @@ const AtlasViewReprojection = (() => {
     return {blended,nearest,filteredCutouts};
   }
 
-  function resolve(atlas, primary, candidates, direction, { distance=Infinity, pixelsPerTexel, time=0, basis }={}) {
+  function resolve(atlas, primary, candidates, ray, { distance=Infinity, pixelsPerTexel, time=0, basis }={}) {
+    const length=Math.hypot(...ray);
+    if (!(length>0)) return null;
+    const direction=Array.from(ray,v=>v/length);
     if (atlas.effect(primary) || atlas.fringe?.(primary,time) || atlas.transition?.(primary,time) ||
         primary.rect.width*primary.rect.height>pixelLimit || dot(primary.basis.normal,direction)<minCosine) return null;
     if (distance===Infinity && dot(primary.basis.normal,direction)>1-1e-12) return null;

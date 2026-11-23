@@ -52,7 +52,8 @@ function run(directory) {
     const aligned=compare(reference,render('depth-reprojected',true));
     const picture=R.grid([R.render(source,view),render('nearest',false),render('depth-reprojected',false)],3,labels);
     clip.push(PNG.packFrame(R.upscale(picture,2)));
-    const improvement=nearest.meanRGB-aligned.meanRGB;
+    const improvement=nearest.meanRGB-aligned.meanRGB -
+      Math.max(0,aligned.silhouettePixels-nearest.silhouettePixels)/25;
     if (yaw>.35 && yaw<1.55 && improvement>best) { best=improvement; still={picture,yaw}; }
     frames.push({yaw, nearest, reprojected:aligned,reprojection});
   }
