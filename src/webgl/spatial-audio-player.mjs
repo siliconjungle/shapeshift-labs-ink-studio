@@ -200,7 +200,8 @@ export function createSpatialAudioPlayer(context, {
         (row.processing!==undefined&&!validProcessing(row.processing))||
         !finite(row.delay,0,1e9)||row.position!==null&&!position(row.position)||
         row.apparentSource!==undefined&&!position(row.apparentSource)||
-        (row.mode==='clip'?!finite(row.duration,0,1e9):row.duration!==undefined))
+        (row.mode==='clip'?!finite(row.duration,0,1e9):
+          row.mode==='cue'&&row.sound?!finite(row.duration,.001,3600):row.duration!==undefined))
         throw new TypeError('Invalid spatial audio voice');
       ids.add(row.id);
     }

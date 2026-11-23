@@ -437,6 +437,7 @@
         check(!plan.worldSiteHistory||!W.worldSiteHistory.eventKinds.includes(args.kind),'Use site history actions to publish site events');
         check(!plan.storyLifecycle?.hasConsequences||args.kind!==W.storyConsequences.kind,'Story consequences are published at closure');
         W.timedEvents.timeOf(args);
+        if(args.kind===W.soundEvents.kind)W.soundEvents.validate(args);
       }
     } else {
       check(own(plan.systems[system]?.actions,key), 'Unknown action ' + raw.action);
@@ -1032,6 +1033,7 @@
         check(!storyLifecycle?.hasConsequences||kind!==W.storyConsequences.kind||token===typedConsequences,
           'Story consequences are published at closure');
         W.timedEvents.timeOf(detail);
+        if(kind===W.soundEvents.kind)W.soundEvents.validate(detail);
         const data=copy(detail), rowData={...data,kind,system,tick:at,id:at+'.'+events.length};
         const causalParents=causal?(parents??scope?.emitParents()??(root?[root]:[])):[];
         if (eventStream) rowData.eventContext=E.context(rowData,world.id,eventStream,

@@ -376,6 +376,26 @@ test('source profiles combine with live acoustic opening and medium rules withou
     rules:[{id:'invalid',profile:'room',when:{medium:'water'}}]}}),/Invalid sound processing rule/);
 });
 
+test('a world sound selects the acoustic band and retains its committed position and duration',()=>{
+  const run=W.runtime.create(hatch);
+  run.advance(8);
+  const ear=[-2,1,0], at=[2,1,0], query=run.query();
+  const audio=W.spatialAudio.create({cues:{bell:'bell'},soundReferenceDb:60,distance:{rolloff:0},
+    occlusion:{acoustic:'acoustics/audible'},propagationDelay:true});
+  function read(band){
+    const row={id:'8.0',kind:'world-sound',cue:'bell',at,band,sourceLevelDb:60,duration:.125};
+    const [cue]=audio.frame({query,listener:ear,time:.8,events:[row,row]}).cues;
+    const path=query.probe('acoustics/audible',ear,{from:at,band,sourceLevelDb:60}).value;
+    near(cue.gain,10**((path.distanceLossDb-path.bands[band].lossDb)/20));
+    near(cue.delay,path.delaySeconds);
+    assert.equal(cue.sourceEvent,row.id);
+    assert.deepEqual(cue.position,at);
+    assert.equal(cue.duration,.125);
+    return cue;
+  }
+  assert(read('high').gain<read('low').gain*.03);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
@@ -514,11 +534,20 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
     player.dispose();
     return {starts,dry:[measure(4800,440),measure(4800,3600)],wet:[measure(33600,440),measure(33600,3600)]};
   }
+  async function sharedSound(){
+    const context=new OfflineAudioContext(2,samples,rate), buffer=context.createBuffer(1,rate,rate);
+    buffer.getChannelData(0).fill(.25);
+    const player=createSpatialAudioPlayer(context,{resolveAsset:()=>buffer});
+    await player.update({...base,cues:[{...voice,position:null,sound:{band:'mid'},duration:.0625}]});
+    const output=await context.startRendering(), channel=output.getChannelData(0);
+    player.dispose();
+    return [channel[1800],channel[5400]];
+  }
   try{
     const clear=await play(voice), same=await play(voice,{duplicate:true}),
       obstructed=await play({...voice,gain:.22,bands:{low:.22,mid:.22,high:.06},cutoff:1000}),
       cancelled=await play(voice,{cancel:true});
-    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact(),tone:await contextTone()});
+    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact(),tone:await contextTone(),shared:await sharedSound()});
   }catch(error){await report({error:error.stack});}
   </script>`);
   const child=spawn(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
@@ -561,4 +590,6 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   assert.equal(starts,1);
   assert(dry.every(level=>level>.01));
   assert(wet[0]>2*dry[0]&&wet[1]<.15*dry[1]);
+  assert(report.shared[0]>.05);
+  near(report.shared[1],0);
 });

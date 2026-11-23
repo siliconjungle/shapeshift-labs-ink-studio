@@ -170,12 +170,19 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
           onsetSample:sample, arrivalSample:time, status:voice.status, position:voice.position, gain:voice.gain,
           ...(voice.selection && { selection:voice.selection }),
           ...(voice.processing?.profiles.length && { processing:voice.processing }),
+          ...(voice.sound && { sound:voice.sound }),
           ...(voice.impact && { impact:{...voice.impact, delay:voice.startDelay, startSample:sample+layerDelay} }) };
         if (history.cues.length >= 16384) throw new RangeError('Story audio trace exceeds its cue budget');
         history.cues.push(report);
       }
       if (voice.gain<=0 && !voice.attachment) return;
       const row={stem,bus:voice.bus,asset:voice.asset,cue:voice.cue,first:time,offset:voice.offset,rate:voice.rate};
+      if (voice.sound && time<cueLimit) {
+        const audio = resolve(voice.asset);
+        const natural = Math.max(0, (audio.samples.length/audio.channels/audio.sampleRate-voice.offset)/voice.rate);
+        row.end = time + Math.min(Math.ceil(natural*sampleRate),Math.round(voice.duration*sampleRate));
+        if (report) report.endSample = row.end;
+      }
       if (stem!=='music') capture(voice.cue,row,voice.gain);
       if (time>=end) return;
       const p = point(voice,ear,time,true);

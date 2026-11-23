@@ -139,6 +139,60 @@ test('sounds emitted between scheduled scans survive until their cue deadline',(
   assert.equal(contacts(run).contacts.find(row=>row.kind==='sound').currentlyAudible,false);
 });
 
+test('shared world sounds retain per-observer explanations, exact tick windows and branch identity',()=>{
+  const scene=world({sealed:true,memory:12});
+  const intel=scene.systems.intel.config;
+  intel.sounds={};
+  intel.factions.west={observers:{
+    guard:{at:[-2,1,0],profile:'scout'},runner:{at:[-3,1,0],profile:'scout'}
+  }};
+  const run=W.runtime.create(scene);
+  const signal=(tick,time,duration)=>action(tick,'world/event',W.timedEvents.at(time,{
+    kind:'world-sound',cue:'beacon',at:[2,1,0],sourceLevelDb:81,band:'high',duration
+  }));
+  run.schedule([...hatch(1,false),signal(2,.17,.03),signal(4,.36,.22),...hatch(5,true),...hatch(6,false)]);
+  run.advance(2);
+  const shared=run.committedEvents().find(row=>row.kind==='world-sound'), first=W.inspectionLinks.identify(shared);
+  const read=(r,faction,event)=>field(r,'hearing',{faction,event}).value.observations;
+  for(const row of read(run,'west',first)){
+    assert.equal(row.status,'blocked'); assert.equal(row.levelDb,null); assert.equal(row.audible,false);
+    assert.equal(row.firstHeardTick,undefined);
+  }
+  assert.equal(read(run,'west',first).length,2);
+  const [local]=read(run,'east',first);
+  assert.equal(local.audible,true);
+  assert.equal(local.firstHeardTick,2);
+  assert.equal(local.lastHeardTick,2);
+  assert.deepEqual([local.cue,local.band,local.sourceLevelDb,local.duration],['beacon','high',81,.03]);
+  run.advance(3);
+  assert.equal(contacts(run,'east').contacts.find(row=>row.id===shared.id).currentlyAudible,false);
+  run.advance(4);
+  const second=run.committedEvents().find(row=>row.kind==='world-sound');
+  assert.equal(read(run,'west',second.id)[0].status,'blocked');
+  const checkpoint=json(run.checkpoint()), restored=W.runtime.create(checkpoint.world,{checkpoint});
+  for(const next of [run,restored])next.advance(5);
+  assert.deepEqual(read(run,'west',second.id).map(row=>[row.observer,row.audible,row.firstHeardTick]),
+    [['guard',true,5],['runner',true,5]]);
+  const louder=read(run,'west',second.id)[0];
+  assert(louder.levelDb>louder.thresholdDb);
+  assert(Math.hypot(...louder.apparentSource.map((n,i)=>n-[0,1,0][i]))<1e-4);
+  assert.deepEqual(restored.checkpoint(),run.checkpoint());
+  assert.deepEqual(W.runtime.replay(json(run.recording())).checkpoint(),run.checkpoint());
+  const branch=run.fork({branch:'second-call'});
+  branch.schedule([signal(6,.56,.18)]);
+  branch.advance(6);
+  const nextSound=branch.committedEvents().find(row=>row.kind==='world-sound');
+  const beat=W.inspectionLinks.identify(nextSound);
+  assert.equal(W.inspectionLinks.parse(beat).branch,'second-call');
+  assert.equal(read(branch,'west',beat).length,2);
+  assert.equal(read(branch,'west',first).length,2);
+  run.advance(6);
+  const [latched]=read(run,'west',second.id);
+  assert.equal(latched.status,'blocked');
+  assert.deepEqual([latched.firstHeardTick,latched.lastHeardTick],[5,5]);
+  assert.throws(()=>run.schedule([event(7,[0,0,0],'world-sound')]),/A world sound needs a cue/);
+});
+
 test('recycled agent IDs keep a separate sight record for each lifetime',()=>{
   const run=W.runtime.create(world());
   const first=contact(run,'west','courier');

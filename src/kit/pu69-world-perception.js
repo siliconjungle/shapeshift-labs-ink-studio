@@ -17,7 +17,9 @@
     value.every(valid)&&new Set(value).size===value.length;
   const token=({kind,system,id,generation})=>kind+'/'+system+'/'+id+(generation===undefined?'':'/'+generation);
   const latest=entry=>Math.max(...channels.map(key=>entry[key]?.tick??-1));
-  const EPS=1e-8;
+  const EPS=1e-8, source=W.soundEvents, committed=W.committedEvents, links=W.inspectionLinks;
+  const reached=(a,b)=>a<=b+4*Number.EPSILON*Math.max(Math.abs(a),Math.abs(b));
+  const hearingKey=(event,observer)=>event+'/'+observer;
 
   function perception(config,{world}){
     check(keys(config,['profiles','factions','targets','sounds','sampleEvery','rememberTicks','maxObservers',
@@ -91,14 +93,23 @@
       return result;
     }
 
-    function cueEvents(previous,input,tick){
-      if(!events.size)return {rows:previous,limited:false};
-      const alive=previous.filter(row=>tick<row.until), added=[];
+    function cueEvents(previous,input,tick,time,dt){
+      const lower=Math.max(0,tick-1)*dt;
+      const alive=previous.filter(row=>row.shared?!reached(row.end,lower):tick<row.until), added=[];
       for(const row of input){
         const template=events.get(row.kind);
-        if(!template||!S.point(row.at))continue;
+        if(!template&&row.kind!==source.kind)continue;
+        const subject={kind:'sound',system:row.system,id:row.id,label:row.kind};
+        if(row.kind===source.kind){
+          const {cue,at,sourceLevelDb,band,duration}=source.describe(row);
+          const start=W.timedEvents.timeOf(row)??time, end=start+duration;
+          if(!reached(end,lower))added.push({subject,position:at,born:tick,band,levelDb:sourceLevelDb,start,end,
+            shared:{cue,duration,beatId:links.identify(committed.read(row,world.id))}});
+          continue;
+        }
+        if(!S.point(row.at))continue;
         const {band,levelDb,duration}=template;
-        added.push({subject:{kind:'sound',system:row.system,id:row.id,label:row.kind},position:row.at,
+        added.push({subject,position:row.at,
           born:tick,until:tick+duration,band,levelDb:S.decibels(row.soundLevelDb)?row.soundLevelDb:levelDb});
       }
       if(alive.length===previous.length&&!added.length)return {rows:previous,limited:false};
@@ -109,6 +120,21 @@
     function scan(group,previous,vis,ctx,overflow){
       const {query,tick}=ctx, {sensors,limited}=observers(group,query), picked=new Map();
       const stats={observers:sensors.length,pairs:0,sounds:0,limited:limited||overflow};
+      const readings=new Map(Object.entries(previous.hearing??{}).filter(([,row])=>tick-row.tick<=rememberTicks));
+      function describeHearing(cue,observer,spec,read){
+        const event=cue.subject.id, key=hearingKey(event,observer), old=readings.get(key);
+        if(!old&&readings.size>=maxContacts*2){
+          stats.limited=true;
+          return;
+        }
+        const firstHeardTick=old?.firstHeardTick??(read.audible?tick:undefined);
+        const lastHeardTick=read.audible?tick:old?.lastHeardTick;
+        readings.set(key,{...cue.shared,event,observer,tick,band:cue.band,sourceLevelDb:cue.levelDb,
+          thresholdDb:spec.thresholdDb,...(spec.field&&{field:spec.field}),distance:read.distance,
+          status:read.status,audible:read.audible,levelDb:read.levelDb??null,
+          ...(read.apparentSource&&{apparentSource:read.apparentSource}),
+          ...(firstHeardTick!==undefined&&{firstHeardTick,lastHeardTick})});
+      }
       function pick(subject,channel,read){
         const key=token(subject);
         let row=picked.get(key);
@@ -158,6 +184,7 @@
         for(const {cue} of nearby.slice(0,maxTargets)){
           stats.sounds++;
           const read=S.heard(query,observer,cue,spec.hearing);
+          if(cue.shared)describeHearing(cue,key,spec.hearing,read);
           if(!read.audible)continue;
           const {levelDb,direction,apparentSource}=read;
           pick(cue.subject,'hearing',{tick,observer:key,levelDb,direction,...(apparentSource&&{apparentSource})});
@@ -171,17 +198,24 @@
         retained.sort(([ak,a],[bk,b])=>latest(b)-latest(a)||order(ak,bk));
       }
       const stored=retained.slice(0,maxContacts).sort(([a],[b])=>order(a,b));
-      return {sampledAt:tick,contacts:Object.fromEntries(stored),stats};
+      const hearing=[...readings];
+      if(hearing.length>maxContacts){
+        stats.limited=true;
+        hearing.sort(([ak,a],[bk,b])=>b.tick-a.tick||
+          Number(b.firstHeardTick!==undefined)-Number(a.firstHeardTick!==undefined)||order(ak,bk));
+      }
+      return {sampledAt:tick,contacts:Object.fromEntries(stored),stats,
+        ...(hearing.length&&{hearing:Object.fromEntries(hearing.slice(0,maxContacts).sort(([a],[b])=>order(a,b)))})};
     }
 
     function afterStep(state,ctx){
-      const cues=cueEvents(state.sounds,ctx.events,ctx.tick);
+      const cues=cueEvents(state.sounds,ctx.events,ctx.tick,ctx.time,ctx.dt);
       const limited=state.soundLimited||cues.limited;
       const sample=ctx.sample&&ctx.tick%sampleEvery===0&&groups.length;
       if(!sample)return cues.rows===state.sounds&&limited===state.soundLimited?state:
         freeze({...state,sounds:cues.rows,soundLimited:limited});
       const soundIndex=cues.rows.length?W.spatial.grid(8):null;
-      for(const row of cues.rows)soundIndex.add(row.position,row);
+      for(const row of cues.rows)if(!row.shared||reached(row.start,ctx.time))soundIndex.add(row.position,row);
       const factions=Object.fromEntries(groups.map(group=>[
         group.name,scan(group,state.factions[group.name],soundIndex,ctx,limited)
       ]));
@@ -220,6 +254,17 @@
       });
       return Q.ok({faction:args.faction,sampledAt,sampleAgeTicks:sampledAt===null?null:tick-sampledAt,contacts:rows,stats});
     }
+    function hearing({state,args,tick}){
+      const {faction,event}=args;
+      if(!own(state?.factions,faction))return Q.missing('unknown perception faction','missing');
+      const beat=links.parse(event);
+      check(keys(args,['faction','event'])&&(event===undefined||committed.eventId(event)||
+        beat&&!beat.projected&&beat.world===world.id&&committed.eventId(beat.id)),'Invalid hearing event selector');
+      const {sampledAt,hearing:readings,stats}=state.factions[faction];
+      const observations=Object.values(readings??{}).filter(row=>tick-row.tick<=rememberTicks&&
+        (event===undefined||event===row.event||event===row.beatId));
+      return Q.ok({faction,sampledAt,limited:stats.limited,observations});
+    }
     function find({state,args,target,tick},visible){
       if(!own(state?.factions,args.faction))return Q.missing('unknown perception faction','missing');
       const {sampledAt,contacts}=state.factions[args.faction];
@@ -248,6 +293,10 @@
       const {sensors}=observers(group,query);
       return Q.ok(sensors.some(({spec,observer})=>spec.sight&&S.seen(query,observer,subject,spec.sight).visible));
     }
+    function beatMatches(value,event){
+      const beat=links.parse(value);
+      return beat&&!beat.projected&&beat.id===event&&beat.world===world.id;
+    }
     function validateState(state){
       check(record(state)&&record(state.factions)&&Object.keys(state.factions).length===groups.length&&
         Array.isArray(state.sounds)&&state.sounds.length<=maxSounds&&typeof state.soundLimited==='boolean','Invalid perception checkpoint');
@@ -257,9 +306,14 @@
           row.id.split('/').every(id)&&(row.generation===undefined||integer(row.generation,1,Number.MAX_SAFE_INTEGER));
       }
       for(const row of state.sounds){
-        check(record(row)&&identity(row.subject)&&row.subject.kind==='sound'&&events.has(row.subject.label)&&
-          !unique.has(token(row.subject))&&tick(row.born)&&integer(row.until,row.born+1,row.born+3600)&&S.point(row.position)&&
-          S.decibels(row.levelDb)&&S.bands.includes(row.band),'Invalid saved sound cue');
+        check(record(row)&&identity(row.subject)&&row.subject.kind==='sound'&&!unique.has(token(row.subject))&&
+          tick(row.born)&&S.point(row.position)&&S.decibels(row.levelDb)&&S.bands.includes(row.band),'Invalid saved sound cue');
+        if(row.shared){
+          source.validate({cue:row.shared.cue,at:row.position,sourceLevelDb:row.levelDb,band:row.band,duration:row.shared.duration});
+          check(row.subject.label===source.kind&&committed.eventId(row.subject.id)&&committed.tickOf(row.subject.id)===row.born&&
+            beatMatches(row.shared.beatId,row.subject.id)&&Number.isFinite(row.start)&&row.start>=0&&
+            row.end===row.start+row.shared.duration&&row.end>row.start,'Invalid saved world sound window');
+        }else check(events.has(row.subject.label)&&integer(row.until,row.born+1,row.born+3600),'Invalid saved sound cue');
         unique.add(token(row.subject));
       }
       for(const {name} of groups){
@@ -268,6 +322,23 @@
           Object.keys(row.contacts).length<=maxContacts&&record(row.stats)&&typeof row.stats.limited==='boolean'&&
           integer(row.stats.observers,0,maxObservers)&&integer(row.stats.pairs,0,maxObservers*maxTargets)&&
           integer(row.stats.sounds,0,maxObservers*maxTargets),'Invalid saved faction perception '+name);
+        if(row.hearing!==undefined){
+          check(record(row.hearing)&&Object.keys(row.hearing).length<=maxContacts&&row.sampledAt!==null,
+            'Invalid saved hearing observations');
+          for(const [key,read] of Object.entries(row.hearing)){
+            check(record(read)&&committed.eventId(read.event)&&beatMatches(read.beatId,read.event)&&
+              key===hearingKey(read.event,read.observer)&&typeof read.observer==='string'&&
+              integer(read.tick,committed.tickOf(read.event),row.sampledAt)&&typeof read.status==='string'&&
+              typeof read.audible==='boolean'&&(read.levelDb===null||Number.isFinite(read.levelDb))&&
+              source.detailsOK(read)&&S.decibels(read.thresholdDb)&&
+              Number.isFinite(read.distance)&&read.distance>=0&&
+              (read.apparentSource===undefined||S.point(read.apparentSource))&&
+              (read.firstHeardTick===undefined?read.lastHeardTick===undefined&&!read.audible:
+                integer(read.firstHeardTick,committed.tickOf(read.event),read.tick)&&
+                integer(read.lastHeardTick,read.firstHeardTick,read.tick)&&(!read.audible||read.lastHeardTick===read.tick)),
+            'Invalid saved hearing observation '+key);
+          }
+        }
         for(const [key,contact] of Object.entries(row.contacts)){
           check(record(contact)&&identity(contact.subject)&&key===token(contact.subject)&&latest(contact)>=0&&
             row.sampledAt!==null,'Invalid saved perception contact '+key);
@@ -286,7 +357,7 @@
     const descriptor=read=>({type:'record',qualified:true,selector:true,read});
     return {initial:()=>initial,settleInitial:(state,ctx)=>afterStep(state,{...ctx,events:empty,sample:true}),
       shareCheckpoint:true,afterStep,checkFields,validateState,
-      fields:{batch:descriptor(batch),faction:descriptor(report),contact:descriptor(ctx=>find(ctx,false)),
+      fields:{batch:descriptor(batch),faction:descriptor(report),hearing:descriptor(hearing),contact:descriptor(ctx=>find(ctx,false)),
         visible:{...descriptor(ctx=>find(ctx,true)),type:'bool'},
         coverage:{type:'bool',qualified:true,read:coverage}}};
   }

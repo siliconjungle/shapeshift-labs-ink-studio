@@ -84,3 +84,57 @@ fields and trace providers. A batch probe can mix points and named objects.
 ```sh
 ink-studio probe lookout.run.json --ticks 24 --field intel/batch --args '{"queries":[{"id":"crossing","profile":"watch","from":[-3,0.1,0],"to":[3,0.8,0]},{"id":"bell","profile":"watch","from":[-3,0.1,0],"to":[3,0.8,0],"sound":{"levelDb":98,"band":"low"}}]}' --json
 ```
+
+## Share a sound between playback and hearing
+
+Publish one `world-sound` with `world/event`. A native system can also
+emit the same kind with `ctx.emit`. Perception reads it automatically.
+
+```json
+{
+  "tick": 6,
+  "action": "world/event",
+  "args": {
+    "kind": "world-sound",
+    "cue": "bell",
+    "at": [2.5, 1, 0],
+    "sourceLevelDb": 72,
+    "band": "high",
+    "duration": 0.36
+  }
+}
+```
+
+`at` is the world position captured at emission. Resolve a moving source
+or socket's position before emitting. `sourceLevelDb` is the source
+level at the acoustic reference distance. `band` is `low`, `mid`, or
+`high`. `duration` is in seconds. Normal events begin at their commit
+tick. [Timed events](simulation-timed-events.md) can place them within a
+tick.
+
+The perception scan evaluates shared sounds whose windows intersect the
+sampled tick. Each observer uses their own range and threshold and can
+use an acoustic field for room, opening, and medium transmission.
+`intel/hearing` takes a `faction` and optionally an `event` local ID or
+beat ID. It reports each retained evaluation with its observer, band,
+received level, threshold, and result. It also preserves the first and
+last ticks an observer heard that sound. The report includes evaluated
+candidates within hearing range and honors perception scan and retention
+budgets. Read `limited` and `sampledAt` with the results.
+
+Configure the named cue in the spatial soundtrack to play the same
+event. `story audio` carries the same beat ID, source description, and
+audio sample placement. The hearing query is available on the
+authoritative simulation. Faction views continue to expose their normal
+observed contacts. [World access](world-access.md)
+
+```sh
+ink-studio probe lock.run.json --ticks 6 --field intel/hearing \
+  --args '{"faction":"hall","event":"6.0"}' --json
+ink-studio beat ink:beat:shared-lock-sounds/main/6.0 hall/report.json hearing.json
+```
+
+The demo prints a hall listener on the left and a guard beside the
+source on the right. The high bell drops below the hall observer's
+threshold when the hatch closes. The low buzzer carries through.
+[Run the shared sound demo](../examples/shared-world-sounds/demo.cjs)

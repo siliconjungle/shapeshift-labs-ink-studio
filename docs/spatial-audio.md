@@ -452,3 +452,21 @@ filtered trims restore the source's filter history.
 The demo script takes an output directory and a dry WAV. It creates
 four listening passes from the same source.
 [Run the contextual audio demo](../examples/contextual-sound-processing/demo.cjs) · [Acoustic queries](acoustic-queries.md)
+
+## Play shared world sounds
+
+A committed `world-sound` names a cue, a fixed world position, a source
+level, a frequency band, and a duration. The same event feeds
+[perception](faction-perception.md#share-a-sound-between-playback-and-hearing)
+and the mixer. A cue's asset, bus, distance, and processing settings
+apply. Set `soundReferenceDb` in the spatial settings to choose the
+source level that maps to unity playback gain before cue and path gain.
+The default is 70 dB. The event's band selects the acoustic route and
+its nominal transmission. The asset supplies the actual waveform.
+
+Duration caps the cue's playback window. A shorter asset plays once to
+its natural end. Keep an asset long enough to fill its window when
+playback must cover the full hearing interval. The story audio report
+includes the source beat, world sound data, and the sample range for
+played cues. Additional acoustic delay uses the existing
+`propagationDelay` option.

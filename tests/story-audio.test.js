@@ -220,6 +220,35 @@ test('a recorded emitter follows a closing and reopening hatch with its playhead
   assert(reopened>open*.95);
 });
 
+test('world sound duration and level drive audio at the same beat as the hearing report', () => {
+  const world={id:'listener-audio',dt:.125,systems:{intel:{kind:'perception',config:{
+    profiles:{ears:{hearing:{range:10,thresholdDb:45}}},
+    factions:{yard:{observers:{watch:{at:[0,0,0],profile:'ears'}}}}
+  }}},commands:[{tick:2,action:'world/event',args:K.world.timedEvents.at(.1875,{
+    kind:'world-sound',cue:'signal',at:[0,0,-1],sourceLevelDb:64,band:'high',duration:.125
+  })}]};
+  const run=R.create(world);
+  run.advance(2);
+  const [hearing]=run.query().probe('intel/hearing',undefined,{faction:'yard'}).value.observations;
+  assert.equal(hearing.audible,true);
+  assert.equal(hearing.levelDb,64);
+  run.advance(5);
+  const tape=run.recording(), plan=ink.createSceneAudio({
+    format:'ink-studio/scene-audio',version:1,sampleRate:rate,spatial:{soundReferenceDb:70,cues:{signal:'signal'}}
+  },{kit,resolveAsset:()=>audio(.25,rate)});
+  const render=start=>plan.render({startPoint:T.read(start),endPoint:T.read(.625)},
+    {runtime:()=>R.openRecording(tape),recordedThrough:5,trace:true});
+  const full=render(0), wave=ink.decodeWav(full.waves.spatial);
+  const [row]=full.report.storyAudio.cues;
+  assert.equal(row.source.beatId,hearing.beatId);
+  assert.deepEqual(row.sound,{cue:'signal',at:[0,0,-1],sourceLevelDb:64,band:'high',duration:.125});
+  assert.deepEqual([row.onsetSample,row.endSample],[1500,2500]);
+  assert.equal(select(wave,.18)[0],0);
+  assert(Math.abs(select(wave,.2)[0]-.25*Math.SQRT1_2*10**(-6/20))<1e-6);
+  assert.equal(select(wave,.3125)[0],0);
+  assert.deepEqual(ink.decodeWav(render(.25).waves.spatial).samples,wave.samples.subarray(4000));
+});
+
 test('story audio saves per-layer take and pitch receipts and replays them with a changed seed', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-sound-receipts-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));

@@ -56,10 +56,11 @@
 
   function create(definition={}){
     const config=copy(definition);
-    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed','contactLoops','processing']),
+    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed','contactLoops','processing','soundReferenceDb']),
       'Invalid spatial audio settings');
     const distance=distanceSettings(config.distance), cueList=table(config.cues??{},512,'cues',cueName);
-    const {propagationDelay=false,surface}=config;
+    const {propagationDelay=false,surface,soundReferenceDb=70}=config;
+    check(W.soundEvents.levelOK(soundReferenceDb),'Invalid world sound playback reference level');
     const processor=config.processing===undefined?null:W.spatialSoundProcessing.compile(config.processing);
     check(typeof propagationDelay==='boolean'&&(surface===undefined||field(surface)),'Invalid audio surface or delay setting');
     const {acoustic,rays=[],segments=[],lossDb,cutoff,materials:occluders={}}=config.occlusion??{};
@@ -143,11 +144,12 @@
       const processing=processor?.resolve(processor.has(input.audioProfile)?input.audioProfile:cue.audioProfile,
         {cue:input.cue,entity,object:input.object??entity},query,source?.point,listener?.position);
       const colorGain=processing?amplitude(-processing.gainDb):1;
-      const scale=Math.min(16384,(input.gain??1)*cue.gain*colorGain);
+      const sound=input.sound, sourceGain=sound?amplitude(soundReferenceDb-sound.sourceLevelDb):1;
+      const scale=Math.min(16384,(input.gain??1)*cue.gain*colorGain*sourceGain);
       const bus=input.bus??cue.bus??(input.impact?'effects':undefined);
       const result={id:input.id,cue:input.cue,asset:cue.asset,mode:input.mode,offset:input.offset??0,
         rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(bus!==undefined&&{bus}),
-        ...(processing&&{processing}),
+        ...(processing&&{processing}),...(sound&&{sound}),
         ...(input.impact&&{impact:input.impact,startDelay:input.startDelay}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
         ...(input.selection!==undefined&&{selection:variation?{...input.selection,variation:{...variation,rate:pitch}}:input.selection}),
@@ -166,7 +168,8 @@
       let apparent=position, route, delay=0, cutoff=22000, blocker, attenuation=[1,1,1];
       if(cue.occlusion&&spread>0&&query){
         if(acoustic){
-          const reading=query.probe(acoustic,listener.position,{from:position});
+          const reading=query.probe(acoustic,listener.position,{from:position,
+            ...(sound&&{band:sound.band,sourceLevelDb:sound.sourceLevelDb})});
           if(reading.status==='ok'){
             route=reading.value.status;
             if(route==='blocked')attenuation=[0,0,0];
@@ -206,7 +209,7 @@
       }
       const levels=Object.fromEntries(bands.map((band,i)=>[band,scale*spread*attenuation[i]]));
       return {...result,...contact(spread*attenuation[1]),status:spread===0?'out-of-range':route==='blocked'?'blocked':blocker?'occluded':'spatial',
-        position,apparentSource:apparent,distance:range,gain:levels.mid,bands:levels,cutoff,
+        position,apparentSource:apparent,distance:range,gain:levels[sound?.band??'mid'],bands:levels,cutoff,
         ...(blocker&&{blocker}),...(route&&{acoustic:route}),delay:propagationDelay?delay:0};
     }
 
@@ -245,6 +248,13 @@
         check(active.length+shots.length<=4096,'Spatial audio mix exceeds its voice budget');
       }
       function route(row,serial,contact){
+        if(row.kind===W.soundEvents.kind){
+          W.soundEvents.validate(row);
+          const sound=W.soundEvents.describe(row), sourceEvent=W.committedEvents.eventId(row.id)?row.id:undefined;
+          add({id:serial,cue:sound.cue,at:sound.at,mode:'cue',sound,duration:sound.duration,sourceEvent,
+            onset:W.timedEvents.timeOf(row),audioProfile:row.audioProfile,object:row.object,entity:row.entity},shots);
+          return;
+        }
         const at=eventAt(row), gain=row.gain??1, pitch=row.pitch??1;
         if(!finite(gain,0,64)||!finite(pitch,.0625,8))return;
         const entity=row.entity??row.contact?.entity;
