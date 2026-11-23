@@ -109,6 +109,7 @@ const AtlasSprites = require('../src/atlas-sprites.js');
 const AtlasRaster = require('./atlas-sprites.js');
 const SurfaceRaster = require('./sprite-surfaces.js');
 const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
+const SimulationMaterialLayers=require('../src/simulation-material-layers.js');
 const SceneMeshes = require('../src/scene-meshes.js');
 let SplatFields, AtmosphereEmitters;
 const ReflectionProbes = require('../src/reflection-probes.js');
@@ -1068,7 +1069,11 @@ function renderFrame(world, o, preparedPalettes) {
   const decals = o.surfaceDecals !== false && world.surfaceDecals?.sample(sceneTime,o).layers;
   const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?
     [spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []) : spriteSurfaces;
-  const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
+  const simulationLayers=o.simulationMaterialLayers===false ? undefined : SimulationMaterialLayers.frame(
+    [surfaceLayers].flat(),{time:sceneTime,session:lookInputs||undefined,
+      query:()=>world.lookSnapshot?.query??world.surfaceEffects?.query??require('../index.js').load().KIT.world.query.fromScene(world,sceneTime),
+      report:!reflectionPlane&&!probeView&&(!o.samples||o.worked)?o.simulationMaterialLayersFrame:undefined});
+  const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,

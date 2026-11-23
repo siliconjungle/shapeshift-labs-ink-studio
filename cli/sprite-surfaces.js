@@ -1,6 +1,7 @@
 // Rasterize opaque, cutout atlas triangles into the existing scene compositor.
 const SpriteSurface = require('../src/sprite-surface.js');
 const Mips = require('../src/semantic-texture-mipmaps.js');
+const Simulation = require('../src/simulation-material-layers.js');
 const uvSlip=Symbol.for('ink-studio.spriteSurface.uvSlip');
 const dot = (a, b) => a.reduce((sum, n, i) => sum + n * b[i], 0);
 const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
@@ -17,7 +18,7 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -55,7 +56,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const filtered = depthOnly || paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
     const projections = depthOnly ? [] : SpriteSurface.projectionPlan(layer);
     const omitLayer=omit && layer.brickField;
-    const charts=(capture || omitLayer) && layer.surfaceCharts;
+    const charts=(capture || omitLayer || simulationLayers?.size) && layer.surfaceCharts;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
@@ -67,6 +68,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const filter = filtered?.[filterIndex]?.filter;
       while(semantic[semanticIndex]?.end<=first)semanticIndex++;
       const mip=semantic[semanticIndex]?.first<=first ? semantic[semanticIndex] : null;
+      const driven=mip?.simulation && simulationLayers?.get(mip.simulation);
       while(projections[projectionIndex]?.end<=first)projectionIndex++;
       const style = projections[projectionIndex]?.first <= first ? projections[projectionIndex] : undefined;
       const affine = style?.affine, linearUV = affine || ortho, step = (style?.vertexSnap ?? 0) * artScale;
@@ -76,7 +78,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         motion || chart ? weights : undefined));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
         ...(motion && {key:JSON.stringify(['mesh',layer.surfaceMotionKey ?? layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
-          chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
+          chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
+          driven?.amounts??null]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
       const axes = !depthOnly && surfaceNormals && (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);
@@ -100,14 +103,26 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         const row=[a,b,c], transform=uvTransform;
         const bounds = shifted ? range.bounds : filter ? [filter.rect.x,filter.rect.y,
           filter.rect.x + filter.rect.width - 1,filter.rect.y + filter.rect.height - 1] : style?.bounds ?? [0,0,width-1,height-1];
-        let gradients;
+        let gradients, worldWeights, restTriangle, maskTriangle;
+        if(driven?.active){
+          const firstCorner=(first-chart.first)*2, region=chart.region;
+          const original=input.map((corner,i)=>chart.uv ? chart.uv.subarray(firstCorner+i*2,firstCorner+i*2+2) :
+            [(corner.uv[0]-region.x-.5)/Math.max(1,region.width-1),
+              (corner.uv[1]-region.y-.5)/Math.max(1,region.height-1)]);
+          maskTriangle=row.map(v=>[0,1].map(k=>v.weights.reduce((n,w,i)=>n+w*original[i][k],0)));
+        }
         if (filter || mip) {
-          const weighted = (vx, vy, vz) => {
-            const dw = [vx,vy,vz].map((n,k) => n * artScale / (area * (linearUV ? 1 : row[k].z)));
-            return [dw.reduce((n,v,k) => n + v * row[k].uv[0], 0),
-              dw.reduce((n,v,k) => n + v * row[k].uv[1], 0), linearUV ? 0 : dw[0] + dw[1] + dw[2]];
-          };
-          gradients = [weighted(b.sy-c.sy,c.sy-a.sy,a.sy-b.sy), weighted(c.sx-b.sx,a.sx-c.sx,b.sx-a.sx)];
+          const edges=[[b.sy-c.sy,c.sy-a.sy,a.sy-b.sy],[c.sx-b.sx,a.sx-c.sx,b.sx-a.sx]];
+          gradients=edges.map(edge=>{
+            const dw=edge.map((n,k)=>n*artScale/(area*(linearUV?1:row[k].z)));
+            return [dw.reduce((n,v,k)=>n+v*row[k].uv[0],0),dw.reduce((n,v,k)=>n+v*row[k].uv[1],0),
+              linearUV?0:dw[0]+dw[1]+dw[2]];
+          });
+          if(driven?.relief&&surfaceNormals){
+            worldWeights=edges.map(edge=>edge.map((n,k)=>n/(area*(ortho?1:row[k].z))));
+            const at=first-chart.first;
+            restTriangle=row.map(v=>[0,1,2].map(k=>v.weights.reduce((n,w,i)=>n+w*chart.rest[(at+i)*3+k],0)));
+          }
         }
         for(let y=loY;y<=hiY;y++)for(let x=loX;x<=hiX;x++){
           if (code && !spriteLOD.geometry(code,x,y)) continue;
@@ -137,8 +152,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             if(mip){
               const {region,chain}=mip;
               const span=semanticMipmaps===false?1:Math.max(Math.hypot(...dx),Math.hypot(...dy));
-              material=Mips.sample(chain,(S-region.x-.5)/Math.max(1,region.width-1),
-                (T-region.y-.5)/Math.max(1,region.height-1),span);
+              const scale=[Math.max(1,region.width-1),Math.max(1,region.height-1)];
+              material=Mips.sample(chain,(S-region.x-.5)/scale[0],(T-region.y-.5)/scale[1],span);
               if(!material.visible)continue;
             } else {
               ink=filter.sample(S,T,...dx,...dy);
@@ -168,6 +183,26 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             uv=uv.map(n=>Math.max(0,Math.min(1,n)));
           }
           const objectPosition=chart?.rest ? [0,1,2].map(k=>value(chart.rest,3,k)) : position;
+          if(driven?.active){
+            const maskUV=[0,1].map(k=>w.reduce((total,n,i)=>total+n*maskTriangle[i][k],0)/sum);
+            const state=Simulation.apply(mip.simulation,driven,maskUV,objectPosition,{
+              color:material.color,roughness:material.roughness,sheen:mip.chain.rule.specular
+            });
+            material.color=state.color;
+            material.roughness=state.roughness;
+            material.sheen=state.sheen;
+            if(worldWeights){
+              const derivative=(positions,center,weights)=>center.map((v,k)=>
+                weights.reduce((total,w,i)=>total+w*(positions[i][k]-v),0)/sum);
+              const [dx,dy]=worldWeights.map(dw=>derivative(row.map(v=>v.p),position,dw));
+              const perps=[cross(dy,normal),cross(normal,dx)], determinant=dot(dx,perps[0]);
+              if(Math.abs(determinant)>1e-12){
+                const slopes=worldWeights.map(dw=>Simulation.slope(mip.simulation,driven,maskUV,objectPosition,
+                  derivative(maskTriangle,maskUV,dw),derivative(restTriangle,objectPosition,dw)));
+                mapped=unit((mapped??normal).map((n,k)=>n-(perps[0][k]*slopes[0]+perps[1][k]*slopes[1])/determinant));
+              }
+            }
+          }
           fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
             ...(material && {semantic:material,semanticRule:mip.chain.rule,
               semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),

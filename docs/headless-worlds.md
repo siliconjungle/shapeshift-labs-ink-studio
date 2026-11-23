@@ -1334,6 +1334,8 @@ Probe `rig/surface-state` by body ID and face UV, or pass a world-space point
 and body ID to resolve the local face and original UV. `rig/surface-charts`
 returns the atlas data. Checkpoints save the chart windows and stamps.
 For a custom mesh, use [surface chart correspondences](procedural.md#surface-state-through-remeshing).
+To turn committed chart values into native mesh pigment, roughness, sheen, or
+relief, see [simulation-driven material layers](simulation-material-layers.md).
 
 Cloth sheets and nets can stamp the same channels in their rest UVs and keep them through stretch, tears, and replay. [Deformation-aware materials](deformation-materials.md)
 

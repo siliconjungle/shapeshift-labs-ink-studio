@@ -153,12 +153,12 @@ const SemanticTextureMipmaps = (() => {
     return {color:Array.from(color.rgba.subarray(color.at,color.at+3),n=>n/255),coverage,visible,normal,roughness,emission,lod};
   }
 
-  function shade(color,normal,view,{roughness,emission},rule) {
+  function shade(color,normal,view,{roughness,emission,sheen},rule) {
     const light=rule.light, h=normalized(light.map((n,c)=>n+view[c]),[0,0,0]);
     const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
     const gloss=1-roughness;
     const shine=dot(normal,light)>0 && dot(normal,view)>0 ?
-      rule.specular*gloss*Math.max(0,dot(normal,h))**(4+96*gloss**2):0;
+      (sheen??rule.specular)*gloss*Math.max(0,dot(normal,h))**(4+96*gloss**2):0;
     const ambient=rule.ambient??1;
     const diffuse=ambient+(1-ambient)*Math.max(0,dot(normal,light));
     return color.map((ink,c)=>display(bound(linear(ink)*diffuse+emission[c]+shine,0,1)));

@@ -594,3 +594,7 @@ node scripts/render-surface-gallery.js
 ```
 
 The gallery script writes a still life and two camera angles of all 40 presets to `studio/out/surface-gallery`. It keeps the light and scene state fixed for each pair.
+
+[Simulation-driven material layers](simulation-material-layers.md) let native
+mesh materials use committed world fields and signals to drive UV and
+rest-space pigment, roughness, sheen, and relief.

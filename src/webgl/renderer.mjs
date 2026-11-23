@@ -208,7 +208,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const previewPipelines = [];
     const surfacePipelines = [], brickPipelines=new Map();
     const brickShaders={cache:new Map(),program:resources.program};
-    let lastBrickLayers=[],lastReliefMeshes=[];
+    let lastBrickLayers=[],lastReliefMeshes=[],lastSimulationMaterials;
     let depthMeshPass, finiteCurvePass, lastDepthProxy = false;
     let emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let artPixelFinish, correctionStage;
@@ -1319,6 +1319,15 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const spriteSurfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
       const decals=frame.surfaceDecals !== false && world.surfaceDecals?.sample(t,frame).layers;
       const atlases=[spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []);
+      const simulationLayers=frame.simulationMaterialLayers===false?undefined:toolkit.KIT?.sceneMeshes?.simulationFrame(atlases,{
+        time:t,query:()=>world.lookSnapshot?.query??world.surfaceEffects?.query??toolkit.KIT.world.query.fromScene(world,t),
+        report:!reflectionCapture&&plane===zero?frame.simulationMaterialLayersFrame:undefined
+      });
+      if(!reflectionCapture&&plane===zero){
+        const changes=simulationLayers?.size?JSON.stringify([...simulationLayers.values()].map(row=>row.amounts)):undefined;
+        if(changes!==lastSimulationMaterials)historyValid=false;
+        lastSimulationMaterials=changes;
+      }
       let marks, engraving, markOutput, filterBuffers;
       if (filter) {
         if (width*2 > Math.min(maxSize,viewportLimit[0]) || height*2 > Math.min(maxSize,viewportLimit[1]))
@@ -1491,7 +1500,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
       const surfaceFrame={depthProxy,meshCodes:spriteMask?.meshCodes,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
         fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,
-        surfaceNormals:frame.surfaceNormals,semanticMipmaps:frame.semanticMipmaps,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
+        surfaceNormals:frame.surfaceNormals,semanticMipmaps:frame.semanticMipmaps,simulationLayers,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
         sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
       if(layeredGlass){
         textureUnit(13,null);

@@ -2,6 +2,7 @@
 const SceneMeshes = (() => {
   const Sprite = typeof SpriteSurface === 'undefined' ? require('./sprite-surface.js') : SpriteSurface;
   const Mips = typeof SemanticTextureMipmaps === 'undefined' ? require('./semantic-texture-mipmaps.js') : SemanticTextureMipmaps;
+  const simulationAPI=()=>typeof SimulationMaterialLayers==='undefined'?require('./simulation-material-layers.js'):SimulationMaterialLayers;
   const state = Symbol.for('ink-studio.sceneMesh');
   const charts = new WeakMap();
   const maxTriangles = 250000;
@@ -35,10 +36,13 @@ const SceneMeshes = (() => {
   }
 
   function materialOf({ id, color = 0xffffff, texture: input, normal, roughness, emission, emissionStrength,
-      alphaCutoff = .5, sampling, engraving, mipmaps } = {}) {
+      alphaCutoff = .5, sampling, engraving, mipmaps, simulationLayers } = {}) {
     const texture=Mips.texture(input);
     const { width = 1, height = 1, pixels, indices, palette } = texture ?? {};
-    const rules=Mips.settings(mipmaps ?? (indices||roughness!==undefined||emission ? true : undefined));
+    const simulation=simulationLayers===undefined ? undefined :
+      simulationAPI().create(simulationLayers);
+    const rules=Mips.settings(mipmaps ?? (simulation||indices||roughness!==undefined||emission ? true : undefined));
+    if(simulation&&!rules)throw new TypeError('Simulation layers need semantic material channels');
     if(rules && sampling)throw new TypeError('Choose one texture filter per material');
     if (!name(id) || !Number.isInteger(color) || color < 0 || color > 0xffffff || !unit(alphaCutoff))
       throw new RangeError('Mesh materials need an ID, RGB24 tint, and alpha cutoff in [0,1]');
@@ -66,7 +70,7 @@ const SceneMeshes = (() => {
       return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,emission,emissionStrength},
         {...rules,protect:rules.protect.map(tintColor)});
     }
-    return { id, width, height, paint, normal, sampling, engraving, ...(rules&&{chain}) };
+    return { id, width, height, paint, normal, sampling, engraving, simulation, ...(rules&&{chain}) };
   }
 
   function atlasWidth(materials) {
@@ -126,7 +130,8 @@ const SceneMeshes = (() => {
       atlas.meshRegion({ points:positions, restPoints:positions, uvs, triangles:drawIndices.subarray(offset,cursor) },
         regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling,
           engraving:material.engraving});
-      if(material.chain)semantic.push({first:offset,end:cursor,region:regions[index],chain:material.chain()});
+      if(material.chain)semantic.push({first:offset,end:cursor,region:regions[index],chain:material.chain(),
+        ...(material.simulation&&{simulation:material.simulation,materialId:material.id})});
     }
     const layer = atlas.finish();
     if(semantic.length)layer.semanticMipmaps=semantic;
@@ -375,6 +380,7 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
-  return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect,projector,sampleProjection,revision:mesh=>read(mesh).revision});
+  return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,projector,sampleProjection,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;
