@@ -1,14 +1,6 @@
 // Generate charts on planar projections and pack them without crossing UV islands.
 const edgeKey = (a, b) => a < b ? a + '/' + b : b + '/' + a;
-const area2 = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-
-function overlaps(a, b, epsilon) {
-  // With counterclockwise winding, a separating edge puts the other triangle outside.
-  return [a, b].every((source, i) => {
-    const target = i ? a : b;
-    return source.every((p, j) => target.some(q => area2(p, source[(j + 1) % 3], q) > epsilon));
-  });
-}
+const { area2, overlaps } = require('../src/mesh-uv.js');
 
 function chartsFor(points, faces, normals, groups) {
   const size = [0, 1, 2].map(axis => {

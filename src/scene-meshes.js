@@ -129,6 +129,20 @@ const SceneMeshes = (() => {
     return mesh[state];
   }
 
+  function inspectUV(mesh, {material, size, ...options} = {}) {
+    const {rest,uvs,indices,materials,faceMaterials,regions}=read(mesh);
+    const name=material??(mesh.materials.length===1 ? mesh.materials[0] : undefined);
+    const slot=materials.indexOf(name), region=regions[slot];
+    if (!region) throw new RangeError('Choose a textured mesh material to inspect its UV atlas');
+    const points=Array.from({length:rest.length/3},(_,i)=>Array.from(rest.subarray(i*3,i*3+3)));
+    const triangles=[];
+    for (let i=0; i<indices.length; i+=3)
+      if ((faceMaterials?.[i/3]??0)===slot) triangles.push(Array.from(indices.subarray(i,i+3)));
+    const uv=triangles.map(face=>face.map(i=>[uvs[i*2],uvs[i*2+1]]));
+    const api=typeof MeshUV==='undefined' ? require('./mesh-uv.js') : MeshUV;
+    return api.inspect({points,triangles,uvs:uv},{...options,size:size??[region.width,region.height]});
+  }
+
   function pose(mesh, input) {
     const data = read(mesh), positions = positionsOf(input,data.positions.length), target = data.layer.vertices;
     for (let i = 0; i < data.drawIndices.length; i++) {
@@ -302,6 +316,6 @@ const SceneMeshes = (() => {
     return closest;
   }
 
-  return Object.freeze({create,pose,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect});
+  return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

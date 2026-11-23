@@ -24,18 +24,25 @@
 
   function simplifyQEM(source,{
     target, ratio=0.5, groups=source?.groupsByFace, locked=[], preserveBoundary=true, preserveSeams=true,
+    protectedSeams=source?.protectedSeams ?? [],
     maxError=Infinity, minNormal=0.08, maxPairs=1700000
   }={}){
-    const verts=source?.points,tris=source?.triangles;
+    const verts=source?.points,tris=source?.triangles,uvs=source?.uvs;
     if(!Array.isArray(verts)||verts.length>260000||!Array.from(verts).every(vector)||
       !Array.isArray(tris)||tris.length>500000||
       (groups!==undefined&&(!Array.isArray(groups)||groups.length!==tris.length))||
       !Array.isArray(locked)||locked.length>verts.length||!locked.every(i=>integer(i,0,verts.length-1))||
+      !Array.isArray(protectedSeams)||
       typeof preserveBoundary!=='boolean'||typeof preserveSeams!=='boolean'||
       !Number.isFinite(ratio)||ratio<0||ratio>1||
       (target!==undefined&&!integer(target,0,tris.length))||
       (typeof maxError!=='number'||!(maxError>=0))||!Number.isFinite(minNormal)||minNormal<0||minNormal>=1||
       !integer(maxPairs,1,8000000)) throw new Error('QEM needs indexed triangles and bounded collapse controls');
+    let uvTopology;
+    if (uvs!==undefined || protectedSeams.length) {
+      MeshUV.validate(verts,tris,uvs);
+      uvTopology=MeshUV.topology(verts,tris,uvs,protectedSeams);
+    }
     const goal=target??Math.floor(tris.length*ratio), center=verts.length ?
       V.mul(verts.reduce((p,q)=>V.add(p,q),[0,0,0]),1/verts.length) : [0,0,0],
       nodes=verts.map((p,id)=>({id,p:V.sub(p,center),q:new Float64Array(10),mass:0,faces:new Set(),version:0,parent:-1,locked:false})),
@@ -54,11 +61,18 @@
       const cross=normal(nodes,...ids), area=V.len(cross), data=group(groups?.[id]);
       if(area<EPS)throw new Error('QEM input triangles need nonzero area');
       const n=V.mul(cross,1/area), support=plane(n,-V.dot(n,nodes[ids[0]].p)),
-        face={id,ids:ids.slice(),n,metadata:data.value,group:data.key,alive:true};
+        face={id,ids:ids.slice(),n,metadata:data.value,group:data.key,alive:true,
+          uv:uvs?.[id].map(corner=>corner.slice())};
+      const collapsedUV=face.uv && Math.abs(MeshUV.area2(...face.uv))<=1e-15;
       faces.push(face);
       names.set(tag,id);
       for(const [j,vert] of ids.entries()){
         const node=nodes[vert], next=ids[(j+1)%3], key=pair(vert,next);
+        if (face.uv) {
+          const uv=face.uv[j];
+          if (collapsedUV || node.uv && !MeshUV.sameUV(node.uv,uv)) node.locked=true;
+          node.uv ??= uv;
+        }
         node.faces.add(id);
         node.mass+=area;
         for(let k=0;k<10;k++)node.q[k]+=support[k]*area;
@@ -67,6 +81,8 @@
       }
     }
     for(const i of locked)nodes[i].locked=true;
+    for(const i of uvTopology?.locked ?? [])nodes[i].locked=true;
+    if(uvTopology)work.protectedUVEdges=uvTopology.seams.filter(edge=>edge.protected||edge.kind==='seam').length;
     if(preserveSeams)for(const node of nodes){
       if(new Set([...node.faces].map(id=>faces[id].group)).size>1)node.locked=true;
     }
@@ -92,7 +108,15 @@
         const e=Math.max(0,quadratic(q,p))/mass;
         if(e<error){error=e;point=p;}
       }
-      if(error<=maxError*maxError)heap.push({a,b,av:A.version,bv:B.version,error,point,q,mass});
+      if(error<=maxError*maxError) {
+        let uv;
+        if (A.uv && B.uv) {
+          const edge=V.sub(B.p,A.p), length=V.dot(edge,edge);
+          const t=length>0 ? K.clamp(V.dot(V.sub(point,A.p),edge)/length,0,1) : 0;
+          uv=A.uv.map((value,i)=>value+(B.uv[i]-value)*t);
+        }
+        heap.push({a,b,av:A.version,bv:B.version,error,point,q,mass,uv});
+      }
     }
     function neighbors(node){
       const output=new Set();
@@ -112,7 +136,9 @@
           old=names.get(key), [x,y,z]=ids.map(i=>i===a.id?item.point:nodes[i].p),
           cross=V.cross(V.sub(y,x),V.sub(z,x)), len=V.len(cross);
         if(keys.has(key)||(old!==undefined&&!incident.has(old))||len<EPS||V.dot(f.n,cross)<minNormal*len)return false;
-        next.push({f,ids,n:V.mul(cross,1/len),key});
+        const uv=f.uv && f.uv.map((corner,i)=>ids[i]===a.id?item.uv:corner);
+        if (uv && Math.sign(MeshUV.area2(...f.uv))*MeshUV.area2(...uv)<=1e-15) return false;
+        next.push({f,ids,n:V.mul(cross,1/len),key,uv});
         keys.add(key);
       }
       for(const id of incident){
@@ -121,13 +147,15 @@
         names.delete(triplet(f.ids));
         if(removed.has(id))f.alive=false;
       }
-      for(const {f,ids,n,key} of next){
+      for(const {f,ids,n,key,uv} of next){
         f.ids=ids;
         f.n=n;
+        f.uv=uv;
         names.set(key,f.id);
         for(const i of ids)nodes[i].faces.add(f.id);
       }
       a.p=item.point;
+      a.uv=item.uv;
       a.q=item.q;
       a.mass=item.mass;
       b.parent=a.id;
@@ -154,17 +182,19 @@
       if(a.parent>=0||b.parent>=0||a.version!==item.av||b.version!==item.bv)continue;
       if(!collapse(item))work.rejected++;
     }
-    const points=[],normals=[],triangles=[],groupsByFace=[], ids=new Map();
+    const points=[],normals=[],triangles=[],groupsByFace=[],sourceFaces=[], mappedUVs=uvs && [], ids=new Map();
     for(const n of nodes){
       if(n.parent>=0)continue;
       ids.set(n.id,points.length);
-      points.push(V.add(n.p,center));
+      points.push(n.locked ? verts[n.id].slice() : V.add(n.p,center));
       const sum=[...n.faces].reduce((p,i)=>V.add(p,faces[i].n),[0,0,0]);
       normals.push(V.len(sum)>EPS?V.norm(sum):[0,1,0]);
     }
     for(const face of faces)if(face.alive){
       triangles.push(face.ids.map(i=>ids.get(i)));
       groupsByFace.push(face.metadata);
+      sourceFaces.push(face.id);
+      if (mappedUVs) mappedUVs.push(face.uv);
     }
     const pointMap=nodes.map(n=>{
       let id=n.id;
@@ -172,14 +202,17 @@
       return ids.get(id);
     });
     const status=active<=goal?'ok':capped?'budget':'constrained';
-    return P.data.freeze({status,points,normals,triangles,groupsByFace,pointMap,work,
+    return P.data.freeze({status,points,normals,triangles,groupsByFace,pointMap,sourceFaces,work,
+      ...(mappedUVs && {uvs:mappedUVs}),
+      ...(protectedSeams.length && {protectedSeams:protectedSeams.map(edge=>edge.map(i=>pointMap[i]))}),
       mesh(metadata){
         const builder=G.builder();
         for(const [i,face] of triangles.entries())builder.triangle(...face.map(j=>points[j]),
-          {...groupsByFace[i],...metadata},undefined,face.map(j=>normals[j]));
+          {...groupsByFace[i],...metadata},mappedUVs?.[i],face.map(j=>normals[j]));
         return builder.finish();
       }
     });
   }
   G.simplifyQEM=simplifyQEM;
+  G.inspectUV=MeshUV.inspect;
 })(KIT);

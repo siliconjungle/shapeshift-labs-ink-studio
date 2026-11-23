@@ -120,7 +120,7 @@
   }
 
   function fromSculpt(sculpt, { palette = PAL_HEX, bounds, resolution = 0.08, targetTriangles = 16000,
-      guides = [], topology, fur = {}, ...options } = {}) {
+      guides = [], topology, simplifyTopology = false, fur = {}, ...options } = {}) {
     const { field, parts, noise } = sculpt.modelSource();
     if (!(targetTriangles === Infinity || Number.isInteger(targetTriangles) && targetTriangles >= 4))
       throw new Error('Target triangles must be an integer of at least four');
@@ -137,18 +137,26 @@
     const raw = topology || fromSdf(field.sdf, { bounds: bounds ?? field.modelBounds(resolution * 2), resolution, ...options });
     const projected = triangulate(raw);
     let faces = projected.faces, points = raw.points;
+    let protectedSeams = raw.protectedSeams;
     const sourceTriangles = faces.length;
     const midpoint = f => V.mul(f.reduce((out, i) => V.add(out, points[i]), [0, 0, 0]), 1 / f.length);
     let locked = [];
     if (!topology && guides.length) ({ points, faces, locked } = G.guideModelTopology({ points, faces }, guides));
-    if (!topology && faces.length > targetTriangles) {
-      const groups = faces.map(face => ({ owner: field.surfaceAt(...midpoint(face)).tag || '' }));
-      const result = G.simplifyQEM({ points, triangles: faces }, { target: targetTriangles, groups, locked,
+    if ((!topology || simplifyTopology) && faces.length > targetTriangles) {
+      const groups = faces.map((face,i) => ({ owner: field.surfaceAt(...midpoint(face)).tag || '',
+        ...(projected.chartGroups?.[i] !== undefined && {surface:projected.chartGroups[i]}) }));
+      const result = G.simplifyQEM({ points, triangles: faces, uvs:projected.uvs, protectedSeams },
+        { target: targetTriangles, groups, locked,
         maxError: resolution * 0.72, minNormal: 0.18 });
       points = result.points;
       faces = result.triangles;
+      projected.uvs = result.uvs;
+      if (projected.cornerNormals) projected.cornerNormals = result.sourceFaces.map(i=>projected.cornerNormals[i]);
+      if (projected.chartGroups) projected.chartGroups = result.sourceFaces.map(i=>projected.chartGroups[i]);
+      protectedSeams = result.protectedSeams;
     }
-    const mesh = { ...raw, ...projected, points, faces, sourceTriangles, name: options.name || raw.name };
+    const mesh = { ...raw, ...projected, points, faces, sourceTriangles, ...(protectedSeams && {protectedSeams}),
+      name: options.name || raw.name };
     const color = i => rgb(palette[i] ?? 0x504644);
     if (fur !== false) attachments.push(...G.modelFur(mesh, field, noise, color, fur));
     const tagAt = p => field.surfaceAt(...p).tag;

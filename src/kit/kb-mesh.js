@@ -104,6 +104,7 @@
     const mesh = M.make(P, T, anyCol ? C : null, TM, mats);
     if (attributes && T.length) {
       if (uvFaces.every(face => face.every(Boolean))) mesh.uvs = uvFaces;
+      else if (uvFaces.some(face => face.some(Boolean))) mesh.uvFaces = uvFaces.map(face=>face.every(Boolean)?face:null);
       if (normalFaces.every(face => face.every(Boolean))) mesh.cornerNormals = normalFaces;
     }
     return mesh;
@@ -190,7 +191,9 @@
     },
     WIDTH = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
   M.gltfTransforms = Object.freeze(mat4);
-  M.gltf = (json, bins, { visitNode, visitPrimitive } = {}) => {
+  M.gltf = (json, bins, { visitNode, visitPrimitive, attributes = false, uvSet = 0 } = {}) => {
+    if (attributes && (!Number.isSafeInteger(uvSet) || uvSet<0 || uvSet>31))
+      throw new RangeError('glTF UV set must be an integer from 0 to 31');
     const g = typeof json === 'string' ? JSON.parse(json) : json,
       bufs = (g.buffers || []).map((b, i) =>
         bins && bins[i]
@@ -221,6 +224,7 @@
       C = [],
       T = [],
       TM = [],
+      uvFaces = [],
       mats = [{ name: 'default', rgb: [0.7, 0.7, 0.7] }],
       matOf = new Map();
     let anyCol = false,
@@ -284,6 +288,13 @@
             }
           if (visitPrimitive) visitPrimitive(pr, { firstVertex:base, vertexCount:pa.n,
             firstFace, faceCount:TM.length-firstFace, accessor:acc, matrix:m.slice() });
+          if (attributes) {
+            const ref=pr.attributes['TEXCOORD_'+uvSet], uv=ref===undefined?null:acc(ref);
+            if (uv && (uv.n!==pa.n || uv.w!==2)) throw new TypeError('glTF UVs must match the primitive vertex count');
+            for (let f=firstFace; f<TM.length; f++) {
+              uvFaces.push(uv?T.slice(3*f,3*f+3).map(i=>[uv.get(i-base,0),uv.get(i-base,1)]):null);
+            }
+          }
         }
       for (const c of n.children || []) walk(c, m);
     };
@@ -294,6 +305,10 @@
           : (g.nodes || []).map((n, i) => i).filter(i => !(g.nodes || []).some(n => (n.children || []).includes(i)));
     for (const r of roots) walk(r, ID);
     const mesh = M.make(P, T, anyCol ? C : null, TM, mats);
+    if (attributes && uvFaces.some(Boolean)) {
+      if (uvFaces.every(Boolean)) mesh.uvs=uvFaces;
+      else mesh.uvFaces=uvFaces;
+    }
     mesh.skipped = skipped;
     return mesh;
   };
@@ -317,9 +332,9 @@
     }
     return { json, bins };
   };
-  M.glb = bytes => {
+  M.glb = (bytes, options) => {
     const { json, bins } = M.glbParts(bytes);
-    return M.gltf(json, bins);
+    return M.gltf(json, bins, options);
   };
 
   // ---------------- fitting ----------------

@@ -2592,6 +2592,9 @@ collapse must preserve the local mesh link and avoid reversed or
 duplicate faces. Open boundaries and group seams are locked by
 default. Pass one owner, surface, and material record per face in
 `groups`. The result maps source vertices to surviving indices.
+Supply corner `uvs` to carry the authored atlas through reduction and
+lock UV seams, or set `protectedSeams` to pin specific geometric edges.
+[UV and seam inspection](mesh-uv.md) documents the diagnostics and CLI.
 
 `lod.mergeSplats(records, {ratio, target, maxDistance, maxRadius,
 viewDirections, silhouette, lockSeams, seamDistance, maxSeamPairs, maxPairs})`

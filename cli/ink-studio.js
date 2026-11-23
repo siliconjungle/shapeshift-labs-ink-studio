@@ -1279,6 +1279,7 @@ const CMD = {
         '  motion <id> [--from 0 --to 12]   numbers about how it moves: speed, jumps, what goes underground',
         '  render <file.ply|.spz> --raw   render a Gaussian splat cloud without palette quantization',
         '  mesh <file.obj|.gltf|.glb>  import and inspect as splats (--uv requires textured GLB stamps, --uv off uses geometry)',
+        '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
         '  export-glb <scene.js|.json|.obj|.gltf|.glb> --out model.glb   write UV-mapped geometry with materials, skins and clips',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
@@ -3471,6 +3472,9 @@ const CMD = {
   },
   shape() {
     require('./turntable-shape.js').command(pos, opt, lib());
+  },
+  'mesh-uv'() {
+    require('./mesh-uv.js').command(pos,opt,{num,list});
   },
   mesh() {
     const w = build(pos[0]),
