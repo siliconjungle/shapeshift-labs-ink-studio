@@ -62,9 +62,12 @@ export function cameraPose({ eye, view }) {
     up: [view[1], view[5], view[9]], back: [view[2], view[6], view[10]] };
 }
 
-export function withCameraPose(camera, pose) {
-  const checked=cameraLens.pose(pose);
-  return {...camera,eye:checked.eye,view:new Float32Array(cameraLens.matrix(checked))};
+export function withCameraPose(camera, pose, reflected = false) {
+  // Validate a proper camera pose, then restore the handedness of the mirror.
+  const checked = cameraLens.pose(reflected ? { ...pose, right: pose.right.map(x => -x) } : pose);
+  const view = new Float32Array(cameraLens.matrix(checked));
+  if (reflected) for (const column of [0, 4, 8, 12]) view[column] = -view[column];
+  return { ...camera, eye: checked.eye, view };
 }
 
 function placedDepth(row, i, project) {

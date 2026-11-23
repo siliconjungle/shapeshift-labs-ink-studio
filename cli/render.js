@@ -427,6 +427,9 @@ function renderFrame(world, o, preparedPalettes) {
   }) : preparedPalettes;
   const requestedPasses = ArtPasses.select(o.passes);
   const passSelection = new Set(requestedPasses);
+  const captureHybridDepth = typeof o.hybridDepthFrame === 'function' && !probeView &&
+    !o[matteScope] && o[subjectFocusPass] !== false && (!o.samples || o[nativePartMotion]);
+  if (captureHybridDepth) passSelection.add('depth');
   if (captureStages) passSelection.add('splatId');
   const readabilitySelectors = !o.samples && !o.captureCoverage && o.readabilitySelectors;
   if (readabilitySelectors) passSelection.add('splatId');
@@ -718,7 +721,7 @@ function renderFrame(world, o, preparedPalettes) {
   const captureSurfaceMotion=partView&&(!!o.captureSurfaceMotion||ArtPasses.needsSurfaceMotion(requestedPasses));
   const surfaceReset=o.resetRenderHistory||o.resetSurfaceMotion;
   if (partView&&!captureSurfaceMotion&&surfaceReset) o.surfaceMotionHistory?.clear();
-  const captureTexturedSurface=captureSurfaceMotion||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
+  const captureTexturedSurface=Boolean(deepPlan)||captureSurfaceMotion||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
     'surfaceKind','partId'].some(channel=>passSelection.has(channel));
   const captureStrandMotion = partView && (!!o.captureStrandMotion || ArtPasses.needsStrandMotion(requestedPasses));
   const strandReset = o.resetRenderHistory || o.resetStrandMotion;
@@ -760,6 +763,7 @@ function renderFrame(world, o, preparedPalettes) {
         [subjectFocusPass]:focus,
         captureMotion: false, capturePartMotion:false, captureStrandMotion:false, captureSurfaceMotion:false, strandPixel:undefined,
         motionFrom: undefined, effectPaletteCapture: null, reflectionTint: effects?.reflection,
+        hybridDepthFrame: undefined,
         passes: specializedResolve ? ['coverage'] : false,
         lookAudit: false
       })
@@ -966,7 +970,7 @@ function renderFrame(world, o, preparedPalettes) {
   const rayAt = cameraRays(V, eye, W, H, focal, ortho);
   const baseSky = SkyEnvironment.withCelestials(environment?.sky, celestial, celestial && hex(0));
   const sky = baseSky && direction?.bands ? { ...baseSky, bands:direction.bands } : baseSky;
-  const aerial = o.atmosphere !== false && !o.captureCoverage ?
+  const aerial = o.atmosphere !== false && (!o.captureCoverage || reflectionPlane) ?
     SkyEnvironment.aerial(world.aerialPerspective, o.aerialPerspective, environment?.parameters) : null;
   const cloudShadow = clouds?.shadow;
   const planeClip = reflectionPlane && (p=>SceneOptics.planeDistance(reflectionPlane,...p)>reflectionPlane.bias);
@@ -1132,7 +1136,6 @@ function renderFrame(world, o, preparedPalettes) {
               captureMotion: false,
               fragmentProbe: undefined,
               lookAudit: false,
-              atmosphere: false,
               water: false,
               reflections: false,
               edges: false
@@ -1544,10 +1547,10 @@ function renderFrame(world, o, preparedPalettes) {
         sameSpan });
     } else SplatOrder.stabilize(order, tolerance, depthAt, transparentAt, undefined, sameSpan);
   }
-  const mediaOptions = (water || aerial || cloudView || (curveScene || deep || blendDepth) && volumes.length) && atmosphereOptions();
+  const mediaOptions = (water || aerial || cloudView || (reflectionPlane || curveScene || deep || blendDepth || surfaceFragments.length || sprites.length) && volumes.length) && atmosphereOptions();
   const hazeCoverage = effectRules?.ramps.get('fog')?.geometry && world.fog.max > 0 && new Float32Array(W * H);
   const rayMedia = mediaOptions ? mediaSampler(volumes, water, rayAt, W, mediumHorizon, {
-    ...mediaOptions, reflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth,
+    ...mediaOptions, reflectionPlane, reflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth,
     deep: Boolean(deep), matteCount:mattes?.count
   }, air) : null;
   const retainLayers = retainContributions || Boolean(rayMedia || deep);
@@ -2474,7 +2477,7 @@ function renderFrame(world, o, preparedPalettes) {
           playFragments(false,-cz);
           orderFallback = true;
         }
-        const opticalDepth = planeHit || curveHit || cutaway || deep || blendDepth || aerial || cloudView || preciseDepth ? surfaceZ : undefined;
+        const opticalDepth = planeHit || curveHit || cutaway || deep || blendDepth || rayMedia || preciseDepth ? surfaceZ : undefined;
         if (deferred && (sortedSurfaces || preciseDepth)) {
           if (wantStation && !curveSpan) {
             const frame = curveFrames && curveFrames(i);
@@ -3071,6 +3074,8 @@ function renderFrame(world, o, preparedPalettes) {
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
     surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers,brickFrames) : undefined,
     representationLabels:captureTexturedSurface && spriteLOD ? spriteLOD.labels(world) : undefined });
+  if (captureHybridDepth) o.hybridDepthFrame({ view: reflectionPlane ? 'reflection' : 'camera',
+    reflection: reflectionPlane?.id, portalDepth: 0, width: W, height: H, depth: passes.depth });
   if (proxyDepthPass || proxyRejected || proxyRemoved) {
     const native = {w:W,h:H,...passes};
     const rows = (source, Result, fill) => source ?

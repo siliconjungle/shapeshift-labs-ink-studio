@@ -1,6 +1,7 @@
 import { environmentMediaSource } from './environment-shaders.mjs';
 import { emitterGLSL } from './light-emitters.mjs';
 import { waterGLSL } from './water-optics.mjs';
+import { glassSurfaceOutputs } from './hybrid-depth.mjs';
 import { createResources } from './resources.mjs';
 
 const uvSlip = Symbol.for('ink-studio.spriteSurface.uvSlip');
@@ -14,7 +15,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
   try {
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
-    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart) {
+    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers) {
       const chart = lighting && !normalMapped;
       const key = [
         wet?.airPockets,
@@ -28,7 +29,8 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         !!environment?.lit,
         paletteSampling,
         styledProjection,
-        maskedPart
+        maskedPart,
+        glassLayers
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -83,7 +85,8 @@ in vec3 v_camera;
 ${styledProjection ? 'uniform bool u_affine;uniform vec4 u_projectionBounds;in vec2 v_affine;' : ''}
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
-layout(location=2) out vec4 water;
+${glassLayers && !wet ? 'vec4 water;' : 'layout(location=2) out vec4 water;'}
+${glassLayers ? glassSurfaceOutputs(wet) : ''}
 ${normalMapped ? `
 vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map){
   float det=du.x*dv.y-du.y*dv.x;
@@ -142,6 +145,7 @@ void main(){
   ${section ? 'rgb=mix(rgb,u_sectionEdge.rgb,sectionInk(margin));' : ''}
   color=u_index?vec4(float(u_portalCover)):vec4(rgb,1.0);
   depth=vec4(d,0.0,0.0,1.0);water=vec4(mark,1.0);
+  ${glassLayers ? 'splitOpaqueSurface(color,gl_FragCoord.z);' : ''}
   if(u_index&&u_graphDepth){float z=round(d*16777215.0);water=vec4(mod(z,256.0),mod(floor(z/256.0),256.0),floor(z/65536.0),255.0)/255.0;}
 }`
       );
@@ -445,6 +449,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         fog,
         index = false,
         graphDepth = false,
+        glassLayers = false,
         portalCover = false,
         arrivalPlane = [0, 0, 0, 0],
         clip = [0, 0, 0, 0],
@@ -493,7 +498,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode));
+      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -506,6 +511,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLit: 24,
         ...(normalMapped && { u_surfaceNormalMap: 24, u_surfaceNormals: surfaceNormals, u_surfaceEye: eyeFromView(view) }),
         u_index: +index,
+        u_glassBoundary: 13,
         u_graphDepth: graphDepth,
         u_portalCover: portalCover,
         u_arrivalPlane: arrivalPlane,

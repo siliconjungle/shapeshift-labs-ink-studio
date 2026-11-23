@@ -49,7 +49,7 @@ export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, 
     return resources.texture();
   }
 
-  function prepare(world, frame, camera, time, width, height, reflection = false) {
+  function prepare(world, frame, camera, time, width, height, reflection, entryPlane) {
     if (frame.environment === false || !state || !skyAPI) return null;
     const skySource = frame.skyEnvironment ?? world.skyEnvironment;
     const cloudSource = frame.cloudField ?? world.cloudField;
@@ -163,7 +163,7 @@ export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, 
         u_envZenith:sky?.zenith ?? blank,u_envSkyHorizon:sky?.horizon ?? blank,u_envGround:sky?.ground ?? blank,
         u_envSun:sky?.sun ?? blank,u_envSunRGB:sky?.sunColor ?? blank,
         u_envSunParams:[sky?.sunEdge ?? 0,sky?.sunCore ?? 1,sky?.sunStrength ?? 0],
-        u_envFogCount:fog.length,u_envBands:direction?.atmosphereBands ?? 0,
+        u_envEntryPlane:entryPlane, u_envFogCount:fog.length,u_envBands:direction?.atmosphereBands ?? 0,
         u_envPaletteFog: +fields.fog, u_envPaletteStart: paletteStart, u_envPaletteCard: fields.card,
         u_envCardSize:card?.resolution ?? 0,u_envCloudHardness:direction?.cloudHardness ?? .5,
         ...(card && {u_envCardFrame:[...card.center,card.radius],u_envCardRight:card.right,u_envCardUp:card.up,

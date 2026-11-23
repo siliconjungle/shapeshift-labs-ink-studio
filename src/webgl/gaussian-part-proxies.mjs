@@ -1,3 +1,4 @@
+import { glassSurfaceOutputs } from './hybrid-depth.mjs';
 import { gaussianHarmonicGLSL } from './gaussian-harmonics.mjs';
 
 const plans = new WeakMap();
@@ -134,7 +135,7 @@ vec3 proxyColor(vec3 pos, vec4 source) {
 }
 `;
 
-function shaders(stroke, degree) {
+function shaders(stroke, degree, glassLayers, wet) {
   const sh = degree === undefined ? '' : '#define SH\n' + gaussianHarmonicGLSL(degree);
   const declarations = stroke ? `
 layout(location=0) in vec4 a_start;
@@ -209,7 +210,8 @@ uniform vec4 u_range,u_light;
 uniform vec3 u_fog;
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
-layout(location=2) out vec4 aux;
+${glassLayers && !wet ? 'vec4 aux;' : 'layout(location=2) out vec4 aux;'}
+${glassLayers ? glassSurfaceOutputs(wet) : ''}
 vec4 encode(int value) {
   return vec4(value&255,(value>>8)&255,(value>>16)&255,255)/255.0;
 }
@@ -235,6 +237,7 @@ void main(){
     ink*=mix(1.0,max(0.0,dot(normal,normalize(u_light.xyz))),u_light.w);
     float haze=u_range.z<1.0?smoothstep(u_range.z,1.0,linear)*u_range.w:0.0;
     color=vec4(mix(ink,u_fog,haze),1);
+    ${glassLayers ? 'splitOpaqueSurface(color,gl_FragDepth);' : ''}
   }
 }`];
 }
@@ -273,15 +276,16 @@ export function createGaussianProxyRenderer(gl, resources, table, maxSize) {
   }
   function drawPart(entry, frame, pass) {
     const degree = frame.gaussian?.u_gaussianCount && entry.live && pass === 0 ? frame.degree : undefined;
-    const key = (entry.stroke ? 8 : 0) + (degree ?? -1);
-    if (!programs.has(key)) programs.set(key,resources.program(...shaders(entry.stroke,degree)));
+    const glassLayers = pass === 0 && frame.glassLayers;
+    const key = (entry.stroke ? 8 : 0) + (degree ?? -1) + (glassLayers ? (frame.wet ? 32 : 16) : 0);
+    if (!programs.has(key)) programs.set(key,resources.program(...shaders(entry.stroke,degree,glassLayers,frame.wet)));
     const shader = programs.get(key), {camera,width,height,scale,range,fog,plane,clip} = frame;
     gl.useProgram(shader.p);
     gl.bindVertexArray(entry.vao);
     shader.set({ ...frame.gaussian, u_view:camera.view,u_proj:camera.projection,u_eye:camera.eye,u_ortho:camera.ortho,
       u_live:entry.live,u_viewport:[width,height],u_near:camera.clipNear,
       u_minRadius:entry.minPixels/Math.SQRT2*scale,
-      u_range:range,u_fog:fog,u_light:entry.light,u_pass:pass,u_owner:entry.owner,u_plane:plane,u_clip:clip });
+      u_range:range,u_fog:fog,u_glassBoundary:13,u_light:entry.light,u_pass:pass,u_owner:entry.owner,u_plane:plane,u_clip:clip });
     const count = entry.vertices.length / entry.size;
     if (entry.stroke) gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,count);
     else gl.drawArrays(gl.TRIANGLES,0,count);

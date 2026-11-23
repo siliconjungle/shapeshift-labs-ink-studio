@@ -156,6 +156,8 @@ between neighboring art pixels and eases where translucent layers meet. Give
 each pane its own object ID to keep its splats together for refraction. The blend
 is deterministic at a given time and camera and needs no frame history.
 
+[Hybrid depth captures](hybrid-view-depth.md) compare meshes, depth proxies, fog, and transparent crossings in camera, portal, and reflected views.
+
 Use [translucent silhouette policies](translucent-silhouettes.md) to preserve thin glass edges and fabric, keep leaf gaps open, and soften steam on the native art grid before those layers are sorted.
 
 `depthTolerance` is the slice spacing in world units along the camera axis.

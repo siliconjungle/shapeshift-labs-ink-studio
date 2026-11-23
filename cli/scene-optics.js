@@ -164,7 +164,7 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
   if (trackCoverage) result.fill(0, 6);
   const trackFog = result.length > 8;
   if (trackFog) result[8] = 1;
-  let cursor = 0, dryDistance = 0, aerialThrough = 1;
+  let cursor = options?.start ?? 0, dryDistance = 0, aerialThrough = 1;
   const remaining = () => (result[3] + result[4] + result[5])/3;
   function composite(slot) {
     if (trackCoverage) result[slot] += remaining() * (1-sample[3]);
@@ -291,8 +291,17 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     if (!ray) {
       const x = pixel % width, y = Math.floor(pixel / width);
       const { origin, direction, axial } = rayAt(x + .5, y + .5);
+      let start = 0;
+      if (options.reflectionPlane) {
+        const plane = options.reflectionPlane;
+        const side = SceneOptics.planeDistance(plane, ...origin) - plane.bias;
+        if (side < 0) {
+          const towards = direction.reduce((sum, value, i) => sum + value * plane.normal[i], 0);
+          start = towards > 1e-7 ? -side / towards : Infinity;
+        }
+      }
       stats.rays++;
-      ray = rays[pixel] = { origin: origin.slice(), direction: direction.slice(), axial,
+      ray = rays[pixel] = { origin: origin.slice(), direction: direction.slice(), axial, start,
         segments: water ? water.raySegments(origin, direction, horizon / axial) : [],
         bounds:options.cacheBounds !== false && volumes.length
           ? SceneOptics.rayBounds(volumes,origin,direction,horizon/axial,options.counters) : undefined,
@@ -303,7 +312,7 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     query.reflectionX = pixel % width + .5;
     query.reflectionY = Math.floor(pixel / width) + .5;
     const stop = Math.min(horizon, depth) / ray.axial;
-    const useAerial = geometry && aerial && Number.isFinite(depth) && stop > aerial.start;
+    const useAerial = geometry && aerial && Number.isFinite(depth) && stop > Math.max(ray.start, aerial.start);
     fogCoverage = cloudCoverage = 0;
     fogThrough = 1;
     reflected = undefined;
@@ -313,7 +322,7 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
       transfer.fill(0, 0, 3);
       transfer.fill(1, 3, 6);
     }
-    if (!useAerial && !ray.segments.length && !volumes.length && !options.cloud) {
+    if (stop <= ray.start || !useAerial && !ray.segments.length && !volumes.length && !options.cloud) {
       opacity = 0;
       return rgb;
     }
@@ -321,7 +330,7 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
       ray.aerial = { ...aerial, color: aerial.color(pixel, ray.direction) };
     }
     if (useAerial && !ray.segments.length && !volumes.length && !options.cloud) {
-      const raw = airTransmission(aerial, (stop-aerial.start)*fogScale);
+      const raw = airTransmission(aerial, (stop-Math.max(ray.start, aerial.start))*fogScale);
       const remaining = options.bands ? 1-options.bands(1-raw) : raw;
       opacity = fogCoverage = 1 - remaining;
       visibility = remaining;
@@ -340,6 +349,7 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
       ray.fogScale = fogScale;
       query.fogScale = fogScale;
       query.axial = ray.axial;
+      query.start = ray.start;
       query.rayBounds = ray.bounds;
       query.fullFog = ray.fullFog;
       values.fill(0);

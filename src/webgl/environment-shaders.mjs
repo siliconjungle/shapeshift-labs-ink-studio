@@ -21,6 +21,7 @@ vec4 envRow(int index) {
 
 export function environmentMediaSource(lighting=false){ return rays + data + (lighting?`uniform highp sampler3D u_eFogField;uniform vec3 u_eFogMin,u_eFogExtent,u_eFogSize;vec3 eFogLight(vec3 p){vec3 uv=(clamp((p-u_eFogMin)/u_eFogExtent,vec3(0),vec3(1))*(u_eFogSize-1.0)+.5)/u_eFogSize;return texture(u_eFogField,uv).rgb;}`:'') + `
 uniform int u_envFogCount, u_envCardSize;
+uniform vec4 u_envEntryPlane;
 uniform int u_envPaletteFog, u_envPaletteStart, u_envPaletteCard;
 vec3 envPalette(vec3 base, int index, vec4 signals) {
   if (index < 0) return base;
@@ -61,9 +62,9 @@ bool envRadial(inout vec2 hit, float a, float b, float c) {
   hit = vec2(max(hit.x,(-b-r)/a),min(hit.y,(-b+r)/a));
   return hit.y > hit.x;
 }
-bool envFogInterval(vec3 origin, vec3 ray, float stop, int index, out vec2 hit) {
+bool envFogInterval(vec3 origin, vec3 ray, vec2 span, int index, out vec2 hit) {
   vec4 first = envRow(index), second = envRow(index+1), range = envRow(index+3);
-  hit = vec2(range.x,min(range.y,stop));
+  hit = vec2(max(range.x,span.x),min(range.y,span.y));
   if (hit.y <= hit.x) return false;
   if (first.w < 0.5) return envSlab(hit,origin.y,ray.y,first.y,second.y);
   if (first.w < 1.5) return envSlab(hit,origin.x,ray.x,first.x,second.x) &&
@@ -74,14 +75,14 @@ bool envFogInterval(vec3 origin, vec3 ray, float stop, int index, out vec2 hit) 
   return envSlab(hit,p,d,0.0,second.w) &&
     envRadial(hit,1.0-d*d,dot(offset,ray)-p*d,dot(offset,offset)-p*p-range.z*range.z);
 }
-vec4 envFog(vec3 origin, vec3 ray, float stop, float setback) {
+vec4 envFog(vec3 origin, vec3 ray, vec2 span, float setback) {
   const int budget = ${2*fogLimit};
   vec2 events[budget];
   int n = 0;
   for (int i=0; i<${fogLimit}; i++) {
     if (i >= u_envFogCount) break;
     vec2 hit;
-    if (envFogInterval(origin,ray,stop,4*i,hit)) {
+    if (envFogInterval(origin,ray,span,4*i,hit)) {
       events[n++] = vec2(hit.x,float(i+1));
       events[n++] = vec2(hit.y,-float(i+1));
     }
@@ -219,13 +220,19 @@ vec3 envMedia(vec3 color, vec2 pixel, vec2 size, float axialDepth) {
   float axial = ortho ? 1.0 : inversesqrt(1.0+dot(screen,screen));
   vec3 origin = ortho ? u_envEye+offset : u_envEye;
   vec3 ray = ortho ? -u_envBack : (offset-u_envBack)*axial;
-  float stop = min(axialDepth,u_envHorizon)/axial;
+  vec2 span = vec2(0.0, min(axialDepth,u_envHorizon)/axial);
+  float side = dot(u_envEntryPlane,vec4(origin,1.0));
+  float towards = dot(u_envEntryPlane.xyz,ray);
+  if (towards > 1e-7) span.x = max(span.x,-side/towards);
+  else if (towards < -1e-7) span.y = min(span.y,-side/towards);
+  else if (side < 0.0) return color;
+  if (span.x >= span.y) return color;
   if (u_envCardSize > 0) {
-    vec4 card = envCard(origin,ray,u_envCamera.w,stop);
+    vec4 card = envCard(origin,ray,max(span.x,u_envCamera.w),span.y);
     color = card.rgb + card.a*color;
   }
   if (u_envFogCount > 0) {
-    vec4 fog = envFog(origin,ray,stop,u_envCamera.w/axial);
+    vec4 fog = envFog(origin,ray,span,u_envCamera.w/axial);
     color = fog.rgb + fog.a*color;
   }
   return color;

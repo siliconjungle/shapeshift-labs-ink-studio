@@ -1430,6 +1430,7 @@ const CMD = {
         '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
         '  project verify <experiment-or-story-bundle.json> [--out report.json --compare-engine]',
+        '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
         '  render|sheet|clip <id> or sim render <file> --passes environment   write environment passes beside the export',
@@ -2727,6 +2728,16 @@ const CMD = {
   },
   retarget() {
     require('./retarget.js').run({ K: lib().KIT, build, pos, options: opt, view: view() });
+  },
+  'hybrid-depth-review'() {
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'hybrid-depth-review');
+    const report = require('./hybrid-depth-review.js').run(directory, {chrome:opt.chrome,hardware:opt.hardware});
+    for (const [backend, frames] of Object.entries(report.backends)) {
+      console.log(backend, frames.combined.views.length, 'depth views');
+      for (const [id, frame] of Object.entries(frames))
+        if (frame.difference) console.log(' ', id, frame.difference.changed, 'changed pixels');
+    }
+    console.log('wrote',directory);
   },
   'environment-parity'() {
     const parity = require('./environment-parity.js');

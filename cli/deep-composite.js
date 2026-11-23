@@ -60,8 +60,8 @@ function capture(w, h, scope, metadata, view, sprites) {
   function fragment(bottom, depth, coverage, r, g, b, index, kind, medium, sprite) {
     const pixel = top(bottom), base = pixel * layers;
     const at = base * stride, tag = base * idStride;
-    const object = identify(sprite?.objectId, worldIds?.[index], objects, objectLabels, objectNumbers);
-    const material = identify(sprite?.materialId, materialIds?.[index], materials, materialLabels, materialNumbers);
+    const object = identify(sprite?.objectId ?? sprite?.mesh?.object, worldIds?.[index], objects, objectLabels, objectNumbers);
+    const material = identify(sprite?.materialId ?? sprite?.mesh?.material, materialIds?.[index], materials, materialLabels, materialNumbers);
     if (scope.coalesce && count[pixel] && object && ids[tag + 2] === object && ids[tag + 3] === material &&
         ids[tag] === kinds[kind] && Math.abs(colors[at] - depth) < 1e-4) {
       // Coincident dabs from one surface consume a single layer.

@@ -621,7 +621,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;
     od = vec4(0.0); ${masked ? `if (v_policySlot > 0) {${ownerMaskWrite}}` : ''}
     float graphDepth = round(clamp(${gaussianProxy ? '(proxyOwnsDepth ? proxyDepth : '+(cutaway ? 'sectionDepth' : 'v_depth')+')' : cutaway ? 'sectionDepth' : 'v_depth'}, 0.0, 1.0) * 16777215.0);
-    oa = vec4(mod(graphDepth,256.0), mod(floor(graphDepth/256.0),256.0), floor(graphDepth/65536.0),255.0)/255.0; return; }
+    oa = vec4(mod(graphDepth,256.0), mod(floor(graphDepth/256.0),256.0), floor(graphDepth/65536.0),255.0)/255.0; ${layeredGlass && !water ? 'o_back = oa;' : ''} return; }
   bool solid = u_crisp > 0.5 && v_color.a >= 1.0 && v_coverage != ${softMode};
   float a = continuous ? surfaceAlpha :
     (solid && u_hard > 0.5 ? (g > 0.5 ? 1.0 : 0.0) : contributionAlpha(power,v_color.a,solid));
@@ -881,7 +881,7 @@ bool constrainPalette(ivec2 p, vec3 inputColor, out vec3 color) {
 export function pixelShaderSources(PixelLook, { water = false, airPockets = false, layered = false, atlas = false,
   paletteConstraints = false, masked = false, contributions = false, layeredGlass = false, materialStyles = false,
   environment = false, emitterFog=false, relighting = false, packedTone = false, cutaway, facingColors = false,
-  protectGaps = false } = {}) {
+  protectGaps = false, patternedResolve = true, coloredResolve = true, paintResolve = true } = {}) {
   const waterPixelGLSL = `
 uniform highp sampler2D u_waterMask;
 ivec2 waterPixel(ivec2 p) {
@@ -1358,7 +1358,7 @@ ivec2 holeFill(ivec2 p) { ivec2 ms = textureSize(u_depth, 0) - 1; float d0 = tex
   ${protectGaps ? 'if (protectedGap(u_idxTex, u_depth, p)) return p;' : ''}
   // (colour per pixel knows which dab is in front at each pixel: a pixel with none, between two that have one, is a hole whatever the
   // depths say: dabs left out of outlines write none)
-  if (u_pixOn > 0.5 && dabAt(p) < 0) for (int ax = 0; ax < 2; ax++) { ivec2 o = ax == 0 ? ivec2(0, 1) : ivec2(1, 0); if (dabAt(p + o) >= 0 && dabAt(p - o) >= 0) return p + o; }
+  if (${patternedResolve ? 'u_pixOn > 0.5' : 'false'} && dabAt(p) < 0) for (int ax = 0; ax < 2; ax++) { ivec2 o = ax == 0 ? ivec2(0, 1) : ivec2(1, 0); if (dabAt(p + o) >= 0 && dabAt(p - o) >= 0) return p + o; }
   for (int ax = 0; ax < 2; ax++) { ivec2 o = ax == 0 ? ivec2(0, 1) : ivec2(1, 0), qa = clamp(p + o, ivec2(0), ms), qb = clamp(p - o, ivec2(0), ms);
     float da = texelFetch(u_depth, qa, 0).r, db = texelFetch(u_depth, qb, 0).r, gap = d0 - max(da, db);
     if (min(d0, min(da, db)) > -0.5 && gap > 0.004 && abs(da - db) < 0.6 * gap) return da < db ? qa : qb; }
@@ -1378,10 +1378,10 @@ vec3 plainAt(ivec2 p) {
   vec3 c = texelFetch(u_scene, p, 0).rgb;
   ${layeredGlass ? 'c = refractContributions(p,c);' : ''}
   g_pixed = false;
-  if (u_pixOn > 0.5) { if (u_sprOn > 0.5) {
+  if (${patternedResolve ? 'u_pixOn > 0.5' : 'false'}) { if (u_sprOn > 0.5) {
 ${water || environment || relighting ? '      vec4 sl = texelFetch(u_sprLayer, p, 0); if (sl.a > 0.5) { g_spr = true; g_pixed = true; return u_toneOn > 0.5 ? toneAt(sl.rgb, artPixel) : sl.rgb; }' :
       '      vec4 sl = texelFetch(u_sprLayer, p, 0) * 255.0; if (sl.a > 127.0) { int v = int(sl.r + 0.5), ci = v >= 100 ? v - 100 : rampAt(int(sl.g + 0.5), int(sl.b + 0.5) + v - 8); g_spr = true; g_pixed = true; vec3 color = u_pal[clamp(ci, 0, u_n - 1)]; return u_toneOn > 0.5 ? toneAt(color, artPixel) : color; }'} }
-    if (u_paintOn) {
+    if (${paintResolve ? 'u_paintOn' : 'false'}) {
       vec3 paint = texelFetch(u_crispScene, p, 0).rgb;
       float through = 1.0 - texelFetch(u_crispDepth, p, 0).r;
       if (through > 0.01) {
@@ -1438,17 +1438,17 @@ ${paletteConstraints ? '    vec3 constrained; if (constrainPalette(p, c, constra
 }
 bool like(vec3 a, vec3 b) { vec3 d = abs(a - b); return max(d.r, max(d.g, d.b)) < 0.004; }
 vec3 lookAt(ivec2 p) {
-  if (u_colored > 0.5) {
+  if (${coloredResolve ? 'u_colored > 0.5' : 'false'}) {
 ${paletteConstraints ? '    vec3 constrained; if (constrainPalette(p, pixelNative(p), constrained)) { g_constrained = true; return constrained; }' : ''}
     vec3 c = pixelResolve(p); vec4 dq = texelFetch(u_crispDepth, p, 0);
     if (u_grade > 0.5 && dq.b > 0.3 + ((BAYER[(p.x & 3) + ((p.y & 3) << 2)] + 0.5) / 16.0 - 0.5) * 0.3) { for (int j = 0; j < u_out.length(); j++) { if (j >= u_n) break; if (like(c, u_out[j])) { c = u_outl[j]; break; } } }   // under a carried light
     return glassAir(c, p, dq.r, vec2(textureSize(u_crispScene, 0))); }
   return plainAt(p);
 }
-float depthAt(ivec2 p) { return u_colored > 0.5 ? texelFetch(u_crispDepth, p, 0).r : texelFetch(u_depth, p, 0).r; }
+float depthAt(ivec2 p) { return ${coloredResolve ? 'u_colored > 0.5' : 'false'} ? texelFetch(u_crispDepth, p, 0).r : texelFetch(u_depth, p, 0).r; }
 void main(){
   ivec2 p = ivec2(gl_FragCoord.xy);
-  if (u_bars > 0.0 && abs(gl_FragCoord.y / float(textureSize(u_crispScene, 0).y) - 0.5) > 0.5 - u_bars) { o = vec4(0.0, 0.0, 0.0, 1.0); return; }   /* letterbox bars, when a diorama asks for them */
+  if (u_bars > 0.0 && abs(gl_FragCoord.y / float(textureSize(${coloredResolve ? 'u_crispScene' : 'u_scene'}, 0).y) - 0.5) > 0.5 - u_bars) { o = vec4(0.0, 0.0, 0.0, 1.0); return; }   /* letterbox bars, when a diorama asks for them */
 ${water ? '  p = waterPixel(p);' : ''}
   if (u_bypass > 0.5) { o = vec4(texelFetch(u_scene, p, 0).rgb, 1.0); return; }
   vec3 c0 = lookAt(p);

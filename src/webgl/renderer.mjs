@@ -15,6 +15,7 @@ import { createLightEmitters } from './light-emitters.mjs';
 import { createNativeCelDraw } from './native-cel-pixels.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
+import { readHybridDepth } from './hybrid-depth.mjs';
 import { createRenderGraph, graphOwner, graphCapture } from './render-graph.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
@@ -37,7 +38,7 @@ import { createViewerInput } from './viewer-input.mjs';
 const zero = new Float32Array(4);
 const empty = new Float32Array(0);
 const reconstructionSource = Symbol('reconstruction source');
-const portalDepth = Symbol('portal depth');
+const portalDepth = Symbol('portal depth'), hybridReflection = Symbol('reflection plane');
 const portalLimit = 2;
 
 function reconstruct(toolkit, world, frame, definition) {
@@ -156,8 +157,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const dryGeometry = target(2), dryContours = target(2), plainOwner = target(), key = target(1, { integer: true });
     const wetVariants = new Map();
     let graphOwnership, normalOwner, wetGeometry, wetContours, waterTexture, packedWater, maskOwner, glassBoundary, dryGlassGeometry, wetGlassGeometry;
-    let portalSource, portalMask, portalSpriteLayer, portalProgram;
-    const portalDestinations = [], portalApertures = [];
+    let portalSpriteLayer;
+    const portalPrograms = new Map();
+    const portalTargets = { destinations: [] }, reflectedPortalTargets = { destinations: [] };
+    const portalApertures = [];
     let lastWater, lastWaterTime, uploadedWater, waterWidth = 0, waterHeight = 0;
     let waterLookSource, waterLookPlan, waterOpticalPlan, mappedWater;
     let opticsDefinition, opticsWorld, opticsPlan, opticsTime;
@@ -556,6 +559,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         gl.clearBufferfv(gl.COLOR, 1, zero);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      } else if (options.portalForeground) {
+        for (let i = 0; i < buffer.textures.length; i++) gl.clearBufferfv(gl.COLOR, i, zero);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       } else if (options.u_idx) {
         gl.disable(gl.BLEND);
         if(options.u_idx===3){
@@ -577,15 +584,17 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             u_envViewport:[width,height],u_waterViewport:[width,height] });
         } else {
           if (water) {
-            wet.background ??= program(waterBackgroundShader(wet.airPockets, wet.layered, wet.atlas));
+            const backgroundProgram = options.layeredGlass
+              ? (wet.glassBackground ??= program(waterBackgroundShader(wet.airPockets, wet.layered, wet.atlas, false, true)))
+              : (wet.background ??= program(waterBackgroundShader(wet.airPockets, wet.layered, wet.atlas)));
             gl.disable(gl.BLEND);
-            fullscreen(wet.background, buffer.framebuffer, width, height, { ...water,
+            fullscreen(backgroundProgram, buffer.framebuffer, width, height, { ...water,
               u_waterViewport: [width, height], u_waterBackground: options.background.slice(0, 3) });
           } else {
             gl.clearBufferfv(gl.COLOR, 0, options.background);
             gl.clearBufferfv(gl.COLOR, 1, [1, 0, 0, 1]);
           }
-          if (options.layeredGlass) {
+          if (options.layeredGlass && !water) {
             const at = buffer.textures.length-2;
             gl.clearBufferfv(gl.COLOR,at,options.background);
             gl.clearBufferfv(gl.COLOR,at+1,[1,1,1,1]);
@@ -608,6 +617,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
         gl.clearBufferfv(gl.DEPTH,0,[1]);gl.disable(gl.BLEND);
         if (weightsOnly) gl.colorMask(false,false,false,false);
+        const surfaceFrame = { ...options.surfaceFrame, water, wet, width, height,
+          glassLayers: !!options.layeredGlass };
         if (surfaces) for (const [i, atlas] of (Array.isArray(surfaces) ? surfaces : [surfaces]).entries()) {
           if (!atlas) continue;
           let surface;
@@ -617,7 +628,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             surface=brickPipelines.get(atlas.sceneMeshId);
           } else surface=surfacePipelines[i] ??= createSurfacePipeline(gl,surfaceOptions);
           if (atlas.sceneMeshId) gl.depthFunc(gl.LESS);
-          surface.draw(atlas, { ...options.surfaceFrame, water, wet, width, height,
+          surface.draw(atlas, { ...surfaceFrame,
             samplingScale: options.u_materialGridScale ?? 1,
             geometryCode: options.surfaceFrame?.meshCodes?.get(atlas.sceneMeshId),
             partGrid: options.spriteGrid });
@@ -627,20 +638,20 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           gl.depthFunc(gl.LESS);
           for (const [i, atlas] of previews.entries()) if (atlas) {
             previewPipelines[i] ??= createSurfacePipeline(gl, surfaceOptions);
-            previewPipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
+            previewPipelines[i].draw(atlas, { ...surfaceFrame, samplingScale: options.u_materialGridScale ?? 1 });
           }
           gl.depthFunc(gl.LEQUAL);
         }
         if(spriteRows?.length){
           spriteReconstructionPipeline ??= createSpriteReconstructionPipeline(gl, spriteLOD, cutawayAPI?.glsl);
           spriteReconstructionPipeline.draw(spriteRows, {
-            ...options.surfaceFrame, water, wet, width, height, artScale:options.spriteGrid??[1,1]
+            ...surfaceFrame, artScale:options.spriteGrid??[1,1]
           });
         }
-        if(options.surfaceFrame?.lighting?.display){emitterSurfacePipeline??=createSurfacePipeline(gl,{cutaway:cutawayAPI?.glsl});emitterSurfacePipeline.draw(options.surfaceFrame.lighting.display,{...options.surfaceFrame,lighting:null,water,wet,width,height});}
+        if(options.surfaceFrame?.lighting?.display){emitterSurfacePipeline??=createSurfacePipeline(gl,{cutaway:cutawayAPI?.glsl});emitterSurfacePipeline.draw(options.surfaceFrame.lighting.display,{...surfaceFrame,lighting:null});}
         if (hasProxies) {
           if (options.u_splatPaintPass) gl.colorMask(true,true,true,true);
-          gaussianProxies.draw({ ...options.proxy, width, height, scale: options.u_materialGridScale ?? 1 },
+          gaussianProxies.draw({ ...options.proxy, width, height, wet, glassLayers: surfaceFrame.glassLayers, scale: options.u_materialGridScale ?? 1 },
             options.u_paintPass || options.u_gaussianMaterialPass ? 3 : options.u_idx || 0);
         }
         data.bind();
@@ -760,9 +771,12 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         const t = frame.time ?? world.lookSnapshot?.time ?? 0;
         const time = contract?.clock(world, frame).scene ?? t;
         source = selectReflectionWorld(source,capture.plane,time,toolkit);
-        render(source,{...frame,instances,order:undefined,changedRows:undefined,water:false,reflections:false,
-          raw:frame.raw??false,outline:false,dither:0,damp:false,edges:false,clean:false,tone:false},
-          width,height,buffer.framebuffer,capture.camera,capture.equation,undefined,true,trailStart);
+        const reflectedFrame = {...frame, instances, order: undefined, changedRows: undefined,
+          water: false, reflections: false, raw: frame.raw ?? false, outline: false, dither: 0,
+          damp: false, edges: false, clean: false, tone: false, fade: 0, [graphOwner]: undefined,
+          [hybridReflection]: capture.plane.id };
+        present(source, reflectedFrame, width, height, buffer.framebuffer, capture.camera,
+          capture.equation, 0, true, trailStart);
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER,buffer.framebuffer);
         textureUnit(23,reflectionAtlas);
         const x = (capture.slot % 2) * plan.width, y = Math.floor(capture.slot / 2) * plan.height;
@@ -928,7 +942,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const highlightPlan = highlightDefinition && highlightAPI?.prepare(highlightDefinition, {
         scenePalette: world.pal, paletteRoles: world.paletteRoles
       });
-      const packedDepth = Boolean(foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || finishShotArt);
+      const hybridDepthCapture = typeof frame.hybridDepthFrame === 'function';
+      const packedDepth = Boolean(foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || hybridDepthCapture || finishShotArt);
       const owner = packedDepth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
       const sourceWater = frame.water !== false && world.water?.count ? world.water : null;
       const pixel = toolkit.KIT?.pixel;
@@ -973,7 +988,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         wetContours ??= target(3);
       }
       let layeredGlass = false;
-      if (coverage && (world.refract ?? 6)>0 && plane===zero && !cover &&
+      if (coverage && (world.refract ?? 6)>0 &&
           maxBuffers >= (waterScene ? 5 : 4)) {
         if (world!==glassWorld || world.data!==glassData || frame.changedRows?.length!==0) {
           const indices=[];
@@ -1106,7 +1121,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const water = waterUniforms(waterScene, camera, motion?.water ?? time, plane, captures, width, height,
         frame.reflectionDetail!==false);
       if (water) water.u_waterWindGain = (windResponse?.water ?? 0) * Math.hypot(...flex('water'));
-      const env = environment.prepare(world,frame,camera,t,width,height,reflectionCapture);
+      const env = environment.prepare(world,frame,camera,t,width,height,reflectionCapture,plane);
       if (env || lastEnvironment) historyValid = false;
       lastEnvironment = !!env;
       const wet = water && wetVariant(water,!!env?.media);
@@ -1374,7 +1389,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if(layeredGlass){
         textureUnit(13,null);
         const indices = selection ? glassIndices.filter(i => selection.keep[i]) : glassIndices;
-        drawGeometry(shader,glassBoundary,width,height,{u_idx:3,u_snap:1,u_hard:0,tangent,indices,surfaceFrame});
+        drawGeometry(shader, glassBoundary, width, height, { u_idx: 3, u_snap: 1, u_hard: 0, tangent,
+          indices, surfaceFrame: { ...surfaceFrame, lighting: undefined } });
         textureUnit(13,glassBoundary.textures[0]);
       }
       drawGeometry(shader, geometry, rw, rh, { u_idx: 0, u_snap: +(!raw && !colored), u_hard: 0,
@@ -1427,10 +1443,22 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (ownsPixels)
         drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
-      if (cover)
-        drawGeometry(shader, cover.buffer, width, height,
-          { u_idx: 2, u_snap: +(!raw && !colored), u_hard: 0, u_portalCoverPlane: cover.plane, tangent, proxy:proxy && {...proxy,clip:cover.plane},
-            surfaces, scaleSurfaces, spriteRows, surfaceFrame: { ...surfaceFrame, index: true, portalCover: true, clip: cover.plane } });
+      if (hybridDepthCapture) {
+        const depth = readHybridDepth(gl, owner.framebuffer, width, height, camera.depthRange);
+        const depthInPortal = frame[portalDepth] ?? 0, reflection = frame[hybridReflection];
+        frame.hybridDepthFrame({ view: depthInPortal ? 'portal' : reflection ? 'reflection' : 'camera',
+          reflection, portalDepth: depthInPortal, width, height, depth });
+      }
+      if (cover) {
+        cover.environment = env;
+        const foreground = { u_snap: +(!raw && !colored), u_hard: 0,
+          u_portalCoverPlane: cover.plane, tangent, proxy:proxy && {...proxy,clip:cover.plane},
+          surfaces, scaleSurfaces, spriteRows, surfaceFrame: { ...surfaceFrame, clip: cover.plane } };
+        drawGeometry(shader, cover.buffer, width, height, { ...foreground, u_idx: 2,
+          surfaceFrame: { ...foreground.surfaceFrame, index: true, portalCover: true } });
+        drawGeometry(shader, cover.foreground, width, height, { ...foreground, u_idx: 0, portalForeground: true },
+          water, wet, env);
+      }
       if (vote) {
         drawGeometry(shader, vote.samples, width * 2, height * 2, { u_snap: 0, u_hard: 0,
           u_coverageVotePass: true, u_materialGridScale: 2, tangent, surfaces, scaleSurfaces, spriteRows,
@@ -1501,11 +1529,13 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         const mode = (wet ? 1+Number(wet.airPockets)+2*Number(wet.layered)+4*Number(wet.atlas) : 0) +
           16*Number(masked) + 32*Number(layeredGlass) + 64*Number(styledPattern) + 128*Number(!!constraints) +
           256*Number(!!env?.media) + 512*Number(relitPattern)+1024*Number(!!env?.lit)+2048*Number(!!facingPattern) +
-          4096*Number(protectResolve);
+          4096*Number(protectResolve) + 8192*Number(patterned) + 16384*Number(colored) +
+          32768*Number(paintOnPatterns);
         if (!cache.has(mode)) cache.set(mode,program(pixelSources({
           water:!!wet,airPockets:wet?.airPockets,layered:wet?.layered,atlas:wet?.atlas,
           paletteConstraints:!!constraints && !coverage,masked,contributions:coverage,layeredGlass,materialStyles:styledPattern, facingColors:facingPattern && facingAPI,
-          environment:!!env?.media,emitterFog:!!env?.lit,relighting:relitPattern,protectGaps:protectResolve
+          environment:!!env?.media,emitterFog:!!env?.lit,relighting:relitPattern,protectGaps:protectResolve,
+          patternedResolve:patterned,coloredResolve:colored,paintResolve:paintOnPatterns
         }).POST_FS));
         resolve = cache.get(mode);
         if (constraints && !coverage) {
@@ -1693,29 +1723,33 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       slot.mask = mask;
     }
 
-    function present(world, frame, width, height, output, camera, entryPlane = zero, depth = 0) {
+    function present(world, frame, width, height, output, camera, entryPlane = zero, depth = 0,
+      reflection = false, trailStart) {
       const portal = depth < portalLimit ? frame.portal : undefined, fade = depth === 0 ? frame.fade ?? 0 : 0;
-      if (!portal && !fade) return render(world, frame, width, height, output, camera, entryPlane);
+      if (!portal && !fade) return render(world, frame, width, height, output, camera, entryPlane, undefined, reflection, trailStart);
       camera ??= makeCamera(world, frame, width, height);
       const opening = portal?.opening;
       const front = opening && planeInView(anchorPlane(opening.from), camera);
       const visible = front && (camera.ortho ? front[2] > 1e-7 : front[3] > 1e-6);
-      if (!visible && !fade) return render(world, frame, width, height, output, camera, entryPlane);
+      if (!visible && !fade) return render(world, frame, width, height, output, camera, entryPlane, undefined, reflection, trailStart);
       if (width > maxSize || height > maxSize || width > viewportLimit[0] || height > viewportLimit[1])
         throw new RangeError('Ink Studio frame exceeds the WebGL viewport or texture size limit');
       if (!output) {
         if (gl.canvas.width !== width) gl.canvas.width = width;
         if (gl.canvas.height !== height) gl.canvas.height = height;
       }
-      portalSource ??= target();
-      portalSource.resize(width, height);
+      const buffers = reflection ? reflectedPortalTargets : portalTargets;
+      const sourceBuffer = buffers.source ??= target();
+      sourceBuffer.resize(width, height);
       let destinationBuffer;
       if (visible) {
-        destinationBuffer = portalDestinations[depth] ??= target();
+        destinationBuffer = buffers.destinations[depth] ??= target();
         destinationBuffer.resize(width, height);
-        portalMask ??= target();
-        portalMask.resize(width, height);
-        const nextCamera = withCameraPose(camera, opening.camera(cameraPose(camera)));
+        buffers.mask ??= target();
+        buffers.foreground ??= target(2);
+        buffers.mask.resize(width, height);
+        buffers.foreground.resize(width, height);
+        const nextCamera = withCameraPose(camera, opening.camera(cameraPose(camera)), reflection);
         const { raw, outline, dither, scale, clean, lineClean, colored, tone, edges, water, time, skyTime, cameraTime,
           stepAnimation, artDirection, renderStages, strictContract, environment, colorClusters, boundaryCels,
           stableTransparency, resetTransparency, stableDetail, passQuality, silhouetteProtection, scalePreviews } = frame;
@@ -1723,22 +1757,29 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         const destination = reconstructFrame(portal.destination, { raw, outline, dither, scale, clean, lineClean, colored, tone,
           edges, water, time, skyTime, cameraTime, stepAnimation, artDirection, renderStages, strictContract,
           environment, colorClusters, boundaryCels, stableTransparency, resetTransparency, stableDetail, passQuality,
-          silhouetteProtection, scalePreviews, ...portal.destinationFrame, damp: false, [portalDepth]: depth + 1 }, expand);
+          silhouetteProtection, scalePreviews, atmosphere: frame.atmosphere, coverageAware: frame.coverageAware,
+          reflections: frame.reflections, ...portal.destinationFrame,
+          ...(reflection && { water: false, reflections: false, [hybridReflection]: frame[hybridReflection] }),
+          hybridDepthFrame: frame.hybridDepthFrame, damp: false, [portalDepth]: depth + 1 }, expand);
         // Resolve the deeper view before reusing the source and coverage targets.
         present(destination.world, destination.frame, width, height, destinationBuffer.framebuffer,
-          nextCamera, anchorPlane(opening.to), depth + 1);
+          nextCamera, anchorPlane(opening.to), depth + 1, reflection);
       }
+      const cover = visible ? { buffer: buffers.mask, foreground: buffers.foreground, plane: front } : undefined;
       const spriteCover = render(world, visible ? { ...frame, damp: false } : frame, width, height,
-        portalSource.framebuffer, camera, entryPlane, visible ? { buffer: portalMask, plane: front } : undefined);
-      portalProgram ??= program(portalComposite);
-      const source = portalSource.textures[0], mask = visible ? opening.mask : undefined;
+        sourceBuffer.framebuffer, camera, entryPlane, cover, reflection, trailStart);
+      const env = cover?.environment, key = +!!env?.media + 2 * !!env?.lit;
+      if (!portalPrograms.has(key)) portalPrograms.set(key, program(portalComposite(env?.media, env?.lit)));
+      const portalProgram = portalPrograms.get(key);
+      const source = sourceBuffer.textures[0], mask = visible ? opening.mask : undefined;
       textureUnit(0, source);
       textureUnit(1, destinationBuffer?.textures[0] ?? source);
-      textureUnit(2, visible ? portalMask.textures[0] : source);
+      textureUnit(2, visible ? buffers.mask.textures[0] : source);
+      textureUnit(5, visible ? buffers.foreground.textures[0] : source);
       textureUnit(3, spriteCover || source);
       bindPortalAperture(mask, depth, source);
-      fullscreen(portalProgram, output, width, height, { u_source: 0, u_destination: 1,
-        u_cover: 2, u_spriteCover: 3, u_hasSpriteCover: +!!spriteCover,
+      fullscreen(portalProgram, output, width, height, { ...env?.uniforms, u_source: 0, u_destination: 1,
+        u_cover: 2, u_foreground: 5, u_spriteCover: 3, u_hasSpriteCover: +!!spriteCover,
         u_aperture: 4, u_painted: +!!mask, u_entryPlane: entryPlane,
         u_opening: visible ? (opening.shape === 'ellipse' ? 2 : 1) : 0, u_size: [width, height], u_fade: fade,
         ...(visible ? { u_origin: opening.from.origin, u_right: opening.from.right, u_up: opening.from.up,

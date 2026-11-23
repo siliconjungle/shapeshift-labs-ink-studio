@@ -1,8 +1,10 @@
+import { environmentMediaSource } from './environment-shaders.mjs';
+
 // Each side retains its own palette and lighting. Front-side fragments
 // mark the source coverage before compositing the world-space aperture.
-export const portalComposite = `#version 300 es
+export const portalComposite = (media, lit) => `#version 300 es
 precision highp float;
-uniform sampler2D u_source, u_destination, u_cover, u_spriteCover;
+uniform sampler2D u_source, u_destination, u_cover, u_spriteCover, u_foreground;
 uniform sampler2D u_aperture;
 uniform vec3 u_origin, u_right, u_up, u_normal, u_eye;
 uniform vec4 u_entryPlane;
@@ -12,7 +14,8 @@ uniform vec2 u_half, u_size;
 uniform int u_opening, u_hasSpriteCover, u_painted;
 uniform float u_fade, u_far;
 out vec4 o;
-bool throughOpening() {
+${media ? environmentMediaSource(lit) : ''}
+bool throughOpening(out float axialDepth) {
   vec2 p = (gl_FragCoord.xy / u_size * 2.0 - 1.0) * u_settings.xy;
   bool ortho = u_settings.z > 0.5;
   mat3 world = transpose(mat3(u_portalView));
@@ -22,6 +25,7 @@ bool throughOpening() {
   if (towards >= -1e-7) return false;
   float t = dot(u_origin - eye, u_normal) / towards;
   if (t <= 0.0 || t >= u_far) return false;
+  axialDepth = t;
   vec3 at = eye + ray * t;
   if (dot(u_entryPlane, vec4(at, 1.0)) < 0.0) return false;
   vec3 relative = at - u_origin;
@@ -39,7 +43,13 @@ bool throughOpening() {
 }
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
-  vec3 color = u_opening != 0 && throughOpening() ? texelFetch(u_destination, p, 0).rgb :
-    texelFetch(u_source, p, 0).rgb;
+  vec3 color = texelFetch(u_source, p, 0).rgb;
+  float axialDepth;
+  if (u_opening != 0 && throughOpening(axialDepth)) {
+    vec4 foreground = texelFetch(u_foreground, p, 0);
+    vec3 destination = texelFetch(u_destination, p, 0).rgb;
+    ${media ? 'destination = envMedia(destination, gl_FragCoord.xy, u_size, axialDepth);' : ''}
+    color = foreground.rgb + destination * (1.0 - foreground.a);
+  }
   o = vec4(color * (1.0 - u_fade), 1.0);
 }`;

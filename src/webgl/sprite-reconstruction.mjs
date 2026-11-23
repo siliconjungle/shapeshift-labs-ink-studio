@@ -1,6 +1,7 @@
 import { createResources } from './resources.mjs';
 import { environmentMediaSource } from './environment-shaders.mjs';
 import { waterGLSL } from './water-optics.mjs';
+import { glassSurfaceOutputs } from './hybrid-depth.mjs';
 
 const cacheLimit = 32 * 1024 * 1024;
 const unit = 29;
@@ -36,8 +37,8 @@ export function createSpriteReconstructionPipeline(gl, api, cutaway) {
     bytes += image.values.byteLength;
   }
 
-  function program(wet, section, env) {
-    const key = [!!wet, wet?.airPockets, wet?.layered, wet?.atlas, !!section, !!env?.media, !!env?.lit].join('/');
+  function program(wet, section, env, glassLayers) {
+    const key = [!!wet, wet?.airPockets, wet?.layered, wet?.atlas, !!section, !!env?.media, !!env?.lit, glassLayers].join('/');
     if (programs.has(key)) return programs.get(key);
     const shader = resources.program(
       `#version 300 es
@@ -73,7 +74,8 @@ in vec2 v_texel;
 in vec3 v_world;
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
-layout(location=2) out vec4 water;
+${glassLayers && !wet ? 'vec4 water;' : 'layout(location=2) out vec4 water;'}
+${glassLayers ? glassSurfaceOutputs(wet) : ''}
 void main(){
   vec2 pixel=gl_FragCoord.xy*u_artScale;
   if(spriteRank(pixel,u_phase)<u_step)discard;
@@ -110,6 +112,7 @@ void main(){
   color=u_index?vec4(float(u_portalCover)):vec4(rgb,1);
   depth=vec4(d,0,0,1);
   water=vec4(mark,1);
+  ${glassLayers ? 'splitOpaqueSurface(color,z);' : ''}
   if(u_index&&u_graphDepth){
     float packedDepth=round(d*16777215.0);
     water=vec4(mod(packedDepth,256.0),mod(floor(packedDepth/256.0),256.0),floor(packedDepth/65536.0),255.0)/255.0;
@@ -140,11 +143,12 @@ void main(){
         section,
         index,
         graphDepth,
+        glassLayers,
         portalCover,
         arrivalPlane,
         clip
       } = frame;
-      const shader = program(wet, section, environment);
+      const shader = program(wet, section, environment, glassLayers);
       gl.useProgram(shader.p);
       gl.bindVertexArray(vao);
       gl.activeTexture(gl.TEXTURE0 + unit);
@@ -162,6 +166,7 @@ void main(){
         u_fog: fog,
         u_surfaceViewport: [width, height],
         u_index: !!index,
+        u_glassBoundary: 13,
         u_graphDepth: !!graphDepth,
         u_portalCover: !!portalCover,
         u_arrivalPlane: arrivalPlane,
