@@ -39,14 +39,15 @@ function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
 
 const {staticSources,occludes}=AreaLights;
 
-function createLighting(lights, world, data, alpha, { spots = [], shadow, cutoutShadow, shot } = {}) {
+function createLighting(lights, world, data, alpha, { spots = [], shadow, cutoutShadow, shot, art, spill = [] } = {}) {
   const active = lights.filter(light=>light.intensity>0).map(light=>({
     ...light, extent:Math.hypot(...light.half), tint:linear(light.rgb)
   }));
   const projectors = spots.map(light => ({ ...light, tint:linear(light.rgb) }));
-  const rig = ShotLighting.bind(shot, world, data, alpha);
-  if (!active.length && !projectors.length && !rig) return null;
-  const sources = active.some(light=>light.shadows) || (!shadow && spots.some(light=>light.castsShadow))
+  const spillLights=spill.filter(light=>light.intensity>0);
+  const rig = ShotLighting.bind(shot, world, data, alpha, art);
+  if (!active.length && !spillLights.length && !projectors.length && !rig) return null;
+  const sources = active.some(light=>light.shadows) || spillLights.some(light=>light.shadows) || (!shadow && spots.some(light=>light.castsShadow))
     ? staticSources(world,data,alpha) : [];
   const areaShadow = sources.length || cutoutShadow ? (origin, direction, stop) =>
     cutoutShadow?.(origin, direction, stop) || occludes(sources, origin, direction, stop) : null;
@@ -54,12 +55,20 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
 
   function evaluate(point, normal, row, biasNormal) {
     const rgb=[0,0,0];
-    AreaLights.evaluate(active,point,normal,rgb,{shadow:areaShadow,biasNormal});
+    const shadeNormal=art?.normal?.(row,normal) ?? normal, bias=biasNormal??normal;
+    AreaLights.evaluate(active,point,shadeNormal,rgb,{shadow:areaShadow,biasNormal:bias});
+    if(spillLights.length){
+      const emitted=[0,0,0];
+      AreaLights.evaluate(spillLights,point,shadeNormal,emitted,{shadow:areaShadow,biasNormal:bias,
+        contribution:art?.spill && ((light,at)=>art.spill(light,row,at))});
+      const graded=art?.curves.emission?.(emitted) ?? emitted;
+      for(let c=0;c<3;c++)rgb[c]+=graded[c];
+    }
     for (const light of projectors) {
       const offset = light.at.map((value,k) => value-point[k]), distance = Math.hypot(...offset);
       if (distance <= spotBias || distance >= light.radius) continue;
       const direction = offset.map(value => value/distance);
-      const receive = dot(normal,direction);
+      const receive = dot(shadeNormal,direction);
       if (receive <= 0) continue;
       const weight = spotWeight(light,direction);
       if (!weight) continue;
@@ -78,7 +87,7 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     }
     if (!rig) return rgb.map(n => 1 + n);
     const additional = [0, 0, 0];
-    const retention = rig.sample(row, point, normal, additional);
+    const retention = rig.sample(row, point, normal, additional, bias);
     return rgb.map((n, c) => (n + additional[c] + retention) * rig.exposure);
   }
 
@@ -98,7 +107,7 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     const shaded = ShotLighting.shade(surface, light);
     return fogMix ? shaded.map((n,k)=>n+(fog[k]-n)*fogMix) : shaded;
   }
-  shade.receives = row => active.length > 0 || projectors.length > 0 || rig.receives(row);
+  shade.receives = row => active.length > 0 || spillLights.length > 0 || projectors.length > 0 || rig?.receives(row);
   return shade;
 }
 

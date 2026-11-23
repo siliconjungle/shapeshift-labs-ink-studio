@@ -18,7 +18,7 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit,probeTargets}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -56,9 +56,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const filtered = depthOnly || paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
     const projections = depthOnly ? [] : SpriteSurface.projectionPlan(layer);
     const omitLayer=omit && layer.brickField;
-    const probeMesh=probeTargets && layer.sceneMeshId;
+    const lightingMesh=lightingTargets && layer.sceneMeshId;
     const sampleCharts=capture || omitLayer || simulationLayers?.size;
-    const charts=(sampleCharts || probeMesh) && layer.surfaceCharts;
+    const charts=(sampleCharts || lightingMesh) && layer.surfaceCharts;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
@@ -76,7 +76,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const affine = style?.affine, linearUV = affine || ortho, step = (style?.vertexSnap ?? 0) * artScale;
       while(charts?.[chartIndex]?.end<=first)chartIndex++;
       const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
-      const probeTarget=probeMesh && chart && {
+      const lightingTarget=lightingMesh && chart && {
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
@@ -212,7 +212,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ...(material && {semantic:material,semanticRule:mip.chain.rule,
               semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),
             normal:mapped??normal,...(mapped&&{biasNormal:normal}),objectPosition,surface:true,
-            ...(probeTarget&&{probeTarget}),
+            ...(lightingTarget&&{lightingTarget}),
             ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
         }
       }

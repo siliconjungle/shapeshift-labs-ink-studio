@@ -1,0 +1,165 @@
+{
+  "channels": {
+    "key": {
+      "stops": [
+        [
+          0,
+          0
+        ],
+        [
+          0.06,
+          0.075
+        ],
+        [
+          0.23,
+          0.26
+        ],
+        [
+          0.48,
+          0.62
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "interpolation": "step",
+      "tint": "#ffdfbc"
+    },
+    "sky": {
+      "stops": [
+        [
+          0,
+          0
+        ],
+        [
+          0.03,
+          0.08
+        ],
+        [
+          0.26,
+          0.36
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "tint": "#8ed5ff"
+    },
+    "bounce": {
+      "stops": [
+        [
+          0,
+          0
+        ],
+        [
+          0.02,
+          0.045
+        ],
+        [
+          0.13,
+          0.36
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "tint": "#ff9d79"
+    },
+    "emission": {
+      "stops": [
+        [
+          0,
+          0
+        ],
+        [
+          0.07,
+          0.13
+        ],
+        [
+          0.35,
+          0.54
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "tint": "#ffc586"
+    },
+    "shadow": {
+      "stops": [
+        [
+          0,
+          0.08
+        ],
+        [
+          0.3,
+          0.24
+        ],
+        [
+          0.6,
+          0.74
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "interpolation": "step"
+    }
+  },
+  "shadeNormals": [
+    {
+      "select": {
+        "object": "east-insulator"
+      },
+      "normal": [
+        -0.31,
+        0.72,
+        0.61
+      ],
+      "strength": 0.42
+    }
+  ],
+  "shadowBands": [
+    {
+      "select": {
+        "material": "ceramic"
+      },
+      "bias": 0.1,
+      "steps": 4
+    }
+  ],
+  "spill": [
+    {
+      "id": "work-lamp",
+      "receive": {
+        "include": [
+          {
+            "object": "west-floor"
+          },
+          {
+            "object": "west-insulator"
+          }
+        ]
+      },
+      "bounds": {
+        "min": [
+          -2.6,
+          -0.25,
+          -0.8
+        ],
+        "max": [
+          0,
+          1.62,
+          1.25
+        ],
+        "feather": 0.17
+      },
+      "gain": 1.25
+    }
+  ]
+}

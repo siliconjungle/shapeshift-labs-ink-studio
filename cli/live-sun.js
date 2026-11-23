@@ -1,6 +1,7 @@
 // An orthographic depth map and hemisphere lighting for the posed splats.
 const ColorSpace = require('../src/color-space.js');
 const ShadowArt = require('../src/shadow-art.js');
+const Channels = require('../src/lighting-channels.js');
 const CurveSplat = require('../src/curve-splat.js');
 const StrandShadows = require('./strand-shadows.js');
 const linear = ColorSpace.prepare('srgb', 'srgb-linear');
@@ -259,11 +260,11 @@ function shadowMap(sun, world, { x, y, z, alpha, scale }, normalAt, casts,
 }
 
 function create(sun, world, pose, normalAt, cloudShadow, exposure,
-  { shadowArt, footprint, probes, curveAt, curveProxyAt, curveData, curveStats } = {}) {
+  { shadowArt, footprint, probes, curveAt, curveProxyAt, curveData, curveStats, artLighting } = {}) {
   // Albedo exists on opted-in sculpt bakes and explicitly described builder rows.
   // Older pixel-material bakes still carry the original material ramps.
   const fill = new Int32Array(pose.alpha.length).fill(-1);
-  const normals = [];
+  const normals = [], geometryNormals=artLighting?.normal ? [] : normals;
   for (let i = 0; i < fill.length; i++) {
     if (!pose.alpha[i] || (Math.round(world.data[i*16+11]) & (32 | 64 | 256))) continue;
     const reference = world.materialAlbedo?.[i], palette = world.pix?.[i*8];
@@ -271,19 +272,22 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     if (rgb === undefined) continue;
     const normal = normalAt(i);
     if (!normal) continue;
-    normals[i] = normal;
+    geometryNormals[i] = normal;
+    normals[i] = artLighting?.normal?.(i,normal) ?? normal;
     fill[i] = rgb;
   }
   const art = ShadowArt.prepare(shadowArt ?? world.look?.shadowArt);
   const receives = ShadowArt.bind(art, world, 'receive');
   const coarse = ShadowArt.small(art, footprint);
   const shadow = shadowMap(sun,world,pose,normalAt,ShadowArt.bind(art,world,'cast'),{curveAt,curveProxyAt,curveData,curveStats});
-  const facing = new Float32Array(fill.length);
+  const facing = new Float32Array(fill.length), curves=artLighting?.curves;
+  const splitIndirect=curves?.sky || curves?.bounce;
   const indirect = (sun.sky || sun.ground) && new Float32Array(fill.length * 3);
   for (let i = 0; i < normals.length; i++) {
     const normal = normals[i];
     if (!normal) continue;
-    facing[i] = Math.max(0, dot(normal, sun.direction));
+    const cosine=dot(normal,sun.direction);
+    facing[i] = Math.max(0,artLighting?.band?.(i,cosine) ?? cosine);
     if (indirect) {
       // A cosine-weighted hemisphere sends half its light to a vertical surface.
       const upper = (1 + normal[1]) * .5;
@@ -294,8 +298,10 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
   const visibility = (i, x, y, z) => {
     if (!normals[i]) return undefined;
     const geometry = shadow && facing[i] > 0 && (!receives || receives(i)) ?
-      ShadowArt.transfer(art, shadow(x, y, z, normals[i], facing[i]), coarse) : 1;
-    return geometry && geometry * (cloudShadow?.(x,y,z) ?? 1) * (exposure?.(x,y,z) ?? 1);
+      ShadowArt.transfer(art, shadow(x, y, z, geometryNormals[i], artLighting?.normal || artLighting?.band ?
+        Math.abs(dot(geometryNormals[i],sun.direction)) : facing[i]), coarse) : 1;
+    const value=geometry && geometry * (cloudShadow?.(x,y,z) ?? 1) * (exposure?.(x,y,z) ?? 1);
+    return curves?.shadow ? curves.shadow(value) : value;
   };
   function transmissionVisibility(i, point, normal, bias) {
     const cosine = dot(normal, sun.direction);
@@ -310,7 +316,8 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     if (!shadow || receives && !receives(i)) return 1;
     const cosine = dot(normal, sun.direction);
     const toward = cosine < 0 ? normal.map(value => -value) : normal;
-    return ShadowArt.transfer(art, shadow(...point, toward, Math.abs(cosine)), coarse);
+    const value=ShadowArt.transfer(art, shadow(...point, toward, Math.abs(cosine)), coarse);
+    return curves?.shadow ? curves.shadow(value) : value;
   }
   const level = (i, x, y, z) => sun.ambient + sun.intensity * facing[i] * visibility(i, x, y, z);
   const indirectScratch = [0,0,0];
@@ -319,16 +326,28 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     const local = probes?.(i,x,y,z,normals[i]);
     if (!local && (!indirect || !(indirect[offset] || indirect[offset+1] || indirect[offset+2]))) return null;
     const mix = local?.mix ?? 0, openness = exposure?.(x,y,z) ?? 1;
+    if(splitIndirect){
+      const upper=(1+normals[i][1])*.5, fill=openness*(1-mix);
+      const sky=[0,1,2].map(c=>upper*(sun.sky?.[c]??0)*fill+(local?.sky[c]??0)*mix);
+      const bounce=[0,1,2].map(c=>(1-upper)*(sun.ground?.[c]??0)*fill+((local?.bounce[c]??0)+(local?.ground?.[c]??0))*mix);
+      const value=Channels.indirect(curves,sky,bounce);
+      for(let c=0;c<3;c++)out[c]=value[c];
+      return out;
+    }
     for (let c=0;c<3;c++) out[c] = (indirect?.[offset+c] ?? 0) * openness * (1-mix) + (local?.rgb[c] ?? 0) * mix;
     return out;
   }
   function gains(i, x, y, z, rgb) {
     rgb.fill(level(i, x, y, z));
     const bounce = indirectAt(i,x,y,z,indirectScratch);
-    if (!bounce) return rgb;
-    // Blend the local irradiance into the hemisphere fill in linear light.
+    if (!bounce && !curves?.key) return rgb;
     linear(rgb, rgb);
-    for (let c = 0; c < 3; c++) rgb[c] += bounce[c];
+    if(curves?.key){
+      const ambient=linear([sun.ambient,sun.ambient,sun.ambient])[0];
+      const key=curves.key(rgb.map(v=>Math.max(0,v-ambient)));
+      for(let c=0;c<3;c++)rgb[c]=ambient+key[c];
+    }
+    if(bounce)for (let c = 0; c < 3; c++) rgb[c] += bounce[c];
     return srgb(rgb, rgb);
   }
   function rampLevel(i, x, y, z, tint) {
@@ -342,8 +361,8 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     const n = fill[i];
     return n >= 0 ? [(n >> 16)/255, (n >> 8 & 255)/255, (n & 255)/255] : null;
   };
-  return { albedo, normal: i => normals[i], level, gains, rampLevel, visibility, transmissionVisibility, curveVisibility,
-    indirectAt, hasBounce: Boolean(indirect || probes) };
+  return { albedo, normal: i => geometryNormals[i], level, gains, rampLevel, visibility, transmissionVisibility, curveVisibility,
+    indirectAt, hasTint: Boolean(indirect || probes || curves?.key) };
 }
 
 module.exports = { prepare, create };

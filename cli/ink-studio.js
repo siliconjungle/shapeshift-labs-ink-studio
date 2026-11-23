@@ -1575,7 +1575,7 @@ const CMD = {
         'shadow art: --shadow-art file.json|off for baked JSON scenes and live sun',
         'color clusters: --color-clusters file.json|off for material-specific cluster size, grain and protection',
         'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
-        'shot lighting: --shot-lighting on|off|file.json   scope key, fill, rim and negative fill',
+        'shot lighting: --shot-lighting on|off|file.json   scope lights, channel ramps and spill',
         'reflection detail: --reflection-detail on|off   compare the authored core, streaks and distance clusters',
         'brushwork: --brushwork on|off   compare surface-aligned paint at export size',
         'shadow bands: --shadow-band-paint on|off   compare painted lighting thresholds',

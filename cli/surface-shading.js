@@ -34,6 +34,7 @@ function surfaceShading(world, options, camera) {
   }
   const { eye, forward, parallel, footprint, time, reflection, localReflection, sky, skyReflectionSource, blueNoise } = camera;
   const { STRIDE } = SurfaceLook;
+  const art=camera.artLighting;
   const liveLight = camera.sun ?? (world.surfaceLight === undefined ? undefined :
     SurfaceLook.prepareLightTrack(world.surfaceLight)(time));
   const ramps = options.raw ? null : SurfaceLook.lightRamps(options.surfaceLightRamps ?? world.look?.surfaceLightRamps);
@@ -178,7 +179,9 @@ function surfaceShading(world, options, camera) {
     normal[1] = surfaceData[offset + 2];
     normal[2] = surfaceData[offset + 3];
     sample.skyAccess = camera.exposure?.light?.(x,y,z) ?? 1;
-    sample.visibility = camera.sunVisibility?.(i, x, y, z) ?? surfaceData[offset + 4] * (camera.cloudShadow?.(x, y, z) ?? 1) * sample.skyAccess;
+    const liveVisibility=camera.sunVisibility?.(i,x,y,z);
+    const storedVisibility=surfaceData[offset+4]*(camera.cloudShadow?.(x,y,z)??1)*sample.skyAccess;
+    sample.visibility=liveVisibility??(art?.curves.shadow?.(storedVisibility)??storedVisibility);
     const tx = surfaceData[offset + 5],
       ty = surfaceData[offset + 6],
       tz = surfaceData[offset + 7];
@@ -251,6 +254,21 @@ function surfaceShading(world, options, camera) {
       sample.shadeNormalPosition = undefined;
       sample.shadeNormalLight = undefined;
     }
+    sample.shotDiffuse=prepared.diffuseLayers && (art?.normal||art?.band||art?.curves.key) ?
+      (normal,incidence,wrap,bias,visibility)=>{
+        if(art.normal){
+          const worldNormal=shadePose ? normal : sample.skyNormal?.(normal) ??
+            (angle ? [c*normal[0]+s*normal[2],normal[1],c*normal[2]-s*normal[0]] : normal);
+          const shaped=art.normal(i,worldNormal);
+          const direction=prepared.sun;
+          incidence=shaped[0]*direction[0]+shaped[1]*direction[1]+shaped[2]*direction[2];
+        }
+        const cutoff=Math.max(0,Math.min(1,(incidence+wrap)/(1+wrap)-bias));
+        const level=(art.band?.(i,cutoff)??cutoff)*visibility;
+        if(!art.curves.key)return level;
+        const rgb=art.curves.key([level,level,level]);
+        return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];
+      } : undefined;
     sample.reflection =
       planar(i) && sx !== undefined
         ? (layer, n, original, detail) => {

@@ -1,14 +1,15 @@
 /* Surface lighting roles with independent receivers and shadow casters. */
 const ShotLighting = (() => {
-  let Area, Target, Shadow, Optics, Color;
+  let Area, Target, Shadow, Optics, Color, Channels;
   try {
-    [Area, Target, Shadow, Optics, Color] = [AreaLights, TargetSelectors, ShadowArt, OpticalMaterials, ColorSpace];
+    [Area, Target, Shadow, Optics, Color, Channels] = [AreaLights, TargetSelectors, ShadowArt, OpticalMaterials, ColorSpace, LightingChannels];
   } catch {
     Area = require('./area-lights.js');
     Target = require('./target-selectors.js');
     Shadow = require('./shadow-art.js');
     Optics = require('./optical-materials.js');
     Color = require('./color-space.js');
+    Channels = require('./lighting-channels.js');
   }
   const linear = Color.prepare('srgb', 'srgb-linear'), srgb = Color.prepare('srgb-linear', 'srgb');
   const format = 'ink-studio/shot-lighting', roles = ['key', 'fill', 'rim'];
@@ -21,7 +22,7 @@ const ShotLighting = (() => {
   function prepare(definition, { time = 0 } = {}) {
     if (definition === false || definition === undefined) return null;
     if (!Number.isFinite(time) || !record(definition) ||
-        !fields(definition, ['format', 'version', ...roles, 'negativeFill', 'exposureEV', 'bounceEV']) ||
+        !fields(definition, ['format', 'version', ...roles, 'negativeFill', 'exposureEV', 'bounceEV', 'channels', 'shadeNormals', 'shadowBands', 'spill']) ||
         (definition.format !== undefined || definition.version !== undefined) &&
         (definition.format !== format || definition.version !== 1))
       throw new TypeError('Expected version 1 shot lighting settings with key, fill, rim or negativeFill');
@@ -57,8 +58,9 @@ const ShotLighting = (() => {
       const masks = Shadow.prepare({ receive });
       if (strength) negative = { at: point.slice(), radius, strength, receive: masks?.receive };
     }
-    return positive.length || negative || exposureEV || bounceEV
-      ? { positive, negative, exposure:2**exposureEV, ...(bounceEV&&{bounceScale:2**bounceEV}) } : null;
+    const art=Channels.prepare(definition);
+    return positive.length || negative || exposureEV || bounceEV || art
+      ? { positive, negative, exposure:2**exposureEV, ...(bounceEV&&{bounceScale:2**bounceEV}), ...(art&&{art}) } : null;
   }
 
   function frame(authored, override, time) {
@@ -71,7 +73,7 @@ const ShotLighting = (() => {
       (role === 'key' || definition[role].shadows === true) && definition[role].intensity !== 0);
   }
 
-  function bind(rig, world, data, alpha) {
+  function bind(rig, world, data, alpha, art=Channels.bind(rig?.art,world)) {
     if (!rig) return null;
     const { positive, negative, exposure } = rig;
     const targets = positive.some(entry => entry.receive || entry.cast) || negative?.receive ? Target.index(world) : null;
@@ -88,12 +90,17 @@ const ShotLighting = (() => {
     const shadow = casters.length ? (origin, direction, stop, light) =>
       Area.occludes(byLight.get(light) ?? [], origin, direction, stop) : undefined;
     const masks = new WeakMap();
+    const shapedKey=art?.curves.key || art?.curves.shadow || art?.band;
     function receiver(row) {
-      const target = row >= 0 ? targets?.row(row) ?? unnamed : unnamed;
-      if (!masks.has(target)) masks.set(target, {
-        lights: positive.filter(entry => Shadow.allows(entry.receive, target)).map(entry => entry.light),
-        negative: negative && Shadow.allows(negative.receive, target) ? negative : null
-      });
+      const target = row && typeof row==='object' ? row : row >= 0 ? targets?.row(row) ?? unnamed : unnamed;
+      if (!masks.has(target)) {
+        const lights=positive.filter(entry=>Shadow.allows(entry.receive,target)).map(entry=>entry.light);
+        masks.set(target,{
+          lights,
+          ...(shapedKey&&{keys:lights.filter(light=>light.id==='key'),other:lights.filter(light=>light.id!=='key')}),
+          negative:negative&&Shadow.allows(negative.receive,target)?negative:null
+        });
+      }
       return masks.get(target);
     }
     return {
@@ -102,15 +109,22 @@ const ShotLighting = (() => {
         const layer = receiver(row);
         return exposure !== 1 || layer.lights.length > 0 || !!layer.negative;
       },
-      sample(row, point, normal, out) {
-        const layer = receiver(row);
-        if (layer.lights.length) Area.evaluate(layer.lights, point, normal, out, { shadow });
+      sample(row, point, normal, out, biasNormal=normal) {
+        const layer = receiver(row), shadeNormal=art?.normal?.(row,normal) ?? normal;
+        if(layer.keys?.length){
+          Area.evaluate(layer.other,point,shadeNormal,out,{shadow,biasNormal});
+          const key=[0,0,0];
+          Area.evaluate(layer.keys,point,shadeNormal,key,{shadow,biasNormal,
+            incidence:art.band && ((light,value)=>art.band(row,value)), visibility:art.curves.shadow});
+          const graded=art.curves.key?.(key) ?? key;
+          for(let c=0;c<3;c++)out[c]+=graded[c];
+        } else if(layer.lights.length)Area.evaluate(layer.lights,point,shadeNormal,out,{shadow,biasNormal});
         else out.fill(0);
         if (!layer.negative) return 1;
         const { at: [x, y, z], strength, radius } = layer.negative;
         const dx = x - point[0], dy = y - point[1], dz = z - point[2], distance = Math.hypot(dx, dy, dz);
         if (distance >= radius) return 1;
-        const facing = distance < 1e-8 ? 1 : clamp((normal[0] * dx + normal[1] * dy + normal[2] * dz) / distance);
+        const facing = distance < 1e-8 ? 1 : clamp((shadeNormal[0] * dx + shadeNormal[1] * dy + shadeNormal[2] * dz) / distance);
         return 1 - strength * facing * (1 - distance / radius) ** 2;
       }
     };

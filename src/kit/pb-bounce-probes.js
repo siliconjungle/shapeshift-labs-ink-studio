@@ -103,11 +103,14 @@
     return Math.hypot(...point.map((n, i) => Math.max(min[i] - n, n - max[i], 0)));
   }
 
-  function update(world, settings, { time = world.lookSnapshot?.time ?? 0, emissiveTime = time, lights = [] } = {}) {
+  function update(world, settings, { time = world.lookSnapshot?.time ?? 0, emissiveTime = time, lights = [], spill = [], lighting } = {}) {
     const { dynamic, reach, probes: sites } = settings;
     const noWork = { probes: sites, updated: [], rays: 0 };
     if (!dynamic || !sites.length) return noWork;
     const live = lights.filter(light => light.intensity > 0 && dynamic.lights.includes(light.id));
+    const spillSources=new Set(spill), emission=lighting?.curves.emission;
+    const shapedSpill=emission ? live.filter(light=>spillSources.has(light)) : [];
+    const direct=shapedSpill.length ? live.filter(light=>!spillSources.has(light)) : live;
     const litSites = new Set(sites.filter(site => live.some(light =>
       Math.hypot(...light.at.map((n, i) => n - site.at[i])) < reach + light.radius + Math.hypot(...light.half))));
     if (!litSites.size && !dynamic.reflect.length && !dynamic.emit.length) return noWork;
@@ -128,10 +131,21 @@
     const lit = [0, 0, 0], albedos = new Map();
     function color({ index, point }) {
       const base = bakedColor(index), gain = posed.emission[index];
-      if (gain) return base.map(n => n * gain);
+      if (gain) {
+        const color=base.map(n=>n*gain);
+        return emission?emission(color):color;
+      }
       const normal = frames && (normals[index] ?? (normals[index] = frames(index).normal || false));
       if (!normal || !posed.opaque[index]) return base;
-      AreaLights.evaluate(live, point, normal, lit, { shadow });
+      const shaped=lighting?.normal?.(index,normal) ?? normal;
+      const contribution=lighting?.spill && ((light,at)=>spillSources.has(light)?lighting.spill(light,index,at):1);
+      AreaLights.evaluate(direct,point,shaped,lit,{shadow,biasNormal:normal,contribution});
+      if(shapedSpill.length){
+        const emitted=[0,0,0];
+        AreaLights.evaluate(shapedSpill,point,shaped,emitted,{shadow,biasNormal:normal,contribution});
+        const graded=emission(emitted);
+        for(let c=0;c<3;c++)lit[c]+=graded[c];
+      }
       if (!lit.some(Boolean)) return base;
       const packed = world.materialAlbedo?.[index];
       if (packed && !albedos.has(packed)) {
