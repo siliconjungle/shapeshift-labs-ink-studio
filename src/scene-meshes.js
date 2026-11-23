@@ -1,6 +1,7 @@
 /* Indexed, UV-mapped triangle assets for the shared cutout surface renderer. */
 const SceneMeshes = (() => {
   const Sprite = typeof SpriteSurface === 'undefined' ? require('./sprite-surface.js') : SpriteSurface;
+  const Mips = typeof SemanticTextureMipmaps === 'undefined' ? require('./semantic-texture-mipmaps.js') : SemanticTextureMipmaps;
   const state = Symbol.for('ink-studio.sceneMesh');
   const charts = new WeakMap();
   const maxTriangles = 250000;
@@ -33,8 +34,12 @@ const SceneMeshes = (() => {
     return { min, max };
   }
 
-  function materialOf({ id, color = 0xffffff, texture, normal, alphaCutoff = .5, sampling, engraving } = {}) {
-    const { width = 1, height = 1, pixels } = texture ?? {};
+  function materialOf({ id, color = 0xffffff, texture: input, normal, roughness, emission, emissionStrength,
+      alphaCutoff = .5, sampling, engraving, mipmaps } = {}) {
+    const texture=Mips.texture(input);
+    const { width = 1, height = 1, pixels, indices, palette } = texture ?? {};
+    const rules=Mips.settings(mipmaps ?? (indices||roughness!==undefined||emission ? true : undefined));
+    if(rules && sampling)throw new TypeError('Choose one texture filter per material');
     if (!name(id) || !Number.isInteger(color) || color < 0 || color > 0xffffff || !unit(alphaCutoff))
       throw new RangeError('Mesh materials need an ID, RGB24 tint, and alpha cutoff in [0,1]');
     if (![width,height].every(n => Number.isInteger(n) && n > 0 && n <= maxEdge) ||
@@ -51,7 +56,17 @@ const SceneMeshes = (() => {
       for (let c = 0; c < 3; c++) ink = ink * 256 + Math.round(pixels[at+c] * tint[c] / 255);
       return ink;
     }
-    return { id, width, height, paint, normal, sampling, engraving };
+    function chain() {
+      const pigment=new Uint8Array(width*height*4);
+      for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+        const ink=paint(x,y);
+        if(ink!==undefined)pigment.set([ink>>16,ink>>8&255,ink&255,255],(y*width+x)*4);
+      }
+      const tintColor=ink=>tint.reduce((value,n,c)=>value*256+Math.round((ink>>((2-c)*8)&255)*n/255),0);
+      return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,emission,emissionStrength},
+        {...rules,protect:rules.protect.map(tintColor)});
+    }
+    return { id, width, height, paint, normal, sampling, engraving, ...(rules&&{chain}) };
   }
 
   function atlasWidth(materials) {
@@ -96,7 +111,9 @@ const SceneMeshes = (() => {
     const atlas = Sprite.make(atlasWidth(tiles),maxEdge), regions = [];
     for (const tile of tiles) regions[tile.index] = atlas.reserve(tile.width,tile.height,tile.paint,{normal:tile.normal});
     const uvs = Float32Array.from(uvInput), source = Uint32Array.from(indices);
-    const drawIndices = new Uint32Array(source.length);
+    const drawIndices = new Uint32Array(source.length), semantic=[];
+    if(tiles.reduce((sum,tile)=>sum+(tile.chain?tile.width*tile.height:0),0)>2**20)
+      throw new RangeError('Mesh semantic mipmaps exceed the texel budget');
     let cursor = 0;
     for (const [index,faces] of grouped.entries()) {
       if (!faces.length) continue;
@@ -109,8 +126,10 @@ const SceneMeshes = (() => {
       atlas.meshRegion({ points:positions, restPoints:positions, uvs, triangles:drawIndices.subarray(offset,cursor) },
         regions[index], {id:material.id, objectId, partId, materialId:material.id, sampling:material.sampling,
           engraving:material.engraving});
+      if(material.chain)semantic.push({first:offset,end:cursor,region:regions[index],chain:material.chain()});
     }
     const layer = atlas.finish();
+    if(semantic.length)layer.semanticMipmaps=semantic;
     layer.sceneMeshId = id;
     const restBounds=bounds(positions);
     const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, layer, regions, revision:0,

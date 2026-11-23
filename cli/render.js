@@ -108,6 +108,7 @@ const RainImpacts = require('./rain-impacts.js');
 const AtlasSprites = require('../src/atlas-sprites.js');
 const AtlasRaster = require('./atlas-sprites.js');
 const SurfaceRaster = require('./sprite-surfaces.js');
+const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
 const SceneMeshes = require('../src/scene-meshes.js');
 let SplatFields, AtmosphereEmitters;
 const ReflectionProbes = require('../src/reflection-probes.js');
@@ -1065,7 +1066,7 @@ function renderFrame(world, o, preparedPalettes) {
     [spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []) : spriteSurfaces;
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
       far:camera.clipFar, clip: geometryClip,
-      paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
+      paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
       omit:useSdf && brickFrames.length ? (object,material,point)=>sdfSettings.allows({object,entity:object,material},point) : undefined });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
@@ -1933,6 +1934,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if(i<0&&sprite.surface&&!sprite.emission&&directLight?.receives(-1)&&sprite.normal)
       color=directLight(sprite.p,position,sprite.normal,color,undefined,0,undefined,sprite.biasNormal);
+    if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule);
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
       const shaded=value+(fog[c]-value)*fogMix;

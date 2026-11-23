@@ -1,5 +1,6 @@
 // Rasterize opaque, cutout atlas triangles into the existing scene compositor.
 const SpriteSurface = require('../src/sprite-surface.js');
+const Mips = require('../src/semantic-texture-mipmaps.js');
 const uvSlip=Symbol.for('ink-studio.spriteSurface.uvSlip');
 const dot = (a, b) => a.reduce((sum, n, i) => sum + n * b[i], 0);
 const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
@@ -16,7 +17,7 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -55,7 +56,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const projections = depthOnly ? [] : SpriteSurface.projectionPlan(layer);
     const omitLayer=omit && layer.brickField;
     const charts=(capture || omitLayer) && layer.surfaceCharts;
-    let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0;
+    const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
+    let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
       const first=offset/5;
       while(ranges[rangeIndex]?.end<=first)rangeIndex++;
@@ -63,6 +65,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const shifted=range&&range.first<=first;
       while(filtered?.[filterIndex]?.end<=first)filterIndex++;
       const filter = filtered?.[filterIndex]?.filter;
+      while(semantic[semanticIndex]?.end<=first)semanticIndex++;
+      const mip=semantic[semanticIndex]?.first<=first ? semantic[semanticIndex] : null;
       while(projections[projectionIndex]?.end<=first)projectionIndex++;
       const style = projections[projectionIndex]?.first <= first ? projections[projectionIndex] : undefined;
       const affine = style?.affine, linearUV = affine || ortho, step = (style?.vertexSnap ?? 0) * artScale;
@@ -75,7 +79,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
-      const axes = !depthOnly && surfaceNormals && normalPixels && textureAxes(input, uvTransform);
+      const axes = !depthOnly && surfaceNormals && (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);
       const polygon=[];
       for(let i=0;i<3;i++){
         const a=input[i],b=input[(i+1)%3];
@@ -97,7 +101,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         const bounds = shifted ? range.bounds : filter ? [filter.rect.x,filter.rect.y,
           filter.rect.x + filter.rect.width - 1,filter.rect.y + filter.rect.height - 1] : style?.bounds ?? [0,0,width-1,height-1];
         let gradients;
-        if (filter) {
+        if (filter || mip) {
           const weighted = (vx, vy, vz) => {
             const dw = [vx,vy,vz].map((n,k) => n * artScale / (area * (linearUV ? 1 : row[k].z)));
             return [dw.reduce((n,v,k) => n + v * row[k].uv[0], 0),
@@ -125,22 +129,31 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const tx = Math.max(bounds[0], Math.min(bounds[2], Math.floor(S)));
           const ty = Math.max(bounds[1], Math.min(bounds[3], Math.floor(T)));
           const texel = (ty * width + tx) * 4;
-          let ink;
-          if (filter) {
+          let ink, material;
+          if (filter || mip) {
             const [[dxU, dxV, dxZ], [dyU, dyV, dyZ]] = gradients;
-            ink = filter.sample(S, T, transform[0] * (dxU - s * dxZ) / uvSum, transform[1] * (dxV - t * dxZ) / uvSum,
-              transform[0] * (dyU - s * dyZ) / uvSum, transform[1] * (dyV - t * dyZ) / uvSum);
-            if (ink === null) continue;
+            const dx=[transform[0]*(dxU-s*dxZ)/uvSum,transform[1]*(dxV-t*dxZ)/uvSum],
+              dy=[transform[0]*(dyU-s*dyZ)/uvSum,transform[1]*(dyV-t*dyZ)/uvSum];
+            if(mip){
+              const {region,chain}=mip;
+              const span=semanticMipmaps===false?1:Math.max(Math.hypot(...dx),Math.hypot(...dy));
+              material=Mips.sample(chain,(S-region.x-.5)/Math.max(1,region.width-1),
+                (T-region.y-.5)/Math.max(1,region.height-1),span);
+              if(!material.visible)continue;
+            } else {
+              ink=filter.sample(S,T,...dx,...dy);
+              if(ink===null)continue;
+            }
           }
-          if (ink === undefined) {
+          if (ink === undefined && !material) {
             if (pixels[texel+3] < 128) continue;
             ink = (pixels[texel] << 16) | (pixels[texel + 1] << 8) | pixels[texel + 2];
           }
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
           if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
           let mapped;
-          if (bitangent && normalPixels[texel+3]>=128) {
-            const local = [0,1,2].map(k => Math.max(-127, normalPixels[texel+k]-128));
+          if (bitangent && (material || normalPixels?.[texel+3]>=128)) {
+            const local = material?.normal ?? [0,1,2].map(k => Math.max(-127, normalPixels[texel+k]-128));
             if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
               local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
           }
@@ -155,7 +168,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             uv=uv.map(n=>Math.max(0,Math.min(1,n)));
           }
           const objectPosition=chart?.rest ? [0,1,2].map(k=>value(chart.rest,3,k)) : position;
-          fragments[p]={p,z,alpha:1,color:[ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
+          fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
+            ...(material && {semantic:material,semanticRule:mip.chain.rule,
+              semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),
             normal:mapped??normal,...(mapped&&{biasNormal:normal}),objectPosition,surface:true,
             ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
         }

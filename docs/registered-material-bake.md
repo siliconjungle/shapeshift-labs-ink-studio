@@ -30,7 +30,9 @@ Each mesh has a directory with these outputs:
 The GLB embeds the same pigment, normal, metallic-roughness and emission PNG
 bytes. `material-bake.json` records UV and geometry hashes, texture hashes,
 dimensions, padding, emissive strength, and paint coverage by camera. Mesh
-indices follow export order, including attachments.
+indices follow export order, including attachments. Use
+[semantic mipmaps](semantic-texture-mipmaps.md) to filter these maps on a
+native scene mesh.
 
 Author masks on a model material with `masks: { gasket: 1, label: .4 }`. A
 procedural `sampleSurface(point, normal, faceIndex)` can return linear

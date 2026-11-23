@@ -979,6 +979,7 @@ const view = extra =>
       brickMeshes: onOffOption('brick-meshes'),
       splatDepthProxies: onOffOption('splat-depth-proxies'),
       surfaceDecals: onOffOption('surface-decals'),
+      semanticMipmaps: onOffOption('semantic-mipmaps'),
       splatProxyTolerance: num('splat-proxy-tolerance'),
       spriteReconstruction: opt['sprite-reconstruction'],
       aerialPerspective: aerialOption(),
@@ -1596,7 +1597,7 @@ const CMD = {
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'shared rendering: --strict-contract [on|off] --step-animation [on|off]',
         'effect palette options: --effect-palettes on|off|file.json',
-        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|off|file.json --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
+        'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|off|file.json --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
       ].join('\n')
     );
   },

@@ -10,6 +10,55 @@ const eyeFromView = view => [0, 1, 2].map(
   k => -(view[k * 4] * view[12] + view[k * 4 + 1] * view[13] + view[k * 4 + 2] * view[14])
 );
 
+// The three layers are pigment/coverage, tangent normal/roughness, and emission.
+const semanticSource=`
+uniform highp sampler2DArray u_semanticAtlas;
+uniform bool u_semanticOn,u_semanticLevels,u_semanticNormals,u_semanticOrtho;
+uniform int u_semanticMax;
+uniform vec4 u_semanticRect;
+uniform vec3 u_semanticLight,u_semanticEye,u_semanticBack;
+uniform float u_semanticScale,u_semanticStrength,u_semanticSpecular;
+vec3 semanticLinear(vec3 c){
+  return mix(pow((c+.055)/1.055,vec3(2.4)),c/12.92,lessThanEqual(c,vec3(.04045)));
+}
+vec3 semanticDisplay(vec3 c){
+  c=clamp(c,0.,1.);
+  return mix(1.055*pow(c,vec3(1./2.4))-.055,12.92*c,lessThanEqual(c,vec3(.0031308)));
+}
+ivec2 semanticTexel(vec2 uv,int level){
+  ivec2 size=textureSize(u_semanticAtlas,level).xy;
+  return clamp(ivec2(floor(.5+uv*vec2(size-1))),ivec2(0),size-1);
+}
+vec4 semanticRead(ivec2 xy,int channel,int level){
+  return texelFetch(u_semanticAtlas,ivec3(xy,channel),level);
+}
+void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out vec3 emission){
+  int ranks[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+  float lod=u_semanticLevels?clamp(log2(max(1.,span)),0.,float(u_semanticMax)):0.;
+  int lo=int(floor(lod)),hi=int(ceil(lod));
+  ivec2 a=semanticTexel(uv,lo),b=semanticTexel(uv,hi);
+  vec4 first=semanticRead(a,0,lo),second=semanticRead(b,0,hi);
+  bool chooseB=fract(lod)>=.5;
+  ivec2 cell=chooseB?b:a;
+  pigment=chooseB?second:first;
+  pigment.a=step((float(ranks[(cell.y%4)*4+cell.x%4])+.5)/16.,pigment.a);
+  vec2 covered=vec2((1.-fract(lod))*first.a,fract(lod)*second.a);
+  covered/=max(1e-8,covered.x+covered.y);
+  detail=semanticRead(a,1,lo)*covered.x+semanticRead(b,1,hi)*covered.y;
+  emission=(semanticLinear(semanticRead(a,2,lo).rgb)*covered.x+
+    semanticLinear(semanticRead(b,2,hi).rgb)*covered.y)*u_semanticStrength;
+}
+vec3 semanticFinish(vec3 pigment,vec3 normal,float roughness,vec3 emission,vec3 world){
+  vec3 view=u_semanticOrtho?u_semanticBack:normalize(u_semanticEye-world);
+  vec3 h=u_semanticLight+view;
+  h*=inversesqrt(max(dot(h,h),1e-18));
+  float gloss=1.-roughness;
+  float shine=dot(normal,view)>0.&&dot(normal,u_semanticLight)>0.?
+    u_semanticSpecular*gloss*pow(max(0.,dot(normal,h)),4.+96.*gloss*gloss):0.;
+  return semanticDisplay(semanticLinear(pigment)+emission+shine);
+}
+`;
+
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
 export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD, sharedShaders, print } = {}) {
   const resources = createResources(gl);
@@ -17,9 +66,9 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving) {
+      anchors,engraving,semantic) {
       const chart = lighting && !normalMapped;
-      const marks=anchors || engraving;
+      const marks=anchors || engraving, needsFrame=normalMapped||semantic;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -33,7 +82,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving
+        glassLayers,anchors,engraving,semantic
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -88,7 +137,9 @@ ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
 ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
-${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
+${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;' : ''}
+${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
+${semantic ? semanticSource : ''}
 ${marks ? 'in vec3 v_rest;flat in vec2 v_marks;' : ''}
 ${engraving ? `uniform float u_engravingArtScale;${surfaceEngravingFragment(print)}` : ''}
 in vec2 v_texel;
@@ -100,11 +151,11 @@ layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
 ${glassLayers && !wet ? 'vec4 water;' : 'layout(location=2) out vec4 water;'}
 ${glassLayers ? glassSurfaceOutputs(wet) : ''}
-${normalMapped ? `
-vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map){
+${needsFrame ? `
+vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map,bool continuous){
   float det=du.x*dv.y-du.y*dv.x;
   if(map.a<.5||abs(det)<=1e-5*length(du)*length(dv))return normal;
-  vec3 local=max(vec3(-127),round(map.rgb*255.0)-128.0);
+  vec3 local=max(vec3(-127),(continuous?map.rgb*255.0:round(map.rgb*255.0))-128.0);
   if(dot(local,local)==0.0)return normal;
   vec3 tangent=normalize(dx*dv.y-dy*du.y)*sign(det);
   vec3 bitangent=cross(normal,tangent);
@@ -133,11 +184,21 @@ void main(){
   ${styledProjection ? 'if(u_affine){dx=dFdx(uv)*scale;dy=dFdy(uv)*scale;}' : ''}
   if(u_paletteSampling)ink=samplePalette(rawTexel,dx,dy,ink);
   ` : ''}
-  ${normalMapped ? `
+  ${semantic ? `
+  float semanticSpan=max(length(dFdx(rawTexel)),length(dFdy(rawTexel)))*u_semanticScale;
+  vec4 detail;
+  vec3 emission;
+  if(u_semanticOn){
+    vec2 coord=(rawTexel-u_semanticRect.xy-.5)/max(vec2(1),u_semanticRect.zw-1.);
+    semanticMaterial(coord,semanticSpan,ink,detail,emission);
+  }
+  ` : ''}
+  ${needsFrame ? `
   // Use the surface UV frame even when affine sampling or snapping changes the lookup.
   vec3 dpdx=dFdx(v_world),dpdy=dFdy(v_world);
   vec3 geometricNormal=normalize(cross(dpdx,dpdy));
-  if(dot(geometricNormal,u_surfaceEye-v_world)<0.0)geometricNormal=-geometricNormal;
+  vec3 normalSight=${semantic ? 'u_semanticOn&&u_semanticOrtho?u_semanticBack:u_surfaceEye-v_world' : 'u_surfaceEye-v_world'};
+  if(dot(geometricNormal,normalSight)<0.0)geometricNormal=-geometricNormal;
   vec2 scaleUV=u_uvSlip?u_uvTransform.xy:vec2(1);
   vec2 uvDx=dFdx(v_texel)*scaleUV,uvDy=dFdy(v_texel)*scaleUV;
   ` : ''}
@@ -150,12 +211,16 @@ void main(){
   float fog=u_range.z<1.0?smoothstep(u_range.z,1.0,d)*u_range.w:0.0;
   vec3 mark=vec3(0.0), rgb=ink.rgb;
   ${chart ? 'vec3 irradiance=vec3(0);for(int i=0;i<32;i++){if(i>=u_surfaceLightCount)break;irradiance+=texelFetch(u_surfaceLit,ivec3(ivec2(v_light),i),0).rgb;}rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));' : ''}
+  ${needsFrame ? `
+  vec4 map=${normalMapped ? 'u_surfaceNormals?texelFetch(u_surfaceNormalMap,ivec2(texel),0):vec4(0)' : 'vec4(0)'};
+  ${semantic?'if(u_semanticOn)map=u_semanticNormals&&u_surfaceNormals?vec4(detail.rgb,1):vec4(0);':''}
+  vec3 normal=surfaceNormal(geometricNormal,dpdx,dpdy,uvDx,uvDy,map,${semantic?'u_semanticOn':'false'});
+  ` : ''}
   ${normalMapped ? `
-  vec4 map=u_surfaceNormals?texelFetch(u_surfaceNormalMap,ivec2(texel),0):vec4(0);
-  vec3 normal=surfaceNormal(geometricNormal,dpdx,dpdy,uvDx,uvDy,map);
   vec3 irradiance=eLighting(v_world,normal,false,vec3(0),geometricNormal);
   rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));
   ` : ''}
+  ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,emission,v_world);':''}
   ${engraving ? `
   if(v_marks.y>0.0){
     vec3 restN=cross(restX,restY),liveN=cross(worldX,worldY);
@@ -494,6 +559,26 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
     }
 
+    const semanticUnit=5, semanticTextures=new Map();
+    let semanticOwner;
+    function bindSemantic(chain){
+      gl.activeTexture(gl.TEXTURE0+semanticUnit);
+      let texture=semanticTextures.get(chain);
+      if(texture){
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY,texture);
+        return;
+      }
+      texture=resources.allocate('Texture');
+      semanticTextures.set(chain,texture);
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY,texture);
+      gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.NEAREST_MIPMAP_NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MAX_LEVEL,chain.levels.length-1);
+      for(const [lod,{width,height,rgba}] of chain.levels.entries()){
+        gl.texImage3D(gl.TEXTURE_2D_ARRAY,lod,gl.RGBA8,width,height,3,0,gl.RGBA,gl.UNSIGNED_BYTE,rgba);
+        stats.textureBytes+=rgba.byteLength;
+      }
+    }
     function draw(
       atlas,
       {
@@ -515,6 +600,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         height = 1,
         paletteSampling,
         surfaceNormals = true,
+        semanticMipmaps = true, eye, back=[0,0,1], ortho,
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
@@ -522,6 +608,12 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
     ) {
       upload(atlas);
+      const semantic=atlas.semanticMipmaps;
+      if(semanticOwner!==atlas){
+        for(const texture of semanticTextures.values())resources.free(texture);
+        semanticTextures.clear();
+        semanticOwner=atlas;
+      }
       if (paletteSampling !== false && atlas.paletteSampling !== undefined && (!samplingPlan || !samplingGLSL))
         throw new TypeError('Palette-filtered surfaces need SpriteSurface.samplingPlan and samplingGLSL');
       if (atlas.projectionRanges !== undefined && !projectionPlan)
@@ -558,7 +650,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched || anchors)bindMarks(atlas,anchors,etched);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched);
+        !!anchors,!!etched,!!semantic);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -570,7 +662,10 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         ...(useSampling && { u_sampleTotals: prefixUnits[0], u_sampleAccents: prefixUnits[1], u_samplingScale: samplingScale }),
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
-        ...(normalMapped && { u_surfaceNormalMap: 24, u_surfaceNormals: surfaceNormals, u_surfaceEye: eyeFromView(view) }),
+        ...(normalMapped && {u_surfaceNormalMap:24}),
+        ...((normalMapped||semantic)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
+        ...(semantic&&{u_semanticAtlas:semanticUnit,u_semanticLevels:semanticMipmaps!==false,u_semanticScale:samplingScale,
+          u_semanticEye:eye??eyeFromView(view),u_semanticBack:back,u_semanticOrtho:!!ortho}),
         u_index: +index,
         u_historyFirst:historyFirst,
         u_filterMatte: !!coverageFilter,
@@ -587,6 +682,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         ...environment?.uniforms,
         ...lighting?.uniforms
       });
+      if(semantic)bindSemantic(semantic[0].chain);
       gl.bindVertexArray(vao);
       for(const i of [3,4]) if(etched||anchors)gl.enableVertexAttribArray(i);else gl.disableVertexAttribArray(i);
       if (lit && !normalMapped) gl.enableVertexAttribArray(2);
@@ -607,20 +703,29 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           first = stop;
         }
       }
-      let chartIndex = 0;
+      let chartIndex = 0, semanticIndex=0;
       function drawRange(first, end) {
-        if (!coverageFilter) {
+        if(!coverageFilter && !semantic){
           drawProjected(first,end);
           return;
         }
-        const charts = atlas.surfaceCharts ?? [];
-        while (first < end) {
-          while (charts[chartIndex]?.end <= first) chartIndex++;
-          const next = charts[chartIndex], chart = next?.first <= first ? next : null;
-          const stop = Math.min(end,(chart ? chart.end : next?.first) ?? end);
-          shader.set({ u_filterSoftness:coverageFilter.at(chart?.materialId) });
+        const charts=coverageFilter ? atlas.surfaceCharts??[] : [];
+        while(first<end){
+          while(charts[chartIndex]?.end<=first)chartIndex++;
+          while(semantic?.[semanticIndex]?.end<=first)semanticIndex++;
+          const next=charts[chartIndex], chart=next?.first<=first?next:null;
+          const candidate=semantic?.[semanticIndex], mip=candidate?.first<=first?candidate:null;
+          const stop=Math.min(end,(chart?chart.end:next?.first)??end,(mip?mip.end:candidate?.first)??end);
+          if(coverageFilter)shader.set({u_filterSoftness:coverageFilter.at(chart?.materialId)});
+          if(mip){
+            const {chain,region:r}=mip;
+            bindSemantic(chain);
+            shader.set({u_semanticOn:true,u_semanticRect:[r.x,r.y,r.width,r.height],u_semanticMax:chain.levels.length-1,
+              u_semanticStrength:chain.emissionStrength,u_semanticLight:chain.rule.light,
+              u_semanticSpecular:chain.rule.specular,u_semanticNormals:chain.normal});
+          } else if(semantic)shader.set({u_semanticOn:false});
           drawProjected(first,stop);
-          first = stop;
+          first=stop;
         }
       }
       if (useSampling) {

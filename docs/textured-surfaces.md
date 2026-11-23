@@ -282,7 +282,9 @@ A material supports an RGB24 `color` tint, an optional top-down RGBA8
 coverage or a cutout. `sampling` accepts the palette-preserving
 minification rule above. The resulting colors go through local scene
 emitters, fog, and the scene’s palette resolve. Use `raw: true` for the
-unquantized scene color.
+unquantized scene color. For indexed pigment, cutout coverage, and filtered
+normal, roughness, and emission maps, use
+[semantic texture mipmaps](semantic-texture-mipmaps.md).
 
 Each mesh retains its initial positions for rest-space and motion output.
 Pose it without changing index order and call `SceneMeshes.pose` again

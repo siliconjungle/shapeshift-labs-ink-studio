@@ -1482,7 +1482,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
       const surfaceFrame={depthProxy,meshCodes:spriteMask?.meshCodes,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
         fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,
-        surfaceNormals:frame.surfaceNormals,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
+        surfaceNormals:frame.surfaceNormals,semanticMipmaps:frame.semanticMipmaps,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
         sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
       if(layeredGlass){
         textureUnit(13,null);
