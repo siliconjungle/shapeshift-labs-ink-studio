@@ -50,8 +50,8 @@ function views(mesh, report, name) {
   const steel=[64,94,118], mint=[107,216,194], warm=[246,117,105];
   const panels=[
     ['Charts',summary.charts+' UV islands',colorChart],
-    ['Stretch','1× isotropic  →  8× or more',f=>ramp(mint,warm,Math.log2(f.stretch)/3)],
-    ['Texel density','0  →  '+number(maxDensity)+' texels per unit',f=>ramp(steel,mint,f.density/maxDensity)],
+    ['Stretch','1× isotropic to 8× or more',f=>ramp(mint,warm,Math.log2(f.stretch)/3)],
+    ['Texel density','0 to '+number(maxDensity)+' texels per unit',f=>ramp(steel,mint,f.density/maxDensity)],
     ['Overlaps',summary.overlapPairs+' triangle pairs intersect',f=>f.overlap?'#ef746d':'#415d71'],
     ['Padding',report.padding.required+' texels required  ·  coral marks short gutters',f=>issues.has(f.chart)?'#e78071':'#548d88'],
     ['UV edges','Cyan UV cut  ·  Pink protected  ·  Gray open',()=>grid]
