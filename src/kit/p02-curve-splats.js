@@ -1005,5 +1005,5 @@
     });
   }
 
-  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, drivers: CurvePoseDrivers, world });
+  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, drivers: CurvePoseDrivers, world });
 })(KIT);

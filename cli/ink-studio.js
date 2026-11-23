@@ -1440,6 +1440,7 @@ const CMD = {
         '  render @namespace/scene@revision --asset-registry catalog.json   render a pinned scene',
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
         '  project verify <experiment-or-story-bundle.json> [--out report.json --compare-engine]',
+        '  finite-curve-review [--out directory --chrome executable --hardware --orbit]  compare interactive GPU curves with the headless renderer',
         '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
         '  passes <id> --channels environment --px1   export sky, fog transmittance, precipitation, reflections and foreground coverage',
@@ -2751,6 +2752,13 @@ const CMD = {
   },
   retarget() {
     require('./retarget.js').run({ K: lib().KIT, build, pos, options: opt, view: view() });
+  },
+  'finite-curve-review'() {
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'finite-curve-review');
+    const report = require('./finite-curve-review.js').run(directory,{ chrome:opt.chrome,hardware:opt.hardware,orbit:opt.orbit });
+    for (const { yaw, curves, error } of report.frames)
+      console.log(yaw, curves.segments, 'visible spans, mean byte error', error.mean.toFixed(3));
+    console.log('wrote',directory);
   },
   'hybrid-depth-review'() {
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'hybrid-depth-review');

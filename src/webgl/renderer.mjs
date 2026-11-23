@@ -16,6 +16,7 @@ import { createNativeCelDraw } from './native-cel-pixels.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
 import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { readHybridDepth } from './hybrid-depth.mjs';
+import { createFiniteCurvePass, finiteCurveMode, prepareFiniteCurves } from './finite-curves.mjs';
 import { createRenderGraph, graphOwner, graphCapture } from './render-graph.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
@@ -200,7 +201,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const surfacePipelines = [], brickPipelines=new Map();
     const brickShaders={cache:new Map(),program:resources.program};
     let lastBrickLayers=[];
-    let depthMeshPass, lastDepthProxy = false;
+    let depthMeshPass, finiteCurvePass, lastDepthProxy = false;
     let emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let artPixelFinish, correctionStage;
     const clusterAPI = toolkit.KIT?.colorClusters, boundaryAPI = toolkit.KIT?.boundaryCels;
@@ -216,11 +217,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     let toneKey, tone, uploadedTone, sorted, instanceDraw, expandInstances, lastInstances;
 
     function orderFor(world, frame, camera, time, isNew, plan, width, height, scale,
-      tolerance, histories, source, rainClocks, rainWind, quality, spriteMask) {
+      tolerance, histories, source, rainClocks, rainWind, quality, spriteMask, curveRows) {
       const far = spriteMask?.hasFar ? spriteMask : null;
-      const keep = i => (!quality || quality.keep[i]) && !spriteLOD?.hidden(far?.codes[i]);
+      const keep = i => !curveRows?.[i] && (!quality || quality.keep[i]) && !spriteLOD?.hidden(far?.codes[i]);
       function submitted(indices, references) {
-        if (!quality && !far) return indices;
+        if (!quality && !far && !curveRows) return indices;
         if (!references) return indices.filter(keep);
         let count=0;
         const visible=new Int32Array(indices.length);
@@ -250,7 +251,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (canReuse && !isNew && (frame.changedRows?.length === 0 || plan && !world.count && !frame.changedRows) &&
           !frame.resetTransparency && !seeking && sorted?.tolerance === tolerance && sameValues(sorted.clock,clock) &&
           (!tolerance || sorted.histories === histories) &&
-          sorted.quality === quality && sorted.far === far && sorted.revision === plan?.orderRevision && sameValues(sorted.viewport,viewport) &&
+          sorted.quality === quality && sorted.far === far &&
+          (sorted.curveRows === curveRows || curveRows && sameValues(sorted.curveRows,curveRows)) &&
+          sorted.revision === plan?.orderRevision && sameValues(sorted.viewport,viewport) &&
           sameValues(sorted.view, camera.view) && sameValues(sorted.moving, moving) && sameValues(sorted.back, back)) {
         sorted.sceneTime = sceneTime;
         return;
@@ -265,7 +268,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const order = sort(world, camera.view, time, visible, plan?.rows, stabilize, rainClocks, rainWind);
       pipeline.setOrder(submitted(order,!!plan), !!plan);
       sorted = canReuse ? { view: camera.view, moving: Int32Array.from(moving), back: Int32Array.from(back),
-        clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality, far } : null;
+        clock, tolerance, sceneTime, source, histories, revision:plan?.orderRevision, viewport, quality, far, curveRows } : null;
     }
 
     function prepareDetail(world, budget) {
@@ -942,10 +945,13 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const highlightPlan = highlightDefinition && highlightAPI?.prepare(highlightDefinition, {
         scenePalette: world.pal, paletteRoles: world.paletteRoles
       });
+      const finiteCurves = finiteCurveMode(world,frame);
+      if (finiteCurves && !toolkit.KIT?.curveSplats?.renderKernel)
+        throw new Error('Finite curves need the Ink Studio KIT');
       const hybridDepthCapture = typeof frame.hybridDepthFrame === 'function';
       const needsPresentationDepth = Boolean(foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || finishShotArt);
-      const packedDepth = needsPresentationDepth || hybridDepthCapture;
-      const owner = packedDepth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
+      const packedDepth = needsPresentationDepth || hybridDepthCapture || finiteCurves;
+      let owner = packedDepth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
       const sourceWater = frame.water !== false && world.water?.count ? world.water : null;
       const pixel = toolkit.KIT?.pixel;
       const patterned = !raw && !!(look.pixel && world.pix && pixel?.gpu);
@@ -1028,7 +1034,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           vote.source.resize(width, height);
         }
       }
-      const colored = !raw && !portableStages && !frameTone && !patterned && !coverage && (frame.colored ?? true);
+      const colored = !raw && !finiteCurves && !portableStages && !frameTone && !patterned && !coverage && (frame.colored ?? true);
       const detail = prepareDetail(world, budget);
       const scopedCleanup = !!needsDetailFlags && !!detail?.flags;
       const protectGaps = scopedCleanup && budget.protectsGaps;
@@ -1049,7 +1055,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       geometry.resize(rw, rh);
       contours.resize(colored ? width : 1, colored ? height : 1);
       const ownsPixels = needsPresentationDepth || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
-      const drawOwnership = ownsPixels || hybridDepthCapture;
+      const drawOwnership = ownsPixels || hybridDepthCapture || finiteCurves;
       owner.resize(drawOwnership ? width : 1, drawOwnership ? height : 1);
       const captureNormals = harmonics && frame[gaussianNormalFrame];
       if (captureNormals) {
@@ -1242,7 +1248,14 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       uploadedSpriteMask=spriteMask;
       if(source.spriteReconstruction&&!reflectionCapture&&plane===zero)
         frame.spriteReconstructionFrame?.(spritePlan??{geometryRows:source.count,states:[]});
-      orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind, selection, spriteMask);
+      const withdrawal = sampleCoverage?.amount(frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0) ?? 0;
+      const curvePlan = finiteCurves && prepareFiniteCurves(toolkit.KIT,world,geometryData,camera,width,height,{
+        time, drawOrder:frame.order,
+        keep:i=>(!selection || selection.keep[i]) && !spriteLOD?.hidden(spriteMask?.codes[i]),
+        visible:sampleCoverage && (flags=>sampleCoverage.visible(flags,withdrawal))
+      });
+      orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind,
+        selection, spriteMask, curvePlan?.rows);
       if (patterned) {
         const pixelRows = diffuseRamps?.pixels ?? world.pix;
         if (isNew || materials?.world !== world || materials.values !== world.pix ||
@@ -1316,7 +1329,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         const { layers, maxSplats, maxPixels, region } = localOrder;
         const count = pipeline.count;
         let reason;
-        if (plane !== zero || cover || group || waterScene || env || layeredGlass || ownsPixels || materialPalette ||
+        if (plane !== zero || cover || group || waterScene || env || layeredGlass || ownsPixels || finiteCurves || materialPalette ||
             splatPaint || vote || portableStages || depthProxy || surfaces || preview || spriteMask || spriteRows?.length || emitterFrame?.display ||
             proxy || footprints && footprintBinding.hasPlanes || section) reason = 'composition';
         else if (count < 2) reason = 'splat-count';
@@ -1363,7 +1376,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           u_lookSites:10,u_maskTextures:14,u_maskTime:t,u_lookProjection:camera.projection,u_lookRadius:camera.radius,u_lookOrtho:+camera.ortho,
           u_pal:pal,u_n:palCount,u_grade:+Boolean(grade),u_out:grade??pal,u_toneOn:0,u_lookGrid:[width,height] }),
         u_arrivalPlane: plane, u_splatPlane: clip, ...(layeredGlass&&{u_glassBoundary:13,u_glassTolerance:tolerance}),
-        u_sampleWithdrawal: sampleCoverage?.amount(frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0) ?? 0,
+        u_sampleWithdrawal: withdrawal,
         u_born: [frame.bornAt ?? 0, growth.rate ?? 1, growth.fade ?? 0.5, growth.loop ?? 0],
         u_detailTexture: detailTexture, u_detailGeometry: detailGeometry,
         u_crisp: +!raw, u_splatCoverage: splatCoverage, u_dilate: raw ? 0.3 : 0.15, u_near: camera.clipNear,
@@ -1444,13 +1457,6 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (drawOwnership)
         drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
-      frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
-      if (hybridDepthCapture) {
-        const depth = readHybridDepth(gl, owner.framebuffer, width, height, camera.depthRange);
-        const depthInPortal = frame[portalDepth] ?? 0, reflection = frame[hybridReflection];
-        frame.hybridDepthFrame({ view: depthInPortal ? 'portal' : reflection ? 'reflection' : 'camera',
-          reflection, portalDepth: depthInPortal, width, height, depth });
-      }
       if (cover) {
         cover.environment = env;
         const foreground = { u_snap: +(!raw && !colored), u_hard: 0,
@@ -1465,6 +1471,40 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         drawGeometry(shader, vote.samples, width * 2, height * 2, { u_snap: 0, u_hard: 0,
           u_coverageVotePass: true, u_materialGridScale: 2, tangent, surfaces, scaleSurfaces, spriteRows,
           spriteGrid:[.5,.5], surfaceFrame });
+      }
+      if (curvePlan?.count) {
+        finiteCurvePass ??= createFiniteCurvePass(gl,{
+          target,table,program,maxSize,textureUnit,fullscreen,cutaway:cutawayAPI?.glsl
+        });
+        const baseOwner = owner;
+        const curveOptions = { clip, section, wet, water, env, layeredGlass,
+          glass:layeredGlass ? glassBoundary.textures[0] : undefined,
+          fog:{ color:surfaceFrame.fog,range:[fog.start ?? 1,fog.max ?? 0] },
+          proxy:depthProxy && depthMeshPass.prepare(surfaceFrame,width,height) };
+        finiteCurvePass.prepare(curvePlan);
+        finiteCurvePass.draw(curvePlan,geometry,baseOwner,camera,curveOptions);
+        if (cover) {
+          const foreground = { ...curveOptions, cover:cover.plane, layeredGlass:false, glass:undefined };
+          finiteCurvePass.draw(curvePlan,cover.buffer,baseOwner,camera,{ ...foreground, mode:'mask' });
+          finiteCurvePass.draw(curvePlan,cover.foreground,baseOwner,camera,foreground);
+        }
+        if (ownsPixels || hybridDepthCapture)
+          owner = finiteCurvePass.owner(curvePlan,baseOwner,camera,curveOptions);
+        data.bind();
+        fine.bind();
+        if (constraints && (coverage || masked)) {
+          constraintSlots.bind(9);
+          textureUnit(8,constraintRows);
+        }
+      }
+      if (curvePlan && typeof frame.curveFrame === 'function')
+        frame.curveFrame({ segments:curvePlan.count, tileReferences:curvePlan.references, peakTile:curvePlan.peakTile });
+      frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
+      if (hybridDepthCapture) {
+        const depth = readHybridDepth(gl, owner.framebuffer, width, height, camera.depthRange);
+        const depthInPortal = frame[portalDepth] ?? 0, reflection = frame[hybridReflection];
+        frame.hybridDepthFrame({ view: depthInPortal ? 'portal' : reflection ? 'reflection' : 'camera',
+          reflection, portalDepth: depthInPortal, width, height, depth });
       }
       gl.disable(gl.BLEND);
       textureUnit(1, geometry.textures[0]);
@@ -1762,6 +1802,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           silhouetteProtection, scalePreviews, atmosphere: frame.atmosphere, coverageAware: frame.coverageAware,
           reflections: frame.reflections, ...portal.destinationFrame,
           ...(reflection && { water: false, reflections: false, [hybridReflection]: frame[hybridReflection] }),
+          curveMode: portal.destinationFrame?.curveMode ?? frame.curveMode,
+          curveSplats: portal.destinationFrame?.curveSplats ?? frame.curveSplats,
           hybridDepthFrame: frame.hybridDepthFrame, damp: false, [portalDepth]: depth + 1 }, expand);
         // Resolve the deeper view before reusing the source and coverage targets.
         present(destination.world, destination.frame, width, height, destinationBuffer.framebuffer,

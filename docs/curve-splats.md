@@ -3,7 +3,8 @@
 Ink can render a 3D path as connected splat segments. The headless renderer
 integrates density along each finite segment and composites its colour at the
 segment's local depth. Splitting a straight span preserves its density through
-the joint. Ordinary native splats can share the frame and occlude the curves.
+the joint. Ordinary native splats can share the frame and occlude the curves. [The WebGL 2 preview](gpu-finite-curves.md)
+uses the same authored shapes and has a matched reference review.
 
 ## Author a source
 
