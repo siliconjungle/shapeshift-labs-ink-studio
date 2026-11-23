@@ -5,15 +5,16 @@
   const xyz = p => Array.isArray(p) && p.length === 3 && Array.from(p).every(finite);
   const screen = Object.freeze([-1, 1, -1, 1]);
 
-  function camera({ eye, right, up, back, tangent, aspect, ortho = false, near = .4, far = 400, observer = eye } = {}) {
+  function camera({ eye, right, up, back, tangent, aspect, ortho = false, near = .4, far = 400, observer = eye, pixelHeight } = {}) {
     if (![eye, right, up, back, observer].every(xyz) || ![tangent, aspect, near, far].every(finite) ||
+        pixelHeight !== undefined && (!Number.isSafeInteger(pixelHeight) || pixelHeight < 1) ||
         tangent <= 0 || aspect <= 0 || near <= 0 || far <= near || typeof ortho !== 'boolean')
       throw new TypeError('Streaming needs a finite camera pose, projection and depth range');
     if ([right, up, back].some(axis => Math.abs(len(axis) - 1) > 1e-4) ||
         Math.max(Math.abs(dot(right, up)), Math.abs(dot(right, back)), Math.abs(dot(up, back))) > 1e-4)
       throw new RangeError('Streaming camera axes must form an orthonormal basis');
     return Object.freeze({ ...Object.fromEntries(Object.entries({ eye, right, up, back, observer })
-      .map(([key, value]) => [key, Object.freeze(value.slice())])), tangent, aspect, ortho, near, far });
+      .map(([key, value]) => [key, Object.freeze(value.slice())])), tangent, aspect, ortho, near, far, ...(pixelHeight !== undefined && { pixelHeight }) });
   }
 
   function localPlanes(camera, [left, right, bottom, top]) {
@@ -46,6 +47,35 @@
   function distance({ min, max }, point) {
     return Math.hypot(...point.map((value, axis) => Math.max(min[axis] - value, value - max[axis], 0)));
   }
+  function projected(box, camera, window) {
+    if (!camera.pixelHeight) throw new TypeError('Projected chunk budgets need camera.pixelHeight');
+    const { min, max } = box;
+    function interval(axis) {
+      let lo = -dot(axis, camera.eye), hi = lo;
+      axis.forEach((n, i) => {
+        lo += n * (n < 0 ? max[i] : min[i]);
+        hi += n * (n < 0 ? min[i] : max[i]);
+      });
+      return [lo, hi];
+    }
+    const [left, right] = interval(camera.right), [bottom, top] = interval(camera.up);
+    const [back, front] = interval(camera.back);
+    const near = Math.max(camera.near, -front), far = Math.max(near, Math.min(camera.far, -back));
+    const focal = camera.pixelHeight / (2 * camera.tangent);
+    const slope = Math.hypot(Math.max(Math.abs(left), Math.abs(right)), Math.max(Math.abs(bottom), Math.abs(top))) / near;
+    const scale = camera.ortho ? focal : focal / near * Math.hypot(1, slope);
+    const denomMin = camera.ortho ? 1 : near, denomMax = camera.ortho ? 1 : far;
+    function span(lo, hi, base, end) {
+      const a = lo * focal / (lo < 0 ? denomMin : denomMax);
+      const b = hi * focal / (hi < 0 ? denomMax : denomMin);
+      return Math.max(0, Math.min(b, end) - Math.max(a, base));
+    }
+    const halfY = camera.pixelHeight / 2, halfX = halfY * camera.aspect;
+    const pixels = span(left, right, window[0] * halfX, window[1] * halfX) *
+      span(bottom, top, window[2] * halfY, window[3] * halfY);
+    return { scale, pixels };
+  }
+
   function clip(polygon, plane) {
     const clipped = [];
     for (let i = 0; i < polygon.length; i++) {
@@ -83,5 +113,5 @@
     return { area, window: Object.freeze([Math.min(...x), Math.max(...x), Math.min(...y), Math.max(...y)]) };
   }
 
-  K.procedural.chunks.visibility = Object.freeze({ camera, bounds, frustum, visible, distance, aperture, screen });
+  K.procedural.chunks.visibility = Object.freeze({ camera, bounds, frustum, visible, distance, projected, aperture, screen });
 })(KIT);

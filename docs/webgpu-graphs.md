@@ -157,6 +157,65 @@ sorting, and the raster pass including fragment shading and blending. Devices
 without timestamps return `gpuMs: null` with the same counts and upload data.
 Call `dispose()` when the renderer is no longer needed.
 
+### Stream Gaussian chunks
+
+Build a pack from a PLY, SPZ, or GSZ input.
+
+```sh
+node scripts/pack-gaussian-chunks.mjs scan.ply packs/scan 2 .2,.1,.05,0 6
+```
+
+The arguments after the destination are the spatial cell size, nested
+voxel sizes, fitted world size, and optional up axis. A final voxel size
+of zero keeps the original records. The packer groups samples into
+spatial chunks, matches the moments of each coarser voxel, and records the
+largest source-center displacement per tier. The `manifest.json` records
+bounds, levels, revisions, and chunk filenames. Its little-endian binary
+payloads contain the same 64-byte records as the imported Gaussian world.
+Serve the manifest and its files together over HTTP. Code can use
+`packGaussianChunks(world, { layer: index => 'foliage', ...settings })`
+to assign layer IDs before writing a pack.
+
+After creating a WebGPU renderer and loading Ink's browser toolkit:
+
+```js
+import { createGaussianChunkStream } from './webgpu.mjs';
+
+const url = new URL('./packs/scan/manifest.json', location.href);
+const manifest = await (await fetch(url)).json();
+const stream = createGaussianChunkStream(renderer, KIT, manifest, {
+  url,
+  budgetBytes: 6 * 1024 * 1024,
+  maxSplats: 70000,
+  projectedError: { targetPx: 3, hysteresis: .2 },
+  guardPixels: 16,
+  layers: { foliage: { maxSplats: 20000, splatsPerPixel: .6 } }
+});
+const report = await stream.render(context.getCurrentTexture(), { yaw: .5, profile: true });
+console.log(report.stream);
+```
+
+Advance by rendering frames as the camera moves and while the shot has
+pending loads. The renderer uploads each admitted chunk as it arrives,
+draws from the resident buffers, and sorts their visible splats together.
+The byte budget caps chunk buffers and in-flight reservations. The render
+report lists reusable projection and sort workspace separately as
+`workBytes`. The visible splat ceiling applies before GPU culling, so
+the profiled GPU visible count is at or below that ceiling. Call
+`stream.dispose()` before disposing the renderer.
+
+Run the [Glasswater Transect demo](../examples/gaussian-stream/) with:
+
+```sh
+npm run build
+node examples/gaussian-stream/prepare.mjs
+python3 -m http.server 8180 --bind 127.0.0.1
+```
+
+Open [Glasswater Transect](http://127.0.0.1:8180/examples/gaussian-stream/)
+and play the dolly or scrub the camera. The receipt shows the resident
+chunks, draw tiers, memory, visible splats, and per-layer limits.
+
 ## Inspect a patch while orbiting
 
 In the [Pelagic viewer](../examples/live-gaussian/index.html), click either view

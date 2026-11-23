@@ -214,3 +214,74 @@ catch (error) { result.textContent = encodeURIComponent(JSON.stringify({error:er
   assert(result.sameWorld && result.sameDestination && result.shut);
   assert.equal(result.splats, 2);
 });
+
+test('projected-error LOD holds across a pixel cutoff and layer limits stay hard', async () => {
+  const row = { id: 'subject', layer: 'hero', bounds: { min: [-.1, .9, -.1], max: [.1, 1.1, .1] },
+    levels: [{ id: 'base', bytes: 60, splats: 6, revision: 1, error: .20 },
+      { id: 'detail', bytes: 120, splats: 24, revision: 1, error: 0 }] };
+  const stream = createSceneStream({ budgetBytes: 180, maxSplats: 24, projectedError: { targetPx: 2, hysteresis: .2 },
+    layers: { hero: { maxSplats: 24, splatsPerPixel: 50 } },
+    query: () => [row], load: ({ splats }) => ({ count: splats }) });
+  try {
+    const step = async (depth, pixels = 100) => {
+      stream.advance({ place: 'stage', camera: { ...camera, eye: [0, 1, depth], tangent: .5, pixelHeight: pixels } });
+      await stream.ready();
+      const { views, budget } = stream.snapshot();
+      assert(budget.layers.hero.drawSplats <= 24);
+      assert(stream.stats().bytes + stream.stats().reservedBytes <= 180);
+      return views[0].entries[0].level;
+    };
+    for (const d of [11, 9.7, 10.3, 9.7]) assert.equal(await step(d), 'base');
+    assert.equal(await step(7), 'detail');
+    assert.equal(await step(10.3), 'detail');
+    assert.equal(await step(13.5), 'base');
+    assert.equal(await step(13.5, 200), 'detail');
+  } finally {
+    stream.dispose();
+  }
+  const density = createSceneStream({ budgetBytes: 180, maxSplats: 24, projectedError: {},
+    layers: { hero: { maxSplats: 16, splatsPerPixel: 2.5 } },
+    query: () => [row], load: ({ splats }) => ({ count: splats }) });
+  try {
+    density.advance({ place: 'stage', camera: { ...camera, eye: [0, 1, 9], tangent: .5, pixelHeight: 100 } });
+    await density.ready();
+    assert.deepEqual(drawn(density), [['main', ['subject/base']]]);
+    assert.equal(density.snapshot().budget.layers.hero.drawSplats, 6);
+  } finally {
+    density.dispose();
+  }
+});
+
+test('the frustum guard retains a pending or resident chunk without drawing it', async () => {
+  const edge = chunk('edge', 5.32, 0, []);
+  edge.bounds = { min: [4.95, .8, -.08], max: [5.7, 1.2, .08] };
+  let started = 0, evicted = 0, finish;
+  const stream = createSceneStream({ budgetBytes: 60, maxSplats: 60, guardPixels: 12,
+    query: () => [edge],
+    load: () => { started++; return new Promise(resolve => { finish = resolve; }); },
+    release: () => { evicted++; } });
+  try {
+    const step = x => stream.advance({ place: 'stage', camera: { ...camera, eye: [x, 1, 10],
+      tangent: .5, pixelHeight: 200, aspect: 1 } });
+    step(0);
+    await tick();
+    assert.equal(started, 1);
+    step(-.2);
+    await tick();
+    assert.equal(stream.snapshot().budget.retained, 1);
+    assert.equal(stream.snapshot().budget.drawSplats, 0);
+    finish({ count: 60 });
+    await tick();
+    assert.equal(stream.stats().bytes, 60);
+    step(0);
+    await stream.ready();
+    assert.equal(stream.snapshot().budget.drawSplats, 60);
+    assert.equal(started, 1);
+    step(-1);
+    await tick();
+    assert.equal(stream.stats().bytes, 0);
+    assert.equal(evicted, 1);
+  } finally {
+    stream.dispose();
+  }
+});

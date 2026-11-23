@@ -6,6 +6,7 @@ const splatBytes = 16 * wordBytes;
 const ellipseBytes = 8 * wordBytes;
 const keyBytes = 4 * wordBytes;
 const drawBytes = 4 * wordBytes;
+export const gaussianChunkBytes = count => count * splatBytes + 4 * wordBytes;
 const dispatchBytes = 3 * wordBytes;
 const cameraBytes = 24 * wordBytes;
 const timestampBytes = 6 * 8;
@@ -70,10 +71,11 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
   const query = timed ? device.createQuerySet({ type: 'timestamp', count: 6 }) : null;
   const resolved = timed ? buffer('Gaussian resolved timestamps', timestampBytes, usage.QUERY_RESOLVE | usage.COPY_SRC) : null;
   const uniform = new Float32Array(cameraBytes / wordBytes);
-  let scene, disposed = false, cloudUpload = emptyUpload;
+  let scene, work, disposed = false, cloudUpload = emptyUpload;
+  const chunks = new Map();
 
   const maxStorage = Math.min(limits.maxBufferSize, limits.maxStorageBufferBindingSize);
-  const maxSplats = Math.min(4_000_000, Math.floor(maxStorage / splatBytes),
+  const maxSplats = Math.min(4_000_000, Math.floor((maxStorage - gaussianChunkBytes(0)) / splatBytes),
     limits.maxComputeWorkgroupsPerDimension * (sortTile / 2));
 
   function assertOpen() {
@@ -86,27 +88,60 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     });
   }
 
+  function uploadChunk(data, { order = 0 } = {}) {
+    assertOpen();
+    const count = data?.length / 16;
+    if (!(data instanceof Float32Array) || !Number.isInteger(count) || count < 1 ||
+        !Number.isInteger(order) || order < 0 || order > 0xffffffff)
+      throw new TypeError('Supply packed Gaussian records and an unsigned chunk order');
+    if (count > maxSplats)
+      throw new RangeError('Gaussian cloud exceeds this WebGPU device limit of ' + maxSplats + ' splats');
+    const bytes = gaussianChunkBytes(count);
+    const points = buffer('Gaussian imported chunk', bytes, usage.STORAGE | usage.COPY_DST);
+    try {
+      const began = performance.now();
+      queue.writeBuffer(points, 0, Uint32Array.of(order, 0, 0, 0));
+      queue.writeBuffer(points, gaussianChunkBytes(0), data);
+      const cpuMs = performance.now() - began;
+      const handle = Object.freeze({ count, order, bytes, cpuMs, dispose() {
+        if (chunks.delete(handle)) points.destroy();
+      } });
+      chunks.set(handle, { points });
+      return handle;
+    } catch (error) {
+      points.destroy();
+      throw error;
+    }
+  }
+
   function setWorld(world) {
     assertOpen();
     const { count, data } = world ?? {};
-    if (!(data instanceof Float32Array) || !Number.isInteger(count) || count < 1 || data.length !== count * 16)
+    if (!Number.isInteger(count) || data?.length !== count * 16)
       throw new TypeError('Supply a packed Gaussian world from gaussianSplatWorld');
-    if (count > maxSplats)
-      throw new RangeError('Gaussian cloud exceeds this WebGPU device limit of ' + maxSplats + ' splats');
+    const handle = uploadChunk(data);
+    scene?.handle.dispose();
+    scene = { world, handle };
+    cloudUpload = { bytes: data.byteLength, cpuMs: handle.cpuMs };
+    return { ...cloudUpload };
+  }
 
+  function workFor(count) {
+    const capacity = sortCapacity(Math.max(count, 1));
+    if (work?.capacity >= capacity) return work;
     const owned = [];
+    let bytes = 0;
     function allocate(label, size, usage, mapped) {
       const value = buffer(label, size, usage, mapped);
       owned.push(value);
+      bytes += size;
       return value;
     }
     const destroy = () => owned.forEach(value => value.destroy());
     try {
-      const capacity = sortCapacity(count);
       const stages = stagesFor(capacity);
       const dispatchCount = Math.log2(capacity / sortTile) + 1;
-      const points = allocate('Gaussian imported records', data.byteLength, usage.STORAGE | usage.COPY_DST);
-      const ellipses = allocate('Gaussian visible ellipses', count * ellipseBytes, usage.STORAGE);
+      const ellipses = allocate('Gaussian visible ellipses', capacity * ellipseBytes, usage.STORAGE);
       const keys = allocate('Gaussian depth order', capacity * keyBytes, usage.STORAGE);
       const draw = allocate('Gaussian draw arguments', drawBytes,
         usage.STORAGE | usage.INDIRECT | usage.COPY_DST | usage.COPY_SRC);
@@ -117,20 +152,16 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
         params.set([width, stride], i * alignment / wordBytes);
       });
       settings.unmap();
-
       const next = {
-        world, draw, dispatch, stages, destroy,
-        projection: group(projection, camera, points, ellipses, keys, draw),
+        capacity, bytes, draw, dispatch, stages, destroy, keys, ellipses,
         prepare: group(prepare, draw, dispatch),
         sort: group(seed, keys, draw, { buffer: settings, size: 16 }),
         raster: group(raster, camera, ellipses, keys)
       };
-      const began = performance.now();
-      queue.writeBuffer(points, 0, data);
-      cloudUpload = { bytes: data.byteLength, cpuMs: performance.now() - began };
-      scene?.destroy();
-      scene = next;
-      return { ...cloudUpload };
+      for (const chunk of chunks.values()) chunk.projection = undefined;
+      work?.destroy();
+      work = next;
+      return next;
     } catch (error) {
       destroy();
       throw error;
@@ -160,15 +191,25 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     }
   }
 
-  function render(target, frame = {}) {
+  function renderChunks(target, world, handles, frame = {}, upload = emptyUpload) {
     assertOpen();
-    if (!scene) throw new Error('Load a Gaussian world before rendering');
+    if (!Array.isArray(handles)) throw new TypeError('Expected an array of resident Gaussian chunks');
+    let input = 0;
+    const orders = new Set();
+    for (const handle of handles) {
+      if (!chunks.has(handle) || orders.has(handle.order))
+        throw new TypeError('Draw chunks must be resident on this renderer with unique order IDs');
+      orders.add(handle.order);
+      input += handle.count;
+    }
+    if (input > maxSplats) throw new RangeError('Draw exceeds this WebGPU Gaussian renderer’s splat limit');
     if (!target?.createView || target.format !== format || target.dimension !== '2d' || target.sampleCount !== 1 ||
         target.depthOrArrayLayers !== 1 || !(target.usage & GPUTextureUsage.RENDER_ATTACHMENT)) {
       throw new TypeError('Supply a single-sampled 2D render target in the renderer format');
     }
     const { width, height } = target;
-    const { world, draw, dispatch, stages } = scene;
+    const workspace = workFor(input);
+    const { draw, dispatch, stages } = workspace;
     const view = makeCamera(world, frame, width, height);
     uniform.set(view.view);
     uniform.set([width / 2, height / 2, height / (2 * view.tangent), +view.ortho, view.clipNear, view.clipFar], 16);
@@ -180,17 +221,21 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
     encoder.clearBuffer(draw);
     const visibility = encoder.beginComputePass({ label: 'Project and cull', ...timestamps(frame.profile, 0) });
     visibility.setPipeline(projection);
-    visibility.setBindGroup(0, scene.projection);
-    visibility.dispatchWorkgroups(Math.ceil(world.count / (sortTile / 2)));
+    for (const handle of handles) {
+      const chunk = chunks.get(handle);
+      chunk.projection ??= group(projection, camera, chunk.points, workspace.ellipses, workspace.keys, draw);
+      visibility.setBindGroup(0, chunk.projection);
+      visibility.dispatchWorkgroups(Math.ceil(handle.count / (sortTile / 2)));
+    }
     visibility.setPipeline(prepare);
-    visibility.setBindGroup(0, scene.prepare);
+    visibility.setBindGroup(0, workspace.prepare);
     visibility.dispatchWorkgroups(1);
     visibility.end();
 
     const sort = encoder.beginComputePass({ label: 'Sort visible depths', ...timestamps(frame.profile, 2) });
     stages.forEach(({ entry, width }, i) => {
       sort.setPipeline(sorter[entry]);
-      sort.setBindGroup(0, scene.sort, [i * alignment]);
+      sort.setBindGroup(0, workspace.sort, [i * alignment]);
       sort.dispatchWorkgroupsIndirect(dispatch, Math.log2(width / sortTile) * dispatchBytes);
     });
     sort.end();
@@ -204,7 +249,7 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
       }]
     });
     pass.setPipeline(raster);
-    pass.setBindGroup(0, scene.raster);
+    pass.setBindGroup(0, workspace.raster);
     pass.drawIndirect(draw, 0);
     pass.end();
 
@@ -219,18 +264,26 @@ export async function createGaussianSplatRenderer(device, { format = 'rgba8unorm
       encoder.copyBufferToBuffer(draw, wordBytes, staging, offset, wordBytes);
     }
     queue.submit([encoder.finish()]);
-    const report = { input: world.count, cloudUpload: { ...cloudUpload }, cameraUpload };
-    cloudUpload = emptyUpload;
+    const report = { input, cloudUpload: { ...upload }, cameraUpload, workBytes: workspace.bytes };
     return staging ? readProfile(staging, report) : report;
+  }
+
+  function render(target, frame = {}) {
+    assertOpen();
+    if (!scene) throw new Error('Load a Gaussian world before rendering');
+    const result = renderChunks(target, scene.world, [scene.handle], frame, cloudUpload);
+    cloudUpload = emptyUpload;
+    return result;
   }
 
   function dispose() {
     if (disposed) return;
     disposed = true;
-    scene?.destroy();
+    for (const handle of chunks.keys()) handle.dispose();
+    work?.destroy();
     camera.destroy();
     query?.destroy();
     resolved?.destroy();
   }
-  return Object.freeze({ setWorld, render, dispose, format, maxSplats, timestamps: timed });
+  return Object.freeze({ setWorld, render, uploadChunk, renderChunks, dispose, format, maxSplats, timestamps: timed });
 }

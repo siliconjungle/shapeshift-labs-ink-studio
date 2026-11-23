@@ -26,7 +26,11 @@ struct Point {
   covariance1: vec4f,
   extra: vec4f,
 }
-@group(0) @binding(1) var<storage, read> points: array<Point>;
+struct Chunk {
+  identity: vec4u,
+  points: array<Point>,
+}
+@group(0) @binding(1) var<storage, read> chunk: Chunk;
 @group(0) @binding(2) var<storage, read_write> ellipses: array<Ellipse>;
 @group(0) @binding(3) var<storage, read_write> keys: array<vec4u>;
 @group(0) @binding(4) var<storage, read_write> draw: array<atomic<u32>, 4>;
@@ -35,8 +39,8 @@ var<workgroup> first: u32;
 
 fn project(index: u32, xyz: vec3f, depth: f32) -> Ellipse {
   var ellipse: Ellipse;
-  if (index >= arrayLength(&points) || !(depth >= camera.clip.x && depth <= camera.clip.y)) { return ellipse; }
-  let point = points[index];
+  if (index >= arrayLength(&chunk.points) || !(depth >= camera.clip.x && depth <= camera.clip.y)) { return ellipse; }
+  let point = chunk.points[index];
   if (point.position.w < 0.004) { return ellipse; }
   let viewport = camera.viewport.xy;
   let focal = camera.viewport.z;
@@ -81,7 +85,7 @@ fn main(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_inde
   if (lane == 0u) { atomicStore(&visible, 0u); }
   workgroupBarrier();
   var xyz: vec3f;
-  if (id.x < arrayLength(&points)) { xyz = (camera.view * vec4f(points[id.x].position.xyz, 1.0)).xyz; }
+  if (id.x < arrayLength(&chunk.points)) { xyz = (camera.view * vec4f(chunk.points[id.x].position.xyz, 1.0)).xyz; }
   let depth = -xyz.z;
   let ellipse = project(id.x, xyz, depth);
   var offset = 0u;
@@ -95,7 +99,7 @@ fn main(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_inde
   if (ellipse.alpha > 0.0) {
     let slot = first + offset;
     ellipses[slot] = ellipse;
-    keys[slot] = vec4u(bitcast<u32>(depth), id.x, slot, 0u);
+    keys[slot] = vec4u(bitcast<u32>(depth), chunk.identity.x, id.x, slot);
   }
 }
 `;
@@ -131,7 +135,7 @@ var<workgroup> tile: array<vec4u, ${sortTile}>;
 // Positive f32 depth has the same order as its unsigned bits. Empty lanes
 // carry zero and sort behind every visible sample.
 fn precedes(a: vec4u, b: vec4u) -> bool {
-  return a.x > b.x || (a.x == b.x && a.y < b.y);
+  return a.x > b.x || (a.x == b.x && (a.y < b.y || (a.y == b.y && a.z < b.z)));
 }
 fn firstOfPair(thread: u32, stride: u32) -> u32 {
   return (thread / stride) * (stride * 2u) + thread % stride;
@@ -207,7 +211,7 @@ struct Vertex {
 
 @vertex
 fn vertex(@builtin(vertex_index) id: u32, @builtin(instance_index) instance: u32) -> Vertex {
-  let ellipse = ellipses[keys[instance].z];
+  let ellipse = ellipses[keys[instance].w];
   let uv = vec2f(f32(id & 1u), f32(id >> 1u)) * 2.0 - 1.0;
   let position = (ellipse.center + uv.x * ellipse.axisX + uv.y * ellipse.axisY) / camera.viewport.xy;
   let color = unpack4x8unorm(ellipse.rgb);

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glasswater Transect · Ink Studio</title>
+<link rel="stylesheet" href="../gaussian-gpu/style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Glasswater Transect</h1>
+    <p>Stream a Gaussian shoal through a fixed memory and splat budget</p>
+  </header>
+  <div class="controls">
+    <button id="survey" type="button">Survey</button>
+    <button id="pass" type="button">Close pass</button>
+    <button id="play" type="button" aria-pressed="false">Play dolly</button>
+    <label for="position">Dolly</label>
+    <input id="position" type="range" min="0" max="100" step="0.2" value="0">
+  </div>
+  <canvas id="view" width="864" height="512" aria-label="Streamed Gaussian splat render"></canvas>
+  <p id="status" role="status">Opening WebGPU…</p>
+  <div id="measure" hidden>
+    <dl>
+      <div><dt>GPU chunk memory</dt><dd id="memory"></dd></div>
+      <div><dt>Visible splats</dt><dd id="visible"></dd></div>
+      <div><dt>Shoal draw</dt><dd id="layer"></dd></div>
+      <div><dt>Chunks loaded / released</dt><dd id="loads"></dd></div>
+      <div><dt>Drawn chunks by LOD</dt><dd id="levels"></dd></div>
+      <div><dt>Offscreen guard band</dt><dd id="held"></dd></div>
+    </dl>
+    <button id="receipt" type="button">Download render report</button>
+  </div>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

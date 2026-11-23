@@ -19,7 +19,7 @@ export function captureStreamingCamera(world, frame, width, height) {
   const { camera } = snapshots.get(snapshot);
   const { eye, back } = snapshot.pose;
   return { snapshot, camera: { ...snapshot.pose, ortho: camera.ortho, tangent: camera.tangent, aspect: camera.aspect,
-    near: camera.clipNear, far: camera.clipFar, observer: eye.map((v, i) => v - back[i] * camera.setback) } };
+    near: camera.clipNear, far: camera.clipFar, pixelHeight: height, observer: eye.map((v, i) => v - back[i] * camera.setback) } };
 }
 
 export function makeCamera(world, frame, width, height) {
