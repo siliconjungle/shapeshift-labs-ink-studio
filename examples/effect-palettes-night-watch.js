@@ -2,7 +2,7 @@ module.exports = ({ KIT:K, makeBuilder, makeSculpt }) => ({
   id:'effect-palettes-night-watch',
   name:'Night watch at Saltgate',
   seed:734,
-  build(seed) {
+  build(seed, { cloudSteps = 21 } = {}) {
     const B=makeBuilder(seed,[
       0x17212b,0x253543,0x31444e,0x42606a,0x5a7373,0x778983,0x9da594,
       0x273c3b,0x38564c,0x547369,0x6f8b77,
@@ -80,7 +80,7 @@ module.exports = ({ KIT:K, makeBuilder, makeSculpt }) => ({
     for (const x of [-.048,.069]) S.ball(at(x,1.038,.216),[.019,.025,.014],marker,{...tag,res:.016});
     S.bake();
     const cloudField=K.clouds.compile({
-      bounds:{min:[-45,-77],max:[45,-7]},resolution:[90,82],height:6.0,thickness:1.8,steps:21,
+      bounds:{min:[-45,-77],max:[45,-7]},resolution:[90,82],height:6.0,thickness:1.8,steps:cloudSteps,
       color:'#4e5574',opacity:.94,velocity:[1.55,.17],
       lighting:{color:'#bdb2bd',ambient:.43,strength:.56,rim:.31},
       coverage(x,z){

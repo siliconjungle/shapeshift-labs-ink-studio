@@ -1309,6 +1309,7 @@ const CMD = {
         '  render/clip/atlas --view-poses asset.json|off   load or bypass view-sector pose corrections',
         '  render/clip --volume-scale 3 --volume-reconstruction object|depth|lighting   choose a coarse fog reconstruction',
         '  render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field',
+        '  render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]   compare matched art-grid renders',
         '  fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]',
         '  render/clip --dynamic-bounce off   reuse the baked probes without sampling moving sources',
         '  render <id> --palette-constraints <file.json|off>   override target palettes and dither settings',
@@ -3124,6 +3125,21 @@ const CMD = {
     for (const {id,groups,webgl} of report.views)
       console.log(id,webgl,'visible curve spans,',groups.shoots.attached,'attached clay shoots');
     console.log('wrote',directory);
+  },
+  'render-suite'() {
+    if (pos.length) die('Use render-suite [--scene gatehouse|signal-coil|night] [--profile file.json] [--out directory]');
+    const directory = outputFile('render-suite');
+    const report = require('./render-suite.js').run(directory, {
+      width: num('w'), height: num('h'), fps: num('fps'), framesPerMove: num('frames-per-move'), scene: opt.scene,
+      profiles: opt.profile === undefined ? undefined : JSON.parse(fs.readFileSync(opt.profile, 'utf8')),
+      onScene: id => console.log('comparing', id)
+    });
+    for (const { id, performance } of report.scenes) {
+      const { reference, candidate } = performance;
+      const pair = key => reference.frameMs[key].toFixed(1) + ' → ' + candidate.frameMs[key].toFixed(1) + ' ms';
+      console.log(id, 'p50', pair('p50'), 'p95', pair('p95'));
+    }
+    console.log('wrote', directory);
   },
   'finite-curve-review'() {
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'finite-curve-review');

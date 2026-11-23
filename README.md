@@ -874,6 +874,8 @@ covers reachable activity choices and confirmed arrivals.
 
 ## Rendering and command reference
 
+Use the [standard render comparison suite](docs/render-suite.md) to measure matched camera moves on the gatehouse, signal coil, and Saltgate night watch.
+
 The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](docs/browser-renderer.md) for an interactive WebGL canvas. The two backends share scene data and several pixel-art controls. Use the same backend when recording and checking exact image baselines.
 
 | Command | Purpose |
