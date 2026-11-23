@@ -49,6 +49,10 @@ const SplatFrames = (() => {
       if (normal && transform) normal = M.app(transform.normal, normal);
       if (normal && angle) normal = [c * normal[0] + s * normal[2], normal[1], c * normal[2] - s * normal[0]];
       const length = normal && Math.hypot(...normal);
+      function worldCovector(axis) {
+        const local = transform ? M.app(transform.normal, axis) : axis;
+        return angle ? [c * local[0] + s * local[2], local[1], c * local[2] - s * local[0]] : local;
+      }
       return { normal: length > 1e-8 ? normal.map(value => value / length) : null,
         rest: (fragment ? reconstructionPose.base : skinned ? restData :
           anim?.base instanceof Float32Array ? anim.base : rest || data).subarray(q, q + 3),
@@ -127,9 +131,13 @@ const SplatFrames = (() => {
             covariance: kind === 12 || kind === 13 ? posed : orbit };
 
         },
-        worldCovector(axis) {
-          const local = transform ? M.app(transform.normal, axis) : axis;
-          return angle ? [c * local[0] + s * local[2], local[1], c * local[2] - s * local[0]] : local;
+        worldCovector,
+        restNormal(axis) {
+          // Reconstruction has already transferred baked normals to world space.
+          return fragment?.transpose ? M.app(fragment.transpose, axis) : axis;
+        },
+        worldNormal(axis) {
+          return fragment?.rotation ? M.app(fragment.rotation, axis) : worldCovector(axis);
         },
         localDirection(x, y, z) {
           const offset = [c * x - s * z, y, c * z + s * x];

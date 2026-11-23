@@ -214,20 +214,25 @@
       const value = clone(material);
       return edit('Set solid material', targets, solid => ({ ...solid, mat: value }));
     }
-    function paintShadowBand(stroke, { layer = 'diffuse', keys = selectedKeys() } = {}) {
-      const mark = SurfaceLook.shadowBandPaint.stroke(stroke);
+    function paintDiffuse(label, field, mark, { layer = 'diffuse', keys = selectedKeys() }) {
       if (!TargetSelectors.name(layer)) throw new TypeError('A shadow band needs a diffuse layer name');
-      return edit('Paint a shadow band', keys, solid => {
+      return edit(label, keys, solid => {
         const mat = solid.mat, finish = mat?.surface, layers = finish?.layers;
         const diffuse = layers && Object.hasOwn(layers, layer) && layers[layer];
         if (diffuse?.type !== 'diffuse')
           throw new RangeError('Add a named diffuse lighting ramp to the solid material before painting');
-        const strokes = [...(diffuse.shadowBand?.strokes ?? []), mark];
-        if (strokes.length > 256) throw new RangeError('A shadow band supports up to 256 strokes');
+        const strokes = [...(diffuse[field]?.strokes ?? []), mark];
+        if (strokes.length > 256) throw new RangeError('A painted diffuse layer supports up to 256 strokes');
         return { ...solid, mat: { ...mat, surface: { ...finish, layers: {
-          ...layers, [layer]: { ...diffuse, shadowBand: { strokes } }
+          ...layers, [layer]: { ...diffuse, [field]: { strokes } }
         } } } };
       });
+    }
+    function paintShadowBand(stroke, options = {}) {
+      return paintDiffuse('Paint a shadow band', 'shadowBand', SurfaceLook.shadowBandPaint.stroke(stroke), options);
+    }
+    function paintShadeNormal(stroke, options = {}) {
+      return paintDiffuse('Paint a shade normal', 'shadeNormals', SurfaceLook.shadowBandPaint.normals.stroke(stroke), options);
     }
     function setSurfaceState(state, targets = selectedKeys()) {
       const value = clone(state);
@@ -361,6 +366,7 @@
       applyBrush,
       setMaterial,
       paintShadowBand,
+      paintShadeNormal,
       setSurfaceState,
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),

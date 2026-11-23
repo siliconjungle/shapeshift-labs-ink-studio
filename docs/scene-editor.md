@@ -66,6 +66,11 @@ threshold of a selected solid's diffuse material. The stroke uses rest
 XYZ points and joins the editor's undo history.
 [Shadow band paint](shadow-band-paint.md)
 
+Use `paintShadeNormal(stroke, { layer, keys })` on the same diffuse
+layers to aim their lighting normals in rest space. Pass `normal: null`
+to erase the tilt from the footprint.
+[Shade normal paint](shadow-band-paint.md#paint-the-shade-normal)
+
 Use `setBrushRegion(region)` to select a bounded 3D region or pass `null` to clear it. The region is stored as `brushRegion` in the saved diorama. Set `bounds` with XYZ `min` and `max`, and list the IDs of the stationary solids to edit in `solids`. Omit `solids` for a region that starts empty. `cell` sets the surface sampling interval and defaults to 0.16 scene units. `chunkCells` sets the size of each chunk along an axis and defaults to 12.
 
 Use `applyBrush(stroke)` to append a retained stroke and receive the rebuilt world immediately. A stroke needs a unique `id`, a `mode`, one or more XYZ `points`, and a positive `radius`. Brush footprints are clipped to the region.

@@ -10,6 +10,7 @@ import { createFootprintBinding } from './footprints.mjs';
 import { createArtPixelFinish } from './art-pixel-finish.mjs';
 import { createRenderGrid } from './render-grid.mjs';
 import { createMaterialControls } from './material-controls.mjs';
+import { applyShadeNormals } from './shade-normals.mjs';
 import { createLightEmitters } from './light-emitters.mjs';
 import { createNativeCelDraw } from './native-cel-pixels.mjs';
 import { createInspection, inspectionDepth } from './inspection.mjs';
@@ -202,7 +203,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       };
     }
     let post, simpleUnavailable = false, keyProgram, damp, copy, spriteProgram, spriteEnvProgram, spriteLayer, spriteTable, anchors;
-    let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, lastStaged, fineValues, materials, anchorCount = 0;
+    let lastWorld, lastData, lastCount, lastOutput, lastDetail, lastEnvironment, lastStaged, lastShadeNormals, fineValues, materials, anchorCount = 0;
     let packed = empty, historyIndex = 0, historyValid = false, previousVP, previousPalette, previousDetailRanges, previousSection, lastQualityKey;
     let toneKey, tone, uploadedTone, sorted, instanceDraw, expandInstances, lastInstances;
 
@@ -1045,6 +1046,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       const paintView = paintActive ? camera.view : undefined;
       if (portableStages) geometryData = contract.materialData(portableStages, world, geometryData);
+      const shadePaint = colorMode === 'baked' && applyShadeNormals(toolkit, world, frame, camera, t, time, geometryData, patterned);
+      if (shadePaint) geometryData = shadePaint.data;
+      if (shadePaint || lastShadeNormals) historyValid = false;
       if ((paintView || lastPaintView) && (!paintView || !lastPaintView || !sameValues(paintView, lastPaintView)))
         historyValid = false;
       lastPaintView = paintView;
@@ -1141,7 +1145,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         lastWorld.data === lastData && world.count === lastCount && !group && !lastInstances &&
         !paint && !lastWorld.paintCorrections && !world.anim && !lastWorld.anim;
       const dirty = !isNew || incremental ? frame.changedRows : undefined;
-      const geometryDirty = portableStages || lastStaged ? undefined : dirty && paint ?
+      const geometryDirty = portableStages || lastStaged || shadePaint || lastShadeNormals ? undefined : dirty && paint ?
         [...new Set([...dirty, ...paint.dirtyRows.filter(row => row * 512 < world.count)])] : dirty;
       let plan;
       if (group) {
@@ -1196,17 +1200,18 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         frame.spriteReconstructionFrame?.(spritePlan??{geometryRows:source.count,states:[]});
       orderFor(world, frame, camera, time, isNew, plan, width, height, scale, tolerance, histories, source, rainClocks, rainWind, selection, spriteMask);
       if (patterned) {
+        const pixelRows = shadePaint?.pixels ?? world.pix;
         if (isNew || materials?.world !== world || materials.values !== world.pix ||
             materials.ramps !== world.ramps || materials.rampOff !== world.rampOff || materials.patterns !== world.pats) {
-          const patternDirty = incremental && materials?.world === lastWorld &&
+          const patternDirty = !shadePaint && !lastShadeNormals && incremental && materials?.world === lastWorld &&
             materials.values === lastWorld.pix ? frame.changedPatternRows : undefined;
-          pattern.upload(world.pix, world.count * 8, patternDirty);
+          pattern.upload(pixelRows, world.count * 8, patternDirty);
           const gpu = materialData(pixel, world);
           updateSprites(world, pixel);
           materials = { world, values: world.pix, ramps: world.ramps, rampOff: world.rampOff, patterns: world.pats, gpu };
-        } else if (world.anim?.dynamicPatternNormals) {
-          const patternDirty = dirty && [...new Set(dirty.map(row => Math.floor(row / 2)))];
-          pattern.upload(world.pix, world.count * 8, patternDirty);
+        } else if (shadePaint || lastShadeNormals || world.anim?.dynamicPatternNormals) {
+          const patternDirty = !shadePaint && !lastShadeNormals && dirty ? [...new Set(dirty.map(row => Math.floor(row / 2)))] : undefined;
+          pattern.upload(pixelRows, world.count * 8, patternDirty);
         } else pattern.bind();
       }
 
@@ -1609,6 +1614,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       lastInstances = group;
       lastData = world.data;
       lastStaged = Boolean(portableStages);
+      lastShadeNormals = Boolean(shadePaint);
       lastCount = world.count;
       lastOutput = output;
       lastDetail = detail;

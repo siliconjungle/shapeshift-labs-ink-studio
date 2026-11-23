@@ -76,3 +76,37 @@ Use `--shadow-band-paint off` to bypass paint during headless rendering
 while keeping the palette ramp and light. Junya Motomura shows how
 *Guilty Gear Xrd* used artist-assigned threshold offsets in the
 [GDC talk on its rendering](https://media.gdcvault.com/gdc2015/presentations/Motomura_Junya_GuiltyGearXrd.pdf#page=19).
+
+## Paint the shade normal
+
+Paint the normal when a cheek, sleeve, or fold needs to turn into the light
+as a single shape. Add `shadeNormals.strokes` to a diffuse layer with a
+lighting ramp. A stroke's XYZ normal points in the material's baked rest
+frame. Its radius and softness behave like the threshold brush. Use
+`strength` from 0 to 1 to blend toward the target, or `normal: null` to erase
+toward the sculpted normal. Later strokes apply over earlier ones.
+
+```js
+const cheek = {
+  type: 'diffuse',
+  lightingRamp: { stops: [[0, '#663443'], [.45, '#ae6557'], [.72, '#e4a781']], interpolation: 'step' },
+  shadeNormals: {
+    strokes: [
+      { points: [[-.31, 1.76, .49], [-.13, 1.61, .49]], radius: .14, normal: [-.9, -.3, .3] }
+    ]
+  }
+};
+editor.paintShadeNormal(cheek.shadeNormals.strokes[0], { layer: 'diffuse' });
+```
+
+The normal turns with the posed material. The diffuse ramp still uses light
+visibility and any `shadowBand` bias. Geometry, specular lighting and
+view-facing effects use their existing normals. The browser evaluates the
+authored diffuse ramp on the posed splat carriers and gives it priority over
+their baked pixel ramp. The software renderer evaluates it at surface samples.
+Set `shadeNormals: false` in either renderer, or use
+`--shade-normals off` from the CLI to compare with sculpted normals.
+
+Open [Saltwind Courier](../examples/shade-normals/index.html) after building
+the browser bundle. Sweep the light, orbit the courier, and paint either
+direction on the cheek or cloak.

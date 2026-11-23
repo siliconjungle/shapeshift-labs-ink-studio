@@ -550,7 +550,7 @@ const SurfaceLook = (() => {
 
   function prepare(settings, palette = [], lightDirection = [-0.55, 0.72, 0.43], context = {},
     { colorCurves = true, colorLut = true, colorStack = true, paletteConstraints = true, paletteRoles, blueNoise, onPaletteClip,
-      transmission = true, detailKits = true, paintShadowBands = true, validateOnly = false, skipMasks = false, ditherSpaceOverride, facingRamp, facingColors = true, directionalColors = true } = {}) {
+      transmission = true, detailKits = true, paintShadowBands = true, shadeNormals = true, validateOnly = false, skipMasks = false, ditherSpaceOverride, facingRamp, facingColors = true, directionalColors = true } = {}) {
     if (!isRecord(settings)) throw new TypeError('Surface settings must be an object');
     const roles = pixelLook.bindRoles(palette, paletteRoles, settings.paletteRoles);
     const resolveColor = value => color(value, palette, WHITE, roles);
@@ -633,6 +633,11 @@ const SurfaceLook = (() => {
             Object.keys(layer.shadowBand).some(key => key !== 'strokes')))
           throw new TypeError(id + '.shadowBand needs an ordered stroke list on a diffuse lighting ramp');
         const readBand = painted && shadowBandPaint.prepare(layer.shadowBand.strokes);
+        const shaped = layer.shadeNormals !== undefined && layer.shadeNormals !== false;
+        if (shaped && (layer.type !== 'diffuse' || !isRecord(layer.shadeNormals) ||
+            Object.keys(layer.shadeNormals).some(key => key !== 'strokes')))
+          throw new TypeError(id + '.shadeNormals needs an ordered stroke list on a diffuse lighting ramp');
+        const readNormal = shaped && shadowBandPaint.normals.prepare(layer.shadeNormals.strokes);
         numeric(
           layer,
           [
@@ -753,6 +758,7 @@ const SurfaceLook = (() => {
           model: models[layer.type],
           lightingRamp,
           readBand: paintShadowBands && readBand,
+          readShadeNormal: shadeNormals && readNormal || undefined,
           ...(capture && {detail:captureDetail}),
           strength: clamp(layer.strength ?? 1),
           roughness: [roughness[0], roughness[1] ?? roughness[0]].map(v =>
@@ -777,15 +783,16 @@ const SurfaceLook = (() => {
     const weather = layers.some(layer => layer.retainedMask || layer.effect?.weather || layer.drive?.some(entry => entry.signal.weather));
     const hasKits = layers.some(layer=>layer.kit);
     const kitExposure = layers.some(layer=>layer.kit?.exposure);
+    const shadeNormalLayers = layers.some(layer => layer.shadeNormals);
     return {
-      settings, normal, layers, facingProfile, directionProfile, driven, weather, thin, thinLocal, hasKits, kitExposure, paintsBase,
+      settings, normal, layers, facingProfile, directionProfile, driven, weather, thin, thinLocal, hasKits, kitExposure, paintsBase, shadeNormalLayers,
       captureDetail: layers.some(layer=>(layer.type==='planarReflection'||layer.type==='localReflection') && layer.detail),
       needsDistance: layers.some(layer=>layer.type==='bevel' || layer.kit?.recipe==='crevice-moss' && layer.kit.crevices!=='joints'),
-      finishBeforeFog: Boolean(facingProfile || directionProfile) || thin || driven || hasKits || paintsBase || layers.some(layer => layer.type === 'tint' || layer.shadowBand), sun: unit(vector(lightDirection, AXES.y)),
+      finishBeforeFog: Boolean(facingProfile || directionProfile || shadeNormalLayers) || thin || driven || hasKits || paintsBase || layers.some(layer => layer.type === 'tint' || layer.shadowBand), sun: unit(vector(lightDirection, AXES.y)),
       paletteConstraint: paletteConstraints && settings.paletteConstraint !== undefined
         ? pixelLook.prepareLookPolicy(settings.paletteConstraint, { palette, roles, blueNoise, context, validateOnly, onPaletteClip,
           skipMaskedStacks: !colorStack, skipMasks, ditherSpaceOverride }) : null,
-      projected: Boolean(settings.rainRipple) || driven || weather || hasKits || layers.some(layer => layer.effect || layer.spatialMask || layer.shadowBand),
+      projected: Boolean(settings.rainRipple) || driven || weather || hasKits || shadeNormalLayers || layers.some(layer => layer.effect || layer.spatialMask || layer.shadowBand),
       depth: layers.some(layer => layer.effect?.depth),
       reveals: layers.some(layer => layer.effect?.reveals)
     };
@@ -960,9 +967,17 @@ const SurfaceLook = (() => {
       shading.light = layer.shadow === false ? 1 : visibility;
       for (let i = 0; i < 3; i++) rgb[i] = layer.color[i];
       if (planarMatte) shading.planarSample = undefined;
-      let response = layer.readBand
-        ? shadowBandPaint.level(shading.nl,shading.light,layer.readBand(position))
-        : layer.model(layer, shading, rgb);
+      let response;
+      if (layer.shadeNormals) {
+        const at = sample.shadeNormalPosition ?? position, frame = sample.shadeNormalFrame;
+        const base = frame ? frame.restNormal(n) : n;
+        const aimed = layer.readShadeNormal?.(at,base) ?? base;
+        const posed = frame ? frame.worldNormal(aimed) : aimed;
+        const incidence = dot(posed === aimed ? aimed : unit(posed),sample.shadeNormalLight ?? sun);
+        response = shadowBandPaint.level(incidence,shading.light,layer.readBand ? layer.readBand(at) : 0);
+      } else if (layer.readBand) {
+        response = shadowBandPaint.level(shading.nl,shading.light,layer.readBand(position));
+      } else response = layer.model(layer, shading, rgb);
       if (layer.lightingRamp) {
         const level = clamp(response);
         layer.lightingRamp.tint(level, rgb);
