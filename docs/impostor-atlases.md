@@ -55,6 +55,14 @@ ink-studio render examples/relightable-impostor.js --t 3 --sprite-atlas-mode car
 ink-studio render examples/relightable-impostor.js --t 3 --sprite-atlas-mode impostor --raw --out impostor.png
 ```
 
+For animated sprites, `--maps normal` writes `normal.png` alongside the
+color frames with matching tile rectangles, pivots, and timings. Use
+`--normal-space view` for a screen-facing game sprite. Its normal axes are X
+right, Y up, and +Z toward the viewer of each baked tile. The default is
+`--normal-space asset`, which keeps the object's axes for world lighting.
+Build the relightable Signal Courier example with
+`node examples/baked-sprite-normals.cjs courier-normals.html`.
+
 A JSON diorama can put an array of placements in `finish.spriteAtlases` and refer to each `atlas` by a path relative to the diorama. Use `--sprite-atlas off` to hide the authored placements in a comparison. A manifest passed with `--sprite-atlas` replaces the scene's placements for that render and defaults to the world origin. Set `--sprite-at x,y,z` and `--sprite-scale n` to place it.
 
 Depth positions each texel along its draw ray and participates in the scene's depth, fog, and emission passes. The renderer uses the silhouette of the selected view. The [survey drone example](../examples/relightable-impostor.js) demonstrates both placement modes under changing camera and lighting angles.

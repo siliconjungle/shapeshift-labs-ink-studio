@@ -123,6 +123,30 @@ test('exported multi-elevation PNG atlases can be imported and placed without ex
   assert.throws(()=>K.sprite.atlas(atlas([[1,2,3,255]],{frames:[{rect:{x:1,y:0,width:1,height:1}}]})),/rectangle/);
 });
 
+test('view-space atlas normals follow each tile camera without changing its color frame', () => {
+  const source=world(undefined,true), options={width:35,height:31,directions:2,pitches:[.36],yaw:.43,maps:['normal']};
+  const asset=ink.spriteAtlas(source,options), view=ink.spriteAtlas(source,{...options,normalSpace:'view'});
+  assert.equal(asset.metadata.normalSpace,'asset');
+  assert.equal(view.metadata.normalSpace,'view');
+  assert.deepEqual(view.images.color,asset.images.color);
+  const {basis,dot}=require('../src/atlas-sprites.js');
+  const {width}=view.metadata;
+  for(const {rect,yaw,pitch} of view.metadata.frames){
+    const {right,up,normal}=basis(yaw,pitch);
+    let mapped=0;
+    for(let y=0;y<rect.height;y++)for(let x=0;x<rect.width;x++){
+      const at=((rect.y+y)*width+rect.x+x)*4;
+      if(!view.images.normal[at+3])continue;
+      assert(view.images.color[at+3]);
+      const worldNormal=Array.from(asset.images.normal.subarray(at,at+3),byte=>byte-127.5);
+      const expected=[right,up,normal].map(axis=>127.5+dot(axis,worldNormal));
+      expected.forEach((byte,i)=>close(view.images.normal[at+i],byte,2));
+      mapped++;
+    }
+    assert(mapped>25);
+  }
+});
+
 test('painted scenery interleaves vine and recess depth with opaque geometry and local fog', () => {
   const source=atlas([[250,24,24,255],[24,242,32,255]],{ scenery:{
     bands:{wall:0,vines:-.62,recess:.84},base:'recess',

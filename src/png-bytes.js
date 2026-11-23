@@ -36,7 +36,15 @@ const PNGBytes = (() => {
     parts.push(chunk('IDAT', deflated), chunk('IEND', new Uint8Array(0)));
     return parts;
   }
-  return Object.freeze({ chunk, scanlines, indexed });
+  function rgba(width, height, deflated) {
+    const hd = new Uint8Array(13), view = new DataView(hd.buffer);
+    view.setUint32(0, width);
+    view.setUint32(4, height);
+    hd[8] = 8;
+    hd[9] = 6;
+    return [signature, chunk('IHDR', hd), chunk('IDAT', deflated), chunk('IEND', new Uint8Array(0))];
+  }
+  return Object.freeze({ chunk, scanlines, indexed, rgba });
 })();
 if (typeof module !== 'undefined') module.exports = PNGBytes;
 else globalThis[Symbol.for('ink-studio.png-bytes')] = PNGBytes;

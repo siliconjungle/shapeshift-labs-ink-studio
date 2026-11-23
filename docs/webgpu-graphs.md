@@ -177,11 +177,20 @@ framing and center pivot. The cutout uses splat coverage and reserves a separate
 transparent palette entry. JSON includes top-left tile rectangles, tile-local
 pivots in pixels, yaw angles in degrees and frame durations in seconds.
 
+Select **Bake normals** before building the preview to export a matching RGBA
+normal PNG. Inspect the normal colors or move the light in **Toon light**.
+The normal sheet stores view-space XYZ in RGB, with X right, Y up, and +Z toward
+the camera. Alpha zero marks a missing normal. Gaussian normals are estimates
+from the visible splats' covariance axes. Export coverage and a normal's alpha
+can differ where the visible splats lack a reliable surface axis.
+
 Hosts can call `renderer.captureTurntable(world, { angles, width, height, columns,
-fps, cutoff, pivot, frame })` for an imported live Gaussian world. `cutoff`
+fps, cutoff, pivot, frame, normals })` for an imported live Gaussian world. `cutoff`
 ranges from above zero to one and `pivot` is a world-space XYZ point.
 The result contains the shared indexed pixels and their metadata.
 `encodeGaussianTurntablePNG(sheet)` from `webgl.mjs` produces a PNG Blob
-from that same result.
+from that same result. With `normals: true`, the result also contains `normal`
+RGBA bytes in the same tile layout. Encode them with
+`encodeGaussianTurntableNormalPNG(sheet)`.
 
 Format references. [Graphdeco PLY implementation](https://github.com/graphdeco-inria/gaussian-splatting/blob/main/scene/gaussian_model.py) · [Niantic SPZ](https://github.com/nianticlabs/spz) · [WebGPU specification](https://www.w3.org/TR/webgpu/)

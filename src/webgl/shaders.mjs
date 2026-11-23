@@ -468,7 +468,7 @@ ${ascii ? ascii.fsDecl : 'uniform float u_gly;\n'}uniform float u_crisp, u_hard;
 flat in vec4 v_fm; flat in vec4 v_ft; flat in float v_fk; flat in float v_lit; flat in float v_ix; uniform vec3 u_fpal[${scenePaletteSize}]; uniform vec3 u_fog;
 ${materialStyles ? `flat in vec4 v_pixelStyle; flat in float v_pixelFog; uniform float u_materialGridScale;
 ${materialStyleThreshold}` : ''}
-uniform float u_idx;
+uniform float u_idx, u_gaussianNormalCutoff;
 uniform bool u_paintPass; flat in int v_paint;
 ${coverageVote ? 'uniform bool u_coverageVotePass;' : ''}
 ${relighting ? 'flat in vec4 v_relight;' : ''}
@@ -603,7 +603,10 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   `}
   if (u_idx > 0.5) {
     ${engraving ? 'if(v_engravingSlot>0)discard;' : ''}   // the index pass (colour per pixel): which solid dab is in front here, its number in three bytes
-    if (v_color.a < 1.0 ${gaussianProxy ? '&& !proxyOwnsDepth' : ''} || (continuous ? surfaceAlpha <= 0.5 : g < 0.5) || v_depth < 0.0) discard;
+    if (u_gaussianNormalCutoff > 0.0) {
+      float alpha = continuous ? surfaceAlpha : contributionAlpha(power, v_color.a, false);
+      if (alpha < u_gaussianNormalCutoff || v_depth < 0.0) discard;
+    } else if (v_color.a < 1.0 ${gaussianProxy ? '&& !proxyOwnsDepth' : ''} || (continuous ? surfaceAlpha <= 0.5 : g < 0.5) || v_depth < 0.0) discard;
     ${cutaway ? 'if (cutInk > 0.0) { o = vec4(0.0); od = vec4(0.0); oa = vec4(0.0); return; }' : ''}
     float k = v_ix + 1.0;
     o = vec4(mod(k, 256.0), mod(floor(k / 256.0), 256.0), floor(k / 65536.0), 255.0) / 255.0;

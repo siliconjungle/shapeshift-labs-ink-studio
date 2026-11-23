@@ -72,6 +72,7 @@
   .turntable-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,300px); gap:18px; }
   .turntable-controls { display:grid; align-content:start; gap:9px; }
   .turntable-controls label { display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:13px; }
+  .turntable-controls [hidden] { display:none; }
   .turntable-controls input[type=text], .turntable-controls input[type=number] {
     box-sizing:border-box; background:#0c1725; color:inherit; border:1px solid #395469; padding:6px; border-radius:5px;
   }
@@ -169,14 +170,22 @@
           <label>Columns <input id="turntable-columns" type="number" min="1" max="64" value="4"></label>
           <label>FPS <input id="turntable-fps" type="number" min="1" max="60" value="8"></label>
           <label>Cutout <input id="turntable-cutoff" type="number" min="1" max="100" value="25"> %</label>
+          <label><input id="turntable-normals" type="checkbox"> Bake normals</label>
           <label><input id="turntable-pivot" type="checkbox" checked> Show pivot</label>
         </div>
         <div class="paint-row">
           <button id="turntable-generate" type="button">Build preview</button>
           <button id="turntable-png" type="button" disabled>Download PNG</button>
+          <button id="turntable-normal-png" type="button" disabled>Download normals</button>
           <button id="turntable-json" type="button" disabled>Download metadata</button>
         </div>
         <p id="turntable-status" role="status">Build a preview to review the loop.</p>
+        <div class="paint-row" id="turntable-normal-controls" hidden>
+          <label>Preview <select id="turntable-preview-mode">
+            <option value="color">Color</option><option value="normal">Normals</option><option value="toon">Toon light</option>
+          </select></label>
+          <label id="turntable-light-row" hidden>Light <input id="turntable-light" type="range" min="-120" max="120" value="-45"></label>
+        </div>
       </div>
       <div>
         <div class="turntable-image">

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Courier · Baked sprite normals</title>
+<style>
+  :root { color-scheme: dark; background: #10171b; color: #faf0dc; font: 15px system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { width: min(1040px, calc(100% - 36px)); margin: auto; padding: 28px 0; }
+  h1 { margin: 0; font: 400 clamp(34px, 7vw, 60px)/1 Georgia, serif; letter-spacing: -.04em; }
+  header p { margin: 8px 0 20px; color: #bdcec6; }
+  .panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  figure { margin: 0; border: 1px solid #465655; border-radius: 5px; background: #18252a; overflow: hidden; }
+  canvas { display: block; width: min(100%, 320px); aspect-ratio: 1; margin: auto; image-rendering: pixelated; }
+  figcaption { padding: 10px; border-top: 1px solid #465655; font-weight: 650; text-align: center; }
+  figure:last-child { border-color: #72978a; }
+  figure:last-child figcaption { color: #a4e0c5; }
+  fieldset { display: flex; gap: 12px 20px; align-items: center; flex-wrap: wrap; border: 0; margin: 0; padding: 15px 0; }
+  label { display: flex; gap: 8px; align-items: center; flex: 1 1 240px; }
+  input[type=range] { flex: 1; min-width: 60px; accent-color: #a4e0c5; }
+  output { min-width: 58px; color: #bdcec6; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  button, a { padding: 8px 11px; border: 1px solid #627572; border-radius: 4px; background: #243636; color: inherit; font: inherit; text-decoration: none; }
+  button { min-width: 70px; cursor: pointer; }
+  nav { display: flex; gap: 7px; flex-wrap: wrap; }
+  @media (max-width: 540px) {
+    main { width: calc(100% - 22px); padding-top: 20px; }
+    .panels { gap: 6px; }
+    figcaption { padding: 7px 2px; font-size: 12px; }
+  }
+</style>
+<main>
+  <header><h1>Signal Courier</h1><p>Move the light across the same baked animation frames.</p></header>
+  <div class="panels">
+    <figure><canvas id="color" aria-label="Baked color frame"></canvas><figcaption>Color</figcaption></figure>
+    <figure><canvas id="normal" aria-label="Baked view-space normal frame"></canvas><figcaption>Normals</figcaption></figure>
+    <figure><canvas id="toon" aria-label="Same frame with three-band lighting"></canvas><figcaption>Toon light</figcaption></figure>
+  </div>
+  <p id="status" role="status">Loading the atlas…</p>
+  <div id="controls" hidden>
+    <fieldset aria-label="Frame and light controls">
+      <button id="play" type="button">Play</button>
+      <label>Frame <input id="frame" type="range" min="0" value="0"><output id="current" for="frame"></output></label>
+      <label>Light <input id="light" type="range" min="-120" max="120" value="-45"><output id="angle" for="light">−45°</output></label>
+    </fieldset>
+    <nav aria-label="Download the exported atlas">
+      <a id="color-file" download="color.png">Color PNG</a>
+      <a id="normal-file" download="normal.png">Normal PNG</a>
+      <a id="json-file" download="atlas.json">Atlas JSON</a>
+    </nav>
+  </div>
+</main>
+<script type="module">
+/* SHADER */
+const { metadata, files } = /* DATA */;
+const get = id => document.getElementById(id);
+const frame = get('frame'), light = get('light'), play = get('play');
+const { frames, width, height, tileWidth, tileHeight, fps } = metadata;
+let current = Math.min(17, frames.length - 1), timer;
+
+async function pixels(url) {
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0);
+  return context.getImageData(0, 0, width, height).data;
+}
+
+try {
+  const [color, normal] = await Promise.all([pixels(files.color), pixels(files.normal)]);
+  const contexts = ['color', 'normal', 'toon'].map(mode => {
+    const canvas = get(mode);
+    canvas.width = tileWidth;
+    canvas.height = tileHeight;
+    return [mode, canvas.getContext('2d', { willReadFrequently: true })];
+  });
+  let painted;
+  function show() {
+    const { rect } = frames[current], strip = rect.width * 4;
+    const image = new ImageData(rect.width, rect.height);
+    for (const [mode, context] of contexts) {
+      if (painted === current && mode !== 'toon') continue;
+      for (let y = 0; y < rect.height; y++) {
+        const at = ((rect.y + y) * width + rect.x) * 4;
+        image.data.set(color.subarray(at, at + strip), y * strip);
+      }
+      previewSpriteNormals(image.data, normal, width, rect, mode, Number(light.value));
+      context.putImageData(image, 0, 0);
+    }
+    painted = current;
+    frame.value = current;
+    get('current').textContent = (current + 1) + ' / ' + frames.length;
+    get('angle').textContent = light.value + '°';
+  }
+  function playback(on) {
+    clearInterval(timer);
+    play.textContent = on ? 'Pause' : 'Play';
+    timer = on ? setInterval(() => { current = (current + 1) % frames.length; show(); }, 1000 / fps) : undefined;
+  }
+  frame.max = frames.length - 1;
+  frame.oninput = () => { playback(false); current = Number(frame.value); show(); };
+  light.oninput = show;
+  play.onclick = () => playback(!timer);
+  get('color-file').href = files.color;
+  get('normal-file').href = files.normal;
+  get('json-file').href = URL.createObjectURL(new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' }));
+  get('controls').hidden = false;
+  get('status').hidden = true;
+  show();
+  playback(!matchMedia('(prefers-reduced-motion: reduce)').matches);
+} catch (error) {
+  get('status').textContent = error.message;
+}
+</script>
+</html>

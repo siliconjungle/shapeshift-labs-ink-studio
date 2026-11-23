@@ -2279,7 +2279,7 @@ const CMD = {
     const atlas = spriteAtlas(w, { width: num('w', 96), height: num('h', 96), directions: num('directions', 8),
       columns: num('cols', num('directions', 8)), maps: opt.maps ? String(opt.maps).split(',') : [],
       pivot: opt.pivot ? list('pivot') : w.cam.target, view: view(), yaw: num('yaw', w.cam.yaw),
-      pitches:opt.pitches===undefined?undefined:list('pitches'),times,fps,pose,cutoutMipmaps });
+      pitches:opt.pitches===undefined?undefined:list('pitches'),times,fps,pose,cutoutMipmaps,normalSpace:opt['normal-space'] });
     writeAtlas(directory, atlas);
     console.log('wrote', directory, atlas.metadata.frames.length, 'frames');
   },

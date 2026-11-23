@@ -1,6 +1,6 @@
 import { createCoverageVote } from './coverage-vote.mjs';
 import { createGaussianProxyRenderer, gaussianProxyPlan } from './gaussian-part-proxies.mjs';
-import { captureGaussianTurntable, gaussianCoverageFrame } from './gaussian-turntable.mjs';
+import { captureGaussianTurntable, gaussianCoverageFrame, gaussianNormalFrame } from './gaussian-turntable.mjs';
 import { createSplatPaintPass, splatPaintStyle } from './splat-paint-pass.mjs';
 import { createGaussianHarmonics } from './gaussian-harmonics.mjs';
 import { createSurfaceOrder, surfaceOrderRegion, surfaceOrderSettings } from './surface-order.mjs';
@@ -153,7 +153,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const skyPrograms = new Map();
     const dryGeometry = target(2), dryContours = target(2), plainOwner = target(), key = target(1, { integer: true });
     const wetVariants = new Map();
-    let graphOwnership, wetGeometry, wetContours, waterTexture, packedWater, maskOwner, glassBoundary, dryGlassGeometry, wetGlassGeometry;
+    let graphOwnership, normalOwner, wetGeometry, wetContours, waterTexture, packedWater, maskOwner, glassBoundary, dryGlassGeometry, wetGlassGeometry;
     let portalSource, portalMask, portalSpriteLayer, portalProgram;
     const portalDestinations = [], portalApertures = [];
     let lastWater, lastWaterTime, uploadedWater, waterWidth = 0, waterHeight = 0;
@@ -635,6 +635,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_portalCoverPlane: options.u_portalCoverPlane ?? zero,
         u_paintPass: !!options.u_paintPass, u_splatPaintPass: !!options.u_splatPaintPass, u_coverageVotePass: !!options.u_coverageVotePass,
         u_gaussianMaterialPass: !!options.u_gaussianMaterialPass, u_surfacePeel: false,
+        u_gaussianNormalCutoff: options.u_gaussianNormalCutoff ?? 0,
         u_materialGridScale: options.u_materialGridScale ?? 1,
         u_facingGridScale: options.u_materialGridScale ?? 1,
         u_spriteLodGrid: options.spriteGrid ?? [1,1],
@@ -1005,6 +1006,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       contours.resize(colored ? width : 1, colored ? height : 1);
       const ownsPixels = packedDepth || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
       owner.resize(ownsPixels ? width : 1, ownsPixels ? height : 1);
+      const captureNormals = harmonics && frame[gaussianNormalFrame];
+      if (captureNormals) {
+        normalOwner ??= target();
+        normalOwner.resize(width, height);
+      }
       if (scopedCleanup) detailTable ??= table(512, 7, maxSize);
       if (materialStyles) materialStyleTable ??= table(512, 16, maxSize);
       key.resize(patterned ? width : 1, patterned ? height : 1);
@@ -1342,6 +1348,12 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (orderReport) frame.surfaceOrderReport?.(orderReport);
       if (captureSplatCoverage) captureSplatCoverage((colored ? contours : geometry).framebuffer);
+      if (captureNormals) {
+        drawGeometry(shader, normalOwner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0,
+          u_gaussianNormalCutoff: captureNormals.cutoff, tangent, proxy, surfaces, scaleSurfaces, spriteRows,
+          surfaceFrame: { ...surfaceFrame, index: true } }, water, wet, env);
+        captureNormals.read(normalOwner.framebuffer);
+      }
       if (materialPalette) {
         drawGeometry(shader, gaussianMaterialPalette.coverage, width, height, {
           u_idx: 0, u_snap: 1, u_hard: 0, u_gaussianMaterialPass: true,

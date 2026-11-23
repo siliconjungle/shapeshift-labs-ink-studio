@@ -24,7 +24,7 @@ function spriteAtlas(world, options = {}) {
   const {
     width = 96, height = 96, directions = 8, times = [0], fps = 12, columns = directions,
     pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view = {}, depthRange, sourceTimes, pitches,
-    cutoutMipmaps
+    cutoutMipmaps, normalSpace = 'asset'
   } = options;
   if (!integer(width, 1, 2048) || !integer(height, 1, 2048) ||
       !integer(columns, 1, 256) || !Number.isFinite(fps) || fps <= 0 || fps > 240 ||
@@ -34,6 +34,7 @@ function spriteAtlas(world, options = {}) {
         Array.from(sourceTimes).some(time => !Number.isFinite(time) || time < 0) || typeof pose !== 'function')) ||
       !Array.isArray(pivot) || pivot.length !== 3 || !pivot.every(Number.isFinite) ||
       !Array.isArray(maps) || maps.some(map => !mapNames.includes(map)) ||
+      !['asset', 'view'].includes(normalSpace) ||
       (pose !== undefined && typeof pose !== 'function'))
     throw new RangeError('Invalid sprite atlas dimensions, timing, directions, pivot or maps');
   const requested = [...new Set(maps)];
@@ -64,6 +65,7 @@ function spriteAtlas(world, options = {}) {
     const duration = f + 1 < times.length ? times[f + 1] - time : 1 / fps;
     for (let angle=0;angle<views;angle++) {
       const {direction,yaw,pitch}=angles[angle];
+      const axes = images.normal && normalSpace === 'view' ? AtlasSprites.basis(yaw, pitch) : null;
       const i = f * views + angle, ox = i % cols * width, oy = Math.floor(i / cols) * height;
       const image = render(world, { spriteReconstruction: false, ...view, t: sourceTime, w: width, h: height, px: 1,
         yaw, pitch, ortho: true, target: pivot,
@@ -92,8 +94,11 @@ function spriteAtlas(world, options = {}) {
           maxDepth = Math.max(maxDepth, data.depth[p]);
           depths[q] = data.depth[p];
         }
-        if (images.normal && (data.normal[j] || data.normal[j + 1] || data.normal[j + 2])) {
-          for (let c = 0; c < 3; c++) images.normal[k + c] = byte(.5 + data.normal[j + c] * .5);
+        if (images.normal && (!axes || alpha) && (data.normal[j] || data.normal[j + 1] || data.normal[j + 2])) {
+          const xyz = data.normal.subarray(j, j + 3);
+          const channels = axes ? [AtlasSprites.dot(axes.right, xyz), AtlasSprites.dot(axes.up, xyz),
+            AtlasSprites.dot(axes.normal, xyz)] : xyz;
+          for (let c = 0; c < 3; c++) images.normal[k + c] = byte(.5 + channels[c] * .5);
           images.normal[k + 3] = 255;
         }
         if (images.emission) {
@@ -124,13 +129,13 @@ function spriteAtlas(world, options = {}) {
     }
   }
   const metadata = { width: w, height: h, tileWidth: width, tileHeight: height, directions, fps, ...(pitches && { pitches:pitches.slice() }),
-    pivot: pivot.slice(), frames: entries, normalSpace:'asset', emissionMode:'baked',
+    pivot: pivot.slice(), frames: entries, normalSpace, emissionMode:'baked',
     ...(cutout && { cutoutMipmaps: cutout }),
     encodings: {
       color: 'straight RGBA',
       ...(images.silhouette && { silhouette: 'binary RGBA coverage at alpha >= 128' }),
       ...(images.depth && { depth: { range, encoding: 'camera-axis distance as RGB24, alpha marks a surface' } }),
-      ...(images.normal && { normal: 'world XYZ mapped from [-1,1] to RGB, alpha marks a normal' }),
+      ...(images.normal && { normal: (normalSpace === 'view' ? 'view XYZ' : 'world XYZ') + ' mapped from [-1,1] to RGB, alpha marks a normal' }),
       ...(images.emission && { emission: 'visible premultiplied emissive RGB, alpha is max RGB' })
     } };
   return { images, metadata };
