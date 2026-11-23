@@ -503,7 +503,7 @@ history age, and fallback reasons on `frame.volumeStats`.
 
 ```sh
 node cli/ink-studio.js clip examples/depth-aware-fog/stochastic-aperture.js \
-  --w 200 --h 124 --px1 --fps 16 --from 0 --to 1.875 --raw \
+  --w 200 --h 124 --px 1 --px1 --fps 16 --from 0 --to 1.875 --raw \
   --volume-stochastic 8 --volume-stochastic-history 12 --out aperture.png
 
 node scripts/review-stochastic-fog.js stochastic-fog-review

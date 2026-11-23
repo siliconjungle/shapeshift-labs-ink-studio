@@ -3343,7 +3343,7 @@ function renderFrame(world, o, preparedPalettes) {
     const quality = fogQuality;
     if (quality.stochastic > 1) {
       quality.historySource = o.atmosphere ?? world.atmosphere;
-      quality.historyLighting = volumeLighting;
+      quality.historyLighting = o.volumeLighting ?? world.volumeLighting ?? o.areaLights ?? world.areaLights;
       quality.resetHistory = o.resetRenderHistory;
     }
     atmosphere = applyAtmosphere(volumes, col, axialDepth, rayAt, W, H, horizon, quality, t, quality.media,
