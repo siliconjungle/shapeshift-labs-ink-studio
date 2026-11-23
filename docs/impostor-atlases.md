@@ -126,7 +126,26 @@ its move with `--sprite-clip right-call`.
 
 A JSON diorama can put an array of placements in `finish.spriteAtlases` and refer to each `atlas` by a path relative to the diorama. Use `--sprite-atlas off` to hide the authored placements in a comparison. A manifest passed with `--sprite-atlas` replaces the scene's placements for that render and defaults to the world origin. Set `--sprite-at x,y,z` and `--sprite-scale n` to place it.
 
-Depth positions each texel along its draw ray and participates in the scene's depth, fog, and emission passes. The renderer uses the silhouette of the selected view. The [survey drone example](../examples/relightable-impostor.js) demonstrates both placement modes under changing camera and lighting angles.
+Depth positions each texel along its draw ray and participates in the scene's depth, fog, and emission passes. By default the renderer uses the silhouette of the selected view. The [survey drone example](../examples/relightable-impostor.js) demonstrates both placement modes under changing camera and lighting angles.
+
+## Depth-reprojected views
+
+Bake registered depth and set `"viewBlend": "depth-reprojected"` to blend between authored views. This applies to standalone impostors in headless rendering and to bound sprite reconstruction in headless and WebGL rendering and picking.
+
+```sh
+ink-studio atlas examples/adaptive-impostors/aperture-relay.js \
+  --directions 8 --w 136 --h 132 --yaw -.392699 --raw \
+  --maps depth,normal,emission,silhouette --impostor-blend depth-reprojected --out relay-atlas
+node examples/depth-reprojected-impostors.cjs /tmp/relay-review
+```
+
+Ink projects each source texel into the current camera view and resolves occlusion in each projected tile. The nearest authored view sets cutout coverage. Color, normals, emission, and depth blend where the other view covers the same surface at a compatible depth. Compatible view-space normals are converted to asset coordinates before blending. With `cutoutMipmaps` enabled, the view is reprojected from its selected registered mip.
+
+Use `--impostor-blend nearest` or `--impostor-blend depth-reprojected` to compare the two playback modes from the same atlas. In Node and WebGL set `impostorBlend` on the render frame. The asset default is `nearest`. Ordinary cards and painted scenery keep their own placement rules. Missing depth, separate painted effects, and active painted transitions or fringes use the nearest tile. Exact authored orthographic views also use their original tiles.
+
+At most two source tiles contribute to a draw, within 45 degrees of the observer. The shared CPU cache stores bounded reprojected tiles in half-degree camera bins. WebGL displays the result with its existing depth-bearing quad. Bound sprite frame reports give the neighbor angle, blend weight, and counts of blended texels, nearest-only texels, and neighbor texels rejected by cutouts in `states[i].reprojection`. Large or near-singular projections fall back to the nearest tile.
+
+The Aperture Relay comparison renders the original geometry, closest-view playback, and depth-reprojected playback on the same art grid. Its orbit and JSON report show both improvements and residual errors from single-layer source depth.
 
 ## Cutout coverage at a distance
 

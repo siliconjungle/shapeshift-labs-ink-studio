@@ -957,7 +957,7 @@ function renderFrame(world, o, preparedPalettes) {
   const spriteLOD = world.spriteReconstruction && require('../index.js').load().KIT.sprite.reconstruction;
   const spritePlan = spriteLOD && spriteLOD.resolve(world, {
     eye, back:[V[2],V[6],V[10]], ortho, focal:focal/(o.artGridScale||1),
-    setback:depthOffset, time:t, mode:o.spriteReconstruction,
+    setback:depthOffset, time:t, mode:o.spriteReconstruction, impostorBlend:o.impostorBlend,
     atlasTime:shutterRows?.atlasTime
   });
   const spriteAtlases = AtlasSprites.placements(world.spriteAtlases, o.spriteAtlases);
@@ -1131,7 +1131,7 @@ function renderFrame(world, o, preparedPalettes) {
     surfaceDepth[sample.p] = Math.min(surfaceDepth[sample.p], sample.z);
   const sprites=AtlasRaster.rasterize(spriteAtlases,{
     eye,V,W,H,focal,ortho,near,rayAt,time:t,interfaceTime:o.interfaceTime,override:o.spriteAtlasMode,sun,
-    reconstructed, spriteLOD,
+    reconstructed, spriteLOD, impostorBlend:o.impostorBlend,
     objectDither: anchorSpaces.has('object'), shutterTime: shutterRows?.atlasTime,
     subject: pictureFocus ? target=>focusedRule(target,protection?.match(target)) : protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),

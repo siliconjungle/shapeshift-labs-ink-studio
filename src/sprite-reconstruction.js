@@ -156,11 +156,12 @@ bool spriteGeometry(int code, vec2 at) {
     return entries.filter(row=>row.part!==undefined).map(({object,part,material})=>({object,part,material}));
   }
 
-  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime } = {}) {
+  function resolve(world, { eye, back, ortho, focal, time = 0, setback = 0, mode = 'auto', atlasTime, impostorBlend } = {}) {
     const configuration = world.spriteReconstruction;
     if (!configuration || mode === false || mode === 'geometry') return null;
     if (!['auto', 'sprite'].includes(mode) || !Number.isFinite(time) || !Number.isFinite(setback))
       throw new RangeError('Sprite reconstruction mode must be auto, geometry or sprite');
+    atlasAPI.viewBlend(impostorBlend);
     const plan = bindingsFor(world, configuration),
       rows = [],
       states = [],
@@ -209,19 +210,24 @@ bool spriteGeometry(int code, vec2 at) {
       const pixelsPerTexel = project(view);
       const cutoutLevel = source.atlas.cutoutLevel?.(view, pixelsPerTexel);
       if (cutoutLevel !== undefined) state.cutoutLevel = cutoutLevel;
-      const axes = atlasAPI.basis(
+      const reprojection = atlasAPI.reproject(placement, view, local(rotation,direction), {
+        blend:impostorBlend, distance:ortho ? Infinity : distance, pixelsPerTexel, time:clock
+      });
+      const axes = reprojection ? atlasAPI.basis(reprojection.report.yaw+placement.yaw,reprojection.report.pitch) : atlasAPI.basis(
         Math.atan2(direction[0], direction[2]),
         Math.atan2(direction[1], Math.hypot(direction[0], direction[2]))
       );
       state.view = { frame: view.frame, yaw: view.yaw, pitch: view.pitch };
+      if (reprojection) state.reprojection=reprojection.report;
       rows.push({
         placement,part,
         at,
         view,
         axes,
+        reprojection,
         cutoutLevel,
         normalAxes:
-          source.atlas.normalSpace === 'view' ? atlasAPI.basis(view.yaw + placement.yaw, view.pitch) : rotation,
+          !reprojection && source.atlas.normalSpace === 'view' ? atlasAPI.basis(view.yaw + placement.yaw, view.pitch) : rotation,
         phase,
         step
       });
@@ -250,8 +256,9 @@ bool spriteGeometry(int code, vec2 at) {
     const texel = { color: [0, 0, 0], normal: [0, 0, 0], emission: [0, 0, 0] },
       effectColor = [0, 0, 0];
     for (const row of plan.rows) {
-      const { placement, at, axes, view } = row,
+      const { placement, at, axes, reprojection } = row,
         { atlas, objectId, materialId, scale } = placement;
+      const view = reprojection?.view ?? row.view;
       const facing = -dot(ray, axes.normal);
       if (!(facing > 1e-7)) continue;
       const plane = dot(plus(origin, at, -1), axes.normal) / facing;
@@ -286,10 +293,11 @@ bool spriteGeometry(int code, vec2 at) {
           solid
         });
       }
-      const mip = atlas.cutoutImage?.(view, row.cutoutLevel);
-      if (mip ? atlas.cutoutSample(view, mip, u, v, placement, texel) : atlas.sample(view, x, y, placement, texel))
-        add(texel.alpha, texel.depth, texel.color, true);
-      const effect = atlas.effect(view),
+      const mip = !reprojection && atlas.cutoutImage?.(view, row.cutoutLevel);
+      const body = reprojection ? atlasAPI.sampleReprojected(reprojection,u,v,placement,texel) :
+        mip ? atlas.cutoutSample(view,mip,u,v,placement,texel) : atlas.sample(view,x,y,placement,texel);
+      if (body) add(texel.alpha,texel.depth,texel.color,true);
+      const effect = reprojection ? null : atlas.effect(view),
         coverage = effect?.sample(x, y, effectColor);
       if (coverage) add(coverage, effect.depth, effectColor, false);
     }

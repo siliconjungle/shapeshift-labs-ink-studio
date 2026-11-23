@@ -1319,7 +1319,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (source.spriteReconstruction && !spriteLOD) throw new Error('Sprite reconstruction needs the Ink Studio KIT');
       const spritePlan = source.spriteReconstruction && spriteLOD.resolve(source, {
         eye:camera.eye,back,ortho:camera.ortho,focal:camera.projection[5]*height*.5,
-        setback:camera.setback,time:t,mode:frame.spriteReconstruction
+        setback:camera.setback,time:t,mode:frame.spriteReconstruction,impostorBlend:frame.impostorBlend
       });
       const spriteMask = spritePlan?.mask, spriteRows = spritePlan?.rows;
       if (spriteMask) {
@@ -2312,7 +2312,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         const view=makeCamera(world,frame,width,height);
         const {eye,back}=cameraPose(view);
         const plan=spriteLOD.resolve(world,{eye,back,ortho:view.ortho,focal:view.projection[5]*height*.5,
-          setback:view.setback,time,mode:frame.spriteReconstruction});
+          setback:view.setback,time,mode:frame.spriteReconstruction,impostorBlend:frame.impostorBlend});
         if(plan?.mask){
           const {projection,view:m}=view;
           const axial=([x,y,z])=>-(m[2]*x+m[6]*y+m[10]*z+m[14]);

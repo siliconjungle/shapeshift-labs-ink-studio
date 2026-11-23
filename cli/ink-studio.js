@@ -1011,6 +1011,7 @@ const view = extra =>
       scalePreviews: onOffOption('scale-previews'),
       reliefLOD: opt['relief-lod']==='off' ? false : opt['relief-lod'],
       spriteAtlasMode: opt['sprite-atlas-mode'],
+      impostorBlend:require('../src/atlas-sprites.js').viewBlend(opt['impostor-blend']),
       meshes: onOffOption('meshes'),
       brickMeshes: onOffOption('brick-meshes'),
       splatDepthProxies: onOffOption('splat-depth-proxies'),
@@ -1354,7 +1355,7 @@ const CMD = {
         '  atlas <id> [--directions 8 --pitches 0,0.7 --w 96 --h 96 --fps 12 --maps depth,normal,emission,silhouette]',
         '    --adaptive-views [--min-directions 4 --view-probes 64 --view-error .045 --view-protect JSON --view-review]',
         '           [--clips plan.json] bake named sprite clips from one seekable source',
-        '             [--cutout-mipmaps coverage|average --alpha-cutoff 0.5]  export a transparent sprite atlas',
+        '             [--cutout-mipmaps coverage|average --alpha-cutoff 0.5] [--impostor-blend depth-reprojected]  export a transparent sprite atlas',
         '  camera-review <scene> --from 0 --to 2 --frames 5 --w 160 --h 96   export-sized frames and framing checks',
         '  silhouette-review <scene> --directions 8 --w 96 --h 96   paired export-size views and edge contrast',
         '  transition-review <scene> [--plan file.json] --w 160 --h 90 [--out sheet.png]',
@@ -1634,7 +1635,7 @@ const CMD = {
         'view options: --surface off (no finish layers) --facing-colors off --directional-colors off --water off --reflections off --reflection-probes off --transmission off --surface-detail-kits off --atmosphere off --edges off (no edge sprites) --yaw --pitch --zoom 2 --target x,y,z --w 900 --h 620 --px 2 (screen pixels per art pixel) --px1 (native art pixels) --tone stipple|off --raw (no palette) --colored (smooth body-colored contours) --fine (inked detail: colours looked up per pixel) --bounce (bounce light baked in) --focus x,y,z[,near,far,coarse] (uneven detail) --follow [stretch,broad] (dabs along the form) --adaptive-sampling on|off|file.json --clean (remove lone pixels) --camera-shot id --ortho [on|off] (override authored projection) --cols 4 --out file.png --seed n',
         'socket emitter options: --atmosphere-emitters on|off|file.json',
         'animated splat options: --splat-fields on|off|file.json',
-        'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite',
+        'sprite options: --sprite-atlas on|off|atlas.json --sprite-at x,y,z --sprite-scale n --sprite-atlas-mode card|impostor|scenery --sprite-reconstruction auto|geometry|sprite --impostor-blend nearest|depth-reprojected',
         '                --sprite-cels edits.json|off --sprite-playback once|loop',
         'shaped fog options: --shaped-atmosphere on|off|file.json --volume-cutouts on|off|file.json',
         'atmosphere bands: --atmosphere-depth-bands on|off|file.json',
@@ -2724,7 +2725,7 @@ const CMD = {
     const settings={ width: num('w', 96), height: num('h', 96), directions: num('directions', 8),
       columns: num('cols', num('directions', 8)), maps: opt.maps ? String(opt.maps).split(',') : [],
       pivot: opt.pivot ? list('pivot') : w.cam.target, view: view(), yaw: num('yaw', w.cam.yaw),
-      pitches,...(clips===undefined?{times}:{clips}),fps,pose,cutoutMipmaps,normalSpace:opt['normal-space'],adaptive };
+      pitches,...(clips===undefined?{times}:{clips}),fps,pose,cutoutMipmaps,normalSpace:opt['normal-space'],viewBlend:opt['impostor-blend'],adaptive };
     const atlas=spriteAtlas(w,settings);
     writeAtlas(directory, atlas);
     if (viewReview) require('./impostor-view-review.js').review(w,atlas,settings,path.join(directory,'review'));

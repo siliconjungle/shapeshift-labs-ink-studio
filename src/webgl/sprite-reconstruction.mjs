@@ -184,9 +184,10 @@ void main(){
         ...environment?.uniforms
       });
       for (const row of rows) {
-        const { placement, view: tile, at, axes, normalAxes, phase, step, cutoutLevel } = row;
-        const mip = placement.atlas.cutoutImage?.(tile, cutoutLevel);
-        const image = mip ?? api.tile(row);
+        const { placement, at, axes, normalAxes, phase, step, cutoutLevel, reprojection } = row;
+        const tile = reprojection?.view ?? row.view;
+        const mip = !reprojection && placement.atlas.cutoutImage?.(tile, cutoutLevel);
+        const image = reprojection?.image ?? (mip || api.tile(row));
         texture(image);
         shader.set({
           u_anchor: at,

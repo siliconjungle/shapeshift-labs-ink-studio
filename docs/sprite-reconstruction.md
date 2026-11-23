@@ -40,7 +40,7 @@ representation owns all pixels. Zoom, field of view, the art-grid size and
 the atlas view's scale all affect the handoff. Supply one of `projectedRange`
 and `range`.
 
-Bake the near geometry at the same `at`, `yaw` and `scale` as the atlas placement. If `at(time)` moves the pivot, animate the full-detail object to match. `frame` also accepts a callback, and `playback` accepts the existing atlas time modes. Synchronize any native animation to the atlas bake's sample times. The closest baked heading and elevation are used while the atlas is active. More views reduce changes between neighbouring silhouettes.
+Bake the near geometry at the same `at`, `yaw` and `scale` as the atlas placement. If `at(time)` moves the pivot, animate the full-detail object to match. `frame` also accepts a callback, and `playback` accepts the existing atlas time modes. Synchronize any native animation to the atlas bake's sample times. The closest baked heading and elevation are used by default. Enable [depth-reprojected atlas views](impostor-atlases.md#depth-reprojected-views) to align nearby tiles before blending. Reconstruction uses the same reprojected depth and cutouts for drawing and ray picks.
 
 ## Render and inspect the handoff
 

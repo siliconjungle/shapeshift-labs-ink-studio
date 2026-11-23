@@ -3,6 +3,7 @@ const AtlasSprites = (() => {
   const drawing=typeof FrameComposite==='undefined'?require('./frame-composite.js'):FrameComposite;
   const cels=typeof SpriteCels==='undefined'?require('./sprite-cels.js'):SpriteCels;
   const shells=typeof ShadowShell==='undefined'?require('./shadow-shell.js'):ShadowShell;
+  const reprojection=typeof AtlasViewReprojection==='undefined'?require('./atlas-view-reprojection.js'):AtlasViewReprojection;
   const cutouts=typeof SpriteCutoutMipmaps==='undefined'?require('./sprite-cutout-mipmaps.js'):SpriteCutoutMipmaps;
   const assetBrand=Symbol.for('ink-studio.sprite-atlas'), placedBrand=Symbol.for('ink-studio.atlas-placement');
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -139,7 +140,7 @@ const AtlasSprites = (() => {
       throw new RangeError('Sprite atlas needs valid dimensions and view frames');
     if (!['view','asset'].includes(normalSpace)||!['baked','add'].includes(emissionMode)||!['rgb24','gray'].includes(depthFormat))
       throw new RangeError('Invalid sprite atlas map encoding');
-    const cutoutMipmaps=cutouts.prepare(m.cutoutMipmaps);
+    const cutoutMipmaps=cutouts.prepare(m.cutoutMipmaps), viewBlend=reprojection.mode(m.viewBlend);
     if (cutoutMipmaps && painted !== undefined) throw new TypeError('Cutout mipmaps need a card or impostor atlas');
     if (outputPalette!==undefined && (!Array.isArray(outputPalette) || !outputPalette.length || outputPalette.length>64 ||
         !Array.from(outputPalette).every(color=>integer(color,0,0xffffff))))
@@ -310,7 +311,11 @@ const AtlasSprites = (() => {
       ...(transition&&{transition:transition.frame}),
       ...(transition?.silhouetteIds.length&&{silhouettes:transition.silhouetteIds,
         silhouette:(view,time,id)=>transition.silhouetteIds.includes(id) ? transition.frame(view,time,id) : null}),
-      playback,
+      playback, viewBlend,
+      ...(maps.depth && !scenery && { reproject(primary,direction,options) {
+        const views=groups.get(primary.frame).map(view=>edits?.held.get(view)??view);
+        return reprojection.resolve(this,primary,views,direction,{...options,basis});
+      } }),
       snapshot:()=>({metadata:structuredClone(metadata),images:structuredClone(sourceMaps)}),
       width,height,normalSpace,emissionMode,swatches,largestView:frames.reduce((max,{rect})=>Math.max(max,rect.width*rect.height),0),hasDepth:Boolean(maps.depth||scenery||editedDepth||edits?.transition?.hasDepth),sceneryPlanes:scenery?.planes});
   }
@@ -361,6 +366,13 @@ const AtlasSprites = (() => {
     return source.map(place);
   }
 
-  return Object.freeze({compile,place,placements,basis,nativeOrigin,dot,vector});
+  function reproject(placement, primary, direction, { blend, distance=Infinity, pixelsPerTexel, time } = {}) {
+    const {atlas,depth,scale}=placement, selected=blend??atlas.viewBlend;
+    if (selected!=='depth-reprojected' || !depth) return null;
+    return atlas.reproject?.(primary,direction,{distance:distance/scale,pixelsPerTexel,time}) ?? null;
+  }
+
+  return Object.freeze({compile,place,placements,basis,nativeOrigin,dot,vector,reproject,
+    viewBlend:reprojection.mode, reprojectionPixelLimit:reprojection.pixelLimit, sampleReprojected:reprojection.sample});
 })();
 if (typeof module !== 'undefined') module.exports = AtlasSprites;
