@@ -154,6 +154,7 @@ function writeLockedSearch(folder,engine,source,brief,assets,paths,options) {
 
 module.exports=function command([mode,file,config],opt,kit) {
   const P=kit.KIT.music.production;
+  if (mode==='drop-studies') return require('./music-drop-studies.js')(file,opt,kit);
   if (mode==='instrument-benchmark') return require('./music-instrument-benchmark.js')(file,opt,kit);
   if (mode==='sound-library' || mode==='sound-pack') {
     const library=require('./music-sound-library.js');

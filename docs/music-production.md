@@ -1,5 +1,7 @@
 # Music production
 
+[Dance drop studies](music-drop-studies.md) ships editable drum & bass, dubstep and rave sessions with in-context drum auditions and measured kick–bass timing.
+
 Use a phrase arrangement as the shared score and scene cue source. A production
 adds instrument patches, performed note timing, voicing, mixing, and playback
 rules. The [Relay Glass cue](../examples/music-production/relay-glass.json)

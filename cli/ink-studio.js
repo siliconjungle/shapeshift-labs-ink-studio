@@ -1206,6 +1206,7 @@ const CMD = {
         '  music production instrument-library   list instruments, ranges and gestures',
         '  music production instrument-pack NAME [settings.json] --out DIR   export a stock instrument and its WAVs',
         '  music production play-kit <instrument.json> <performance.json> --out DIR   play a portable pad kit',
+        '  music production drop-studies [dnb|dubstep|rave] --out DIR   print editable dance drop studies and drum auditions',
         '  music production instrument-benchmark suite.json --clap-host host.json --out DIR   compare instruments on the same performance and mix',
         '  music production instrument-presets   list ready-to-play phrase-aware patches',
         '  music production sound-library   list the recorded native sound packs',
