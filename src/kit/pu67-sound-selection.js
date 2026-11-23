@@ -154,7 +154,7 @@
     return {rules,choose};
   }
 
-  function readContact(row,contact,profile,{speedForFullStrength,loadForFullStrength}){
+  function readContact(row,contact,profile,{speedForFullStrength,loadForFullStrength,threshold}){
     const details=record(row.contact)?row.contact:contact;
     const authored=[row,details,row.fact?.data,row.data];
     const value=(name,valid)=>authored.map(item=>item?.[name]).find(valid);
@@ -167,17 +167,25 @@
     const surface=value('surface',key)??[surfaceRecord?.id,row.material,details?.material,profile?.id].find(key);
     const wetness=value('wetness',unit)??[surfaceRecord?.wetness,profile?.wetness].find(unit);
     const explicit=value('strength',unit);
+    const readLoad=()=>value('load',nonnegative)??authored.map(normalLoad).find(nonnegative);
+    const readSpeed=()=>value('speed',nonnegative);
     let measurement;
     if(explicit!==undefined)measurement={kind:'strength',value:explicit,reference:1};
     else{
-      const load=loadForFullStrength===undefined?undefined:value('load',nonnegative)??authored.map(normalLoad).find(nonnegative);
-      const speed=speedForFullStrength===undefined?undefined:value('speed',nonnegative);
+      const load=loadForFullStrength===undefined?undefined:readLoad();
+      const speed=speedForFullStrength===undefined?undefined:readSpeed();
       if(load!==undefined)measurement={kind:'load',value:load,reference:loadForFullStrength};
       else if(speed!==undefined)measurement={kind:'speed',value:speed,reference:speedForFullStrength};
     }
     const strength=measurement&&Math.min(1,measurement.value/measurement.reference);
     const context=Object.fromEntries(Object.entries({action,object,surface,strength,wetness,prop}).filter(([,item])=>item!==undefined));
-    return {context,measurement};
+    const reading={context,measurement};
+    if(threshold){
+      const {measure}=threshold;
+      reading.thresholdValue=measure==='strength'?strength:measurement?.kind===measure?measurement.value:
+        measure==='load'?readLoad():readSpeed();
+    }
+    return reading;
   }
 
   function normalLoad(row){

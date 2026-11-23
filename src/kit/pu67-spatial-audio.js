@@ -13,6 +13,8 @@
   const amplitude=db=>10**(-db/20);
   const ordered=rows=>Object.keys(rows).sort().map(key=>[key,rows[key]]);
   const eventKinds=['material-sound','audio-cue','animation-sound'];
+  const impactLayers=['strike','surface','rattle','tail'];
+  const cueFields=['cue','interaction','at','gain','select','speedForFullStrength','loadForFullStrength'];
 
   function distanceSettings(raw={},base={reference:1,max:50,rolloff:1,fade:5}){
     check(keys(raw,['reference','max','rolloff','fade']),'Invalid audio distance settings');
@@ -92,16 +94,41 @@
     });
     const createPlayback=()=>Object.assign(S.createPlayback(),{contactFrame:contactPlayback?.()});
     const livePlayback=createPlayback();
+    function compileCue(name,row,impact){
+      const {cue,interaction,at,gain,select,threshold,delay,bus,speedForFullStrength,loadForFullStrength}=row;
+      check((cue!==undefined?cues.has(cue):interaction!==undefined?['roll','step','impact'].includes(interaction):select!==undefined)&&
+        [speedForFullStrength,loadForFullStrength].every(value=>value===undefined||
+          (select!==undefined||threshold?.measure==='strength')&&finite(value,.000001,1e12))&&
+        (at===undefined||selector(at))&&finite(gain??1,0,16),'Invalid cue binding '+name);
+      if(impact){
+        check((threshold===undefined||keys(threshold,['measure','min'])&&['strength','speed','load'].includes(threshold.measure)&&
+          finite(threshold.min,0,threshold.measure==='strength'?1:1e12))&&finite(delay??0,0,10)&&
+          (bus===undefined||buses.includes(bus)),'Invalid compound impact layer '+name);
+      }
+      return {name,...row,impact,select:select===undefined?undefined:selection.rules(select,name)};
+    }
     const bindings=new Map();
     for(const [name,row] of table(config.bindings??{},128,'bindings')){
-      check(keys(row,['on','cue','interaction','at','gain','select','speedForFullStrength','loadForFullStrength'])&&keys(row.on,['kind','system','where'])&&
-        id(row.on.kind)&&(row.on.system===undefined||id(row.on.system))&&
-        (row.cue!==undefined?cues.has(row.cue):row.interaction!==undefined?['roll','step','impact'].includes(row.interaction):row.select!==undefined)&&
-        [row.speedForFullStrength,row.loadForFullStrength].every(value=>value===undefined||row.select!==undefined&&finite(value,.000001,1e12))&&
-        (row.at===undefined||selector(row.at))&&finite(row.gain??1,0,16),'Invalid cue binding '+name);
+      const compound=record(row)&&row.impactLayers!==undefined;
+      const allowed=compound?['on','at','gain','impactLayers']:['on',...cueFields];
+      check(keys(row,allowed)&&keys(row.on,['kind','system','where'])&&id(row.on.kind)&&
+        (row.on.system===undefined||id(row.on.system)),'Invalid cue binding '+name);
       Q.condition(row.on.where,{});
       if(!bindings.has(row.on.kind))bindings.set(row.on.kind,[]);
-      bindings.get(row.on.kind).push({name,...row,select:row.select===undefined?undefined:selection.rules(row.select,name)});
+      const definitions=bindings.get(row.on.kind);
+      if(!compound){
+        definitions.push(compileCue(name,row));
+        continue;
+      }
+      check(keys(row.impactLayers,impactLayers)&&Object.keys(row.impactLayers).length>0&&
+        (row.at===undefined||selector(row.at))&&finite(row.gain??1,0,16),'Invalid compound impact binding '+name);
+      for(const layer of impactLayers){
+        if(!own(row.impactLayers,layer))continue;
+        const spec=row.impactLayers[layer], address='impact:'+name+'/'+layer;
+        check(keys(spec,[...cueFields,'threshold','delay','bus']),'Invalid compound impact layer '+address);
+        definitions.push({...compileCue(address,spec,{binding:name,layer}),on:row.on,
+          at:spec.at??row.at,gain:(row.gain??1)*(spec.gain??1)});
+      }
     }
 
     function mix(query,listener,input){
@@ -111,8 +138,10 @@
       const variation=input.selection?.variation, detune=variation?2**(variation.pitchCents/1200):1;
       const pitch=variation?.rate??Math.max(.001,Math.min(64,(input.pitch??1)*cue.pitch*detune));
       const scale=Math.min(16384,(input.gain??1)*cue.gain);
+      const bus=input.bus??cue.bus??(input.impact?'effects':undefined);
       const result={id:input.id,cue:input.cue,asset:cue.asset,mode:input.mode,offset:input.offset??0,
-        rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(cue.bus!==undefined&&{bus:cue.bus}),
+        rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(bus!==undefined&&{bus}),
+        ...(input.impact&&{impact:input.impact,startDelay:input.startDelay}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
         ...(input.selection!==undefined&&{selection:variation?{...input.selection,variation:{...variation,rate:pitch}}:input.selection}),
         ...(cue.follow&&input.mode==='cue'&&at?.entity&&{attachment:{cue:input.cue,at,
@@ -173,13 +202,14 @@
     }
 
     function eventAt(row) {
-      for (const at of [row.at,row.point,row.emitter,row.contact?.point,row.fact?.at]) {
+      for (const at of [row.at,row.point,row.emitter,row.contact?.at,row.contact?.point,row.fact?.at]) {
         if (selector(at)) return at;
         if (point(at?.point)) return at.point;
         if (id(at?.entity) && (at.socket===undefined || id(at.socket)))
           return {entity:at.entity,...(at.socket!==undefined&&{socket:at.socket})};
       }
-      return id(row.entity)?{entity:row.entity}:undefined;
+      const entity=row.entity??row.contact?.entity;
+      return id(entity)?{entity}:undefined;
     }
     function surfaceAt(query,at){
       const position=resolve(query,at)?.point;
@@ -187,7 +217,7 @@
     }
     function materialCue(query,row,at,interaction){
       const profile=surfaceAt(query,at);
-      const material=row.material??profile?.id;
+      const material=row.material??row.contact?.material??row.surface?.id??row.contact?.surface?.id??profile?.id;
       return materials.get(material)?.[interaction]??profile?.sounds?.[interaction];
     }
     function frame({query,time=0,from=time,listener,events=[],animation=[],timeline,captureSources=false,
@@ -214,10 +244,13 @@
         let matched=false, profile, replayed=0;
         for(const binding of bindings.get(row.kind)??[]){
           if(binding.on.system!==undefined&&binding.on.system!==row.system||!Q.condition(binding.on.where,row))continue;
+          const {impact,threshold}=binding;
+          if(impact)matched=true;
+          if(binding.select&&profile===undefined)profile=surfaceAt(query,at)??null;
+          const reading=(binding.select||threshold)&&S.readContact(row,contact,profile,binding);
+          if(threshold&&(reading.thresholdValue===undefined||reading.thresholdValue<threshold.min))continue;
           let chosen;
           if(binding.select){
-            if(profile===undefined)profile=surfaceAt(query,at)??null;
-            const reading=S.readContact(row,contact,profile,binding);
             const replay=recorded?.get(binding.name);
             chosen=selection.choose(binding.select,reading,serial,binding.name,playback,replay);
             if(replay)replayed++;
@@ -225,15 +258,17 @@
           }
           matched=true;
           const site=binding.at??at, voiceId=serial+'/'+binding.name, level=gain*(binding.gain??1);
+          const layerInput=impact?{...raw,bus:binding.bus,startDelay:binding.delay??0,
+            impact:{...impact,...(threshold&&{threshold:{...threshold,value:reading.thresholdValue}})}}:raw;
           if(chosen){
             for(const {cue,selection} of chosen){
               const layer=selection.layer;
-              add({...raw,id:layer?'layer:'+JSON.stringify([voiceId,layer.at]):voiceId,
+              add({...layerInput,id:layer?'layer:'+JSON.stringify([voiceId,layer.at]):voiceId,
                 cue,selection,at:site,gain:level*(layer?.weight??1)},shots);
             }
           }else{
             const cue=binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
-            if(cue)add({...raw,id:voiceId,cue,at:site,gain:level},shots);
+            if(cue)add({...layerInput,id:voiceId,cue,at:site,gain:level},shots);
           }
         }
         check(!recorded||replayed===recorded.size,'Saved sound choice no longer matches its binding');

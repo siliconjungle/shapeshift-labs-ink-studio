@@ -11,7 +11,7 @@ simulation, and acoustic queries.
 | --- | --- |
 | `cues` | A table of cue names mapped to asset IDs or records with `asset`, `at`, `gain`, `pitch`, `distance`, and `occlusion`. A cue with an `at` position uses an XYZ point or entity/socket selector. A cue without a position plays without spatial panning. |
 | `emitters` | Named looping emitters with a `cue`, optional overriding `at`, `gain`, and starting buffer `offset` in seconds. Entity/socket positions follow the current world snapshot. |
-| `bindings` | Named rules with `on.kind`, optional `on.system` and `on.where`, and a `cue` or material `interaction`. A rule can override `at` and scale `gain`. |
+| `bindings` | Named rules with `on.kind`, optional `on.system` and `on.where`, and a `cue` or material `interaction`. A rule can override `at` and scale `gain` or define compound `impactLayers`. |
 | `soundFamilies` | Named sets of takes for context-based selections in a binding's `select` rules. Takes use the same cue table as ordinary bindings. |
 | `materials` | A material-to-cue table with optional `step`, `roll`, and `impact` entries. Set `surface` to a physical surface field to read authored material sounds at a contact point. |
 | `distance` | Default falloff in world units. Set `reference`, `max`, `rolloff`, and `fade`. Cues can override these values. Default gain is full through 1 unit, falls off inversely, and fades to silence across the last 5 of 50 units. |
@@ -52,8 +52,8 @@ are returned in `active`, and event cues in `cues`. Each voice reports
 its resolved position, distance, per-band gains, filter cutoff, and
 any obstacle or acoustic route status.
 
-`createSpatialAudioPlayer(context, {resolveAsset, destination, panning,
-maxVoices, smoothing})` is exported by `webgl.mjs`. The caller supplies
+`createSpatialAudioPlayer(context, {resolveAsset, destination, destinations,
+panning, maxVoices, smoothing})` is exported by `webgl.mjs`. The caller supplies
 a Web Audio context and a resolver returning an `AudioBuffer` or promise
 for each asset ID. Call `update(frame)` to update the listener and active
 voices and play new cue IDs. One-shot cues use the acoustic mix at
@@ -312,3 +312,85 @@ origin or give the host a current contact snapshot.
 the `foley` bus by default when soundtrack post is enabled. Its report
 includes the contact ID, source cue, and sample range for each material
 loop. [Run the continuous contact demo](../examples/continuous-contact-sounds/demo.cjs)
+
+## Layer compound impacts
+
+Use `impactLayers` inside a cue binding to split an impact into a
+`strike`, `surface`, `rattle`, and `tail`. Include the layers that make
+sense for the object. The binding can listen for an authored event or
+native `material-sound` events with `interaction: "impact"`.
+
+```json
+{
+  "cues": {
+    "tool-hit": "tool-hit",
+    "boards": "boards-thump",
+    "stone": "stone-crack",
+    "hardware": "loose-hardware",
+    "ring": "toolbox-ring"
+  },
+  "materials": {
+    "shop/boards": { "impact": "boards" },
+    "shop/stone": { "impact": "stone" }
+  },
+  "bindings": {
+    "toolbox": {
+      "on": {
+        "kind": "material-sound",
+        "where": { "path": "/interaction", "value": "impact" }
+      },
+      "impactLayers": {
+        "strike": { "cue": "tool-hit", "bus": "foley" },
+        "surface": {
+          "interaction": "impact",
+          "threshold": { "measure": "speed", "min": 1.2 },
+          "delay": 0.009,
+          "bus": "effects"
+        },
+        "rattle": {
+          "cue": "hardware",
+          "threshold": { "measure": "load", "min": 35 },
+          "delay": 0.043,
+          "gain": 0.7,
+          "bus": "foley"
+        },
+        "tail": {
+          "cue": "ring",
+          "threshold": { "measure": "strength", "min": 0.7 },
+          "speedForFullStrength": 4,
+          "delay": 0.027,
+          "bus": "ambience"
+        }
+      }
+    }
+  }
+}
+```
+
+Each layer can use a named `cue`, look up a material cue with
+`interaction: "impact"`, or use `select` for context rules, velocity
+layers, and rotating takes. The binding's `at` and `gain` apply across
+its layers. A layer can override the position and add its own gain
+multiplier. Use a prop-specific rule for sounds such as loose tools
+inside a box.
+
+A threshold uses an inclusive minimum. Ink reads `speed`, `load`, or
+normalized `strength` from the event or its contact record. Load can come
+from force projected onto the contact normal. For strength, Ink uses an
+explicit value in `[0, 1]` first, then load or speed normalized by the
+layer's `loadForFullStrength` or `speedForFullStrength`. Missing
+measurements leave their gated layer silent. When a compound binding
+matches, its layers replace the event's automatic cue.
+
+Each layer's `bus` can override the cue's bus. The default is `effects`.
+Enable `post` on the scene soundtrack to print the separate buses. A live Web Audio host can pass
+`destinations: {foley, effects, ambience}` to the spatial player, where
+each entry is an AudioNode on the player's context. Unmapped buses use
+the player's `destination`. Layer `delay` is measured in seconds from
+the live dispatch or the recorded event onset. Acoustic propagation
+delay is added independently.
+
+Story audio reports preserve the impact's beat ID and show each
+sounding layer's threshold reading, scheduled sample, arrival sample,
+and stem. A rotating or detuned layer has its own sound-choice receipt
+under `impact:<binding>/<layer>`. [Run the compound-impact demo](../examples/compound-impact-sounds/demo.cjs)

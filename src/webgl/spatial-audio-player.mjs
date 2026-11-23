@@ -1,16 +1,21 @@
 /* Play spatial mix frames through caller-owned Web Audio resources. */
 const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
 const finite=(value,min,max)=>Number.isFinite(value)&&value>=min&&value<=max;
+const buses=['dialogue','foley','effects','ambience','music'];
 const position=value=>Array.isArray(value)&&value.length===3&&value.every(Number.isFinite);
 
 export function createSpatialAudioPlayer(context, {
-  resolveAsset, destination=context?.destination, panning='HRTF', maxVoices=32, smoothing=.025
+  resolveAsset, destination=context?.destination, destinations={}, panning='HRTF', maxVoices=32, smoothing=.025
 }={}) {
   if(typeof context?.createBufferSource!=='function'||!context.listener||!destination||
     typeof resolveAsset!=='function'||!['HRTF','equalpower'].includes(panning)||
     !Number.isSafeInteger(maxVoices)||maxVoices<1||maxVoices>128||!finite(smoothing,0,1))
     throw new TypeError('Spatial audio needs a Web Audio context, asset resolver, and valid mix settings');
 
+  if(!destinations||![Object.prototype,null].includes(Object.getPrototypeOf(destinations))||
+    Object.entries(destinations).some(([name,node])=>!buses.includes(name)||node?.context!==context||typeof node.connect!=='function'))
+    throw new TypeError('Spatial audio bus destinations must be AudioNodes on the player context');
+  const outputs=new Map(Object.entries(destinations)), output=voice=>outputs.get(voice.bus)??destination;
   const voices=new Map(), seen=new Set(), assets=new Map(), retiring=new Set();
   let disposed=false, previousTime=-Infinity;
   function remember(id){
@@ -93,7 +98,7 @@ export function createSpatialAudioPlayer(context, {
     previousTime=-Infinity;
   }
   function start(voice,at){
-    const row={voice,when:at+voice.delay};
+    const row={voice,when:at+voice.delay+(voice.startDelay??0)};
     voices.set(voice.id,row);
     row.pending=asset(voice.asset).then(buffer=>{
       if(disposed||voices.get(voice.id)!==row)return;
@@ -121,8 +126,8 @@ export function createSpatialAudioPlayer(context, {
         panner=context.createPanner();
         panner.panningModel=panning;
         panner.rolloffFactor=0;
-        gain.connect(panner);panner.connect(destination);nodes.push(panner);
-      }else gain.connect(destination);
+        gain.connect(panner);panner.connect(output(live));nodes.push(panner);
+      }else gain.connect(output(live));
       Object.assign(row,{source,low,high,filter,gain,panner,nodes,started:when});
       tune(row,true);
       source.onended=()=>{
@@ -156,6 +161,7 @@ export function createSpatialAudioPlayer(context, {
         !finite(row.rate,.001,64)||!finite(row.offset,0,65e9)||!finite(row.cutoff,20,22000)||
         (row.contact&&(row.mode!=='loop'||!finite(row.contact.targetGain,0,16384)||
           !finite(row.contact.remaining,0,10.000001)))||
+        (row.startDelay!==undefined&&(row.mode!=='cue'||!finite(row.startDelay,0,10)))||
         !finite(row.delay,0,1e9)||row.position!==null&&!position(row.position)||
         row.apparentSource!==undefined&&!position(row.apparentSource)||
         (row.mode==='clip'?!finite(row.duration,0,1e9):row.duration!==undefined))
@@ -186,7 +192,7 @@ export function createSpatialAudioPlayer(context, {
       for(const [id,voice] of selected){
         let row=voices.get(id);
         if(row&&(row.voice.asset!==voice.asset||(!voice.contact&&row.voice.rate!==voice.rate)||
-          Boolean(row.voice.position)!==Boolean(voice.position))){
+          output(row.voice)!==output(voice)||Boolean(row.voice.position)!==Boolean(voice.position))){
           stop(row);
           row=undefined;
         }

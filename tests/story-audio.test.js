@@ -115,6 +115,56 @@ test('recorded continuous contacts print timed fades, variable phase and exact t
   assert.deepEqual(all.report.storyAudio.cues,[]);
 });
 
+test('compound impact layers preserve beat identity, sample delays, buses, and replay choices', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-impact-layers-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=name=>path.join(dir,name), bytes=name=>fs.readFileSync(file(name));
+  const save=(name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  const read=name=>JSON.parse(bytes(name));
+  const call=(...args)=>execFileSync(process.execPath,[cli,...args],{cwd:dir,encoding:'utf8',stdio:'pipe'});
+  const run=R.create({id:'compound-test',dt:.125,commands:[{tick:2,action:'world/event',
+    args:K.world.timedEvents.at(.1875,{kind:'drop',contact:{speed:4,load:30}})}]});
+  run.advance(6);
+  save('run.json',run.recording());
+  for(const [name,gain] of Object.entries({hit:.05,surface:.1,rattle:.15,ring:.2}))
+    fs.writeFileSync(file(name+'.wav'),ink.encodeWav(audio(gain,rate/2)));
+  const varied=cue=>({takes:{take:cue,alternate:cue},variation:{rotate:true,pitchCents:[-100,100]}});
+  const definition={format:'ink-studio/scene-audio',version:1,sampleRate:rate,post:{},
+    assets:{hit:'hit.wav',surface:'surface.wav',rattle:'rattle.wav',ring:'ring.wav'},
+    spatial:{cues:{hit:'hit',surface:'surface',rattle:'rattle',ring:'ring'},soundSeed:9,
+      soundFamilies:{hardware:varied('rattle'),resonance:varied('ring')},
+      bindings:{tool:{on:{kind:'drop'},impactLayers:{
+        strike:{cue:'hit',bus:'foley'},
+        surface:{cue:'surface',bus:'effects',delay:.015625,threshold:{measure:'speed',min:4}},
+        rattle:{select:[{id:'parts',family:'hardware'}],bus:'effects',delay:.03125,threshold:{measure:'load',min:30}},
+        tail:{select:[{id:'body',family:'resonance'}],bus:'ambience',delay:.0625}
+      }}}}};
+  save('plan.json',definition);
+  call('story','audio','run.json','plan.json','--out','original');
+  const report=read('original/report.json');
+  assert.deepEqual(report.cues.map(row=>[row.impact.layer,row.onsetSample,row.impact.startSample,row.arrivalSample,row.file]),[
+    ['strike',1500,1500,1500,'foley.wav'],['surface',1500,1625,1625,'effects.wav'],
+    ['rattle',1500,1750,1750,'effects.wav'],['tail',1500,2000,2000,'ambience.wav']
+  ]);
+  assert(report.cues.every(row=>row.source.beatId==='ink:beat:compound-test/main/2.0'));
+  const gainAt=(bus,sample)=>ink.decodeWav(bytes('original/'+bus+'.wav')).samples[2*sample];
+  assert.equal(gainAt('effects',1624),0);
+  assert(Math.abs(gainAt('effects',1625)-.1)<.0001);
+  assert(Math.abs(gainAt('effects',1750)-.25)<.0001);
+  assert.equal(gainAt('ambience',1999),0);
+  assert(Math.abs(gainAt('ambience',2000)-.2)<.0001);
+  const choices=read('original/receipts.json').choices;
+  assert.deepEqual(choices.map(row=>row.binding),['impact:tool/rattle','impact:tool/tail']);
+  definition.spatial.soundSeed=922;
+  definition.spatial.soundFamilies.hardware.variation.pitchCents=[0,0];
+  save('changed.json',definition);
+  call('story','audio','run.json','changed.json','--receipts','original/receipts.json','--out','replay');
+  for(const name of ['mix.wav','receipts.json','report.json'])assert(bytes('replay/'+name).equals(bytes('original/'+name)));
+  call('story','audio','run.json','plan.json','--from','.24','--to','.5','--out','trim');
+  assert.deepEqual(ink.decodeWav(bytes('trim/mix.wav')).samples,
+    ink.decodeWav(bytes('original/mix.wav')).samples.subarray(3840,8000));
+});
+
 test('story audio saves per-layer take and pitch receipts and replays them with a changed seed', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-sound-receipts-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));

@@ -295,6 +295,47 @@ test('contact snapshots release missing contacts and use stable native wheel ide
     /Invalid continuous contact audio interaction/);
 });
 
+test('compound impacts gate each voice, resolve material and prop cues, and keep native fallback scoped',()=>{
+  const cues={hit:{asset:'hit',bus:'effects'},wood:'wood',clink:'clink',ring:{asset:'ring',bus:'ambience'}};
+  const create=impactLayers=>W.spatialAudio.create({cues,materials:{boards:{impact:'wood'}},
+    soundFamilies:{parts:{takes:{clink:'clink'}}},bindings:{
+      tool:{on:{kind:'material-sound',where:{path:'/interaction',value:'impact'}},gain:.8,impactLayers}
+    }
+  });
+  const layers={
+    strike:{cue:'hit',bus:'foley',threshold:{measure:'speed',min:.5}},
+    surface:{interaction:'impact',threshold:{measure:'speed',min:1}},
+    rattle:{threshold:{measure:'load',min:12},delay:.025,
+      select:[{id:'box',when:{prop:'toolbox'},family:'parts'}]},
+    tail:{cue:'ring',threshold:{measure:'strength',min:.5},speedForFullStrength:4,
+      at:[1,0,0],gain:.5,delay:.05}
+  };
+  const audio=create(layers);
+  const frame=(...events)=>audio.frame({listener:[0,0,0],events}).cues;
+  const event={id:'hit-1',kind:'material-sound',interaction:'impact',entity:'toolbox',point:[0,0,-1],
+    cue:'hit',material:'boards'};
+  assert.deepEqual(frame({...event,speed:.2}),[]);
+  assert.deepEqual(frame(event),[]);
+  assert.deepEqual(frame({...event,interaction:'roll'}).map(row=>row.cue),['hit']);
+  const tap=frame({...event,speed:.5,contact:{load:12,prop:'plain-box'}});
+  assert.deepEqual(tap.map(row=>[row.impact.layer,row.bus,row.startDelay]),[['strike','foley',0]]);
+  const hard={...event,contact:{speed:2,force:[0,-12,0],normal:[0,2,0]}};
+  const hit=frame(hard,hard);
+  assert.deepEqual(hit.map(row=>[row.impact.layer,row.cue,row.bus,row.startDelay]),[
+    ['strike','hit','foley',0],['surface','wood','effects',0],
+    ['rattle','clink','effects',.025],['tail','ring','ambience',.05]
+  ]);
+  assert.deepEqual(hit.map(row=>row.impact.threshold.value),[2,2,12,.5]);
+  assert.deepEqual(hit[3].position,[1,0,0]);
+  near(hit[3].gain,.4);
+  assert.equal(new Set(hit.map(row=>row.id)).size,4);
+  assert.equal(hit[2].selection.binding,'impact:tool/rattle');
+  assert.throws(()=>create({strike:{cue:'unknown'}}),/Invalid cue binding/);
+  assert.throws(()=>create({strike:{cue:'hit',bus:'custom'}}),/Invalid compound impact layer/);
+  assert.throws(()=>create({strike:{cue:'hit',threshold:{min:2,measure:'strength'}}}),/Invalid compound impact layer/);
+  assert.throws(()=>create({squeak:{cue:'hit'}}),/Invalid compound impact binding/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
@@ -384,11 +425,33 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
     player.dispose();
     return {starts,rates,levels};
   }
+  async function impact(){
+    const context=new OfflineAudioContext(2,samples,rate), buffer=context.createBuffer(1,samples,rate);
+    buffer.getChannelData(0).fill(.25);
+    const merger=context.createChannelMerger(2), foley=context.createGain(), effects=context.createGain();
+    foley.connect(merger,0,0);effects.connect(merger,0,1);merger.connect(context.destination);
+    const starts=[], create=context.createBufferSource.bind(context);
+    context.createBufferSource=()=>{
+      const source=create(), start=source.start.bind(source);
+      source.start=(...args)=>{starts.push(args[0]);start(...args);};
+      return source;
+    };
+    const player=createSpatialAudioPlayer(context,{resolveAsset:()=>buffer,destinations:{foley,effects}});
+    const strike={...voice,position:null,bus:'foley',startDelay:0};
+    const tail={...strike,id:'tail',bus:'effects',startDelay:.0625};
+    const frame={...base,cues:[strike,tail]};
+    await player.update(frame);
+    await player.update(frame);
+    const output=await context.startRendering();
+    const levels=[.04,.1025].map(time=>[0,1].map(channel=>output.getChannelData(channel)[Math.round(time*rate)]));
+    player.dispose();
+    return {starts,levels};
+  }
   try{
     const clear=await play(voice), same=await play(voice,{duplicate:true}),
       obstructed=await play({...voice,gain:.22,bands:{low:.22,mid:.22,high:.06},cutoff:1000}),
       cancelled=await play(voice,{cancel:true});
-    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous()});
+    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact()});
   }catch(error){await report({error:error.stack});}
   </script>`);
   const child=spawn(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
@@ -422,4 +485,9 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   assert(attack>0&&attack<building&&building<full);
   assert(releasing>0&&releasing<full);
   near(silent,0);
+  assert.deepEqual(report.impact.starts,[0,.0625]);
+  const [earlyImpact,lateImpact]=report.impact.levels;
+  assert(earlyImpact[0]>.05);
+  near(earlyImpact[1],0);
+  assert(lateImpact.every(level=>level>.05));
 });
