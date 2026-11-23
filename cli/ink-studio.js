@@ -1330,6 +1330,7 @@ const CMD = {
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '                              [--res 0.08 --texture-size 1024 --triangles 16000 --duration 4 --fps 30]',
+        '  scan-mesh <depth.png|depth.json> --image aligned.png --out prop.glb   recover an opaque mesh with residual splats',
         '  depth <map.png|map.json> [--image aligned.png --out-dir folder]  import a depth map as splats, a mesh and an SDF',
         '                              [--size 6 --cells 64 --res 0.09 --hues 6 --shades 4 --up z --spin 0.5 --thick 0.1]; a mesh file also works wherever an id does',
         '  validate <scene|look-file> [--renderer headless|webgl]   check scene content and look bindings',
@@ -3587,6 +3588,9 @@ const CMD = {
     if (opt.json || opt.out) return io.report(report, opt, pos[0]);
     const label = report.scene ? ' (' + report.scene.id + ', "' + report.scene.name + '")' : '';
     console.log(pos[0] + ': sound' + label);
+  },
+  'scan-mesh'() {
+    return require('./scan-mesh.js').command(pos[0],opt,lib());
   },
   depth() {
     require('./depth.js')(pos[0], opt, lib(), path.join(OUT, 'depth-import'));

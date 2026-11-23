@@ -67,6 +67,14 @@
       const [xs, ys] = camera.scaleAt(d);
       return [(u - camera.cx) * xs, (camera.cy - v) * ys, -d];
     };
+    function depthAt(u,v) {
+      if (!Number.isInteger(u)||!Number.isInteger(v)||u<0||u>=width||v<0||v>=height) return 0;
+      const pixel=v*width+u, raw=depth[pixel];
+      if ((mask && !mask[pixel]) || (options.alphaMask && channels===4 && !image.data[pixel*channels+3]) ||
+          !Number.isFinite(raw) || raw===options.invalid) return 0;
+      const d=raw*depthScale+depthOffset;
+      return finitePositive(d) ? d : 0;
+    }
     let low = Infinity,
       high = -Infinity;
     for (let row = 0; row < rows; row++)
@@ -74,12 +82,8 @@
         const u = Math.min(width - 1, col * stride + Math.floor(stride / 2));
         const v = Math.min(height - 1, row * stride + Math.floor(stride / 2));
         const pixel = v * width + u,
-          raw = depth[pixel];
-        if ((mask && !mask[pixel]) || (options.alphaMask && channels === 4 && !image.data[pixel * channels + 3]))
-          continue;
-        if (!Number.isFinite(raw) || raw === options.invalid) continue;
-        const d = raw * depthScale + depthOffset;
-        if (!finitePositive(d)) continue;
+          d = depthAt(u,v);
+        if (!d) continue;
         const p = project(u, v, d);
         if (!p.every(v => Number.isFinite(Math.fround(v))))
           throw new RangeError('Projection exceeds the supported coordinate range');
@@ -140,7 +144,7 @@
       }
     const rasterVertices = samples.slice();
     for (const [i, s] of samples.entries()) {
-      if (used[i]) continue;
+      if (used[i] || options.isolatedPatches === false) continue;
       // A disconnected pixel still contributes a small camera-facing patch.
       const h = stride * 0.44,
         first = pos.length / 3;
@@ -239,6 +243,13 @@
     return {
       front,
       mesh,
+      depthAt,
+      frontUVs: () => Float32Array.from(rasterVertices.flatMap(({u,v})=>[
+        K.clamp(u/Math.max(1,width-1),0,1),K.clamp(v/Math.max(1,height-1),0,1)])),
+      observations: function* () {
+        for (const [index,sample] of samples.entries())
+          yield { ...sample, position:vectorAt(pos,index), normal:normalAt(index), color:vectorAt(colors,index) };
+      },
       bounds: closedBounds,
       camera,
       count: samples.length,

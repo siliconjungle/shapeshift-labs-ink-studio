@@ -12,6 +12,8 @@ const unsigned = [5121, 5123, 5125], float = [5126], maxPoints = 4_000_000;
 const countValid = n => Number.isSafeInteger(n) && n >= 0;
 const clamp = n => Math.min(1, Math.max(0, n));
 
+export const hasScanSurfaceGltf = document => document?.asset?.extras?.inkStudioScanSurface === 1;
+
 export function hasGaussianGltf(document) {
   return (document?.meshes ?? []).some(mesh =>
     mesh?.primitives?.some(part => Object.hasOwn(part?.extensions ?? {}, gaussianGltfExtension)));
@@ -230,7 +232,8 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
   }
   const asset = kit.authoring.gltfAssets.create(source);
   const { document, binary } = asset.snapshot();
-  if (!hasGaussianGltf(document)) throw new TypeError('No KHR_gaussian_splatting primitive in glTF');
+  const scanSurface = hasScanSurfaceGltf(document);
+  if (!scanSurface && !hasGaussianGltf(document)) throw new TypeError('No KHR_gaussian_splatting primitive in glTF');
   const supported = [gaussianGltfExtension,'KHR_mesh_quantization','KHR_texture_transform','KHR_materials_unlit'];
   const missing = (document.extensionsRequired ?? []).filter(name => !supported.includes(name));
   if (missing.length) throw new TypeError('Unsupported required glTF extensions: ' + missing.join(', '));
@@ -259,12 +262,13 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
       rows.push({ detail, ellipse, part, point, indices, mode });
     }
   }
-  if (!count) throw new RangeError('The selected glTF scene has no Gaussian points');
+  if (!count && (!scanSurface || !rows.length)) throw new RangeError('The selected glTF scene has no Gaussian points');
 
   const data = new Float32Array(count*16), dc = new Float32Array(count*3), terms = (degree+1)**2-1;
   const sh = new Float32Array(count*terms*3);
   const linear = rows.some(row => row.ellipse?.colorSpace === colors[1]) ? new Uint8Array(count) : undefined;
   const objectIds = new Uint32Array(count), targetIds = new Uint32Array(count), objects = [null], targets = [null];
+  const normals = scanSurface && new Float32Array(count*3);
   const meshes = [], parts = [], cached = new Map(), { trs, mul } = kit.mesh.gltfTransforms;
   const segments = new Map();
   const lo = [Infinity,Infinity,Infinity], hi = [-Infinity,-Infinity,-Infinity];
@@ -293,12 +297,22 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
     const first = next, objectIndex = segments.get(object) ?? objects.length, targetIndex = targets.length;
     if (!segments.has(object)) { segments.set(object,objectIndex); objects.push(object); }
     targets.push({ entity:object, part:id });
-    const rotate = harmonicRotation(orientation(matrix),ellipse.degree);
+    const axes = orientation(matrix), rotate = harmonicRotation(axes,ellipse.degree);
+    const normal = scanSurface && part.attributes.NORMAL !== undefined &&
+      accessor(part.attributes.NORMAL,'VEC3',float,false,'NORMAL');
+    if (normal && normal.count !== point.count) throw new RangeError('Scan normals must match POSITION');
+    const inverseScale = normal && [0,4,8].map(i => 1/Math.hypot(...matrix.slice(i,i+3)));
     const n = ellipse.harmonics.length - 1, input = new Float64Array(n);
     const isLinear = ellipse.colorSpace === colors[1];
     for (let j=0; j<indices.length; j++,next++) {
       const i = indices.get(j), at = next*16;
       packGaussian(data,at,point,matrix,trs,mul,ellipse,i);
+      if (normal) {
+        const transformed = [0,1,2].map(axis=>axes.reduce((sum,vector,k)=>
+          sum+vector[axis]*normal.get(i,k)*inverseScale[k],0));
+        const length=Math.hypot(...transformed);
+        if (length) normals.set(transformed.map(value=>value/length),next*3);
+      }
       include(data.subarray(at,at+3),[4,8,10].map(k => 3*Math.sqrt(data[at+k])));
       objectIds[next] = objectIndex;
       targetIds[next] = targetIndex;
@@ -318,11 +332,11 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
   }
   const target = lo.map((n,k) => (n+hi[k])/2), radius = Math.max(...hi.map((n,k) => n-lo[k]),1e-4);
   const pal = [0x101820,0x334552,0x6f8590,0xbccdd0,0xf4f8f5];
-  return { count, data, meshes, gaussianCloud:true, gaussianSort:'cameraDistance',
-    gaussianHarmonics:{ count, degree, dc, sh, linear, up:'y', colorMode:'rgb' },
-    gltfParts:{ extension:gaussianGltfExtension, scene:scene ?? document.scene ?? (document.scenes?.length ? 0 : null),
+  return { count, data, meshes, ...(scanSurface && {scanSurface:true}), ...(count && { gaussianCloud:true, gaussianSort:'cameraDistance',
+      gaussianHarmonics:{ count, degree, dc, sh, linear, up:'y', colorMode:'rgb' } }),
+    gltfParts:{ ...(count && {extension:gaussianGltfExtension}), ...(scanSurface && {scanSurface:true}), scene:scene ?? document.scene ?? (document.scenes?.length ? 0 : null),
       ...(clip !== undefined && { clip,time }), parts },
-    renderMetadata:{ objectIds, objects, targetIds, targets },
+    renderMetadata:{ objectIds, objects, targetIds, targets, ...(normals && {normals}) },
     seed:1, detail:14, radius, moving:new Int32Array(), back:new Int32Array(), pal, palName:'Gaussian glTF',
     bg:[16,24,32], dither:0, fog:{ c:0,start:1,max:0 }, outline:{ c:0,edge:0 },
     cam:{ target, yaw:.18, pitch:.1, dist:radius*2.05, sway:0 } };

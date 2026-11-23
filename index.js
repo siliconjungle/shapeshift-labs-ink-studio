@@ -100,6 +100,7 @@ module.exports = {
   // a mesh file from disk, by its ending: .obj (with the .mtl beside it), .gltf (with its .bin files), .glb
   createShowBridge: require('./cli/show-bridge.js').createShowBridge,
   readGaussianSplat: require('./cli/gaussian-splats.js').readGaussianSplat,
+  scanToMesh: require('./cli/scan-mesh.js').scanToMesh,
   async gaussianSplatWorld(cloud, options) {
     return (await import('./src/gaussian-splats.mjs')).gaussianSplatWorld(cloud, options);
   },

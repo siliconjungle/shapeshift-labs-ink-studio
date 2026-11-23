@@ -44,7 +44,7 @@ function writeJSON(filename, value) {
   );
 }
 
-module.exports = function depthCommand(filename, opt, kit, output) {
+function readDepthInput(filename, opt = {}) {
   if (!filename) throw new Error('depth <depth.png|depth.json> [--image aligned.png] [--out-dir directory]');
   const extension = path.extname(filename).toLowerCase();
   if (extension !== '.png' && extension !== '.json') throw new Error('Depth input must be PNG or JSON');
@@ -72,6 +72,11 @@ module.exports = function depthCommand(filename, opt, kit, output) {
   }
   if (opt['alpha-mask']) options.alphaMask = true;
 
+  return options;
+}
+
+function depthCommand(filename, opt, kit, output) {
+  const options = readDepthInput(filename,opt);
   const model = kit.KIT.depth.fromMap(options);
   const field = model.field({ cells: Number(opt.cells ?? 64) });
   const world = model.world({ spread: Number(opt.spread ?? 0.6), relight: opt.relight ? true : undefined });
@@ -103,4 +108,6 @@ module.exports = function depthCommand(filename, opt, kit, output) {
     ...world
   });
   console.log('Depth import wrote ' + model.count + ' splats, a closed mesh and an SDF grid to ' + dir);
-};
+}
+
+module.exports = Object.assign(depthCommand,{ readDepthInput });

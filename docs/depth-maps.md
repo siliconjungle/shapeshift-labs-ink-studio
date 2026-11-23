@@ -8,6 +8,8 @@ The command writes `preview.png`, `splats.json`, `mesh.obj` and `sdf.json`. The 
 
 Use the CLI preview for the original CPU-rendered export. The imported world can also be drawn by the [WebGL canvas renderer](browser-renderer.md) after restoring its packed splat buffer.
 
+Use [scan to mesh with residual splats](scan-to-mesh.md) to turn a registered capture into an opaque textured mesh and a sparse Gaussian layer in one GLB.
+
 ## Depth and camera
 
 - **Grayscale PNG** supports 8-bit or 16-bit depth. By default black maps to 1 world unit from the camera and white maps to 2. Set `--near` and `--far` to change the interval, and use `--white-near` for the opposite convention. For raw measurements such as millimetres, use `--depth-scale 0.001` instead. `--depth-offset` adds a constant after scaling.

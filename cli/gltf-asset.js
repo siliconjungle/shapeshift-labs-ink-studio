@@ -27,9 +27,9 @@ function readGltfAsset(file) {
 }
 
 async function readGaussianGltf(file, { optional, onFile, decodeImage, ...options } = {}) {
-  const { gaussianGltfWorld, hasGaussianGltf } = await import('../src/gaussian-gltf.mjs');
+  const { gaussianGltfWorld, hasGaussianGltf, hasScanSurfaceGltf } = await import('../src/gaussian-gltf.mjs');
   const source = readGltfSource(file);
-  if (optional && !hasGaussianGltf(source.gltf)) return null;
+  if (optional && !hasGaussianGltf(source.gltf) && !hasScanSurfaceGltf(source.gltf)) return null;
   const toolkit = require('../index.js').load();
   return gaussianGltfWorld(retain(source,onFile), {
     toolkit, decodeImage:decodeImage ?? require('./gltf-image.js'), ...options

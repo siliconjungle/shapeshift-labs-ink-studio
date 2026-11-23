@@ -1594,7 +1594,7 @@ function renderFrame(world, o, preparedPalettes) {
     for (const id of probes.stats.updated) if (!stats.updated.includes(id)) stats.updated.push(id);
   }
   function receivesDiffuse(i) {
-    return i >= 0 && i < baseCount && AL[i] >= 1 && !(Math.round(d[i*16+11]) & (16 | 32 | 64 | 128 | 256 | 2048 | 32768)) &&
+    return i >= 0 && i < baseCount && (AL[i] >= 1 || world.scanSurface && AL[i] > 0) && !(Math.round(d[i*16+11]) & (16 | 32 | 64 | 128 | 256 | 2048 | 32768)) &&
       !world.opticalSplats?.[i*OpticalMaterials.STRIDE+3] && !surface?.reveals(i) &&
       ContributionRules.materialCoverage(world.materialPixelStyles?.[i*4] ?? 0,coverageMode) !== ContributionRules.softCoverage;
   }
