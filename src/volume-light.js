@@ -161,6 +161,8 @@ const VolumeLight = (() => {
   function integrate(segments, origin, direction, stop, result, options = {}) {
     const { time = 0, media, maxSteps = 64, stepScale = 1, jitter = .5, skip = true, cloudShadow, flash, exposure, cutouts, counters, scatteringStats, extinctionOnly = false } = options;
     const active = new Set(), rgb = [0, 0, 0], light = [1, 1, 1], tint = [0, 0, 0];
+    const scatteringStride = extinctionOnly ? 1 : options.scatteringStride ?? 1;
+    let random = options.scatteringSeed || 1;
     result[0] = result[1] = result[2] = 0;
     result[3] = 1;
     let last = 0;
@@ -182,6 +184,15 @@ const VolumeLight = (() => {
     function paletteColor(volume, color, depth, altitude) {
       const field = volume.paletteField;
       return field ? field.apply(field.source === 'altitude' ? altitude : Math.max(0, depth - depthZero), color, tint) : color;
+    }
+    function fieldColor(volume, bandColor, value, depth, x, y, z, visibility, gain, strike) {
+      const base = paletteColor(volume, bandColor ?? mediumColor(volume, value), depth, y);
+      if (volume.lit && media) {
+        if (scatteringStats) scatteringStats.lightingSamples++;
+        illuminate(volume, light, x, y, z, direction, media, visibility * (exposure?.light?.(x, y, z) ?? 1));
+      } else light.fill(volume.lit ? gain : 1);
+      for (let k = 0; k < 3; k++)
+        light[k] = base[k] * light[k] + volume.emissiveRgb[k] * volume.emissiveGain + (volume.lit ? .45 * (strike?.[k] ?? 0) : 0);
     }
     const rateFloor = (exit - entry) / maxSteps;
     const hasField = segments.some(([, volume]) => volume.type === 'field' || volume.lit || volume.densityField || volume.depthBand?.sample);
@@ -213,11 +224,14 @@ const VolumeLight = (() => {
         } else {
           const step = Math.max(minStep, rateFloor);
           const volumes = [...active];
+          const stochastic = scatteringStride > 1 && volumes.length === 1 && volumes[0].type === 'field' && !cloudShadow && !flash;
+          let weight = 0, count = 0, pickedDepth, pickedValue, pickedColor;
           const gaps = skip && volumes.some(v=>v.type === 'field' && v.field.skip) ? new Float64Array(volumes.length) : null;
           for (let t = last; t < end && (!hasField || result[3] >= .001);) {
             const distance = Math.min(end - t, step);
             if (t + distance === t) break;
             if (counters) counters.marchSteps++;
+            if (scatteringStats) scatteringStats.marchSteps++;
             if (gaps) {
               // Check occupancy before evaluating lighting, exposure, or cutout samplers.
               const x = origin[0]+t*direction[0], y = origin[1]+t*direction[1], z = origin[2]+t*direction[2];
@@ -241,9 +255,9 @@ const VolumeLight = (() => {
             }
             const depth = t + distance * jitter;
             const x = origin[0] + depth * direction[0], y = origin[1] + depth * direction[1], z = origin[2] + depth * direction[2];
-            const visibility = extinctionOnly ? 1 : cloudShadow?.(x, y, z) ?? 1;
+            const visibility = extinctionOnly || stochastic ? 1 : cloudShadow?.(x, y, z) ?? 1;
             const gain = clouds.dim(visibility);
-            const strike = !extinctionOnly && flash?.light(x, y, z);
+            const strike = !extinctionOnly && !stochastic && flash?.light(x, y, z);
             const mist = (exposure?.fog?.(x,y,z) ?? 1) *
               (cutRay ? cutRay.distance(t,t+distance)/distance : 1);
             let density = 0;
@@ -265,22 +279,50 @@ const VolumeLight = (() => {
                 continue;
               }
               if (counters) counters.densitySamples++;
+              if (scatteringStats) scatteringStats.fieldSamples++;
               const value = v.field.sample(x, y, z, time, options);
               const band = v.bands?.sample(value);
               const extinction = (v.bands ? band?.at ?? 0 : value) * localDensity;
               if (!extinction) continue;
               density += extinction;
               if (extinctionOnly) continue;
-              const base = paletteColor(v, band?.rgb ?? mediumColor(v, value), depth, y);
-              if (v.lit && media) {
-                if (scatteringStats) scatteringStats.lightingSamples++;
-                illuminate(v,light,x,y,z,direction,media,visibility*(exposure?.light?.(x,y,z)??1));
-              } else light.fill(v.lit ? gain : 1);
-              for (let k = 0; k < 3; k++)
-                rgb[k] += extinction * (base[k] * light[k] + v.emissiveRgb[k] * v.emissiveGain + (v.lit ? .45 * (strike?.[k] ?? 0) : 0));
+              if (stochastic) {
+                if (extinction <= 0) continue;
+                // Keep the dense extinction march. Replace each group of scattering
+                // evaluations with one draw proportional to visible opacity (T * alpha).
+                const alpha = -Math.expm1(-extinction * distance * (options.fogScale ?? 1));
+                const visible = result[3] * alpha;
+                result[3] *= 1 - alpha;
+                weight += visible;
+                random ^= random << 13;
+                random ^= random >>> 17;
+                random ^= random << 5;
+                if ((random >>> 0) * (weight / 0x100000000) < visible) {
+                  pickedDepth = depth;
+                  pickedValue = value;
+                  pickedColor = band?.rgb;
+                }
+                count++;
+              } else {
+                fieldColor(v, band?.rgb, value, depth, x, y, z, visibility, gain, strike);
+                for (let k = 0; k < 3; k++) rgb[k] += extinction * light[k];
+              }
             }
-            blend(density, distance);
+            if (stochastic) {
+              if (count === scatteringStride) {
+                flushScattering();
+                weight = count = 0;
+              }
+            } else blend(density, distance);
             t += distance;
+          }
+          if (stochastic) flushScattering();
+          function flushScattering() {
+            if (!weight) return;
+            fieldColor(volumes[0], pickedColor, pickedValue, pickedDepth,
+              origin[0] + pickedDepth * direction[0], origin[1] + pickedDepth * direction[1],
+              origin[2] + pickedDepth * direction[2], 1, 1);
+            for (let k = 0; k < 3; k++) result[k] += weight * light[k];
           }
         }
       }
@@ -297,20 +339,30 @@ const VolumeLight = (() => {
     number(maxGap, .001, 10, 'Volume history time gap');
     let last;
     return {
-      filter(color, depth, time, key, { owners,boundaries } = {}) {
-        if (last && last.key === key && time > last.time && time - last.time <= maxGap && last.depth.length === depth.length) {
+      filter(color, depth, time, key, { owners, boundaries, frames, source, lighting, stats } = {}) {
+        const ages = frames && new Uint8Array(depth.length).fill(1);
+        if (last && last.key === key && frames === last.frames && source === last.source && lighting === last.lighting &&
+            time > last.time && time - last.time <= maxGap && last.depth.length === depth.length) {
           for (let p = 0; p < depth.length; p++) {
             if (owners?.[p] !== last.owners?.[p] || boundaries?.[p] || last.boundaries?.[p]) continue;
             const dz = depth[p] === last.depth[p] ? 0 : Math.abs(depth[p] - last.depth[p]);
-            // A sharp change in transmittance signals disocclusion or a fast density change.
-            if (dz > depthTolerance || Math.abs(color[p * 4 + 3] - last.color[p * 4 + 3]) > .18) continue;
-            for (let c = 0; c < 4; c++) {
-              const i = p * 4 + c;
-              color[i] += (last.color[i] - color[i]) * weight;
+            const offset = p * 4;
+            const dt = Math.abs(color[offset + 3] - last.color[offset + 3]);
+            // Accumulate only scattering for the trial. Any change in opaque depth
+            // or native transmittance rejects its prior lighting at this pixel.
+            if (dz > (ages ? 0 : depthTolerance) || dt > (ages ? 1e-6 : .18)) continue;
+            const blend = ages ? 1 - 1 / (ages[p] = Math.min(frames, last.ages[p] + 1)) : weight;
+            if (ages && stats && (color[offset + 3] < 1 || last.color[offset + 3] < 1)) {
+              stats.historyPixels++;
+              stats.historyFrames = Math.max(stats.historyFrames, ages[p]);
+            }
+            for (let c = 0; c < (ages ? 3 : 4); c++) {
+              const i = offset + c;
+              color[i] += (last.color[i] - color[i]) * blend;
             }
           }
         }
-        last = { time, key, depth: depth.slice(), color: color.slice(),
+        last = { time, key, depth: depth.slice(), color: color.slice(), ages, frames, source, lighting,
           owners: owners?.slice(), boundaries: boundaries?.slice() };
         return color;
       },

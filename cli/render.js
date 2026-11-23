@@ -1748,6 +1748,7 @@ function renderFrame(world, o, preparedPalettes) {
   }, air) : null;
   const fogQuality = !rayMedia && axialDepth && atmosphereOptions();
   if (fogQuality && depthFogGeometry) fogQuality.composition='depth';
+  if (!fogQuality && volumeConfig.stochastic > 1) o.volumeHistory?.clear();
   const fogOwners = fogQuality && fogQuality.scale > 1 && fogQuality.reconstruction !== 'depth' &&
     (depthFogGeometry || world.renderMetadata?.objectIds) && new Uint32Array(W*H);
   const fogOwnerRows = fogOwners && world.renderMetadata?.objectIds;
@@ -3340,10 +3341,16 @@ function renderFrame(world, o, preparedPalettes) {
     atmosphere = { fog };
   } else if (fogQuality) {
     const quality = fogQuality;
+    if (quality.stochastic > 1) {
+      quality.historySource = o.atmosphere ?? world.atmosphere;
+      quality.historyLighting = volumeLighting;
+      quality.resetHistory = o.resetRenderHistory;
+    }
     atmosphere = applyAtmosphere(volumes, col, axialDepth, rayAt, W, H, horizon, quality, t, quality.media,
       captureFog || effectMedia || transparent || fogPass, o.volumeHistory,
       o.volumeHistory && [W,H,focal,ortho,quality.scale,quality.reconstruction,quality.composition,quality.depthTolerance,quality.samples,
-        quality.seed,quality.jitter,quality.maxSteps,quality.stepScale,
+        quality.seed,quality.jitter,quality.maxSteps,quality.stepScale,quality.stochastic,quality.stochasticHistory,
+        quality.skip,horizon,near,depthOffset,
         o.volumeLocalLights,o.volumeLocalShadows,o.cutoutShadows,o.shadowShells,ShadowCutouts.historyKey(cutoutsForLight),...V].join('/'),
       fogScales, fogOwners || undefined);
     if (effectMedia) for (let p = 0; p < W*H; p++) {

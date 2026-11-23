@@ -136,7 +136,8 @@ function reflectionSampler(planes, render, view, eye, scale, { quality, width, h
 
 function atmosphereQuality(value = {}) {
   const { scale = 1, depthTolerance = .22, steps = 64, stepScale = 1, samples = 1, jitter = 'off',
-    skip = true, cacheBounds = true, seed = 0, stats = false, reconstruction = 'object', composition = 'auto' } = value;
+    skip = true, cacheBounds = true, seed = 0, stats = false, reconstruction = 'object', composition = 'auto',
+    stochastic = 1, stochasticHistory = 0 } = value;
   if (!['object','depth','lighting'].includes(reconstruction))
     throw new RangeError('Volume reconstruction must be object or depth, or lighting for native extinction');
   if (!['auto','depth'].includes(composition)) throw new RangeError('Volume composition must be auto or depth');
@@ -147,7 +148,11 @@ function atmosphereQuality(value = {}) {
       !Number.isSafeInteger(samples) || samples < 1 || samples > 4 || !['off', 'blue-noise', 'spatiotemporal'].includes(jitter) ||
       !Number.isSafeInteger(seed) || typeof skip !== 'boolean' || typeof cacheBounds !== 'boolean' || typeof stats !== 'boolean')
     throw new RangeError('Invalid atmosphere quality options');
-  return { scale, depthTolerance, maxSteps: steps, stepScale, samples, jitter, skip, cacheBounds, seed, stats, reconstruction, composition };
+  if (!Number.isSafeInteger(stochastic) || stochastic < 1 || stochastic > 32 ||
+      !Number.isSafeInteger(stochasticHistory) || stochasticHistory < 0 || stochasticHistory > 32)
+    throw new RangeError('Volume stochastic stride must be 1–32 and history must be 0–32 frames');
+  return { scale, depthTolerance, maxSteps: steps, stepScale, samples, jitter, skip, cacheBounds,
+    seed, stats, reconstruction, composition, stochastic, stochasticHistory };
 }
 
 const noiseTiles = new Map();
@@ -295,7 +300,8 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     for (let c=0;c<matte.length;c++) matte[c] += value[c]*amount/samples;
   };
   let opacity = 0, fogCoverage = 0, cloudCoverage = 0, fogThrough = 1;
-  const stats = { rays: 0, fallbackRays: 0, depthSamples: 0, mode: 'layered', lightingSamples: 0, extinctionRays: 0 };
+  const stats = { rays: 0, fallbackRays: 0, depthSamples: 0, mode: 'layered', lightingSamples: 0, marchSteps: 0, fieldSamples: 0, extinctionRays: 0 };
+  if (options.stochastic > 1) stats.stochasticFallback = 'layered composition';
   if (options.stats) query.scatteringStats=stats;
   function shade(pixel, depth, rgb, geometry = true, fogScale = 1) {
     if (options.counters) options.counters.mediaQueries++;
@@ -398,27 +404,50 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     transfer, reflected: () => reflected, matte: () => matte, visibility: () => visibility };
 }
 
+function scatteringSeed(pixel, sample, seed, time) {
+  let hash = Math.imul(pixel + 1, 0x9e3779b1) ^ Math.imul(sample + 1, 0x85ebca6b) ^
+    Math.imul(Math.round(time * 1e6), 0xc2b2ae35) ^ seed;
+  hash = Math.imul(hash ^ hash >>> 16, 0x7feb352d);
+  hash = Math.imul(hash ^ hash >>> 15, 0x846ca68b);
+  return (hash ^ hash >>> 16) || 1;
+}
+
 function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, time, media, capture, history, viewKey,
   fogScales, owners) {
   const light = [0, 0, 0, 1], sample = [0, 0, 0, 1];
   const fields = volumes.some(volume => volume.type === 'field' || volume.densityField || volume.depthBand?.sample || volume.paletteField) ||
     (media?.paletteLocals && volumes.some(volume => volume.lit));
   const query = { ...quality, time, media };
-  // Reusing a density history would leave trails on animated lights and clear pockets.
-  const transient = quality.flash || quality.cutouts?.fog || fogScales || volumes.some(volume => volume.paletteField);
-  if (transient) history?.clear();
-  const temporal = quality.reconstruction !== 'lighting' && quality.composition !== 'depth' && fields && !transient && !quality.cloudShadow && !volumes.some(v => v.densityField || v.depthBand?.sample) &&
-    !media?.animatedLocals && quality.jitter === 'spatiotemporal' && history;
-  const tile = fields && quality.jitter !== 'off' ? volumeNoise(quality.seed) : null;
-  const accumulation = temporal ? new Float32Array(W * H * 4) : null;
-  const frame = temporal ? Math.floor(time * 60) : 0;
-  const phaseShift = (frame * .61803398875) % 1;
-  const samples = fields ? quality.samples : 1;
   const { scale, depthTolerance, reconstruction } = quality;
   const mode = scale === 1 ? 'native' : reconstruction;
+  // Reusing a density history would leave trails on animated lights and clear pockets.
+  const transient = quality.flash || quality.cutouts?.fog || fogScales || volumes.some(volume => volume.paletteField);
+  const requested = quality.stochastic > 1;
+  const fallback = requested && (scale !== 1 ? 'coarse grid' :
+    volumes.length !== 1 || volumes[0].type !== 'field' || !volumes[0].lit || !media ? 'requires one lit field' :
+    quality.flash || quality.cloudShadow ? 'cloud shadow or lightning' : null);
+  const stochastic = requested && !fallback;
+  if (transient || quality.resetHistory) history?.clear();
+  const frames = stochastic && !transient && !media?.animatedLocals && quality.stochasticHistory;
+  const legacyHistory = !stochastic && reconstruction !== 'lighting' && quality.composition !== 'depth' &&
+    fields && !transient && !quality.cloudShadow && !volumes.some(v => v.densityField || v.depthBand?.sample) &&
+    !media?.animatedLocals && quality.jitter === 'spatiotemporal';
+  const accumulation = history && (frames > 1 ? new Float64Array(W * H * 4) :
+    legacyHistory ? new Float32Array(W * H * 4) : null);
+  if (requested && !accumulation) history?.clear();
+  const tile = fields && quality.jitter !== 'off' ? volumeNoise(quality.seed) : null;
+  const frame = legacyHistory && history ? Math.floor(time * 60) : 0;
+  const phaseShift = (frame * .61803398875) % 1;
+  const samples = fields ? quality.samples : 1;
   const stats = { mode, rays: 0, coarseRays: 0, fallbackRays: 0, boundaryRays: 0, boundaryPixels: 0,
-    reconstructedPixels: 0, boundaryRejectedTaps: 0, lightingSamples: 0, extinctionRays: 0, lightingFallbacks: 0 };
-  if (quality.stats) query.scatteringStats=stats;
+    reconstructedPixels: 0, boundaryRejectedTaps: 0, lightingSamples: 0, marchSteps: 0, fieldSamples: 0,
+    extinctionRays: 0, lightingFallbacks: 0 };
+  if (fallback) stats.stochasticFallback = fallback;
+  if (stochastic) {
+    query.scatteringStride = quality.stochastic;
+    Object.assign(stats, { stochasticStride: quality.stochastic, historyFrames: 1, historyPixels: 0 });
+  }
+  if (quality.stats) query.scatteringStats = stats;
   const split=mode==='lighting';
   const guide = mode === 'object' || split ? surfaceGuide(W,H,depths,owners,fogScales,depthTolerance) : null;
   const fog = capture ? new Float32Array(W * H) : null;
@@ -433,6 +462,7 @@ function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, ti
     out.fill(0);
     for (let i = 0; i < samples; i++) {
       query.jitter = (i + phase) / samples;
+      if (stochastic) query.scatteringSeed = scatteringSeed(y * W + x, i, quality.seed, time);
       SceneOptics.trace(volumes, origin, direction, stop, sample, query);
       for (let c = 0; c < 4; c++) out[c] += sample[c] / samples;
       if(extinctionOnly)stats.extinctionRays++;
@@ -518,7 +548,9 @@ function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, ti
     }
   }
   if (accumulation) {
-    history.filter(accumulation, depths, time, viewKey, guide ?? undefined);
+    history.filter(accumulation, depths, time, viewKey, stochastic ? {
+      frames, source: quality.historySource, lighting: quality.historyLighting, stats
+    } : guide ?? undefined);
     for (let i = 0; i < W * H; i++) {
       const rgba = i*4;
       const opacity = 1-accumulation[rgba+3], styled = quality.bands ? quality.bands(opacity) : opacity;

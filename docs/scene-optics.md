@@ -479,6 +479,43 @@ Use `--atmosphere off` to disable the pass. `volumeQuality` controls `scale` (1â
 
 Render `examples/art-pipeline.js` to see sculpted pool mist, a local light, and emission coloring at art resolution. For aimable beams and multiple lamps, see [Local lights in fog](fog-lighting.md).
 
+### Trial stochastic fog scattering
+
+For one bounded, lit field in the headless native fog pass, set
+`volumeQuality: { stochastic: 8, stochasticHistory: 12 }`. The stride groups
+up to eight contributing steps and draws one lighting sample from each group.
+Steps with greater visible opacity have a higher chance of being chosen. The
+native density march still computes transmittance at every step and stops at
+opaque depth. The seed, native pixel, and frame time determine the lighting
+draws. Use stride `1` to return to dense lighting.
+
+History is opt-in for static fog and lights. Supply `volumeHistory:
+K.atmosphere.history()` for direct renderer calls. CLI clips supply history
+automatically. Set `stochasticHistory: 0` for fresh samples each frame. The
+running average caps its effective sample count at the configured frame limit.
+A changed camera, time discontinuity, changed opaque depth or transmittance, or
+`resetRenderHistory: true` discards the affected history. Time-varying local
+lights bypass accumulation. Reset history when editing density or shadows in
+place. For opaque mesh scenes, use `composition: 'depth'`. Layered media, coarse
+grids, multiple fields, cloud shadows, and lightning keep their regular
+integration. Set `stats: true` to inspect field samples, lighting evaluations,
+history age, and fallback reasons on `frame.volumeStats`.
+
+```sh
+node cli/ink-studio.js clip examples/depth-aware-fog/stochastic-aperture.js \
+  --w 200 --h 124 --px1 --fps 16 --from 0 --to 1.875 --raw \
+  --volume-stochastic 8 --volume-stochastic-history 12 --out aperture.png
+
+node scripts/review-stochastic-fog.js stochastic-fog-review
+```
+
+The review cuts between two fixed doorway shots. The comparison shows dense
+lighting, fresh stochastic samples, and accumulated samples. Its report includes
+median and 95th-percentile frame time, native-pixel RGB error, frame-to-frame
+noise, and settling times. The report marks the first point after the cut with
+three consecutive frames within one 8-bit RGB level in RMS error, measured
+against both the preceding frame and the dense reference.
+
 ### Reconstruct coarse fog on the art grid
 
 Use `volumeQuality: { scale: 4, reconstruction: 'object' }` for bounded fog on the headless renderer's opaque depth pass. Object-guided reconstruction is the default when the scale exceeds one. It reuses coarse rays across pixels with compatible depth, visible object ownership, and fog overrides. A native ray supplies each side of an ownership or depth break. A tap also checks for an intervening silhouette before reusing a sample on the far side. Give a character's sculpt pieces a shared `objectId` so the guide treats them as one object.

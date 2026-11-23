@@ -1034,12 +1034,16 @@ const view = extra =>
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),
       volumeLocalShadows: onOffOption('volume-local-shadows'),
-      volumeQuality: opt['volume-scale'] || opt['volume-steps'] || opt['volume-jitter'] || opt['volume-reconstruction'] || opt['volume-composition'] ? {
+      volumeQuality: opt['volume-scale'] || opt['volume-steps'] || opt['volume-jitter'] ||
+        opt['volume-reconstruction'] || opt['volume-composition'] || opt['volume-stochastic'] !== undefined ||
+        opt['volume-stochastic-history'] !== undefined ? {
         ...(opt['volume-scale'] && { scale: num('volume-scale') }),
         ...(opt['volume-steps'] && { steps: num('volume-steps') }),
         ...(opt['volume-jitter'] && { jitter: opt['volume-jitter'] }),
         ...(opt['volume-reconstruction'] && { reconstruction: opt['volume-reconstruction'] }),
-        ...(opt['volume-composition'] && { composition:opt['volume-composition'] })
+        ...(opt['volume-composition'] && { composition:opt['volume-composition'] }),
+        ...(opt['volume-stochastic'] !== undefined && { stochastic: num('volume-stochastic') }),
+        ...(opt['volume-stochastic-history'] !== undefined && { stochasticHistory: num('volume-stochastic-history') })
       } : undefined,
       edges: opt.edges === 'off' ? false : undefined
     },
@@ -1303,6 +1307,7 @@ const CMD = {
         '  render/clip/atlas --pose-correctives patch.json|off   load or bypass puppet corrective sculpts',
         '  render/clip/atlas --view-poses asset.json|off   load or bypass view-sector pose corrections',
         '  render/clip --volume-scale 3 --volume-reconstruction object|depth|lighting   choose a coarse fog reconstruction',
+        '  render/clip --volume-stochastic 4 --volume-stochastic-history 12   trial sparse scattering in one static fog field',
         '  fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]',
         '  render/clip --dynamic-bounce off   reuse the baked probes without sampling moving sources',
         '  render <id> --palette-constraints <file.json|off>   override target palettes and dither settings',
