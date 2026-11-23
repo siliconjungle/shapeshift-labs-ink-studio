@@ -4,6 +4,7 @@ const ShotCorrections = require('../src/shot-corrections.js');
 const Targets = require('../src/target-selectors.js');
 const SplatFit = require('./splat-fit-asset.js');
 const { signature } = require('./render-row-assets.js');
+const Provenance = require('../src/splat-provenance.js');
 
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
@@ -35,14 +36,11 @@ function validate(destinations, bindings) {
   }
 }
 
-function resolve(design, edit) {
-  const name = edit.destination === undefined ? 'raster' : edit.destination;
+function resolve(design, name = 'raster') {
   const destination = (design.version === 2 && design.destinations?.find(target => target.id === name)) ||
     (name === 'raster' && { id:'raster', kind:'raster' });
   if (!destination) throw new RangeError('Unknown pixel edit destination ' + name);
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);
-  if (binding?.frame !== undefined && binding.frame !== edit.frame)
-    throw new RangeError('Pixel edit destination ' + name + ' is bound to frame ' + binding.frame);
   return { destination, binding };
 }
 
@@ -57,20 +55,13 @@ function sceneTarget(binding) {
 
 function splatRows(world, binding) {
   const target = sceneTarget(binding), { row } = Targets.index(world);
-  let names;
+  let ids;
   return function resolveSplat(source) {
-    let index = source;
-    if (typeof source === 'string') {
-      if (!names) {
-        names = new Map();
-        for (const [i,key] of (world.splatIds ?? []).entries()) names.set(key,names.has(key) ? -1 : i);
-      }
-      index = names.get(source);
-    }
-    if (!Number.isSafeInteger(index) || index < 0 || index >= world.count ||
-        !Targets.matches(target,row(index)))
+    const index = typeof source === 'string' ? (ids ??= Provenance.identities(world)).rowOf(source) : source;
+    const scope = Number.isSafeInteger(index) && index >= 0 && index < world.count && Targets.objectScope(target,row(index));
+    if (!scope)
       throw new RangeError('Splat ' + source + ' is missing, ambiguous, or outside binding ' + binding.id);
-    return index;
+    return { index, scope };
   };
 }
 
@@ -87,7 +78,7 @@ function shot(frame, edit, binding, world, marks) {
   const colors = new Map(frame.swatches.map((swatch,i) => [swatch,'#'+frame.colors[i].toString(16).padStart(6,'0')]));
   const pixels = marks.map(mark => [mark.at[0]-x,mark.at[1]-y,colors.get(mark.swatch)]);
   checkRevision(binding,signature(world));
-  splatRows(world,binding)(anchor.splat);
+  const { scope } = splatRows(world,binding)(anchor.splat);
   const base = world.look?.shotCorrections;
   const size = [frame.width,frame.height];
   const prior = ShotCorrections.prepare(base);
@@ -96,7 +87,7 @@ function shot(frame, edit, binding, world, marks) {
       prior.fps !== clock.fps || prior.startTime !== clock.startTime))
     throw new RangeError('Shot correction grid and clock must match the existing shot');
   return ShotCorrections.paint(prior ?? clock,{
-    id:edit.id, frames, anchor:{ ...anchor, target:sceneTarget(binding) }, pixels, depthTolerance
+    id:edit.id, frames, anchor:{ ...anchor, target:scope }, pixels, depthTolerance
   });
 }
 
@@ -107,6 +98,7 @@ function splats(edit, binding, world) {
   const bake = signature(world);
   checkRevision(binding,bake);
   const row = splatRows(world,binding);
+  const seen = new Set();
   const edits = operation.splats.map(change => {
     if (!fields(change,['splat','footprintScale','visible']) ||
         (change.footprintScale === undefined) === (change.visible === undefined) ||
@@ -114,42 +106,68 @@ function splats(edit, binding, world) {
         (change.footprintScale !== undefined && (!Number.isFinite(change.footprintScale) ||
           change.footprintScale < .4 || change.footprintScale > 2)))
       throw new TypeError('A splat attribute edit needs either footprintScale (0.4–2) or visible (boolean)');
-    return [row(change.splat),change.footprintScale ?? Number(change.visible)];
+    const { index } = row(change.splat);
+    if (seen.has(index)) throw new RangeError('Duplicate splat edit ' + change.splat);
+    seen.add(index);
+    return [index,change.footprintScale ?? Number(change.visible)];
   });
-  const asset = { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits };
-  SplatFit.prepare(world,asset);
   const prior = world.look?.splatFit;
-  return SplatFit.prepare(world,prior)
-    ? { ...asset, edits:[...new Map([...prior.edits,...edits])] }
-    : asset;
+  SplatFit.prepare(world,prior);
+  const target = sceneTarget(binding);
+  const sameScope = prior?.version === 2 && prior.target.object === target.object && prior.target.part === target.part;
+  const stable = (!prior || sameScope) && operation.splats.every(change => typeof change.splat === 'string');
+  const ids = (stable || prior?.version === 2) && Provenance.identities(world);
+  const previous = prior?.edits?.map(([source,scale]) =>
+    [prior.version === 2 ? ids.rowOf(source) : source,scale]) ?? [];
+  const merged = [...new Map([...previous,...edits])];
+  const asset = stable
+    ? { format:SplatFit.format, version:2, scene:SplatFit.sceneId(world), target,
+      edits:merged.map(([index,scale]) => [ids.idAt(index),scale]) }
+    : { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits:merged };
+  SplatFit.prepare(world,asset);
+  return asset;
 }
 
-function solidEdit(edit, destination, binding, editor, revision) {
+function boundSolid(binding, editor, revision) {
   checkRevision(binding,revision);
   const key = 'solid:' + binding.object;
   const solid = editor.node(key)?.solid;
   if (!solid || binding.part !== undefined && solid.part !== binding.part)
     throw new RangeError('Scene binding does not resolve to an authored solid: ' + binding.id);
+  return { key, solid };
+}
+
+function restChart(solid, chart) {
+  const charts = solid.surfaceState?.charts;
+  const target = charts && Object.hasOwn(charts,chart) && charts[chart];
+  if (!target) throw new RangeError('Unknown rest chart ' + chart + ' on ' + solid.id);
+  return target;
+}
+
+function solidEdit(edit, destination, binding, editor, revision) {
+  const { key, solid } = boundSolid(binding,editor,revision);
   const operation = edit.operation;
   if (destination.kind === 'surface-channel') {
     const state = solid.surfaceState, { chart, channel } = destination;
-    const target = state?.charts && Object.hasOwn(state.charts,chart) && state.charts[chart];
-    if (!target) throw new RangeError('Unknown rest chart ' + chart + ' on ' + binding.object);
+    const target = restChart(solid,chart);
     if (!fields(operation,['stamp']) || !fields(operation.stamp,['brush','value','mode','strength','window']))
       throw new TypeError('A surface channel edit needs a native UV stamp');
     editor.setSurfaceState({ ...state, charts:{ ...state.charts,
       [chart]:{ ...target, stamps:[...(target.stamps ?? []),{ ...operation.stamp, channel }] }
     } },key);
   } else if (destination.kind === 'sdf-shape') {
-    if (!fields(operation,['parameters','modifier']) ||
-        (operation.parameters === undefined) === (operation.modifier === undefined))
-      throw new TypeError('An SDF shape edit needs shape parameters or a single modifier');
+    if (!fields(operation,['parameters','modifier','updateModifier']) || Object.keys(operation).length !== 1)
+      throw new TypeError('An SDF shape edit needs shape parameters, a new modifier, or an update by modifier ID');
     if (operation.modifier !== undefined) {
       const modifiers = solid.modifiers ?? [];
       if (!record(operation.modifier) || Object.hasOwn(operation.modifier,'id') ||
           modifiers.some(modifier => modifier.id === edit.id))
         throw new TypeError('An SDF modifier uses the edit ID, which must be new on the solid');
       editor.setModifiers([...modifiers,{ ...operation.modifier, id:edit.id }],key);
+    } else if (operation.updateModifier !== undefined) {
+      const update = operation.updateModifier;
+      if (!fields(update,['id','patch'])) throw new TypeError('An SDF modifier update needs an ID and patch');
+      editor.updateModifier(update.id,update.patch,key);
     } else editor.updateShape(operation.parameters,key);
   } else {
     if (!fields(operation,['material']) || (typeof operation.material !== 'string' && !record(operation.material)))
@@ -160,6 +178,8 @@ function solidEdit(edit, destination, binding, editor, revision) {
 }
 
 function apply(frame, edit, { destination, binding }, context, readMarks) {
+  if (binding.frame !== undefined && binding.frame !== edit.frame)
+    throw new RangeError('Pixel edit destination ' + destination.id + ' is bound to frame ' + binding.frame);
   if (destination.kind === 'shot-correction') {
     const marks = readMarks(frame,edit);
     return shot(frame,edit,binding,context.world(binding),marks);
@@ -171,4 +191,32 @@ function apply(frame, edit, { destination, binding }, context, readMarks) {
   return solidEdit(edit,destination,binding,editor,revision);
 }
 
-module.exports = { validate, resolve, apply };
+function targets({ destination, binding }, context, limit) {
+  if (!binding) throw new TypeError('Choose a scene destination. Pixel document IDs are listed by pixel-art validate.');
+  if (['shot-correction','splat-attributes'].includes(destination.kind)) {
+    const world = context.world(binding), revision = signature(world);
+    checkRevision(binding,revision);
+    const ids = Provenance.identities(world), { row } = Targets.index(world), scope = sceneTarget(binding);
+    const rest = world.rest ?? world.data, splats = [];
+    let count = 0;
+    for (let i = 0; i < world.count; i++) {
+      const id = ids.idAt(i);
+      if (!id || !Targets.objectScope(scope,row(i)) ||
+          destination.kind === 'splat-attributes' && !SplatFit.eligible(world,i)) continue;
+      count++;
+      if (splats.length < limit) splats.push({ id, at:Array.from(rest.subarray(i*16,i*16+3)) });
+    }
+    return { destination:destination.id, binding, revision, count, splats };
+  }
+  const { editor, revision } = context.scene(binding);
+  const { key, solid } = boundSolid(binding,editor,revision);
+  const { chart, channel } = destination;
+  if (destination.kind === 'surface-channel') restChart(solid,chart);
+  return { destination:destination.id, binding, revision,
+    solid:{ id:solid.id, key, label:solid.label, part:solid.part },
+    ...(channel !== undefined && { surfaceChannel:{ object:solid.id, chart, channel } }),
+    modifiers:(solid.modifiers ?? []).map(({id,kind,label}) => ({ id,kind,label }))
+  };
+}
+
+module.exports = { validate, resolve, apply, targets };

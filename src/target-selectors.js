@@ -20,6 +20,12 @@ const TargetSelectors = (() => {
     });
   }
 
+  function objectScope(scope, target) {
+    if (scope.part !== undefined && scope.part !== target.part) return null;
+    const key = scope.object === target.object ? 'object' : scope.object === target.entity ? 'entity' : null;
+    return key && { [key]:scope.object, ...(scope.part !== undefined && { part:scope.part }) };
+  }
+
   function describe(target) {
     if (!record(target)) throw new TypeError('Expected named target metadata');
     const keys = ['entity', 'part', 'surface', 'prefabs', 'tags', 'medium', 'mediumKind', 'mark', 'markLayer'];
@@ -77,6 +83,6 @@ const TargetSelectors = (() => {
       ...(world.reflections ?? []).map(item => medium(item.id, 'reflection', item.tags))
     ];
   }
-  return Object.freeze({ prepare, matches, describe, index, name, medium, media, isGlass: namedGlass });
+  return Object.freeze({ prepare, matches, objectScope, describe, index, name, medium, media, isGlass: namedGlass });
 })();
 if (typeof module !== 'undefined') module.exports = TargetSelectors;

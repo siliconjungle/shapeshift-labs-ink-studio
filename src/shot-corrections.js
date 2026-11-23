@@ -1,6 +1,7 @@
 /* Exact native-pixel cels with explicit shot timing and visible surface anchors. */
 const ShotCorrections = (() => {
   const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
+  const splats = typeof SplatProvenance === 'undefined' ? require('./splat-provenance.js') : SplatProvenance;
   const prepared = new WeakSet();
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const keys = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key));
@@ -14,7 +15,7 @@ const ShotCorrections = (() => {
 
   function anchor(raw) {
     check(keys(raw, ['splat', 'offset', 'target', 'depthOffset']) &&
-      (integer(raw.splat, 0, Number.MAX_SAFE_INTEGER) || typeof raw.splat === 'string' && raw.splat.length > 0 && raw.splat.length <= 512),
+      (integer(raw.splat, 0, Number.MAX_SAFE_INTEGER) || splats.validId(raw.splat)),
     'anchor needs a splat row or stable splat ID');
     const { splat, offset = [0, 0], target, depthOffset = 0 } = raw;
     check(xy(offset, 8192) && Number.isFinite(depthOffset) && Math.abs(depthOffset) <= 4096,
@@ -101,14 +102,8 @@ const ShotCorrections = (() => {
       if (frame < frames[0] || frame > frames[1]) continue;
       let row = anchor.splat;
       if (typeof row === 'string') {
-        if (!byId) {
-          byId = new Map();
-          for (const [i, name] of (world.splatIds ?? []).entries()) {
-            if (byId.has(name)) byId.set(name, -1);
-            else byId.set(name, i);
-          }
-        }
-        row = byId.get(row) ?? -1;
+        byId ??= splats.identities(world);
+        row = byId.rowOf(row);
       }
       const rule = integer(row, 0, world.count - 1) ? target(row) : null;
       const domain = rule && targetOf(rule);
@@ -154,10 +149,16 @@ const ShotCorrections = (() => {
     check(dimensions([w, h]) && splatId?.length === w * h && depth?.length === w * h && typeof project === 'function',
       'capture needs aligned depth, owners and projection on the native grid');
     const owners = splatId.slice(), distances = depth.slice(), rows = new Map(), target = selectors.index(world).row;
+    const ids = splats.identities(world);
     for (const owner of owners) {
       if (!integer(owner, 1, world.count) || rows.has(owner)) continue;
-      const row = owner - 1, center = project(row, w, h);
-      rows.set(owner, { center, target: targetOf(target(row)), splat: world.splatIds?.[row] ?? row });
+      const row = owner - 1;
+      if (ids.ambiguous(row)) {
+        rows.set(owner,null);
+        continue;
+      }
+      const center = project(row, w, h);
+      rows.set(owner, { center, target: targetOf(target(row)), splat: ids.idAt(row) ?? row });
     }
     function pin(x, y) {
       if (!integer(x, 0, w - 1) || !integer(y, 0, h - 1)) return null;

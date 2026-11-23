@@ -122,6 +122,47 @@ test('document validation checks frame and layer references and cels outside the
   assert.throws(()=>validate(invalid),/Pixel frame blink: Unknown pixel swatch absent/);
 });
 
+test('raster edits address a cel by ID after moving it and changing labels and palette order', t => {
+  const design = structuredClone(document);
+  design.layers[0].label = 'Shell paint';
+  design.palette = { light:{color:'#f8e8ac',label:'Bright paint'}, brass:'#ae8640' };
+  const cel = design.frames[0].cels.shell;
+  cel.id = 'beat-paint';
+  cel.label = 'Opening paint';
+  const report = validate(design);
+  assert.deepEqual(report.identities.cels.find(target=>target.id === 'beat-paint'),
+    { id:'beat-paint', frame:'idle', layer:'shell', label:'Opening paint' });
+  assert.equal(report.identities.cels.find(target=>target.id === 'blink/shell').layer,'shell');
+  design.frames.reverse();
+  design.layers.push({ id:'trim', label:'Paint' });
+  const idle = design.frames.find(frame=>frame.id === 'idle');
+  delete idle.cels.shell;
+  idle.cels.trim = { ...cel, label:'Trim paint' };
+  const frame = compile(design,'idle');
+  const patch = {
+    revision:frame.revision, id:'trim-fix', cel:'beat-paint',
+    edits:[{ at:[0,0], layer:'trim', from:'brass', to:'light' }]
+  };
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-cel-id-'));
+  t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const filename = name=>path.join(directory,name+'.json');
+  fs.writeFileSync(filename('design'),JSON.stringify(design));
+  fs.writeFileSync(filename('patch'),JSON.stringify(patch));
+  const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],{
+    cwd:path.resolve(__dirname,'..'),encoding:'utf8'
+  });
+  cli('edit',filename('design'),filename('patch'),'--out',filename('revised'));
+  const revised = JSON.parse(fs.readFileSync(filename('revised'),'utf8'));
+  assert.deepEqual(revised.layers,design.layers);
+  assert.deepEqual(stamp(compile(revised,'idle')).palette,['#f8e8ac','#ae8640']);
+  assert.equal(compile(revised,'idle').slots[0],0);
+  assert.equal(revised.frames[1].cels.trim.id,'beat-paint');
+  assert.equal(JSON.parse(cli('inspect',filename('revised'),'--frame','idle','--at','0,0')).cel,'beat-paint');
+  assert.throws(()=>validate({ ...design, frames:[{
+    ...idle, cels:{ ...idle.cels, shell:{ id:'beat-paint', marks:[] } }
+  }] }),/Duplicate pixel cel ID/);
+});
+
 test('the CLI round-trips a frame edit and preserves protected details and scene bindings', t => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(),'ink-pixel-document-'));
   t.after(()=>fs.rmSync(out,{ recursive:true, force:true }));

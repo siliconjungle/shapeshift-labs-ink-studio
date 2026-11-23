@@ -67,7 +67,9 @@ function setup(t) {
     assert.match(result.stderr,pattern);
     assert.equal(fs.existsSync(filename('invalid')),false);
   }
-  return { document, filename, write, request, apply, reject };
+  const targets = (destination, limit = 128) => JSON.parse(cli('pixel-art','targets',filename('document'),
+    '--destination',destination,'--scene',filename('source'),'--limit',String(limit)));
+  return { document, filename, write, request, apply, reject, targets };
 }
 
 test('pixel destinations route raster, shot and splat edits through their native consumers', t => {
@@ -78,6 +80,7 @@ test('pixel destinations route raster, shot and splat edits through their native
   const at = [20,16];
   const { target, ...anchor } = baseline.shotCorrectionSurface.pin(...at);
   assert.equal(target.object,'gate');
+  assert.equal(typeof anchor.splat,'string');
   const edits = [{ at, layer:null, from:null, to:'amber' }];
   const raster = apply(request({ destination:'pixels', edits }),'raster');
   assert.equal(compile(raster,'front').slots[16*40+20],0);
@@ -109,8 +112,32 @@ test('pixel destinations route raster, shot and splat edits through their native
   reject(request({ destination:'footprint', operation:{ splats:[{ splat:outside, visible:false }] } }),/outside binding/);
 });
 
+test('a stable splat edit resolves the same sample after a scene reorder', t => {
+  const { request, apply, targets } = setup(t);
+  const report = targets('footprint',1);
+  assert(report.count > 1);
+  assert.equal(report.splats.length,1);
+  const splat = report.splats[0].id;
+  const asset = apply(request({ destination:'footprint', operation:{ splats:[{ splat, visible:false }] } }),'stable-fit');
+  assert.equal(asset.version,2);
+  assert.deepEqual(asset.edits,[[splat,0]]);
+  const initial = KIT.diorama.build(source);
+  const reordered = KIT.diorama.build({ ...source, solids:source.solids.slice().reverse().map(solid =>
+    ({ ...solid, label:'Revised ' + solid.id })) });
+  const ids = KIT.procedural.splatProvenance.identities;
+  const before = ids(initial).rowOf(splat), after = ids(reordered).rowOf(splat);
+  assert(before >= 0 && after >= 0);
+  assert.notEqual(before,after);
+  assert.equal(SplatFit.prepare(initial,asset)[before],0);
+  assert.equal(SplatFit.prepare(reordered,asset)[after],0);
+  assert.equal(SplatFit.prepare(reordered,asset)[before],1);
+  const missing = KIT.procedural.splatProvenance.subset(reordered,
+    Array.from({length:reordered.count},(_,i)=>i).filter(i=>i!==after));
+  assert.throws(()=>SplatFit.prepare(missing,asset),/unavailable splat fit target/);
+});
+
 test('pixel destinations retain edits on a rest chart and the selected SDF solid', t => {
-  const { document, filename, write, request, apply, reject } = setup(t);
+  const { document, filename, write, request, apply, reject, targets } = setup(t);
   const baseline = ink.render(KIT.diorama.build(source),view);
   const stamp = { value:'#e9673b', brush:{ kind:'rect', min:[.2,.15], max:[.8,.8] } };
   const painted = apply(request({ destination:'patina', operation:{ stamp } }),'painted');
@@ -126,6 +153,18 @@ test('pixel destinations retain edits on a rest chart and the selected SDF solid
   assert.deepEqual(recolored.solids[1],source.solids[1]);
   assert.notDeepEqual(ink.render(KIT.diorama.build(recolored),view).rgb,baseline.rgb);
   assert.deepEqual(JSON.parse(fs.readFileSync(filename('source'),'utf8')),source);
+  assert.deepEqual(targets('patina').surfaceChannel,{ object:'gate', chart:'front', channel:'paint' });
+
+  carved.solids[0].modifiers.unshift({ id:'border', kind:'swell', by:.01 });
+  carved.solids[0].label = 'Gate with aperture';
+  carved.solids.reverse();
+  write('source',carved);
+  assert.deepEqual(targets('notch').modifiers.map(({id})=>id),['border','detail']);
+  const restored = apply(request({ destination:'notch', id:'disable-detail', operation:{
+    updateModifier:{ id:'detail', patch:{ enabled:false } }
+  } }),'restored');
+  assert.equal(restored.solids[1].modifiers[1].enabled,false);
+  assert.equal(restored.solids[1].modifiers[0].enabled,undefined);
 
   reject(request({ destination:'stone', edits:[], operation:{ material:'accent' } }),/explicit source/);
   assert.throws(()=>validate({ ...document, destinations:[{ id:'hole', kind:'sdf-shape', binding:'unknown' }] }),

@@ -19,6 +19,7 @@ For CLI diorama builds, add `--asset-cache DIR` to reuse candidate points, mesh 
 ## Scene tree and selection
 
 - `tree()` returns the scene hierarchy with blend groups, rig parts, solids, and nested operands. Solids assigned to a rig part appear under that part, with any blend group still recorded on the solid.
+- A part's map key and a solid's `id` identify the object. An optional `label` supplies a display name. Unnamed nested operands under a named solid use addresses such as `operand:gate/modifiers/vent/shape`, based on the solid and modifier IDs. Existing `slot:` addresses also resolve for the current source order.
 - `node(key)` looks up a tree entry. Solid entries include their authored properties. Named solids keep stable keys and unnamed solids use their source paths. An unnamed solid receives a temporary render tag for picking.
 - `pick(ray, options)` resolves a world-space ray to a visible editable solid and returns its tree key and contributing hit. A miss returns `null`. A compound shape picks as a whole, and its operands can be selected through the tree. Pass a posed world from `build()` as `options.world` when picking an animated preview.
 - `select(keys, { mode })` selects solids by tree key. `selectRay(ray, { mode, ...options })` selects the picked solid. Modes are `replace`, `add`, `toggle`, and `remove`. Read the current keys with `selection()`.

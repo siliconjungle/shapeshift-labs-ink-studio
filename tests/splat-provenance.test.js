@@ -7,6 +7,24 @@ const { procedural: P, world: W } = K;
 const cam = { target: [0, 0, 0], dist: 5, yaw: 0, pitch: 0 };
 const pal = [0x121929, 0x626262, 0xcacaca];
 const view = { w: 96, h: 72, px: 1, ortho: true };
+
+test('authored splat IDs travel with rows and coincident generated samples are ambiguous', () => {
+  const B = makeBuilder(3,pal);
+  B.iso(-.7,0,0,.14,B.P[1],2,{splatId:'gate-left'});
+  B.iso(.7,0,0,.14,B.P[1],2,{splatId:'gate-right'});
+  assert.throws(()=>B.iso(1,0,0,.14,B.P[1],2,{splatId:'gate-left'}),/unique IDs/);
+  B.iso(0,0,0,.14,B.P[1],2);
+  B.iso(0,0,0,.18,B.P[1],2);
+  B.describeSplats(0,4,{object:'gate'});
+  const world = B.finish();
+  const reordered = SplatProvenance.subset(world,[1,0,3,2]);
+  assert.deepEqual(reordered.splatIds,['gate-right','gate-left',null,null]);
+  const ids = SplatProvenance.identities(reordered);
+  assert.equal(ids.rowOf('gate-left'),1);
+  assert.equal(ids.idAt(0),'gate-right');
+  assert.equal(ids.idAt(2),undefined);
+  assert.equal(ids.idAt(3),undefined);
+});
 const tint = (name, offset) => ({ name, steps: [{
   type: 'channelMix', matrix: [[0, 0, 0], [0, 0, 0], [0, 0, 0]], offset
 }] });

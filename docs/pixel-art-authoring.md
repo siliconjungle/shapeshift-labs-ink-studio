@@ -103,11 +103,13 @@ document level. Each frame holds its own cels and duration.
 - `width` and `height` are the native art dimensions (1–512 each).
   `pixelAspect` stores the width-to-height ratio of one pixel as two positive
   integers. Draw exports keep the native pixel dimensions.
-- `palette` maps 1–255 swatch names to six-digit RGB colors. Layers are ordered
+- `palette` maps 1–255 stable swatch IDs to six-digit RGB colors, or to
+  `{ "color": "#rrggbb", "label": "Display label" }` records. Layers are ordered
   bottom to top, with optional `clip` and `protect` as in version 1. A cel is
   keyed by its layer ID and holds `marks` and optional `slots`. It is blank
   when omitted from a frame. Frame order is the order of the array and
-  `durationMs` is a positive integer.
+  `durationMs` is a positive integer. Layers, frames, and cels can also have
+  a separate display `label`.
 - `selections` and `protectedDetails` are optional arrays of named coordinate
   sets. Each list uses unique in-bounds `[x, y]` coordinates. Omit `frame` to
   apply the set across all frames. Selections are saved for reuse. Protected
@@ -120,7 +122,11 @@ document level. Each frame holds its own cels and duration.
 - Frame, layer, swatch, selection, protected detail, and binding IDs start
   with a lowercase ASCII letter and contain at most 64 lowercase letters,
   digits, or hyphens. IDs are unique within their own lists. References to
-  frames and layers must use existing IDs.
+  frames and layers must use existing IDs. An optional cel `id` is unique
+  across the document. Without an explicit ID, the cel uses `frame/layer`.
+  To move a cel to a different frame or layer while keeping its identity, give
+  it an explicit ID before the move. An existing `frame/layer` ID can also be
+  saved explicitly.
 
 ```sh
 node cli/ink-studio.js pixel-art validate document.json
@@ -128,9 +134,11 @@ node cli/ink-studio.js pixel-art inspect document.json --frame flash --at 1,1
 node cli/ink-studio.js pixel-art draw document.json --frame flash --out flash
 ```
 
-`validate` checks document references and compiles every frame. `draw` and
+`validate` checks document references, compiles every frame, and lists layer,
+swatch, and cel IDs. `draw` and
 `inspect` use the first frame by default. Their reports include the selected
-frame ID, duration, and pixel aspect.
+frame ID, duration, and pixel aspect. Pixel inspection also reports the cel
+ID when a pixel belongs to one.
 
 ## Start from a scene
 
@@ -176,6 +184,12 @@ repair creates a cel in the chosen frame alone. The revision covers the whole
 document, including its saved selections, protected details, and scene
 bindings.
 
+To edit an existing cel instead, set the patch's `cel` to its ID. Supply the
+expected layer and swatch in each pixel edit. The CLI finds the cel's frame,
+or checks it against the frame you supply. Ink appends the marks to that cel
+and checks that the changes are visible on its layer. Display labels never
+serve as edit keys.
+
 ## Choose an edit destination
 
 Add an optional `destinations` array to a version 2 document. The raster
@@ -203,8 +217,8 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `raster` | `edits` with `at`, `layer`, `from`, and `to` | Revised pixel document, with the new cel on the chosen frame |
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
-| `splat-attributes` | `operation.splats` with source row or stable splat ID and either `footprintScale` or `visible` per splat | Splat-fit asset checked against the source bake by `render --splat-fit` |
-| `sdf-shape` | `operation.parameters` with native shape fields, or one `operation.modifier` | Revised JSON diorama with edited geometry |
+| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and either `footprintScale` or `visible` per splat | Splat-fit asset for `render --splat-fit` |
+| `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
 Omitting `destination` continues to edit raster pixels. Scene writes take
@@ -227,13 +241,40 @@ and [rest surface charts](deformation-materials.md) for native parameters.
 
 On a splat destination, `{"splats":[{"splat":12,"footprintScale":0.7},{"splat":26,"visible":false}]}`
 scales one eligible opaque splat's footprint and hides another. The splat
-asset checks the source bake at render time. For a shot correction, pass the
+asset for numeric rows checks the original bake at render time. Use stable
+IDs to carry the edit across row reordering:
+
+```sh
+node cli/ink-studio.js pixel-art targets document.json \
+  --destination edge-splats --scene gate.json --limit 12
+```
+
+`targets` reports stable splat IDs and rest positions for the bound object or
+part. Copy the reported `id` into `operation.splats[].splat`. A fit with
+stable targets resolves those IDs at render time and rejects missing or
+ambiguous matches. Older fits that use row numbers remain tied to their bake.
+
+Authors can assign a persistent ID with `{ splatId: "gate-hinge-chip" }` in
+the final options argument to `builder.iso`, `builder.disc`, or
+`builder.dab`. Existing `world.splatIds` also work. For a generated sample on
+a named object, Ink can derive an ID from the owner, part, and exact rest
+position. If resampling moves or retires the sample, inspect the new source
+before targeting it again. Coincident samples with an ambiguous derived ID
+need authored IDs for individual edits.
+
+For a shot correction, pass the
 native anchor's `splat`, optional `offset` and `depthOffset`, and the grid
 coordinate where it was pinned as `operation.at`. A host can obtain the pin
 with `captureShotCorrectionSurface` and `shotCorrectionSurface.pin(x, y)`.
 The correction uses offsets from that pixel and the renderer still checks
 ownership and depth when it draws. The shot operation also accepts
 `startTime` and `depthTolerance`.
+
+For a scene-source destination, `targets` reports the solid ID, part ID,
+modifier IDs, and the surface channel if one is bound. Part IDs are the
+keys under `parts`. A channel is addressed by solid ID, chart ID and channel
+ID, for example `gate/front/wear`. To toggle a cut after reordering the
+modifier stack, use `{"updateModifier":{"id":"vent","patch":{"enabled":false}}}`.
 
 An optional binding `revision` pins the scene to its file SHA-256 for
 surface and SDF destinations, or its packed rest-row signature for shot

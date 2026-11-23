@@ -20,6 +20,22 @@ const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const fingerprint = design => createHash('sha256').update(JSON.stringify(design)).digest('hex');
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
 const reference = value => typeof value === 'string' && value.trim().length > 0;
+const label = value => value === undefined || reference(value);
+const celName = value => typeof value === 'string' &&
+  /^[a-z][a-z0-9-]{0,63}(\/[a-z][a-z0-9-]{0,63})?$/.test(value);
+const celId = (frame, layer, cel) => cel.id ?? frame.id + '/' + layer;
+const swatchColor = value => typeof value === 'string' ? value : value?.color;
+
+function paletteEntries(palette, version) {
+  const entries = Object.entries(palette);
+  if (!integer(entries.length,1,255) || entries.some(([id,value]) => !name(id) ||
+      (typeof value !== 'string' && !(version === 2 && fields(value,['color','label']) && label(value.label))) ||
+      typeof swatchColor(value) !== 'string' || !/^#[\da-f]{6}$/i.test(swatchColor(value))))
+    throw new TypeError('Pixel palettes need 1–255 RGB swatches keyed by stable ID');
+  return entries.map(([id,value]) => ({
+    id, color:swatchColor(value), ...(typeof value !== 'string' && value.label !== undefined && { label:value.label })
+  }));
+}
 
 function namedRegions(regions, kind, width, height, frames) {
   if (regions === undefined) return;
@@ -57,22 +73,26 @@ function documentShape(design) {
     throw new RangeError('Pixel aspect needs two positive integers [width,height]');
   const layerIds = new Set();
   for (const layer of layers) {
-    if (!fields(layer,['id','clip','protect']) || !name(layer.id) || layerIds.has(layer.id) ||
+    if (!fields(layer,['id','label','clip','protect']) || !name(layer.id) || layerIds.has(layer.id) || !label(layer.label) ||
         (layer.clip !== undefined && !layerIds.has(layer.clip)) ||
         (layer.protect !== undefined && typeof layer.protect !== 'boolean'))
       throw new TypeError('Pixel layer definitions need unique IDs and may clip to an earlier layer');
     layerIds.add(layer.id);
   }
   if (!Array.isArray(frames) || !frames.length) throw new TypeError('Pixel documents need at least one frame');
-  const frameIds = new Set();
+  const frameIds = new Set(), celIds = new Set();
   for (const frame of frames) {
-    if (!fields(frame,['id','durationMs','cels']) || !name(frame.id) || frameIds.has(frame.id) ||
+    if (!fields(frame,['id','label','durationMs','cels']) || !name(frame.id) || frameIds.has(frame.id) || !label(frame.label) ||
         !integer(frame.durationMs,1,Number.MAX_SAFE_INTEGER) || !record(frame.cels))
       throw new TypeError('Pixel frames need unique IDs, positive integer durations in milliseconds and cels');
     frameIds.add(frame.id);
     for (const [layer,cel] of Object.entries(frame.cels)) {
-      if (!layerIds.has(layer) || !fields(cel,['marks','slots']) || !Array.isArray(cel.marks))
+      if (!layerIds.has(layer) || !fields(cel,['id','label','marks','slots']) || !label(cel.label) ||
+          !Array.isArray(cel.marks) || (cel.id !== undefined && !celName(cel.id)))
         throw new TypeError('Pixel cel ' + frame.id + '/' + layer + ' needs a known layer and marks');
+      const id = celId(frame,layer,cel);
+      if (celIds.has(id)) throw new RangeError('Duplicate pixel cel ID ' + id);
+      celIds.add(id);
     }
   }
   namedRegions(selections,'Pixel selections',width,height,frameIds);
@@ -120,14 +140,10 @@ function shapes(width, height, mark) {
   return result;
 }
 
-function composite(width,height,palette,layers) {
+function composite(width,height,entries,layers) {
   const size = width*height;
-  const entries = Object.entries(palette);
-  if (!integer(entries.length,1,255) ||
-      entries.some(([id,color]) => !name(id) || typeof color !== 'string' || !/^#[\da-f]{6}$/i.test(color)))
-    throw new TypeError('Pixel palettes need 1–255 named RGB swatches');
-  const swatches = entries.map(([id]) => id);
-  const colors = entries.map(([,color]) => Number.parseInt(color.slice(1),16));
+  const swatches = entries.map(({ id }) => id);
+  const colors = entries.map(({ color }) => Number.parseInt(color.slice(1),16));
   const ids = new Map(swatches.map((id,i) => [id,i]));
   const erase = entries.length;
   const slots = new Int16Array(size).fill(-1), owners = new Uint8Array(size), locks = new Uint8Array(size);
@@ -181,51 +197,71 @@ function composite(width,height,palette,layers) {
   return { width,height,slots,owners,locks,underSlots,underOwners,layerIds,swatches,colors };
 }
 
-function compileFrame(design, frame, revision) {
-  const { width,height,palette,layers } = design;
+function compileFrame(design, frame, revision, palette) {
+  const { width,height,layers } = design;
   if (!frame) return { ...composite(width,height,palette,layers), revision };
+  const cels = new Map();
   const stack = layers.map(layer => {
-    const cel = Object.hasOwn(frame.cels,layer.id) ? frame.cels[layer.id] : { marks:[] };
-    return { ...layer, ...cel };
+    const { id,clip,protect } = layer;
+    const cel = Object.hasOwn(frame.cels,id) ? frame.cels[id] : undefined;
+    if (cel) cels.set(id,celId(frame,id,cel));
+    return { id,clip,protect,marks:cel?.marks ?? [],slots:cel?.slots };
   });
   const raster = composite(width,height,palette,stack);
   for (const detail of design.protectedDetails ?? []) {
     if (detail.frame !== undefined && detail.frame !== frame.id) continue;
     for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
   }
-  return { ...raster, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice() };
+  return { ...raster, cels, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice() };
 }
 
-function compile(design, frameId) {
+function compile(design, frameId, targetCel) {
   documentShape(design);
   const frames = design.version === 2 ? design.frames : [];
-  const frame = frameId === undefined ? frames[0] : frames.find(item => item.id === frameId);
+  let frame;
+  if (frameId !== undefined) frame = frames.find(item => item.id === frameId);
+  else if (targetCel !== undefined) frame = frames.find(item => Object.entries(item.cels)
+    .some(([layer,cel]) => celId(item,layer,cel) === targetCel));
+  else frame = frames[0];
   if (frameId !== undefined && !frame) throw new RangeError('Unknown pixel frame ' + frameId);
-  return compileFrame(design,frame,fingerprint(design));
+  if (targetCel !== undefined && !frame) throw new RangeError('Unknown pixel cel ' + targetCel);
+  return compileFrame(design,frame,fingerprint(design),paletteEntries(design.palette,design.version));
 }
 
 function validate(design) {
   documentShape(design);
   const revision = fingerprint(design);
   const frames = design.version === 1 ? [undefined] : design.frames;
+  const palette = paletteEntries(design.palette,design.version);
   for (const frame of frames) {
     try {
-      compileFrame(design,frame,revision);
+      compileFrame(design,frame,revision,palette);
     } catch (error) {
       if (!frame) throw error;
       throw new Error('Pixel frame ' + frame.id + ': ' + error.message, { cause:error });
     }
   }
+  const identities = design.version === 2 ? {
+    layers:design.layers.map(({ id,label }) => ({ id,...(label !== undefined && { label }) })),
+    swatches:palette,
+    cels:frames.flatMap(frame => Object.entries(frame.cels).map(([layer,cel]) =>
+      ({ id:celId(frame,layer,cel), frame:frame.id, layer, ...(cel.label !== undefined && { label:cel.label }) })))
+  } : undefined;
   return { format, version:design.version, revision, grid:[design.width,design.height],
     pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
-      id:frame?.id ?? null, durationMs:frame?.durationMs ?? null
-    })), ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
+      id:frame?.id ?? null, durationMs:frame?.durationMs ?? null, ...(frame?.label !== undefined && { label:frame.label })
+    })), ...(identities && { identities }),
+    ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
 
 function cell(frame,p) {
-  return { at:[p%frame.width,Math.floor(p/frame.width)], layer:frame.layerIds[frame.owners[p]],
+  const layer = frame.layerIds[frame.owners[p]];
+  const under = frame.layerIds[frame.underOwners[p]];
+  return { at:[p%frame.width,Math.floor(p/frame.width)], layer,
+    ...(frame.cels && { cel:frame.cels.get(layer) ?? null }),
     swatch:frame.swatches[frame.slots[p]] ?? null, protected:!!frame.locks[p],
-    underneath:{ layer:frame.layerIds[frame.underOwners[p]], swatch:frame.swatches[frame.underSlots[p]] ?? null }
+    underneath:{ layer:under, ...(frame.cels && { cel:frame.cels.get(under) ?? null }),
+      swatch:frame.swatches[frame.underSlots[p]] ?? null }
   };
 }
 
@@ -276,7 +312,7 @@ function review(frame) {
   };
 }
 
-function readPixelEdits(frame, patch) {
+function readPixelEdits(frame, patch, layer) {
   if (!Array.isArray(patch.edits) || !integer(patch.edits.length,1,4096))
     throw new TypeError('Pixel paint needs 1–4096 edits');
   const visited = new Set(), marks = [];
@@ -285,7 +321,8 @@ function readPixelEdits(frame, patch) {
         !Object.hasOwn(change,'from') || !Object.hasOwn(change,'layer'))
       throw new TypeError('A pixel edit needs at, from, layer and to');
     const [x,y] = change.at, p = y*frame.width+x, state = cell(frame,p);
-    if (visited.has(p) || state.protected || state.swatch !== change.from || state.layer !== change.layer)
+    if (visited.has(p) || state.protected || state.swatch !== change.from || state.layer !== change.layer ||
+        (layer !== undefined && state.layer !== null && state.layer !== layer))
       throw new RangeError('Pixel edit no longer applies at ' + change.at.join(','));
     visited.add(p);
     marks.push({ swatch:change.to, at:change.at });
@@ -297,15 +334,33 @@ function edit(design, frame, patch, context) {
   if (!record(patch) || patch.revision !== frame.revision || !name(patch.id))
     throw new TypeError('Pixel edit needs the observed revision and a valid edit ID');
   if (frame.revision !== fingerprint(design)) throw new RangeError('Pixel edit revision no longer matches the document');
-  if (design.version === 2 && patch.frame !== frame.id)
+  if (design.version === 2 && patch.frame !== frame.id && (patch.frame !== undefined || patch.cel === undefined))
     throw new RangeError('Pixel edit needs the observed frame ID');
-  const route = Destinations.resolve(design,patch);
+  const route = Destinations.resolve(design,patch.destination);
   if (route.destination.kind !== 'raster') {
+    if (patch.cel !== undefined) throw new TypeError('A cel ID is a raster edit target');
     if (!context) throw new TypeError('Scene edit needs a scene context');
     return Destinations.apply(frame,patch,route,context,readPixelEdits);
   }
-  if (frame.layerIds.includes(patch.id) || patch.operation !== undefined)
+  if (patch.operation !== undefined || (patch.cel === undefined && frame.layerIds.includes(patch.id)))
     throw new TypeError('A raster edit needs a new layer ID and pixel edits');
+  if (patch.cel !== undefined) {
+    const layer = frame.cels && [...frame.cels].find(([,id]) => id === patch.cel)?.[0];
+    if (layer === undefined) throw new RangeError('Unknown pixel cel ' + patch.cel + ' on frame ' + frame.id);
+    const marks = readPixelEdits(frame,patch,layer);
+    const revised = { ...design, frames:design.frames.map(item => {
+      if (item.id !== frame.id) return item;
+      const cel = item.cels[layer];
+      return { ...item, cels:{ ...item.cels, [layer]:{ ...cel, marks:[...cel.marks,...marks] } } };
+    }) };
+    const result = compile(revised,frame.id);
+    for (const { at:[x,y], swatch } of marks) {
+      const state = cell(result,y*frame.width+x);
+      if (state.cel !== patch.cel || state.swatch !== swatch)
+        throw new RangeError('Pixel cel edit is clipped at ' + [x,y].join(','));
+    }
+    return revised;
+  }
   const marks = readPixelEdits(frame,patch);
   const revised = design.version === 1
     ? { ...design, layers:[...design.layers,{ id:patch.id, marks }] }
@@ -363,8 +418,8 @@ function trace(frame, object, scene) {
 
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
-  if (!['trace','validate','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
-    throw new TypeError('Use pixel-art trace <scene> --subject object-id, validate <design.json>, draw <design.json>, inspect <design.json> --at x,y, or edit <design.json> <patch.json> --out revised.json');
+  if (!['trace','validate','targets','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
+    throw new TypeError('Use pixel-art trace, validate, targets, draw, inspect, or edit. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -379,8 +434,31 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     process.stdout.write(JSON.stringify(validate(design),null,2)+'\n');
     return;
   }
+  const out = action === 'edit' && typeof opt.out === 'string' ? path.resolve(opt.out) : undefined;
+  function sourceFor(binding) {
+    const sameFile = typeof opt.scene === 'string' && /\.(?:js|json)$/i.test(binding.scene) &&
+      path.resolve(opt.scene) === path.resolve(binding.scene);
+    if (opt.scene !== binding.scene && !sameFile)
+      throw new TypeError('Pass --scene ' + binding.scene + ' to use the bound source');
+    if (out && [source,patch,binding.scene].some(file => path.resolve(file) === out))
+      throw new RangeError('Write the scene edit to a separate output from its inputs');
+    return opt.scene;
+  }
+  const context = {
+    world:binding => world(sourceFor(binding)),
+    scene:binding => scene(sourceFor(binding))
+  };
+  if (action === 'targets') {
+    documentShape(design);
+    const limit = opt.limit === undefined ? 128 : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
+    if (!integer(limit,1,Number.MAX_SAFE_INTEGER) || typeof opt.destination !== 'string')
+      throw new TypeError('Use pixel-art targets <design.json> --destination id --scene <bound scene> [--limit count]');
+    const report = Destinations.targets(Destinations.resolve(design,opt.destination),context,limit);
+    process.stdout.write(JSON.stringify(report,null,2)+'\n');
+    return;
+  }
   const changes = action === 'edit' ? read(patch) : undefined;
-  const frame = compile(design,opt.frame ?? (design.version === 2 ? changes?.frame : undefined));
+  const frame = compile(design,opt.frame ?? (design.version === 2 ? changes?.frame : undefined),changes?.cel);
   if (action === 'inspect') {
     const coordinate = /^\d+,\d+$/.test(opt.at ?? '') ? opt.at.split(',').map(Number) : null;
     if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use --at x,y inside the native grid');
@@ -394,22 +472,8 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     console.log('wrote',directory);
     return;
   }
-  if (typeof opt.out !== 'string') throw new TypeError('Use --out revised.json to save the edit');
-  const out = path.resolve(opt.out);
-  function sourceFor(binding) {
-    const sameFile = typeof opt.scene === 'string' && /\.(?:js|json)$/i.test(binding.scene) &&
-      path.resolve(opt.scene) === path.resolve(binding.scene);
-    if (opt.scene !== binding.scene && !sameFile)
-      throw new TypeError('Pass --scene ' + binding.scene + ' to edit the bound source');
-    if ([source,patch,binding.scene].some(file => path.resolve(file) === out))
-      throw new RangeError('Write the scene edit to a separate output from its inputs');
-    return opt.scene;
-  }
-  const result = edit(design,frame,changes,{
-    world:binding => world(sourceFor(binding)),
-    scene:binding => scene(sourceFor(binding))
-  });
-  files.json(out,result);
+  if (!out) throw new TypeError('Use --out revised.json to save the edit');
+  files.json(out,edit(design,frame,changes,context));
 }
 
 module.exports = { compile, validate, stamp, image, review, edit, draw, trace, command };

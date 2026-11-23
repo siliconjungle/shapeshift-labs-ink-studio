@@ -2,6 +2,7 @@
 const SplatProvenance = (() => {
   const tables = [['objectIds', 'objects'], ['materialIds', 'materials'], ['targetIds', 'targets']];
   const channels = [['normals', 3, Float32Array], ['muteEmission', 1, Uint8Array]];
+  const identityCache = new WeakMap();
   const curveLod = (records, indexAt) => records?.length ?
     (typeof CurveLod === 'undefined' ? require('./curve-lod.js') : CurveLod).remap(records, indexAt) : [];
   const perSplat = [['data', 16, Float32Array], ['attr', 4, Float32Array], ['fine', 12, Float32Array],
@@ -15,6 +16,36 @@ const SplatProvenance = (() => {
     if (target.mark !== undefined || target.markLayer !== undefined || target.part !== undefined) labels.push(target.mark, target.markLayer);
     if (target.part !== undefined) labels.push(target.part);
     return JSON.stringify(labels);
+  }
+
+  const validId = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 4096;
+
+  function identities(world) {
+    const rest = world.rest ?? world.data;
+    const authored = world.splatIds, metadata = world.renderMetadata, count = world.count;
+    const prior = identityCache.get(rest);
+    if (prior && prior.authored === authored && prior.metadata === metadata && prior.count === count) return prior.index;
+    const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
+    const { row } = selectors.index(world);
+    const ids = new Array(count), rows = new Map();
+    for (let i = 0; i < count; i++) {
+      const target = row(i), owner = target.entity ?? target.object;
+      const offset = i*16;
+      const x = rest[offset], y = rest[offset+1], z = rest[offset+2];
+      const id = validId(authored?.[i]) ? authored[i] :
+        owner != null && Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+          ? 'rest:' + JSON.stringify([owner,target.part ?? null,x,y,z]) : undefined;
+      if (!validId(id)) continue;
+      ids[i] = id;
+      rows.set(id,rows.has(id) ? -1 : i);
+    }
+    const index = Object.freeze({
+      idAt: i => rows.get(ids[i]) === i ? ids[i] : undefined,
+      ambiguous: i => rows.get(ids[i]) === -1,
+      rowOf: id => rows.get(id) ?? -1
+    });
+    identityCache.set(rest,{ authored, metadata, count, index });
+    return index;
   }
 
   function dictionary(key = value => value) {
@@ -192,6 +223,7 @@ const SplatProvenance = (() => {
       return out;
     }
     for (const [key, stride, Type] of perSplat) if (world[key]) result[key] = take(world[key], stride, Type);
+    if (world.rest instanceof Float32Array) result.rest = take(world.rest,16,Float32Array);
     if (world.renderMetadata) {
       const source = world.renderMetadata, meta = result.renderMetadata = { ...source };
       for (const [key, stride, Type] of channels) if (source[key]) meta[key] = take(source[key], stride, Type);
@@ -214,6 +246,6 @@ const SplatProvenance = (() => {
     return api.bind(rows);
   }
 
-  return Object.freeze({ join, subset, fromRecords, targetKey });
+  return Object.freeze({ join, subset, fromRecords, targetKey, validId, identities });
 })();
 if (typeof module !== 'undefined') module.exports = SplatProvenance;

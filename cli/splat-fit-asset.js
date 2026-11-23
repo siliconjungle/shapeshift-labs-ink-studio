@@ -1,6 +1,8 @@
 const RowAssets = require('./render-row-assets.js');
 const Curve = require('../src/curve-splat.js');
 const Optical = require('../src/optical-materials.js');
+const Provenance = require('../src/splat-provenance.js');
+const Targets = require('../src/target-selectors.js');
 
 const format='ink-studio/splat-fit';
 const compiled=new WeakMap();
@@ -13,19 +15,32 @@ function eligible(world, i) {
 
 function prepare(world, asset) {
   if (asset===undefined || asset===false) return null;
-  RowAssets.validate(world,asset,format);
-  if (compiled.has(asset)) return compiled.get(asset);
-  if (!Array.isArray(asset.edits) || asset.edits.length>world.count) throw new TypeError('Splat fit needs row edits');
+  const stable = asset?.version === 2 && asset.format === format;
+  if (!stable) RowAssets.validate(world,asset,format);
+  if (stable && asset.scene !== undefined && asset.scene !== sceneId(world))
+    throw new RangeError('Splat fit belongs to a different scene');
+  let cache = compiled.get(asset);
+  if (!cache) compiled.set(asset,cache = new WeakMap());
+  if (cache.has(world)) return cache.get(world);
+  if (!Array.isArray(asset.edits) || asset.edits.length>world.count) throw new TypeError('Splat fit needs splat edits');
+  const target = stable ? Targets.prepare(asset.target) : undefined;
+  if (stable && (!Targets.name(target.object) || Object.keys(target).some(key => !['object','part'].includes(key))))
+    throw new TypeError('Stable splat fit needs an object ID and optional part ID');
+  const ids = stable && Provenance.identities(world);
+  const owner = stable && Targets.index(world).row;
   const scales=new Float32Array(world.count).fill(1), seen=new Set();
-  for (const [i, scale] of asset.edits) {
+  for (const [source, scale] of asset.edits) {
+    const i = stable ? ids.rowOf(source) : source;
     if (!Number.isSafeInteger(i) || i<0 || i>=world.count || seen.has(i) ||
-        !Number.isFinite(scale) || scale!==0 && (scale<.4 || scale>2) || !eligible(world,i))
-      throw new RangeError('Invalid or duplicate splat fit row edit');
+        !Number.isFinite(scale) || scale!==0 && (scale<.4 || scale>2) || !eligible(world,i) ||
+        (stable && !Targets.objectScope(target,owner(i))))
+      throw new RangeError('Invalid, duplicate, or unavailable splat fit target ' + source);
     seen.add(i);
     scales[i]=scale;
   }
-  compiled.set(asset,scales);
+  cache.set(world,scales);
   return scales;
 }
 
-module.exports={format,prepare,eligible};
+const sceneId = world => world.spec?.id ?? world.id;
+module.exports={format,prepare,eligible,sceneId};

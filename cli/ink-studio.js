@@ -1394,6 +1394,7 @@ const CMD = {
         '    layer controls: --angle degrees --feather degrees --opacity fraction --region JSON|file|off',
         '  pixel-art trace <scene> --subject object-id --out directory   save a native underdrawing from a scene',
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
+        '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --scene <bound scene> --out edit.json   write a scene destination',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
