@@ -492,3 +492,8 @@ counts, and the native dimensions. Buffers are interleaved and top-down.
 The `f32le` files are little-endian float32, `u32le` files are little-endian
 unsigned integers, and `u8` files contain bytes. Preview scaling leaves
 the raw files on the native grid.
+
+Use `ink.pickSurface(frame.passes, x, y)` or the CLI command
+`surface-pixel <scene> --at x,y` to read the depth owner at a top-down
+native art pixel. [Indexed scene meshes](textured-surfaces.md#indexed-scene-meshes)
+shows the command and the world-space ray query.

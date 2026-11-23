@@ -888,6 +888,7 @@ const view = extra =>
       spriteAtlases: spriteAtlasOption(),
       scalePreviews: onOffOption('scale-previews'),
       spriteAtlasMode: opt['sprite-atlas-mode'],
+      meshes: onOffOption('meshes'),
       spriteReconstruction: opt['sprite-reconstruction'],
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),
@@ -1389,6 +1390,7 @@ const CMD = {
         '    [--bake clip.json] [--preview directory] [--at seconds|--frames count] [--direction index] [--out report.json]',
         '  retarget --profiles  show built-in role templates',
         '  passes <id> [--channels opaque-surface,part-motion,strands] [--previous seconds]   save art-pixel render passes',
+        '  surface-pixel <id> --at x,y [--t seconds]   inspect the opaque native art-pixel owner',
         '  strand-pixel <id> --at x,y [--t seconds] [--previous seconds]   inspect visible strand hits on the native art grid',
         '  strand-review <id> --w 160 --h 96 [--curve-quality file.json] [--from 0 --to 3 --camera-orbit 20] [--out directory]',
         '  export-layers <id> [--t 0,1,2 | --from 0 --to 2 --n 3] [--part-motion on] [--compositing file.json] [--out directory]   export RGBA and compositing layers',
@@ -2668,6 +2670,18 @@ const CMD = {
     const directory = opt.out ? path.resolve(opt.out) : path.join(OUT, w.id + '-passes');
     require('./pass-preview.js').writePasses(directory, im, opt.px1 ? 1 : im.px);
     console.log('wrote', directory);
+  },
+  'surface-pixel'() {
+    if (pos.length !== 1 || typeof opt.at !== 'string' || !/^\d+,\d+$/.test(opt.at) || opt.out === true)
+      die('Use surface-pixel <scene> --at x,y [--t seconds] [--out inspection.json]');
+    const world = buildPreview(), t = num('t', 0), [x,y] = list('at');
+    const art = require('../src/art-passes.js');
+    const passes = art.opaque.filter(channel => !art.needsSurfaceMotion([channel]));
+    pose(world,t);
+    const frame = R.render(world,view({t,passes}));
+    const report = {scene:world.id,time:t,at:[x,y],hit:art.pick(frame.passes,x,y)};
+    if (opt.out) require('./asset-files.js').json(path.resolve(opt.out),report);
+    else process.stdout.write(JSON.stringify(report,null,2) + '\n');
   },
   'strand-pixel'() {
     if (pos.length !== 1 || typeof opt.at !== 'string' || !/^\d+,\d+$/.test(opt.at) || opt.out === true)

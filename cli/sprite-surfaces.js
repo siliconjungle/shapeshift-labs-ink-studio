@@ -16,7 +16,7 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false}) {
   if(!atlas)return [];
   const fragments=new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
   function transform(v, step, weights) {
@@ -67,7 +67,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNor
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
         motion || chart ? weights : undefined));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,
-        ...(motion && {key:JSON.stringify(['mesh',slot,chart?.id ?? chart?.first ?? 0,
+        ...(motion && {key:JSON.stringify(['mesh',layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
@@ -104,7 +104,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,clip,paletteSampling,surfaceNor
           if(weights.some(n=>n < -1e-7))continue;
           const w=weights.map((n,k)=>ortho?n:n/row[k].z),sum=w[0]+w[1]+w[2];
           const z=ortho?weights.reduce((s,n,k)=>s+n*row[k].z,0):1/sum,p=y*W+x;
-          if(fragments[p]&&z>=fragments[p].z)continue;
+          if((layer.sceneMeshId && z>far) || (fragments[p] && z>=fragments[p].z)) continue;
           const uvWeights = linearUV ? weights : w, uvSum = linearUV ? 1 : sum;
           const sample=k=>row.reduce((s,n,i)=>s+n.uv[k]*uvWeights[i]/uvSum,0);
           const s=sample(0),t=sample(1);

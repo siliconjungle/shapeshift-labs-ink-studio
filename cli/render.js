@@ -104,6 +104,7 @@ const RainImpacts = require('./rain-impacts.js');
 const AtlasSprites = require('../src/atlas-sprites.js');
 const AtlasRaster = require('./atlas-sprites.js');
 const SurfaceRaster = require('./sprite-surfaces.js');
+const SceneMeshes = require('../src/scene-meshes.js');
 let SplatFields, AtmosphereEmitters;
 const ReflectionProbes = require('../src/reflection-probes.js');
 const { cameraRays, surfacePoint, reflectionSampler, atmosphereQuality, mediaSampler, applyAtmosphere } = require('./scene-optics.js');
@@ -971,7 +972,7 @@ function renderFrame(world, o, preparedPalettes) {
   const sectionAt = cutaway && (p => Cutaway.margin(cutaway,...p,
     -(V[2]*p[0]+V[6]*p[1]+V[10]*p[2]+V[14])-cutoffDepth));
   const geometryClip = sectionAt ? (p => (!planeClip || planeClip(p)) && sectionAt(p)>=0) : planeClip;
-  let spriteSurfaces = world.spriteSurfaces;
+  let spriteSurfaces = o.spriteSurfaces === false ? undefined : world.spriteSurfaces;
   if (world.scalePreviews && o.scalePreviews !== false && o.spriteSurfaces !== false) {
     const grid = o.artGridScale || 1;
     const api = require('../index.js').load().KIT.procedural.lod.preview;
@@ -981,8 +982,10 @@ function renderFrame(world, o, preparedPalettes) {
     }, report).filter(Boolean);
     if (active.length) spriteSurfaces = [spriteSurfaces, ...active];
   }
-  const surfaceFragments = o.spriteSurfaces === false ? [] :
-    SurfaceRaster.rasterize(spriteSurfaces, { V, W, H, focal, ortho, near, clip: geometryClip,
+  const meshLayers = SceneMeshes.layers(world,o.meshes);
+  const surfaceLayers = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
+  const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
+      far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, motion:captureSurfaceMotion });
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip}) : null;
@@ -3048,7 +3051,7 @@ function renderFrame(world, o, preparedPalettes) {
   let passes = art?.finalize(world, t, { x: X, y: Y, z: Z, scale:SC, rayAt, span: R,
     detail, sprM, surfaceGlint, centers, ditherView, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
-    surfaceLabels:captureTexturedSurface&&o.spriteSurfaces!==false ? SurfaceRaster.labels(spriteSurfaces) : undefined });
+    surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers) : undefined });
   if (surfaceCapture) o.surfaceMotionHistory?.store(motionReference.surfaceMotion,surfaceReset);
   const strand = strandTrace && strandTrace.finalize();
   if (strand) {

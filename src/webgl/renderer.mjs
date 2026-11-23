@@ -193,7 +193,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const sort = createDepthSorter(), transparencyAPI = toolkit.KIT?.procedural?.splatOrder;
     const afterimagesAPI = toolkit.KIT?.afterimages;
     const previewPipelines = [];
-    let surfacePipeline,emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
+    const surfacePipelines = [];
+    let emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let artPixelFinish, correctionStage;
     const clusterAPI = toolkit.KIT?.colorClusters, boundaryAPI = toolkit.KIT?.boundaryCels;
     const historiesByDepth = [];
@@ -598,9 +599,12 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);
         gl.clearBufferfv(gl.DEPTH,0,[1]);gl.disable(gl.BLEND);
         if (weightsOnly) gl.colorMask(false,false,false,false);
-        if (surfaces) {
-          surfacePipeline ??= createSurfacePipeline(gl, surfaceOptions);
-          surfacePipeline.draw(surfaces, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
+        if (surfaces) for (const [i, atlas] of (Array.isArray(surfaces) ? surfaces : [surfaces]).entries()) {
+          if (!atlas) continue;
+          surfacePipelines[i] ??= createSurfacePipeline(gl, surfaceOptions);
+          if (atlas.sceneMeshId) gl.depthFunc(gl.LESS);
+          surfacePipelines[i].draw(atlas, { ...options.surfaceFrame, water, wet, width, height, samplingScale: options.u_materialGridScale ?? 1 });
+          if (atlas.sceneMeshId) gl.depthFunc(gl.LEQUAL);
         }
         if (previews) {
           gl.depthFunc(gl.LESS);
@@ -1245,7 +1249,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         fog: rgb(world.pal[fog.c ?? 0] ?? 0) };
       const proxyUniforms = proxy && gaussianProxies.prepare(proxyPlan, proxy);
       if (proxy) historyValid = false;
-      const surfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
+      const spriteSurfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
+      const meshLayers = world.meshes === undefined || frame.meshes === false ? [] :
+        toolkit.KIT.sceneMeshes.layers(world,frame.meshes);
+      const surfaces = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
       const preview = frame.spriteSurfaces !== false && frame.scalePreviews !== false && world.scalePreviews;
       let ordering, orderReport;
       if (localOrder && !reflectionCapture) {
@@ -1771,7 +1778,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       inspection(world, frame, settings, width, height, output, presentGrid);
     }
     return { render: presentFrame, dispose() {
-      surfacePipeline?.dispose();
+      for (const pipeline of surfacePipelines) pipeline?.dispose();
       spriteReconstructionPipeline?.dispose();
       for (const preview of previewPipelines) preview?.dispose();
       emitterSurfacePipeline?.dispose();
@@ -1953,7 +1960,8 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
         footprintView={...makeCamera(world,frame,width,height),width,height,variance:frame.raw?.3:.15,snap:!frame.raw&&!frame.colored};
       }
       const spriteLOD=toolkit.KIT?.sprite?.reconstruction;
-      const pickFrame={water:frame.water!==false,...ray,cutaway:section,camera,footprintView};
+      const pickFrame={water:frame.water!==false,...ray,meshes:frame.meshes!==false&&ray?.meshes!==false,
+        cutaway:section,camera,footprintView};
       if(world.spriteReconstruction&&spriteLOD){
         const width=frame.width??frame.target?.width??canvas.width,height=frame.height??frame.target?.height??canvas.height;
         const view=makeCamera(world,frame,width,height);
@@ -1973,7 +1981,7 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
             toolkit.KIT.cutaway.margin(section,...point,axial(point)-view.setback)>=0);
           const accept=ray?.accept;
           pickFrame.accept=hit=>{
-            const code=plan.mask.codes[hit.index], pixel=code&&pixelAt(hit.point);
+            const code=hit.kind === 'mesh' ? 0 : plan.mask.codes[hit.index], pixel=code&&pixelAt(hit.point);
             return (!code||pixel&&spriteLOD.geometry(code,...pixel))&&(!accept||accept(hit));
           };
           pickFrame.extraHits=ray=>spriteLOD.hits(plan,{...ray,pixelAt,clip});

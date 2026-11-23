@@ -39,6 +39,21 @@ const ArtPasses = (() => {
     return output;
   }
 
+  function pick(passes,x,y) {
+    if (!passes?.depth || !passes.surfaceKind || !passes.position)
+      throw new TypeError('Surface picking needs the opaque-surface art passes');
+    const {w,h,depth}=passes;
+    if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || x<0 || y<0 || x>=w || y>=h) return null;
+    const p=y*w+x;
+    if (!Number.isFinite(depth[p])) return null;
+    const tuple = (array,n) => array && Array.from(array.subarray(p*n,(p+1)*n));
+    return { kind:surfaceKinds[passes.surfaceKind[p]], depth:depth[p],
+      object:passes.objects?.[passes.objectId?.[p]] ?? null, material:passes.materials?.[passes.materialId?.[p]] ?? null,
+      coverage:passes.surfaceCoverage?.[p], position:tuple(passes.position,3), restPosition:tuple(passes.objectPosition,3),
+      geometricNormal:tuple(passes.geometricNormal,3), shadingNormal:tuple(passes.shadingNormal,3),
+      uv:passes.surfaceUVValid?.[p] ? tuple(passes.surfaceUV,2) : null };
+  }
+
   const glsl = `
 bool inkOwnsSurface(float alpha, bool writesDepth, float depth, float nearestDepth) {
   return writesDepth && alpha > 0.5 && depth <= nearestDepth;
@@ -49,6 +64,6 @@ vec3 inkEmissionOver(vec3 emission, vec3 below, float alpha) {
 }
 `;
 
-  return Object.freeze({ channels, environment, partMotion, strands, opaque, surfaceKinds, needsPartMotion, needsStrandMotion, needsSurfaceMotion, select, subset, cutoff, ownsSurface, over, glsl });
+  return Object.freeze({ channels, environment, partMotion, strands, opaque, surfaceKinds, needsPartMotion, needsStrandMotion, needsSurfaceMotion, select, subset, pick, cutoff, ownsSurface, over, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = ArtPasses;

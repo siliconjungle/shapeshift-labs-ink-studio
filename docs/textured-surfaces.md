@@ -242,3 +242,75 @@ On a deforming mesh you can supply `restPoints` alongside `points` to
 retain original XYZ. `points` still provide current vertex positions.
 [Shared opaque surfaces](art-passes.md#shared-opaque-surfaces) exposes these
 labels, geometric and painted normals, original UVs, depth, and motion.
+
+## Indexed scene meshes
+
+Use `SceneMeshes.create` from `ink.load()` (or `KIT.sceneMeshes` in a
+browser) for indexed geometry with image materials. Attach the returned
+mesh to `world.meshes`. Both the software and native WebGL 2 renderers
+draw the triangles into the same scene as splats, curve strands, and
+sprite surfaces.
+
+```js
+const { SceneMeshes, makeBuilder } = ink.load();
+const panel = SceneMeshes.create({
+  id: 'signal-panel',
+  positions: new Float32Array([-1,1,0, 1,1,0, -1,-1,0, 1,-1,0]),
+  uvs: new Float32Array([0,0, 1,0, 0,1, 1,1]),
+  indices: new Uint16Array([0,1,2, 2,1,3]),
+  materials: [{ id: 'painted-metal', texture: { width, height, pixels } }]
+});
+const world = makeBuilder(12, [0x172339, 0xe6b296, 0x66afa0]).finish({
+  meshes: [panel],
+  cam: { target: [0,0,0], dist: 4, yaw: 0, pitch: 0 }
+});
+
+// In a stage update, submit one posed XYZ triple per original vertex.
+SceneMeshes.pose(panel, movedPositions);
+```
+
+`positions` are world-space XYZ triples and `uvs` are normalized pairs.
+UV (0,0) addresses the upper-left texel center. Split vertices at UV
+seams. `indices` contains one triple per triangle. For multiple materials,
+provide one zero-based `faceMaterials` index per authored triangle.
+Material IDs label the visible faces in the art passes. Use unique
+object IDs within a scene.
+
+A material supports an RGB24 `color` tint, an optional top-down RGBA8
+`texture`, and an optional matching tangent-space RGBA8 `normal` map.
+`alphaCutoff` defaults to 0.5 and turns texture alpha into solid
+coverage or a cutout. `sampling` accepts the palette-preserving
+minification rule above. The resulting colors go through local scene
+emitters, fog, and the scene’s palette resolve. Use `raw: true` for the
+unquantized scene color.
+
+Each mesh retains its initial positions for rest-space and motion output.
+Pose it without changing index order and call `SceneMeshes.pose` again
+when its vertices move. Ink prepares an atlas and shared triangle draw
+buffers once per mesh and updates vertex positions on a pose. Triangles
+are double-sided. These materials support opaque and cutout rendering.
+The per-mesh limits are 250,000 triangles, 64 materials, and a 2048 ×
+2048 texture atlas. The scene can contain up to 32 meshes, 500,000
+triangles, and 16 million allocated atlas texels.
+
+### Inspecting a mesh
+
+The headless `opaque-surface` pass includes the visible mesh ID,
+material, UV, coverage, depth, motion, and geometric and shading normals.
+Use `ink.pickSurface(frame.passes, x, y)` or `surface-pixel` to inspect
+the depth-winning art pixel, including when a splat or SDF occludes it.
+
+```sh
+ink-studio passes examples/native-textured-mesh.js --channels opaque-surface \
+  --w 240 --h 148 --px 1 --px1 --previous .35 --t .62 --out receiver-passes
+ink-studio surface-pixel examples/native-textured-mesh.js --at 119,62 \
+  --w 240 --h 148 --px 1 --t .62
+```
+
+Browser `renderer.pick(world, ray, frame)` and the toolkit’s
+`KIT.procedural.contributions.create(world).ray(ray)` also report mesh
+hits. A hit carries the authored triangle index, UV, position, normal,
+and object and material labels. Ray picking tests the base cutout texels
+of the posed triangles. Use art-pixel inspection for the exact result of
+screen-space minification or a headless SDF assist. Set `meshes: false`
+on a frame or use `--meshes off` for a render comparison.
