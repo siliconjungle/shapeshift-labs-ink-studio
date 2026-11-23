@@ -943,7 +943,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         scenePalette: world.pal, paletteRoles: world.paletteRoles
       });
       const hybridDepthCapture = typeof frame.hybridDepthFrame === 'function';
-      const packedDepth = Boolean(foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || hybridDepthCapture || finishShotArt);
+      const needsPresentationDepth = Boolean(foamRows?.length || highlightPlan?.length || frame[graphOwner]?.depth || finishShotArt);
+      const packedDepth = needsPresentationDepth || hybridDepthCapture;
       const owner = packedDepth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
       const sourceWater = frame.water !== false && world.water?.count ? world.water : null;
       const pixel = toolkit.KIT?.pixel;
@@ -1047,8 +1048,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           (waterScene && frame.time !== lastWaterTime)) historyValid = false;
       geometry.resize(rw, rh);
       contours.resize(colored ? width : 1, colored ? height : 1);
-      const ownsPixels = packedDepth || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
-      owner.resize(ownsPixels ? width : 1, ownsPixels ? height : 1);
+      const ownsPixels = needsPresentationDepth || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
+      const drawOwnership = ownsPixels || hybridDepthCapture;
+      owner.resize(drawOwnership ? width : 1, drawOwnership ? height : 1);
       const captureNormals = harmonics && frame[gaussianNormalFrame];
       if (captureNormals) {
         normalOwner ??= target();
@@ -1440,7 +1442,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         drawGeometry(shader, paintOverlay, width, height, { u_idx: 0, u_snap: 1, u_hard: 0, u_paintPass: true,
           tangent, lookGrid: coverage && [width, height] }, water, wet, env);
       }
-      if (ownsPixels)
+      if (drawOwnership)
         drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,proxy,surfaces,scaleSurfaces,spriteRows,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
       frame[graphOwner]?.(world, owner.textures[0], frame[graphOwner].depth ? owner.textures[2] : undefined, camera);
       if (hybridDepthCapture) {

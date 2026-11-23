@@ -49,6 +49,10 @@ test('live surface ordering resolves a translucent crossing with deterministic p
       const imported = sample(live, .015, undefined);
       const importedCenter = sample(live, .015, 'center');
       const repeat = sample(world, .015, 'surface');
+      let capture;
+      const reviewed = sample(world, .015, 'surface', undefined, {
+        hybridDepthFrame: value => { capture = [value.view, value.width, value.height, value.depth.length]; }
+      });
       const paletteView = { raw: false, colored: true };
       const palette = sample(world, .015, 'surface', undefined, paletteView);
       const paletteCenter = sample(world, .015, 'center', undefined, paletteView);
@@ -57,7 +61,7 @@ test('live surface ordering resolves a translucent crossing with deterministic p
       const perspectiveLocal = sample(world, .015, 'surface', undefined, perspective);
       draw.close();
       return { left, right, surfaceLeft, surfaceRight, narrow, narrowBefore, over, regular, enough, budget,
-        splatBudget, noNormals, imported, importedCenter, repeat, palette, paletteCenter, perspectiveCenter, perspectiveLocal };
+        splatBudget, noNormals, imported, importedCenter, repeat, reviewed, capture, palette, paletteCenter, perspectiveCenter, perspectiveLocal };
     }, {});
     const delta = (a, b) => a.reduce((sum, v, i) => sum + Math.abs(v - b[i]), 0);
     assert(result.right.right[0] - result.left.right[0] > 35);
@@ -83,6 +87,8 @@ test('live surface ordering resolves a translucent crossing with deterministic p
     assert.equal(result.imported.report.mode, 'surface');
     assert(delta(result.imported.right, result.importedCenter.right) > 50);
     assert.deepEqual(result.surfaceRight, result.repeat);
+    assert.deepEqual(result.surfaceRight, result.reviewed);
+    assert.deepEqual(result.capture, ['camera', 96, 84, 96 * 84]);
     assert.equal(result.palette.report.passes, 4);
     assert.notDeepEqual(result.palette.right, result.paletteCenter.right);
     assert.equal(result.perspectiveLocal.report.mode, 'surface');
