@@ -56,6 +56,7 @@
     'linear',
     'smooth',
     'step',
+    'step-start',
     'in-quad',
     'out-quad',
     'in-out-quad',
@@ -102,6 +103,8 @@
         return t * t * (3 - 2 * t);
       case 'step':
         return t === 1 ? 1 : 0;
+      case 'step-start':
+        return t === 0 ? 0 : 1;
       case 'in-quad':
         return t * t;
       case 'out-quad':

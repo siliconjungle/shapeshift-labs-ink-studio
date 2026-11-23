@@ -209,7 +209,7 @@ function controls(){
 }
 const keyTime=row=>row.cue===undefined?row.at:edit.cues[row.cue]+(row.offset??0);
 const easing={
-  linear:u=>u,smooth:u=>u*u*(3-2*u),step:()=>0,
+  linear:u=>u,smooth:u=>u*u*(3-2*u),step:()=>0,'step-start':u=>u>0?1:0,
   'in-sine':u=>1-Math.cos(u*Math.PI/2),'out-sine':u=>Math.sin(u*Math.PI/2),
   'in-out-sine':u=>(1-Math.cos(u*Math.PI))/2
 };

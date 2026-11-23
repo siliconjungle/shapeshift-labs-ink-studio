@@ -35,7 +35,7 @@
   const usableEase = ease => eases.includes(ease) || Array.isArray(ease) && ease.length===4 &&
     Array.from(ease).every((n,i)=>Number.isFinite(n) && (i%2 ? Math.abs(n)<=16 : n>=0 && n<=1));
   const sampleEase = (progress,ease) => Array.isArray(ease) ? cubicEase(ease,progress) :
-    ease==='step-start' ? 1 : K.anim.ease(progress,ease);
+    K.anim.ease(progress,ease);
 
   function create(schema, input = []) {
     if (!record(schema) || !Array.isArray(input)) throw Error('Expected channel modes and a keyframe array');
