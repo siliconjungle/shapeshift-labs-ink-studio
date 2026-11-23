@@ -104,6 +104,8 @@ labels. Soft pixels follow their usual depth ownership rule.
 The frame report includes the representation, part, material,
 native coverage share, and selected sprite view for each binding.
 
+The [curve bake](curve-bake.md) exports registered color, coverage, depth, and optional normals for curve parts.
+
 The [Brine lantern scene](../examples/part-representations.js) bakes
 the three atlases from their original native geometry.
 

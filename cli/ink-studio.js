@@ -1460,6 +1460,8 @@ const CMD = {
         '  project unpack <bundle.json> --out new-directory   extract a portable project',
         '  project verify <experiment-or-story-bundle.json> [--out report.json --compare-engine]',
         '  curve-subdivision-review [--out directory --chrome executable --hardware]  compare dense and adaptive finite spans',
+        '  curve-bake <scene> [--object name --part part --normals on --out directory]  bake curve cards and depth ribbons',
+        '  curve-bake-review [--out directory --chrome executable --hardware]  compare native curves, ribbons, and rebuilt cards',
         '  finite-curve-review [--out directory --chrome executable --hardware --orbit]  compare interactive GPU curves with the headless renderer',
         '  hybrid-depth-review [--out directory --chrome executable --hardware]  capture matched hybrid-depth views and controls',
         '  environment-parity [--fixture observatory --out directory --chrome executable]  compare matched CLI and WebGL environment frames',
@@ -2801,6 +2803,32 @@ const CMD = {
     const report = require('./curve-subdivision-review.js').run(directory,{ chrome:opt.chrome,hardware:opt.hardware });
     for (const { distance,webgl } of report.views)
       console.log(distance, webgl.dense.segments, 'to', webgl.adaptive.segments, 'spans, mean byte error', webgl.error.mean.toFixed(3));
+    console.log('wrote',directory);
+  },
+  'curve-bake'() {
+    const world = buildPreview(), time = num('t',0);
+    pose(world,time);
+    const { bakeCurves,writeCurveBake } = require('./curve-bake.js');
+    const result = bakeCurves(world,{
+      object:opt.object,part:opt.part,width:num('w',96),height:num('h',96),
+      directions:num('directions',8),yaw:num('yaw',world.cam.yaw ?? 0),time,
+      ...(opt.pitches!==undefined && { pitches:list('pitches') }),
+      ...(opt.pivot!==undefined && { pivot:list('pivot') }),
+      padding:num('pad',3),normals:onOffOption('normals') ?? false,
+      ribbon:onOffOption('ribbon')===false ? false : {
+        view:num('ribbon-view',0),alphaCutoff:num('alpha-cutoff',.5),depthTolerance:num('depth-tolerance',.02)
+      }
+    });
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,world.id+'-curve-bake');
+    writeCurveBake(directory,result);
+    console.log('wrote',directory,result.atlas.metadata.frames.length,'card views',
+      result.ribbon ? result.ribbon.strips+' ribbon strips' : '');
+  },
+  'curve-bake-review'() {
+    const directory = opt.out ? path.resolve(opt.out) : path.join(OUT,'curve-bake-review');
+    const report = require('./curve-bake-review.js').run(directory,{ chrome:opt.chrome,hardware:opt.hardware });
+    for (const asset of report.assets)
+      console.log(asset.object,asset.sourceSpans,'native spans,',asset.strips,'ribbon strips,',asset.cardViews,'card views');
     console.log('wrote',directory);
   },
   'finite-curve-review'() {

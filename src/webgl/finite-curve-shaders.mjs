@@ -159,7 +159,7 @@ bool curveHit(int id, vec3 origin, vec3 ray, vec2 viewInterval, out Hit hit) {
   return alpha >= 1e-5;
 }`;
 
-export function finiteCurveFragment({ tileSize, layers, mode, wet, layeredGlass, environment, section }) {
+export function finiteCurveFragment({ tileSize, layers, mode, wet, layeredGlass, environment, section, spriteLOD }) {
   const owner = mode === 'owner', mask = mode === 'mask', color = !owner && !mask;
   return `#version 300 es
 precision highp float;
@@ -177,6 +177,7 @@ ${owner ? 'uniform sampler2D u_curveOwner,u_curveOwnerMask;' : ''}
 ${color && wet ? waterGLSL(wet.airPockets,wet.layered,wet.atlas) : ''}
 ${color && environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${section ?? ''}
+${spriteLOD ?? ''}
 layout(location=0) out vec4 o_color;
 ${!mask ? 'layout(location=1) out vec4 o_depth;' : ''}
 ${owner || color && wet ? 'layout(location=2) out vec4 o_aux;' : ''}
@@ -216,6 +217,7 @@ void main() {
   for (int j=0; j<int(tile.y); j++) {
     int k = start+j;
     int id = int(tileRow(k >> 2)[k & 3]);
+    ${spriteLOD ? 'if (!spriteGeometry(int(spanRow(id,7).z),gl_FragCoord.xy)) continue;' : ''}
     Hit hit;
     if (!curveHit(id,origin,ray,interval,hit)) continue;
     float projected = projectedDepth(hit.depth);

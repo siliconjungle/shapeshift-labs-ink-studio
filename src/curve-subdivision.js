@@ -58,7 +58,7 @@ const CurveSubdivision = (() => {
 
   function compatible(world, a, b) {
     return a.strand === b.strand && a.tag === b.tag && a.color === b.color && a.flags === b.flags &&
-      a.alpha === b.alpha && a.aspect === b.aspect && a.part === b.part &&
+      a.alpha === b.alpha && a.aspect === b.aspect && a.part === b.part && a.partition === b.partition &&
       Math.abs(a.end - b.begin) <= 1e-6 && distance(a.to, b.from) <= 1e-5 &&
       sameValues(world.curveMaterials, kernel.materialStride, a.index, b.index) &&
       sameValues(world.curveLighting, kernel.lightingStride, a.index, b.index) &&
@@ -77,7 +77,7 @@ const CurveSubdivision = (() => {
   }
 
   function frame(world, camera, settings, {
-    data = world.data, positionAt, alphaAt, scaleAt, keep, planes = []
+    data = world.data, positionAt, alphaAt, scaleAt, keep, partitionAt, planes = []
   } = {}) {
     const stations = world.curveStations;
     if (!settings || !stations?.length) return;
@@ -165,7 +165,7 @@ const CurveSubdivision = (() => {
       if (projection.nearPlane(cameraFrom, cameraTo, reach)) return;
       return { ...shape, index, strand, begin, end, from, to, cameraFrom, cameraTo, reach,
         alpha:alphaAt?.(index) ?? data[q + 3], tag:data[q + 15], color:data[q + 7], flags:data[q + 11],
-        aspect:shape.major ? data[q + 14] : 1, part:rig?.free?.[index] ? 0 : rig?.bid?.[index] ?? 0 };
+        aspect:shape.major ? data[q + 14] : 1, partition:partitionAt?.(index), part:rig?.free?.[index] ? 0 : rig?.bid?.[index] ?? 0 };
     }
 
     for (let index = 0; index < world.count; index++) {

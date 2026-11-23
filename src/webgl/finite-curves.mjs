@@ -38,9 +38,9 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     (!options.visible || options.visible(data[i*16+11]));
   const subdivision = kit.curveSplats.subdivision;
   const settings = subdivision.prepare(options.curveSubdivision);
-  const detail = subdivision.frame(world,lens,settings,{ data, keep, planes:options.planes });
+  const detail = subdivision.frame(world,lens,settings,{ data, keep, planes:options.planes, partitionAt:options.geometryCode });
   const programs = new Map();
-  let references = 0, peakTile = 0;
+  let references = 0, peakTile = 0, masked = false;
 
   for (let i=0; i<world.count; i++) {
     const at = i*16;
@@ -85,12 +85,14 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     const mode = Number(span.beta) + 2*Number(!!span.group) + 4*Number(!!span.major) + 8*Number(span.flattened);
     const rgb = data[at+7], glow = !world.renderMetadata?.muteEmission?.[i] && kernel.emissionAt(world.curveMaterials,i);
     const color = [rgb & 255, rgb >> 8 & 255, rgb >> 16 & 255].map((byte,k) => Math.min(1,byte/255 + (glow?.[k] ?? 0)));
+    const geometryCode = options.geometryCode?.(i) ?? 0;
+    masked ||= geometryCode !== 0;
     spans.push(...point(view,span.from),span.radius,
       ...vector(view,span.axis),span.length,
       ...(span.major ? vector(view,span.major) : none),mode,
       ...(span.minor ? vector(view,span.minor) : none),span.opacity,
       ...(caps[0]?.plane ?? zero),...(caps[1]?.plane ?? zero),
-      ...color,i+1,span.group,span.tau,0,0,
+      ...color,i+1,span.group,span.tau,geometryCode,0,
       ...(caps[0]?.at ?? zero),...(caps[1]?.at ?? zero));
   }
   const starts = tiles.length*4, tileData = new Float32Array(starts + references);
@@ -102,10 +104,10 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     cursor += bin.length;
   }
   return { spans:Float32Array.from(spans), tiles:tileData, columns, rows,
-    count:spans.length/spanStride, references, peakTile, ...(detail && { subdivision:detail.stats }) };
+    count:spans.length/spanStride, references, peakTile, masked, ...(detail && { subdivision:detail.stats }) };
 }
 
-export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway }) {
+export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD }) {
   const spans = table(rowWidth,tableUnits.spans,maxSize);
   const tiles = table(rowWidth,tableUnits.tiles,maxSize);
   const programs = new Map();
@@ -115,9 +117,9 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
   function draw(plan, buffer, base, camera, options) {
     const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy } = options;
     const isOwner = mode === 'owner';
-    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass].join('/');
+    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked].join('/');
     if (!programs.has(key)) programs.set(key,program(finiteCurveFragment({
-      mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined
+      mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined, spriteLOD:plan.masked ? spriteLOD : undefined
     })));
     const shader = programs.get(key), { width, height } = base;
     textureUnit(tableUnits.solid,base.textures[2]);

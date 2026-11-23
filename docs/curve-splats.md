@@ -6,6 +6,7 @@ segment's local depth. Splitting a straight span preserves its density through
 the joint. Ordinary native splats can share the frame and occlude the curves. [The WebGL 2 preview](gpu-finite-curves.md)
 uses the same authored shapes and has a matched reference review.
 [Projected-error subdivision](curve-subdivision.md) adapts those spans to the art grid.
+[Curve baking](curve-bake.md) turns them into depth cards and textured ribbons.
 
 ## Author a source
 

@@ -26,7 +26,7 @@ function spriteAtlas(world, options = {}) {
   const {
     width = 96, height = 96, directions = 8, times: takeTimes = [0], fps = 12, columns = directions,
     pivot = world.cam.target, yaw = world.cam.yaw, maps = [], pose, view = {}, depthRange, sourceTimes, pitches,
-    cutoutMipmaps, normalSpace = 'asset', clips
+    cutoutMipmaps, normalSpace = 'asset', clips, curveSurface = false
   } = options;
   if (clips !== undefined && (options.times !== undefined || sourceTimes !== undefined || world.anim?.stateful))
     throw new RangeError('Sprite clip plans need a seekable scene and provide their own timing');
@@ -47,10 +47,10 @@ function spriteAtlas(world, options = {}) {
   const cutout = CutoutMipmaps.prepare(cutoutMipmaps);
   if (cutout && width*height > CutoutMipmaps.pixelLimit)
     throw new RangeError('Cutout mipmaps support up to 262144 pixels per view');
-  const passes = requested.filter(name => name !== 'silhouette');
+  const passes = requested.filter(name => name !== 'silhouette' && !(curveSurface && ['normal','depth'].includes(name)));
   const angles=exportViews(world,{directions,yaw,pitch:view.pitch,pitches}), views=angles.length;
   const anchor = plan ? pivot.slice() : pivot;
-  const camera = plan && CameraLens.view(world.cam, view.camera, { pose: null, composition: [.5,.5] });
+  const camera = (plan || curveSurface) && CameraLens.view(world.cam, view.camera, { pose: null, composition: [.5,.5] });
   const fixedView = camera && { camera, cameraTime: 0, cameraStaging: false, lockCamera: true,
     composition: [.5,.5], dist: view.dist ?? camera.dist / (view.zoom ?? 1) };
   const framing = fixedView && angles.map(({ yaw, pitch }) =>
@@ -87,9 +87,20 @@ function spriteAtlas(world, options = {}) {
       const {direction,yaw,pitch}=angles[angle];
       const axes = images.normal && normalSpace === 'view' ? AtlasSprites.basis(yaw, pitch) : null;
       const i = f * views + angle, ox = i % cols * width, oy = Math.floor(i / cols) * height;
+      const curveDepth = curveSurface && new Float32Array(width*height).fill(Infinity);
+      const curveNormals = curveSurface && images.normal && new Float32Array(width*height*3);
+      const curveProbe = curveDepth && ((p, _row, _center, depth, _r, _g, _b, alpha, normal) => {
+        if (alpha <= 0 || depth > curveDepth[p]) return;
+        curveDepth[p] = depth;
+        if (curveNormals) {
+          if (normal) curveNormals.set(normal,p*3);
+          else curveNormals.fill(0,p*3,p*3+3);
+        }
+      });
       const image = render(world, { spriteReconstruction: false, ...view, ...fixedView, t: sourceTime, w: width, h: height, px: 1,
         yaw, pitch, ortho: true, target: anchor,
-        transparent: true, passes, artHistory: history[angle], volumeHistory: volumes[angle] });
+        transparent: true, passes, artHistory: history[angle], volumeHistory: volumes[angle],
+        ...(curveSurface && { fragmentProbe:curveProbe, curveSurfaceNormals:!!curveNormals, edgeFilter:false, colored:false }) });
       const data = image.passes;
       let pixels = 0, left = width, top = height, right = -1, bottom = -1;
       for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -109,13 +120,16 @@ function spriteAtlas(world, options = {}) {
           right = Math.max(right, x);
           bottom = Math.max(bottom, y);
         }
-        if (depths && Number.isFinite(data.depth[p])) {
-          minDepth = Math.min(minDepth, data.depth[p]);
-          maxDepth = Math.max(maxDepth, data.depth[p]);
-          depths[q] = data.depth[p];
+        const bottomPixel = (height-1-y)*width+x;
+        const depth = curveSurface ? curveDepth[bottomPixel] : data?.depth?.[p];
+        if (depths && (!curveSurface || alpha) && Number.isFinite(depth)) {
+          minDepth = Math.min(minDepth,depth);
+          maxDepth = Math.max(maxDepth,depth);
+          depths[q] = depth;
         }
-        if (images.normal && (!axes || alpha) && (data.normal[j] || data.normal[j + 1] || data.normal[j + 2])) {
-          const xyz = data.normal.subarray(j, j + 3);
+        const normals = curveSurface ? curveNormals : data?.normal, n = curveSurface ? bottomPixel*3 : j;
+        if (images.normal && (!curveSurface && !axes || alpha) && (normals[n] || normals[n+1] || normals[n+2])) {
+          const xyz = normals.subarray(n,n+3);
           const channels = axes ? [AtlasSprites.dot(axes.right, xyz), AtlasSprites.dot(axes.up, xyz),
             AtlasSprites.dot(axes.normal, xyz)] : xyz;
           for (let c = 0; c < 3; c++) images.normal[k + c] = byte(.5 + channels[c] * .5);

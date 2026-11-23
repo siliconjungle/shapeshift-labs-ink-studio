@@ -1510,6 +1510,7 @@ function renderFrame(world, o, preparedPalettes) {
   const subdivision = curves && !shutterRows && !cutaway && !probeView && !reflectionPlane?.select &&
     CurveSubdivision.frame(world, curveCamera, subdivisionSettings, {
       data:d, positionAt:i=>[X[i],Y[i],Z[i]], alphaAt:i=>AL[i], scaleAt:i=>SC[i],
+      partitionAt:geometryMask && (i=>geometryMask.codes[i]),
       planes:reflectionPlane ? [CurveSubdivision.viewPlane(V,reflectionPlane)] : [],
       keep:i=>(!qualityRows || qualityRows.keep[i]) && !spriteLOD?.hidden(geometryMask?.codes[i]) &&
         !curveWidthAt?.(i) && !curveLod?.hidden?.has(i) && !curveLod?.geometry?.has(i) && !curveLod?.choices?.has(i)
@@ -2234,7 +2235,8 @@ function renderFrame(world, o, preparedPalettes) {
       return SplatFootprints.coverage(shaped,m[0]*u+m[1]*v,m[2]*u+m[3]*v);
     }
     const geometryCode = geometryMask?.codes[i];
-    const curveNormal = curveReceives || (curveLight ? curveLight.needsNormal : roughness !== undefined);
+    const lightingCurveNormal = curveReceives || (curveLight ? curveLight.needsNormal : roughness !== undefined);
+    const curveNormal = lightingCurveNormal || probe && o.curveSurfaceNormals;
     for (let iy = y0; iy <= y1; iy++) {
       const dy = iy + 0.5 - sy;
       for (let ix = x0; ix <= x1; ix++) {
@@ -2403,7 +2405,7 @@ function renderFrame(world, o, preparedPalettes) {
           if (directReceiver) [pr,pg,pb] = directLight(p,point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0,i);
           if (localProbe) [pr,pg,pb] = probes.shade(point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0,localAlbedo);
         }
-        if (curveLight || curveHit?.normal || curveEmission || curveReceives) {
+        if (curveLight || lightingCurveNormal && curveHit?.normal || curveEmission || curveReceives) {
           const [u, v] = curveFootprint?.offset ?? [0, 0];
           const ray = rayAt(ix + .5 + u, iy + .5 + v), curveView = ray.direction;
           const shade = curveReceives ? live.curveVisibility(i,
@@ -2497,7 +2499,7 @@ function renderFrame(world, o, preparedPalettes) {
           if (proxyRemoved) proxyRemoved[p]=a+proxyRemoved[p]*(1-a);
           continue;
         }
-        if (probe && !curveFootprint?.depths) probe(p, i, -cz, surfaceZ, pr, pg, pb, a);
+        if (probe && !curveFootprint?.depths) probe(p, i, -cz, surfaceZ, pr, pg, pb, a, curveHit?.normal);
         if (!deep && !blendDepth && !planarFootprints && !curveScene && deferred && deferredCount >= fragmentBudget) {
           playFragments(false,-cz);
           orderFallback = true;

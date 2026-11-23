@@ -1251,6 +1251,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const withdrawal = sampleCoverage?.amount(frame.sampleWithdrawal ?? world.sampleWithdrawal ?? 0) ?? 0;
       const curvePlan = finiteCurves && prepareFiniteCurves(toolkit.KIT,world,geometryData,camera,width,height,{
         time, drawOrder:frame.order, planes:[clip,cover?.plane],
+        geometryCode:spriteMask && (i=>spriteMask.codes[i]),
         curveSubdivision:cutaway ? false : frame.curveSubdivision ?? look.curveSubdivision,
         keep:i=>(!selection || selection.keep[i]) && !spriteLOD?.hidden(spriteMask?.codes[i]),
         visible:sampleCoverage && (flags=>sampleCoverage.visible(flags,withdrawal))
@@ -1475,7 +1476,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       if (curvePlan?.count) {
         finiteCurvePass ??= createFiniteCurvePass(gl,{
-          target,table,program,maxSize,textureUnit,fullscreen,cutaway:cutawayAPI?.glsl
+          target,table,program,maxSize,textureUnit,fullscreen,cutaway:cutawayAPI?.glsl,spriteLOD:spriteLOD?.glsl
         });
         const baseOwner = owner;
         const curveOptions = { clip, section, wet, water, env, layeredGlass,

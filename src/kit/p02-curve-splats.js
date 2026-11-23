@@ -1006,5 +1006,5 @@
     });
   }
 
-  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, subdivision: CurveSubdivision, drivers: CurvePoseDrivers, world });
+  K.curveSplats = Object.freeze({ format, segmentLimit, lightingPresets, bundle, surfacePath, carve, draw, bind, renderKernel: CurveSplat, subdivision: CurveSubdivision, bakedRibbon: CurveRibbons.ribbon, drivers: CurvePoseDrivers, world });
 })(KIT);
