@@ -101,15 +101,19 @@ vec3 eCookie(int i,vec3 p){
   return mix(mix(texelFetch(u_eCookies,lo+clamp(a,ivec2(0),hi),0).rgb,texelFetch(u_eCookies,lo+clamp(a+ivec2(1,0),ivec2(0),hi),0).rgb,f.x),mix(texelFetch(u_eCookies,lo+clamp(a+ivec2(0,1),ivec2(0),hi),0).rgb,texelFetch(u_eCookies,lo+clamp(a+ivec2(1),ivec2(0),hi),0).rgb,f.x),f.y);
 }
 vec2 eDisk(vec2 a){if(a.x==0.0&&a.y==0.0)return vec2(0);bool wide=abs(a.x)>abs(a.y);float r=wide?a.x:a.y,angle=.78539816339*(wide?a.y/a.x:2.0-a.x/a.y);return r*vec2(cos(angle),sin(angle));}
-vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal){
+vec3 eSurfaceLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal,
+  vec3 observer,float roughness,float sheen,out vec3 specular){
   vec3 sum=vec3(0);
+  specular=vec3(0);
+  float gloss=1.0-roughness;
+  bool shiny=sheen>0.0&&gloss>0.0&&dot(normal,observer)>0.0;
   for(int i=0;i<32;i++){
     if(i>=u_eCount||(fog&&i>=u_eFogCount))break;if(u_ePick>0&&i!=u_ePick-1)continue;
     vec4 c=eRow(i,4),params=eRow(i,5);float power=fog?c.w:params.x;if(power<=0.0)continue;
     vec4 at=eRow(i,0),n=eRow(i,1),u=eRow(i,2),v=eRow(i,3);
     if(distance(p,at.xyz)>at.w+length(vec2(u.w,v.w)))continue;
     vec3 transmission=eCookie(i,p);if(max(transmission.r,max(transmission.g,transmission.b))<=0.0)continue;
-    int type=int(n.w),grid=fog?1:int(params.y);float total=0.0,lit=0.0;
+    int type=int(n.w),grid=fog?1:int(params.y);float total=0.0,lit=0.0,shine=0.0;
     for(int j=0;j<64;j++){
       int count=type==2?grid:type>=3?1:grid*grid;if(j>=count)break;
       vec2 q=vec2(2.0*(float(j%grid)+.5)/float(grid)-1.0,2.0*(float(j/grid)+.5)/float(grid)-1.0);
@@ -124,13 +128,27 @@ vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal){
       vec3 origin=p+(fog?vec3(0):biasNormal*params.w);
       float visible=shadows?eShadow(origin,dir,d,params.w)*eCutoutShadow(origin,sampleAt,fog&&type>=3?0.0:params.w):1.0;
       lit+=amount*visible;
+      if(shiny){
+        vec3 h=dir+observer;
+        h*=inversesqrt(max(dot(h,h),1e-16));
+        shine+=amount*visible*sheen*gloss*pow(max(0.0,dot(normal,h)),4.0+96.0*gloss*gloss);
+      }
     }
     float count=float(type==2?grid:type>=3?1:grid*grid),visibility=total>0.0?lit/total:0.0;
     float steps=eRow(i,10).x;
-    if(steps>1.0)lit=total*floor(visibility*(steps-1.0)+.5)/(steps-1.0);
+    if(steps>1.0){
+      float resolved=total*floor(visibility*(steps-1.0)+.5)/(steps-1.0);
+      shine*=resolved/max(lit,1e-8);
+      lit=resolved;
+    }
+    if(shiny)specular+=c.rgb*transmission*(power*shine/max(count,1.0));
     sum+=(fog?eSRGB(c.rgb):c.rgb)*transmission*(power*lit/max(count,1.0));
   }
   return sum;
+}
+vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal){
+  vec3 unused;
+  return eSurfaceLighting(p,normal,fog,viewRay,biasNormal,vec3(0),1.0,0.0,unused);
 }
 vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){return eLighting(p,normal,fog,viewRay,normal);}
 vec3 ePaint(vec3 rgb,vec3 p,vec3 n){return eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(p,n,false,vec3(0)))));}

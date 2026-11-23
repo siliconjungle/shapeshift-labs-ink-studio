@@ -46,7 +46,25 @@ const SemanticTextureMipmaps = (() => {
     return {width,height,pixels,indices,palette};
   }
 
-  function build({width,height,pigment,normal,roughness=.65,emission,emissionStrength=1,indices,palette}, config=true) {
+  function scanFrame(daylight=true, appearance=0) {
+    if (typeof daylight!=='boolean' || !unit(appearance))
+      throw new RangeError('Scan shading needs a daylight switch and an appearance weight from 0 to 1');
+    return {daylight,appearance};
+  }
+
+  function scanCapture(source,count) {
+    if (source===undefined) return null;
+    if (!source || typeof source!=='object') throw new TypeError('Supply a registered scan material');
+    const {pixels,sourceView,angles=[.75,.99]}=source;
+    if (pixels!==undefined && (!bytes(pixels)||pixels.length!==count*4 ||
+        !Array.isArray(sourceView)||sourceView.length!==4||!sourceView.every(Number.isFinite)||
+        ![0,1].includes(sourceView[3])||sourceView[3]===0&&Math.hypot(...sourceView.slice(0,3))<1e-8 ||
+        !Array.isArray(angles)||angles.length!==2||!angles.every(n=>Number.isFinite(n)&&n>=-1&&n<=1)||angles[0]>=angles[1]))
+      throw new RangeError('Scan appearance needs registered RGBA pixels, capture view and increasing angle cosines');
+    return pixels===undefined ? {} : {sourceView:sourceView.slice(),angles:angles.slice()};
+  }
+
+  function build({width,height,pigment,normal,roughness=.65,emission,emissionStrength=1,indices,palette,scan}, config=true) {
     const rule=settings(config), count=width*height;
     if(!rule||![width,height].every(n=>Number.isInteger(n)&&n>0&&n<=1024)||
       !bytes(pigment)||pigment.length!==count*4||normal!==undefined&&(!bytes(normal)||normal.length!==count*4)||
@@ -57,15 +75,19 @@ const SemanticTextureMipmaps = (() => {
         !palette.length||palette.length>256||!Array.from(palette).every(rgb24)||!indices.every(i=>i<palette.length)) ||
       rule.protect.some(c=>!palette?.includes(c)))
       throw new RangeError('Semantic mipmaps need matching maps and protected colors from the indexed palette');
+    const capture=scanCapture(scan,count), captured=scan?.pixels;
+    const captureStride=captured?4:0;
     const protect=palette?.map(color=>rule.protect.includes(color)), levels=[];
-    const data=new Float32Array(count*8), emissionStride=emission?emission.length/count:0;
+    const data=new Float32Array(count*8), appearance=captured&&new Float32Array(count*4), emissionStride=emission?emission.length/count:0;
     for(let p=0;p<count;p++){
       const i=p*4, at=p*8;
       if(!pigment[i+3])continue;
       for(let c=0;c<3;c++){
         data[at+c]=linearByte[pigment[i+c]];
         if(emission)data[at+3+c]=linearByte[emission[p*emissionStride+c]];
+        if(appearance)appearance[i+c]=linearByte[captured[i+c]]*captured[i+3]/255;
       }
+      if(appearance)appearance[i+3]=captured[i+3]/255;
       data[at+6]=unit(roughness)?roughness**2:(roughness[p]/255)**2;
       data[at+7]=pigment[i+3]/255;
     }
@@ -76,9 +98,9 @@ const SemanticTextureMipmaps = (() => {
     }
     const votes=indices&&new Float64Array(palette.length), used=[];
     for(let w=width,h=height;;w=Math.max(1,w>>1),h=Math.max(1,h>>1)){
-      const texels=w*h, layerBytes=texels*4, rgba=new Uint8Array(layerBytes*3);
+      const texels=w*h, layerBytes=texels*4, rgba=new Uint8Array(layerBytes*(3+(captured?1:0)));
       const scaleX=width/w,scaleY=height/h;
-      const sum=new Float64Array(11);
+      const sum=new Float64Array(11+captureStride);
       for(let y=0;y<h;y++)for(let x=0;x<w;x++){
         const left=x*scaleX,right=(x+1)*scaleX,top=y*scaleY,bottom=(y+1)*scaleY;
         sum.fill(0);
@@ -89,6 +111,7 @@ const SemanticTextureMipmaps = (() => {
           sum[0]+=weight;
           for(let c=0;c<7;c++)sum[c+1]+=data[at+c]*weight;
           if(normals)for(let c=0;c<3;c++)sum[c+8]+=normals[p*3+c]*weight;
+          if(appearance)for(let c=0;c<4;c++)sum[11+c]+=appearance[p*4+c]*weight;
           if(indices){
             const index=indices[p];
             if(votes[index]===0)used.push(index);
@@ -120,12 +143,17 @@ const SemanticTextureMipmaps = (() => {
           rgba[layerBytes+i+c]=128+Math.round(direction[c]*127);
           rgba[layerBytes*2+i+c]=toByte(display(sum[4+c]/area));
         }
+        if(captured){
+          const at=layerBytes*3+i;
+          if(sum[14])for(let c=0;c<3;c++)rgba[at+c]=toByte(display(sum[11+c]/sum[14]));
+          rgba[at+3]=toByte(sum[14]/area);
+        }
         rgba[layerBytes+i+3]=toByte(Math.sqrt(Math.min(1,sum[7]/area+rule.variance*variance)));
       }
       levels.push({width:w,height:h,rgba});
       if(w===1&&h===1)break;
     }
-    return {width,height,levels,rule,emissionStrength,normal:!!normal};
+    return {width,height,levels,rule,emissionStrength,normal:!!normal,scan:capture,captured:!!captured};
   }
 
   function levelAt(chain,footprint) {
@@ -150,20 +178,33 @@ const SemanticTextureMipmaps = (() => {
     const roughness=mix(a.rgba[a.at+a.stride+3],b.rgba[b.at+b.stride+3])/255;
     const emission=[0,1,2].map(c=>chain.emissionStrength*
       mix(linearByte[a.rgba[a.at+a.stride*2+c]],linearByte[b.rgba[b.at+b.stride*2+c]]));
-    return {color:Array.from(color.rgba.subarray(color.at,color.at+3),n=>n/255),coverage,visible,normal,roughness,emission,lod};
+    const captured=chain.captured && Array.from(color.rgba.subarray(color.stride*3+color.at,color.stride*3+color.at+4),
+      (n,k)=>k===3?n/255:linearByte[n]);
+    return {color:Array.from(color.rgba.subarray(color.at,color.at+3),n=>n/255),coverage,visible,normal,roughness,emission,lod,
+      ...(captured && {captured})};
   }
 
-  function shade(color,normal,view,{roughness,emission,sheen},rule) {
+  function shade(color,normal,view,{roughness,emission,sheen,captured},rule, options) {
     const light=rule.light, h=normalized(light.map((n,c)=>n+view[c]),[0,0,0]);
     const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-    const gloss=1-roughness;
-    const shine=dot(normal,light)>0 && dot(normal,view)>0 ?
+    const gloss=1-roughness, daylight=options?.daylight!==false;
+    const shine=daylight && dot(normal,light)>0 && dot(normal,view)>0 ?
       (sheen??rule.specular)*gloss*Math.max(0,dot(normal,h))**(4+96*gloss**2):0;
     const ambient=rule.ambient??1;
-    const diffuse=ambient+(1-ambient)*Math.max(0,dot(normal,light));
-    return color.map((ink,c)=>display(bound(linear(ink)*diffuse+emission[c]+shine,0,1)));
+    const diffuse=ambient+(daylight?(1-ambient)*Math.max(0,dot(normal,light)):0);
+    let blend=0;
+    if(captured?.[3] && options?.appearance){
+      const {sourceView,angles}=options.scan;
+      const direction=normalized(sourceView.slice(0,3).map((n,k)=>n-sourceView[3]*options.position[k]),[0,0,0]);
+      const weight=bound((dot(view,direction)-angles[0])/(angles[1]-angles[0]),0,1);
+      blend=options.appearance*captured[3]*weight*weight*(3-2*weight);
+    }
+    return color.map((ink,c)=>{
+      const lit=bound(linear(ink)*(diffuse+(options?.irradiance?.[c]??0))+emission[c]+shine+(options?.highlight?.[c]??0),0,1);
+      return display(blend ? lit+(captured[c]-lit)*blend : lit);
+    });
   }
 
-  return Object.freeze({settings,texture,build,levelAt,sample,shade,rank});
+  return Object.freeze({settings,texture,build,levelAt,sample,shade,scanFrame,rank});
 })();
 if (typeof module !== 'undefined') module.exports = SemanticTextureMipmaps;

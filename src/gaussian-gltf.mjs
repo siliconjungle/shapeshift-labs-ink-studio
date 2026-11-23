@@ -186,7 +186,60 @@ async function browserImage(bytes, mime) {
   }
 }
 
-async function meshMaterial(kit, document, binary, part, accessor, vertexCount, decodeImage, cached) {
+async function registeredImage(api, document, binary, source, decode, cache) {
+  if (!cache.has(source)) {
+    const {pixels,mime}=api.embeddedImage({json:document,bin:binary},source);
+    const image=await decode(pixels,mime);
+    if (!(image?.pixels instanceof Uint8Array || image?.pixels instanceof Uint8ClampedArray) ||
+        image.pixels.length!==image.width*image.height*4)
+      throw new TypeError('glTF image decoder must return RGBA8 pixels');
+    cache.set(source,image);
+  }
+  return cache.get(source);
+}
+
+async function scanMaps(definition, base, matrix, read) {
+  const spec=definition?.extras?.inkStudioScanMaterial;
+  if (spec===undefined) return null;
+  if (spec?.version!==1 || !base) throw new TypeError('Relightable scan material needs its registered diffuse map');
+  const pbr=definition.pbrMetallicRoughness, uv=pbr.baseColorTexture.texCoord??0;
+  // These maps describe one capture raster and share its UV registration.
+  if (pbr.baseColorTexture.extensions?.KHR_texture_transform)
+    throw new TypeError('Relightable scan map coordinates must be registered');
+  async function load(info) {
+    if ((info.texCoord??0)!==uv || info.extensions?.KHR_texture_transform)
+      throw new TypeError('Relightable scan maps must share their UV set');
+    const image=await read(info.index);
+    if (image.width!==base.width || image.height!==base.height)
+      throw new RangeError('Relightable scan maps must have matching dimensions');
+    return Uint8Array.from(image.pixels);
+  }
+  let normal, roughness=pbr.roughnessFactor??1;
+  if (!Number.isFinite(roughness)||roughness<0||roughness>1) throw new RangeError('Invalid scan roughness');
+  if (pbr.metallicRoughnessTexture) {
+    const image=await load(pbr.metallicRoughnessTexture), factor=roughness;
+    roughness=Uint8Array.from({length:base.width*base.height},(_,i)=>Math.round(image[i*4+1]*factor));
+  }
+  if (definition.normalTexture) {
+    normal=await load(definition.normalTexture);
+    const scale=definition.normalTexture.scale??1;
+    if (!Number.isFinite(scale)) throw new RangeError('Invalid scan normal scale');
+    if (scale!==1) for(let i=0;i<normal.length;i+=4) {
+      const n=[(normal[i]-128)*scale,(normal[i+1]-128)*scale,normal[i+2]-128], length=Math.hypot(...n);
+      if (length) for(let k=0;k<3;k++) normal[i+k]=128+Math.round(127*n[k]/length);
+    }
+  }
+  let scan={};
+  if (spec.captured!==undefined) {
+    if (!['orthographic','perspective'].includes(spec.projection))
+      throw new TypeError('Relightable scan capture needs a projection');
+    const sourceView=spec.projection==='perspective' ? [...matrix.slice(12,15),1] : [...matrix.slice(8,11),0];
+    scan={sourceView,angles:spec.angles,pixels:await load(spec.captured)};
+  }
+  return {normal,roughness,scan,mipmaps:spec.daylight??{ambient:.48,specular:.46}};
+}
+
+async function meshMaterial(kit, document, binary, part, accessor, vertexCount, decodeImage, cached, scanSurface, matrix) {
   const id = part.material === undefined ? 'gltf-material-default' : 'gltf-material-' + part.material;
   const api = kit.authoring.assetTextures;
   const spec = api.baseColor(document, part);
@@ -194,6 +247,8 @@ async function meshMaterial(kit, document, binary, part, accessor, vertexCount, 
   const uvs = new Float32Array(vertexCount * 2);
   if (spec.alphaMode === 'BLEND') throw new TypeError('Gaussian glTF native mesh materials support OPAQUE and MASK');
   if (spec.source === undefined) {
+    if(scanSurface && document.materials?.[part.material]?.extras?.inkStudioScanMaterial!==undefined)
+      throw new TypeError('Relightable scan material needs its registered diffuse map');
     const material = { id, color };
     if (spec.alphaMode === 'MASK' && spec.opacity < spec.alphaCutoff)
       material.texture = { width:1, height:1, pixels:new Uint8Array(4) };
@@ -206,13 +261,11 @@ async function meshMaterial(kit, document, binary, part, accessor, vertexCount, 
     const pair = [uv.get(i,0)*spec.scale[0],uv.get(i,1)*spec.scale[1]];
     uvs.set([clamp(pair[0]*cos-pair[1]*sin+spec.offset[0]),clamp(pair[0]*sin+pair[1]*cos+spec.offset[1])],i*2);
   }
-  if (!cached.has(spec.source)) {
-    const { pixels, mime } = api.embeddedImage({ json:document, bin:binary }, spec.source);
-    cached.set(spec.source, await decodeImage(pixels,mime));
-  }
-  const { width, height, pixels } = cached.get(spec.source);
-  if (!(pixels instanceof Uint8Array || pixels instanceof Uint8ClampedArray) || pixels.length !== width*height*4)
-    throw new TypeError('glTF image decoder must return RGBA8 pixels');
+  const read=source=>registeredImage(api,document,binary,source,decodeImage,cached);
+  const base=await read(spec.source);
+  const {width,height,pixels}=base;
+  const maps=scanSurface && await scanMaps(document.materials?.[part.material],base,matrix,
+    index=>read(document.textures?.[index]?.source));
   const rgba = Uint8Array.from(pixels);
   const tinted = spec.factor.some(value=>value !== 1);
   for (let i=0; i<rgba.length; i+=4) {
@@ -220,7 +273,7 @@ async function meshMaterial(kit, document, binary, part, accessor, vertexCount, 
       rgba[i+channel] = displayByte(srgbDisplay(linearByte[rgba[i+channel]]*spec.factor[channel]));
     rgba[i+3] = spec.alphaMode === 'OPAQUE' || rgba[i+3]/255*spec.opacity >= spec.alphaCutoff ? 255 : 0;
   }
-  return { uvs, material:{ id, texture:{ width,height,pixels:rgba } } };
+  return { uvs, material:{ id, texture:{ width,height,pixels:rgba },...maps } };
 }
 
 export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0, maxSplats = maxPoints, decodeImage = browserImage } = {}) {
@@ -288,10 +341,10 @@ export async function gaussianGltfWorld(source, { toolkit, scene, clip, time = 0
         positions.set(p,i*3);
         include(p);
       }
-      const { uvs, material } = await meshMaterial(kit,document,binary,part,accessor,point.count,decodeImage,cached);
+      const { uvs, material } = await meshMaterial(kit,document,binary,part,accessor,point.count,decodeImage,cached,scanSurface,matrix);
       meshes.push(kit.sceneMeshes.create({ id, objectId:object, partId:id, positions, uvs, indices:indicesOf, materials:[material] }));
       parts.push({ ...detail, material:material.id, materialName:document.materials?.[part.material]?.name ?? null,
-        triangles:indicesOf.length/3 });
+        triangles:indicesOf.length/3,...(material.scan && {relightable:true,capturedAppearance:!!material.scan.pixels}) });
       continue;
     }
     const first = next, objectIndex = segments.get(object) ?? objects.length, targetIndex = targets.length;

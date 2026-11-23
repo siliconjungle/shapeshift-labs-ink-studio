@@ -1627,6 +1627,7 @@ function renderFrame(world, o, preparedPalettes) {
     sampleFrames(world, t), { x: X, y: Y, z: Z });
   const spotLighting = Array.isArray(volumeLighting?.spots) && volumeLighting.spots.some(light => light?.surfaceIntensity !== undefined)
     ? prepareVolumeLight() : undefined;
+  const scanFrame = SemanticMipmaps.scanFrame(o.scanDaylight,o.scanAppearance);
   const directLight = AreaRaster.createLighting(areaLights,world,d,AL,
       { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights });
   const diffuseFrames = (directLight || probes) && sampleFrames(world,t), diffuseNormals = [];
@@ -1987,7 +1988,7 @@ function renderFrame(world, o, preparedPalettes) {
     const rule = i<0 ? protection : subject?.(i);
     const dn=normalizedDepth(z), fogMix=world.fog.max>0&&world.fog.start<1 ?
       targetFog(sstep(world.fog.start,1,dn)*world.fog.max*(exposure?.fog?.(...position)??1),rule) : 0;
-    let color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, stageBase, surfaceMatte;
+    let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, stageBase, surfaceMatte;
     if (i>=0) {
       const packed=d[i*16+7];
       color=live?.albedo(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
@@ -2031,14 +2032,19 @@ function renderFrame(world, o, preparedPalettes) {
     if(i<0&&sprite.surface&&!sprite.emission&&sprite.normal){
       const target=sprite.sdf?sprite.row.target:sprite.lightingTarget;
       const directTarget=artLighting ? target : undefined;
-      if(directLight?.receives(directTarget))color=directLight(sprite.p,position,sprite.normal,color,undefined,0,directTarget,sprite.biasNormal);
+      if(directLight?.receives(directTarget)) {
+        if(sprite.scan)scanLight=directLight.scanSurface(position,sprite.normal,directTarget,sprite.biasNormal,
+          sprite.semanticView,sprite.semantic.roughness,sprite.semantic.sheen??sprite.semanticRule.specular);
+        else color=directLight(sprite.p,position,sprite.normal,color,undefined,0,directTarget,sprite.biasNormal);
+      }
       if(target&&probes?.receivesSurface(target))color=probes.shade(position,shadeNormal(target,sprite.normal),color);
     }
     if(sprite.emission&&emissionCurve){
       color=LightingChannels.emission(emissionCurve,color);
       sprite={...sprite,emission:color.some(Boolean)?color:undefined};
     }
-    if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule);
+    if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
+      sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} : undefined);
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
       const shaded=value+(fog[c]-value)*fogMix;

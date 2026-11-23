@@ -173,9 +173,12 @@ const AreaLights = (() => {
     normal,
     out = [0, 0, 0],
     { shadow, volume = false, direction = [0, 0, 1], anisotropy = 0, biasNormal = normal,
-      incidence, visibility:transferVisibility, contribution } = {}
+      incidence, visibility:transferVisibility, contribution, specular } = {}
   ) {
     out.fill(0);
+    const gloss=specular && 1-specular.roughness;
+    const shiny=gloss>0 && specular.strength>0 && dot(normal,specular.view)>0;
+    if(specular)specular.out.fill(0);
     const transmissionRGB = [1, 1, 1];
     for (const light of lights) {
       const intensity = (volume ? light.volumeIntensity : light.intensity) * (contribution?.(light,point) ?? 1);
@@ -185,7 +188,7 @@ const AreaLights = (() => {
       if (!transmissionRGB.some(Boolean)) continue;
       const origin = point.map((n, k) => n + (volume ? 0 : biasNormal[k] * light.bias));
       let total = 0,
-        lit = 0;
+        lit = 0, shine=0;
       for (const sample of light.points) {
         const delta = sample.map((n, k) => n - point[k]),
           distance = Math.hypot(...delta);
@@ -218,12 +221,19 @@ const AreaLights = (() => {
             continue;
         }
         lit += amount;
+        if(shiny){
+          const half=toLight.map((n,k)=>n+specular.view[k]);
+          const cosine=Math.max(0,dot(normal,half)/Math.max(1e-8,Math.hypot(...half)));
+          shine+=amount*specular.strength*gloss*cosine**(4+96*gloss**2);
+        }
       }
       if (!total) continue;
       const steps = light.shadowSteps && light.shadowSteps - 1,
         measured = steps ? Math.round((steps * lit) / total) / steps : lit / total,
         visibility = transferVisibility?.(measured) ?? measured,
         level = (total * visibility * intensity) / light.points.length;
+      if(shiny && lit>0)for(let k=0;k<3;k++)
+        specular.out[k]+=light.linearRGB[k]*transmissionRGB[k]*shine*level/lit;
       for (let k = 0; k < 3; k++) out[k] += (volume ? light.rgb[k] : light.linearRGB[k]) * level * transmissionRGB[k];
     }
     return out;

@@ -110,4 +110,4 @@ function depthCommand(filename, opt, kit, output) {
   console.log('Depth import wrote ' + model.count + ' splats, a closed mesh and an SDF grid to ' + dir);
 }
 
-module.exports = Object.assign(depthCommand,{ readDepthInput });
+module.exports = Object.assign(depthCommand,{ readDepthInput, colorImage });

@@ -11,7 +11,7 @@ const eyeFromView = view => [0, 1, 2].map(
   k => -(view[k * 4] * view[12] + view[k * 4 + 1] * view[13] + view[k * 4 + 2] * view[14])
 );
 
-// The three layers are pigment/coverage, tangent normal/roughness, and emission.
+// Registered pigment, normal/roughness, emission, and optional directional capture.
 const semanticSource=`
 uniform highp sampler2DArray u_semanticAtlas;
 uniform bool u_semanticOn,u_semanticLevels,u_semanticNormals,u_semanticOrtho;
@@ -19,6 +19,10 @@ uniform int u_semanticMax;
 uniform vec4 u_semanticRect;
 uniform vec3 u_semanticLight,u_semanticEye,u_semanticBack;
 uniform float u_semanticScale,u_semanticStrength,u_semanticSpecular,u_semanticAmbient;
+uniform bool u_scanMaterial,u_scanDaylight,u_scanCaptured;
+uniform float u_scanAppearance;
+uniform vec4 u_scanSourceView;
+uniform vec2 u_scanAngles;
 vec3 semanticLinear(vec3 c){
   return mix(pow((c+.055)/1.055,vec3(2.4)),c/12.92,lessThanEqual(c,vec3(.04045)));
 }
@@ -33,7 +37,7 @@ ivec2 semanticTexel(vec2 uv,int level){
 vec4 semanticRead(ivec2 xy,int channel,int level){
   return texelFetch(u_semanticAtlas,ivec3(xy,channel),level);
 }
-void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out vec3 emission){
+void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out vec3 emission,out vec4 captured){
   int ranks[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
   float lod=u_semanticLevels?clamp(log2(max(1.,span)),0.,float(u_semanticMax)):0.;
   int lo=int(floor(lod)),hi=int(ceil(lod));
@@ -48,16 +52,29 @@ void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out ve
   detail=semanticRead(a,1,lo)*covered.x+semanticRead(b,1,hi)*covered.y;
   emission=(semanticLinear(semanticRead(a,2,lo).rgb)*covered.x+
     semanticLinear(semanticRead(b,2,hi).rgb)*covered.y)*u_semanticStrength;
+  captured=u_scanCaptured&&u_scanAppearance>0.?semanticRead(cell,3,chooseB?hi:lo):vec4(0);
 }
-vec3 semanticFinish(vec3 pigment,vec3 normal,float roughness,float sheen,vec3 emission,vec3 world){
-  vec3 view=u_semanticOrtho?u_semanticBack:normalize(u_semanticEye-world);
+vec3 semanticObserver(vec3 point){
+  return u_semanticOrtho?u_semanticBack:normalize(u_semanticEye-point);
+}
+vec3 semanticFinish(vec3 pigment,vec3 normal,float roughness,float sheen,vec3 emission,vec3 world,
+  vec3 irradiance,vec3 highlight,vec4 captured){
+  vec3 view=semanticObserver(world);
   vec3 h=u_semanticLight+view;
   h*=inversesqrt(max(dot(h,h),1e-18));
   float gloss=1.-roughness;
   float shine=dot(normal,view)>0.&&dot(normal,u_semanticLight)>0.?
     sheen*gloss*pow(max(0.,dot(normal,h)),4.+96.*gloss*gloss):0.;
   float diffuse=mix(max(0.,dot(normal,u_semanticLight)),1.,u_semanticAmbient);
-  return semanticDisplay(semanticLinear(pigment)*diffuse+emission+shine);
+  if(u_scanMaterial&&!u_scanDaylight){diffuse=u_semanticAmbient;shine=0.;}
+  vec3 lit=clamp(semanticLinear(pigment)*(diffuse+irradiance)+emission+shine+highlight,0.,1.);
+  if(captured.a>0.){
+    vec3 source=u_scanSourceView.xyz-world*u_scanSourceView.w;
+    source*=inversesqrt(max(dot(source,source),1e-16));
+    float weight=smoothstep(u_scanAngles.x,u_scanAngles.y,dot(view,source));
+    lit=mix(lit,semanticLinear(captured.rgb),weight*captured.a*u_scanAppearance);
+  }
+  return semanticDisplay(lit);
 }
 `;
 
@@ -201,11 +218,11 @@ void main(){
   ` : ''}
   ${semantic ? `
   float semanticSpan=max(length(dFdx(rawTexel)),length(dFdy(rawTexel)))*u_semanticScale;
-  vec4 detail;
+  vec4 detail,captured;
   vec3 emission;
   if(u_semanticOn){
     vec2 coord=(rawTexel-u_semanticRect.xy-.5)/max(vec2(1),u_semanticRect.zw-1.);
-    semanticMaterial(coord,semanticSpan,ink,detail,emission);
+    semanticMaterial(coord,semanticSpan,ink,detail,emission,captured);
   }
   ` : ''}
   ${needsFrame ? `
@@ -236,11 +253,12 @@ void main(){
   ${simulation?`
   if(u_semanticOn)simApply(v_simUV,v_rest,geometricNormal,simUVx,simUVy,simRestX,simRestY,dpdx,dpdy,rgb,detail.a,sheen,normal);
   `:''}
+  ${semantic ? 'vec3 scanIrradiance=vec3(0),scanHighlight=vec3(0);':''}
   ${normalMapped ? `
-  vec3 irradiance=eLighting(v_world,normal,false,vec3(0),geometricNormal);
-  rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));
+  ${semantic?'if(u_semanticOn&&u_scanMaterial)scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,scanHighlight);else':''}
+  rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal))));
   ` : ''}
-  ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world);':''}
+  ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
   ${engraving ? `
   if(v_marks.y>0.0){
     vec3 restN=cross(restX,restY),liveN=cross(worldX,worldY);
@@ -627,7 +645,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MAX_LEVEL,chain.levels.length-1);
       for(const [lod,{width,height,rgba}] of chain.levels.entries()){
-        gl.texImage3D(gl.TEXTURE_2D_ARRAY,lod,gl.RGBA8,width,height,3,0,gl.RGBA,gl.UNSIGNED_BYTE,rgba);
+        gl.texImage3D(gl.TEXTURE_2D_ARRAY,lod,gl.RGBA8,width,height,chain.captured?4:3,0,gl.RGBA,gl.UNSIGNED_BYTE,rgba);
         stats.textureBytes+=rgba.byteLength;
       }
     }
@@ -652,7 +670,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         height = 1,
         paletteSampling,
         surfaceNormals = true, sceneryBlockTextures = true,
-        semanticMipmaps = true, simulationLayers, eye, back=[0,0,1], ortho,
+        semanticMipmaps = true, scanFrame, simulationLayers, eye, back=[0,0,1], ortho,
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
@@ -692,7 +710,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       const useSampling = filters.size > 0;
       const lit = Boolean(lighting?.active && !index && !coverageFilter);
-      const normalMapped = lit && Boolean(atlas.normalPixels||simulation);
+      const normalMapped = lit && Boolean(atlas.normalPixels||simulation||semantic?.some(row=>row.chain.scan));
       if (normalMapped) {
         gl.activeTexture(gl.TEXTURE0 + 24);
         gl.bindTexture(gl.TEXTURE_2D, atlas.normalPixels?normalTexture:texture);
@@ -820,7 +838,10 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
             bindSemantic(chain);
             shader.set({u_semanticOn:true,u_semanticRect:[r.x,r.y,r.width,r.height],u_semanticMax:chain.levels.length-1,
               u_semanticStrength:chain.emissionStrength,u_semanticLight:chain.rule.light,
-              u_semanticSpecular:chain.rule.specular,u_semanticAmbient:chain.rule.ambient,u_semanticNormals:chain.normal});
+              u_semanticSpecular:chain.rule.specular,u_semanticAmbient:chain.rule.ambient,u_semanticNormals:chain.normal,
+              u_scanMaterial:!!chain.scan,u_scanCaptured:chain.captured,u_scanDaylight:scanFrame?.daylight ?? true,
+              u_scanAppearance:scanFrame?.appearance ?? 0,
+              ...(chain.captured&&{u_scanSourceView:chain.scan.sourceView,u_scanAngles:chain.scan.angles})});
           } else if(semantic)shader.set({u_semanticOn:false});
           if(simulation){
             const plan=mip?.simulation, state=simulationLayers.get(plan);

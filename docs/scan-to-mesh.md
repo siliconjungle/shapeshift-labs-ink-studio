@@ -27,6 +27,8 @@ In capture space, the camera is at the origin, X is right, Y is up, and visible 
 
 The GLB uses ordinary indexed triangles, a PNG texture, and the uncompressed [Gaussian glTF extension](gaussian-gltf.md). Ink renders the same file through its native mesh and Gaussian paths. Add an area light to compare shading from the recovered mesh and retained observation normals. The color capture includes the original illumination, so this is a relighting preview over captured pigment.
 
+Use [relightable scan materials](relightable-scans.md) to supply explicit diffuse, normal, and roughness maps and retain the original exposure as a separate layer.
+
 ## Node API
 
 ```js

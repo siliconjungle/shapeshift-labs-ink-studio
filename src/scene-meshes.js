@@ -36,12 +36,12 @@ const SceneMeshes = (() => {
   }
 
   function materialOf({ id, color = 0xffffff, texture: input, normal, roughness, emission, emissionStrength,
-      alphaCutoff = .5, sampling, engraving, mipmaps, simulationLayers } = {}) {
+      alphaCutoff = .5, sampling, engraving, mipmaps, simulationLayers, scan } = {}) {
     const texture=Mips.texture(input);
     const { width = 1, height = 1, pixels, indices, palette } = texture ?? {};
     const simulation=simulationLayers===undefined ? undefined :
       simulationAPI().create(simulationLayers);
-    const rules=Mips.settings(mipmaps ?? (simulation||indices||roughness!==undefined||emission ? true : undefined));
+    const rules=Mips.settings(mipmaps ?? (simulation||indices||roughness!==undefined||emission||scan ? true : undefined));
     if(simulation&&!rules)throw new TypeError('Simulation layers need semantic material channels');
     if(rules && sampling)throw new TypeError('Choose one texture filter per material');
     if (!name(id) || !Number.isInteger(color) || color < 0 || color > 0xffffff || !unit(alphaCutoff))
@@ -72,7 +72,7 @@ const SceneMeshes = (() => {
         if(ink!==undefined)pigment.set([ink>>16,ink>>8&255,ink&255,255],(y*width+x)*4);
       }
       const tintColor=ink=>tint.reduce((value,n,c)=>value*256+Math.round((ink>>((2-c)*8)&255)*n/255),0);
-      return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,emission,emissionStrength},
+      return Mips.build({width,height,pigment,indices,palette:palette?.map(tintColor),normal,roughness,emission,emissionStrength,scan},
         {...rules,protect:rules.protect.map(tintColor)});
     }
     return { id, width, height, paint, normal, sampling, engraving, simulation, blockTexture, tint, ...(rules&&{chain}) };
@@ -411,7 +411,7 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
-  return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+  return Object.freeze({create,scanFrame:Mips.scanFrame,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
     simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,rayQuery,projector,sampleProjection,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

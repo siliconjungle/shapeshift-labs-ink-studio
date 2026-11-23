@@ -2,7 +2,8 @@ const path = require('node:path');
 const { document } = require('./glb-file.js');
 const files = require('./asset-files.js');
 const PNG = require('./png.js');
-const { readDepthInput } = require('./depth.js');
+const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
+const { readDepthInput, colorImage } = require('./depth.js');
 
 const EXT = 'KHR_gaussian_splatting', SH0 = .28209479177387814;
 const clamp = (n, a, b) => Math.max(a,Math.min(b,n));
@@ -10,8 +11,8 @@ const vec = (array,i,width=3) => Array.from(array.subarray(i*width,(i+1)*width))
 const display = coefficient => clamp(.5+coefficient*SH0,0,1)*255;
 const depthLimit = 180000;
 
-function material(capture, model, radius) {
-  const {width,height,image}=capture, pixels=new Uint8Array(width*height*4);
+function material(capture, model, radius, image=capture.image) {
+  const {width,height}=capture, pixels=new Uint8Array(width*height*4);
   const depth=Float32Array.from({length:width*height},(_,i)=>model.depthAt(i%width,Math.floor(i/width)));
   const channels=image?.channels ?? (image?.data.length===depth.length*4 ? 4 : 3);
   function color(i,k) {
@@ -36,6 +37,32 @@ function material(capture, model, radius) {
   return { width,height,pixels };
 }
 
+function scanMaterials(capture, model, options) {
+  if (options===undefined) return null;
+  const {width,height}=capture, n=width*height;
+  if (width>1024||height>1024) throw new RangeError('Relightable scan maps support up to 1024 pixels per edge');
+  if (!options || typeof options!=='object' || Array.isArray(options)) throw new TypeError('Supply registered scan material maps');
+  const {normal,roughness=.65,captured=false,angles=[.72,.92], daylight={ambient:.48,specular:.46}}=options;
+  const diffuse=options.diffuse && {
+    ...options.diffuse, channels:options.diffuse.channels??(options.diffuse.data?.length===n*4?4:3)
+  };
+  const bytes=a=>a instanceof Uint8Array || a instanceof Uint8ClampedArray;
+  if (diffuse && (diffuse.width!==width||diffuse.height!==height||!bytes(diffuse.data)||
+      ![3,4].includes(diffuse.channels)||diffuse.data.length!==n*diffuse.channels) ||
+      normal!==undefined && (!bytes(normal)||normal.length!==n*4) ||
+      !(Number.isFinite(roughness)&&roughness>=0&&roughness<=1) && (!bytes(roughness)||roughness.length!==n))
+    throw new RangeError('Scan diffuse, tangent normals and roughness need matching capture dimensions');
+  if (typeof captured!=='boolean'||captured&&!capture.image||!Array.isArray(angles)||angles.length!==2||
+      !angles.every(value=>Number.isFinite(value)&&value>=-1&&value<=1)||angles[0]>=angles[1])
+    throw new RangeError('The captured layer needs a color capture and increasing angle cosines');
+  if (!SemanticMipmaps.settings(daylight)) throw new TypeError('Supply scan daylight settings');
+  const photograph=captured && material(capture,model,0).pixels;
+  if (photograph && capture.image.data.length===n*4) {
+    for (let i=3;i<photograph.length;i+=4) photograph[i]=Math.min(photograph[i],capture.image.data[i]);
+  }
+  return {diffuse,normal,roughness,photograph,angles,daylight,projection:model.camera.type};
+}
+
 function compactSurface(model, image) {
   const {pos,tri}=model.front, sourceUV=model.frontUVs(), mapping=new Uint32Array(pos.length/3);
   const positions=[], uvs=[], indices=new Uint32Array(tri.length);
@@ -51,20 +78,22 @@ function compactSurface(model, image) {
   return {positions:Float32Array.from(positions),uvs:Float32Array.from(uvs),indices,image};
 }
 
-function measuredSplats(model, stride) {
+function measuredSplats(model, stride, diffuse) {
   const count=model.count;
   const positions=new Float32Array(count*3), scales=new Float32Array(count*3);
   const rotations=new Float32Array(count*4), opacity=new Float32Array(count).fill(.93);
   const dc=new Float32Array(count*3), normals=new Float32Array(count*3);
   let i=0;
-  for (const {position,normal,color,d} of model.observations()) {
+  for (const {position,normal,color,d,u,v} of model.observations()) {
+    const at=diffuse && (v*diffuse.width+u)*diffuse.channels;
+    const pigment=diffuse ? [0,1,2].map(k=>diffuse.data[at+k]/255) : color;
     const [sx,sy]=model.camera.scaleAt(d).map(n=>n*stride);
     const [x,y,z]=normal, w=1+z, l=Math.hypot(x,y,w);
     rotations.set(l>1e-8 ? [-y/l,x/l,0,w/l] : [0,1,0,0],i*4);
     positions.set(position,i*3);
     scales.set([sx*.53,sy*.53,Math.min(sx,sy)*.1],i*3);
     normals.set(normal,i*3);
-    dc.set(color.map(v=>(v-.5)/SH0),i*3);
+    dc.set(pigment.map(v=>(v-.5)/SH0),i*3);
     i++;
   }
   return { count,degree:0,positions,scales,rotations,opacity,dc,normals,sh:new Float32Array() };
@@ -165,14 +194,32 @@ function addGaussians(doc, cloud, selection, kit) {
   return {mode:0,attributes,extensions:{[EXT]:{kernel:'ellipse',colorSpace:'srgb_rec709_display'}}};
 }
 
+function writeMaterial(image, maps, texture) {
+  const {width,height,pixels}=image;
+  const add=(data,name)=>({index:texture(PNG.encode(width,height,data,4),name)});
+  const result={name:'Recovered scan surface',alphaMode:'MASK',pbrMetallicRoughness:{
+    baseColorTexture:add(pixels,'Registered diffuse color'),metallicFactor:0,roughnessFactor:1}};
+  if (!maps) return result;
+  const {roughness,normal,photograph,projection,angles,daylight}=maps;
+  const pbr=result.pbrMetallicRoughness;
+  if (typeof roughness==='number') pbr.roughnessFactor=roughness;
+  else {
+    const packed=new Uint8Array(width*height*4);
+    for(let i=0;i<roughness.length;i++) packed.set([255,roughness[i],0,255],i*4);
+    pbr.metallicRoughnessTexture=add(packed,'Registered roughness');
+  }
+  if (normal) result.normalTexture=add(normal,'Registered tangent normals');
+  result.extras={inkStudioScanMaterial:{version:1,daylight,
+    ...(photograph && {captured:add(photograph,'Captured directional color'),projection,angles})}};
+  return result;
+}
+
 function encodeScan(geometry, cloud, selection, kind, kit, name) {
   const doc=document(), {gltf,add,accessor,texture,finish}=doc, parts=[];
   gltf.asset.extras={inkStudioScanSurface:1};
   if(kind!=='source') {
-    const {positions,uvs,indices,image}=geometry;
-    const index=texture(PNG.encode(image.width,image.height,image.pixels,4),'Registered scan pigment');
-    const material=add('materials',{name:'Recovered scan surface',alphaMode:'MASK',
-      pbrMetallicRoughness:{baseColorTexture:{index},metallicFactor:0,roughnessFactor:1}});
+    const {positions,uvs,indices,image,maps}=geometry;
+    const material=add('materials',writeMaterial(image,maps,texture));
     parts.push({attributes:{POSITION:accessor(positions,'VEC3',{bounds:true,target:34962}),
       TEXCOORD_0:accessor(uvs,'VEC2',{target:34962})},indices:accessor(indices,'SCALAR',{target:34963}),material});
   }
@@ -186,7 +233,7 @@ function encodeScan(geometry, cloud, selection, kind, kit, name) {
 }
 
 async function scanToMesh(capture, { toolkit=require('../index.js').load(), cloud, meshStride=capture?.stride,
-    sampleStride, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={}) {
+    sampleStride, materials, paintRadius=2, rgbThreshold=16, tolerance, residualLimit=30000, name='Captured surface' }={}) {
   const kit=toolkit.KIT ?? toolkit, {width,height}=capture ?? {};
   if (![width,height].every(n=>Number.isSafeInteger(n)&&n>=2&&n<=2048))
     throw new RangeError('Scan images must have 2 to 2048 pixels per dimension');
@@ -201,14 +248,15 @@ async function scanToMesh(capture, { toolkit=require('../index.js').load(), clou
   const model=kit.depth.fromMap({...capture,stride:meshStride,isolatedPatches:false});
   if (!model.front.tri.length) throw new RangeError('The scan has no connected opaque surface at this stride and depth jump');
   if (model.front.tri.length>750000) throw new RangeError('The scan exceeds the native triangle budget. Increase mesh stride.');
-  const image=material(capture,model,paintRadius);
-  const geometry=compactSurface(model,image);
+  const maps=scanMaterials(capture,model,materials);
+  const image=material(capture,model,maps?.diffuse?0:paintRadius,maps?.diffuse);
+  const geometry={...compactSurface(model,image),maps};
   const opaque=kit.sceneMeshes.create({id:'scan-surface',...geometry,materials:[{id:'scan-pigment',texture:image}]});
   const supplied=!!cloud;
   if (cloud) checkCloud(cloud);
   else {
     const observed=kit.depth.fromMap({...capture,stride:expandedStride,isolatedPatches:false});
-    cloud=measuredSplats(observed,observed.stride);
+    cloud=measuredSplats(observed,observed.stride,maps?.diffuse);
   }
   const {chosen,reasons}=closestParts(cloud,opaque,model,capture,{rgbThreshold,tolerance,residualLimit},kit);
   const glb=encodeScan(geometry,cloud,chosen,'hybrid',kit,name);
@@ -225,8 +273,29 @@ async function scanToMesh(capture, { toolkit=require('../index.js').load(), clou
     width,height,camera,meshStride:model.stride,...(!supplied && {sampleStride:expandedStride}),paintRadius,rgbThreshold,residualLimit,
     maxDepthJump:Number.isFinite(model.maxDepthJump)?model.maxDepthJump:null,tolerance:tolerance??null,
     triangles:opaque.triangles,vertices:opaque.vertices,sourceSplats:cloud.count,residualSplats:chosen.length,reasons,
+    ...(maps && {material:{diffuse:maps.diffuse?'supplied':'capture',normal:maps.normal?'tangent-map':'geometry',
+      roughness:typeof maps.roughness==='number'?maps.roughness:'texture',captured:!!maps.photograph}}),
     ...(cloud.degree>3 && {sourceHarmonics:cloud.degree,exportedHarmonics:3})
   }};
+}
+
+function materialOptions(opt, capture) {
+  if (['diffuse','normal','roughness','capture-layer'].every(key=>opt[key]===undefined)) return undefined;
+  function image(flag) {
+    if(typeof opt[flag]!=='string') throw new TypeError('--'+flag+' needs an aligned PNG');
+    const decoded=colorImage(path.resolve(opt[flag]));
+    if(decoded.width!==capture.width||decoded.height!==capture.height)
+      throw new RangeError('--'+flag+' must match the capture dimensions');
+    return decoded;
+  }
+  const value=opt.roughness;
+  if (value===true) throw new TypeError('--roughness needs a scalar or aligned PNG');
+  const roughness=value===undefined ? undefined : Number.isFinite(Number(value)) ? Number(value) :
+    image('roughness').data.filter((_,i)=>i%4===0);
+  if (opt['capture-layer']!==undefined && ![true,'on','off'].includes(opt['capture-layer']))
+    throw new TypeError('--capture-layer expects on or off');
+  return {diffuse:opt.diffuse!==undefined?image('diffuse'):undefined,normal:opt.normal!==undefined?image('normal').data:undefined,
+    roughness,captured:opt['capture-layer']!==undefined&&opt['capture-layer']!=='off'};
 }
 
 async function command(file,opt,kit) {
@@ -237,7 +306,7 @@ async function command(file,opt,kit) {
   const cloud=opt.cloud && await require('./gaussian-splats.js').readGaussianSplat(path.resolve(opt.cloud));
   const numeric=flag=>opt[flag]===undefined ? undefined : opt[flag]===true ? NaN : Number(opt[flag]);
   const result=await scanToMesh(capture,{ toolkit:kit,cloud,meshStride:numeric('mesh-stride'),sampleStride:numeric('sample-stride'),
-    paintRadius:numeric('paint-radius'),rgbThreshold:numeric('rgb-threshold'),tolerance:numeric('surface-tolerance'),
+    materials:materialOptions(opt,capture),paintRadius:numeric('paint-radius'),rgbThreshold:numeric('rgb-threshold'),tolerance:numeric('surface-tolerance'),
     residualLimit:numeric('residual-limit'),name:path.basename(opt.out,path.extname(opt.out)) });
   const out=path.resolve(opt.out);
   files.write(out,result.glb);

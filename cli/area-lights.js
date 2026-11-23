@@ -53,10 +53,10 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     cutoutShadow?.(origin, direction, stop) || occludes(sources, origin, direction, stop) : null;
   const cache = [];
 
-  function evaluate(point, normal, row, biasNormal) {
+  function evaluate(point, normal, row, biasNormal, specular) {
     const rgb=[0,0,0];
     const shadeNormal=art?.normal?.(row,normal) ?? normal, bias=biasNormal??normal;
-    AreaLights.evaluate(active,point,shadeNormal,rgb,{shadow:areaShadow,biasNormal:bias});
+    AreaLights.evaluate(active,point,shadeNormal,rgb,{shadow:areaShadow,biasNormal:bias,specular});
     if(spillLights.length){
       const emitted=[0,0,0];
       AreaLights.evaluate(spillLights,point,shadeNormal,emitted,{shadow:areaShadow,biasNormal:bias,
@@ -107,6 +107,11 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     const shaded = ShotLighting.shade(surface, light);
     return fogMix ? shaded.map((n,k)=>n+(fog[k]-n)*fogMix) : shaded;
   }
+  shade.scanSurface = (point,normal,row,biasNormal,view,roughness,strength) => {
+    const highlight=[0,0,0];
+    const gain=evaluate(point,normal,row,biasNormal,{view,roughness,strength,out:highlight});
+    return {irradiance:gain.map(n=>n-1),highlight};
+  };
   shade.receives = row => active.length > 0 || spillLights.length > 0 || projectors.length > 0 || rig?.receives(row);
   return shade;
 }
