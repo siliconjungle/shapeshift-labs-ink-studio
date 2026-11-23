@@ -52,6 +52,9 @@ if (read.status === "ok" && read.value.audible) {
 Use the [spatial audio mixer](spatial-audio.md) to play cues with the same
 acoustic paths.
 
+Use [acoustic ambience zones](acoustic-ambience.md) to apply those paths,
+weather, and shelter to continuous PCM beds.
+
 The report includes the estimated level, linear amplitude gain, propagation
 delay, distance and high-frequency loss relative to the low band
 (`muffleDb`). `apparentSource` is the listener-side mouth of the last

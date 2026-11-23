@@ -14,7 +14,7 @@
 
   function open(sources,spec,options={}) {
     check(fields(options,['assets','sampleRate','maxVoices','reservedVoices','foreground','priorities','traceLimit',
-      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','layerFactors','stemGroups']),
+      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains','layerFactors','stemGroups','ambienceGains']),
     'Invalid live score options');
     const {assets={},sampleRate:rate=48000,maxVoices=32,reservedVoices=Math.min(4,maxVoices-1),
       foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0,layerGains={},layerFactors={}}=options;
@@ -69,6 +69,7 @@
       streamGaps:0,peakVoices:0,peakClips:0,peak:0,clippedFrames:0,blocks:0};
     let frame=0, order=0, clipId=0, incomingRule=null, active, pending, newest, lastBlock=null, roomLastInput=null;
     const log=(kind,detail)=>boundedPush(trace,{kind,frame,time:time(),...detail},traceLimit);
+    const ambience=options.ambienceGains===undefined ? null : P.musicAmbience.open(rate,options.ambienceGains,stemGroups,log);
     function gainAt(row) {
       if (!row) return 1;
       if (frame>=row.endFrame) return row.target;
@@ -443,6 +444,7 @@
         }
         if (row.intent.kind==='music-transition') plan(row);
         else if (row.intent.kind==='music-layer') setLayer(row.intent);
+        else if (row.intent.kind==='music-ambience') ambience.update(row.intent,frame);
         else (cues ??= []).push(row.intent);
       }
       if (pending) commit();
@@ -464,6 +466,7 @@
         (intent.kind==='music-transition' ? known(intent.from) && known(intent.to) &&
           record(intent.layers ?? {}) && Object.entries(intent.layers ?? {}).every(([key,level])=>id(key) && finite(level,0,1)) :
           intent.kind==='music-layer' ? K.music.layerIntent(intent) && knowsLayer(intent) :
+          intent.kind==='music-ambience' ? ambience && P.musicAmbience.validIntent(intent) && ambience.knows(intent) :
           intent.kind==='music-cue' && token(intent.resource ?? intent.cue)),
       'Invalid live adaptive score intent');
       check(intents.length<maxEvents,'Live adaptive event queue is full');
@@ -548,10 +551,16 @@
               log('stream-underrun',{name:gap.name,sourceFrame:gap.frame,group:group.name,
                 part:stem.part,positionFrame:position});
             }
+            const ambient=ambience?.process(stem.part,frame,pair);
             const gain=layerGain(stem.part);
             const left=pair[0]*gain, right=pair[1]*gain;
-            l+=left; r+=right;
-            sendL+=left*stem.source.send; sendR+=right*stem.source.send;
+            if (ambient && foleyRoom) {
+              foleyL+=left; foleyR+=right;
+              foleySendL+=left*stem.source.send; foleySendR+=right*stem.source.send;
+            } else {
+              l+=left; r+=right;
+              sendL+=left*stem.source.send; sendR+=right*stem.source.send;
+            }
           }
         }
         for (const [key,lane] of desk) {
@@ -631,6 +640,7 @@
         ...(Object.keys(layerGains).length && {layerGains}),
         ...(Object.keys(layerFactors).length && {layerFactors}),
         ...(scoring && {scoring:scoring.inspect(frame)}),
+        ...(ambience && {ambienceGains:ambience.inspect(frame)}),
         ...(stemGroups.length && {stemGroups:Object.fromEntries(stemGroups.map(group=>[group.name,{
           frames:group.frames,phaseFrames:group.phaseFrames,positionFrame:group.position(frame),
           parts:Object.fromEntries(group.parts.map(({part,source,start})=>[part,{stream:source.name,startFrame:start}]))

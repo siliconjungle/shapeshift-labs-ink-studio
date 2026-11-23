@@ -26,15 +26,17 @@
     }]));
 
   function validate(raw) {
-    check(fields(raw,['format','version','id','label','entry','end','intents','worldEvents','requests','origin','layerGains','layerFactors']) &&
+    check(fields(raw,['format','version','id','label','entry','end','intents','worldEvents','requests','origin','layerGains','layerFactors','ambienceGains']) &&
       raw.format===format && raw.version===1 && id(raw.id) && id(raw.entry) && finite(raw.end,.001,300) &&
       (raw.layerGains===undefined || layerGains(raw.layerGains)) &&
       (raw.layerFactors===undefined || layerFactors(raw.layerFactors)) &&
+      (raw.ambienceGains===undefined || P.musicAmbience.validGains(raw.ambienceGains)) &&
       (raw.label===undefined || text(raw.label)) && Array.isArray(raw.intents) && raw.intents.length<=2048 &&
       Array.from(raw.intents).every(row=>record(row) && finite(row.time,0,raw.end) && row.time<raw.end &&
         (row.serial===undefined || integer(row.serial,0,Number.MAX_SAFE_INTEGER)) &&
         (row.kind==='music-transition' ? id(row.from) && id(row.to) :
-          row.kind==='music-cue' ? text(row.cue ?? row.resource) : K.music.layerIntent(row))),
+          row.kind==='music-cue' ? text(row.cue ?? row.resource) :
+          row.kind==='music-ambience' ? P.musicAmbience.validIntent(row) : K.music.layerIntent(row))),
     'Invalid adaptive score trace or recorded music intents');
     const worldEvents=raw.worldEvents ?? [], requests=raw.requests ?? [];
     check(Array.isArray(worldEvents) && worldEvents.length<=limit && Array.from(worldEvents).every(row=>
@@ -52,7 +54,7 @@
       requests:requests.slice().sort(byTime)};
   }
 
-  function collector({section:entry,layerGains,layerFactors},end) {
+  function collector({section:entry,layerGains,layerFactors},end,ambienceGains) {
     const intents=[], worldEvents=[], requests=[];
     let pending;
     function observe(time,view,events,hits=[]) {
@@ -81,18 +83,22 @@
         requests.push({...request,outcome:'pending'});
       }
       return frozen(validate({format,version:1,id:options.id,...(options.label && {label:options.label}),entry,end,
-        intents,worldEvents,requests,origin,...(layerGains && {layerGains}),...(layerFactors && {layerFactors})}));
+        intents,worldEvents,requests,origin,...(layerGains && {layerGains}),...(layerFactors && {layerFactors}),
+        ...(ambienceGains && {ambienceGains})}));
     }
     return {observe,finish};
   }
 
   function captureWorld(log,options) {
     const W=K.world;
-    check(fields(options,['id','system','end','label']) && id(options.id) && id(options.system ?? 'score') &&
+    check(fields(options,['id','system','end','label','ambience']) && id(options.id) && id(options.system ?? 'score') &&
+      (options.ambience===undefined || id(options.ambience)) &&
       (options.label===undefined || text(options.label)) && log?.format===W.runtime.runFormat &&
       log.origin?.tick===0 && integer(log.end?.tick,1,24000),'Use a tick-zero world recording of up to 24000 ticks');
-    const run=W.runtime.openRecording(log), {world}=run.view(), system=options.system ?? 'score';
+    const run=W.runtime.openRecording(log), {world}=run.view(), system=options.system ?? 'score', {ambience}=options;
     check(world.systems[system]?.kind==='adaptive-music','World trace needs an adaptive-music system');
+    check(ambience===undefined || world.systems[ambience]?.kind==='acoustic-ambience',
+      'World trace ambience needs an acoustic-ambience system');
     const view=query=>{
       const result=query.probe(system+'/state');
       check(result.status==='ok','Adaptive score state is unavailable');
@@ -100,11 +106,15 @@
     };
     const end=options.end ?? round(log.end.tick*world.dt);
     check(finite(end,.001,Math.min(300,round(log.end.tick*world.dt))),'Trace end lies outside the recorded world');
-    const saved=collector(view(run.query()),end);
+    const initial=run.query();
+    const ambienceGains=ambience===undefined ? undefined : Object.fromEntries(
+      Object.entries(initial.probe(ambience+'/mix').value.zones).map(([part,row])=>[part,row.bands]));
+    const saved=collector(view(initial),end,ambienceGains);
     const timeOf=(event,time)=>W.timedEvents.timeOf(event) ?? event.time ?? time;
     run.advance(log.end.tick,{onTick(frame,query) {
       if (frame.time>end+tolerance) return;
-      const events=run.events.filter(row=>row.system===system && ['music-transition','music-cue','music-layer'].includes(row.kind))
+      const events=run.events.filter(row=>(row.system===system && ['music-transition','music-cue','music-layer'].includes(row.kind)) ||
+        (ambience!==undefined && row.system===ambience && row.kind==='music-ambience'))
         .map(row=>({...row,time:timeOf(row,frame.time)}));
       const hits=run.events.filter(row=>row.kind==='audio-cue' && text(row.cue))
         .map(row=>({cue:row.cue,time:timeOf(row,frame.time),
@@ -113,7 +123,7 @@
     }});
     check(W.runtime.checkpointsEqual(run.checkpoint(),log.end),'World recording diverges at the final checkpoint');
     return saved.finish(options,{kind:'world-recording',scene:world.id,seed:world.seed,
-      system,dt:world.dt,ticks:log.end.tick});
+      system,dt:world.dt,ticks:log.end.tick,...(ambience!==undefined && {ambience})});
   }
 
   function captureScore(score,updates,options) {

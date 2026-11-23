@@ -163,6 +163,9 @@ If a page is late, its stem fades back in from the current position when data
 returns. `inspect().stemGroups` shows each group's current frame and source
 windows. Underrun rows include the group, part, source frame, and loop position.
 
+[Acoustic ambience zones](acoustic-ambience.md) turn room paths and weather
+fields into live band gains on stem groups.
+
 ## What plays through a join
 
 An edge with an explicit `exit` waits for the next occurrence of that marker in
