@@ -29,8 +29,9 @@
         !number(reflection.blur ?? 0) || (reflection.blur ?? 0) < 0 || (reflection.blur ?? 0) > 16))
       throw new RangeError('Water reflection needs a plane ID, distortion in [0,64] and blur in [0,16]');
     const detail = reflection && ReflectionDetail.prepare(reflection.detail);
+    const proxy=reflection && ReflectionProxy.prepare(reflection.proxy,Math.min(1,(reflection.blur??0)/8));
     const binding = reflection && { plane: reflection.plane, distortion: reflection.distortion ?? 5, blur: reflection.blur ?? 0,
-      ...(detail && {detail}) };
+      ...(detail && {detail}), ...(proxy&&{proxy}) };
     const profile = optical === undefined ? undefined : OpticalMaterials.material(optical);
     if (profile) {
       const medium = OpticalMaterials.medium(profile, tint);
@@ -372,16 +373,20 @@
   // Append capture bindings to the existing optical texture, not a second water layout.
   function packReflections(packed, profiles, planes) {
     if (!planes.length) return packed;
-    const base = packed.data.length / 4, extra = profiles.reduce((n,style)=>n+(style.reflection?.detail ? 2 : 0),0);
-    const height = Math.ceil((base + profiles.length + extra) / packed.width);
+    const base=packed.data.length/4, proxyBase=profiles.some(style=>style.reflection?.proxy)?base+profiles.length:0;
+    const extra=profiles.reduce((n,style)=>n+(style.reflection?.detail?2:0),0);
+    const firstDetail=base+profiles.length*(proxyBase?2:1);
+    const height=Math.ceil((firstDetail+extra)/packed.width);
     if (height > atlasSize) throw new RangeError('Water reflection bindings exceed the texture atlas budget');
     const data = new Float32Array(packed.width * height * 4);
     data.set(packed.data);
-    let cursor = base + profiles.length;
+    let cursor=firstDetail;
     profiles.forEach((style, i) => {
       const binding = style.reflection;
       if (!binding) return;
-      const detail = binding.detail;
+      const {detail,proxy}=binding;
+      if(proxy)data.set([...(proxy.distance||[-1,-1]),ReflectionProxy.keep(proxy.roughness,proxy.roughnessRange),1],
+        (proxyBase+i)*4);
       data.set([planes.indexOf(binding.plane) + 1, binding.distortion, binding.blur, detail ? cursor : 0], (base + i) * 4);
       if (detail) {
         data.set([detail.core,...detail.stretch,+(detail.direction==='ripple'),...(detail.distance ?? [0,0]),
@@ -389,7 +394,7 @@
         cursor += 2;
       }
     });
-    return { ...packed, height, data, uniforms: { ...packed.uniforms, u_waterReflectionBase: base } };
+    return { ...packed, height, data, uniforms: { ...packed.uniforms, u_waterReflectionBase:base,u_waterReflectionProxyBase:proxyBase } };
   }
 
   function rayBox(bounds, origin, direction, stop) {
@@ -484,10 +489,13 @@
       return Object.freeze({ ...combined, surfaceAt: (x, y, z) => sample(x, y, z).surfaceAt(x, y, z),
         current: (x, y, z) => sample(x, y, z).current(x, y, z) });
     }), ...pockets]);
-    const reflectionProfiles = active.flatMap(body => {
-      const state = states.get(body);
-      return [state.style, ...(state.spanProfiles ?? [])].flatMap(style => style.reflection ? [style.reflection] : []);
+    const reflectionRoutes=active.flatMap(body=>{
+      const state=states.get(body);
+      return [state.style,...(state.spanProfiles??[])].flatMap(style=>
+        style.reflection?[{binding:style.reflection,bounds:body.bounds}]:[]);
     });
+    const reflectionProfiles=reflectionRoutes.map(row=>row.binding);
+    const reflectionProxies=reflectionProfiles.some(binding=>binding.proxy);
     const reflectionPlanes = Object.freeze([...new Set(reflectionProfiles.map(row=>row.plane))].sort());
     const reflectionClusters = reflectionProfiles.some(row=>row.detail?.distance && row.detail.cluster>1);
     if (reflectionPlanes.length > 4) throw new RangeError('A water scene supports up to four distinct reflection planes');
@@ -599,7 +607,7 @@
       });
       return next.every((body, i) => body === sorted[i]) ? result : scene(next, { airPockets });
     }
-    const result = Object.freeze({ media, mediumAt, count: active.length, layered, reflectionPlanes, reflectionClusters, pack, changesFrom, mapColors, raySegments });
+    const result = Object.freeze({ media, mediumAt, count:active.length,layered,reflectionPlanes,reflectionClusters,...(reflectionProxies&&{reflectionRoutes:P.data.freeze(reflectionRoutes)}),pack, changesFrom, mapColors, raySegments });
     sceneStates.set(result, { physical, pockets });
     return result;
   }

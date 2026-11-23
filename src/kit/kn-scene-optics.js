@@ -8,6 +8,7 @@
   K.clouds = CloudField;
   K.reflection = {
     detail: ReflectionDetail,
+    proxy: ReflectionProxy,
     plane: SceneOptics.plane,
     probe: ReflectionProbes.probe,
     reflectedView: SceneOptics.reflectedView,

@@ -2,6 +2,7 @@ const SceneOptics = require('../src/scene-optics.js');
 const CloudField = require('../src/cloud-field.js');
 const ArtDirection = require('../src/art-direction.js');
 const ReflectionDetail = require('../src/reflection-detail.js');
+const ReflectionProxy=require('../src/reflection-proxy.js');
 const { airTransmission } = require('../src/sky-environment.js');
 const { rays: cameraRays } = require('../src/camera-lens.js');
 const { surfaceGuide } = require('./fog-reconstruction.js');
@@ -213,7 +214,7 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
     if (trackFog) result[8] *= ratio;
     aerialThrough = through;
   }
-  function waterSurface(style, t, surface) {
+  function waterSurface(style, t, surface, medium) {
     const atSurface=Math.abs(origin[1]+t*direction[1]-surface)<=1e-6;
     let reflection = style.reflection && !style.optical && atSurface ?
       style.surface*(.16+.84*(1-Math.abs(direction[1]))**3) :
@@ -224,7 +225,7 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
     }
     if (!reflection) return;
     let reflected;
-    if (style.reflection && options?.reflection) {
+    if (style.reflection && (options?.reflection || style.reflection.proxy&&options?.proxyReflection)) {
       const x = origin[0] + direction[0]*t, z = origin[2] + direction[2]*t, time = options.waterTime ?? options.time ?? 0;
       const flow=options.reflectionCurrent?.(x,surface-1e-5,z)?.current;
       const px=x-(flow?.[0]??0)*time*.25,pz=z-(flow?.[2]??0)*time*.25;
@@ -234,8 +235,14 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
         depth:t*(options.axial ?? 1),
         axis:ReflectionDetail.axis(style.reflection.detail,[0,1,0],[dx,0,dz],[1,0,0])
       };
-      reflected = options.reflection(style.reflection, options.reflectionX, options.reflectionY, dx, 0, dz,
-        options.reflectionBackground, detail);
+      if(style.reflection.proxy&&options.proxyReflection){
+        const bend=(style.reflection.distortion??5)*.004, up=1/Math.hypot(dx*bend,1,dz*bend);
+        const normal=[dx*bend*up,up,dz*bend*up];
+        reflected=options.proxyReflection(style.reflection,{x:options.reflectionX,y:options.reflectionY,shift:[dx,0,dz],detail,
+          depth:t*(options.axial??1)-(options.depthOffset??0),point:[x,surface,z],
+          direction:ReflectionProxy.reflected(direction.map(n=>-n),normal),kind:'water',id:medium??style.reflection.plane});
+      } else reflected=options.reflection(style.reflection,options.reflectionX,options.reflectionY,dx,0,dz,
+        options.reflectionBackground,detail);
     }
     if (reflected?.address) options.observeReflection?.({
       ...reflected.address, amount: reflected.address.amount * reflection * remaining()
@@ -246,11 +253,11 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
       result[channel + 3] *= 1 - reflection;
     }
   }
-  for (const [start, exit, style, surface] of segments) {
+  for (const [start, exit, style, surface, medium] of segments) {
     if (start >= stop) break;
     const end = Math.min(stop, exit);
     air(start);
-    if (direction[1] < 0) waterSurface(style, start, surface);
+    if (direction[1] < 0) waterSurface(style, start, surface, medium);
     const midpoint = (start + end) * .5;
     const depth = surface - origin[1] - midpoint * direction[1];
     const visibility = options?.cloudShadow?.(origin[0] + midpoint * direction[0], surface,
@@ -264,7 +271,7 @@ function traceMedia(volumes, segments, origin, direction, stop, result, sample, 
       result[channel] += result[channel + 3] * loss * tint * gain;
       result[channel + 3] *= 1 - loss;
     }
-    if (direction[1] > 0 && end < stop) waterSurface(style, end, surface);
+    if (direction[1] > 0 && end < stop) waterSurface(style, end, surface, medium);
     cursor = end;
   }
   air(stop);
@@ -307,7 +314,7 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
       }
       stats.rays++;
       ray = rays[pixel] = { origin: origin.slice(), direction: direction.slice(), axial, start,
-        segments: water ? water.raySegments(origin, direction, horizon / axial) : [],
+        segments: water ? water.raySegments(origin,direction,horizon/axial,{mediumIds:!!options.proxyReflection}) : [],
         bounds:options.cacheBounds !== false && volumes.length
           ? SceneOptics.rayBounds(volumes,origin,direction,horizon/axial,options.counters) : undefined,
         phase: tile ? (tile.ranks[y % tile.height * tile.width + x % tile.width] + .5) / tile.ranks.length : .5,

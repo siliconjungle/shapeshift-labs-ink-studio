@@ -946,6 +946,7 @@ const view = extra =>
       reflectionDetail: onOffOption('reflection-detail'),
       passQuality: passQualityOption(),
       reflectionProbes: onOffOption('reflection-probes'),
+      reflectionProxies: onOffOption('reflection-proxies'),
       transmission: onOffOption('transmission'),
       surfaceDetailKits: onOffOption('surface-detail-kits'),
       skyReflections: opt['sky-reflections'],
@@ -1579,6 +1580,7 @@ const CMD = {
         'pass quality: --pass-quality file.json|off for background, particles and secondary reflections',
         'shot lighting: --shot-lighting on|off|file.json   scope lights, channel ramps and spill',
         'reflection detail: --reflection-detail on|off   compare the authored core, streaks and distance clusters',
+        'reflection proxies: --reflection-proxies on|off and render --reflection-report file.json',
         'brushwork: --brushwork on|off   compare surface-aligned paint at export size',
         'shadow bands: --shadow-band-paint on|off   compare painted lighting thresholds',
         'diffuse ramps: --diffuse-ramps on|off   compare authored diffuse ramps',
@@ -2545,10 +2547,19 @@ const CMD = {
     const w = buildPreview(), diagnostics = previewPasses(),
       t = num('t', 0);
     const suffixes = reviewSidecars(diagnostics);
+    const report=opt['reflection-report'];
+    if(report!==undefined&&(typeof report!=='string'||[outputFile(w.id+'.png'),path.resolve(pos[0])].includes(path.resolve(report))))
+      die('--reflection-report needs a separate JSON output path');
     shot?.destination(outputFile(w.id+'.png'),suffixes);
     pose(w, t);
     const t0 = Date.now(),
-      im = R.render(w, view({ t, ...diagnostics?.settings }));
+      im = R.render(w, view({ t, ...diagnostics?.settings, ...(report&&{renderStats:true}) }));
+    if(report)require('./asset-files.js').json(path.resolve(report),{
+      scene:w.id,time:t,width:im.w,height:im.h,
+      receivers:im.renderStats?.reflectionSources?.receivers??[],planarCaptures:im.renderStats?.planarCaptures??0,
+      planarPixels:im.renderStats?.planarPixels??0,probeFaces:im.renderStats?.reflectionProbeFaces??0,
+      probePixels:im.renderStats?.reflectionProbePixels??0
+    });
     diagnostics?.capture(im, opt.px1 ? 1 : im.px);
     console.log('drawn in', Date.now() - t0, 'ms');
     /* --text [ascii|symbols|braille|blocks]: drawn as text (K.ascii.draw), --tg screen pixels a font pixel (2), --tcolour scene|ink|mono;

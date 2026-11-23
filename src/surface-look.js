@@ -9,6 +9,7 @@ const SurfaceLook = (() => {
   const stages = typeof RenderStages === 'undefined' ? require('./render-stages.js') : RenderStages;
   const pixelLook = typeof PixelLook === 'undefined' ? require('./pixel-look.js') : PixelLook;
   const shadowBandPaint = typeof ShadowBandPaint === 'undefined' ? require('./shadow-band-paint.js') : ShadowBandPaint;
+  const reflectionProxy = typeof ReflectionProxy === 'undefined' ? require('./reflection-proxy.js') : ReflectionProxy;
   const history = typeof MaterialHistory === 'undefined' ? require('./material-history.js') : MaterialHistory;
   let curves, luts, stacks, colorSpace, reflectionDetail;
   try {
@@ -749,6 +750,9 @@ const SurfaceLook = (() => {
         const local = layer.type === 'localReflection';
         const capture = local || layer.type === 'planarReflection';
         const captureDetail = capture && reflectionDetail.prepare(layer.detail);
+        if(layer.proxy && layer.type!=='planarReflection')
+          throw new TypeError(id + ' reflection proxies need a planarReflection layer');
+        const proxy=layer.type==='planarReflection' ? reflectionProxy.prepare(layer.proxy,Math.max(...roughness.map(n=>n??0))) : undefined;
         if (local && (typeof layer.probe !== 'string' || !layer.probe.trim() ||
           roughness.some(n=>n !== undefined && (n < 0 || n > 1)) ||
           (layer.f0 ?? .04) < 0 || (layer.f0 ?? .04) > 1 || (layer.power ?? 5) < 0))
@@ -766,6 +770,7 @@ const SurfaceLook = (() => {
           readBand: paintShadowBands && readBand,
           readShadeNormal: shadeNormals && readNormal || undefined,
           ...(capture && {detail:captureDetail}),
+          ...(proxy&&{proxy}),
           strength: clamp(layer.strength ?? 1),
           roughness: [roughness[0], roughness[1] ?? roughness[0]].map(v =>
             local ? v ?? 0.22 : positive(v, layer.type === 'glints' ? 0.085 : 0.22)

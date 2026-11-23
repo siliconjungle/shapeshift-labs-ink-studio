@@ -152,8 +152,10 @@ export function createEnvironment(gl, resources, {table, textureUnit}, maxSize, 
         lightingPixels = light.cells;
       }
     } else tableData.bind(cloudLightUnit);
+    const reflectionColors=world.water?.reflectionRoutes && sky && frame.reflectionProxies!==false && frame.reflections!==false && frame.water!==false &&
+      [[0,-1,0],[1,0,0],[0,1,0]].map(ray=>skyAPI.shade(skyAPI.forReflection(sky),ray,[0,0,0]));
     return {
-      media:!!(card || fog.length),lit:fog.some(v=>v.lit),
+      reflectionColors,media:!!(card || fog.length),lit:fog.some(v=>v.lit),
       uniforms:{
         u_envData:dataUnit,u_envCard:cardUnit,u_envCloudLight:cloudLightUnit,u_envBackdrop:backdropUnit,
         u_envEye:pose.eye,u_envRight:pose.right,u_envUp:pose.up,u_envBack:pose.back,

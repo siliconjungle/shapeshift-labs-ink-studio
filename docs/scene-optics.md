@@ -282,6 +282,53 @@ The `reflections` export pass contains both kinds.
 ink-studio render examples/local-reflection-workshop.js --w 356 --h 183 --px 1 --out workshop.png
 ```
 
+## Choose close and distant reflection sources
+
+Opt in with `proxy` on a planar finish or a live water reflection. Keep
+recognizable geometry in nearby water and glass with a planar capture,
+then blend into a local probe or the scene environment as the surface
+gets farther away or rougher.
+
+```js
+const proxy = {
+  distance: [7, 12],
+  roughness: 0.12,
+  roughnessRange: [0.5, 0.85],
+  probe: 'lantern-bench',
+  probeSize: 32
+};
+const glass = K.reflection.material({ r: [7], materialId: 'glass' }, 'window', { proxy });
+// Inside a water body's optics:
+const reflection = { plane: 'basin', proxy: { distance: [7, 12] } };
+```
+
+Distance is depth along the camera axis in scene units in both
+projections. Each range is a smooth transition. Set either range to
+`false` to ignore that input, or give both endpoints the same value for a
+hard cutoff. The default ranges are shown above. If omitted, roughness
+comes from the material or from water reflection blur. The finish keeps
+its Fresnel, strength, tint, and mask controls.
+
+In headless renders, an optional named local probe provides the coarse
+reflection. Its faces are capped at 32 pixels by default, with 16 and 64
+also available. The environment fills gaps in the capture. If a planar
+capture cannot be used due to view orientation or pass quality, the
+receiver uses the fallback. Only sampled sources incur capture work.
+WebGL live water blends to the scene sky and skips the planar capture
+when the whole receiver is outside the planar range. Pass
+`reflectionSourceFrame` as a frame callback to inspect its source
+selection and the capture workload.
+
+```sh
+node cli/ink-studio.js render examples/reflection-proxy-dock.js --w 352 --h 224 --px 1 --raw --reflection-report dock.json --out dock.png
+```
+
+The JSON receipt records each receiver's planar, probe, and environment
+contributions alongside the total capture count and pixel workload.
+A blended lookup can count toward two sources. Node renders expose the
+same information through `renderStats: true`. Use `--reflection-proxies off`
+or `reflectionProxies: false` to compare against the authored planar paths.
+
 ## Reflection detail by surface and distance
 
 Set `detail` on a `planarReflection` or `localReflection` finish layer, or

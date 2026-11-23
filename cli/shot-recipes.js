@@ -16,7 +16,7 @@ const fileOptions = new Set([
   'rain-impacts','reconstruction','relighting','render-graph','scene-exposure','sdf-assist','shadow-art','shot-lighting','shaped-atmosphere','silhouette-protection','sky-environment','sky-transitions',
   'motional-coverage','splat-fields','sprite-atlas','sprite-cels','stable','stable-detail','translucent-silhouettes','volume-cutouts','weather-binding','wind-field'
 ]);
-const omitted = new Set(['recipe','out','fail-on-flags']);
+const omitted = new Set(['recipe','out','fail-on-flags','reflection-report']);
 const fileDigest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const isFile = file => fs.statSync(file, {throwIfNoEntry:false})?.isFile();
 const read = file => JSON.parse(fs.readFileSync(file,'utf8'));

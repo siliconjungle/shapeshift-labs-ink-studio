@@ -14,12 +14,28 @@ export function waterReflectionPlan(world, frame, camera, width, height, reflect
   }
   const factor = Math.min(scale, limit / Math.max(width, height), textureLimit / (2*Math.max(width,height)));
   const active = new Float32Array(4), heights = new Float32Array(4);
+  const eligible = frame.reflectionProxies!==false && world.water.reflectionRoutes;
+  const routes=eligible && new Map();
+  const depth=(bounds,far)=>-camera.view[14]-(camera.setback??0)-[2,6,10].reduce((sum,at,i)=>{
+    const axis=camera.view[at], useHigh=far?axis<0:axis>0;
+    return sum+axis*(useHigh?bounds.max[i]:bounds.min[i]);
+  },0);
   const captures = ids.map((id, slot) => {
     const plane = definitions.get(id);
     if (!plane) throw new RangeError('Unknown water reflection plane ' + id);
     if (Math.abs(plane.normal[1] - 1) > 1e-6)
       throw new RangeError('Water reflection planes must face up');
     heights[slot] = plane.at[1];
+    if(eligible){
+      const own=eligible.filter(row=>row.binding.plane===id);
+      const max=Math.max(...own.map(({binding,bounds})=>binding.proxy ?
+        reflection.proxy.planarWeight(binding.proxy,depth(bounds,false)) : 1));
+      const min=Math.min(...own.map(({binding,bounds})=>binding.proxy ?
+        reflection.proxy.planarWeight(binding.proxy,depth(bounds,true)) : 1));
+      const proxy=own.some(row=>row.binding.proxy);
+      routes.set(id,{plane:id,proxy,min,max});
+      if(max<=1e-6)return null;
+    }
     const capture = reflection.captureView(camera.view, plane, camera.eye);
     if (!capture) return null;
     const eye = camera.eye.slice();
@@ -38,7 +54,13 @@ export function waterReflectionPlan(world, frame, camera, width, height, reflect
     active[capture.slot] = 1;
     retained.push({ ...capture, width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) });
   }
-  return { captures: retained, active, heights, count: ids.length, width: w, height: h, grid: [2, Math.ceil(ids.length / 2)] };
+  const sources=routes && [...routes.values()].map(row=>({
+    plane:row.plane,path:retained.some(capture=>capture.plane.id===row.plane) ?
+      row.proxy && row.min<1 ? 'planar+environment' : 'planar' : row.proxy ? 'environment' : 'material',
+    minPlanarWeight:row.min,maxPlanarWeight:row.max
+  }));
+  return { captures:retained,active,heights,count:ids.length,width:w,height:h,grid:[2,Math.ceil(ids.length/2)],
+    ...(sources&&{sources}) };
 }
 
 export function selectReflectionWorld(world, plane, time, toolkit) {

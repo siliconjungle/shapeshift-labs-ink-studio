@@ -525,7 +525,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       anchorCount = points.n;
     }
 
-    function waterUniforms(scene, camera, time, plane, captures, width, height, detailOn) {
+    function waterUniforms(scene, camera, time, plane, captures, width, height, detailOn, frame) {
       if (!scene) return null;
       waterTexture ??= resources.texture();
       textureUnit(3, waterTexture);
@@ -546,7 +546,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         u_waterReflections: captures ? 23 : 0, u_waterReflectionCount: captures?.count ?? 0,
         u_waterReflectionActive: captures?.active ?? zero, u_waterReflectionHeights: captures?.heights ?? zero,
         u_waterReflectionGrid: captures?.grid ?? [2,1], u_waterReflectionViewport:[width,height],
-        u_waterReflectionDetailOn:detailOn,u_waterProjection:camera.projection };
+        u_waterReflectionDetailOn:detailOn,u_waterProjection:camera.projection,
+        u_waterReflectionProxyBase:packedWater.u_waterReflectionProxyBase??0,u_waterProxySetback:camera.setback??0,
+        u_waterProxyOn:frame.reflections!==false&&frame.reflectionProxies!==false };
     }
 
     function wetVariant(water, media) {
@@ -773,6 +775,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     function captureWater(world, frame, camera, width, height, trailStart, quality) {
       const plan = waterReflectionPlan(world, frame, camera, width, height, toolkit.KIT?.reflection, maxSize,
         quality?.captures && (ids => qualityAPI.reflectionPlan(quality, ids)));
+      if(plan?.sources && frame.reflectionSourceFrame)frame.reflectionSourceFrame({
+        sources:plan.sources,planarCaptures:plan.captures.length,
+        planarPixels:plan.captures.reduce((sum,entry)=>sum+entry.width*entry.height,0)
+      });
       if (!plan?.captures.length) return null;
       reflectionAtlas ??= resources.texture();
       const size = [plan.width*plan.grid[0],plan.height*plan.grid[1]];
@@ -1182,9 +1188,13 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         if (direction?.cadence.rain !== undefined) rainWind = velocity('rain');
       }
       const water = waterUniforms(waterScene, camera, motion?.water ?? time, plane, captures, width, height,
-        frame.reflectionDetail!==false);
+        frame.reflectionDetail!==false,frame);
       if (water) water.u_waterWindGain = (windResponse?.water ?? 0) * Math.hypot(...flex('water'));
       const env = environment.prepare(world,frame,camera,t,width,height,reflectionCapture,plane);
+      if(water?.u_waterReflectionProxyBase){
+        const base=rgb(world.pal[0]??0), [ground,horizon,sky]=env?.reflectionColors??[base,base,base];
+        Object.assign(water,{u_waterProxyGround:ground,u_waterProxyHorizon:horizon,u_waterProxySky:sky});
+      }
       if (env || lastEnvironment) historyValid = false;
       lastEnvironment = !!env;
       const wet = water && wetVariant(water,!!env?.media);

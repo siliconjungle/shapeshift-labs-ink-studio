@@ -148,9 +148,10 @@ const ReflectionProbes = (() => {
     const byId = new Map(definitions.map(entry=>[entry.id,entry]));
     const filtered = [0,0,0,0], rgb = [0,0,0], sample = { rgb, coverage:0 };
     const taps = [[-1,.12],[-.5,.23],[0,.30],[.5,.23],[1,.12]];
-    function read(id, point, ray, roughness, axis, captureDetail) {
+    function read(id, point, ray, roughness, axis, captureDetail, sizeLimit) {
       const probe=byId.get(id);
       if (!probe) return null;
+      const size=sizeLimit<probe.size ? sizeLimit : probe.size;
       let influence=1;
       if(probe.bounds) {
         const { min,max,feather }=probe.bounds;
@@ -162,11 +163,14 @@ const ReflectionProbes = (() => {
           if(!influence) return null;
         }
       }
-      const key=JSON.stringify([probe.id,probe.size]);
-      if(!cache.has(key)) cache.set(key,levels(faces.map((_,i)=>capture(probe,i)),probe.size));
+      const key=JSON.stringify([probe.id,size]);
+      if(!cache.has(key)){
+        const captureProbe=size===probe.size ? probe : {...probe,size};
+        cache.set(key,levels(faces.map((_,i)=>capture(captureProbe,i)),size));
+      }
       const mip=cache.get(key), [along,across]=roughness;
       const minor=Math.min(along,across), spread=Math.abs(along*along-across*across)*.9;
-      const lod=Math.min(mip.length-1,Math.log2(1+(minor*minor+spread*.29)*probe.size*.65));
+      const lod=Math.min(mip.length-1,Math.log2(1+(minor*minor+spread*.29)*size*.65));
       const low=Math.floor(lod), high=Math.min(low+1,mip.length-1), fraction=lod-low;
       filtered.fill(0);
       const tap = (direction, weight) => {
@@ -190,7 +194,7 @@ const ReflectionProbes = (() => {
             (a,b,gain)=>tap(ray.map((n,i)=>n+u[i]*a+v[i]*b),gain));
         }
         if (far) {
-          const count=Math.min(mip.length-1,Math.log2(settings.cluster*Math.max(1,probe.size*.5*pixelAngle)));
+          const count=Math.min(mip.length-1,Math.log2(settings.cluster*Math.max(1,size*.5*pixelAngle)));
           const level=Math.floor(count), blend=count-level, direction=parallax(probe,point,sharp);
           block(mip[level],direction,far*(1-blend),filtered);
           if (blend) block(mip[level+1],direction,far*blend,filtered);

@@ -114,6 +114,7 @@ const SimulationMaterialLayers=require('../src/simulation-material-layers.js');
 const SceneMeshes = require('../src/scene-meshes.js');
 let SplatFields, AtmosphereEmitters;
 const ReflectionProbes = require('../src/reflection-probes.js');
+const ReflectionProxyLighting=require('./reflection-proxies.js');
 const { cameraRays, surfacePoint, reflectionSampler, atmosphereQuality, mediaSampler, applyAtmosphere } = require('./scene-optics.js');
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x),
   sstep = (a, b, x) => {
@@ -1257,6 +1258,9 @@ function renderFrame(world, o, preparedPalettes) {
       atmosphere:false, water:false, reflections:false, edges:false, transparencyHistory:undefined
     });
   }, o[probeCaptures]) : null;
+  const proxyReflection=o.reflectionProxies!==false && o.surface!==false && o.reflections!==false ?
+    ReflectionProxyLighting.create(reflection,localReflection,opticalSky && ((direction,out,point)=>skySample(direction,out,point,true)),
+      bg,counters) : null;
   let live, transmissionOccluder;
   function transmissionOccluded(point, direction, distance, bias) {
     if (!world.renderSdfs?.length || distance <= bias) return false;
@@ -1267,7 +1271,7 @@ function renderFrame(world, o, preparedPalettes) {
   const surface = surfaceShading(world, stages && !coverageAware ? { ...o, paletteConstraints: false } : o, {
     eye,
     forward: [V[2], V[6], V[10]],
-    reflection, localReflection,
+    reflection, localReflection, proxyReflection, reflectionSetback:depthOffset,
     sky: opticalSky && ((direction, out, origin) => {
       if (!skyOverlay) return skySample(direction,out,origin,true);
       flash?.sky(origin,direction,out);
@@ -1690,7 +1694,7 @@ function renderFrame(world, o, preparedPalettes) {
     atmosphereOptions();
   const hazeCoverage = effectRules?.ramps.get('fog')?.geometry && world.fog.max > 0 && new Float32Array(W * H);
   const rayMedia = mediaOptions ? mediaSampler(volumes, water, rayAt, W, mediumHorizon, {
-    ...mediaOptions, reflectionPlane, reflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth,
+    ...mediaOptions, reflectionPlane, reflection, proxyReflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth,
     deep: Boolean(deep), matteCount:mattes?.count
   }, air) : null;
   const fogQuality = !rayMedia && axialDepth && atmosphereOptions();
