@@ -94,6 +94,7 @@ async function command(file, plan, rest, opt, library) {
     sections:storyAudio.sections.map(row => ({...row,file:'music.wav'})),
     layers:storyAudio.layers,
     cues:storyAudio.cues.map(row=>({...row,file:cueFile(row)})),
+    ...(storyAudio.contacts && {contacts:storyAudio.contacts.map(row=>({...row,file:cueFile(row)}))}),
     ...(storyAudio.soundChoices && { receipts:'receipts.json' })
   };
   if (storyAudio.soundChoices) output.push({file:'receipts.json',document:{

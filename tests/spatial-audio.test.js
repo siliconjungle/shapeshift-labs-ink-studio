@@ -233,6 +233,68 @@ test('rotation tolerates forced repeats and resumes avoiding them when more take
   }),/ordered integer-cent range/);
 });
 
+test('continuous contact events keep phase through speed changes, material switches, and release',()=>{
+  const audio=W.spatialAudio.create({cues:{wood:{asset:'wood',pitch:1.25},stone:'stone'},
+    contactLoops:{attack:.125,crossfade:.25,release:.25,response:.125,interactions:{
+      drag:{cue:'wood',materials:{stone:'stone'},speedForFullRate:4,loadForFullGain:100,rate:[.5,1.5]}}}});
+  const listener=[0,0,0], id='crate', at=[0,0,-1];
+  const command=(kind,time,contact)=>W.timedEvents.at(time,{id:String(time),kind,contact:{id,...contact}});
+  const start=command('contact-start',.125,{interaction:'drag',at,material:'wood',speed:2,load:50});
+  const update=command('contact-update',.375,{speed:4,load:100});
+  const change=command('contact-update',.625,{material:'stone'});
+  const halt=command('contact-end',1,{});
+  const frame=(time,events=[],playback)=>audio.frame({time,events,listener,playback});
+  let state=frame(.25,[start,start]);
+  assert.deepEqual(state.cues,[]);
+  const [wood]=state.active;
+  near(wood.offset,.15625);
+  near(wood.gain,.5);
+  assert.deepEqual(state.contactChanges.map(row=>row.time),[.125,.25]);
+  state=frame(.5,[update]);
+  assert.equal(state.active[0].id,wood.id);
+  near(state.active[0].offset,.25*1.25+.125*1.875);
+  near(state.active[0].rate,1.875);
+  near(state.active[0].gain,1);
+  state=frame(.75,[change]);
+  assert.deepEqual(state.active.map(voice=>[voice.cue,voice.contact.material]),[['wood','wood'],['stone','stone']]);
+  assert.equal(state.active[0].id,wood.id);
+  for(const voice of state.active)near(voice.gain,.5);
+  near(state.active[1].offset,.125*1.5);
+  state=frame(.875,[change]);
+  assert.deepEqual(state.active.map(voice=>voice.cue),['stone']);
+  assert(state.contactChanges.some(row=>row.ended&&row.voice.id===wood.id));
+  near(frame(1.125,[halt]).active[0].gain,.5);
+  state=frame(1.25);
+  assert.deepEqual(state.active,[]);
+  assert.deepEqual(state.contactChanges.map(row=>[row.time,row.ended]),[[1.25,true]]);
+  assert.deepEqual(frame(1.25,[halt]).active,[]);
+  assert.deepEqual(frame(.25,[start]).active,[wood]);
+  assert.deepEqual(frame(.25,[start],audio.createPlayback()).active,[wood]);
+});
+
+test('contact snapshots release missing contacts and use stable native wheel identities',()=>{
+  const audio=W.spatialAudio.create({cues:{wheel:'wheel',clay:'clay',stone:'stone'},
+    contactLoops:{fields:['feedback/contacts'],attack:0,crossfade:.1,release:.1,interactions:{
+      roll:{cue:'wheel',materials:{stone:'stone','trackside/clay':'clay'}},
+      scrape:{cue:'stone'}}}});
+  const run=W.runtime.create(contacts), playback=audio.createPlayback();
+  const listener=[0,1,0], find=frame=>frame.active.flatMap(row=>row.contact.interaction==='roll'?[row.id]:[]);
+  const options={listener,playback};
+  run.advance(21);
+  const first=find(audio.frame({...options,time:run.view().time,query:run.query()}));
+  assert(first.length>=2);
+  run.advance(22);
+  const second=find(audio.frame({...options,time:run.view().time,query:run.query()}));
+  assert.deepEqual(first,second);
+  const fieldContact=(time,rows)=>audio.frame({...options,time,contacts:rows});
+  const scrape={id:'tool',interaction:'scrape',speed:2,load:9,material:'stone',at:[0,1,-1]};
+  assert.equal(fieldContact(.5,[scrape]).active[0].contact.id,'tool');
+  assert.equal(fieldContact(.625,[]).active[0].contact.targetGain,0);
+  assert.deepEqual(fieldContact(.75,[]).active,[]);
+  assert.throws(()=>W.spatialAudio.create({cues:{wheel:'wheel'},contactLoops:{interactions:{roll:{cue:'missing'}}}}),
+    /Invalid continuous contact audio interaction/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
@@ -292,11 +354,41 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
     player.dispose();
     return starts;
   }
+  async function continuous(){
+    const context=new OfflineAudioContext(2,rate,rate), buffer=context.createBuffer(1,rate,rate);
+    buffer.getChannelData(0).fill(.25);
+    const create=context.createBufferSource.bind(context), rates=[];
+    let starts=0;
+    context.createBufferSource=()=>{
+      starts++;
+      const source=create(), param=source.playbackRate, set=param.setValueAtTime.bind(param);
+      param.setValueAtTime=(value,time)=>{rates.push(value);return set(value,time);};
+      return source;
+    };
+    const player=createSpatialAudioPlayer(context,{resolveAsset:()=>buffer});
+    const frame=(time,gain,targetGain,remaining,rate)=>({...base,time,cues:[],active:[
+      {...voice,mode:'loop',position:null,gain,bands:{low:gain,mid:gain,high:gain},
+        rate,contact:{targetGain,remaining}}]});
+    await player.update(frame(0,0,1,.125,1));
+    const speed=context.suspend(.25).then(async()=>{
+      await player.update(frame(.25,1,1,0,1.5));
+      await context.resume();
+    });
+    const release=context.suspend(.5).then(async()=>{
+      await player.update(frame(.5,1,0,.125,1.5));
+      await context.resume();
+    });
+    const [output]=await Promise.all([context.startRendering(),speed,release]);
+    const channel=output.getChannelData(0);
+    const levels=[.015,.085,.42,.555,.72].map(time=>channel[Math.round(time*rate)]);
+    player.dispose();
+    return {starts,rates,levels};
+  }
   try{
     const clear=await play(voice), same=await play(voice,{duplicate:true}),
       obstructed=await play({...voice,gain:.22,bands:{low:.22,mid:.22,high:.06},cutoff:1000}),
       cancelled=await play(voice,{cancel:true});
-    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping()});
+    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous()});
   }catch(error){await report({error:error.stack});}
   </script>`);
   const child=spawn(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
@@ -324,4 +416,10 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   assert.equal(report.starts.length,2);
   near(report.starts[0],.1);
   near(report.starts[1],.6);
+  assert.deepEqual(report.continuous.rates,[1,1.5,1.5]);
+  assert.equal(report.continuous.starts,1);
+  const [attack,building,full,releasing,silent]=report.continuous.levels;
+  assert(attack>0&&attack<building&&building<full);
+  assert(releasing>0&&releasing<full);
+  near(silent,0);
 });

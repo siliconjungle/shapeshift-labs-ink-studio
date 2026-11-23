@@ -77,6 +77,44 @@ test('story replay mixes both velocity takes at the same sample and carries thei
   assert.deepEqual(sliced.samples,mixed.samples.subarray(3200));
 });
 
+test('recorded continuous contacts print timed fades, variable phase and exact trimmed foley', () => {
+  const command=(kind,tick,time,contact)=>({tick,action:'world/event',
+    args:K.world.timedEvents.at(time,{kind,contact:{id:'crate',...contact}})});
+  const run=R.create({id:'continuous-foley',dt:.125,commands:[
+    command('contact-start',2,.1875,{interaction:'drag',material:'boards',speed:2,load:2}),
+    command('contact-update',4,.4375,{speed:4}),
+    command('contact-update',6,.6875,{material:'stone'}),
+    command('contact-end',8,.9375,{})
+  ]});
+  run.advance(10);
+  const recording=run.recording();
+  const shape={sampleRate:rate,channels:1,samples:Float32Array.from({length:rate},(_,i)=>.2*i/rate)};
+  const plan=ink.createSceneAudio({
+    format:'ink-studio/scene-audio',version:1,sampleRate:rate,post:{},spatial:{
+      cues:{boards:'boards',stone:'stone'},
+      contactLoops:{attack:.125,crossfade:.125,release:.125,response:.125,interactions:{
+        drag:{cue:'boards',materials:{stone:'stone'},speedForFullRate:4,loadForFullGain:2,rate:[.5,1.5]}}}
+    }
+  },{kit,resolveAsset:name=>name==='boards'?shape:audio(.4,rate)});
+  const render=start=>plan.render({startPoint:T.read(start),endPoint:T.read(1.25)},{
+    runtime:()=>R.openRecording(recording),recordedThrough:10,trace:true
+  });
+  const all=render(0), cut=render(.5);
+  const complete=ink.decodeWav(all.waves.foley), trimmed=ink.decodeWav(cut.waves.foley);
+  assert.deepEqual(trimmed.samples,complete.samples.subarray(rate));
+  const at=time=>select(complete,time)[0];
+  assert.equal(at(.185),0);
+  assert(at(.25)>0);
+  assert(Math.abs(at(.625)-.10625)<1e-6);
+  assert(at(.75)>.24&&at(.75)<.32);
+  assert(Math.abs(at(.875)-.4)<1e-6);
+  assert(Math.abs(at(1)-.2)<1e-6);
+  assert.equal(at(1.0625),0);
+  assert.deepEqual(all.report.storyAudio.contacts.map(row=>[row.material,row.fromSample,row.toSample,row.bus]),
+    [['boards',1500,6500,'foley'],['stone',5500,8500,'foley']]);
+  assert.deepEqual(all.report.storyAudio.cues,[]);
+});
+
 test('story audio saves per-layer take and pitch receipts and replays them with a changed seed', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-sound-receipts-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));

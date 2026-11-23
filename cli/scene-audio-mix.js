@@ -59,7 +59,10 @@ function sumVoices(voices, resolve, { start, end, sampleRate, gain = 1, cues }, 
       const pan = a?.pan === undefined ? undefined : a.pan + u * ((b?.pan ?? a.pan) - a.pan);
       const cutoff = a && a.cutoff + u * ((b?.cutoff ?? a.cutoff) - a.cutoff);
       const delay = a && a.delay + u * ((b?.delay ?? a.delay) - a.delay);
-      const position = p.sourceStart + (sample - p.first - (delay ?? 0) * sampleRate) * p.sourceStep;
+      const elapsed = sample - (delay ?? 0) * sampleRate;
+      if (a?.sourceTime !== undefined && elapsed < p.first) continue;
+      const position = a?.sourceTime === undefined ? p.sourceStart + (elapsed - p.first) * p.sourceStep :
+        (a.sourceTime + (elapsed - a.sample) * a.rate / sampleRate) * source.sampleRate;
       const l = stereoSource(source, position, p.loop, 0), r = stereoSource(source, position, p.loop, 1);
       const fade = p.fade ? clamp(Math.min((sample - p.first) / p.fade, (p.end - sample) / p.fade), 0, 1) : 1;
       const n = (sample - start) * 2, scale = level * p.gain * gain * fade;

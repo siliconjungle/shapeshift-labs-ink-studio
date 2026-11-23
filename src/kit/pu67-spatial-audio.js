@@ -54,7 +54,7 @@
 
   function create(definition={}){
     const config=copy(definition);
-    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed']),
+    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed','contactLoops']),
       'Invalid spatial audio settings');
     const distance=distanceSettings(config.distance), cueList=table(config.cues??{},512,'cues',cueName);
     const {propagationDelay=false,surface}=config;
@@ -86,7 +86,12 @@
       return [name,row];
     }));
     const S=W.spatialSoundSelection, selection=S.compile(config.soundFamilies??{},config.soundSeed??0,cues);
-    const livePlayback=S.createPlayback();
+    const contactPlayback=config.contactLoops===undefined?null:W.spatialContactAudio.compile(config.contactLoops,cues,(query,row)=>{
+      const at=eventAt(row);
+      return {at,material:row.material??row.surface?.id??surfaceAt(query,at)?.id};
+    });
+    const createPlayback=()=>Object.assign(S.createPlayback(),{contactFrame:contactPlayback?.()});
+    const livePlayback=createPlayback();
     const bindings=new Map();
     for(const [name,row] of table(config.bindings??{},128,'bindings')){
       check(keys(row,['on','cue','interaction','at','gain','select','speedForFullStrength','loadForFullStrength'])&&keys(row.on,['kind','system','where'])&&
@@ -113,10 +118,11 @@
         ...(cue.follow&&input.mode==='cue'&&at?.entity&&{attachment:{cue:input.cue,at,
           ...(input.gain!==undefined&&{gain:input.gain}),...(input.pitch!==undefined&&{pitch:input.pitch}),
           ...(input.exclude!==undefined&&{exclude:input.exclude})}})};
-      if(!positioned)return {...result,status:'unpositioned',position:null,distance:null,gain:scale,
+      const contact=factor=>input.contact&&{contact:{...input.contact,targetGain:input.contact.targetGain*cue.gain*factor}};
+      if(!positioned)return {...result,...contact(1),status:'unpositioned',position:null,distance:null,gain:scale,
         bands:{low:scale,mid:scale,high:scale},cutoff:22000,delay:0};
       const position=source?.point;
-      if(!point(position)||!listener)return {...result,status:'unavailable',position:point(position)?position:null,
+      if(!point(position)||!listener)return {...result,...contact(0),status:'unavailable',position:point(position)?position:null,
         distance:null,gain:0,bands:{low:0,mid:0,high:0},cutoff:22000,delay:0};
       const range=V.dist(position,listener.position), spread=distanceGain(range,cue.distance);
       let apparent=position, route, delay=0, cutoff=22000, blocker, attenuation=[1,1,1];
@@ -161,7 +167,7 @@
         }
       }
       const levels=Object.fromEntries(bands.map((band,i)=>[band,scale*spread*attenuation[i]]));
-      return {...result,status:spread===0?'out-of-range':route==='blocked'?'blocked':blocker?'occluded':'spatial',
+      return {...result,...contact(spread*attenuation[1]),status:spread===0?'out-of-range':route==='blocked'?'blocked':blocker?'occluded':'spatial',
         position,apparentSource:apparent,distance:range,gain:levels.mid,bands:levels,cutoff,
         ...(blocker&&{blocker}),...(route&&{acoustic:route}),delay:propagationDelay?delay:0};
     }
@@ -185,10 +191,11 @@
       return materials.get(material)?.[interaction]??profile?.sounds?.[interaction];
     }
     function frame({query,time=0,from=time,listener,events=[],animation=[],timeline,captureSources=false,
-      playback=livePlayback,receipts}={}){
+      playback=livePlayback,receipts,contacts}={}){
       check(finite(time,0,1e9)&&finite(from,-1e9,time)&&Array.isArray(events)&&events.length<=10000&&
-        Array.isArray(animation)&&animation.length<=128&&(!timeline||typeof timeline.sample==='function'&&
-          typeof timeline.between==='function'),'Invalid spatial audio frame');
+        Array.isArray(animation)&&animation.length<=128&&
+        (contacts===undefined||Array.isArray(contacts)&&contacts.length<=4096)&&
+        (!timeline||typeof timeline.sample==='function'&&typeof timeline.between==='function'),'Invalid spatial audio frame');
       const ear=listenerFrame(query,listener), active=[], shots=[], known=new Set();
       playback.observe(time);
       function add(input,target){
@@ -233,6 +240,8 @@
         if(!matched&&eventKinds.includes(row.kind)&&cueName(row.cue))add({...raw,id:serial,cue:row.cue},shots);
       }
       for(const row of emitters)add({...row,id:'emitter:'+row.name,mode:'loop',offset:(row.offset??0)+time*cues.get(row.cue).pitch},active);
+      const sustained=playback.contactFrame?.(time,query,events,contacts);
+      if(sustained)for(const voice of sustained.active)add(voice,active);
       events.forEach((row,i)=>{
         if(record(row)&&id(row.kind))route(row,'world:'+JSON.stringify(row.id??[time,i]));
       });
@@ -264,12 +273,14 @@
         for(const item of timeline.between(from,time))if(item.type==='audio'&&!item.duration)
           add({id:trackId(item),cue:item.cue,mode:'cue',gain:item.gain,offset:item.offset},shots);
       }
-      return freeze(copy({time,listener:ear&&{position:ear.position,forward:ear.forward,up:ear.up},active,cues:shots}));
+      const contactChanges=sustained?.changes.map(change=>({...change,voice:mix(query,ear,change.voice)}));
+      return freeze(copy({time,listener:ear&&{position:ear.position,forward:ear.forward,up:ear.up},active,cues:shots,
+        ...(contactChanges?.length&&{contactChanges})}));
     }
     function cue({ query, listener, cue, at, gain, pitch, exclude } = {}) {
       return mix(query, listenerFrame(query, listener), { cue, at, gain, pitch, exclude, mode: 'cue' });
     }
-    return Object.freeze({frame,cue,createPlayback:S.createPlayback});
+    return Object.freeze({frame,cue,createPlayback});
   }
   W.spatialAudio=Object.freeze({create});
 })(KIT);

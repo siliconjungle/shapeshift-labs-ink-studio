@@ -234,3 +234,81 @@ Run the [repeat avoidance demo](../examples/repeat-safe-sounds/demo.cjs)
 with `node examples/repeat-safe-sounds/demo.cjs output/repeat-safe-sounds`
 to compare a weighted draw, a rotation, and receipt replay after a seed
 change.
+
+## Sustain drag, roll, and scrape sounds
+
+Add `contactLoops` to the spatial settings used by a live player or a scene
+soundtrack. Each interaction uses a looping cue and can override it by
+material. Use a loop-ready WAV or a compatible soundtrack asset for each cue.
+
+```json
+{
+  "surface": "floor/surface",
+  "cues": {
+    "wheel-boards": { "asset": "wood-rumble", "bus": "foley" },
+    "wheel-stone": { "asset": "stone-rumble", "bus": "foley" }
+  },
+  "contactLoops": {
+    "fields": ["drive/contacts"],
+    "attack": 0.035,
+    "crossfade": 0.12,
+    "release": 0.16,
+    "response": 0.04,
+    "interactions": {
+      "roll": {
+        "cue": "wheel-boards",
+        "materials": { "shop/stone": "wheel-stone" },
+        "speedForFullRate": 3,
+        "loadForFullGain": 60,
+        "rate": [0.55, 1.65]
+      }
+    }
+  }
+}
+```
+
+Configure any of `drag`, `roll`, and `scrape`. Speed moves the playback
+rate through the authored range and preserves the loop's playhead. The
+cue's pitch multiplies that rate. Gain is the square root of normalized
+speed times normalized load, with each input capped at its reference.
+A stationary contact stays registered at zero gain. Omitted speed starts
+at zero. Omitted load uses the full-gain reference. Envelope times are
+in seconds. `response` smooths gain changes. A material change uses
+the crossfade time if it selects a different cue.
+
+Choose how to feed the planner:
+
+- Set `fields` to native material-contact probes such as `drive/contacts`
+  or `feedback/contacts`. Ink groups successive readings by field, producer,
+  entity, wheel, and interaction, or by a stable `contactId` from a custom
+  field. A missing reading releases the contact. Use
+  `contactEvents: "material"` for mechanics to include speed and load.
+- A live host can pass a complete `contacts` array to `frame()`. Every row
+  supplies a stable `id`, an `interaction`, and any measured values. Remove a
+  row to release its voice.
+- For a recording, send committed `contact-start`, `contact-update`, and
+  `contact-end` events with a nested `contact` record. Keep the same contact
+  ID from start to end. An update can supply only the changed values and an
+  end needs only the ID.
+
+```json
+[
+  { "kind": "contact-start", "contact": { "id": "crate-left", "interaction": "drag", "material": "shop/boards", "speed": 0.7, "load": 24, "point": [-1, 0, -2] } },
+  { "kind": "contact-update", "contact": { "id": "crate-left", "speed": 2.1, "material": "shop/stone" } },
+  { "kind": "contact-end", "contact": { "id": "crate-left" } }
+]
+```
+
+A reading can use `at`, `point`, or an entity ID for positioning. If it
+omits the material, Ink checks the configured `surface` at that position.
+A sustained contact is independent of any one-shot impact or footstep
+bindings. Its loop appears in `frame.active`. `frame.contactChanges`
+lists the time and voice for envelope and rate changes, with `ended`
+marking a completed fade. Keep a playback state per live session. To
+reconstruct a contact across a seek, replay its events from the run
+origin or give the host a current contact snapshot.
+
+`ink-studio story audio` prints sustained voices into `spatial.wav`, or
+the `foley` bus by default when soundtrack post is enabled. Its report
+includes the contact ID, source cue, and sample range for each material
+loop. [Run the continuous contact demo](../examples/continuous-contact-sounds/demo.cjs)

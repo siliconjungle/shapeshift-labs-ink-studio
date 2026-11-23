@@ -96,7 +96,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     const playback = mixer?.createPlayback();
     const voices = bed.map(voice => ({ ...voice }));
     const cues = timeline?.audioSchedule(clock) ?? [];
-    const looping = new Map(), resolved = new Map(), positional = [], following = [];
+    const looping = new Map(), contactTracks = new Map(), resolved = new Map(), positional = [], following = [];
     const history = trace && { sections: [], cues: [], layers: [] };
     let next = 0, score = [], automated = [], knots = 0, generated, produced, entry, worldReport;
     const productionIntents=[], worldEvents=[];
@@ -265,6 +265,20 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         }
       }
     }
+    function contactPoint(voice, ear, at, ended = false) {
+      let track = contactTracks.get(voice.id);
+      if (!track) {
+        const {id,interaction,material} = voice.contact;
+        track = push({stem:'spatial', bus:voice.bus ?? 'foley', asset:voice.asset, cue:voice.cue, first:at,
+          loop:true, points:[], contact:{id,interaction,material,voice:voice.id}});
+        contactTracks.set(voice.id, track);
+      }
+      append(track.points, {...point(voice, ear, at), sourceTime:voice.offset, rate:voice.rate});
+      if (ended) {
+        track.end = at;
+        contactTracks.delete(voice.id);
+      }
+    }
     function observe(time, sample, nextSample, query, events = []) {
       const receipts = soundReceipts && new Map(events.flatMap(event=>{
         const saved = soundReceipts.get(beat(event)?.beatId);
@@ -275,7 +289,14 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       cueFrame(query, sample, nextSample, state?.listener);
       if (state) {
         updateFollowing(query,state.listener,sample);
+        for (const change of state.contactChanges ?? []) {
+          contactPoint(change.voice, state.listener, change.time === time ? sample : stamp(change.time), change.ended);
+        }
         for (const voice of state.active) {
+          if (voice.contact) {
+            contactPoint(voice, state.listener, sample);
+            continue;
+          }
           let track = looping.get(voice.id);
           if (!track) {
             track = push({ stem:'spatial', bus:voice.bus, asset:voice.asset,
@@ -385,7 +406,13 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     if (selection?.kind==='world' && !result.report.stems.spatial.voices)
       throw new RangeError('No audible world source in the selected capture range');
     if (worldReport) result.report.worldScore=worldReport;
-    if (history) result.report.storyAudio=history;
+    if (history) {
+      const contacts = active.filter(row=>row.contact && Math.max(row.first,start)<Math.min(row.end??end,end))
+        .map(row=>({...row.contact,cue:row.cue,asset:row.asset,bus:row.bus,stem:row.stem,
+          fromSample:Math.max(row.first,start),toSample:Math.min(row.end??end,end)}));
+      if (contacts.length) history.contacts=contacts;
+      result.report.storyAudio=history;
+    }
     return result;
   }
   return Object.freeze({

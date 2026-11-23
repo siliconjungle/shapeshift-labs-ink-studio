@@ -52,8 +52,15 @@ export function createSpatialAudioPlayer(context, {
   function tune(row,immediate){
     if(!row.source)return;
     const {voice,gain,low,high,filter,panner}=row, at=context.currentTime;
-    parameter(gain.gain,voice.gain,at,immediate);
-    const relative=band=>clamp(20*Math.log10(Math.max(1e-8,voice.bands[band]/voice.gain)),-60,40);
+    if(voice.contact){
+      const start=Math.max(at,row.started), {remaining,targetGain}=voice.contact;
+      row.source.playbackRate.setValueAtTime(voice.rate,start);
+      gain.gain.cancelScheduledValues(start);
+      gain.gain.setValueAtTime(voice.gain,start);
+      if(remaining)gain.gain.linearRampToValueAtTime(targetGain,start+remaining);
+    }else parameter(gain.gain,voice.gain,at,immediate);
+    const relative=band=>voice.gain>0?
+      clamp(20*Math.log10(Math.max(1e-8,voice.bands[band]/voice.gain)),-60,40):0;
     parameter(low.gain,relative('low'),at,immediate);
     parameter(high.gain,relative('high'),at,immediate);
     parameter(filter.frequency,Math.min(voice.cutoff,context.sampleRate*.49),at,immediate);
@@ -147,6 +154,8 @@ export function createSpatialAudioPlayer(context, {
       if(typeof row?.id!=='string'||ids.has(row.id)||typeof row.asset!=='string'||!modes.includes(row.mode)||
         !finite(row.gain,0,16384)||!['low','mid','high'].every(band=>finite(row.bands?.[band],0,16384))||
         !finite(row.rate,.001,64)||!finite(row.offset,0,65e9)||!finite(row.cutoff,20,22000)||
+        (row.contact&&(row.mode!=='loop'||!finite(row.contact.targetGain,0,16384)||
+          !finite(row.contact.remaining,0,10.000001)))||
         !finite(row.delay,0,1e9)||row.position!==null&&!position(row.position)||
         row.apparentSource!==undefined&&!position(row.apparentSource)||
         (row.mode==='clip'?!finite(row.duration,0,1e9):row.duration!==undefined))
@@ -163,7 +172,10 @@ export function createSpatialAudioPlayer(context, {
       previousTime=frame.time;
       const desired=new Map();
       for(const row of voices.values())if(row.voice.mode==='cue')desired.set(row.voice.id,row.voice);
-      for(const voice of frame.active)if(voice.gain>0&&!seen.has(voice.id))desired.set(voice.id,voice);
+      for(const voice of frame.active){
+        const sustained=voice.contact&&(voice.contact.targetGain>0||voices.has(voice.id));
+        if((voice.gain>0||sustained)&&!seen.has(voice.id))desired.set(voice.id,voice);
+      }
       for(const voice of frame.cues)if(!seen.has(voice.id)){
         remember(voice.id);
         if(voice.gain>0)desired.set(voice.id,voice);
@@ -173,7 +185,8 @@ export function createSpatialAudioPlayer(context, {
       const pending=[], at=context.currentTime;
       for(const [id,voice] of selected){
         let row=voices.get(id);
-        if(row&&(row.voice.asset!==voice.asset||row.voice.rate!==voice.rate||Boolean(row.voice.position)!==Boolean(voice.position))){
+        if(row&&(row.voice.asset!==voice.asset||(!voice.contact&&row.voice.rate!==voice.rate)||
+          Boolean(row.voice.position)!==Boolean(voice.position))){
           stop(row);
           row=undefined;
         }
