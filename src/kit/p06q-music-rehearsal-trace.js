@@ -7,14 +7,18 @@
   const limit=4096, tolerance=1e-8;
   const byTime=(a,b)=>a.time-b.time || (a.serial ?? 0)-(b.serial ?? 0);
   const frozen=value=>P.data.freeze(P.data.clone(value));
+  const layerGains=value=>record(value) && Object.keys(value).length<=64 &&
+    Object.entries(value).every(([part,gain])=>id(part) && finite(gain,0,1));
 
   function validate(raw) {
-    check(fields(raw,['format','version','id','label','entry','end','intents','worldEvents','requests','origin']) &&
+    check(fields(raw,['format','version','id','label','entry','end','intents','worldEvents','requests','origin','layerGains']) &&
       raw.format===format && raw.version===1 && id(raw.id) && id(raw.entry) && finite(raw.end,.001,300) &&
+      (raw.layerGains===undefined || layerGains(raw.layerGains)) &&
       (raw.label===undefined || text(raw.label)) && Array.isArray(raw.intents) && raw.intents.length<=2048 &&
       Array.from(raw.intents).every(row=>record(row) && finite(row.time,0,raw.end) && row.time<raw.end &&
         (row.serial===undefined || integer(row.serial,0,Number.MAX_SAFE_INTEGER)) &&
-        (row.kind==='music-transition' ? id(row.from) && id(row.to) : row.kind==='music-cue' && text(row.cue ?? row.resource))),
+        (row.kind==='music-transition' ? id(row.from) && id(row.to) :
+          row.kind==='music-cue' ? text(row.cue ?? row.resource) : K.music.layerIntent(row))),
     'Invalid adaptive score trace or recorded music intents');
     const worldEvents=raw.worldEvents ?? [], requests=raw.requests ?? [];
     check(Array.isArray(worldEvents) && worldEvents.length<=limit && Array.from(worldEvents).every(row=>
@@ -32,7 +36,7 @@
       requests:requests.slice().sort(byTime)};
   }
 
-  function collector(entry,end) {
+  function collector(entry,end,initialGains) {
     const intents=[], worldEvents=[], requests=[];
     let pending;
     function observe(time,view,events,hits=[]) {
@@ -61,7 +65,7 @@
         requests.push({...request,outcome:'pending'});
       }
       return frozen(validate({format,version:1,id:options.id,...(options.label && {label:options.label}),entry,end,
-        intents,worldEvents,requests,origin}));
+        intents,worldEvents,requests,origin,...(initialGains && {layerGains:initialGains})}));
     }
     return {observe,finish};
   }
@@ -80,11 +84,12 @@
     };
     const end=options.end ?? round(log.end.tick*world.dt);
     check(finite(end,.001,Math.min(300,round(log.end.tick*world.dt))),'Trace end lies outside the recorded world');
-    const saved=collector(view(run.query()).section,end);
+    const initial=view(run.query());
+    const saved=collector(initial.section,end,initial.layerGains);
     const timeOf=(event,time)=>W.timedEvents.timeOf(event) ?? event.time ?? time;
     run.advance(log.end.tick,{onTick(frame,query) {
       if (frame.time>end+tolerance) return;
-      const events=run.events.filter(row=>row.system===system && ['music-transition','music-cue'].includes(row.kind))
+      const events=run.events.filter(row=>row.system===system && ['music-transition','music-cue','music-layer'].includes(row.kind))
         .map(row=>({...row,time:timeOf(row,frame.time)}));
       const hits=run.events.filter(row=>row.kind==='audio-cue' && text(row.cue))
         .map(row=>({cue:row.cue,time:timeOf(row,frame.time),
@@ -101,8 +106,9 @@
       (options.label===undefined || text(options.label)) && Array.isArray(updates) && updates.length<=4096 &&
       Array.from(updates).every(row=>fields(row,['time','emotions','parameters','cues']) && finite(row.time,0,options.end)),
     'Use bounded adaptive clock updates and a trace end');
-    const machine=K.music.create(score), saved=collector(score.entry,options.end);
+    const machine=K.music.create(score);
     let state=machine.initial();
+    const saved=collector(score.entry,options.end,machine.inspect(state).layerGains);
     for (const update of [...updates,{time:options.end}]) {
       const result=machine.advance(state,update);
       state=result.state;
@@ -111,5 +117,5 @@
     const trace=saved.finish(options,{kind:'clock-updates'});
     return frozen(validate({...trace,worldEvents:options.worldEvents ?? []}));
   }
-  P.adaptiveRehearsalTrace=Object.freeze({format,validate,captureWorld,captureScore});
+  P.adaptiveRehearsalTrace=Object.freeze({format,validate,captureWorld,captureScore,layerGains});
 })(KIT);

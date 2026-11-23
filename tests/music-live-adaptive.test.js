@@ -184,3 +184,74 @@ test('native WAV pages match the corresponding ranges of the original sample',as
     await fs.rm(dir,{recursive:true,force:true});
   }
 });
+
+test('layer ramps follow the sample clock on one held note, including retargets and late delivery',async()=>{
+  const dry=cue([[0,3.8,57]]);
+  const {echo,...dryPatch}=dry.patches.reed;
+  dry.patches.reed=dryPatch;
+  dry.tracks.reed.send=0;
+  const assets={air:dry}, arranged={entry:'bank',segments:{bank:{source:'air',end:2,loop:false}}};
+  const settings={...options,startTime:10};
+  const layer=(time,gain,ramp,serial)=>({kind:'music-layer',time,part:'reed',gain,ramp,serial});
+  const route={end:1.6,layerGains:{reed:0},events:[
+    event(layer(10.25,1,.5,1)),event(layer(10.5,.25,.25,2)),
+    event(layer(10.3,.8,.1,3),10.625),event(layer(10.875,0,.25,4),11)
+  ]};
+  const faded=await live.replay(assets,arranged,{...route,blockFrames:131},settings);
+  const reblocked=await live.replay(assets,arranged,{...route,blockFrames:512},settings);
+  const baseline=await live.replay(assets,arranged,{end:route.end,events:[]},settings);
+  assert.deepEqual(faded.value.samples,reblocked.value.samples);
+  assert.equal(faded.report.profile.starts,1);
+  assert.equal(faded.report.profile.lateEvents,2);
+  assert.deepEqual(faded.report.joins,[]);
+  assert.deepEqual(faded.report.trace.filter(row=>row.kind==='layer-gain')
+    .map(({from,target,startFrame,endFrame})=>[from,target,startFrame,endFrame]),
+  [[0,1,2000,6000],[.5,.25,4000,6000],[.25,0,8000,10000]]);
+  assert(faded.report.trace.some(row=>row.kind==='layer-ignored' && row.reason==='stale-intent'));
+  assert.deepEqual(faded.report.layerGains.reed,{gain:0,target:0,startFrame:8000,endFrame:10000});
+
+  const {samples}=baseline.value;
+  for (let i=0;i<samples.length;i++) {
+    const frame=i>>1;
+    const gain=frame<4000 ? Math.max(0,(frame-2000)/4000) :
+      frame<6000 ? .5-.25*(frame-4000)/2000 : .25*Math.min(1,Math.max(0,(10000-frame)/2000));
+    assert(Math.abs(faded.value.samples[i]-samples[i]*gain)<2e-8,`feed at frame ${frame}`);
+  }
+});
+
+test('world recordings and live clock updates share initial layers, ramps, and held-note playback',async()=>{
+  const base=cue([[0,3.8,57]]);
+  const assets={air:base}, arranged={entry:'bank',segments:{bank:{source:'air',end:2,loop:false}}};
+  const clock={entry:'bank',sections:{bank:{resource:'bank'}},parameters:{danger:{default:.4,attack:.8}},
+    layerControls:{reed:{parameter:'danger',range:[.2,.6],attack:.35,release:.15}}};
+  const updates=[{time:.25,parameters:{danger:1}},{time:.75,parameters:{danger:0}}];
+  const world=KIT.world.runtime.create({id:'alarm',dt:.05,systems:{score:{kind:'adaptive-music',config:clock}},
+    commands:updates.map(row=>({tick:Math.round(row.time/.05),action:'world/input',
+      args:{port:'score/parameter.danger',value:row.parameters.danger}}))});
+  world.advance(26);
+  const rehearsal=KIT.music.production.rehearsal;
+  const trace=rehearsal.capture(world.recording(),{id:'watch'});
+  const steps=rehearsal.captureScore(clock,updates,{id:'watch',end:1.3});
+  assert(Math.abs(trace.layerGains.reed-.5)<1e-10);
+  const ramps=val=>val.intents.map(({kind,time,part,gain,ramp})=>[kind,time,part,gain,ramp]);
+  assert.deepEqual(ramps(trace),[
+    ['music-layer',.25,'reed',1,.35],['music-layer',.75,'reed',0,.15]
+  ]);
+  assert.deepEqual(ramps(trace),ramps(steps));
+  const replay=await live.replay(assets,arranged,live.fromTrace(JSON.parse(JSON.stringify(trace))),options);
+  const engine=live.open(assets,arranged,{...options,clock});
+  const livePCM=new Float32Array(replay.value.samples.length);
+  let frame=0;
+  for (const row of updates) {
+    const next=Math.round(row.time*rate);
+    livePCM.set(engine.pull(next-frame).samples,frame*2);
+    engine.update(row);
+    frame=next;
+  }
+  livePCM.set(engine.pull(livePCM.length/2-frame).samples,frame*2);
+  assert.deepEqual(livePCM,replay.value.samples);
+  assert.equal(replay.report.profile.starts,1);
+  assert.equal(replay.report.joins.length,0);
+  assert.throws(()=>engine.dispatch({kind:'music-layer',time:1.3,part:'absent',gain:1}),/Invalid live adaptive score intent/);
+  assert.throws(()=>engine.dispatch({kind:'music-layer',time:1.3,part:'reed',gain:-1}),/Invalid live adaptive score intent/);
+});

@@ -13,13 +13,13 @@
 
   function open(sources,spec,options={}) {
     check(fields(options,['assets','sampleRate','maxVoices','reservedVoices','foreground','priorities','traceLimit',
-      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime']),
+      'maxEvents','streams','readPage','pageSize','maxPages','masterGain','clock','startTime','layerGains']),
     'Invalid live score options');
     const {assets={},sampleRate:rate=48000,maxVoices=32,reservedVoices=Math.min(4,maxVoices-1),
-      foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0}=options;
+      foreground=[],priorities={},traceLimit=128,maxEvents=512,masterGain=-3,startTime=0,layerGains={}}=options;
     check(integer(rate,8000,96000) && integer(maxVoices,1,128) && integer(reservedVoices,0,maxVoices) &&
       integer(traceLimit,1,2048) && integer(maxEvents,1,4096) && finite(masterGain,-60,6) &&
-      finite(startTime,0,1e9) && Array.isArray(foreground) && foreground.every(id) &&
+      finite(startTime,0,1e9) && record(layerGains) && Array.isArray(foreground) && foreground.every(id) &&
       new Set(foreground).size===foreground.length && record(priorities) &&
       Object.entries(priorities).every(([name,priority])=>id(name) && integer(priority,-100,100)),
     'Invalid live score clock or voice limits');
@@ -32,6 +32,7 @@
     const persistent=spec.performers && P.musicPersistentPerformers.prepare(spec.performers,
       {sources,compiled,segments,entry:spec.entry,placements:musicNames.map(source=>({source,kind:'segment'}))});
     const carries=new Set(persistent?.names);
+    const parts=new Set(Object.values(compiled).flatMap(score=>Object.keys(score.tracks)));
     const entrySource=compiled[segments[spec.entry].source];
     const room=A.makeSessionRoom(persistent?.room ?? entrySource.room,rate);
     check([...streams.streams.keys()].every(name=>!Object.hasOwn(stingers,name)),
@@ -41,6 +42,10 @@
     const initial=control && machine.inspect(control);
     check(!initial || initial.section===spec.entry && Object.keys(options.clock.sections).every(known),
       'Live score and world clock must share an entry and use authored sections');
+    const initialLayers=Object.entries({...initial?.layerGains,...layerGains});
+    check(initialLayers.every(([part,gain])=>parts.has(part)&&finite(gain,0,1)),
+      'Initial live layer gains need known score parts and values from zero to one');
+    const layerLevels=new Map(initialLayers.map(([part,gain])=>[part,{from:gain,target:gain,startFrame:0,endFrame:0}]));
     const time=()=>frame/rate, snap=seconds=>Math.round(seconds*rate), inputFrame=seconds=>snap(seconds-startTime);
     const fg=new Set(foreground), scale=db(masterGain), edgeFade=Math.max(2,Math.round(rate*.008));
     const desk=new Map(), echoes=new Map(), indexes=new Map(), recentNotes=new Map();
@@ -51,6 +56,23 @@
       streamGaps:0,peakVoices:0,peakClips:0,peak:0,clippedFrames:0,blocks:0};
     let frame=0, order=0, clipId=0, incomingRule=null, active, pending, newest, lastBlock=null, roomLastInput=null;
     const log=(kind,detail)=>boundedPush(trace,{kind,frame,time:time(),...detail},traceLimit);
+    function gainAt(row) {
+      if (!row) return 1;
+      if (frame>=row.endFrame) return row.target;
+      return row.from+(row.target-row.from)*(frame-row.startFrame)/(row.endFrame-row.startFrame);
+    }
+    function setLayer(intent) {
+      const {part,gain:target,ramp=.05}=intent, previous=layerLevels.get(part);
+      const last=previous?.intent;
+      if (last && (intent.time<last.time || (intent.time===last.time && intent.serial!==undefined &&
+        last.serial!==undefined && intent.serial<=last.serial))) {
+        log('layer-ignored',{part,reason:'stale-intent',trigger:intent});
+        return;
+      }
+      const from=gainAt(previous), startFrame=frame, endFrame=frame+snap(ramp);
+      layerLevels.set(part,{from,target,startFrame,endFrame,intent});
+      log('layer-gain',{part,from,target,startFrame,endFrame,trigger:intent});
+    }
     for (const [source,score] of Object.entries(compiled)) {
       const parts=Object.entries(score.tracks);
       const rows=parts.flatMap(([part,track],rank)=>{
@@ -113,7 +135,7 @@
             l:0,r:0,send:track.mix.send,until:-1};
           echoes.set(echoKey,echo);
         }
-        row={strip:A.scoreStrip(source,part,rate),echo,track,key,l:0,r:0,until:0};
+        row={strip:A.scoreStrip(source,part,rate),echo,track,key,part,l:0,r:0,until:0};
         desk.set(key,row);
       }
       if (row.clip!==clip) {
@@ -121,6 +143,16 @@
         row.strip.resetClock();
       }
       return row;
+    }
+    function creditNote(voice,from,gain,velocity){
+      const {clip,part,lane,pitch}=voice;
+      if (!clip.finished) {
+        if (!clip.listen || clip.listen.includes(part)) clip.spoke=true;
+        memory?.add({source:clip.source,segment:clip.section,instance:clip.id,at:time(),from,
+          to:from+3*eps,gain,layers:clip.layers,note:{part,midi:pitch}});
+      }
+      recentNotes.set(lane.key,{time:time(),velocity});
+      voice.unheard=undefined;
     }
     function addNote(request) {
       const {clip,event}=request;
@@ -142,10 +174,9 @@
       const persistent=carries.has(part) && clip.kind==='segment';
       const voice={...tone,part,clip,lane,persistent,off:snap(row.time+row.gate),pitch:note.midi,
         choke:track.mix.choke ? (persistent ? 'live/' : clip.source+'/')+track.mix.choke : null};
-      if (!clip.listen || clip.listen.includes(part)) clip.spoke=true;
-      memory?.add({source:clip.source,segment:clip.section,instance:clip.id,at:time(),from:note.time,
-        to:note.time+3*eps,gain:row.renderGain,layers:clip.layers,note:{part,midi:note.midi}});
-      recentNotes.set(lane.key,{time:time(),velocity:note.velocity});
+      if (clip.kind==='segment' && gainAt(layerLevels.get(part))===0)
+        voice.unheard={from:note.time,gain:row.renderGain,velocity:note.velocity};
+      else creditNote(voice,note.time,row.renderGain,note.velocity);
       return voice;
     }
     function start(request) {
@@ -346,6 +377,7 @@
           log('late-event',{framesLate:late,trigger:row.intent});
         }
         if (row.intent.kind==='music-transition') plan(row);
+        else if (row.intent.kind==='music-layer') setLayer(row.intent);
         else (cues ??= []).push(row.intent);
       }
       if (pending) commit();
@@ -365,6 +397,7 @@
         (intent.serial===undefined || integer(intent.serial,0,Number.MAX_SAFE_INTEGER)) &&
         (intent.kind==='music-transition' ? known(intent.from) && known(intent.to) &&
           record(intent.layers ?? {}) && Object.entries(intent.layers ?? {}).every(([key,level])=>id(key) && finite(level,0,1)) :
+          intent.kind==='music-layer' ? K.music.layerIntent(intent) && parts.has(intent.part) :
           intent.kind==='music-cue' && token(intent.resource ?? intent.cue)),
       'Invalid live adaptive score intent');
       check(intents.length<maxEvents,'Live adaptive event queue is full');
@@ -379,6 +412,8 @@
       check(intents.length+result.intents.length<=maxEvents,'Live adaptive event queue is full');
       check(result.intents.every(intent=>intent.kind!=='music-transition' || known(intent.from) && known(intent.to)),
         'Control clock emitted an unknown live score section');
+      check(result.intents.every(intent=>intent.kind!=='music-layer' || parts.has(intent.part)),
+        'Control clock emitted an unknown live score part');
       for (const intent of result.intents) dispatch(intent);
       control=result.state;
       return machine.inspect(control);
@@ -417,6 +452,10 @@
           }
           const lane=voice.lane;
           if (lane) {
+            if (voice.unheard && gainAt(layerLevels.get(voice.part))>0) {
+              const {from,gain,velocity}=voice.unheard;
+              creditNote(voice,from,gain,velocity);
+            }
             lane.l+=vl; lane.r+=vr;
             lane.until=frame+rate*.12;
           } else {
@@ -429,15 +468,17 @@
             desk.delete(key);
             continue;
           }
-          const {clip,strip,echo,track}=lane;
+          const {clip,strip,echo,track,part}=lane;
           const local=clip.position+(frame-clip.first)/rate;
           strip.tick(lane.l,lane.r,frame,mixed,local,
             track.mix.duck ? recentNotes.get(clip.source+'/'+track.mix.duck.from+(clip.kind==='segment' ? '' : '/accent')) ?? null : null);
           lane.l=lane.r=0;
-          l+=mixed[0]; r+=mixed[1];
-          sendL+=mixed[0]*mixed[2]; sendR+=mixed[1]*mixed[2];
+          const level=clip.kind==='segment'?gainAt(layerLevels.get(part)):1;
+          const dryL=mixed[0]*level, dryR=mixed[1]*level;
+          l+=dryL; r+=dryR;
+          sendL+=dryL*mixed[2]; sendR+=dryR*mixed[2];
           if (echo) {
-            echo.l+=mixed[0]*mixed[3]; echo.r+=mixed[1]*mixed[3];
+            echo.l+=dryL*mixed[3]; echo.r+=dryR*mixed[3];
             if (Math.max(Math.abs(echo.l),Math.abs(echo.r))>1e-7) {
               echo.until=frame+echo.tailFrames;
               echo.send=mixed[2];
@@ -479,6 +520,9 @@
         pending:pending ? {to:pending.row.intent.to,frame:pending.at,rule:pending.row.intent.rule ?? null} : null,
         clock:control ? machine.inspect(control) : null, heard:phrasing.counts(),
         ...(memory && {themes:memory.at(time())}),
+        ...(layerLevels.size && {layerGains:Object.fromEntries([...layerLevels].map(([part,row])=>[
+          part,{gain:gainAt(row),target:row.target,startFrame:row.startFrame,endFrame:row.endFrame}
+        ]))}),
         profile:{...profile,activeVoices:voices.length,queued:intents.length,waiting:waiting.length,
           maxVoices,reservedVoices,stream:streams.profile(),lastBlock},joins,trace});
     }

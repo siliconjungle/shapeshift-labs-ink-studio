@@ -29,8 +29,8 @@ const report = score.inspect();
 its quantization, cue requests, and cancellation of pending control rules.
 Advance it with world time even when no parameters change. If the world already
 emits committed intents, omit `clock` and call
-`score.dispatch(intent, { observedAt })` for each `music-transition` or
-`music-cue`. Map a world sound to a resource by dispatching a `music-cue`.
+`score.dispatch(intent, { observedAt })` for each `music-transition`,
+`music-cue`, or `music-layer`. Map a world sound to a resource by dispatching a `music-cue`.
 `observedAt` defaults to the current output position. With nonzero `startTime`,
 world timestamps remain absolute, and output sample positions start at zero.
 
@@ -39,6 +39,43 @@ world timestamps remain absolute, and output sample positions start at zero.
 voice worker or output producer with a short buffer before the device.
 Choose the buffer size for the host and call `prefetch` ahead of consumption.
 No I/O takes place inside `pull`.
+
+## Change a layer while it plays
+
+Bind each part to a named adaptive score parameter or emotion. Add the
+following to the score clock config to let danger bring in the kick.
+
+```js
+parameters: { danger: { default: 0 } },
+layerControls: {
+  kick: { parameter: 'danger', range: [0.15, 0.9], attack: 0.4, release: 0.8 }
+}
+```
+
+`range` names the input values for silence and full gain. The gain between
+them is linear and clamps to 0–1 outside the range. Reverse the endpoints for
+a layer that fades out as the input rises. The binding reads the input target.
+The mixer applies `attack` and `release` in seconds on the sample clock.
+The clock emits a `music-layer` intent when the mapped target changes.
+
+Keep the authored section gain positive for parts you want to reveal. The
+live gain multiplies it. While a live layer is at zero, its notes, envelopes,
+and instrument state continue under the normal voice budget. Ramps affect
+the dry signal and new room and tape sends. Existing effect tails decay in
+place. Bridge and stinger tracks have their own gains.
+
+Hosts can set `layerGains: { kick: 0 }` in `live.open` and dispatch gain
+intents directly. `time` uses the same clock as the other music intents.
+
+```js
+score.dispatch({ kind: 'music-layer', time: 3.8, part: 'kick', gain: 1, ramp: 0.4 });
+```
+
+A new ramp starts from the current gain on its first sample, including when
+it interrupts a previous ramp. Delivery after the intent time starts the
+ramp on the next available sample. `ramp: 0` applies an immediate change.
+Omit `ramp` for a 50 ms fade. `inspect().layerGains` shows current and target
+gains, and the `layer-gain` trace rows include the start and end frames.
 
 ## What plays through a join
 
@@ -109,7 +146,9 @@ const route = live.fromTrace(capturedTrace, {
 const { value, report } = await live.replay(sources, timeline, route, options);
 ```
 
-A route is `{ end, events: [{ intent, observedAt }], blockFrames? }`.
+A route is `{ end, events: [{ intent, observedAt }], blockFrames?, layerGains? }`.
+Adaptive score traces include the initial gains and the committed gain
+changes for live replay. Route gains take precedence for those parts.
 Change `observedAt` to simulate late delivery and leave `intent.time` intact.
 The replay feeds the same causal `pull` path and measures PCM around each
 retained join, including the sample-to-sample step and local levels.
@@ -128,3 +167,15 @@ Open `floodgate/index.html` to drive the demo, or listen to
 a late arrival, a long dwell, and two bursts of world cues. Its JSON report
 records which notes carried and why the tower's phrase changes after the
 first pass.
+
+Run the Signal Watch example to listen to the same approach on a single
+section.
+
+```sh
+node examples/music-production/live-layer-controls.cjs ./signal-watch
+```
+
+In `signal-watch/mix/score.wav`, danger begins to rise at 1.90 s and reaches
+its highest target at 3.80 s. It starts to fall at 6.05 s. The pulse starts
+silently with the score and plays as one held note throughout the fade.
+`signal-watch/mix/listen.json` has the sample positions for each ramp.
