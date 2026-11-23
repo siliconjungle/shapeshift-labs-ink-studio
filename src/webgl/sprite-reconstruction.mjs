@@ -65,7 +65,8 @@ uniform vec4 u_range,u_splatPlane;
 uniform vec2 u_surfaceViewport,u_artScale,u_sunGain,u_size;
 uniform int u_phase,u_step;
 uniform bool u_ortho,u_depth,u_normal,u_emission,u_baked,u_effect,u_index,u_graphDepth,u_portalCover,u_markPass;
-uniform float u_scale,u_effectDepth;
+uniform float u_scale,u_effectDepth,u_filterSoftness;
+uniform bool u_filterMatte;
 ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arrivalPlane;'}
 ${section ? cutaway : ''}
 ${env?.media ? environmentMediaSource(env.lit) : ''}
@@ -110,7 +111,7 @@ void main(){
   ${env?.media ? 'if(!u_index)rgb=envMedia(rgb,gl_FragCoord.xy,u_surfaceViewport,axial);' : ''}
   rgb=mix(rgb,u_fog,fog);
   ${section ? 'rgb=mix(rgb,u_sectionEdge.rgb,sectionInk(margin));' : ''}
-  color=u_index?vec4(float(u_portalCover)):vec4(rgb,1);
+  color=u_filterMatte?vec4(vec3(u_filterSoftness),1):u_index?vec4(float(u_portalCover)):vec4(rgb,1);
   depth=vec4(d,0,0,1);
   water=vec4(mark,1);
   ${glassLayers ? 'splitOpaqueSurface(color,z);' : ''}
@@ -145,6 +146,7 @@ void main(){
         index,
         graphDepth,
         anchors,
+        coverageFilter,
         glassLayers,
         portalCover,
         arrivalPlane,
@@ -169,6 +171,7 @@ void main(){
         u_surfaceViewport: [width, height],
         u_index: !!index,
         u_markPass:!!anchors,
+        u_filterMatte:!!coverageFilter,
         u_glassBoundary: 13,
         u_graphDepth: !!graphDepth,
         u_portalCover: !!portalCover,
@@ -193,6 +196,7 @@ void main(){
           u_units: tile.unitsPerPixel * placement.scale,
           u_scale: placement.scale,
           u_phase: phase,
+          u_filterSoftness:coverageFilter?.at(placement.material) ?? 1,
           u_step: step,
           u_depth: placement.depth,
           u_normal: !!sun && placement.lighting,

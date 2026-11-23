@@ -1,3 +1,4 @@
+import { filterMatte } from './coverage-filter.mjs';
 import {markVertexUniforms,markVertex,markFragmentUniforms,markSplatWrite,markResolve} from './rest-marks.mjs';
 import { gaussianProxyVertex, gaussianProxyFragment } from './gaussian-part-proxies.mjs';
 import { gaussianHarmonicGLSL } from './gaussian-harmonics.mjs';
@@ -36,7 +37,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -479,6 +480,7 @@ uniform float u_idx, u_gaussianNormalCutoff;
 uniform bool u_paintPass; flat in int v_paint;
 ${depthMeshProxy ? 'uniform highp sampler2D u_meshDepthProxy;' : ''}
 ${coverageVote ? 'uniform bool u_coverageVotePass;' : ''}
+${coverageFilter ? filterMatte : ''}
 ${relighting ? 'flat in vec4 v_relight;' : ''}
 ${optical ? 'flat in vec4 v_optical; flat in vec3 v_scatterTint, v_reflectTint; flat in float v_opticalFog;' : ''}
 layout(location=0) out vec4 o;
@@ -638,6 +640,10 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
   ${footprints ? 'if(shaped) a=min(.99,g);' : ''}
   ${stableDetail ? 'a *= v_detailGeometry;' : ''}
   if (a < 0.004) discard;
+  ${coverageFilter ? `if(u_filterMatte){
+    o=vec4(vec3(filterSoftness(int(v_ix))*a),a);od=vec4(0);oa=vec4(0);
+    return;
+  }` : ''}
   vec3 rgb = v_color.rgb;
 ${materialStyles ? `
   if ((v_fk < 0.0${stableDetail ? ' || v_detailTexture < 1.0' : ''}) && (int(v_pixelStyle.y) & 2048) != 0) {

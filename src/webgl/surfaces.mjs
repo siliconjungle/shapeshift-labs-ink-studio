@@ -73,7 +73,8 @@ ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arri
 uniform vec2 u_surfaceViewport;
 uniform vec3 u_fog;
 uniform bool u_index, u_graphDepth, u_portalCover;
-uniform bool u_uvSlip;
+uniform bool u_uvSlip, u_filterMatte;
+uniform float u_filterSoftness;
 ${maskedPart ? 'uniform int u_geometryCode;uniform vec2 u_partGrid;'+spriteLOD : ''}
 uniform vec4 u_uvTransform, u_uvBounds;
 ${paletteSampling ? `uniform float u_samplingScale;
@@ -138,6 +139,7 @@ void main(){
   if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
   ${section ? 'float margin=sectionMargin(v_world,v_depth); if(margin<0.0)discard;' : ''}
   ${anchors ? 'color=vec4(v_world,v_marks.x);depth=vec4(v_rest,1);return;' : ''}
+  if(u_filterMatte){color=vec4(vec3(u_filterSoftness),1);depth=vec4(0);water=vec4(0);return;}
   float d=clamp((v_depth-u_range.x)/(u_range.y-u_range.x),0.0,1.0);
   float fog=u_range.z<1.0?smoothstep(u_range.z,1.0,d)*u_range.w:0.0;
   vec3 mark=vec3(0.0), rgb=ink.rgb;
@@ -507,7 +509,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
-        section, anchors, engraving
+        section, anchors, engraving, coverageFilter
       }
     ) {
       upload(atlas);
@@ -523,7 +525,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         integralTextures.delete(filter);
       }
       const useSampling = filters.size > 0;
-      const lit = Boolean(lighting?.active && !index);
+      const lit = Boolean(lighting?.active && !index && !coverageFilter);
       const normalMapped = lit && Boolean(atlas.normalPixels);
       if (normalMapped) {
         gl.activeTexture(gl.TEXTURE0 + 24);
@@ -543,7 +545,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      const etched=!index && engraving && atlas.surfaceCharts?.some(chart=>engraving.mesh(chart)) ? engraving : null;
+      const etched=!coverageFilter && !index && engraving && atlas.surfaceCharts?.some(chart=>engraving.mesh(chart)) ? engraving : null;
       if(etched || anchors)bindMarks(atlas,anchors,etched);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
@@ -560,6 +562,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLit: 24,
         ...(normalMapped && { u_surfaceNormalMap: 24, u_surfaceNormals: surfaceNormals, u_surfaceEye: eyeFromView(view) }),
         u_index: +index,
+        u_filterMatte: !!coverageFilter,
         u_glassBoundary: 13,
         u_graphDepth: graphDepth,
         u_portalCover: portalCover,
@@ -578,7 +581,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if (lit && !normalMapped) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);
       let projectionIndex = 0;
-      function drawRange(first, end) {
+      function drawProjected(first, end) {
         if (!projections.length) {
           gl.drawArrays(gl.TRIANGLES, first, end - first);
           return;
@@ -590,6 +593,22 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           shader.set({ u_affine: style?.affine ?? false, u_vertexSnap: (style?.vertexSnap ?? 0) * samplingScale,
             ...(style?.affine && { u_projectionBounds: style.bounds }) });
           gl.drawArrays(gl.TRIANGLES, first, stop - first);
+          first = stop;
+        }
+      }
+      let chartIndex = 0;
+      function drawRange(first, end) {
+        if (!coverageFilter) {
+          drawProjected(first,end);
+          return;
+        }
+        const charts = atlas.surfaceCharts ?? [];
+        while (first < end) {
+          while (charts[chartIndex]?.end <= first) chartIndex++;
+          const next = charts[chartIndex], chart = next?.first <= first ? next : null;
+          const stop = Math.min(end,(chart ? chart.end : next?.first) ?? end);
+          shader.set({ u_filterSoftness:coverageFilter.at(chart?.materialId) });
+          drawProjected(first,stop);
           first = stop;
         }
       }

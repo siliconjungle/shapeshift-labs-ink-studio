@@ -23,4 +23,6 @@ A sculpt material can override the scene mode with `pixelStyle: { coverage: 'sof
 
 The wider footprint can slightly grow a silhouette and shade more fragments. Review critical thin gaps at the intended export size. Coverage follows the projected footprints, so a surface with large gaps still needs more samples. Picking uses the same coverage curve on the ray's world-space footprint.
 
+For four-sample coverage across splats, wires, meshes, and decals on the same art grid, see [Filter coverage before palette lookup](texel-coverage.md#filter-coverage-before-palette-lookup).
+
 The technique takes inspiration from elliptical screen-space reconstruction in [Surface Splatting by Zwicker et al.](https://www.merl.com/publications/TR2001-20).

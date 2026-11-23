@@ -171,7 +171,8 @@ uniform mat4 u_curveView,u_curveProjection;
 uniform vec3 u_curveFog;
 uniform vec2 u_curveFogRange;
 uniform float u_curveNear,u_curveFar,u_curveSetback;
-uniform bool u_curveOrtho,u_curveHasProxy;
+uniform bool u_curveOrtho,u_curveHasProxy,u_filterMatte;
+uniform float u_curveArtScale;
 uniform highp sampler2D u_curveTiles,u_curveSolid,u_curveProxy;
 uniform int u_curveTileColumns;
 ${owner ? 'uniform sampler2D u_curveOwner,u_curveOwnerMask;' : ''}
@@ -239,8 +240,8 @@ void main() {
   for (int j=0; j<int(tile.y); j++) {
     int k = start+j;
     int id = int(tileRow(k >> 2)[k & 3]);
-    ${spriteLOD ? 'if (!spriteGeometry(int(spanRow(id,7).z),gl_FragCoord.xy)) continue;' : ''}
-    ${strandLOD ? 'int strandCode=int(spanRow(id,7).w); if (strandCode!=0 && !strandVisible(strandCode,gl_FragCoord.xy)) continue;' : ''}
+    ${spriteLOD ? 'if (!spriteGeometry(int(spanRow(id,7).z),gl_FragCoord.xy/u_curveArtScale)) continue;' : ''}
+    ${strandLOD ? 'int strandCode=int(spanRow(id,7).w); if (strandCode!=0 && !strandVisible(strandCode,gl_FragCoord.xy/u_curveArtScale)) continue;' : ''}
     Hit hit;
     if (!curveHit(id,origin,ray,interval,hit)) continue;
     float projected = projectedDepth(hit.depth);
@@ -310,11 +311,12 @@ void main() {
       vec3 at=origin+ray*(hit.depth/(-ray.z)),rest,rn,n;float stretch;
       curveChart(hit.row,at,ray,rest,rn,n,stretch);
       float footprint=2.*u_curveInvProjection.y/u_curveViewport.y*(u_curveOrtho?1.:hit.depth)*stretch;
-      rgb=surfaceEngraving(slot,rgb,rest,rn,curveMark(hit.row,4).xyz,n,footprint,1.,0.,vec3(0));
+      rgb=surfaceEngraving(slot,rgb,rest,rn,curveMark(hit.row,4).xyz,n,footprint,u_curveArtScale,0.,vec3(0));
     }` : ''}
     if (u_curveFogRange.x < 1.0) rgb = mix(rgb,u_curveFog,smoothstep(u_curveFogRange.x,1.0,normalized)*u_curveFogRange.y);
     ${wet ? 'vec3 mark; rgb = waterPaint(rgb,gl_FragCoord.xy,u_curveViewport,hit.depth,mark);' : ''}
     ${environment?.media ? 'rgb = envMedia(rgb,gl_FragCoord.xy,u_curveViewport,hit.depth);' : ''}
+    if(u_filterMatte)rgb=vec3(spanRow(hit.row,9).w);
     vec4 ink = vec4(rgb*hit.alpha,hit.alpha);
     float left = 1.0-o_color.a;
     o_color += ink*left;

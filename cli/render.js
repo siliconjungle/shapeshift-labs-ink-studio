@@ -53,6 +53,7 @@ const ArtStability = require('../src/art-stability.js');
 const { ditherFootprint } = require('./dither-footprint.js');
 const StableDetail = require('../src/stable-detail.js');
 const EdgeFilter = require('../src/edge-filter.js');
+const CoverageFilter = require('../src/coverage-filter.js');
 const MotionalCoverage = require('../src/motional-coverage.js');
 const TranslucentSilhouettes = require('../src/translucent-silhouettes.js');
 const SdfAssist = require('../src/sdf-assist.js');
@@ -133,6 +134,7 @@ const matteScope = Symbol('object matte capture budget');
 const deepReflection = Symbol('deep reflection plane');
 const shutterPlan = Symbol('shutter plan');
 const coverageLane = Symbol('motional coverage native/oversampled lane');
+const coverageFilterSample = Symbol('coverage filter sample');
 const nativePartMotion = Symbol('part motion native capture');
 const deferredShotCorrection = Symbol('shot correction after shutter integration');
 
@@ -428,7 +430,9 @@ function renderFrame(world, o, preparedPalettes) {
   const trackGlow = o[scopedGlowPass] || styled &&
     emissive?.profiles.some(profile => profile.glow?.strength || profile.glow !== undefined && effects?.halo);
   const stable = ArtStability.prepare(look.stable, o.stable, o.ditherSpaceOverride);
-  const specializedResolve = legacyLook && stable && stable.resolve !== 'native';
+  const filter = legacyLook && !probeView && CoverageFilter.prepare(o.coverageFilter ?? look.coverageFilter);
+  const filterSettings = o[coverageFilterSample] ?? filter;
+  const specializedResolve = legacyLook && !filter && stable && stable.resolve !== 'native';
   const anchoring = !o.raw && !o.captureCoverage && !!stable?.anchorSpaces.size;
   const paletteRules = legacyLook || coverageAware ? PixelLook.preparePaletteConstraints(o.paletteConstraints ?? look.paletteConstraints, {
     palette: world.pal, roles: world.paletteRoles, blueNoise: settings => blueNoise(world, settings),
@@ -731,7 +735,7 @@ function renderFrame(world, o, preparedPalettes) {
   const captureSurfaceMotion=partView&&(!!o.captureSurfaceMotion||ArtPasses.needsSurfaceMotion(requestedPasses));
   const surfaceReset=o.resetRenderHistory||o.resetSurfaceMotion;
   if (partView&&!captureSurfaceMotion&&surfaceReset) o.surfaceMotionHistory?.clear();
-  const captureTexturedSurface=Boolean(deepPlan)||captureSurfaceMotion||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
+  const captureTexturedSurface=Boolean(deepPlan)||captureSurfaceMotion||filterSettings?.varied||['objectId','materialId','objectPosition','surfaceUV','surfaceUVValid',
     'surfaceKind','partId'].some(channel=>passSelection.has(channel));
   const captureStrandMotion = partView && (!!o.captureStrandMotion || ArtPasses.needsStrandMotion(requestedPasses));
   const strandReset = o.resetRenderHistory || o.resetStrandMotion;
@@ -746,7 +750,7 @@ function renderFrame(world, o, preparedPalettes) {
       reflections:false, atmosphere:false, precipitation:false, rainImpacts:false, captureFog:false, volumeHistory:null,
       [captureCamera]:undefined, [deepScope]:null, [matteScope]:null
     })));
-  if (legacyLook && (specializedResolve || (o.colored && !tone))) {
+  if (legacyLook && !filter && (specializedResolve || (o.colored && !tone))) {
     const native = render(world, Object.assign({}, o, { colored: false, samples: true, worked: true, px, passes: [...passSelection], [scopedGlowPass]: trackGlow, [coverageLane]: 'native', artInkActive: !!ink,
       [subjectFocusPass]:focus,
       captureMotion, motionFrom, [nativePartMotion]: true, maskGrade: !tone && grade, reflectionTint: effects?.reflection,
@@ -1639,6 +1643,13 @@ function renderFrame(world, o, preparedPalettes) {
     if (captured && rayMedia) captured[i] = rayMedia.opacity();
     dep[i] = 1;
   }
+  const filterMatte = filterSettings?.varied ? new Float32Array(W * H).fill(1) : null;
+  const filterMeta = filterMatte && world.renderMetadata;
+  const filterRows = filterMeta?.materials?.map(filterSettings.at);
+  const filterAt = (i, sprite) => {
+    const label = sprite?.mesh?.material ?? sprite?.materialId;
+    return label !== undefined ? filterSettings.at(label) : filterRows?.[filterMeta?.materialIds?.[i]] ?? filterSettings.fallback;
+  };
   let drawn = 0;
   // colour per pixel (look.pixel): which dab is in front at each pixel, to be coloured afterwards from where the pixel lands on it
   let PIX =
@@ -1777,6 +1788,7 @@ function renderFrame(world, o, preparedPalettes) {
       const through = !filteredEdge && wd && a > .5 ? 0 : ia;
       edgePixels[p] = edgePixels[p] * through + (filteredEdge ? a : 0);
     }
+    if (filterMatte) filterMatte[p] = filterAt(i,sprite) * a + filterMatte[p] * ia;
     col[p3] = pr * a + col[p3] * ia;
     col[p3 + 1] = pg * a + col[p3 + 1] * ia;
     col[p3 + 2] = pb * a + col[p3 + 2] * ia;
@@ -3077,6 +3089,7 @@ function renderFrame(world, o, preparedPalettes) {
         col[q * 3 + 1] = c[1];
         col[q * 3 + 2] = c[2];
         if (transparent) captured[q] = 1;
+        if (filterMatte) filterMatte[q] = filterAt(sprOwner[q]);
         if (edgePixels) edgePixels[q] = 0;
         if (axialDepth) axialDepth[q] = eyeD - R + sprD[q] * 2 * R;
         if (fogOwners) fogOwners[q] = fogOwnerRows[sprOwner[q]] ?? 0;
@@ -3193,6 +3206,18 @@ function renderFrame(world, o, preparedPalettes) {
     }
   }
   SubjectFocus.grade(col,W,H,focus,focusPixel,fallingCoverage);
+  if (filter) {
+    if (W * H > 4_000_000) throw new RangeError('Coverage filtering is limited to four million native art pixels');
+    const samples = renderFrame(world, {
+      ...o, w:W*px, h:H*px, px:px/2, samples:true, worked:false, artGridScale:2,
+      coverageFilter:false, [coverageFilterSample]:filter, passes:[],
+      [coverageLane]:'oversampled', [subjectFocusPass]:focus, [deepScope]:null, [matteScope]:null,
+      captureMotion:false, capturePartMotion:false, captureStrandMotion:false, captureSurfaceMotion:false,
+      fragmentProbe:undefined, hybridDepthFrame:undefined, pick:undefined, volumeHistory:null,
+      surfaceMotionHistory:undefined, lookAudit:false, [captureCamera]:undefined
+    });
+    CoverageFilter.filter(col,alpha,samples,W,H,filterMatte);
+  }
   const masks = overlay && createMaskResolve(world, { w: W, h: H, time: t, x: X, y: Y, z: Z, depth, rayAt, span: R,
     ditherView, ditherPixelStep: artScale },
     overlay, localConstraints, o.maskGrade ?? (!tone && grade), lookPass?.local,paletteTrace);
@@ -3248,6 +3273,7 @@ function renderFrame(world, o, preparedPalettes) {
     if (partCapture) o.partMotionHistory?.store(motionReference.partMotion, partCapture.reset);
     return {
       w: W, h: H, color: Uint8Array.from(c2, v => Math.round(clamp(v, 0, 1) * 255)), depth: dep, drawn,
+      ...(filterMatte && {matte:filterMatte}),
       ...(strand?.inspected && { strandPixel: strand.inspected }),
       ...(deepFrame && { deep: deepFrame }),
       ...(objectMattes && {objectMattes}),
