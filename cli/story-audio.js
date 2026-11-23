@@ -103,4 +103,4 @@ async function command(file, plan, rest, opt, library) {
   graphOutputs([...inputs]).write(path.resolve(opt.out),[...output,{file:'report.json',document:documentReport}]);
 }
 
-module.exports = { command, usage, readNativeRun };
+module.exports = { command, usage, point, readNativeRun, readSoundReceipts };

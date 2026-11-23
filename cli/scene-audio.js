@@ -82,7 +82,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   const inline = proceduralScore?.score === undefined ? null : K.music.score.compile(proceduralScore.score);
   const scoreSystem = proceduralScore?.system, synthAsset = Symbol('procedural score'), productionAsset=Symbol('music production');
 
-  function render(sequence, { timeline, runtime: sceneRuntime, recordedThrough, trace = false, soundReceipts } = {}, selection, delivery=false) {
+  function render(sequence, { timeline, runtime: sceneRuntime, recordedThrough, trace = false, soundReceipts, audition } = {}, selection, delivery=false) {
     const start = sampleOf(sequence.startPoint), end = sampleOf(sequence.endPoint);
     const postSelected=post && (!selection || selection.kind==='stem' && !legacy.includes(selection.name));
     const mixStart=postSelected ? 0 : start;
@@ -146,7 +146,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         ...(duration!==undefined && {duration})});
     }
     function beat(event) {
-      if (!event || (!history && !soundReceipts)) return;
+      if (!event || (!history && !soundReceipts && !audition)) return;
       const {world,eventStream} = run.view(), W = K.world;
       const { id, tick, system, kind, branch, causes } = W.committedEvents.read(event,world.id,eventStream);
       const occurrence = occurrenceOf(event);
@@ -169,8 +169,9 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         report = { source, cue:voice.cue, asset:voice.asset, stem, bus:voice.bus ?? (stem==='music' ? 'music' : 'effects'),
           onsetSample:sample, arrivalSample:time, status:voice.status, position:voice.position, gain:voice.gain,
           ...(voice.selection && { selection:voice.selection }),
-          ...(voice.processing?.profiles.length && { processing:voice.processing }),
+          ...(voice.processing&&(voice.processing.profiles.length||voice.audition)&&{processing:voice.processing}),
           ...(voice.sound && { sound:voice.sound }),
+          ...(voice.audition && { audition:voice.audition }),
           ...(voice.impact && { impact:{...voice.impact, delay:voice.startDelay, startSample:sample+layerDelay} }) };
         if (history.cues.length >= 16384) throw new RangeError('Story audio trace exceeds its cue budget');
         history.cues.push(report);
@@ -296,7 +297,9 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         const saved = soundReceipts.get(beat(event)?.beatId);
         return saved ? [[event.id,saved]] : [];
       }));
-      const state = mixer?.frame({ query, listener, time, events, captureSources:trace, playback, receipts });
+      const target = audition && events.find(event=>event.id===audition.event && beat(event)?.beatId===audition.beatId);
+      const state = mixer?.frame({query,listener,time,events,captureSources:trace,playback,receipts,
+        ...(target && {audition})});
       const byId = history && state?.cues.length ? new Map(events.map(event=>[event.id,event])) : null;
       cueFrame(query, sample, nextSample, state?.listener);
       if (state) {
@@ -429,6 +432,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   }
   return Object.freeze({
     sampleRate,
+    soundFamilies:Object.freeze(Object.keys(spatial?.soundFamilies??{}).sort()),
     asset(name) {
       const audio = resolveAsset(name);
       if (!audio) throw new RangeError('Missing soundtrack asset ' + name);

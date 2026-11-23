@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ink Studio · World Cue Audition</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#101618;color:#f2eee3;--line:#3b4b47;--accent:#c9edb3;--muted:#becbc4}
+*{box-sizing:border-box}body{margin:0}main{width:min(740px,100%);margin:auto;padding:clamp(25px,6vw,65px) 22px}
+h1{font-size:clamp(30px,6vw,47px);line-height:1.06;margin:0 0 13px}
+header{margin-bottom:25px}header code{color:var(--muted);overflow-wrap:anywhere;font-size:13px}
+section,form{background:#192120;border:1px solid var(--line);border-radius:9px;padding:17px;margin-top:13px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.between{justify-content:space-between;align-items:center}
+button,input,select{font:inherit;color:inherit;background:#111917;border:1px solid #586b63;border-radius:5px;min-height:40px;padding:7px 10px}
+button{cursor:pointer}button:disabled{opacity:.55;cursor:default}button.primary{background:var(--accent);color:#18231a;border-color:var(--accent);font-weight:700}
+label{display:grid;gap:6px;color:var(--muted);font-size:13px;min-width:0}
+fieldset{border:0;margin:0;padding:0;min-width:0}fieldset .row+.row{margin-top:12px}input{width:8em}select{max-width:100%}
+progress{appearance:none;width:100%;height:11px;display:block;border:0;border-radius:20px;background:#101618;overflow:hidden}
+progress::-webkit-progress-bar{background:#101618}progress::-webkit-progress-value{background:var(--accent)}
+.rail{position:relative;margin:15px 0 10px}.rail i{position:absolute;top:-3px;bottom:-3px;border-left:2px solid #f2eee3;pointer-events:none}
+output{font:13px ui-monospace,monospace;color:var(--muted);overflow-wrap:anywhere}#status{display:block;margin-top:14px;color:var(--accent);min-height:1.3em}
+#voice-list{margin:0;padding:0;list-style:none;display:grid;gap:6px;font:14px ui-monospace,monospace;overflow-wrap:anywhere}
+#voice-list small{color:var(--muted);display:block;margin-top:4px}.notice{color:var(--muted);font-size:13px;margin:0}
+</style>
+<script type="module" src="/audition.mjs"></script>
+</head>
+<body>
+<main>
+<header><h1>World cue audition</h1><code id="beat"></code></header>
+<section aria-label="Scene loop">
+<div class="row between"><button type="button" class="primary" id="play" disabled>Play loop</button><output id="clock"></output></div>
+<div class="rail"><progress id="position" max="1" value="0" aria-label="Loop position"></progress><i id="onset" aria-hidden="true"></i></div>
+<p class="notice" id="range"></p>
+</section>
+<form id="controls" aria-label="Cue controls">
+<fieldset id="fields" disabled>
+<div class="row">
+<label>Binding<select id="binding"></select></label>
+<label>Sound family<select id="family"></select></label>
+</div>
+<div class="row">
+<label>Gain · dB<input id="gain" type="number" min="-36" max="12" step=".5" value="0" required></label>
+<label>High-pass · Hz<input id="highpass" type="number" min="0" max="4000" step="1" placeholder="Scene"></label>
+<label>Low-pass · Hz<input id="lowpass" type="number" min="40" max="22000" step="1" placeholder="Scene"></label>
+<button type="submit">Apply</button><button type="button" id="reset">Original mix</button>
+</div>
+</fieldset>
+<output id="status" role="status">Loading scene loop…</output>
+</form>
+<section aria-label="Current cue takes"><ul id="voice-list"></ul></section>
+</main>
+</body>
+</html>

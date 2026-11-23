@@ -135,21 +135,28 @@
     }
 
     function mix(query,listener,input){
-      const cue=cues.get(input.cue);
-      if(!cue)return null;
+      const sample=cues.get(input.cue), cue=input.routingCue===undefined?sample:cues.get(input.routingCue);
+      if(!sample||!cue)return null;
       const at=input.at??cue.at, positioned=at!==undefined, source=resolve(query,at);
       const variation=input.selection?.variation, detune=variation?2**(variation.pitchCents/1200):1;
-      const pitch=variation?.rate??Math.max(.001,Math.min(64,(input.pitch??1)*cue.pitch*detune));
+      const pitch=variation?.rate??Math.max(.001,Math.min(64,(input.pitch??1)*sample.pitch*detune));
       const entity=at?.entity??input.entity;
-      const processing=processor?.resolve(processor.has(input.audioProfile)?input.audioProfile:cue.audioProfile,
-        {cue:input.cue,entity,object:input.object??entity},query,source?.point,listener?.position);
+      let processing=processor?.resolve(processor.has(input.audioProfile)?input.audioProfile:cue.audioProfile,
+        {cue:input.routingCue??input.cue,entity,object:input.object??entity},query,source?.point,listener?.position);
+      const edit=input.audition;
+      if(edit&&(edit.highpass!==undefined||edit.lowpass!==undefined)){
+        processing={profiles:[],peaks:[],gainDb:0,...processing,
+          highpass:edit.highpass??processing?.highpass??0,lowpass:edit.lowpass??processing?.lowpass??22000};
+        check(processing.highpass<processing.lowpass,'The audition high-pass must be below its low-pass');
+      }
       const colorGain=processing?amplitude(-processing.gainDb):1;
       const sound=input.sound, sourceGain=sound?amplitude(soundReferenceDb-sound.sourceLevelDb):1;
-      const scale=Math.min(16384,(input.gain??1)*cue.gain*colorGain*sourceGain);
+      const scale=Math.min(16384,(input.gain??1)*sample.gain*colorGain*sourceGain*amplitude(-(edit?.gainDb??0)));
       const bus=input.bus??cue.bus??(input.impact?'effects':undefined);
-      const result={id:input.id,cue:input.cue,asset:cue.asset,mode:input.mode,offset:input.offset??0,
+      const result={id:input.id,cue:input.cue,asset:sample.asset,mode:input.mode,offset:input.offset??0,
         rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(bus!==undefined&&{bus}),
         ...(processing&&{processing}),...(sound&&{sound}),
+        ...(edit&&{audition:{binding:edit.binding}}),
         ...(input.impact&&{impact:input.impact,startDelay:input.startDelay}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
         ...(input.selection!==undefined&&{selection:variation?{...input.selection,variation:{...variation,rate:pitch}}:input.selection}),
@@ -157,7 +164,9 @@
           ...(input.gain!==undefined&&{gain:input.gain}),...(input.pitch!==undefined&&{pitch:input.pitch}),
           ...(input.exclude!==undefined&&{exclude:input.exclude}),
           ...(input.object!==undefined&&{object:input.object}),
-          ...(input.audioProfile!==undefined&&{audioProfile:input.audioProfile})}})};
+          ...(input.audioProfile!==undefined&&{audioProfile:input.audioProfile}),
+          ...(input.routingCue!==undefined&&{routingCue:input.routingCue}),
+          ...(edit&&{audition:edit})}})};
       const contact=factor=>input.contact&&{contact:{...input.contact,targetGain:Math.min(16384,input.contact.targetGain*cue.gain*colorGain)*factor}};
       if(!positioned)return {...result,...contact(1),status:'unpositioned',position:null,distance:null,gain:scale,
         bands:{low:scale,mid:scale,high:scale},cutoff:22000,delay:0};
@@ -233,7 +242,7 @@
       return materials.get(material)?.[interaction]??profile?.sounds?.[interaction];
     }
     function frame({query,time=0,from=time,listener,events=[],animation=[],timeline,captureSources=false,
-      playback=livePlayback,receipts,contacts}={}){
+      playback=livePlayback,receipts,contacts,audition}={}){
       check(finite(time,0,1e9)&&finite(from,-1e9,time)&&Array.isArray(events)&&events.length<=10000&&
         Array.isArray(animation)&&animation.length<=128&&
         (contacts===undefined||Array.isArray(contacts)&&contacts.length<=4096)&&
@@ -248,11 +257,29 @@
         check(active.length+shots.length<=4096,'Spatial audio mix exceeds its voice budget');
       }
       function route(row,serial,contact){
+        const edit=audition?.event===row.id?audition:undefined;
+        function emit(raw, members, voiceId, binding, reading){
+          if(!members.length)return;
+          const tweak=edit&&(edit.binding===undefined||edit.binding===binding)?{...edit,binding}:undefined;
+          let routingCue;
+          if(tweak?.family){
+            routingCue=members[0].cue;
+            members=selection.choose(selection.rules([{id:'audition',family:tweak.family}],binding),
+              reading??S.readContact(row,contact,surfaceAt(query,raw.at),{}),serial,binding,S.createPlayback())??[];
+            check(members.length>0,'No eligible take in sound family '+tweak.family+' for this interaction');
+          }
+          for(const member of members){
+            const layer=member.selection?.layer;
+            add({...raw,...member,id:layer?'layer:'+JSON.stringify([voiceId,layer.at]):voiceId,
+              gain:(raw.gain??1)*(layer?.weight??1),...(tweak&&{audition:tweak}),routingCue},shots);
+          }
+        }
         if(row.kind===W.soundEvents.kind){
           W.soundEvents.validate(row);
           const sound=W.soundEvents.describe(row), sourceEvent=W.committedEvents.eventId(row.id)?row.id:undefined;
-          add({id:serial,cue:sound.cue,at:sound.at,mode:'cue',sound,duration:sound.duration,sourceEvent,
-            onset:W.timedEvents.timeOf(row),audioProfile:row.audioProfile,object:row.object,entity:row.entity},shots);
+          emit({at:sound.at,mode:'cue',sound,duration:sound.duration,sourceEvent,
+            onset:W.timedEvents.timeOf(row),audioProfile:row.audioProfile,object:row.object,entity:row.entity},
+            [{cue:sound.cue}],serial,'direct');
           return;
         }
         const at=eventAt(row), gain=row.gain??1, pitch=row.pitch??1;
@@ -268,8 +295,9 @@
           if(binding.on.system!==undefined&&binding.on.system!==row.system||!Q.condition(binding.on.where,row))continue;
           const {impact,threshold}=binding;
           if(impact)matched=true;
-          if(binding.select&&profile===undefined)profile=surfaceAt(query,at)??null;
-          const reading=(binding.select||threshold)&&S.readContact(row,contact,profile,binding);
+          const needsContext=binding.select||edit?.family;
+          if(needsContext&&profile===undefined)profile=surfaceAt(query,at)??null;
+          const reading=(needsContext||threshold)&&S.readContact(row,contact,profile,binding);
           if(threshold&&(reading.thresholdValue===undefined||reading.thresholdValue<threshold.min))continue;
           let chosen;
           if(binding.select){
@@ -282,19 +310,12 @@
           const site=binding.at??at, voiceId=serial+'/'+binding.name, level=gain*(binding.gain??1);
           const layerInput=impact?{...raw,bus:binding.bus,startDelay:binding.delay??0,
             impact:{...impact,...(threshold&&{threshold:{...threshold,value:reading.thresholdValue}})}}:raw;
-          if(chosen){
-            for(const {cue,selection} of chosen){
-              const layer=selection.layer;
-              add({...layerInput,id:layer?'layer:'+JSON.stringify([voiceId,layer.at]):voiceId,
-                cue,selection,at:site,gain:level*(layer?.weight??1)},shots);
-            }
-          }else{
-            const cue=binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
-            if(cue)add({...layerInput,id:voiceId,cue,at:site,gain:level},shots);
-          }
+          const fallback=chosen?undefined:binding.cue??materialCue(query,row,site,binding.interaction)??row.cue;
+          emit({...layerInput,at:site,gain:level},chosen??(fallback?[{cue:fallback}]:[]),
+            voiceId,binding.name,reading);
         }
         check(!recorded||replayed===recorded.size,'Saved sound choice no longer matches its binding');
-        if(!matched&&eventKinds.includes(row.kind)&&cueName(row.cue))add({...raw,id:serial,cue:row.cue},shots);
+        if(!matched&&eventKinds.includes(row.kind)&&cueName(row.cue))emit(raw,[{cue:row.cue}],serial,'direct');
       }
       for(const row of emitters)add({...row,id:'emitter:'+row.name,mode:'loop',offset:(row.offset??0)+time*cues.get(row.cue).pitch},active);
       const sustained=playback.contactFrame?.(time,query,events,contacts);
@@ -334,8 +355,9 @@
       return freeze(copy({time,listener:ear&&{position:ear.position,forward:ear.forward,up:ear.up},active,cues:shots,
         ...(contactChanges?.length&&{contactChanges})}));
     }
-    function cue({ query, listener, cue, at, gain, pitch, exclude, object, audioProfile } = {}) {
-      return mix(query, listenerFrame(query, listener), { cue, at, gain, pitch, exclude, object, audioProfile, mode: 'cue' });
+    function cue({ query, listener, cue, at, gain, pitch, exclude, object, audioProfile, routingCue, audition } = {}) {
+      return mix(query, listenerFrame(query, listener),
+        { cue, at, gain, pitch, exclude, object, audioProfile, routingCue, audition, mode: 'cue' });
     }
     return Object.freeze({frame,cue,createPlayback});
   }
