@@ -129,6 +129,12 @@
       inputs:{source:'raster',palette:'palette',options},outputs:{value:'raster',indices:'raster'},
       run({source,palette,options}){return E.paletteFault(source,palette,options);}
     },
+    'fx.moveRegions':{
+      description:'Move paint by stable label ID, composite overlapping pieces by depth, and mask newly exposed pixels.',
+      inputs:{source:'raster',labels:'raster',transforms:{type:'array<record>',default:[]},options},
+      outputs:{value:'raster',labels:'raster',gaps:'raster'},
+      run({source,labels,transforms,options}){return E.moveRegions(source,labels,transforms,options);}
+    },
     'fx.trackRegions': {
       inputs: { frames: 'array<raster>', options },
       outputs: { value: 'array<record>', labels: 'raster', time: 'number', frame: 'number', events: 'array<record>' },

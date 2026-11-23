@@ -264,6 +264,7 @@ const specifications = {
     writes: [{ id: 'scanner', rect: [1, 0, 2, 2], priority: 3, attributes: { ink: 2 } }] } },
   'fx.paletteCycle': { inputs: { source: slots, cycles: { shimmer: { range: [0, 1], period: 2 } } } },
   'fx.paletteFault': { inputs: { source: slots, options: { swaps: [[0, 1]] } } },
+  'fx.moveRegions': { inputs: { source: rgba, labels: slots, transforms: [{ id: 1, offset: [1, 0], depth: -1 }] } },
   'fx.regionObservations': { inputs: { frames: [mask, mask] } },
   'fx.analyze': { output: 'paths' },
   'proc.sphereMap': { inputs:{options:{width:32,height:24}} },

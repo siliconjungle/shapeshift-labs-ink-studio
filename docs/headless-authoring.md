@@ -930,6 +930,7 @@ outside the original image.
 | `fx.paletteCycle` | [Rotate named palette ranges](#cycle-an-indexed-palette) independently. Outputs the display image, unchanged indices, and rotated palette. |
 | `fx.paletteFault` | Swap pairs of palette slots, or force selected slots to a fixed one. Use `options.mask` to localize edits. Outputs RGBA `value` and edited `indices`. |
 | `fx.trackRegions` | Track connected regions across a sequence of `frames`. Outputs persistent region records, ID `labels`, lineage `events`, source `frame`, and source `time`. |
+| `fx.moveRegions` | [Move painted regions by ID](raster-region-move.md) with independent transforms and depth. Outputs the image, visible IDs, and gaps exposed by the move. |
 
 Both blurs filter premultiplied colour and alpha with `edge` set to
 `clamp`, `transparent`, or `wrap`. Kernel blur defaults to clamped edges.
