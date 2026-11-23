@@ -151,6 +151,34 @@ at its authored world orientation as the camera turns. Use the existing
 paint without live shading. The software renderer and CLI composite the
 paint with real geometry and depth-dependent fog.
 
+### Paint bump height
+
+Add an optional `bump` block to a scenery, card, or impostor atlas. Paint
+positive heights for raised castings, or negative heights for engraving.
+The live light responds to the slopes at the painted edges. The bump layer
+combines with any authored normal map or `lightPaint` underneath it.
+
+```json
+"bump": {
+  "strength": 1,
+  "paint": [
+    { "height": 2, "shape": { "type": "rect", "rect": [18, 12, 27, 4] } },
+    { "height": -1, "shape": { "type": "path", "points": [[21, 15], [36, 15]], "width": 1 } }
+  ]
+}
+```
+
+Heights are in texel units from −8 to 8. Later strokes replace earlier
+heights. Use a height of zero to erase a mark. `strength` defaults to 1 and
+accepts values from 0 to 4. Gradient samples stay within each tile, its
+visible silhouette, and its scenery depth band. Color, opacity and placement
+depth come from the atlas. Placement lighting and a scene light control the
+resulting shade.
+
+Run `node examples/painted-bump-demo.cjs signal-works.html` to paint, relight,
+and download the Signal Works atlas. Put its JSON and color PNG next to each
+other to load them through the usual atlas manifest path.
+
 For a single flattened painting, match the reference camera and keep turns
 short. Wider turns can expose gaps behind painted foreground details. Fill
 those areas with a backing card or geometry when a shot needs them.

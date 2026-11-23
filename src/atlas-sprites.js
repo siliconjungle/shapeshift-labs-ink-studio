@@ -31,6 +31,52 @@ const AtlasSprites = (() => {
     return [Math.round(x-view.pivot.x),-Math.round(view.pivot.y-y)];
   }
 
+  function paintStroke(paint, color) {
+    const { shape } = paint ?? {};
+    if (!shape || Object.keys(shape).some(key =>
+        !['type', 'points', 'width', 'closed', 'rect', 'rings'].includes(key)))
+      throw new TypeError('Atlas paint needs a pixel path, polygon or rectangle');
+    return { ...shape, color };
+  }
+
+  function paintedBump(settings, width, height) {
+    if (settings === undefined || settings === false) return null;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings) ||
+        Object.keys(settings).some(key => !['paint', 'strength'].includes(key)))
+      throw new TypeError('Atlas bump needs height paint and an optional strength');
+    const { paint = [], strength = 1 } = settings;
+    if (!Array.isArray(paint) || paint.length > 512 || !Number.isFinite(strength) || strength < 0 || strength > 4 || width * height > 4e6)
+      throw new RangeError('Atlas bump supports up to 512 strokes, strength 0–4 and a bounded image');
+    const levels = [0];
+    // Rasterize stroke IDs so the byte paint map keeps fractional and negative heights intact.
+    const strokes = Array.from(paint, (stroke, i) => {
+      if (!Number.isFinite(stroke?.height) || Math.abs(stroke.height) > 8)
+        throw new RangeError('Atlas bump height must be between -8 and 8 texels');
+      levels.push(stroke.height);
+      const id = ((i + 1) << 8).toString(16).padStart(6, '0');
+      return paintStroke(stroke, '#' + id);
+    });
+    if (!paint.length || !strength) return null;
+    const ids = drawing.paintMap(width, height, strokes);
+    const heights = Float32Array.from({ length: width * height }, (_, i) => levels[ids[i * 4] * 256 + ids[i * 4 + 1]]);
+    return { heights, strength: strength * .5 };
+  }
+
+  function tiltNormal(normal, hasNormal, basis, sx, sy) {
+    let [x, y, z] = hasNormal ? normal : [0, 0, 1];
+    if (basis && hasNormal) [x, y, z] = [dot(normal, basis.right), dot(normal, basis.up), dot(normal, basis.normal)];
+    const length = Math.hypot(x, y, z);
+    if (length < .01) { x = 0; y = 0; z = 1; }
+    else { x /= length; y /= length; z /= length; }
+    // Apply the height slope in the tangent plane of the existing normal.
+    const along = x * sx + y * sy;
+    const nx = x + sx - along * x, ny = y + sy - along * y, nz = z - along * z;
+    const size = Math.hypot(nx, ny, nz);
+    for (let axis = 0; axis < 3; axis++) normal[axis] = (basis
+      ? nx * basis.right[axis] + ny * basis.up[axis] + nz * basis.normal[axis]
+      : axis === 0 ? nx : axis === 1 ? ny : nz) / size;
+  }
+
   function paintedScenery(settings, width, height, maps) {
     const { bands, base, depthPaint = [], lightPaint = [] } = settings ?? {};
     const names = bands && typeof bands === 'object' && !Array.isArray(bands) ? Object.keys(bands) : [];
@@ -43,23 +89,16 @@ const AtlasSprites = (() => {
     const depths = names.map(name => bands[name]);
     const baseId = names.indexOf(base);
     const hex = values => '#' + values.map(value => value.toString(16).padStart(2, '0')).join('');
-    const draw = (paint, color) => {
-      const { shape } = paint ?? {};
-      if (!shape || Object.keys(shape).some(key =>
-          !['type', 'points', 'width', 'closed', 'rect', 'rings'].includes(key)))
-        throw new TypeError('Scenery paint needs a pixel path, polygon or rectangle');
-      return { ...shape, color };
-    };
     const ids = depthPaint.length && drawing.paintMap(width, height, Array.from(depthPaint, paint => {
       const id = names.indexOf(paint?.band);
       if (id < 0) throw new RangeError('Unknown scenery band: ' + paint?.band);
-      return draw(paint, hex([id, 0, 0]));
+      return paintStroke(paint, hex([id, 0, 0]));
     }));
     if (lightPaint.length) {
       const normals = drawing.paintMap(width, height, Array.from(lightPaint, paint => {
         const normal = vector(paint?.normal, 'Painted normal');
         const length = positive(Math.hypot(...normal), 'Painted normal length');
-        return draw(paint, hex(normal.map(value => Math.round((1 + value/length)*127.5))));
+        return paintStroke(paint, hex(normal.map(value => Math.round((1 + value/length)*127.5))));
       }));
       if (!maps.normal) maps.normal = normals;
       else for (let i = 0; i < normals.length; i += 4)
@@ -123,6 +162,7 @@ const AtlasSprites = (() => {
     delete metadata.files;
     if (painted?.lightPaint?.length && maps.normal) maps.normal=maps.normal.slice();
     const scenery=painted===undefined?null:paintedScenery(painted,width,height,maps);
+    const bump=paintedBump(m.bump,width,height);
     const range=encodings.depth?.range??m.depthRange;
     if (maps.depth && range===undefined && !maps.depth.some((n,i)=>i%4===3&&n)) delete maps.depth;
     const validRange=Array.isArray(range)&&range.length===2&&Array.from(range).every(Number.isFinite)&&range[1]>=range[0];
@@ -202,6 +242,23 @@ const AtlasSprites = (() => {
       out.hasNormal=!!(normal?.[n+3] && (art?.normal || keepBase && (bakedAlpha || patch?.normal)));
       out.hasEmission=!!(channels.emission&&emission?.[e+3]&&(art?.emission || keepBase && (bakedAlpha||patch?.emission)));
       if (out.hasNormal) for (let c=0;c<3;c++) out.normal[c]=normal[n+c]/127.5-1;
+      if (bump && inside && !transition) {
+        const p = index / 4, center = bump.heights[p], id = scenery?.bandAt(index);
+        function neighbor(offset, baseOffset) {
+          return baseImage[baseIndex + baseOffset * 4 + 3] && (!scenery || scenery.bandAt(index + offset * 4) === id)
+            ? bump.heights[p + offset] : center;
+        }
+        const stride = patch?.color ? rect.width : width;
+        const left = x > 0 ? neighbor(-1, -1) : center;
+        const right = x + 1 < rect.width ? neighbor(1, 1) : center;
+        const up = y > 0 ? neighbor(-width, -stride) : center;
+        const down = y + 1 < rect.height ? neighbor(width, stride) : center;
+        const sx = (left - right) * bump.strength, sy = (down - up) * bump.strength;
+        if (sx || sy) {
+          tiltNormal(out.normal, out.hasNormal, normalSpace === 'asset' ? view.basis : null, sx, sy);
+          out.hasNormal = true;
+        }
+      }
       if (out.hasEmission) {
         const gain=emissionMode==='baked'?255/(art?.emission?rgba[colorIndex+3]:patch?.emission?baseImage[baseIndex+3]:bakedAlpha):emission[e+3]/255;
         for(let c=0;c<3;c++) out.emission[c]=Math.min(1,emission[e+c]/255*gain);
@@ -224,6 +281,7 @@ const AtlasSprites = (() => {
     const editedDepth=edits&&Array.from(edits.edited.values()).some(edit=>edit.maps.depth||edit.extensionDepth!==undefined);
     const transition=edits?.transition;
     return Object.freeze({[assetBrand]:true,select,sample,effect,...(edits?.fringe&&{fringe:edits.fringe}),
+      ...(bump&&{bumpHeight:(x,y)=>integer(x,0,width-1)&&integer(y,0,height-1) ? bump.heights[y*width+x] : 0}),
       ...(cutoutMipmaps&&{cutoutMipmaps,cutoutLevel:cutouts.level,cutoutSample:cutouts.sample,
         cutoutImage(view,level=0) {
           if (!integer(level,0,cutouts.maxLevel(view))) throw new RangeError('Invalid sprite cutout mip level');

@@ -147,6 +147,85 @@ test('view-space atlas normals follow each tile camera without changing its colo
   }
 });
 
+test('painted heights tilt atlas normals and preserve the underlying alpha, depth and color', () => {
+  const width = 8, height = 5;
+  const colors = Array.from({ length: width * height }, () => [160, 114, 62, 255]);
+  const shape = { type:'rect', rect:[2,1,3,3] };
+  const source = atlas(colors, { width, height, scenery: { bands:{face:0}, base:'face' },
+    bump: { paint:[{ shape, height:2 }] } });
+  const raised = K.sprite.atlas(source);
+  const sample = (asset, x, y) => {
+    const out = { color:[], normal:[], emission:[] };
+    return asset.sample(asset.select(0,'scenery',[0,0,1]),x,y,{depth:true},out) ? out : null;
+  };
+  assert.equal(raised.bumpHeight(2,1),2);
+  assert.equal(raised.bumpHeight(1,1),0);
+  const left = sample(raised,1,2), right = sample(raised,5,2);
+  close(left.normal[0],-Math.SQRT1_2);
+  close(right.normal[0],Math.SQRT1_2);
+  close(sample(raised,3,0).normal[1],Math.SQRT1_2);
+  assert.equal(left.alpha,1);
+  assert.equal(left.depth,0);
+  assert.deepEqual(left.color,[160/255,114/255,62/255]);
+  assert.equal(sample(raised,3,2).hasNormal,false);
+  const flat = K.sprite.atlas({ ...source, metadata:{...source.metadata,bump:{...source.metadata.bump,strength:0}} });
+  assert.equal(sample(flat,1,2).hasNormal,false);
+  const opposite = K.sprite.atlas({ ...source, metadata:{...source.metadata,bump:{paint:[
+    {shape,height:2},{shape,height:-2}
+  ]}} });
+  close(sample(opposite,1,2).normal[0],Math.SQRT1_2);
+  assert.deepEqual(raised.snapshot().images.color,source.images.color);
+  assert.deepEqual(K.sprite.atlas(raised.snapshot()).snapshot(),raised.snapshot());
+
+  const scene = world({atlas:raised,at:[0,0,0]});
+  const render = direction => ink.render(scene,{...view,ortho:true,transparent:true,passes:['depth'],
+    liveSun:{direction,ambient:.4,intensity:.8,shadows:false}});
+  const litLeft = render([-.9,0,.4]), litRight = render([.9,0,.4]);
+  assert.notDeepEqual(litLeft.rgb,litRight.rgb);
+  assert.deepEqual(litLeft.alpha,litRight.alpha);
+  assert.deepEqual(litLeft.passes.depth,litRight.passes.depth);
+});
+
+test('atlas bump paint does not cross transparent texels, scenery bands or frame borders', () => {
+  const colors = Array.from({ length:8 }, () => [200,140,70,255]);
+  colors[2] = [0,0,0,0];
+  const source = atlas(colors, { scenery:{bands:{front:0,back:2},base:'front',depthPaint:[
+    {band:'back',shape:{type:'rect',rect:[5,0,3,1]}}
+  ]}, bump:{paint:[
+    {height:3,shape:{type:'rect',rect:[0,0,3,1]}},
+    {height:2,shape:{type:'rect',rect:[5,0,3,1]}}
+  ]} });
+  const asset = K.sprite.atlas(source), view = asset.select();
+  for(const x of [1,3,4,5]) {
+    const out = {color:[],normal:[],emission:[]};
+    assert(asset.sample(view,x,0,{depth:true},out));
+    assert.equal(out.hasNormal,false);
+  }
+  const frames = [{x:0,y:0,width:4,height:1},{x:4,y:0,width:4,height:1}].map((rect,frame)=>({rect,frame}));
+  const card = K.sprite.atlas(atlas(colors,{frames,bump:{paint:[
+    {height:2,shape:{type:'rect',rect:[4,0,4,1]}}
+  ]}}));
+  for(const [frame,x] of [[0,3],[1,0]]) {
+    const out = {color:[],normal:[],emission:[]};
+    assert(card.sample(card.select(frame),x,0,{},out));
+    assert.equal(out.hasNormal,false);
+  }
+});
+
+test('bump slopes layer over an asset-space normal in the selected tile basis', () => {
+  const source = atlas([[160,114,62,255],[160,114,62,255],[160,114,62,255]], {
+    frames:[{yaw:Math.PI/2,rect:{x:0,y:0,width:3,height:1}}],
+    normalSpace:'asset', normal:Array.from({length:3},()=>[255,128,128,255]),
+    bump:{paint:[{height:2,shape:{type:'rect',rect:[1,0,1,1]}}]}
+  });
+  const asset=K.sprite.atlas(source), out={color:[],normal:[],emission:[]};
+  assert(asset.sample(asset.select(),0,0,{},out));
+  close(out.normal[0],Math.SQRT1_2);
+  close(out.normal[1],0);
+  close(out.normal[2],Math.SQRT1_2);
+  assert.deepEqual(asset.snapshot().images.normal,source.images.normal);
+});
+
 test('painted scenery interleaves vine and recess depth with opaque geometry and local fog', () => {
   const source=atlas([[250,24,24,255],[24,242,32,255]],{ scenery:{
     bands:{wall:0,vines:-.62,recess:.84},base:'recess',
