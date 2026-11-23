@@ -23,6 +23,12 @@
       inputs:{source:'raster',field:'raster',options},outputs:{value:'raster'},
       run({source,field,options}){return {value:W.sample(source,field,options)};}
     },
+    'warp.curveMap':{
+      description:'Map pixels around a sampled curve to along-track UVs, signed across distance, tangent and coverage.',
+      inputs:{path:'path',width:'pixelCount',height:'pixelCount',options},
+      outputs:{value:'raster',along:'raster',across:'raster',tangent:'raster',coverage:'raster',segment:'raster',length:'number'},
+      run({path,width,height,options}){return W.curveMap(path,{...options,width,height});}
+    },
     'warp.scanlines':{
       description:'Deform source rows while preserving a registered pivot, named anchors and sprite maps.',
       inputs:{source:'raster',anchors:options,maps:options,options},

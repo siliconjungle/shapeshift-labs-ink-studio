@@ -1428,6 +1428,7 @@ either axis with `edgeU` or `edgeV`.
 
 | Node | Authoring |
 | --- | --- |
+| `warp.curveMap` | Build [curve-local UVs and coordinate planes](curve-raster-map.md) from a path in art pixels. Set a full `strokeWidth` or a width per vertex and choose `nearest`, `first` or `last` at crossings. |
 | `warp.mesh` | Set `control.from` and `control.to` to corresponding normalized 2D landmarks. Supply `triangles` as triples of indices or a flat index buffer. Each destination triangle pulls pixels from its source triangle. Later triangles win overlaps. Uncovered pixels are transparent. |
 | `warp.scanlines` | Deform a registered raster in asset space with [source-row offsets and scales](#deform-registered-scanlines). Returns the result, UV field, relocated anchors, and remapped image planes. |
 | `warp.grid` | Set `control.columns`, `rows`, and row-major `points` for the destination lattice. The source is a regular grid. |

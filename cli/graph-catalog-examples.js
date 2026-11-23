@@ -279,6 +279,8 @@ const specifications = {
   'warp.compose': { inputs: { fields: [{ width: 1, height: 1, channels: 2, data: [.5, .5] }] } },
   'warp.sample': { nodes: { mapping: { op: 'warp.field', inputs: { width: 4, height: 4 } } },
     inputs: { field: link('mapping') } },
+  'warp.curveMap': { inputs: { path: [[2.5, 2.5], [13.5, 12.5], [2.5, 12.5], [13.5, 2.5]],
+    width: 16, height: 16, options: { strokeWidth: 3, overlap: 'last' } } },
   'warp.mesh': { inputs: { control: { from: triangle, to: triangle, triangles: [[0, 1, 2]] } } },
   'warp.grid': { inputs: { control: { columns: 2, rows: 2, points: quad } } },
   'warp.morph': { inputs: { control: { from: triangle, to: triangle, triangles: [[0, 1, 2]] } } },
