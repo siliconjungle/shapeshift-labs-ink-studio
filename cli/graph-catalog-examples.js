@@ -355,6 +355,7 @@ const specifications = {
   'rig.skinSprite': { nodes: { binding: { op: 'rig.bindSprite', inputs: { source: rgba,
     bones: [bone] } } }, inputs: { bind: link('binding') } },
   'anim.keyframes': { inputs: { channels: { x: 'number' }, keys: [{ time: 0, value: { x: 2 } }] } },
+  'anim.cueTrack': { inputs: { cues:{ignition:.4},keys:[{at:0,value:0},{cue:'ignition',value:1}],duration:1 } },
   'anim.spriteDesync': { inputs: { source: clip } },
   'anim.subjectFeedback': { inputs: { source: rgba, options: { width: 4, height: 4 } } },
   'fx.signalRecovery': { inputs: { source: rgba, options: { lossFrames: 2, lockFrames: 3 } } },

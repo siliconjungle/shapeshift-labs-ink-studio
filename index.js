@@ -250,6 +250,8 @@ module.exports = {
   silhouetteReview: require('./cli/silhouette-review.js').silhouetteReview,
   transitionReview: require('./cli/transition-review.js').transitionReview,
   createReferenceClipReview: require('./cli/reference-clip-review.js').createReferenceClipReview,
+  createEffectClip: require('./cli/effect-clip.js').createEffectClip,
+  readEffectClip: require('./cli/effect-clip.js').readEffectClip,
   spriteAtlas: require('./cli/sprite-atlas.js').spriteAtlas,
   readSpriteAtlas: require('./cli/sprite-atlas.js').readSpriteAtlas,
   writeSpriteAtlas: require('./cli/sprite-atlas.js').writeSpriteAtlas,

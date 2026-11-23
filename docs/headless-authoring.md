@@ -1820,6 +1820,7 @@ port to hide a layer during that hold.
 | Operation | Inputs and outputs |
 | --- | --- |
 | `anim.keyframes` | Sample named `channels` from `keys`. A key has `time`, a named `value` for each channel, and optional `ease`. Uses Ink’s scalar, vector, angle, positive, quaternion and orientation interpolation. Returns the channel record and track duration. |
+| `anim.cueTrack` | Sample a scalar track whose keys use absolute `at` seconds or a name in the `cues` time table and an optional signed `offset`. Resolved keys must increase in lane order within `duration`. See [editable effect clips](effect-clips.md). |
 | `anim.clock` | Map the project clock to `options.range`, with `delay`, `rate`, `reverse`, and a `mode` of `hold`, `loop` or `pingpong`. Add `phase` and `cues` for authored layer clocks. Returns mapped time, progress, playback direction and activity. |
 | `anim.stagger` | Sample several clocks with `count`, `options.interval` and `offset`. `reverseOrder` switches which item starts first. Returns mapped times and per-item clock records. |
 | `anim.frame` | Select from raster `frames` with `fps` and a half-open interval from `first` to `end` in frame indices. Accepts the same delay, rate, reverse and looping controls. |

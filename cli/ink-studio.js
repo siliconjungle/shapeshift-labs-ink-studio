@@ -1197,6 +1197,7 @@ const CMD = {
         '  silhouette-review <scene> --directions 8 --w 96 --h 96   paired export-size views and edge contrast',
         '  transition-review <scene> [--plan file.json] --w 160 --h 90 [--out sheet.png]',
         '  reference-clip <plan.json> --out directory [--beat ID | --at seconds] [--mode side-by-side|swipe|difference] [--sheet]',
+        ...require('./effect-clip-command.js').usage.map(command=>'  '+command.replace('ink-studio ','')),
         '    compare native frames around midnight, weather beats, or cuts [--scale N --fail-on-flags]',
         '  pose-review <id> [--directions 8 --w 96 --h 96]  review named poses at sprite resolution',
         '  motion-review <id> [--finding kind-or-id] [--out report.json]  inspect motion findings and focused playback ranges',
@@ -2569,6 +2570,9 @@ const CMD = {
   },
   'reference-clip'() {
     return require('./reference-clip-review.js').command(pos,opt,lib());
+  },
+  'effect-clip'() {
+    return require('./effect-clip-command.js').command(pos,opt,{kit:lib(),operations:cfg.graphOperations,adapters:cfg.graphAdapters});
   },
   music() {
     return require('./music-composer.js')(pos,opt,lib());

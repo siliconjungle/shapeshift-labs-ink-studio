@@ -349,6 +349,7 @@ Move section planes, depth ranges, and spatial masks across a native render. [In
 
 Compare synchronized scenes with side-by-side playback, a swipe divider, and signed overlays. [Comparison views](docs/comparison-views.md)
 Align PNG sequences and Ink renders by named beats, loop a passage, and save frame notes. [Reference clip workbench](docs/reference-clip-review.md)
+Edit named cues and parameter lanes against pinned passes, then reuse the effect as a graph group. [Editable effect clips](docs/effect-clips.md)
 
 Capture independent cameras under a shared budget and compose their feeds into overlays and textured world panels. [Multi-camera render atlases](docs/camera-atlas.md)
 

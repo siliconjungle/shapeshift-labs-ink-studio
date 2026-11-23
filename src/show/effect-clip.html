@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effect clip editor</title>
+<style>
+:root{color-scheme:dark;background:#11151c;color:#f2f1ea;font:14px/1.45 system-ui,sans-serif;--panel:#1a222b;--edge:#364550;--quiet:#a9b8be;--active:#a0e6ce}
+*{box-sizing:border-box}body{margin:0}main{width:min(1280px,100% - 28px);margin:24px auto 60px}
+h1,h2,p{margin:0}h1{font-size:clamp(28px,5vw,48px);line-height:1.08;letter-spacing:-.045em}h2{font-size:15px}
+header,.row{display:flex;align-items:center;gap:9px 14px;flex-wrap:wrap}header{justify-content:space-between;margin-bottom:16px}
+button,select,input[type=number]{color:inherit;background:#26343e;border:1px solid #516470;border-radius:5px;font:inherit;padding:5px 8px;min-height:33px}
+button{cursor:pointer}button:hover,button[aria-pressed=true]{color:var(--active);border-color:var(--active)}
+button:disabled{cursor:default;opacity:.4}input{accent-color:var(--active)}:focus-visible{outline:2px solid var(--active);outline-offset:2px}
+label{display:inline-flex;align-items:center;gap:6px}input[type=number]{width:85px}input[type=range]{width:100%;min-width:50px}
+.panel{border:1px solid var(--edge);border-radius:9px;background:var(--panel);padding:12px;min-width:0}
+.layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(310px,1fr);gap:12px;margin-top:12px;align-items:start}
+.timeline{display:grid;gap:9px}.clock{font:13px ui-monospace,monospace;color:var(--active);margin-left:auto}
+.ruler{position:relative;margin:0 7px;height:21px}
+.ruler button{position:absolute;top:0;transform:translateX(-50%);min-height:18px;min-width:16px;padding:1px 3px;font-size:11px;line-height:1}
+#cue-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;border-top:1px solid var(--edge);padding-top:9px}
+#cue-slider{max-width:185px}#cue-controls:empty,[hidden]{display:none!important}
+#pins{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px 12px;color:var(--quiet)}
+.passes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+figure{margin:0;min-width:0;border:1px solid var(--edge);border-radius:6px;overflow:hidden}
+figcaption{display:flex;align-items:center;justify-content:space-between;gap:4px 8px;min-height:31px;padding:5px 8px;background:#24313b;font-size:12px}
+figcaption span{color:var(--quiet);font:11px ui-monospace,monospace}figure .view{display:grid;place-items:center;min-height:70px;overflow:auto;padding:7px;
+background:conic-gradient(#10151e 25%,#171e28 0 50%,#10151e 0 75%,#171e28 0) 0 0/14px 14px}
+figure img{display:block;image-rendering:pixelated}figure pre{max-width:100%;max-height:175px;overflow:auto;margin:5px;font-size:11px}
+.inspector{display:grid;gap:14px}.controls{display:grid;gap:6px;margin-top:7px}.control{display:grid;grid-template-columns:minmax(82px,.8fr) minmax(50px,1fr) 85px;align-items:center;gap:7px}
+#lane-tabs{margin:8px 0}#lane-tabs button{font-size:12px}#curve{display:block;width:100%;height:115px;background:#111921;border:1px solid var(--edge);border-radius:4px;margin-bottom:8px}
+#lane-caption,#status{color:var(--quiet);font-size:12px}#status[data-error=true]{color:#ffbaae}
+.table-wrap{overflow:auto;max-height:242px;margin:8px 0}table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}th{text-align:left;color:var(--quiet);font-weight:500}
+td,th{padding:4px;border-bottom:1px solid #32414b}td input[type=number]{width:64px}td button{min-height:29px}
+@media(max-width:800px){.layout{grid-template-columns:1fr}.control{grid-template-columns:minmax(80px,.7fr) minmax(50px,1fr) 85px}}
+@media(max-width:445px){main{width:calc(100% - 16px)}.passes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1 id="title">Effect clip editor</h1>
+  <div class="row"><button id="save">Download clip</button><button id="export">Export graph group</button></div>
+</header>
+<section class="panel timeline" aria-label="Clip timeline">
+  <div class="row">
+    <button id="back" aria-label="Previous picture frame">−1 frame</button>
+    <button id="play">Play</button>
+    <button id="next" aria-label="Next picture frame">+1 frame</button>
+    <label><input id="loop" type="checkbox" checked> Loop</label>
+    <span id="clock" class="clock"></span>
+  </div>
+  <input id="time" type="range" min="0" step="any" aria-label="Shared playhead">
+  <div id="ruler" class="ruler"></div>
+  <div id="cue-controls">
+    <label>Cue <select id="cue"></select></label>
+    <label>Time <input id="cue-at" type="number" min="0" step="0.001"> s</label>
+    <input id="cue-slider" type="range" min="0" step="0.001" aria-label="Move selected cue">
+    <button id="goto">Jump to cue</button>
+  </div>
+  <p id="status" role="status">Opening effect clip…</p>
+</section>
+<div class="layout">
+  <section class="panel" aria-label="Pass previews">
+    <div class="row"><h2>Pinned passes</h2>
+      <label>Pixel zoom <select id="zoom"><option value="auto">Fit · whole pixels</option><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option></select></label>
+    </div>
+    <div id="pins"></div>
+    <div class="passes" id="passes"></div>
+  </section>
+  <aside class="inspector">
+    <section class="panel" id="parameter-panel"><h2>Parameters</h2><div class="controls" id="parameters"></div></section>
+    <section class="panel" id="lane-panel">
+      <h2>Parameter lanes</h2>
+      <div class="row" id="lane-tabs"></div>
+      <canvas id="curve" role="img" aria-label="Selected lane curve and shared playhead"></canvas>
+      <p id="lane-caption"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Anchor</th><th>Time / Δ</th><th>Value</th><th>Ease</th><th></th></tr></thead>
+        <tbody id="key-list"></tbody>
+      </table></div>
+      <button id="add-key">Add key at playhead</button>
+    </section>
+  </aside>
+</div>
+</main>
+<script type="module" src="/editor.mjs"></script>
+</body>
+</html>
