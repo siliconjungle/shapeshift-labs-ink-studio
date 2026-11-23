@@ -14,7 +14,11 @@ export function createGaussianHarmonics(gl, resources, unit, maxSize) {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, start + rows, count, 1, gl.RGB, gl.FLOAT, values, rows * stride);
     }
   }
-  return function bind(harmonics, live) {
+  const rebind = () => {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+  };
+  function bind(harmonics, live) {
     if (!harmonics) {
       clear();
       return;
@@ -54,13 +58,11 @@ export function createGaussianHarmonics(gl, resources, unit, maxSize) {
       }
       shOffset = dcRows * width;
       uploaded = harmonics;
-    } else {
-      gl.activeTexture(gl.TEXTURE0 + unit);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-    }
+    } else rebind();
     return { u_gaussianSH: unit, u_gaussianWidth: width, u_gaussianOffset: shOffset,
       u_gaussianCount: count, u_gaussianColorOffset: colorOffset, u_gaussianZUp: up === 'z' };
-  };
+  }
+  return { bind, rebind };
 }
 
 // Derivatives of the Legendre polynomials through degree four. The real

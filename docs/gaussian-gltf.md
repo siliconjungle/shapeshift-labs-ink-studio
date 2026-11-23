@@ -7,7 +7,7 @@ Ink can draw ordinary triangles and [KHR_gaussian_splatting](https://github.com/
 ```sh
 node examples/gaussian-gltf/tidal-beacon.js /tmp/tidal-beacon.glb
 node cli/ink-studio.js render /tmp/tidal-beacon.glb \
-  --w 840 --h 504 --px 3 --yaw .16 --pitch .16 --dist 4.5 --out /tmp/tidal-beacon.png
+  --w 840 --h 504 --px 3 --yaw .16 --pitch .16 --zoom 1.28 --out /tmp/tidal-beacon.png
 node cli/ink-studio.js inspect-gltf /tmp/tidal-beacon.glb --out /tmp/tidal-parts.json
 node cli/ink-studio.js inspect-gltf /tmp/tidal-beacon.glb --ray -.42,-.9,4,0,0,-1
 ```

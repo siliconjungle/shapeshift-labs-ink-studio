@@ -152,7 +152,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     let splatPaintPass, coverageVotePass, gaussianMaterialBinding, gaussianMaterialPalette, surfaceOrdering;
     // The material-controls pass uses unit 31 before the splat draw.
     let gaussianProxies;
-    const bindGaussians = createGaussianHarmonics(gl, resources, 31, maxSize);
+    const gaussianRows = createGaussianHarmonics(gl, resources, 31, maxSize);
     const environment = createEnvironment(gl,resources,targets,maxSize,toolkit);
     const emitterLighting=createLightEmitters(gl,resources,targets,maxSize,toolkit);
     const highlightAPI = toolkit.KIT?.highlightCels;
@@ -676,6 +676,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         }
         if(!options.u_markPass&&options.surfaceFrame?.lighting?.display){emitterSurfacePipeline??=createSurfacePipeline(gl,{cutaway:cutawayAPI?.glsl});emitterSurfacePipeline.draw(options.surfaceFrame.lighting.display,{...surfaceFrame,lighting:null,historyFirst:options.historyOwner?.(options.surfaceFrame.lighting.display)});}
         if (hasProxies) {
+          if (shader.gaussianRows) gaussianRows.rebind();
           if (options.u_splatPaintPass) gl.colorMask(true,true,true,true);
           gaussianProxies.draw({ ...options.proxy, width, height, wet, glassLayers: surfaceFrame.glassLayers, scale: options.u_materialGridScale ?? 1 },
             options.u_paintPass || options.u_gaussianMaterialPass ? 3 : options.u_idx || 0);
@@ -687,6 +688,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         if(!options.u_idx&&!options.u_coverageVotePass){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);}
       }else if(options.u_idx!==3)gl.disable(gl.DEPTH_TEST);
       shader.bindFilterRows?.();
+      // Surface atlas allocation and material draws can change texture bindings.
+      if (shader.gaussianRows) gaussianRows.rebind();
       if (shader.footprints) footprintBinding.rebind();
       if (shader.gaussianMaterials) gaussianMaterialBinding.rebind();
       gl.useProgram(shader.p);
@@ -1427,7 +1430,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       gl.depthMask(true);
       gl.blendEquation(gl.FUNC_ADD);
       if (proxyPlan) gaussianProxies ??= createGaussianProxyRenderer(gl, resources, table, maxSize);
-      const gaussianUniforms = bindGaussians(harmonics, colorMode !== 'baked');
+      const gaussianUniforms = gaussianRows.bind(harmonics, colorMode !== 'baked');
       if (gaussianMaterial) gaussianMaterialBinding ??= createGaussianMaterialBinding(gl, table, maxSize);
       const materialUniforms = gaussianMaterial &&
         gaussianMaterialBinding.bind(gaussianMaterial, frame.gaussianLight ?? world.gaussianLight);
@@ -1483,6 +1486,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       });
       shader.bindFilterRows = filterBuffers?.centerMatte ? filterBuffers.bindRows : undefined;
       shader.footprints=footprints;
+      shader.gaussianRows = !!gaussianUniforms;
       shader.gaussianMaterials = !!gaussianMaterial;
       gl.useProgram(shader.p);
       const growth = world.grow ?? {};
@@ -1552,6 +1556,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           const rect = surfaceOrderRegion(ordering.region, center.width, center.height);
           return surfaceOrdering.draw(center, camera, background, { ...ordering, rect }, index, uniforms => {
             data.bind();
+            if (shader.gaussianRows) gaussianRows.rebind();
             if (shader.footprints) footprintBinding.rebind();
             if (shader.gaussianMaterials) gaussianMaterialBinding.rebind();
             gl.useProgram(shader.p);

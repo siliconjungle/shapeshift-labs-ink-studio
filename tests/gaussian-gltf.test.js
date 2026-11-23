@@ -125,17 +125,27 @@ test('WebGL draws native mesh paint and live Gaussian harmonics from the same GL
     try {
       view.draw(w);
       const all = view.image();
+      view.draw(w);
+      const warmed = view.image();
       view.draw(w,{gaussianColor:'baked',raw:true});
       const baked = view.image();
       view.draw({...w,meshes:[]});
       const clouds = view.image();
-      return { all,baked,clouds };
+      return { all,warmed,baked,clouds };
     } finally { view.close(); }
   },tidalBeacon().toString('base64'));
   const difference = (a,b) => {
     const left=Buffer.from(a,'base64'),right=Buffer.from(b,'base64');
     return left.reduce((sum,n,i)=>sum+(Math.abs(n-right[i])>3),0);
   };
+  const pixels = Buffer.from(output.all,'base64');
+  let cyan = 0;
+  for (let i=0; i<pixels.length; i+=3) {
+    const [r,g,b] = pixels.subarray(i,i+3);
+    if (r<110 && g>140 && b>165) cyan++;
+  }
+  assert(cyan>30,'Expected cyan Gaussian paint from live harmonics on the first mixed draw');
+  assert.equal(output.all,output.warmed);
   assert(difference(output.all,output.clouds)>300);
   assert(difference(output.all,output.baked)>50);
 });
