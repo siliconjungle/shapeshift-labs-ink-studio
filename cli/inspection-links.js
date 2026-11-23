@@ -53,6 +53,14 @@ function locate(api,beatId,files,base,timing) {
             if(Number.isFinite(value))context[key]=value;
           if(typeof row.status==='string')context.status=row.status;
           if(typeof row.output==='string')context.output=row.output;
+          const playback=format==='ink-studio/audio-playback-receipts' && /^\/receipts\/\d+$/.test(pointer) ? row : row.playback;
+          if (Number.isSafeInteger(playback?.requestedSample)) {
+            const {requestedSample,plannedSample,observedSample,actualSample,lateBySamples,fileSample,outcome,reason,bus,variant,
+              spatialSource,voiceBudget}=playback;
+            context.audio={requestedSample,plannedSample,observedSample,actualSample,lateBySamples,outcome,bus,variant,
+              spatialSource,...(fileSample!==undefined&&{fileSample}),...(reason!==undefined&&{reason}),
+              ...(voiceBudget!==undefined&&{voiceBudget})};
+          }
           if (format === 'ink-studio/patch-show-report' && /^\/storyDiagnostics\/findings\/\d+$/.test(pointer)) {
             const { kind, fromFrame, toFrame, source, channel, stage } = row;
             context.diagnostic = { kind, fromFrame, toFrame, source, channel, stage };

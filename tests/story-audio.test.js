@@ -280,6 +280,13 @@ test('recorded voice limits drop bursts, steal from loud voices and resume loops
   const renderCue=result.report.storyAudio.cues;
   assert.equal(renderCue.find(row=>row.cue==='warning').voiceBudget.action,'admitted');
   assert.equal(renderCue.filter(row=>row.voiceBudget.action==='dropped').length,2);
+  const playback=result.report.storyAudio.playbackReceipts;
+  const collisions=playback.filter(row=>row.cue==='collision');
+  assert.deepEqual(collisions.map(row=>[row.requestedSample,row.actualSample,row.outcome]),[
+    [1000,1000,'played'],[1000,null,'dropped'],[1000,null,'dropped']
+  ]);
+  assert.equal(collisions[0].voiceBudget.stolenAt,2000);
+  assert(collisions.slice(1).every(row=>row.reason==='group-limit' && row.bus==='effects'));
   const decode=stem=>ink.decodeWav(result.waves[stem]);
   const ambient=decode('ambience'), effects=decode('effects'), dialog=decode('dialogue');
   assert(select(effects,.18)[0]>.29);
@@ -333,7 +340,7 @@ test('story audio saves per-layer take and pitch receipts and replays them with 
   call('story','audio','run.json','changed.json','--out','redraw');
   assert(!bytes('redraw/mix.wav').equals(bytes('original/mix.wav')));
   call('story','audio','run.json','changed.json','--receipts','original/receipts.json','--out','replay');
-  for(const file of ['mix.wav','receipts.json','report.json'])assert(bytes('replay/'+file).equals(bytes('original/'+file)));
+  for(const file of ['mix.wav','receipts.json','playback.json','report.json'])assert(bytes('replay/'+file).equals(bytes('original/'+file)));
   const invalid=structuredClone(receipts);
   invalid.choices[0].take='d';
   save('invalid.json',invalid);
@@ -370,6 +377,20 @@ test('story audio prints a verified branch window with exact onset and beat look
   assert.equal(cue.source.beatId,'ink:beat:moving-sound/late-cart/3.0');
   const linked = JSON.parse(call('beat',cue.source.beatId,'printed/report.json'));
   assert.equal(linked.matches[0].artifact,'printed/spatial.wav');
+  assert.equal(report.playbackReceipts,'playback.json');
+  const ledger=read('printed/playback.json');
+  assert.equal(ledger.format,'ink-studio/audio-playback-receipts');
+  const [receipt]=ledger.receipts;
+  assert.deepEqual([receipt.requestedSample,receipt.plannedSample,receipt.observedSample,receipt.actualSample],
+    [2000,2000,2400,2000]);
+  assert.equal(receipt.outcome,'played');
+  assert.equal(receipt.bus,'spatial');
+  assert.equal(receipt.fileSample,400);
+  assert.deepEqual(receipt.spatialSource.selector,{entity:'cart',socket:'bell'});
+  const lookup=JSON.parse(call('beat',receipt.beatId,'printed/playback.json'));
+  assert.equal(lookup.matches[0].audio.actualSample,2000);
+  assert.equal(lookup.matches[0].audio.fileSample,400);
+  assert.equal(lookup.matches[0].artifact,'printed/spatial.wav');
   const diverged = read('run.json');
   diverged.end.world.entities.cart.position = [9,0,0];
   save('diverged.json',diverged);
@@ -378,4 +399,40 @@ test('story audio prints a verified branch window with exact onset and beat look
   assert.equal(failure.status,1);
   assert.match(failure.stderr,/diverged|checkpoint/i);
   assert.equal(fs.existsSync(file('bad')),false);
+});
+
+test('playback receipts distinguish an authored layer delay, late admission and unavailable sources',()=>{
+  const run=R.create({id:'admission-receipts',dt:.125,entities:{cart:{position:[-9,0,0]}},commands:[
+    {tick:1,action:'world/event',args:{kind:'cart-passes',at:{entity:'cart'}}},
+    {tick:3,action:'world/patch',args:{edits:[{op:'set',path:'/entities/cart/position',value:[-1,0,0]}]}},
+    {tick:4,action:'world/event',args:{kind:'impact',at:[0,0,-1]}},
+    {tick:5,action:'world/event',args:{kind:'audio-cue',cue:'missing',at:{entity:'missing'}}},
+    {tick:7,action:'world/event',args:{kind:'impact',at:[0,0,-1]}}
+  ]});
+  run.advance(8);
+  const recording=run.recording();
+  const plan=ink.createSceneAudio({format:'ink-studio/scene-audio',version:1,sampleRate:rate,post:{},spatial:{
+    voiceBudget:{maxVoices:3,reservedVoices:0},distance:{reference:1,max:4,fade:0},
+    cues:{cart:{asset:'cart',bus:'foley',follow:true},ring:{asset:'ring',bus:'effects'},missing:'ring'},
+    soundFamilies:{metal:{takes:{thin:'ring'}}},
+    bindings:{cart:{on:{kind:'cart-passes'},cue:'cart'},impact:{on:{kind:'impact'},impactLayers:{
+      tail:{select:[{id:'metal',family:'metal'}],delay:.1875}
+    }}}
+  }},{kit,resolveAsset:name=>name==='cart'?audio(.27,rate):audio(.18,500)});
+  const full=plan.render({startPoint:T.read(0),endPoint:T.read(1)},
+    {runtime:()=>R.openRecording(recording),recordedThrough:8,trace:true});
+  const [cart,hit,missing,future]=full.report.storyAudio.playbackReceipts;
+  assert.deepEqual([cart.requestedSample,cart.plannedSample,cart.actualSample,cart.lateBySamples,cart.outcome],
+    [1000,1000,3000,2000,'late']);
+  assert.deepEqual(cart.spatialSource.selector,{entity:'cart'});
+  assert.deepEqual(cart.spatialSource.actualPosition,[-1,0,0]);
+  const foley=ink.decodeWav(full.waves.foley);
+  assert.equal(select(foley,.374875)[0],0);
+  assert(select(foley,.376)[0]>0);
+  assert.deepEqual([hit.requestedSample,hit.plannedSample,hit.actualSample,hit.lateBySamples,hit.outcome],
+    [4000,5500,5500,0,'played']);
+  assert.equal(hit.variant.family,'metal');
+  assert.equal(hit.variant.take,'thin');
+  assert.deepEqual([missing.outcome,missing.reason,missing.actualSample],['muted','unavailable',null]);
+  assert.deepEqual([future.outcome,future.reason,future.actualSample],['outside-window','past-render-end',null]);
 });

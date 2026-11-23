@@ -107,3 +107,24 @@ test('scene soundtrack follows spatial shots and timeline clips without changing
     WAV.decode(whole.waves[name]).samples.slice(13455*2,23896*2));
   assert.deepEqual(trim.report.worldScore,report);
 });
+
+test('compiled score stingers report both played and withheld beat receipts',()=>{
+  const cue=(tick,cue)=>({tick,action:'score/cue',args:{cue}});
+  const world={id:'score-receipt',dt:.125,systems:{score:{kind:'adaptive-music',config:{
+    entry:'approach',sections:{approach:{resource:'approach'}},
+    cues:{ring:{resource:'ring'},hush:{resource:'hush'}}
+  }}},commands:[cue(2,'ring'),cue(4,'hush')]};
+  const run=K.world.runtime.create(world);
+  run.advance(8);
+  const recording=run.recording();
+  const scene=createSceneAudio({format:'ink-studio/scene-audio',version:1,sampleRate,
+    music:{system:'score',production:{sources:bank,timeline:{...timeline,stingers:{ring:'reveal',hush:'reveal'},
+      stingerRules:[{resource:'hush',section:'approach'}]}}}
+  },{kit,resolveAsset:()=>null});
+  const {report}=scene.render({startPoint:T.read(0),endPoint:T.read(1)},
+    {runtime:()=>K.world.runtime.openRecording(recording),recordedThrough:8,trace:true});
+  assert.deepEqual(report.storyAudio.playbackReceipts.map(({cue,bus,requestedSample,actualSample,outcome,reason})=>
+    [cue,bus,requestedSample,actualSample,outcome,reason]),[
+    ['ring','music',2000,2000,'played',undefined],['hush','music',4000,null,'dropped','withheld']
+  ]);
+});

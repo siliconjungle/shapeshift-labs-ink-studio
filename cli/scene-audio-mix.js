@@ -26,6 +26,29 @@ function placement({ asset, first, end, offset = 0, rate = 1, gain = 1, loop = f
   return { asset, first, end, sourceStep, sourceStart, gain, loop, fade, points };
 }
 
+// An onset is the first mixer sample at which the voice has an admitted,
+// positive feed. Source silence and authored attack fades still belong to it.
+function playbackStart(voice, source, sampleRate, end) {
+  const p=placement(voice,source,sampleRate), length=source.samples.length/source.channels;
+  const last=Math.min(end,p.end,p.loop ? Infinity : p.first+Math.ceil((length-p.sourceStart)/p.sourceStep));
+  if (!length || !p.gain || last<=p.first) return null;
+  const spans=voice.admissions ?? [{first:p.first,end:last}], points=p.points;
+  if (!points?.length) return spans.find(span=>span.end>span.first && span.first<last)?.first ?? null;
+  let knot=0;
+  for (const {first,end} of spans) {
+    const stop=Math.min(end,last);
+    for (let at=first;at<stop;) {
+      while (points[knot+1]?.sample<=at) knot++;
+      const a=points[knot], b=points[knot+1];
+      if (a.gain>0) return at;
+      const rise=Math.max(at,a.sample+1);
+      if (b?.gain>0 && rise<stop && rise<=b.sample) return rise;
+      at=b?.sample ?? stop;
+    }
+  }
+  return null;
+}
+
 function contextualFilter(points, rate, parametric) {
   const plans = points?.flatMap(point => point.processing ? [point.processing] : []);
   if (!plans?.length) return;
@@ -171,4 +194,4 @@ function mix(voices, resolve, options) {
   return { waves, report };
 }
 
-module.exports = { mix, sumVoices };
+module.exports = { mix, sumVoices, playbackStart };

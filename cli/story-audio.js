@@ -5,6 +5,7 @@ const { resolveCheckpoint } = require('./checkpoint-file.js');
 const { readProjectBundle } = require('./project-bundle.js');
 const { readRecording } = require('./story-exchange.js');
 const { graphOutputs } = require('./graph-outputs.js');
+const { format:playbackFormat } = require('./scene-audio-receipts.js');
 
 const format = 'ink-studio/story-audio';
 const choiceFormat = 'ink-studio/sound-choice-receipts';
@@ -95,10 +96,18 @@ async function command(file, plan, rest, opt, library) {
     layers:storyAudio.layers,
     cues:storyAudio.cues.map(row=>({...row,file:cueFile(row)})),
     ...(storyAudio.contacts && {contacts:storyAudio.contacts.map(row=>({...row,file:cueFile(row)}))}),
+    playbackReceipts:'playback.json',
     ...(storyAudio.soundChoices && { receipts:'receipts.json' })
   };
   if (storyAudio.soundChoices) output.push({file:'receipts.json',document:{
     format:choiceFormat, version:1, world:world.id, choices:storyAudio.soundChoices
+  }});
+  output.push({file:'playback.json',document:{
+    format:playbackFormat,version:1,world:world.id,sampleRate:report.sampleRate,
+    firstSample:report.firstSample,endSample:report.endSample,
+    receipts:storyAudio.playbackReceipts.map(row=>({...row,
+      ...(row.actualSample!==null && row.actualSample>=report.firstSample &&
+        {file:row.bus+'.wav',fileSample:row.actualSample-report.firstSample})}))
   }});
   graphOutputs([...inputs]).write(path.resolve(opt.out),[...output,{file:'report.json',document:documentReport}]);
 }

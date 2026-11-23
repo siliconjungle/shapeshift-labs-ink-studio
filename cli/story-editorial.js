@@ -114,8 +114,9 @@ async function command(file,planFile,rest,opt,library) {
       if (mixed.report.stems[name].voices) clips.push(media.editorialClip(name,name,name,0,0,endSample-firstSample,endSample-firstSample));
     }
     for (const row of mixed.report.storyAudio.cues) {
-      if (row.arrivalSample<firstSample||row.arrivalSample>=endSample) continue;
-      const point=row.arrivalSample===row.onsetSample ? T.read(row.source.timecode) : T.div(T.read(row.arrivalSample),T.read(rate));
+      const sample=row.playback ? row.playback.actualSample : row.arrivalSample;
+      if (sample===null || sample<firstSample || sample>=endSample) continue;
+      const point=sample===row.onsetSample ? T.read(row.source.timecode) : T.div(T.read(sample),T.read(rate));
       const at=marker(clock,T.compare(point,from)<0 ? from : point,{id:'audio-'+(markers.length+1),label:row.cue,
         kind:'audio',role:row.bus,beatId:row.source.beatId,source:row.source,file:stems[row.bus]});
       if (at) markers.push(at);

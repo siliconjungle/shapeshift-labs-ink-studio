@@ -13,6 +13,41 @@ The command verifies native replay and writes aligned stereo WAVs plus `report.j
 
 The report records section entries, sampled layer gains, cue onset and arrival samples, heard position, and the final sampled position of a following cue. Cue rows carry the committed beat ID and original timecode. `ink-studio beat ID mix/report.json` finds the associated stem and sample metadata. Soundtrack assets use the existing [scene audio format](scene-audio.md), including WAV files, pinned assets, graphs and editorial sessions. The recording supplies the soundtrack world.
 
+## Inspect playback by beat
+
+`story audio` writes `playback.json` with one receipt per routed story cue
+or stinger, including separate compound and velocity layers. The receipt
+keeps the committed beat ID, the chosen asset and variant, the rendered bus,
+and the source selector and position. Following cues also report the source
+position when playback begins.
+
+| Field | Meaning |
+| --- | --- |
+| `requestedSample` | The original cue onset on the absolute scene sample clock. |
+| `plannedSample` | The requested sample plus any authored layer delay and acoustic propagation. |
+| `observedSample` | The simulation tick at which the renderer received the cue, expressed on the same sample clock. Offline replay can reconstruct an onset earlier in that tick. |
+| `actualSample` | The first mixer sample with admitted playback, or `null` when the cue never enters its bus. An admitted sample can still carry source silence or an authored attack. |
+| `lateBySamples` | The difference between actual and planned onset, or `null` when playback never begins. |
+| `fileSample` | The onset offset inside the exported WAV when that onset falls inside the print window. |
+
+`outcome` records played, late, dropped, muted, or outside-window. A dropped
+receipt can include a voice or group limit, reserved capacity, or an authored
+stinger hold. A played cue can also record a later `stolenAt` sample. The
+existing `receipts.json` preserves sound choices for replay. Use
+`--receipts` with that file to reproduce the chosen sounds and regenerate
+their playback receipts.
+
+```sh
+ink-studio beat ink:beat:switchyard/main/30.0 mix/playback.json
+node examples/audio-playback-receipts/demo.cjs ./switchyard
+```
+
+In **Switchyard**, the cart is requested at 1.50 s and enters the Foley bus
+at 2.25 s when it comes into range. The same playhead continues from the
+original request. At 3.60 s, two of three basket impacts lose their slot.
+The receipt for each request keeps its beat link and outcome. Story
+editorial uses the actual samples for its playback markers.
+
 ## Drive a layer from sustained pressure
 
 Use a named parameter on the world’s `adaptive-music` system. This parameter reads the committed danger allocation in the incident scheduler.

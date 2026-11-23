@@ -164,6 +164,7 @@
         ...allocation,...(edit&&{audition:{binding:edit.binding}}),
         ...(input.impact&&{impact:input.impact,startDelay:input.startDelay}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
+        ...((input.sourceEvent!==undefined||input.captureSource)&&positioned&&{sourceAt:at}),
         ...(input.selection!==undefined&&{selection:variation?{...input.selection,variation:{...variation,rate:pitch}}:input.selection}),
         ...(cue.follow&&input.mode==='cue'&&at?.entity&&{attachment:{cue:input.cue,at,
           ...(input.gain!==undefined&&{gain:input.gain}),...(input.pitch!==undefined&&{pitch:input.pitch}),
@@ -360,9 +361,9 @@
       return freeze(copy({time,listener:ear&&{position:ear.position,forward:ear.forward,up:ear.up},active,cues:shots,
         ...(voiceBudget&&{voiceBudget}),...(contactChanges?.length&&{contactChanges})}));
     }
-    function cue({ query, listener, cue, at, gain, pitch, exclude, object, audioProfile, routingCue, audition } = {}) {
+    function cue({ query, listener, cue, at, gain, pitch, exclude, object, audioProfile, routingCue, audition, captureSource } = {}) {
       return mix(query, listenerFrame(query, listener),
-        { cue, at, gain, pitch, exclude, object, audioProfile, routingCue, audition, mode: 'cue' });
+        { cue, at, gain, pitch, exclude, object, audioProfile, routingCue, audition, captureSource, mode: 'cue' });
     }
     return Object.freeze({frame,cue,createPlayback,voiceBudget});
   }
