@@ -21,7 +21,7 @@ function createScenePost(P,post,sampleRate) {
     const classified=voices.map(row=>({...row,stem:row.bus ?? (
       row.stem==='music' ? 'music' : row.stem==='tracks' || row.stem==='spatial' && row.loop ? 'ambience' : 'effects')}));
     const cues=collect ? [] : undefined;
-    const {stems,statistics}=sumVoices(classified,resolve,{start:0,end,sampleRate,gain,cues},buses);
+    const {stems,statistics}=sumVoices(classified,resolve,{start:0,end,sampleRate,gain,cues,parametric:P.audioParametric},buses);
     const assets=Object.fromEntries(Object.entries(post.assets ?? {}).map(([name,asset])=>[name,resolve(asset)]));
     const strips={...definitions}, premix=new Map();
     for (const [name,samples] of stems) {

@@ -122,7 +122,8 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
       const right = ear && V.norm(V.cross(ear.forward, ear.up));
       const at = voice.apparentSource ?? voice.position;
       const pan = right && at ? Math.max(-1, Math.min(1, V.dot(V.norm(V.sub(at, ear.position)), right))) : undefined;
-      return { sample, gain: voice.gain, pan, cutoff: voice.cutoff, delay: delayed ? 0 : voice.delay };
+      return { sample, gain: voice.gain, pan, cutoff: voice.cutoff, delay: delayed ? 0 : voice.delay,
+        ...(voice.processing&&{processing:voice.processing}) };
     }
     function append(target, row) {
       if (++knots > 200000) throw new RangeError('Scene soundtrack exceeds its spatial automation budget');
@@ -168,6 +169,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         report = { source, cue:voice.cue, asset:voice.asset, stem, bus:voice.bus ?? (stem==='music' ? 'music' : 'effects'),
           onsetSample:sample, arrivalSample:time, status:voice.status, position:voice.position, gain:voice.gain,
           ...(voice.selection && { selection:voice.selection }),
+          ...(voice.processing?.profiles.length && { processing:voice.processing }),
           ...(voice.impact && { impact:{...voice.impact, delay:voice.startDelay, startSample:sample+layerDelay} }) };
         if (history.cues.length >= 16384) throw new RangeError('Story audio trace exceeds its cue budget');
         history.cues.push(report);
@@ -264,6 +266,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         if (report) {
           report.lastPosition = live.position;
           report.lastStatus = live.status;
+          if(live.processing)report.lastProcessing=live.processing;
         }
       }
     }
@@ -404,7 +407,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
         row.stem==='spatial' && row[selection.by]===selection.name)));
     if (delivery) return post.prepare(active,resolve,{start,end,gain},true);
     const result=postSelected ? post.render(active,resolve,{start,end,gain},selection) :
-      mix(active,resolve,{start,end,sampleRate,gain,capture:selection!==undefined});
+      mix(active,resolve,{start,end,sampleRate,gain,capture:selection!==undefined,parametric:K.procedural.audioParametric});
     if (selection?.kind==='world' && !result.report.stems.spatial.voices)
       throw new RangeError('No audible world source in the selected capture range');
     if (worldReport) result.report.worldScore=worldReport;

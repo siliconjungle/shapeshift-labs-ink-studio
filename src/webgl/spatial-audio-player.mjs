@@ -69,6 +69,20 @@ export function createSpatialAudioPlayer(context, {
     parameter(low.gain,relative('low'),at,immediate);
     parameter(high.gain,relative('high'),at,immediate);
     parameter(filter.frequency,Math.min(voice.cutoff,context.sampleRate*.49),at,immediate);
+    if(row.tone){
+      const {highpass,lowpass,peaks}=row.tone, plan=voice.processing;
+      const limit=context.sampleRate/2;
+      parameter(highpass.frequency,Math.min(plan.highpass,limit*.98),at,immediate);
+      parameter(lowpass.frequency,plan.lowpass===22000?limit:Math.min(plan.lowpass,limit*.98),at,immediate);
+      peaks.forEach((node,i)=>{
+        const peak=plan.peaks[i];
+        parameter(node.gain,peak?.gainDb??0,at,immediate);
+        if(peak){
+          parameter(node.frequency,Math.min(peak.hz,limit*.98),at,immediate);
+          parameter(node.Q,peak.q,at,immediate);
+        }
+      });
+    }
     if(panner){
       const point=voice.apparentSource??voice.position;
       if(panner.positionX)coordinates(panner,'position',point,at,immediate);
@@ -119,8 +133,24 @@ export function createSpatialAudioPlayer(context, {
       low.type='lowshelf';low.frequency.value=Math.min(250,context.sampleRate*.1);
       high.type='highshelf';high.frequency.value=Math.min(2600,context.sampleRate*.4);
       filter.type='lowpass';filter.Q.value=-3;
-      source.connect(low);low.connect(high);high.connect(filter);filter.connect(gain);
+      source.connect(low);low.connect(high);high.connect(filter);
       const nodes=[source,low,high,filter,gain];
+      let tail=filter, tone;
+      if(live.processing){
+        const highpass=context.createBiquadFilter(), lowpass=context.createBiquadFilter();
+        highpass.type='highpass';lowpass.type='lowpass';
+        highpass.Q.value=lowpass.Q.value=-3.01029995664;
+        const peaks=Array.from({length:4},()=>{
+          const node=context.createBiquadFilter();
+          node.type='peaking';
+          return node;
+        });
+        for(const node of [highpass,...peaks,lowpass]){
+          tail.connect(node);nodes.push(node);tail=node;
+        }
+        tone={highpass,peaks,lowpass};
+      }
+      tail.connect(gain);
       let panner;
       if(live.position){
         panner=context.createPanner();
@@ -128,7 +158,7 @@ export function createSpatialAudioPlayer(context, {
         panner.rolloffFactor=0;
         gain.connect(panner);panner.connect(output(live));nodes.push(panner);
       }else gain.connect(output(live));
-      Object.assign(row,{source,low,high,filter,gain,panner,nodes,started:when});
+      Object.assign(row,{source,low,high,filter,gain,panner,nodes,tone,started:when});
       tune(row,true);
       source.onended=()=>{
         retiring.delete(row);
@@ -149,6 +179,11 @@ export function createSpatialAudioPlayer(context, {
     });
     return row.pending;
   }
+  function validProcessing(plan){
+    return plan&&finite(plan.highpass,0,4000)&&finite(plan.lowpass,40,22000)&&
+      Array.isArray(plan.peaks)&&plan.peaks.length<=4&&Array.from(plan.peaks).every(peak=>
+        peak&&finite(peak.hz,40,16000)&&finite(peak.q,.25,12)&&finite(peak.gainDb,-24,18));
+  }
   function validate(frame){
     if(!frame||!finite(frame.time,0,1e9)||!Array.isArray(frame.active)||!Array.isArray(frame.cues)||
       frame.active.length+frame.cues.length>4096||
@@ -162,6 +197,7 @@ export function createSpatialAudioPlayer(context, {
         (row.contact&&(row.mode!=='loop'||!finite(row.contact.targetGain,0,16384)||
           !finite(row.contact.remaining,0,10.000001)))||
         (row.startDelay!==undefined&&(row.mode!=='cue'||!finite(row.startDelay,0,10)))||
+        (row.processing!==undefined&&!validProcessing(row.processing))||
         !finite(row.delay,0,1e9)||row.position!==null&&!position(row.position)||
         row.apparentSource!==undefined&&!position(row.apparentSource)||
         (row.mode==='clip'?!finite(row.duration,0,1e9):row.duration!==undefined))
@@ -192,6 +228,7 @@ export function createSpatialAudioPlayer(context, {
       for(const [id,voice] of selected){
         let row=voices.get(id);
         if(row&&(row.voice.asset!==voice.asset||(!voice.contact&&row.voice.rate!==voice.rate)||
+          Boolean(row.voice.processing)!==Boolean(voice.processing)||
           output(row.voice)!==output(voice)||Boolean(row.voice.position)!==Boolean(voice.position))){
           stop(row);
           row=undefined;

@@ -56,10 +56,11 @@
 
   function create(definition={}){
     const config=copy(definition);
-    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed','contactLoops']),
+    check(keys(config,['cues','emitters','bindings','materials','surface','distance','occlusion','propagationDelay','soundFamilies','soundSeed','contactLoops','processing']),
       'Invalid spatial audio settings');
     const distance=distanceSettings(config.distance), cueList=table(config.cues??{},512,'cues',cueName);
     const {propagationDelay=false,surface}=config;
+    const processor=config.processing===undefined?null:W.spatialSoundProcessing.compile(config.processing);
     check(typeof propagationDelay==='boolean'&&(surface===undefined||field(surface)),'Invalid audio surface or delay setting');
     const {acoustic,rays=[],segments=[],lossDb,cutoff,materials:occluders={}}=config.occlusion??{};
     check(keys(config.occlusion??{},['acoustic','rays','segments','lossDb','cutoff','materials'])&&
@@ -69,11 +70,12 @@
     const obstacles=new Map(table(occluders,128,'occluding materials').map(([name,raw])=>[name,occlusionStyle(raw,obstacle)]));
     const cues=new Map(cueList.map(([name,raw])=>{
       const spec=typeof raw==='string'?{asset:raw}:raw;
-      check(keys(spec,['asset','at','gain','pitch','distance','occlusion','follow','bus'])&&
+      check(keys(spec,['asset','at','gain','pitch','distance','occlusion','follow','bus','audioProfile'])&&
         typeof spec.asset==='string'&&spec.asset.length<=512&&!!spec.asset.trim()&&
         (spec.at===undefined||selector(spec.at))&&finite(spec.gain??1,0,16)&&finite(spec.pitch??1,.0625,8)&&
         typeof (spec.occlusion??true)==='boolean' && typeof (spec.follow??false)==='boolean' &&
-        (spec.bus===undefined||buses.includes(spec.bus)),'Invalid audio cue '+name);
+        (spec.bus===undefined||buses.includes(spec.bus))&&
+        (spec.audioProfile===undefined||processor?.has(spec.audioProfile)),'Invalid audio cue '+name);
       return [name,{...spec,gain:spec.gain??1,pitch:spec.pitch??1,
         distance:distanceSettings(spec.distance,distance),occlusion:spec.occlusion??true}];
     }));
@@ -137,17 +139,24 @@
       const at=input.at??cue.at, positioned=at!==undefined, source=resolve(query,at);
       const variation=input.selection?.variation, detune=variation?2**(variation.pitchCents/1200):1;
       const pitch=variation?.rate??Math.max(.001,Math.min(64,(input.pitch??1)*cue.pitch*detune));
-      const scale=Math.min(16384,(input.gain??1)*cue.gain);
+      const entity=at?.entity??input.entity;
+      const processing=processor?.resolve(processor.has(input.audioProfile)?input.audioProfile:cue.audioProfile,
+        {cue:input.cue,entity,object:input.object??entity},query,source?.point,listener?.position);
+      const colorGain=processing?amplitude(-processing.gainDb):1;
+      const scale=Math.min(16384,(input.gain??1)*cue.gain*colorGain);
       const bus=input.bus??cue.bus??(input.impact?'effects':undefined);
       const result={id:input.id,cue:input.cue,asset:cue.asset,mode:input.mode,offset:input.offset??0,
         rate:pitch,...(input.duration!==undefined&&{duration:input.duration}),...(bus!==undefined&&{bus}),
+        ...(processing&&{processing}),
         ...(input.impact&&{impact:input.impact,startDelay:input.startDelay}),
         ...(input.sourceEvent!==undefined&&{sourceEvent:input.sourceEvent}),
         ...(input.selection!==undefined&&{selection:variation?{...input.selection,variation:{...variation,rate:pitch}}:input.selection}),
         ...(cue.follow&&input.mode==='cue'&&at?.entity&&{attachment:{cue:input.cue,at,
           ...(input.gain!==undefined&&{gain:input.gain}),...(input.pitch!==undefined&&{pitch:input.pitch}),
-          ...(input.exclude!==undefined&&{exclude:input.exclude})}})};
-      const contact=factor=>input.contact&&{contact:{...input.contact,targetGain:input.contact.targetGain*cue.gain*factor}};
+          ...(input.exclude!==undefined&&{exclude:input.exclude}),
+          ...(input.object!==undefined&&{object:input.object}),
+          ...(input.audioProfile!==undefined&&{audioProfile:input.audioProfile})}})};
+      const contact=factor=>input.contact&&{contact:{...input.contact,targetGain:Math.min(16384,input.contact.targetGain*cue.gain*colorGain)*factor}};
       if(!positioned)return {...result,...contact(1),status:'unpositioned',position:null,distance:null,gain:scale,
         bands:{low:scale,mid:scale,high:scale},cutoff:22000,delay:0};
       const position=source?.point;
@@ -238,7 +247,10 @@
       function route(row,serial,contact){
         const at=eventAt(row), gain=row.gain??1, pitch=row.pitch??1;
         if(!finite(gain,0,64)||!finite(pitch,.0625,8))return;
+        const entity=row.entity??row.contact?.entity;
         const raw={mode:'cue',at,gain,pitch,onset:W.timedEvents.timeOf(row),exclude:id(row.entity)?row.entity:undefined,
+          ...(processor&&{entity,object:row.object??row.contact?.object??row.fact?.data?.object??row.data?.object,
+            audioProfile:processor.has(row.audioProfile)?row.audioProfile:undefined}),
           ...(captureSources&&typeof row.id==='string'&&W.committedEvents.eventId(row.id)&&{sourceEvent:row.id})};
         const recorded=receipts?.get(row.id);
         let matched=false, profile, replayed=0;
@@ -312,8 +324,8 @@
       return freeze(copy({time,listener:ear&&{position:ear.position,forward:ear.forward,up:ear.up},active,cues:shots,
         ...(contactChanges?.length&&{contactChanges})}));
     }
-    function cue({ query, listener, cue, at, gain, pitch, exclude } = {}) {
-      return mix(query, listenerFrame(query, listener), { cue, at, gain, pitch, exclude, mode: 'cue' });
+    function cue({ query, listener, cue, at, gain, pitch, exclude, object, audioProfile } = {}) {
+      return mix(query, listenerFrame(query, listener), { cue, at, gain, pitch, exclude, object, audioProfile, mode: 'cue' });
     }
     return Object.freeze({frame,cue,createPlayback});
   }

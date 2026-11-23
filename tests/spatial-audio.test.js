@@ -336,6 +336,46 @@ test('compound impacts gate each voice, resolve material and prop cues, and keep
   assert.throws(()=>create({squeak:{cue:'hit'}}),/Invalid compound impact binding/);
 });
 
+test('source profiles combine with live acoustic opening and medium rules without replacing a cue asset',()=>{
+  const audio=W.spatialAudio.create({cues:{call:{asset:'single-call',audioProfile:'source'}},
+    processing:{path:'acoustics/path',profiles:{
+      source:{highpass:80,gainDb:-3},
+      pipe:{highpass:350,peaks:[{hz:740,q:4,gainDb:14}]},
+      hatch:{lowpass:680,peaks:[{hz:310,q:2,gainDb:5}]},
+      water:{lowpass:480}
+    },rules:[
+      {id:'submerged',when:{medium:'water',minMeters:1},profile:'water'},
+      {id:'closed',when:{opening:'hatch',maxOpen:.1},profile:'hatch'},
+      {id:'steel',when:{object:'steel-pipe',cue:'call'},profile:'pipe'}
+    ]}});
+  const run=W.runtime.create(hatch);
+  const call=(config={})=>audio.cue({query:run.query(),listener:{entity:'listen-post'},at:{entity:'beacon',socket:'speaker'},cue:'call',...config});
+  assert.equal(call().asset,'single-call');
+  assert.deepEqual(call().processing.profiles,['source']);
+  assert.deepEqual(call({object:'steel-pipe'}).processing.profiles,['source','pipe']);
+  assert.deepEqual(call({audioProfile:'pipe',object:'steel-pipe'}).processing.profiles,['pipe']);
+  near(call().gain,10**(-3/20)/4.7);
+  run.advance(8);
+  assert.equal(call({object:'steel-pipe'}).processing.rule,'closed');
+  assert.equal(call().processing.lowpass,680);
+  run.advance(16);
+  assert.equal(call({object:'steel-pipe'}).processing.rule,'steel');
+  const pool=W.runtime.create({systems:{
+    wet:{kind:'enclosed-water',config:{chambers:{pool:{bounds:{min:[1,0,-1],max:[3,4,1]},initial:8}}}},
+    acoustics:{kind:'acoustics',config:{layout:'wet/acoustic-layout'}}
+  }});
+  const inPool=(at,listener)=>call({query:pool.query(),at,listener}).processing;
+  assert.equal(inPool([1.1,1,0],[2.7,1,0]).rule,'submerged');
+  assert.equal(inPool([1.1,1,0],[1.6,1,0]).rule,undefined);
+  assert.equal(inPool([1.1,3,0],[2.7,3,0]).rule,undefined);
+  const event=audio.frame({listener:[0,0,0],events:[{kind:'audio-cue',cue:'call',object:'steel-pipe'}]}).cues[0];
+  assert.deepEqual(event.processing.profiles,['source','pipe']);
+  assert.throws(()=>W.spatialAudio.create({cues:{call:{asset:'dry',audioProfile:'unlisted'}}}),/Invalid audio cue/);
+  assert.throws(()=>W.spatialAudio.create({processing:{profiles:{bad:{lowpass:20}}}}),/Invalid sound profile/);
+  assert.throws(()=>W.spatialAudio.create({processing:{profiles:{room:{}},
+    rules:[{id:'invalid',profile:'room',when:{medium:'water'}}]}}),/Invalid sound processing rule/);
+});
+
 test('Web Audio renders positional attenuation, muffling, and cancelled late assets',
   {skip:!process.env.INK_TEST_CHROME,timeout:30000},async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-spatial-audio-'));
@@ -447,11 +487,38 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
     player.dispose();
     return {starts,levels};
   }
+  async function contextTone(){
+    const context=new OfflineAudioContext(2,rate,rate), buffer=context.createBuffer(1,rate,rate);
+    for(let i=0;i<rate;i++)buffer.getChannelData(0)[i]=.08*(Math.sin(i*2*Math.PI*440/rate)+Math.sin(i*2*Math.PI*3600/rate));
+    const create=context.createBufferSource.bind(context);
+    let starts=0;
+    context.createBufferSource=()=>{starts++;return create();};
+    const player=createSpatialAudioPlayer(context,{resolveAsset:()=>buffer,smoothing:.015});
+    const frame=(time,processing)=>({...base,time,cues:[],active:[{...voice,mode:'loop',position:null,processing}]});
+    await player.update(frame(0,{highpass:0,lowpass:22000,peaks:[]}));
+    const changed=context.suspend(.45).then(async()=>{
+      await player.update(frame(.45,{highpass:0,lowpass:1000,peaks:[{hz:440,q:3,gainDb:9}]}));
+      await context.resume();
+    });
+    const [output]=await Promise.all([context.startRendering(),changed]);
+    function measure(start,hz){
+      let x=0,y=0;
+      const channel=output.getChannelData(0), length=rate/5;
+      for(let i=start;i<start+length;i++){
+        const angle=i*2*Math.PI*hz/rate;
+        x+=channel[i]*Math.cos(angle);
+        y+=channel[i]*Math.sin(angle);
+      }
+      return Math.hypot(x,y)/length;
+    }
+    player.dispose();
+    return {starts,dry:[measure(4800,440),measure(4800,3600)],wet:[measure(33600,440),measure(33600,3600)]};
+  }
   try{
     const clear=await play(voice), same=await play(voice,{duplicate:true}),
       obstructed=await play({...voice,gain:.22,bands:{low:.22,mid:.22,high:.06},cutoff:1000}),
       cancelled=await play(voice,{cancel:true});
-    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact()});
+    await report({clear,same,obstructed,cancelled,blend:await play(voice,{blend:true}),starts:await looping(),continuous:await continuous(),impact:await impact(),tone:await contextTone()});
   }catch(error){await report({error:error.stack});}
   </script>`);
   const child=spawn(process.env.INK_TEST_CHROME,['--headless','--no-first-run','--disable-background-networking',
@@ -490,4 +557,8 @@ test('Web Audio renders positional attenuation, muffling, and cancelled late ass
   assert(earlyImpact[0]>.05);
   near(earlyImpact[1],0);
   assert(lateImpact.every(level=>level>.05));
+  const {dry,wet,starts}=report.tone;
+  assert.equal(starts,1);
+  assert(dry.every(level=>level>.01));
+  assert(wet[0]>2*dry[0]&&wet[1]<.15*dry[1]);
 });

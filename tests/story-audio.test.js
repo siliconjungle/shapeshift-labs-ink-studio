@@ -165,6 +165,61 @@ test('compound impact layers preserve beat identity, sample delays, buses, and r
     ink.decodeWav(bytes('original/mix.wav')).samples.subarray(3840,8000));
 });
 
+test('contextual audio prints the same asset with different spectra and restores filter history for trims', () => {
+  const dt=.125, commands=[
+    {tick:1,action:'world/event',args:{kind:'audio-cue',cue:'call'}},
+    {tick:9,action:'world/event',args:{kind:'audio-cue',cue:'call',object:'pipe'}}
+  ];
+  const run=R.create({id:'contextual-call',dt,commands});
+  run.advance(17);
+  const tape=run.recording(), source={sampleRate:rate,channels:1,samples:Float32Array.from({length:6000},(_,i)=>
+    .08*(Math.sin(i*2*Math.PI*440/rate)+Math.sin(i*2*Math.PI*3000/rate)))};
+  const spatial={cues:{call:{asset:'call',bus:'dialogue'}},processing:{
+    profiles:{pipe:{highpass:120,lowpass:950,peaks:[{hz:440,q:3,gainDb:9}]}},
+    rules:[{id:'pipe',when:{object:'pipe'},profile:'pipe'}]}};
+  const render=(from,post)=>ink.createSceneAudio({format:'ink-studio/scene-audio',version:1,sampleRate:rate,spatial,
+    ...(post&&{post:{}})},{kit,resolveAsset:()=>source}).render({startPoint:T.read(from),endPoint:T.read(2.125)},
+    {runtime:()=>R.openRecording(tape),recordedThrough:17,trace:true});
+  function level(samples,start,hz){
+    const length=rate/4, angle=2*Math.PI*hz/rate;
+    let cos=0,sin=0;
+    for(let i=start;i<start+length;i++){
+      cos+=samples[2*i]*Math.cos(i*angle);
+      sin+=samples[2*i]*Math.sin(i*angle);
+    }
+    return Math.hypot(cos,sin)/length;
+  }
+  const full=render(0,true), cut=render(1.375,true);
+  const waves=ink.decodeWav(full.waves.dialogue).samples;
+  assert.deepEqual(ink.decodeWav(cut.waves.dialogue).samples,waves.subarray(2*rate*1.375));
+  assert.deepEqual(full.report.storyAudio.cues.map(row=>[row.asset,row.processing?.profiles]),[['call',undefined],['call',['pipe']]]);
+  assert(level(waves,10400,440)>2*level(waves,2400,440));
+  assert(level(waves,10400,3000)<.15*level(waves,2400,3000));
+  assert.deepEqual(ink.decodeWav(render(0,false).waves.spatial).samples,waves);
+});
+
+test('a recorded emitter follows a closing and reopening hatch with its playhead intact', () => {
+  const run=R.create(require('../examples/world-acoustic-hatch.json'));
+  run.advance(20);
+  const tape=run.recording(), source={sampleRate:rate,channels:1,samples:Float32Array.from({length:rate},(_,i)=>
+    .12*Math.sin(i*2*Math.PI*2200/rate))};
+  const plan=ink.createSceneAudio({format:'ink-studio/scene-audio',version:1,sampleRate:rate,spatial:{
+    distance:{reference:5},cues:{tone:'tone'},emitters:{alarm:{cue:'tone',at:{entity:'beacon',socket:'speaker'}}},
+    processing:{path:'acoustics/path',profiles:{hatch:{lowpass:510}},
+      rules:[{id:'closed',profile:'hatch',when:{opening:'hatch',maxOpen:.01}}]}
+  },listener:{at:{entity:'listen-post'},forward:[1,0,0]}},{kit,resolveAsset:()=>source});
+  const render=start=>plan.render({startPoint:T.read(start),endPoint:T.read(2)},
+    {runtime:()=>R.openRecording(tape),recordedThrough:20,trace:true});
+  const full=ink.decodeWav(render(0).waves.spatial).samples;
+  const trimmed=ink.decodeWav(render(1).waves.spatial).samples;
+  assert.deepEqual(trimmed,full.subarray(rate*2));
+  const rms=(second,length)=>Math.sqrt(full.subarray(second*rate*2,(second+length)*rate*2)
+    .reduce((sum,value)=>sum+value*value,0)/(length*rate*2));
+  const open=rms(.3,.2), closed=rms(1,.2), reopened=rms(1.75,.2);
+  assert(closed<open*.13);
+  assert(reopened>open*.95);
+});
+
 test('story audio saves per-layer take and pitch receipts and replays them with a changed seed', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-sound-receipts-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));

@@ -394,3 +394,61 @@ Story audio reports preserve the impact's beat ID and show each
 sounding layer's threshold reading, scheduled sample, arrival sample,
 and stem. A rotating or detuned layer has its own sound-choice receipt
 under `impact:<binding>/<layer>`. [Run the compound-impact demo](../examples/compound-impact-sounds/demo.cjs)
+
+## Color the same source by context
+
+Use `processing` to give a cue the tone of an object, enclosure, or
+medium. The cue keeps the same source asset. A profile can trim level,
+roll off low or high frequencies, and add up to two resonant peaks or
+cuts. Frequencies are in Hz, `gainDb` is in dB, and a larger peak `q`
+makes the band narrower.
+
+```json
+{
+  "cues": { "call": { "asset": "radio-call", "bus": "dialogue" } },
+  "processing": {
+    "path": "acoustics/path",
+    "profiles": {
+      "pipe": {
+        "highpass": 370,
+        "lowpass": 2600,
+        "peaks": [{ "hz": 695, "q": 4.8, "gainDb": 13 }]
+      },
+      "hatch": {
+        "lowpass": 800,
+        "peaks": [{ "hz": 380, "q": 3, "gainDb": 5 }]
+      },
+      "water": { "lowpass": 390, "gainDb": 1 }
+    },
+    "rules": [
+      { "id": "submerged", "when": { "medium": "water", "minMeters": 1.2 }, "profile": "water" },
+      { "id": "closed-hatch", "when": { "opening": "hatch", "maxOpen": 0.08 }, "profile": "hatch" },
+      { "id": "steel-pipe", "when": { "object": "steel-pipe" }, "profile": "pipe" }
+    ]
+  }
+}
+```
+
+Rules run in authored order. The first match adds its profile to any
+base `audioProfile` on the cue. An event can choose its own registered
+`audioProfile` as the base. Combined profiles add their gains and peaks
+and use the narrower passband. A cue with neither a base nor a matching
+rule plays without contextual filters.
+
+A rule can match `cue`, source `entity`, or `object`. An event can name
+its object, and a positioned source's entity ID is the default object.
+Set `path` to an acoustic path trace to match a traversed `room`,
+`opening`, or `medium`. `maxOpen` tests an opening fraction from 0 to 1.
+`minMeters` measures the total distance in the requested medium. You can
+combine selectors in one rule. Existing occlusion and propagation-delay
+settings still control acoustic transmission independently.
+
+Active loops and clips update their filters as the world changes, and
+one-shots use the context at dispatch. In scene exports, a cue with
+`follow: true` samples the context along its attachment. Story audio
+reports show the resolved profiles and matching rule per cue, and
+filtered trims restore the source's filter history.
+
+The demo script takes an output directory and a dry WAV. It creates
+four listening passes from the same source.
+[Run the contextual audio demo](../examples/contextual-sound-processing/demo.cjs) · [Acoustic queries](acoustic-queries.md)
