@@ -209,6 +209,94 @@ test('a shared transaction commits, undoes and redoes the pixel cel and the SDF 
   ]);
 });
 
+test('preview shows exact pixel and source changes before commit and leaves cancel reversible', t => {
+  const { document, filename } = setup(t);
+  const scene = ink.createSceneEditor(source);
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const at = [20,16], events = [];
+  scene.onChange(event=>events.push(event.type));
+  function stage() {
+    pixels.begin('Edit the gate');
+    const { revision,frame } = pixels.inspect(at);
+    pixels.apply({ id:'rim-paint', revision, frame, edits:[{ at, layer:null, from:null, to:'amber' }] });
+    scene.setMaterial('accent','solid:post');
+    pixels.apply({ id:'gate-carve', frame, revision:pixels.describe().revision, destination:'notch',
+      operation:{ modifier:{ kind:'mask', mode:'cut', shape:{ kind:'box', at:[0,0,0], half:[.2,.3,.5] } } } });
+  }
+  stage();
+  const preview = pixels.previewChanges();
+  assert.equal(preview.valid,true);
+  assert.equal(preview.pixelCount,1);
+  assert.deepEqual(preview.pixels.map(({frame,at,before,after})=>[frame,at,before.swatch,after.swatch,after.cel]),
+    [['front',at,null,'amber','front/rim-paint']]);
+  assert.deepEqual(preview.sources.map(({object,fields})=>[object,fields]),
+    [['gate',['modifiers']],['post',['mat']]]);
+  assert.deepEqual(preview.targets.map(({kind,object})=>[kind,object]),[['sdf-shape','gate']]);
+  assert.deepEqual(pixels.history().undo,[]);
+  assert.deepEqual(events,[]);
+  assert.equal(pixels.cancel(),true);
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(scene.snapshot(),source);
+  assert.deepEqual(events,[]);
+
+  stage();
+  assert.deepEqual(pixels.previewChanges(),preview);
+  assert.equal(pixels.commit(),true);
+  assert.equal(pixels.inspect(at).swatch,'amber');
+  assert.equal(scene.snapshot().solids[0].modifiers[0].id,'gate-carve');
+  assert.deepEqual(events,['commit']);
+  assert.equal(scene.undo(),true);
+  assert.deepEqual(pixels.snapshot(),document);
+  assert.deepEqual(scene.snapshot(),source);
+});
+
+test('proposed edits report conflicts without changing an open draft or writing a scene file', t => {
+  const { document, filename, write } = setup(t);
+  const scene = ink.createSceneEditor(source);
+  const pixels = ink.createPixelEditor(document,{ sceneEditor:scene, sceneRef:filename('source') });
+  const patch = (id,extra) => ({ id, frame:'front', revision:pixels.describe().revision, ...extra });
+  pixels.begin('Existing draft');
+  scene.setMaterial('accent','solid:post');
+  const sceneDraft = scene.snapshot();
+  const rejected = pixels.previewEdit(patch('bad-paint',{ edits:[
+    { at:[0,0], layer:null, from:null, to:'amber' },
+    { at:[2,1], layer:'base', from:null, to:'amber' }
+  ] }));
+  assert.equal(rejected.valid,false);
+  assert.deepEqual(rejected.conflicts.map(({code,at})=>[code,at]),[
+    ['protected-pixel',[0,0]],['pixel-changed',[2,1]]
+  ]);
+  const operation = { modifier:{ kind:'mask', mode:'cut', shape:{ kind:'box', at:[0,0,0], half:[.2,.3,.5] } } };
+  const edit = patch('preview-notch',{ destination:'notch', operation });
+  const proposed = pixels.previewEdit(edit);
+  assert.equal(proposed.valid,true);
+  assert.deepEqual(proposed.sources.map(({object})=>object),['gate']);
+  assert.deepEqual(scene.snapshot(),sceneDraft);
+  assert.deepEqual(pixels.previewChanges().sources.map(({object})=>object),['post']);
+  pixels.cancel();
+
+  const pinned = structuredClone(document);
+  pinned.sceneBindings[1].revision = 'old-scene';
+  write('document',pinned);
+  write('patch',{ ...edit, revision:compile(pinned).revision });
+  const argumentsFor = ['pixel-art','preview',filename('document'),filename('patch'),
+    '--scene',filename('source'),'--out',filename('output')];
+  const invalid = spawnSync(process.execPath,cliArgs(...argumentsFor),{ cwd,encoding:'utf8' });
+  assert.equal(invalid.status,2);
+  const conflict = JSON.parse(invalid.stdout);
+  assert.equal(conflict.valid,false);
+  assert.equal(conflict.conflicts[0].code,'stale-source');
+  assert.equal(conflict.targets[0].object,'gate');
+
+  write('document',document);
+  write('patch',edit);
+  const ready = JSON.parse(cli(...argumentsFor));
+  assert.equal(ready.valid,true);
+  assert.deepEqual(ready.sources.map(({object,fields})=>[object,fields]),[['gate',['modifiers']]]);
+  assert.equal(fs.existsSync(filename('output')),false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(filename('source'),'utf8')),source);
+});
+
 test('a failed scene or pixel operation rolls back the entire shared draft', t => {
   const { document, filename } = setup(t);
   const scene = ink.createSceneEditor(source);
@@ -223,6 +311,17 @@ test('a failed scene or pixel operation rolls back the entire shared draft', t =
   assert.deepEqual(scene.snapshot(),source);
   assert.deepEqual(pixels.snapshot(),document);
   assert.deepEqual(pixels.history(),{ undo:[], redo:[] });
+
+  pixels.begin('Preview an invalid carve');
+  pixels.apply(request('draft-paint',{ edits:[paint] }));
+  scene.updateShape({ half:[.3,.4] },'solid:gate');
+  const conflicts = pixels.previewChanges();
+  assert.equal(conflicts.valid,false);
+  assert.equal(conflicts.pixelCount,1);
+  assert.equal(conflicts.sources[0].object,'gate');
+  assert(conflicts.conflicts.some(({code,path})=>code === 'invalid-scene' && path.endsWith('.half')));
+  assert.deepEqual(scene.snapshot(),source);
+  assert.deepEqual(pixels.snapshot(),document);
 
   scene.begin('Surface paint with a blocked pixel');
   pixels.apply(request('patina-mark',{ destination:'patina', operation:{ stamp:{
@@ -266,11 +365,17 @@ test('shot corrections and splat assets travel with pixel undo and render the re
   assert.notEqual(splat,undefined);
   const patch = (id,extra) => ({ id, frame:'front', revision:pixels.describe().revision, ...extra });
   const edits = [{ at, layer:null, from:null, to:'amber' }];
-  pixels.transact('Paint and fit the shot', () => {
-    pixels.apply(patch('highlight',{ destination:'one-shot', edits, operation:{ at, fps:10, frames:[0,0], anchor } }));
-    pixels.apply(patch('fit-edge',{ destination:'footprint', operation:{ splats:[{ splat, footprintScale:.9 }] } }));
-    pixels.apply(patch('cel-highlight',{ edits }));
-  });
+  pixels.begin('Paint and fit the shot');
+  pixels.apply(patch('highlight',{ destination:'one-shot', edits, operation:{ at, fps:10, frames:[0,0], anchor } }));
+  pixels.apply(patch('fit-edge',{ destination:'footprint', operation:{ splats:[{ splat, footprintScale:.9 }] } }));
+  pixels.apply(patch('cel-highlight',{ edits }));
+  const preview = pixels.previewChanges();
+  assert.equal(preview.pixelCount,1);
+  assert.equal(preview.valid,true);
+  const [shot,fit] = preview.targets;
+  assert.deepEqual([shot.object,shot.pixels[0].at],['gate',at]);
+  assert.deepEqual([fit.object,fit.splats],['gate',[splat]]);
+  assert.equal(pixels.commit(),true);
   const options = pixels.renderOptions();
   assert.equal(options.shotCorrections.corrections[0].id,'highlight');
   assert.equal(Math.round(SplatFit.prepare(world,options.splatFit)[splat]*10),9);

@@ -402,6 +402,7 @@
     doc.seed = () => state.seed;
     doc.revision = () => revision;
     doc.pending = () => !!transaction;
+    doc.transactionBase = () => transaction ? immutable(transaction.before) : undefined;
     doc.history = () => freeze({ undo: past.map(e => e.label), redo: future.map(e => e.label) });
     doc.onChange = fn => {
       listeners.add(fn);

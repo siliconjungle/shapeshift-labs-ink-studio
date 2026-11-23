@@ -5,6 +5,7 @@ const Targets = require('../src/target-selectors.js');
 const SplatFit = require('./splat-fit-asset.js');
 const { signature } = require('./render-row-assets.js');
 const Provenance = require('../src/splat-provenance.js');
+const { conflict } = require('./pixel-edit-preview.js');
 
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
@@ -39,14 +40,15 @@ function validate(destinations, bindings) {
 function resolve(design, name = 'raster') {
   const destination = (design.version === 2 && design.destinations?.find(target => target.id === name)) ||
     (name === 'raster' && { id:'raster', kind:'raster' });
-  if (!destination) throw new RangeError('Unknown pixel edit destination ' + name);
+  if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);
   return { destination, binding };
 }
 
 function checkRevision(binding, revision) {
   if (binding.revision !== undefined && binding.revision !== revision)
-    throw new RangeError('Pixel edit scene binding is stale: ' + binding.id);
+    throw conflict('stale-source','Pixel edit scene binding is stale: ' + binding.id,
+      { binding:binding.id, expected:binding.revision, actual:revision });
 }
 
 function sceneTarget(binding) {
@@ -60,7 +62,8 @@ function splatRows(world, binding) {
     const index = typeof source === 'string' ? (ids ??= Provenance.identities(world)).rowOf(source) : source;
     const scope = Number.isSafeInteger(index) && index >= 0 && index < world.count && Targets.objectScope(target,row(index));
     if (!scope)
-      throw new RangeError('Splat ' + source + ' is missing, ambiguous, or outside binding ' + binding.id);
+      throw conflict('unavailable-splat','Splat ' + source + ' is missing, ambiguous, or outside binding ' + binding.id,
+        { binding:binding.id, splat:source });
     return { index, scope };
   };
 }
@@ -133,14 +136,16 @@ function boundSolid(binding, editor, revision) {
   const key = 'solid:' + binding.object;
   const solid = editor.node(key)?.solid;
   if (!solid || binding.part !== undefined && solid.part !== binding.part)
-    throw new RangeError('Scene binding does not resolve to an authored solid: ' + binding.id);
+    throw conflict('missing-source-object','Scene binding does not resolve to an authored solid: ' + binding.id,
+      { binding:binding.id, object:binding.object });
   return { key, solid };
 }
 
 function restChart(solid, chart) {
   const charts = solid.surfaceState?.charts;
   const target = charts && Object.hasOwn(charts,chart) && charts[chart];
-  if (!target) throw new RangeError('Unknown rest chart ' + chart + ' on ' + solid.id);
+  if (!target) throw conflict('missing-chart','Unknown rest chart ' + chart + ' on ' + solid.id,
+    { object:solid.id, chart });
   return target;
 }
 
@@ -179,7 +184,8 @@ function solidEdit(edit, destination, binding, editor, revision) {
 
 function apply(frame, edit, { destination, binding }, context, readMarks) {
   if (binding.frame !== undefined && binding.frame !== edit.frame)
-    throw new RangeError('Pixel edit destination ' + destination.id + ' is bound to frame ' + binding.frame);
+    throw conflict('wrong-frame','Pixel edit destination ' + destination.id + ' is bound to frame ' + binding.frame,
+      { binding:binding.id, expected:binding.frame, actual:edit.frame });
   if (destination.kind === 'shot-correction') {
     const marks = readMarks(frame,edit);
     return shot(frame,edit,binding,context.world(binding),marks);

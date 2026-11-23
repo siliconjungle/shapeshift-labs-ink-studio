@@ -349,6 +349,7 @@
     const editor = Object.freeze({
       snapshot,
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
+      fork: () => create(snapshot(),{ env:buildEnv, historyLimit:0 }),
       tree: () => current().tree,
       node: key => current().nodes.get(key),
       selection: selectedKeys,

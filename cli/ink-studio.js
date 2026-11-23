@@ -1397,6 +1397,7 @@ const CMD = {
         '  pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels',
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
+        '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
         '  pixel-art draw|inspect|edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --scene <bound scene> --out edit.json   write a scene destination',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',

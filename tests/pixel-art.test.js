@@ -3,7 +3,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync,spawnSync } = require('node:child_process');
 const { createPixelEditor } = require('..');
 const { compile, edit, review, stamp, validate } = require('../cli/pixel-art.js');
 const PixelStamps = require('../src/pixel-stamps.js');
@@ -135,6 +135,36 @@ test('CLI output can be inspected and round-trips through the existing pixel sta
   const rendered = PixelStamps.image(indexed);
   const decoded = PNG.raster(path.join(out,'art.png'));
   assert.deepEqual([...rendered.rgba],[...decoded.data]);
+});
+
+test('CLI preview reports exact legacy pixel changes without writing and returns conflicts as JSON', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'ink-pixel-preview-'));
+  t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const cwd = path.resolve(__dirname,'..');
+  const file = path.join(directory,'art.json'), pending = path.join(directory,'patch.json');
+  const output = path.join(directory,'revised.json');
+  fs.writeFileSync(file,JSON.stringify(draft));
+  fs.writeFileSync(pending,JSON.stringify(patch));
+  const args = ['cli/ink-studio.js','pixel-art','preview',file,pending,'--out',output,'--limit','1'];
+  const preview = JSON.parse(execFileSync(process.execPath,args,{ cwd,encoding:'utf8' }));
+  assert.equal(preview.valid,true);
+  assert.equal(preview.pixelCount,patch.edits.length);
+  assert.equal(preview.pixels.length,1);
+  const [pixel] = preview.pixels;
+  const edit = patch.edits.find(change=>change.at.join(',') === pixel.at.join(','));
+  assert.equal(pixel.before.swatch,edit.from);
+  assert.equal(pixel.after.swatch,edit.to);
+  assert.equal(pixel.after.color,draft.palette[edit.to]);
+
+  fs.writeFileSync(pending,JSON.stringify({ ...patch, revision:'stale' }));
+  const result = spawnSync(process.execPath,args,{ cwd,encoding:'utf8' });
+  assert.equal(result.status,2);
+  const invalid = JSON.parse(result.stdout);
+  assert.equal(invalid.valid,false);
+  assert.deepEqual(invalid.conflicts.map(issue=>issue.code),['stale-document']);
+  assert.equal(invalid.conflicts[0].actual,patch.revision);
+  assert.equal(fs.existsSync(output),false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')),draft);
 });
 
 test('a named object can be traced on its native grid and redrawn as an indexed layer', t => {

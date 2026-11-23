@@ -155,6 +155,45 @@ sidecars, and redo restores the revised ones. Use `renderOptions(sceneRef)`
 to retrieve options by source reference when the editor is standalone.
 The shared history belongs to the live editing session.
 
+## Preview before committing
+
+Use `pixels.previewEdit(patch)` to check a proposed patch against the working
+document. It returns a report without staging the patch. An already open
+transaction stays available for editing. Preview accepts the same source
+adapters as `apply`.
+
+After staging a gesture with `begin()` and `apply()`, call
+`pixels.previewChanges()` to compare the whole draft with the start of the
+transaction. The report includes these fields.
+
+- `pixelCount` and `pixels` for native-grid changes to visible colors, owners,
+  or protection. Each listed pixel has a frame, coordinate, and before and
+  after values. The default list shows up to 256 changes. Set `limit` for more
+  or fewer details. The count still covers all changes.
+- `sources` for changed source objects and their authored fields, including
+  changes made by calling the attached scene editor directly.
+- `targets` for bound destinations, including the source object, part,
+  surface channel, requested shot pixels, or splat IDs as applicable.
+- `conflicts` for validation errors such as protected pixels, mismatched
+  owners, stale document or source revisions, and invalid scene fields.
+
+Commit a valid draft with `commit()` or restore the original scene and
+document with `cancel()`. Preview leaves the undo history untouched. If
+validation finds an invalid staged scene, the report includes its conflicts
+and the shared draft rolls back. Shot pixels in the report are authored
+requests. You can render a valid draft with the scene editor's `build()` and
+`pixels.renderOptions()` to see the camera-dependent result.
+
+The CLI reports a single proposed patch as JSON on standard output. Pass
+`--scene` for a scene-bound destination and `--limit` to control the pixel
+list. Exit status 2 indicates a conflict. Apply the reviewed patch with
+`pixel-art edit` when ready.
+
+```sh
+node cli/ink-studio.js pixel-art preview examples/pixel-art-tooling/relay.json \
+  examples/pixel-art-tooling/relay-cleanup.json
+```
+
 ## Author a version 2 document
 
 Version 2 keeps canvas size, pixel aspect, palette, and the layer stack at the

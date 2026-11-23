@@ -8,6 +8,7 @@ const PNG = require('./png.js');
 const Critic = require('./critic.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
+const Preview = require('./pixel-edit-preview.js');
 
 const format = 'ink-studio/pixel-art';
 const name = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
@@ -324,27 +325,46 @@ function review(frame) {
 function readPixelEdits(frame, patch, layer) {
   if (!Array.isArray(patch.edits) || !integer(patch.edits.length,1,4096))
     throw new TypeError('Pixel paint needs 1–4096 edits');
-  const visited = new Set(), marks = [];
+  const visited = new Set(), marks = [], issues = [];
   for (const change of patch.edits) {
     if (!record(change) || !at(frame.width,frame.height,change.at) || ![null,...frame.swatches].includes(change.to) ||
-        !Object.hasOwn(change,'from') || !Object.hasOwn(change,'layer'))
-      throw new TypeError('A pixel edit needs at, from, layer and to');
+        !Object.hasOwn(change,'from') || !Object.hasOwn(change,'layer')) {
+      issues.push({ code:'invalid-pixel', message:'A pixel edit needs at, from, layer and to',
+        ...(Array.isArray(change?.at) && { at:change.at }) });
+      continue;
+    }
     const [x,y] = change.at, p = y*frame.width+x, state = cell(frame,p);
-    if (visited.has(p) || state.protected || state.swatch !== change.from || state.layer !== change.layer ||
-        (layer !== undefined && state.layer !== null && state.layer !== layer))
-      throw new RangeError('Pixel edit no longer applies at ' + change.at.join(','));
+    let code;
+    if (visited.has(p)) code = 'duplicate-pixel';
+    else if (state.protected) code = 'protected-pixel';
+    else if (state.swatch !== change.from || state.layer !== change.layer) code = 'pixel-changed';
+    else if (layer !== undefined && state.layer !== null && state.layer !== layer) code = 'wrong-cel';
     visited.add(p);
+    if (code) {
+      issues.push({ code, at:change.at, message:'Pixel edit no longer applies at ' + change.at.join(','),
+        expected:{ layer:change.layer, swatch:change.from }, actual:state });
+      continue;
+    }
     marks.push({ swatch:change.to, at:change.at });
+  }
+  if (issues.length) {
+    const ErrorType = issues[0].code === 'invalid-pixel' ? TypeError : RangeError;
+    throw Object.assign(new ErrorType(issues[0].message),{ conflicts:issues });
   }
   return marks;
 }
 
 function edit(design, frame, patch, context) {
-  if (!record(patch) || patch.revision !== frame.revision || !name(patch.id))
+  if (!record(patch) || !name(patch.id))
     throw new TypeError('Pixel edit needs the observed revision and a valid edit ID');
-  if (frame.revision !== fingerprint(design)) throw new RangeError('Pixel edit revision no longer matches the document');
+  if (patch.revision !== frame.revision)
+    throw Preview.conflict('stale-document','Pixel edit needs the observed revision and a valid edit ID',
+      { expected:patch.revision, actual:frame.revision },TypeError);
+  const revision = fingerprint(design);
+  if (frame.revision !== revision) throw Preview.conflict('stale-document','Pixel edit revision no longer matches the document',
+    { expected:frame.revision, actual:revision });
   if (design.version === 2 && patch.frame !== frame.id && (patch.frame !== undefined || patch.cel === undefined))
-    throw new RangeError('Pixel edit needs the observed frame ID');
+    throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   const route = Destinations.resolve(design,patch.destination);
   if (route.destination.kind !== 'raster') {
     if (patch.cel !== undefined) throw new TypeError('A cel ID is a raster edit target');
@@ -363,11 +383,13 @@ function edit(design, frame, patch, context) {
       return { ...item, cels:{ ...item.cels, [layer]:{ ...cel, marks:[...cel.marks,...marks] } } };
     }) };
     const result = compile(revised,frame.id);
+    const clipped = [];
     for (const { at:[x,y], swatch } of marks) {
       const state = cell(result,y*frame.width+x);
       if (state.cel !== patch.cel || state.swatch !== swatch)
-        throw new RangeError('Pixel cel edit is clipped at ' + [x,y].join(','));
+        clipped.push({ code:'clipped-pixel', at:[x,y], message:'Pixel cel edit is clipped at ' + [x,y].join(',') });
     }
+    if (clipped.length) throw Object.assign(new RangeError(clipped[0].message),{ conflicts:clipped });
     return revised;
   }
   const marks = readPixelEdits(frame,patch);
@@ -398,6 +420,32 @@ function openDesign(source) {
     : { design, legacyRevision:null };
 }
 
+function previewEdit(design, patch, context, { frameId,limit } = {}) {
+  Preview.previewLimit(limit);
+  const targets = [], sources = [];
+  let candidate = design, issues = [], source;
+  try {
+    const route = Destinations.resolve(design,patch?.destination);
+    const target = Preview.sourceTarget(route,patch);
+    if (target) targets.push(target);
+    const frame = compile(design,frameId ?? (design.version === 2 ? patch?.frame : undefined),patch?.cel);
+    const output = edit(design,frame,patch,{
+      world:binding => context.world(binding),
+      scene(binding) {
+        const { editor,revision } = context.scene(binding);
+        const fork = editor.fork();
+        source = { scene:binding.scene, before:editor.snapshot(), fork };
+        return { editor:fork, revision };
+      }
+    });
+    if (route.destination.kind === 'raster') candidate = output;
+    if (source) sources.push(...Preview.sourceChanges(source.scene,source.before,source.fork.snapshot()));
+  } catch (error) {
+    issues = Preview.conflicts(error);
+  }
+  return Preview.report({ baseline:design,candidate,sources,targets,issues,compile,cell,limit });
+}
+
 function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
   const baseline = { ...openDesign(source), renderOutputs:{} };
   const { authoring } = require('../index.js').load().KIT;
@@ -407,6 +455,7 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
   if (!journal) throw new TypeError('Use an Ink scene editor for a shared pixel transaction');
   const sceneName = sceneRef ?? sceneEditor?.snapshot().id;
   const slot = 'pixel-editor-' + randomUUID();
+  const stagedTargets = new WeakMap();
   let cached = baseline, text;
 
   function state() {
@@ -436,40 +485,55 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     return sceneEditor;
   }
 
+  function requestFor({ design,legacyRevision }, patch) {
+    const request = structuredClone(patch);
+    if (legacyRevision !== null && request?.revision === legacyRevision) {
+      request.revision = fingerprint(design);
+      if (request.frame === undefined && request.cel === undefined) request.frame = 'artwork';
+    }
+    return request;
+  }
+
+  function editContext(context, grouped) {
+    return {
+      scene(binding) {
+        if (grouped && !sceneEditor)
+          throw new Error('Attach the source scene editor to group native scene and pixel edits');
+        const supplied = context?.scene?.(binding);
+        if (supplied) {
+          if (sceneEditor && supplied.editor !== sceneEditor)
+            throw new Error('The pixel transaction must use its attached scene editor');
+          return supplied;
+        }
+        const editor = resolveScene(binding);
+        return { editor, revision:fingerprint(editor.snapshot()) };
+      },
+      world(binding) {
+        const world = context?.world?.(binding) ?? resolveScene(binding).build();
+        return { ...world, look:{ ...world.look,...renderOptions(binding.scene) } };
+      }
+    };
+  }
+
   function apply(patch,context) {
     const grouped = journal.pending();
     const perform = () => {
-      const request = structuredClone(patch);
-      const draft = state(), { design,legacyRevision } = draft;
-      if (legacyRevision !== null && request?.revision === legacyRevision) {
-        request.revision = fingerprint(design);
-        if (request.frame === undefined && request.cel === undefined) request.frame = 'artwork';
-      }
+      const draft = state(), { design } = draft;
+      const request = requestFor(draft,patch);
       const frame = compile(design,request?.frame,request?.cel);
-      const result = edit(design,frame,request,{
-        scene(binding) {
-          if (grouped && !sceneEditor)
-            throw new Error('Attach the source scene editor to group native scene and pixel edits');
-          const supplied = context?.scene?.(binding);
-          if (supplied) {
-            if (sceneEditor && supplied.editor !== sceneEditor)
-              throw new Error('The pixel transaction must use its attached scene editor');
-            return supplied;
-          }
-          const editor = resolveScene(binding);
-          return { editor, revision:fingerprint(editor.snapshot()) };
-        },
-        world(binding) {
-          const world = context?.world?.(binding) ?? resolveScene(binding).build();
-          return { ...world, look:{ ...world.look,...renderOptions(binding.scene) } };
-        }
-      });
-      const { destination,binding } = Destinations.resolve(design,request.destination);
+      const result = edit(design,frame,request,editContext(context,grouped));
+      const route = Destinations.resolve(design,request.destination), { destination,binding } = route;
       if (destination.kind === 'raster') store({ ...draft, design:result, legacyRevision:null });
       const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
       if (option) store({ ...draft, renderOutputs:{ ...draft.renderOutputs,
         [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
       } });
+      if (grouped && binding) {
+        const base = journal.transactionBase();
+        let targets = stagedTargets.get(base);
+        if (!targets) stagedTargets.set(base,targets = new Map());
+        targets.set(JSON.stringify([binding.scene,destination.id,request.id]),Preview.sourceTarget(route,request));
+      }
       return structuredClone(result);
     };
     if (!grouped) return journal.transact(patch?.id,perform);
@@ -479,6 +543,25 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
       journal.cancel();
       throw error;
     }
+  }
+
+  function previewChanges({ limit } = {}) {
+    Preview.previewLimit(limit);
+    const before = journal.transactionBase();
+    if (!before) throw new Error('No active transaction');
+    const content = before.entities[slot]?.content;
+    const original = content === undefined ? baseline.design : JSON.parse(content).design;
+    const targets = Array.from(stagedTargets.get(before)?.values() ?? []);
+    let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
+    try {
+      journal.preview();
+      candidate = state().design;
+      scene = sceneEditor?.snapshot();
+    } catch (error) {
+      issues = Preview.conflicts(error);
+    }
+    const sources = Preview.sourceChanges(sceneName,before.environment,scene);
+    return Preview.report({ baseline:original,candidate,sources,targets,issues,compile,cell,limit });
   }
 
   const editor = Object.freeze({
@@ -491,6 +574,18 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     apply,
     begin: label => { journal.begin(label); },
     preview() { journal.preview(); return editor.snapshot(); },
+    previewChanges,
+    previewEdit(patch,options = {}) {
+      const { limit } = options;
+      const draft = state();
+      let request;
+      try {
+        request = requestFor(draft,patch);
+      } catch (error) {
+        return Preview.report({ baseline:draft.design, issues:Preview.conflicts(error),compile,cell,limit });
+      }
+      return previewEdit(draft.design,request,editContext(options,false),{ limit });
+    },
     commit: journal.commit,
     cancel: journal.cancel,
     undo: journal.undo,
@@ -553,8 +648,9 @@ function trace(frame, object, scene) {
 
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
-  if (!['trace','upgrade','validate','targets','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, inspect, or edit. See ink-studio help.');
+  if (!['trace','upgrade','validate','targets','draw','inspect','preview','edit'].includes(action) ||
+      pos.length !== (['edit','preview'].includes(action) ? 3 : 2))
+    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, inspect, preview, or edit. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -596,6 +692,13 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
       throw new TypeError('Use pixel-art targets <design.json> --destination id --scene <bound scene> [--limit count]');
     const report = Destinations.targets(Destinations.resolve(design,opt.destination),context,limit);
     process.stdout.write(JSON.stringify(report,null,2)+'\n');
+    return;
+  }
+  if (action === 'preview') {
+    const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
+    const report = previewEdit(design,read(patch),context,{ frameId:opt.frame,limit });
+    process.stdout.write(JSON.stringify(report,null,2)+'\n');
+    if (!report.valid) process.exitCode = 2;
     return;
   }
   const changes = action === 'edit' ? read(patch) : undefined;
