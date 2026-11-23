@@ -44,7 +44,7 @@ For an arbitrary façade, skirt, or parameterized patch use `TexturedSurface.gri
 
 The native WebGL renderer and software renderer read `world.spriteSurfaces`. Set `spriteSurfaces: false` in render options to bypass the optional surfaces. A custom browser host may use `createSurfacePipeline` from the WebGL entry point with a depth attachment shared with the splat pass. The Rebirth host uses the same atlas representation.
 
-Paint returns a 24-bit RGB integer or `undefined` for a transparent cutout. Sampling uses nearest texels by default. Fractional alpha is reserved for splats and the existing sprite-atlas effects. Texture RGB is authored surface color, so bake surface shading into the paint when desired. The software renderer's resolved-frame looks also affect the result. Surface color is baked. Material-selector and live-relighting channels continue to use SDF splats.
+Paint returns a 24-bit RGB integer or `undefined` for a transparent cutout. Sampling uses nearest texels by default. Fractional alpha is reserved for splats and the existing sprite-atlas effects. Texture RGB supplies the surface's base color. It can include baked shading or respond to scene emitters. The software renderer's resolved-frame looks also affect the result. Material-selector channels continue to use SDF splats.
 
 Grids default to a 200,000-triangle budget. Raise `maxTriangles` explicitly up to 2,000,000. The atlas has its existing configurable width and maximum height. Invalid geometry or paint leaves the atlas allocation unchanged.
 
@@ -58,6 +58,41 @@ Set `castsShadow: true` on a planar face or face region to use its painted
 alpha to block local light. [Shadows from painted cutouts](painted-cutout-shadows.md)
 
 Run `ink-studio render examples/textured-surfaces.js` for a mixed example. Its `build(seed,{textured:false})` also exercises the SDF and splat rendering path.
+
+## Background tile normals
+
+Pack a normal map alongside a tile's color, then place the same region
+wherever the tile repeats. The demo uses this for masonry, paving, a
+metal hatch and copper pipes. [Signal Vault demo](../examples/background-tile-normals/index.html)
+
+```js
+const brick = atlas.reserve(16, 16, paintBrick, {
+  normal(x, y) {
+    const dx = brickHeight(x + 1, y) - brickHeight(x - 1, y);
+    const dy = brickHeight(x, y + 1) - brickHeight(x, y - 1);
+    return [-dx, dy, 1];
+  }
+});
+atlas.faceRegion([-2, 0, 0], [2, 0, 0], [0, 2, 0], brick);
+atlas.faceRegion([0, 0, 0], [2, 0, 0], [0, 2, 0], brick);
+```
+
+The callback supplies a tangent-space vector. Positive X points right in
+the texture, positive Y points up, and positive Z points away from the
+surface toward the viewer. Return `undefined` to use the geometric normal.
+Alternatively, pass a matching top-down `Uint8Array` or `Uint8ClampedArray`
+RGBA normal map, using raw texture bytes. Flat is `[128,128,255,255]`.
+Alpha below 128 uses the geometric normal. The normals use the tile's
+nearest-texel lookup and follow rotated or mirrored UVs. If you edit
+`atlas.normalPixels` in place after packing, call
+`SpriteSurface.markDirty(atlas, region)` to upload the changed texels.
+
+The software and WebGL renderers use the normals for live scene emitters.
+Pass `surfaceNormals: false` in render options to compare flat shading.
+Normal maps affect receiver shading. Color, coverage, depth and
+shadow-casting geometry come from the same original tile. Degenerate UVs
+use the geometric normal. On WebGL, a mapped atlas evaluates its lights
+at visible fragments to retain relief as the light moves.
 
 ## PS1-style material projection
 

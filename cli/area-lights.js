@@ -52,9 +52,9 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     cutoutShadow?.(origin, direction, stop) || occludes(sources, origin, direction, stop) : null;
   const cache = [];
 
-  function evaluate(point, normal, row) {
+  function evaluate(point, normal, row, biasNormal) {
     const rgb=[0,0,0];
-    AreaLights.evaluate(active,point,normal,rgb,{shadow:areaShadow});
+    AreaLights.evaluate(active,point,normal,rgb,{shadow:areaShadow,biasNormal});
     for (const light of projectors) {
       const offset = light.at.map((value,k) => value-point[k]), distance = Math.hypot(...offset);
       if (distance <= spotBias || distance >= light.radius) continue;
@@ -64,7 +64,7 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
       const weight = spotWeight(light,direction);
       if (!weight) continue;
       if (light.castsShadow && (shadow || sources.length || cutoutShadow)) {
-        const origin = point.map((value,k) => value+normal[k]*spotBias);
+        const origin = point.map((value,k) => value+(biasNormal??normal)[k]*spotBias);
         const ray = light.at.map((value,k) => value-origin[k]), stop = Math.hypot(...ray);
         if (stop > spotBias) {
           const toLight = ray.map(value => value/stop);
@@ -82,14 +82,16 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
     return rgb.map((n, c) => n + additional[c] + retention);
   }
 
-  function shade(pixel, point, normal, rgb, fog, fogMix = 0, row) {
+  function shade(pixel, point, normal, rgb, fog, fogMix = 0, row, biasNormal) {
     const previous = cache[pixel];
     let light;
     if (previous && previous.row === row && point.every((n,k)=>Math.abs(n-previous.point[k])<1e-6) &&
-        normal.every((n,k)=>Math.abs(n-previous.normal[k])<1e-6)) light=previous.light;
+        normal.every((n,k)=>Math.abs(n-previous.normal[k])<1e-6) &&
+        (biasNormal===previous.biasNormal || biasNormal&&previous.biasNormal&&
+          biasNormal.every((n,k)=>Math.abs(n-previous.biasNormal[k])<1e-6))) light=previous.light;
     else {
-      light=evaluate(point,normal,row);
-      cache[pixel]={point,normal,light,row};
+      light=evaluate(point,normal,row,biasNormal);
+      cache[pixel]={point,normal,biasNormal,light,row};
     }
     if (light.every(n => n === 1) || fogMix>=1) return rgb;
     const surface = fogMix ? rgb.map((n,k)=>clamp((n-fog[k]*fogMix)/(1-fogMix))) : rgb;

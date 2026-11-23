@@ -172,7 +172,7 @@ const AreaLights = (() => {
     point,
     normal,
     out = [0, 0, 0],
-    { shadow, volume = false, direction = [0, 0, 1], anisotropy = 0 } = {}
+    { shadow, volume = false, direction = [0, 0, 1], anisotropy = 0, biasNormal = normal } = {}
   ) {
     out.fill(0);
     const transmissionRGB = [1, 1, 1];
@@ -182,7 +182,7 @@ const AreaLights = (() => {
       if (Math.hypot(...point.map((n, k) => n - light.at[k])) >= light.radius + Math.hypot(...light.half)) continue;
       transmission(light, point, transmissionRGB);
       if (!transmissionRGB.some(Boolean)) continue;
-      const origin = point.map((n, k) => n + (volume ? 0 : normal[k] * light.bias));
+      const origin = point.map((n, k) => n + (volume ? 0 : biasNormal[k] * light.bias));
       let total = 0,
         lit = 0;
       for (const sample of light.points) {

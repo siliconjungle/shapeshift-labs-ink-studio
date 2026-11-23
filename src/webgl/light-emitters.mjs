@@ -101,7 +101,7 @@ vec3 eCookie(int i,vec3 p){
   return mix(mix(texelFetch(u_eCookies,lo+clamp(a,ivec2(0),hi),0).rgb,texelFetch(u_eCookies,lo+clamp(a+ivec2(1,0),ivec2(0),hi),0).rgb,f.x),mix(texelFetch(u_eCookies,lo+clamp(a+ivec2(0,1),ivec2(0),hi),0).rgb,texelFetch(u_eCookies,lo+clamp(a+ivec2(1),ivec2(0),hi),0).rgb,f.x),f.y);
 }
 vec2 eDisk(vec2 a){if(a.x==0.0&&a.y==0.0)return vec2(0);bool wide=abs(a.x)>abs(a.y);float r=wide?a.x:a.y,angle=.78539816339*(wide?a.y/a.x:2.0-a.x/a.y);return r*vec2(cos(angle),sin(angle));}
-vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){
+vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay,vec3 biasNormal){
   vec3 sum=vec3(0);
   for(int i=0;i<32;i++){
     if(i>=u_eCount||(fog&&i>=u_eFogCount))break;if(u_ePick>0&&i!=u_ePick-1)continue;
@@ -121,7 +121,7 @@ vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){
       if(type==3){float outer=u.w,inner=v.w;if(facing<outer)continue;float edge=inner==outer?1.0:clamp((facing-outer)/(inner-outer),0.0,1.0);angular*=edge*edge*(3.0-2.0*edge);}
       float amount=receive*angular*pow(1.0-d/at.w,2.0);total+=amount;
       bool shadows=mod(params.z,2.0)>.5&&(!fog||eRow(i,10).y>.5);
-      vec3 origin=p+(fog?vec3(0):normal*params.w);
+      vec3 origin=p+(fog?vec3(0):biasNormal*params.w);
       float visible=shadows?eShadow(origin,dir,d,params.w)*eCutoutShadow(origin,sampleAt,fog&&type>=3?0.0:params.w):1.0;
       lit+=amount*visible;
     }
@@ -132,6 +132,7 @@ vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){
   }
   return sum;
 }
+vec3 eLighting(vec3 p,vec3 normal,bool fog,vec3 viewRay){return eLighting(p,normal,fog,viewRay,normal);}
 vec3 ePaint(vec3 rgb,vec3 p,vec3 n){return eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(p,n,false,vec3(0)))));}
 `;
 

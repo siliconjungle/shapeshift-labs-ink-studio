@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signal Vault · Ink Studio</title>
+<style>
+:root{color-scheme:dark;background:#101a22;color:#ebede1;font:15px system-ui,sans-serif;--rule:#344a52;--dim:#acbdb9;--light:#e6b17c}
+body{margin:0}
+main{max-width:1140px;margin:0 auto;padding:clamp(28px,7vw,86px) clamp(16px,5vw,64px)}
+h1{font-size:clamp(42px,9vw,92px);line-height:.93;letter-spacing:-.074em;margin:0 0 16px}
+p{margin:0;color:var(--dim);max-width:50ch}
+header{margin-bottom:24px}
+.views{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+figure{margin:0;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:#14222b}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated;cursor:crosshair;touch-action:none}
+figcaption{padding:12px 15px;border-top:1px solid var(--rule);font-weight:650;letter-spacing:-.015em}
+.controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;margin-top:16px}
+label{display:grid;grid-template-columns:auto minmax(60px,1fr) 4ch;gap:12px;align-items:center}
+input{width:100%;margin:0;accent-color:var(--light)}
+output{color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+button{font:inherit;font-weight:650;color:#141d22;background:#e5b27f;border:1px solid #e5b27f;border-radius:5px;padding:9px 13px;cursor:pointer;min-width:120px}
+button:focus-visible,input:focus-visible{outline:2px solid #f9d3a9;outline-offset:3px}
+#status{margin-top:14px;color:#f7bb90}
+@media(max-width:530px){.views{grid-template-columns:1fr;gap:8px}figcaption{padding:8px;font-size:12px}.controls{gap:10px}label{gap:8px;font-size:13px}button{min-width:103px;font-size:13px;padding:8px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Signal Vault</h1>
+    <p>Drag the lamp over either room to light the same bricks, ironwork and paving with flat or painted tile normals.</p>
+  </header>
+  <div class="views">
+    <figure><canvas id="flat" width="224" height="128" aria-label="Room with flat tile normals"></canvas><figcaption>Flat tile normals</figcaption></figure>
+    <figure><canvas id="mapped" width="224" height="128" aria-label="Room with painted tile normals"></canvas><figcaption>Painted tile normals</figcaption></figure>
+  </div>
+  <div class="controls">
+    <label for="sweep">Lamp position <input id="sweep" type="range" min="-58" max="58" value="-24"><output id="lamp" for="sweep">-2.4</output></label>
+    <button type="button" id="play" aria-pressed="false">Play sweep</button>
+  </div>
+  <p id="status" role="status"></p>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

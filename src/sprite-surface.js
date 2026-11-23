@@ -54,7 +54,7 @@ const SpriteSurface = (() => {
     const regions = new WeakSet();
     const faces = new Map(), sampling = [], shadowFaces = [], projections = [];
     const geometry = typeof TexturedSurface !== 'undefined' ? TexturedSurface : require('./textured-surface.js');
-    function reserve(w, h, paint) {
+    function reserve(w, h, paint, { normal } = {}) {
       if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || w > width || h < 1 ||
         paint !== undefined && typeof paint !== 'function')
         throw new RangeError('Expected bounded sprite dimensions and an optional paint function');
@@ -69,9 +69,28 @@ const SpriteSurface = (() => {
           throw new RangeError('Surface paint must return RGB hex or a transparent pixel');
         pixels.set([(ink >>> 16) & 255, (ink >>> 8) & 255, ink & 255, 255], (j * w + i) * 4);
       }
+      let normals;
+      if (typeof normal === 'function') {
+        normals = new Uint8Array(pixels.length);
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+          const n = normal(i, j);
+          if (n == null) continue;
+          const vector = (Array.isArray(n) || ArrayBuffer.isView(n)) && n.length === 3 && Array.from(n);
+          if (!vector || !vector.every(Number.isFinite) || !vector.some(value => value !== 0))
+            throw new RangeError('Surface normal paint must return a finite, nonzero XYZ vector');
+          const scale = Math.max(...vector.map(Math.abs));
+          const unit = vector.map(value => value / scale);
+          const length = Math.hypot(...unit);
+          normals.set([...unit.map(value => Math.round(128 + 127 * value / length)), 255], (j * w + i) * 4);
+        }
+      } else if (normal !== undefined) {
+        if (!(normal instanceof Uint8Array || normal instanceof Uint8ClampedArray) || normal.length !== pixels.length)
+          throw new RangeError('A surface normal map needs a matching top-down RGBA raster');
+        normals = new Uint8Array(normal);
+      }
       const region = Object.freeze({ x: nextX, y: nextY, width: w, height: h });
       regions.add(region);
-      entries.push({ x: nextX, y: nextY, w, h, pixels });
+      entries.push({ x: nextX, y: nextY, w, h, pixels, normals });
       x = nextX + w;
       y = nextY;
       shelf = Math.max(nextShelf, h);
@@ -151,10 +170,14 @@ const SpriteSurface = (() => {
     }
     function finish() {
       const height = Math.max(1, y + shelf), pixels = new Uint8Array(width * height * 4);
+      const normalPixels = entries.some(entry => entry.normals) ? new Uint8Array(pixels.length) : undefined;
       for (const e of entries) for (let row = 0; row < e.h; row++) {
-        pixels.set(e.pixels.subarray(row * e.w * 4, (row + 1) * e.w * 4), ((row + e.y) * width + e.x) * 4);
+        const start = row * e.w * 4, end = start + e.w * 4, target = ((row + e.y) * width + e.x) * 4;
+        pixels.set(e.pixels.subarray(start, end), target);
+        if (e.normals) normalPixels.set(e.normals.subarray(start, end), target);
       }
       const atlas = { width, height, pixels, vertices: Float32Array.from(vertices) };
+      if (normalPixels) atlas.normalPixels = normalPixels;
       if (faces.size) namedFaces.set(atlas, new Map(faces));
       if (sampling.length) atlas.paletteSampling = sampling.slice();
       if (shadowFaces.length) atlas.shadowFaces = Object.freeze(shadowFaces.slice());

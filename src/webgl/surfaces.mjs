@@ -4,13 +4,17 @@ import { waterGLSL } from './water-optics.mjs';
 import { createResources } from './resources.mjs';
 
 const uvSlip = Symbol.for('ink-studio.spriteSurface.uvSlip');
+const eyeFromView = view => [0, 1, 2].map(
+  k => -(view[k * 4] * view[12] + view[k * 4 + 1] * view[13] + view[k * 4 + 2] * view[14])
+);
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
 export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan } = {}) {
   const resources = createResources(gl);
   try {
     const shaders = new Map();
-    function shaderFor(wet, section, lighting, environment, paletteSampling, styledProjection) {
+    function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection) {
+      const chart = lighting && !normalMapped;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -18,6 +22,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         !!wet,
         !!section,
         !!lighting,
+        normalMapped,
         !!environment?.media,
         !!environment?.lit,
         paletteSampling,
@@ -32,13 +37,13 @@ layout(location=1) in vec2 a_texel;
 uniform mat4 u_view,u_proj;
 out vec2 v_texel;
 out vec3 v_world;
-${lighting ? 'layout(location=2)in vec2 a_light;out vec2 v_light;' : ''}
+${chart ? 'layout(location=2)in vec2 a_light;out vec2 v_light;' : ''}
 out float v_depth;
 out vec3 v_camera;
 ${styledProjection ? 'uniform vec2 u_surfaceViewport;uniform float u_vertexSnap;out vec2 v_affine;' : ''}
 void main(){
   vec4 p=u_view*vec4(a_point,1.0);
-  ${lighting ? 'v_light=a_light;' : ''}
+  ${chart ? 'v_light=a_light;' : ''}
   v_texel=a_texel;v_world=a_point;v_depth=-p.z;v_camera=p.xyz;
   gl_Position=u_proj*p;
   ${styledProjection ? `
@@ -66,7 +71,8 @@ ${samplingGLSL}` : ''}
 ${section ? cutaway : ''}
 ${environment?.media ? environmentMediaSource(environment.lit) : ''}
 ${lighting ? emitterGLSL : ''}
-${lighting ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
+${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightCount;in vec2 v_light;' : ''}
+${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
 in vec2 v_texel;
 in vec3 v_world;
 in float v_depth;
@@ -75,6 +81,19 @@ ${styledProjection ? 'uniform bool u_affine;uniform vec4 u_projectionBounds;in v
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 depth;
 layout(location=2) out vec4 water;
+${normalMapped ? `
+vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map){
+  float det=du.x*dv.y-du.y*dv.x;
+  if(map.a<.5||abs(det)<=1e-5*length(du)*length(dv))return normal;
+  vec3 local=max(vec3(-127),round(map.rgb*255.0)-128.0);
+  if(dot(local,local)==0.0)return normal;
+  vec3 tangent=normalize(dx*dv.y-dy*du.y)*sign(det);
+  vec3 bitangent=cross(normal,tangent);
+  // Positive map Y faces up the texture, opposite increasing row coordinates.
+  bitangent*=dot(bitangent,(dx*dv.x-dy*du.x)*sign(det))<0.0?-1.0:1.0;
+  return normalize(mat3(tangent,bitangent,normal)*local);
+}
+` : ''}
 void main(){
   vec2 uv=${styledProjection ? 'u_affine?v_affine*gl_FragCoord.w:v_texel' : 'v_texel'};
   vec2 rawTexel=u_uvSlip?uv*u_uvTransform.xy+u_uvTransform.zw:uv;
@@ -93,12 +112,26 @@ void main(){
   ${styledProjection ? 'if(u_affine){dx=dFdx(uv)*scale;dy=dFdy(uv)*scale;}' : ''}
   if(u_paletteSampling)ink=samplePalette(rawTexel,dx,dy,ink);
   ` : ''}
+  ${normalMapped ? `
+  // Use the surface UV frame even when affine sampling or snapping changes the lookup.
+  vec3 dpdx=dFdx(v_world),dpdy=dFdy(v_world);
+  vec3 geometricNormal=normalize(cross(dpdx,dpdy));
+  if(dot(geometricNormal,u_surfaceEye-v_world)<0.0)geometricNormal=-geometricNormal;
+  vec2 scaleUV=u_uvSlip?u_uvTransform.xy:vec2(1);
+  vec2 uvDx=dFdx(v_texel)*scaleUV,uvDy=dFdy(v_texel)*scaleUV;
+  ` : ''}
   if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
   ${section ? 'float margin=sectionMargin(v_world,v_depth); if(margin<0.0)discard;' : ''}
   float d=clamp((v_depth-u_range.x)/(u_range.y-u_range.x),0.0,1.0);
   float fog=u_range.z<1.0?smoothstep(u_range.z,1.0,d)*u_range.w:0.0;
   vec3 mark=vec3(0.0), rgb=ink.rgb;
-  ${lighting ? 'if(!u_index){vec3 irradiance=vec3(0);for(int i=0;i<32;i++){if(i>=u_surfaceLightCount)break;irradiance+=texelFetch(u_surfaceLit,ivec3(ivec2(v_light),i),0).rgb;}rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));}' : ''}
+  ${chart ? 'vec3 irradiance=vec3(0);for(int i=0;i<32;i++){if(i>=u_surfaceLightCount)break;irradiance+=texelFetch(u_surfaceLit,ivec3(ivec2(v_light),i),0).rgb;}rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));' : ''}
+  ${normalMapped ? `
+  vec4 map=u_surfaceNormals?texelFetch(u_surfaceNormalMap,ivec2(texel),0):vec4(0);
+  vec3 normal=surfaceNormal(geometricNormal,dpdx,dpdy,uvDx,uvDy,map);
+  vec3 irradiance=eLighting(v_world,normal,false,vec3(0),geometricNormal);
+  rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+irradiance)));
+  ` : ''}
   ${wet ? 'if(!u_index)rgb=waterPaint(rgb,gl_FragCoord.xy,u_surfaceViewport,v_depth,mark);' : ''}
   ${environment?.media ? 'if(!u_index)rgb=envMedia(rgb,gl_FragCoord.xy,u_surfaceViewport,v_depth);' : ''}
   rgb=mix(rgb,u_fog,fog);
@@ -123,6 +156,8 @@ void main(){
     gl.bindVertexArray(null);
     let active,
       activeVertices,
+      activeNormals,
+      normalTexture,
       revision = -1,
       geometryRevision = -1,
       width = 0,
@@ -141,6 +176,7 @@ void main(){
         revision === next &&
         geometryRevision === nextGeometry &&
         activeVertices === atlas.vertices &&
+        activeNormals === atlas.normalPixels &&
         width === atlas.width &&
         height === atlas.height
       )
@@ -155,6 +191,8 @@ void main(){
         atlas.height < 1 ||
         !(atlas.pixels instanceof Uint8Array) ||
         atlas.pixels.length !== atlas.width * atlas.height * 4 ||
+        (atlas.normalPixels !== undefined &&
+          (!(atlas.normalPixels instanceof Uint8Array) || atlas.normalPixels.length !== atlas.pixels.length)) ||
         !Number.isSafeInteger(next) ||
         next < 0 ||
         !Number.isSafeInteger(nextGeometry) ||
@@ -180,45 +218,47 @@ void main(){
         gl.bufferSubData(gl.ARRAY_BUFFER, first * 20, values);
         stats.geometryBytes = values.byteLength;
       }
-      gl.activeTexture(gl.TEXTURE0 + 6);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      if (replace) {
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,
-          gl.RGBA8,
-          atlas.width,
-          atlas.height,
-          0,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          atlas.pixels
-        );
-        stats.textureBytes = atlas.pixels.byteLength;
-      } else if (revision !== next) {
+      let x = 0, y = 0, w = atlas.width, h = atlas.height;
+      if (!replace && revision !== next) {
         const changes = updatesSince?.(atlas, revision);
-        let x = 0,
-          y = 0,
-          w = atlas.width,
-          h = atlas.height;
         if (changes?.length) {
           x = Math.min(...changes.map(r => r.x));
           y = Math.min(...changes.map(r => r.y));
           w = Math.max(...changes.map(r => r.x + r.width)) - x;
           h = Math.max(...changes.map(r => r.y + r.height)) - y;
         }
+      }
+      function uploadPixels(data, full) {
+        if (full) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, atlas.width, atlas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+          stats.textureBytes += data.byteLength;
+          return;
+        }
         const bytes = w * h * 4;
         if (staging.length < bytes) staging = new Uint8Array(bytes);
         for (let row = 0; row < h; row++)
           staging.set(
-            atlas.pixels.subarray(((y + row) * atlas.width + x) * 4, ((y + row) * atlas.width + x + w) * 4),
+            data.subarray(((y + row) * atlas.width + x) * 4, ((y + row) * atlas.width + x + w) * 4),
             row * w * 4
           );
         gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, staging.subarray(0, bytes));
-        stats.textureBytes = bytes;
+        stats.textureBytes += bytes;
+      }
+      gl.activeTexture(gl.TEXTURE0 + 6);
+      if (replace || revision !== next) {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        uploadPixels(atlas.pixels, replace);
+      }
+      const newNormals = activeNormals !== atlas.normalPixels;
+      if (atlas.normalPixels && (replace || newNormals || revision !== next)) {
+        gl.activeTexture(gl.TEXTURE0 + 24);
+        normalTexture ??= resources.texture();
+        gl.bindTexture(gl.TEXTURE_2D, normalTexture);
+        uploadPixels(atlas.normalPixels, replace || newNormals);
       }
       active = atlas;
       activeVertices = atlas.vertices;
+      activeNormals = atlas.normalPixels;
       revision = next;
       geometryRevision = nextGeometry;
       width = atlas.width;
@@ -280,9 +320,7 @@ void main(){
         lightGeometry = atlas.vertices;
         lightRevision = atlas.geometryRevision ?? 0;
       }
-      const eye = [0, 1, 2].map(
-        k => -(view[k * 4] * view[12] + view[k * 4 + 1] * view[13] + view[k * 4 + 2] * view[14])
-      );
+      const eye = eyeFromView(view);
       let side = 0;
       for (let i = 0; i < lightPositions.length; i += 9) {
         const a = lightPositions.subarray(i, i + 3),
@@ -411,6 +449,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         width = 1,
         height = 1,
         paletteSampling,
+        surfaceNormals = true,
         samplingScale = 1,
         section
       }
@@ -428,7 +467,12 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         integralTextures.delete(filter);
       }
       const useSampling = filters.size > 0;
-      if (lighting?.active && !index) {
+      const lit = Boolean(lighting?.active && !index);
+      const normalMapped = lit && Boolean(atlas.normalPixels);
+      if (normalMapped) {
+        gl.activeTexture(gl.TEXTURE0 + 24);
+        gl.bindTexture(gl.TEXTURE_2D, normalTexture);
+      } else if (lit) {
         const framebuffer = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING),
           viewport = gl.getParameter(gl.VIEWPORT),
           blend = gl.isEnabled(gl.BLEND),
@@ -443,7 +487,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      const shader = shaderFor(wet, section, !index && lighting?.active, environment, useSampling, projections.length > 0);
+      const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -454,6 +498,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         ...(useSampling && { u_sampleTotals: prefixUnits[0], u_sampleAccents: prefixUnits[1], u_samplingScale: samplingScale }),
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
+        ...(normalMapped && { u_surfaceNormalMap: 24, u_surfaceNormals: surfaceNormals, u_surfaceEye: eyeFromView(view) }),
         u_index: +index,
         u_graphDepth: graphDepth,
         u_portalCover: portalCover,
@@ -466,7 +511,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         ...lighting?.uniforms
       });
       gl.bindVertexArray(vao);
-      if (!index && lighting?.active) gl.enableVertexAttribArray(2);
+      if (lit && !normalMapped) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);
       let projectionIndex = 0;
       function drawRange(first, end) {
