@@ -1,0 +1,19 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; color: #e5f1f3; background: #101b24; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(100% - 2.5rem, 58rem); margin: 2rem auto 3rem; }
+h1 { font-size: clamp(2rem, 6vw, 3.2rem); margin: 0; letter-spacing: -.045em; }
+header p, #status, dt { color: #acc1c9; }
+header p { margin: .25rem 0 1.4rem; }
+.controls { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin-bottom: .9rem; }
+button, .upload { font: inherit; color: #dbecee; background: #1b2d39; border: 1px solid #4b646f; border-radius: .45rem; padding: .45rem .72rem; cursor: pointer; }
+button[aria-pressed="true"] { color: #07161b; background: #a7e5df; border-color: #a7e5df; }
+#orbit { accent-color: #a7e5df; }
+#import { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.upload:has(+ input:focus-visible) { outline: 2px solid #a7e5df; }
+canvas { display: block; width: 100%; height: auto; background: #070e18; border: 1px solid #3a5361; border-radius: .65rem; }
+#status { min-height: 1.5rem; }
+dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .8rem; margin: .75rem 0 1rem; }
+dl div { border-top: 1px solid #416171; padding: .5rem 0; }
+dt { font-size: .8rem; }
+dd { margin: .2rem 0 0; font-variant-numeric: tabular-nums; }

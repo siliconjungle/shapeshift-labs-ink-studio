@@ -2,7 +2,7 @@
 
 Ink's WebGPU graph compiles a dependency graph of WGSL compute passes. A pass can read textures and buffers together and publish textures or buffers for other passes or for drawing. The GPU owns those resources between passes. Read them back explicitly when an authoring tool or export needs the bytes.
 
-The graph is an opt-in browser module. Request a WebGPU device from a secure origin such as HTTPS or localhost. The existing scene renderer still uses WebGL 2. WebGPU resources can feed a WebGPU render pass on the same device. To use their data in the WebGL renderer, read back the resource and upload it to the scene.
+The graph is an opt-in browser module. Request a WebGPU device from a secure origin such as HTTPS or localhost. Ink's full scene renderer uses WebGL 2. The WebGPU Gaussian renderer renders imported clouds directly on the device. WebGPU resources can feed a WebGPU render pass on the same device. To use their data in the WebGL renderer, read back the resource and upload it to the scene.
 
 ## Run the gallery
 
@@ -13,7 +13,7 @@ npm run build
 python3 -m http.server 8180 --bind 127.0.0.1
 ```
 
-Open [GPU Studies](http://127.0.0.1:8180/examples/webgpu-graphs/). Refraction generates and filters a texture. Change its channel shift or edit its WGSL and apply it live. Fold deforms a 16,641-vertex surface and shades it using the texture from Refraction. Pelagic opens sample PLY and SPZ assets or a local file and renders them through Ink's WebGL 2 pipeline. The [side-by-side viewer](../examples/live-gaussian/index.html) shares a camera between directional RGB and palette views.
+Open [GPU Studies](http://127.0.0.1:8180/examples/webgpu-graphs/). Refraction generates and filters a texture. Change its channel shift or edit its WGSL and apply it live. Fold deforms a 16,641-vertex surface and shades it using the texture from Refraction. Pelagic opens sample PLY and SPZ assets or a local file and renders them through Ink's WebGL 2 pipeline. The [side-by-side viewer](../examples/live-gaussian/index.html) shares a camera between directional RGB and palette views. [Pelagic Current](../examples/gaussian-gpu/index.html) shows GPU culling, projection, and sorting with a denser imported cloud and timing receipts.
 
 ## Compile a graph
 
@@ -111,7 +111,53 @@ renderer.render(world, { camera, gaussianColor: 'palette', width: 320, height: 2
 - **World conversion.** The decoder retains XYZ, scales, normalized XYZW rotation, opacity and SH coefficients in typed arrays. World conversion fits the cloud and packs each Gaussian's covariance for Ink's renderer. It uses DC color by default. Set `viewDirection: [x, y, z]` in source coordinates to bake the retained harmonics for a fixed viewing direction. Use a live color mode in WebGL to evaluate those coefficients during orbiting.
 - **Limits.** Decoding defaults to a four-million-point maximum. Hosts can pass a lower `maxPoints`. A file named `.gsz` must contain a recognized PLY or SPZ payload. Derivative's [Point File In reference](https://docs.derivative.ca/Point_File_In_POP) and [file-type table](https://docs.derivative.ca/File_Types) list `.spz` for this format.
 
-### Inspect a patch while orbiting
+### Render a cloud with GPU visibility
+
+The WebGPU renderer accepts a world from the PLY, SPZ, or GSZ decoder and
+draws its baked RGB into a WebGPU texture. Use the same orbit camera
+settings as the scene renderer. Set `viewDirection` in `gaussianSplatWorld`
+to bake directional color before upload. The WebGL viewer continues to
+offer live harmonic color, palette resolve, and its scene and material tools.
+
+```js
+import { createGaussianSplatRenderer, decodeGaussianSplat, gaussianSplatWorld } from './webgpu.mjs';
+
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice({
+  requiredFeatures: adapter.features.has('timestamp-query') ? ['timestamp-query'] : []
+});
+const format = navigator.gpu.getPreferredCanvasFormat();
+const context = canvas.getContext('webgpu');
+context.configure({ device, format, alphaMode: 'opaque' });
+const renderer = await createGaussianSplatRenderer(device, { format });
+
+const cloud = await decodeGaussianSplat(bytes, { maxPoints: renderer.maxSplats });
+renderer.setWorld(gaussianSplatWorld(cloud, { size: 6 }));
+const report = await renderer.render(context.getCurrentTexture(), {
+  yaw: .5, pitch: -.1, profile: true
+});
+console.log(report);
+```
+
+Upload a cloud once with `setWorld` and reuse it across camera moves. A
+compute pass projects the full covariance, checks the near and far planes
+and the projected three-sigma bounds, and compacts the survivors. A GPU
+depth sort orders that compact list back to front, breaking equal depths by
+original source index. The visible count limits both indirect sort dispatches
+and the indirect draw. The draw consumes the projected ellipses directly.
+The normal frame path transfers a 96-byte camera uniform and returns
+immediately after submitting commands.
+
+Request `profile: true` for a diagnostic frame. It reads back the count and
+optional timestamps. `sortCapacity` is the active padded count in the sort.
+The report lists the cloud bytes uploaded since the previous frame and the
+camera bytes separately with CPU enqueue timings. On a device created with
+`timestamp-query`, `gpuMs` gives distinct timings for projection and culling,
+sorting, and the raster pass including fragment shading and blending. Devices
+without timestamps return `gpuMs: null` with the same counts and upload data.
+Call `dispose()` when the renderer is no longer needed.
+
+## Inspect a patch while orbiting
 
 In the [Pelagic viewer](../examples/live-gaussian/index.html), click either view
 or move the cursor with the arrow keys and press Enter. The marker follows the

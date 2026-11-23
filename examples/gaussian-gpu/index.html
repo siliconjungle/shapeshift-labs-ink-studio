@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pelagic Current · Ink Studio</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Pelagic Current</h1>
+    <p>GPU visibility and depth sorting for imported Gaussian splats</p>
+  </header>
+  <div class="controls">
+    <button id="detail" type="button">Close view</button>
+    <button id="wide" type="button">Wide view</button>
+    <label for="orbit">Orbit</label>
+    <input id="orbit" type="range" min="-180" max="180" step="1" value="0">
+    <label class="upload" for="import">Open PLY, SPZ or GSZ</label>
+    <input id="import" type="file" accept=".ply,.spz,.gsz">
+  </div>
+  <canvas id="view" width="864" height="512" aria-label="Gaussian splat render"></canvas>
+  <p id="status" role="status">Preparing WebGPU…</p>
+  <div id="measure" hidden>
+    <dl>
+      <div><dt>Visible / imported</dt><dd id="visible"></dd></div>
+      <div><dt>Project + cull</dt><dd id="projection"></dd></div>
+      <div><dt>Depth sort</dt><dd id="sort"></dd></div>
+      <div><dt>Raster + blend</dt><dd id="raster"></dd></div>
+      <div><dt>Camera upload</dt><dd id="camera"></dd></div>
+      <div><dt>Cloud upload</dt><dd id="cloud"></dd></div>
+    </dl>
+    <button id="receipt" type="button">Download render report</button>
+  </div>
+</main>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>
