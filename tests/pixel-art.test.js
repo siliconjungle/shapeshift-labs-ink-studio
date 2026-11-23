@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { compile, edit, review, stamp } = require('../cli/pixel-art.js');
+const { compile, edit, review, stamp, validate } = require('../cli/pixel-art.js');
 const PixelStamps = require('../src/pixel-stamps.js');
 const PNG = require('../cli/png.js');
 const draft = require('../examples/pixel-art-tooling/relay.json');
@@ -74,10 +74,88 @@ test('a named object can be traced on its native grid and redrawn as an indexed 
     '--subject','gatehouse','--w','64','--h','40','--out',directory],{cwd});
   const traced = JSON.parse(fs.readFileSync(path.join(directory,'design.json')));
   const frame = compile(traced);
+  assert.equal(traced.version,2);
+  assert.deepEqual(traced.sceneBindings,[{
+    id:'projection', scene:'examples/sdf-gatehouse.js', object:'gatehouse', frame:'capture', layer:'projection'
+  }]);
   assert.deepEqual([frame.width,frame.height],[64,40]);
   assert.equal(frame.layerIds[1],'projection');
   assert(frame.slots.some(slot=>slot>=0));
   assert(frame.slots.includes(-1));
   assert.deepEqual([...PixelStamps.image(stamp(frame)).rgba],
     [...PNG.raster(path.join(directory,'art.png')).data]);
+});
+
+const document = {
+  format:'ink-studio/pixel-art', version:2, width:3, height:2, pixelAspect:[2,1],
+  palette:{ brass:'#ae8640', light:'#f8e8ac' },
+  layers:[{ id:'shell' },{ id:'lit', clip:'shell' }],
+  frames:[
+    { id:'idle', durationMs:150, cels:{ shell:{ slots:['brass','brass',null,null,null,null], marks:[] } } },
+    { id:'blink', durationMs:40, cels:{
+      shell:{ marks:[{ swatch:'brass', shape:rect(0,0,2,1) }] },
+      lit:{ marks:[{ swatch:'light', at:[0,0] },{ swatch:'light', at:[2,0] }] }
+    } }
+  ],
+  selections:[{ id:'shell-area', pixels:[[0,0],[1,0]] }],
+  protectedDetails:[
+    { id:'gap', pixels:[[2,0]] },
+    { id:'glint', frame:'blink', pixels:[[0,0]] }
+  ],
+  sceneBindings:[{ id:'lamp', scene:'relay-stage', object:'relay', part:'lamp', revision:'asset-v1', frame:'blink', layer:'lit' }]
+};
+
+test('document validation checks frame and layer references and cels outside the current frame', () => {
+  const legacy = validate(draft);
+  assert.equal(legacy.version,1);
+  assert.equal(legacy.revision,patch.revision);
+  assert.deepEqual(validate(document).frames,[{ id:'idle', durationMs:150 },{ id:'blink', durationMs:40 }]);
+  assert.throws(()=>validate({...document, version:3}),/version 1 or 2/);
+  assert.throws(()=>validate({...document, pixelAspect:[2,0]}),/positive integers/);
+  assert.throws(()=>validate({...document, frames:[...document.frames,document.frames[0]]}),/unique IDs/);
+  assert.throws(()=>validate({...document, selections:[{ id:'outside', pixels:[[3,1]] }]}),/outside the native grid/);
+  assert.throws(()=>validate({...document, protectedDetails:[{ id:'gap', frame:'absent', pixels:[[2,0]] }]}),/known frames/);
+  assert.throws(()=>validate({...document, sceneBindings:[{ ...document.sceneBindings[0], layer:'absent' }]}),/frame and layer scopes/);
+  const invalid = structuredClone(document);
+  invalid.frames[1].cels.lit.marks[0].swatch = 'absent';
+  assert.equal(compile(invalid).id,'idle');
+  assert.throws(()=>validate(invalid),/Pixel frame blink: Unknown pixel swatch absent/);
+});
+
+test('the CLI round-trips a frame edit and preserves protected details and scene bindings', t => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(),'ink-pixel-document-'));
+  t.after(()=>fs.rmSync(out,{ recursive:true, force:true }));
+  const cwd = path.resolve(__dirname,'..');
+  const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],{ cwd, encoding:'utf8' });
+  const source = path.join(out,'document.json'), patchFile = path.join(out,'patch.json'), saved = path.join(out,'saved.json');
+  fs.writeFileSync(source,JSON.stringify(document));
+  assert.deepEqual(JSON.parse(cli('validate',source)),validate(document));
+  const blink = compile(document,'blink'), idle = compile(document);
+  assert.deepEqual([...blink.slots],[1,0,-1,-1,-1,-1]);
+  assert.deepEqual([...idle.slots],[0,0,-1,-1,-1,-1]);
+  const inspect = (x,y)=>JSON.parse(cli('inspect',source,'--frame','blink','--at',x+','+y));
+  const detail = inspect(0,0);
+  assert.deepEqual([detail.frame,detail.durationMs,detail.swatch,detail.protected],['blink',40,'light',true]);
+  assert.deepEqual(detail.pixelAspect,[2,1]);
+  assert.deepEqual([inspect(2,0).swatch,inspect(2,0).protected],[null,true]);
+  const repair = {
+    revision:blink.revision, frame:'blink', id:'repair', edits:[{ at:[1,0], layer:'shell', from:'brass', to:'light' }]
+  };
+  assert.throws(()=>edit(document,idle,repair),/observed frame ID/);
+  assert.throws(()=>edit(document,blink,{
+    ...repair, edits:[{ at:[2,0], layer:null, from:null, to:'light' }]
+  }),/no longer applies at 2,0/);
+  const movedSelection = {...document, selections:[]};
+  assert.throws(()=>edit(movedSelection,blink,repair),/revision no longer matches/);
+  fs.writeFileSync(patchFile,JSON.stringify(repair));
+  cli('edit',source,patchFile,'--out',saved);
+  const revised = JSON.parse(fs.readFileSync(saved,'utf8'));
+  assert.deepEqual(revised.frames[0],document.frames[0]);
+  for (const key of ['pixelAspect','selections','protectedDetails','sceneBindings'])
+    assert.deepEqual(revised[key],document[key]);
+  assert.notEqual(validate(revised).revision,blink.revision);
+  cli('draw',saved,'--frame','blink','--out',out);
+  const report = JSON.parse(fs.readFileSync(path.join(out,'report.json'),'utf8'));
+  assert.deepEqual([report.frame,report.grid,report.pixelAspect],['blink',[3,2],[2,1]]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out,'stamp.json'),'utf8')).slots,[1,1,null,null,null,null]);
 });

@@ -16,6 +16,80 @@ const at = (width, height, xy) => Array.isArray(xy) && xy.length === 2 &&
   integer(xy[0], 0, width-1) && integer(xy[1], 0, height-1);
 const rect = (x,y,w=1,h=1) => ({ type:'rect', rect:[x,y,w,h] });
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const fingerprint = design => createHash('sha256').update(JSON.stringify(design)).digest('hex');
+const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
+const reference = value => typeof value === 'string' && value.trim().length > 0;
+
+function namedRegions(regions, kind, width, height, frames) {
+  if (regions === undefined) return;
+  if (!Array.isArray(regions)) throw new TypeError(kind + ' must be an array');
+  const ids = new Set();
+  for (const region of regions) {
+    if (!fields(region,['id','frame','pixels']) || !name(region.id) || ids.has(region.id) ||
+        (region.frame !== undefined && !frames.has(region.frame)) || !Array.isArray(region.pixels))
+      throw new TypeError(kind + ' needs unique IDs, pixel lists and optional known frames');
+    ids.add(region.id);
+    const pixels = new Set();
+    for (const xy of region.pixels) {
+      if (!at(width,height,xy)) throw new RangeError(kind + ' ' + region.id + ' has a pixel outside the native grid');
+      const pixel = xy[1]*width+xy[0];
+      if (pixels.has(pixel)) throw new RangeError(kind + ' ' + region.id + ' repeats pixel ' + xy.join(','));
+      pixels.add(pixel);
+    }
+  }
+}
+
+function documentShape(design) {
+  if (!record(design) || design.format !== format || ![1,2].includes(design.version))
+    throw new TypeError('Expected an Ink pixel-art document, version 1 or 2');
+  const { width,height,palette,layers } = design;
+  if (!integer(width,1,512) || !integer(height,1,512) || !Array.isArray(layers) ||
+      !integer(layers.length,1,64) || width*height*layers.length > 4_000_000 || !record(palette))
+    throw new RangeError('Pixel art needs a native grid, a palette and up to 64 bounded layers');
+  if (design.version === 1) return;
+
+  const { pixelAspect,frames,selections,protectedDetails,sceneBindings } = design;
+  if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
+    'selections','protectedDetails','sceneBindings'])) throw new TypeError('Unknown pixel document field');
+  if (!Array.isArray(pixelAspect) || pixelAspect.length !== 2 ||
+      !integer(pixelAspect[0],1,Number.MAX_SAFE_INTEGER) || !integer(pixelAspect[1],1,Number.MAX_SAFE_INTEGER))
+    throw new RangeError('Pixel aspect needs two positive integers [width,height]');
+  const layerIds = new Set();
+  for (const layer of layers) {
+    if (!fields(layer,['id','clip','protect']) || !name(layer.id) || layerIds.has(layer.id) ||
+        (layer.clip !== undefined && !layerIds.has(layer.clip)) ||
+        (layer.protect !== undefined && typeof layer.protect !== 'boolean'))
+      throw new TypeError('Pixel layer definitions need unique IDs and may clip to an earlier layer');
+    layerIds.add(layer.id);
+  }
+  if (!Array.isArray(frames) || !frames.length) throw new TypeError('Pixel documents need at least one frame');
+  const frameIds = new Set();
+  for (const frame of frames) {
+    if (!fields(frame,['id','durationMs','cels']) || !name(frame.id) || frameIds.has(frame.id) ||
+        !integer(frame.durationMs,1,Number.MAX_SAFE_INTEGER) || !record(frame.cels))
+      throw new TypeError('Pixel frames need unique IDs, positive integer durations in milliseconds and cels');
+    frameIds.add(frame.id);
+    for (const [layer,cel] of Object.entries(frame.cels)) {
+      if (!layerIds.has(layer) || !fields(cel,['marks','slots']) || !Array.isArray(cel.marks))
+        throw new TypeError('Pixel cel ' + frame.id + '/' + layer + ' needs a known layer and marks');
+    }
+  }
+  namedRegions(selections,'Pixel selections',width,height,frameIds);
+  namedRegions(protectedDetails,'Protected pixel details',width,height,frameIds);
+  if (sceneBindings === undefined) return;
+  if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
+  const bindingIds = new Set();
+  for (const binding of sceneBindings) {
+    if (!fields(binding,['id','scene','object','part','revision','frame','layer']) || !name(binding.id) ||
+        bindingIds.has(binding.id) || !reference(binding.scene) || !reference(binding.object) ||
+        (binding.part !== undefined && !reference(binding.part)) ||
+        (binding.revision !== undefined && !reference(binding.revision)) ||
+        (binding.frame !== undefined && !frameIds.has(binding.frame)) ||
+        (binding.layer !== undefined && !layerIds.has(binding.layer)))
+      throw new TypeError('Pixel scene bindings need unique IDs, scene and object references, and valid frame and layer scopes');
+    bindingIds.add(binding.id);
+  }
+}
 
 function shapes(width, height, mark) {
   if (!record(mark) || ['at','shape','steps'].filter(key => Object.hasOwn(mark,key)).length !== 1 ||
@@ -45,13 +119,8 @@ function shapes(width, height, mark) {
   return result;
 }
 
-function compile(design) {
-  if (!record(design) || design.format !== format || design.version !== 1)
-    throw new TypeError('Expected an Ink pixel-art version 1 design');
-  const { width, height, palette, layers } = design, size = width*height;
-  if (!integer(width,1,512) || !integer(height,1,512) || !Array.isArray(layers) ||
-      !integer(layers.length,1,64) || size*layers.length > 4_000_000 || !record(palette))
-    throw new RangeError('Pixel art needs a native grid, a palette and up to 64 bounded layers');
+function composite(width,height,palette,layers) {
+  const size = width*height;
   const entries = Object.entries(palette);
   if (!integer(entries.length,1,255) ||
       entries.some(([id,color]) => !name(id) || typeof color !== 'string' || !/^#[\da-f]{6}$/i.test(color)))
@@ -108,8 +177,48 @@ function compile(design) {
       locks[p] = Number(layer.protect === true);
     }
   }
-  const revision = createHash('sha256').update(JSON.stringify(design)).digest('hex');
-  return { width,height,slots,owners,locks,underSlots,underOwners,layerIds,swatches,colors,revision };
+  return { width,height,slots,owners,locks,underSlots,underOwners,layerIds,swatches,colors };
+}
+
+function compileFrame(design, frame, revision) {
+  const { width,height,palette,layers } = design;
+  if (!frame) return { ...composite(width,height,palette,layers), revision };
+  const stack = layers.map(layer => {
+    const cel = Object.hasOwn(frame.cels,layer.id) ? frame.cels[layer.id] : { marks:[] };
+    return { ...layer, ...cel };
+  });
+  const raster = composite(width,height,palette,stack);
+  for (const detail of design.protectedDetails ?? []) {
+    if (detail.frame !== undefined && detail.frame !== frame.id) continue;
+    for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
+  }
+  return { ...raster, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice() };
+}
+
+function compile(design, frameId) {
+  documentShape(design);
+  const frames = design.version === 2 ? design.frames : [];
+  const frame = frameId === undefined ? frames[0] : frames.find(item => item.id === frameId);
+  if (frameId !== undefined && !frame) throw new RangeError('Unknown pixel frame ' + frameId);
+  return compileFrame(design,frame,fingerprint(design));
+}
+
+function validate(design) {
+  documentShape(design);
+  const revision = fingerprint(design);
+  const frames = design.version === 1 ? [undefined] : design.frames;
+  for (const frame of frames) {
+    try {
+      compileFrame(design,frame,revision);
+    } catch (error) {
+      if (!frame) throw error;
+      throw new Error('Pixel frame ' + frame.id + ': ' + error.message, { cause:error });
+    }
+  }
+  return { format, version:design.version, revision, grid:[design.width,design.height],
+    pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
+      id:frame?.id ?? null, durationMs:frame?.durationMs ?? null
+    })) };
 }
 
 function cell(frame,p) {
@@ -129,6 +238,10 @@ function image(frame) {
     rgb[i+2]=color&255;
   }
   return { w:frame.width, h:frame.height, rgb };
+}
+
+function frameMetadata(frame) {
+  return frame.id === undefined ? {} : { frame:frame.id, durationMs:frame.durationMs, pixelAspect:frame.pixelAspect };
 }
 
 function review(frame) {
@@ -155,7 +268,8 @@ function review(frame) {
   const used = frame.swatches.map(() => 0);
   for (const slot of frame.slots) if (slot >= 0) used[slot]++;
   return {
-    report:{ format:'ink-studio/pixel-art-review', version:1, grid:[frame.width,frame.height], revision:frame.revision, metrics,
+    report:{ format:'ink-studio/pixel-art-review', version:1, grid:[frame.width,frame.height], revision:frame.revision,
+      ...frameMetadata(frame), metrics,
       swatches:Object.fromEntries(frame.swatches.map((id, i) => [id,used[i]])), findings, protectedMarks },
     overlay:Critic.lintMap(color,result)
   };
@@ -165,6 +279,9 @@ function edit(design, frame, patch) {
   if (!record(patch) || patch.revision !== frame.revision || !name(patch.id) ||
       frame.layerIds.includes(patch.id) || !Array.isArray(patch.edits) || !integer(patch.edits.length,1,4096))
     throw new TypeError('Pixel edit needs the observed revision, a new layer ID and a list of edits');
+  if (frame.revision !== fingerprint(design)) throw new RangeError('Pixel edit revision no longer matches the document');
+  if (design.version === 2 && patch.frame !== frame.id)
+    throw new RangeError('Pixel edit needs the observed frame ID');
   const visited = new Set(), marks = [];
   for (const change of patch.edits) {
     if (!record(change) || !at(frame.width,frame.height,change.at) || ![null,...frame.swatches].includes(change.to) ||
@@ -176,8 +293,11 @@ function edit(design, frame, patch) {
     visited.add(p);
     marks.push({ swatch:change.to, at:change.at });
   }
-  const revised = { ...design, layers:[...design.layers,{ id:patch.id, marks }] };
-  compile(revised);
+  const revised = design.version === 1
+    ? { ...design, layers:[...design.layers,{ id:patch.id, marks }] }
+    : { ...design, layers:[...design.layers,{ id:patch.id }], frames:design.frames.map(item =>
+      item.id === frame.id ? { ...item, cels:{ ...item.cels, [patch.id]:{ marks } } } : item) };
+  compile(revised,frame.id);
   return revised;
 }
 
@@ -200,7 +320,7 @@ function draw(frame,directory) {
   return result.report;
 }
 
-function trace(frame, object) {
+function trace(frame, object, scene) {
   const { w:width, h:height, rgb, passes } = frame;
   if (!integer(width,1,512) || !integer(height,1,512) || rgb?.length !== width*height*3 ||
       passes?.w !== width || passes?.h !== height || !passes.objectId || !passes.objects)
@@ -220,28 +340,39 @@ function trace(frame, object) {
   if (!pixels) throw new RangeError('Trace subject is outside the current view');
   if (Object.keys(palette).length > 255)
     throw new RangeError('Trace found over 255 visible colors. Choose a scoped palette in the source shot first.');
-  return { format, version:1, width, height, palette, layers:[{ id:'projection', slots, marks:[] }] };
+  const design = { format, version:2, width, height, pixelAspect:[1,1], palette, layers:[{ id:'projection' }],
+    frames:[{ id:'capture', durationMs:100, cels:{ projection:{ slots, marks:[] } } }] };
+  if (scene !== undefined) design.sceneBindings = [
+    { id:'projection', scene, object, frame:'capture', layer:'projection' }
+  ];
+  return design;
 }
 
 function command(pos,opt,outputFile,capture) {
   const [action, source, patch] = pos;
-  if (!['trace','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
-    throw new TypeError('Use pixel-art trace <scene> --subject object-id, draw <design.json>, inspect <design.json> --at x,y, or edit <design.json> <patch.json> --out revised.json');
+  if (!['trace','validate','draw','inspect','edit'].includes(action) || pos.length !== (action === 'edit' ? 3 : 2))
+    throw new TypeError('Use pixel-art trace <scene> --subject object-id, validate <design.json>, draw <design.json>, inspect <design.json> --at x,y, or edit <design.json> <patch.json> --out revised.json');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
-    const design = trace(capture(source), opt.subject);
+    const design = trace(capture(source), opt.subject, source);
     const directory = outputFile('pixel-art-trace');
     draw(compile(design),directory);
     files.json(path.join(directory,'design.json'),design);
     console.log('wrote',directory);
     return;
   }
-  const design = read(source), frame = compile(design);
+  const design = read(source);
+  if (action === 'validate') {
+    process.stdout.write(JSON.stringify(validate(design),null,2)+'\n');
+    return;
+  }
+  const changes = action === 'edit' ? read(patch) : undefined;
+  const frame = compile(design,opt.frame ?? (design.version === 2 ? changes?.frame : undefined));
   if (action === 'inspect') {
     const coordinate = /^\d+,\d+$/.test(opt.at ?? '') ? opt.at.split(',').map(Number) : null;
     if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use --at x,y inside the native grid');
     const [x,y] = coordinate;
-    process.stdout.write(JSON.stringify({ revision:frame.revision, ...cell(frame,y*frame.width+x) },null,2)+'\n');
+    process.stdout.write(JSON.stringify({ revision:frame.revision, ...frameMetadata(frame), ...cell(frame,y*frame.width+x) },null,2)+'\n');
     return;
   }
   if (action === 'draw') {
@@ -251,8 +382,8 @@ function command(pos,opt,outputFile,capture) {
     return;
   }
   if (typeof opt.out !== 'string') throw new TypeError('Use --out revised.json to save the edited design');
-  const revised=edit(design,frame,read(patch));
+  const revised=edit(design,frame,changes);
   files.json(path.resolve(opt.out),revised);
 }
 
-module.exports = { compile, stamp, image, review, edit, draw, trace, command };
+module.exports = { compile, validate, stamp, image, review, edit, draw, trace, command };
