@@ -5,6 +5,7 @@ const { document, readGlb, embed } = require('./glb-file');
 const files = require('./asset-files');
 const writeRig = require('./glb-rig');
 const writeMesh = require('./glb-mesh');
+const registeredMaterial = require('./registered-material-bake.js');
 
 function summarize({ meshes = [], skins = [], accessors = [] }) {
   const count = i => accessors[i]?.count || 0;
@@ -20,7 +21,7 @@ function summarize({ meshes = [], skins = [], accessors = [] }) {
   };
 }
 
-function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024 } = {}) {
+function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024, bakeDir, paintViews, capturePaint } = {}) {
   if (!out || path.extname(out).toLowerCase() !== '.glb') throw new Error('Choose an .glb output filename');
   if (!Number.isFinite(uvMargin) || uvMargin <= 0 || uvMargin >= 0.1)
     throw new Error('UV margin must be between 0 and 0.1');
@@ -29,8 +30,10 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024 } = 
   const input = typeof modelOrFile === 'string' ? path.resolve(modelOrFile) : null, output = path.resolve(out);
   if (input === output) throw new Error('Choose an output different from the input mesh');
   const studio = require('../index'), extension = input && path.extname(input).toLowerCase();
+  const registered = registeredMaterial.prepare({bakeDir,paintViews,capturePaint});
   let bytes, report;
   if (extension === '.gltf' || extension === '.glb') {
+    if (registered) throw new TypeError('Registered baking uses an authored model or OBJ input');
     const original = fs.readFileSync(input);
     const { gltf, bin } = extension === '.glb' ? readGlb(original) : { gltf: JSON.parse(original.toString('utf8')) };
     const preserved = extension === '.glb' && !gltf.buffers?.some(b => b.uri !== undefined) &&
@@ -40,21 +43,25 @@ function exportGlb(modelOrFile, { out, uvMargin = 0.008, textureSize = 1024 } = 
   } else {
     if (input && extension !== '.obj') throw new Error('Mesh input must be an OBJ, glTF or GLB');
     const { KIT: K } = studio.load();
-    if (K.authoring.gltfAssets.is(modelOrFile))
+    if (K.authoring.gltfAssets.is(modelOrFile)) {
+      if (registered) throw new TypeError('Registered baking uses an authored model or OBJ input');
       return { ...summarize(modelOrFile.snapshot().document), preserved: true, ...studio.writeGltfAsset(modelOrFile, { out }) };
+    }
     if (input) modelOrFile = K.model.fromMesh(studio.readMesh(input, { attributes: true }));
     const model = modelOrFile?.meshes ? modelOrFile : { meshes: [modelOrFile] };
     if (!model.meshes.length || model.meshes.some(m => !m)) throw new Error('GLB export requires a model');
     const doc = document(), rig = writeRig(doc, model, K);
     const geometry = model.meshes.flatMap(mesh => K.model.mapModelMeshes(mesh, part => part));
+    registered?.validate(geometry.length);
     const meshes = geometry.map((mesh, i) => writeMesh(doc, {
       ...mesh,
       name: mesh.name || path.parse(output).name + (geometry.length > 1 ? ' ' + (i + 1) : '')
-    }, rig, K, { uvMargin, textureSize }));
+    }, rig, K, { uvMargin, textureSize, registered, meshIndex:i }));
     bytes = doc.finish();
     report = { meshes, joints: rig.size };
   }
   files.write(output, bytes);
+  if(registered)report.materialBake=registered.write(output);
   return { ...report, file: output };
 }
 

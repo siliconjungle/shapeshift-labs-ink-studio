@@ -166,7 +166,7 @@
       const p = midpoint(face), [a, b, c] = face.map(i => points[i]);
       const n = V.norm(V.cross(V.sub(b, a), V.sub(c, a)));
       const value = sample(field.surfaceAt(...p).material, p, n);
-      const key = JSON.stringify([value.name, value.color, value.roughness, value.metallic, value.emission]);
+      const key = JSON.stringify([value.name, value.color, value.roughness, value.metallic, value.emission, value.masks]);
       if (!shades.has(key)) {
         shades.set(key, materials.length);
         const { normal, ...material } = value;

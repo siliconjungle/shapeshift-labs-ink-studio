@@ -824,14 +824,17 @@
           catch (error) { bad(path + '.albedo', error.message); }
         }
         if (m.model !== undefined) {
-          const q = m.model, at = path + '.model', channels = { color: 1, emission: 1, roughness: 1, metallic: 1 };
+          const q = m.model, at = path + '.model', channels = { color: 1, emission: 1, roughness: 1, metallic: 1, normal:1, masks:1 };
           if (!q || typeof q !== 'object' || Array.isArray(q)) bad(at, 'model material channels need an object');
           else {
             keys(q, at, channels);
             for (const [channel, value] of Object.entries(q)) {
               const valid = channel === 'color' || channel === 'emission' ?
                 isVec(value, 3) && value.every(v => v >= 0 && (channel === 'emission' || v <= 1)) :
-                isNum(value) && value >= 0 && value <= 1;
+                channel === 'normal' ? isVec(value,3) && Math.hypot(...value)>0 :
+                channel === 'masks' ? value && typeof value === 'object' && !Array.isArray(value) &&
+                  Object.entries(value).every(([id,n])=>PaintCorrections.idOK(id) && isNum(n) && n>=0 && n<=1) :
+                  isNum(value) && value >= 0 && value <= 1;
               if (!valid) bad(at + '.' + channel, 'invalid model material channel');
             }
           }

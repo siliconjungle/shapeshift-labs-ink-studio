@@ -1,6 +1,8 @@
 # UV and seam inspection
 
 Inspect the artist's UV layout before baking or reducing a mesh.
+Use [registered material baking](registered-material-bake.md) to export
+the material channels and approved camera paint on that layout.
 
 ```sh
 node cli/ink-studio.js mesh-uv inspect relay.glb --atlas 1024,512 \
