@@ -52,7 +52,7 @@ const data=/*FOG_REVIEW_DATA*/;
 const {report,pictures}=data;
 const byId=id=>document.getElementById(id);
 const play=byId('play'), seek=byId('seek'), zoom=byId('zoom'), mark=byId('mark');
-const labels={depth:'Depth only',object:'Object-guided',native:'Full resolution'};
+const labels={depth:'Depth only',object:report.reconstruction==='lighting'?'Coarse lighting':'Object-guided',native:'Full resolution'};
 const views={};
 for (const [id,label] of Object.entries(labels)) {
   const figure=document.createElement('figure'), caption=document.createElement('figcaption'), canvas=document.createElement('canvas');
@@ -96,11 +96,16 @@ async function update() {
     ctx.drawImage(layers[k],x,y,w,h,0,0,w,h);
     if(id==='depth'&&overlay) ctx.drawImage(overlay,x,y,w,h,0,0,w,h);
     const rays=sample.renderStats[id].rays, reference=sample.renderStats.native.rays;
-    view.rays.textContent=rays.toLocaleString()+' rays';
+    const channel=report.reconstruction==='lighting', lightWork=sample.renderStats[id].lightingSamples;
+    view.rays.textContent=channel?lightWork.toLocaleString()+' light samples':rays.toLocaleString()+' rays';
     view.error.textContent=id==='native' ? report.width+' × '+report.height+' art pixels' :
       ((id==='depth'?sample.depthError:sample.objectError)*100).toFixed(1)+'% mean edge fog error';
-    if(id==='object') byId('summary').textContent=sample.correctedPixels.toLocaleString()+
-      ' outline pixels corrected · '+Math.round(100*(1-rays/reference))+'% fewer fog rays than full resolution';
+    if(id==='object'){
+      const nativeWork=sample.renderStats.native.lightingSamples;
+      const drop=channel && nativeWork ? ' · '+Math.round(100*(1-lightWork/nativeWork))+'% fewer light samples'
+        : ' · '+Math.round(100*(1-rays/reference))+'% fewer full fog rays';
+      byId('summary').textContent=sample.correctedPixels.toLocaleString()+' outline pixels corrected'+drop;
+    }
   }
 }
 function stop() {

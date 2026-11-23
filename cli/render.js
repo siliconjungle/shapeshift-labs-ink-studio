@@ -1075,10 +1075,14 @@ function renderFrame(world, o, preparedPalettes) {
     [surfaceLayers].flat(),{time:sceneTime,session:lookInputs||undefined,
       query:()=>world.lookSnapshot?.query??world.surfaceEffects?.query??require('../index.js').load().KIT.world.query.fromScene(world,sceneTime),
       report:!reflectionPlane&&!probeView&&(!o.samples||o.worked)?o.simulationMaterialLayersFrame:undefined});
+  const volumeConfig={...world.volumeQuality,...o.volumeQuality};
+  const depthFogRequested=volumes.length && (volumeConfig.reconstruction==='lighting' || volumeConfig.composition==='depth');
+  const captureFogOwners=depthFogRequested && N===0;
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
       capture:captureTexturedSurface, motion:!!temporal||captureSurfaceMotion, meshMask:geometryMask?.meshCodes, spriteLOD,
+      captureFogOwners,
       lightingTargets:artLighting || o.bounceProbes!==false &&
         (o.bounceProbes===true?world.bounceProbes:o.bounceProbes??world.bounceProbes)?.geometry,
       omit:useSdf && brickFrames.length ? (object,material,point)=>sdfSettings.allows({object,entity:object,material},point) : undefined });
@@ -1096,7 +1100,7 @@ function renderFrame(world, o, preparedPalettes) {
     objectDither: anchorSpaces.has('object'), shutterTime: shutterRows?.atlasTime,
     subject: protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
-    clip:geometryClip, captureIds:Boolean(deep), artScale:o.artGridScale || 1,
+    clip:geometryClip, captureIds:Boolean(deep||captureFogOwners), artScale:o.artGridScale || 1,
     budgets:!reflectionPlane && !probeView && (o.spriteAtlasBudgets === true ? world.spriteAtlasBudgets :
       o.spriteAtlasBudgets ?? world.spriteAtlasBudgets),
     budgetTime:o.interfaceTime ?? sceneTime,
@@ -1181,7 +1185,7 @@ function renderFrame(world, o, preparedPalettes) {
     ? WindField.create(WindField.settings(true), { ambient:() => volumeWind, exposure }) : flow)?.frame(skyTime);
   const waterWind = windResponse?.water ? (x,y,z) => windGain(windResponse.water,gustTime('water', motion.water),x,y,z) : undefined;
   const atmosphereOptions = () => {
-    const quality = atmosphereQuality({ ...world.volumeQuality, ...o.volumeQuality });
+    const quality = atmosphereQuality(volumeConfig);
     quality.wind = volumeWind ?? wind.velocity;
     if (volumeFlow) quality.windOffset = volumeFlow.windOffset;
     const media = volumes.some(volume => volume.type === 'field'||volume.lit) ? prepareVolumeLight() : undefined;
@@ -1673,16 +1677,36 @@ function renderFrame(world, o, preparedPalettes) {
         sameSpan });
     } else SplatOrder.stabilize(order, tolerance, depthAt, transparentAt, undefined, sameSpan);
   }
-  const mediaOptions = (water || aerial || cloudView || (reflectionPlane || curveScene || deep || blendDepth || surfaceFragments.length || sprites.length) && volumes.length) && atmosphereOptions();
+  // This lane has one opaque depth per pixel. Keep per-fragment transport for mixed media and alpha layers.
+  const depthFogGeometry=captureFogOwners && !reflectionPlane && !probeView && !curveScene && !deep && !blendDepth &&
+    !mattes && !transparent && !o.captureCoverage && sprites.every(sprite=>sprite.alpha===1&&!sprite.effect);
+  const fogBack=depthFogRequested && !backRows && world.back?.length ? new Set(world.back) : backRows;
+  const layeredFogRows=depthFogRequested && (transparent || o.captureCoverage || o.soft || order.some(i=>
+    AL[i]>0 && !fogBack?.has(i) && (SplatOrder.isTransparent(d,i,AL[i],optical?.[i*OpticalMaterials.STRIDE+3]) ||
+      ContributionRules.materialCoverage(world.materialPixelStyles?.[i*4]??0,coverageMode)===ContributionRules.softCoverage)));
+  const mediaOptions = (water || aerial || cloudView || volumes.length &&
+    (reflectionPlane || curveScene || deep || blendDepth || layeredFogRows ||
+      !depthFogGeometry && (surfaceFragments.length || sprites.length))) &&
+    atmosphereOptions();
   const hazeCoverage = effectRules?.ramps.get('fog')?.geometry && world.fog.max > 0 && new Float32Array(W * H);
   const rayMedia = mediaOptions ? mediaSampler(volumes, water, rayAt, W, mediumHorizon, {
     ...mediaOptions, reflectionPlane, reflection, reflectionBackground: bg, reflectionDetail:o.reflectionDetail, waterTransition: blendDepth,
     deep: Boolean(deep), matteCount:mattes?.count
   }, air) : null;
   const fogQuality = !rayMedia && axialDepth && atmosphereOptions();
-  const fogOwners = fogQuality && fogQuality.scale > 1 && fogQuality.reconstruction === 'object' &&
-    world.renderMetadata?.objectIds && new Uint32Array(W*H);
-  const fogOwnerRows = fogOwners && world.renderMetadata.objectIds;
+  if (fogQuality && depthFogGeometry) fogQuality.composition='depth';
+  const fogOwners = fogQuality && fogQuality.scale > 1 && fogQuality.reconstruction !== 'depth' &&
+    (depthFogGeometry || world.renderMetadata?.objectIds) && new Uint32Array(W*H);
+  const fogOwnerRows = fogOwners && world.renderMetadata?.objectIds;
+  const fogObjectIds = fogOwners && depthFogGeometry && new Map();
+  function fogOwner(i,sprite) {
+    if(i>=0)return fogOwnerRows?.[i]??0;
+    if(!fogObjectIds || !sprite)return 0;
+    const object=sprite.sdf ? sprite.row.target?.object : sprite.fogObject ?? sprite.objectId;
+    if(object===undefined)return 0;
+    if(!fogObjectIds.has(object))fogObjectIds.set(object,fogObjectIds.size+1);
+    return fogObjectIds.get(object);
+  }
   const retainLayers = retainContributions || Boolean(rayMedia || deep);
   const col = new Float32Array(W * H * 3),
     dep = new Float32Array(W * H),
@@ -1892,7 +1916,7 @@ function renderFrame(world, o, preparedPalettes) {
         if (pixelBudgets) pixelBudgets[p] = (cleanupFlags[i] ?? 0) | DetailBudgets.OWNED;
         if (win) win[p] = sectionEdge || surface?.reveals(i) ? -1 : i;
         if (axialDepth) axialDepth[p] = opticalDepth;
-        if (fogOwners) fogOwners[p] = fogOwnerRows[i] ?? 0;
+        if (fogOwners) fogOwners[p] = fogOwner(i,sprite);
         if (fogScales || silhouetteMask) subjectPixel(p,rule);
       }
     } else if (glass) gls[p] = Math.min(1, gls[p] + a * 0.5);
@@ -3173,7 +3197,7 @@ function renderFrame(world, o, preparedPalettes) {
         if (filterMatte) filterMatte[q] = filterAt(sprOwner[q]);
         if (edgePixels) edgePixels[q] = 0;
         if (axialDepth) axialDepth[q] = eyeD - R + sprD[q] * 2 * R;
-        if (fogOwners) fogOwners[q] = fogOwnerRows[sprOwner[q]] ?? 0;
+        if (fogOwners) fogOwners[q] = fogOwner(sprOwner[q]);
         if (art) art.sprite(q, sprOwner[q], eyeD - R + sprD[q] * 2 * R);
         if (deep) {
           const depth = eyeD - R + sprD[q] * 2 * R;
@@ -3220,7 +3244,7 @@ function renderFrame(world, o, preparedPalettes) {
     const quality = fogQuality;
     atmosphere = applyAtmosphere(volumes, col, axialDepth, rayAt, W, H, horizon, quality, t, quality.media,
       captureFog || effectMedia || transparent || fogPass, o.volumeHistory,
-      o.volumeHistory && [W,H,focal,ortho,quality.scale,quality.reconstruction,quality.depthTolerance,quality.samples,
+      o.volumeHistory && [W,H,focal,ortho,quality.scale,quality.reconstruction,quality.composition,quality.depthTolerance,quality.samples,
         quality.seed,quality.jitter,quality.maxSteps,quality.stepScale,
         o.volumeLocalLights,o.volumeLocalShadows,o.cutoutShadows,o.shadowShells,ShadowCutouts.historyKey(cutoutsForLight),...V].join('/'),
       fogScales, fogOwners || undefined);

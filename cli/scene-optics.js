@@ -135,9 +135,10 @@ function reflectionSampler(planes, render, view, eye, scale, { quality, width, h
 
 function atmosphereQuality(value = {}) {
   const { scale = 1, depthTolerance = .22, steps = 64, stepScale = 1, samples = 1, jitter = 'off',
-    skip = true, cacheBounds = true, seed = 0, stats = false, reconstruction = 'object' } = value;
-  if (reconstruction !== 'object' && reconstruction !== 'depth')
-    throw new RangeError('Volume reconstruction must be object or depth');
+    skip = true, cacheBounds = true, seed = 0, stats = false, reconstruction = 'object', composition = 'auto' } = value;
+  if (!['object','depth','lighting'].includes(reconstruction))
+    throw new RangeError('Volume reconstruction must be object or depth, or lighting for native extinction');
+  if (!['auto','depth'].includes(composition)) throw new RangeError('Volume composition must be auto or depth');
   if (!Number.isSafeInteger(scale) || scale < 1 || scale > 4 ||
       !Number.isFinite(depthTolerance) || depthTolerance < 0 ||
       !Number.isSafeInteger(steps) || steps < 4 || steps > 256 ||
@@ -145,7 +146,7 @@ function atmosphereQuality(value = {}) {
       !Number.isSafeInteger(samples) || samples < 1 || samples > 4 || !['off', 'blue-noise', 'spatiotemporal'].includes(jitter) ||
       !Number.isSafeInteger(seed) || typeof skip !== 'boolean' || typeof cacheBounds !== 'boolean' || typeof stats !== 'boolean')
     throw new RangeError('Invalid atmosphere quality options');
-  return { scale, depthTolerance, maxSteps: steps, stepScale, samples, jitter, skip, cacheBounds, seed, stats, reconstruction };
+  return { scale, depthTolerance, maxSteps: steps, stepScale, samples, jitter, skip, cacheBounds, seed, stats, reconstruction, composition };
 }
 
 const noiseTiles = new Map();
@@ -287,7 +288,8 @@ function mediaSampler(volumes, water, rayAt, width, horizon, options, aerial) {
     for (let c=0;c<matte.length;c++) matte[c] += value[c]*amount/samples;
   };
   let opacity = 0, fogCoverage = 0, cloudCoverage = 0, fogThrough = 1;
-  const stats = { rays: 0, fallbackRays: 0, depthSamples: 0, mode: 'layered' };
+  const stats = { rays: 0, fallbackRays: 0, depthSamples: 0, mode: 'layered', lightingSamples: 0, extinctionRays: 0 };
+  if (options.stats) query.scatteringStats=stats;
   function shade(pixel, depth, rgb, geometry = true, fogScale = 1) {
     if (options.counters) options.counters.mediaQueries++;
     let ray = rays[pixel];
@@ -398,7 +400,7 @@ function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, ti
   // Reusing a density history would leave trails on animated lights and clear pockets.
   const transient = quality.flash || quality.cutouts?.fog || fogScales || volumes.some(volume => volume.paletteField);
   if (transient) history?.clear();
-  const temporal = fields && !transient && !quality.cloudShadow && !volumes.some(v => v.densityField || v.depthBand?.sample) &&
+  const temporal = quality.reconstruction !== 'lighting' && quality.composition !== 'depth' && fields && !transient && !quality.cloudShadow && !volumes.some(v => v.densityField || v.depthBand?.sample) &&
     !media?.animatedLocals && quality.jitter === 'spatiotemporal' && history;
   const tile = fields && quality.jitter !== 'off' ? volumeNoise(quality.seed) : null;
   const accumulation = temporal ? new Float32Array(W * H * 4) : null;
@@ -408,21 +410,26 @@ function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, ti
   const { scale, depthTolerance, reconstruction } = quality;
   const mode = scale === 1 ? 'native' : reconstruction;
   const stats = { mode, rays: 0, coarseRays: 0, fallbackRays: 0, boundaryRays: 0, boundaryPixels: 0,
-    reconstructedPixels: 0, boundaryRejectedTaps: 0 };
-  const guide = mode === 'object' ? surfaceGuide(W,H,depths,owners,fogScales,depthTolerance) : null;
+    reconstructedPixels: 0, boundaryRejectedTaps: 0, lightingSamples: 0, extinctionRays: 0, lightingFallbacks: 0 };
+  if (quality.stats) query.scatteringStats=stats;
+  const split=mode==='lighting';
+  const guide = mode === 'object' || split ? surfaceGuide(W,H,depths,owners,fogScales,depthTolerance) : null;
   const fog = capture ? new Float32Array(W * H) : null;
-  function solve(x, y, depth) {
+  function solve(x, y, depth, out=light, extinctionOnly=false) {
     const { origin, direction, axial } = rayAt(x + .5, y + .5);
     query.axial = axial;
     if (fogScales) query.fogScale = fogScales[y*W+x];
-    const stop = (Number.isFinite(depth) ? depth : horizon) / axial;
+    const surface=Number.isFinite(depth)?depth:horizon;
+    const stop=(quality.composition==='depth'?Math.min(surface,horizon):surface)/axial;
+    query.extinctionOnly=extinctionOnly;
     const phase = tile ? ((tile.ranks[y % tile.height * tile.width + x % tile.width] + .5) / tile.ranks.length + phaseShift) % 1 : .5;
-    light.fill(0);
+    out.fill(0);
     for (let i = 0; i < samples; i++) {
       query.jitter = (i + phase) / samples;
       SceneOptics.trace(volumes, origin, direction, stop, sample, query);
-      for (let c = 0; c < 4; c++) light[c] += sample[c] / samples;
-      stats.rays++;
+      for (let c = 0; c < 4; c++) out[c] += sample[c] / samples;
+      if(extinctionOnly)stats.extinctionRays++;
+      else stats.rays++;
       if (quality.counters) quality.counters.raySamples++;
     }
   }
@@ -445,6 +452,7 @@ function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, ti
     low.set(light, p * 4);
   }
   stats.coarseRays = stats.rays;
+  const extinction=[0,0,0,1];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x, p = i * 3;
     const edge = guide?.boundaries[i];
@@ -471,6 +479,19 @@ function applyAtmosphere(volumes, col, depths, rayAt, W, H, horizon, quality, ti
         const w = spatial / (1 + delta * 5);
         for (let c = 0; c < 4; c++) light[c] += low[j * 4 + c] * w;
         weight += w;
+      }
+      if (weight && split) {
+        const coarseOpacity=weight-light[3];
+        solve(x,y,depths[i],extinction,true);
+        const opacity=1-extinction[3];
+        if (opacity>1e-9 && coarseOpacity<=1e-9) {
+          stats.lightingFallbacks++;
+          weight=0;
+        } else {
+          const gain=opacity>1e-9 ? weight*opacity/coarseOpacity : 0;
+          for(let c=0;c<3;c++) light[c]*=gain;
+          light[3]=extinction[3]*weight;
+        }
       }
       if (weight) stats.reconstructedPixels++;
     }

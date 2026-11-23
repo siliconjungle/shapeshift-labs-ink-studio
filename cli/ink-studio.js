@@ -996,11 +996,12 @@ const view = extra =>
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),
       volumeLocalShadows: onOffOption('volume-local-shadows'),
-      volumeQuality: opt['volume-scale'] || opt['volume-steps'] || opt['volume-jitter'] || opt['volume-reconstruction'] ? {
+      volumeQuality: opt['volume-scale'] || opt['volume-steps'] || opt['volume-jitter'] || opt['volume-reconstruction'] || opt['volume-composition'] ? {
         ...(opt['volume-scale'] && { scale: num('volume-scale') }),
         ...(opt['volume-steps'] && { steps: num('volume-steps') }),
         ...(opt['volume-jitter'] && { jitter: opt['volume-jitter'] }),
-        ...(opt['volume-reconstruction'] && { reconstruction: opt['volume-reconstruction'] })
+        ...(opt['volume-reconstruction'] && { reconstruction: opt['volume-reconstruction'] }),
+        ...(opt['volume-composition'] && { composition:opt['volume-composition'] })
       } : undefined,
       edges: opt.edges === 'off' ? false : undefined
     },
@@ -1263,7 +1264,7 @@ const CMD = {
         '  pose-correctives review <scene> --out directory [--from 0 --to 2.4 --fps 10]',
         '  render/clip/atlas --pose-correctives patch.json|off   load or bypass puppet corrective sculpts',
         '  render/clip/atlas --view-poses asset.json|off   load or bypass view-sector pose corrections',
-        '  render/clip --volume-scale 3 --volume-reconstruction object|depth   choose a coarse fog reconstruction',
+        '  render/clip --volume-scale 3 --volume-reconstruction object|depth|lighting   choose a coarse fog reconstruction',
         '  fog-reconstruction review <scene> --out directory [--subject object-id --volume-scale 4 --from 0 --to 2.4 --fps 10]',
         '  render/clip --dynamic-bounce off   reuse the baked probes without sampling moving sources',
         '  render <id> --palette-constraints <file.json|off>   override target palettes and dither settings',
@@ -2122,7 +2123,9 @@ const CMD = {
     const world=buildPreview(id);
     const report=require('./fog-reconstruction-review.js').review(world,directory,{
       pose,view,width:num('w',192),height:num('h',112),from:num('from',0),to:num('to',2.4),
-      fps:num('fps',10),scale:num('volume-scale',world.volumeQuality?.scale>1 ? world.volumeQuality.scale : 4),subject:opt.subject
+      fps:num('fps',10),scale:num('volume-scale',world.volumeQuality?.scale>1 ? world.volumeQuality.scale : 4),subject:opt.subject,
+      reconstruction:opt['volume-reconstruction']==='lighting'||opt['volume-reconstruction']===undefined&&world.volumeQuality?.reconstruction==='lighting' ?
+        'lighting' : 'object'
     });
     console.log('Compared',report.samples.length,'fog frames. Wrote',directory);
   },

@@ -445,6 +445,42 @@ node cli/ink-studio.js fog-reconstruction review examples/depth-aware-fog/sluice
 
 Open `index.html` to play or scrub the same shot in depth-only, object-guided, and full-resolution modes. **Close-up** follows the selected character. **Mark corrected edge pixels** highlights where the object-guided opacity moves closer to the reference by at least three percentage points, from an initial error of at least four. The review includes three animated PNGs and the per-frame measurements.
 
+### Shade scattering on a coarse grid
+
+Use `volumeQuality: { scale: 4, reconstruction: 'lighting' }` to keep
+optical extinction on the native art grid and shade fog and shafts on a
+coarse grid. Each compatible tap supplies scattered color per unit of
+opacity. The renderer weights those taps by depth and visible ownership
+and applies the result to the native ray's opacity. This keeps clear pixels
+clear, including gaps narrower than the coarse grid. An opaque edge or a
+native fog pixel with no suitable tap gets a fully lit native ray. The
+result uses current-frame depth, including moving foreground geometry.
+
+The headless renderer applies this mode to its bounded splat fog pass and
+scenes made of opaque native surfaces such as a mesh doorway. It keeps the
+per-fragment path for water, aerial perspective, volumetric clouds, and
+layered surface compositions that need multiple depths. Set
+`--volume-composition depth` to use the same eligible opaque-depth path
+when comparing the older reconstruction methods.
+
+The stats distinguish `lightingSamples` (actual scattering evaluations)
+from `extinctionRays` (native density-only work) and `lightingFallbacks`
+(reconstructed pixels sent back to a full ray because all compatible taps
+were clear). `rays` counts the full rays in each mode. Use
+`--volume-scale 1` on the same settings for the fully shaded reference.
+
+```sh
+node cli/ink-studio.js render examples/depth-aware-fog/aperture-works.js \
+  --volume-reconstruction lighting --volume-scale 4 --w 256 --h 152 --px 1 --raw --out aperture.png
+node cli/ink-studio.js fog-reconstruction review examples/depth-aware-fog/aperture-works.js \
+  --volume-reconstruction lighting --subject cart --out aperture-review \
+  --w 256 --h 152 --from .4 --to 2.5 --fps 10 --raw
+```
+
+Aperture Works compares depth-only interpolation, coarse lighting with native
+extinction, and a fully shaded reference. The review JSON records per-object
+edge error in rendered RGB and fog opacity alongside lighting work.
+
 ## Pixel budgets and upload profiling
 
 Give a scene a soft internal raster budget through `look.pixelBudget`.

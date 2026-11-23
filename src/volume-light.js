@@ -159,7 +159,7 @@ const VolumeLight = (() => {
   }
 
   function integrate(segments, origin, direction, stop, result, options = {}) {
-    const { time = 0, media, maxSteps = 64, stepScale = 1, jitter = .5, skip = true, cloudShadow, flash, exposure, cutouts, counters } = options;
+    const { time = 0, media, maxSteps = 64, stepScale = 1, jitter = .5, skip = true, cloudShadow, flash, exposure, cutouts, counters, scatteringStats, extinctionOnly = false } = options;
     const active = new Set(), rgb = [0, 0, 0], light = [1, 1, 1], tint = [0, 0, 0];
     result[0] = result[1] = result[2] = 0;
     result[3] = 1;
@@ -170,7 +170,7 @@ const VolumeLight = (() => {
       if (density <= 0) return;
       const alpha = -Math.expm1(-density * length * (options?.fogScale ?? 1));
       const contribution = result[3] * alpha / density;
-      for (let k = 0; k < 3; k++) result[k] += contribution * rgb[k] * gain;
+      if (!extinctionOnly) for (let k = 0; k < 3; k++) result[k] += contribution * rgb[k] * gain;
       result[3] *= 1 - alpha;
     }
     const entry = segments[0]?.[0] ?? 0;
@@ -199,7 +199,7 @@ const VolumeLight = (() => {
           rgb.fill(0);
           for (const v of active) {
             density += v.density;
-            for (let k = 0; k < 3; k++) rgb[k] += v.density * v.rgb[k];
+            if (!extinctionOnly) for (let k = 0; k < 3; k++) rgb[k] += v.density * v.rgb[k];
           }
           if (counters) counters.analyticSegments++;
           if (cloudShadow) {
@@ -207,7 +207,7 @@ const VolumeLight = (() => {
             const step = (end - last) / 4;
             for (let i = 0; i < 4; i++) {
               const length = effectiveLength?.(last+i*step,last+(i+1)*step) ?? step;
-              blend(density, length, clouds.dim(cloudVisibility(last + (i + .5) * step)));
+              blend(density, length, extinctionOnly ? 1 : clouds.dim(cloudVisibility(last + (i + .5) * step)));
             }
           } else blend(density, effectiveLength?.(last,end) ?? end-last);
         } else {
@@ -241,9 +241,9 @@ const VolumeLight = (() => {
             }
             const depth = t + distance * jitter;
             const x = origin[0] + depth * direction[0], y = origin[1] + depth * direction[1], z = origin[2] + depth * direction[2];
-            const visibility = cloudShadow?.(x, y, z) ?? 1;
+            const visibility = extinctionOnly ? 1 : cloudShadow?.(x, y, z) ?? 1;
             const gain = clouds.dim(visibility);
-            const strike = flash?.light(x, y, z);
+            const strike = !extinctionOnly && flash?.light(x, y, z);
             const mist = (exposure?.fog?.(x,y,z) ?? 1) *
               (cutRay ? cutRay.distance(t,t+distance)/distance : 1);
             let density = 0;
@@ -255,7 +255,11 @@ const VolumeLight = (() => {
               const localDensity = v.density * (v.densityField?.sample(x,z) ?? 1) * (v.depthBand?.sample?.(x,y,z,options) ?? 1) * mist;
               if (v.type !== 'field') {
                 density += localDensity;
-                if(v.lit&&media)illuminate(v,light,x,y,z,direction,media,visibility);else light.fill(gain);
+                if (extinctionOnly) continue;
+                if (v.lit && media) {
+                  if (scatteringStats) scatteringStats.lightingSamples++;
+                  illuminate(v,light,x,y,z,direction,media,visibility);
+                } else light.fill(gain);
                 const base = paletteColor(v, v.rgb, depth, y);
                 for (let k = 0; k < 3; k++) rgb[k] += localDensity * (base[k] * light[k] + .45 * (strike?.[k] ?? 0));
                 continue;
@@ -266,9 +270,12 @@ const VolumeLight = (() => {
               const extinction = (v.bands ? band?.at ?? 0 : value) * localDensity;
               if (!extinction) continue;
               density += extinction;
+              if (extinctionOnly) continue;
               const base = paletteColor(v, band?.rgb ?? mediumColor(v, value), depth, y);
-              if (v.lit && media) illuminate(v, light, x, y, z, direction, media, visibility * (exposure?.light?.(x,y,z) ?? 1));
-              else light.fill(v.lit ? gain : 1);
+              if (v.lit && media) {
+                if (scatteringStats) scatteringStats.lightingSamples++;
+                illuminate(v,light,x,y,z,direction,media,visibility*(exposure?.light?.(x,y,z)??1));
+              } else light.fill(v.lit ? gain : 1);
               for (let k = 0; k < 3; k++)
                 rgb[k] += extinction * (base[k] * light[k] + v.emissiveRgb[k] * v.emissiveGain + (v.lit ? .45 * (strike?.[k] ?? 0) : 0));
             }

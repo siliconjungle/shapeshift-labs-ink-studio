@@ -277,11 +277,11 @@ const SceneOptics = (() => {
       if (density > 1e-10 && t > last) {
         if (counters) counters.analyticSegments++;
         const alpha = -Math.expm1(-density * (t - last) * scale);
-        for (let i = 0; i < 3; i++) result[i] += (result[3] * alpha * rgb[i]) / density;
+        if (!options?.extinctionOnly) for (let i = 0; i < 3; i++) result[i] += (result[3] * alpha * rgb[i]) / density;
         result[3] *= 1 - alpha;
       }
       density += volume.density * sign;
-      for (let i = 0; i < 3; i++) rgb[i] += volume.rgb[i] * volume.density * sign;
+      if (!options?.extinctionOnly) for (let i = 0; i < 3; i++) rgb[i] += volume.rgb[i] * volume.density * sign;
       last = t;
     }
     return result;
