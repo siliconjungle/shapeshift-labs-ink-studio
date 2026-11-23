@@ -526,3 +526,9 @@ world cue audition labels dropped and displaced cues in its loop.
 The demo plays one busy recording twice with six active slots. Listen
 for the warning, spoken instruction, and confirm sound in the second
 pass. [Run the world voice priorities demo](../examples/world-voice-priorities/demo.cjs)
+
+## Share a sound family across projects
+
+[Portable world-sound packs](world-sound-packs.md) keep cue IDs, recipes,
+recordings, and material and context rules together. Import a pinned pack in
+a scene soundtrack or render a bundled example through the story audio mixer.

@@ -84,3 +84,7 @@ checks against the packaged files on the pinned engine.
 ## Exchange story packs and recorded runs
 
 A version 4 bundle carries definitions, capability declarations, pinned assets, inputs, and optional media. A run bundle also retains a recorded event log and can include native replay data. The same bundle opens in the story event and cue tools. [Portable story packs and run bundles](portable-story-packs.md)
+
+A take's soundtrack can import [portable world-sound packs](world-sound-packs.md)
+from files inside the project root. Packing the take verifies those imports
+and carries the self-contained sound packs into the relocated project.

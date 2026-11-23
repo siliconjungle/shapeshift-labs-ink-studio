@@ -8,6 +8,7 @@ const { isModel, mapModels, requireRevision } = require('./simulation-model-file
 const { groupEntries, groupReference, groupDocument, requireGroupReference } = require('./graph-groups.js');
 const Experiment = require('./experiment-schema.js');
 const Assets = require('./asset-references.js');
+const SoundPacks = require('./world-sound-pack.js');
 const Story = require('../src/story-document.js');
 
 const formats = {
@@ -17,6 +18,7 @@ const formats = {
   'ink-studio/graph-project': 'graph',
   'ink-studio/graph-group': 'group',
   'ink-studio/scene-audio': 'audio',
+  [SoundPacks.format]: 'world-sound-pack',
   'ink-studio/shot-recipe': 'shot',
   'ink-studio/checkpoint-ref': 'checkpoints',
   'ink-studio/checkpoint': 'checkpoints',
@@ -244,7 +246,10 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       follow(document.world, 'world');
       if (assetApi().isRef(document.graph)) visit(bind(document.graph, 'graph').filename, 'graph');
       else follow(document.graph, 'graph');
-      follow(document.audio, 'audio');
+      if(document.audio!==undefined){
+        const audio=visit(resolvePath(file,document.audio));
+        if(!['audio','world-sound-pack'].includes(audio.kind))throw new TypeError('Unexpected project soundtrack type');
+      }
       follow(document.assetPack, 'look');
       follow(document.checkpoint, 'checkpoints');
       for (const ref of values(document.shots)) follow(ref, 'shot');
@@ -261,7 +266,20 @@ function collectDependencies(bundles, entry, get, attachments = {}) {
       activeGroups.add(file);
       graphGroups(file, dependency.group.definition.groups);
       activeGroups.delete(file);
+    } else if (kind === 'world-sound-pack') {
+      const {manifest,sha256}=SoundPacks.open(bytes(raw),toolkit(),undefined,document);
+      dependency.soundPack={manifest,sha256};
     } else if (kind === 'audio') {
+      if(document.worldSoundPacks!==undefined){
+        const api=toolkit().world.soundPacks;
+        const packs=api.references(document.worldSoundPacks).map(ref=>{
+          const {soundPack}=visit(resolvePath(file,ref.file),'world-sound-pack');
+          SoundPacks.checkPin(soundPack,ref);
+          return soundPack;
+        });
+        if(packs.length)toolkit().world.spatialAudio.create(
+          api.compose(document.spatial,packs,Object.keys(document.assets??{})).spatial);
+      }
       const bind = select(file, document);
       follow(document.world, 'world');
       for (const asset of values(document.assets)) {

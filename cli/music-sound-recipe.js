@@ -52,6 +52,7 @@ function mutate(sound, source, settings, inputs, output) {
 
 function command(pos, opt, kit) {
   const [mode, input, config] = pos;
+  if(mode==='pack')return require('./world-sound-pack.js').command(pos.slice(1),opt,kit);
   if (!input || !((mode === 'render' || mode === 'replay') && pos.length === 2 || mode === 'mutate' && pos.length <= 3) ||
       typeof opt.out !== 'string' || !opt.out.trim() || Object.keys(opt).some(key => key !== 'out'))
     throw new TypeError('Use ' + usage + ', ' + mutationUsage + ', or ' + replayUsage);

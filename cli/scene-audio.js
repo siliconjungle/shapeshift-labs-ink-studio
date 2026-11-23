@@ -12,6 +12,7 @@ const { readGraphProject } = require('./graph-project.js');
 const { readAudioPrint } = require('./audio-print.js');
 const { embed } = require('./data-inputs.js');
 const Assets = require('./asset-references.js');
+const SoundPacks = require('./world-sound-pack.js');
 
 const format = 'ink-studio/scene-audio';
 const record = value => value && [Object.prototype, null].includes(Object.getPrototypeOf(value));
@@ -20,7 +21,7 @@ const finite = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
 const token = value => typeof value === 'string' && value.trim() && value.length <= 512;
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 
-function createSceneAudio(definition, { kit = require('../index.js').load(), resolveAsset, runtime } = {}) {
+function createSceneAudio(definition, { kit = require('../index.js').load(), resolveAsset, runtime, worldSoundPacks = [] } = {}) {
   if (!fields(definition, ['format', 'version', 'sampleRate', 'gain', 'tracks', 'spatial', 'listener', 'music', 'proceduralScore', 'post']) ||
       definition.format !== format || definition.version !== 1 || typeof resolveAsset !== 'function')
     throw new TypeError('Expected a version 1 scene soundtrack and audio resolver');
@@ -468,6 +469,7 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
     if (selection?.kind==='world' && !result.report.stems.spatial.voices)
       throw new RangeError('No audible world source in the selected capture range');
     if (worldReport) result.report.worldScore=worldReport;
+    if (worldSoundPacks.length) result.report.worldSoundPacks=worldSoundPacks;
     if (allocation) result.report.voiceBudget=allocation;
     if (history) {
       const contacts = active.filter(row=>row.contact && Math.max(row.first,start)<Math.min(row.end??end,end))
@@ -503,15 +505,27 @@ function createSceneAudio(definition, { kit = require('../index.js').load(), res
   });
 }
 
-function readSceneAudio(file, { kit = require('../index.js').load(), onFile = () => {}, recordedOnly = false, additions, ...graphOptions } = {}) {
-  const source = path.resolve(file), folder = path.dirname(source);
-  const { assets = undefined, world, assetRegistry, ...definition } = read(source);
+function readSceneAudio(file, { kit = require('../index.js').load(), onFile = () => {}, recordedOnly = false,
+  additions, maxPlanBytes, ...graphOptions } = {}) {
+  const source = path.resolve(file), folder = path.dirname(source), K=kit.KIT;
+  const packAPI=K.world.soundPacks, stat=fs.statSync(source);
+  if(!stat.isFile()||stat.size>packAPI.maxDocumentBytes)throw new RangeError('Scene soundtrack exceeds its byte budget');
+  const bytes=fs.readFileSync(source), document=JSON.parse(bytes.toString('utf8'));
   onFile(source);
+  if(document?.format===packAPI.format) {
+    if(additions)throw new TypeError('Use a scene soundtrack with a worldSoundPacks import to add editorial tracks');
+    return SoundPacks.createSoundtrack(SoundPacks.open(bytes,K,undefined,document),kit);
+  }
+  if(maxPlanBytes!==undefined&&bytes.length>maxPlanBytes)throw new RangeError('Story audio plan exceeds its byte budget');
+  const { assets = undefined, world, assetRegistry, worldSoundPacks = [], ...definition } = document;
+  const packs=SoundPacks.mount(source,worldSoundPacks,K,{onFile}), packsById=new Map(packs.map(pack=>[pack.manifest.id,pack]));
   if (recordedOnly && world!==undefined) throw new TypeError('The recorded run supplies the story soundtrack world');
   const api = kit.KIT.authoring.assetReferences, select = Assets.scope(api, source, assetRegistry, {onFile});
-  const assetsByName = assets === undefined && (additions || definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
+  const assetsByName = assets === undefined && (packs.length || additions || definition.proceduralScore!==undefined || definition.music?.production) ? {} : assets;
   if (!record(assetsByName) || Object.keys(assetsByName).length > 1024 || !Object.keys(assetsByName).every(token))
     throw new TypeError('Soundtrack needs named audio assets');
+  const imported=packs.length ? packAPI.compose(definition.spatial,packs,Object.keys(assetsByName)) : null;
+  if(imported)definition.spatial=imported.spatial;
   const assetCache = new Map(), graphs = new Map(), prints=new Map(), editorials=new Map();
   const T=kit.KIT.procedural.takeTime;
   let soundWorld, totalSamples = 0;
@@ -557,13 +571,16 @@ function readSceneAudio(file, { kit = require('../index.js').load(), onFile = ()
   }
   function resolveAsset(name) {
     if (additions?.assets.has(name)) {
-      if (Object.hasOwn(assetsByName,name)) throw new TypeError('Soundtrack asset name collides with a handoff asset: '+name);
+      if (Object.hasOwn(assetsByName,name)||imported?.assets.has(name))
+        throw new TypeError('Soundtrack asset name collides with a handoff asset: '+name);
       return additions.assets.get(name);
     }
     if (assetCache.has(name)) return assetCache.get(name);
     const spec = Object.hasOwn(assetsByName, name) ? assetsByName[name] : undefined;
+    const pack=imported?.assets.get(name);
     let audio;
-    if (typeof spec === 'string') {
+    if(pack)audio=packsById.get(pack.pack).audio(name);
+    else if (typeof spec === 'string') {
       const file = path.resolve(folder,spec);
       audio = readAudioSource(file, kit.KIT.procedural);
       onFile(file);
@@ -612,7 +629,7 @@ function readSceneAudio(file, { kit = require('../index.js').load(), onFile = ()
     tracks=[...(tracks??[]),...additions.tracks];
     definition.post ??= {};
   }
-  return createSceneAudio({...definition,...(tracks!==undefined && {tracks})}, { kit, resolveAsset,
+  return createSceneAudio({...definition,...(tracks!==undefined && {tracks})}, { kit, resolveAsset, worldSoundPacks:packs.map(pack=>pack.identity),
     ...(soundWorld && { runtime: () => kit.KIT.world.runtime.create(soundWorld) }) });
 }
 

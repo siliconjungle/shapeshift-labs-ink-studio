@@ -1226,6 +1226,8 @@ const CMD = {
         '  '+require('./music-sound-recipe.js').usage+'   render reproducible one-shot audio',
         '  '+require('./music-sound-recipe.js').mutationUsage+'   generate a bounded family of one-shots',
         '  '+require('./music-sound-recipe.js').replayUsage+'   rebuild a kept sound audition',
+        '  '+require('./world-sound-pack.js').usage,
+        '  '+require('./world-sound-pack.js').auditionUsage,
         '  music instrument analyze|audition|build recipe.json --out path   turn a take bank into labeled playable zones',
         '  music instrument discover|keep-discovery file.json [selection.json] --out dir',
         '  music instrument workshop|audition-workshop|keep-workshop file.json [settings.json] --out dir',

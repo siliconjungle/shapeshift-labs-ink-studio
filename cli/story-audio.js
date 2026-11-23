@@ -61,26 +61,37 @@ async function command(file, plan, rest, opt, library) {
   if (!file || !plan || rest.length || typeof opt.out !== 'string' || !opt.out.trim() ||
       Object.keys(opt).some(key => !['out','from','to','receipts'].includes(key)) ||
       opt.receipts!==undefined && (typeof opt.receipts!=='string'||!opt.receipts.trim())) throw new TypeError('Use ' + usage);
-  const kit = library(), { world:W, procedural:P } = kit.KIT;
-  const T = P.takeTime, R = W.runtime;
+  const kit = library(), { world:W } = kit.KIT;
   const inputs = new Set([path.resolve(file),path.resolve(plan)]);
   const onFile = entry => {
     const source = path.resolve(entry);
     inputs.add(source);
     return source;
   };
-  if (fs.statSync(plan).size > 8*1024*1024) throw new RangeError('Story audio plan exceeds its byte budget');
+
   const recording = readNativeRun(file,kit,onFile);
   const { world } = recording.origin;
   const soundReceipts = opt.receipts && readSoundReceipts(onFile(opt.receipts),world.id,W);
+  const soundtrack = readSceneAudio(plan,{kit,onFile,recordedOnly:true,maxPlanBytes:8*1024*1024});
+  const {outputs}=await renderRecording(recording,soundtrack,{...opt,soundReceipts},kit);
+  graphOutputs([...inputs]).write(path.resolve(opt.out),outputs);
+}
+
+function recordingWindow(T,recording,{from,to}) {
+  const {world}=recording.origin;
   const period = T.period(world.dt,world.takeClock?.simulationRate);
   const at = tick => T.mul(T.read(tick),period);
   const origin = at(recording.origin.tick), end = at(recording.end.tick);
-  const startPoint = point(T,opt.from,origin), endPoint = point(T,opt.to,end);
+  const startPoint = point(T,from,origin), endPoint = point(T,to,end);
   if (T.compare(startPoint,origin)<0 || T.compare(endPoint,end)>0 || T.compare(startPoint,endPoint)>=0)
     throw new RangeError('Story audio window falls outside the recorded run');
+  return {startPoint,endPoint};
+}
 
-  const soundtrack = readSceneAudio(plan,{kit,onFile,recordedOnly:true});
+async function renderRecording(recording,soundtrack,settings,{KIT:K}) {
+  const T=K.procedural.takeTime, R=K.world.runtime, {world}=recording.origin;
+  const {startPoint,endPoint}=recordingWindow(T,recording,settings);
+  const {soundReceipts}=settings;
   await R.replayAsync(recording);
   const { waves, report } = soundtrack.render({startPoint,endPoint},{
     runtime:()=>R.openRecording(recording),recordedThrough:recording.end.tick,trace:true,soundReceipts
@@ -109,7 +120,7 @@ async function command(file, plan, rest, opt, library) {
       ...(row.actualSample!==null && row.actualSample>=report.firstSample &&
         {file:row.bus+'.wav',fileSample:row.actualSample-report.firstSample})}))
   }});
-  graphOutputs([...inputs]).write(path.resolve(opt.out),[...output,{file:'report.json',document:documentReport}]);
+  return {outputs:[...output,{file:'report.json',document:documentReport}],report:documentReport};
 }
 
-module.exports = { command, usage, point, readNativeRun, readSoundReceipts };
+module.exports = { command, usage, point, readNativeRun, readSoundReceipts, recordingWindow, renderRecording };
