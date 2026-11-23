@@ -18,6 +18,7 @@ import { waterReflectionPlan, selectReflectionWorld } from './reflections.mjs';
 import { createRenderGraph, graphOwner, graphCapture } from './render-graph.mjs';
 import { createFrameComposite, frameCamera, captureFrameCamera } from './frame-composite.mjs';
 import { createSurfacePipeline } from './surfaces.mjs';
+import { createDepthMeshPass } from './depth-mesh-proxies.mjs';
 import { createSpriteReconstructionPipeline } from './sprite-reconstruction.mjs';
 import { createResources } from './resources.mjs';
 import { createTargets } from './targets.mjs';
@@ -130,7 +131,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const motionAPI = toolkit.ArtDirection ?? toolkit.KIT?.artDirection;
     const footprintAPI = toolkit.KIT?.splatFootprints;
     const spriteLOD = toolkit.KIT?.sprite?.reconstruction;
-    const spriteLodUnit = 28;
+    const spriteLodUnit = 28, meshDepthUnit = 29; // Temporarily borrows the surface emitter shadow slot.
     let spriteLodTable, uploadedSpriteMask, spriteReconstructionPipeline;
     let footprintBinding,engravingBinding;
     const engravingAPI=toolkit.KIT?.engraving;
@@ -194,6 +195,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const afterimagesAPI = toolkit.KIT?.afterimages;
     const previewPipelines = [];
     const surfacePipelines = [];
+    let depthMeshPass, lastDepthProxy = false;
     let emitterSurfacePipeline, reflectionTarget, secondaryReflectionTarget, reflectionAtlas, reflectionAtlasSize, reflectionAtlasFramebuffer;
     let artPixelFinish, correctionStage;
     const clusterAPI = toolkit.KIT?.colorClusters, boundaryAPI = toolkit.KIT?.boundaryCels;
@@ -536,6 +538,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       return wetVariants.get(key);
     }
     function drawGeometry(shader, buffer, width, height, options, water, wet, env) {
+      let meshDepth, previousMeshBinding;
+      if (options.surfaceFrame?.depthProxy) {
+        depthMeshPass ??= createDepthMeshPass(gl,meshDepthUnit,cutawayAPI?.glsl);
+        meshDepth=depthMeshPass.prepare(options.surfaceFrame,width,height);
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer.framebuffer);
       gl.viewport(0, 0, width, height);
       if (options.u_coverageVotePass) {
@@ -635,7 +642,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (shader.gaussianMaterials) gaussianMaterialBinding.rebind();
       gl.useProgram(shader.p);
       shader.set({
-        ...options,u_geometryDepth:+(hasSurfaces||hasProxies||hasPlanes),
+        ...options,u_meshDepthProxy:meshDepthUnit,u_geometryDepth:+(hasSurfaces||hasProxies||hasPlanes),
         u_proxyGrid: options.proxy ? [options.proxy.width/width, options.proxy.height/height] : [1,1],
         u_portalCoverPlane: options.u_portalCoverPlane ?? zero,
         u_paintPass: !!options.u_paintPass, u_splatPaintPass: !!options.u_splatPaintPass, u_coverageVotePass: !!options.u_coverageVotePass,
@@ -648,6 +655,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         ...(options.lookGrid && { u_lookViewportScale: [options.lookGrid[0]/width,options.lookGrid[1]/height] }),
         u_focal: height / 2 / options.tangent
       });
+      if (meshDepth) {
+        gl.activeTexture(gl.TEXTURE0+meshDepthUnit);
+        previousMeshBinding=gl.getParameter(gl.TEXTURE_BINDING_2D);
+        gl.bindTexture(gl.TEXTURE_2D,meshDepth);
+      }
       if(hasPlanes){
         // Only opaque retained planes enter the depth prepass. Ordinary soft
         // splats and glass keep their established contribution blending.
@@ -659,6 +671,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         pipeline.drawSubset(options.indices);
         gl.disable(gl.DEPTH_TEST);
       } else pipeline.draw();
+      if (meshDepth) textureUnit(meshDepthUnit,previousMeshBinding);
       gl.disable(gl.DEPTH_TEST);gl.depthMask(true);
     }
 
@@ -1253,6 +1266,9 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const meshLayers = world.meshes === undefined || frame.meshes === false ? [] :
         toolkit.KIT.sceneMeshes.layers(world,frame.meshes);
       const surfaces = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
+      const depthProxy = toolkit.KIT?.sceneMeshes?.proxyPlan(world,frame.splatDepthProxies,frame.splatProxyTolerance);
+      if (depthProxy || lastDepthProxy) historyValid=false;
+      lastDepthProxy=!!depthProxy;
       const preview = frame.spriteSurfaces !== false && frame.scalePreviews !== false && world.scalePreviews;
       let ordering, orderReport;
       if (localOrder && !reflectionCapture) {
@@ -1260,7 +1276,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         const count = pipeline.count;
         let reason;
         if (plane !== zero || cover || group || waterScene || env || layeredGlass || ownsPixels || materialPalette ||
-            splatPaint || vote || portableStages || surfaces || preview || spriteMask || spriteRows?.length || emitterFrame?.display ||
+            splatPaint || vote || portableStages || depthProxy || surfaces || preview || spriteMask || spriteRows?.length || emitterFrame?.display ||
             proxy || footprints && footprintBinding.hasPlanes || section) reason = 'composition';
         else if (count < 2) reason = 'splat-count';
         else if (count > maxSplats) reason = 'splat-budget';
@@ -1278,7 +1294,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       const shader = pipeline.programFor({
         water: !!wet, airPockets: wet?.airPockets, layered: wet?.layered, atlas: wet?.atlas, portal: plane !== zero || !!cover,
-        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote, surfaceOrder:!!ordering,
+        gaussianDegree: gaussianUniforms ? harmonics.degree : undefined, splatPaint: !!splatPaint, gaussianProxy:!!proxy, depthMeshProxy:!!depthProxy, gaussianMaterials:!!gaussianMaterial, coverageVote:!!vote, surfaceOrder:!!ordering,
         instances: !!plan, contributions:coverage && !!constraints, masked, textured:constraints?.textured, layeredGlass,
         engraving:engraved, footprints, materialStyles, facingColors:facing && facingAPI, environment:env?.media,emitterFog:!!env?.lit, relighting, optical:opticalMaterials, cutaway:!!section, spriteReconstruction:!!spriteMask
       });
@@ -1327,14 +1343,14 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         view: camera.view, width, height, focal: height / (2 * tangent), ortho: camera.ortho,
         near: camera.clipNear, far: camera.clipFar
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
-      const surfaceFrame={lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
+      const surfaceFrame={depthProxy,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
         fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,
         surfaceNormals:frame.surfaceNormals,eye:camera.eye,back,ortho:camera.ortho,
         sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
       if(layeredGlass){
         textureUnit(13,null);
         const indices = selection ? glassIndices.filter(i => selection.keep[i]) : glassIndices;
-        drawGeometry(shader,glassBoundary,width,height,{u_idx:3,u_snap:1,u_hard:0,tangent,indices});
+        drawGeometry(shader,glassBoundary,width,height,{u_idx:3,u_snap:1,u_hard:0,tangent,indices,surfaceFrame});
         textureUnit(13,glassBoundary.textures[0]);
       }
       drawGeometry(shader, geometry, rw, rh, { u_idx: 0, u_snap: +(!raw && !colored), u_hard: 0,
@@ -1779,6 +1795,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     }
     return { render: presentFrame, dispose() {
       for (const pipeline of surfacePipelines) pipeline?.dispose();
+      depthMeshPass?.dispose();
       spriteReconstructionPipeline?.dispose();
       for (const preview of previewPipelines) preview?.dispose();
       emitterSurfacePipeline?.dispose();

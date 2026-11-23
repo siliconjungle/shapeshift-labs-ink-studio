@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const { upscale } = require('./render.js');
-const { channels, strands, opaque } = require('../src/art-passes.js');
+const { channels, strands, opaque, proxies } = require('../src/art-passes.js');
 
 const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
 const idColor = id => Math.imul(id, 0x9e3779b1) & 0xffffff;
@@ -30,6 +30,9 @@ const environmentEncodings = {
   strandU: 'RGB8 normalized authored distance, black is the path start or empty',
   strandMotion: 'RGB8 preview, red and green encode signed XY at ±4 art pixels, black means invalid',
   strandMotionValid: 'RGB8 grayscale, white is a valid previous sample',
+  proxyDepth: 'RGB8 relative camera-axis proxy depth, black means no proxy',
+  proxyRejected: 'RGB8 heat map, black means no rejected splat fragments and gold means 63 or more',
+  proxyRemovedCoverage: 'RGB8 grayscale combined opacity of rejected splat fragments',
   surfaceKind: 'RGB8 surface kind legend color',
   surfaceCoverage: 'RGB8 depth-owner coverage, white is full coverage',
   geometricNormal: 'RGB8 signed world-space normal, decode as 2 * (RGB / 255) - 1',
@@ -62,14 +65,18 @@ function encode(frame, channel) {
   if (!data) throw new Error('The renderer did not supply the ' + channel + ' pass');
   const rgb = new Uint8Array(w * h * 3);
   const alpha = channel === 'precipitation' && new Uint8Array(w * h);
-  const isDepth = ['depth', 'emissionDepth', 'previousDepth', 'strandDepth'].includes(channel);
+  const isDepth = ['depth', 'emissionDepth', 'previousDepth', 'strandDepth', 'proxyDepth'].includes(channel);
   const depth = isDepth && depthRange(data);
   for (let p = 0; p < w * h; p++) {
     const q = p * 3;
-    if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU', 'surfaceCoverage'].includes(channel))
+    if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU', 'surfaceCoverage', 'proxyRemovedCoverage'].includes(channel))
       rgb.fill(byte(data[p]), q, q + 3);
     else if (['partMotionValid','strandMotionValid','surfaceUVValid','surfaceMotionValid'].includes(channel)) rgb.fill(data[p],q,q+3);
-    else if (isDepth) {
+    else if (channel === 'proxyRejected') {
+      const heat=Math.min(1,Math.log2(1+data[p])/6);
+      rgb[q]=byte(Math.sqrt(heat));
+      rgb[q+1]=byte(heat*.8);
+    } else if (isDepth) {
       if (depth && Number.isFinite(data[p]))
         rgb.fill(byte(1 - .85 * (data[p] - depth.near) / (depth.far - depth.near || 1)), q, q + 3);
     } else if (['normal','strandTangent','geometricNormal','shadingNormal'].includes(channel)) {
@@ -147,6 +154,10 @@ function writePasses(directory, frame, scale = 1) {
     const file = channel + '.' + ext;
     fs.writeFileSync(path.join(directory, file), bytes);
     return file;
+  }
+  if (proxies.some(channel=>passes[channel])) {
+    manifest.proxyData=writePassData(passes,proxies,writeData);
+    if (passes.proxyDepth) manifest.proxyDepth=depthRange(passes.proxyDepth);
   }
   if (passes.strands) manifest.strandData=writeStrandData(passes,writeData);
   if (['surfaceKind','surfaceCoverage','geometricNormal','shadingNormal','surfaceUV','surfaceUVValid','surfaceMotion','surfaceMotionValid']

@@ -16,9 +16,10 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,artScale=1,capture=false,motion=false,depthOnly=false}) {
   if(!atlas)return [];
-  const fragments=new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
+  const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
+  const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
   function transform(v, step, weights) {
     let x=V[0]*v[0]+V[4]*v[1]+V[8]*v[2]+V[12], y=V[1]*v[0]+V[5]*v[1]+V[9]*v[2]+V[13];
     const z=-(V[2]*v[0]+V[6]*v[1]+V[10]*v[2]+V[14]), w=ortho?1:z;
@@ -46,10 +47,10 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       !Number.isSafeInteger(height)||height<1||!(pixels instanceof Uint8Array)||pixels.length!==width*height*4||
       (normalPixels!==undefined&&(!(normalPixels instanceof Uint8Array)||normalPixels.length!==pixels.length))||
       !vertices.every(Number.isFinite))throw new RangeError('Invalid sprite surface atlas');
-    const plan=layer[uvSlip];
+    const plan=depthOnly ? null : layer[uvSlip];
     const ranges=plan?.vertices===vertices&&plan.width===width&&plan.height===height ? plan.ranges : [];
-    const filtered = paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
-    const projections = SpriteSurface.projectionPlan(layer);
+    const filtered = depthOnly || paletteSampling === false ? null : SpriteSurface.samplingPlan(layer);
+    const projections = depthOnly ? [] : SpriteSurface.projectionPlan(layer);
     const charts=capture && layer.surfaceCharts;
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
@@ -71,7 +72,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0)]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
-      const axes = surfaceNormals && normalPixels && textureAxes(input, uvTransform);
+      const axes = !depthOnly && surfaceNormals && normalPixels && textureAxes(input, uvTransform);
       const polygon=[];
       for(let i=0;i<3;i++){
         const a=input[i],b=input[(i+1)%3];
@@ -83,8 +84,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         if(Math.abs(area)<1e-10)continue;
         const loX=Math.max(0,Math.ceil(Math.min(a.sx,b.sx,c.sx)-.5)),hiX=Math.min(W-1,Math.floor(Math.max(a.sx,b.sx,c.sx)-.5));
         const loY=Math.max(0,Math.ceil(Math.min(a.sy,b.sy,c.sy)-.5)),hiY=Math.min(H-1,Math.floor(Math.max(a.sy,b.sy,c.sy)-.5));
-        const normal=unit(cross(sub(b.p,a.p),sub(c.p,a.p)));
-        if(dot(normal,sub(eye,a.p))<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
+        const normal=!depthOnly && unit(cross(sub(b.p,a.p),sub(c.p,a.p)));
+        if(normal && dot(normal,sub(eye,a.p))<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
         const bitangent = axes && cross(normal, axes.right);
         if (bitangent && dot(bitangent, axes.up)<0) for(let k=0;k<3;k++)bitangent[k]=-bitangent[k];
         const row=[a,b,c], transform=uvTransform;
@@ -104,7 +105,13 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           if(weights.some(n=>n < -1e-7))continue;
           const w=weights.map((n,k)=>ortho?n:n/row[k].z),sum=w[0]+w[1]+w[2];
           const z=ortho?weights.reduce((s,n,k)=>s+n*row[k].z,0):1/sum,p=y*W+x;
-          if((layer.sceneMeshId && z>far) || (fragments[p] && z>=fragments[p].z)) continue;
+          if ((layer.sceneMeshId || depthOnly) && z>far) continue;
+          if (depthOnly) {
+            if (z<depth[p] && (!clip || clip([0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0)))))
+              depth[p]=z;
+            continue;
+          }
+          if (fragments[p] && z>=fragments[p].z) continue;
           const uvWeights = linearUV ? weights : w, uvSum = linearUV ? 1 : sum;
           const sample=k=>row.reduce((s,n,i)=>s+n.uv[k]*uvWeights[i]/uvSum,0);
           const s=sample(0),t=sample(1);
@@ -149,7 +156,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       }
     }
   }
-  return fragments.filter(Boolean);
+  return depthOnly ? depth : fragments.filter(Boolean);
 }
 function labels(atlas) {
   const objects=new Set(), materials=new Set();

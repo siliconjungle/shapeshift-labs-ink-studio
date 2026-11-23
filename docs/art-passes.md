@@ -497,3 +497,20 @@ Use `ink.pickSurface(frame.passes, x, y)` or the CLI command
 `surface-pixel <scene> --at x,y` to read the depth owner at a top-down
 native art pixel. [Indexed scene meshes](textured-surfaces.md#indexed-scene-meshes)
 shows the command and the world-space ray query.
+
+## Depth proxy diagnostics
+
+Request `['depth-proxy']` in Node or `--channels depth-proxy` in
+`ink-studio passes`. The channels use the top-down native art grid.
+
+| Channel | Data |
+| --- | --- |
+| `proxyDepth` | Camera-axis depth of the nearest proxy triangle before tolerance. Empty samples are positive infinity. |
+| `proxyRejected` | Unsigned count of sampled splat fragments rejected by the proxy at the pixel. The heat map uses a logarithmic display scale. |
+| `proxyRemovedCoverage` | Combined opacity of rejected splat fragments, from zero to one. The value is the union of their alpha samples. |
+
+A rejection records a sample at the proxy depth test, before
+blending the remaining fragments. Other occluders in the scene can
+also affect the final color at that pixel. The CLI saves the previews
+and lossless data in the `proxyData` section of `passes.json`.
+Headless graphs can read the same channels through `scene.pass`.

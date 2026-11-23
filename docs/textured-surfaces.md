@@ -314,3 +314,44 @@ and object and material labels. Ray picking tests the base cutout texels
 of the posed triangles. Use art-pixel inspection for the exact result of
 screen-space minification or a headless SDF assist. Set `meshes: false`
 on a frame or use `--meshes off` for a render comparison.
+
+## Depth-only proxies for splats
+
+Use `SceneMeshes.depthProxy({ id, positions, indices })` to fit an
+indexed shell to the intended surface of a splat asset. Put the mesh
+in `splatDepthProxies` on the scene.
+
+```js
+const shell = SceneMeshes.depthProxy({ id: 'shell', positions, indices });
+const world = builder.finish({
+  splatDepthProxies: { meshes: [shell], tolerance: .055 }
+});
+```
+
+The headless and WebGL 2 renderers rasterize the nearest proxy triangle
+at each pixel. A splat fragment survives when its depth is in front of
+the shell or within the tolerance behind it. Tolerance is a distance
+along the camera axis in scene units. It defaults to .03. The rule
+uses the renderer's splat center depth for ordinary splats and their
+fragment depth where a retained footprint or clipped surface supplies
+one. Triangles are double-sided. The nearest shell applies to every
+splat at that pixel. Place a shell where it represents an opaque
+occluder for the rest of the scene. In WebGL, an active proxy uses
+the standard splat sort.
+
+A proxy writes only the depth limit. The surviving splats supply
+the final color, visible depth, and surface IDs. Mesh and sprite
+draws retain their own depth tests. Use `SceneMeshes.pose` for a moving
+shell. Set `splatDepthProxies: false` on a frame to bypass the limit,
+or set `splatProxyTolerance` to override the scene value.
+
+```sh
+ink-studio passes examples/depth-mesh-proxies.js --channels depth-proxy \
+  --w 210 --h 144 --px 1 --px1 --t .22 --out malachite-proxy
+ink-studio passes examples/depth-mesh-proxies.js --channels depth-proxy \
+  --w 210 --h 144 --px 1 --px1 --t .22 --splat-depth-proxies off --out malachite-reference
+```
+
+Read the rejection heat map next to the regular color and depth passes.
+Use `--splat-proxy-tolerance 0` to inspect a tight fit.
+[Depth proxy diagnostics](art-passes.md#depth-proxy-diagnostics)

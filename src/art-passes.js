@@ -6,11 +6,12 @@ const ArtPasses = (() => {
   const strands = Object.freeze(['strandId', 'strandDepth', 'strandCoverage', 'strandTangent', 'strandU', 'strandMotion', 'strandMotionValid']);
   const opaque = Object.freeze(['depth','surfaceCoverage','objectId','materialId','geometricNormal','shadingNormal',
     'position','objectPosition','surfaceUV','surfaceUVValid','surfaceKind','surfaceMotion','surfaceMotionValid']);
+  const proxies=Object.freeze(['proxyDepth','proxyRejected','proxyRemovedCoverage']);
   const surfaceKinds=Object.freeze([null,'mesh','sdf','splat','sprite','emitter']);
   const needsSurfaceMotion = selected => selected.includes('surfaceMotion') || selected.includes('surfaceMotionValid');
   const needsPartMotion = selected => selected.some(channel => channel !== 'partId' && partMotion.includes(channel));
   const needsStrandMotion = selected => selected.includes('strandMotion') || selected.includes('strandMotionValid');
-  const channels = Object.freeze([...new Set([...surface, ...environment, ...partMotion, ...strands, ...opaque, 'paletteOwner'])]);
+  const channels = Object.freeze([...new Set([...surface, ...environment, ...partMotion, ...strands, ...opaque, ...proxies, 'paletteOwner'])]);
   const cutoff = 0.5;
   const ownsSurface = (alpha, writesDepth, depth, nearest) => writesDepth && alpha > cutoff && depth <= nearest;
   const over = (value, below, alpha) => value * alpha + below * (1 - alpha);
@@ -18,10 +19,11 @@ const ArtPasses = (() => {
   function select(request) {
     if (!request) return [];
     if (request === true) return surface;
-    if (!Array.isArray(request) || request.some(channel => !['environment', 'part-motion', 'strands', 'opaque-surface'].includes(channel) && !channels.includes(channel)))
+    if (!Array.isArray(request) || request.some(channel => !['environment', 'part-motion', 'strands', 'opaque-surface', 'depth-proxy'].includes(channel) && !channels.includes(channel)))
       throw new RangeError('Unknown art pass. Available passes: ' + channels.join(', '));
     return [...new Set(request.flatMap(channel => channel === 'environment' ? environment :
-      channel === 'part-motion' ? partMotion : channel === 'strands' ? strands : channel === 'opaque-surface' ? opaque : [channel]))];
+      channel === 'part-motion' ? partMotion : channel === 'strands' ? strands : channel === 'opaque-surface' ? opaque :
+      channel === 'depth-proxy' ? proxies : [channel]))];
   }
 
   function subset(passes, selected) {
@@ -64,6 +66,6 @@ vec3 inkEmissionOver(vec3 emission, vec3 below, float alpha) {
 }
 `;
 
-  return Object.freeze({ channels, environment, partMotion, strands, opaque, surfaceKinds, needsPartMotion, needsStrandMotion, needsSurfaceMotion, select, subset, pick, cutoff, ownsSurface, over, glsl });
+  return Object.freeze({ channels, environment, partMotion, strands, opaque, surfaceKinds, proxies, needsPartMotion, needsStrandMotion, needsSurfaceMotion, select, subset, pick, cutoff, ownsSurface, over, glsl });
 })();
 if (typeof module !== 'undefined') module.exports = ArtPasses;

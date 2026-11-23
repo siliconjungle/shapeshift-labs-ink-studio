@@ -35,7 +35,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false, surfaceOrder = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -43,6 +43,10 @@ export function splatShaderSources(ascii, sampleCoverage, {
   const nonSurface = coverageRules?.nonSurface ?? 2559;
   const variance = coverageRules?.continuousVariance ?? .25;
   const continuousLow = coverageRules?.continuousLow ?? .16, continuousHigh = coverageRules?.continuousHigh ?? .30;
+  const footprintPrepass = footprints ? `if(u_idx>3.5){
+    if(!footprintPlane||v_coverage==${softMode}||v_color.a<1.0||g<0.5${optical?'||hasOptical':''})discard;
+    o=vec4(0.0);od=vec4(0.0);oa=vec4(0.0);return;
+  }` : '';
   const SPLAT_VS = `#version 300 es
 precision highp float; precision highp int;
 uniform highp sampler2D u_data;
@@ -92,7 +96,7 @@ ${instances ? 'layout(location=2) in int a_instance; uniform highp sampler2D u_i
 ${footprints ? 'uniform highp sampler2D u_footprintRows,u_footprintParams; flat out vec4 v_footprintMap; flat out vec2 v_footprintStyle, v_footprintZ; flat out vec4 v_footprintPlane;' : ''}
 out vec2 v_d; out vec3 v_conic; out vec4 v_color; out float v_depth;
 ${portal ? 'flat out vec3 v_portalDepth;' : ''}
-${!portal || layeredGlass ? 'flat out float v_ownerDepth;' : ''}
+${!portal || layeredGlass || depthMeshProxy ? 'flat out float v_ownerDepth;' : ''}
 ${cutaway ? 'flat out vec4 v_sectionSample;' : ''}
 out float v_gl; out float v_as; out float v_ast; uniform vec4 u_az[4]; uniform int u_azn; uniform float u_asoft, u_azst;
 ${water && !portal ? 'flat out float v_waterAxial;' : ''}
@@ -300,7 +304,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
   v_glassNearDepth = nearGlass.z / nearGlass.w * 0.5 + 0.5;` : ''}
   ${contributions || masked ? 'v_policySlot = contributionSlot(a_index);' : ''}
   ${masked ? 'if (u_idx < 2.5) placeMask(a_index, v_policySlot, pos, cam.xyz, abs(determinant(FM)) > 1e-8 ? inverse(FM) : mat3(1.0), mat3(u_view));' : ''}
-  ${!portal || layeredGlass ? `v_ownerDepth = ${layeredGlass ? '' : 'u_idx > 1.5 ? '}clip.z / clip.w * 0.5 + 0.5${layeredGlass ? '' : ' : 0.0'};` : ''}
+  ${!portal || layeredGlass || depthMeshProxy ? `v_ownerDepth = ${layeredGlass || depthMeshProxy ? '' : 'u_idx > 1.5 ? '}clip.z / clip.w * 0.5 + 0.5${layeredGlass || depthMeshProxy ? '' : ' : 0.0'};` : ''}
   ${gaussianMaterials ? 'v_gaussianMaterial = 0;' : ''}
   ${gaussianDegree !== undefined ? `
   if (u_idx < 0.5 && record < u_gaussianCount${instances ? ' && a_instance == 0' : ''}) {
@@ -451,7 +455,7 @@ ${footprints ? 'uniform highp sampler2D u_footprintAtlas; uniform float u_footpr
 in vec2 v_d; in vec3 v_conic; in vec4 v_color; in float v_depth; flat in int v_coverage;
 ${stableDetail ? 'flat in float v_detailGeometry, v_detailTexture;' : ''}
 ${portal ? 'flat in vec3 v_portalDepth; uniform vec4 u_splatPlane, u_portalCoverPlane;' : ''}
-${!portal || layeredGlass ? 'flat in float v_ownerDepth;' : ''}
+${!portal || layeredGlass || depthMeshProxy ? 'flat in float v_ownerDepth;' : ''}
 ${portal || cutaway || footprints ? 'uniform mat4 u_proj;' : ''}
 ${portal || cutaway || footprints || facingColors ? 'uniform float u_ortho;' : ''}
 ${facingColors ? facingColors.splatFragmentGLSL : ''}
@@ -470,6 +474,7 @@ ${materialStyles ? `flat in vec4 v_pixelStyle; flat in float v_pixelFog; uniform
 ${materialStyleThreshold}` : ''}
 uniform float u_idx, u_gaussianNormalCutoff;
 uniform bool u_paintPass; flat in int v_paint;
+${depthMeshProxy ? 'uniform highp sampler2D u_meshDepthProxy;' : ''}
 ${coverageVote ? 'uniform bool u_coverageVotePass;' : ''}
 ${relighting ? 'flat in vec4 v_relight;' : ''}
 ${optical ? 'flat in vec4 v_optical; flat in vec3 v_scatterTint, v_reflectTint; flat in float v_opticalFog;' : ''}
@@ -553,10 +558,7 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     if (axial <= 0.0 || dot(u_splatPlane, at) < 0.0 || dot(u_portalCoverPlane, at) < 0.0) discard;
   }
   ` : ''}
-  ${footprints ? `if(u_idx>3.5){
-    if(!footprintPlane||v_coverage==${softMode}||v_color.a<1.0||g<0.5${optical?'||hasOptical':''})discard;
-    o=vec4(0.0);od=vec4(0.0);oa=vec4(0.0);return;
-  }` : ''}
+  ${depthMeshProxy ? '' : footprintPrepass}
   ${gaussianProxy ? `
   ${cutaway || footprints ? '' : 'gl_FragDepth=gl_FragCoord.z;'}
   float proxyDepth = v_depth, proxyGain = 1.0;
@@ -575,6 +577,13 @@ ${ascii ? ascii.fsMain : ''}  float power = -0.5 * (v_conic.x * v_d.x * v_d.x + 
     if (hit && role==4) proxyGain=proxyLighting(proxyNormal(surface.rg),u_proxyLights[layer]);
   }
   ` : ''}
+  ${depthMeshProxy ? `
+  float meshSampleDepth=${gaussianProxy ? 'proxyOwnsDepth?gl_FragDepth:' : ''}
+    ${cutaway ? 'sectionZ' : footprints ? '(footprintPlane?footprintDepth:v_ownerDepth)' : 'v_ownerDepth'};
+  float meshLimit=texelFetch(u_meshDepthProxy,ivec2(gl_FragCoord.xy),0).r;
+  if(meshLimit<1.0&&meshSampleDepth>meshLimit+2e-7)discard;
+  ` : ''}
+  ${depthMeshProxy ? footprintPrepass : ''}
   ${layeredGlass ? `
   ${cutaway || footprints ? '' : 'gl_FragDepth = gl_FragCoord.z;'}
   if (u_idx > 2.5) {

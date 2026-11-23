@@ -114,6 +114,12 @@ const SceneMeshes = (() => {
     return Object.freeze({ id, vertices, triangles, [state]:data });
   }
 
+  function depthProxy({id,positions,indices} = {}) {
+    const points = positionsOf(positions);
+    return create({id,positions:points,indices,uvs:new Float32Array(points.length / 3 * 2),
+      materials:[{id:'proxy'}]});
+  }
+
   function read(mesh) {
     if (!mesh?.[state]) throw new TypeError('Use SceneMeshes.create for indexed scene geometry');
     return mesh[state];
@@ -153,6 +159,18 @@ const SceneMeshes = (() => {
     return list(world,enabled).map(mesh => read(mesh).layer);
   }
 
+  function proxyPlan(world, enabled, toleranceOverride) {
+    const definition = world.splatDepthProxies;
+    if (enabled === false || definition === false || definition === undefined) return null;
+    if (!definition || !Array.isArray(definition.meshes))
+      throw new TypeError('Splat depth proxies need an object with a mesh list');
+    const tolerance = toleranceOverride ?? definition.tolerance ?? .03;
+    if (!Number.isFinite(tolerance) || tolerance < 0)
+      throw new RangeError('Splat proxy depth tolerance must be a finite nonnegative distance');
+    const meshes = list(definition);
+    return meshes.length ? {meshes:meshes.map(read), tolerance} : null;
+  }
+
   function intersect(mesh, {origin,direction,maxDistance}, {V,rayBox}, accept) {
     const {positions,rest,uvs,indices,materials,faceMaterials,regions,layer,bounds} = read(mesh);
     if (rayBox(bounds,origin,direction,maxDistance) === null) return null;
@@ -188,6 +206,6 @@ const SceneMeshes = (() => {
     return closest;
   }
 
-  return Object.freeze({create,pose,list,layers,intersect});
+  return Object.freeze({create,pose,list,layers,depthProxy,proxyPlan,intersect});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

@@ -9,7 +9,7 @@ const { encode, depthRange, labels } = require('./pass-preview.js');
 
 const defaults = ['coverage', 'depth', 'normal', 'objectId', 'materialId', 'emission'];
 const positionPass = new Set(['position', 'objectPosition']);
-const finitePass = new Set(['depth', 'emissionDepth', 'previousDepth', 'strandDepth']);
+const finitePass = new Set(['depth', 'emissionDepth', 'previousDepth', 'strandDepth', 'proxyDepth']);
 
 function renderGraphScene(source, { camera, lights, channels = defaults, options = {}, renderGraphInputs, renderGraphCapture,
   take, time = take?.start ?? 0, kit } = {}) {

@@ -889,6 +889,8 @@ const view = extra =>
       scalePreviews: onOffOption('scale-previews'),
       spriteAtlasMode: opt['sprite-atlas-mode'],
       meshes: onOffOption('meshes'),
+      splatDepthProxies: onOffOption('splat-depth-proxies'),
+      splatProxyTolerance: num('splat-proxy-tolerance'),
       spriteReconstruction: opt['sprite-reconstruction'],
       aerialPerspective: aerialOption(),
       volumeLocalLights: onOffOption('volume-local-lights'),

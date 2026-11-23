@@ -956,7 +956,7 @@ function renderFrame(world, o, preparedPalettes) {
     previous:o.motionFrom?.strandMotion ?? o.strandMotionHistory?.previous()
   });
   const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' &&
-    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture);
+    !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name) && !ArtPasses.proxies.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
   const reflectPass = environmentPasses?.passes.reflections;
@@ -982,6 +982,13 @@ function renderFrame(world, o, preparedPalettes) {
     }, report).filter(Boolean);
     if (active.length) spriteSurfaces = [spriteSurfaces, ...active];
   }
+  const proxies = SceneMeshes.proxyPlan(world,o.splatDepthProxies,o.splatProxyTolerance);
+  const proxyDepth = proxies && SurfaceRaster.rasterize(proxies.meshes.map(mesh=>mesh.layer), {
+    V,W,H,focal,ortho,near,far:camera.clipFar,clip:geometryClip,depthOnly:true
+  });
+  const proxyRejected = passSelection.has('proxyRejected') && new Uint32Array(W*H);
+  const proxyRemoved = passSelection.has('proxyRemovedCoverage') && new Float32Array(W*H);
+  const proxyDepthPass = passSelection.has('proxyDepth');
   const meshLayers = SceneMeshes.layers(world,o.meshes);
   const surfaceLayers = meshLayers.length ? [spriteSurfaces].flat().concat(meshLayers) : spriteSurfaces;
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
@@ -2451,6 +2458,11 @@ function renderFrame(world, o, preparedPalettes) {
         const surfaceZ = sectionZ ?? exact?.z ?? planeDepth ?? (wantsDepth ?
           sampledDepth(rayAt(ix + .5, iy + .5), probeNormal, probeCenter, -cz, probeReach) : -cz);
         if (preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) continue;
+        if (proxyDepth && (sectionZ ?? exact?.z ?? planeDepth ?? -cz) > proxyDepth[p]+proxies.tolerance+1e-6) {
+          if (proxyRejected) proxyRejected[p]++;
+          if (proxyRemoved) proxyRemoved[p]=a+proxyRemoved[p]*(1-a);
+          continue;
+        }
         if (probe && !curveFootprint?.depths) probe(p, i, -cz, surfaceZ, pr, pg, pb, a);
         if (!deep && !blendDepth && !planarFootprints && !curveScene && deferred && deferredCount >= fragmentBudget) {
           playFragments(false,-cz);
@@ -3052,6 +3064,15 @@ function renderFrame(world, o, preparedPalettes) {
     detail, sprM, surfaceGlint, centers, ditherView, motionFrom:o.resetRenderHistory ? undefined : o.surfaceMotionFrom ?? motionFrom,
     emissionMotionFrom:motionFrom, motionReference, ditherPixelStep: spatialFade ? artScale : 0,
     surfaceLabels:captureTexturedSurface ? SurfaceRaster.labels(surfaceLayers) : undefined });
+  if (proxyDepthPass || proxyRejected || proxyRemoved) {
+    const native = {w:W,h:H,...passes};
+    const rows = (source, Result, fill) => source ?
+      Result.from(source, (_v,p)=>source[(H-1-Math.floor(p/W))*W+p%W]) : new Result(W*H).fill(fill);
+    if (proxyDepthPass) native.proxyDepth=rows(proxyDepth,Float32Array,Infinity);
+    if (proxyRejected) native.proxyRejected=rows(proxyRejected,Uint32Array,0);
+    if (proxyRemoved) native.proxyRemovedCoverage=rows(proxyRemoved,Float32Array,0);
+    passes=native;
+  }
   if (surfaceCapture) o.surfaceMotionHistory?.store(motionReference.surfaceMotion,surfaceReset);
   const strand = strandTrace && strandTrace.finalize();
   if (strand) {
