@@ -1308,7 +1308,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const brickAPI=toolkit.KIT?.procedural?.brickMeshes;
       const brickLayers=world.brickMeshes ? brickAPI.layers(brickAPI.frame(world,frame.brickMeshes)) : [];
       const spriteSurfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
-      const atlases=[spriteSurfaces].flat().concat(meshLayers,brickLayers);
+      const decals=frame.surfaceDecals !== false && world.surfaceDecals?.sample(t,frame).layers;
+      const atlases=[spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []);
       let marks, engraving, markOutput, filterBuffers;
       if (filter) {
         if (width*2 > Math.min(maxSize,viewportLimit[0]) || height*2 > Math.min(maxSize,viewportLimit[1]))
@@ -1400,7 +1401,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           brickPipelines.delete(id);
         }
       }
-      const surfaces=meshLayers.length||brickLayers.length ? atlases : spriteSurfaces;
+      const surfaces=meshLayers.length||brickLayers.length||decals?.length ? atlases : spriteSurfaces;
       const depthProxy = toolkit.KIT?.sceneMeshes?.proxyPlan(world,frame.splatDepthProxies,frame.splatProxyTolerance);
       if (depthProxy || lastDepthProxy) historyValid=false;
       lastDepthProxy=!!depthProxy;

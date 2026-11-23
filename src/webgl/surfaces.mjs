@@ -78,7 +78,7 @@ ${wet ? waterGLSL(wet.airPockets, wet.layered, wet.atlas) : 'uniform vec4 u_arri
 uniform vec2 u_surfaceViewport;
 uniform vec3 u_fog;
 uniform bool u_index, u_graphDepth, u_portalCover;
-uniform bool u_uvSlip, u_filterMatte;
+uniform bool u_uvSlip, u_filterMatte, u_frontOnly;
 uniform float u_filterSoftness;
 ${maskedPart ? 'uniform int u_geometryCode;uniform vec2 u_partGrid;'+spriteLOD : ''}
 uniform vec4 u_uvTransform, u_uvBounds;
@@ -114,6 +114,7 @@ vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map){
 }
 ` : ''}
 void main(){
+  if(u_frontOnly&&!gl_FrontFacing)discard;
   ${maskedPart ? 'if(!spriteGeometry(u_geometryCode,gl_FragCoord.xy*u_partGrid))discard;' : ''}
   vec2 uv=${styledProjection ? 'u_affine?v_affine*gl_FragCoord.w:v_texel' : 'v_texel'};
   vec2 rawTexel=u_uvSlip?uv*u_uvTransform.xy+u_uvTransform.zw:uv;
@@ -565,6 +566,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_range: range,
         u_fog: fog,
         u_atlas: 6,
+        u_frontOnly: Boolean(atlas.frontOnly),
         ...(useSampling && { u_sampleTotals: prefixUnits[0], u_sampleAccents: prefixUnits[1], u_samplingScale: samplingScale }),
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,

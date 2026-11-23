@@ -112,8 +112,9 @@ const SceneMeshes = (() => {
     }
     const layer = atlas.finish();
     layer.sceneMeshId = id;
-    const data = { positions, rest:positions, uvs, indices:source, drawIndices, layer, regions, revision:0,
-      materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:bounds(positions) };
+    const restBounds=bounds(positions);
+    const data = { positions, rest:positions, restBounds, uvs, indices:source, drawIndices, layer, regions, revision:0,
+      materials:rows.map(row => row.id), faceMaterials:faceMaterials && Uint8Array.from(faceMaterials), bounds:restBounds };
     return Object.freeze({ id, objectId, partId, vertices, triangles,
       materials:Object.freeze(tiles.map(tile=>tile.id).sort()), [state]:data });
   }
@@ -280,16 +281,20 @@ const SceneMeshes = (() => {
     return meshes.length ? {meshes:meshes.map(read), tolerance} : null;
   }
 
-  function intersect(mesh, {origin,direction,maxDistance}, {V,rayBox}, accept) {
-    const {positions,rest,uvs,indices,materials,faceMaterials,regions,layer,bounds} = read(mesh);
-    if (rayBox(bounds,origin,direction,maxDistance) === null) return null;
+  function intersect(mesh, {origin,direction,maxDistance}, {V,rayBox,restSpace=false,candidates}, accept) {
+    const data=read(mesh), {rest,uvs,indices,materials,faceMaterials,regions,layer} = data;
+    const positions=restSpace ? rest : data.positions;
+    if (rayBox(restSpace ? data.restBounds : data.bounds,origin,direction,maxDistance) === null) return null;
     let closest = null, closestMaterial = Infinity, stop = maxDistance;
-    for (let offset = 0; offset < indices.length; offset += 3) {
+    const count=candidates?.length ?? indices.length/3;
+    for (let i=0;i<count;i++) {
+      const offset=(candidates ? candidates[i] : i)*3;
       const a = indices[offset], b = indices[offset+1], c = indices[offset+2];
       const p = positions.subarray(a*3,a*3+3);
       const ab = V.sub(positions.subarray(b*3,b*3+3),p), ac = V.sub(positions.subarray(c*3,c*3+3),p);
       const h = V.cross(direction,ac), det = V.dot(ab,h);
-      if (Math.abs(det) <= 1e-12 * V.len(ab) * V.len(ac)) continue;
+      const epsilon=1e-12 * V.len(ab) * V.len(ac);
+      if (restSpace ? det<=epsilon : Math.abs(det)<=epsilon) continue;
       const delta = V.sub(origin,p), v = V.dot(delta,h)/det;
       if (v < -1e-7 || v > 1+1e-7) continue;
       const q = V.cross(delta,ab), w = V.dot(direction,q)/det, u = 1-v-w;
@@ -307,7 +312,8 @@ const SceneMeshes = (() => {
       const normal = V.norm(V.cross(ab,ac).map(n => n*Math.sign(det)));
       const hit = { kind:'mesh', index:-1, id:mesh.objectId, mesh:mesh.id, triangle,
         target:{object:mesh.objectId,material:materials[slot],...(mesh.partId && {entity:mesh.objectId,part:mesh.partId})},
-        distance, point:V.mad(origin,direction,distance), normal, uv, restPosition:interpolate(rest,3), alpha:1, solid:true };
+        distance, point:V.mad(origin,direction,distance), normal, uv, restPosition:interpolate(rest,3), alpha:1, solid:true,
+        ...(restSpace && {vertices:[a,b,c],weights:[u,v,w]}) };
       if (accept && !accept(hit)) continue;
       closest = hit;
       closestMaterial = slot;
@@ -316,6 +322,37 @@ const SceneMeshes = (() => {
     return closest;
   }
 
-  return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect});
+  function projector(mesh,{at,normal,up,size,depth},{V,procedural:{spatial}}) {
+    const {rest,indices}=read(mesh), right=V.cross(up,normal), faces=[];
+    const points=Array.from({length:rest.length/3},(_,i)=>{
+      const p=V.sub(rest.subarray(i*3,i*3+3),at);
+      return [V.dot(p,right),V.dot(p,up),V.dot(p,normal)];
+    });
+    for(let f=0;f<indices.length/3;f++) {
+      const a=points[indices[f*3]],b=points[indices[f*3+1]],c=points[indices[f*3+2]];
+      const box=spatial.boxOf([a,b,c]);
+      if (box.min[2]>depth || box.max[2]<-depth ||
+          size.some((n,k)=>box.min[k]>n*.5 || box.max[k]<-n*.5)) continue;
+      box.min[2]=box.max[2]=0;
+      faces.push({f,bounds:spatial.expand(box,1e-7)});
+    }
+    const index=spatial.pointIndex(faces), direction=V.mul(normal,-1);
+    return point=>{
+      const p=V.sub(point,at), candidates=[];
+      index([V.dot(p,right),V.dot(p,up),0],row=>candidates.push(row.f));
+      candidates.sort((a,b)=>a-b);
+      return intersect(mesh,{origin:V.mad(point,normal,depth),direction,maxDistance:depth*2},
+        {V,rayBox:spatial.rayBox,restSpace:true,candidates},hit=>V.dot(hit.normal,normal)>.25);
+    };
+  }
+
+  function sampleProjection(mesh, {vertices,weights}, {V}) {
+    const {positions}=read(mesh), [a,b,c]=vertices.map(i=>positions.subarray(i*3,i*3+3));
+    const area=V.cross(V.sub(b,a),V.sub(c,a));
+    if (V.len(area)<=1e-12) return null;
+    return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
+  }
+
+  return Object.freeze({create,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,depthProxy,proxyPlan,intersect,projector,sampleProjection,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

@@ -87,7 +87,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         if(Math.abs(area)<1e-10)continue;
         const loX=Math.max(0,Math.ceil(Math.min(a.sx,b.sx,c.sx)-.5)),hiX=Math.min(W-1,Math.floor(Math.max(a.sx,b.sx,c.sx)-.5));
         const loY=Math.max(0,Math.ceil(Math.min(a.sy,b.sy,c.sy)-.5)),hiY=Math.min(H-1,Math.floor(Math.max(a.sy,b.sy,c.sy)-.5));
-        const normal=!depthOnly && unit(cross(sub(b.p,a.p),sub(c.p,a.p)));
+        const face=(!depthOnly||layer.frontOnly) && cross(sub(b.p,a.p),sub(c.p,a.p));
+        if (layer.frontOnly && dot(face,ortho ? [V[2],V[6],V[10]] : sub(eye,a.p))<=0) continue;
+        const normal=!depthOnly && unit(face);
         if(normal && dot(normal,sub(eye,a.p))<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
         const bitangent = axes && cross(normal, axes.right);
         if (bitangent && dot(bitangent, axes.up)<0) for(let k=0;k<3;k++)bitangent[k]=-bitangent[k];
@@ -109,7 +111,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           if(weights.some(n=>n < -1e-7))continue;
           const w=weights.map((n,k)=>ortho?n:n/row[k].z),sum=w[0]+w[1]+w[2];
           const z=ortho?weights.reduce((s,n,k)=>s+n*row[k].z,0):1/sum,p=y*W+x;
-          if ((layer.sceneMeshId || depthOnly) && z>far) continue;
+          if ((layer.sceneMeshId || layer.frontOnly || depthOnly) && z>far) continue;
           if (depthOnly) {
             if (z<depth[p] && (!clip || clip([0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0)))))
               depth[p]=z;

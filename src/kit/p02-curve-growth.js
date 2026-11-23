@@ -247,5 +247,5 @@ const CurveGrowth = (() => {
     return {...binding,pose,snapshot,post:(dt,time,stage,clock)=>pose(stage.W,{dt,time,stage,clock})};
   }
 
-  return Object.freeze({grow});
+  return Object.freeze({grow,sdfSurface});
 })();

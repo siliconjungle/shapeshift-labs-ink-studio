@@ -1060,8 +1060,9 @@ function renderFrame(world, o, preparedPalettes) {
   const proxyDepthPass = passSelection.has('proxyDepth');
   const meshLayers = SceneMeshes.layers(world,o.meshes);
   const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
-  const surfaceLayers = meshLayers.length || brickLayers.length ?
-    [spriteSurfaces].flat().concat(meshLayers,brickLayers) : spriteSurfaces;
+  const decals = o.surfaceDecals !== false && world.surfaceDecals?.sample(sceneTime,o).layers;
+  const surfaceLayers = meshLayers.length || brickLayers.length || decals?.length ?
+    [spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []) : spriteSurfaces;
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,
       far:camera.clipFar, clip: geometryClip,
       paletteSampling: o.paletteSampling, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,

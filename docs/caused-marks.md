@@ -96,3 +96,7 @@ the collected events against your retained scene. Each returned layer is an
 ordinary surface paint layer with its source reference. Live hosts can gather
 new batches without depending on the run's bounded history. Geometry is
 sampled in its rest pose, and event positions should use the same world space.
+
+Use [surface decals](surface-decals.md) for a part-local graphic or relief that
+keeps its pose and lifetime when the part switches between mesh, SDF, and
+splat receivers.
