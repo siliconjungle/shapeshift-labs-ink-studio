@@ -81,3 +81,13 @@ test('A signed field sprite keeps the foreground depth and surface normal at the
   assert(result.depth.data[center]>.78);
   assert(Math.abs(result.normal.data[center*3+2]-1)<1e-6);
 });
+
+test('The spark tracer stays valid at every exported frame as the impact fades', () => {
+  const studies = require('../examples/pixel-effects-atlas')({KIT});
+  const spark = studies.find(study => study.id === 'spark');
+  const frames = Math.round(spark.duration * 24);
+  for (let frame = 0; frame < frames; frame++) {
+    const image = spark.render(frame / frames);
+    assert.equal(image.data.length, 96 * 96 * 4);
+  }
+});
