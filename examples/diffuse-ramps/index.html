@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiln Relay · Ink Studio</title>
+<style>
+:root{color-scheme:dark;background:#121b22;color:#eee8db;font:15px system-ui,sans-serif;--line:#394b56;--dim:#b4bfc4;--accent:#f0bb80}
+body{margin:0}
+main{max-width:1030px;margin:0 auto;padding:clamp(24px,5vw,60px) clamp(14px,5vw,56px)}
+h1{margin:0 0 10px;font-size:clamp(42px,8vw,84px);line-height:.96;letter-spacing:-.07em}
+p{margin:0;color:var(--dim)}
+header{margin-bottom:19px}
+.views{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+figure{border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:0;background:#18252e}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+figcaption{border-top:1px solid var(--line);padding:9px 12px;font-weight:650}
+.controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:center;margin:13px 0 0}
+.range{display:grid;align-items:center;grid-template-columns:auto minmax(50px,1fr) 4ch;gap:10px}
+input[type=range]{width:100%;margin:0;accent-color:var(--accent)}
+output{color:var(--accent);font-variant-numeric:tabular-nums;text-align:right}
+button,select{font:inherit;padding:7px 11px;border:1px solid #607480;background:#23343d;color:inherit;border-radius:4px;cursor:pointer}
+#play{background:var(--accent);border-color:var(--accent);color:#19252b;font-weight:650;min-width:102px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ramp{margin-top:18px;border:1px solid var(--line);border-radius:6px;padding:12px;background:#18252e}
+.ramp-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:11px}
+.ramp-head span{font-weight:650}
+.ramp-head label{display:flex;gap:9px;align-items:center}
+#strip{height:24px;border-radius:3px}
+#stops{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:7px}
+#stops button{padding:0;height:27px;background:var(--swatch);border:2px solid transparent}
+#stops button[aria-pressed=true]{border-color:#eae2cd}
+.edit{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:13px;margin-top:12px;align-items:center}
+.edit label:not(.range){display:flex;gap:8px;align-items:center}
+input[type=color]{background:none;border:0;width:32px;height:30px;padding:0;cursor:pointer}
+@media(max-width:590px){.views{gap:8px}figcaption{font-size:13px;padding:8px}.controls{grid-template-columns:1fr auto;gap:10px}#play{grid-column:2;grid-row:1;align-self:start}.controls label:nth-child(2){grid-column:1/-1}.edit{grid-template-columns:1fr auto}.edit button{grid-column:2}button,select{font-size:13px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Kiln Relay</h1>
+    <p>Sweep the same light across both relays. Edit the stops to decide where the enamel shifts from cool shadow to warm light.</p>
+  </header>
+  <div class="views">
+    <figure><canvas id="neutral" width="192" height="148" aria-label="Relay under a neutral diffuse ramp"></canvas><figcaption>Neutral ramp</figcaption></figure>
+    <figure><canvas id="authored" width="192" height="148" aria-label="Relay under a cool-to-warm diffuse ramp"></canvas><figcaption>Authored ramp</figcaption></figure>
+  </div>
+  <div class="controls">
+    <label class="range" for="light">Light <input id="light" type="range" min="-78" max="91" value="36"><output id="light-value" for="light">36°</output></label>
+    <label class="range" for="wrap">Wrap <input id="wrap" type="range" min="0" max="100" value="45"><output id="wrap-value" for="wrap">0.45</output></label>
+    <button type="button" id="play" aria-pressed="false">Play light</button>
+  </div>
+  <section class="ramp" aria-label="Ramp editor">
+    <div class="ramp-head">
+      <span>Ramp stops</span>
+      <label for="interpolation">Interpolation
+        <select id="interpolation"><option value="step">Stepped</option><option value="linear">Linear</option><option value="smooth">Smooth</option></select>
+      </label>
+    </div>
+    <canvas id="strip" width="256" height="20" aria-label="Preview of the authored light ramp"></canvas>
+    <div id="stops" aria-label="Select a stop">
+      <button type="button" aria-label="Shadow stop"></button><button type="button" aria-label="Cool stop"></button>
+      <button type="button" aria-label="Transition stop"></button><button type="button" aria-label="Warm stop"></button>
+      <button type="button" aria-label="Highlight stop"></button>
+    </div>
+    <div class="edit">
+      <label class="range" for="position">Position <input id="position" type="range" min="30" max="71" value="53"><output id="position-value" for="position">0.53</output></label>
+      <label for="color">Color <input id="color" type="color" value="#926377"></label>
+      <button type="button" id="reset">Reset ramp</button>
+    </div>
+  </section>
+</main>
+<script src="../../dist/ink-studio.browser.js"></script>
+<script type="module" src="demo.mjs"></script>
+</body>
+</html>

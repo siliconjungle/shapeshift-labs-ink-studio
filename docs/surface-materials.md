@@ -225,13 +225,27 @@ const cloth = K.surface.material({ r: [8, 9, 10, 11] }, {
   strength and a highlight uses its original angular response. Explicit
   highlight weights must start at zero so an inactive highlight stays dark.
 - Diffuse ramps use the angle to the directional light and the existing
-  shadow visibility. Specular ramps keep the layer's `roughness` control.
+  shadow visibility. Set `wrap` on a diffuse layer to shift the lookup across
+  the terminator. It defaults to 0 for ordinary Lambert shading. At 1 the
+  full signed cosine range maps to zero through one, with grazing light at
+  the midpoint, as in the [Team Fortress 2 diffuse warp](https://cdn.steamstatic.com/apps/valve/2007/NPAR07_IllustrativeRenderingInTeamFortress2.pdf#page=4).
+  With shadows enabled, fully occluded areas use the first stop. Specular
+  ramps keep the layer's `roughness` control.
   Use the layer's mask or strength to blend with the underlying shading.
   Disable a diffuse layer by setting its named slot to `false`, or clear a
   highlight ramp with `lightingRamp: false`. A ramp override replaces its
   configuration as a unit.
 
-Ink resolves the resulting colors through the usual export palette.
+WebGL evaluates diffuse ramps on posed splat centers. The software
+renderer evaluates them at surface samples. Both feed the usual palette
+resolve. Set `diffuseRamps: false` or use `--diffuse-ramps off` to
+compare with the baked diffuse colors. A live diffuse layer takes priority
+over the corresponding baked pixel ramp in WebGL.
+
+Open the [Kiln Relay workshop](../examples/diffuse-ramps/index.html) after
+building the browser bundle to sweep a light, edit color stops and compare
+stepped, linear and smooth ramps.
+
 For custom hosts, pass `{ paletteRoles }` as the fifth argument to
 `SurfaceLook.prepare`. Render the headless example to compare cloth, iron,
 and worn stone under a shared key light.

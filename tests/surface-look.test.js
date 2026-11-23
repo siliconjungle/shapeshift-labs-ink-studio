@@ -190,6 +190,20 @@ test('diffuse lighting ramps use palette roles, authored stop positions and dire
   assert.deepEqual(rgb({ visibility: 1 }), [0xf1, 0xcb, 0xda].map(n => n / 255));
 });
 
+test('diffuse wrap separates grazing planes and preserves the fully occluded stop', () => {
+  const lightingRamp = { stops: [[0, '#19233c'], [.25, '#3b6581'], [.75, '#ffde99']], interpolation: 'step' };
+  const ramp = (wrap, options) => Surface.prepare({ layers: { body: { type: 'diffuse', lightingRamp, wrap } } },
+    [], neutralSun, {}, options);
+  const rgb = (look, sample) => Surface.shade(look, { ...front, ...sample }, base).slice(0, 3);
+  const away = { normal: [Math.sqrt(.84), 0, -.4] };
+  assert.deepEqual(rgb(ramp(0), away), [25, 35, 60].map(n => n/255));
+  assert.deepEqual(rgb(ramp(1), away), [59, 101, 129].map(n => n/255));
+  assert.deepEqual(rgb(ramp(1), { ...away, visibility: 0 }), rgb(ramp(0), away));
+  assert.deepEqual(rgb(ramp(1), front), [255, 222, 153].map(n => n/255));
+  assert.deepEqual(rgb(ramp(1, { diffuseRamps: false }), front), base);
+  assert.throws(() => ramp(1.1), /wrap.*\[0, 1\]/);
+});
+
 test('ramped highlights preserve roughness, respect shadow, and can shape tint and blend', () => {
   const finish = roughness => prepare({ layers: { glint: { type: 'specular', roughness, lightingRamp: {
     stops: [[0, '#785950'], [0.5, '#bab5c2'], [1, '#ffffff']],
@@ -235,11 +249,45 @@ test('JSON material ramps render with animated light, remain palette-resolved an
   const center = ((lit.h >> 1) * lit.w + (lit.w >> 1)) * 3;
   assert.deepEqual(Array.from(lit.rgb.slice(center, center + 3)), [0x93, 0xbe, 0xea]);
   assert.deepEqual(Array.from(dark.rgb.slice(center, center + 3)), [0x18, 0x1d, 0x32]);
+  assert.deepEqual(render(world, { ...view, diffuseRamps: false }).rgb, render(world, { ...view, surface: false }).rgb);
   const layer = spec.solids[0].mat.surface.layers.cloth;
   layer.lightingRamp.role = 'missing';
   assert(KIT.diorama.check(spec).some(item => item.path === 'solids[0].mat.surface' && /palette role/.test(item.problem)));
   spec.solids[0].mat.surface.layers.cloth = false;
   assert.deepEqual(render(KIT.diorama.build(spec), view).rgb, render(world, { ...view, surface: false }).rgb);
+});
+
+test('WebGL applies regular diffuse ramps and reloads edits on the same world', { skip: !process.env.INK_TEST_CHROME }, () => {
+  const result = require('../cli/look-webgl.js')({}, ({KIT:K,makeBuilder,makeSculpt}) => {
+    const pal=[0x111c27,0x19233c,0x3b6581,0xffde99,0x9e598c], B=makeBuilder(15,pal);
+    const S=K.sculpt(makeSculpt(B));
+    Object.assign(S,{pixel:true,amb:.65,sky:0,shLen:0});
+    const mat=K.surface.material([2,4],{id:'tile',layers:{body:{type:'diffuse',shadow:false,wrap:1,
+      lightingRamp:{role:'metal',positions:[0,.25,.75],interpolation:'step'}
+    }}});
+    S.box([0,0,0],[.93,.68,.1],mat,{res:.05,rd:.012});
+    S.bake();
+    return B.finish({radius:4,dither:0,paletteRoles:{metal:[1,2,3]},
+      look:{pixel:true,splatCoverage:'continuous'},fog:{start:1,max:0,c:0},
+      cam:{target:[0,0,0],yaw:0,pitch:0,dist:3,fov:.65,ortho:true},surfaceLight:[[0,0,0,1],[1,.9165,0,-.4]]});
+  }, (_kit,fixture,backend) => {
+    const world=fixture(_kit), b=backend(64,48,{dither:0,colored:false,damp:false});
+    const sample=frame=>{
+      b.draw(world,frame);
+      return b.sample({center:[32,24]}).center;
+    };
+    try {
+      const direct=sample({time:0}), wrapped=sample({time:1}), bypass=sample({time:0,diffuseRamps:false});
+      const override={tile:{body:{stops:[[0,'#19233c'],[.6,'#9e598c']],interpolation:'step'}}};
+      const custom=sample({time:0,surfaceLightRamps:override});
+      return { direct,wrapped,bypass,custom,restored:sample({time:0,diffuseRamps:false}) };
+    } finally { b.close(); }
+  });
+  assert.deepEqual(result.direct,[255,222,153]);
+  assert.deepEqual(result.wrapped,[59,101,129]);
+  assert.deepEqual(result.custom,[158,89,140]);
+  assert.notDeepEqual(result.bypass,result.direct);
+  assert.deepEqual(result.restored,result.bypass);
 });
 
 test('bevel reach follows art pixels, detects convex rims and concave folds, and respects light', () => {

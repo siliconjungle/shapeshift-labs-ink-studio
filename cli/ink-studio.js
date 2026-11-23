@@ -817,6 +817,7 @@ const view = extra =>
       paletteSampling: onOffOption('palette-sampling'),
       brushwork: onOffOption('brushwork'),
       shadowBandPaint: onOffOption('shadow-band-paint'),
+      diffuseRamps: onOffOption('diffuse-ramps'),
       shadeNormals: onOffOption('shade-normals'),
       renderGrid: opt['render-grid'] === 'off' ? false : opt['render-grid'] === undefined ? undefined :
         { mode: opt['render-grid'], size: num('grid-size', 8), angle: num('grid-angle', 0),
@@ -1410,6 +1411,7 @@ const CMD = {
         'reflection detail: --reflection-detail on|off   compare the authored core, streaks and distance clusters',
         'brushwork: --brushwork on|off   compare surface-aligned paint at export size',
         'shadow bands: --shadow-band-paint on|off   compare painted lighting thresholds',
+        'diffuse ramps: --diffuse-ramps on|off   compare authored diffuse ramps',
         'shade normals: --shade-normals on|off   compare authored diffuse normals',
         'detail-preserving relighting: --relighting on|off|file.json --sky-time seconds',
         'bounce options: --sky-bounce color|preset|off --ground-bounce color|preset|off --sky-bounce-intensity n --ground-bounce-intensity n',

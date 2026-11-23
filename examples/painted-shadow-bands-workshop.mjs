@@ -6,44 +6,31 @@ const toolkit = { KIT, PixelLook, SpriteSurface, makeBuilder, makeSculpt };
 const demo = paintedShadowBandsDemo(toolkit), world = demo.build(demo.seed,{controls:{single:true}});
 const renderer = createRenderer(canvas,{toolkit});
 const picker = KIT.procedural.contributions.create(world,{splatCoverage:world.look.splatCoverage});
-const band = KIT.surface.shadowBandPaint, track = KIT.surface.prepareLightTrack(world.surfaceLight);
-const initial = demo.authored(0), history = [], colors = [0,0,0];
-let strokes=initial, read=band.prepare(strokes), active, sign=1, playing=false, animation, lastTick;
-const materials = world.surfaces.map(({settings,light}) =>
-  KIT.surface.prepare(settings,world.pal,light,world.surfaceEffects,{paletteRoles:world.paletteRoles}).layers
-    .find(layer=>layer.id==='diffuse'&&layer.shadowBand));
-const rows = [];
-for (let i=0;i<world.count;i++) {
-  const n=i*8, q=i*16, layer=materials[world.surfaceData[n]-1];
-  if (!layer) continue;
-  rows.push({ q, layer, at:Array.from(world.data.subarray(q,q+3)), visibility:world.surfaceData[n+4],
-    normal:KIT.V.norm(Array.from(world.surfaceData.subarray(n+1,n+4))) });
-}
+const initial = demo.authored(0), history = [], bindings = world.surfaces;
+let strokes=initial, active, sign=1, playing=false, animation, lastTick;
+const hasPaint = binding => binding?.settings.layers?.diffuse?.shadowBand;
 
 function refresh() {
-  const time=$('time').valueAsNumber, direction=track(time), painted=$('show').checked;
+  const time=$('time').valueAsNumber;
   world.anim.update(0,time);
-  const data=world.data.slice();
-  // Preview this scene's single full-strength diffuse layer on the splat carriers.
-  for (const {q,layer,at,visibility,normal} of rows) {
-    const level=band.level(KIT.V.dot(normal,direction),visibility,painted?read(at):0);
-    layer.lightingRamp.tint(level,colors);
-    data[q+7]=Math.round(colors[0]*255)+Math.round(colors[1]*255)*256+Math.round(colors[2]*255)*65536;
-  }
-  renderer.render({...world,data},{time,colored:false,damp:false});
+  renderer.render(world,{time,colored:false,damp:false,shadowBandPaint:$('show').checked});
   for (const key of ['time','radius','bias']) $(key+'-value').value=$(key).valueAsNumber.toFixed(2);
   $('undo').disabled=!history.length;
   $('status').value=strokes.length+' '+(strokes.length===1?'stroke':'strokes');
 }
 
 function updatePaint(value, undoable=false) {
-  const sampler=band.prepare(value);
+  KIT.surface.shadowBandPaint.prepare(value);
   if (undoable) {
     history.push(strokes);
     if (history.length>64) history.shift();
   }
   strokes=value;
-  read=sampler;
+  world.surfaces=bindings.map(binding=>{
+    if(!hasPaint(binding)) return binding;
+    const {settings}=binding, {layers}=settings;
+    return {...binding,settings:{...settings,layers:{...layers,diffuse:{...layers.diffuse,shadowBand:{strokes}}}}};
+  });
   refresh();
 }
 
@@ -55,7 +42,7 @@ function pick(event) {
   const y=target[1]-(event.clientY-rect.top-rect.height*.5)*scale;
   const hit=picker.ray({origin:[x,y,6],direction:[0,0,-1],limit:1});
   const item=hit.solid??hit.dominant;
-  return item && materials[world.surfaceData[item.index*8]-1] ? item.point : null;
+  return item && hasPaint(bindings[world.surfaceData[item.index*8]-1]) ? item.point : null;
 }
 
 canvas.addEventListener('pointerdown',event=>{

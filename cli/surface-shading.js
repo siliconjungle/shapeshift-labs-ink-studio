@@ -41,7 +41,8 @@ function surfaceShading(world, options, camera) {
     const material = SurfaceLook.prepare(SurfaceLook.withLightRamps(settings, ramps), world.pal, liveLight ?? light, world.surfaceEffects,
       { colorCurves: options.colorCurves !== false, colorLut: options.colorLut !== false, colorStack: options.colorStack !== false,
         paletteConstraints: options.paletteConstraints !== false && (options.lookMasks !== false || !settings.paletteConstraint?.mask),
-        skipMasks: options.lookMasks === false, paintShadowBands: options.shadowBandPaint !== false,
+        skipMasks: options.lookMasks === false, diffuseRamps: options.diffuseRamps !== false,
+        paintShadowBands: options.shadowBandPaint !== false,
         shadeNormals: options.shadeNormals !== false, transmission: options.transmission !== false, detailKits:options.surfaceDetailKits!==false,
         paletteRoles: world.paletteRoles, facingRamp, facingColors: options.facingColors !== false && !options.raw,
         directionalColors: options.directionalColors !== false && !options.raw, blueNoise, onPaletteClip: camera.onPaletteClip,
@@ -49,7 +50,7 @@ function surfaceShading(world, options, camera) {
     if (bevelDistance && material.needsDistance) material.bevelDistance = bevelDistance;
     return material;
   });
-  const posedFrames = materials.some(material => material.facingProfile || material.directionProfile || material.shadeNormalLayers) &&
+  const posedFrames = materials.some(material => material.facingProfile || material.directionProfile || material.diffuseLayers) &&
     (world.anim?.bones || rig || world.reconstructionPose) &&
     require('./art-passes.js').sampleFrames(world, time);
   const posedRows = [];
@@ -240,7 +241,7 @@ function surfaceShading(world, options, camera) {
       const length = Math.hypot(...ray);
       sample.lightDirection = ray.map(x => x / length);
     }
-    const shadePose = prepared.shadeNormalLayers && poseAt(i);
+    const shadePose = prepared.diffuseLayers && poseAt(i);
     sample.shadeNormalFrame = shadePose || undefined;
     if (shadePose) {
       const local = shadePose.localOffset(dx,y-centerY,dz);
