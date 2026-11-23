@@ -70,7 +70,8 @@ const mix={format:'ink-studio/scene-audio',version:1,sampleRate,gain:.88,assets,
       amber:{asset:'amber',bus:'dialogue',gain:.8,protected:true,priority:90},
       stray:{asset:'bright',bus:'foley',gain:.4}
     },
-    soundFamilies:{counter:{takes:{thin:'thin',bright:'bright'}},basket:{takes:{plate:'plate',loose:'loose'}}},
+    soundFamilies:{counter:{takes:{thin:'thin',bright:'bright'},variation:{pitchCents:[-32,24]}},
+      basket:{takes:{plate:'plate',loose:'loose'},variation:{rotate:true,pitchCents:[-22,36]}}},
     bindings:{
       stamp:{on:{kind:'permit-stamped'},impactLayers:{
         strike:{cue:'stamp',bus:'foley'},tail:{select:[{id:'counter',family:'counter'}],delay:.0625,bus:'effects'}
@@ -88,6 +89,7 @@ run.advance(124);
 write('world.run.json',run.recording());
 command('story','audio','world.run.json','score.json','--out','mix');
 const receipts=JSON.parse(fs.readFileSync(path.join(dir,'mix/playback.json'),'utf8')).receipts;
+assert(fs.existsSync(path.join(dir,'mix/receipts.json')));
 const cart=receipts.find(row=>row.cue==='cart');
 assert.equal(cart.outcome,'late');
 assert.equal(cart.requestedSample,48000);
