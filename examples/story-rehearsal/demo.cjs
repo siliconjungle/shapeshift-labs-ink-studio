@@ -11,6 +11,7 @@ const repo = path.resolve(process.argv[3] ?? path.join(__dirname, '../..'));
 const target = path.resolve(process.argv[2]), file = name => path.join(target, name);
 const { KIT: { world: W, procedural: P } } = require(repo).load();
 const cli = path.join(repo, 'cli/ink-studio.js'), PNG = require(path.join(repo, 'cli/png.js'));
+const WAV = require(path.join(repo, 'cli/wav.js'));
 const save = (name, value) => fs.writeFileSync(file(name), JSON.stringify(value, null, 2) + '\n');
 const read = name => JSON.parse(fs.readFileSync(file(name), 'utf8'));
 const run = (...args) => execFileSync(process.execPath, [cli, ...args], { cwd: target, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -42,6 +43,45 @@ function harbor(name, lit) {
     rect(130, 56, 3, 12, '#463c4e'), rect(141, 56, 3, 12, '#463c4e'),
     poly([[112, 55], [135, 40], [158, 55]], '#6e5372')
   ]));
+}
+
+function audio(ids, beats) {
+  const sampleRate = 8000;
+  const samples = Float32Array.from({length: 2600}, (_, i) => {
+    const t = i / sampleRate, gain = Math.min(1, 1200 * t) * Math.exp(-9 * t);
+    return gain * (.33 * Math.sin(2 * Math.PI * 526 * t) + .21 * Math.sin(2 * Math.PI * 771 * t));
+  });
+  fs.writeFileSync(file('bell.wav'), WAV.encode({samples, sampleRate, channels: 1}, {encoding:'pcm24'}));
+  const story = {format:'ink-studio/scene-audio',version:1,sampleRate,post:{},assets:{bell:'bell.wav'},spatial:{
+    cues:{bell:{asset:'bell',bus:'effects',priority:20,group:'beacon'},
+      answer:{asset:'bell',bus:'foley',priority:10,group:'beacon',pitch:.74}},
+    bindings:{strike:{on:{kind:'beacon-ring'},cue:'bell'},echo:{on:{kind:'beacon-ring'},cue:'answer'}}
+  }};
+  const production = pitch => ({arrangement:{
+    score:{key:{root:'D4'},tempoMap:{tempo:120},harmonies:{home:{root:'D4',quality:'unison'}}},
+    parts:{pad:{role:'pad'}},motifs:{},sections:[{id:'watch',bars:1,harmony:'home'}]},
+    patches:{pad:{type:'fm',ratio:2,index:.61,env:{attack:.04,decay:.16,sustain:.58,release:.28}}},
+    tracks:{pad:{patch:'pad',gain:-16,send:.33,clips:[{id:'line',beat:0,length:4,voices:[{id:'player',
+      notes:[{id:'note',beat:0,duration:1.15,midi:pitch,velocity:.68}]}]}]}}});
+  const score = {sources:{hold:production(62),open:production(69)},timeline:{
+    entry:'hold',segments:{hold:{source:'hold',end:.7},open:{source:'open',end:1}},
+    transitions:[{from:'hold',to:'open',exit:.45}]
+  },live:{options:{sampleRate,pageSize:256,maxPages:8},streams:{bell:{file:'bell.wav',gain:-4}}}};
+  save('audio.score.json', score);
+  const bellTime = beats.ring.payload?.timing?.time ?? .462;
+  const join = {kind:'music-transition',from:'hold',to:'open',time:beats.arrival.tick/10,beatId:ids.arrival};
+  const ring = {kind:'music-cue',resource:'bell',time:bellTime,beatId:ids.ring};
+  function make(mode, fault) {
+    save(mode+'.soundtrack.json',fault ? {...story,spatial:{...story.spatial,
+      voiceBudget:{maxVoices:2,reservedVoices:0,groups:{beacon:1}}}} : story);
+    run('story','audio','harbor.run.json',mode+'.soundtrack.json','--out',mode+'-foley');
+    save(mode+'.route.json',{end:1.7,blockFrames:1024,...(fault && {lookaheadFrames:256}),events:[
+      {intent:join,observedAt:fault ? .52 : join.time},{intent:ring,observedAt:ring.time}
+    ]});
+    run('music','live','replay','audio.score.json',mode+'.route.json','--out',mode+'-score');
+    return [{file:mode+'-foley/playback.json'},{file:mode+'-score/listen.json'}];
+  }
+  return {healthy:make('healthy',false),fault:make('fault',true)};
 }
 
 function assets() {
@@ -80,6 +120,7 @@ function assets() {
     }
   });
   run('take', 'map', 'edit.json', '--out', 'edit.map.json');
+  const audioReports = audio(ids, beats);
   const node = id => ({ node: id });
   const graph = { format: 'ink-studio/graph-project', version: 1,
     inputs: { level: { type: 'number', default: 0 }, stall: { type: 'boolean', default: false } },
@@ -101,9 +142,9 @@ function assets() {
     presets: { waiting: { level: 0 }, lit: { level: 1 } },
     beatWindows: [{ beatId: ids.ring, tick: beats.ring.tick, label: 'Beacon tone tail', fromFrame: 5, toFrame: 13 }]
   };
-  save('healthy.show.json', show);
+  save('healthy.show.json', { ...show, audioReports: audioReports.healthy });
   save('fault.show.json', { ...show, patch: 'fault.patch.json', video: '-', videoTimeoutMs: 170,
-    projector: { wait: true }, inputs: { stall: true } });
+    projector: { wait: true }, inputs: { stall: true }, audioReports: audioReports.fault });
   return ids;
 }
 
@@ -155,12 +196,15 @@ function compare(ids, healthy, fault) {
   const issue = fault.storyDiagnostics.findings;
   const text = (value, x, y, color = '#a8bbc9', size = 1) => label(value, x, y, color, size);
   const swatches = { schedule: '#ef9c78', projector: '#b9aafa', video: '#81c7bb',
-    'slow-stage': '#e1c575', 'source-offline': '#6ab7c4', 'missed-cue': '#ef9a9a' };
-  const lanes = ['schedule', 'projector', 'slow-stage', 'source-offline', 'missed-cue'];
-  const headings = ['SCHEDULER SKIP', 'PROJECTOR SKIP', 'SLOW STAGE', 'VIDEO OFFLINE', 'MISSED CUES'];
+    'slow-stage': '#e1c575', 'source-offline': '#6ab7c4', 'missed-cue': '#ef9a9a',
+    'missed-audio-cue':'#e285a6', 'audio-underrun':'#7dd9c9', 'late-musical-join':'#e6bf7c' };
+  const lanes = ['schedule', 'projector', 'slow-stage', 'source-offline', 'missed-cue',
+    'missed-audio-cue','audio-underrun','late-musical-join'];
+  const headings = ['SCHEDULER SKIP', 'PROJECTOR SKIP', 'SLOW STAGE', 'VIDEO OFFLINE', 'MISSED PRESET',
+    'MISSED AUDIO CUE','PCM UNDERRUN','LATE MUSICAL JOIN'];
   const left = 354, cell = 22, top = 136, span = cell * frames;
   const art = [
-    rect(0, 0, 888, 352, '#111c2a'), text('BEACON REHEARSAL', 18, 15, '#eed4aa', 2),
+    rect(0, 0, 888, 451, '#111c2a'), text('BEACON REHEARSAL', 18, 15, '#eed4aa', 2),
     text('ONE CUT / TWO REHEARSALS', 18, 39, '#7ad6bd'),
     rect(18, 64, 310, 154, '#27374a'), text('PROJECTOR FRAME 20+', 18, 226),
     text('CLEAN: ' + healthy.rendered + ' FRAMES / ALL CUES ON TIME', 18, 257, '#7ad6bd'),
@@ -169,7 +213,7 @@ function compare(ids, healthy, fault) {
     text('EDITED SHOW FRAMES', left, 64, '#c1ced9')
   ];
   for (let f = 0; f <= frames; f++) {
-    art.push(rect(left + f * cell, 124, 1, 183, f % 4 ? '#223247' : '#374b60'));
+    art.push(rect(left + f * cell, 124, 1, 282, f % 4 ? '#223247' : '#374b60'));
     if (f % 4 === 0) art.push(text(String(f), left + f * cell + 2, 111));
   }
   for (const [i, key] of lanes.entries()) {
@@ -188,7 +232,7 @@ function compare(ids, healthy, fault) {
     for (const cue of placements) art.push(rect(left + cue.at.showFrame * cell, 99, 3, 9, ['#9dbde2', '#eab383', '#e6cb85'][i]));
   }
   const snapshot = PNG.raster(file('projected.png'));
-  image('rehearsal-comparison.png', P.raster.blend(shot(888, 352, art), {
+  image('rehearsal-comparison.png', P.raster.blend(shot(888, 451, art), {
     width: snapshot.w, height: snapshot.h, data: snapshot.data
   }, { x: 18, y: 64 }));
 }
@@ -209,12 +253,17 @@ async function main() {
   assert(linked('source-offline', ids.ring, 'source', 'video'));
   assert(linked('missed-cue', ids.choice, 'status', 'superseded'));
   assert(linked('missed-cue', ids.ring, 'status', 'late'));
+  assert(linked('missed-audio-cue',ids.ring,'reason','group-limit'));
+  assert(linked('audio-underrun',ids.ring,'resource','bell'));
+  assert(linked('late-musical-join',ids.arrival,'lateBySamples',5600));
   assert(fault.beatLinks.some(row => row.beatId === ids.choice && row.clip === 'repeat' && row.status === 'applied'));
   run('beat', ids.choice, 'committed.json', 'edit.map.json', 'fault.report.json', '--out', 'release.inspection.json');
+  run('beat',ids.ring,'fault.report.json','fault-foley/playback.json','--out','ring.inspection.json');
   assert(read('release.inspection.json').matches.some(row => row.diagnostic?.kind === 'missed-cue'));
   compare(ids, healthy, fault);
   save('demo-report.json', { beats: ids, healthy: { rendered: healthy.rendered, passed: healthy.passed },
-    fault: { dropped: fault.dropped, missedCues: fault.storyDiagnostics.missedCues, reported: diagnostics.length } });
+    fault: { dropped: fault.dropped, missedCues: fault.storyDiagnostics.missedCues,
+      audio:fault.audioDiagnostics.counts,reported: diagnostics.length } });
   console.log('Rehearsed both shows and traced actual timing failures to their original story beats.');
 }
 

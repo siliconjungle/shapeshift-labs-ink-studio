@@ -79,6 +79,7 @@
           gap=true;
           return missing ? {name,frame} : null;
         }
+        const recovered=gap;
         gap=false;
         gain=Math.min(ramp,gain+1);
         const left=data[n*source.channels], right=data[n*source.channels+source.channels-1];
@@ -88,7 +89,7 @@
         const fade=Math.min(gain,next ? ramp : remaining)/ramp;
         out[0]=left*source.left*fade;
         out[1]=right*source.right*fade;
-        return null;
+        return recovered ? {name,frame,recovered:true} : null;
       };
     }
     function voice(source,first) {

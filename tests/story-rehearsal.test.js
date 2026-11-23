@@ -121,3 +121,51 @@ test('the projector reports skipped publications using show indices across sched
     { fromFrame: 1, toFrame: 2 }, { fromFrame: 4, toFrame: 6 }
   ] }]);
 });
+
+test('story rehearsal aligns audio evidence and picture faults on the exact show clock', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ink-audio-rehearsal-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const save=(name,document)=>fs.writeFileSync(path.join(dir,name),JSON.stringify(document));
+  const receipt=(n,plannedSample,outcome,reason)=>({beatId:id(n),cue:'latch',bus:'foley',asset:'hatch',
+    requestedSample:plannedSample,plannedSample,actualSample:null,outcome,reason});
+  save('playback.json',{format:'ink-studio/audio-playback-receipts',version:1,sampleRate:48000,firstSample:4800,
+    endSample:24000,receipts:[receipt(2,6402,'dropped','voice-limit'),receipt(7,8100,'dropped','withheld'),
+      receipt(9,9400,'muted','out-of-range')]});
+  save('listen.json',{format:'ink-studio/music-live-report',version:1,sampleRate:48000,firstSample:0,endSample:12000,
+    audioDiagnostics:{findings:[
+      {kind:'audio-underrun',fromSample:800,toSample:2600,resource:'wind',sourceSample:800},
+      {kind:'late-musical-join',fromSample:4800,toSample:8001,beatId:id(3),expectedSample:4800,actualSample:8000}
+    ],omitted:{'audio-underrun':2}}});
+  const spec={format:'ink-studio/patch-show',version:1,fps:'30000/1001',frames:12,patch:'patch.json',
+    output:'picture',beatWindows:[{beatId:id(1),fromFrame:2,toFrame:3}],
+    audioReports:[{file:'playback.json',atFrame:4},{file:'listen.json',fromSample:1600,toSample:9600,atFrame:2}]};
+  save('show.json',spec);
+  const config=await readShow(path.join(dir,'show.json'),true,{KIT:K});
+  const report=showReport(config,true);
+  report.frame(2);
+  report.displayed(1,{ranges:[{fromFrame:2,toFrame:3}],unknown:0});
+  const summary=report.finish('completed');
+  assert.equal(summary.passed,false);
+  assert.deepEqual(summary.audioDiagnostics.counts,{'missed-audio-cue':1,'audio-underrun':1,'late-musical-join':1});
+  assert.deepEqual(summary.audioDiagnostics.omitted,{});
+  const findings=summary.storyDiagnostics.findings;
+  const audio=kind=>findings.find(row=>row.kind===kind);
+  assert.deepEqual([audio('missed-audio-cue').fromFrame,audio('missed-audio-cue').toFrame],[5,6]);
+  assert.deepEqual([audio('late-musical-join').fromFrame,audio('late-musical-join').toFrame],[3,6]);
+  assert.deepEqual(audio('audio-underrun').beats.map(beat=>[beat.beatId,beat.alignment]),[[id(1),'window']]);
+  assert.equal(audio('missed-audio-cue').beats[0].beatId,id(2));
+  assert.equal(audio('late-musical-join').beats[0].beatId,id(3));
+  assert(findings.some(row=>row.kind==='dropped-frame' && row.channel==='projector'));
+  save('report.json',summary);
+  const [hit]=locate(K.world.inspectionLinks,id(3),[path.join(dir,'report.json')],dir).matches;
+  assert.deepEqual([hit.diagnostic.sourceReport,hit.diagnostic.fromSample,hit.diagnostic.toSample,
+    hit.diagnostic.sourcePointer],['listen.json',4800,8001,'/audioDiagnostics/findings/1']);
+  assert.equal(showReport(config,true).finish('completed').passed,false);
+  assert.equal(showReport(config,false).finish('completed').passed,true);
+
+  save('show.json',{...spec,audioReports:[{file:'listen.json'}]});
+  const whole=await readShow(path.join(dir,'show.json'),true,{KIT:K});
+  assert.equal(showReport(whole,true).finish('completed').audioDiagnostics.counts['audio-underrun'],3);
+  save('show.json',{...spec,audioReports:[{file:'listen.json',fromSample:1600,toSample:13000}]});
+  await assert.rejects(readShow(path.join(dir,'show.json'),true,{KIT:K}),/in-range show placement/);
+});

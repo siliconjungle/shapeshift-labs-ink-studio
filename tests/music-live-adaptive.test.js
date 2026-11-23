@@ -22,12 +22,14 @@ const event=(intent,observedAt=intent.time)=>({intent,observedAt});
 const hasAudio=samples=>samples.some(n=>Math.abs(n)>.0001);
 
 test('live joins preserve the original note, resonance, tape and room across the real authored exit',async()=>{
-  const events=[event(transition('bank','tower',.42))];
+  const events=[event(transition('bank','tower',.42),.68)];
   const result=await live.replay(sources,timeline,{end:1.95,events,blockFrames:131},options);
   const control=await live.replay(sources,timeline,{end:1.95,events:[],blockFrames:511},options);
   assert.deepEqual(result.value.samples,control.value.samples);
   const [join]=result.report.joins;
   assert.equal(join.frame,8000);
+  assert.equal(join.expectedFrame,8000);
+  assert.deepEqual(result.report.audioDiagnostics.findings,[]);
   assert.equal(join.exit.played,1);
   assert.equal(join.trigger.time,.42);
   assert.equal(join.carry.held[0].pitch,57);
@@ -39,13 +41,17 @@ test('live joins preserve the original note, resonance, tape and room across the
 });
 
 test('reversal cancels a pending exit and a delayed event is audible at the next valid marker',async()=>{
+  const beatId='ink:beat:river/main/12.0';
   const events=[event(transition('bank','tower',.15)),event(transition('tower','bank',.36,'reverse')),
-    event(transition('bank','tower',.54),1.33)];
+    event({...transition('bank','tower',.54),beatId},1.33)];
   const out=await live.replay(sources,timeline,{end:3.4,events},options);
   assert.equal(out.report.profile.cancellations,1);
   assert.equal(out.report.profile.lateEvents,1);
   assert.equal(out.report.joins.length,1);
   assert.equal(out.report.joins[0].time,3);
+  assert.deepEqual(out.report.audioDiagnostics.findings,[{kind:'late-musical-join',fromSample:8000,toSample:24001,
+    from:'bank',to:'tower',requestedSample:4320,expectedSample:8000,arrivalSample:10640,
+    actualSample:24000,lateBySamples:16000,beatId}]);
   assert.equal(out.report.joins[0].arrivalFrame,Math.round(1.33*rate));
   assert.equal(out.report.joins[0].heard.phrases.bank,1);
   assert(out.report.trace.some(row=>row.reason==='reversal'));
@@ -104,14 +110,18 @@ test('missing PCM fades out and resumes at its elapsed time, with cold misses re
   const engine=live.open(sources,timeline,{...options,pageSize:256,maxPages:2,streams:{
     metal:{frames:2000,sampleRate:rate,channels:1}},
   readPage:async(name,first,count)=>new Float32Array(count).fill(.25+first/4000)});
-  engine.dispatch(trigger('metal',0));
+  const beatId='ink:beat:river/main/0.0';
+  engine.dispatch({...trigger('metal',0),beatId});
   assert(!hasAudio(engine.pull(448).samples));
   assert.equal(engine.inspect().profile.streamGaps,1);
+  assert.deepEqual(engine.inspect().audioDiagnostics.findings,[{kind:'audio-underrun',fromSample:0,toSample:448,
+    resource:'metal',sourceSample:0,beatId}]);
   await engine.prefetch(256);
   const page=engine.pull(64).samples;
   assert(page[0]>.004 && page[0]<.02);
   assert(page[2*31]>.14);
   assert.equal(engine.inspect().profile.streamGaps,1);
+  assert.equal(engine.inspect().audioDiagnostics.findings[0].toSample,448);
 });
 
 test('drive the same live engine from a recorded control clock or live world updates',async()=>{

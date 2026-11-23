@@ -4,6 +4,7 @@ const path = require('node:path');
 const { parseRate, parseSize } = require('./patch-media.js');
 const { encodeOsc } = require('./show-protocols.js');
 const Beats = require('./show-beat-diagnostics.js');
+const Audio = require('./show-audio-diagnostics.js');
 const Installation = require('./patch-installation.js');
 const Assets = require('./asset-references.js');
 
@@ -80,7 +81,7 @@ async function readShow(file, rehearse, kit) {
   if (fs.statSync(file).size > 1024 * 1024) throw new RangeError('Show cue file exceeds 1 MiB');
   const config = record(JSON.parse(fs.readFileSync(file, 'utf8')), ['format', 'version', 'patch', 'output', 'size', 'fps',
     'frames', 'video', 'audio', 'videoTimeoutMs', 'inputs', 'presets', 'initial', 'cues', 'cueMap', 'projector', 'osc', 'midi', 'slowMs',
-    'liveWorld', 'assetRegistry', 'installation', 'beatWindows', 'presentationReport'], 'patch show cue file');
+    'liveWorld', 'assetRegistry', 'installation', 'beatWindows', 'presentationReport', 'audioReports'], 'patch show cue file');
   const { patch, output, size, fps: rate = '30', frames = rehearse ? 120 : Infinity,
     inputs = {}, presets = {}, initial, cues = [], projector = {}, slowMs } = config;
   const { KIT: K } = kit ?? require('../index.js').load(), api = K.authoring.assetReferences;
@@ -120,6 +121,7 @@ async function readShow(file, rehearse, kit) {
   let cueSource, presentationSource, scheduled=cues;
   const T = K.procedural.takeTime;
   const beatAnchors = Beats.authored(K.world, config.beatWindows === undefined ? [] : config.beatWindows, frames);
+  const audioDiagnostics=config.audioReports===undefined ? undefined : Audio.load(K,config.audioReports,directory,rate,frames);
   if (config.presentationReport !== undefined) {
     const { file, report } = Beats.reportFile(directory, config.presentationReport, 'presentationReport');
     presentationSource = file;
@@ -147,6 +149,7 @@ async function readShow(file, rehearse, kit) {
   const osc = oscInput(config.osc), midi = midiInput(config.midi, presets);
   const installation = Installation.prepare(K.world, config.installation, { osc, midi, dimensions });
   return { patch: graph, output, rate, fps, frames, dimensions, inputs, presets, initial, cues:scheduled,cueSource,presentationSource,beatAnchors,
+    audioDiagnostics,
     ...sources(media, directory, frames), projector: { port, wait, surfaces: mapping }, slowMs: slowMs ?? 1000 / fps,
     assetFiles: [...assetFiles], assetBindings: [...bindings.values()],
     osc, midi, installation, liveWorld: liveWorldInput(config.liveWorld) };

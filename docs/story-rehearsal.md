@@ -32,6 +32,34 @@ A show can draw on several kinds of evidence.
 
 For sound placed on an [audiovisual take](audiovisual-takes.md), use the edited sound bounds after trimming the take. Convert the start to its containing show frame and round the end up to the next frame boundary. The [world-score report](music-world-score.md) gives resolved onset and envelope times for music responses and reserved space. Those intervals can supply beat windows after matching the response to its source cue.
 
+## Place audio evidence on the show clock
+
+Add `audioReports` to the cue file. Use `playback.json` from
+[story audio](adaptive-story-audio.md#inspect-playback-by-beat) or
+`listen.json` from [music live replay](music-live-adaptive.md#rehearse-the-actual-live-output).
+The live engine also produces the same report through `inspect()`.
+
+```json
+{
+  "audioReports": [
+    { "file": "foley/playback.json" },
+    { "file": "score/listen.json", "fromSample": 48000, "toSample": 240000, "atFrame": 12 }
+  ]
+}
+```
+
+Paths are relative to the cue file. By default, the start of each report's
+sample window maps to show frame zero. Use `fromSample` and `toSample` to
+place a half-open portion of that report, and `atFrame` to move its start.
+For a repeated edit, add each placement. Ink uses the exact show rate and
+the report's sample rate to find all show frames intersected by the fault.
+The finding also retains the original sample range and source report pointer.
+
+A captured world trace carries committed beat IDs into live audio. Findings
+with that identity link directly to the beat. An untagged stream underrun
+can link by overlap with an authored or observed beat. Evidence is collected
+from the supplied audio run and shares the show diagnostic clock.
+
 ## Read the rehearsal report
 
 `storyDiagnostics.findings` gives the affected half-open show range and its matching `beats`. Each match has the original beat ID and the overlap frame range. When available it also gives the source tick, source picture frame, clip, cue, or graph output. The `alignment` field identifies the evidence that made the link. `ink-studio beat` returns the diagnostic kind and range with each matching report pointer.
@@ -42,10 +70,13 @@ For sound placed on an [audiovisual take](audiovisual-takes.md), use the edited 
 | `slow-stage` | The measured graph, node, or output stage exceeded the show's `slowMs` threshold at that frame. |
 | `source-offline` | The source was observed offline from the reported slot until recovery or the end of the show. The finding carries the source name and its diagnostic message when available. |
 | `missed-cue` | The scheduled preset played `late`, was `superseded`, was `not-reached`, or its graph frame `render-failed`. A tagged cue links directly to its own beat and placement. A rehearse command returns status 2 when it misses a cue. |
+| `missed-audio-cue` | A cue arrived late on its bus, lost voice capacity, had no assigned resource, or could not play from its source. Authored holds, out-of-range cues, cooldowns, and intentional expiry are respected. |
+| `audio-underrun` | The live PCM reader missed pages from the first absent sample until recovery or the end of the stream. A cue receipt can supply the beat, and a continuous stem uses show-clock overlap. |
+| `late-musical-join` | Playback joined after the exit it could have made had the request arrived on time during the current section visit. The report retains request, arrival, expected, and actual sample positions. Waiting for an authored exit on time is a normal join. |
 
-A finding with no frame overlap or explicit cue identity remains visible with an empty `beats` list and contributes to `unattributed`. Alignment describes which beats occupied the affected part of the show. The measured stage, channel, or source identifies the operational problem. Playback cue results refer to presets applied by the show runner. Audio cue windows use the same diagnostic clock and retain their authored timing.
+A finding with no frame overlap or explicit cue identity remains visible with an empty `beats` list and contributes to `unattributed`. Alignment describes which beats occupied the affected part of the show. The measured stage, channel, or source identifies the operational problem. `audioDiagnostics.counts` totals the imported audio findings. Audio findings fail a rehearsal with exit status 2 just like picture faults.
 
-Reports keep up to 256 findings per kind, 32 links per finding, 2,048 observed graph links, and 16,384 planned windows, clock-map events, and pack placements. Scheduled cue anchors have their own cue budget. Omission counters show when detail exceeded its budget. Existing drop counts, per-stage timing, sources, and cue receipts remain available.
+Reports keep up to 256 findings per kind, 32 links per finding, 2,048 observed graph links, and 16,384 planned windows, clock-map events, and pack placements. Scheduled cue anchors have their own cue budget. Audio omission totals retain in-range findings excluded by the show budget. They also include source omissions when the full source report fits the placement, since a trimmed source has no sample positions for omitted faults.
 
 ## Run the Beacon Rehearsal demo
 
@@ -54,4 +85,4 @@ node scripts/build.js node
 node examples/story-rehearsal/demo.cjs ./beacon-rehearsal
 ```
 
-The demo rehearses the same edited harbor story twice. The clean pass plays all four cue placements on time. The second pass stalls a graph stage, pauses the projector client, and interrupts a video stream. Its report shows the affected beats and distinguishes a superseded lantern cue from its successfully played repeat placement. The demo saves both reports, a frame from the projector, an annotated timing comparison, and a shared beat inspection.
+The demo rehearses the same edited harbor story twice. The clean pass plays all four cue placements on time. The second pass stalls a graph stage, pauses the projector client, and interrupts a video stream. The audio runs add a voice-limited bell, a missing PCM range, and a join that misses its first exit. The demo saves both reports, audio and picture evidence, an annotated timing comparison, and shared beat inspections.

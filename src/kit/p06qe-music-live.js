@@ -68,7 +68,16 @@
       starts:0,foregroundStarts:0,dropped:0,foregroundDropped:0,stolen:0,choked:0,delayed:0,latePickups:0,
       streamGaps:0,peakVoices:0,peakClips:0,peak:0,clippedFrames:0,blocks:0};
     let frame=0, order=0, clipId=0, incomingRule=null, active, pending, newest, lastBlock=null, roomLastInput=null;
-    const log=(kind,detail)=>boundedPush(trace,{kind,frame,time:time(),...detail},traceLimit);
+    const diagnostics=P.musicLiveDiagnostics.create(Math.min(traceLimit,256));
+    function missed(intent,resource,reason,part) {
+      diagnostics.issue('missed-audio-cue',frame,frame+1,{cue:intent.cue ?? resource,resource,reason,
+        requestedSample:inputFrame(intent.time),...(part!==undefined && {part})},intent);
+    }
+    function log(kind,detail) {
+      boundedPush(trace,{kind,frame,time:time(),...detail},traceLimit);
+      if (kind==='score-accent' && detail.status==='dropped' && detail.reason==='queue-budget')
+        missed(detail.trigger,detail.resource,detail.reason);
+    }
     const ambience=options.ambienceGains===undefined ? null : P.musicAmbience.open(rate,options.ambienceGains,stemGroups,log);
     function gainAt(row) {
       if (!row) return 1;
@@ -134,6 +143,7 @@
       }
       const clip={id:++clipId,section,segment,...selection,first:frame,position,phase,kind,notes,next:low,
         stop:Math.max(frame+1,frameAt(phase,segment.end)),layers:{...segment.layers,...layers},fadeIn,spoke:false};
+      clip.visit={first:frame,position,phase,stop:clip.stop};
       clip.listen=phrasing.tracks(section);
       clip.roomCut=P.musicCueMap.cursor(compiled[clip.source].cue?.roomCuts ?? []);
       return clip;
@@ -216,7 +226,7 @@
     }
     function start(request) {
       const voice=request.stream ? {...streams.voice(request.stream,frame),stream:request.stream,
-        scoreAccent:request.scoreAccent} : addNote(request);
+        scoreAccent:request.scoreAccent,trigger:request.trigger} : addNote(request);
       if (!voice) return 'silent';
       const choked=voice.choke ? voices.filter(row=>row.choke===voice.choke && row.first<frame && row.last>frame) : [];
       for (const row of choked) retire(row,frame+edgeFade);
@@ -231,6 +241,12 @@
       profile.dropped++;
       profile.foregroundDropped+=Number(request.foreground);
       log('voice-dropped',{part:request.event?.part ?? request.stream?.name,reason,foreground:request.foreground});
+      if (request.trigger) missed(request.trigger,request.stream.name,reason);
+      else if (request.clip?.trigger && !request.clip.missedNote) {
+        const {trigger,resource}=request.clip;
+        missed(trigger,resource,reason,request.event.part);
+        request.clip.missedNote=true;
+      }
       return 'dropped';
     }
     function admit(request,canWait=true) {
@@ -265,12 +281,14 @@
         admit({clip,event,foreground:fg.has(event.part),priority:priorities[event.part] ?? 0});
       }
     }
-    function accent(section,kind) {
+    function accent(section,kind,trigger,resource) {
       if (accents.length>=maxVoices) {
         log('accent-skipped',{section,reason:'clip-budget'});
+        if (trigger) missed(trigger,resource,'clip-budget');
         return null;
       }
       const clip=begin(section,segments[section].start,{},0,kind);
+      if (trigger) Object.assign(clip,{trigger,resource});
       accents.push(clip);
       profile.peakClips=Math.max(profile.peakClips,accents.length+1);
       return clip;
@@ -285,13 +303,16 @@
     }
     function playCue(resource,intent,scoreAccent=false) {
       const stream=streams.streams.get(resource), segment=Object.hasOwn(stingers,resource) ? stingers[resource] : null;
-      if (!stream && !segment) return 'unmapped';
+      if (!stream && !segment) {
+        missed(intent,resource,'unmapped');
+        return 'unmapped';
+      }
       if (holds.some(row=>row.resource===resource && row.section===active.section &&
         (row.linked===undefined || row.linked===(intent.transition!==undefined)))) return 'withheld';
       const strength=intent.data?.strength;
-      if (segment) return accent(segment,'stinger') ? 'scheduled' : 'dropped';
+      if (segment) return accent(segment,'stinger',intent,resource) ? 'scheduled' : 'dropped';
       if (strength===0) return 'silent';
-      return admit({stream,scoreAccent,foreground:stream.foreground,priority:stream.priority,
+      return admit({stream,scoreAccent,trigger:intent,foreground:stream.foreground,priority:stream.priority,
         strength:finite(strength,0,1) ? strength : 1},!scoreAccent);
     }
     function cue(intent) {
@@ -299,7 +320,10 @@
       if (intent.transition!==undefined) {
         if (pending?.row.intent.rule===intent.transition && pending.row.intent.time===intent.time) {
           if (pending.cues.length<maxEvents) pending.cues.push(intent);
-          else log('cue-skipped',{resource,reason:'queue-budget'});
+          else {
+            log('cue-skipped',{resource,reason:'queue-budget'});
+            missed(intent,resource,'queue-budget');
+          }
           return;
         }
         const destination=outcomes.get(linkKey(intent.time,intent.transition));
@@ -351,6 +375,23 @@
       }
       return selected;
     }
+    function expectedExit(edge,intent,planned) {
+      const requested=inputFrame(intent.time), {visit,segment}=active;
+      if (requested>=frame || requested<visit.first) return planned;
+      if (!edge.waitForExit) return requested;
+      const period=snap(segment.end-segment.start);
+      const points=edge.switchPoints?.map(point=>point.position) ?? [edge.exit];
+      let expected=Infinity;
+      for (const position of points) {
+        const first=frameAt(visit.phase,position);
+        if (position>=visit.position && first>=requested) expected=Math.min(expected,first);
+        else if (segment.loop) {
+          const next=visit.stop+snap(position-segment.start);
+          expected=Math.min(expected,next+Math.max(0,Math.ceil((requested-next)/period))*period);
+        }
+      }
+      return Math.min(planned,expected===Infinity && !edge.switchPoints ? requested : expected);
+    }
     function plan(row) {
       const {intent}=row, target=intent.to, section=active.section;
       if (newest && (intent.time<newest.time ||
@@ -377,7 +418,7 @@
       }
       if (matched) edge={...edge,exit:matched.point.position,entry:matched.point.position};
       const at=matched?.at ?? nextExit(edge);
-      pending={row,edge,at,switchPoint:matched?.point,cues:[],accessories:[
+      pending={row,edge,at,expectedFrame:expectedExit(edge,intent,at),switchPoint:matched?.point,cues:[],accessories:[
         [edge.bridge,'bridge',edge.pickup],
         [edge.commonTone?.segment,'common-tone',edge.commonTone?.pickup ?? 0]
       ].filter(([clip])=>clip).map(([clip,kind,pickup])=>{
@@ -392,7 +433,7 @@
       for (const accessory of pending.accessories) if (accessory.at===frame)
         accessory.playing=accent(accessory.clip,accessory.kind);
       if (pending.at!==frame) return;
-      const {row,edge,cues,switchPoint}=pending, {intent}=row, outgoing=active;
+      const {row,edge,cues,switchPoint,expectedFrame}=pending, {intent}=row, outgoing=active;
       finish(outgoing,edge.tail,Boolean(switchPoint));
       const hearing={phrases:phrasing.counts(),
         ...(memory && {themes:memory.at(time())})};
@@ -405,7 +446,7 @@
         part:voice.part,pitch:voice.pitch,phaseFrames:frame-voice.first,gateEndFrame:voice.off,releaseEndFrame:voice.last,
         state:frame<voice.off ? 'held' : 'release',...(switchPoint && {source:voice.clip.source})
       }));
-      const detail={frame,time:time(),trigger:intent,arrivalFrame:row.received,latencyFrames:frame-inputFrame(intent.time),
+      const detail={frame,time:time(),trigger:intent,arrivalFrame:row.received,expectedFrame,latencyFrames:frame-inputFrame(intent.time),
         from:outgoing.section,to:active.section,via:via.slice(),
         exit:{source:outgoing.source,authored:edge.waitForExit ? edge.exit : null,
           played:Math.min(outgoing.segment.end,playhead(outgoing)),tail:edge.tail},
@@ -414,6 +455,11 @@
           room:true,roomLastInputFrame:roomLastInput,bridge:edge.bridge ?? null,commonTone:edge.commonTone ?? null}};
       profile.transitions++;
       boundedPush(joins,detail,traceLimit);
+      if (frame>expectedFrame) diagnostics.issue('late-musical-join',expectedFrame,frame+1,{
+        from:detail.from,to:detail.to,requestedSample:inputFrame(intent.time),expectedSample:expectedFrame,
+        arrivalSample:row.received,actualSample:frame,lateBySamples:frame-expectedFrame,
+        ...(switchPoint && {switchPoint:switchPoint.id})
+      },intent);
       log('transition',detail);
       pending=null;
       linkOutcome(intent,active.section);
@@ -427,11 +473,18 @@
     }
     function repeat() {
       if (!active.finished || active.parked) return;
-      if (active.segment.loop) active=begin(active.section,active.segment.start,active.layers,0,'segment','repeat');
+      if (active.segment.loop) {
+        const {visit}=active;
+        active=begin(active.section,active.segment.start,active.layers,0,'segment','repeat');
+        active.visit=visit;
+      }
       else active.parked=true;
     }
     function step() {
-      for (let i=voices.length-1;i>=0;i--) if (voices[i].last<=frame) voices.splice(i,1);
+      for (let i=voices.length-1;i>=0;i--) if (voices[i].last<=frame) {
+        if (voices[i].stream) diagnostics.close(voices[i],frame);
+        voices.splice(i,1);
+      }
       expireAccents();
       // A request observed at the exit can still choose or cancel that exit.
       let cues;
@@ -462,6 +515,7 @@
     const token=value=>typeof value==='string' && value.length>0 && value.length<=256;
     function dispatch(intent,{observedAt=startTime+time()}={}) {
       check(record(intent) && finite(intent.time,0,1e9) && finite(observedAt,startTime,1e9) &&
+        (intent.beatId===undefined || K.world.inspectionLinks.parse(intent.beatId)) &&
         (intent.serial===undefined || integer(intent.serial,0,Number.MAX_SAFE_INTEGER)) &&
         (intent.kind==='music-transition' ? known(intent.from) && known(intent.to) &&
           record(intent.layers ?? {}) && Object.entries(intent.layers ?? {}).every(([key,level])=>id(key) && finite(level,0,1)) :
@@ -523,8 +577,11 @@
           const gap=voice.read(frame,pair);
           const gain=fadeAt(voice,frame)*voice.strength, vl=pair[0]*gain,vr=pair[1]*gain;
           if (gap) {
-            profile.streamGaps++;
-            log('stream-underrun',gap);
+            diagnostics.stream(voice,gap,frame,undefined,voice.trigger);
+            if (!gap.recovered) {
+              profile.streamGaps++;
+              log('stream-underrun',{name:gap.name,sourceFrame:gap.frame});
+            }
           }
           const lane=voice.lane;
           if (lane) {
@@ -547,9 +604,12 @@
           for (const stem of group.parts) {
             const gap=stem.read(position,pair);
             if (gap) {
-              profile.streamGaps++;
-              log('stream-underrun',{name:gap.name,sourceFrame:gap.frame,group:group.name,
-                part:stem.part,positionFrame:position});
+              diagnostics.stream(stem,gap,frame,{group:group.name,part:stem.part});
+              if (!gap.recovered) {
+                profile.streamGaps++;
+                log('stream-underrun',{name:gap.name,sourceFrame:gap.frame,group:group.name,
+                  part:stem.part,positionFrame:position});
+              }
             }
             const ambient=ambience?.process(stem.part,frame,pair);
             const gain=layerGain(stem.part);
@@ -631,7 +691,8 @@
             factors:Object.fromEntries([...factors].map(([name,row])=>[name,describe(row)]))};
         }
       }
-      return P.data.clone({frame,time:time(),startTime,section:active.section,source:active.source,phrase:active.phrase,
+      return P.data.clone({format:'ink-studio/music-live-report',version:1,sampleRate:rate,firstSample:0,endSample:frame,
+        audioDiagnostics:diagnostics.inspect(frame),frame,time:time(),startTime,section:active.section,source:active.source,phrase:active.phrase,
         position:Math.min(active.segment.end,playhead(active)),
         pending:pending ? {to:pending.row.intent.to,frame:pending.at,rule:pending.row.intent.rule ?? null,
           ...(pending.switchPoint && {switchPoint:pending.switchPoint})} : null,

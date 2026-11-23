@@ -192,7 +192,7 @@ async function runShow(file, opt, settings, emit) {
   const watch = { picture: { output: config.output } }, control = presetControl(config, project, report);
   const live = liveWorld && feed(settings.kit.KIT.world, liveWorld, (state, reason) => report.source('world', state, reason));
   const protectedFiles = [...project.sourceFiles(), ...config.assetFiles, file, config.cueSource, config.presentationSource, video, audio,
-    interventionInput?.source].filter(source =>
+    ...(config.audioDiagnostics?.files ?? []), interventionInput?.source].filter(source =>
     source && !['-', 'video'].includes(source) && fs.existsSync(source));
   const writer = output && graphOutputs(protectedFiles);
   writer?.protect(fs.statSync(output, { throwIfNoEntry: false }));

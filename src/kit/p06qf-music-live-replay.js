@@ -51,7 +51,8 @@
     check(finite(arrivalOffset,0,60) && record(worldCues) &&
       Object.values(worldCues).every(id),'Invalid live rehearsal arrival offset or world cue mapping');
     const events=[...trace.intents,...trace.worldEvents.filter(row=>Object.hasOwn(worldCues,row.cue)).map(row=>({
-      kind:'music-cue',time:row.time,cue:row.cue,resource:worldCues[row.cue],data:{strength:row.strength ?? 1}
+      kind:'music-cue',time:row.time,cue:row.cue,resource:worldCues[row.cue],data:{strength:row.strength ?? 1},
+      ...(row.beatId && {beatId:row.beatId})
     }))].map(intent=>({intent,observedAt:intent.time+arrivalOffset})).filter(row=>row.observedAt<trace.end);
     return {end:trace.end,events,...(trace.layerGains && {layerGains:trace.layerGains}),
       ...(trace.layerFactors && {layerFactors:trace.layerFactors}),

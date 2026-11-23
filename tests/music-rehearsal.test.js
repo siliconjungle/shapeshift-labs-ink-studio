@@ -37,7 +37,10 @@ test('capture replays world logs, tracks cancelled and committed requests, and p
   assert.equal(early.origin.kind,'world-recording');
   assert.equal(early.intents.find(row=>row.kind==='music-transition').time,4);
   assert(early.requests.some(row=>row.outcome==='committed' && row.due===4 && row.time>2));
-  assert.deepEqual(early.worldEvents,[{cue:'latch',time:4.2}]);
+  assert.deepEqual(early.worldEvents,[{cue:'latch',time:4.2,beatId:'ink:beat:test-score/main/84.0'}]);
+  const linked=A.live.fromTrace(early,{worldCues:{latch:'latch'}});
+  assert.equal(linked.events.find(row=>row.intent.cue==='latch').intent.beatId,early.worldEvents[0].beatId);
+  assert.equal(linked.events.find(row=>row.intent.kind==='music-transition').intent.beatId,'ink:beat:test-score/main/80.0');
   assert.equal(cancel.intents.length,0);
   assert.equal(cancel.requests[0].outcome,'cancelled');
   assert.equal(cancel.requests[0].due,2);

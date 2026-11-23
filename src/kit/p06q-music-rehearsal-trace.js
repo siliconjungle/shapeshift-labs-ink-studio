@@ -33,6 +33,7 @@
       (raw.ambienceGains===undefined || P.musicAmbience.validGains(raw.ambienceGains)) &&
       (raw.label===undefined || text(raw.label)) && Array.isArray(raw.intents) && raw.intents.length<=2048 &&
       Array.from(raw.intents).every(row=>record(row) && finite(row.time,0,raw.end) && row.time<raw.end &&
+        (row.beatId===undefined || K.world.inspectionLinks.parse(row.beatId)) &&
         (row.serial===undefined || integer(row.serial,0,Number.MAX_SAFE_INTEGER)) &&
         (row.kind==='music-transition' ? id(row.from) && id(row.to) :
           row.kind==='music-cue' ? text(row.cue ?? row.resource) :
@@ -40,7 +41,8 @@
     'Invalid adaptive score trace or recorded music intents');
     const worldEvents=raw.worldEvents ?? [], requests=raw.requests ?? [];
     check(Array.isArray(worldEvents) && worldEvents.length<=limit && Array.from(worldEvents).every(row=>
-      fields(row,['cue','time','strength','duration']) && text(row.cue) && finite(row.time,0,raw.end) && row.time<raw.end &&
+      fields(row,['cue','time','strength','duration','beatId']) && text(row.cue) && finite(row.time,0,raw.end) && row.time<raw.end &&
+      (row.beatId===undefined || K.world.inspectionLinks.parse(row.beatId)) &&
       finite(row.strength ?? 1,0,1) && (row.duration===undefined || finite(row.duration,0,300))) &&
       Array.isArray(requests) && requests.length<=limit && Array.from(requests).every(row=>
       fields(row,['id','time','due','from','to','rule','outcome','resolvedAt','serial']) && id(row.id) && id(row.from) &&
@@ -113,11 +115,14 @@
     const timeOf=(event,time)=>W.timedEvents.timeOf(event) ?? event.time ?? time;
     run.advance(log.end.tick,{onTick(frame,query) {
       if (frame.time>end+tolerance) return;
+      const stream=run.view().eventStream;
+      const identity=row=>W.inspectionLinks.identify(W.committedEvents.read(row,world.id,stream));
       const events=run.events.filter(row=>(row.system===system && ['music-transition','music-cue','music-layer'].includes(row.kind)) ||
         (ambience!==undefined && row.system===ambience && row.kind==='music-ambience'))
-        .map(row=>({...row,time:timeOf(row,frame.time)}));
+        .map(row=>({...row,time:timeOf(row,frame.time),
+          ...(['music-transition','music-cue'].includes(row.kind) && {beatId:identity(row)})}));
       const hits=run.events.filter(row=>row.kind==='audio-cue' && text(row.cue))
-        .map(row=>({cue:row.cue,time:timeOf(row,frame.time),
+        .map(row=>({cue:row.cue,time:timeOf(row,frame.time),beatId:identity(row),
           ...(row.strength!==undefined && {strength:row.strength}),...(row.duration!==undefined && {duration:row.duration})}));
       saved.observe(frame.time,view(query),events,hits);
     }});

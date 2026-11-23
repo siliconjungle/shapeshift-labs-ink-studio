@@ -1,4 +1,5 @@
 const { collect, cueAnchor } = require('./show-beat-diagnostics.js');
+const { kinds:audioKinds } = require('./show-audio-diagnostics.js');
 
 const sampleLimit = 256;
 
@@ -100,16 +101,29 @@ function showReport(config, rehearse) {
           ...(cue.cue && { cue: cue.cue }), ...(cue.clip && { clip: cue.clip })
         }, scheduledFrame, scheduledFrame + 1, cue.beatId && cueAnchor(cue));
       }
+      const audio=config.audioDiagnostics;
+      let audioDiagnostics, audioFailed=false;
+      if (audio?.files.length) {
+        const counts=Object.fromEntries(audioKinds.map(kind=>[kind,audio.omitted[kind] ?? 0]));
+        for (const {kind,detail,fromFrame,toFrame,direct} of audio.findings) {
+          counts[kind]++;
+          diagnostics.issue(kind,detail,fromFrame,toFrame,direct);
+        }
+        audioFailed=Object.values(counts).some(Boolean);
+        audioDiagnostics={counts,omitted:audio.omitted};
+      }
       const storyDiagnostics = diagnostics.finish();
       const beatLinks = [...cueLinks.values()].filter(cue => cue.beatId).concat(graphLinks);
       return { format: 'ink-studio/patch-show-report', version: 1, event: 'show-report', mode: rehearse ? 'rehearsal' : 'show',
-        reason, passed: reason === 'completed' && !slow && !offline && !assertionFailures && !Object.values(dropped).some(Boolean) && (!rehearse || !diagnostics.missedCues),
+        reason, passed: reason === 'completed' && !slow && !offline && !assertionFailures && !Object.values(dropped).some(Boolean) &&
+          (!rehearse || !diagnostics.missedCues && !audioFailed),
         fps: config.fps, frameBudgetMs: 1000 / config.fps, slowMs: config.slowMs, elapsedMs: elapsed(),
         rendered, displayed, dropped, video, assertionFailures, sources: Object.fromEntries(sources),
         stages: Object.fromEntries([...stages].map(([name, { totalMs, ...entry }]) => [name, { ...entry, meanMs: totalMs / entry.samples }])),
         ...(config.assetBindings?.length && { assetBindings: config.assetBindings }),
         ...(beatLinks.length&&{beatLinks}),
         ...(storyDiagnostics && { storyDiagnostics }),
+        ...(audioDiagnostics && { audioDiagnostics }),
         ...(inputMode && { interventions: { mode: inputMode, outcomes } }),
         sourceEvents, presets, samples, unlogged, ...(error && { error: error.message }) };
     }

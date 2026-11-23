@@ -64,6 +64,11 @@ function locate(api,beatId,files,base,timing) {
           if (format === 'ink-studio/patch-show-report' && /^\/storyDiagnostics\/findings\/\d+$/.test(pointer)) {
             const { kind, fromFrame, toFrame, source, channel, stage } = row;
             context.diagnostic = { kind, fromFrame, toFrame, source, channel, stage };
+            if (['missed-audio-cue','audio-underrun','late-musical-join'].includes(kind)) {
+              const {fromSample,toSample,sampleRate,sourceReport,sourcePointer,cue,resource,reason,status}=row;
+              context.diagnostic={...context.diagnostic,fromSample,toSample,sampleRate,sourceReport,sourcePointer,
+                cue,resource,reason,status};
+            }
           }
           if(local(row.file))context.file=row.file;
           if(local(row.frameFolder))context.frameFolder=row.frameFolder;
