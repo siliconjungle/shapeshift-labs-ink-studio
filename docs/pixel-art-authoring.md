@@ -153,7 +153,62 @@ same history. Pass `pixels.renderOptions()` along with your normal view
 settings when rendering the attached scene. Undo restores the previous
 sidecars, and redo restores the revised ones. Use `renderOptions(sceneRef)`
 to retrieve options by source reference when the editor is standalone.
-The shared history belongs to the live editing session.
+
+## Reopen a working session
+
+Give the editor a `sessionDirectory` to keep committed undo and redo history,
+scene bindings, render sidecars, receipts, and the active draft on disk. Open
+that directory after a restart to recover the working state and the attached
+scene editor. The original pixel document and authored scene JSON are retained
+in the session. Linked assets and prefabs stay external. Reopen with the same
+dependency data in `env`, or supply a fresh editor for the original scene
+through `sceneEditor`. Ink checks the retained dependency revision on open.
+
+```js
+const { createPixelEditor, createSceneEditor, openPixelEditorSession } = require('.');
+const pixels = createPixelEditor(pixelDocument, {
+  sceneEditor: createSceneEditor(sceneSource),
+  sceneRef: 'gate.json',
+  sessionDirectory: 'gate-session'
+});
+pixels.begin('Retouch the gate');
+pixels.apply(patch);
+
+// In a new process
+const resumed = openPixelEditorSession('gate-session');
+if (resumed.sessionStatus().pending) {
+  const report = resumed.previewChanges();
+  if (report.valid) resumed.commit();
+}
+const scene = resumed.sceneEditor;
+```
+
+The editor saves after each finished operation. Within a synchronous
+`transact` callback it saves the complete transaction together. Use
+`begin` and separate `apply` calls to keep each completed step recoverable
+before a gesture commits. Resume a draft with more edits, or cancel it to
+restore its prior state and redo history. The history limit still applies.
+`sessionStatus()` reports a storage error if a checkpoint could not be
+published. Edits stay in memory and `flushSession()` retries the write.
+A stale editor cannot replace a newer checkpoint.
+
+The CLI can manage the same session across commands.
+
+```sh
+node cli/ink-studio.js pixel-art session init gate-session document.json --scene gate.json
+node cli/ink-studio.js pixel-art session begin gate-session --label 'Retouch the gate'
+node cli/ink-studio.js pixel-art session apply gate-session patch.json
+node cli/ink-studio.js pixel-art session status gate-session
+node cli/ink-studio.js pixel-art session preview gate-session
+node cli/ink-studio.js pixel-art session commit gate-session
+node cli/ink-studio.js pixel-art session export gate-session --artifact scene --out revised-gate.json
+```
+
+Use `inspect --at x,y` or `targets --destination id` to read current
+revisions while preparing a patch. `undo`, `redo`, and `cancel` update the
+stored state. Export the pixel document with `--artifact document` or choose
+`scene`, `shot-corrections`, or `splat-fit` for the retained native artifact.
+Keep the entire session directory when copying a working session.
 
 ## Preview before committing
 

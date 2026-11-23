@@ -284,6 +284,9 @@ module.exports = {
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },
+  openPixelEditorSession(directory, options) {
+    return require('./cli/pixel-art.js').openEditorSession(directory, options);
+  },
   createSplatPicker(world, options = {}) {
     const K = module.exports.load().KIT;
     const time = options.time ?? world.lookSnapshot?.time ?? 0;

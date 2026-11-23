@@ -10,6 +10,7 @@ const Critic = require('./critic.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
+const Sessions = require('./pixel-edit-session.js');
 const { isRevision } = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/pixel-art';
@@ -544,17 +545,79 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
   return Preview.report({ baseline:design,candidate,sources,targets,issues,warnings,sourceRevision,compile,cell,limit });
 }
 
-function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
-  const baseline = { ...openDesign(source), renderOutputs:{}, receipts:[] };
+const persistentJournals = new WeakSet();
+
+function sceneDependencies(editor) {
+  const signature = editor.sourceDependencies();
+  if (signature === undefined) throw new Error('Cannot verify dependencies for the pixel edit session scene');
+  return createHash('sha256').update(signature).digest('hex');
+}
+
+function openEditorSession(directory,{ sceneEditor, env, resolveScene } = {}) {
+  const loaded = Sessions.read(directory), saved = loaded.contents;
+  if (!record(saved.baseline) || saved.baseline.design?.version !== 2 ||
+      !(saved.baseline.legacyRevision === null || isRevision(saved.baseline.legacyRevision)) ||
+      typeof saved.slot !== 'string' || !/^pixel-editor-[a-f0-9-]{36}$/.test(saved.slot))
+    throw new Error('Invalid pixel edit session identity');
+  validate(saved.baseline.design);
+  if (saved.scene !== null) {
+    if (!record(saved.scene) || !record(saved.scene.source) || !reference(saved.scene.ref) ||
+        !isRevision(saved.scene.dependencies) ||
+        (saved.scene.location !== undefined && !reference(saved.scene.location)))
+      throw new Error('Invalid retained scene binding for the pixel edit session');
+    const historyLimit = saved.journal?.historyLimit;
+    sceneEditor ??= resolveScene?.(saved.scene,historyLimit) ??
+      require('../index.js').createSceneEditor(saved.scene.source,{ env, historyLimit });
+    if (!equal(sceneEditor.snapshot(),saved.scene.source) || sceneEditor.history().undo.length ||
+        sceneEditor.history().redo.length)
+      throw new Error('Reopen with a fresh editor for the retained scene source');
+    if (sceneDependencies(sceneEditor) !== saved.scene.dependencies)
+      throw new Error('The dependencies for the retained scene binding have changed');
+  } else if (sceneEditor) throw new Error('This session has no attached scene');
+  return createEditor(undefined,{ sceneEditor, sceneRef:saved.scene?.ref, sceneLocation:saved.scene?.location,
+    historyLimit:saved.journal?.historyLimit, sessionDirectory:loaded.directory },loaded);
+}
+
+function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimit, sessionDirectory } = {}, loaded) {
+  const original = loaded?.contents.baseline ?? openDesign(source);
+  const baseline = { ...original, renderOutputs:{}, receipts:[], verifiedReplays:[] };
   const { authoring } = require('../index.js').load().KIT;
   const journal = sceneEditor === undefined
     ? authoring.document(undefined,{ historyLimit })
     : authoring.sceneEditor.transactionDocument(sceneEditor);
   if (!journal) throw new TypeError('Use an Ink scene editor for a shared pixel transaction');
   const sceneName = sceneRef ?? sceneEditor?.snapshot().id;
-  const slot = 'pixel-editor-' + randomUUID();
-  const stagedTargets = new WeakMap();
-  let cached = baseline, text;
+  const retainedScene = loaded ? loaded.contents.scene?.source : sceneEditor?.snapshot();
+  const slot = loaded?.contents.slot ?? 'pixel-editor-' + randomUUID();
+  let cached = baseline, text, persistence;
+
+  if (sessionDirectory !== undefined) {
+    if (journal.pending() || persistentJournals.has(journal))
+      throw new Error('Finish or close the existing edit session before attaching persistence');
+    if ((sceneEditor && !reference(sceneName)) || (sceneLocation !== undefined && !reference(sceneLocation)))
+      throw new TypeError('A persisted scene needs a valid source reference');
+    if (loaded) {
+      const identity = journal.snapshot().id;
+      journal.restoreSession(loaded.contents.journal,(snapshot,{ draft }) => {
+        if (snapshot.id !== identity || sceneEditor && snapshot.environment.id !== retainedScene.id)
+          throw new Error('Session history does not belong to the retained document and scene');
+        if (sceneEditor && !draft) authoring.sceneEditor.validateSnapshot(sceneEditor,snapshot.environment);
+        const item = snapshot.entities[slot];
+        if (!item) return;
+        const data = JSON.parse(item.content);
+        if (item.type !== 'pixel-document' || !record(data) || !Array.isArray(data.receipts) ||
+            !Array.isArray(data.verifiedReplays) || !data.verifiedReplays.every(index => integer(index,0,data.receipts.length-1)) ||
+            !record(data.renderOutputs) || !(data.legacyRevision === null || isRevision(data.legacyRevision)))
+          throw new Error('Invalid retained pixel edit state');
+        documentShape(data.design);
+      });
+    }
+    persistence = Sessions.attach(sessionDirectory,() => ({
+      slot, baseline:original, scene:sceneEditor ? { ref:sceneName, source:retainedScene,
+        ...(sceneLocation !== undefined && { location:sceneLocation }), dependencies:sceneDependencies(sceneEditor) } : null
+    }),journal,loaded);
+    persistentJournals.add(journal);
+  }
 
   function state() {
     const next = journal.get(slot)?.content;
@@ -618,37 +681,32 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     const perform = () => {
       const draft = state(), { design } = draft;
       const request = requestFor(draft,patch);
-      const adapter = editContext(context,grouped || !!expected);
+      const adapter = editContext(context,grouped || !!expected || !!persistence);
       const shotHitFrame = expected ? expected.command.options.shotHitFrame : context?.shotHitFrame;
       const options = shotHitFrame === undefined ? {} : { shotHitFrame };
       const { result,receipt } = editWithReceipt(design,request,adapter,
         { runner:'sdk', options, frameId:request?.frame, shotHitFrame, expected, rawPatch:patch });
       const route = Destinations.resolve(design,request.destination), { destination,binding } = route;
       const next = { ...draft, receipts:[...draft.receipts,receipt] };
+      if (expected && binding && request.sourceRevision === undefined)
+        next.verifiedReplays = [...draft.verifiedReplays,draft.receipts.length];
       if (destination.kind === 'raster') Object.assign(next,{ design:result, legacyRevision:null });
       const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
       if (option) next.renderOutputs = { ...draft.renderOutputs,
         [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
       };
       store(next);
-      if (grouped && binding) {
-        const base = journal.transactionBase();
-        let targets = stagedTargets.get(base);
-        if (!targets) stagedTargets.set(base,targets = new Map());
-        targets.set(JSON.stringify([binding.scene,destination.id,request.id]),{
-          ...Preview.sourceTarget(route,request), sourceRevision:receipt.inputs.sourceRevision,
-          sourceChecked:request.sourceRevision !== undefined || !!expected
-        });
-      }
       return structuredClone(result);
     };
     if (!grouped) return journal.transact(patch?.id,perform);
-    try {
-      return perform();
-    } catch (error) {
-      journal.cancel();
-      throw error;
-    }
+    return journal.batchSession(() => {
+      try {
+        return perform();
+      } catch (error) {
+        journal.cancel();
+        throw error;
+      }
+    });
   }
 
   function previewChanges({ limit } = {}) {
@@ -656,8 +714,19 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     const before = journal.transactionBase();
     if (!before) throw new Error('No active transaction');
     const content = before.entities[slot]?.content;
-    const original = content === undefined ? baseline.design : JSON.parse(content).design;
-    const targets = Array.from(stagedTargets.get(before)?.values() ?? []);
+    const base = content === undefined ? baseline : JSON.parse(content);
+    const draft = state(), targetsByKey = new Map(), verifiedReplays = new Set(draft.verifiedReplays);
+    for (let index = base.receipts.length; index < draft.receipts.length; index++) {
+      const receipt = draft.receipts[index];
+      const patch = receipt.command.patch, route = Destinations.resolve(draft.design,patch.destination);
+      const target = Preview.sourceTarget(route,patch);
+      if (target) {
+        const key = JSON.stringify([target.scene,target.destination,target.id]);
+        targetsByKey.set(key,{ ...target, sourceRevision:receipt.inputs.sourceRevision,
+          sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
+      }
+    }
+    const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
     try {
       journal.preview();
@@ -668,10 +737,11 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     }
     const sources = Preview.sourceChanges(sceneName,before.environment,scene);
     const warnings = targets.filter(target => !target.sourceChecked).map(target => sourceWarning(target.binding));
-    return Preview.report({ baseline:original,candidate,sources,targets,issues,warnings,compile,cell,limit });
+    return Preview.report({ baseline:base.design,candidate,sources,targets,issues,warnings,compile,cell,limit });
   }
 
   const editor = Object.freeze({
+    sceneEditor,
     snapshot: () => structuredClone(state().design),
     serialize: (space = 2) => JSON.stringify(state().design,null,space),
     describe: () => validate(state().design),
@@ -706,6 +776,15 @@ function createEditor(source,{ sceneEditor, sceneRef, historyLimit } = {}) {
     undo: journal.undo,
     redo: journal.redo,
     history: journal.history,
+    sessionStatus: () => persistence ? { ...persistence.status(), pending:journal.pending() } : null,
+    flushSession: () => persistence?.flush() ?? false,
+    closeSession() {
+      if (!persistence?.flush()) return false;
+      persistence.detach();
+      persistence = undefined;
+      persistentJournals.delete(journal);
+      return true;
+    },
     transact(label,fn) {
       if (typeof fn !== 'function' || Object.prototype.toString.call(fn) === '[object AsyncFunction]')
         throw new TypeError('A pixel transaction needs a synchronous function');
@@ -861,4 +940,71 @@ function inspectTargets(design,destination,context,limit = 128) {
   return { documentRevision:fingerprint(design), ...targets };
 }
 
-module.exports = { createEditor, compile, validate, stamp, image, review, edit, draw, trace, command };
+function sessionCommand(pos,opt,{ scene }) {
+  const [action,directory,input] = pos;
+  const argc = ['init','apply'].includes(action) ? 3 : 2;
+  if (pos.length !== argc || !['init','status','begin','apply','preview','commit','cancel','undo','redo',
+    'inspect','targets','export'].includes(action))
+    throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, targets, or export');
+
+  let editor, result;
+  if (action === 'init') {
+    const design = read(input);
+    const sceneRef = opt.scene;
+    if (sceneRef !== undefined && !reference(sceneRef)) throw new TypeError('--scene needs an editable diorama path');
+    const sceneLocation = sceneRef === undefined ? undefined : path.resolve(sceneRef);
+    documentShape(design);
+    const bindings = design.version === 2 ? design.sceneBindings ?? [] : [];
+    const binding = bindings.find(row => row.scene === sceneRef) ??
+      bindings.find(row => sceneLocation && path.resolve(row.scene) === sceneLocation);
+    const sceneEditor = sceneLocation && scene(sceneLocation).editor;
+    editor = createEditor(design,{ sessionDirectory:directory, sceneEditor, sceneLocation, sceneRef:binding?.scene ?? sceneRef });
+  } else {
+    editor = openEditorSession(directory,{ resolveScene(retained,historyLimit) {
+      return retained.location && scene(retained.location,retained.source,historyLimit).editor;
+    } });
+    if (action === 'begin') {
+      if (opt.label !== undefined && !reference(opt.label)) throw new TypeError('--label needs a transaction name');
+      editor.begin(opt.label);
+    } else if (action === 'apply') {
+      const sample = opt['shot-hit-frame'];
+      const shotHitFrame = sample === undefined ? undefined : typeof sample === 'string' && /^\d+$/.test(sample)
+        ? Number(sample) : NaN;
+      editor.apply(read(input),{ shotHitFrame });
+      result = editor.receipts().at(-1);
+    } else if (action === 'preview') {
+      const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
+      result = editor.previewChanges({ limit });
+      if (!result.valid) process.exitCode = 2;
+    } else if (action === 'inspect') {
+      if (!/^\d+,\d+$/.test(opt.at ?? '')) throw new TypeError('Use --at x,y inside the native grid');
+      result = editor.inspect(opt.at.split(',').map(Number),{ frame:opt.frame, cel:opt.cel });
+    } else if (action === 'targets') {
+      if (!reference(opt.destination)) throw new TypeError('--destination needs a destination ID');
+      const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
+      result = editor.targets(opt.destination,{ limit });
+    } else if (action === 'export') {
+      if (!reference(opt.out)) throw new TypeError('--out needs a file path');
+      const out = path.resolve(opt.out), artifact = opt.artifact ?? 'document';
+      if (path.dirname(out) === path.resolve(directory) && /^checkpoint-\d+\.json$/.test(path.basename(out)))
+        throw new RangeError('Choose an output outside the session checkpoints');
+      let data;
+      if (artifact === 'document') data = editor.snapshot();
+      else if (artifact === 'scene') data = editor.sceneEditor?.snapshot();
+      else if (artifact === 'shot-corrections' || artifact === 'splat-fit')
+        data = editor.renderOptions(opt.scene)[artifact === 'shot-corrections' ? 'shotCorrections' : 'splatFit'];
+      if (data === undefined) throw new Error('No session artifact named ' + artifact);
+      files.json(out,data);
+      result = { artifact, file:out };
+    } else if (action !== 'status') {
+      const changed = editor[action]();
+      result = { ...editor.sessionStatus(), history:editor.history(), changed };
+    }
+  }
+  const status = editor.sessionStatus();
+  if (!status.saved) throw new Error(status.error);
+  process.stdout.write(JSON.stringify(result ?? { ...status, history:editor.history(),
+    documentRevision:editor.describe().revision },null,2)+'\n');
+}
+
+module.exports = { createEditor, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, command, sessionCommand };

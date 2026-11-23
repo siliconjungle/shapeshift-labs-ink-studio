@@ -263,6 +263,7 @@
       validate(snapshot(), bindings);
       Object.assign(buildEnv, bindings, { brushSession: A.brushRegions.create() });
       indexScene = undefined;
+      document.checkpointSession();
     }
 
     function setPrefabInstance(id, instance) {
@@ -275,7 +276,7 @@
         document.setEnvironment({ instances: null });
         document.setEnvironment({ instances });
       };
-      if (document.pending()) write();
+      if (document.pending()) document.batchSession(write);
       else document.transact('Edit prefab instance ' + id, write);
     }
 
@@ -295,12 +296,14 @@
         return (previewWorld = build());
       }
       if (!document.pending()) return document.transact('Set breakable groups', write);
-      try {
-        return write();
-      } catch (error) {
-        document.cancel();
-        throw error;
-      }
+      return document.batchSession(() => {
+        try {
+          return write();
+        } catch (error) {
+          document.cancel();
+          throw error;
+        }
+      });
     }
 
     function applyBrush(stroke) {
@@ -401,9 +404,13 @@
         return document.onChange(({ type, label, revision }) => listener({ type, label, revision, snapshot: snapshot() }));
       }
     });
-    documents.set(editor,document);
+    documents.set(editor,{ document, validate });
     return editor;
   }
 
-  A.sceneEditor = Object.freeze({ create, transactionDocument: editor => documents.get(editor) });
+  A.sceneEditor = Object.freeze({
+    create,
+    transactionDocument: editor => documents.get(editor)?.document,
+    validateSnapshot: (editor,snapshot) => documents.get(editor).validate(snapshot)
+  });
 })(KIT);

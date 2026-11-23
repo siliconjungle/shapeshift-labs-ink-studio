@@ -157,7 +157,7 @@ function dataScene(file, override, { installedPacks = false } = {}) {
   const descriptor=K.diorama.scene(spec,env);
   const atlases=new Map();
   return { ...descriptor, project: project?.metadata, lookPreviewPacks:spec.assetPacks,
-    ...(source === raw && source.format === undefined && { openEditor: () => K.authoring.sceneEditor.create(spec,{ env }) }),
+    ...(source === raw && source.format === undefined && { openEditor: options => K.authoring.sceneEditor.create(spec,{ ...options,env }) }),
     build(seed, options = {}) {
     const parameterTime = opt['parameter-time'] ?? (Number.isFinite(Number(opt.t)) ? opt.t : 0);
     const world=descriptor.build(seed, { ...options, parameterInputs: { time: Number(parameterTime), ...options.parameterInputs } });
@@ -1405,6 +1405,8 @@ const CMD = {
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
         '  pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options',
         '            --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits',
+        '  pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session',
+        '  pixel-art session <status|begin|apply|preview|commit|cancel|undo|redo|inspect|targets|export> <directory>',
         '  lint <id ...> [--map]              pixel-art lint: orphans, doubles, jaggies, banding, pillow shading, noise, colours',
         '  review <id> [--ref pic --px 2]     a sheet of fixed shots (four sides, top, low, far, near, close), beside the last one',
         '  sweep <scene> <plan.json> --out directory   render still and clip contact sheets across settings and seeds',
@@ -4084,20 +4086,24 @@ const CMD = {
      its pixels make one, as 2 for a picture shown at twice its size), the diorama drawn at the same size in art pixels, the two side
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
   'pixel-art'() {
-    require('./pixel-art.js').command(pos,opt,outputFile,{
+    const PixelArt = require('./pixel-art.js');
+    function editScene(id,retained,historyLimit) {
+      if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
+      const bytes = retained === undefined ? fs.readFileSync(path.resolve(id)) : undefined;
+      const descriptor = dataScene(id,retained ?? JSON.parse(bytes));
+      if (!descriptor.openEditor) throw new TypeError('This pixel destination needs a plain JSON diorama');
+      return { editor:descriptor.openEditor({ historyLimit }),
+        ...(bytes && { revision:require('./asset-references.js').hash(bytes) }) };
+    }
+    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene });
+    PixelArt.command(pos,opt,outputFile,{
       capture(id) {
         const world = buildPreview(id), t = num('t',0);
         pose(world,t);
         return R.render(world, view({ w:num('w',160), h:num('h',96), px:1, t, passes:['objectId'] }));
       },
       world: id => buildPreview(id),
-      scene(id) {
-        if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
-        const bytes = fs.readFileSync(path.resolve(id));
-        const descriptor = dataScene(id,JSON.parse(bytes));
-        if (!descriptor.openEditor) throw new TypeError('This pixel destination needs a plain JSON diorama');
-        return { editor:descriptor.openEditor(), revision:require('./asset-references.js').hash(bytes) };
-      }
+      scene:editScene
     });
   },
   /* pixel-art lint: the mistakes pixel artists name, at a diorama's own pixel size, beside what the references come to (the medians

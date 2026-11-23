@@ -591,3 +591,133 @@ test('shot corrections and splat assets travel with pixel undo and render the re
   assert.deepEqual(pixels.renderOptions(),options);
   assert.equal(pixels.inspect(at).swatch,'amber');
 });
+
+test('a persistent shared session restores redo and an interrupted native draft with its receipt', t => {
+  const { document,filename,write } = setup(t);
+  const directory = filename('session');
+  const child = spawnSync(process.execPath,['-e',`
+    const ink = require('.');
+    const fs = require('node:fs');
+    const [directory, sceneFile, documentFile] = process.argv.slice(1);
+    const scene = ink.createSceneEditor(fs.readFileSync(sceneFile,'utf8'));
+    const pixels = ink.createPixelEditor(fs.readFileSync(documentFile,'utf8'),
+      { sceneEditor:scene, sceneRef:sceneFile, sessionDirectory:directory });
+    const patch = (id,extra) => ({ id,frame:'front',revision:pixels.describe().revision,...extra });
+    const paint = at => ({ edits:[{ at,layer:null,from:null,to:'amber' }] });
+    pixels.transact('Committed paint and material',() => {
+      pixels.apply(patch('mark',paint([4,4])));
+      scene.setMaterial('accent','solid:gate');
+    });
+    pixels.transact('Future scene move',() => scene.setTransform({ translation:[.1,0,0] },'solid:post'));
+    pixels.undo();
+    pixels.begin('Interrupted cut');
+    pixels.apply(patch('draft-mark',paint([5,4])));
+    pixels.apply(patch('draft-cut',{ destination:'notch',operation:{ parameters:{ half:[.5,.6,.23] } } }));
+    if (!pixels.sessionStatus().saved) throw new Error(pixels.sessionStatus().error);
+    process.kill(process.pid,'SIGKILL');
+  `,directory,filename('source'),filename('document')],{ cwd,encoding:'utf8' });
+  assert.equal(child.signal,'SIGKILL',child.stderr);
+
+  // The retained definitions reopen independently of the original authoring files.
+  write('document',null);
+  write('source',null);
+  const pixels = ink.openPixelEditorSession(directory);
+  const scene = pixels.sceneEditor;
+  assert.equal(pixels.sessionStatus().pending,true);
+  assert.deepEqual(pixels.snapshot().sceneBindings,document.sceneBindings);
+  assert.deepEqual(pixels.history(),{ undo:['Committed paint and material'], redo:['Future scene move'] });
+  assert.equal(pixels.inspect([5,4]).swatch,'amber');
+  assert.deepEqual(scene.snapshot().solids[0].half,[.5,.6,.23]);
+  assert.deepEqual(pixels.receipts().map(receipt=>receipt.command.patch.id),['mark','draft-mark','draft-cut']);
+  const preview = pixels.previewChanges();
+  assert.equal(preview.valid,true);
+  assert.deepEqual(preview.targets.map(target=>[target.id,target.scene]),[['draft-cut',filename('source')]]);
+  assert.equal(pixels.cancel(),true);
+
+  const reopened = ink.openPixelEditorSession(directory);
+  assert.equal(reopened.sessionStatus().pending,false);
+  assert.equal(reopened.inspect([5,4]).swatch,null);
+  assert.deepEqual(reopened.sceneEditor.snapshot().solids[0].half,source.solids[0].half);
+  assert.deepEqual(reopened.receipts().map(receipt=>receipt.command.patch.id),['mark']);
+  assert.equal(reopened.sceneEditor.redo(),true);
+  assert.deepEqual(reopened.sceneEditor.snapshot().solids[1].transform.translation,[.1,0,0]);
+  assert.equal(reopened.undo(),true);
+  assert.equal(reopened.undo(),true);
+  assert.equal(reopened.inspect([4,4]).swatch,null);
+  assert.equal(reopened.sceneEditor.snapshot().solids[0].mat,'stone');
+  const restored = ink.openPixelEditorSession(directory);
+  assert.equal(restored.redo(),true);
+  assert.equal(restored.inspect([4,4]).swatch,'amber');
+  assert.equal(restored.sceneEditor.snapshot().solids[0].mat,'accent');
+});
+
+test('CLI commands reopen and commit a shot draft and export its retained artifact', t => {
+  const { filename,write,read } = setup(t);
+  const directory = filename('session'), at = [20,16];
+  const run = (action,...args) => JSON.parse(cli('pixel-art','session',action,directory,...args));
+  const created = run('init',filename('document'),'--scene',filename('source'));
+  const base = KIT.diorama.build(source);
+  const { target,...anchor } = ink.render(base,{ ...view,captureShotCorrectionSurface:true }).shotCorrectionSurface.pin(...at);
+  assert.equal(target.object,'gate');
+  const observed = run('targets','--destination','one-shot','--limit','1');
+  write('patch',{ id:'sampled-light',frame:'front',revision:created.documentRevision,
+    sourceRevision:observed.sourceRevision,destination:'one-shot',
+    edits:[{ at,layer:null,from:null,to:'amber' }],operation:{ at,fps:10,frames:[0,0],anchor } });
+  run('begin','--label','Retained shot');
+  const receipt = run('apply',filename('patch'),'--shot-hit-frame','0');
+  assert.equal(receipt.shotHits.painted,1);
+  fs.unlinkSync(filename('source'));
+  assert.equal(run('status').pending,true);
+  assert.equal(run('preview').targets[0].id,'sampled-light');
+  assert.deepEqual(run('commit').history.undo,['Retained shot']);
+  assert.equal(run('undo').changed,true);
+  assert.deepEqual(run('status').history.redo,['Retained shot']);
+  assert.equal(run('redo').changed,true);
+  run('export','--artifact','shot-corrections','--out',filename('shot'));
+  assert.equal(read('shot').corrections[0].id,'sampled-light');
+  const rendered = ink.render(base,{ ...view,shotCorrections:read('shot') });
+  const p = (at[1]*view.w+at[0])*3;
+  assert.deepEqual([...rendered.rgb.slice(p,p+3)],[255,202,51]);
+});
+
+test('a stale session writer cannot overwrite the retained checkpoint or lose its local edits', t => {
+  const { document,filename } = setup(t);
+  const directory = filename('session');
+  const first = ink.createPixelEditor(document,{ sessionDirectory:directory, historyLimit:1 });
+  const stale = ink.openPixelEditorSession(directory);
+  const paint = (pixels,id,at) => pixels.apply({ id,frame:'front',revision:pixels.describe().revision,
+    edits:[{ at,layer:null,from:null,to:'amber' }] });
+  paint(first,'first',[4,4]);
+  paint(first,'second',[5,4]);
+  paint(stale,'other',[6,4]);
+  assert.equal(stale.sessionStatus().saved,false);
+  assert.match(stale.sessionStatus().error,/advanced on disk/);
+  assert.equal(stale.inspect([6,4]).swatch,'amber');
+  assert.equal(stale.flushSession(),false);
+  const current = ink.openPixelEditorSession(directory);
+  assert.equal(current.inspect([6,4]).swatch,null);
+  assert.equal(current.inspect([5,4]).swatch,'amber');
+  assert.deepEqual(current.history().undo,['second']);
+  assert.equal(current.undo(),true);
+  assert.equal(current.undo(),false);
+  assert.equal(current.inspect([4,4]).swatch,'amber');
+});
+
+test('session recovery checks the retained scene dependencies before opening', t => {
+  const { document,filename } = setup(t);
+  const directory = filename('session');
+  const env = half => ({ prefabs:{ rail:{ revision:1, solids:{
+    slat:{ kind:'box', at:[0,0,0], half:[half,.2,.1], mat:'stone' }
+  } } } });
+  const scene = ink.createSceneEditor({ ...source, prefabLibrary:'library.json', instances:{
+    end:{ prefab:'rail', transform:{ translation:[2,0,0] } }
+  } },{ env:env(.3) });
+  const pixels = ink.createPixelEditor(document,{ sessionDirectory:directory, sceneEditor:scene, sceneRef:filename('source') });
+  const revision = pixels.sessionStatus().revision;
+  scene.refreshPrefabs(env(.4).prefabs);
+  assert.equal(pixels.sessionStatus().revision,revision+1);
+  assert.throws(()=>ink.openPixelEditorSession(directory,{ env:env(.3) }),/dependencies.*changed/);
+  const reopened = ink.openPixelEditorSession(directory,{ env:env(.4) });
+  assert.deepEqual(reopened.snapshot().sceneBindings,document.sceneBindings);
+  assert.equal(reopened.targets('notch').sourceRevision,pixels.targets('notch').sourceRevision);
+});
