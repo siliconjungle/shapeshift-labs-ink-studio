@@ -120,6 +120,7 @@ const EffectPalettes = (() => {
 
   const distance = (a,b) => pixel.rgbWeights.reduce((sum,weight,i)=>sum+weight*(a[i]-b[i])**2,0);
   function apply(frame, passes, signals, source, palette, capture, ditherAt, ownership, inspect) {
+    const ink = typeof ArtInk === 'undefined' ? require('./art-ink.js') : ArtInk;
     const { rules, media, backdropCloud, sky, haze } = signals;
     const { w, h, rgb } = frame, { ramps, objects, materials } = rules;
     const mask = capture ? new Uint8Array(w*h) : null;
@@ -130,8 +131,9 @@ const EffectPalettes = (() => {
     const darkLightness = ramps.has('darks') ? new Map() : null;
     let changed = false;
     for (let p=0; p<w*h; p++) {
+      const treatment = frame.inkMask?.[p];
       if (frame.alpha && !frame.alpha[p] || protectedObjects.has(passes.objectId?.[p]) ||
-          protectedMaterials.has(passes.materialId?.[p]) || frame.inkMask?.[p] > 0 && frame.inkMask[p] < 4) continue;
+          protectedMaterials.has(passes.materialId?.[p]) || treatment && treatment !== ink.reservedCode) continue;
       const x = p%w, y = Math.floor(p/w), bottom = (h-1-y)*w+x, q = p*3;
       const coverage = passes.coverage[p], geometry = Number.isFinite(passes.depth[p]);
       const through = media?.[q+2] ?? 1, cloud = backdropCloud?.[bottom] ?? 0;
@@ -152,7 +154,7 @@ const EffectPalettes = (() => {
         if (!ramp) continue;
         const weight = dark ? 1 : light?.[kind] ?? weights[kind];
         if (dark) {
-          if (weights.emission > 0 || frame.inkMask?.[p] === 4 || frame.alpha && frame.alpha[p] < 255) continue;
+          if (weights.emission > 0 || treatment === ink.reservedCode || frame.alpha && frame.alpha[p] < 255) continue;
         } else if (!(weight > 0 && weight >= ramp.threshold) ||
             (geometry && !ramp.geometry && (kind === 'fog' || kind === 'clouds' || lighting(kind)))) continue;
         if ((dark || ramp.combine) && ownership?.outlined?.[bottom]) break;

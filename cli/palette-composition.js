@@ -91,7 +91,7 @@ function capture(w,h,palettes,policies,scene,grade,{diagnostic,lit}) {
   return {claim,view};
 }
 
-function lighting(passes, bottom, p, {live, sun, contact, probes, probeReceiver, cloudShadow, cloudsReceive}) {
+function lighting(passes, bottom, p, {live, sun, contact, probes, probeReceiver, cloudShadow, cloudsReceive}, shadowOnly) {
   const i = (passes.splatId?.[p] ?? 0)-1;
   if (i < 0) return;
   const q = p*3, point = passes.position.subarray(q,q+3), normal = passes.normal.subarray(q,q+3);
@@ -99,11 +99,11 @@ function lighting(passes, bottom, p, {live, sun, contact, probes, probeReceiver,
   let shadow = 0, bounce = 0;
   if (live?.normal(i)) {
     if (sun.intensity > 0) shadow = 1-live.visibility(i,...point);
-    const indirect = live.indirectAt(i,...point);
+    const indirect = !shadowOnly && live.indirectAt(i,...point);
     if (indirect) bounce = Math.max(...indirect);
   } else {
     if (cloudShadow && cloudsReceive(i)) shadow = 1-cloudShadow(...point);
-    const local = probeReceiver(i) && probes.sample(point,normal);
+    const local = !shadowOnly && probeReceiver(i) && probes.sample(point,normal);
     if (local) bounce = Math.max(...local.rgb)*local.mix;
   }
   const receiver = contact?.at(i);

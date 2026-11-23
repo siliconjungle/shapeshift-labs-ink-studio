@@ -11,7 +11,8 @@ const ArtPasses = (() => {
   const needsSurfaceMotion = selected => selected.includes('surfaceMotion') || selected.includes('surfaceMotionValid');
   const needsPartMotion = selected => selected.some(channel => channel !== 'partId' && partMotion.includes(channel));
   const needsStrandMotion = selected => selected.includes('strandMotion') || selected.includes('strandMotionValid');
-  const channels = Object.freeze([...new Set([...surface, ...environment, ...partMotion, ...strands, ...opaque, ...proxies, 'paletteOwner'])]);
+  const channels = Object.freeze([...new Set([...surface, ...environment, ...partMotion, ...strands, ...opaque, ...proxies,
+    'paletteOwner', 'inkMask', 'inkShadow'])]);
   const cutoff = 0.5;
   const ownsSurface = (alpha, writesDepth, depth, nearest) => writesDepth && alpha > cutoff && depth <= nearest;
   const over = (value, below, alpha) => value * alpha + below * (1 - alpha);

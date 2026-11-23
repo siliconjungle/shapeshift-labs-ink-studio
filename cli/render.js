@@ -434,7 +434,7 @@ function renderFrame(world, o, preparedPalettes) {
   const effectPaletteSettings = styled ? EffectPalettes.prepare(
     o.effectPalettes === true ? look.effectPalettes : o.effectPalettes ?? look.effectPalettes, world.pal, world.paletteRoles
   ) : !o.raw && !o.captureCoverage ? o.effectPaletteCapture : null;
-  const ink = styled ? ArtInk.prepare(o.ink ?? look.ink, world.pal) : null;
+  const ink = styled ? ArtInk.prepare(o.ink ?? look.ink, world.pal, o.inkShot) : null;
   const emissive = EmissiveFinishes.bind(EmissiveFinishes.prepare(
     o.emissiveFinishes ?? world.emissiveFinishes, world.pal), world);
   const effects = styled ? ArtEffects.prepare(o.artEffects ?? look.effects, world.pal) : null;
@@ -455,6 +455,7 @@ function renderFrame(world, o, preparedPalettes) {
   }) : preparedPalettes;
   const requestedPasses = ArtPasses.select(o.passes);
   const passSelection = new Set(requestedPasses);
+  passSelection.delete('inkMask');
   if(temporal)passSelection.add('depth');
   const captureHybridDepth = typeof o.hybridDepthFrame === 'function' && !probeView &&
     !o[matteScope] && o[subjectFocusPass] !== false && (!o.samples || o[nativePartMotion]);
@@ -479,6 +480,11 @@ function renderFrame(world, o, preparedPalettes) {
   if (effects?.smear && o.artHistory) passSelection.add('emissionMotion');
   if (ink) for (const channel of ArtInk.channels) passSelection.add(channel);
   if (ink?.painted) for (const channel of ['position', 'objectPosition']) passSelection.add(channel);
+  if (ink?.hatching) passSelection.add('objectPosition');
+  if (ink?.all.some(style => style.crease?.cosine !== undefined)) passSelection.add('geometricNormal');
+  if (ink?.scoped.concat(ink.shotScoped).some(row => row.select.part !== undefined)) passSelection.add('partId');
+  if (ink?.needsLight) passSelection.add('inkShadow');
+  if (passSelection.has('inkShadow')) for (const channel of ['splatId', 'position', 'normal']) passSelection.add(channel);
   if (effectPaletteSettings) {
     for (const channel of ['coverage', 'depth']) passSelection.add(channel);
     if (effectPaletteSettings.ramps.has('emission') || effectPaletteSettings.ramps.has('darks')) passSelection.add('emission');
@@ -676,9 +682,9 @@ function renderFrame(world, o, preparedPalettes) {
       else for (const slot of baseSlots) declared.add(basePalette[slot]);
       if (full) {
         for (const ramp of ink?.ramps.values() ?? []) for (const color of ramp) declared.add(color);
-        if (ink) for (const style of [ink.base,...ink.styles.values(),...ink.scoped.map(row=>row.patch)]) {
+        if (ink) for (const style of ink.all) {
           for (const color of style.ramp ?? []) declared.add(color);
-          for (const key of ['silhouette','crease','boundary']) {
+          for (const key of ArtInk.treatments) {
             const line = style[key];
             for (const color of [line?.color,line?.highlight,line?.shadow,line?.contrast?.dark,line?.contrast?.light])
               if (color !== undefined) declared.add(color);
@@ -691,7 +697,9 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (o.captureScenePalette) frame.scenePalette = legacyLook && !tone ? basePalette : null;
     if (!o.captureMotion && !o.capturePartMotion && !o.captureStrandMotion && !o.captureSurfaceMotion) delete frame.motionReference;
-    if (requestedPasses.length) frame.passes = ArtPasses.subset(passes, requestedPasses);
+    if (requestedPasses.length) frame.passes = ArtPasses.subset(requestedPasses.includes('inkMask') ?
+      { w:frame.w, h:frame.h, ...passes, inkMask:frame.inkMask ?? new Uint8Array(frame.w*frame.h) } : passes,
+      requestedPasses);
     if (readabilitySelectors && frame.readabilityMask) o.captureReadabilityFrame?.(frame);
     return frame;
   };
@@ -1008,7 +1016,7 @@ function renderFrame(world, o, preparedPalettes) {
     source:o.strandMotionSource ?? partSource.rest ?? partSource.data, reset:strandReset,
     previous:o.motionFrom?.strandMotion ?? o.strandMotionHistory?.previous()
   });
-  const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' &&
+  const art = createArtPasses([...passSelection].filter(name => name !== 'target' && name !== 'mask' && name !== 'paletteOwner' && name !== 'inkShadow' &&
     !ArtPasses.environment.includes(name) && !ArtPasses.strands.includes(name) && !ArtPasses.proxies.includes(name)), W, H, trackGlow && emissive?.slots, partCapture, surfaceCapture, temporal);
   const environmentPasses = createEnvironmentPasses(passSelection, W, H, world);
   const skyPass = environmentPasses?.passes.sky, fogPass = environmentPasses?.passes.fogTransmittance;
@@ -3210,9 +3218,19 @@ function renderFrame(world, o, preparedPalettes) {
       o.strandMotionHistory?.store(strand.snapshot, strandReset);
     }
   }
-  if (lightingEffects) effectSignals.lightAt = (p,bottom)=>PaletteComposition.lighting(passes,bottom,p,{
-    live,sun,contact,probes,probeReceiver,cloudShadow,cloudsReceive:i=>!(Math.round(d[i*16+11]) & (32 | 64))
-  });
+  if (lightingEffects || passSelection.has('inkShadow')) {
+    const sources = {live,sun,contact,probes,probeReceiver,cloudShadow,
+      cloudsReceive:i=>!(Math.round(d[i*16+11]) & (32 | 64))};
+    if (lightingEffects) effectSignals.lightAt = (p,bottom)=>PaletteComposition.lighting(passes,bottom,p,sources);
+    if (passSelection.has('inkShadow')) {
+      const shadow = new Float32Array(W*H);
+      if (live || contact || cloudShadow) for (let p=0;p<shadow.length;p++) {
+        const bottom=(H-1-Math.floor(p/W))*W+p%W;
+        shadow[p] = PaletteComposition.lighting(passes,bottom,p,sources,true)?.shadow ?? 0;
+      }
+      passes.inkShadow=shadow;
+    }
+  }
   if (o[subjectFocusPass] === false) return { passes, silhouetteMask };
   if (o.captureCoverage) {
     if (reflectionTint && passes?.emission) ArtEffects.tintReflection(col, captured, passes.emission, W, H, reflectionTint, t);

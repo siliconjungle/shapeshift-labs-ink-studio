@@ -3,14 +3,19 @@ const path = require('node:path');
 const PNG = require('./png.js');
 const { upscale } = require('./render.js');
 const { channels, strands, opaque, proxies } = require('../src/art-passes.js');
+const { labels: inkLabels } = require('../src/art-ink.js');
+const inkColors = [0, 0xf2ad77, 0x63bcc5, 0xab84d8, 0xf2e7c5, 0xe9647f, 0x90bd78];
 
 const byte = value => Math.round(Math.max(0, Math.min(1, value)) * 255);
 const idColor = id => Math.imul(id, 0x9e3779b1) & 0xffffff;
 
 function labels(passes) {
-  return Object.fromEntries(['objects', 'materials', 'parts', 'strands', 'targets', 'paletteOwners', 'surfaceKinds'].flatMap(key => passes[key] ? [[key,
+  const legend = Object.fromEntries(['objects', 'materials', 'parts', 'strands', 'targets', 'paletteOwners', 'surfaceKinds'].flatMap(key => passes[key] ? [[key,
     passes[key].map((label, index) => ({ label, color: '#' + idColor(index).toString(16).padStart(6, '0') }))
   ]] : []));
+  if (passes.inkMask) legend.inkMask = inkLabels.map((label,i) =>
+    ({label,color:'#'+inkColors[i].toString(16).padStart(6,'0')}));
+  return legend;
 }
 
 const environmentEncodings = {
@@ -40,7 +45,9 @@ const environmentEncodings = {
   surfaceUV: 'RGB8 preview, red and green encode normalized UV, blue is validity',
   surfaceUVValid: 'RGB8 grayscale, white is a valid UV coordinate',
   surfaceMotion: 'RGB8 preview, red and green encode signed XY at ±4 art pixels, black means invalid',
-  surfaceMotionValid: 'RGB8 grayscale, white is a valid previous sample'
+  surfaceMotionValid: 'RGB8 grayscale, white is a valid previous sample',
+  inkMask: 'RGB8 ink operation legend color',
+  inkShadow: 'RGB8 grayscale cast shadow attenuation, white is fully shadowed'
 };
 
 function environmentEncoding(passes) {
@@ -69,7 +76,8 @@ function encode(frame, channel) {
   const depth = isDepth && depthRange(data);
   for (let p = 0; p < w * h; p++) {
     const q = p * 3;
-    if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU', 'surfaceCoverage', 'proxyRemovedCoverage'].includes(channel))
+    if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU', 'surfaceCoverage',
+      'proxyRemovedCoverage', 'inkShadow'].includes(channel))
       rgb.fill(byte(data[p]), q, q + 3);
     else if (['partMotionValid','strandMotionValid','surfaceUVValid','surfaceMotionValid'].includes(channel)) rgb.fill(data[p],q,q+3);
     else if (channel === 'proxyRejected') {
@@ -98,7 +106,7 @@ function encode(frame, channel) {
     } else if (channel === 'emission' || channel === 'sky' || channel === 'reflections') {
       for (let c = 0; c < 3; c++) rgb[q + c] = byte(data[q + c]);
     } else {
-      const color = idColor(data[p]);
+      const color = channel === 'inkMask' ? inkColors[data[p]] : idColor(data[p]);
       rgb[q] = color >> 16;
       rgb[q + 1] = color >> 8 & 255;
       rgb[q + 2] = color & 255;

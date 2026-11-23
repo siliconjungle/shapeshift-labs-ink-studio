@@ -1,0 +1,19 @@
+{
+  "targets": [
+    {
+      "select": { "surface": "keeper-face" },
+      "silhouette": { "color": "#9e6266", "strength": 0.26 },
+      "boundary": { "color": "#a36166", "strength": 0.26 },
+      "crease": false,
+      "shadowEdge": { "strength": 0.16 },
+      "hatch": false
+    },
+    {
+      "select": { "object": "inspection-machine", "material": "metal" },
+      "silhouette": { "color": "#262334", "highlight": "#ffd998", "strength": 1 },
+      "crease": { "color": "#52353e", "highlight": "#ffd998", "cosine": 0.82, "strength": 1 },
+      "shadowEdge": { "color": "#4d313c", "strength": 1 },
+      "hatch": { "color": "#48333c", "strength": 0.93 }
+    }
+  ]
+}

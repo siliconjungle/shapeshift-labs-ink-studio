@@ -310,7 +310,7 @@ const ink = {
 };
 ```
 
-`distance` measures scene units along the view axis from the authored camera in either projection. A line stays at full strength through `near` and disappears at `far`. Put the range on `ink`, a material, or a target to apply it to all three line types there. A line's own range takes precedence. Use equal values for a hard cutoff or `distance: false` to clear an inherited range. Set a line to `false` to turn it off at every depth.
+`distance` measures scene units along the view axis from the authored camera in either projection. Ink stays at full strength through `near` and disappears at `far`. Put the range on `ink`, a material, or a target to apply it to all treatments there. A treatment's own range takes precedence. Use equal values for a hard cutoff or `distance: false` to clear an inherited range. Set a treatment to `false` to turn it off at every depth.
 
 Use `--ink file.json` to apply a standalone ink profile through the CLI or `--ink off` to disable selective ink. The [aqueduct courier scene](../examples/selective-ink.js) shows a colored character contour in front of stonework that loses its ink over distance.
 
@@ -375,6 +375,65 @@ The [last signal scene](../examples/edge-hierarchy.js) keeps the face and
 lantern hand distinct while letting the cloak and far aqueduct soften.
 Author the profile in `finish.look.ink` or override it for a shot with
 `--ink file.json`. Use `--ink off` to bypass selective ink.
+
+### Material ink and shot overrides
+
+In the headless renderer, assign `materials` rules by authored material ID.
+Each material can specify its own silhouette, crease, boundary, shadow edge,
+and hatch. These rules share the same native art grid across splats, indexed
+meshes, and direct SDF surfaces.
+
+```js
+const ink = {
+  light: [-.58, .52, .60],
+  materials: {
+    skin: { silhouette: { color: '#97585e', strength: .4 }, crease: false },
+    metal: {
+      silhouette: { shadow: '#342a39', highlight: '#f1bf7d' },
+      crease: { color: '#674643', cosine: .74 },
+      shadowEdge: { color: '#5a3e43', threshold: .51, minLightDelta: .13 },
+      hatch: { color: '#49363a', direction: [.72, 1, .19], spacing: .124,
+        width: .24, lightRange: [.22, .49], strength: .62 }
+    }
+  }
+};
+```
+
+- `crease.cosine` sets the normal-angle cutoff for that material or target.
+  Lower values reserve ink for sharper turns. The global `creaseCosine`
+  supplies the default.
+- `shadowEdge` inks the dark side of a lighting transition within a
+  continuous surface. `threshold` defaults to `.4` and `minLightDelta` to
+  `.06`. The light signal uses the shading normal against `ink.light`
+  and includes directional, contact, or cloud shadow attenuation where
+  the headless splat lighting path supplies it.
+- `hatch` adds rest-space stripes in shades below the upper end of
+  `lightRange`. The lower end sets where they reach full strength.
+  `direction` is the local XYZ direction across the stripes, `spacing`
+  is the distance between stripes in scene units, and `width` is the
+  fraction of that period filled by ink. Stripes fade as they approach
+  the resolution limit of the art grid. Use a fixed `color` or palette
+  `steps` to set the hatch color.
+
+Pass an `inkShot` object to `render()` or use `--ink-shot file.json` to
+patch the look for a single shot. Scene defaults, materials, and matching
+scene targets apply first. The shot applies its defaults, material
+patches, and matching targets in that order. Target lists apply in
+author order. A field such as `shadowEdge: { strength: .16 }` keeps
+the inherited threshold and color. An explicit `false` disables the
+treatment on that target. `--ink off` disables the whole pass.
+
+The [night inspection demo](../examples/material-ink-rules.js) keeps the
+keeper's face quiet and strengthens the approaching machine using a
+[shot patch](../examples/material-ink-shot.json). Use `--passes inkMask`
+for a color-coded view of the visible treatments and its legend.
+
+```sh
+node cli/ink-studio.js render examples/material-ink-rules.js \
+  --w 336 --h 176 --px 1 --t 2.25 \
+  --ink-shot examples/material-ink-shot.json --passes inkMask,materialId \
+  --out night-inspection.png
+```
 
 See [Stable dithering and camera review](stable-dithering.md) for per-object anchors and native-resolution pan and orbit clips. Camera snapping applies to orthographic projection. World-space dithering samples at the visible surface. Object-space dithering maps the sample back to the splat's rest frame, using the rig transform where available. Screen-space dithering follows the art grid. View-direction dithering projects the surface hit onto a plane chosen from the camera heading and elevation. Use `--ortho --snap`, `--dither-space screen|world|object|view`, and `--resolve native|coverage|clusters`. The coverage and cluster modes render four subpixels per art pixel and can protect named objects, materials, glints and small emissive details.
 
