@@ -114,7 +114,9 @@
       const selected=phrasing.choose(section,time(),source,via,incomingRule,reason);
       return {...selected,themeMatch:match?.when ?? null};
     }
-    function begin(section,position,layers={},fadeIn=0,kind='segment',reason='entry') {
+    const frameAt=(phase,position)=>phase.frame+snap(position-phase.position);
+    const playhead=clip=>clip.phase.position+(frame-clip.phase.frame)/rate;
+    function begin(section,position,layers={},fadeIn=0,kind='segment',reason='entry',phase={frame,position}) {
       const segment=segments[section];
       const selection=kind==='segment' ? choose(section,reason) : {source:segment.source,phrase:null};
       const notes=indexes.get(selection.source);
@@ -124,8 +126,8 @@
         if (notes[mid].at<position-eps) low=mid+1;
         else high=mid;
       }
-      const clip={id:++clipId,section,segment,...selection,first:frame,position,kind,notes,next:low,
-        stop:frame+Math.max(1,snap(segment.end-position)),layers:{...segment.layers,...layers},fadeIn,spoke:false};
+      const clip={id:++clipId,section,segment,...selection,first:frame,position,phase,kind,notes,next:low,
+        stop:Math.max(frame+1,frameAt(phase,segment.end)),layers:{...segment.layers,...layers},fadeIn,spoke:false};
       clip.listen=phrasing.tracks(section);
       clip.roomCut=P.musicCueMap.cursor(compiled[clip.source].cue?.roomCuts ?? []);
       return clip;
@@ -137,12 +139,13 @@
       voice.fadeEnd=end;
       voice.last=Math.min(voice.last,end);
     }
-    function finish(clip,tail=0) {
+    function finish(clip,tail=0,keepVoices=false) {
       if (clip.finished) return;
       clip.finished=true;
       if (clip.kind==='segment' && clip.spoke && clip.position<=clip.segment.start+eps && frame>=clip.stop)
         phrasing.heardPhrase(clip.phrase,clip.section,clip.source,time());
       memory?.finish(clip.id,time());
+      if (keepVoices) return;
       const end=frame+(tail ? snap(tail) : edgeFade);
       for (const voice of voices) if (voice.clip===clip && !voice.persistent) retire(voice,end);
     }
@@ -250,7 +253,7 @@
       if (clip.finished || frame>=clip.stop) return;
       for (;clip.next<clip.notes.length;clip.next++) {
         const event=clip.notes[clip.next];
-        if (event.at>=clip.segment.end-eps || clip.first+snap(event.at-clip.position)>frame) break;
+        if (event.at>=clip.segment.end-eps || frameAt(clip.phase,event.at)>frame) break;
         if (!event.note.velocity || !event.track.mix.gain || clip.layers[event.part]===0) continue;
         admit({clip,event,foreground:fg.has(event.part),priority:priorities[event.part] ?? 0});
       }
@@ -312,12 +315,27 @@
     }
     function nextExit(edge) {
       if (!edge.waitForExit) return frame;
-      const first=active.first+snap(edge.exit-active.position), period=snap(active.segment.end-active.segment.start);
+      const first=frameAt(active.phase,edge.exit), period=snap(active.segment.end-active.segment.start);
       if (first>=frame) return first;
       if (active.parked || !active.segment.loop) return frame;
       // The first partial pass can enter after its exit marker. The next pass starts at the loop head.
       const next=active.stop+snap(edge.exit-active.segment.start);
       return next>=frame ? next : next+Math.ceil((frame-next)/period)*period;
+    }
+    function nextSwitch(points) {
+      if (active.parked) return null;
+      const {start,loop}=active.segment;
+      let selected=null;
+      for (const point of points) {
+        let at=frameAt(active.phase,point.position);
+        if (point.position<active.position || at<frame) {
+          if (!loop) continue;
+          // The active pass still owns its original boundary after a matched switch.
+          at=active.stop+snap(point.position-start);
+        }
+        if (!selected || at<selected.at) selected={point,at};
+      }
+      return selected;
     }
     function plan(row) {
       const {intent}=row, target=intent.to, section=active.section;
@@ -336,10 +354,16 @@
         log('transition-ignored',{target,reason:'already-playing',trigger:row.intent});
         return;
       }
-      const edge=rules.get(section+'>'+target) ??
+      let edge=rules.get(section+'>'+target) ??
         {exit:segments[section].end,entry:segments[target].start,tail:0,fadeIn:0,pickup:0};
-      const at=nextExit(edge);
-      pending={row,edge,at,cues:[],accessories:[
+      const matched=edge.switchPoints && nextSwitch(edge.switchPoints);
+      if (edge.switchPoints && !matched) {
+        log('transition-ignored',{target,reason:'no-compatible-switch',trigger:intent});
+        return;
+      }
+      if (matched) edge={...edge,exit:matched.point.position,entry:matched.point.position};
+      const at=matched?.at ?? nextExit(edge);
+      pending={row,edge,at,switchPoint:matched?.point,cues:[],accessories:[
         [edge.bridge,'bridge',edge.pickup],
         [edge.commonTone?.segment,'common-tone',edge.commonTone?.pickup ?? 0]
       ].filter(([clip])=>clip).map(([clip,kind,pickup])=>{
@@ -347,30 +371,32 @@
         if (requested<frame) profile.latePickups++;
         return {clip,kind,at:Math.max(frame,requested)};
       })};
-      log('transition-planned',{trigger:row.intent,from:section,to:target,exitFrame:at,exit:edge.exit,entry:edge.entry});
+      log('transition-planned',{trigger:row.intent,from:section,to:target,exitFrame:at,exit:edge.exit,entry:edge.entry,
+        ...(matched && {switchPoint:matched.point})});
     }
     function commit() {
       for (const accessory of pending.accessories) if (accessory.at===frame)
         accessory.playing=accent(accessory.clip,accessory.kind);
       if (pending.at!==frame) return;
-      const {row,edge,cues}=pending, {intent}=row, outgoing=active;
-      finish(outgoing,edge.tail);
+      const {row,edge,cues,switchPoint}=pending, {intent}=row, outgoing=active;
+      finish(outgoing,edge.tail,Boolean(switchPoint));
       const hearing={phrases:phrasing.counts(),
         ...(memory && {themes:memory.at(time())})};
       via.push(outgoing.section);
       if (via.length>8) via.shift();
       incomingRule=intent.rule ?? null;
-      active=begin(intent.to,edge.entry,intent.layers ?? {},edge.fadeIn);
-      const held=voices.filter(voice=>voice.persistent && voice.last>frame).map(voice=>({
+      const phase=switchPoint && frame<outgoing.stop ? outgoing.phase : undefined;
+      active=begin(intent.to,edge.entry,intent.layers ?? {},edge.fadeIn,'segment','entry',phase);
+      const held=voices.filter(voice=>voice.last>frame && (voice.persistent || (switchPoint && voice.clip===outgoing))).map(voice=>({
         part:voice.part,pitch:voice.pitch,phaseFrames:frame-voice.first,gateEndFrame:voice.off,releaseEndFrame:voice.last,
-        state:frame<voice.off ? 'held' : 'release'
+        state:frame<voice.off ? 'held' : 'release',...(switchPoint && {source:voice.clip.source})
       }));
       const detail={frame,time:time(),trigger:intent,arrivalFrame:row.received,latencyFrames:frame-inputFrame(intent.time),
         from:outgoing.section,to:active.section,via:via.slice(),
         exit:{source:outgoing.source,authored:edge.waitForExit ? edge.exit : null,
-          played:Math.min(outgoing.segment.end,outgoing.position+(frame-outgoing.first)/rate),tail:edge.tail},
+          played:Math.min(outgoing.segment.end,playhead(outgoing)),tail:edge.tail},
         entry:{source:active.source,offset:edge.entry,phrase:active.phrase,themeMatch:active.themeMatch,fadeIn:edge.fadeIn},
-        heard:hearing,carry:{held,echoes:[...echoes].filter(([,echo])=>echo.until>frame).map(([key])=>key),
+        ...(switchPoint && {switchPoint}),heard:hearing,carry:{held,echoes:[...echoes].filter(([,echo])=>echo.until>frame).map(([key])=>key),
           room:true,roomLastInputFrame:roomLastInput,bridge:edge.bridge ?? null,commonTone:edge.commonTone ?? null}};
       profile.transitions++;
       boundedPush(joins,detail,traceLimit);
@@ -511,7 +537,7 @@
             continue;
           }
           const {clip,strip,echo,track,part}=lane;
-          const local=clip.position+(frame-clip.first)/rate;
+          const local=playhead(clip);
           strip.tick(lane.l,lane.r,frame,mixed,local,
             track.mix.duck ? recentNotes.get(clip.source+'/'+track.mix.duck.from+(clip.kind==='segment' ? '' : '/accent')) ?? null : null);
           lane.l=lane.r=0;
@@ -539,7 +565,7 @@
           l+=wet[0]; r+=wet[1];
           sendL+=wet[0]*echo.send; sendR+=wet[1]*echo.send;
         }
-        const cut=Boolean(!active.finished && active.roomCut?.(active.position+(frame-active.first)/rate));
+        const cut=Boolean(!active.finished && active.roomCut?.(playhead(active)));
         if (cut) roomLastInput=null;
         else if (Math.max(Math.abs(sendL),Math.abs(sendR))>1e-7) roomLastInput=frame;
         const wet=room(sendL,sendR,cut);
@@ -568,8 +594,9 @@
         }
       }
       return P.data.clone({frame,time:time(),startTime,section:active.section,source:active.source,phrase:active.phrase,
-        position:Math.min(active.segment.end,active.position+(frame-active.first)/rate),
-        pending:pending ? {to:pending.row.intent.to,frame:pending.at,rule:pending.row.intent.rule ?? null} : null,
+        position:Math.min(active.segment.end,playhead(active)),
+        pending:pending ? {to:pending.row.intent.to,frame:pending.at,rule:pending.row.intent.rule ?? null,
+          ...(pending.switchPoint && {switchPoint:pending.switchPoint})} : null,
         clock:control ? machine.inspect(control) : null, heard:phrasing.counts(),
         ...(memory && {themes:memory.at(time())}),
         ...(Object.keys(layerGains).length && {layerGains}),

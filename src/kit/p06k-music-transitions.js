@@ -73,14 +73,32 @@
     'Stinger rules need a mapped resource and a section in which to withhold it');
     const rules=new Map();
     for (const edge of edges) {
-      check(fields(edge,['from','to','exit','entry','tail','fadeIn','bridge','pickup','commonTone']) && known(edge.from) &&
+      check(fields(edge,['from','to','exit','entry','tail','fadeIn','bridge','pickup','commonTone','switchPoints']) && known(edge.from) &&
         known(edge.to) && (edge.bridge===undefined || known(edge.bridge)),'Invalid music transition edge');
       const key=edge.from+'>'+edge.to;
       check(!rules.has(key),'Duplicate music transition edge');
       const from=segments[edge.from], to=segments[edge.to];
+      const fadeIn=numeric(edge.fadeIn ?? 0,0,4,'fade in');
+      if (edge.switchPoints!==undefined) {
+        check(live,'Render matched performance switch points with music live replay');
+        check(fields(edge,['from','to','switchPoints','fadeIn']) && edge.from!==edge.to && from.source!==to.source &&
+          from.start===to.start && from.end===to.end && from.loop===to.loop &&
+          F.sharesGrid(compiled[from.source],compiled[to.source]),
+        'Matched performances need distinct sources on the same score grid and playback window');
+        check(record(edge.switchPoints) && integer(Object.keys(edge.switchPoints).length,1,32),
+          'Name up to 32 matched performance switch points');
+        const switchPoints=Object.entries(edge.switchPoints).map(([idValue,at])=>{
+          check(id(idValue) && at!==undefined && at!==null,'Invalid matched performance switch point');
+          return {id:idValue,position:numeric(position(edge.from,at),from.start,from.end-.001,'switch point')};
+        }).sort((a,b)=>a.position-b.position);
+        check(new Set(switchPoints.map(point=>point.position)).size===switchPoints.length,
+          'Matched performance switch points must have distinct positions');
+        rules.set(key,{switchPoints,waitForExit:true,fadeIn,tail:0,pickup:0});
+        continue;
+      }
       const exit=numeric(position(edge.from,edge.exit,from.end),from.start+.001,from.end,'exit marker');
       const entry=numeric(position(edge.to,edge.entry,to.start),to.start,to.end-.001,'entry marker');
-      const tail=numeric(edge.tail ?? 0,0,4,'tail'), fadeIn=numeric(edge.fadeIn ?? 0,0,4,'fade in');
+      const tail=numeric(edge.tail ?? 0,0,4,'tail');
       const pickup=numeric(edge.pickup ?? 0,0,4,'pickup');
       check(!pickup || edge.bridge,'A pickup requires a transition bridge');
       const tone=edge.commonTone;

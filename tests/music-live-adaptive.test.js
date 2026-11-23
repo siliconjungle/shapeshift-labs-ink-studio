@@ -410,3 +410,56 @@ test('environment factors ramp independently while pursuit holds, with exact rec
   const invalid={...clock,layerControls:{storm:{parameter:'pursuit',factors:clock.layerControls.storm.factors}}};
   assert.throws(()=>KIT.music.create(invalid),/Invalid live layer factors/);
 });
+
+test('matched performance joins keep the outgoing holds, releases, tape and room',async()=>{
+  const soft=cue([[.16,.46,57],[.82,.96,62]]);
+  const drive=cue([[.07,.22,74],[2.7,.38,69]]);
+  drive.room={gain:-40,size:.3,decay:.22,damping:.8};
+  const assets={soft,drive}, arranged={entry:'restrained',segments:{
+    restrained:{source:'soft',end:2},energetic:{source:'drive',end:2}},
+    transitions:[{from:'restrained',to:'energetic',switchPoints:{lift:{beat:1.1},downbeat:{beat:2.6}}}]};
+  const events=[event(transition('restrained','energetic',.27))];
+  const out=await live.replay(assets,arranged,{end:1.6,events,blockFrames:123},options);
+  const control=await live.replay(assets,arranged,{end:1.6,events:[]},options);
+  const switchFrame=Math.round(.55*rate), nextAttack=Math.round(1.35*rate);
+  assert.deepEqual(out.value.samples.slice(0,nextAttack*2),control.value.samples.slice(0,nextAttack*2));
+  assert.notDeepEqual(out.value.samples.slice(nextAttack*2),control.value.samples.slice(nextAttack*2));
+  const [join]=out.report.joins;
+  assert.deepEqual(join.switchPoint,{id:'lift',position:.55});
+  assert.equal(join.frame,switchFrame);
+  assert.equal(join.entry.offset,join.exit.authored);
+  assert.deepEqual(join.carry.held.map(({pitch,state,source})=>[pitch,state,source]),
+    [[57,'release','soft'],[62,'held','soft']]);
+  assert(join.carry.held.every(voice=>voice.releaseEndFrame>switchFrame));
+  assert.deepEqual(join.carry.echoes,['soft/reed']);
+  assert.equal(join.carry.roomLastInputFrame,switchFrame-1);
+  assert.equal(out.report.profile.starts,3);
+});
+
+test('matched joins pick the next compatible point without moving the original sample grid',async()=>{
+  const assets={soft:cue([]),drive:cue([])};
+  const loop={end:.20015};
+  const points={early:.100075,late:.1501};
+  const arranged={entry:'restrained',segments:{restrained:{source:'soft',...loop},energetic:{source:'drive',...loop}},
+    transitions:[{from:'restrained',to:'energetic',switchPoints:points},{from:'energetic',to:'restrained',switchPoints:points}]};
+  const to=(at,energetic=true,arrival=at)=>event(transition(energetic?'restrained':'energetic',
+    energetic?'energetic':'restrained',at/rate),arrival/rate);
+  const route={end:.4,events:[to(120),to(500,false),to(660),to(1000,false,1400),to(2500)]};
+  const out=await live.replay(assets,arranged,route,options);
+  assert.deepEqual(out.report.joins.map(join=>[join.switchPoint.id,join.frame]),
+    [['early',801],['early',2402],['late',2802]]);
+  assert.equal(out.report.profile.cancellations,1);
+  assert.equal(out.report.profile.lateEvents,1);
+
+  const oneShot={...arranged,segments:{restrained:{...arranged.segments.restrained,loop:false},
+    energetic:{...arranged.segments.energetic,loop:false}}};
+  const missed=await live.replay(assets,oneShot,{end:.3,events:[to(1230)]},options);
+  assert.deepEqual(missed.report.joins,[]);
+  assert(missed.report.trace.some(row=>row.reason==='no-compatible-switch'));
+  const incompatible=cue([]);
+  incompatible.arrangement.score.tempoMap={tempo:121};
+  assert.throws(()=>live.open({soft:assets.soft,drive:incompatible},arranged,options),/same score grid/);
+  assert.throws(()=>live.open(assets,{...arranged,transitions:[{
+    from:'restrained',to:'energetic',switchPoints:{a:.12,b:.12}
+  }]},options),/distinct positions/);
+});

@@ -97,6 +97,9 @@ ink-studio music production performances cue.json takes.json --out choices.json
 ink-studio music production audition cue.json choices.json --out audition
 ```
 
+Use [matched performance switch points](music-live-adaptive.md#switch-between-matched-performances)
+to change takes during live playback on the same passage grid.
+
 ## Two palettes for the same score
 
 The [gesture palettes](../examples/music-production/gesture-palettes.json)

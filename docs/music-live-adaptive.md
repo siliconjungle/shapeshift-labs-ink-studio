@@ -197,6 +197,47 @@ includes the committed intent and arrival, the requested and realized exit,
 entry source and phrase, prior listening and route, held and releasing pitches
 with phase and gate frames, and which effects continued.
 
+## Switch between matched performances
+
+Create a production source for each take. Keep their score grid and playback
+window equal so both sources can read the same passage position. Put the take
+names in `timeline.segments` and name the allowed handoff points on the edge.
+
+```json
+{
+  "from": "restrained",
+  "to": "energetic",
+  "switchPoints": {
+    "lift": { "beat": 4 },
+    "answer": { "beat": 8 },
+    "return": { "beat": 12 }
+  }
+}
+```
+
+Use beats or source seconds inside the shared window. The start of the window
+is also a valid marker. Author the reverse edge when the host can return to
+the first take. Choose points where incoming attacks can sit under any
+outgoing held notes and releases.
+
+Send a normal `music-transition` intent or use an adaptive score rule. The
+engine picks the first compatible point at or after the request arrives.
+Looping passages can wait into the next pass. A one-shot with no remaining
+points logs `no-compatible-switch`. A newer request can cancel or replace
+a pending switch. The switch retains the original sample grid and starts the
+incoming take at the same passage position. It plays incoming attacks from
+that point forward.
+
+Outgoing voices keep their scheduled gates and release envelopes under the
+normal voice budget. The room and tape returns continue, and
+`performers.tracks` can share a tape return between matching desks. Add
+`fadeIn` to soften the incoming take's attacks when desired. Authored cuts
+on the take still apply.
+
+`inspect().pending.switchPoint` reports the planned handoff. The join report
+records the point, arrival and landing frames, and carried voices and effects.
+Use `music live replay` to render a route with matched performance switches.
+
 ## Budgets and prefetch
 
 Background playback can use `maxVoices - reservedVoices` slots. Protected
@@ -283,3 +324,11 @@ In `under-the-eaves/mix/score.wav`, rain strengthens at 1.80 s and the pursuit
 pulse enters at 3.30 s. The listener moves under an overhang at 5.80 s. The rain
 becomes muffled and picks up roof drips while the pulse keeps going. Pursuit
 releases at 9.95 s, then outdoor rain returns as the listener steps out at 11.70 s.
+
+```sh
+node examples/music-production/matched-performances.cjs ./copper-steps
+```
+
+`copper-steps/mix/score.wav` switches from restrained to energetic at 2.00 s
+and back at 6.00 s. Listen for the struck lead and held pad ringing across
+each change. The folder also contains both complete takes for comparison.
