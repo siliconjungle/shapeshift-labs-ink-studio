@@ -1400,6 +1400,7 @@ const CMD = {
         '  pixel-art palette export <document.json> --out palette.json',
         '  pixel-art palette extract <image.png|document.json> --out palette.json [--size 32] [--alpha visible|opaque|all]',
         '  pixel-art palette import <document.json> <palette.json> --out revised.json',
+        '    edit operations: palette swatch, palette remap-indices, or raster replace-swatch in a saved selection',
         '  pixel-art import <image.png> --out document.json   open indexed or RGBA PNG as editable pixels',
         '  pixel-art upgrade <design.json> --out <document.json>   open a legacy drawing as editable cels',
         '  pixel-art validate <design.json>           validate the versioned document and each frame',

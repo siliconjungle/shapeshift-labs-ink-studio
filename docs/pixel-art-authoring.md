@@ -357,6 +357,7 @@ and `cel` because the edit applies to all frames.
 | `remove-ramp` | `id`. Remove a named ramp. |
 | `reorder` | `order`. List every current swatch ID once. Pixels and named ramps follow their IDs. |
 | `remap` | `map: {source: target}` and optional `removeSources: true`. Replace the source IDs simultaneously across slots and marks, including hidden paint. Removing a source also updates ramp references. A ramp must still have at least two distinct swatches. |
+| `remap-indices` | `map: {"0": 2, "2": 0}`. Reassign the referenced indices in all cels using the palette order at the observed revision. Palette definitions, order, and ramps stay intact. |
 | `import` | `palette`. Merge a palette asset by ID. An existing ID with a different RGB or ramp order is a conflict. |
 
 A locked swatch can be named, reordered, painted with, and used as a
@@ -378,6 +379,35 @@ the requested size when needed. Indexed PNG extraction preserves the
 order and distinct indices of swatches that pass the alpha filter.
 `editor.palette()` returns the same portable asset. Ink stamp JSON and
 Ink PNG metadata also carry swatch names, locks, and ramps.
+
+### Choose a recoloring scope
+
+- Change a swatch's RGB with `destination: "palette"` and `type: "swatch"`.
+  Every pixel using that ID takes the new color. Its palette index and
+  assignment stay the same.
+- Replace a swatch only in a saved selection with the raster operation
+  below. Specify a layer and frame, or pass a cel ID on the patch and
+  omit `layer`.
+- Change which palette indices the art uses with `destination: "palette"`
+  and `type: "remap-indices"`. Indices start at zero. The map is applied
+  once to the original indices, so a swap such as `{"0": 2, "2": 0}` works
+  across the document without cascading.
+
+```json
+{
+  "tool": "replace-swatch",
+  "layer": "ink",
+  "selection": "badge",
+  "from": "steel-shadow",
+  "to": "bronze-shadow"
+}
+```
+
+Selection replacement checks the source swatch ID. Same-RGB aliases
+stay distinct. It carries alpha, including zero-alpha pigment, and
+reports the matching runs in preview and receipts. It honors clipping
+and protected pixels. Color locks guard definition changes and global
+remaps. Painting over a locked swatch locally remains available.
 
 ### Symmetry and wraparound
 

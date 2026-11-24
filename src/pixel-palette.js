@@ -115,10 +115,22 @@ const PixelPalette = (() => {
           throw new RangeError('Imported ramp '+ramp.id+' has a different swatch order');
         if (!before) namedRamps.set(ramp.id,ramp);
       }
-    } else if (fields(operation,['type','map','removeSources']) && operation.type === 'remap' &&
-        record(operation.map) && (operation.removeSources === undefined || typeof operation.removeSources === 'boolean')) {
+    } else if (['remap','remap-indices'].includes(operation?.type)) {
+      const byIndex = operation.type === 'remap-indices';
+      if (!fields(operation,byIndex ? ['type','map'] : ['type','map','removeSources']) || !record(operation.map) ||
+          (operation.removeSources !== undefined && typeof operation.removeSources !== 'boolean'))
+        throw new TypeError('Remap needs a map of swatch IDs or zero-based palette indices');
       replacements = new Map();
-      for (const [from,to] of Object.entries(operation.map)) {
+      for (const [key,value] of Object.entries(operation.map)) {
+        let from = key, to = value;
+        if (byIndex) {
+          const index = Number(key);
+          if (!Number.isInteger(index) || String(index) !== key || !swatches[index] ||
+              !Number.isInteger(value) || !swatches[value])
+            throw new RangeError('Remap indices must be zero-based integers in the current palette');
+          from = swatches[index].id;
+          to = swatches[value].id;
+        }
         if (!entries.has(from) || !entries.has(to)) throw new RangeError('Remapping requires existing source and target swatches');
         if (from === to) continue;
         unlocked(entries.get(from));

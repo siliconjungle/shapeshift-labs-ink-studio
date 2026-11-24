@@ -605,6 +605,7 @@ function edit(design, frame, patch, context) {
   }
   if (patch.operation !== undefined) {
     if (patch.operation?.tool === 'rgba') return editRGBA(design,frame,patch,route.destination,context);
+    if (patch.operation?.tool === 'replace-swatch') return replaceSwatch(design,frame,patch,route.destination,context);
     if (['transform','paste'].includes(patch.operation?.tool))
       return editTransform(design,frame,patch,route.destination,context);
     return editRasterTool(design,frame,patch,route.destination,context);
@@ -800,6 +801,33 @@ function editRGBA(design,frame,patch,destination,context) {
   return revised;
 }
 
+function replaceSwatch(design,frame,patch,destination,context) {
+  const { operation } = patch, { selection,from,to } = operation;
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','selection','from','to']) || !name(selection))
+    throw new TypeError('Swatch replacement needs a layer or cel and a saved selection');
+  const slot = frame.swatches.indexOf(from);
+  if (slot < 0 || from === to || !frame.swatches.includes(to))
+    throw new RangeError('Choose two distinct existing swatch IDs');
+  const layer = rasterToolLayer(frame,patch), { width } = frame;
+  const saved = namedSelection(design,selection,frame.id);
+  const source = compile(design,frame.id,patch.cel,layer).layerSources.get(layer);
+  const pixels = [];
+  for (const at of saved.pixels) {
+    const [x,y] = at, p = y*width+x;
+    if (source.slots[p] !== slot) continue;
+    if (frame.locks[p] || source.clipping && !source.clipping[p])
+      throw Preview.conflict(frame.locks[p] ? 'protected-pixel' : 'clipped-pixel',
+        'Swatch replacement cannot change this pixel',{ layer,at });
+    pixels.push(p);
+  }
+  const runs = RasterTools.runs(width,pixels.sort((a,b)=>a-b));
+  const revised = runs.length ? appendRasterMarks(design,frame,layer,[{ swatch:to,runs }],[]) : design;
+  compile(revised,frame.id);
+  context?.onEditTarget?.({ destination:destination.id,kind:'raster',tool:'replace-swatch',frame:frame.id,
+    layer,cel:frame.cels.get(layer) ?? frame.id+'/'+layer,selection,from,to,pixelCount:pixels.length,runs });
+  return revised;
+}
+
 function editTransform(design,frame,patch,destination,context) {
   const { operation } = patch, paste = operation.tool === 'paste';
   const input = paste ? ['clipboard'] : ['selection','mode'];
@@ -914,7 +942,8 @@ function editPalette(design,patch,context) {
   }
   validate(revised);
   context?.onEditTarget?.({ destination:'palette',kind:'palette',tool:operation.type,
-    before,after:palette,...(replacements && { remappedCels,map:Object.fromEntries(replacements),removed }) });
+    before,after:palette,...(replacements && { remappedCels,map:Object.fromEntries(replacements),removed }),
+    ...(operation.type === 'remap-indices' && { indices:operation.map }) });
   return revised;
 }
 

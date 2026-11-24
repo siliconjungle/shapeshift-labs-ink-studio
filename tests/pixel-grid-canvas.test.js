@@ -682,6 +682,29 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(ordered.frames[0].slots,[1,0,1,2,null,0]);
     assert.deepEqual(ordered.ramps[0].swatches,['rgb-112233','accent','brass']);
     assert.deepEqual(ordered.frames[0].alpha,editable.frames[0].alpha);
+    assert.equal(await browser.evaluate("document.querySelector('#swatch-replace').disabled"),true);
+    await evaluate(browser,()=>document.querySelector('#swatch-replace').closest('details').open = true);
+    await chooseSelection('rectangle');
+    const paletteCanvas = await screen(browser,main);
+    await press(place(paletteCanvas,0,0));
+    await mouse('mouseMoved',place(paletteCanvas,1,0),{ button:'left',buttons:1 });
+    await release(place(paletteCanvas,1,0));
+    await change('swatch-replace-target','rgb-112233');
+    await click(browser,'#swatch-replace');
+    const localColor = await download('#export');
+    assert.deepEqual(localColor.palette,ordered.palette);
+    assert.deepEqual(localColor.frames[0].slots,[2,0,1,2,null,0]);
+    assert.deepEqual(localColor.frames[0].alpha,ordered.frames[0].alpha);
+    await click(browser,'#undo');
+
+    await click(browser,'#palette button:nth-child(1)');
+    await change('swatch-remap-target','rgb-112233');
+    await click(browser,'#swatch-remap');
+    const indexRemap = await download('#export');
+    assert.deepEqual(indexRemap.palette,ordered.palette);
+    assert.deepEqual(indexRemap.frames[0].slots,[1,2,1,2,null,2]);
+    await click(browser,'#undo');
+
     await click(browser,'#palette button:nth-child(1)');
     await change('swatch-remap-target','rgb-112233');
     await click(browser,'#swatch-remap-remove');

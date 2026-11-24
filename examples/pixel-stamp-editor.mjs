@@ -183,6 +183,7 @@ function drawSelection() {
   $('transform-duplicate-label').hidden = !transformDraft?.fromSelection;
   $('transform-apply').disabled = !transformDraft?.preview || drawingPointer !== undefined;
   $('canvas-fit-selection').disabled = busy || !active?.pixelCount;
+  $('swatch-replace').disabled = busy || !active?.pixelCount || !$('swatch-replace-target').value;
 }
 
 function refreshSelection() {
@@ -491,15 +492,19 @@ function selectSwatch(index) {
   const locked = lockedSwatches?.includes(id) ?? false;
   $('color').value = color;
   $('color').disabled = locked;
-  $('swatch-label').textContent = `${label ?? state.doc.swatchRoles?.[index] ?? id} · ${color}`;
+  $('swatch-label').textContent = `${label ?? state.doc.swatchRoles?.[index] ?? id} · ${color} · index ${index}`;
   $('swatch-name').value = label ?? '';
   $('swatch-lock').checked = locked;
   $('swatch-earlier').disabled = index === 0;
   $('swatch-later').disabled = index === palette.length-1;
   $('swatch-remap').disabled = locked || palette.length === 1;
-  const target = $('swatch-remap-target'), previous = target.value;
-  target.replaceChildren(...swatchIds.filter(key=>key !== id).map(key=>new Option(swatchTitle(key),key)));
-  if (swatchIds.includes(previous) && previous !== id) target.value = previous;
+  for (const menu of ['swatch-replace-target','swatch-remap-target']) {
+    const target = $(menu), previous = target.value;
+    target.replaceChildren(...swatchIds.flatMap((key,slot)=>key === id ? [] : [
+      new Option(menu === 'swatch-remap-target' ? slot+' · '+swatchTitle(key) : swatchTitle(key),key)
+    ]));
+    if (swatchIds.includes(previous) && previous !== id) target.value = previous;
+  }
   draw();
 }
 
@@ -1380,10 +1385,27 @@ for (const [button,step] of [['swatch-earlier',-1],['swatch-later',1]]) $(button
   [order[p],order[q]] = [order[q],order[p]];
   commitPalette({ type:'reorder',order });
 });
+$('swatch-replace').addEventListener('click',()=>{
+  const active = activeSelection();
+  const { width,height,frames,swatchIds } = state.doc, current = frames[state.frame];
+  const to = swatchIds.indexOf($('swatch-replace-target').value);
+  if (!active?.pixelCount || to < 0 || to === state.swatch) return;
+  const slots = stamp.paint(width,height,current);
+  let changed = 0;
+  for (let p = 0; p < slots.length; p++) {
+    if (!active.mask[p] || slots[p] !== state.swatch) continue;
+    slots[p] = to;
+    changed++;
+  }
+  if (changed) savePixels(current,slots);
+  notify(changed ? `Replaced ${changed} selected pixels` : 'No selected pixels use the active swatch');
+});
 $('swatch-remap').addEventListener('click',()=>{
-  const from = state.doc.swatchIds[state.swatch], to = $('swatch-remap-target').value;
-  if (commitPalette({ type:'remap',map:{ [from]:to },removeSources:$('swatch-remap-remove').checked },to))
-    showPaletteRamp();
+  const { swatchIds } = state.doc, from = swatchIds[state.swatch], to = $('swatch-remap-target').value;
+  const operation = $('swatch-remap-remove').checked
+    ? { type:'remap',map:{ [from]:to },removeSources:true }
+    : { type:'remap-indices',map:{ [state.swatch]:swatchIds.indexOf(to) } };
+  if (commitPalette(operation,to)) showPaletteRamp();
 });
 $('palette-ramp-select').addEventListener('change',showPaletteRamp);
 const rampOrder = ()=>$('palette-ramp-order').value.split(',').map(id=>id.trim()).filter(Boolean);

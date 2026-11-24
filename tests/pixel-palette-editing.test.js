@@ -71,6 +71,65 @@ test('remap rewrites every cel simultaneously, retains authored marks and makes 
   assert.deepEqual(editor.snapshot(),design);
 });
 
+test('definition edits, selection replacement, and index remaps have independent scopes', () => {
+  const paint = structuredClone(design);
+  paint.width = 5;
+  paint.layers = [{ id:'base' },{ id:'ink' }];
+  paint.frames[0].cels.base = { slots:[null,'mid',null,null,null],marks:[] };
+  const cel = paint.frames[0].cels.ink;
+  cel.slots = ['dark','mid','alias','mid','mid'];
+  cel.marks[1] = { alpha:0,runs:[[0,3,1]] };
+  paint.selections = [{ id:'stripe',frame:'front',pixels:[[3,0],[2,0],[1,0]] }];
+
+  const global = ink.createPixelEditor(paint);
+  const recolored = global.apply(patch(global,{ type:'swatch',swatch:{ id:'mid',color:'#335588' } }));
+  assert.deepEqual(recolored.frames,paint.frames);
+  assert.equal(global.sample([1,0],{ mode:'layer',layer:'ink' }).color,'#335588');
+  assert.equal(global.sample([0,0],{ mode:'layer',layer:'ink',frame:'back' }).color,'#335588');
+  assert.equal(global.sample([2,0]).color,'#49606f');
+
+  const local = ink.createPixelEditor(paint);
+  const replace = (editor,operation = {})=>({ id:'replace',cel:'front/ink',revision:editor.describe().revision,
+    operation:{ tool:'replace-swatch',selection:'stripe',from:'mid',to:'glint',...operation } });
+  const preview = local.previewEdit(replace(local));
+  assert.equal(preview.valid,true);
+  assert.equal(preview.targets[0].pixelCount,2);
+  assert.deepEqual(preview.targets[0].runs,[[0,1,1],[0,3,1]]);
+  assert.deepEqual(local.snapshot(),paint);
+
+  const revised = local.apply(replace(local)), sample = x=>local.sample([x,0],{ mode:'layer',layer:'ink' });
+  assert.deepEqual(revised.palette,paint.palette);
+  assert.deepEqual(revised.ramps,paint.ramps);
+  assert.deepEqual(revised.frames[0].cels.base,paint.frames[0].cels.base);
+  assert.deepEqual(revised.frames[1],paint.frames[1]);
+  assert.deepEqual([sample(1).swatch,sample(1).alpha],['glint',7]);
+  assert.deepEqual([sample(3).swatch,sample(3).alpha],['glint',0]);
+  assert.equal(sample(2).swatch,'alias');
+  assert.equal(sample(4).swatch,'mid');
+  assert.deepEqual(ink.createPixelEditor(paint).replay(local.receipts()[0]),revised);
+  assert.equal(local.undo(),true);
+  assert.deepEqual(local.snapshot(),paint);
+
+  const locked = ink.createPixelEditor({ ...paint,palette:{ ...paint.palette,mid:{ color:'#49606f',locked:true } } });
+  assert.equal(locked.previewEdit(replace(locked)).valid,true);
+  assert.equal(locked.previewEdit(patch(locked,{ type:'remap-indices',map:{ 1:2 } })).conflicts[0].code,'locked-swatch');
+  const protectedInk = ink.createPixelEditor({ ...paint,protectedDetails:[{ id:'hold',pixels:[[1,0]] }] });
+  assert.equal(protectedInk.previewEdit(replace(protectedInk)).conflicts[0].code,'protected-pixel');
+  const clipped = ink.createPixelEditor({ ...paint,layers:[{ id:'base' },{ id:'ink',clip:'base' }] });
+  assert.equal(clipped.previewEdit(replace(clipped)).conflicts[0].code,'clipped-pixel');
+  assert.equal(local.previewEdit({ ...replace(local),cel:'back/ink' }).valid,false);
+
+  const indexPatch = patch(local,{ type:'remap-indices',map:{ 1:2,2:1 } });
+  const indexed = local.apply(indexPatch);
+  assert.deepEqual(indexed.palette,paint.palette);
+  assert.deepEqual(indexed.ramps,paint.ramps);
+  assert.equal(indexed.frames[0].cels.base.slots[1],'glint');
+  assert.equal(indexed.frames[1].cels.ink.marks[0].swatch,'glint');
+  assert.deepEqual(local.stamp({ layer:'ink' }).slots,[0,2,3,2,2]);
+  assert.deepEqual(local.receipts().at(-1).affectedTargets[0].indices,{ 1:2,2:1 });
+  assert.equal(local.previewEdit(patch(local,{ type:'remap-indices',map:{ '01':2 } })).valid,false);
+});
+
 test('CLI palette extraction and exchange reuse editable IDs, preserve labels and refuse color conflicts', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-palette-editing-'));
   t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
