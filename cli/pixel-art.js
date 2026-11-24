@@ -1687,13 +1687,19 @@ function trace(frame, object, scene) {
   return design;
 }
 
+const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy',
+  'preview','edit','replay'];
+const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
+  'inspect','sample','select','snap','brush','copy','targets','export'];
+const paletteActions = ['export','extract','import'];
+
 function extractPalette(image,options) {
   return PixelPalette.fromExtraction(PaletteExtract.extract(image,options));
 }
 
 function paletteCommand(pos,opt) {
   const [action,source,input] = pos;
-  if (!['export','extract','import'].includes(action) || pos.length !== (action === 'import' ? 3 : 2) ||
+  if (!paletteActions.includes(action) || pos.length !== (action === 'import' ? 3 : 2) ||
       typeof opt.out !== 'string' || !opt.out.trim())
     throw new TypeError('Use pixel-art palette export <document.json>, extract <image.png|document.json>, or import <document.json> <palette.json> with --out');
   const out = path.resolve(opt.out);
@@ -1726,7 +1732,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
-  if (!['trace','import','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy','preview','edit','replay'].includes(action) ||
+  if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
     throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
@@ -1877,8 +1883,7 @@ function inspectTargets(design,destination,context,limit = 128) {
 function sessionCommand(pos,opt,{ scene,capture }) {
   const [action,directory,input] = pos;
   const argc = ['init','apply','select'].includes(action) ? 3 : 2;
-  if (pos.length !== argc || !['init','status','begin','apply','preview','commit','cancel','undo','redo',
-    'inspect','sample','select','snap','brush','copy','targets','export'].includes(action))
+  if (pos.length !== argc || !sessionActions.includes(action))
     throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, sample, select, snap, brush, copy, targets, or export');
 
   const captureSelection = reference(opt.scene) && capture ? settings=>capture(opt.scene,settings) : undefined;
@@ -1956,4 +1961,5 @@ function sessionCommand(pos,opt,{ scene,capture }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, documentFromPNG, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, command, sessionCommand };
+module.exports = { createEditor, documentFromPNG, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace,
+  command, sessionCommand, actions, sessionActions, paletteActions };

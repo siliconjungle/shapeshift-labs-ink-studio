@@ -1,0 +1,22 @@
+name: Documentation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  public-reference:
+    name: Public reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run docs:check
+      - run: node --test tests/public-reference.test.js tests/graph-catalog.test.js

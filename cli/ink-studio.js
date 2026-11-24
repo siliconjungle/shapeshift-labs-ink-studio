@@ -19,12 +19,13 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' ? ['json'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
     const k = a.slice(2),
       v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) opt[k] = true;
+    if (switches.includes(k) || v === undefined || v.startsWith('--')) opt[k] = true;
     else {
       opt[k] = v;
       i++;
@@ -1176,10 +1177,10 @@ const CMD = {
     process.once('SIGTERM', stop);
   },
   help() {
-    console.log(
-      [
+    const lines = [
         'ink-studio <command> <diorama id | lab/file.js> [options]',
         '',
+        '  help [--json]   list commands and shared options',
         '  paint mix|ramp|table|swatches <file.json> [--out file.json]   mix pigments or bake colors',
         '  hierarchy <graph.json> [--node id] [--parent id|world] [--out file.json]   inspect or reparent live scene nodes',
         '  curve <family.json> [--distance n] [--text INK] [--out file.json]   sample reusable curve families',
@@ -1318,7 +1319,7 @@ const CMD = {
         '  scenes                      list every diorama',
         '  show-bridge [--port 8181] [--osc-in 9002]   open live audio, timecode, stage and projection control',
         '    --dmx-host IP --dmx-protocol artnet|sacn --universe N   configure a physical lighting destination',
-        '  catalog [words]             what the toolkit can do, searchable',
+        '  catalog [words] [--full] [--json] [--all]   search features or the complete public reference',
         '  stats <id>                  splat counts, colours used, size, cost per frame, warnings',
         '  render <id> [--t 1.5]       one PNG rendered on the CPU',
         '  bounce-probes bake <scene> [--bounce-probes settings.json] --out probes.json',
@@ -1575,6 +1576,7 @@ const CMD = {
         '  music reference <plan.json> --part ID --section ID [--out motif.json]   recover an audition idea',
         '  patch help   edit, wire, inspect and run typed audiovisual patches from the CLI',
         '  story validate|describe|preview <file.json> [story-id]   validate or inspect versioned story definitions',
+        '  story help   list story commands',
         '  story describe <file.json> [story-id] --inventory      list role schemas and required interfaces',
         '  story preview <file.json> [story-id] [--format json|text|dot] [--out file] [--strict]   export potential story routes',
         '  story instantiate <template.json|story-pack-bundle> <instance.json> [--template ID]',
@@ -1598,11 +1600,7 @@ const CMD = {
         '  story shots <recording> [--timeline file --story id/name --from-tick N --to-tick N --limit N --out plan.json]',
         '  story shots-review <recording> <plan.json> --out directory [--all --w N --h N]',
         '  sim cast <world|checkpoint|run> --spec casting.json   explain who qualifies for a story role',
-        '  patch show <cues.json> [--rehearse] [--report file]   run a cue-driven patch on a projector',
-        '    --capture-performance directory [--live-score timeline.json --live-route route.json]   capture beat-level workload around a fault',
-        '  patch stress <case.json> [--repeat N] [--out report.json]   replay the captured graph and score workload',
-        '    [--record-interventions journal.ndjson [--intervention-input <recording.json|->]]',
-        '  '+require('./patch-choice-replay.js').usage.replace('ink-studio ',''),
+        ...require('./patch-cli.js').usage.split('\n').map(line => '  ' + line.replace(/^ink-studio /, '')),
         '  graph nodes [--json]   list registered graph operations and their ports',
         '  graph describe <op> [--json | --example]   show schema, units, limits and a runnable example',
         '  graph validate|plan <project.json> [--inputs values.json]   validate and describe a headless graph',
@@ -1737,8 +1735,11 @@ const CMD = {
         'shared rendering: --strict-contract [on|off] --step-animation [on|off]',
         'effect palette options: --effect-palettes on|off|file.json',
         'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|posed|off|file.json --traced-lighting file.json|off --splat-fit file.json|off --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
-      ].join('\n')
-    );
+    ];
+    if (opt.json) {
+      const commands = [...Object.keys(CMD), ...worldCommands].sort();
+      console.log(JSON.stringify({ commands, lines }, null, 2));
+    } else console.log(lines.join('\n'));
   },
   hierarchy() {
     return require('./hierarchy.js')(pos,opt,lib());
@@ -2459,6 +2460,7 @@ const CMD = {
     for (const s of lib().SCENES) console.log(s.id.padEnd(12), s.name.padEnd(20), s.blurb);
   },
   catalog() {
+    if (opt.all) return require('./reference-search.js').print(pos, opt);
     const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog.json'), 'utf8')),
       words = pos.map(s => s.toLowerCase());
     const hit = e =>
@@ -2468,6 +2470,10 @@ const CMD = {
             .includes(w)
         ),
       found = cat.entries.filter(hit);
+    if (opt.json) {
+      console.log(JSON.stringify({ ...cat, entries: found }, null, 2));
+      return;
+    }
     if (found.length === 1 || opt.full)
       for (const e of found)
         console.log(
@@ -4799,7 +4805,8 @@ async function run() {
       console.error('UV asset import unavailable: ' + error.message + '. Using the geometry importer. Pass --uv to require UV import.');
     }
   }
-  await (CMD[cmd] || (() => die('unknown command "' + cmd + '". try: ink-studio help')))();
+  if (!Object.hasOwn(CMD, cmd)) die('unknown command "' + cmd + '". try: ink-studio help');
+  await CMD[cmd]();
   shotReplay?.verify();
 }
 run().catch(error => { console.error(error.message); process.exitCode = 1; });

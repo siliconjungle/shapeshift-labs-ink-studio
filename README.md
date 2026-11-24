@@ -24,6 +24,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Headless world simulation](docs/headless-worlds.md)
 - [Editable starter recipes](examples/starter-recipes/README.md)
 - [Rendering and command reference](#rendering-and-command-reference)
+- [Searchable public reference](docs/reference/index.md)
 - [View-dependent surface materials](#view-dependent-surface-materials)
 - [Projected and procedural effects](#projected-and-procedural-effects)
 - [Reflections, ripples and atmosphere](#reflections-ripples-and-atmosphere)
@@ -802,6 +803,9 @@ S.bake();
 ```
 
 Use `ink-studio catalog <words>` to search catalog entries and follow their `where` fields to the implementation.
+Add `--all` to search the [public reference](docs/reference/index.md), including
+CLI usage, exported APIs, graph operations, and guide headings. Add `--json`
+for structured results.
 
 ## Editable 3D drawing
 
@@ -895,7 +899,7 @@ The CLI and Node `render()` use the CPU renderer. Use the [browser renderer](doc
 | --- | --- |
 | `help` | Print supported commands and options. |
 | `scenes` | List scenes from the default demos or configured collection. |
-| `catalog [words] [--full]` | Search feature names, descriptions and tags. |
+| `catalog [words] [--full] [--json] [--all]` | Search the feature catalog or the full public reference. |
 | `acts` | List action clips, reactions, easing names and cues. |
 | `authoring inspect\|preview\|apply <scene>` | Inspect generated parts, preview JSON edits and save validated snapshots. |
 | `render <scene> --t 1.5` | Render one PNG at a chosen time. |
@@ -1236,6 +1240,12 @@ Other directories:
 - `storage-retention.json`: exact retained inputs and disposable generated outputs.
 
 ## Validation and development
+
+Run `npm run docs:build` after adding or changing a public command, API member,
+graph operation, or guide. `npm run docs:check` regenerates the reference in
+memory and checks it against the committed files. The test suite and the
+documentation workflow run that check. See the
+[reference maintenance guide](docs/reference-maintenance.md) for what it verifies.
 
 ```sh
 npm test

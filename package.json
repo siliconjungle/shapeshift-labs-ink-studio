@@ -30,9 +30,11 @@
   "scripts": {
     "build": "node scripts/build.js",
     "prepare": "node scripts/build.js --quiet",
-    "pretest": "node scripts/build.js node",
+    "pretest": "npm run docs:check && node scripts/build.js node",
     "test": "node --test tests/*.test.js && node cli/ink-studio.js selftest",
     "lint": "node scripts/check.js",
+    "docs:build": "node scripts/reference.js",
+    "docs:check": "node scripts/reference.js --check",
     "format": "prettier --write \"src/**/*.js\" \"cli/*.js\" \"demos/*.js\" \"lab/*.js\" index.js \"scripts/*.js\""
   },
   "license": "MIT",

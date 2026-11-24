@@ -15,7 +15,8 @@ const usage = [
   'ink-studio patch wire <project.json> <source> <destination> [--out new.json]',
   'ink-studio patch bind <project.json> <source> <destination> --id name --from 0,1 --to 0,2',
   'ink-studio patch plan <project.json> [--json | --dot]',
-  'ink-studio patch nodes [--json] | patch describe <operation>',
+  'ink-studio patch nodes [--json]',
+  'ink-studio patch describe <operation> [--json]',
   'ink-studio patch run <project.json> [--video file|-] [--audio file.wav|video] [--watch name=node:port,...]',
   '  [--frames 120] [--fps 12] [--size 320x180] [--controls controls.json] [--out folder] [--keep] [--progress]',
   'ink-studio patch show <cues.json> [--rehearse] [--report rehearsal.json] [--ffmpeg path] [--gpu-module path]',
@@ -167,3 +168,5 @@ async function patchCommand(pos,opt,settings) {
 }
 
 module.exports=patchCommand;
+module.exports.usage=usage;
+module.exports.commandOptions=flags;
