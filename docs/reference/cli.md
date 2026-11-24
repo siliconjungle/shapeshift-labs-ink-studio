@@ -26,6 +26,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   effect-recipe open <id|file.json> [--out example.json]  copy an editable recipe
   effect-recipe render <id|file.json> [--inputs edits.json] [--sample index] --out frame.png  export a recipe frame
   effect-recipe check [id|file.json] [--chrome executable] [--out report.json]  compare WebGL preview with PNG export
+  effect transfers <scene> [--t seconds] [--out report.json]   read material pickup and deposit events
   effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact
   palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size
   palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture
