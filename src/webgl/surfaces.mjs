@@ -15,10 +15,12 @@ const eyeFromView = view => [0, 1, 2].map(
 const semanticSource=`
 uniform highp sampler2DArray u_semanticAtlas;
 uniform bool u_semanticOn,u_semanticLevels,u_semanticNormals,u_semanticOrtho;
+uniform bool u_texelMaterial,u_texelSun;
 uniform int u_semanticMax;
 uniform vec4 u_semanticRect;
 uniform vec3 u_semanticLight,u_semanticEye,u_semanticBack;
 uniform float u_semanticScale,u_semanticStrength,u_semanticSpecular,u_semanticAmbient;
+uniform float u_texelSunIntensity;
 uniform bool u_scanMaterial,u_scanDaylight,u_scanCaptured;
 uniform float u_scanAppearance;
 uniform vec4 u_scanSourceView;
@@ -63,9 +65,11 @@ vec3 semanticFinish(vec3 pigment,vec3 normal,float roughness,float sheen,vec3 em
   vec3 h=u_semanticLight+view;
   h*=inversesqrt(max(dot(h,h),1e-18));
   float gloss=1.-roughness;
-  float shine=dot(normal,view)>0.&&dot(normal,u_semanticLight)>0.?
-    sheen*gloss*pow(max(0.,dot(normal,h)),4.+96.*gloss*gloss):0.;
-  float diffuse=mix(max(0.,dot(normal,u_semanticLight)),1.,u_semanticAmbient);
+  float direct=max(0.,dot(normal,u_semanticLight));
+  float intensity=u_texelSun?u_texelSunIntensity:1.;
+  float shine=dot(normal,view)>0.&&direct>0.?
+    intensity*sheen*gloss*pow(max(0.,dot(normal,h)),4.+96.*gloss*gloss):0.;
+  float diffuse=u_semanticAmbient+(u_texelSun?intensity:1.-u_semanticAmbient)*direct;
   if(u_scanMaterial&&!u_scanDaylight){diffuse=u_semanticAmbient;shine=0.;}
   vec3 lit=clamp(semanticLinear(pigment)*(diffuse+irradiance)+emission+shine+highlight,0.,1.);
   if(captured.a>0.){
@@ -85,9 +89,9 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation,blockColor) {
+      anchors,engraving,semantic,simulation,blockColor,objectTexels) {
       const chart = lighting && !normalMapped;
-      const marks=anchors || engraving, rest=marks||simulation, needsFrame=normalMapped||semantic;
+      const marks=anchors || engraving, rest=marks||simulation||objectTexels, needsFrame=normalMapped||semantic;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -101,7 +105,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation,blockColor
+        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -190,6 +194,12 @@ vec3 surfaceNormal(vec3 normal,vec3 dx,vec3 dy,vec2 du,vec2 dv,vec4 map,bool con
   return normalize(mat3(tangent,bitangent,normal)*local);
 }
 ` : ''}
+${objectTexels ? `
+mat3 texelFrame(vec3 dx,vec3 dy){
+  vec3 right=normalize(dx),normal=normalize(cross(right,dy));
+  return mat3(right,cross(normal,right),normal);
+}
+` : ''}
 void main(){
   if(u_frontOnly&&!gl_FrontFacing)discard;
   ${maskedPart ? 'if(!spriteGeometry(u_geometryCode,gl_FragCoord.xy*u_partGrid))discard;' : ''}
@@ -234,6 +244,7 @@ void main(){
   vec2 scaleUV=u_uvSlip?u_uvTransform.xy:vec2(1);
   vec2 uvDx=dFdx(v_texel)*scaleUV,uvDy=dFdy(v_texel)*scaleUV;
   ` : ''}
+  ${objectTexels?'vec3 texelRestX=dFdx(v_rest),texelRestY=dFdy(v_rest);':''}
   ${simulation?'vec2 simUVx=dFdx(v_simUV),simUVy=dFdy(v_simUV);vec3 simRestX=dFdx(v_rest),simRestY=dFdy(v_rest);':''}
   ${engraving ? 'vec3 restX=dFdx(v_rest),restY=dFdy(v_rest),worldX=dFdx(v_world),worldY=dFdy(v_world);vec2 texX=dFdx(v_texel),texY=dFdy(v_texel);' : ''}
   if(ink.a<.5||dot(u_arrivalPlane,vec4(v_world,1.0))<0.0||dot(u_splatPlane,vec4(v_camera,1.0))<0.0)discard;
@@ -249,13 +260,20 @@ void main(){
   ${semantic?'if(u_semanticOn)map=u_semanticNormals&&u_surfaceNormals?vec4(detail.rgb,1):vec4(0);':''}
   vec3 normal=surfaceNormal(geometricNormal,dpdx,dpdy,uvDx,uvDy,map,${semantic?'u_semanticOn':'false'});
   ` : ''}
+  ${objectTexels ? `
+  if(u_semanticOn&&u_texelMaterial&&u_surfaceNormals){
+    vec3 local=detail.rgb*255.-128.;
+    normal=normalize(texelFrame(dpdx,dpdy)*transpose(texelFrame(texelRestX,texelRestY))*local);
+    if(!gl_FrontFacing)normal=-normal;
+  }
+  ` : ''}
   ${semantic?'float sheen=u_semanticSpecular;':''}
   ${simulation?`
   if(u_semanticOn)simApply(v_simUV,v_rest,geometricNormal,simUVx,simUVy,simRestX,simRestY,dpdx,dpdy,rgb,detail.a,sheen,normal);
   `:''}
   ${semantic ? 'vec3 scanIrradiance=vec3(0),scanHighlight=vec3(0);':''}
   ${normalMapped ? `
-  ${semantic?'if(u_semanticOn&&u_scanMaterial)scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,scanHighlight);else':''}
+  ${semantic?'if(u_semanticOn&&(u_scanMaterial||u_texelMaterial))scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,scanHighlight);else':''}
   rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal))));
   ` : ''}
   ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
@@ -630,7 +648,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
 
     const semanticUnit=5, semanticTextures=new Map(), simulationUnit=11;
     const masks=simulationMasks(gl,resources,simulationUnit);
-    let semanticOwner;
+    let semanticOwner, semanticRanges;
     function bindSemantic(chain){
       gl.activeTexture(gl.TEXTURE0+semanticUnit);
       let texture=semanticTextures.get(chain);
@@ -670,7 +688,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         height = 1,
         paletteSampling,
         surfaceNormals = true, sceneryBlockTextures = true,
-        semanticMipmaps = true, scanFrame, simulationLayers, eye, back=[0,0,1], ortho,
+        semanticMipmaps = true, scanFrame, simulationLayers, eye, back=[0,0,1], ortho, sun,
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
@@ -689,13 +707,15 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       upload(atlas,Boolean(blockReady && planBlocks.complete));
       stats.blockMode=planBlocks ? blockReady ? 'native-bc1' : 'decoded-rgba' : undefined;
       const semantic=atlas.semanticMipmaps;
+      const objectTexels=Boolean(semantic?.some(row=>row.objectTexels));
       const firstSimulation=!index&&!coverageFilter&&semantic?.find(row=>simulationLayers?.get(row.simulation)?.active);
       const simulation=Boolean(firstSimulation);
       masks.start(atlas);
-      if(semanticOwner!==atlas){
+      if(semanticOwner!==atlas || semanticRanges!==semantic){
         for(const texture of semanticTextures.values())resources.free(texture);
         semanticTextures.clear();
         semanticOwner=atlas;
+        semanticRanges=semantic;
       }
       if (paletteSampling !== false && atlas.paletteSampling !== undefined && (!samplingPlan || !samplingGLSL))
         throw new TypeError('Palette-filtered surfaces need SpriteSurface.samplingPlan and samplingGLSL');
@@ -710,7 +730,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       const useSampling = filters.size > 0;
       const lit = Boolean(lighting?.active && !index && !coverageFilter);
-      const normalMapped = lit && Boolean(atlas.normalPixels||simulation||semantic?.some(row=>row.chain.scan));
+      const normalMapped = lit && Boolean(atlas.normalPixels||simulation||objectTexels||semantic?.some(row=>row.chain.scan));
       if (normalMapped) {
         gl.activeTexture(gl.TEXTURE0 + 24);
         gl.bindTexture(gl.TEXTURE_2D, atlas.normalPixels?normalTexture:texture);
@@ -730,10 +750,10 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       const etched=!coverageFilter && !index && engraving && atlas.surfaceCharts?.some(chart=>engraving.mesh(chart)) ? engraving : null;
-      if(etched || anchors || simulation)bindMarks(atlas,anchors,etched,simulation);
+      if(etched || anchors || simulation || objectTexels)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation,!!blockRanges);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -792,7 +812,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         }
       };
       gl.bindVertexArray(vao);
-      for(const [i,on] of [[3,etched||anchors||simulation],[4,etched||anchors],[5,simulation]])
+      for(const [i,on] of [[3,etched||anchors||simulation||objectTexels],[4,etched||anchors],[5,simulation]])
         if(on)gl.enableVertexAttribArray(i);else gl.disableVertexAttribArray(i);
       if (lit && !normalMapped) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);
@@ -835,10 +855,12 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
           if(coverageFilter)shader.set({u_filterSoftness:coverageFilter.at(chart?.materialId)});
           if(mip){
             const {chain,region:r}=mip;
+            const key=mip.objectTexels && sun;
             bindSemantic(chain);
             shader.set({u_semanticOn:true,u_semanticRect:[r.x,r.y,r.width,r.height],u_semanticMax:chain.levels.length-1,
-              u_semanticStrength:chain.emissionStrength,u_semanticLight:chain.rule.light,
-              u_semanticSpecular:chain.rule.specular,u_semanticAmbient:chain.rule.ambient,u_semanticNormals:chain.normal,
+              u_semanticStrength:chain.emissionStrength,u_semanticLight:key?.direction??chain.rule.light,
+              u_semanticSpecular:chain.rule.specular,u_semanticAmbient:key?.ambient??chain.rule.ambient,u_semanticNormals:chain.normal,
+              u_texelMaterial:!!mip.objectTexels,u_texelSun:!!key,u_texelSunIntensity:key?.intensity??1,
               u_scanMaterial:!!chain.scan,u_scanCaptured:chain.captured,u_scanDaylight:scanFrame?.daylight ?? true,
               u_scanAppearance:scanFrame?.appearance ?? 0,
               ...(chain.captured&&{u_scanSourceView:chain.scan.sourceView,u_scanAngles:chain.scan.angles})});

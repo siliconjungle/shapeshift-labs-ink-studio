@@ -1547,7 +1547,8 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         scanFrame:toolkit.KIT?.sceneMeshes?.scanFrame(frame.scanDaylight,frame.scanAppearance),simulationLayers,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
         sceneryBlockTextures:frame.sceneryBlockTextures,
         sceneryDeliveryFrame:reflectionCapture || plane!==zero ? undefined : frame.sceneryDeliveryFrame,
-        sun:spriteRows?.length?spriteLOD.light(world.liveSun,frame.liveSun,t):undefined};
+        sun:spriteRows?.length || meshLayers.some(layer=>layer.semanticMipmaps?.some(row=>row.objectTexels)) ?
+          spriteLOD.light(world.liveSun,frame.liveSun,t) : undefined};
       if(layeredGlass){
         textureUnit(13,null);
         const indices = selection ? glassIndices.filter(i => selection.keep[i]) : glassIndices;

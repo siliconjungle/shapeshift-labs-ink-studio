@@ -18,6 +18,11 @@ function textureAxes([a, b, c], transform) {
   return { right, up };
 }
 
+function triangleAxes([a,b,c]) {
+  const right=unit(sub(b,a)), normal=unit(cross(right,sub(c,a)));
+  return [right,cross(normal,right),normal];
+}
+
 function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
@@ -61,8 +66,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const omitLayer=omit && layer.brickField;
     const lightingMesh=lightingTargets && layer.sceneMeshId;
     const sampleCharts=capture || omitLayer || simulationLayers?.size;
-    const charts=(sampleCharts || lightingMesh || captureFogOwners || multiprojection) && layer.surfaceCharts;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
+    const charts=(sampleCharts || lightingMesh || captureFogOwners || multiprojection ||
+      semantic.some(row=>row.objectTexels)) && layer.surfaceCharts;
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
       const first=offset/5;
@@ -93,7 +99,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           driven?.amounts??null]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step, ...(local && {localProjection:local})})};
       const uvTransform = shifted ? range.transform : [1,1,0,0];
-      const axes = !depthOnly && surfaceNormals && (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);
+      const axes = !depthOnly && surfaceNormals && !mip?.objectTexels &&
+        (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);
+      let restAxes, posedAxes;
+      if (mip?.objectTexels && surfaceNormals) {
+        const at=(first-chart.first)*3;
+        restAxes=triangleAxes(identity.map((_,i)=>Array.from(chart.rest.subarray(at+i*3,at+i*3+3))));
+        posedAxes=triangleAxes(input.map(row=>row.p));
+      }
       const polygon=[];
       for(let i=0;i<3;i++){
         const a=input[i],b=input[(i+1)%3];
@@ -108,7 +121,8 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         const face=(!depthOnly||layer.frontOnly) && cross(sub(b.p,a.p),sub(c.p,a.p));
         if (layer.frontOnly && (local ? area : dot(face,ortho ? [V[2],V[6],V[10]] : sub(eye,a.p)))<=0) continue;
         const normal=!depthOnly && unit(face);
-        if(normal && dot(normal,sub(eye,a.p))<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
+        const facing=mip?.objectTexels && ortho ? [V[2],V[6],V[10]] : sub(eye,a.p);
+        if(normal && dot(normal,facing)<0)for(let k=0;k<3;k++)normal[k]=-normal[k];
         const bitangent = axes && cross(normal, axes.right);
         if (bitangent && dot(bitangent, axes.up)<0) for(let k=0;k<3;k++)bitangent[k]=-bitangent[k];
         const row=[a,b,c], transform=uvTransform;
@@ -180,7 +194,11 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           const position=[0,1,2].map(k=>row.reduce((s,n,i)=>s+n.p[k]*w[i]/sum,0));
           if(clip&&!clip(position) || omitLayer && omit(omitLayer,chart?.materialId,position))continue;
           let mapped;
-          if (bitangent && (material || normalPixels?.[texel+3]>=128)) {
+          if (restAxes) {
+            const weights=restAxes.map(axis=>dot(axis,material.normal));
+            const sign=dot(posedAxes[2],normal)<0 ? -1 : 1;
+            mapped=unit(normal.map((_,k)=>sign*weights.reduce((sum,n,i)=>sum+n*posedAxes[i][k],0)));
+          } else if (bitangent && (material || normalPixels?.[texel+3]>=128)) {
             const local = material?.normal ?? [0,1,2].map(k => Math.max(-127, normalPixels[texel+k]-128));
             if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
               local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
@@ -217,7 +235,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             }
           }
           fragments[p]={p,z,alpha:1,color:material?.color ?? [ink >>> 16, (ink >>> 8) & 255, ink & 255].map(n=>n/255),position,
-            ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,
+            ...(material && {semantic:material,semanticRule:mip.chain.rule,scan:mip.chain.scan,objectTexels:mip.objectTexels,
               semanticView:ortho ? [V[2],V[6],V[10]] : unit(sub(eye,position))}),
             normal:mapped??normal,...(mapped&&{biasNormal:normal}),objectPosition,surface:true,
             ...(local && {localProjection:true}),

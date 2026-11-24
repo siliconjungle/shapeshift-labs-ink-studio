@@ -158,6 +158,40 @@ const SceneMeshes = (() => {
       materials:[{id:'proxy'}]});
   }
 
+  function fromObjectTexels(bake, {id,objectId,partId,materialId=id,emissionStrength=1,
+      lighting={}} = {}) {
+    if (!bake?.cells || !bake.normal || !bake.roughness || !bake.emission)
+      throw new TypeError('Use a relightable object texel bake');
+    const {width,height,rgba,normal,roughness,emission,points,uvs,triangles}=bake;
+    const mipmaps={ambient:.25,specular:.42,...lighting};
+    const mesh=create({id,objectId,partId,positions:points,uvs,indices:triangles,
+      materials:[{id:materialId,texture:{width,height,pixels:rgba},normal,roughness,emission,emissionStrength,mipmaps}]});
+    const data=read(mesh), layer=data.layer;
+    layer.semanticMipmaps=[{ ...layer.semanticMipmaps[0],objectTexels:true }];
+    data.objectTexels={bake,emissionStrength,mipmaps:layer.semanticMipmaps[0].chain.rule};
+    return mesh;
+  }
+
+  function updateObjectTexels(mesh, bake) {
+    const data=read(mesh), binding=data.objectTexels;
+    const previous=binding?.bake;
+    if (!previous || !bake?.normal || !bake.roughness || !bake.emission ||
+        bake.cells!==previous.cells || bake.points!==previous.points ||
+        bake.triangles!==previous.triangles || bake.uvs!==previous.uvs ||
+        bake.width!==previous.width || bake.height!==previous.height)
+      throw new TypeError('Object texel edits must retain the bound cells and geometry');
+    if (previous===bake) return mesh;
+    const {width,height,rgba,normal,roughness,emission}=bake;
+    const {layer}=data, [row]=layer.semanticMipmaps;
+    const chain=Mips.build({width,height,pigment:rgba,normal,roughness,emission,
+      emissionStrength:binding.emissionStrength},binding.mipmaps);
+    Sprite.update(layer,row.region,{w:width,h:height,rgba});
+    layer.normalPixels.set(normal);
+    layer.semanticMipmaps=[{...row,chain}];
+    binding.bake=bake;
+    return mesh;
+  }
+
   function read(mesh) {
     if (!mesh?.[state]) throw new TypeError('Use SceneMeshes.create for indexed scene geometry');
     return mesh[state];
@@ -411,7 +445,7 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
-  return Object.freeze({create,scanFrame:Mips.scanFrame,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+  return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
     simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,rayQuery,projector,sampleProjection,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

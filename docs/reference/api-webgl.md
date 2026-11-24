@@ -8,7 +8,7 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `webgl.bakeObjectTexels` | function | `(mesh, { origin = [0,0,0], resolution = 16, paint, fallback = 0x202020 } = {})` | [source](../../src/object-texels.mjs) |
+| `webgl.bakeObjectTexels` | function | `(mesh, { origin = [0,0,0], resolution = 16, paint, material, fallback = 0x202020 } = {})` | [source](../../src/object-texels.mjs) |
 | `webgl.captureCamera` | function | `(world, frame, width, height)` | [source](../../src/webgl/view.mjs) |
 | `webgl.captureRoomSweep` | function | `(context,stream,{sweep,channels=1,signal,destination=context?.destination}={})` | [guide](../room-impulse-capture.md), [source](../../src/webgl/room-impulse-capture.mjs) |
 | `webgl.compileGaussianMaterials` | function | `(world, materials)` | [guide](../gaussian-materials.md), [source](../../src/webgl/gaussian-materials.mjs) |
@@ -44,6 +44,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `webgl.decodeSceneryPack` | function | `(bytes, { toolkit } = {})` | [source](../../src/scenery-delivery.mjs) |
 | `webgl.default` | function | `(canvas, { toolkit, specialize = true, reuseOrder = true, resolve = 'auto', contextAttributes, input } = {})` | [source](../../src/webgl/renderer.mjs) |
 | `webgl.defineTransition` | function | `({ duration = 1, stages, cues = [] } = {})` | [source](../../src/webgl/transition-timeline.mjs) |
+| `webgl.editObjectTexels` | function | `(bake, edits)` | [source](../../src/object-texels.mjs) |
 | `webgl.encodeGaussianTurntableNormalPNG` | function | `({ width, height, normal })` | [source](../../src/webgl/gaussian-turntable.mjs) |
 | `webgl.encodeGaussianTurntablePNG` | function | `({ width, height, indices, metadata })` | [source](../../src/webgl/gaussian-turntable.mjs) |
 | `webgl.gaussianGltfWorld` | function | `(source, { toolkit, scene, clip, time = 0, maxSplats = maxPoints, decodeImage = browserImage } = {})` | [guide](../gaussian-gltf.md), [source](../../src/gaussian-gltf.mjs) |
