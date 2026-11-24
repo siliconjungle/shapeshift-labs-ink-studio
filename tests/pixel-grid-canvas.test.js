@@ -532,6 +532,54 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'#selection-recall');
     assert.equal(await selected(26,16),false);
     assert.equal(await selected(25,15),true);
+
+    await click(browser,'#selection-clear');
+    await chooseSelection('rectangle');
+    await rectangle(5,32,6,32);
+    const gold = [230,219,182,255];
+    await evaluate(browser,()=>document.querySelector('#transform-begin').closest('details').open = true);
+    const key = async name => {
+      await browser.send('Input.dispatchKeyEvent',{ type:'keyDown',key:name,code:name });
+      await browser.send('Input.dispatchKeyEvent',{ type:'keyUp',key:name,code:name });
+    };
+    await click(browser,'#transform-begin');
+    await key('ArrowRight');
+    assert.deepEqual(await raster(browser,preview,5,32),clear);
+    assert.deepEqual(await raster(browser,preview,7,32),gold);
+    const beforeCommit = await download('#export');
+    assert.notEqual(beforeCommit.frames[0].slots[32*48+5],null);
+    assert.equal(beforeCommit.frames[0].slots[32*48+7],null);
+    await press(cursor(6,32));
+    await move(9,31);
+    await release(cursor(9,31));
+    assert.deepEqual(await raster(browser,preview,10,31),gold);
+    assert.equal(await selected(10,31),true);
+    await key('Enter');
+    assert.equal(await browser.evaluate("document.querySelector('#transform-fields').hidden"),true);
+    assert.deepEqual(await raster(browser,main,10,31),gold);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,main,10,31),clear);
+    assert.equal(await selected(5,32),true);
+
+    await click(browser,'#transform-begin');
+    await change('transform-angle',90,'input');
+    await change('transform-width',3,'input');
+    await change('transform-rotation','pixel-aware','input');
+    assert.deepEqual(await raster(browser,preview,5,34),gold);
+    assert.deepEqual(await raster(browser,preview,6,32),clear);
+    await key('Escape');
+    assert.deepEqual(await raster(browser,preview,5,34),clear);
+    assert.deepEqual(await raster(browser,preview,6,32),gold);
+
+    await click(browser,'#transform-copy');
+    await click(browser,'#transform-paste');
+    await change('transform-x',19,'input');
+    await change('transform-y',25,'input');
+    assert.deepEqual(await raster(browser,preview,5,32),gold);
+    assert.deepEqual(await raster(browser,preview,20,25),gold);
+    await click(browser,'#transform-apply');
+    assert.deepEqual(await raster(browser,main,20,25),gold);
+    assert.equal(await selected(20,25),true);
   });
 });
 

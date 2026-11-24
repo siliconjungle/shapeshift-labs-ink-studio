@@ -172,6 +172,39 @@
             </div>
           </details>
           <details>
+            <summary>Transform pixels</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <div class="row">
+                <button type="button" id="transform-begin" disabled>Transform</button>
+                <button type="button" id="transform-copy" disabled>Copy</button>
+                <button type="button" id="transform-paste" disabled>Paste</button>
+              </div>
+              <div class="guide-controls" id="transform-fields" hidden>
+                <div class="canvas-size">
+                  <label>X<input id="transform-x" type="number" min="-4096" max="4096" step="1"></label>
+                  <label>Y<input id="transform-y" type="number" min="-4096" max="4096" step="1"></label>
+                  <label>Angle (°)<input id="transform-angle" type="number" step="any"></label>
+                  <label>Width<input id="transform-width" type="number" min="1" max="512" step="1"></label>
+                  <label>Height<input id="transform-height" type="number" min="1" max="512" step="1"></label>
+                </div>
+                <div class="row">
+                  <label><input id="transform-flip-x" type="checkbox"> Flip X</label>
+                  <label><input id="transform-flip-y" type="checkbox"> Flip Y</label>
+                  <label id="transform-duplicate-label"><input id="transform-duplicate" type="checkbox"> Leave source</label>
+                </div>
+                <label>Rotation<select id="transform-rotation">
+                  <option value="nearest">Nearest pixel</option>
+                  <option value="pixel-aware">Pixel-aware</option>
+                </select></label>
+                <output id="transform-info" aria-live="polite"></output>
+                <div class="row">
+                  <button type="button" id="transform-apply">Apply transform</button>
+                  <button type="button" id="transform-cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </details>
+          <details>
             <summary>Saved masks</summary>
             <div class="guide-controls" style="margin-top:9px">
               <label>Mask ID<input id="selection-name" type="text" maxlength="64" placeholder="glaze-islands"></label>

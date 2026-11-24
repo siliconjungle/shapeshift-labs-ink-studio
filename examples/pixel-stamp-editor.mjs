@@ -1,13 +1,14 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
-const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections;
+const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
 let brush, brushTip, brushStroke, selection, selectionDraft, shownMasks;
+let clipboard, transformDraft;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -23,7 +24,7 @@ const saveUndo = (selectionOnly = false) => {
 
 function resetStroke() {
   state.points = [];
-  pencilStroke = brushStroke = selectionDraft = undefined;
+  pencilStroke = brushStroke = selectionDraft = transformDraft = undefined;
 }
 
 const selectionId = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
@@ -132,8 +133,8 @@ function selectPixels(query) {
 }
 
 function drawSelection() {
-  const active = activeSelection(), draft = selectionDraft?.preview, displayed = draft ?? active;
-  const busy = drawingPointer !== undefined || !!selectionDraft;
+  const active = activeSelection(), draft = transformDraft?.preview?.selection ?? selectionDraft?.preview;
+  const displayed = draft ?? active, busy = drawingPointer !== undefined || !!selectionDraft || !!transformDraft;
   view.setSelection(displayed?.mask ?? null);
   const type = selectionType(), choosing = state.tool === 'brush-select';
   $('selection-tolerance-label').hidden = !colorSelection(type);
@@ -141,7 +142,7 @@ function drawSelection() {
   $('polygon-selection-actions').hidden = !choosing || type !== 'polygon';
   $('selection-close').disabled = (selectionDraft?.points.length ?? 0) < 3;
   $('selection-cancel').disabled = !selectionDraft;
-  $('selection-clear').disabled = !active && !selectionDraft;
+  $('selection-clear').disabled = (!!transformDraft || !active && !selectionDraft);
   $('selection-count').value = displayed ? `${displayed.pixelCount} pixels selected` : '';
   $('capture-brush').disabled = !active?.pixelCount || busy;
   for (const button of $('selection-modifiers').querySelectorAll('button'))
@@ -157,6 +158,12 @@ function drawSelection() {
   $('selection-save').disabled = !active || busy || !selectionId(id);
   $('selection-save').textContent = rows?.some(row=>row.id === id) ? 'Update mask' : 'Save mask';
   $('selection-recall').disabled = busy || !menu.value;
+  $('transform-begin').disabled = busy || !active?.pixelCount;
+  $('transform-copy').disabled = busy || !active?.pixelCount;
+  $('transform-paste').disabled = busy || !clipboard;
+  $('transform-fields').hidden = !transformDraft;
+  $('transform-duplicate-label').hidden = !transformDraft?.fromSelection;
+  $('transform-apply').disabled = !transformDraft?.preview || drawingPointer !== undefined;
 }
 
 function refreshSelection() {
@@ -267,6 +274,106 @@ function recallSelection() {
   draw();
 }
 
+const indexedPalette = () => state.doc.palette.map((color,i)=>({ id:'slot-'+i,color }));
+
+function copyPixels() {
+  const { width,height } = state.doc, current = state.doc.frames[state.frame];
+  const active = activeSelection();
+  return transforms.capture(width,height,{ slots:stamp.paint(width,height,current),
+    alpha:current.alpha,palette:indexedPalette() },active.mask);
+}
+
+function copyActiveSelection() {
+  const active = activeSelection();
+  if (!active?.pixelCount || transformDraft || selectionDraft || drawingPointer !== undefined) return;
+  clipboard = copyPixels();
+  notify(`Copied ${active.pixelCount} selected pixels`);
+  drawSelection();
+}
+
+function startTransform(fromSelection) {
+  if (transformDraft || drawingPointer !== undefined ||
+      (fromSelection ? !activeSelection()?.pixelCount : !clipboard)) return;
+  const { width,height } = state.doc, clip = fromSelection ? copyPixels() : clipboard;
+  stop();
+  resetStroke();
+  transformDraft = { clip,fromSelection };
+  [$('transform-x').value,$('transform-y').value] = fromSelection ? clip.origin :
+    [Math.min(clip.origin[0],width-1),Math.min(clip.origin[1],height-1)];
+  $('transform-width').value = clip.width;
+  $('transform-height').value = clip.height;
+  $('transform-angle').value = 0;
+  $('transform-flip-x').checked = $('transform-flip-y').checked = $('transform-duplicate').checked = false;
+  updateTransform();
+  art.closest('.ink-grid-viewport').focus({ preventScroll:true });
+}
+
+function repositionTransform(x,y) {
+  const at = [limit(x,-4096,4096),limit(y,-4096,4096)];
+  if (at[0] === $('transform-x').valueAsNumber && at[1] === $('transform-y').valueAsNumber) {
+    drawSelection();
+    return;
+  }
+  [$('transform-x').value,$('transform-y').value] = at;
+  updateTransform();
+}
+
+function updateTransform() {
+  if (!transformDraft) return;
+  const { width,height } = state.doc, frame = state.doc.frames[state.frame];
+  const slots = stamp.paint(width,height,frame), alpha = frame.alpha?.slice() ?? Array(width*height).fill(255);
+  try {
+    const settings = {
+      at:[$('transform-x').valueAsNumber,$('transform-y').valueAsNumber],
+      angle:$('transform-angle').valueAsNumber,size:[$('transform-width').valueAsNumber,$('transform-height').valueAsNumber],
+      flipX:$('transform-flip-x').checked,flipY:$('transform-flip-y').checked,rotation:$('transform-rotation').value
+    };
+    const move = transformDraft.fromSelection && !$('transform-duplicate').checked;
+    const raster = transforms.stage(width,height,{ slots,alpha,palette:indexedPalette() },transformDraft.clip,settings,{ move,limit:48 });
+    for (const [p,pixel] of raster.writes) {
+      slots[p] = pixel.slot < 0 ? null : pixel.slot;
+      alpha[p] = pixel.alpha;
+    }
+    transformDraft.preview = { slots,alpha,palette:raster.palette.map(entry=>entry.color),
+      selection:selectionFromMask(raster.mask) };
+    $('transform-info').value = raster.clippedPixels ? `${raster.clippedPixels} selected pixels outside the canvas` : '';
+  } catch (error) {
+    transformDraft.preview = undefined;
+    $('transform-info').value = error.message;
+  }
+  draw();
+}
+
+function finishTransform() {
+  const preview = transformDraft?.preview;
+  if (!preview || drawingPointer !== undefined) return;
+  const { slots,palette,alpha,selection } = preview;
+  savePixels(state.doc.frames[state.frame],slots,palette,alpha,selection);
+  notify('Applied transform');
+}
+
+function cancelTransform() {
+  if (!transformDraft) return;
+  resetStroke();
+  draw();
+}
+
+function beginTransformDrag(event) {
+  const box = art.getBoundingClientRect(), { width,height } = state.doc;
+  const x = $('transform-x').valueAsNumber, y = $('transform-y').valueAsNumber;
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+  transformDraft.drag = { x,y,clientX:event.clientX,clientY:event.clientY,scaleX:width/box.width,scaleY:height/box.height };
+  art.setPointerCapture(event.pointerId);
+  drawingPointer = event.pointerId;
+  art.closest('.ink-grid-viewport').focus({ preventScroll:true });
+  drawSelection();
+}
+
+function extendTransformDrag(event) {
+  const { x,y,clientX,clientY,scaleX,scaleY } = transformDraft.drag;
+  repositionTransform(x+Math.round((event.clientX-clientX)*scaleX),y+Math.round((event.clientY-clientY)*scaleY));
+}
+
 function frameSlots(current) {
   const { width,height } = state.doc;
   const slotData = stamp.paint(width,height,current), selected = activeSelection()?.mask;
@@ -296,8 +403,10 @@ function frameSlots(current) {
 function draw() {
   const { width,height } = state.doc;
   const current = state.doc.frames[state.frame];
-  let palette = state.doc.palette, slots = frameSlots(current), alpha = current.alpha;
-  if (state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
+  const preview = transformDraft?.preview;
+  let palette = preview?.palette ?? state.doc.palette, slots = preview?.slots ?? frameSlots(current);
+  let alpha = preview?.alpha ?? current.alpha;
+  if (!transformDraft && state.tool === 'brush-stamp' && brush && (brushStroke || state.points.length)) {
     try { ({ palette,slots,alpha } = applyBrush(slots,alpha)); }
     catch (error) { notify(error.message); }
   }
@@ -367,6 +476,7 @@ function stop() {
 function edit(callback) {
   stop();
   saveUndo();
+  transformDraft = undefined;
   callback();
   update();
 }
@@ -382,13 +492,14 @@ function commitStroke() {
   savePixels(current,slots);
 }
 
-function savePixels(current,slots,palette = state.doc.palette,alpha = current.alpha) {
+function savePixels(current,slots,palette = state.doc.palette,alpha = current.alpha,nextSelection = selection) {
   edit(() => {
     const { rows,strokes,alpha:previousAlpha,...frame } = current;
     const keepAlpha = alpha?.some((value,p)=>value !== 255 && slots[p] !== null);
     state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12),
       ...(keepAlpha && { alpha:alpha.map((value,p)=>slots[p] === null ? 255 : value) }) };
     state.doc.palette = palette;
+    selection = nextSelection;
     resetStroke();
   });
 }
@@ -843,6 +954,10 @@ function extendDynamicBrush(event) {
 art.parentElement.addEventListener('pointerdown',event => {
   if (event.button !== 0 || drawingPointer !== undefined) return;
   const central = event.target === art;
+  if (transformDraft) {
+    if (central) beginTransformDrag(event);
+    return;
+  }
   if (!central && (!grid || state.tool === 'brush-select' || !event.target.matches('.ink-grid-repeats canvas'))) return;
   const snap = state.tool !== 'eyedropper' && !(state.tool === 'brush-select' && pointSelection(selectionType()));
   const at = central ? view.pixelAt(event.clientX,event.clientY,{ snap }) : strokeAt(event);
@@ -867,6 +982,7 @@ art.parentElement.addEventListener('pointerdown',event => {
 });
 art.addEventListener('pointermove',event => {
   if (drawingPointer !== event.pointerId) return;
+  if (transformDraft?.drag) { extendTransformDrag(event); return; }
   if (selectionDraft) {
     if (extendSelection(event)) drawSelection();
     return;
@@ -891,7 +1007,10 @@ art.addEventListener('pointerup',event => {
   if (drawingPointer !== event.pointerId) return;
   if (pencilStroke) extendPencil(event);
   drawingPointer = undefined;
-  if (selectionDraft) {
+  if (transformDraft?.drag) {
+    extendTransformDrag(event);
+    delete transformDraft.drag;
+  } else if (selectionDraft) {
     extendSelection(event);
     finishSelection();
   } else if (brushStroke) {
@@ -920,6 +1039,30 @@ art.addEventListener('lostpointercapture',event => {
   resetStroke();
   draw();
 });
+$('transform-begin').addEventListener('click',()=>startTransform(true));
+$('transform-copy').addEventListener('click',copyActiveSelection);
+$('transform-paste').addEventListener('click',()=>startTransform(false));
+$('transform-fields').addEventListener('input',updateTransform);
+$('transform-apply').addEventListener('click',finishTransform);
+$('transform-cancel').addEventListener('click',cancelTransform);
+const nudges = { ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1] };
+art.closest('.ink-grid-viewport').addEventListener('keydown',event => {
+  const key = event.key.toLowerCase();
+  const clipboardKey = (event.ctrlKey || event.metaKey) && (key === 'c' || key === 'v');
+  const nudge = nudges[event.key];
+  if (!clipboardKey && !(transformDraft && (nudge || key === 'enter' || key === 'escape'))) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (clipboardKey) {
+    if (key === 'c') copyActiveSelection();
+    else startTransform(false);
+  } else if (key === 'enter') finishTransform();
+  else if (key === 'escape') cancelTransform();
+  else {
+    const x = $('transform-x').valueAsNumber, y = $('transform-y').valueAsNumber;
+    if (Number.isInteger(x) && Number.isInteger(y)) repositionTransform(x+nudge[0],y+nudge[1]);
+  }
+},{ capture:true });
 $('selection-type').addEventListener('change',() => chooseTool('brush-select'));
 $('selection-mode').addEventListener('change',() => {
   if (selectionDraft) { refreshSelection(); drawSelection(); }

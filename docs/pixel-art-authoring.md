@@ -438,6 +438,52 @@ saves its resolved pixels without changing the artwork. Exports from
 `pixel-art draw` or `pixels.stamp()` carry the frame's saved masks in
 stamp JSON for recall in the Workshop.
 
+### Transform and paste selections
+
+A raster edit can transform the pixels of a saved selection on a layer or
+cel. The move mode clears the original pixels and places the result as
+one edit. Use `"mode":"copy"` to leave the source in place. Set an optional
+`resultSelection` ID to save the transformed mask in the same edit.
+
+```json
+{
+  "tool": "transform",
+  "layer": "ink",
+  "selection": "badge",
+  "mode": "move",
+  "transform": { "offset": [1, -2], "flipX": true, "angle": 90 },
+  "resultSelection": "badge-moved"
+}
+```
+
+Use `offset` to nudge relative to the source bounding box, or `at` for the
+top-left of the transformed bounds. Placement stays on integer coordinates.
+Set `size: [width, height]` to scale to whole pixels before rotation.
+`flipX` and `flipY` mirror the selection before a clockwise `angle` in
+degrees. Quarter turns place exact texels. For angled turns, choose
+`rotation: "nearest"` or `"pixel-aware"`. The latter uses Scale2x-style
+neighbor rules to help diagonals and corners hold together without
+blending the palette.
+
+Blank selected cells and holes in the mask leave the underlying destination
+alone. The transform carries swatches, alpha, and explicit knockout marks.
+The canvas clips the floated footprint. Preview reports its bounds,
+changed runs, clipped pixel count, and saved result mask if requested.
+Protected pixels and the target layer's clipping mask still guard writes.
+
+Use `pixels.copySelection({ selection, layer, frame })` or the CLI to
+export the indexed clipboard. You can use `cel` in place of `layer`.
+
+```sh
+node cli/ink-studio.js pixel-art copy document.json --selection badge --layer ink > badge-clip.json
+```
+
+Paste by embedding the clipboard JSON in `operation.clipboard` with
+`tool: "paste"`, a target layer or cel, and optional transform and result
+selection. Paste maps colors into the destination palette, adding any
+missing swatches. Preview, edit, replay and persistent sessions use
+the same placement.
+
 ## Author a drawing
 
 ```json

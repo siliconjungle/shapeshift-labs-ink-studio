@@ -9,6 +9,7 @@ const PixelGuides = require('../src/pixel-guides.js');
 const RasterTools = require('../src/pixel-paint-tools.js');
 const PixelBrushes = require('../src/pixel-brushes.js');
 const PixelSelections = require('../src/pixel-selections.js');
+const PixelTransforms = require('../src/pixel-selection-transforms.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
@@ -443,6 +444,20 @@ function namedSelection(design,id,frame) {
   return saved;
 }
 
+function copySelection(design,{ selection,frame,layer,cel } = {}) {
+  if ((layer === undefined) === (cel === undefined))
+    throw new TypeError('Copy needs a source layer or cel');
+  documentShape(design);
+  const saved = namedSelection(design,selection,frame);
+  const compiled = compile(design,frame ?? saved.frame,cel,layer ?? true);
+  const target = layer ?? [...compiled.cels].find(([,id])=>id === cel)?.[0];
+  const source = compiled.layerSources.get(target);
+  if (!source) throw new RangeError('Unknown pixel layer ' + target);
+  const { width,height } = compiled;
+  const mask = PixelSelections.fromPixels(width,height,saved.pixels);
+  return PixelTransforms.capture(width,height,{ ...source,palette:paletteEntries(design.palette,design.version) },mask);
+}
+
 function captureBrush(design,{ selection,pixels,rect,frame,layer,cel,anchor,settings } = {}) {
   documentShape(design);
   if ([selection,pixels,rect].filter(value=>value !== undefined).length !== 1 ||
@@ -568,7 +583,11 @@ function edit(design, frame, patch, context) {
     if (!context) throw new TypeError('Scene edit needs a scene context');
     return Destinations.apply(frame,patch,route,context,readPixelEdits);
   }
-  if (patch.operation !== undefined) return editRasterTool(design,frame,patch,route.destination,context);
+  if (patch.operation !== undefined) {
+    if (['transform','paste'].includes(patch.operation?.tool))
+      return editTransform(design,frame,patch,route.destination,context);
+    return editRasterTool(design,frame,patch,route.destination,context);
+  }
   if (patch.cel === undefined && frame.layerIds.includes(patch.id))
     throw new TypeError('A raster edit needs a new layer ID and pixel edits');
   if (patch.cel !== undefined) {
@@ -599,6 +618,15 @@ function edit(design, frame, patch, context) {
   return revised;
 }
 
+function rasterToolLayer(frame,patch) {
+  const { layer } = patch.operation;
+  const target = patch.cel === undefined ? layer : frame.cels &&
+    [...frame.cels].find(([,id])=>id === patch.cel)?.[0];
+  if (typeof target !== 'string' || !frame.layerIds.includes(target) || patch.cel !== undefined && layer !== undefined)
+    throw new TypeError('Choose an existing raster layer or cel for the paint tool');
+  return target;
+}
+
 function editRasterTool(design,frame,patch,destination,context) {
   const { operation } = patch;
   if (patch.edits !== undefined || !fields(operation,['tool','layer','at','points','samples','swatch','pixelPerfect','shape','brush','shading','drawing','selection']))
@@ -609,11 +637,7 @@ function editRasterTool(design,frame,patch,destination,context) {
     throw new TypeError('Pixel-perfect cleanup is a boolean pencil option');
   const { width,height } = frame;
   const grid = drawing === undefined ? undefined : RasterTools.drawingGrid(width,height,drawing);
-  const layer = patch.cel === undefined ? operation.layer : frame.cels &&
-    [...frame.cels].find(([,id]) => id === patch.cel)?.[0];
-  if (typeof layer !== 'string' || !frame.layerIds.includes(layer) ||
-      (patch.cel !== undefined && operation.layer !== undefined))
-    throw new TypeError('Choose an existing raster layer or cel for the paint tool');
+  const layer = rasterToolLayer(frame,patch);
   const slot = erase ? -1 : frame.swatches.indexOf(swatch);
   if (!['pencil','eraser','fill','shape','brush'].includes(tool) ||
       (erase ? swatch !== undefined : (!brushing || swatch !== undefined) && slot < 0))
@@ -684,16 +708,71 @@ function editRasterTool(design,frame,patch,destination,context) {
     ...(added.length && { addedSwatches:added.map(entry=>entry.id) }), pixelCount:changed.length,runs });
   if (!runs.length) return design;
   const marks = brushing ? brushMarks : [erase ? { clear:true,runs } : { swatch,runs }];
+  const revised = appendRasterMarks(design,frame,layer,marks,added);
+  compile(revised,frame.id);
+  return revised;
+}
+
+function appendRasterMarks(design,frame,layer,marks,added) {
+  if (!marks.length) return design;
   const base = added.length ? { ...design,palette:{ ...design.palette,
     ...Object.fromEntries(added.map(entry=>[entry.id,entry.color])) } } : design;
-  const revised = frame.id === undefined
-    ? { ...base, layers:base.layers.map(item => item.id === layer ? { ...item, marks:[...item.marks,...marks] } : item) }
-    : { ...base, frames:base.frames.map(item => {
+  return frame.id === undefined
+    ? { ...base,layers:base.layers.map(item=>item.id === layer ? { ...item,marks:[...item.marks,...marks] } : item) }
+    : { ...base,frames:base.frames.map(item=>{
       if (item.id !== frame.id) return item;
       const source = item.cels[layer];
-      return { ...item, cels:{ ...item.cels, [layer]:{ ...source, marks:[...(source?.marks ?? []),...marks] } } };
+      return { ...item,cels:{ ...item.cels,[layer]:{ ...source,marks:[...(source?.marks ?? []),...marks] } } };
     }) };
+}
+
+function editTransform(design,frame,patch,destination,context) {
+  const { operation } = patch, paste = operation.tool === 'paste';
+  const input = paste ? ['clipboard'] : ['selection','mode'];
+  if (patch.edits !== undefined || !fields(operation,['tool','layer','transform','resultSelection',...input]))
+    throw new TypeError('A transform needs a named selection or an indexed clipboard to paste');
+  const { tool,selection,resultSelection,mode = 'move',transform,clipboard } = operation;
+  if ((!paste && !['move','copy'].includes(mode)) ||
+      (resultSelection !== undefined && (design.version !== 2 || !name(resultSelection))))
+    throw new TypeError('Use move or copy and an optional result selection ID in a version 2 document');
+  const { width,height } = frame, layer = rasterToolLayer(frame,patch);
+  const source = compile(design,frame.id,patch.cel,layer).layerSources.get(layer);
+  const palette = paletteEntries(design.palette,design.version), current = { ...source,palette };
+  const clip = paste ? clipboard : PixelTransforms.capture(width,height,current,
+    PixelSelections.fromPixels(width,height,namedSelection(design,selection,frame.id).pixels));
+  const result = PixelTransforms.stage(width,height,current,clip,transform,{ move:!paste && mode === 'move',named:true });
+  const changed = [...result.writes.keys()].sort((a,b)=>a-b), bySlot = new Map(), byAlpha = new Map();
+  function group(groups,key,p) {
+    if (!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(p);
+  }
+  for (const p of changed) {
+    const { slot,alpha } = result.writes.get(p), previous = source.slots[p];
+    if (frame.locks[p] || source.clipping && !source.clipping[p])
+      throw Preview.conflict(frame.locks[p] ? 'protected-pixel' : 'clipped-pixel','Transform cannot change this pixel',
+        { layer,at:[p%width,Math.floor(p/width)] });
+    if (previous !== slot) group(bySlot,slot,p);
+    if (slot >= 0 && alpha !== (previous < 0 ? 255 : source.alpha?.[p] ?? 255)) group(byAlpha,alpha,p);
+  }
+  const marks = [...bySlot].map(([slot,indices])=>({
+    ...(slot === -1 ? { clear:true } : { swatch:slot < 0 ? null : result.palette[slot].id }),
+    runs:RasterTools.runs(width,indices)
+  }));
+  for (const [alpha,indices] of byAlpha) marks.push({ alpha,runs:RasterTools.runs(width,indices) });
+  const added = result.palette.slice(palette.length);
+  let revised = appendRasterMarks(design,frame,layer,marks,added);
+  let selectionRuns;
+  if (resultSelection !== undefined) {
+    const pixels = PixelSelections.pixels(width,result.mask);
+    selectionRuns = RasterTools.runs(width,pixels.map(([x,y])=>y*width+x));
+    revised = saveNamedSelection(revised,{ id:resultSelection,frame:frame.id,pixels });
+  }
   compile(revised,frame.id);
+  context?.onEditTarget?.({ destination:destination.id,kind:'raster',tool,frame:frame.id ?? null,layer,
+    cel:frame.cels?.get(layer) ?? (frame.id ? frame.id+'/'+layer : null),
+    ...(!paste && { selection,mode }),...(resultSelection !== undefined && { resultSelection,selectionRuns }),
+    bounds:result.bounds,clippedPixels:result.clippedPixels,pixelCount:changed.length,
+    runs:RasterTools.runs(width,changed),...(added.length && { addedSwatches:added.map(entry=>entry.id) }) });
   return revised;
 }
 
@@ -736,6 +815,14 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
     marks:[...bySwatch].map(([swatch,pixels])=>({ swatch,runs:RasterTools.runs(width,pixels) })) };
 }
 
+function saveNamedSelection(design,row) {
+  const selections = [...(design.selections ?? [])];
+  const index = selections.findIndex(saved=>saved.id === row.id);
+  if (index < 0) selections.push(row);
+  else selections[index] = row;
+  return { ...design,selections };
+}
+
 function editSelection(design,frame,patch,context) {
   const { operation } = patch;
   if (patch.edits !== undefined || patch.cel !== undefined ||
@@ -747,14 +834,10 @@ function editSelection(design,frame,patch,context) {
   if (operation.sources !== undefined && !equal(operation.sources,sources ?? []))
     throw Preview.conflict('stale-source','Selection sources differ from the inspected sources',
       { expected:operation.sources,actual:sources ?? [] });
-  const row = { id,frame:frame.id,pixels }, selections = [...(design.selections ?? [])];
-  const index = selections.findIndex(saved=>saved.id === id);
-  if (index < 0) selections.push(row);
-  else selections[index] = row;
   const runs = RasterTools.runs(frame.width,pixels.map(([x,y])=>y*frame.width+x));
   context?.onEditTarget?.({ destination:'selections',kind:'selections',selection:id,frame:frame.id,
     tool:query.type,pixelCount:pixels.length,runs,...(sources && { sources }) });
-  return { ...design,selections };
+  return saveNamedSelection(design,{ id,frame:frame.id,pixels });
 }
 
 function editGuides(design,patch) {
@@ -1133,6 +1216,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
+    copySelection: options => copySelection(state().design,options),
     select: (query,options) => selectPixels(state().design,query,options,editContext(options,false)),
     snap: (coordinate,{ frame,radius } = {}) => snapPoint(compile(state().design,frame),coordinate,radius),
     stamp: ({ frame,cel } = {}) => stamp(compile(state().design,frame,cel)),
@@ -1347,9 +1431,9 @@ function trace(frame, object, scene) {
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
-  if (!['trace','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','preview','edit','replay'].includes(action) ||
+  if (!['trace','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy','preview','edit','replay'].includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, canvas, inspect, sample, select, snap, brush, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, canvas, inspect, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -1360,6 +1444,11 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const design = read(source);
+  if (action === 'copy') {
+    const { selection,frame,layer,cel } = opt;
+    process.stdout.write(JSON.stringify(copySelection(design,{ selection,frame,layer,cel }),null,2)+'\n');
+    return;
+  }
   if (action === 'brush') {
     process.stdout.write(JSON.stringify(writeBrush(design,opt,path.resolve(source)),null,2)+'\n');
     return;
@@ -1487,8 +1576,8 @@ function sessionCommand(pos,opt,{ scene,capture }) {
   const [action,directory,input] = pos;
   const argc = ['init','apply','select'].includes(action) ? 3 : 2;
   if (pos.length !== argc || !['init','status','begin','apply','preview','commit','cancel','undo','redo',
-    'inspect','sample','select','snap','brush','targets','export'].includes(action))
-    throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, sample, select, snap, brush, targets, or export');
+    'inspect','sample','select','snap','brush','copy','targets','export'].includes(action))
+    throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, sample, select, snap, brush, copy, targets, or export');
 
   const captureSelection = reference(opt.scene) && capture ? settings=>capture(opt.scene,settings) : undefined;
   let editor, result;
@@ -1529,6 +1618,9 @@ function sessionCommand(pos,opt,{ scene,capture }) {
     } else if (action === 'select') {
       const { frame,layer,cel } = opt;
       result = editor.select(read(input),{ frame,layer,cel,captureSelection });
+    } else if (action === 'copy') {
+      const { selection,frame,layer,cel } = opt;
+      result = editor.copySelection({ selection,frame,layer,cel });
     } else if (action === 'brush') {
       result = writeBrush(editor.snapshot(),opt,path.resolve(directory));
     } else if (action === 'snap') {

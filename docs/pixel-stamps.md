@@ -87,6 +87,17 @@ and both directions of a repeating texture.
 The Workshop saves one native tile and retains the drawing settings in the
 stamp JSON. [Symmetry and wraparound in document edits](pixel-art-authoring.md#symmetry-and-wraparound)
 
+Use **Transform pixels** to float the selected pixels. Drag on the
+canvas or use arrow keys for one-pixel nudges. The fields set integer
+position and size, flips, angle, and the rotation sampler. Watch both
+canvases as you edit. **Leave source** turns a move into a copy. Press
+Enter or **Apply transform** to commit, or Escape to cancel.
+
+**Copy** and **Paste** use the Workshop clipboard across frames or stamps
+opened in the same Workshop tab. The viewport also accepts Ctrl/Cmd+C and
+Ctrl/Cmd+V. Pasting starts an editable preview. A single undo restores
+the paint and selection. [Document transform and clipboard syntax](pixel-art-authoring.md#transform-and-paste-selections)
+
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
 or focus the canvas and use the arrow keys to move it. The grid appears at
