@@ -269,6 +269,38 @@
       point:vector=>V.mad(translatedPivot,direction(V.sub(vector,pivot)),scale),
       inverse:vector=>V.mad(pivot,inverseDirection(V.sub(vector,translatedPivot)),1/scale) };
   }
+  function surfaceBakeSources(solids, frame, margin) {
+    const { V } = K, sources = [];
+    function visit(solid, key, spatial) {
+      const space = spatial && solidSpace(solid, frame);
+      const modifiers = activeModifiers(solid);
+      for (const [order, [id, chart]] of Object.entries(solid.surfaceState?.charts ?? {}).entries()) {
+        const { origin, u, v, depth = .035 } = chart;
+        let bounds;
+        if (spatial && !modifiers.length) {
+          const normal = V.norm(V.cross(u, v));
+          const corners = [-1e-6, 1 + 1e-6].flatMap(a => [-1e-6, 1 + 1e-6].flatMap(b =>
+            [-depth, depth].map(d => {
+              const point = V.mad(V.mad(V.mad(origin, u, a), v, b), normal, d);
+              return space ? space.point(point) : point;
+            })));
+          const axes = [0, 1, 2].map(axis => corners.map(point => point[axis]));
+          bounds = { min: axes.map(values => Math.min(...values) - margin),
+            max: axes.map(values => Math.max(...values) + margin) };
+        }
+        sources.push({ key: JSON.stringify([...key, id]), bounds,
+          definition: [order, chart, solid.surfaceState.masks, solid.transform] });
+      }
+      // Nested operands can be sampled through a nonlinear inverse. Their
+      // authored projection box is only valid before the parent operation.
+      const operands = [['a', solid.a], ['b', solid.b], ['of', solid.of],
+        ...modifiers.map((modifier, index) => ['modifier-' + index, modifier.shape])];
+      for (const [name, value] of operands) if (value && typeof value === 'object' && !Array.isArray(value))
+        visit(value, [...key, name], false);
+    }
+    for (const [index, solid] of solids.entries()) visit(solid, [solid.id ?? index], true);
+    return sources;
+  }
   DIO.surfaceChart = (solid,frame) => {
     const project = K.procedural.surfaceState.projection(solid.surfaceState,{coordinatesOnly:true}), space = solidSpace(solid,frame);
     if (!space) return project;
@@ -1745,13 +1777,16 @@
         const mesh = K.model.fromSculpt(S, {
           name: name ?? spec.id, palette: pal, resolution: detail, method, bounds: restBounds, targetTriangles
         });
-        if (name === null) meshes.push(...K.model.mapModelMeshes(mesh, part => ({ ...part, static: true })));
+        const surfaceSources = surfaceBakeSources(groups.get(name), B.frame, detail);
+        if (name === null) meshes.push(...K.model.mapModelMeshes(mesh, part => ({ ...part, surfaceSources, static: true })));
         else {
           const index = joints.length, box = previewRig.box(name);
           joint[name] = parts[name]?.joint || (box ? [(box.lo[0] + box.hi[0]) * 0.5, box.lo[1], (box.lo[2] + box.hi[2]) * 0.5] : mesh.points[0]);
           joints.push({ name, parent: parts[name]?.parent ? names.indexOf(parts[name].parent) : null,
             head: joint[name], tail: V.mad(joint[name], [0, 1, 0], box ? Math.max(0.05, box.hi[1] - box.lo[1]) : 0.1) });
-          meshes.push(...K.model.mapModelMeshes(mesh, part => ({ ...part, weights: part.points.map(() => [[index, 1]]) })));
+          meshes.push(...K.model.mapModelMeshes(mesh, part => ({
+            ...part, surfaceSources, weights: part.points.map(() => [[index, 1]])
+          })));
         }
       }
       const pose = names.length && (motion.length || timeline?.targets.some(path => path[0] === 'poses')) &&

@@ -3,6 +3,7 @@ const path = require('node:path');
 const files = require('./asset-files.js');
 const projection = require('./material-projection.js');
 const charts = require('./material-chart-rebake.js');
+const {writeMips} = require('./registered-material-mips.js');
 
 function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
   if ([bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits].every(value=>value===undefined)) return null;
@@ -56,9 +57,10 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
       reused:state.charts.filter(chart=>!dirty.has(chart.id)).map(chart=>chart.id),
       sampledTexels:baked.sampledTexels
     };
+    const mipmaps=writeMips(baked,size,dirty,source?.row.mipmaps,baseline?.read,map,sidecar);
     const row={index,name:mesh.name,geometry:projection.geometryHash(mesh.points,faces),
       uvLayout:projection.digest(JSON.stringify([faces,uvs])),texCoord:0,width:size,height:size,padding,
-      coverage,emissionStrength:strength,maps,masks,paintViews:[...paintReceipts.values()],
+      coverage,emissionStrength:strength,maps,masks,mipmaps,paintViews:[...paintReceipts.values()],
       charts:state.charts.map(({id,faces,bounds})=>({id,faces,bounds})),
       chartLayout:sidecar('chart-layout','json',Buffer.from(JSON.stringify(state))),
       rebakeState:{owners:sidecar('chart-owners','deflate',previous?.packedOwners??charts.pack(baked.owners)),
@@ -71,7 +73,9 @@ function prepare({bakeDir,paintViews,capturePaint,rebakeFrom,chartEdits}) {
       output.set('paint-views/'+id+'-paint.png',blank);
       captures.push({id,...view,paint:id+'-paint.png'});
     }
-    return {index,width:size,height:size,uvLayout:row.uvLayout,chartReport,paintViews:row.paintViews.map(({id,texels})=>({id,texels}))};
+    return {index,width:size,height:size,uvLayout:row.uvLayout,chartReport,
+      mipmaps:mipmaps.levels.map(({level,width,height,filteredTexels})=>({level,width,height,filteredTexels})),
+      paintViews:row.paintViews.map(({id,texels})=>({id,texels}))};
   }
 
   function write(glb) {

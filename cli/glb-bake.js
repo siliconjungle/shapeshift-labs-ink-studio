@@ -36,7 +36,7 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     base: new Uint8Array(count * 3), normal: new Uint8Array(count * 3),
     surface: new Uint8Array(count * 3), emission: new Uint8Array(count * 3)
   };
-  const alpha = previous?.opacity ?? (mesh.paintedOpacity && new Uint8Array(count).fill(255));
+  const alpha = mesh.paintedOpacity && (previous?.opacity ?? new Uint8Array(count).fill(255));
   const names = mesh.maskNames ?? [];
   if (registered && (!Array.isArray(names) || !Array.from(names).every(idOK)))
     throw new TypeError('Material mask names must be lowercase IDs');
@@ -194,7 +194,8 @@ function bake(mesh, faces, uvs, normals, size, padding, { V }, { registered = fa
     masks:Object.fromEntries(Array.from(masks,([name,data])=>[name,png.encodeGray(size,size,data)]))
   };
   const coverage = previous ? footprint.reduce((n,value)=>n+Number(value!==0),0)/count : used/count;
-  return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used };
+  const raster = registered && {pixels,opacity:alpha,footprint,masks,owners};
+  return { textures, strength, coverage, registeredMaps, owners, stamp, translucent, sampledTexels:used, raster };
 }
 
 module.exports = bake;

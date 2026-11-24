@@ -1765,6 +1765,9 @@ pigment sample returns its swatch and color. A roughness, emission,
 normal, or opacity override returns its value and coverage, or `null`
 where the base material is in use. Unpainted named masks return zero.
 For texture and glTF export, see [Registered material baking](registered-material-bake.md).
+Pass the saved edited scene to `export-glb --rebake-from` with the previous
+registered bake's manifest. Ink updates the receiving atlas charts and
+their mip texels while keeping neighboring chart paint and UVs in place.
 
 ## Paint lighting and ink controls
 

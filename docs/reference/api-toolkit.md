@@ -334,6 +334,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.ScreenPrint` | alias | `Alias of KIT.engraving.print` |  |
 | `toolkit.SemanticTextureMipmaps` | namespace |  |  |
 | `toolkit.SemanticTextureMipmaps.build` | function | `({width,height,pigment,normal,roughness=.65,emission,emissionStrength=1,indices,palette,scan}, config=true)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
+| `toolkit.SemanticTextureMipmaps.filterNormal` | function | `(mean, roughnessSquared, variance = 1)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
+| `toolkit.SemanticTextureMipmaps.fromSRGBByte` | function | `(value)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.levelAt` | function | `(chain,footprint)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.rank` | value | `array` |  |
 | `toolkit.SemanticTextureMipmaps.sample` | function | `(chain,u,v,footprint=1)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
@@ -341,6 +343,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.SemanticTextureMipmaps.settings` | function | `(value)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.shade` | function | `(color,normal,view,{roughness,emission,sheen,captured},rule, options)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SemanticTextureMipmaps.texture` | function | `(input)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
+| `toolkit.SemanticTextureMipmaps.toSRGBByte` | function | `(value)` | [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
 | `toolkit.SilhouetteProtection` | namespace |  |  |
 | `toolkit.SilhouetteProtection.prepare` | function | `(authored, override)` | [guide](../silhouette-protection.md), [source](../../src/silhouette-protection.js) |
 | `toolkit.SimulationMaterialLayers` | namespace |  |  |
