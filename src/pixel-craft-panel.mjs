@@ -3,13 +3,17 @@ export function mountPixelCraftPanel(host,view,kinds,{ inspect,select } = {}) {
   const make = (tag,text)=>Object.assign(document.createElement(tag),text === undefined ? {} : { textContent:text });
   const panel = make('details'), summary = make('summary','Craft diagnostics');
   panel.className = 'pixel-craft';
-  const controls = make('div'), filter = make('select'), include = make('input');
+  const controls = make('div'), filter = make('select'), include = make('input'), accept = make('input');
   const kindLabel = make('label','Finding '), protectedLabel = make('label'), output = make('output'), hint = make('p');
   controls.className = 'pixel-craft-controls';
   filter.dataset.diagnosticKind = '';
   output.dataset.diagnosticResult = '';
   output.setAttribute('aria-live','polite');
-  include.type = 'checkbox';
+  include.type = accept.type = 'checkbox';
+  const acceptedLabel = make('label');
+  acceptedLabel.hidden = true;
+  accept.dataset.diagnosticAccepted = '';
+  acceptedLabel.append(accept,document.createTextNode(' Include accepted'));
   include.dataset.diagnosticProtected = '';
   kindLabel.append(filter);
   protectedLabel.append(include,document.createTextNode(' Include protected'));
@@ -22,7 +26,7 @@ export function mountPixelCraftPanel(host,view,kinds,{ inspect,select } = {}) {
   const previous = button('Previous','diagnosticPrevious'), next = button('Next','diagnosticNext');
   const jump = button('Jump to finding','diagnosticJump');
   const selectPixels = select && button('Select unprotected pixels','diagnosticSelect');
-  controls.append(kindLabel,protectedLabel,previous,next,jump);
+  controls.append(kindLabel,protectedLabel,acceptedLabel,previous,next,jump);
   if (selectPixels) controls.append(selectPixels);
   panel.append(summary,controls,output,hint);
   host.append(panel);
@@ -35,18 +39,19 @@ export function mountPixelCraftPanel(host,view,kinds,{ inspect,select } = {}) {
     previous.disabled = !finding || index === 0;
     next.disabled = !finding || index+1 >= visible.length;
     jump.disabled = !finding;
-    if (selectPixels) selectPixels.disabled = !finding || finding.protectedCount === finding.pixelCount;
+    if (selectPixels) selectPixels.disabled = !finding || !!finding.exception || finding.protectedCount === finding.pixelCount;
     output.dataset.finding = finding?.id ?? '';
     output.value = error ?? (finding ? [
       (index+1)+' / '+visible.length,kinds[finding.kind].label,'X '+finding.at[0]+' · Y '+finding.at[1],
       finding.pixelCount+(finding.pixelCount === 1 ? ' pixel' : ' pixels'),
-      finding.protectedCount && finding.protectedCount+' protected',finding.layers.join(', ')
+      finding.protectedCount && finding.protectedCount+' protected',finding.layers.join(', '),finding.exception && 'Accepted · '+finding.exception.id
     ].filter(Boolean).join(' · ') : 'No findings in this view');
-    hint.textContent = finding ? kinds[finding.kind].hint : '';
+    hint.textContent = finding ? finding.exception?.reason ?? kinds[finding.kind].hint : '';
   }
 
-  const eligible = row=>include.checked || row.protectedCount < row.pixelCount;
+  const eligible = row=>row.exception ? accept.checked : include.checked || row.protectedCount < row.pixelCount;
   function rebuild(id) {
+    acceptedLabel.hidden = !diagnostics.some(row=>row.exception);
     const counts = new Map();
     for (const row of diagnostics) if (eligible(row)) counts.set(row.kind,(counts.get(row.kind) ?? 0)+1);
     const category = filter.value;
@@ -93,6 +98,7 @@ export function mountPixelCraftPanel(host,view,kinds,{ inspect,select } = {}) {
   });
   filter.addEventListener('change',()=>rebuild());
   include.addEventListener('change',()=>rebuild(current()?.id));
+  accept.addEventListener('change',()=>rebuild(current()?.id));
   previous.addEventListener('click',()=>{ index--; focus(); });
   next.addEventListener('click',()=>{ index++; focus(); });
   jump.addEventListener('click',focus);

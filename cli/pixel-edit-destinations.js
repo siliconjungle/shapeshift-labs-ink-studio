@@ -47,6 +47,7 @@ function resolve(design, name = 'raster') {
     (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
     (['palette','document:palette'].includes(name) && { id:'palette',kind:'palette' }) ||
     (['adjustments','document:adjustments'].includes(name) && { id:'adjustments',kind:'adjustments' }) ||
+    (design.version === 2 && ['art-rules','document:art-rules'].includes(name) && { id:'art-rules',kind:'art-rules' }) ||
     (design.version === 2 && ['protection','document:protection'].includes(name) && { id:'protection',kind:'protection' }) ||
     (['layers','document:layers'].includes(name) && { id:'layers',kind:'layers' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });

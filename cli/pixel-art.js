@@ -22,6 +22,7 @@ const PaletteExtract = require('../src/palette-extract.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Craft = require('../src/pixel-craft.js');
+const ArtRules = require('../src/pixel-art-rules.js');
 const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
@@ -97,7 +98,7 @@ function documentShape(design) {
 
   const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,guides,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata']))
+    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules']))
     throw new TypeError('Unknown pixel document field');
   if (design.ramps !== undefined) paletteAsset(design);
   if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
@@ -124,6 +125,7 @@ function documentShape(design) {
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   Protection.validate(protectedDetails,width,height,[...frameIds]);
   PixelGuides.prepare(guides,frameIds);
+  rulesFor(design);
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
   for (const binding of sceneBindings) {
@@ -144,6 +146,21 @@ function documentShape(design) {
     if (!binding || binding.layer !== undefined && binding.layer !== layer.id)
       throw new RangeError('Surface layer '+layer.id+' needs a matching surface-channel destination');
   }
+}
+
+function rulesFor(design) {
+  if (design.version !== 2 || design.artRules === undefined) return;
+  return ArtRules.prepare(design.artRules,{ swatches:paletteEntries(design.palette,2),ramps:design.ramps,
+    layers:design.layers,frames:design.frames.map(row=>row.id),selections:design.selections });
+}
+
+function artRulesReport(design,{ frame,shot,layer } = {}) {
+  documentShape(design);
+  if (frame !== undefined && !design.frames?.some(row=>row.id === frame)) throw new RangeError('Unknown pixel frame '+frame);
+  if (layer !== undefined && !design.layers.some(row=>row.id === layer)) throw new RangeError('Unknown pixel layer '+layer);
+  const plan = rulesFor(design), options = { frame,shot,layer };
+  return { revision:fingerprint(design),...options,active:ArtRules.describe(plan,options),
+    scene:ArtRules.scene(plan,options),definition:design.artRules ?? null };
 }
 
 function shapes(width, height, mark) {
@@ -311,6 +328,7 @@ function validate(design) {
     pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
       id:frame?.id ?? null, durationMs:frame?.durationMs ?? null, ...(frame?.label !== undefined && { label:frame.label })
     })), ...(identities && { identities }),
+    ...(design.version === 2 && design.artRules !== undefined && { artRules:structuredClone(design.artRules) }),
     ...(design.version === 2 && design.protectedDetails !== undefined && { protectedDetails:structuredClone(design.protectedDetails) }),
     ...(design.version === 2 && design.ramps !== undefined && { ramps:structuredClone(design.ramps) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
@@ -525,11 +543,12 @@ function frameMetadata(frame) {
   return frame.id === undefined ? {} : { frame:frame.id, durationMs:frame.durationMs, pixelAspect:frame.pixelAspect };
 }
 
-function review(frame,{ kind,finding,overlay = true } = {}) {
-  if (kind !== undefined && !Object.hasOwn(Craft.kinds,kind))
-    throw new TypeError('Choose a diagnostic kind: '+Object.keys(Craft.kinds).join(', '));
+function review(frame,{ kind,finding,overlay = true,rules,shot,layer } = {}) {
+  if (kind !== undefined && !Object.hasOwn(ArtRules.kinds,kind))
+    throw new TypeError('Choose a diagnostic kind: '+Object.keys(ArtRules.kinds).join(', '));
   if (finding !== undefined && !reference(finding)) throw new TypeError('Use a diagnostic ID for --finding');
-  const { image:color,result,diagnostics } = Craft.analyze(frame);
+  const options = { frame:frame.id,shot,layer };
+  const { image:color,result,diagnostics,acceptedMarks } = ArtRules.audit(frame,Craft.analyze(frame),rules,options);
   const addressed = diagnostics.filter(row=>(kind === undefined || kind === row.kind) && (finding === undefined || finding === row.id));
   const { mark, bg, ...metrics } = result;
   const findings = {}, protectedMarks = {};
@@ -554,6 +573,8 @@ function review(frame,{ kind,finding,overlay = true } = {}) {
   return {
     report:{ format:'ink-studio/pixel-art-review', version:1, grid:[frame.width,frame.height], revision:frame.revision,
       ...frameMetadata(frame), metrics,
+      ...(rules && { artRules:ArtRules.describe(rules,options),
+        ...(shot !== undefined && { artShot:shot }),acceptedMarks:acceptedMarks ?? {} }),
       ...(frame.protectedDetails?.length && { protectedDetails:frame.protectedDetails.map(({ id,kind,pixels })=>
         ({ id,kind:kind ?? 'pixel',pixelCount:pixels.length })) }),
       swatches:Object.fromEntries(frame.swatches.map((id, i) => [id,used[i]])), findings, protectedMarks,diagnostics:addressed },
@@ -604,10 +625,11 @@ function edit(design, frame, patch, context) {
     { expected:frame.revision, actual:revision });
   const route = Destinations.resolve(design,patch.destination);
   if (design.version === 2 && patch.frame !== frame.id &&
-      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments','layers','protection'].includes(route.destination.kind))))
+      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments','layers','protection','art-rules'].includes(route.destination.kind))))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
     throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
+  if (route.destination.kind === 'art-rules') return editArtRules(design,patch,context);
   if (route.destination.kind === 'protection') return editProtection(design,patch,context);
   if (route.destination.kind === 'layers') return editLayers(design,patch,context);
   if (route.destination.kind === 'adjustments') return editAdjustment(design,patch,context);
@@ -970,6 +992,17 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
   }
   return { changed,added:palette.slice(original.length),
     marks:[...bySwatch].map(([swatch,pixels])=>({ swatch,runs:RasterTools.runs(width,pixels) })) };
+}
+
+function editArtRules(design,patch,context) {
+  if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined ||
+      !fields(patch.operation,['artRules']) || !Object.hasOwn(patch.operation,'artRules'))
+    throw new TypeError('Art rule edits need an artRules definition or null');
+  const { artRules:before,...base } = design, { artRules } = patch.operation;
+  const revised = artRules === null ? base : { ...base,artRules };
+  documentShape(revised);
+  context?.onEditTarget?.({ destination:'art-rules',kind:'art-rules',before:before ?? null,after:artRules });
+  return revised;
 }
 
 function editProtection(design,patch,context) {
@@ -1346,7 +1379,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
         { expected:expected.inputs.documentRevision, actual:documentRevision });
     const route = Destinations.resolve(design,patch?.destination), { destination,binding,layer } = route;
     const frame = compile(design,frameId,patch?.cel,layer?.kind === 'surface' ? layer.id : undefined);
-    command.frame = ['canvas','palette','adjustments','layers','protection'].includes(destination.kind) ? null : frame.id ?? null;
+    command.frame = ['canvas','palette','adjustments','layers','protection','art-rules'].includes(destination.kind) ? null : frame.id ?? null;
     if (shotHitFrame !== undefined && (destination.kind !== 'shot-correction' || !integer(shotHitFrame,0,1e9)))
       throw new TypeError('A shot hit sample needs a shot-correction edit and a nonnegative shot frame');
     const result = edit(design,frame,patch,{
@@ -1576,7 +1609,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const request = structuredClone(patch);
     if (legacyRevision !== null && request?.revision === legacyRevision) {
       request.revision = fingerprint(design);
-      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments','layers','document:layers','protection','document:protection'].includes(request.destination))
+      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments','layers','document:layers','protection','document:protection','art-rules','document:art-rules'].includes(request.destination))
         request.frame = 'artwork';
     }
     return request;
@@ -1654,7 +1687,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
       }
       const [painted] = receipt.affectedTargets;
-      if (['canvas','palette','selections','adjustments','layers','protection'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
+      if (['canvas','palette','selections','adjustments','layers','protection','art-rules'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
     const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
@@ -1682,6 +1715,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     inspect: (coordinate,options = {}) => inspect(state().design,coordinate,options,
       { ...editContext(options,false),sceneRef:sceneEditor && sceneName }),
     lint: (options = {}) => lintDesign(state().design,options),
+    artRules: (options = {}) => structuredClone(artRulesReport(state().design,options)),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
     copySelection: options => copySelection(state().design,options),
@@ -1794,7 +1828,7 @@ function documentFromPNG(file) {
 const stackFormat = 'ink-studio/pixel-layer-deck';
 
 function layerDeck(design) {
-  const { width,height,layers:defs,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata } = design;
+  const { width,height,layers:defs,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules } = design;
   const palette = paletteAsset(design), revision = fingerprint(design);
   const frames = design.frames.map(frame=>{
     const compiled = compileFrame(design,frame,revision,palette.swatches,true);
@@ -1813,13 +1847,13 @@ function layerDeck(design) {
     ...(guides?.some(row=>row.frame === undefined) && { guides:guides.filter(row=>row.frame === undefined) }),
     ...(design.selections?.some(row=>row.frame === undefined) && { sharedSelections:design.selections.filter(row=>row.frame === undefined) }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
-    ...(legacyMetadata && { legacyMetadata }) };
+    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }) };
 }
 
 function documentFromDeck(deck) {
   if (deck?.format !== stackFormat || deck.version !== 1 || !Array.isArray(deck.frames) || !deck.frames.length)
     throw new TypeError('Expected a version 1 Ink pixel layer deck');
-  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata } = deck;
+  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules } = deck;
   const asset = PixelPalette.fromStamp(deck);
   const guides = [...(deck.guides ?? [])], selections = [...(deck.sharedSelections ?? [])], frameIds = new Set();
   for (const frame of deck.frames) if (frame.id !== undefined) {
@@ -1850,7 +1884,7 @@ function documentFromDeck(deck) {
   const design = { format,version:2,width,height,pixelAspect,layers,frames,palette:paletteDefinition(asset.swatches),
     ...(asset.ramps.length && { ramps:asset.ramps }),...(guides.length && { guides }),...(selections.length && { selections }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
-    ...(legacyMetadata && { legacyMetadata }) };
+    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }) };
   validate(design);
   return design;
 }
@@ -1924,18 +1958,18 @@ function craftLayer(frame,layer) {
     layerIds:[null,layer],mixedColors:undefined,underSlots:undefined,underOwners:undefined };
 }
 
-function lintDesign(design,{ frame,layer,cel,kind,finding } = {}) {
+function lintDesign(design,{ frame,layer,cel,kind,finding,shot } = {}) {
   if (layer !== undefined && cel !== undefined) throw new TypeError('Choose one layer or cel to lint');
   const compiled = compile(design,frame,cel,layer ?? (cel !== undefined));
   layer ??= cel === undefined ? undefined : [...compiled.cels].find(([,id])=>id === cel)?.[0];
-  const { report } = review(craftLayer(compiled,layer),{ kind,finding,overlay:false });
+  const { report } = review(craftLayer(compiled,layer),{ kind,finding,overlay:false,rules:rulesFor(design),shot,layer });
   if (finding !== undefined && !report.diagnostics.length) throw new RangeError('No diagnostic '+finding+' in this native frame');
   return { ...report,...(layer !== undefined && { layer }) };
 }
 
-function draw(frame,directory,{ layer,colorMode } = {}) {
+function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
   const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
-  const result = review(craftLayer(frame,layer)), { w,h,rgb } = result.overlay;
+  const result = review(craftLayer(frame,layer),{ rules,shot,layer }), { w,h,rgb } = result.overlay;
   fs.mkdirSync(directory,{ recursive:true });
   files.write(path.join(directory,'art.png'),art);
   files.write(path.join(directory,'review.png'),PNG.encode(w,h,rgb));
@@ -1944,7 +1978,7 @@ function draw(frame,directory,{ layer,colorMode } = {}) {
   return result.report;
 }
 
-function canvasReview(design,frameId,file,sources,scene) {
+function canvasReview(design,frameId,file,sources,scene,artShot) {
   documentShape(design);
   const palette = paletteEntries(design.palette,design.version), revision = fingerprint(design);
   const frames = design.version === 1 ? [undefined] : design.frames;
@@ -1997,13 +2031,18 @@ function canvasReview(design,frameId,file,sources,scene) {
   });
   const template = fs.readFileSync(path.join(__dirname,'pixel-grid-review.html'),'utf8');
   const browserSource = ext => fs.readFileSync(path.join(__dirname,'../src/pixel-grid-canvas.'+ext),'utf8');
-  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && embedScene(scene),layerIds }).replaceAll('<','\\u003c');
+  const rulesSource = design.version === 2 && design.artRules && {
+    definition:design.artRules,artShot,ramps:design.ramps,layers:design.layers,
+    frames:design.frames.map(row=>row.id),selections:design.selections
+  };
+  if (artShot !== undefined) ArtRules.describe(rulesFor(design),{ shot:artShot });
+  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && embedScene(scene),layerIds,rulesSource }).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
     .replace('/*PIXEL_INSPECT_MODULES*/',() => [
       'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','pixel-protection.js','art-passes.js',
-      'pixel-craft.js','pixel-inspector.mjs','pixel-craft-panel.mjs'
+      'pixel-craft.js','target-selectors.js','pixel-art-rules.js','pixel-inspector.mjs','pixel-craft-panel.mjs'
     ].map(file=>fs.readFileSync(path.join(__dirname,'../src',file),'utf8')).join('\n'))
     .replace('/*PIXEL_GRID_DATA*/',() => data));
 }
@@ -2047,7 +2086,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','sample','select','snap','brush','copy',
+const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2118,7 +2157,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -2136,11 +2175,12 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const design = read(source);
-  if (action === 'lint') {
-    const { frame,layer,cel,kind,finding } = opt;
+  if (action === 'lint' || action === 'rules') {
+    const { frame,layer,cel,kind,finding } = opt, shot = opt['art-shot'];
     if (opt.out !== undefined && (typeof opt.out !== 'string' || path.resolve(opt.out) === path.resolve(source)))
       throw new TypeError('Write the diagnostic report to a separate JSON file');
-    const report = lintDesign(design,{ frame,layer,cel,kind,finding });
+    const report = action === 'lint' ? lintDesign(design,{ frame,layer,cel,kind,finding,shot }) :
+      artRulesReport(design,{ frame,layer,shot });
     if (opt.out) files.json(path.resolve(opt.out),report);
     else process.stdout.write(JSON.stringify(report,null,2)+'\n');
     return;
@@ -2201,7 +2241,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     const materials = inspectionMaterials(design,destinations,context,opt.frame);
     const scene = inspectionCapture(design.width,design.height,coordinate,context);
     const file = path.resolve(opt.out);
-    canvasReview(design,opt.frame,file,materials,scene);
+    canvasReview(design,opt.frame,file,materials,scene,opt['art-shot']);
     console.log('wrote',file);
     return;
   }
@@ -2270,7 +2310,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   }
   if (action === 'draw') {
     const directory=outputFile('pixel-art');
-    draw(frame,directory,{ layer:opt.layer,colorMode:opt['color-mode'] });
+    draw(frame,directory,{ layer:opt.layer,colorMode:opt['color-mode'],rules:rulesFor(design),shot:opt['art-shot'] });
     console.log('wrote',directory);
     return;
   }
@@ -2364,5 +2404,5 @@ function sessionCommand(pos,opt,{ scene,capture }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, documentFromPNG, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace,
+module.exports = { createEditor, documentFromPNG, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
   command, sessionCommand, actions, sessionActions, paletteActions, stackActions };

@@ -9,6 +9,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `node.createPixelEditor().apply` | function | `(patch,context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().artRules` | function | `(options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().begin` | function | `(label)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().cancel` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |
 | `node.createPixelEditor().captureBrush` | function | `(options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |

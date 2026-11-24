@@ -16,6 +16,7 @@
   .paint { min-width:0; background:#172126; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
   aside { display:grid; gap:15px; align-content:start; }
   section { background:#1a262b; border:1px solid var(--line); border-radius:10px; padding:15px; }
+  .row[hidden] { display:none; }
   .row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
   .side-label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; }
   .side-label span, .muted, output { color:var(--quiet); }
@@ -73,6 +74,9 @@
   <div class="layout">
     <div class="paint">
       <div id="canvas-view"></div>
+      <div class="row timeline" id="art-shot-control" hidden>
+        <label>Art shot <select id="art-shot"></select></label>
+      </div>
       <div id="craft-diagnostics"></div>
       <div id="pixel-inspection"></div>
       <div class="row timeline">

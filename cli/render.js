@@ -54,6 +54,7 @@ const ArtStability = require('../src/art-stability.js');
 const { ditherFootprint } = require('./dither-footprint.js');
 const StableDetail = require('../src/stable-detail.js');
 const EdgeFilter = require('../src/edge-filter.js');
+const PixelArtRules = require('../src/pixel-art-rules.js');
 const CoverageFilter = require('../src/coverage-filter.js');
 const SurfaceHistory = require('../src/surface-history.js');
 const MotionalCoverage = require('../src/motional-coverage.js');
@@ -184,6 +185,10 @@ function sequenceOutput(history, draw) {
 }
 
 function render(world, o, preparedPalettes) {
+  if (o?.assetArtRules) {
+    world = { ...world,look:PixelArtRules.applyLook(world.look,o.assetArtRules) };
+    o = { ...o,assetArtRules:undefined };
+  }
   if (world.gltfParts && o?.raw === undefined) o = { ...o, raw:true };
   if (world.anim?.bones && (!world.rest || world.rest===world.data)) {
     const { KIT }=require('../index.js').load();

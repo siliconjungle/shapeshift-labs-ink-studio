@@ -1355,6 +1355,92 @@ The preview and receipt include the complete authored diff in the target's
 its swatch ID, RGBA bytes, and cell state. The regular preview also shows
 the resulting composite changes.
 
+## Author asset-specific art rules
+
+Keep art rules in the version 2 pixel document. Define profiles for
+characters, props or shots, then bind each to a layer, frame, named shot,
+or scene target. A layer binding also covers its child layers. Rules and
+their named exception masks travel with the exported layer deck.
+
+The example uses existing palette ramps named `suit` and `dusk`, swatches
+named `navy`, `steel` and `ink`, and a saved selection named `visor-glint`.
+
+```json
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "courier",
+      "ramps": ["suit"],
+      "outline": { "mode": "silhouette", "swatch": "ink" },
+      "dither": { "pattern": "bayer", "pairs": [["navy", "steel"]] },
+      "edge": { "mode": "hard" },
+      "exceptions": [{
+        "id": "visor-highlight",
+        "check": "orphan",
+        "selection": "visor-glint",
+        "reason": "One specular pixel keeps the visor readable at 1×."
+      }]
+    },
+    {
+      "id": "evening",
+      "ramps": ["dusk"],
+      "outline": { "mode": "off" },
+      "edge": { "mode": "area", "strength": 0.65 }
+    }
+  ],
+  "bindings": [
+    { "profile": "courier", "layer": "courier", "select": { "object": "courier" } },
+    { "profile": "evening", "layer": "courier", "select": { "object": "courier" }, "shot": "night-arrival" }
+  ]
+}
+```
+
+Put this object in `artRules` or commit it with the
+`document:art-rules` destination and an operation of the form
+`{"artRules":{...}}`. Use `{"artRules":null}` to remove the rules.
+The normal preview, undo, and receipt replay commands track the change.
+
+The last matching declaration for each of palette, outline, and edge wins
+within a scope. Layer or scene targets take precedence over general
+defaults. A shot-specific binding follows base bindings in the same
+scope. Add both `layer` and `select` to share one binding between document
+review and the scene renderer. A binding with only `select` applies to the
+scene. A binding with only `layer` applies to the document. A `frame` or
+`shot` restricts either binding to that context.
+
+- **Ramps** list permitted indexed swatches. Outline paint may use its
+  declared line swatch alongside those ramps.
+- **Outline** supports `off`, `silhouette`, and `selective`. Selective
+  outlines can enable or disable `crease` and `boundary`. Name an outline
+  swatch so the raster linter can identify authored line pixels.
+- **Dither** lists symmetric pairs chosen from the permitted ramps. An
+  empty list keeps every swatch solid. The scene renderer supports its native
+  patterns, including Bayer and blue noise. The raster linter checks
+  visible alternating 2×2 patches where the indexed pair is identifiable.
+- **Edge** uses `hard` for center-sampled edges or `area` for coverage
+  filtering where the renderer supports it. The raster check looks for
+  partial coverage on hard boundaries.
+- **Exceptions** name a craft check and give a reason. Omit the mask to
+  accept that check across the matching profile. Accepted findings stay
+  inspectable under **Include accepted** in Craft diagnostics.
+
+Use the Workshop's **Art shot** selector or inspect rules and violations
+through the CLI. `pixel-art rules` also reports the native scene look
+settings. `render` can use the same rules for the named scene geometry.
+
+```sh
+node cli/ink-studio.js pixel-art rules design.json --frame front --layer courier --art-shot night-arrival
+node cli/ink-studio.js pixel-art lint design.json --frame front --art-shot night-arrival
+node cli/ink-studio.js pixel-art canvas design.json --art-shot night-arrival --out review.html
+node cli/ink-studio.js render scene.json --art-rules design.json --art-frame front --art-shot night-arrival --out night.png
+```
+
+The headless scene adapter uses Ink's existing palette constraints, line
+styles, and selective edge filter. Edge supersampling applies to eligible
+splats and finite curves. Existing explicit render overrides still take
+precedence. Render recipes record the source document and selected scope.
+
 ## Inspect, revise and reuse
 
 `pixel-art draw` writes the same diagnostics in `report.json`, along with
