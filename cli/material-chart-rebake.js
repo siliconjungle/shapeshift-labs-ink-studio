@@ -84,10 +84,10 @@ function pack(data) {
   return zlib.deflateSync(bytes);
 }
 
-function loadAtlas(baseline, row) {
-  const {width:size,maps,rebakeState} = row, count = size*size;
+function loadRaster(read, size, maps, masks) {
+  const count = size*size;
   function raster(descriptor, channels) {
-    const {w,h,data,max} = png.raster(baseline.read(descriptor));
+    const {w,h,data,max} = png.raster(read(descriptor));
     if (w !== size || h !== size || max !== 255) throw new Error('Invalid chart rebake map dimensions');
     const pixels = new Uint8Array(count*channels);
     for (let i = 0; i < count; i++) for (let c = 0; c < channels; c++) pixels[i*channels+c] = data[i*4+c];
@@ -96,10 +96,15 @@ function loadAtlas(baseline, row) {
   const pixels = Object.fromEntries(Object.entries({
     base:maps.pigment,normal:maps.normal,surface:maps.metallicRoughness,emission:maps.emission
   }).map(([key,map]) => [key,raster(map,3)]));
+  return {pixels, ...(maps.opacity&&{opacity:raster(maps.opacity,1)}), footprint:raster(maps.coverage,1),
+    masks:new Map(Object.entries(masks).map(([name,map]) => [name,raster(map,1)]))};
+}
+
+function loadAtlas(baseline, row) {
+  const {width:size,maps,masks,rebakeState} = row, count = size*size;
   const packedOwners=baseline.read(rebakeState.owners);
   const packedPaint=rebakeState.paint && baseline.read(rebakeState.paint);
-  return {pixels, ...(maps.opacity&&{opacity:raster(maps.opacity,1)}), footprint:raster(maps.coverage,1), strength:row.emissionStrength,packedOwners,packedPaint,
-    masks:new Map(Object.entries(row.masks).map(([name,map]) => [name,raster(map,1)])),
+  return {...loadRaster(baseline.read,size,maps,masks), strength:row.emissionStrength,packedOwners,packedPaint,
     owners:unpack(packedOwners,Uint32Array,count),
     paint:packedPaint && unpack(packedPaint,Float32Array,count*4)};
 }
@@ -127,10 +132,12 @@ function planMesh({mesh, faces, uvs, normals, atlas, splits, size, source, edits
   }
   const maskNames = [...new Set([...(mesh.maskNames ?? []),...mesh.materials.flatMap(m => Object.keys(m.masks ?? {}))])].sort();
   const statePaintKey = views.length ? paintKey(views) : prior?.paintKey ?? paintKey([]);
+  const surfaceSources = mesh.surfaceSources?.map(({key,bounds,definition}) => ({key,bounds,signature:hash([bounds,definition])}));
   const state = {
     version:1, topology:topologyKey(mesh), authoredUV:uvKey(mesh), faces, uvs, splits, faceCharts,
     chartCount:atlas.charts, utilization:atlas.utilization, maskNames,
     paintKey:statePaintKey,
+    ...(surfaceSources && {surfaceSources}),
     paintMasks:[...new Set([...(prior?.paintMasks ?? []),
       ...(views.length ? ['projected-paint',...views.map(view => 'paint-'+view.id)] : [])])],
     charts:charts.map(chart => {
@@ -165,8 +172,16 @@ function planMesh({mesh, faces, uvs, normals, atlas, splits, size, source, edits
     }
     if (!prior || chart.signature !== prior.charts[chart.id].signature) dirty.add(chart.id);
   }
+  if (prior && (surfaceSources || prior.surfaceSources)) {
+    const before = new Map(prior.surfaceSources?.map(row => [row.key,row]));
+    const after = new Map(surfaceSources?.map(row => [row.key,row]));
+    const changed = [...before.values()].filter(row => row.signature !== after.get(row.key)?.signature)
+      .concat([...after.values()].filter(row => row.signature !== before.get(row.key)?.signature));
+    for (const chart of charts) if (!prior.surfaceSources || changed.some(({bounds}) =>
+      !bounds || overlaps(chart.bounds,bounds) || overlaps(prior.charts[chart.id].bounds,bounds))) dirty.add(chart.id);
+  }
   if (prior && hash(maskNames) !== hash(prior.maskNames)) for (const chart of charts) dirty.add(chart.id);
   return {state,dirty,reproject,previous:source && loadAtlas(baseline,source.row)};
 }
 
-module.exports = {readPlan,readBaseline,baselineLayout,planMesh,pack};
+module.exports = {readPlan,readBaseline,baselineLayout,planMesh,loadRaster,pack,unpack};

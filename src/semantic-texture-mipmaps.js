@@ -12,6 +12,15 @@ const SemanticTextureMipmaps = (() => {
     const len=Math.hypot(...n);
     return len>1e-8?n.map(x=>x/len):fallback;
   };
+  const fromSRGBByte = value => linearByte[value];
+  const toSRGBByte = value => toByte(display(value));
+  function filterNormal(mean, roughnessSquared, variance = 1) {
+    const length = Math.hypot(...mean);
+    return {
+      direction: length > 1e-8 ? mean.map(value => value / length) : [0,0,1],
+      roughness: toByte(Math.sqrt(Math.min(1, roughnessSquared + variance * Math.max(0, 1 - length))))
+    };
+  }
   const rank=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 
   function settings(value) {
@@ -134,21 +143,20 @@ const SemanticTextureMipmaps = (() => {
         if(chosen>=0) {
           const c=palette[chosen];
           rgba[i]=c>>16; rgba[i+1]=c>>8&255; rgba[i+2]=c&255;
-        } else for(let c=0;c<3;c++)rgba[i+c]=toByte(display(sum[c+1]/area));
+        } else for(let c=0;c<3;c++)rgba[i+c]=toSRGBByte(sum[c+1]/area);
         rgba[i+3]=toByte(area/(scaleX*scaleY));
         const mean=normals?[sum[8]/area,sum[9]/area,sum[10]/area]:[0,0,1];
-        const direction=normalized(mean,[0,0,1]);
-        const variance=Math.max(0,1-Math.hypot(...mean));
+        const filtered=filterNormal(mean,sum[7]/area,rule.variance);
         for(let c=0;c<3;c++){
-          rgba[layerBytes+i+c]=128+Math.round(direction[c]*127);
-          rgba[layerBytes*2+i+c]=toByte(display(sum[4+c]/area));
+          rgba[layerBytes+i+c]=128+Math.round(filtered.direction[c]*127);
+          rgba[layerBytes*2+i+c]=toSRGBByte(sum[4+c]/area);
         }
         if(captured){
           const at=layerBytes*3+i;
           if(sum[14])for(let c=0;c<3;c++)rgba[at+c]=toByte(display(sum[11+c]/sum[14]));
           rgba[at+3]=toByte(sum[14]/area);
         }
-        rgba[layerBytes+i+3]=toByte(Math.sqrt(Math.min(1,sum[7]/area+rule.variance*variance)));
+        rgba[layerBytes+i+3]=filtered.roughness;
       }
       levels.push({width:w,height:h,rgba});
       if(w===1&&h===1)break;
@@ -205,6 +213,6 @@ const SemanticTextureMipmaps = (() => {
     });
   }
 
-  return Object.freeze({settings,texture,build,levelAt,sample,shade,scanFrame,rank});
+  return Object.freeze({settings,texture,build,levelAt,sample,shade,scanFrame,rank,fromSRGBByte,toSRGBByte,filterNormal});
 })();
 if (typeof module !== 'undefined') module.exports = SemanticTextureMipmaps;

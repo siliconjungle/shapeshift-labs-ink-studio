@@ -143,7 +143,11 @@ test('chart rebakes lock generated UVs and quad splits, and preserve clean texel
   touchUp=true;
   const patch=run('patch',{rebakeFrom:first.materialBake,chartEdits:editPlan({mesh:0,charts:[0]})});
   const full=run('full');
-  assert.deepEqual(read(patch.materialBake).meshes[0].maps,read(full.materialBake).meshes[0].maps);
+  const patched=read(patch.materialBake).meshes[0], fresh=read(full.materialBake).meshes[0];
+  assert.deepEqual(patched.maps,fresh.maps);
+  assert.deepEqual(patched.mipmaps.levels.map(({filteredTexels,...level})=>level),
+    fresh.mipmaps.levels.map(({filteredTexels,...level})=>level));
+  assert(patched.mipmaps.levels[0].filteredTexels<fresh.mipmaps.levels[0].filteredTexels);
   touchUp=false;
   // Flip the shortest quad diagonal. Receiving geometry must keep the original diagonal.
   model.points[2][2]=.7;
@@ -169,8 +173,16 @@ test('chart rebakes lock generated UVs and quad splits, and preserve clean texel
     assert(gutters>0);
   }
   const clean=run('clean',{rebakeFrom:edited.materialBake});
-  assert.deepEqual(read(clean.materialBake).meshes[0].chartReport,{updated:[],reused:[0,1],sampledTexels:0});
-  assert.deepEqual(read(clean.materialBake).meshes[0].maps,after.maps);
+  const reused=read(clean.materialBake).meshes[0];
+  assert.deepEqual(reused.chartReport,{updated:[],reused:[0,1],sampledTexels:0});
+  assert.deepEqual(reused.maps,after.maps);
+  assert.deepEqual(reused.mipmaps.levels,after.mipmaps.levels.map(level=>({...level,filteredTexels:0})));
+  const legacy=read(edited.materialBake), legacyFile=path.join(editedDir,'legacy.json');
+  delete legacy.meshes[0].mipmaps;
+  fs.writeFileSync(legacyFile,JSON.stringify(legacy));
+  const restored=read(run('legacy',{rebakeFrom:legacyFile}).materialBake).meshes[0];
+  assert.equal(restored.chartReport.sampledTexels,0);
+  assert.deepEqual(restored.mipmaps.levels.map(level=>level.maps),after.mipmaps.levels.map(level=>level.maps));
   const same=run('second',{rebakeFrom:edited.materialBake,chartEdits:editPlan({mesh:0,bounds:{min:[-.2,-.2,.8],max:[.2,.2,1.1]}})});
   assert.deepEqual(read(same.materialBake).meshes[0].chartReport.updated,[1]);
   assert(fs.existsSync(path.join(editedDir,after.maps.pigment.file)));
@@ -205,6 +217,9 @@ test('saved camera paint follows a sculpt, and changed source paint touches only
   assert.deepEqual(at(posed,.725),[247,63,18]);
   const source=read(posed.materialBake).meshes[0];
   assert.deepEqual(source.chartReport.updated,[0]);
+  const mip=source.mipmaps.levels[2];
+  assert.deepEqual(pixel(PNG.raster(path.join(path.dirname(posed.materialBake),mip.maps.pigment.file)),.275,.4).slice(0,3),
+    [247,63,18]);
 
   paint([23,219,159]);
   delete view.geometry;
@@ -216,6 +231,10 @@ test('saved camera paint follows a sculpt, and changed source paint touches only
   assert.deepEqual(row.paintViews[0].charts,[1]);
   assert.deepEqual(at(updated,.275),[247,63,18]);
   assert.deepEqual(at(updated,.725),[23,219,159]);
+  const reduced=row.mipmaps.levels.at(-1);
+  // The coarsest texel belongs to one chart and cannot blend the two paints.
+  assert.deepEqual(reduced.maps.pigment,source.mipmaps.levels.at(-1).maps.pigment);
+  assert.equal(reduced.filteredTexels,0);
   const rest=run('rest',{rebakeFrom:updated.materialBake,paintViews:planFile,chartEdits:editPlan({mesh:0,charts:[0]})});
   assert(at(rest,.275)[1]>at(rest,.275)[0]+90);
   assert.deepEqual(read(rest.materialBake).meshes[0].chartReport.updated,[0]);

@@ -32,9 +32,9 @@ The GLB embeds the same pigment, normal, metallic-roughness and emission PNG
 bytes. Painted translucency sets the glTF material to `BLEND`.
 `material-bake.json` records UV and geometry hashes, texture hashes,
 dimensions, padding, emissive strength, and paint coverage by camera. Mesh
-indices follow export order, including attachments. Use
-[semantic mipmaps](semantic-texture-mipmaps.md) to filter these maps on a
-native scene mesh.
+indices follow export order, including attachments. Each mesh publishes
+`mipmaps.levels`, with separate registered PNGs from half resolution through
+1 × 1 for consumers that accept an authored chain.
 
 Author masks on a model material with `masks: { gasket: 1, label: .4 }`. A
 procedural `sampleSurface(point, normal, faceIndex)` can return linear
@@ -129,8 +129,14 @@ node cli/ink-studio.js export-glb edited-scene.js \
 
 The atlas keeps its exact UV coordinates, quad diagonals, chart IDs, and
 gutter ownership. Changed positions, shading normals, vertex colors, and
-material slots mark their affected charts automatically. Several charts can
-depend on the same shared vertex or material. For sculpt work, an authored
+material slots mark their affected charts automatically. The saved diorama
+from `pixel-art edit` also carries rest-chart revisions. Adding, changing,
+clearing, or undoing a stamp invalidates the receiving atlas charts, even
+when the edit falls between face sample points. Ink checks the previous
+and current projection bounds, including solid transforms. A chart
+inside a nested or modified SDF recipe can require resampling its mesh
+because of nonlinear coordinates. Several charts can depend on the same
+shared vertex or material. For sculpt work, an authored
 receiving topology can be reused across edits through
 `KIT.model.fromSculpt(sculpt, { topology })`. Topology or UV changes require a
 fresh full bake, as does an emission edit that exceeds the saved intensity
@@ -156,6 +162,16 @@ The manifest lists each chart's ID, triangle indices, and bounds. Its
 texels sampled. A rebake combines the new samples with the previous atlas
 and embeds the complete material PNGs into the GLB. Reused chart texels and
 gutters keep their exact bytes.
+
+Each coarser texel keeps the chart chosen by the original atlas bake.
+Dominant surface coverage wins where footprints meet, with the chart ID
+breaking ties. Pigment and emission filter in linear light, normal
+variation raises roughness, and scalar channels filter independently
+inside that chart. Small charts can disappear at levels where their
+footprint shares a texel with a larger chart. A rebake filters only the
+affected charts' owned mip texels and records `filteredTexels` per level.
+Older baselines can be reused. The first run fills in their mip chain
+and records diorama chart revisions for subsequent edits.
 
 Omit `--paint-views` to carry the saved approved pigment through a sculpt edit.
 Ink stores it in UV space, so it follows the surface. To apply an updated

@@ -215,6 +215,57 @@ test('CLI receipts replay authored and sampled shot edits on the original inputs
   assert.equal(fs.existsSync(filename('rejected')),false);
 });
 
+test('a saved pixel stamp invalidates its receiver charts and their mip texels', t => {
+  const { document, filename, write, request, apply } = setup(t);
+  const baseline = structuredClone(source);
+  baseline.solids[0].transform = {translation:[.1,0,.08]};
+  baseline.solids[0].surfaceState.charts.front = {
+    origin:[-.45,-.48,.23], u:[.9,0,0], v:[0,.96,0], depth:.06,
+    stamps:[{channel:'pigment',value:{swatch:'label',color:'#53d488'},
+      brush:{kind:'rect',min:[.1,.65],max:[.35,.84]}}]
+  };
+  write('source',baseline);
+  document.destinations.find(row=>row.id==='patina').channel='pigment';
+  write('document',document);
+  const bake = (id,scene,...args) => {
+    const result=JSON.parse(cli('export-glb',filename(scene),'--out',filename(id+'-glb')+'.glb',
+      '--bake-dir',filename(id+'-maps'),'--res','.14','--texture-size','256',...args));
+    const directory=path.dirname(result.materialBake);
+    const row=JSON.parse(fs.readFileSync(result.materialBake,'utf8')).meshes[0];
+    return {row,directory,file:result.materialBake};
+  };
+  const before=bake('base','source');
+  apply(request({destination:'patina',operation:{stamp:{value:'amber',
+    brush:{kind:'rect',min:[.464,.341],max:[.496,.397]}}}}),'painted');
+  const after=bake('update','painted','--rebake-from',before.file);
+  assert.equal(after.row.uvLayout,before.row.uvLayout);
+  assert(after.row.chartReport.updated.length && after.row.chartReport.reused.length);
+  assert.notEqual(after.row.maps.pigment.sha256,before.row.maps.pigment.sha256);
+  assert(after.row.chartReport.reused.some(id=>before.row.charts[id].bounds.min[0]>.8));
+  const savedLayout=run=>JSON.parse(fs.readFileSync(path.join(run.directory,run.row.chartLayout.file),'utf8'));
+  assert.deepEqual(savedLayout(after).charts.map(chart=>chart.signature),savedLayout(before).charts.map(chart=>chart.signature));
+  const pixels=(run,map)=>PNG.raster(path.join(run.directory,map.file)).data;
+  const label=(image,i)=>image[i]===0x53&&image[i+1]===0xd4&&image[i+2]===0x88;
+  const base=pixels(before,before.row.maps.pigment), painted=pixels(after,after.row.maps.pigment);
+  let retained=0;
+  for(let i=0;i<base.length;i+=4) if(label(base,i)){
+    assert(label(painted,i));
+    retained++;
+  }
+  assert(retained>0);
+  const mip=after.row.mipmaps.levels[0], original=before.row.mipmaps.levels[0];
+  const a=pixels(before,original.maps.pigment), b=pixels(after,mip.maps.pigment);
+  const owners=require('node:zlib').inflateSync(fs.readFileSync(path.join(after.directory,mip.owners.file)));
+  assert.deepEqual(mip.owners,original.owners);
+  assert(mip.filteredTexels>0 && mip.filteredTexels<original.filteredTexels);
+  const clean=new Set(after.row.chartReport.reused);
+  for(let i=0;i<a.length;i+=4) if(clean.has(owners.readUInt32LE(i)-1))
+    assert.deepEqual(a.subarray(i,i+4),b.subarray(i,i+4));
+  const reverted=bake('undo','source','--rebake-from',after.file);
+  assert.deepEqual(reverted.row.maps,before.row.maps);
+  assert.deepEqual(reverted.row.mipmaps.levels.map(row=>row.maps),before.row.mipmaps.levels.map(row=>row.maps));
+});
+
 test('pixel destinations retain edits on a rest chart and the selected SDF solid', t => {
   const { document, filename, write, request, apply, reject, targets } = setup(t);
   const baseline = ink.render(KIT.diorama.build(source),view);
