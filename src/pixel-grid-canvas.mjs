@@ -14,9 +14,13 @@ const markup = `
   <div class="ink-grid-views">
     <div class="ink-grid-viewport" tabindex="0" role="group" aria-label="Canvas viewport">
       <div class="ink-grid-plane">
+        <div class="ink-grid-repeats" aria-hidden="true"></div>
         <canvas class="ink-grid-main" aria-label="Native pixel canvas"></canvas>
         <div class="ink-grid-lines" aria-hidden="true" hidden></div>
         <div class="ink-grid-guides" aria-hidden="true" hidden></div>
+        <div class="ink-grid-mirrors" aria-hidden="true">
+          <div class="ink-grid-mirror-x" hidden></div><div class="ink-grid-mirror-y" hidden></div>
+        </div>
         <div class="ink-grid-selection" aria-hidden="true" hidden></div>
         <div class="ink-grid-cursor" aria-hidden="true" hidden></div>
       </div>
@@ -42,7 +46,8 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
-  const selection = find('.ink-grid-selection');
+  const selection = find('.ink-grid-selection'), repeats = find('.ink-grid-repeats');
+  const mirrorLines = [find('.ink-grid-mirror-x'),find('.ink-grid-mirror-y')];
   const guidesLayer = find('.ink-grid-guides'), guideToggles = find('.ink-guide-toggles');
   const showGuides = find('[data-view="guides"]'), snapGuides = find('[data-view="snap"]');
   const zoomLabel = find('.ink-grid-zoom'), dimensions = find('.ink-grid-dimensions');
@@ -51,7 +56,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const events = new AbortController();
   const listen = (target,type,fn,options) => target.addEventListener(type,fn,{ ...options,signal:events.signal });
   let width = 0, height = 0, zoom = 1, left = 0, top = 0, fitting = true;
-  let drag, pan = false, point, image, guides = [];
+  let drag, pan = false, point, image, guides = [], tiles = [], repeatX = false, repeatY = false;
 
   function showPoint(pick) {
     point = pick;
@@ -96,6 +101,35 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     guideToggles.hidden = guides.length === 0;
     guidesLayer.hidden = guideToggles.hidden || !showGuides.checked;
     showPoint(null);
+  }
+
+  function setDrawing({ mirrorX,mirrorY,wrapX = false,wrapY = false } = {}) {
+    [mirrorX,mirrorY].forEach((value,i) => {
+      mirrorLines[i].hidden = value === undefined;
+      if (value !== undefined) mirrorLines[i].style.setProperty('--mirror-at',value+.5);
+    });
+    if (wrapX === repeatX && wrapY === repeatY) return;
+    repeatX = wrapX;
+    repeatY = wrapY;
+    const neighbors = [];
+    for (const y of wrapY ? [-1,0,1] : [0]) for (const x of wrapX ? [-1,0,1] : [0]) {
+      if (!x && !y) continue;
+      const tile = host.ownerDocument.createElement('canvas');
+      tile.style.setProperty('--tile-x',x);
+      tile.style.setProperty('--tile-y',y);
+      neighbors.push(tile);
+    }
+    repeats.replaceChildren(...neighbors);
+    tiles = neighbors.map(tile=>tile.getContext('2d'));
+    if (image) drawRepeats();
+  }
+
+  function drawRepeats() {
+    for (const tile of tiles) {
+      if (tile.canvas.width !== width) tile.canvas.width = width;
+      if (tile.canvas.height !== height) tile.canvas.height = height;
+      tile.putImageData(image,0,0);
+    }
   }
 
   function paintView() {
@@ -143,22 +177,28 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     move(x - (x - left) * ratio,y - (y - top) * ratio);
   }
 
-  function locate(target,clientX,clientY,{ boundary = false,snap = false } = {}) {
+  function locate(target,clientX,clientY,{ boundary = false,snap = false,wrapX = false,wrapY = false } = {}) {
     const box = target.getBoundingClientRect();
     if (!width || !box.width || !box.height || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
     const x = (clientX - box.left) * width / box.width, y = (clientY - box.top) * height / box.height;
-    if (!boundary && (x < 0 || y < 0 || x >= width || y >= height)) return null;
-    if (snap && guides.length && snapGuides.checked)
-      return guideTool.snap(guides,[x-.5,y-.5],{ width,height,radius:Math.min(2,7/zoom) });
-    return { position:[x-.5,y-.5],at:[clamp(Math.floor(x),0,width-1),clamp(Math.floor(y),0,height-1)] };
+    const outside = x < 0 || y < 0 || x >= width || y >= height;
+    if (!boundary && outside) return null;
+    const repeated = (wrapX && (x < 0 || x >= width)) || (wrapY && (y < 0 || y >= height));
+    if (!repeated && snap && guides.length && snapGuides.checked) {
+      const hit = guideTool.snap(guides,[x-.5,y-.5],{ width,height,radius:Math.min(2,7/zoom) });
+      hit.position = [clamp(hit.position[0],-.5,width-.5),clamp(hit.position[1],-.5,height-.5)];
+      return hit;
+    }
+    const inside = (p,size,wrap) => wrap ? clamp(p,-size,2*size) : clamp(p,0,size);
+    const pixel = (p,size,wrap) => Math.min(wrap ? 2*size-1 : size-1,Math.floor(inside(p,size,wrap)));
+    return { position:[inside(x,width,wrapX)-.5,inside(y,height,wrapY)-.5],
+      at:[pixel(x,width,wrapX),pixel(y,height,wrapY)] };
   }
   const locateCanvas = (x,y,options = {}) => locate(canvas,x,y,{ snap:true,...options });
-  const pixelAt = (x,y,{ clamp:boundary = false,snap = true } = {}) => locateCanvas(x,y,{ boundary,snap })?.at ?? null;
-
-  const positionAt = (x,y,{ clamp:boundary = false } = {}) => {
-    const hit = locateCanvas(x,y,{ boundary });
-    return hit?.position.map((value,i) => clamp(value,-.5,(i === 0 ? width : height)-.5)) ?? null;
-  };
+  const pixelAt = (x,y,{ clamp:boundary = false,...options } = {}) =>
+    locateCanvas(x,y,{ boundary,...options })?.at ?? null;
+  const positionAt = (x,y,{ clamp:boundary = false,...options } = {}) =>
+    locateCanvas(x,y,{ boundary,...options })?.position ?? null;
 
   function setFrame({ width:w,height:h,rgba }) {
     if (![w,h].every(size => Number.isSafeInteger(size) && size > 0) ||
@@ -177,6 +217,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     image.data.set(rgba);
     art.putImageData(image,0,0);
     sample.putImageData(image,0,0);
+    drawRepeats();
   }
 
   listen(zoomOut,'click',() => setZoom(zoom-1));
@@ -248,6 +289,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, setFrame, setGuides, setSelection, setZoom, fit, pixelAt, positionAt,
+  return Object.freeze({ canvas, setFrame, setGuides, setDrawing, setSelection, setZoom, fit, pixelAt, positionAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

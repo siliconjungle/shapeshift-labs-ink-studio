@@ -179,3 +179,56 @@ test('material eyedropper reads retained color, coverage and scalar values in re
   assert.equal(cli('edit',input,patch,'--out',out).affectedTargets[0].pixelCount,4);
   assert.equal(cli('sample',out,'--mode','layer','--layer','ink','--at','1,1').swatch,'base');
 });
+
+test('symmetry and wrap apply after a pencil stroke is rasterized, with atomic protection and replay', t => {
+  const blank = { ...design,frames:[{ id:'front',durationMs:100,cels:{} }] };
+  const editor = ink.createPixelEditor(blank);
+  const drawing = { mirrorX:3.5,mirrorY:2,wrapX:true,wrapY:true };
+  const operation = { tool:'pencil',layer:'ink',swatch:'gold',points:[[7,5],[8,6],[9,6]],drawing };
+  const patch = makePatch(editor,'seam',operation);
+  const expected = [[0,0,2],[0,6,2],[4,0,2],[4,6,2],[5,0,1],[5,7,1]];
+  assert.deepEqual(editor.previewEdit(patch).targets[0].runs,expected);
+  const painted = editor.apply(patch), [receipt] = editor.receipts();
+  assert.deepEqual(receipt.affectedTargets[0].drawing,drawing);
+  assert.deepEqual(receipt.affectedTargets[0].runs,expected);
+  assert.deepEqual(ink.createPixelEditor(blank).replay(receipt),painted);
+  assert.equal(editor.sample([4,5]).swatch,null);
+  assert.equal(editor.undo(),true);
+  assert.equal(editor.sample([7,4]).swatch,null);
+  assert.equal(editor.redo(),true);
+  assert.equal(editor.sample([7,4]).swatch,'gold');
+
+  const protectedDoc = { ...blank,protectedDetails:[{ id:'hold',pixels:[[7,4]] }] };
+  const guarded = ink.createPixelEditor(protectedDoc);
+  assert.throws(()=>guarded.apply(makePatch(guarded,'blocked',operation)),
+    error=>error.receipt.conflicts[0].code === 'protected-pixel');
+  assert.deepEqual(guarded.snapshot(),protectedDoc);
+  assert.equal(editor.previewEdit(makePatch(editor,'outside',{ ...operation,points:[[16,1]] })).valid,false);
+  assert.equal(editor.previewEdit(makePatch(editor,'fractional',{ ...operation,drawing:{ mirrorX:3.25 } })).valid,false);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-wrapped-edit-'));
+  t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
+  const file = name => path.join(dir,name+'.json');
+  fs.writeFileSync(file('design'),JSON.stringify(blank));
+  fs.writeFileSync(file('patch'),JSON.stringify(patch));
+  const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+    { cwd:path.resolve(__dirname,'..'),encoding:'utf8' });
+  fs.writeFileSync(file('receipt'),cli('edit',file('design'),file('patch'),'--out',file('edited')));
+  cli('replay',file('design'),file('receipt'),'--out',file('replayed'));
+  assert.equal(fs.readFileSync(file('edited'),'utf8'),fs.readFileSync(file('replayed'),'utf8'));
+});
+
+test('wrapped fill crosses enabled edges and each mirrored seed uses its own starting swatch', () => {
+  const marks = [[0,0],[0,1],[7,1],[0,5]].map(at=>({ swatch:'mint',at }));
+  marks.push({ swatch:'other',at:[4,1] });
+  const spec = { ...design,frames:[{ id:'front',durationMs:100,cels:{ ink:{ marks } } }] };
+  const editor = ink.createPixelEditor(spec);
+  editor.apply(makePatch(editor,'fill-wrap',{ tool:'fill',layer:'ink',at:[0,1],swatch:'gold',
+    drawing:{ mirrorX:2,wrapX:true } }));
+  assert.deepEqual(editor.receipts()[0].affectedTargets[0].runs,[[0,0,1],[1,0,1],[1,4,1],[1,7,1]]);
+  assert.equal(editor.sample([0,5]).swatch,'mint');
+  editor.apply(makePatch(editor,'wrap-erase',{ tool:'eraser',layer:'ink',points:[[7,1],[8,1]],drawing:{ wrapX:true } }));
+  assert.equal(editor.sample([7,1]).swatch,null);
+  assert.equal(editor.sample([0,1]).swatch,null);
+  assert.equal(editor.sample([4,1]).swatch,'gold');
+});

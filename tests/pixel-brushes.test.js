@@ -252,3 +252,20 @@ test('alpha-only strokes preview, replay and restore hidden pigment through a lo
   assert.throws(()=>guarded.apply(locked),error=>error.receipt?.conflicts[0].code === 'protected-pixel');
   assert.equal(guarded.sample([2,2]).color,'#ff0000');
 });
+
+test('wrapped, mirrored brush tips retain source colors and shaded overlaps change once', () => {
+  const editor = ink.createPixelEditor(glazing);
+  const brush = brushes.capture({ width:2,height:1,rect:[0,0,2,1],anchor:[0,0],
+    read:x=>({ color:x ? '#0000ff' : '#ff0000' }),settings:{ dynamics:{ stabilization:20 } } });
+  const drawing = { wrapX:true,mirrorY:4 };
+  const samples = [{ at:[9,0],time:0,pressure:1 },{ at:[10,0],time:30,pressure:1 }];
+  editor.apply(pathFor(editor,'wrap-tip',brush,{ samples },{ drawing }));
+  assert.deepEqual([0,1,9].map(x=>editor.sample([x,0]).swatch),['red','blue','red']);
+  assert.deepEqual([0,1,9].map(x=>editor.sample([x,8]).swatch),['red','blue','red']);
+
+  const ramp = ['red','shade','bright'];
+  const overlap = solidBrush({ size:[5,1] });
+  editor.apply(pathFor(editor,'shade-wrap',overlap,{ points:[[9,0],[10,0],[9,0]] },
+    { drawing,shading:{ mode:'ramp',ramp,step:1 } }));
+  for (const y of [0,8]) assert.deepEqual([0,1,9].map(x=>editor.sample([x,y]).swatch),['shade','blue','shade']);
+});

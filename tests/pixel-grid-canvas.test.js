@@ -248,19 +248,20 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
       angle.value = 90;
       angle.dispatchEvent(new Event('change',{ bubbles:true }));
     });
-    const saveBrush = () => evaluate(browser,async () => {
+    const download = selector => evaluate(browser,async selector => {
       const createURL = URL.createObjectURL, clickLink = HTMLAnchorElement.prototype.click;
       let writing;
       try {
         URL.createObjectURL = blob => { writing = blob.text(); return createURL.call(URL,blob); };
         HTMLAnchorElement.prototype.click = function () {};
-        document.querySelector('#save-brush').click();
+        document.querySelector(selector).click();
         return JSON.parse(await writing);
       } finally {
         URL.createObjectURL = createURL;
         HTMLAnchorElement.prototype.click = clickLink;
       }
-    });
+    },selector);
+    const saveBrush = () => download('#save-brush');
     const savedBrush = await saveBrush();
     assert.deepEqual(savedBrush.anchor,[1,1]);
     assert.deepEqual(savedBrush.settings,{ angle:90,size:[2,2],swatch:{ mode:'original' } });
@@ -346,6 +347,54 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(await raster(browser,preview,30,25),[230,219,182,255]);
     await click(browser,'#undo');
     assert.deepEqual(await raster(browser,preview,30,25),clear);
+
+    await click(browser,'[data-tool="pencil"]');
+    await click(browser,'#mirror-x');
+    await evaluate(browser,() => {
+      const input = document.querySelector('#mirror-x-at');
+      input.value = 12.5;
+      input.dispatchEvent(new Event('change',{ bubbles:true }));
+    });
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-mirror-x').hidden"),false);
+    await press(anchor(11,5));
+    assert.deepEqual(await raster(browser,preview,14,5),color);
+    await release(anchor(11,5));
+    assert.deepEqual(await raster(browser,main,11,5),color);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,14,5),clear);
+    assert.deepEqual(await raster(browser,preview,11,5),clear);
+    await click(browser,'#mirror-x');
+
+    await click(browser,'#wrap-x');
+    await click(browser,'[data-view="out"]');
+    const tile = await screen(browser,main), leftRepeat = '.ink-grid-repeats canvas:first-child';
+    assert.equal(await browser.evaluate("document.querySelectorAll('.ink-grid-repeats canvas').length"),2);
+    const right = place(tile,47,34), over = place(tile,48.25,34);
+    await press(right);
+    await mouse('mouseMoved',over,{ button:'left',buttons:1 });
+    assert.deepEqual(await raster(browser,preview,0,34),color);
+    assert.deepEqual(await raster(browser,leftRepeat,0,34),color);
+    assert.deepEqual(await raster(browser,preview,24,34),clear);
+    await release(over);
+    assert.deepEqual(await raster(browser,main,47,34),color);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,0,34),clear);
+    assert.deepEqual(await raster(browser,preview,47,34),clear);
+
+    await click(browser,'[data-tool="brush"]');
+    const repeatTap = place(tile,48.25,36);
+    await press(repeatTap);
+    await release(repeatTap);
+    assert.deepEqual(await raster(browser,main,0,36),color);
+    await click(browser,'[data-tool="erase"]');
+    await press(repeatTap);
+    await release(repeatTap);
+    assert.deepEqual(await raster(browser,preview,0,36),clear);
+    await click(browser,'#wrap-y');
+    assert.equal(await browser.evaluate("document.querySelectorAll('.ink-grid-repeats canvas').length"),8);
+    const savedTile = await download('#export');
+    assert.deepEqual([savedTile.width,savedTile.height],[48,48]);
+    assert.deepEqual(savedTile.drawing,{ wrapX:true,wrapY:true });
   });
 });
 

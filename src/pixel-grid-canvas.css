@@ -81,8 +81,35 @@
   background: repeating-conic-gradient(#203035 0% 25%,#26383a 0% 50%) 0 / 16px 16px;
 }
 .ink-grid-main { cursor: crosshair; }
-.ink-grid-hand, .ink-grid-hand .ink-grid-main { cursor: grab; }
-.ink-grid-dragging, .ink-grid-dragging .ink-grid-main { cursor: grabbing; }
+.ink-grid-repeats, .ink-grid-mirrors { position: absolute; inset: 0; pointer-events: none; }
+.ink-grid-repeats canvas {
+  position: absolute;
+  pointer-events: auto;
+  cursor: crosshair;
+  left: calc(100% * var(--tile-x));
+  top: calc(100% * var(--tile-y));
+  width: 100%;
+  height: 100%;
+  outline: 1px solid #526565;
+}
+.ink-grid-repeats:not(:empty) + .ink-grid-main {
+  position: relative;
+  outline: 1px solid #b3d6bb;
+}
+.ink-grid-mirror-x, .ink-grid-mirror-y {
+  position: absolute;
+  inset: 0;
+}
+.ink-grid-mirror-x {
+  left: calc(var(--ink-grid-cell) * var(--mirror-at));
+  border-left: 1px dashed #f6aee0;
+}
+.ink-grid-mirror-y {
+  top: calc(var(--ink-grid-cell) * var(--mirror-at));
+  border-top: 1px dashed #f6aee0;
+}
+.ink-grid-hand, .ink-grid-hand canvas { cursor: grab; }
+.ink-grid-dragging, .ink-grid-dragging canvas { cursor: grabbing; }
 .ink-grid-lines, .ink-grid-cursor, .ink-grid-guides { position: absolute; top: 0; left: 0; pointer-events: none; }
 .ink-grid-lines {
   inset: 0;

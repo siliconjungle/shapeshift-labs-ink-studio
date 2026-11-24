@@ -53,6 +53,17 @@ per texel alongside its indexed paint. Omitting the array gives painted
 texels full opacity. Sprite atlases and projected indexed paint and masks
 carry this coverage through sampling.
 
+Under **Symmetry and wrapping**, enable **Mirror X** or **Mirror Y** and
+move the axis using its position field. Whole values run through pixel
+centers and half-pixels run between them. Enable **Wrap X** to repeat
+left and right, or **Wrap Y** to repeat above and below. Neighbor tiles
+update while you draw, and you can draw in any visible repeat. Zoom out
+to expose more of the neighboring tiles. Use both axes to check corners
+and both directions of a repeating texture.
+
+The Workshop saves one native tile and retains the drawing settings in the
+stamp JSON. [Symmetry and wraparound in document edits](pixel-art-authoring.md#symmetry-and-wraparound)
+
 The main canvas zooms in whole steps. Use **−**, **+**, and **Fit**, or
 Ctrl-scroll or ⌘-scroll around the cursor. Middle-drag, use **Pan** and drag,
 or focus the canvas and use the arrow keys to move it. The grid appears at

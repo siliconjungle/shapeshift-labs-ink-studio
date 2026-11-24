@@ -6,7 +6,7 @@ const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPi
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
-let drawingPointer, pencilStroke;
+let drawingPointer, pencilStroke, grid;
 let brush, brushTip, brushStroke, selection;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
@@ -31,6 +31,7 @@ function load(data) {
   if (width > 512 || height > 512 || !palette || palette.length > 48 ||
       !palette.every(color => typeof color === 'string' && /^#[a-f\d]{6}$/i.test(color)))
     throw new RangeError('Open a stamp up to 512 × 512 with 1–48 hex swatches.');
+  if (data.drawing !== undefined) paintTools.drawingGrid(width,height,data.drawing);
   stop();
   if (state.doc) saveUndo();
   const { slots, rows, strokes, alpha, frames, ...rest } = data;
@@ -61,6 +62,23 @@ function activeStrokes() {
   return [rect(slot,x-inset,y-inset,brushWidth,brushWidth)];
 }
 
+function strokeCopies({ slot,shape }) {
+  let bounds;
+  if (shape.type === 'rect') {
+    const [x,y,w,h] = shape.rect;
+    bounds = [x,y,x+w,y+h];
+  } else {
+    const xs = shape.points.map(point=>point[0]), ys = shape.points.map(point=>point[1]);
+    const pad = shape.width/2+1;
+    bounds = [Math.min(...xs)-pad,Math.min(...ys)-pad,Math.max(...xs)+pad,Math.max(...ys)+pad];
+  }
+  return grid.copies(bounds).map(([[sx,tx],[sy,ty]]) => {
+    if (shape.type !== 'rect') return { slot,shape:{ ...shape,points:shape.points.map(([x,y])=>[sx*x+tx,sy*y+ty]) } };
+    const [x,y,w,h] = shape.rect;
+    return rect(slot,sx*x+tx-(sx < 0 ? w : 0),sy*y+ty-(sy < 0 ? h : 0),w,h);
+  });
+}
+
 function frameSlots(current) {
   const { width,height } = state.doc;
   const slotData=stamp.paint(width,height,current);
@@ -73,8 +91,14 @@ function frameSlots(current) {
     return slotData;
   }
   if (state.tool === 'brush-select' || state.tool === 'brush-stamp') return slotData;
-  const marks=activeStrokes();
-  return marks.length ? stamp.paint(width,height,{slots:slotData,strokes:marks}) : slotData;
+  if (grid && state.tool === 'pencil') {
+    const tip = pencilStroke?.tip();
+    if (tip) for (const [x,y] of [...state.points,tip])
+      grid.pixels(x,y,p=>{ slotData[p] = state.swatch; });
+    return slotData;
+  }
+  const marks = activeStrokes(), strokes = grid ? marks.flatMap(strokeCopies) : marks;
+  return strokes.length ? stamp.paint(width,height,{slots:slotData,strokes}) : slotData;
 }
 
 function draw() {
@@ -111,7 +135,22 @@ function selectSwatch(index) {
   draw();
 }
 
+function updateDrawing() {
+  const { width,height,drawing } = state.doc;
+  grid = drawing ? paintTools.drawingGrid(width,height,drawing) : undefined;
+  for (const [axis,property,size,wrap] of [['x','mirrorX',width,'wrapX'],['y','mirrorY',height,'wrapY']]) {
+    const position = drawing?.[property], input = $('mirror-'+axis+'-at');
+    $('mirror-'+axis).checked = position !== undefined;
+    input.value = position ?? (size-1)/2;
+    input.max = size-.5;
+    input.disabled = position === undefined;
+    $('wrap-'+axis).checked = drawing?.[wrap] === true;
+  }
+  view.setDrawing(drawing);
+}
+
 function update() {
+  updateDrawing();
   $('palette').replaceChildren(...state.doc.palette.map((color,index) => {
     const b=document.createElement('button');
     b.className='swatch';
@@ -225,7 +264,7 @@ function brushShading() {
 
 function applyBrush(slots,alpha) {
   const { width,height,palette:colors } = state.doc, dabs = brushStroke?.dabs ?? new Map();
-  if (!brushStroke) brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dabs.set(p,slot); });
+  if (!brushStroke) brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dabs.set(p,slot); },grid);
   const shading = brushShading();
   if (shading) {
     const resolve = brushes.shade(shading,colors.map((_,slot)=>slot));
@@ -331,7 +370,7 @@ function currentShape(points = state.points) {
 }
 
 function paintShape(slots,shape) {
-  const { width,height } = state.doc, mask = KIT.pixelShapes.raster(width,height,shape);
+  const { width,height } = state.doc, mask = KIT.pixelShapes.raster(width,height,shape,grid);
   let changed = false;
   for (let p = 0; p < mask.length; p++) {
     if (!mask[p] || slots[p] === state.swatch) continue;
@@ -381,7 +420,8 @@ function showShapeControls() {
 
 function pickOrFill(at) {
   const { width,height } = state.doc, current = state.doc.frames[state.frame];
-  const slots = stamp.paint(width,height,current), p = at[1]*width+at[0], picked = slots[p];
+  const slots = stamp.paint(width,height,current), p = grid ? grid.primary(at) : at[1]*width+at[0];
+  const picked = slots[p];
   if (state.tool === 'eyedropper') {
     if (picked !== null) selectSwatch(picked);
     const opacity = current.alpha?.[p];
@@ -389,8 +429,10 @@ function pickOrFill(at) {
       (opacity === undefined ? '' : ' · alpha '+opacity));
     return;
   }
-  if (picked === state.swatch) return;
-  const region = paintTools.region(width,height,at,p=>slots[p] === picked);
+  if (!grid && picked === state.swatch) return;
+  const region = grid ? paintTools.fillPixels(grid,at,(p,seed)=>slots[seed] !== state.swatch && slots[p] === slots[seed])
+    : paintTools.region(width,height,at,p=>slots[p] === picked);
+  if (!region.length) return;
   for (const p of region) slots[p] = state.swatch;
   savePixels(current,slots);
   notify(`Filled ${region.length} pixels`);
@@ -493,6 +535,26 @@ $('guide-remove').addEventListener('click',() => {
   notify('Removed guide ' + item.guide.id);
 });
 
+$('drawing-settings').addEventListener('change',() => {
+  const { width,height } = state.doc, drawing = {};
+  if ($('mirror-x').checked) drawing.mirrorX = $('mirror-x-at').valueAsNumber;
+  if ($('mirror-y').checked) drawing.mirrorY = $('mirror-y-at').valueAsNumber;
+  if ($('wrap-x').checked) drawing.wrapX = true;
+  if ($('wrap-y').checked) drawing.wrapY = true;
+  try {
+    paintTools.drawingGrid(width,height,drawing);
+    edit(() => {
+      if (Object.keys(drawing).length) state.doc.drawing = drawing;
+      else delete state.doc.drawing;
+      resetStroke();
+    });
+    notify('');
+  } catch (error) {
+    updateDrawing();
+    notify(error.message);
+  }
+});
+
 function resizeCanvas(width,height) {
   const doc = state.doc;
   if (![width,height].every(size => Number.isSafeInteger(size) && size >= 1 && size <= 512) ||
@@ -511,10 +573,19 @@ function resizeCanvas(width,height) {
     return { ...hold, slots:resized, ...(opacity && { alpha:opacity }) };
   });
   edit(() => {
-    state.doc = { ...doc,width,height,frames };
+    const drawing = doc.drawing && { ...doc.drawing };
+    if (drawing?.mirrorX !== undefined) drawing.mirrorX = Math.min(drawing.mirrorX,width-.5);
+    if (drawing?.mirrorY !== undefined) drawing.mirrorY = Math.min(drawing.mirrorY,height-.5);
+    state.doc = { ...doc,width,height,frames,...(drawing && { drawing }) };
     selection = undefined;
     resetStroke();
   });
+}
+
+function strokeAt(event,continuous = false) {
+  const options = { clamp:true,
+    ...(state.tool !== 'brush-select' && grid && { wrapX:grid.wrapX,wrapY:grid.wrapY }) };
+  return continuous ? view.positionAt(event.clientX,event.clientY,options) : view.pixelAt(event.clientX,event.clientY,options);
 }
 
 function startPencil(at) {
@@ -530,7 +601,7 @@ function extendPencil(event) {
   const tip = pencilStroke.tip();
   for (const sample of [...(event.getCoalescedEvents?.() ?? []),event]) {
     if (state.points.length >= maxPencilPixels-1) break;
-    const at = view.pixelAt(sample.clientX,sample.clientY,{ clamp:true });
+    const at = strokeAt(sample);
     if (at) pencilStroke.add(at);
   }
   return pencilStroke.tip() !== tip;
@@ -540,14 +611,14 @@ function startDynamicBrush(event) {
   resetStroke();
   const { width,height } = state.doc, dabs = new Map();
   brushStroke = { dabs,start:event.timeStamp,
-    path:brushes.beginDynamicStroke(width,height,brush,(p,slot)=>{ dabs.set(p,slot); }) };
+    path:brushes.beginDynamicStroke(width,height,brush,(p,slot)=>{ dabs.set(p,slot); },grid) };
   extendDynamicBrush(event);
 }
 
 function extendDynamicBrush(event) {
   try {
     for (const input of [...(event.getCoalescedEvents?.() ?? []),event]) {
-      const at = view.positionAt(input.clientX,input.clientY,{ clamp:true });
+      const at = strokeAt(input,true);
       if (!at) continue;
       const { last,start,path } = brushStroke, ending = event.type === 'pointerup';
       const samePosition = last && at[0] === last.at[0] && at[1] === last.at[1];
@@ -566,9 +637,11 @@ function extendDynamicBrush(event) {
   }
 }
 
-art.addEventListener('pointerdown',event => {
+art.parentElement.addEventListener('pointerdown',event => {
   if (event.button !== 0 || drawingPointer !== undefined) return;
-  const at = view.pixelAt(event.clientX,event.clientY,{ snap:state.tool !== 'eyedropper' });
+  const central = event.target === art;
+  if (!central && (!grid || state.tool === 'brush-select' || !event.target.matches('.ink-grid-repeats canvas'))) return;
+  const at = central ? view.pixelAt(event.clientX,event.clientY,{ snap:state.tool !== 'eyedropper' }) : strokeAt(event);
   if (!at) return;
   stop();
   if (state.tool === 'eyedropper' || state.tool === 'fill') { pickOrFill(at); return; }
@@ -602,7 +675,7 @@ art.addEventListener('pointermove',event => {
     return;
   }
   if (state.points.length >= 120) return;
-  const at=view.pixelAt(event.clientX,event.clientY,{ clamp:true }), last=state.points.at(-1);
+  const at=strokeAt(event), last=state.points.at(-1);
   if (!at || !last || last[0]===at[0] && last[1]===at[1]) return;
   if (state.tool === 'brush-select') {
     selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
@@ -615,7 +688,7 @@ art.addEventListener('pointerup',event => {
   if (pencilStroke) extendPencil(event);
   drawingPointer = undefined;
   if (state.tool === 'brush-select' && state.points.length) {
-    const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
+    const at = strokeAt(event);
     if (at) selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
     resetStroke();
     draw();
@@ -624,14 +697,20 @@ art.addEventListener('pointerup',event => {
     if (brushStroke) commitBrush();
     else draw();
   } else if (state.tool === 'brush-stamp' && state.points.length) {
-    const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
+    const at = strokeAt(event);
     if (at && state.points.length < 120) state.points.push(at);
     commitBrush();
   } else if (state.tool === 'shape' && state.points.length && dragShapes.has(shapeType())) {
-    const at = view.pixelAt(event.clientX,event.clientY,{ clamp:true });
+    const at = strokeAt(event);
     if (at) state.points[1] = at;
     finishShape(currentShape());
-  } else commitStroke();
+  } else {
+    if (grid && !pencilStroke && state.points.length && state.points.length < 120) {
+      const at = strokeAt(event), last = state.points.at(-1);
+      if (at && (at[0] !== last[0] || at[1] !== last[1])) state.points.push(at);
+    }
+    commitStroke();
+  }
 });
 art.addEventListener('lostpointercapture',event => {
   if (drawingPointer !== event.pointerId) return;

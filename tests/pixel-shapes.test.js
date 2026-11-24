@@ -104,3 +104,18 @@ test('document shapes preview, respect protected pixels, undo and replay from th
   assert.equal(cli('replay',file('spec'),file('receipt'),'--out',file('replayed')),written);
   assert.equal(fs.readFileSync(file('replayed'),'utf8'),fs.readFileSync(file('edited'),'utf8'));
 });
+
+test('polygons and staircases retain their coverage across enabled tile edges', () => {
+  const grid = KIT.pixelPaintTools.drawingGrid(size,size,{ wrapX:true,wrapY:true });
+  const polygon = { type:'polygon',points:[[18,18],[21,18],[21,21],[18,21]] };
+  const on = mask=>points(mask).map(([x,y])=>y*size+x).sort((a,b)=>a-b);
+  const local = coverage({ ...polygon,points:[[2,2],[5,2],[5,5],[2,5]] });
+  const expected = points(local).map(([x,y])=>((y+16)%size)*size+(x+16)%size).sort((a,b)=>a-b);
+  assert.deepEqual(on(raster(size,size,polygon,grid)),expected);
+  assert.deepEqual(points(raster(size,size,{ type:'staircase',from:[0,19],axis:'x',
+    direction:[-1,1],lengths:[2,2] },grid)),[[17,0],[18,0],[0,19],[19,19]]);
+  const mirror = KIT.pixelPaintTools.drawingGrid(size,size,{ mirrorX:9.5 });
+  const shape = { type:'text',at:[1,2],text:'I' };
+  assert.deepEqual(on(raster(size,size,shape,mirror)),
+    points(coverage(shape)).flatMap(([x,y])=>[y*size+x,y*size+19-x]).sort((a,b)=>a-b));
+});

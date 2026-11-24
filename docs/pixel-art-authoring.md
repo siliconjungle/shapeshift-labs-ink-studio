@@ -283,6 +283,39 @@ and writes an RGBA `art.png` when the frame has authored alpha. Fully
 transparent paint remains recoverable in the source document. Flattened
 exports describe the visible composite.
 
+### Symmetry and wraparound
+
+Add `operation.drawing` to any raster-tool patch to mirror or wrap its stroke.
+
+```json
+{
+  "tool": "pencil",
+  "layer": "ink",
+  "swatch": "light",
+  "points": [[7, 2], [8, 2], [9, 3]],
+  "drawing": { "mirrorY": 2.5, "wrapX": true }
+}
+```
+
+In an eight-pixel-wide document this stroke crosses the right seam into
+columns 0 and 1. On a wrapped axis, integer input can extend from
+`-size` through `2*size-1` to address either neighboring tile. Keep these
+input coordinates unwrapped so the path, pixel-perfect cleanup, and brush
+dynamics follow the actual stroke across the seam. Coordinates inside one
+tile still describe an ordinary path within that tile.
+
+Use `mirrorX` for a vertical axis and `mirrorY` for a horizontal axis.
+Zero is the first pixel center. Whole positions reflect through a row or
+column of pixels, and half-pixels reflect between them. Each enabled axis
+can move from the first edge (−0.5) to the last edge (size − 0.5).
+Enable `wrapX` or `wrapY` independently. Ink reflects the footprint and
+wraps each copy back to the native tile. Fill crosses enabled seams and
+uses each mirrored seed's own starting swatch. Overlapping copies count
+once in the edit and apply a shading step at most once per pixel.
+
+Preview and replay use the same placement settings and enforce clipping and
+protected details on the resulting pixels.
+
 ## Author a drawing
 
 ```json

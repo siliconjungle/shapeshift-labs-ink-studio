@@ -108,14 +108,14 @@ const PixelBrushes = (() => {
     return tip;
   }
 
-  function stroke(width,height,tip,points,emit) {
+  function stroke(width,height,tip,points,emit,grid) {
     if (!integer(width,1,512) || !integer(height,1,512) || !Array.isArray(points) ||
-        !integer(points.length,1,4096) || !Array.from(points).every(point=>xy(point,width,height)))
+        !integer(points.length,1,4096) || !Array.from(points).every(point=>grid ? grid.contains(point) : xy(point,width,height)))
       throw new RangeError('Brush stroke needs a bounded path inside the native grid');
     let cost = 0;
     function dab(x,y) {
       if ((cost += tip.length) > 8e6) throw new RangeError('Brush stroke exceeds its native pixel budget');
-      place(width,height,tip,x,y,emit);
+      place(width,height,tip,x,y,emit,grid);
     }
     const path = tools.freehand(dab);
     for (const point of points) path.add(point);
@@ -123,14 +123,15 @@ const PixelBrushes = (() => {
     if (last) dab(...last);
   }
 
-  function place(width,height,tip,x,y,emit) {
+  function place(width,height,tip,x,y,emit,grid) {
     for (const [dx,dy,slot] of tip) {
       const u = x+dx, v = y+dy;
-      if (integer(u,0,width-1) && integer(v,0,height-1)) emit(v*width+u,slot);
+      if (grid) grid.pixels(u,v,p=>emit(p,slot));
+      else if (integer(u,0,width-1) && integer(v,0,height-1)) emit(v*width+u,slot);
     }
   }
 
-  function beginDynamicStroke(width,height,raw,emit) {
+  function beginDynamicStroke(width,height,raw,emit,grid) {
     if (!integer(width,1,512) || !integer(height,1,512) || typeof emit !== 'function')
       throw new TypeError('Brush dynamics need a native canvas and pixel callback');
     const brush = validate(raw), { size } = brush.settings;
@@ -151,12 +152,12 @@ const PixelBrushes = (() => {
         lastSize = key;
       }
       charge(lastTip.length+1);
-      place(width,height,lastTip,x,y,emit);
+      place(width,height,lastTip,x,y,emit,grid);
       lastDab = [x,y];
     }
 
     function extend(next,nextScale) {
-      const at = next.map((n,i) => clamp(Math.round(n),0,(i === 0 ? width : height)-1));
+      const at = grid ? grid.quantize(next) : next.map((n,i) => clamp(Math.round(n),0,(i === 0 ? width : height)-1));
       const steps = anchor && Math.max(Math.abs(at[0]-anchor[0]),Math.abs(at[1]-anchor[1]));
       if (steps) {
         let step = 0;
@@ -169,7 +170,8 @@ const PixelBrushes = (() => {
     function add(sample) {
       if (ended || count >= 4096 || !fields(sample,['at','pressure','time']) ||
           !Array.isArray(sample.at) || sample.at.length !== 2 ||
-          !bounded(sample.at[0],-.5,width-.5) || !bounded(sample.at[1],-.5,height-.5) ||
+          (grid ? !grid.contains(sample.at,true) :
+            !bounded(sample.at[0],-.5,width-.5) || !bounded(sample.at[1],-.5,height-.5)) ||
           !bounded(sample.pressure,0,1) || !bounded(sample.time,previous?.time ?? 0,Number.MAX_SAFE_INTEGER))
         throw new RangeError('Brush samples need in-grid positions, pressure in 0–1 and ordered elapsed milliseconds (up to 4096 samples)');
       const at = sample.at.slice();
@@ -197,10 +199,10 @@ const PixelBrushes = (() => {
     return { add,finish };
   }
 
-  function dynamicStroke(width,height,brush,samples,emit) {
+  function dynamicStroke(width,height,brush,samples,emit,grid) {
     if (!Array.isArray(samples) || !integer(samples.length,1,4096))
       throw new RangeError('A dynamic brush stroke needs 1–4096 samples');
-    const stroke = beginDynamicStroke(width,height,brush,emit);
+    const stroke = beginDynamicStroke(width,height,brush,emit,grid);
     for (const sample of samples) stroke.add(sample);
     stroke.finish();
   }

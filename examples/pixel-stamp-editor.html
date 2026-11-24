@@ -37,7 +37,7 @@
   #status { margin:12px 0 0; min-height:1.45em; font-size:13px; }
   .canvas-size { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
   .canvas-size label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
-  .canvas-size input { width:65px; color:#e6eeea; }
+  .canvas-size input[type=number] { width:65px; color:#e6eeea; }
   .guide-controls { display:grid; gap:9px; }
   .guide-controls > label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
   .guide-controls select { max-width:100%; color:#e6eeea; }
@@ -183,6 +183,21 @@
           <label>Height<input type="number" id="canvas-height" min="1" max="512" step="1" required></label>
           <button type="submit">Resize</button>
         </form>
+      </section>
+      <section>
+        <h2>Symmetry and wrapping</h2>
+        <div id="drawing-settings" class="guide-controls">
+          <div class="canvas-size">
+            <div><label class="row"><input id="mirror-x" type="checkbox"> Mirror X</label>
+              <input id="mirror-x-at" aria-label="Vertical mirror position" type="number" min="-0.5" step="0.5"></div>
+            <div><label class="row"><input id="mirror-y" type="checkbox"> Mirror Y</label>
+              <input id="mirror-y-at" aria-label="Horizontal mirror position" type="number" min="-0.5" step="0.5"></div>
+          </div>
+          <div class="row">
+            <label><input id="wrap-x" type="checkbox"> Wrap X</label>
+            <label><input id="wrap-y" type="checkbox"> Wrap Y</label>
+          </div>
+        </div>
       </section>
       <section>
         <h2>Guides</h2>
