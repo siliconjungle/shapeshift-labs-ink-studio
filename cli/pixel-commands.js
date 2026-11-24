@@ -15,12 +15,27 @@ const renderOptions = Object.freeze({
 const exportArtifacts = Object.freeze([
   'document','scene','layer-deck','stamp','png','preset',...Object.keys(renderOptions)
 ]);
+const optionFields = {
+  inspect:['frame','cel','binding','destinations','references'],
+  select:['frame','layer','cel'],
+  edit:['shotHitFrame'],
+  preview:['limit'],
+  export:{ preset:['preset','out','directory'],png:['frame','cel','layer','colorMode'],
+    stamp:['frame','cel','layer','references'],render:['scene'] }
+};
 const members = {
   validate:[],inspect:['at','options'],select:['query','options'],
   ...Object.fromEntries(edits.map(action=>[action,['patch','options']])),
   preview:['edit','options'],begin:['label'],...Object.fromEntries(travel.map(action=>[action,[]])),
   replay:['receipt'],export:['artifact','options']
 };
+const requiredFields = { inspect:['at'],select:['query'],replay:['receipt'],
+  ...Object.fromEntries(edits.map(action=>[action,['patch']])) };
+
+function contract() {
+  return structuredClone({ format,version:1,members,requiredFields,optionFields,
+    edits,travel,paintTools,canvasTools,recolorTools,exportArtifacts,renderArtifacts:Object.keys(renderOptions) });
+}
 
 const record = value=>value && Object.getPrototypeOf(value) === Object.prototype;
 const text = value=>typeof value === 'string' && !!value.trim();
@@ -30,7 +45,8 @@ const envelope = (action,details)=>({ ...details,format,version:1,action });
 function prepare(command) {
   if (!record(command) || command.format !== format || command.version !== 1 ||
       typeof command.action !== 'string' || !Object.hasOwn(members,command.action) ||
-      !fields(command,['format','version','action',...members[command.action]]))
+      !fields(command,['format','version','action',...members[command.action]]) ||
+      requiredFields[command.action]?.some(key=>!Object.hasOwn(command,key)))
     throw new TypeError('Use a version 1 Ink pixel command with fields for its action');
   return command;
 }
@@ -77,7 +93,7 @@ function request(design,command) {
 function exportArtifact(editor,artifact,options,context) {
   if (!exportArtifacts.includes(artifact)) throw new TypeError('Unknown pixel export artifact '+artifact);
   if (artifact === 'preset') {
-    const {preset,out,directory} = optionsFor(options,['preset','out','directory']) ?? {};
+    const {preset,out,directory} = optionsFor(options,optionFields.export.preset) ?? {};
     if (!record(preset) || !text(out) || directory !== undefined && !text(directory))
       throw new TypeError('A preset export needs a preset object, an output directory, and an optional auxiliary base directory');
     const root = context.directory ?? process.cwd();
@@ -85,13 +101,13 @@ function exportArtifact(editor,artifact,options,context) {
       directory:path.resolve(root,directory ?? '.'),inputs:context.inputs }) };
   }
   if (artifact === 'png') {
-    const settings = optionsFor(options,['frame','cel','layer','colorMode']);
+    const settings = optionsFor(options,optionFields.export.png);
     return { artifact,encoding:'base64',data:editor.png(settings).toString('base64') };
   }
-  if (artifact === 'stamp') return { artifact,data:editor.stamp(optionsFor(options,['frame','cel','layer','references'])) };
+  if (artifact === 'stamp') return { artifact,data:editor.stamp(optionsFor(options,optionFields.export.stamp)) };
   let data;
   if (Object.hasOwn(renderOptions,artifact)) {
-    const { scene } = optionsFor(options,['scene']) ?? {};
+    const { scene } = optionsFor(options,optionFields.export.render) ?? {};
     data = editor.renderOptions(scene)[renderOptions[artifact]];
   } else {
     optionsFor(options,[]);
@@ -107,7 +123,7 @@ function execute(editor,design,raw,context = {}) {
   const command = prepare(raw), {action,options} = command;
   if (edits.includes(action) || action === 'replay') {
     if (action === 'replay') editor.replay(command.receipt,context);
-    else editor.apply(request(design,command),{ ...context,...optionsFor(options,['shotHitFrame']) });
+    else editor.apply(request(design,command),{ ...context,...optionsFor(options,optionFields.edit) });
     return editor.receipts().at(-1);
   }
   if (travel.includes(action)) {
@@ -118,15 +134,15 @@ function execute(editor,design,raw,context = {}) {
     case 'validate':
       return editor.describe();
     case 'inspect':
-      return editor.inspect(command.at,{ ...context,...optionsFor(options,['frame','cel','binding','destinations','references']) });
+      return editor.inspect(command.at,{ ...context,...optionsFor(options,optionFields.inspect) });
     case 'select':
-      return editor.select(command.query,{ ...context,...optionsFor(options,['frame','layer','cel']) });
+      return editor.select(command.query,{ ...context,...optionsFor(options,optionFields.select) });
     case 'preview': {
-      const settings = { ...context,...optionsFor(options,['limit']) };
+      const settings = { ...context,...optionsFor(options,optionFields.preview) };
       if (command.edit === undefined) return editor.previewChanges(settings);
       const proposed = prepare(command.edit);
       if (!edits.includes(proposed.action)) throw new TypeError('Preview needs a pixel edit command');
-      optionsFor(proposed.options,['shotHitFrame']);
+      optionsFor(proposed.options,optionFields.edit);
       return editor.previewEdit(request(design,proposed),settings);
     }
     case 'begin':
@@ -138,4 +154,4 @@ function execute(editor,design,raw,context = {}) {
   }
 }
 
-module.exports = { execute,envelope,edits,travel };
+module.exports = { execute,envelope,edits,travel,contract };

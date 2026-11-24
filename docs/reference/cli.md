@@ -295,6 +295,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options
             --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits
   pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session
+  pixel-art schema [--out schema.json]   publish command schemas, examples, destination inputs and evidence
   pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run the same command object as the SDK
   pixel-art session <apply|draw|mask|recolor|transform> <directory> <patch.json>   stage or apply a guarded edit
   pixel-art session <status|begin|preview|commit|cancel|undo|redo|validate|inspect|sample|select|snap|brush|copy|timeline|targets> <directory>
@@ -739,6 +740,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art reprobe` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art rules` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art sample` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art schema` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art select` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art session apply` · [source](../../cli/pixel-art.js)

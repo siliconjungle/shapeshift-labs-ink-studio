@@ -2707,7 +2707,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['capture','trace','import','upgrade','validate','timeline','targets','draw','canvas','inspect','lint','rules','motion','track','correct','reprobe','multiview','sample','select','snap','brush','copy',
+const actions = ['schema','capture','trace','import','upgrade','validate','timeline','targets','draw','canvas','inspect','lint','rules','motion','track','correct','reprobe','multiview','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','run','begin',...PixelCommands.edits,'preview',...PixelCommands.travel,
   'validate','inspect','sample','select','snap','brush','copy','timeline','targets','export'];
@@ -2836,6 +2836,15 @@ function tilemapCommand([action,source,...rest],opt) {
 }
 
 function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
+  if (pos[0] === 'schema') {
+    if (pos.length !== 1 || Object.keys(opt).some(key=>key !== 'out') ||
+        (opt.out !== undefined && !reference(opt.out)))
+      throw new TypeError('Use pixel-art schema [--out schema.json]');
+    const schema = require('..').pixelCommandSchema();
+    if (opt.out) files.json(path.resolve(opt.out),schema);
+    else process.stdout.write(JSON.stringify(schema,null,2)+'\n');
+    return;
+  }
   if (pos[0] === 'paint')
     return require('./pixel-bound-paint.js').command(pos.slice(1),opt,{ read,compile,scene,sameScene,fingerprint,editWithReceipt });
   if (pos[0] === 'aseprite-tiles') {

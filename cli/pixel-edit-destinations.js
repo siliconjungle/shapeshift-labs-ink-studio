@@ -38,6 +38,17 @@ const kindFields = new Map([
   ['sdf-material', ['binding']]
 ]);
 
+const builtins = new Map([
+  ['raster',1],['canvas',1],['palette',1],['adjustments',1],['art-rules',2],
+  ['protection',2],['timeline',1],['layers',1],['guides',2],['selections',2]
+].map(([kind,minVersion])=>[kind,{ minVersion,aliases:['raster','guides','selections'].includes(kind) ? [] : ['document:'+kind] }]));
+const builtinNames = new Map([...builtins].flatMap(([kind,{minVersion,aliases}])=>
+  [kind,...aliases].map(name=>[name,{kind,minVersion}])));
+
+function contract() {
+  return structuredClone({ declared:Object.fromEntries(kindFields),builtin:Object.fromEntries(builtins) });
+}
+
 function validate(destinations, bindings) {
   if (destinations === undefined) return;
   if (!Array.isArray(destinations)) throw new TypeError('Pixel edit destinations must be an array');
@@ -63,16 +74,9 @@ function validate(destinations, bindings) {
 function resolve(design, name = 'raster') {
   const scoped = design.version === 2 && typeof name === 'string' && name.startsWith('layer:');
   const layer = scoped && design.layers.find(row=>row.id === name.slice(6) && row.kind === 'surface');
+  const builtin = builtinNames.get(name);
   const destination = (design.version === 2 && design.destinations?.find(target => target.id === (layer ? layer.destination : name))) ||
-    (name === 'raster' && { id:name,kind:name }) ||
-    (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
-    (['palette','document:palette'].includes(name) && { id:'palette',kind:'palette' }) ||
-    (['adjustments','document:adjustments'].includes(name) && { id:'adjustments',kind:'adjustments' }) ||
-    (design.version === 2 && ['art-rules','document:art-rules'].includes(name) && { id:'art-rules',kind:'art-rules' }) ||
-    (design.version === 2 && ['protection','document:protection'].includes(name) && { id:'protection',kind:'protection' }) ||
-    (['timeline','document:timeline'].includes(name) && { id:'timeline',kind:'timeline' }) ||
-    (['layers','document:layers'].includes(name) && { id:'layers',kind:'layers' }) ||
-    (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
+    (builtin && (builtin.minVersion === 1 || design.version === 2) && { id:builtin.kind,kind:builtin.kind });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);
   const boundLayer = layer?.id ?? binding?.layer;
@@ -652,4 +656,4 @@ function targets(route, context, limit, query) {
   };
 }
 
-module.exports = { validate, resolve, apply, targets, channelSource, surfaceSource, indexedValue };
+module.exports = { validate, resolve, apply, targets, channelSource, surfaceSource, indexedValue, contract };

@@ -6,6 +6,7 @@ Search this reference with `ink-studio catalog <words> --all`. Add `--full` for 
 The keyword search includes the curated features, CLI usages, public API members, graph operations, runnable effect recipes, and the full text of the guides.
 
 - [Command-line reference](cli.md)
+- [Pixel command schema](pixel-command-schema.json)
 - [Guide index](guides.md)
 - [Effect recipe library](../effect-recipes.md)
 - [Machine-readable search index](index.json)

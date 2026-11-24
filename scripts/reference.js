@@ -230,10 +230,16 @@ async function generate() {
   addPage('guides', 'Guide index', ['All checked-in guides, indexed by title and section headings.', '',
     ...guideIndex.guides.map(item => '- [' + item.title + '](' + fromReference(item.id) + ')')]);
 
+  const commandSchema = require('../cli/pixel-command-schema.js').filename;
+  results.set(commandSchema,JSON.stringify(studio.pixelCommandSchema(),null,2)+'\n');
+  entries.push({ id:'pixel-command-schema',kind:'schema',title:'Pixel editing command schema',
+    summary:'Versioned requests, results, edit destinations, channel units and runnable examples.',
+    use:'ink-studio pixel-art schema',docs:[destination+'/'+commandSchema,'docs/pixel-art-authoring.md'] });
+
   addPage('index', 'Ink Studio public reference', [
     'Search this reference with `ink-studio catalog <words> --all`. Add `--full` for details or `--json` for structured results.',
     'The keyword search includes the curated features, CLI usages, public API members, graph operations, runnable effect recipes, and the full text of the guides.',
-    '', '- [Command-line reference](cli.md)', '- [Guide index](guides.md)', '- [Effect recipe library](../effect-recipes.md)', '- [Machine-readable search index](index.json)',
+    '', '- [Command-line reference](cli.md)', '- [Pixel command schema](' + commandSchema + ')', '- [Guide index](guides.md)', '- [Effect recipe library](../effect-recipes.md)', '- [Machine-readable search index](index.json)',
     '', '## Public APIs', '', ...apiPages, '', '## Graph operations', '', ...graphPages
   ]);
   const sorted = entries.sort((a, b) => compare(a.id, b.id) || compare(a.kind, b.kind) || compare(a.use ?? '', b.use ?? ''));

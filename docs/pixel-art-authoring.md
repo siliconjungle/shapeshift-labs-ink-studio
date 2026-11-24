@@ -1727,6 +1727,27 @@ Relative paths resolve from the command file in the CLI, and from
 shortcuts `session draw`, `session mask`, `session recolor`, and
 `session transform` take the patch JSON by itself.
 
+### Read the command schemas
+
+Download the [pixel command JSON Schema](reference/pixel-command-schema.json).
+The CLI prints the same schema with `ink-studio pixel-art schema` or saves it
+with `ink-studio pixel-art schema --out schema.json`. In Node, call
+`pixelCommandSchema()`.
+
+The root schema validates **requests** using JSON Schema Draft 2020-12.
+Use `x-ink.commands` for request and result schema pointers, required inputs,
+and the evidence each command returns. Each example has its expected result.
+Open a fresh editor with `x-ink.exampleDocument`, run the example's
+`setup` commands, then run its `command`. [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12)
+
+Use `x-ink.editDestinations` to find declaration, patch and operation
+schemas for built-in and scene-bound destinations. Resolve a custom
+destination ID against the current document before validating its
+destination-specific patch. `x-ink.channels` lists the channel value
+schemas, ranges, modes, and units for material paint and related source
+coordinates. The live editor checks state-dependent constraints such as
+document bounds, source capabilities, locks, and current revisions.
+
 ## Preview before committing
 
 Use `pixels.previewEdit(patch)` to check a proposed patch against the working

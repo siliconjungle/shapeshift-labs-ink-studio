@@ -302,6 +302,13 @@ module.exports = {
   createPixelEditor(source, options) {
     return require('./cli/pixel-art.js').createEditor(source, options);
   },
+  pixelCommandSchema() {
+    const { KIT } = module.exports.load();
+    return require('./cli/pixel-command-schema.js').buildSchema({
+      createEditor:module.exports.createPixelEditor,
+      surfaceDefinitions:KIT.procedural.surfaceState.materialChannels({ masks:['example'] })
+    });
+  },
   unpackPixelSourceView: require('./src/pixel-view-source.js').unpack,
   openPixelEditorSession(directory, options) {
     return require('./cli/pixel-art.js').openEditorSession(directory, options);
