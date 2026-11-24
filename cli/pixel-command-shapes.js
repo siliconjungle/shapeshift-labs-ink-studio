@@ -200,7 +200,24 @@ function createDefinitions() {
     tagged('op','retire',{splat:text,reason:text},['splat'])),1)},['topology'])),
     scanMaterialOperation:object({texels:array({...object({at:textureCoordinate,pigment:nullable(inkSwatch),
       roughness:nullable(unit),normal:nullable(tangentNormal)},['at']),anyOf:['pigment','roughness','normal'].map(prop)},1,4096)},['texels']),
-    meshTopologyOperation:object({
+    meshComponentTransform:object({
+      selection:object({format:constant('ink-studio/mesh-selection'),version:constant(1),mesh:text,revision:text,
+        domain:choice('vertices','edges','faces'),ids:array(text,1)},['format','version','mesh','revision','domain','ids']),
+      operation:either(tagged('kind','move',{offset:pos},['offset']),
+        tagged('kind','rotate',{axis:pos,degrees:number},['axis','degrees']),
+        tagged('kind','scale',{factors:either({type:'number',exclusiveMinimum:0},{...pos,
+          prefixItems:Array.from({length:3},()=>({type:'number',exclusiveMinimum:0}))})},['factors'])),
+      space:choice('local','world','normal'),pivot:pos,normal:pos,tangent:pos,
+      pins:object({vertices:array(text),boundary:choice('mesh','selection','both')}),
+      falloff:object({radius:{type:'number',exclusiveMinimum:0},curve:choice('linear','smooth','sharp')},['radius']),
+      snap:either(...['vertex','edge','face'].map(kind=>tagged('kind',kind,{id:text,object:text,anchor:text,maxDistance:num(0)},['id'])),
+        tagged('kind','plane',{origin:pos,normal:pos,anchor:text,maxDistance:num(0)},['origin','normal']),
+        tagged('kind','socket',{instance:text,binding:text,anchor:text,maxDistance:num(0)},['instance','binding']),
+        tagged('kind','sdf',{object:text,anchor:text,maxDistance:{type:'number',exclusiveMinimum:0},
+          tolerance:{type:'number',exclusiveMinimum:0},iterations:int(1,64)},['object','maxDistance']))
+    },['selection','operation']),
+    meshTopologyOperation:{ ...object({
+      transform:ref('meshComponentTransform'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos},['id','position'])),
@@ -215,7 +232,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    },['patch']),
+    }),...exactlyOne('patch','transform') },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

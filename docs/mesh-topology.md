@@ -135,6 +135,93 @@ node examples/mesh-component-selection.cjs component-selection-review
 ink-studio mesh-topology select component-selection-review/mesh.json component-selection-review/rim-query.json --visibility component-selection-review/visible.json
 ```
 
+## Transform and snap a component selection
+
+Use a saved selection for the exact topology revision. A transform writes
+vertex positions and preserves the IDs, polygons, materials, and corner UVs.
+A collapsed or self-intersecting polygon rejects the preview and the edit.
+
+```json
+{
+  "operation": { "kind": "move", "offset": [-0.18, 0, 0] },
+  "space": "world",
+  "pins": { "vertices": ["front/left-foot", "throat/left-foot"] },
+  "falloff": { "radius": 0.9, "curve": "smooth" },
+  "snap": {
+    "kind": "plane",
+    "origin": [-0.965, 0, 0],
+    "normal": [1, 0, 0],
+    "anchor": "front/arch-0",
+    "maxDistance": 0.2
+  }
+}
+```
+
+```sh
+ink-studio mesh-topology transform gatehouse.json request.json --object gatehouse-portal --selection selection.json
+ink-studio mesh-topology transform gatehouse.json request.json --object gatehouse-portal --selection selection.json --out revised.json --report evidence.json
+```
+
+Without `--out`, the CLI returns the vertex patch and a preview report.
+Supply `selection` in the request or pass a selection file. A standalone
+topology document can use the same command without `--object`.
+
+A `move` takes an XYZ offset. A `rotate` takes `axis` and `degrees`,
+and a `scale` takes a positive scalar or XYZ `factors`. The pivot uses
+stored vertex coordinates and defaults to the selected vertices' centroid.
+Local transforms use the mesh's stored axes. World transforms use scene
+axes. Standalone meshes can declare a local-to-world affine `frame` using
+the scene graph transform format. Retained scene meshes store positions
+in scene space. In `normal` space, +Z follows the area-weighted selection
+normal and +X follows a tangent. Supply world-space `normal` or `tangent`
+guides to control the orientation.
+
+Pin explicit `vertices`, the open `mesh` boundary, the `selection`
+boundary, or `both` boundaries. The selection boundary is a face
+perimeter, the ends and junctions of selected edge chains, or selected
+vertices adjacent to unselected vertices. Optional `falloff.radius` is a
+world distance measured along connected mesh edges. `linear`, `smooth`,
+and `sharp` curves taper the movement, rotation angle, or scale toward
+the radius. Pinned vertices block that path.
+
+Snapping uses the edited position of a selected, unpinned `anchor`
+vertex or the transformed pivot. The snap moves the affected vertices
+by the resolved offset, weighted by falloff. The target is resolved
+against the original snapshot. `maxDistance` limits the snap offset in
+world units.
+
+| Snap kind | Required target fields |
+| --- | --- |
+| `vertex`, `edge`, `face` | Stable component `id`. The optional `object` selects another retained mesh. Edges and faces use the closest point on the target. |
+| `plane` | World-space `origin` and `normal` |
+| `socket` | Placed asset `instance` and bound socket `binding` |
+| `sdf` | Authored SDF solid `object` and positive `maxDistance`. Optional `tolerance` and `iterations` control the bounded surface projection. |
+
+Use `KIT.meshTopology.planTransform(document, request, context)` for the
+pure planner. A host can resolve extra targets with `context.mesh(id)`
+returning `{ document, frame? }`, `context.socket(instance, binding)`
+returning a world point, or `context.sdf(id)` returning a signed distance
+function. `sceneEditor.planMeshTransform(object, request, options)`
+resolves targets from the scene snapshot and enforces hybrid shape
+ownership for a managed mesh. `transformMeshTopology` uses
+the same plan and writes through the topology transaction. Scene SDF
+targets use a named top-level solid's authored field in its rest pose.
+
+A pixel patch for the `mesh-topology` destination can use
+`operation: { transform: request }` in place of its raw topology patch.
+Include the observed revisions and any required hybrid shape ownership.
+The native preview, receipt, and review export carry the snap point,
+pinned vertices, weights, and exact before/after positions. Undo and
+replay use the existing journal.
+
+```sh
+node examples/mesh-component-transforms.cjs component-transform-review
+```
+
+The gatehouse demo shifts the left jamb to a construction plane while
+keeping footings and outer corners pinned. Teal marks the additional
+opening in the native-grid comparison.
+
 ## Record correspondence through an edit
 
 `KIT.meshTopology.editWithCorrespondence(before, patch)` returns the

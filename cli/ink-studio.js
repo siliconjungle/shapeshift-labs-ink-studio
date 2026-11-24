@@ -1399,6 +1399,7 @@ const CMD = {
         '  mesh-topology inspect|triangulate <mesh.json> [--out file.json]   inspect authored connectivity or derive triangles',
         '  mesh-topology edit <mesh.json> <patch.json> [--out file.json] [--report map.json]   edit polygon topology with an optional correspondence receipt',
         '  mesh-topology select <mesh-or-scene.json> <query.json> [--object id] [--from selection.json] [--view settings.json | --visibility capture.json] [--out file.json]   select authored components',
+        '  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]   move, rotate, scale and snap authored components',
         '  mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements',
         '  mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks',
         '  scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook',
@@ -3999,7 +4000,14 @@ const CMD = {
     require('./turntable-shape.js').command(pos, opt, lib());
   },
   'mesh-topology'() {
-    require('./mesh-topology.js').command(pos, opt, lib(), { build: file => build(file, undefined, { retainSdf: true }) });
+    require('./mesh-topology.js').command(pos, opt, lib(), {
+      build: file => build(file, undefined, { retainSdf: true }),
+      openEditor(file) {
+        const descriptor = scene(file);
+        if (!descriptor.openEditor) throw new TypeError('A component transform needs a plain editable scene');
+        return descriptor.openEditor();
+      }
+    });
   },
   'mesh-uv'() {
     require('./mesh-uv.js').command(pos,opt,{num,list});
@@ -5116,7 +5124,8 @@ async function run() {
     });
   }
   const sceneFiles = cmd === 'snap' ? pos : cmd === 'pixel-art' ? pixelInputs :
-    cmd === 'mesh-topology' && pos[0] === 'select' && typeof opt.view === 'string' ? pos.slice(1, 2) :
+    cmd === 'mesh-topology' && (pos[0] === 'select' && typeof opt.view === 'string' ||
+      pos[0] === 'transform' && typeof opt.object === 'string') ? pos.slice(1, 2) :
     ['render', 'turn', 'sheet', 'clip', 'atlas', 'passes', 'surface-pixel', 'validate'].includes(cmd) ? pos.slice(0, 1) : [];
   for (const file of new Set(sceneFiles.filter(file => /\.json$/i.test(file)))) {
     if (!fs.existsSync(file)) continue;

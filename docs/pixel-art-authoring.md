@@ -3215,7 +3215,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint, footprint, or transform controls, or an ordered `operation.topology` batch | Splat-fit asset for `render --splat-fit` |
 | `scan-material` | Explicit `operation.texels` on a registered mesh material | Scan paint asset for `render --scan-paint` |
-| `mesh-topology` | `operation.patch` and optional `operation.projection` | Revised scene mesh with element correspondence, binding review and bake validity in the receipt. [Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction) |
+| `mesh-topology` | `operation.patch` or [`operation.transform`](mesh-topology.md#transform-and-snap-a-component-selection), with optional `operation.projection` | Revised scene mesh with element correspondence, binding review and bake validity in the receipt. [Mesh topology transactions](mesh-topology.md#edit-topology-in-a-scene-transaction) |
 | `sdf-shape` | `operation.brush`, `operation.updateBrush`, `operation.parameters`, a new `operation.modifier`, `operation.updateModifier` with `id` and `patch`, or `operation.protection` | Revised JSON diorama with edited geometry or feature volumes |
 | `sdf-material` | `operation.paint` for a native-grid palette role or mask stroke, or `operation.material` for the whole solid | Revised JSON diorama with edited surface appearance |
 

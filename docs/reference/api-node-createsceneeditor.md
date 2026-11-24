@@ -27,6 +27,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().paintShadeNormal` | function | `(stroke, options = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().paintShadowBand` | function | `(stroke, options = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().pick` | function | `(ray, { world, time, reconstruction, sampleWithdrawal } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().planMeshTransform` | function | `(object, request, { part } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().preview` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().redo` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().refreshPrefabs` | function | `(prefabs, { assets = buildEnv.assets } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
@@ -49,6 +50,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createSceneEditor().snapshot` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().sourceDependencies` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().suggestBreakable` | function | `({ world, ...options } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().transformMeshTopology` | function | `(object, request, options)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().tree` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().undo` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().updateModifier` | function | `(id, patch, targets = selectedKeys())` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

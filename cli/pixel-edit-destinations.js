@@ -561,11 +561,17 @@ function apply(frame, edit, route, context, readMarks) {
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
   if (destination.kind === 'mesh-topology') {
     const operation = edit.operation;
-    if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
-      ['vertices', 'faces', 'removeVertices', 'removeFaces', 'lineage']) || !Object.keys(operation.patch).length)
-      throw new TypeError('A topology edit needs a mesh topology patch and optional projection settings');
-    const topology = source.editor.editMeshTopology(binding.object, operation.patch, { part: binding.part, projection: operation.projection });
-    context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, topology });
+    const options = { part: binding.part, projection: operation?.projection };
+    let evidence;
+    if (fields(operation, ['transform', 'projection']) && Object.hasOwn(operation, 'transform')) {
+      evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
+    } else {
+      if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
+        ['vertices', 'faces', 'removeVertices', 'removeFaces', 'lineage']) || !Object.keys(operation.patch).length)
+        throw new TypeError('A topology edit needs a mesh topology patch or component transform');
+      evidence = { topology: source.editor.editMeshTopology(binding.object, operation.patch, options) };
+    }
+    context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, ...evidence });
     return source.editor.snapshot();
   }
 

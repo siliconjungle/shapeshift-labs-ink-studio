@@ -4871,9 +4871,496 @@
         }
       ]
     },
+    "meshComponentTransform": {
+      "type": "object",
+      "properties": {
+        "selection": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "ink-studio/mesh-selection"
+            },
+            "version": {
+              "const": 1
+            },
+            "mesh": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "revision": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "domain": {
+              "enum": [
+                "vertices",
+                "edges",
+                "faces"
+              ]
+            },
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "format",
+            "version",
+            "mesh",
+            "revision",
+            "domain",
+            "ids"
+          ],
+          "additionalProperties": false
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "move"
+                },
+                "offset": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                }
+              },
+              "required": [
+                "kind",
+                "offset"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "rotate"
+                },
+                "axis": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                },
+                "degrees": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "axis",
+                "degrees"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "scale"
+                },
+                "factors": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      ],
+                      "minItems": 3,
+                      "items": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "factors"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "space": {
+          "enum": [
+            "local",
+            "world",
+            "normal"
+          ]
+        },
+        "pivot": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "items": false
+        },
+        "normal": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "items": false
+        },
+        "tangent": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "items": false
+        },
+        "pins": {
+          "type": "object",
+          "properties": {
+            "vertices": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "boundary": {
+              "enum": [
+                "mesh",
+                "selection",
+                "both"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "falloff": {
+          "type": "object",
+          "properties": {
+            "radius": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "curve": {
+              "enum": [
+                "linear",
+                "smooth",
+                "sharp"
+              ]
+            }
+          },
+          "required": [
+            "radius"
+          ],
+          "additionalProperties": false
+        },
+        "snap": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "vertex"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "object": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "maxDistance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "edge"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "object": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "maxDistance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "face"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "object": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "maxDistance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "plane"
+                },
+                "origin": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                },
+                "normal": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "maxDistance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "origin",
+                "normal"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "socket"
+                },
+                "instance": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "binding": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "maxDistance": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "instance",
+                "binding"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "sdf"
+                },
+                "object": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "maxDistance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "tolerance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "iterations": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 64
+                }
+              },
+              "required": [
+                "kind",
+                "object",
+                "maxDistance"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "selection",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
+        "transform": {
+          "$ref": "#/$defs/meshComponentTransform"
+        },
         "patch": {
           "type": "object",
           "properties": {
@@ -5112,10 +5599,20 @@
           "additionalProperties": false
         }
       },
-      "required": [
-        "patch"
-      ],
+      "required": [],
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "patch"
+          ]
+        },
+        {
+          "required": [
+            "transform"
+          ]
+        }
+      ],
       "examples": [
         {
           "patch": {
@@ -15921,7 +16418,7 @@
         },
         "scope": "Bound frame and scene. Use targets to pin sourceRevision before editing.",
         "evidence": {
-          "/affectedTargets": "Stable element IDs, exact topology changes, binding impact and bake validity.",
+          "/affectedTargets": "Stable element IDs, exact topology changes, transform and snap evidence, binding impact and bake validity.",
           "/inputs/sourceRevision": "Observed source fingerprint for the same destination and binding."
         }
       },

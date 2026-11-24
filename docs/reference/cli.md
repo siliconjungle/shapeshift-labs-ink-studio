@@ -211,6 +211,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology inspect|triangulate <mesh.json> [--out file.json]   inspect authored connectivity or derive triangles
   mesh-topology edit <mesh.json> <patch.json> [--out file.json] [--report map.json]   edit polygon topology with an optional correspondence receipt
   mesh-topology select <mesh-or-scene.json> <query.json> [--object id] [--from selection.json] [--view settings.json | --visibility capture.json] [--out file.json]   select authored components
+  mesh-topology transform <mesh-or-scene.json> <request.json> [--object id] [--selection file] [--out file] [--report file]   move, rotate, scale and snap authored components
   mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook

@@ -334,6 +334,47 @@
       return document.pending() ? write() : document.transact(label ?? 'Edit topology of ' + object, write);
     }
 
+    function planMeshTransform(object, request, { part } = {}) {
+      if (request?.frame !== undefined)
+        throw new TypeError('Retained scene mesh coordinates already use scene placement');
+      const row = meshTopology(object, part), scene = current().preview;
+      const ownership = A.hybridOwnership, policy = scene.hybridOwnership;
+      if (ownership.manages(policy, { object, part: row.part })) {
+        const declaration = ownership.prepare(policy);
+        const ownsShape = declaration.parts.some(({ owners }) => {
+          const source = declaration.sources[owners.shape.source];
+          return source.kind === 'mesh' && source.target.object === object && source.target.part === row.part;
+        });
+        if (!ownsShape) throw new RangeError('Transform the authored hybrid shape source for ' + object);
+      }
+      return K.meshTopology.planTransform(row.document, request, {
+        mesh(id) {
+          return { document: meshTopology(id).document };
+        },
+        socket(instance, binding) {
+          const placements = scene.assetParts ?? {}, imports = buildEnv.assetPartImports ?? {};
+          if (!Object.hasOwn(placements, instance) || !Object.hasOwn(imports, instance)) return;
+          const bindings = imports[instance].part.bindings;
+          const target = Object.hasOwn(bindings, binding) && bindings[binding];
+          if (target?.kind === 'socket' && target.status === 'bound') return target.resolved.position;
+        },
+        sdf(id) {
+          const solid = scene.solids.find(item => item.id === id && !item.carve && !item.ghost);
+          if (!solid) return;
+          const { style, roles, palette, groups, parts, dataInputs } = scene;
+          return DIO.brushField({ id: scene.id, style, roles, palette, groups, parts, dataInputs,
+            solids: [solid] }, buildEnv).sdf;
+        }
+      });
+    }
+
+    function transformMeshTopology(object, request, options) {
+      const plan = planMeshTransform(object, request, options);
+      return freeze({ transform: plan.report, ...(plan.patch.vertices.length && {
+        topology: editMeshTopology(object, plan.patch, options)
+      }) });
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -408,7 +449,9 @@
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
       fork: (source = snapshot()) => create(source,{ env:buildEnv, historyLimit:0 }),
       sourceDependencies: () => A.bakeCache.signature([
-        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
+        buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {},
+        ...(Object.keys(buildEnv.assetPartImports ?? {}).length ?
+          [Object.fromEntries(Object.entries(buildEnv.assetPartImports).map(([id, entry]) => [id, entry.part]))] : [])
       ]),
       tree: () => current().tree,
       node: key => current().nodes.get(key),
@@ -434,6 +477,8 @@
       selectMeshTopology: (object, request, { part, visibility } = {}) =>
         K.meshTopology.select(meshTopology(object, part).document, request, { visibility }),
       editMeshTopology,
+      planMeshTransform,
+      transformMeshTopology,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,
