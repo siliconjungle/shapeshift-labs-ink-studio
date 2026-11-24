@@ -207,6 +207,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixel.withEdge` | function | `(spec, mp)` | [guide](../../README.md#rendering-and-command-reference), [source](../../src/kit/kpx-pixel.js) |
 | `KIT.pixel.worley` | function | `(x, y, z, cell, seed)` | [guide](../../README.md#rendering-and-command-reference), [source](../../src/kit/kpx-pixel.js) |
 
+## KIT.pixelAdjustments
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelAdjustments` | namespace |  |  |
+| `KIT.pixelAdjustments.prepare` | function | `(operation,paletteEditor)` | [source](../../src/pixel-adjustments.js) |
+
 ## KIT.pixelBrushes
 
 | Member | Kind | Signature or value | Guides and source |

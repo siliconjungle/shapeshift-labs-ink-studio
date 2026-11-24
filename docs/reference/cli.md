@@ -246,6 +246,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
   pixel-art inspect|edit <design.json> [--frame id]   work on a native indexed frame
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
+    adjustments destination: curves, hue-saturation, gradient, replace, dither, and outline by scope
     canvas destination: crop, trim, pad, resize, or resample all frames
   pixel-art replay <design.json> <receipt.json> --out result.json   verify and reproduce an edit with the same options
             --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits

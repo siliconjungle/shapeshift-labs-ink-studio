@@ -729,6 +729,56 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await until(browser,"document.querySelector('#status').textContent === 'Extracted palette'");
     assert.ok((await download('#palette-export')).swatches.some(row=>row.id === 'extracted-cb4519-slot-1'));
 
+    const adjustmentFile = path.join(directory,'adjustment-frames.json');
+    const frame = (...blue) => Array.from({ length:12 },(_,i)=>blue.includes(i) ? 0 : null);
+    fs.writeFileSync(adjustmentFile,JSON.stringify({ width:4,height:3,palette:['#0000cc','#ffffff'],
+      frames:[{ duration:.125,slots:frame(5,6) },{ duration:.25,slots:frame(6) }] }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[adjustmentFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened adjustment-frames.json'");
+    const originalFrames = await download('#export');
+    await evaluate(browser,()=>document.querySelector('#adjustment-preview').closest('details').open = true);
+    await chooseSelection('rectangle');
+    await change('selection-mode','replace');
+    const maskPoint = place(await screen(browser,main),1,1);
+    await press(maskPoint);
+    await release(maskPoint);
+    await change('adjustment-type','hue-saturation');
+    await change('adjustment-degrees',120);
+    await change('adjustment-scope','selection');
+    await click(browser,'#adjustment-preview');
+    assert.deepEqual(await raster(browser,preview,1,1),[204,0,0,255]);
+    assert.deepEqual(await raster(browser,preview,2,1),[0,0,204,255]);
+    assert.deepEqual(await download('#export'),originalFrames);
+    await click(browser,'#adjustment-cancel');
+    assert.deepEqual(await raster(browser,preview,1,1),[0,0,204,255]);
+    await click(browser,'#adjustment-preview');
+    await click(browser,'#adjustment-apply');
+    const localAdjustment = await download('#export');
+    assert.deepEqual(localAdjustment.swatchIds,['slot-0','slot-1','rgb-cc0000']);
+    assert.equal(localAdjustment.frames[0].slots[5],2);
+    assert.equal(localAdjustment.frames[0].slots[6],0);
+    assert.deepEqual(localAdjustment.frames[1],originalFrames.frames[1]);
+    await click(browser,'#undo');
+    assert.deepEqual(await download('#export'),originalFrames);
+
+    await change('adjustment-scope','range');
+    await change('adjustment-start',1);
+    await change('adjustment-end',2);
+    await click(browser,'#adjustment-preview');
+    assert.equal(await browser.evaluate("document.querySelector('#adjustment-info').value"),'3 pixels changed in 2 frames');
+    await change('scrub',2,'input');
+    assert.deepEqual(await raster(browser,preview,2,1),[204,0,0,255]);
+    assert.deepEqual(await download('#export'),originalFrames);
+    await click(browser,'#adjustment-apply');
+    const ranged = await download('#export');
+    assert.equal(ranged.frames[0].slots[5],2);
+    assert.equal(ranged.frames[0].slots[6],2);
+    assert.equal(ranged.frames[1].slots[6],2);
+    assert.equal(ranged.frames[1].duration,.25);
+    await click(browser,'#undo');
+    assert.deepEqual(await download('#export'),originalFrames);
+
+
 
 
   });

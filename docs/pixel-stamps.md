@@ -99,6 +99,14 @@ merge a palette JSON, and export swatches, locks, and ramps. Each palette
 edit can be undone with the artwork.
 [Palette file and edit syntax](pixel-art-authoring.md#edit-palettes-and-ramps)
 
+Open **Adjust pixels** to use curves, hue and saturation, gradients,
+replacement, dithering, or outlines. Choose the active selection, current
+frame, or an inclusive frame range. **Preview** shows the result in both
+canvas views. Scrub a range to check its frames before choosing **Apply
+adjustment**. **Cancel preview** returns to the source pixels. A range
+commits as one undo step.
+[Document scopes and adjustment settings](pixel-art-authoring.md#apply-scoped-adjustments)
+
 Under **Symmetry and wrapping**, enable **Mirror X** or **Mirror Y** and
 move the axis using its position field. Whole values run through pixel
 centers and half-pixels run between them. Enable **Wrap X** to repeat
