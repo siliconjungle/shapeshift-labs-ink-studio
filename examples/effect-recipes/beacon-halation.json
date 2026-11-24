@@ -1,0 +1,110 @@
+{
+  "format": "ink-studio/effect-recipe",
+  "version": 1,
+  "id": "beacon-halation",
+  "title": "Beacon halation",
+  "intent": "Give a small luminous source a warm photographic halo while protecting the rest of the frame.",
+  "tags": ["glow", "emissive", "light bleed", "neon", "film", "night"],
+  "renderers": ["webgl2", "headless"],
+  "size": [96, 60],
+  "times": [0],
+  "inputs": [
+    {
+      "id": "art",
+      "kind": "drawing",
+      "label": "Source artwork",
+      "pass": "plate",
+      "path": ["layer", "draw"]
+    },
+    {
+      "id": "radius",
+      "kind": "number",
+      "label": "Halo radius",
+      "pass": "halo",
+      "path": ["radius"],
+      "control": {
+        "min": 2,
+        "max": 19,
+        "step": 1
+      }
+    },
+    {
+      "id": "source-region",
+      "kind": "mask",
+      "label": "Emitter source mask",
+      "pass": "emitter",
+      "path": ["rect"]
+    }
+  ],
+  "graph": {
+    "passes": [
+      {
+        "id": "plate",
+        "type": "composite",
+        "isolated": true,
+        "layer": {
+          "draw": [
+            {"type": "rect", "rect": [0, 0, 96, 60], "color": "#111927"},
+            {"type": "rect", "rect": [0, 18, 96, 23], "color": "#182b3a"},
+            {"type": "rect", "rect": [7, 6, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [17, 12, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [24, 5, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [39, 8, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [53, 5, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [65, 10, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [77, 6, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [92, 12, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [85, 3, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [12, 20, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [71, 20, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [47, 15, 1, 1], "color": "#628592"},
+            {"type": "rect", "rect": [59, 13, 1, 1], "color": "#628592"},
+            {"type": "polygon", "points": [[0, 30], [12, 22], [19, 27], [37, 19], [49, 27], [65, 18], [80, 26], [96, 20], [96, 43], [0, 43]], "fill": "#263e4c"},
+            {"type": "polygon", "points": [[0, 35], [15, 29], [34, 32], [52, 26], [78, 31], [96, 28], [96, 44], [0, 44]], "fill": "#192c38"},
+            {"type": "polygon", "points": [[31, 42], [34, 36], [38, 36], [41, 25], [50, 25], [54, 36], [62, 36], [66, 42]], "fill": "#492d36"},
+            {"type": "rect", "rect": [43, 18, 8, 23], "color": "#8b4b48"},
+            {"type": "rect", "rect": [44, 18, 6, 23], "color": "#c57355"},
+            {"type": "rect", "rect": [46, 19, 3, 22], "color": "#eca26e"},
+            {"type": "rect", "rect": [42, 17, 10, 4], "color": "#5e3b42"},
+            {"type": "rect", "rect": [41, 13, 12, 4], "color": "#ffe5a2"},
+            {"type": "rect", "rect": [43, 14, 8, 2], "color": "#fff6c6"},
+            {"type": "rect", "rect": [44, 11, 6, 2], "color": "#b36a51"},
+            {"type": "rect", "rect": [46, 8, 2, 3], "color": "#db9366"},
+            {"type": "rect", "rect": [0, 44, 96, 16], "color": "#152b38"},
+            {"type": "rect", "rect": [6, 48, 24, 1], "color": "#2b4f58"},
+            {"type": "rect", "rect": [27, 52, 21, 1], "color": "#2b4f58"},
+            {"type": "rect", "rect": [63, 47, 23, 1], "color": "#2b4f58"},
+            {"type": "rect", "rect": [40, 56, 42, 1], "color": "#2b4f58"},
+            {"type": "rect", "rect": [4, 56, 13, 1], "color": "#2b4f58"},
+            {"type": "rect", "rect": [69, 54, 16, 1], "color": "#2b4f58"}
+          ]
+        }
+      },
+      {
+        "id": "emitter",
+        "type": "mask",
+        "rect": [36, 6, 22, 18]
+      },
+      {
+        "id": "halo",
+        "type": "halation",
+        "mask": "emitter",
+        "maskMode": "source",
+        "radius": 9,
+        "threshold": 0.43,
+        "intensity": 1.55,
+        "tint": [255, 108, 52],
+        "inner": 0.14
+      }
+    ]
+  },
+  "check": {
+    "edit": {
+      "input": "radius",
+      "value": 16,
+      "fallback": 9
+    },
+    "maxChannelDelta": 2,
+    "minChangedPixels": 70
+  }
+}

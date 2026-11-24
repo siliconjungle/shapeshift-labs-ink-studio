@@ -29,4 +29,4 @@ jobs:
         run: |
           chrome="$(command -v google-chrome)"
           "$chrome" --version
-          INK_TEST_CHROME="$chrome" node --test tests/agent-project.test.js tests/project-bundles.test.js tests/terrain-trails.test.js tests/material-response.test.js tests/effect-pixel.test.js tests/pixel-selection-track.test.js tests/flow-map.test.js tests/pixel-lighting.test.js
+          INK_TEST_CHROME="$chrome" node --test tests/agent-project.test.js tests/project-bundles.test.js tests/terrain-trails.test.js tests/material-response.test.js tests/effect-pixel.test.js tests/pixel-selection-track.test.js tests/flow-map.test.js tests/pixel-lighting.test.js tests/effect-recipes.test.js

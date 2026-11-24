@@ -1,0 +1,46 @@
+{
+  "beacon-halation": {
+    "original": [
+      "9efce0b98241b750b42cb87b03d0fd09d8c6ec75b6140cb1a6ea98b918c853d1"
+    ],
+    "edited": [
+      "1bf8708f5b7432d0129fce286791b414204588e61cea1165a7023d6dcb423fa6"
+    ]
+  },
+  "detail-window": {
+    "original": [
+      "12c76904ec27d03104b80f2799527fc2e230a73ea23df3a229c76eded6bd343e",
+      "4577acad5d85d1bb48324f810d1fa0cf05d6808d1fc8517faef6ad1bcb3c475a"
+    ],
+    "edited": [
+      "f54c3c48faa5e52e636ad585dee8b2fc6f6a7c6ac198aff088c8c8683cfac9d6",
+      "34548a24c25b3f34449f21ac81bd2a6ab5f5761ad40e73e0e54bf13a07fac780"
+    ]
+  },
+  "lantern-relight": {
+    "original": [
+      "be05b78f465e10680e986bf74488988a345e6553f40d7393d2676bf6256a40e5"
+    ],
+    "edited": [
+      "515ac2a6fe9c91770b04e217914b14a3dcc7b54ed4a748b4d41551ca227a757f"
+    ]
+  },
+  "scanline-roll": {
+    "original": [
+      "bd6b2dcf883f76f0d487d0d1b59d39d49fe3a8609172969e22b340d8c33a7572"
+    ],
+    "edited": [
+      "71b8d319cb527a36ae3a2ca532db0060a511b7d94b8436ff5bda063f4aa13978"
+    ]
+  },
+  "tide-reflection": {
+    "original": [
+      "7fad8d4a7a7c0ebeb08b3d6930a6bf5b98a6eb2c0dcfa4968c57266a181ba905",
+      "4012a7f59913be42c098c6c2c521327e4970a34dbc3f4587e0d3cc0740d2d487"
+    ],
+    "edited": [
+      "83452f508d753e0cbb92c1d4ddc14d748f59569d93b139ab05f7382770b6e358",
+      "ffeecb1a7eaf89e282eab6586a578a2f99112b76cc9d0498c1da9cc664b61b89"
+    ]
+  }
+}

@@ -45,7 +45,7 @@ function runtimeSubcommands(cliDirectory, commands) {
 
   // Use the option allowlists from CLI families that expose them. The remaining
   // guards below read dispatch branches and action arrays from the handlers.
-  for (const [group, file] of [['graph', 'graph-cli.js'], ['patch', 'patch-cli.js']]) {
+  for (const [group, file] of [['graph', 'graph-cli.js'], ['patch', 'patch-cli.js'], ['effect-recipe', 'effect-recipes.js']]) {
     if (commands.has(group)) add(group, file, require(path.join(cliDirectory, file)).commandOptions);
   }
   if (commands.has('project')) {

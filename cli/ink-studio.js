@@ -19,7 +19,7 @@ const argv = process.argv.slice(2),
   cmd = argv[0] || 'help',
   pos = [],
   opt = {};
-const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' ? ['json'] : [];
+const switches = cmd === 'catalog' ? ['all', 'json', 'full'] : cmd === 'help' || cmd === 'effect-recipe' ? ['json'] : [];
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a.startsWith('--')) {
@@ -1204,6 +1204,10 @@ const CMD = {
         '  palette distributions <reference.png> [--scene scene | --render frame.png] [--out directory]',
         '  palette error <scene> [--threshold .06] [--heatmap-max .20] [--region-limit 20] [--out directory]',
         '  palette inspect <scene> --at x,y [--out report.json]   explain the palette choice at one art pixel',
+        '  effect-recipe search [words] [--input kind-or-id] [--renderer webgl2,headless] [--json]  find runnable effect recipes',
+        '  effect-recipe open <id|file.json> [--out example.json]  copy an editable recipe',
+        '  effect-recipe render <id|file.json> [--inputs edits.json] [--sample index] --out frame.png  export a recipe frame',
+        '  effect-recipe check [id|file.json] [--chrome executable] [--out report.json]  compare WebGL preview with PNG export',
         '  effect inspect <scene> --at x,y [--t seconds] [--out report.json]   trace a rendered pixel to its material response and contact',
         '  palette fit <fit.json> [--format png|data] [--tile]   fit two approved swatches and preview at native size',
         '  palette dither-review <fit.json> [--out directory]   compare approved pairs and flag strong texture',
@@ -2415,6 +2419,9 @@ const CMD = {
       fs.mkdirSync(path.dirname(file),{recursive:true});
       fs.writeFileSync(file,json);
     }
+  },
+  'effect-recipe'() {
+    return require('./effect-recipes.js').command(pos,opt);
   },
   effect() {
     if (pos[0] !== 'inspect' || pos.length !== 2 || typeof opt.at !== 'string' || !/^\d+\s*,\s*\d+$/.test(opt.at) ||

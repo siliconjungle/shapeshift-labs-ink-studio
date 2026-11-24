@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effect Recipes · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;font:15px/1.45 system-ui,sans-serif;background:#151a18;color:#ecead7;--muted:#b9c2b2;--accent:#c6ec9e;--line:#3a473d;--surface:#202924}
+  *{box-sizing:border-box}
+  body{margin:0}
+  main{max-width:1250px;margin:auto;padding:34px 30px 40px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:26px}
+  h1,h2{font-family:Georgia,serif;font-weight:400;line-height:.98;letter-spacing:-.055em;margin:0}
+  h1{font-size:clamp(42px,6vw,76px)}
+  h2{font-size:clamp(32px,4vw,52px)}
+  h3{font-size:14px;margin:0 0 10px}
+  p{margin:.6rem 0 0}
+  button,input,select{font:inherit;color:inherit}
+  button,select,input[type=search]{background:#27342b;border:1px solid #465a49;border-radius:4px;padding:8px 10px}
+  button{cursor:pointer}
+  input:focus-visible,select:focus-visible,button:focus-visible:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button:hover:hover{border-color:var(--accent)}
+  .label{font:600 11px/1.3 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .studio{color:var(--accent);margin-bottom:9px}
+  .search{display:grid;grid-template-columns:minmax(0,1fr) 175px 157px;gap:8px;margin-bottom:17px}
+  .search input,.search select{width:100%}
+  .layout{display:grid;grid-template-columns:222px minmax(0,1fr);gap:16px}
+  nav{display:grid;align-content:start;gap:6px}
+  .recipe{display:flex;align-items:center;gap:10px;text-align:left;width:100%;background:var(--surface);border-color:var(--line);font-size:14px;padding:6px;color:#e8ebda}
+  .recipe[aria-current=true]{background:#374434;border-color:#88a66d;color:var(--accent)}
+  .recipe img{width:58px;aspect-ratio:8/5;object-fit:cover}
+  img,canvas{image-rendering:pixelated}
+  .detail{min-width:0;border:1px solid var(--line);padding:20px;background:#1c241f}
+  .detail header{align-items:start;margin:0 0 18px}
+  #purpose{color:var(--muted);max-width:62ch;line-height:1.4}
+  .support{white-space:nowrap;color:var(--accent);padding-top:4px}
+  .content{display:grid;grid-template-columns:minmax(0,1fr) 216px;gap:16px}
+  figure{margin:0 0 12px}
+  figcaption{display:flex;justify-content:space-between;gap:6px;margin-bottom:6px}
+  .canvas,canvas{width:100%;aspect-ratio:8/5;display:block;background:#101713}
+  .canvas{border:1px solid #536858;overflow:hidden}
+  .canvas img{width:100%;height:100%;display:block}
+  aside{min-width:0}
+  aside label{display:block;margin-bottom:7px;font-size:13px}
+  aside select{width:100%;margin:0 0 10px}
+  input[type=range]{display:block;width:100%;accent-color:var(--accent);margin:5px 0 12px}
+  output{float:right;color:var(--accent);font-variant-numeric:tabular-nums}
+  .actions{display:grid;gap:7px;margin-bottom:16px}
+  .actions button{display:block;width:100%;text-align:left;font-size:13px;color:#edf0dc;text-decoration:none}
+  .ref{color:var(--muted);font-size:12px}
+  .ref img{width:100%;display:block;border:1px solid var(--line)}
+  #evidence{color:var(--accent);margin:6px 0;min-height:17px}
+  #warning{color:#ffc3a1}
+  #inputs{padding-top:10px;margin-top:11px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+  #inputs li{margin:4px 0}
+  #inputs ul{margin:4px 0 0;padding-left:16px}
+  [hidden]{display:none!important}
+  @media(max-width:930px){main{padding:22px 18px}.layout{grid-template-columns:174px minmax(0,1fr)}.content{grid-template-columns:1fr}aside{display:grid;grid-template-columns:1fr 1fr;gap:13px}.support{white-space:normal}}
+  @media(max-width:640px){.search{grid-template-columns:1fr 1fr}.search input{grid-column:span 2}.layout{grid-template-columns:1fr}nav{grid-template-columns:1fr 1fr}.detail{padding:13px}.recipe{font-size:12px}.recipe img{width:39px}.detail header{display:block}aside{grid-template-columns:1fr}.support{margin-top:6px}}
+</style>
+</head>
+<body>
+<main>
+  <header><div><div class="studio label">Ink Studio</div><h1>Effect Recipes</h1></div></header>
+  <div class="search" role="search">
+    <input id="search" type="search" aria-label="Search recipes" placeholder="Search by intent or input">
+    <select id="input-filter" aria-label="Filter by input kind"><option value="">All inputs</option></select>
+    <select id="renderer-filter" aria-label="Filter by renderer"><option value="">All renderers</option><option value="webgl2">WebGL2</option><option value="headless">Headless PNG</option></select>
+  </div>
+  <div class="layout">
+    <nav id="recipes" aria-label="Recipes"></nav>
+    <article id="recipe" class="detail" hidden>
+      <header>
+        <div><h2 id="title"></h2><p id="purpose"></p></div>
+        <span class="label support" id="support"></span>
+      </header>
+      <div class="content">
+        <div>
+          <figure>
+            <figcaption class="label"><span id="preview-label">WebGL preview</span><span id="size"></span></figcaption>
+            <div class="canvas"><canvas id="preview"></canvas><img id="fallback" alt="Rendered recipe" hidden></div>
+          </figure>
+        </div>
+        <aside>
+          <div>
+            <div id="controls"></div>
+            <label id="sample-label" for="sample">Sample time</label><select id="sample"></select>
+            <div class="actions">
+              <button id="edit" type="button">Apply example edit</button>
+              <button id="reset" type="button">Reset inputs</button>
+              <button id="save" type="button">Download recipe JSON</button>
+            </div>
+          </div>
+          <div>
+            <figure class="ref">
+              <figcaption class="label">Headless export</figcaption>
+              <a id="export" download href=""><img id="reference" alt="Headless PNG export"></a>
+              <p id="evidence" aria-live="polite"></p>
+            </figure>
+            <div id="inputs"></div>
+          </div>
+        </aside>
+      </div>
+    </article>
+    <p id="warning" role="status">Loading recipes…</p>
+  </div>
+</main>
+<script>
+/* RUNTIME */
+async function unpack(value) {
+  const bytes = Uint8Array.from(atob(value), character => character.charCodeAt(0));
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+async function start() {
+  const [toolkitSource,rendererSource,library] = await Promise.all(['@TOOLKIT@','@RENDERER@','@RECIPES@'].map(unpack));
+  const toolkit = Function(toolkitSource)(), entries = JSON.parse(library);
+  const moduleUrl = URL.createObjectURL(new Blob([rendererSource], { type:'text/javascript' }));
+  let createRenderer;
+  try { ({ createRenderer } = await import(moduleUrl)); }
+  finally { URL.revokeObjectURL(moduleUrl); }
+  /* DEMO */
+}
+start().catch(error => {
+  const warning = document.getElementById('warning');
+  warning.hidden = false;
+  warning.textContent = error.message;
+});
+</script>
+</body>
+</html>

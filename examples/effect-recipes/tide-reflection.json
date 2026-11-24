@@ -1,0 +1,128 @@
+{
+  "format": "ink-studio/effect-recipe",
+  "version": 1,
+  "id": "tide-reflection",
+  "title": "Tide reflection",
+  "intent": "Mirror a row of lights into water, then give only the reflection a travelling ripple.",
+  "tags": ["water", "mirror", "ripple", "wave", "distortion", "wet", "reflection"],
+  "renderers": ["webgl2", "headless"],
+  "size": [96, 60],
+  "times": [0, 0.5],
+  "inputs": [
+    {
+      "id": "art",
+      "kind": "drawing",
+      "label": "Source artwork",
+      "pass": "plate",
+      "path": ["layer", "draw"]
+    },
+    {
+      "id": "wave-height",
+      "kind": "number",
+      "label": "Ripple distance",
+      "pass": "ripple",
+      "path": ["amplitude", "0"],
+      "control": {
+        "min": 0,
+        "max": 12,
+        "step": 1
+      }
+    },
+    {
+      "id": "water-region",
+      "kind": "mask",
+      "label": "Waterline mask",
+      "pass": "water",
+      "path": ["rect"]
+    }
+  ],
+  "graph": {
+    "passes": [
+      {
+        "id": "plate",
+        "type": "composite",
+        "isolated": true,
+        "layer": {
+          "draw": [
+            {"type": "rect", "rect": [0, 0, 96, 60], "color": "#292138"},
+            {"type": "rect", "rect": [0, 12, 96, 18], "color": "#533747"},
+            {"type": "rect", "rect": [0, 25, 96, 8], "color": "#744653"},
+            {"type": "rect", "rect": [7, 6, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [17, 12, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [24, 5, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [39, 8, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [53, 5, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [65, 10, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [77, 6, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [92, 12, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [85, 3, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [12, 20, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [71, 20, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [47, 15, 1, 1], "color": "#bb7d80"},
+            {"type": "rect", "rect": [59, 13, 1, 1], "color": "#bb7d80"},
+            {"type": "polygon", "points": [[0, 26], [8, 21], [17, 25], [34, 16], [49, 27], [64, 19], [84, 27], [96, 23], [96, 33], [0, 33]], "fill": "#39364c"},
+            {"type": "rect", "rect": [0, 31, 96, 29], "color": "#172e42"},
+            {"type": "rect", "rect": [0, 29, 96, 2], "color": "#282938"},
+            {"type": "rect", "rect": [5, 29, 85, 1], "color": "#bd6e65"},
+            {"type": "rect", "rect": [9, 20, 7, 2], "color": "#392b3d"},
+            {"type": "rect", "rect": [10, 21, 5, 10], "color": "#fbad73"},
+            {"type": "rect", "rect": [11, 22, 3, 6], "color": "#ffe5a0"},
+            {"type": "rect", "rect": [12, 29, 1, 2], "color": "#a46569"},
+            {"type": "rect", "rect": [22, 16, 7, 2], "color": "#392b3d"},
+            {"type": "rect", "rect": [23, 17, 5, 10], "color": "#fbad73"},
+            {"type": "rect", "rect": [24, 18, 3, 6], "color": "#ffe5a0"},
+            {"type": "rect", "rect": [25, 29, 1, 2], "color": "#a46569"},
+            {"type": "rect", "rect": [40, 11, 7, 2], "color": "#392b3d"},
+            {"type": "rect", "rect": [41, 12, 5, 10], "color": "#fbad73"},
+            {"type": "rect", "rect": [42, 13, 3, 6], "color": "#ffe5a0"},
+            {"type": "rect", "rect": [43, 29, 1, 2], "color": "#a46569"},
+            {"type": "rect", "rect": [56, 15, 7, 2], "color": "#392b3d"},
+            {"type": "rect", "rect": [57, 16, 5, 10], "color": "#fbad73"},
+            {"type": "rect", "rect": [58, 17, 3, 6], "color": "#ffe5a0"},
+            {"type": "rect", "rect": [59, 29, 1, 2], "color": "#a46569"},
+            {"type": "rect", "rect": [71, 19, 7, 2], "color": "#392b3d"},
+            {"type": "rect", "rect": [72, 20, 5, 10], "color": "#fbad73"},
+            {"type": "rect", "rect": [73, 21, 3, 6], "color": "#ffe5a0"},
+            {"type": "rect", "rect": [74, 29, 1, 2], "color": "#a46569"},
+            {"type": "rect", "rect": [84, 22, 7, 2], "color": "#392b3d"},
+            {"type": "rect", "rect": [85, 23, 5, 10], "color": "#fbad73"},
+            {"type": "rect", "rect": [86, 24, 3, 6], "color": "#ffe5a0"},
+            {"type": "rect", "rect": [87, 29, 1, 2], "color": "#a46569"}
+          ]
+        }
+      },
+      {
+        "id": "water",
+        "type": "mask",
+        "rect": [0, 31, 96, 29]
+      },
+      {
+        "id": "mirror",
+        "type": "reflection",
+        "source": "plate",
+        "mask": "water",
+        "axis": "y",
+        "line": 31
+      },
+      {
+        "id": "ripple",
+        "type": "distortion",
+        "source": "mirror",
+        "mask": "water",
+        "amplitude": [3, 0],
+        "period": 8,
+        "rate": 0.7,
+        "phase": 0.17
+      }
+    ]
+  },
+  "check": {
+    "edit": {
+      "input": "wave-height",
+      "value": 9,
+      "fallback": 3
+    },
+    "maxChannelDelta": 0,
+    "minChangedPixels": 60
+  }
+}

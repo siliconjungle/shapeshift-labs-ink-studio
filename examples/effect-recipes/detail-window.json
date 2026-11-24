@@ -1,0 +1,120 @@
+{
+  "format": "ink-studio/effect-recipe",
+  "version": 1,
+  "id": "detail-window",
+  "title": "Detail window",
+  "intent": "Pin a magnified crop beside an object and switch the inset to an alternate scan at a cue.",
+  "tags": ["crop", "zoom", "inspection", "source switch", "comparison", "window", "inset", "tracked"],
+  "renderers": ["webgl2", "headless"],
+  "size": [96, 60],
+  "times": [0, 1],
+  "inputs": [
+    {
+      "id": "art",
+      "kind": "drawing",
+      "label": "Source artwork",
+      "pass": "plate",
+      "path": ["layer", "draw"]
+    },
+    {
+      "id": "crop-x",
+      "kind": "number",
+      "label": "Crop center X",
+      "pass": "inset",
+      "path": ["at", "0"],
+      "control": {
+        "min": 24,
+        "max": 48,
+        "step": 1
+      }
+    },
+    {
+      "id": "source-cues",
+      "kind": "cues",
+      "label": "Alternate image cue times",
+      "pass": "inset",
+      "path": ["switches"]
+    }
+  ],
+  "graph": {
+    "passes": [
+      {
+        "id": "plate",
+        "type": "composite",
+        "isolated": true,
+        "layer": {
+          "draw": [
+            {"type": "rect", "rect": [0, 0, 96, 60], "color": "#191e30"},
+            {"type": "rect", "rect": [4, 4, 87, 50], "color": "#233740"},
+            {"type": "rect", "rect": [7, 6, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [17, 12, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [24, 5, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [39, 8, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [53, 5, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [65, 10, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [77, 6, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [92, 12, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [85, 3, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [12, 20, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [71, 20, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [47, 15, 1, 1], "color": "#48626a"},
+            {"type": "rect", "rect": [59, 13, 1, 1], "color": "#48626a"},
+            {"type": "polygon", "points": [[12, 43], [17, 20], [32, 10], [45, 12], [57, 23], [55, 37], [41, 51], [23, 51]], "fill": "#375459"},
+            {"type": "polygon", "points": [[19, 37], [22, 23], [34, 15], [45, 18], [51, 27], [46, 37], [35, 45], [25, 46]], "fill": "#5b7f75"},
+            {"type": "polygon", "points": [[25, 34], [28, 24], [34, 21], [40, 23], [46, 28], [40, 35], [32, 39]], "fill": "#b5bd8d"},
+            {"type": "polygon", "points": [[28, 29], [31, 25], [36, 24], [40, 28], [35, 33], [31, 35]], "fill": "#e7ca87"},
+            {"type": "rect", "rect": [34, 27, 2, 3], "color": "#252931"},
+            {"type": "rect", "rect": [28, 28, 2, 1], "color": "#fff1b7"},
+            {"type": "rect", "rect": [10, 50, 46, 1], "color": "#557170"},
+            {"type": "rect", "rect": [58, 16, 28, 28], "color": "#141e2e"},
+            {"type": "rect", "rect": [61, 44, 24, 1], "color": "#66877a"}
+          ]
+        }
+      },
+      {
+        "id": "scan",
+        "type": "composite",
+        "isolated": true,
+        "layer": {
+          "draw": [
+            {"type": "rect", "rect": [0, 0, 96, 60], "color": "#242239"},
+            {"type": "polygon", "points": [[20, 38], [24, 22], [34, 15], [45, 18], [51, 27], [46, 38], [32, 46], [24, 42]], "fill": "#2c5372"},
+            {"type": "polygon", "points": [[25, 34], [28, 24], [34, 21], [40, 23], [46, 28], [40, 35], [32, 39]], "fill": "#5b9d9c"},
+            {"type": "polygon", "points": [[29, 28], [34, 23], [39, 26], [36, 33], [32, 34]], "fill": "#f6ad92"},
+            {"type": "rect", "rect": [34, 27, 2, 3], "color": "#422c51"},
+            {"type": "rect", "rect": [29, 28, 2, 1], "color": "#ffe2ae"}
+          ]
+        }
+      },
+      {
+        "id": "inset",
+        "type": "trackedWindow",
+        "input": "plate",
+        "source": "plate",
+        "switches": [[0.5, "scan"]],
+        "at": [34, 29],
+        "crop": {
+          "size": [12, 12]
+        },
+        "place": {
+          "at": [72, 29],
+          "size": [28, 28]
+        },
+        "chrome": {
+          "color": "#f4b789",
+          "border": 1,
+          "leader": true
+        }
+      }
+    ]
+  },
+  "check": {
+    "edit": {
+      "input": "crop-x",
+      "value": 43,
+      "fallback": 34
+    },
+    "maxChannelDelta": 0,
+    "minChangedPixels": 80
+  }
+}

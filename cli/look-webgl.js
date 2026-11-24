@@ -4,7 +4,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
-function runWebGL({ chrome, hardware, asyncFixture }, buildFixture, runFixtures, inputs) {
+function runWebGL({ chrome, hardware, asyncFixture, maxBuffer = 8 * 1024 * 1024 }, buildFixture, runFixtures, inputs) {
   const executable = chrome || process.env.INK_TEST_CHROME || [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'
@@ -22,7 +22,7 @@ const result = document.querySelector('#result');
 try {
   const kit = { KIT, PixelLook, makeBuilder, makeSculpt, SpriteSurface, ContributionRules, RenderStages, compileGaussianPartProxies, compileGaussianMaterials, decodeSceneryPack, gaussianGltfWorld };
   const cases = await (${runFixtures.toString()})(kit, ${buildFixture.toString()},
-    (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${JSON.stringify(inputs)});
+    (${browserBackend.toString()})(kit, createRenderer, createCameraAtlas), ${JSON.stringify(inputs).replaceAll('<', '\\u003c')});
   result.textContent = encodeURIComponent(JSON.stringify({ ...cases, browser: navigator.userAgent }));
 } catch (error) {
   result.textContent = encodeURIComponent(JSON.stringify({ error: error.stack ?? error.message }));
@@ -32,7 +32,7 @@ try {
     const html = execFileSync(executable, ['--headless', '--no-first-run', '--disable-background-networking',
       '--allow-file-access-from-files', ...(asyncFixture ? ['--virtual-time-budget=10000'] : []), ...software,
       '--user-data-dir=' + path.join(temp, 'profile'), '--dump-dom', pathToFileURL(page).href],
-    { timeout: 120000, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    { timeout: 120000, maxBuffer, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     const output = /<pre id="result">([^<]*)<\/pre>/.exec(html)?.[1];
     if (!output || output === 'pending') throw new Error('Chrome did not complete the WebGL fixture page');
     const result = JSON.parse(decodeURIComponent(output));
@@ -91,14 +91,18 @@ function browserBackend(kit, createRenderer, createCameraAtlas) {
           return [name, Array.from(pixels.subarray(offset, offset + 3))];
         }));
       },
-      image() {
+      image({ alpha = false } = {}) {
         const data = read();
-        let rgb = '';
+        let bytes = '';
         for (let y = height-1; y >= 0; y--) for (let x = 0; x < width; x++) {
           const p = 4*(y*width+x);
-          rgb += String.fromCharCode(data[p],data[p+1],data[p+2]);
+          if (alpha) {
+            const a = data[p+3];
+            const color = c => a ? Math.min(255, Math.round(data[p+c]*255/a)) : 0;
+            bytes += String.fromCharCode(color(0),color(1),color(2),a);
+          } else bytes += String.fromCharCode(data[p],data[p+1],data[p+2]);
         }
-        return btoa(rgb);
+        return btoa(bytes);
       },
       close() {
         renderer.dispose();

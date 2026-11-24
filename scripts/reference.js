@@ -218,14 +218,22 @@ async function generate() {
         .map(file => file.trim()).filter(file => file && fs.existsSync(path.join(root, file)))] });
   }
 
+  const recipes = require('../cli/effect-recipes.js');
+  for (const { id, title, intent, tags, inputs, renderers, source } of recipes.library().map(recipes.describe)) {
+    entries.push({ id, kind: 'effect-recipe', title, summary: intent,
+      use: 'ink-studio effect-recipe open ' + id, inputs, renderers, source,
+      keywords: [...tags, ...renderers, ...inputs.flatMap(input => [input.id, input.kind, input.label])].join(' '),
+      docs: ['docs/effect-recipes.md'] });
+  }
+
   entries.push(...guideIndex.guides);
   addPage('guides', 'Guide index', ['All checked-in guides, indexed by title and section headings.', '',
     ...guideIndex.guides.map(item => '- [' + item.title + '](' + fromReference(item.id) + ')')]);
 
   addPage('index', 'Ink Studio public reference', [
     'Search this reference with `ink-studio catalog <words> --all`. Add `--full` for details or `--json` for structured results.',
-    'The keyword search includes the curated features, CLI usages, public API members, graph operations, and the full text of the guides.',
-    '', '- [Command-line reference](cli.md)', '- [Guide index](guides.md)', '- [Machine-readable search index](index.json)',
+    'The keyword search includes the curated features, CLI usages, public API members, graph operations, runnable effect recipes, and the full text of the guides.',
+    '', '- [Command-line reference](cli.md)', '- [Guide index](guides.md)', '- [Effect recipe library](../effect-recipes.md)', '- [Machine-readable search index](index.json)',
     '', '## Public APIs', '', ...apiPages, '', '## Graph operations', '', ...graphPages
   ]);
   const sorted = entries.sort((a, b) => compare(a.id, b.id) || compare(a.kind, b.kind) || compare(a.use ?? '', b.use ?? ''));

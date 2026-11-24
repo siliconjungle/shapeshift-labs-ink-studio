@@ -1,0 +1,114 @@
+{
+  "format": "ink-studio/effect-recipe",
+  "version": 1,
+  "id": "scanline-roll",
+  "title": "Scanline roll",
+  "intent": "Give an instrument readout discrete scanline offsets and stepped pixel sizes.",
+  "tags": ["raster schedule", "scanline", "copper", "register", "registration", "crt", "signal", "pixel size"],
+  "renderers": ["webgl2", "headless"],
+  "size": [96, 60],
+  "times": [0],
+  "inputs": [
+    {
+      "id": "art",
+      "kind": "drawing",
+      "label": "Source artwork",
+      "pass": "plate",
+      "path": ["layer", "draw"]
+    },
+    {
+      "id": "horizontal-shift",
+      "kind": "number",
+      "label": "Middle band shift",
+      "pass": "roll",
+      "path": ["schedule", "1", "offset", "0"],
+      "control": {
+        "min": -10,
+        "max": 10,
+        "step": 1
+      }
+    },
+    {
+      "id": "scanline-writes",
+      "kind": "schedule",
+      "label": "Row register writes",
+      "pass": "roll",
+      "path": ["schedule"]
+    }
+  ],
+  "graph": {
+    "passes": [
+      {
+        "id": "plate",
+        "type": "composite",
+        "isolated": true,
+        "layer": {
+          "draw": [
+            {"type": "rect", "rect": [0, 0, 96, 60], "color": "#153744"},
+            {"type": "rect", "rect": [5, 5, 86, 50], "color": "#1b4952"},
+            {"type": "rect", "rect": [12, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [22, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [32, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [42, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [52, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [62, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [72, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [82, 7, 1, 46], "color": "#245761"},
+            {"type": "rect", "rect": [0, 6, 4, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [13, 10, 8, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [26, 14, 12, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [39, 18, 4, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [52, 22, 8, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [65, 26, 12, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [78, 30, 4, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [2, 34, 8, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [15, 38, 12, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [28, 42, 4, 1], "color": "#b6c9b1"},
+            {"type": "rect", "rect": [41, 46, 8, 1], "color": "#b6c9b1"},
+            {"type": "polygon", "points": [[13, 42], [30, 35], [43, 38], [53, 16], [66, 24], [79, 14], [87, 17], [87, 21], [80, 18], [66, 29], [54, 21], [44, 43], [31, 39], [13, 46]], "fill": "#74d7bb"},
+            {"type": "rect", "rect": [5, 5, 86, 1], "color": "#97ae9a"},
+            {"type": "rect", "rect": [5, 54, 86, 1], "color": "#97ae9a"},
+            {"type": "rect", "rect": [5, 5, 1, 50], "color": "#97ae9a"},
+            {"type": "rect", "rect": [90, 5, 1, 50], "color": "#97ae9a"}
+          ]
+        }
+      },
+      {
+        "id": "roll",
+        "type": "rasterSchedule",
+        "source": "plate",
+        "wrap": true,
+        "schedule": [
+          {
+            "row": 0,
+            "offset": [0, 0]
+          },
+          {
+            "row": 23,
+            "offset": [3, 0],
+            "pixelScale": [2, 1]
+          },
+          {
+            "row": 35,
+            "offset": [-2, 1],
+            "pixelScale": [1, 2]
+          },
+          {
+            "row": 46,
+            "offset": [0, 0],
+            "pixelScale": [1, 1]
+          }
+        ]
+      }
+    ]
+  },
+  "check": {
+    "edit": {
+      "input": "horizontal-shift",
+      "value": -7,
+      "fallback": 3
+    },
+    "maxChannelDelta": 0,
+    "minChangedPixels": 75
+  }
+}
