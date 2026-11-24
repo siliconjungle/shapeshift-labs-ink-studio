@@ -86,6 +86,28 @@ const PixelBrushes = (() => {
     return rasterTip(brush,brush.settings.size);
   }
 
+  function retained(raw) {
+    const brush = validate(raw), {size,swatch:tone} = brush.settings;
+    if (size.some(n=>n>128)) throw new RangeError('A retained brush tip needs a size of at most 128 × 128 pixels');
+    const tip = rasterTip(brush,size);
+    if (!tip.length) throw new RangeError('The retained brush tip has no painted pixels at this size and angle');
+    const min = tip[0].slice(0,2), max = min.slice();
+    for (const [x,y] of tip) {
+      min[0]=Math.min(min[0],x); min[1]=Math.min(min[1],y);
+      max[0]=Math.max(max[0],x); max[1]=Math.max(max[1],y);
+    }
+    const width=max[0]-min[0]+1, height=max[1]-min[1]+1;
+    const slots=new Int16Array(width*height).fill(-1);
+    for (const [x,y,slot] of tip) slots[(y-min[1])*width+x-min[0]]=slot;
+    const {mode,...tint}=tone;
+    const palette=brush.palette.map(entry=>({...(mode==='tint' ? tint : entry)}));
+    function slotAt(x,y) {
+      const u=Math.floor(x+.5)-min[0], v=Math.floor(y+.5)-min[1];
+      return u>=0&&v>=0&&u<width&&v<height ? slots[v*width+u] : -1;
+    }
+    return {min,width,height,slots,palette,slotAt};
+  }
+
   function rasterTip({ width,height,anchor,slots,settings },[w,h],charge) {
     const sx = w/width, sy = h/height;
     const ox = anchor[0]+.5, oy = anchor[1]+.5, turn = ((settings.angle%360)+360)%360;
@@ -268,7 +290,7 @@ const PixelBrushes = (() => {
     return { palette,mapping };
   }
 
-  return Object.freeze({ format,validate,capture,footprint,stroke,beginDynamicStroke,dynamicStroke,shade,resolvePalette });
+  return Object.freeze({ format,validate,capture,footprint,retained,stroke,beginDynamicStroke,dynamicStroke,shade,resolvePalette });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelBrushes;

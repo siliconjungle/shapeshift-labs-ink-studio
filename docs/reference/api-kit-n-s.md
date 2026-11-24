@@ -267,6 +267,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelBrushes.footprint` | function | `(raw)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.format` | value | `string = "ink-studio/pixel-brush"` |  |
 | `KIT.pixelBrushes.resolvePalette` | function | `(brush,entries,{ limit = 255,named = false,used,preserveIds = false } = {})` | [source](../../src/pixel-brushes.js) |
+| `KIT.pixelBrushes.retained` | function | `(raw)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.shade` | function | `(shading,swatches)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.stroke` | function | `(width,height,tip,points,emit,grid)` | [source](../../src/pixel-brushes.js) |
 | `KIT.pixelBrushes.validate` | function | `(brush)` | [source](../../src/pixel-brushes.js) |
@@ -1207,6 +1208,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.sceneMeshes` | namespace |  | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes) |
+| `KIT.sceneMeshes.clipUV` | function | `(mesh, {min,max,material})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.create` | function | `({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {})` | [guide](../compressed-scenery.md#pack-and-render-the-signal-house), [guide](../semantic-texture-mipmaps.md), [guide](../simulation-material-layers.md), [guide](../sprite-reconstruction.md#mixed-representations-on-one-asset), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.depthProxy` | function | `({id,positions,indices} = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.fromObjectTexels` | function | `(bake, {id,objectId,partId,materialId=id,emissionStrength=1, lighting={}} = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
@@ -1669,6 +1671,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.surfaceDecals.bind` | function | `(world,input,{receivers,graph=world?.sceneGraph}={})` | [guide](../surface-decals.md#bind-and-switch-receivers), [source](../../src/kit/p46-surface-decals.js) |
 | `KIT.surfaceDecals.create` | function | `(input)` | [guide](../surface-decals.md), [source](../../src/kit/p46-surface-decals.js) |
 | `KIT.surfaceDecals.format` | value | `string = "ink-studio/surface-decals"` |  |
+| `KIT.surfaceDecals.fromBrush` | function | `({id,tip,anchor,pixelSize,grid,opacity,lifetime}={})` | [guide](../surface-decals.md#retained-pixel-brushes), [source](../../src/kit/p46-surface-decals.js) |
 
 ## KIT.surfaceMarks
 

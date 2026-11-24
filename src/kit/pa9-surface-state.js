@@ -6,6 +6,7 @@
   const keys=(value,allowed)=>record(value)&&Object.keys(value).every(key=>allowed.includes(key));
   const unit=value=>finite(value)&&value>=0&&value<=1;
   const uv=value=>Array.isArray(value)&&value.length===2&&value.every(unit);
+  const xyz=value=>Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
   const name=value=>typeof value==='string'&&value.length>0&&value.length<=200&&
     !['__proto__','constructor','prototype'].includes(value);
   const full=freeze({min:[0,0],max:[1,1]});
@@ -99,33 +100,89 @@
       return Number(row[Math.min(row.length-1,Math.floor(x*row.length))]==='#');
     };
   }
-  function stamp(spec,size,definitions) {
+  function retainedBrush(brush,chart) {
+    const {V}=K;
+    check(keys(brush,['kind','tip','space','at','pixelSize','direction']) &&
+      ['uv','rest'].includes(brush.space) && Array.isArray(brush.pixelSize) && brush.pixelSize.length===2 &&
+      Array.from(brush.pixelSize).every(n=>finite(n)&&n>=1e-8&&n<=(brush.space==='uv'?1:1000)),
+      'A retained brush needs a tip, coordinate space and positive XY pixel sizes');
+    const {space,at,pixelSize,direction}=brush;
+    let offset;
+    if (space==='uv') {
+      check(uv(at)&&direction===undefined,'A UV brush needs a unit UV anchor. Use its tip angle to turn it.');
+      offset=([u,v])=>[u-at[0],at[1]-v];
+    } else {
+      check(chart&&xyz(at)&&(direction===undefined||xyz(direction)),'A rest brush needs a chart and a finite XYZ anchor and tangent');
+      const {origin,u,v,depth=.035}=chart, n=V.norm(V.cross(u,v));
+      const delta=V.sub(at,origin), tangent=direction??u;
+      const planar=V.mad(tangent,n,-V.dot(tangent,n));
+      const chartU=V.dot(V.cross(delta,v),n)/V.len(V.cross(u,v));
+      const chartV=V.dot(V.cross(u,delta),n)/V.len(V.cross(u,v));
+      const tangentLength=V.len(planar);
+      check(Math.abs(V.dot(delta,n))<=depth && [chartU,chartV].every(n=>n>=-1e-8&&n<=1+1e-8) &&
+        finite(tangentLength)&&tangentLength>1e-8,
+        'A rest brush anchor must lie on the chart and its direction must have a tangent component');
+      const right=V.norm(planar), up=V.cross(n,right);
+      const x=[V.dot(u,right),V.dot(v,right),V.dot(delta,right)];
+      const y=[V.dot(u,up),V.dot(v,up),V.dot(delta,up)];
+      offset=([u,v])=>[x[0]*u+x[1]*v-x[2],y[2]-y[0]*u-y[1]*v];
+    }
+    const tip=PixelBrushes.retained(brush.tip);
+    return {...tip,read(p) {
+      const [x,y]=offset(p);
+      return tip.slotAt(x/pixelSize[0],y/pixelSize[1]);
+    }};
+  }
+  function stamp(spec,size,definitions,chart) {
     check(keys(spec,['channel','value','mode','strength','brush','window'])&&own(definitions,spec.channel),
       'Unknown surface channel or stamp arguments');
     const {channel,mode='set',strength=1,window:chartWindow=full}=spec, type=definitions[channel].type;
     check(window(chartWindow)&&unit(strength)&&['set','add','clear'].includes(mode)&&
       (mode!=='add'||type==='number'&&!definitions[channel].material),'Invalid surface stamp mode, strength or window');
-    const value=mode==='clear'?undefined:valueOf(definitions[channel],spec.value,mode==='add');
+    const schema=definitions[channel];
+    if (spec.brush?.kind==='retained') {
+      const tip=retainedBrush(spec.brush,chart);
+      const fromTip=mode!=='clear'&&spec.value===undefined&&(type==='indexed'||type==='color');
+      const value=mode==='clear'||fromTip?undefined:valueOf(schema,spec.value,mode==='add');
+      const colors=fromTip&&Array.from(new Set(tip.slots)).reduce((table,slot)=>{
+        if (slot>=0) {
+          const {id:swatch,color}=tip.palette[slot];
+          table.set(slot,valueOf(schema,type==='indexed'?{swatch,color}:color));
+        }
+        return table;
+      },new Map());
+      return {channel,mode,value,amount:p=>inside(p,chartWindow)&&tip.read(p)>=0?strength:0,
+        ...(fromTip&&{sample:p=>colors.get(tip.read(p))})};
+    }
+    const value=mode==='clear'?undefined:valueOf(schema,spec.value,mode==='add');
     const span=chartWindow.max.map((v,i)=>v-chartWindow.min[i]);
     const weight=mask(spec.brush,size.map((v,i)=>v*span[i]));
     return {channel,mode,strength,value,amount:p=>inside(p,chartWindow)?
       weight(p.map((v,i)=>clamp((v-chartWindow.min[i])/span[i],0,1)))*strength:0};
   }
-  function stampList(list,size,definitions) {
+  function stampList(list,size,definitions,chart) {
     check(Array.isArray(size)&&size.length===2&&size.every(n=>finite(n)&&n>0&&n<=5e5)&&
       Array.isArray(list)&&list.length<=256,'A surface chart needs a bounded size and at most 256 stamps');
     const pointCount=list.reduce((sum,row)=>sum+(row?.brush?.points?.length??0),0);
     check(pointCount<=8192,'Surface chart exceeds its stroke point budget');
-    return list.map(row=>stamp(row,size,definitions));
+    const tipPixels=list.reduce((sum,row)=>{
+      if (row?.brush?.kind!=='retained') return sum;
+      const tip=row.brush.tip, size=tip?.settings?.size;
+      return sum+Math.max(tip?.slots?.length??0,Array.isArray(size)?size[0]*size[1]:0);
+    },0);
+    check(tipPixels<=2**18,'Surface chart exceeds its retained brush pixel budget');
+    return list.map(row=>stamp(row,size,definitions,chart));
   }
-  function prepare(list=[],{size=[1,1],definitions=defaults}={}) {
-    const rows=stampList(list,size,definitions);
+  function prepare(list=[],{size=[1,1],definitions=defaults,chart}={}) {
+    const rows=stampList(list,size,definitions,chart);
     return Object.freeze({sample(point) {
       check(uv(point),'Surface sampling needs unit UV coordinates');
       const values=Object.fromEntries(Object.entries(definitions).map(([key,schema])=>[key,schema.type==='color'?null:schema.default]));
-      for(const {channel,mode,value,amount} of rows){
+      for(const row of rows){
+        const {channel,mode,amount}=row;
         const a=amount(point);
         if(!a)continue;
+        const value=row.sample?row.sample(point):row.value;
         const schema=definitions[channel], before=values[channel];
         if(schema.type==='indexed'){
           if(a>=.5)values[channel]=mode==='clear'?null:{...value};
@@ -230,10 +287,10 @@
       hasInkControls:locate.hasInkControls,
       apply(base,hit,point) {return appearance(base,hit,palette,point);} }};
   }
-  const xyz=value=>Array.isArray(value)&&value.length===3&&Array.from(value).every(finite);
-  function restSampler({u,v,stamps},definitions=materialChannels()) {
+  function restSampler(chart,definitions=materialChannels()) {
     const {V}=K;
-    return prepare(stamps,{size:[Math.sqrt(V.dot(u,u)),Math.sqrt(V.dot(v,v))],definitions});
+    const {u,v,stamps}=chart;
+    return prepare(stamps,{size:[Math.sqrt(V.dot(u,u)),Math.sqrt(V.dot(v,v))],definitions,chart});
   }
   function projection(spec,{coordinatesOnly=false}={}) {
     check(keys(spec,['charts','masks'])&&record(spec.charts)&&Object.keys(spec.charts).length>0&&Object.keys(spec.charts).length<=32,
@@ -246,7 +303,7 @@
         'Surface chart needs a finite origin, UV axes and positive depth');
       const cross=V.cross(u,v), uu=V.dot(u,u), vv=V.dot(v,v), uv=V.dot(u,v), det=V.dot(cross,cross);
       check(det>1e-12&&det>uu*vv*1e-10,'Surface chart UV axes must span a plane');
-      const n=V.norm(cross), sampler=coordinatesOnly ? null : restSampler({u,v,stamps},definitions);
+      const n=V.norm(cross), sampler=coordinatesOnly ? null : restSampler({origin,u,v,depth,stamps},definitions);
       return {chart,sampler,u,v,point(point,normal) {
         const delta=V.sub(point,origin), distance=Math.abs(V.dot(delta,n)), facing=V.dot(n,normal);
         if(distance>depth||(twoSided?Math.abs(facing):facing)<.5)return null;
