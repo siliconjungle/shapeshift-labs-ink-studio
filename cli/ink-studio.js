@@ -1423,6 +1423,8 @@ const CMD = {
         '  pixel-art directions open <atlas> --out document.json   open directional tiles as editable frames',
         '  pixel-art directions review <document.json> [--anchor id] [--out report.json] [--review review.html]   compare adjacent views',
         '  pixel-art directions export <document.json> --out atlas.json [--base registered-atlas.json]   export approved views',
+        '  pixel-art tilemap inspect <document.json> [--at x,y] [--out report.json]   inspect cell references',
+        '  pixel-art tilemap draw <document.json> --out map.png   render shared tiles on the native grid',
         '  pixel-art palette export <document.json> --out palette.json',
         '  pixel-art palette extract <image.png|document.json> --out palette.json [--size 32] [--alpha visible|opaque|all]',
         '  pixel-art palette import <document.json> <palette.json> --out revised.json',

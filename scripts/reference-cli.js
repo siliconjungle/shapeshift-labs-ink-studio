@@ -56,11 +56,12 @@ function runtimeSubcommands(cliDirectory, commands) {
   if (commands.has('pixel-art')) {
     const file = 'pixel-art.js';
     const { actions, sessionActions, paletteActions, stackActions } = require(path.join(cliDirectory, file));
-    add('pixel-art', file, withoutFlags([...actions, 'session', 'palette', 'stack', 'directions']));
+    add('pixel-art', file, withoutFlags([...actions, 'session', 'palette', 'stack', 'directions', 'tilemap']));
     add('pixel-art session', file, withoutFlags(sessionActions));
     add('pixel-art palette', file, withoutFlags(paletteActions));
     add('pixel-art stack', file, withoutFlags(stackActions));
     add('pixel-art directions', 'pixel-directional-views.js', withoutFlags(['open','review','export']));
+    add('pixel-art tilemap', file, withoutFlags(['inspect','draw']));
   }
   for (const [group, file, start, end] of [
     ['music', 'music-composer.js', 'function musicCommand('],

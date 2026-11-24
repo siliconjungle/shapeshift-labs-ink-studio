@@ -18,6 +18,22 @@
   section { background:#1a262b; border:1px solid var(--line); border-radius:10px; padding:15px; }
   .row[hidden] { display:none; }
   .row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+  #tilemap-controls { margin-bottom:16px; }
+  #tilemap-workspace { margin-bottom:16px; }
+  #tilemap-options { margin-bottom:12px; }
+  #tilemap-viewport { overflow:auto; max-height:66vh; background:#141d21; padding:8px; }
+  #tilemap-plane { position:relative; width:max-content; }
+  #tilemap-canvas { display:block; image-rendering:pixelated; touch-action:none; cursor:crosshair;
+    background:repeating-conic-gradient(#263539 0% 25%,#36464a 0% 50%) 0 / 12px 12px; }
+  #tilemap-grid { position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(to right,#a5bcbc50 1px,transparent 1px),
+      linear-gradient(to bottom,#a5bcbc50 1px,transparent 1px);
+    background-size:var(--tile-w) var(--tile-h); }
+  #tilemap-cursor { position:absolute; top:0; left:0; pointer-events:none; width:var(--tile-w); height:var(--tile-h);
+    outline:1px solid #d7f0ba; outline-offset:-1px; }
+  #tilemap-position { margin:8px 0 0; min-height:1.4em; }
+  #tilemap-choice { max-width:min(100%,22rem); }
+  #pixel-workspace[hidden] { display:none; }
   .side-label { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; }
   .side-label span, .muted, output { color:var(--quiet); }
   input, button, select { font:inherit; color:inherit; accent-color:#a8ccb0; }
@@ -72,7 +88,36 @@
       <button id="export-png">Save PNG frame</button>
     </div>
   </header>
-  <div class="layout">
+  <div id="tilemap-controls" class="row">
+    <button id="tilemap-new" type="button" aria-expanded="false">New tilemap</button>
+    <form class="row" id="tilemap-create" hidden>
+      <label>Columns <input id="tilemap-cols" type="number" min="1" max="256" value="8" required></label>
+      <label>Rows <input id="tilemap-rows" type="number" min="1" max="256" value="6" required></label>
+      <button type="submit">Create</button>
+    </form>
+    <div class="row" id="tilemap-modes" role="group" aria-label="Tilemap workspace" hidden>
+      <button id="tilemap-place" type="button" aria-pressed="false">Placements</button>
+      <button id="tilemap-pixels" type="button" aria-pressed="true">Tile pixels</button>
+      <output id="tilemap-editing"></output>
+    </div>
+  </div>
+  <section id="tilemap-workspace" aria-label="Tile placements" hidden>
+    <div class="row" id="tilemap-options">
+      <label>Tile <select id="tilemap-choice"></select></label>
+      <button id="tilemap-edit-tile" type="button">Edit selected tile</button>
+      <button id="tilemap-add-tile" type="button">New tile</button>
+      <label>Tool <select id="tilemap-tool"><option value="paint">Place</option><option value="erase">Erase</option><option value="pick">Pick</option></select></label>
+      <label>Zoom <select id="tilemap-zoom"><option value="1">1×</option><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option><option value="8">8×</option></select></label>
+      <label><input id="tilemap-lines" type="checkbox" checked> Grid</label>
+      <button id="tilemap-undo" type="button">Undo</button>
+    </div>
+    <div id="tilemap-viewport"><div id="tilemap-plane">
+      <canvas id="tilemap-canvas" tabindex="0" aria-label="Tilemap. Arrow keys move and Enter uses the current tool."></canvas>
+      <div id="tilemap-grid" aria-hidden="true"></div><div id="tilemap-cursor" aria-hidden="true" hidden></div>
+    </div></div>
+    <p id="tilemap-position" class="muted"></p>
+  </section>
+  <div class="layout" id="pixel-workspace">
     <div class="paint">
       <div id="canvas-view"></div>
       <div class="row timeline" id="art-shot-control" hidden>

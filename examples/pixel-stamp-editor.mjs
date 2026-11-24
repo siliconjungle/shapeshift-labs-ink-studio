@@ -3,15 +3,18 @@ import { mountPixelOnionSkin } from '../src/pixel-onion-skin.mjs';
 import { mountPixelRangePlayer } from '../src/pixel-range-player.mjs';
 import * as playbackModule from '../src/pixel-playback-ranges.js';
 import * as directionalModule from '../src/pixel-directional-views.js';
+import * as tilemapModule from '../src/pixel-tilemap.js';
+import { mountTilemap } from './pixel-stamp-tilemap.mjs';
 import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
 import * as paletteModule from '../src/pixel-palette.js';
-import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
+import { colors,openPNG,readPNG,savePNG,saveRasterPNG } from './pixel-stamp-png.mjs';
 
 const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixel-palette')];
 const ranges = playbackModule.default ?? globalThis[Symbol.for('ink-studio.pixel-playback-ranges')];
 const directional = directionalModule.default ?? globalThis[Symbol.for('ink-studio.pixel-directional-views')];
+const Tilemap = tilemapModule.default ?? globalThis[Symbol.for('ink-studio.pixel-tilemap')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
 const canvasTransforms = KIT.pixelCanvasTransforms, adjustments = KIT.pixelAdjustments;
@@ -22,6 +25,7 @@ const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.ca
 const onionSkin = mountPixelOnionSkin($('onion-skin'),view);
 const nativePlayer = mountPixelRangePlayer(view.playbackHost,view,ranges);
 let nativeSourceKey, tagFormKey, tagFormDoc;
+let placementSource, placementsByTile = new Map();
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
 const craft = KIT.pixelCraft, artRules = KIT.pixelArtRules, cleanup = KIT.pixelCleanup;
@@ -145,6 +149,7 @@ function load(data) {
   });
   const revised = { ...rest,swatchIds,frames:loaded };
   directional.prepare(revised.directional,new Set(loaded.map(frame=>frame.id)),new Set(swatchIds));
+  if (revised.tilemap !== undefined && !stack) throw new TypeError('Open tilemaps as a pixel layer deck');
   if (stack) validateStackDeck(revised,stack);
   else { validateProtection(revised); workshopRules(revised); }
   stop();
@@ -157,6 +162,7 @@ function load(data) {
   selection = undefined;
   resetStroke();
   update();
+  tilePanel.show(revised.tilemap ? 'map' : 'pixels');
   showPaletteRamp();
 }
 
@@ -791,8 +797,16 @@ function draw() {
     exception.selection && frame.selections?.some(selection=>selection.id === exception.selection)));
   const taggedEndpoint = !!frame.id && doc.tags?.some(tag=>tag.start === frame.id || tag.end === frame.id);
   const registeredView = doc.directional?.views.some(view=>view.frame === frame.id);
-  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView;
-  $('remove').title = registeredView ? 'Registered directional view' : taggedEndpoint ? 'Used as a playback tag endpoint' : '';
+  if (placementSource !== doc.tilemap) {
+    placementSource = doc.tilemap;
+    placementsByTile = new Map();
+    for (const { tile } of doc.tilemap?.cells ?? []) placementsByTile.set(tile,(placementsByTile.get(tile) ?? 0)+1);
+  }
+  const placements = placementsByTile.get(frame.id) ?? 0;
+  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView || placements > 0;
+  $('remove').title = placements ? 'Placed on the tilemap' :
+    registeredView ? 'Registered directional view' : taggedEndpoint ? 'Used as a playback tag endpoint' : '';
+  if (doc.tilemap) tilePanel.editing(frame.label ?? frame.id ?? 'Unregistered frame',placements);
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
   showAdjustmentPreview();
@@ -869,6 +883,7 @@ function update() {
   $('playback').value = state.doc.playback ?? 'loop';
   updateTagForm();
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
+  tilePanel.refresh();
 }
 
 function stop() {
@@ -1722,6 +1737,7 @@ $('tag-remove').addEventListener('click',()=>{
 $('duplicate').addEventListener('click',()=>edit(()=>{
   const copy=structuredClone(state.doc.frames[state.frame]);
   delete copy.id;
+  if (state.doc.tilemap) copy.id = colors.uniqueId(new Set(frameIds(state.doc)),'tile-'+(state.doc.frames.length+1));
   if (state.stack) for (const cel of Object.values(copy.cels)) delete cel.id;
   state.doc.frames.splice(++state.frame,0,copy);
   if (selection?.frame >= state.frame) selection = { ...selection,frame:selection.frame+1 };
@@ -1767,6 +1783,7 @@ function validateStackDeck(doc,stack = layerStack.prepare(doc.layers)) {
   const frameIds = new Set(frames.flatMap(frame=>frame.id === undefined ? [] : [frame.id]));
   if (frameIds.size !== frames.filter(frame=>frame.id !== undefined).length)
     throw new RangeError('Layer deck frame IDs must be unique');
+  Tilemap.prepare(doc.tilemap,frameIds,width,height);
   validateSavedMasks(width,height,doc.sharedSelections);
   const details = doc.protectedDetails ?? [];
   const ids = frames.map(frame=>frame.id);
@@ -2343,10 +2360,68 @@ function download(filename,blob) {
 function saveJson(filename,data) {
   download(filename,new Blob([JSON.stringify(data,null,2)],{ type:'application/json' }));
 }
+
+const tilePanel = mountTilemap(document.querySelector('main'),{
+  Tilemap,segment:paintTools.segment,stop,notify,
+  read:()=>({ doc:state.doc,frame:state.doc.frames[state.frame].id,canUndo:state.undo.length > 0 }),
+  readTile(id) {
+    const frame = state.doc.frames.find(frame=>frame.id === id);
+    const composed = renderStack(state.doc,state.stack,frame);
+    return layerStack.image(composed,composed.packed);
+  },
+  create(width,height) {
+    const doc = state.doc, used = new Set(frameIds(doc)), tilemap = { version:1,width,height,cells:[] };
+    const frames = doc.frames.map((frame,i)=>{
+      const { id,label,guides,selections,duration,...cel } = frame;
+      const key = id ?? colors.uniqueId(used,'tile-'+(i+1));
+      used.add(key);
+      return { id:key,duration:duration ?? 1/(doc.fps ?? 12),
+        ...(label !== undefined && { label }),...(guides !== undefined && { guides }),
+        ...(selections !== undefined && { selections }),cels:state.stack ? frame.cels : { paint:cel } };
+    });
+    const revised = { ...doc,format:stackFormat,version:1,layers:doc.layers ?? [{ id:'paint' }],frames,tilemap };
+    validateStackDeck(revised);
+    edit(()=>{ state.doc = revised; resetStroke(); });
+  },
+  place(points,id) {
+    const doc = state.doc;
+    const { tilemap,changes } = Tilemap.place(doc.tilemap,new Set(frameIds(doc)),doc.width,doc.height,points,id);
+    if (!changes.length) return;
+    stop();
+    saveUndo();
+    state.doc = { ...doc,tilemap };
+    $('undo').disabled = false;
+    tilePanel.refresh();
+    notify((id === null ? 'Erased ' : 'Placed ')+changes.length+(changes.length === 1 ? ' cell' : ' cells'));
+  },
+  edit(id) {
+    const index = state.doc.frames.findIndex(frame=>frame.id === id);
+    if (index < 0) return;
+    stop();
+    resetStroke();
+    state.frame = index;
+    draw();
+    $('canvas-view').querySelector('.ink-grid-viewport').focus({ preventScroll:true });
+  },
+  add() {
+    const doc = state.doc;
+    if ($('duplicate').disabled) throw new RangeError('Tile artwork exceeds the workshop frame budget');
+    const id = colors.uniqueId(new Set(frameIds(doc)),'tile-'+(doc.frames.length+1));
+    const frame = { id,duration:1/(doc.fps ?? 12),cels:{} };
+    edit(()=>{ state.doc = { ...doc,frames:[...doc.frames,frame] }; });
+    return id;
+  },
+  undo:()=> $('undo').click()
+});
+
 $('export-png').addEventListener('click',async()=>{
   const { width,height,palette,swatchIds,swatchLabels,lockedSwatches,ramps,frames } = state.doc;
   const index = state.frame, current = frames[index], name = $('preset').value;
   try {
+    if (tilePanel.active()) {
+      download('tilemap.png',await saveRasterPNG(tilePanel.image()));
+      return;
+    }
     let paint = { palette,swatchIds,slots:stamp.paint(width,height,current),alpha:current.alpha,knockouts:current.knockouts };
     if (state.stack) {
       const raster = renderStack(state.doc,state.stack,current), editor = colors.paletteEditor(indexedPalette(),width*height+palette.length);

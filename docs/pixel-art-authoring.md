@@ -257,6 +257,60 @@ poses, angles, pivots, and scales. Added coverage without registered depth gets
 an exact handoff. Runtime cel transitions, scenery edits, and bump paint need
 a baked base before their maps can be carried through this workflow.
 
+## Place tiles and edit their pixels
+
+Open a clip or layer deck in the [Pixel Stamp Workshop](../examples/pixel-stamp-editor.html).
+Choose **New tilemap** and set the number of columns and rows. Each frame
+becomes a tile image with a stable ID. All tiles use the document canvas
+dimensions, palette, and layer stack.
+
+- In **Placements**, select a tile and draw across cells. Use **Erase** to
+  empty cells or **Pick** to select the tile already placed there. A drag
+  places one stroke and can be undone in one step.
+- Choose **Tile pixels** or **Edit selected tile** to open the selected
+  drawing in the normal pixel editor. Paint, erase, or adjust the layers
+  there. Return to **Placements** to see the change in every cell that
+  references that drawing.
+- Choose **New tile** to draw an independent tile. Use **Save JSON** to keep
+  the editable layer deck and **Save map PNG** to export the composed native
+  raster with transparent empty cells.
+
+A version 2 pixel document stores the map as a top-level `tilemap`. Each
+occupied cell points to a frame ID. Its coordinates are zero-based column and
+row. The map supports up to 256 columns and rows, with a maximum native
+raster of 4,096 pixels per axis and four million pixels total.
+
+```json
+{
+  "version": 1,
+  "width": 8,
+  "height": 6,
+  "cells": [
+    { "at": [1, 2], "tile": "wall" },
+    { "at": [2, 2], "tile": "wall" },
+    { "at": [3, 2], "tile": "lamp" }
+  ]
+}
+```
+
+Use a revision-checked edit with `destination: "timeline"` and
+`operation: { "type": "set-tilemap", "tilemap": ... }` to create the layout.
+Use `operation: { "type": "place-tiles", "points": [[2, 2], [3, 2]], "tile": "wall" }`
+to draw placements, or set `tile` to `null` to erase them. Previews and
+receipts list the cell references before and after the stroke. Edit the
+referenced frame with the usual pixel commands. Both kinds of edit use the
+same undo and redo history.
+
+```sh
+ink-studio pixel-art stack import workshop-deck.json --out map.json
+ink-studio pixel-art tilemap inspect map.json --at 3,2
+ink-studio pixel-art tilemap draw map.json --out map.png
+```
+
+`editor.tilemap([3, 2])` reports the selected cell and usage counts for
+each tile. `editor.tilemapRaster()` returns the composed `{ w, h, rgba }`
+raster for Ink's sprite and composition inputs.
+
 ## Register frames and align texture pixels
 
 Version 2 documents can carry a top-level `guides` list. Guide IDs are

@@ -3,6 +3,7 @@
 const { isDeepStrictEqual:equal } = require('node:util');
 const LayerStack = require('../src/pixel-layer-stack.js');
 const Playback = require('../src/pixel-playback-ranges.js');
+const Tilemap = require('../src/pixel-tilemap.js');
 const { conflict } = require('./pixel-edit-preview.js');
 
 const origin = [0,0];
@@ -186,6 +187,8 @@ const operations = {
   duration:['frame','durationMs'],
   'set-tag':['tag'],
   'set-directional':['directional'],
+  'set-tilemap':['tilemap'],
+  'place-tiles':['points','tile'],
   'remove-tag':['tag'],
   'layer-offset':['layer','offset'],
   'cel-offset':['frame','layer','offset'],
@@ -200,7 +203,19 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, set-directional, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
+    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, set-directional, set-tilemap, place-tiles, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
+  if (op.type === 'set-tilemap') {
+    const { tilemap,...rest } = design;
+    if (op.tilemap === undefined) throw new TypeError('Set a tilemap or pass null to remove it');
+    return { design:op.tilemap === null ? rest : { ...design,tilemap:op.tilemap },
+      report:{ destination:'timeline',kind:'tilemap',tool:op.type,before:tilemap ?? null,after:op.tilemap } };
+  }
+  if (op.type === 'place-tiles') {
+    const { tilemap,changes } = Tilemap.place(design.tilemap,new Set(design.frames.map(frame=>frame.id)),
+      design.width,design.height,op.points,op.tile);
+    return { design:tilemap === design.tilemap ? design : { ...design,tilemap },
+      report:{ destination:'timeline',kind:'tilemap',tool:op.type,cellCount:changes.length,changes } };
+  }
   if (op.type === 'set-directional') {
     const { directional,...rest } = design;
     if (op.directional === undefined) throw new TypeError('Set a directional view set or pass null to remove it');

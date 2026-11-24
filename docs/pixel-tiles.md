@@ -1,5 +1,8 @@
 # Animated pixel tiles
 
+Use [tilemap placement and tile-pixel editing](pixel-art-authoring.md#place-tiles-and-edit-their-pixels)
+to draw a layout of shared tile images in the Pixel Stamp Workshop.
+
 `KIT.pixelTiles` joins editable pixel-stamp cels along a grid and lets an
 authored cue travel around bends, into caps, and through forks. A copper
 trace can cool back to its idle art. Frost can keep the final cel at every

@@ -55,3 +55,8 @@ export async function savePNG(raster,mode) {
     png.rgba(width,height,compressed,metadata);
   return new Blob(parts,{ type:'image/png' });
 }
+
+export async function saveRasterPNG({ w,h,rgba }) {
+  const scanlines = png.scanlines(w,h,rgba,4);
+  return new Blob(png.rgba(w,h,await deflate(scanlines)),{ type:'image/png' });
+}
