@@ -2594,8 +2594,11 @@ selection on the active frame.
 ```json
 {
   "brush": {
-    "mode": "cut",
+    "mode": "carve",
     "depth": 0.2,
+    "direction": "normal",
+    "profile": "round",
+    "falloff": { "pixels": 2, "curve": "smoothstep" },
     "pixels": [[31, 31], [32, 31], [33, 31], [31, 32], [33, 32]]
   }
 }
@@ -2609,13 +2612,35 @@ brush accepts `target`, `yaw`, `pitch`, `dist`, `ortho`, and `fov`.
 Use `minFacing` to adjust the minimum view-facing cosine from the
 default of 0.2.
 
-Each accepted mark projects its native pixel footprint around the
-visible SDF hit. `cut` removes material behind the hit and `add`
-extends material toward the camera. Depth is measured along the camera
-axis in world units. Unmarked cells stay open in the stencil. The
-versioned `grid-brush` modifier keeps the edit ID and retains the
-projection in the solid's rest coordinates so it follows rigid
-transforms.
+Each accepted mark starts on a visible SDF hit. The native footprint
+stays a stencil, including unmarked cells inside the stroke.
+
+| Mode | Effect | How it uses depth |
+| --- | --- | --- |
+| `carve` | Removes a recess along the inward axis | Sets the recess depth |
+| `through-cut` | Traces through the selected solid and clears the last exit across each pixel | Caps the permitted reach. Pixels with no confirmed exit within reach are skipped |
+| `raise` | Adds relief along the outward axis | Sets the raised height |
+| `fill` | Brings recessed hits toward a shared level set by the highest selected surface | Limits how much each hit can rise |
+| `smooth` | Relaxes visible relief toward paired neighboring hits on the same solid | Limits displacement in either direction |
+
+Depth is in world units along the chosen direction. `view` points
+out toward the camera and `normal` uses the traced geometric normal.
+An XYZ vector specifies a world-space outward axis. `carve` and
+`through-cut` travel inward along the opposite axis. With a normal or
+explicit axis, the pixel's corners project onto the hit's tangent plane
+before sweeping. `smooth` also accepts a sampling `radius` of 1–8
+native pixels.
+
+`profile` can be `flat`, `round`, `taper`, or a list of 2–16 ordered
+`[position, depthWeight]` keys with positions spanning 0 to 1. Profile
+position increases from the edge of the accepted footprint toward its
+deepest interior. `falloff` optionally fades the depth over a width
+given by `pixels`, with a `linear` or `smoothstep` curve. A width of 0
+keeps full strength at the edge.
+
+The `grid-brush` modifier keeps the edit ID and the swept stencil in the
+solid's rest coordinates so it follows object transforms. Legacy
+`cut` and `add` strokes retain their version 1 camera-axis behavior.
 
 ```sh
 node cli/ink-studio.js pixel-art preview drawing.json brush.json --scene gate.json
@@ -2624,9 +2649,11 @@ node cli/ink-studio.js pixel-art edit drawing.json brush.json --scene gate.json 
 
 The preview reports accepted hits and skipped pixels under
 `targets[].brush`. Each hit carries its projected depth and the sampled
-depth intervals where material changes. The volume report gives the
-stencil bounds in solid rest space and an estimated changed world volume
-from 16 depth samples along each accepted pixel's center ray. Blocked,
+depth intervals where material changes. The five shape operations report
+depth as signed distance from the hit along the outward axis. The
+volume report gives the stencil bounds in solid rest space and
+separate estimates for material added to and removed from the selected
+solid, using 16 depth samples along each projected pixel's center. Blocked,
 grazing, protected, and unbound marks are skipped. A brush with no valid
 hits is rejected. Apply from an editor transaction to preview, cancel,
 commit, undo, or replay the retained modifier.

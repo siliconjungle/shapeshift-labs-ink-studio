@@ -101,7 +101,7 @@ test('the CLI previews and writes a source-bound brush with a stable modifier ID
   write('document.json',document(file('scene.json')));
   const sceneArgs=['--scene',file('scene.json')];
   const observed=run('targets',file('document.json'),'--destination','sculpt',...sceneArgs);
-  write('edit.json',patch(observed,{mode:'cut',depth:.20,pixels:[[32,32],[33,32],[0,0]]}));
+  write('edit.json',patch(observed,{mode:'carve',depth:.20,pixels:[[32,32],[33,32],[0,0]],profile:'taper'}));
   const args=[file('document.json'),file('edit.json'),...sceneArgs];
   const preview=run('preview',...args);
   assert.equal(preview.targets[0].brush.projectedPixels,2);
@@ -109,7 +109,116 @@ test('the CLI previews and writes a source-bound brush with a stable modifier ID
   const receipt=run('edit',...args,'--out',file('edited.json'));
   assert.deepEqual(receipt.affectedTargets[0].brush,preview.targets[0].brush);
   assert.equal(receipt.skippedHits[0].code,'no-surface');
+  assert.equal(receipt.affectedTargets[0].brush.depthUnit,'signed-world-from-hit');
   const output=JSON.parse(fs.readFileSync(file('edited.json')));
   assert.equal(output.solids[0].modifiers[0].id,'grid-cut');
   assert(KIT.diorama.check(output).every(row=>row.level!=='error'));
+});
+
+function sculpt(spec,mode,options,id=mode) {
+  const scene=ink.createSceneEditor(spec);
+  const editor=ink.createPixelEditor(document('panel.json'),{sceneEditor:scene,sceneRef:'panel.json'});
+  const change=patch(pixels(editor),{ mode,...options },id);
+  const preview=editor.previewEdit(change);
+  return { editor,scene,change,preview,review:preview.targets[0]?.brush };
+}
+
+test('carve has an authored floor and through-cut requires and clears the back exit', () => {
+  const spec=source();
+  const mark={ pixels:[[32,32]],direction:'normal' };
+  const blind=sculpt(spec,'carve',{ ...mark,depth:.30 });
+  assert(blind.preview.valid,JSON.stringify(blind.preview.conflicts));
+  const carved=KIT.diorama.brushField(blind.editor.apply(blind.change));
+  assert(carved.sdf(0,0,.12)>0);
+  assert(carved.sdf(0,0,-.20)<0);
+  assert.equal(blind.review.depthUnit,'signed-world-from-hit');
+  assert(blind.review.volume.removedWorldVolume>0);
+  assert.equal(blind.review.volume.addedWorldVolume,0);
+
+  const short=sculpt(spec,'through-cut',{ ...mark,depth:.30 });
+  assert.equal(short.preview.valid,false);
+  assert.equal(short.preview.conflicts[0].code,'through-cut-depth-limit');
+  assert(short.preview.conflicts[0].requiredDepth>.49);
+  assert.deepEqual(short.scene.snapshot(),spec);
+
+  const through=sculpt(spec,'through-cut',{ ...mark,depth:.72 });
+  assert(through.preview.valid,JSON.stringify(through.preview.conflicts));
+  assert(through.review.hits[0].depth[0]<-.50);
+  const output=through.editor.apply(through.change), drilled=KIT.diorama.brushField(output);
+  assert(drilled.sdf(0,0,-.24)>0);
+  assert(drilled.sdf(.20,0,-.24)<0);
+  assert.equal(output.solids[0].modifiers[0].brush.version,2);
+
+  const backFacing=sculpt(spec,'carve',{...mark,depth:.2,direction:[0,0,-1]});
+  assert.equal(backFacing.preview.conflicts[0].code,'invalid-outward-axis');
+
+  const { id,mat,res,...box } = spec.solids[0];
+  const layered={...spec,solids:[{id,mat,res,kind:'join',how:'union',size:0,a:box,
+    b:{kind:'box',at:[0,0,-.65],half:[.6,.5,.10]}}]};
+  const firstExitOnly=sculpt(layered,'through-cut',{...mark,depth:.72});
+  assert.equal(firstExitOnly.preview.conflicts[0].code,'through-cut-depth-limit');
+  const lastExit=sculpt(layered,'through-cut',{...mark,depth:1.15});
+  assert(lastExit.preview.valid,JSON.stringify(lastExit.preview.conflicts));
+  const lastExitField=KIT.diorama.brushField(lastExit.editor.apply(lastExit.change));
+  assert(lastExitField.sdf(0,0,-.65)>0);
+  assert(lastExitField.sdf(.20,0,-.65)<0);
+});
+
+test('raise retains an oblique direction and grades the depth without changing the stencil', () => {
+  const marks=Array.from({length:9},(_,i)=>[31+i%3,31+Math.floor(i/3)]);
+  const options={pixels:marks,depth:.24,direction:[1,0,1],profile:[[0,0],[.5,.75],[1,1]],
+    falloff:{pixels:1,curve:'linear'}};
+  const run=sculpt(source({perspective:true}),'raise',options);
+  assert(run.preview.valid,JSON.stringify(run.preview.conflicts));
+  const center=run.review.hits.find(hit=>hit.at[0]===32 && hit.at[1]===32);
+  const edge=run.review.hits.find(hit=>hit.at[0]===31 && hit.at[1]===31);
+  assert.equal(center.strength,1);
+  assert.equal(center.depth[1],.24);
+  assert(Math.abs(edge.strength-.25)<1e-6);
+  assert(Math.abs(edge.depth[1]-.06)<1e-6);
+  assert.equal(run.review.projectedPixels,9);
+  assert.equal(run.review.volume.removedWorldVolume,0);
+  const raised=run.editor.apply(run.change);
+  const field=KIT.diorama.brushField(raised);
+  const tip=KIT.V.mad(center.rest,center.outward,.18);
+  assert(field.sdf(...tip)<0);
+  assert(field.sdf(...KIT.V.mad(edge.rest,edge.outward,.18))>0);
+  const stored=raised.solids[0].modifiers[0].brush;
+  assert.deepEqual(stored.settings.profile,options.profile);
+  assert.deepEqual(stored.settings.falloff,options.falloff);
+  assert(Math.abs(Math.hypot(...stored.settings.direction)-1)<1e-6);
+});
+
+test('fill meets the rim and smooth removes and adds relief locally', () => {
+  const base=source(), face=base.solids[0];
+  const { id,mat,res,...box }=face;
+  const spec={...base,solids:[{id,mat,res,kind:'join',how:'cut',size:0,a:box,
+    b:{kind:'box',at:[0,0,.28],half:[.027,.20,.20]}}]};
+  const brush={pixels:[[32,32],[33,32]],depth:.25,direction:'normal'};
+  const fill=sculpt(spec,'fill',brush);
+  assert(fill.preview.valid,JSON.stringify(fill.preview.conflicts));
+  assert.equal(fill.review.projectedPixels,1);
+  assert.equal(fill.review.skippedHits[0].code,'already-at-level');
+  assert.equal(fill.review.volume.removedWorldVolume,0);
+  assert(fill.review.volume.addedWorldVolume>0);
+  const filled=KIT.diorama.brushField(fill.editor.apply(fill.change));
+  assert(filled.sdf(0,0,.22)<0);
+  assert(filled.sdf(0,0,.27)>0);
+  assert(filled.sdf(0,.12,.22)>0);
+
+  const smoothing=sculpt(spec,'smooth',{...brush,profile:'round',radius:1});
+  assert(smoothing.preview.valid,JSON.stringify(smoothing.preview.conflicts));
+  assert.deepEqual(smoothing.review.hits.map(hit=>hit.change),['add','cut']);
+  assert(smoothing.review.volume.addedWorldVolume>0);
+  assert(smoothing.review.volume.removedWorldVolume>0);
+  const edited=smoothing.editor.apply(smoothing.change);
+  const smooth=KIT.diorama.brushField(edited), original=KIT.diorama.brushField(spec);
+  assert(original.sdf(0,0,.12)>0);
+  assert(smooth.sdf(0,0,.12)<0);
+  const rim=smoothing.review.hits[1].rest;
+  assert(original.sdf(rim[0],rim[1],.23)<0);
+  assert(smooth.sdf(rim[0],rim[1],.23)>0);
+  assert(smoothing.editor.undo());
+  smoothing.editor.redo();
+  assert.deepEqual(smoothing.scene.snapshot(),edited);
 });

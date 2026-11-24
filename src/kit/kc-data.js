@@ -173,7 +173,7 @@
   modifierKinds.warp.may = { ...modifierKinds.warp.may, taper: 'vec2' };
   modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: DIO.kinds.join.may };
   modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' } };
-  modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut'], brush: 1 } };
+  modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut', 'carve', 'through-cut', 'raise', 'fill', 'smooth'], brush: 1 } };
   const builtKinds = ['pillar', 'arch', 'stairs', 'fence', 'pipe'];
   const activeModifiers = solid => (solid.modifiers ?? []).filter(modifier => modifier.enabled !== false);
 
@@ -1047,7 +1047,7 @@
         fields(modifier, at, def, { id: 'str', label: 'str', enabled: 'bool' });
         if (Object.hasOwn(modifier, 'do')) bad(at + '.do', 'a sculpt modifier uses kind');
         if (kind === 'grid-brush') {
-          try { K.procedural.gridSculptBrush.check(modifier.brush); }
+          try { K.procedural.gridSculptBrush.check(modifier.brush,modifier.mode); }
           catch (error) { bad(at + '.brush',error.message); }
         }
         if (kind === 'fold') {
@@ -1774,9 +1774,13 @@
             const options = { hold: true };
             let reach = p.reach;
             if (modifier.kind === 'grid-brush') {
-              const operand = K.procedural.gridSculptBrush.prepare(modifier.brush).solid(S,p.mat);
-              const cut = modifier.mode === 'cut';
-              p = S.join(cut ? 'cut' : 'union',p,operand,{ ...options,r:0,mat:p.mat,mask:cut });
+              const { brush,mode } = modifier, api = K.procedural.gridSculptBrush;
+              const changes = brush.version===1 ? [mode] : ['cut','add'].filter(change=>brush.columns.some(row=>row.change===change));
+              for (const change of changes) {
+                const operand = api.prepare(brush,mode,change).solid(S,p.mat);
+                const cut = change==='cut';
+                p = S.join(cut ? 'cut' : 'union',p,operand,{ ...options,r:0,mat:p.mat,mask:cut });
+              }
             } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
               const operand = sub(modifier.shape);
               reach = Math.max(reach, operand.reach);
