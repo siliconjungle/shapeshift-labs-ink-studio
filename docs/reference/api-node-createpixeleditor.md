@@ -21,6 +21,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().describe` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().execute` | function | `(command,context)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().exportPreset` | function | `(preset,options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().exportReview` | function | `(options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().extractPalette` | function | `({ frame,layer,...options } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().flushSession` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().history` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../src/kit/p23-authoring-document.js) |
@@ -31,7 +32,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().palette` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().png` | function | `({ frame,cel,layer,colorMode } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().preview` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
-| `node.createPixelEditor().previewChanges` | function | `(options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().previewChanges` | function | `(options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().previewEdit` | function | `(patch,options = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().previewRecipe` | function | `(recipe,context = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().receipts` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |

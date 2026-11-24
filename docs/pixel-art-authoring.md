@@ -1747,6 +1747,7 @@ const result = editor.execute(command);
 | `revalidate-batch` | Review a recorded `batch` on the current asset. Returns a proposed receipt when the steps pass validation. |
 | `preview-recipe` | Expand a versioned `recipe` with optional `inputs`, then dry run its edits and render its comparisons. |
 | `apply-recipe` | Apply the returned `plan` and `approval` together after verifying the reviewed transaction and comparison frames. |
+| `export-review` | Package a draft, the latest undoable commit, or a supplied batch as an offline review with PNGs and machine-readable evidence. |
 
 A draw, mask, recolor, transform, or apply command takes the regular Ink
 patch fields and returns a pixel edit receipt. Keep `id` and `revision` on
@@ -2069,6 +2070,54 @@ For CLI application, save a version 1 pixel command with
 fields into it. Applying verifies the approved inputs, the edit receipts,
 and the comparison samples before creating one undo entry. Preview the
 saved recipe again to use it on another revision or with different inputs.
+
+### Export a portable edit review
+
+Run `export-review` through `editor.execute` or `pixel-art session run`.
+It reviews the open draft or latest undoable commit. Pass a `batch`
+receipt to review a specific transaction in isolation. The session needs
+the batch's starting revisions either in its current committed state
+or in retained undo history. To review a recipe, use its `plan.batch`
+and optionally copy the view scopes from `plan.comparisons`.
+
+Save the command below as `export-review.json` and run it against the
+session containing the draft or commit. The export creates a new
+directory relative to the command file.
+
+```json
+{
+  "format": "ink-studio/pixel-command",
+  "version": 1,
+  "action": "export-review",
+  "options": { "out": "gate-review", "zoom": 4 }
+}
+```
+
+```sh
+ink-studio pixel-art session run gate-session export-review.json
+```
+
+Open `index.html` locally, or share the entire directory. It includes the
+following files.
+
+- Native 1× and integer-zoom PNGs for before, after, and difference views.
+  Zoom uses nearest-neighbor scaling. White cells in the difference PNG
+  mark changed positions.
+- `diff.json` for exact art-grid and authored source changes, skipped
+  hits, and protection evidence.
+- `render-settings.json` for frame or cel scope, native grid, and resolved
+  camera, time, registration, and render sidecar revisions for scene views.
+- `receipts.json` for the ordered edit receipts and the supplied batch
+  when applicable. The manifest records starting and ending revisions
+  and byte counts and SHA-256 hashes for the packaged files.
+
+By default Ink compares a document frame and adds views for affected scene
+bindings. Specify `options.views` to choose frames, layers, cels or named
+bindings. A whole-scene view on an attached scene uses `"scene": true`.
+Scene views can supply `time` and a `camera` override. Set `zoom` from 1 to 8.
+The SDK can use `editor.exportReview(options)`. Omitting `out` returns the
+manifest and encoded file contents without writing files. The export
+leaves the draft, scene, and undo history available for further editing.
 
 ## Author a version 2 document
 

@@ -3,6 +3,7 @@
 const Commands = require('./pixel-commands.js');
 const Batch = require('./pixel-edit-batch.js');
 const Recipes = require('./pixel-command-recipes.js');
+const ReviewExport = require('./pixel-review-export.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preset = require('../src/pixel-export-preset.js');
 const { createDefinitions,ref,constant,choice,either,object,nullable,types,array,num,int,tuple,prop } =
@@ -44,6 +45,12 @@ const evidence = {
     '/outputs':'Final document, scene and sidecar revisions after verified replay.',
     '/batchRevision':'Revision of the transaction used to apply the approved recipe.',
     '/conflicts':'Mismatched approvals, stale inputs or differing replay evidence.'
+  }],
+  'export-review':['reviewExportResult',{
+    '/manifest':'Portable index of each comparison, evidence file, revision and checksum.',
+    '/directory':'Output directory when options.out publishes files.',
+    '/files':'Bundle contents with UTF-8 or base64 encoding when options.out is omitted.',
+    '/conflicts':'Why a review could not be built or written.'
   }],
   inspect:['inspectResult',{
     '/revision':'Document revision for follow-up edits.',
@@ -184,6 +191,7 @@ function examples(createEditor) {
     'revalidate-batch':[[make('revalidate-batch',{batch:recorded,options:{exact:true}}),[other]]],
     'preview-recipe':[[proposed]],
     'apply-recipe':[[make('apply-recipe',{plan:approval.plan,approval:approval.approval})]],
+    'export-review':[[make('export-review',{options:{zoom:4}})]],
     export:[[make('export',{artifact:'document'})],[make('export',{artifact:'png',options:{frame:'art',layer:'ink'}})]]
   };
   return Object.fromEntries(Object.entries(inputs).map(([action,rows])=>[action,rows.map(([command,setup=[]])=>{
@@ -324,6 +332,30 @@ function recipeDefinitions(edits) {
   };
 }
 
+function reviewDefinitions() {
+  const viewFields = { id,frame:id,layer:id,cel,binding:id,scene:constant(true),time:num(0),
+    camera:object({yaw:number,pitch:number,dist:number,fov:number,target:tuple(number,number,number),ortho:bool}) };
+  const files = object({before:text,after:text,difference:text},['before','after','difference']);
+  return {
+    reviewView:object(viewFields,['id']),
+    reviewManifestView:object({id,scope:ref('reviewView'),changedPixels:natural,comparisonRevision:revision,
+      grids:object({before:size,after:size,difference:size},['before','after','difference']),native:files,zoomed:files},
+    ['id','scope','changedPixels','comparisonRevision','grids','native','zoomed']),
+    reviewManifest:object({format:constant(ReviewExport.format),version:constant(1),label:text,zoom:int(1,ReviewExport.maxZoom),
+      anchors:object({before:ref('batchState'),after:ref('batchState')},['before','after']),
+      views:array(ref('reviewManifestView'),1),review:text,diff:text,settings:text,receipts:text,
+      files:array(object({path:text,bytes:natural,sha256:revision},['path','bytes','sha256']),1)},
+    ['format','version','label','zoom','anchors','views','review','diff','settings','receipts','files']),
+    reviewExportResult:{
+      ...object({format:constant(ReviewExport.resultFormat),version:constant(1),valid:bool,manifest:ref('reviewManifest'),
+        directory:text,files:{type:'object',additionalProperties:object({encoding:choice('utf8','base64'),data:{type:'string'}},
+          ['encoding','data'])},conflicts:array(ref('conflict')),failedStep:natural,editReceipt:obj},
+      ['format','version','valid','conflicts']),
+      if:{properties:{valid:constant(true)}},then:{required:['manifest'],oneOf:[prop('directory'),prop('files')]}
+    }
+  };
+}
+
 function exportRequest(contract) {
   const { optionFields:{export:fields},exportArtifacts,renderArtifacts } = contract;
   const opts = (keys,required = [])=>object(Object.fromEntries(keys.map(key=>[key,properties[key]])),required);
@@ -430,7 +462,7 @@ function channelReference(surfaceDefinitions) {
 
 function buildSchema({ createEditor,surfaceDefinitions }) {
   const contract = Commands.contract(), { format,version,members,requiredFields,optionFields,edits,travel,exportArtifacts } = contract;
-  const defs = { ...createDefinitions(),...resultDefinitions(exportArtifacts),...recipeDefinitions(edits) };
+  const defs = { ...createDefinitions(),...resultDefinitions(exportArtifacts),...recipeDefinitions(edits),...reviewDefinitions() };
   defs.indexedPigment = inkSwatch;
   defs.paintColor = paintColor;
   defs.emission = emission;
@@ -449,7 +481,8 @@ function buildSchema({ createEditor,surfaceDefinitions }) {
     recipe:ref('recipe'),inputs:obj,plan:ref('recipePlan'),approval:revision,
     edit:{oneOf:edits.map(action=>ref(action+'Command'))},artifact:choice(...exportArtifacts) };
   const optionTypes = {frame:id,cel,layer:id,binding:id,destinations:{...array(text),uniqueItems:true},references:bool,
-    limit:natural,shotHitFrame:int(0,1e9),exact:bool,targetRevision:revision};
+    limit:natural,shotHitFrame:int(0,1e9),exact:bool,targetRevision:revision,
+    out:text,zoom:int(1,ReviewExport.maxZoom),views:array(ref('reviewView'),1)};
   for (const action of Object.keys(members)) {
     const schemaName = action+'Command';
     const keys = optionFields[action] ?? (edits.includes(action) ? optionFields.edit : []);

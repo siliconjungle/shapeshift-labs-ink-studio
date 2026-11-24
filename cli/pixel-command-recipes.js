@@ -134,4 +134,4 @@ function checkPlan(value,approval) {
 }
 
 module.exports = { format,planFormat,reviewFormat,applyFormat,maxComparisons,inputTypes:Object.keys(validators),
-  prepare,compare,plan,checkPlan };
+  prepare,comparison,compare,plan,checkPlan };

@@ -1480,7 +1480,7 @@ const CMD = {
         '            --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits',
         '  pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session',
         '  pixel-art schema [--out schema.json]   publish command schemas, examples, destination inputs and evidence',
-        '  pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run SDK commands, batches and recipes',
+        '  pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run SDK commands, batches, recipes and review exports',
         '  pixel-art session <apply|draw|mask|recolor|transform> <directory> <patch.json>   stage or apply a guarded edit',
         '  pixel-art session <status|begin|preview|commit|cancel|undo|redo|validate|inspect|sample|select|snap|brush|copy|timeline|targets> <directory>',
         '  pixel-art session export <directory> [--artifact document|scene|layer-deck|stamp|png|shot-corrections|splat-fit|scan-paint] --out file',

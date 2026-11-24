@@ -21,6 +21,7 @@ const optionFields = {
   edit:['shotHitFrame'],
   preview:['limit','exact','shotHitFrame'],
   'revalidate-batch':['limit','exact'],'preview-recipe':['limit','exact'],
+  'export-review':['out','zoom','views'],
   export:{ preset:['preset','out','directory'],png:['frame','cel','layer','colorMode'],
     stamp:['frame','cel','layer','references'],render:['scene'] }
 };
@@ -30,7 +31,8 @@ const members = {
   preview:['edit','options'],begin:['label'],...Object.fromEntries(travel.map(action=>[action,[]])),
   replay:['receipt'],batch:['revision','label','commands'],'record-batch':[],
   'replay-batch':['batch'],'revalidate-batch':['batch','options'],
-  'preview-recipe':['recipe','inputs','options'],'apply-recipe':['plan','approval'],export:['artifact','options']
+  'preview-recipe':['recipe','inputs','options'],'apply-recipe':['plan','approval'],
+  'export-review':['batch','options'],export:['artifact','options']
 };
 const requiredFields = { inspect:['at'],select:['query'],replay:['receipt'],batch:['revision','commands'],
   'replay-batch':['batch'],'revalidate-batch':['batch'],
@@ -148,6 +150,8 @@ function execute(editor,design,raw,context = {}) {
       return editor.previewRecipe(command.recipe,{...context,...optionsFor(options,optionFields['preview-recipe']),inputs:command.inputs});
     case 'apply-recipe':
       return editor.applyRecipe(command.plan,command.approval,context);
+    case 'export-review':
+      return editor.exportReview({...context,...optionsFor(options,optionFields['export-review']),batch:command.batch});
     case 'validate':
       return editor.describe();
     case 'inspect':

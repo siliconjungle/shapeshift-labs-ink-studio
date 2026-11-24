@@ -68,6 +68,9 @@
       "$ref": "#/$defs/apply-recipeCommand"
     },
     {
+      "$ref": "#/$defs/export-reviewCommand"
+    },
+    {
       "$ref": "#/$defs/exportCommand"
     }
   ],
@@ -7373,6 +7376,410 @@
         ]
       }
     },
+    "reviewView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "frame": {
+          "$ref": "#/$defs/id"
+        },
+        "layer": {
+          "$ref": "#/$defs/id"
+        },
+        "cel": {
+          "$ref": "#/$defs/celId"
+        },
+        "binding": {
+          "$ref": "#/$defs/id"
+        },
+        "scene": {
+          "const": true
+        },
+        "time": {
+          "type": "number",
+          "minimum": 0
+        },
+        "camera": {
+          "type": "object",
+          "properties": {
+            "yaw": {
+              "type": "number"
+            },
+            "pitch": {
+              "type": "number"
+            },
+            "dist": {
+              "type": "number"
+            },
+            "fov": {
+              "type": "number"
+            },
+            "target": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "ortho": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "reviewManifestView": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "scope": {
+          "$ref": "#/$defs/reviewView"
+        },
+        "changedPixels": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "comparisonRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "grids": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            },
+            "after": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            },
+            "difference": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "difference"
+          ],
+          "additionalProperties": false
+        },
+        "native": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "after": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "difference": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "difference"
+          ],
+          "additionalProperties": false
+        },
+        "zoomed": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "after": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "difference": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "before",
+            "after",
+            "difference"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "changedPixels",
+        "comparisonRevision",
+        "grids",
+        "native",
+        "zoomed"
+      ],
+      "additionalProperties": false
+    },
+    "reviewManifest": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-review-bundle"
+        },
+        "version": {
+          "const": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "zoom": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "anchors": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "$ref": "#/$defs/batchState"
+            },
+            "after": {
+              "$ref": "#/$defs/batchState"
+            }
+          },
+          "required": [
+            "before",
+            "after"
+          ],
+          "additionalProperties": false
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewManifestView"
+          },
+          "minItems": 1
+        },
+        "review": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "diff": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "settings": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "receipts": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sha256": {
+                "$ref": "#/$defs/revision"
+              }
+            },
+            "required": [
+              "path",
+              "bytes",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "label",
+        "zoom",
+        "anchors",
+        "views",
+        "review",
+        "diff",
+        "settings",
+        "receipts",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "reviewExportResult": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-review-export"
+        },
+        "version": {
+          "const": 1
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "manifest": {
+          "$ref": "#/$defs/reviewManifest"
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "encoding": {
+                "enum": [
+                  "utf8",
+                  "base64"
+                ]
+              },
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "encoding",
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/conflict"
+          }
+        },
+        "failedStep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "editReceipt": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "valid",
+        "conflicts"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "manifest"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "directory"
+            ]
+          },
+          {
+            "required": [
+              "files"
+            ]
+          }
+        ]
+      }
+    },
     "indexedPigment": {
       "anyOf": [
         {
@@ -10058,6 +10465,63 @@
           "format": "ink-studio/pixel-command",
           "version": 1,
           "action": "apply-recipe"
+        }
+      ]
+    },
+    "export-reviewCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "export-review"
+        },
+        "batch": {
+          "$ref": "#/$defs/batchReceipt"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "out": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "zoom": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "views": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/reviewView"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "options": {
+            "zoom": 4
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "export-review"
         }
       ]
     },
@@ -14265,6 +14729,41 @@
                 "scene": null
               },
               "conflicts": []
+            }
+          }
+        ]
+      },
+      "export-review": {
+        "request": "#/$defs/export-reviewCommand",
+        "result": "#/$defs/reviewExportResult",
+        "required": [],
+        "evidence": {
+          "/manifest": "Portable index of each comparison, evidence file, revision and checksum.",
+          "/directory": "Output directory when options.out publishes files.",
+          "/files": "Bundle contents with UTF-8 or base64 encoding when options.out is omitted.",
+          "/conflicts": "Why a review could not be built or written."
+        },
+        "examples": [
+          {
+            "command": {
+              "options": {
+                "zoom": 4
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "export-review"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-review-export",
+              "version": 1,
+              "valid": false,
+              "conflicts": [
+                {
+                  "code": "nothing-to-review",
+                  "message": "Open a draft, commit an edit, or supply a batch to review"
+                }
+              ]
             }
           }
         ]
