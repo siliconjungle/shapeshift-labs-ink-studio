@@ -85,6 +85,7 @@ sorting or `specialize: false` in auto mode to compare the full resolve.
 | `afterimages` | Draw historical splat poses with scene depth. See [motion-aware afterimages](motion-afterimages.md). |
 | `reconstruction` | Animate selected splats through fragmentation, withdrawal, and reassembly. See [world-space reveal and reconstruction](world-reconstruction.md). |
 | `splatOrder`, `surfaceOrder` | Enable bounded [local surface ordering](surface-order.md) for a transparent crossing. |
+| `pbrMaterials`, `pbrLights` | Bind [shared PBR materials](pbr-materials.md) and relight them live. |
 | `stableTransparency` | Hold the order of nearby translucent splats during motion. See [stable transparency](scene-optics.md#stable-transparency-during-motion). |
 | `water: false` | Compare the scene with water optics disabled. |
 | `reflections: false` | Disable live scene captures bound to water optics. |

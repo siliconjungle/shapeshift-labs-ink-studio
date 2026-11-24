@@ -24,6 +24,7 @@ The package includes geometry, materials, lighting, animation, character control
 - [Headless world simulation](docs/headless-worlds.md)
 - [Playable and editable Inkwell Rebirth scenes](examples/inkwell-rebirth/README.md)
 - [Searchable effect recipes](docs/effect-recipes.md)
+- [Shared PBR materials](docs/pbr-materials.md)
 - [Material-aware secondary emission](docs/secondary-emission.md)
 - [Material pickup and transfer](docs/material-response.md#pick-up-and-transfer-material)
 - [Editable starter recipes](examples/starter-recipes/README.md)

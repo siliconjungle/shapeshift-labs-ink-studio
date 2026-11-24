@@ -99,7 +99,7 @@ const float circleMass[7] = float[7](.1294849662,.2797053915,.3818300505,.417959
 
 uniform highp sampler2D u_curveSpans;
 vec4 spanRow(int id, int field) {
-  int texel = id*10+field;
+  int texel = id*11+field;
   return texelFetch(u_curveSpans,ivec2(texel & 511,texel >> 9),0);
 }
 struct Hit { int row; float depth; float exitDepth; float alpha; float group; };
@@ -160,7 +160,7 @@ bool curveHit(int id, vec3 origin, vec3 ray, vec2 viewInterval, out Hit hit) {
   return alpha >= 1e-5;
 }`;
 
-export function finiteCurveFragment({ tileSize, layers, mode, wet, layeredGlass, environment, section, spriteLOD, strandLOD, engraving, print }) {
+export function finiteCurveFragment({ tileSize, layers, mode, wet, layeredGlass, environment, section, spriteLOD, strandLOD, engraving, print, pbr }) {
   const owner=mode==='owner', mask=mode==='mask', anchors=mode==='anchors', color=mode==='color';
   return `#version 300 es
 precision highp float;
@@ -190,6 +190,48 @@ ${color && layeredGlass ? `uniform sampler2D u_curveGlass;
 layout(location=${wet ? 3 : 2}) out vec4 o_back;
 layout(location=${wet ? 4 : 3}) out vec4 o_through;` : ''}
 ${rays}
+${pbr ? pbr+`
+float curveRadialEntry(vec3 start,vec3 ray,vec3 axis,float radius,float near){
+  vec3 offset=start-axis*dot(start,axis), direction=ray-axis*dot(ray,axis);
+  float a=dot(direction,direction),b=dot(offset,direction);
+  float disc=b*b-a*(dot(offset,offset)-radius*radius);
+  if(a<1e-20||disc<0.0)return farRay;
+  float reach=sqrt(disc);
+  return (b+reach)/a<near?farRay:max(near,(b-reach)/a);
+}
+vec3 curvePbrNormal(int id,vec3 origin,vec3 ray,float distance){
+  vec4 a=spanRow(id,0),b=spanRow(id,1),major=spanRow(id,2),minor=spanRow(id,3);
+  int mode=int(major.w);
+  bool hard=(mode&2)!=0, elliptical=(mode&4)!=0, ribbon=(mode&8)!=0;
+  float blur=ribbon?.25:1.0;
+  vec3 axis=b.xyz,start=a.xyz-origin,direction=ray;
+  if(elliptical){
+    start=vec3(dot(axis,start),dot(major.xyz,start)/blur,dot(minor.xyz,start));
+    direction=vec3(dot(axis,ray),dot(major.xyz,ray)/blur,dot(minor.xyz,ray));
+    float scale=length(direction);
+    direction/=scale;
+    distance*=scale;
+    axis=vec3(1,0,0);
+  }
+  float wing=ribbon?a.w*(1.0-blur)/blur:0.0;
+  if(!hard){
+    float near=u_curveNear/(-ray.z)*(elliptical?length(vec3(dot(b.xyz,ray),dot(major.xyz,ray)/blur,dot(minor.xyz,ray))):1.0);
+    if(ribbon){
+      float center=abs(direction.z)>1e-12?(start.z-sign(direction.z)*a.w)/direction.z:farRay;
+      if(center<near||abs(direction.y*center-start.y)>wing)center=farRay;
+      distance=min(center,min(curveRadialEntry(start-vec3(0,wing,0),direction,axis,a.w,near),
+        curveRadialEntry(start+vec3(0,wing,0),direction,axis,a.w,near)));
+    }else distance=curveRadialEntry(start,direction,axis,a.w,near);
+    if(distance>=farRay*.5)return -ray;
+  }
+  vec3 offset=distance*direction-start;
+  float along=dot(offset,axis);
+  vec3 delta=offset-axis*(hard?clamp(along,0.0,b.w):along);
+  if(ribbon)delta.y-=clamp(delta.y,-wing,wing);
+  vec3 normal=elliptical?b.xyz*delta.x+major.xyz*delta.y/blur+minor.xyz*delta.z:delta;
+  return pbrUnit(normal,-ray);
+}
+` : ''}
 ${anchors || engraving ? `
 uniform highp sampler2D u_curveMarks;
 vec4 curveMark(int id,int field){
@@ -305,6 +347,16 @@ void main() {
     vec4 pigment = spanRow(hit.row,6);
     float normalized = clamp((hit.depth-u_curveRange.x)/(u_curveRange.y-u_curveRange.x),0.0,1.0);
     vec3 rgb = pigment.rgb;
+    ${pbr ? `
+    vec4 controls=spanRow(hit.row,10);
+    if(controls.w>=1.0){
+      float travel=hit.depth/(-ray.z);
+      mat3 toWorld=transpose(mat3(u_curveView));
+      vec3 at=toWorld*(origin+travel*ray-u_curveView[3].xyz);
+      vec3 normal=toWorld*curvePbrNormal(hit.row,origin,ray,travel);
+      rgb=pbrShade(int(controls.w),rgb,normal,toWorld*spanRow(hit.row,1).xyz,-toWorld*ray,at,
+        fract(controls.w)*2.0,0.0,0.0,pbrLinear(controls.rgb));
+    }` : ''}
     ${engraving ? `
     int slot=int(curveMark(hit.row,4).w);
     if(slot>0){

@@ -39,7 +39,7 @@ ivec2 semanticTexel(vec2 uv,int level){
 vec4 semanticRead(ivec2 xy,int channel,int level){
   return texelFetch(u_semanticAtlas,ivec3(xy,channel),level);
 }
-void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out vec3 emission,out vec4 captured){
+void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out vec3 emission,out vec4 captured,out float metalness){
   int ranks[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
   float lod=u_semanticLevels?clamp(log2(max(1.,span)),0.,float(u_semanticMax)):0.;
   int lo=int(floor(lod)),hi=int(ceil(lod));
@@ -52,8 +52,9 @@ void semanticMaterial(vec2 uv,float span,out vec4 pigment,out vec4 detail,out ve
   vec2 covered=vec2((1.-fract(lod))*first.a,fract(lod)*second.a);
   covered/=max(1e-8,covered.x+covered.y);
   detail=semanticRead(a,1,lo)*covered.x+semanticRead(b,1,hi)*covered.y;
-  emission=(semanticLinear(semanticRead(a,2,lo).rgb)*covered.x+
-    semanticLinear(semanticRead(b,2,hi).rgb)*covered.y)*u_semanticStrength;
+  vec4 emitA=semanticRead(a,2,lo),emitB=semanticRead(b,2,hi);
+  emission=(semanticLinear(emitA.rgb)*covered.x+semanticLinear(emitB.rgb)*covered.y)*u_semanticStrength;
+  metalness=dot(vec2(emitA.a,emitB.a),covered);
   captured=u_scanCaptured&&u_scanAppearance>0.?semanticRead(cell,3,chooseB?hi:lo):vec4(0);
 }
 vec3 semanticObserver(vec3 point){
@@ -83,15 +84,15 @@ vec3 semanticFinish(vec3 pigment,vec3 normal,float roughness,float sheen,vec3 em
 `;
 
 // Opaque pixel cutouts share an atlas and depth buffer with the splat pass.
-export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD, sharedShaders, print } = {}) {
+export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, cutaway, samplingPlan, samplingGLSL, projectionPlan, spriteLOD, sharedShaders, print, pbrGLSL } = {}) {
   const resources = createResources(gl);
   try {
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation,blockColor,objectTexels) {
+      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr) {
       const chart = lighting && !normalMapped;
-      const marks=anchors || engraving, rest=marks||simulation||objectTexels, needsFrame=normalMapped||semantic;
+      const marks=anchors || engraving, rest=marks||simulation||objectTexels, needsFrame=normalMapped||semantic||pbr;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -105,7 +106,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels
+        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -168,6 +169,7 @@ ${chart ? 'uniform highp sampler2DArray u_surfaceLit;uniform int u_surfaceLightC
 ${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasSurfaceNormalMap;' : ''}
 ${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
 ${semantic ? semanticSource : ''}
+${pbr ? 'uniform int u_surfacePbr;uniform bool u_pbrOrtho;uniform vec3 u_pbrBack;'+pbrGLSL : ''}
 ${rest?'in vec3 v_rest;':''}
 ${marks?'flat in vec2 v_marks;':''}
 ${simulation?simulationMaterialSource:''}
@@ -230,9 +232,10 @@ void main(){
   float semanticSpan=max(length(dFdx(rawTexel)),length(dFdy(rawTexel)))*u_semanticScale;
   vec4 detail,captured;
   vec3 emission;
+  float metalness;
   if(u_semanticOn){
     vec2 coord=(rawTexel-u_semanticRect.xy-.5)/max(vec2(1),u_semanticRect.zw-1.);
-    semanticMaterial(coord,semanticSpan,ink,detail,emission,captured);
+    semanticMaterial(coord,semanticSpan,ink,detail,emission,captured,metalness);
   }
   ` : ''}
   ${needsFrame ? `
@@ -271,12 +274,21 @@ void main(){
   ${simulation?`
   if(u_semanticOn)simApply(v_simUV,v_rest,geometricNormal,simUVx,simUVy,simRestX,simRestY,dpdx,dpdy,rgb,detail.a,sheen,normal);
   `:''}
+  ${pbr && simulation ? 'vec3 pbrPigment=u_semanticOn&&u_simCount>0?rgb:ink.rgb;' : ''}
   ${semantic ? 'vec3 scanIrradiance=vec3(0),scanHighlight=vec3(0);':''}
   ${normalMapped ? `
   ${semantic?'if(u_semanticOn&&(u_scanMaterial||u_texelMaterial))scanIrradiance=eSurfaceLighting(v_world,normal,false,vec3(0),geometricNormal,semanticObserver(v_world),detail.a,sheen,scanHighlight);else':''}
   rgb=eSRGB(min(vec3(1),eLinear(rgb)*(vec3(1)+eLighting(v_world,normal,false,vec3(0),geometricNormal))));
   ` : ''}
   ${semantic?'if(u_semanticOn&&!u_index)rgb=semanticFinish(rgb,normal,detail.a,sheen,emission,v_world,scanIrradiance,scanHighlight,captured);':''}
+  ${pbr ? `
+  if(u_surfacePbr>0){
+    float det=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
+    vec3 tangent=(dpdx*uvDy.y-dpdy*uvDx.y)*sign(det);
+    rgb=pbrShade(u_surfacePbr,${simulation?'pbrPigment':'ink.rgb'},normal,tangent,
+      u_pbrOrtho?u_pbrBack:u_surfaceEye-v_world,v_world,
+      ${semantic?'u_semanticOn?detail.a:.45,u_semanticOn?metalness:0.,0.,u_semanticOn?emission:vec3(0)':'0.45,0.0,0.0,vec3(0)'});
+  }` : ''}
   ${engraving ? `
   if(v_marks.y>0.0){
     vec3 restN=cross(restX,restY),liveN=cross(worldX,worldY);
@@ -692,7 +704,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
-        section, anchors, engraving, coverageFilter, historyFirst = 0
+        section, anchors, engraving, coverageFilter, historyFirst = 0, pbr, pbrUniforms
       }
     ) {
       const planBlocks=atlas?.blockTextures;
@@ -753,7 +765,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched || anchors || simulation || objectTexels)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr);
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,
@@ -767,7 +779,8 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         u_surfaceLightCount: lighting?.count ?? 0,
         u_surfaceLit: 24,
         ...(normalMapped && {u_surfaceNormalMap:24,u_hasSurfaceNormalMap:!!atlas.normalPixels}),
-        ...((normalMapped||semantic)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
+        ...((normalMapped||semantic||pbr)&&{u_surfaceNormals:surfaceNormals,u_surfaceEye:eye??eyeFromView(view)}),
+        ...(pbr&&{...pbrUniforms,u_pbrOrtho:!!ortho,u_pbrBack:back}),
         ...(semantic&&{u_semanticAtlas:semanticUnit,u_semanticLevels:semanticMipmaps!==false,u_semanticScale:samplingScale,
           u_semanticEye:eye??eyeFromView(view),u_semanticBack:back,u_semanticOrtho:!!ortho}),
         ...(simulation&&{u_simMasks:simulationUnit}),
@@ -834,11 +847,11 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       }
       let chartIndex = 0, semanticIndex=0, blockIndex=0;
       function drawRange(first, end) {
-        if(!coverageFilter && !semantic && !blockRanges){
+        if(!coverageFilter && !semantic && !blockRanges && !pbr){
           drawProjected(first,end);
           return;
         }
-        const charts=coverageFilter ? atlas.surfaceCharts??[] : [];
+        const charts=coverageFilter || pbr ? atlas.surfaceCharts??[] : [];
         while(first<end){
           while(charts[chartIndex]?.end<=first)chartIndex++;
           while(semantic?.[semanticIndex]?.end<=first)semanticIndex++;
@@ -853,6 +866,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
             shader.set({u_blockOn:true,u_blockOrigin:[block.region.x,block.region.y],u_blockTint:block.tint});
           } else if(blockRanges)shader.set({u_blockOn:false});
           if(coverageFilter)shader.set({u_filterSoftness:coverageFilter.at(chart?.materialId)});
+          if(pbr)shader.set({u_surfacePbr:pbr.surface(chart)});
           if(mip){
             const {chain,region:r}=mip;
             const key=mip.objectTexels && sun;

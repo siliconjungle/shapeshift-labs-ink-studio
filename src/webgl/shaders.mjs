@@ -38,7 +38,7 @@ vec4 relightAt(int row) { return texelFetch(u_relight, ivec2(row & 511, row >> 9
 export function splatShaderSources(ascii, sampleCoverage, {
   water = false, airPockets = false, layered = false, atlas = false, portal = false, instances = false,
   contributions = false, masked = false, textured = false, layeredGlass = false, coverageRules, materialStyles = false,
-  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false, gaussianFilter = false
+  environment = false, emitterFog=false, relighting = false, optical = false, stableDetail, cutaway, airflow, footprints = false, footprintGLSL, engraving=false, marks=false, screenPrintGLSL, spriteReconstruction, facingColors = false, gaussianDegree, splatPaint = false, gaussianProxy = false, coverageVote = false, coverageFilter = false, gaussianMaterials = false, surfaceOrder = false, depthMeshProxy = false, gaussianFilter = false, pbr
 } = {}) {
   if (footprints && typeof footprintGLSL !== 'string') throw new Error('Footprint shaders need SplatFootprints.glsl');
   const coverageStride = coverageRules?.coverageStride ?? 4;
@@ -98,6 +98,7 @@ layout(location=1) in int a_index;
 ${instances ? 'layout(location=2) in int a_instance; uniform highp sampler2D u_instances;' : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintRows,u_footprintParams; flat out vec4 v_footprintMap; flat out vec2 v_footprintStyle, v_footprintZ; flat out vec4 v_footprintPlane;' : ''}
 out vec2 v_d; out vec3 v_conic; out vec4 v_color; out float v_depth;
+${pbr ? 'uniform highp sampler2D u_pbrRows;uniform int u_pbrRowCount;flat out vec4 v_pbrRow,v_pbrPigment;flat out vec3 v_pbrCenter;' : ''}
 ${gaussianFilter ? `uniform vec4 u_gaussianFilter;
 flat out vec4 v_gaussianX,v_gaussianY,v_gaussianZ;
 flat out float v_gaussianGain;
@@ -198,6 +199,14 @@ void main(){
     }
   }` : ''}
   vec3 color = vec3(mod(t1.w, 256.0), mod(floor(t1.w / 256.0), 256.0), floor(t1.w / 65536.0)) / 255.0;
+  ${pbr ? `
+  v_pbrRow=a_index>=0&&a_index<u_pbrRowCount?texelFetch(u_pbrRows,ivec2(a_index&511,a_index>>9),0):vec4(0);
+  v_pbrPigment=vec4(color,0);
+  if(v_pbrRow.z>0.0){
+    int albedo=int(v_pbrRow.z)-1;
+    v_pbrPigment.rgb=vec3(albedo>>16,(albedo>>8)&255,albedo&255)/255.0;
+  }
+  ` : ''}
   vec3 color0 = color; mat3 FM = mat3(1.0); v_fk = -1.0; v_lit = 0.0; v_fm = vec4(0.0); v_ft = vec4(0.0);
   int kraw = int(t2.w), flags = kraw / 16, kind = kraw - flags * 16;
   ${sampleCoverage ? 'if (!sampleCoverageVisible(kraw, u_sampleWithdrawal)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }' : ''}
@@ -332,6 +341,7 @@ ${environment ? '  v_envAxial = -cam.z;' : ''}
         if (ci >= 0) { if (!stat) steps = min(steps, 1);   /* (whoever carries the light is not washed out by it) */
           for (int k = 0; k < 3; k++) { if (k >= steps) break; ci = clamp(u_lup[ci], 0, u_lpal.length() - 1); } color = u_lpal[ci]; color0 = color; } } } }
   bool plain = color == color0 && (kraw & 32768) == 0; float fogk = (flags & 2) == 0 && u_fogp.y > 0.0 && u_fogp.x < 1.0 ? smoothstep(u_fogp.x, 1.0, dn) * u_fogp.y : 0.0;   // (smoothstep from 1 to 1 is undefined: some cards give NaN, a black pixel)
+  ${pbr ? 'v_pbrCenter=pos;v_pbrPigment.a=fogk;' : ''}
   ${optical ? `
   ivec2 opticalUV = ivec2((a_index & 511) * 3, a_index >> 9);
   v_optical = texelFetch(u_optical, opticalUV, 0);
@@ -506,9 +516,9 @@ ${stableDetail ? 'flat in float v_detailGeometry, v_detailTexture;' : ''}
 ${portal ? 'flat in vec3 v_portalDepth; uniform vec4 u_splatPlane, u_portalCoverPlane;' : ''}
 ${!portal || layeredGlass || depthMeshProxy ? 'flat in float v_ownerDepth;' : ''}
 ${portal || cutaway || footprints ? 'uniform mat4 u_proj;' : ''}
-${portal || cutaway || footprints || facingColors ? 'uniform float u_ortho;' : ''}
+${portal || cutaway || footprints || facingColors || pbr ? 'uniform float u_ortho;' : ''}
 ${facingColors ? facingColors.splatFragmentGLSL : ''}
-${footprints || facingColors || gaussianFilter ? 'uniform float u_focal;' : ''}
+${footprints || facingColors || gaussianFilter || pbr ? 'uniform float u_focal;' : ''}
 ${gaussianFilter && !cutaway ? 'uniform float u_near;' : ''}
 ${footprints && !cutaway ? 'uniform bool u_geometryDepth;' : ''}
 ${cutaway ? cutaway + `
@@ -539,7 +549,14 @@ flat in float v_glassNearDepth;
 float glassDepth(vec4 sampleDepth) {
   return dot(floor(sampleDepth.rgb*255.0+0.5),vec3(1.0,256.0,65536.0)) / 16777215.0;
 }` : ''}
-${water || portal || environment || cutaway || footprints || facingColors || gaussianFilter ? 'uniform vec2 u_viewport;' : ''}
+${water || portal || environment || cutaway || footprints || facingColors || gaussianFilter || pbr ? 'uniform vec2 u_viewport;' : ''}
+${pbr ? `
+flat in vec4 v_pbrRow,v_pbrPigment;
+flat in vec3 v_pbrCenter;
+uniform mat4 u_pbrView;
+uniform float u_pbrReach;
+${pbr}
+` : ''}
 ${environment ? environmentMediaSource(emitterFog) + 'flat in float v_envAxial;' : ''}
 ${portal || cutaway ? axialPosition : ''}
 ${footprints ? footprintGLSL : ''}
@@ -720,6 +737,26 @@ ${materialStyles ? `
     rgb = ${stableDetail ? 'mix(rgb, tile, v_detailTexture)' : 'tile'}; }
 ${facingColors ? 'rgb = facingFragment(rgb, u_fog, u_viewport, u_focal, u_ortho > 0.5);' : ''}
 ${relighting ? 'if (v_relight.w > 0.0) rgb = mix(min(vec3(1.0), rgb * v_relight.xyz), u_fog, v_relight.w - 1.0);' : ''}
+${pbr ? `
+  if(v_pbrRow.w>=1.0){
+    vec2 screen=(gl_FragCoord.xy-u_viewport*.5)/u_focal;
+    mat3 toWorld=transpose(mat3(u_pbrView));
+    bool ortho=u_ortho>0.5;
+    vec3 ray=ortho?vec3(0,0,-1):vec3(screen,-1);
+    vec3 origin=ortho?vec3(screen,0):vec3(0);
+    vec3 direction=toWorld*ray, from=toWorld*(origin-u_pbrView[3].xyz);
+    vec3 point=v_pbrCenter;
+    vec3 normal=pbrDecodeNormal(v_pbrRow.xy);
+    float facing=dot(normal,direction);
+    if(abs(facing)>1e-7){
+      float travel=dot(normal,point-from)/facing;
+      float centerDepth=-(u_pbrView*vec4(point,1)).z;
+      if(travel>=0.0&&abs(travel-centerDepth)<=u_pbrReach)point=from+travel*direction;
+    }
+    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,vec3(0),-direction,point,
+      fract(v_pbrRow.w)*2.0,0.0,0.0,vec3(0));
+    rgb=mix(rgb,u_fog,${optical?'hasOptical?0.0:':''}v_pbrPigment.a);
+  }` : ''}
 ${optical ? `
   if (hasOptical) {
     rgb = (v_scatterTint.x >= 0.0 ? v_scatterTint : rgb) * v_optical.y + v_reflectTint * v_optical.z;

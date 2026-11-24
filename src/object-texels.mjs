@@ -15,25 +15,27 @@ const materialBakes = new WeakSet();
 function prepareMaterial(sample, fallback) {
   if (rgbColor(sample)) sample = { pigment:sample };
   if (!sample || Object.getPrototypeOf(sample)!==Object.prototype ||
-      Object.keys(sample).some(key=>!['pigment','normal','roughness','emission'].includes(key)))
-    throw new TypeError('Texel materials need pigment, normal, roughness or emission');
-  const {pigment, normal, roughness, emission} = sample;
+      Object.keys(sample).some(key=>!['pigment','normal','roughness','metalness','emission'].includes(key)))
+    throw new TypeError('Texel materials need pigment, normal, roughness, metalness or emission');
+  const {pigment, normal, roughness, metalness, emission} = sample;
   const vector=normal===undefined ? fallback : normal;
   const validVector=(Array.isArray(vector) || ArrayBuffer.isView(vector)) && vector.length===3 && Array.from(vector).every(Number.isFinite);
   const length=validVector ? Math.hypot(...vector) : 0;
   if (pigment!==undefined && !rgbColor(pigment) || emission!==undefined && !rgbColor(emission) ||
       roughness!==undefined && (!Number.isFinite(roughness) || roughness<0 || roughness>1) ||
+      metalness!==undefined && (!Number.isFinite(metalness) || metalness<0 || metalness>1) ||
       vector!==undefined && (!length || !Number.isFinite(length)))
-    throw new RangeError('Texel material needs RGB24 colors, a nonzero XYZ normal and roughness in [0,1]');
+    throw new RangeError('Texel material needs RGB24 colors, a nonzero XYZ normal and roughness and metalness in [0,1]');
   if (fallback && pigment===undefined) throw new TypeError('A baked texel material needs pigment');
-  return {pigment,emission,roughness:roughness ?? (fallback ? .65 : undefined),
+  return {pigment,emission,metalness,roughness:roughness ?? (fallback ? .65 : undefined),
     normal:validVector ? Array.from(vector,n=>n/length) : undefined};
 }
 
-function writeMaterial(bake, id, {pigment, normal, roughness, emission}) {
+function writeMaterial(bake, id, {pigment, normal, roughness, metalness, emission}) {
   if (pigment!==undefined) bake.rgba.set([pigment>>16,pigment>>8&255,pigment&255,255],id*4);
   if (normal) bake.normal.set([...normal.map(n=>128+Math.round(127*n)),255],id*4);
   if (roughness!==undefined) bake.roughness[id]=Math.round(255*roughness);
+  if (metalness!==undefined) bake.metalness[id]=Math.round(255*metalness);
   if (emission!==undefined) bake.emission.set([emission>>16,emission>>8&255,emission&255],id*3);
 }
 
@@ -43,7 +45,7 @@ export function editObjectTexels(bake, edits) {
     throw new TypeError('Edit a relightable object texel bake with a bounded list of cell edits');
   if (!edits.length) return bake;
   const result={...bake,rgba:bake.rgba.slice(),normal:bake.normal.slice(),
-    roughness:bake.roughness.slice(),emission:bake.emission.slice()};
+    roughness:bake.roughness.slice(),metalness:bake.metalness.slice(),emission:bake.emission.slice()};
   const ids=new Set();
   for (const {id,...sample} of edits) {
     if (!Number.isSafeInteger(id) || !bake.cells[id] || ids.has(id))
@@ -212,7 +214,8 @@ export function bakeObjectTexels(mesh, { origin = [0,0,0], resolution = 16, pain
   const bake={...result,uvs,width,height:fullHeight,rgba:pixels,missing,resolution};
   if (relightable) {
     const count=width*fullHeight, cells=Array(count).fill(null);
-    Object.assign(bake,{normal:new Uint8Array(count*4),roughness:new Uint8Array(count),emission:new Uint8Array(count*3)});
+    Object.assign(bake,{normal:new Uint8Array(count*4),roughness:new Uint8Array(count),
+      metalness:new Uint8Array(count),emission:new Uint8Array(count*3)});
     for (const [id,{location,value}] of samples) {
       const {point,normal,...address}=location;
       cells[id]=Object.freeze({...address,id,point:Object.freeze(point),normal:Object.freeze(normal)});

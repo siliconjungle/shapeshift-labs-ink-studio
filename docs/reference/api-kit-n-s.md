@@ -149,6 +149,19 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.passQuality.prioritize` | function | `(settings,rule)` | [source](../../src/pass-quality.js) |
 | `KIT.passQuality.reflectionPlan` | function | `(settings, ids)` | [source](../../src/pass-quality.js) |
 
+## KIT.pbr
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pbr` | namespace |  |  |
+| `KIT.pbr.encodeNormal` | function | `(n)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.glsl` | value | `string` |  |
+| `KIT.pbr.prepare` | function | `(definition, lightsOverride)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.shade` | function | `(plan, id, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.splatBindings` | function | `(world, plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.splatNormal` | function | `(world, i, frame, M)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.uniforms` | function | `(plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+
 ## KIT.pick
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1232,7 +1245,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `KIT.sceneMeshes` | namespace |  | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes) |
 | `KIT.sceneMeshes.clipUV` | function | `(mesh, {min,max,material,clip:limit})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.create` | function | `({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {})` | [guide](../compressed-scenery.md#pack-and-render-the-signal-house), [guide](../semantic-texture-mipmaps.md), [guide](../simulation-material-layers.md), [guide](../sprite-reconstruction.md#mixed-representations-on-one-asset), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.create` | function | `({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {})` | [guide](../compressed-scenery.md#pack-and-render-the-signal-house), [guide](../pbr-materials.md#carrier-channels), [guide](../semantic-texture-mipmaps.md), [guide](../simulation-material-layers.md), [guide](../sprite-reconstruction.md#mixed-representations-on-one-asset), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.depthProxy` | function | `({id,objectId=id,positions,indices} = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.fromObjectTexels` | function | `(bake, {id,objectId,partId,materialId=id,emissionStrength=1, lighting={}} = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.inspectUV` | function | `(mesh, {material, size, ...options} = {})` | [guide](../mesh-uv.md#reduce-an-authored-mesh), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
@@ -1252,7 +1265,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.sceneMeshes.simulationFrame` | function | `(...args)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.skin` | function | `(mesh, influences)` | [guide](../surface-grown-strands.md#grow-from-uvs), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.trianglePigment` | function | `(mesh,triangle)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.updateObjectTexels` | function | `(mesh, bake)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.updateObjectTexels` | function | `(mesh, bake)` | [guide](../pbr-materials.md#carrier-channels), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 | `KIT.sceneMeshes.uvAnchors` | function | `(mesh, {V, procedural:{spatial}})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 
 ## KIT.screenPrint

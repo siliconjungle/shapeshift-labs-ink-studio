@@ -1,6 +1,6 @@
 import { finiteCurveFragment } from './finite-curve-shaders.mjs';
 
-const tileSize = 8, layers = 64, rowWidth = 512, spanStride = 40;
+const tileSize = 8, layers = 64, rowWidth = 512, spanStride = 44;
 const maxTileSpans = 1024, maxReferences = 4_000_000;
 const tableUnits = { spans: 1, tiles: 2, solid: 5, proxy: 6, owner: 7, mask: 8, glass: 13 };
 const zero = [0, 0, 0, 0];
@@ -94,7 +94,14 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     });
     const mode = Number(span.beta) + 2*Number(!!span.group) + 4*Number(!!span.major) + 8*Number(span.flattened);
     const rgb = data[at+7], glow = !world.renderMetadata?.muteEmission?.[i] && kernel.emissionAt(world.curveMaterials,i);
-    const color = [rgb & 255, rgb >> 8 & 255, rgb >> 16 & 255].map((byte,k) => Math.min(1,byte/255 + (glow?.[k] ?? 0)));
+    const physical = options.pbrTargets && options.pbrTargets(i);
+    const roughness = world.curveMaterials?.[i * kernel.materialStride];
+    const albedo = physical && options.pbrUseAlbedo && world.materialAlbedo?.[i];
+    const base = albedo ? [(albedo-1) >> 16, (albedo-1) >> 8 & 255, (albedo-1) & 255] :
+      [rgb & 255, rgb >> 8 & 255, rgb >> 16 & 255];
+    const color = base.map(
+      (byte,k) => Math.min(1,byte/255 + (physical ? 0 : glow?.[k] ?? 0))
+    );
     const geometryCode = options.geometryCode?.(i) ?? 0;
     const strandCode = strands?.codes?.get(i) ?? 0;
     masked ||= geometryCode !== 0;
@@ -107,7 +114,8 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
       ...(span.minor ? vector(view,span.minor) : none),span.opacity,
       ...(caps[0]?.plane ?? zero),...(caps[1]?.plane ?? zero),
       ...color,i+1,span.group,span.tau,geometryCode,strandCode,
-      ...(caps[0]?.at ?? zero),endCap[0],endCap[1],endCap[2],softness);
+      ...(caps[0]?.at ?? zero),endCap[0],endCap[1],endCap[2],softness,
+      ...(glow || none),physical ? physical+.5*(roughness ? roughness-1 : world.splatRoughness?.[i] ?? .45) : 0);
     if (marking) {
       const {V}=kit, stored=!replacement && world.curveRest?.[at+3] ? world.curveRest.subarray(at,at+16) : undefined;
       const shape=kernel.spanShape(replacement?.data ?? data,replacement ? 0 : at,1);
@@ -136,7 +144,7 @@ export function prepareFiniteCurves(kit, world, data, camera, width, height, opt
     ...(detail && { subdivision:detail.stats }), ...(strands && { strandLod:strands.stats }) };
 }
 
-export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD, strandLOD, print }) {
+export function createFiniteCurvePass(gl, { target, table, program, maxSize, textureUnit, fullscreen, cutaway, spriteLOD, strandLOD, print, pbrGLSL }) {
   const spans = table(rowWidth,tableUnits.spans,maxSize);
   const tiles = table(rowWidth,tableUnits.tiles,maxSize);
   const programs = new Map();
@@ -145,14 +153,15 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
   // The ordinary splat pipeline uses some of these units as well. Curve
   // compositing runs after all its geometry draws and before the art resolve.
   function draw(plan, buffer, base, camera, options) {
-    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors, filterMatte, historyOwner, artScale = 1 } = options;
+    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors, filterMatte, historyOwner, artScale = 1, pbrUniforms } = options;
     const isOwner = mode === 'owner';
     const etched=mode==='color' && !!engraving && !filterMatte;
-    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked,etched].join('/');
+    const physical = mode==='color' && !filterMatte && !!pbrUniforms;
+    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked,etched,physical].join('/');
     if (!programs.has(key)) programs.set(key,program(finiteCurveFragment({
       mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined,
       spriteLOD:plan.masked ? spriteLOD : undefined,strandLOD:plan.strandMasked ? strandLOD : undefined,
-      engraving:etched,print
+      engraving:etched,print,pbr:physical ? pbrGLSL : undefined
     })));
     const shader = programs.get(key), { width, height } = base;
     spans.bind();
@@ -185,7 +194,7 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
       u_curveNear:camera.clipNear,u_curveFar:camera.clipFar,u_curveSetback:camera.setback,
       u_curveOrtho:camera.ortho,u_curveHasProxy:!!proxy,u_curveArtScale:artScale,u_filterMatte:!!filterMatte,u_historyOwner:!!historyOwner,u_curveFog:fog.color,u_curveFogRange:fog.range,
       u_curveMarks:12,u_curveBaseWorld:10,u_curveBaseRest:11,
-      ...water,...env?.uniforms,...section,...(etched && engraving.uniforms)
+      ...water,...env?.uniforms,...section,...(etched && engraving.uniforms),...(physical && pbrUniforms)
     });
     gl.disable(gl.BLEND);
   }

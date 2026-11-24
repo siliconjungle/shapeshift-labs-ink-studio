@@ -794,6 +794,11 @@
       bad('finish.look.tone', error.message);
     }
     try {
+      PbrMaterials.prepare(look?.pbrMaterials);
+    } catch (error) {
+      bad('finish.look.pbrMaterials', error.message);
+    }
+    try {
       ColorCurves.prepare(look?.colorCurves);
     } catch (error) {
       bad('finish.look.colorCurves', error.message);

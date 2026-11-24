@@ -15,6 +15,7 @@ const PixelLook = require('../src/pixel-look.js');
 const RenderStages = require('../src/render-stages.js');
 const LookInputs = require('../src/look-inputs.js');
 const TargetSelectors = require('../src/target-selectors.js');
+const PbrMaterials = require('../src/pbr-materials.js');
 const { createArtPasses, sampleFrames, selectVisibleSubjects } = require('./art-passes.js');
 const ArtPasses = require('../src/art-passes.js');
 const PartMotion = require('./part-motion.js');
@@ -389,6 +390,7 @@ function renderFrame(world, o, preparedPalettes) {
   const lensScale = o.lensScale ?? 1;
   if (!Number.isFinite(lensScale) || lensScale <= 0) throw new RangeError('Lens scale must be finite and positive');
   const look = world.look || {};
+  const pbr = PbrMaterials.prepare(o.pbrMaterials ?? look.pbrMaterials, o.pbrLights);
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
   const motion = RenderContract.clock(world, o), { direction, time: sceneTime, scene: t } = motion;
@@ -1036,6 +1038,10 @@ function renderFrame(world, o, preparedPalettes) {
     -(V[4] * V[12] + V[5] * V[13] + V[6] * V[14]),
     -(V[8] * V[12] + V[9] * V[13] + V[10] * V[14])
   ];
+  const pbrView = ortho ? [V[2], V[6], V[10]] : null;
+  const pbrTargets = pbr && PbrMaterials.splatBindings(world, pbr);
+  const pbrFrames = pbr && sampleFrames(world, t);
+  const pbrMatrices = pbr && require('../index.js').load().KIT.M;
   const nominalEye = ortho ? eye.map((value, i) => value - depthOffset * V[2 + i * 4]) : eye;
   const spriteLOD = world.spriteReconstruction && require('../index.js').load().KIT.sprite.reconstruction;
   const spritePlan = spriteLOD && spriteLOD.resolve(world, {
@@ -1202,6 +1208,7 @@ function renderFrame(world, o, preparedPalettes) {
   const trackMeshes = isolate && o.trackPixelSources ? new Map() : null;
   const trackFields = trackMeshes && new Map();
   const surfaceFragments = SurfaceRaster.rasterize(surfaceLayers, { V, W, H, focal, ortho, near,simulationLayers,
+      pbr,
       far:camera.clipFar, clip: geometryClip,multiprojection:localProjection,
       captureRestNormal:passSelection.has('sourceRestNormal'),trackMesh:trackMeshes && ((source,triangle,project)=>trackMeshes.set(PixelSourceTracking.meshKey(source,triangle),project)),
       paletteSampling: o.paletteSampling, semanticMipmaps:o.semanticMipmaps, surfaceNormals: o.surfaceNormals, artScale: o.artGridScale || 1,
@@ -1901,7 +1908,12 @@ function renderFrame(world, o, preparedPalettes) {
         : null;
   if(PIX){
     let copy=false;
-    for(let i=0;i<baseCount;i++)if(Math.round(d[i*16+11])&32768){if(!copy){PIX=PIX.slice();copy=true;}PIX[i*8]=0;}
+    for(let i=0;i<baseCount;i++){
+      if ((Math.round(d[i*16+11])&32768) || PIX[i*8] && pbrTargets && pbrTargets(i)) {
+        if(!copy){PIX=PIX.slice();copy=true;}
+        PIX[i*8]=0;
+      }
+    }
   }
   const win = PIX ? new Int32Array(W * H).fill(-1) : null;
   const footprintPlan = footprintsEnabled ? SplatFootprints.plan(world) : null;
@@ -2108,8 +2120,10 @@ function renderFrame(world, o, preparedPalettes) {
     let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, surfaceMatte;
     let stageBase = paintStage && sprite.surface && !sprite.effect && i < 0 ? color : undefined;
     if (i>=0) {
+      const pbrMaterial = pbrTargets && pbrTargets(i);
       const packed=sprite.row.baseColor ?? d[i*16+7];
       color=live?.albedo(i) ?? fitPigment?.(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
+      if (pbrMaterial) color=baseReference(i) ?? color;
       const staged=stages && stages.at(i);
       const sample=(staged?.material || staged?.lit) && (stageMasks ? stageSample(i,position,sprite.p) : undefined);
       const reference = paintStage && baseReference(i);
@@ -2119,6 +2133,7 @@ function renderFrame(world, o, preparedPalettes) {
         choices && paletteTrace.forStage(choices));
       stageBase = reference && (paintedAlbedo?.slice() ?? reference);
       if (sprite.materialTint) color=sprite.materialTint(color);
+      const physicalPigment=pbrMaterial && color;
       if (live?.normal(i)) {
         live.gains(i,...position,sunGains,sprite.normal,sprite.inkControls?.[0]);
         color=color.map((v,k)=>v*sunGains[k]);
@@ -2141,6 +2156,10 @@ function renderFrame(world, o, preparedPalettes) {
         const gain = contact.sample(receiver, sprite.p, position, sprite.normal);
         color = color.map(value => value*gain);
       }
+      if (pbrMaterial) color=PbrMaterials.shade(pbr,pbrMaterial,{
+        color:physicalPigment,position,normal:sprite.normal,roughness:world.splatRoughness?.[i],
+        view:pbrView ?? eye.map((value,k)=>value-position[k])
+      });
       if (emitted) color=addLinearTint(color,emitted.linear);
       claim = paletteClaim?.(sprite.p,i,paletteId,color[0],color[1],color[2],choices);
       if (contribution?.applies(i, paletteId)) {
@@ -2165,7 +2184,13 @@ function renderFrame(world, o, preparedPalettes) {
       color=LightingChannels.emission(emissionCurve,color);
       sprite={...sprite,emission:color.some(Boolean)?color:undefined};
     }
-    if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
+    if (sprite.pbrMaterial) {
+      color = PbrMaterials.shade(pbr, sprite.pbrMaterial, {
+        color: sprite.color, position, normal: sprite.normal, tangent: sprite.pbrTangent,
+        view: pbrView ?? eye.map((value, k) => value - position[k]), roughness: sprite.semantic?.roughness,
+        metalness: sprite.semantic?.metalness, emission: sprite.semantic?.emission
+      });
+    } else if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
       sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} :
         sprite.objectTexels ? {sun,...scanLight} : undefined);
     const texelEmission=art && sprite.objectTexels && sprite.semantic.emission.some(Boolean) ?
@@ -2293,6 +2318,8 @@ function renderFrame(world, o, preparedPalettes) {
       s2 = SC[i] * SC[i],
       pk = sdf?.rows[i]?.baseColor ?? d[q + 7];
     const fieldParticle = i >= baseCount;
+    const pbrMaterial = !fieldParticle && pbrTargets && pbrTargets(i);
+    const pbrNormal = pbrMaterial && !curve && PbrMaterials.splatNormal(world, i, pbrFrames(i), pbrMatrices);
     const correction = paint && d[q + 14] === paint.marker;
     const translucent = al < 1 && d[q+3] < 1 || opticalActive || (kraw & 16) && (kraw & 256);
     const silhouette = silhouetteAt && !fieldParticle && !correction && !(kraw & (64 | 2048)) &&
@@ -2323,7 +2350,7 @@ function renderFrame(world, o, preparedPalettes) {
     const liveNormal = live?.normal(i), liveAlbedo = liveNormal && live.albedo(i);
     const lightSlot = i * 4, relit = relight?.[lightSlot + 3];
     const pigment=fitPigment?.(i);
-    const basePigment=liveAlbedo || pigment;
+    const basePigment = pbrMaterial && !correction ? baseReference(i) ?? pigment ?? liveAlbedo : liveAlbedo || pigment;
     const directional=scanSplatView ? world.gaussianAppearanceDelta(world,i,scanSplatView) : undefined;
     const scanResidual=directional?.map(value=>value*scanFrame.appearance);
     let r = basePigment ? basePigment[0] : (pk % 256) / 255,
@@ -2334,6 +2361,7 @@ function renderFrame(world, o, preparedPalettes) {
     const centerChoices = paletteTrace && staged?.material?.some(rule=>rule.palette) ? [] : undefined;
     if (staged?.material) [r, g, b] = stagedMaterial(i, staged.material, [r, g, b], materialSample,
       paintedAlbedo,centerChoices && paletteTrace.forStage(centerChoices));
+    const pbrPigment = pbrMaterial && [r, g, b];
     const stageBase = reference && (paintedAlbedo?.slice() ?? reference);
     r += add[i];
     g += add[i];
@@ -2610,7 +2638,7 @@ function renderFrame(world, o, preparedPalettes) {
     const geometryCode = geometryMask?.codes[i];
     const strandCode = strandLod?.codes?.get(i);
     const lightingCurveNormal = curveReceives || (curveLight ? curveLight.needsNormal : roughness !== undefined);
-    const curveNormal = lightingCurveNormal || probe && o.curveSurfaceNormals;
+    const curveNormal = lightingCurveNormal || !!pbrMaterial || probe && o.curveSurfaceNormals;
     for (let iy = y0; iy <= y1; iy++) {
       const dy = iy + 0.5 - sy;
       for (let ix = x0; ix <= x1; ix++) {
@@ -2702,6 +2730,7 @@ function renderFrame(world, o, preparedPalettes) {
           highlight = glint,
           paletteId = centerPalette;
         let samplePaint = stageBase;
+        let physicalPigment = pbrPigment;
         if (exact?.materialTint) {
           const haze = centerFog ? fogMix : 0, visible = 1-haze;
           if (visible>1e-6) {
@@ -2709,6 +2738,7 @@ function renderFrame(world, o, preparedPalettes) {
             [pr,pg,pb]=tint.map((n,k)=>n*visible+fog[k]*haze);
           }
           if (samplePaint) samplePaint=exact.materialTint(samplePaint);
+          if (physicalPigment) physicalPigment=exact.materialTint(physicalPigment);
         }
         if (curve?.pattern?.pigment) {
           const [u, v] = curveFootprint?.offset ?? [0, 0], sx = ix + .5 + u, sy = iy + .5 + v;
@@ -2717,6 +2747,7 @@ function renderFrame(world, o, preparedPalettes) {
           let pigment = pattern.paint(site, curvePigmentSample);
           if (pigment && staged?.material) pigment = stagedMaterial(i, staged.material, pigment, materialSample);
           const haze = centerFog ? fogMix : 0, visible = 1 - haze, gain = curvePigmentSample[0];
+          if (physicalPigment) physicalPigment = (pigment ?? physicalPigment).map(n => Math.min(1, n * gain));
           pr = Math.min(1, (pigment ? pigment[0] * visible : pr - fog[0] * haze) * gain + fog[0] * haze);
           pg = Math.min(1, (pigment ? pigment[1] * visible : pg - fog[1] * haze) * gain + fog[1] * haze);
           pb = Math.min(1, (pigment ? pigment[2] * visible : pb - fog[2] * haze) * gain + fog[2] * haze);
@@ -2823,6 +2854,20 @@ function renderFrame(world, o, preparedPalettes) {
             visibility * (shine * (tint?.[2] ?? 1) + scatter * (transmission?.[2] ?? 0) + (curveEmission?.[2] ?? 0)));
           highlight = Math.max(highlight, shine);
         }
+        if (pbrMaterial) {
+          const [u, v] = curveFootprint?.offset ?? [0, 0];
+          const ray = rayAt(ix + .5 + u, iy + .5 + v);
+          const normal = exact?.normal ?? curveHit?.normal ?? pbrNormal;
+          const position = exact?.position ?? (curveHit || planeHit ?
+            ray.origin.map((value, k) => value + ray.direction[k] * surfaceZ / ray.axial) :
+            normal?.some(Boolean) ? surfacePoint(ray, normal, x, y, z, -cz, R) : [x, y, z]);
+          const rgb = PbrMaterials.shade(pbr, pbrMaterial, {
+            color: physicalPigment, position, normal, tangent: curve?.axis,
+            view: ray.direction.map(n => -n), roughness: roughness ?? world.splatRoughness?.[i],
+            emission: curveEmission ? toLinearSrgb(Array.from(curveEmission)) : undefined
+          });
+          [pr, pg, pb] = rgb.map((value, k) => value + (fog[k] - value) * fogMix);
+        }
         const scoped = contribution?.applies(i, paletteId);
         if (opticalActive) {
           const scatter = optical[opt + 1], reflection = optical[opt + 2], tint = optical[opt + 4] >= 0;
@@ -2838,7 +2883,7 @@ function renderFrame(world, o, preparedPalettes) {
             restNormal:engrave.restNormal,restTangent:engrave.restTangent,screen:[ix+.5,iy+.5]
           });
         }
-        if (scanResidual && !pixelSurface) [pr,pg,pb]=addLinearTint([pr,pg,pb],scanResidual);
+        if (!pbrMaterial && scanResidual && !pixelSurface) [pr,pg,pb]=addLinearTint([pr,pg,pb],scanResidual);
         if (emitted && !pixelSurface) [pr,pg,pb]=addLinearTint([pr,pg,pb],emitted.linear);
         const claim = paletteClaim?.(p,i,paletteId,pr,pg,pb,materialChoices);
         if (staged?.lit || scoped || glassLook) {
