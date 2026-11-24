@@ -124,6 +124,10 @@ const SurfaceRaster = require('./sprite-surfaces.js');
 const PixelSourceTracking = require('./pixel-source-tracking.js');
 const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
 const texelEmissionDisplay = require('../src/color-space.js').prepare('srgb-linear', 'srgb');
+const toLinearSrgb = require('../src/color-space.js').prepare('srgb', 'srgb-linear');
+function addSplatEmission(rgb, emission) {
+  return texelEmissionDisplay(toLinearSrgb(rgb).map((n,k)=>clamp(n+emission[k],0,1)));
+}
 const SimulationMaterialLayers=require('../src/simulation-material-layers.js');
 const SceneMeshes = require('../src/scene-meshes.js');
 let SplatFields, AtmosphereEmitters;
@@ -451,9 +455,7 @@ function renderFrame(world, o, preparedPalettes) {
   const traced = TracedLighting.prepare(world,o.tracedLighting ?? look.tracedLighting);
   const fitted = SplatFit.prepare(world,o.splatFit ?? look.splatFit);
   const fittedCoverage = fitted?.coverage;
-  if (fitted && (Object.hasOwn(fitted,'footprints') || fitted.albedo)) world={...world,
-    ...(Object.hasOwn(fitted,'footprints') && {splatFootprints:fitted.footprints}),
-    ...(fitted.albedo && {materialAlbedo:fitted.albedo})};
+  world = SplatFit.renderWorld(world,fitted);
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
   const shotLighting = ShotLighting.frame(world.shotLighting, o.shotLighting, t);
@@ -2076,11 +2078,19 @@ function renderFrame(world, o, preparedPalettes) {
     const value=fitted.pigment[row];
     return value ? RenderStages.unpack(value-1) : undefined;
   });
+  const splatEmission = fitted?.emission && new Map();
+  for (const [i,linear] of fitted?.emission ?? []) {
+    const display=texelEmissionDisplay(linear.map(n=>Math.min(1,n)));
+    const tint=emissionCurve ? LightingChannels.emission(emissionCurve,display) : display;
+    if (!world.renderMetadata?.muteEmission?.[i] && tint.some(Boolean))
+      splatEmission.set(i,{linear:emissionCurve ? toLinearSrgb(tint) : linear,tint});
+  }
   function spriteSample(sprite) {
     const {z,alpha,position,protection} = sprite, i = sprite.sdf ? sprite.row.i : -1;
     const rule = i<0 ? protection : subject?.(i);
     const dn=normalizedDepth(z), fogMix=world.fog.max>0&&world.fog.start<1 ?
       targetFog(sstep(world.fog.start,1,dn)*world.fog.max*(exposure?.fog?.(...position)??1),rule) : 0;
+    const emitted=splatEmission?.get(i);
     let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, surfaceMatte;
     let stageBase = paintStage && sprite.surface && !sprite.effect && i < 0 ? color : undefined;
     if (i>=0) {
@@ -2116,6 +2126,7 @@ function renderFrame(world, o, preparedPalettes) {
         const gain = contact.sample(receiver, sprite.p, position, sprite.normal);
         color = color.map(value => value*gain);
       }
+      if (emitted) color=addSplatEmission(color,emitted.linear);
       claim = paletteClaim?.(sprite.p,i,paletteId,color[0],color[1],color[2],choices);
       if (contribution?.applies(i, paletteId)) {
         const anchor = fragmentRule(i);
@@ -2149,9 +2160,9 @@ function renderFrame(world, o, preparedPalettes) {
       const shaded=value+(fog[c]-value)*fogMix;
       return ink ? shaded+(cutaway.edge.color[c]-shaded)*ink : shaded;
     });
-    return [i,z,dn,alpha,...rgb,!sprite.effect&&alpha>=.5,false,highlight,paletteId,false,false,
+    return [i,z,dn,alpha,...rgb,!sprite.effect&&alpha>=.5,Boolean(emitted),highlight,paletteId,false,false,
       Boolean(sprite.effect)||alpha<.5,false,undefined,z,sprite,fogMix,
-      rule,reflected,false,1,ink>0,claim,paintStage && paintColor(stageBase),surfaceMatte,texelEmission];
+      rule,reflected,false,1,ink>0,claim,paintStage && paintColor(stageBase),surfaceMatte,emitted?.tint ?? texelEmission];
   }
   function playSprites(through,queued) {
     while (spriteIndex<sprites.length && sprites[spriteIndex].z>=through) {
@@ -2328,8 +2339,10 @@ function renderFrame(world, o, preparedPalettes) {
     const hasEmission=(flags & 2)!==0&&!world.renderMetadata?.muteEmission?.[i];
     if(hasEmission&&emissionCurve)[r,g,b]=LightingChannels.emission(emissionCurve,[r,g,b]);
     const painted = art && !renderMeta?.muteEmission?.[i] && renderMeta?.paintedEmission?.subarray(i*3,i*3+3);
+    const emitted=splatEmission?.get(i);
     const inkEmission = painted && painted.some(Boolean) ? (emissionCurve ? LightingChannels.emission(emissionCurve,painted) : painted) : null;
-    const emits = art && (inkEmission?.some(Boolean) || Boolean(curveEmission) || hasEmission && (!emissionCurve || r>0 || g>0 || b>0));
+    const emissionTint = emitted && inkEmission ? addSplatEmission(inkEmission,emitted.linear) : emitted?.tint ?? inkEmission;
+    const emits = art && (emissionTint?.some(Boolean) || Boolean(curveEmission) || hasEmission && (!emissionCurve || r>0 || g>0 || b>0));
     const automatic = kind === LightSchedule.emissionKind && d[q + 15] === LightSchedule.emissionMarker;
     const sourceScale = automatic ? LightSchedule.emissionScale(dusk) : 1;
     const scheduled = lamps.length && !(flags & 22) && al >= 1 ? LightSchedule.transfer(lamps, x, y, z) : null;
@@ -2500,7 +2513,7 @@ function renderFrame(world, o, preparedPalettes) {
     const reflectInRaster = (planar || localProbeReflection || reflectedSky) && !pixelSurface;
     const finishBeforeFog = !!engrave || reflectInRaster || !pixelSurface && surface?.finishBeforeFog(i);
     const normal = fragmentSurface ? surface.surfaceNormal(i) : null;
-    const centerFog = !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
+    const centerFog = !emitted && !opticalActive && !finishBeforeFog && !staged?.lit && !liveNormal && !splatFlash && !relit && coverGain === 1;
     if (fogMix && centerFog) {
       r += (fog[0] - r) * fogMix;
       g += (fog[1] - g) * fogMix;
@@ -2796,6 +2809,7 @@ function renderFrame(world, o, preparedPalettes) {
             restNormal:engrave.restNormal,restTangent:engrave.restTangent,screen:[ix+.5,iy+.5]
           });
         }
+        if (emitted && !pixelSurface) [pr,pg,pb]=addSplatEmission([pr,pg,pb],emitted.linear);
         const claim = paletteClaim?.(p,i,paletteId,pr,pg,pb,materialChoices);
         if (staged?.lit || scoped || glassLook) {
           let sample;
@@ -2828,7 +2842,7 @@ function renderFrame(world, o, preparedPalettes) {
           pg = Lightning.shade(pg, splatFlash[1]);
           pb = Lightning.shade(pb, splatFlash[2]);
         }
-        if (engrave || opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
+        if (emitted || engrave || opticalActive || staged?.lit || (fragmentSurface && finishBeforeFog) || liveNormal || splatFlash || relit || coverGain < 1) {
           pr += (fog[0] - pr) * fogMix;
           pg += (fog[1] - pg) * fogMix;
           pb += (fog[2] - pb) * fogMix;
@@ -2861,7 +2875,7 @@ function renderFrame(world, o, preparedPalettes) {
               sectionZ !== undefined || exact || planeHit ? normalizedDepth(surfaceZ) : dn,
               a,pr,pg,pb,wd,emits,highlight,paletteId,detailParticle,projected,coat,glass,lookPass && { ...lookPass.mark },
               surfaceZ,undefined,fogMix,rule,reflected?.slice(),filteredEdge,1,sectionTint>0,claim,
-              paintStage && paintColor(samplePaint),surfaceMatte,curveEmission ?? inkEmission]);
+              paintStage && paintColor(samplePaint),surfaceMatte,curveEmission ?? emissionTint]);
         } else if (deferred && (sortedSurfaces || preciseDepth)) {
           if (wantStation && !curveSpan) {
             const frame = curveFrames && curveFrames(i);
@@ -2875,7 +2889,7 @@ function renderFrame(world, o, preparedPalettes) {
             sample: [i, surfaceZ, normalizedDepth(surfaceZ), a, pr, pg, pb,
               wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, lookPass && { ...lookPass.mark },
               opticalDepth, undefined, fogMix, rule, reflected?.slice(), filteredEdge, 1, sectionTint>0, claim,
-              paintStage && paintColor(samplePaint), surfaceMatte, curveEmission ?? inkEmission, strandHit] };
+              paintStage && paintColor(samplePaint), surfaceMatte, curveEmission ?? emissionTint, strandHit] };
           if (!deferred.has(p)) deferred.set(p, []);
           const layers = deferred.get(p);
           if (entry.curveGroup) {
@@ -2887,7 +2901,7 @@ function renderFrame(world, o, preparedPalettes) {
           layers.push(entry);
         } else composite(p, i, sectionZ ?? exact?.z ?? planeDepth ?? -cz, sectionZ !== undefined || exact || planeHit ? normalizedDepth(surfaceZ) : dn,
           a, pr, pg, pb, wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, lookPass?.mark, opticalDepth,
-          undefined, fogMix, rule, reflected, filteredEdge, 1, sectionTint>0, claim, paintStage && paintColor(samplePaint),surfaceMatte, curveEmission ?? inkEmission);
+          undefined, fogMix, rule, reflected, filteredEdge, 1, sectionTint>0, claim, paintStage && paintColor(samplePaint),surfaceMatte, curveEmission ?? emissionTint);
       }
     }
   }
@@ -3212,6 +3226,8 @@ function renderFrame(world, o, preparedPalettes) {
           const gain = exact ? contact.sample(receiver, p, exact.position, exact.normal) : contact.sample(receiver, p, point);
           if (gain < 1) rgb = rgb.slice(0, 3).map(value => value*gain);
         }
+        const emitted=splatEmission?.get(i);
+        if (emitted) rgb=addSplatEmission(rgb,emitted.linear);
         const claim = paletteClaim?.(p,i,c[5],rgb[0],rgb[1],rgb[2],choices);
         if (contribution?.applies(i, c[5])) {
           const rule = fragmentRule(i);

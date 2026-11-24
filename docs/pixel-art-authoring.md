@@ -2297,6 +2297,52 @@ pigment remains editable. Use 1 to restore full coverage. `footprintScale`
 still resizes the footprint, and `visible` switches its footprint between
 hidden and its authored size.
 
+#### Paint material slots and channels with falloff
+
+A shared `paint` block applies the same settings to each selected source
+splat. A row can override a channel or supply a `weight` from 0 to 1,
+for example from a stored contribution or a pressure sample.
+
+```json
+{
+  "splats": [
+    { "splat": "gate-enamel-a" },
+    { "splat": "gate-enamel-b", "weight": 0.8 },
+    { "splat": "gate-edge", "coverage": 0.7 }
+  ],
+  "paint": {
+    "material": "brass",
+    "pigment": "mint",
+    "roughness": 0.65,
+    "emission": [0.0, 0.2, 0.13]
+  },
+  "falloff": { "center": [0.8, 1.1, 0.2], "radius": 0.6, "hardness": 0.25 }
+}
+```
+
+Falloff uses the rest-space positions shown by `targets`. It has full
+strength inside `radius * hardness`, then tapers smoothly to zero at the
+radius. Hardness defaults to zero. The taper multiplies the row weight.
+Pigment blends in linear RGB and reaches the exact swatch at full
+strength. Coverage, roughness, and linear RGB emission also blend from
+their current values. Previews and receipts record the effective weight
+and channels applied to each row.
+
+`material` assigns an existing named material slot at a weight of at
+least 0.5. It supplies the slot's most common source pigment and its
+retained finish when that finish is shared across the slot. An explicit
+pigment override continues to take precedence. The assigned slot is
+available in material queries and the material ID render pass.
+`roughness` ranges from 0 to 1 and adjusts the specular highlight width.
+`emission` adds a linear RGB emissive layer with each component from 0
+to 64. Use `null` at full strength to remove material, pigment, roughness,
+or emission overrides independently.
+
+Use `paintableOnly: true` to query rows that accept these channels,
+including ordinary translucent splats. The existing `editableOnly`
+filter identifies rows that also accept footprint edits. Footprint
+edits remain direct per-row controls.
+
 Omitted channels keep any earlier edits. To continue from a saved fit,
 place its JSON object at `finish.look.splatFit` in the source diorama,
 then run `targets` again for the updated source revision. A pixel editor
