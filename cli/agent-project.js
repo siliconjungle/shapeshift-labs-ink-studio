@@ -230,7 +230,7 @@ function frame(project, options, output) {
   const kit = require('../index.js').load();
   const world = project.build({ parameterInputs: { time: at } });
   require('./diarama-pose.js').pose(world, at, { kit });
-  const image = require('./render.js').render(world, { w, h, px: 1, t: at, time: at,
+  const image = require('./render.js').render(world, { w, h, px: 1, t: at, time: at, captureCompatibility: true,
     ...(point && { passes: [...kit.ArtPasses.opaque.filter(channel => !kit.ArtPasses.needsSurfaceMotion([channel])), 'partId'] }) });
   const PNG = require('./png.js');
   let hit = point && kit.ArtPasses.pick(image.passes, ...point);
@@ -243,7 +243,7 @@ function frame(project, options, output) {
   }
   if (output) write(path.resolve(output), PNG.encodeFrame(PNG.packFrame(image)));
   return { at, width: image.w, height: image.h, camera: world.cam,
-    timeline: world.timeline?.sample(at), ...(point && { hit }),
+    timeline: world.timeline?.sample(at), compatibility: image.compatibility, ...(point && { hit }),
     ...(output && { image: path.resolve(output) }) };
 }
 

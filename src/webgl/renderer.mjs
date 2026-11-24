@@ -2106,6 +2106,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       if (source !== world) frame = { ...frame, renderHistoryKey: source };
       const presentation = toolkit.KIT?.presentationTimeline?.sample(world, frame.interfaceTime ?? frame.time ?? world.lookSnapshot?.time ?? 0, frame);
       if (presentation) frame = { ...frame, ...presentation };
+      if (frame.onCompatibility) {
+        const mode = frame.gaussianColor ?? world.gaussianHarmonics?.colorMode ?? 'baked';
+        const raw = mode === 'baked' ? frame.raw : mode === 'rgb';
+        frame.onCompatibility(contract.review(world, { ...frame, raw }));
+      }
       const definition = frame.inspection ?? world.look?.inspection;
       if (definition === undefined || definition === false) return presentGrid(world, frame, width, height, output);
       const api = toolkit.KIT?.inspection;
@@ -2230,6 +2235,8 @@ export function createRenderer(canvas, { toolkit, specialize = true, reuseOrder 
       if (disposed) throw new Error('The Ink Studio renderer has been disposed');
       if (gl.isContextLost()) throw new Error('The Ink Studio WebGL context is lost');
       validateWorld(world, frame);
+      if (frame.onCompatibility !== undefined && (typeof frame.onCompatibility !== 'function' || !toolkit.KIT?.renderContract))
+        throw new TypeError('Frame review needs an onCompatibility callback and the Ink Studio KIT');
       let portal = frame.portal, portalWorld = world;
       for (let depth = 0; portal && depth < portalLimit; depth++) {
         const { source, destination, opening, destinationFrame = {} } = portal;

@@ -514,6 +514,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   export-scene <scene|world|take> --out directory [--formats still,loop,replay,embed]
     --audio soundtrack.json [--mux CODEC --adapters host.cjs]   export aligned WAV stems and optional video
     --loop-join   inspect the actual frame join and excluded endpoint on a clip or scene export
+    export.json includes WebGL compatibility across sampled frames
     --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json
   scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay
   scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web
@@ -591,6 +592,8 @@ layered horizon: --horizon-bands on|off|file.json
 staging: --fov radians | --focal-length mm [--sensor-height mm] --focus-distance units --composition u,v --camera-staging on|off|file.json --camera-guides [on|off] --depth-of-field [on|off]
 art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json
 shared rendering: --strict-contract [on|off] --step-animation [on|off]
+  render <id> --compatibility-report [on|off]   save WebGL compatibility beside the preview
+  clip <id> --compatibility-report [on|off]   save WebGL compatibility across the previewed frames
 effect palette options: --effect-palettes on|off|file.json
 art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|posed|off|file.json --traced-lighting file.json|off --splat-fit file.json|off --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal
 ```

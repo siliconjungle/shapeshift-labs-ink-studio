@@ -1667,6 +1667,7 @@ const CMD = {
         '  export-scene <scene|world|take> --out directory [--formats still,loop,replay,embed]',
         '    --audio soundtrack.json [--mux CODEC --adapters host.cjs]   export aligned WAV stems and optional video',
         '    --loop-join   inspect the actual frame join and excluded endpoint on a clip or scene export',
+        '    export.json includes WebGL compatibility across sampled frames',
         '    --w width --h height --still-scale 2 --t seconds --from 0 --to 2 --fps 12 --embed-config file.json',
         '  scene-replay <recording.json> --out output.png [--at seconds]   save a frame from a replay',
         '  scene-replay <recording.json> --embed --out embed.html [--embed-config file.json]   package a replay for the web',
@@ -1740,6 +1741,8 @@ const CMD = {
         'staging: --fov radians | --focal-length mm [--sensor-height mm] --focus-distance units --composition u,v --camera-staging on|off|file.json --camera-guides [on|off] --depth-of-field [on|off]',
         'art direction: --art-direction on|off|painted-pixel|storm-silhouette|soft-dawn|file.json',
         'shared rendering: --strict-contract [on|off] --step-animation [on|off]',
+        '  render <id> --compatibility-report [on|off]   save WebGL compatibility beside the preview',
+        '  clip <id> --compatibility-report [on|off]   save WebGL compatibility across the previewed frames',
         'effect palette options: --effect-palettes on|off|file.json',
         'art options: --palette-remap off --color-curves off --lut <file.cube|file.json|off> --color-stack <file.json|off> --ink on|off|file.json --ink-shot file.json --effects off --emissive-finishes off --stable on|off|file.json --stable-detail on|off|file.json --coverage-filter on|off|file.json --surface-history on|off|file.json --protected-pixels on|off|file.json --edge-filter on|off|file.json --contact-shadows on|off|file.json --area-lights on|off|file.json --bounce-probes on|off|file.json --snap on|off --dither-space screen|world|object|view --dither-spacing n --dither-origin x,y,z --resolve native|coverage|clusters --splat-order center|surface|selective --transparency-settings file.json --splat-coverage legacy|continuous|soft --splat-footprints on|off --palette-sampling off --semantic-mipmaps off --simulation-material-layers off --relief-lod auto|geometry|normal|painted|off --render-grid hex|triangle|diamond|off --grid-size 8 --grid-angle 0 --grid-aspect 1 --grid-gap 0 --grid-origin x,y --sdf-assist on|posed|off|file.json --traced-lighting file.json|off --splat-fit file.json|off --surface-decals off --stable-transparency on|off|blend --fragment-budget N --inspection file.json|off --inspection-focus id --composite file.json|off --cutaway file.json|off --render-graph file.json|off --shutter on|off|file.json --afterimages file.json|off --reconstruction file.json|off --volume-scale 2 --volume-steps 8 --volume-jitter off|blue-noise|spatiotemporal'
     ];
@@ -2751,6 +2754,7 @@ const CMD = {
     Shot.replay(pos[1],{out:opt.out,root:opt.root,entry:__filename});
   },
   render() {
+    const Compatibility = require('./scene-compatibility.js');
     const finishOutput = outputFinish();
     const w = buildPreview(), diagnostics = previewPasses(),
       t = num('t', 0);
@@ -2763,10 +2767,15 @@ const CMD = {
         [outputFile(w.id+'.png'),path.resolve(pos[0]),opt['transparency-settings'] && path.resolve(opt['transparency-settings']),
           report && path.resolve(report),opt.recipe && path.resolve(opt.recipe)].includes(path.resolve(transparencyReport))))
       die('--transparency-report needs a separate JSON output path');
-    shot?.destination(outputFile(w.id+'.png'),suffixes);
+    const output = outputFile(w.id+'.png');
+    const compatibilityFile = onOffOption('compatibility-report') &&
+      Compatibility.sidecar(output, pos[0], report, transparencyReport, opt.recipe);
+    if (compatibilityFile) suffixes.push(Compatibility.suffix);
+    shot?.destination(output, suffixes);
     pose(w, t);
     const t0 = Date.now(),
-      im = R.render(w, view({ t, ...diagnostics?.settings, ...(report&&{renderStats:true}) }));
+      im = R.render(w, view({ t, ...diagnostics?.settings, ...(report&&{renderStats:true}), captureCompatibility: true }));
+    Compatibility.preview(im.compatibility, compatibilityFile);
     if(report)require('./asset-files.js').json(path.resolve(report),{
       scene:w.id,time:t,width:im.w,height:im.h,
       receivers:im.renderStats?.reflectionSources?.receivers??[],planarCaptures:im.renderStats?.planarCaptures??0,
@@ -2787,9 +2796,9 @@ const CMD = {
       shot?.finish(f,{suffixes});
       return;
     }
-    const output = save(w.id + '.png', R.upscale(finishOutput(im), opt.px1 ? 1 : im.px));
-    diagnostics?.write(output, { times: [t] });
-    shot?.finish(output,{suffixes});
+    const file = save(w.id + '.png', R.upscale(finishOutput(im), opt.px1 ? 1 : im.px));
+    diagnostics?.write(file, { times: [t] });
+    shot?.finish(file,{suffixes});
   },
   sweep() {
     const sweeps = require('./visual-sweep.js');
@@ -3460,12 +3469,11 @@ const CMD = {
       const fpsText = opt.fps, fraction = typeof fpsText === 'string' && /^(\d+)\/(\d+)$/.exec(fpsText);
       const fps = fraction ? { numerator: Number(fraction[1]), denominator: Number(fraction[2]) } :
         fpsText === undefined ? native?.fps ?? 12 : Number(fpsText);
-      const { file } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
-        if (native) return native.capture({ width, height, from, render: R.render,
-          options: view({ ...(moving && sequenceHistory()), transparent, ...(opt.px1 && { px: 1 }) }) });
-        const world = buildPreview(source, { parameterInputs: { time: num('parameter-time', from) } });
-        const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent,
+      const { file, manifest } = require('./scene-export.js').exportScene(({ width, height, moving, from }) => {
+        const frame = view({ ...(moving && sequenceHistory()), w: width, h: height, transparent, captureCompatibility: true,
           ...(opt.px1 && { px: 1 }) });
+        if (native) return native.capture({ width, height, from, render: R.render, options: frame });
+        const world = buildPreview(source, { parameterInputs: { time: num('parameter-time', from) } });
         const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
         return {
           scene: world.id, title: world.name, timeline: world.timeline,
@@ -3485,6 +3493,7 @@ const CMD = {
         width: num('w', 640), height: num('h', 360), fps, from: num('from', 0), to: num('to'),
         stillScale: num('still-scale', 2), stillTime: num('t'), loopJoin: onOffOption('loop-join'), kit, audio,
         ...(video && { mux: payload => video.mux(opt.mux, payload) }) });
+      require('./scene-compatibility.js').warn(manifest.compatibility);
       console.log('wrote', file);
     });
   },
@@ -3857,6 +3866,7 @@ const CMD = {
     save(w.id + '-turn.png', R.grid(imgs, num('cols', 4), labs));
   },
   clip() {
+    const Compatibility = require('./scene-compatibility.js'), compatibility = Compatibility.collect();
     const finishOutput = outputFinish();
     const join = onOffOption('loop-join') && require('./loop-join.js');
     const w = buildPreview(), diagnostics = previewPasses(),
@@ -3875,16 +3885,19 @@ const CMD = {
     if (boundaryPath===f || boundaryPath===boundaryReport) die('Write boundary output separately from its settings');
     if (boundaryPath) shot?.dependency(boundaryPath);
     const suffixes = [...reviewSidecars(diagnostics), ...(join ? join.suffixes : []), ...(boundaryPath ? ['.boundaries.json'] : [])];
+    const compatibilityFile = onOffOption('compatibility-report') && Compatibility.sidecar(f, pos[0], boundaryPath, opt.recipe);
+    if (compatibilityFile) suffixes.push(Compatibility.suffix);
     shot?.destination(f,suffixes);
     const frame = { ...sequenceHistory(),
       w: num('w', 600), h: num('h', 420) };
     const replay = feedbackReplay(w, from, view(frame));
     function draw(t, resetRenderHistory, fraction = Math.max(0, Math.min(1, (t - from) * fps / (n - 1))), overrides={}) {
       pose(w, t);
-      return R.render(w, view({ ...frame, t, resetRenderHistory, ...camera?.(fraction), ...diagnostics?.settings, ...overrides }));
+      return R.render(w, view({ ...frame, t, resetRenderHistory, ...camera?.(fraction), ...diagnostics?.settings, ...overrides, captureCompatibility: true }));
     }
     function deliver(im,t) {
       diagnostics?.capture(im, opt.px1 ? 1 : im.px);
+      compatibility.sequence(im.compatibility, t, ts.length);
       ts.push(t);
       frames.push(displayFrame(finishOutput(im), w));
     }
@@ -3914,6 +3927,7 @@ const CMD = {
       endpoint: displayFrame(finishOutput(replay ? replay.sample(end, draw) : draw(end, undefined, 1)), w), from, fps, count: n });
     fs.mkdirSync(path.dirname(f), { recursive: true });
     PNG.animate(f, frames, fps);
+    Compatibility.preview(compatibility.report(), compatibilityFile);
     if (boundaries) require('./asset-files.js').json(boundaryReport,{...boundaries,times:ts,fps});
     if (audit) {
       const base = f.replace(/\.(?:a?png)$/i, '');

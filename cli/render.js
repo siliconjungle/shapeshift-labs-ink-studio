@@ -193,6 +193,15 @@ function render(world, o, preparedPalettes) {
   if (o.curveMode !== undefined && o.curveMode !== 'splats' && o.curveMode !== 'curves')
     throw new RangeError('curveMode expects splats or curves');
   if (o.strictContract) RenderContract.requirePortable(world, o);
+  if (o.captureCompatibility === true) {
+    const { captureCompatibility, ...frame } = o;
+    const compatibility = RenderContract.review(world, frame);
+    return { ...renderPrepared(world, frame, preparedPalettes), compatibility };
+  }
+  return renderPrepared(world, o, preparedPalettes);
+}
+
+function renderPrepared(world, o, preparedPalettes) {
   if (o[matteScope] === undefined && o.objectMattes !== undefined) o[matteScope] = ObjectMattes.settings(o.objectMattes);
   if (o[shutterPlan] === undefined && (o.shutter ?? world.look?.shutter) !== undefined) {
     o[shutterPlan] = Exposure.prepare(o.shutter ?? world.look?.shutter);

@@ -5,6 +5,7 @@ const { json } = require('./asset-files.js');
 const { resize } = require('./render.js');
 const Replay = require('./scene-replay.js');
 const Join = require('./loop-join.js');
+const Compatibility = require('./scene-compatibility.js');
 
 const products = ['still', 'loop', 'replay', 'embed'];
 
@@ -52,6 +53,7 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
     return prefix + '/' + name;
   }
   const manifest = { format: 'ink-studio/scene-export', version: 1 };
+  const compatibility = Compatibility.collect();
   let inputs, captured = false;
   function capture(dimensions, moving) {
     const result = createCapture({ ...dimensions, moving, from });
@@ -86,7 +88,9 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
       let encodedLength = extra, first, penultimate, last;
       for (let index = 0; index < count; index++) {
         const time = picture.seconds(index);
-        const image = resize(source.sample(time, lastTime, { index, point: picture.point(index), frameRate }), width, height);
+        const sampled = source.sample(time, lastTime, { index, point: picture.point(index), frameRate });
+        compatibility.sequence(sampled.compatibility, time, index);
+        const image = resize(sampled, width, height);
         if (loopJoin) {
           if (index === 0) first = Join.capture(image);
           if (index === count - 2) penultimate = index === 0 ? first : Join.capture(image);
@@ -144,11 +148,15 @@ function exportScene(createCapture, { out, formats = products, width = 640, heig
     }
     if (still) {
       const source = capture({ width: stillWidth, height: stillHeight }, false);
-      const frame = resize(source.sample(stillTime), stillWidth, stillHeight);
+      const sampled = source.sample(stillTime);
+      compatibility.still(sampled.compatibility, stillTime);
+      const frame = resize(sampled, stillWidth, stillHeight);
       manifest.still = { file: save('still.png', PNG.encodeFrame(PNG.packFrame(frame))), time: stillTime,
         width: stillWidth, height: stillHeight };
     }
     if (inputs) manifest.simulationInputs = save('simulation-inputs.json', JSON.stringify(inputs, null, 2) + '\n');
+    const review = compatibility.report();
+    if (review) manifest.compatibility = review;
     const file = path.join(directory, 'export.json');
     json(file, manifest);
     return { file, manifest };

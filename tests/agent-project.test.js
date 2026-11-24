@@ -23,6 +23,8 @@ test('an agent can pick, edit, reopen and deliver a single portable project revi
   assert.equal(after.objects.children.find(node => node.key === 'solid:pedestal').solid.mat, 'bronze');
   const sample = read(file('sample-reopened.json'));
   assert.equal(sample.camera.yaw, .37);
+  assert.equal(sample.compatibility.status, 'no-known-differences');
+  assert.deepEqual(read(file('edit-preview.json')).sample.compatibility, sample.compatibility);
   assert.equal(read(file('sample-initial.json')).hit.object, 'relay-art');
   assert.deepEqual(read(file('sample-initial.json')).hit.pixelAt, [13, 22]);
   assert.notDeepEqual(fs.readFileSync(file('before.png')), fs.readFileSync(file('after.png')));
@@ -57,6 +59,7 @@ test('an agent can pick, edit, reopen and deliver a single portable project revi
     '--from', '1', '--to', '1.5', '--fps', '8');
   const exported = read(path.join(out, 'export.json'));
   assert.equal(exported.sequence.frameCount, 4);
+  assert.deepEqual(exported.compatibility.samples, { sequence: 4, still: 0 });
   const wav = ink.readWav(path.join(out, exported.audio.mix));
   const onset = wav.samples.findIndex(n => Math.abs(n) > .001) / wav.channels / wav.sampleRate;
   assert(onset >= .25 && onset < .26, 'the relocated cue should land on the trimmed export clock');

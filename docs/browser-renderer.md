@@ -117,6 +117,53 @@ Use `studio.describeRenderFrame(world, frame)` in Node or `renderer.describeFram
 
 `strictContract: true` or CLI `--strict-contract` rejects an incompatible staged frame or a palette above WebGL's 64-swatch limit. The portable staged path covers baked RGB with uniform material and lit rules. Spatial stage masks, frame and palette stages, per-pixel material colors, live lighting, and advanced surface composition use backend-specific paths. The ordinary rendering mode preserves the backend's existing fallback for unsupported combinations. Raster edges, coverage, and precision can still differ with matched inputs.
 
+### Review compatibility before export
+
+A frame's compatibility report lists known differences with a stable
+`code`, the behavior in each backend, and an action to try. For example,
+`palette-limit` records the authored swatch count and WebGL limit.
+`density-field` identifies shaped fog that the WebGL analytic pass omits.
+`lit-fog` flags a difference between headless per-ray lighting and WebGL's
+sampled emitter grid. Diagnostics describe the sampled settings. Pixel
+coverage and driver precision can still vary when the report says
+`no-known-differences`.
+
+```sh
+ink-studio render shot.json --t 0.75 --out preview.png --compatibility-report
+ink-studio clip shot.json --from 0 --to 2 --out preview-loop.png --compatibility-report
+ink-studio export-scene shot.json --out delivery
+```
+
+The CLI warns about detected differences. `--compatibility-report` adds a
+`.compatibility.json` file beside the preview. `export-scene` includes a
+`compatibility` field in `export.json` by default. It counts how many
+sequence frames carry each issue and gives the first and last frame and
+time where it occurred. A separately rendered still has its own entry.
+The report covers delivered frames, including shots with time-varying
+settings. The optional `--strict-contract` check retains its shared
+palette and color-stage contract.
+
+For Node hosts, `studio.describeRenderFrame(world, frame).compatibility`
+inspects the frame without rasterizing it. Use
+`studio.render(world, { ...frame, captureCompatibility: true })` to attach
+the same report to the image. When supplying frames to `studio.exportScene`,
+use that option to include the report in the manifest. Browser hosts can
+read the report from `renderer.describeFrame(world, frame).compatibility`
+or pass `onCompatibility(report) { ... }` in the options to
+`renderer.render` to receive it at draw time.
+
+Run the [Harbor Beacon demo](../examples/render-compatibility/demo.cjs)
+from the repository root. It draws original and adjusted versions at the
+same camera and time, saves compatibility reports and exports, and captures
+both versions in WebGL when Chrome is available.
+
+```sh
+node examples/render-compatibility/demo.cjs /tmp/harbor-beacon
+```
+
+Set `INK_TEST_CHROME` to a Chrome or Chromium executable if needed, or
+pass `--skip-webgl` for the CLI preview and export only.
+
 ## Shared baked splat instances
 
 Use `createSplatInstances(prototypes, placements)` when a scene repeats finished,
@@ -276,7 +323,7 @@ Include the Ink Studio `KIT` in the renderer toolkit. Authored `skyEnvironment`,
 
 Cloud cards use the same baked optical-depth projection as the CLI and clip against scene splats. Set `cloudRepresentation: 'card'` in the world or frame to use a card throughout a shot. Automatic selection draws the card where the asset's card weight reaches one. Impostors, near-volume blends, cloud cutouts and lightning remain on the software path.
 
-WebGL integrates overlapping constant-density height, box, sphere, and shaft volumes before the palette resolve. Uniform weather profile density bindings apply. The WebGL pass supports up to 16 enabled analytic volumes per frame. Density fields, regional fog fronts, volume lighting, cutouts, and coupled water–air integration use the software renderer. Use `atmosphere: false` to bypass analytic fog, `cloudField: false` to hide clouds, or `environment: false` to bypass the WebGL environment passes.
+WebGL integrates overlapping constant-density height, box, sphere, and shaft volumes before the palette resolve. Uniform weather profile density bindings apply. The WebGL pass supports up to 16 enabled analytic volumes per frame. WebGL can light analytic fog from a sampled emitter grid. Density fields, regional fog fronts, volume cutouts, and coupled water–air integration use the software renderer. Use `atmosphere: false` to bypass analytic fog, `cloudField: false` to hide clouds, or `environment: false` to bypass the WebGL environment passes.
 
 Run the fixed-camera comparison with a local Chrome or Chromium executable.
 

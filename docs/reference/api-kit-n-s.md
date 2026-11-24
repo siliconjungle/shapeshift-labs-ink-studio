@@ -655,6 +655,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.renderContract.options` | function | `(world, frame = {}, bindClocks)` | [source](../../src/render-contract.js) |
 | `KIT.renderContract.palette` | function | `(world, frame, { grading = true, tone = true, onClip } = {})` | [guide](../pixel-look.md), [source](../../src/pixel-look.js) |
 | `KIT.renderContract.requirePortable` | function | `(world, frame)` | [source](../../src/render-contract.js) |
+| `KIT.renderContract.review` | function | `(world, frame = {}, sample = clock(world, frame))` | [source](../../src/render-contract.js) |
 | `KIT.renderContract.stagePlan` | function | `(world, frame, time, { query, lookInputs, ...settings } = {})` | [source](../../src/render-contract.js) |
 
 ## KIT.renderGraph

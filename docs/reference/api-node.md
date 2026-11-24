@@ -44,7 +44,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.demoFiles` | function | `()` | [source](../../index.js) |
 | `node.demos` | function | `()` | [guide](../../README.md#embedding-and-custom-scene-collections), [source](../../index.js) |
 | `node.describeGraphNode` | function | `(id, settings = {})` | [guide](../headless-authoring.md#discover-registered-nodes), [source](../../cli/graph-catalog.js) |
-| `node.describeRenderFrame` | function | `(world, frame)` | [guide](../browser-renderer.md#shared-rendering-contract), [source](../../index.js) |
+| `node.describeRenderFrame` | function | `(world, frame)` | [guide](../browser-renderer.md#shared-rendering-contract), [guide](../browser-renderer.md#review-compatibility-before-export), [source](../../index.js) |
 | `node.diffGraphs` | function | `(before, after)` | [source](../../cli/graph-diff.js) |
 | `node.encodeDeepEXR` | function | `(frame, options)` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.encodeSceneryPack` | function | `(id, meshes)` | [source](../../cli/scenery-delivery.js) |
@@ -52,7 +52,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.exportDeepEXR` | function | `(world, { out, view = {}, times = [view.time ?? view.t ?? world?.lookSnapshot?.time ?? 0], layers, reflection, allowTruncated = false, coalesce = true, pose } = {})` | [guide](../deep-openexr.md#node-api), [guide](../deep-openexr.md), [source](../../cli/deep-openexr.js) |
 | `node.exportGlb` | function | `(modelOrFile, { out, uvMargin = 0.008, textureSize, bakeDir, paintViews, capturePaint, rebakeFrom, chartEdits } = {})` | [guide](../registered-material-bake.md#project-approved-paint-from-several-views), [source](../../cli/export-glb.js) |
 | `node.exportLayers` | function | `(world, { out, view = {}, times = [view.time ?? view.t ?? world?.lookSnapshot?.time ?? 0], native = false, pose, replay, partMotion = false, strandPasses = false, compositing } = {})` | [source](../../cli/export-layers.js) |
-| `node.exportScene` | function | `(createCapture, { out, formats = products, width = 640, height = 360, fps = 12, from = 0, to, stillScale = 2, stillTime = from, embed, loopJoin = false, audio, mux, kit } = {})` | [guide](../scene-audio.md#optional-video-adapter), [source](../../cli/scene-export.js) |
+| `node.exportScene` | function | `(createCapture, { out, formats = products, width = 640, height = 360, fps = 12, from = 0, to, stillScale = 2, stillTime = from, embed, loopJoin = false, audio, mux, kit } = {})` | [guide](../browser-renderer.md#review-compatibility-before-export), [guide](../scene-audio.md#optional-video-adapter), [source](../../cli/scene-export.js) |
 | `node.files` | function | `()` | [source](../../index.js) |
 | `node.findGraphGroupUsers` | function | `(groupFile, { root = process.cwd() } = {})` | [source](../../cli/graph-groups.js) |
 | `node.findMatchCuts` | function | `(outgoing, incoming, options)` | [guide](../match-cut.md), [source](../../cli/match-cut.js) |

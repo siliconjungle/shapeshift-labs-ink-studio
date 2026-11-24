@@ -36,7 +36,9 @@ frame IDs, the authored timeline, and soundtrack assets. `sample` takes
 seconds on the scene timeline. `--pick` uses top-left image coordinates
 on the native art grid and reports the visible opaque surface, or
 `hit: null` for a miss. For a managed pixel stamp it also reports the
-asset ID and its source coordinate when available. `pixel` inspects the
+asset ID and its source coordinate when available. Sample and rendered preview
+reports include [WebGL compatibility](browser-renderer.md#review-compatibility-before-export)
+for the frame. `pixel` inspects the
 composite and contributing layers at a source coordinate. Use `--frame`
 or `--layer` to query a specific frame or sample a single layer.
 
