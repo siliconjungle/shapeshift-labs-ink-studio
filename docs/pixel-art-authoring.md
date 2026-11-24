@@ -200,6 +200,9 @@ revision-checked pixel commands to paint a view. Use the same document palette
 and `approvedSwatches` list across the set.
 
 ```sh
+ink-studio atlas examples/adaptive-impostors/aperture-relay.js \
+  --directions 8 --w 136 --h 132 --maps depth,normal,emission,silhouette \
+  --impostor-blend depth-reprojected --out relay-atlas
 ink-studio pixel-art directions open relay-atlas/atlas.json --out relay-views.json
 ink-studio pixel-art directions review relay-views.json --out angles.json --review angles.html
 ink-studio pixel-art directions export relay-views.json --base relay-atlas/atlas.json --out relay-painted/atlas.json
@@ -245,7 +248,8 @@ run `pixel-art stack export relay-views.json --out deck.json` and open
 `pixel-art stack import edited-deck.json --out relay-views.json` before
 reviewing or exporting the edited atlas.
 
-Atlas import supports up to 512 tiles and 255 exact visible colors. Export
+Atlas import supports up to 512 tiles and 255 exact visible colors. Bake
+with the scene palette enabled to stay within the indexed editing limit. Export
 requires approved visible colors and a common duration for the angles of
 each pose. Omit `--base` for a color-only nearest-view atlas. To carry depth,
 normals, and emission through a repaint, pass a baked base with matching
