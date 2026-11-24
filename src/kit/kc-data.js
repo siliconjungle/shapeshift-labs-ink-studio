@@ -229,6 +229,7 @@
     assetPacks: 'list',
     assetParts: 'obj',
     topologyMeshes: 'obj',
+    hybridOwnership: 'obj',
     environmentPreset: 'obj',
     roles: 'obj',
     camera: 'obj',
@@ -438,6 +439,13 @@
         K.authoring.assetRevisions.checkScene(spec, env?.assetPartImports);
       } catch (error) {
         bad('assetParts', error.message);
+      }
+    }
+    if (spec.hybridOwnership !== undefined) {
+      try {
+        presentation.hybridOwnership = K.authoring.hybridOwnership.prepare(spec.hybridOwnership);
+      } catch (error) {
+        bad('hybridOwnership', error.message);
       }
     }
     if (spec.topologyMeshes !== undefined) {
@@ -1548,6 +1556,7 @@
         K.authoring.assetRevisions.install(world, imported);
       }
       K.authoring.meshTopologyScene.mount(world, presentation.topologyMeshes);
+      if (presentation.hybridOwnership) world.hybridOwnership = presentation.hybridOwnership;
     }
     function bindBreakables(world) {
       try {

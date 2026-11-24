@@ -1408,6 +1408,9 @@ const CMD = {
         '    --rebake-from <material-bake.json> [--chart-edits <plan.json>]   update selected or changed UV charts',
         '  interchange <asset.gltf|.glb|.json> --out <file>    round-trip glTF or PNG-backed raster assets',
         '    --manifest <revision.json>   attach an Ink asset revision to tagged glTF data',
+        '  hybrid-ownership inspect <scene.json> [--out file.json]   list authored channels and derived outputs',
+        '  hybrid-ownership route <scene.json> <object> <part> <channel>   resolve the authored edit destination',
+        '  hybrid-ownership plan <scene.json> <revisions.json> [--previous report.json] [--out report.json]   plan dependent rebuilds',
         '  asset-part manifest <asset.gltf|.glb> [--out revision.json]   show stable asset IDs',
         '  asset-part preview <scene.json> <instance> <asset.gltf|.glb> [--expect N] [--out report.json]   check a replacement',
         '  asset-part replace <scene.json> <instance> <asset.gltf|.glb> [--expect N] --out <next-scene.json>   save one part revision',
@@ -2542,6 +2545,9 @@ const CMD = {
     const lut = require('./lut.js'), definition = lut.read(file, lut.importOptions(opt));
     if (opt.out) lut.write(opt.out, definition);
     else process.stdout.write(JSON.stringify(definition) + '\n');
+  },
+  'hybrid-ownership'() {
+    return require('./hybrid-ownership.js').command(pos,opt,lib());
   },
   'asset-part'() {
     return require('./asset-part.js').command(pos, opt, lib());

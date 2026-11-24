@@ -848,6 +848,8 @@ function edit(design, frame, patch, context) {
   if (frame.revision !== revision) throw Preview.conflict('stale-document','Pixel edit revision no longer matches the document',
     { expected:frame.revision, actual:revision });
   const route = Destinations.resolve(design,patch.destination);
+  if (patch.ownership !== undefined && !route.binding)
+    throw Preview.conflict('hybrid-owner-needs-source','A hybrid edit needs a bound source destination');
   if (design.version === 2 && patch.frame !== frame.id &&
       (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments','layers','protection','art-rules','timeline'].includes(route.destination.kind))))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
@@ -1740,7 +1742,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
   const inputs = { documentRevision };
   const common = { format:receiptFormat, version:1, command, inputs };
   const splats = [];
-  let world, editTarget;
+  let world, editTarget, ownership;
   try {
     command.patch = jsonValue(rawPatch ?? null);
     if (expected && !equal(options,expected.command.options))
@@ -1769,6 +1771,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
           throw Preview.conflict('stale-source','Selection passes or material channels differ from the edit receipt',
             { expected:expected.inputs.selectionSources,actual:sources });
       },
+      onOwnership: verified => { ownership = verified; },
       onSplat: splat => splats.push(splat),
       onEditTarget: target => { editTarget = target; }
     });
@@ -1802,6 +1805,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
       if (patch.operation.modifier) target.modifier = patch.id;
       if (patch.operation.updateModifier) target.modifier = patch.operation.updateModifier.id;
     }
+    if (ownership) target.ownership = ownership;
     const artifactRevision = fingerprint(result);
     const celLinks = !binding && Timeline.linkChanges(design,result);
     const receipt = jsonValue({ ...common, status:'applied', affectedTargets:[target], skippedHits,
@@ -1922,6 +1926,8 @@ function previewEdit(design, patch, context, { frameId,limit,exact,shotHitFrame 
         sourceRevision = revision;
         if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
       },
+      hybridOwnership:context.hybridOwnership,
+      onOwnership(ownership) { if (target) target.ownership = ownership; },
       onSplat(splat) {
         if (diff) splats.push(splat);
         resolvedRows.add(splat.id??splat.row);
@@ -2184,6 +2190,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       captureSelection,
       sceneRef,
       renderOptions,ownsWorld:!context?.world,
+      hybridOwnership: binding => sceneEditor && binding.scene === sceneName ? sceneEditor.snapshot().hybridOwnership : undefined,
       scene(binding) {
         if (grouped && !sceneEditor)
           throw new Error('Attach the source scene editor to group native scene and pixel edits');
@@ -2514,6 +2521,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const attributeHits = splats.filter(row=>row.attributes);
         const topologyHits = splats.filter(row=>row.topology);
         const summary={ ...target,...((painted?.kind==='scan-material' || painted?.kind==='mesh-topology' || painted?.brush || painted?.surfacePaint) && painted), sourceRevision:receipt.inputs.sourceRevision,
+          ...(painted?.ownership && { ownership:painted.ownership }),
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),
           ...(footprintHits.length && {footprintHits}),

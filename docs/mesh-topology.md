@@ -4,7 +4,9 @@ An Ink mesh topology document stores positions, shared boundary edges,
 polygon faces, and face corners. Each element has an ID. A polygon
 keeps its boundary and winding when Ink derives its render triangles.
 A face corner refers to a vertex and stores its own UV, so the two faces
-sharing an edge can sample different parts of an atlas.
+sharing an edge can sample different parts of an atlas. Use
+[hybrid edit ownership](hybrid-edit-ownership.md) to declare whether a
+mesh owns the shape or is derived from another source.
 
 ## Author and edit a polygon
 

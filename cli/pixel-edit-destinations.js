@@ -13,6 +13,7 @@ const SdfMaterialPaint = require('./sdf-material-paint.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict,sourceTarget } = require('./pixel-edit-preview.js');
+const HybridOwnership = require('./pixel-hybrid-ownership.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const { staleAt } = require('../src/pixel-source-bindings.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
@@ -542,6 +543,8 @@ function apply(frame, edit, route, context, readMarks) {
   const source = observe(route,context,{ guard:edit.sourceRevision !== undefined || !!context.onSource });
   context.onSource?.(source.sourceRevision,source);
   checkRevision(binding,source,edit.sourceRevision);
+  const ownership = HybridOwnership.verify(route,edit,source,context);
+  if (ownership) context.onOwnership?.(ownership);
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
   if (destination.kind === 'splat-attributes') {
     const apply=edit.operation?.topology!==undefined ? editTopology : splats;

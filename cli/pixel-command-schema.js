@@ -206,7 +206,9 @@ function examples(createEditor) {
 
 function patchDefinitions(defs,edits) {
   const changes = array(ref('pixelEdit'),1,4096);
-  const base = { id,revision,frame:id,cel,destination:text,sourceRevision:revision,operation:obj,edits:changes };
+  const base = { id,revision,frame:id,cel,destination:text,sourceRevision:revision,
+    ownership:object({object:text,part:text,channel:choice('shape','pigment','coverage','detail')},['object','part','channel']),
+    operation:obj,edits:changes };
   // A destination ID can resolve to a document-defined kind. The runtime owns that lookup.
   defs.editPatch = object(base,['id','revision'],true);
   const typed = {

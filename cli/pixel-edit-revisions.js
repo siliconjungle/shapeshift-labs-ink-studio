@@ -27,6 +27,10 @@ function canonicalDigest(value) {
   return digest(canonical(value));
 }
 
+function hybridPolicy(world, context, binding) {
+  return world.hybridOwnership ?? world.spec?.hybridOwnership ?? context.hybridOwnership?.(binding);
+}
+
 function observe({ destination,binding }, context, { guard = true } = {}) {
   const { id,kind,chart,channel } = destination;
   const scope = ['ink-studio/pixel-source-v1',id,kind,chart,channel,
@@ -36,7 +40,9 @@ function observe({ destination,binding }, context, { guard = true } = {}) {
   if (kind==='scan-material') {
     const world=context.world(binding), scan=ScanPaint.source(world,destination,binding);
     const revision=digest([destination.mesh,destination.material,scan]);
-    return {world,scan,revision,sourceRevision:digest([scope,revision,world.look?.scanPaint])};
+    const policy = hybridPolicy(world,context,binding), fields = [scope,revision,world.look?.scanPaint];
+    if (policy !== undefined) fields.push(policy);
+    return {world,scan,revision,sourceRevision:digest(fields)};
   }
   if (kind === 'shot-correction' || kind === 'splat-attributes') {
     const world = context.world(binding);
@@ -49,6 +55,8 @@ function observe({ destination,binding }, context, { guard = true } = {}) {
       world.anim?.physicsOwned,world.anim?.rig?.bid,
       kind === 'shot-correction' ? world.look?.shotCorrections : world.look?.splatFit];
     if (world.gaussianHarmonics) sourceFields.push(world.gaussianHarmonics);
+    const policy = hybridPolicy(world,context,binding);
+    if (policy !== undefined) sourceFields.push(policy);
     const sourceRevision = digest(sourceFields);
     return { world,revision,sourceRevision };
   }
