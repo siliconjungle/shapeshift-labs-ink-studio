@@ -46,7 +46,7 @@ Export [environment passes](art-passes.md#environment-passes-for-compositing) fo
 
 Use the existing `K.reflection.plane` definitions with `optics.reflection` on a
 column water body. The [three reflecting gardens](../examples/water-garden.html)
-uses three heights, a moving lantern boat, SDF trees, and optional atlas terrain.
+use three heights, a moving lantern boat, SDF trees, and optional atlas terrain.
 
 ```js
 const pool = K.procedural.waterBodies.create({
