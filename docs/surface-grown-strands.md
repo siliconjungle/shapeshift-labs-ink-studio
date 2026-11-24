@@ -38,6 +38,9 @@ and then call `grown.pose(world, { time })`. Keep the mesh's indexed topology an
 UVs for the life of its attachments. A temporarily collapsed triangle hides its
 roots, and restoring the triangle reactivates them in the same native rows.
 
+To bend the host and its retained curves, paint, and residual splats from one
+control lattice, see [shared deformation cages](hybrid-deformation-cages.md).
+
 For linear skinning with Ink's twelve-value bone matrices, prepare a mesh
 binding with one bone index or one to four `[bone, weight]` pairs per vertex.
 Register the mesh and curves in Ink's native bone update.

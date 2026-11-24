@@ -368,6 +368,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.SplatFootprints` | alias | `Alias of KIT.splatFootprints` |  |
 | `toolkit.SplatProvenance` | alias | `Alias of KIT.procedural.splatProvenance` |  |
 | `toolkit.SpriteSurface` | namespace |  |  |
+| `toolkit.SpriteSurface.forkGeometry` | function | `(atlas)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.geometryUpdatesSince` | function | `(atlas,revision)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.make` | function | `(width = 1024, limit = 4096)` | [source](../../src/sprite-surface.js) |
 | `toolkit.SpriteSurface.markDirty` | function | `(atlas, rect = { x: 0, y: 0, width: atlas.width, height: atlas.height })` | [source](../../src/sprite-surface.js) |

@@ -1333,6 +1333,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.deform.field` | function | `(fn)` | [source](../../src/kit/ki-deform.js) |
 | `KIT.deform.fold` | function | `(o)` | [source](../../src/kit/ki-deform.js) |
 | `KIT.deform.foliage` | function | `(o)` | [source](../../src/kit/ki-deform.js) |
+| `KIT.deform.hybridCage` | function | `(source, { id, mesh: meshId, bounds, size = [2, 2, 2], growth = [], residuals = [], gaps = [], stretchLimit = 1.25 } = {})` | [guide](../hybrid-deformation-cages.md#bind-a-cage), [source](../../src/kit/p80zz-hybrid-cage.js) |
 | `KIT.deform.inspectPoses` | function | `(puppet, read)` | [source](../../src/kit/ki-deform.js) |
 | `KIT.deform.jac` | function | `(map, p, e)` | [guide](../math-fields.md#deformation-flow-and-materials), [source](../../src/kit/ki-deform.js) |
 | `KIT.deform.lattice` | function | `(box, n)` | [source](../../src/kit/ki-deform.js) |

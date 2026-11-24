@@ -290,6 +290,18 @@ const SceneMeshes = (() => {
     return mesh;
   }
 
+  function geometry(mesh) {
+    const { positions, indices } = read(mesh);
+    return { positions: positions.slice(), indices: indices.slice() };
+  }
+
+  function withPose(mesh, positions) {
+    const data = read(mesh);
+    const copy = Object.freeze({ ...mesh, [state]: { ...data, layer: Sprite.forkGeometry(data.layer),
+      ...(data.objectTexels && { objectTexels: { ...data.objectTexels } }) } });
+    return pose(copy, positions);
+  }
+
   function uvAnchors(mesh, {V, procedural:{spatial}}) {
     if (charts.has(mesh)) return charts.get(mesh);
     const data = read(mesh), {indices,uvs} = data;
@@ -695,7 +707,7 @@ const SceneMeshes = (() => {
     return {anchors, points:Float32Array.from(points), uvs:Float32Array.from(texture), triangles:Uint32Array.from(triangles)};
   }
 
-  return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
+  return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,scanMaterial,paintMeshes,pose,withPose,geometry,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
     simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,sourceTriangle,trianglePigment,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

@@ -362,7 +362,14 @@ const SpriteSurface = (() => {
     const rows=(geometryUpdates.get(atlas)??[]).filter(r=>r.revision>revision);
     return rows[0]?.revision===revision+1&&rows.at(-1)?.revision===atlas.geometryRevision?rows.map(r=>({...r})):null;
   }
-  return Object.freeze({ make, setShadowShell, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince,
+  function forkGeometry(atlas) {
+    const copy = { ...atlas, vertices: atlas.vertices.slice(), pixels: atlas.pixels.slice(),
+      ...(atlas.normalPixels && { normalPixels: atlas.normalPixels.slice() }) };
+    const faces = namedFaces.get(atlas);
+    if (faces) namedFaces.set(copy, new Map(faces));
+    return copy;
+  }
+  return Object.freeze({ make, setShadowShell, markDirty, updatesSince, update, markGeometryDirty, geometryUpdatesSince, forkGeometry,
     uvSlip, projectionPlan, samplingPlan, samplingGLSL: resampling.glsl });
 })();
 if (typeof module !== 'undefined') module.exports = SpriteSurface;

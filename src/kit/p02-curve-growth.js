@@ -159,7 +159,7 @@ const CurveGrowth = (() => {
     need(roots.length+stitches.length+generated.length<=limit &&
       (roots.length+stitches.length+generated.length)*segments<=K.curveSplats.segmentLimit,'surface growth exceeds the curve budget');
     const adapter=host.kind==='uv' ? uvSurface(host) : sdfSurface(host);
-    let source=adapter.context(initialContext), updates, nextSamples;
+    let source=adapter.context(initialContext), updates;
     const specs=[], ids=new Set();
     let skipped=0;
     function append(id,attachments,{height,lift,heading=0,optional=false}) {
@@ -212,16 +212,21 @@ const CurveGrowth = (() => {
       return {points,up:a.tangent};
     }
     const threads=specs.map(spec=>({id:spec.id,path:strandPose(spec,spec.anchors.map(anchor=>anchor.live))}));
-    const binding=K.curveSplats.bind(builder,{kind:'textile',plan:{threads}},rest=>{
-      const sites=nextSamples.get(rest.id);
-      return sites.every(Boolean) ? strandPose(byId.get(rest.id),sites) :
-        {points:rest.points,active:Array(segments).fill(false)};
+    const binding=K.curveSplats.bind(builder,{kind:'textile',plan:{threads}},(rest,{samples,map})=>{
+      const sites=samples.get(rest.id), spec=byId.get(rest.id);
+      if (!sites.every(Boolean)) return {points:rest.points,active:Array(segments).fill(false)};
+      const target=strandPose(spec,sites);
+      if (!map) return target;
+      const mapped=rest.points.map(map);
+      const from=V.sub(target.points[0],mapped[0]);
+      const to=sites.length===2 ? V.sub(target.points.at(-1),mapped.at(-1)) : from;
+      return {up:target.up,points:mapped.map((point,i)=>V.add(point,V.lerp(from,to,i/segments)))};
     },appearance);
     const rootCount=specs.reduce((count,row)=>count+row.anchors.length,0);
     updates={sampled:rootCount,reused:0,detached:0,reattached:0};
     function pose(world,context={}) {
       const sampled=adapter.context({world,...context},source), report={sampled:0,reused:0,detached:0,reattached:0};
-      nextSamples=new Map(specs.map(spec=>[spec.id,spec.anchors.map(anchor=>{
+      const samples=new Map(specs.map(spec=>[spec.id,spec.anchors.map(anchor=>{
         if (!adapter.changed(source,sampled,anchor)) { report.reused++; return anchor.live; }
         report.sampled++;
         const live=adapter.read(anchor,sampled);
@@ -229,22 +234,41 @@ const CurveGrowth = (() => {
         if (!anchor.live && live) report.reattached++;
         return live;
       })]));
-      const result=binding.pose(world,context);
-      for (const spec of specs) spec.anchors.forEach((anchor,i)=>{anchor.live=nextSamples.get(spec.id)[i];});
+      const result=binding.pose(world,{...context,samples});
+      for (const spec of specs) spec.anchors.forEach((anchor,i)=>{anchor.live=samples.get(spec.id)[i];});
       source=sampled;
       updates=report;
       return result;
     }
-    function snapshot() {
-      return {kind:host.kind,seed,skipped,updates:{...updates},strands:specs.map(({id,anchors})=>({
-        id,attached:anchors.every(anchor=>anchor.live),roots:anchors.map(({uv,point,normal,live})=>({
-          ...(uv ? {uv:uv.slice()} : {seedPoint:point.slice(),seedNormal:normal.slice()}),
-          ...(live && {point:live.p.slice(),normal:live.n.slice(),
-            ...(live.triangle!==undefined && {triangle:live.triangle,weights:live.weights.slice()})})
-        }))
-      }))};
+    function describe(samples,counts) {
+      return {kind:host.kind,seed,skipped,updates:{...counts},strands:specs.map(({id,anchors})=>{
+        const sites=samples?.get(id) ?? anchors.map(anchor=>anchor.live);
+        return {id,attached:sites.every(Boolean),roots:anchors.map(({uv,point,normal},i)=>{
+          const live=sites[i];
+          return {...(uv ? {uv:uv.slice()} : {seedPoint:point.slice(),seedNormal:normal.slice()}),
+            ...(samples && !live && anchors[i].live && {restPoint:anchors[i].live.p.slice()}),
+            ...(live && {point:live.p.slice(),normal:live.n.slice(),
+              ...(live.triangle!==undefined && {triangle:live.triangle,weights:live.weights.slice()})})};
+        })};
+      })};
     }
-    return {...binding,pose,snapshot,post:(dt,time,stage,clock)=>pose(stage.W,{dt,time,stage,clock})};
+
+    function poseOnMesh(world,mesh,map) {
+      // The destination is a geometry-only pose of the same indexed mesh.
+      const target=uvSurface({...host,mesh}), context=target.context({world});
+      const counts={sampled:rootCount,reused:0,detached:0,reattached:0};
+      const samples=new Map(specs.map(({id,anchors})=>[id,anchors.map(anchor=>{
+        const live=target.read(anchor,context);
+        if (anchor.live && !live) counts.detached++;
+        if (!anchor.live && live) counts.reattached++;
+        return live;
+      })]));
+      binding.pose(world,{world,samples,map},{isolated:true});
+      return describe(samples,counts);
+    }
+    return {...binding,pose,snapshot:()=>describe(undefined,updates),mesh:host.mesh,
+      ...(host.mesh && {poseOnMesh}),post:(dt,time,stage,clock)=>pose(stage.W,{dt,time,stage,clock})};
+
   }
 
   return Object.freeze({grow,sdfSurface});

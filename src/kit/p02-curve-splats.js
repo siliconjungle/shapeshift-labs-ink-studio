@@ -882,7 +882,8 @@
     const plan = prepare(source, options, palette, true);
     const ranges = emit(builder, plan), hidden = new Uint8Array(ranges.segments);
     const slots = [4, 5, 6, 8, 9, 10];
-    function pose(world, context = {}) {
+    function pose(world, context = {}, { isolated = false } = {}) {
+      const visibility = isolated ? hidden.slice() : hidden;
       const { stage, rows = stage?.rows } = context;
       const data = world?.anim?.bones && world.rest ? world.rest : world?.data;
       check(data instanceof Float32Array && world.count >= ranges.end && data.length >= ranges.end * 16,
@@ -921,7 +922,7 @@
           const from = at(segment, first), to = at(segment, last);
           if (active?.[segment] === false || K.V.dist(from, to) < 1e-7) {
             data[q + 3] = 0;
-            hidden[h] = 1;
+            visibility[h] = 1;
           } else {
             let profile = row.profile;
             if (profile) {
@@ -954,8 +955,8 @@
                 world.curvePattern.set(side, at + CurvePattern.sideOffset);
               }
             }
-            if (hidden[h] && data[q + 3] <= 0) data[q + 3] = row.opacity;
-            hidden[h] = 0;
+            if (visibility[h] && data[q + 3] <= 0) data[q + 3] = row.opacity;
+            visibility[h] = 0;
             if (row.clips) CurveSplat.writeClips(world.curveClips, indexOfRow, geometry.center, row.clips.map(clip));
           }
           if (rows) rows[indexOfRow >> 9] = 1;
@@ -966,8 +967,10 @@
         const parts = posed.flatMap(({ current }, i) => plan.strands[i].rows.length ?
           [{ points: current, radius: plan.strands[i].maxRadius }] : []);
         const coarse = aggregateGuide(parts,proxy.settings);
-        if (coarse && descriptor.pitch !== undefined) descriptor.pitch = coarse.pitch;
         const [start, end] = descriptor.proxy;
+        const target = isolated ? world.curveLod?.map(row => row[descriptor === ranges.lod.aggregate ? 'aggregate' : 'shadow'])
+          .find(row => row?.proxy[0] === start && row.proxy[1] === end) : descriptor;
+        if (coarse && target?.pitch !== undefined) target.pitch = coarse.pitch;
         for (let i = start; i < end; i++) {
           const { segment, first, last } = proxy.plan.strands[0].rows[i - start].attachment;
           const q = i * 16;

@@ -322,24 +322,37 @@
           rest[q + 1] = lo[1] + ((hi[1] - lo[1]) * j) / (n[1] - 1);
           rest[q + 2] = lo[2] + ((hi[2] - lo[2]) * k) / (n[2] - 1);
         }
-    const map = p => {
-      const g = [0, 1, 2].map(a => clamp(((p[a] - lo[a]) / (hi[a] - lo[a] || 1)) * (n[a] - 1), 0, n[a] - 1)),
-        i0 = g.map((v, a) => Math.min(n[a] - 2, Math.floor(v))),
-        f = g.map((v, a) => v - i0[a]),
-        out = p.slice(),
-        P = map.pts;
+    const scale = [0, 1, 2].map(a => (n[a] - 1) / (hi[a] - lo[a] || 1));
+    const sample = (p, jacobian) => {
+      const g = scale.map((s, a) => clamp((p[a] - lo[a]) * s, 0, n[a] - 1));
+      const i0 = g.map((v, a) => Math.min(n[a] - 2, Math.floor(v)));
+      const f = g.map((v, a) => v - i0[a]);
+      const out = jacobian ? M.id() : p.slice();
+      const P = map.pts;
+      const gradientScale = jacobian && scale.map((s, a) => p[a] >= lo[a] && p[a] <= hi[a] ? s : 0);
       for (let c = 0; c < 8; c++) {
-        const di = c & 1,
-          dj = (c >> 1) & 1,
-          dk = (c >> 2) & 1,
-          w = (di ? f[0] : 1 - f[0]) * (dj ? f[1] : 1 - f[1]) * (dk ? f[2] : 1 - f[2]),
-          q = idx(i0[0] + di, i0[1] + dj, i0[2] + dk);
-        out[0] += w * (P[q] - rest[q]);
-        out[1] += w * (P[q + 1] - rest[q + 1]);
-        out[2] += w * (P[q + 2] - rest[q + 2]);
+        const di = c & 1, dj = (c >> 1) & 1, dk = (c >> 2) & 1;
+        const wx = di ? f[0] : 1 - f[0], wy = dj ? f[1] : 1 - f[1], wz = dk ? f[2] : 1 - f[2];
+        const q = idx(i0[0] + di, i0[1] + dj, i0[2] + dk);
+        if (jacobian) {
+          const dx = (di ? 1 : -1) * gradientScale[0] * wy * wz;
+          const dy = (dj ? 1 : -1) * gradientScale[1] * wx * wz;
+          const dz = (dk ? 1 : -1) * gradientScale[2] * wx * wy;
+          for (let row = 0; row < 3; row++) {
+            const offset = P[q + row] - rest[q + row];
+            out[row * 3] += dx * offset;
+            out[row * 3 + 1] += dy * offset;
+            out[row * 3 + 2] += dz * offset;
+          }
+        } else {
+          const w = wx * wy * wz;
+          for (let a = 0; a < 3; a++) out[a] += w * (P[q + a] - rest[q + a]);
+        }
       }
       return out;
     };
+    const map = p => sample(p, false);
+    map.jacobian = p => sample(p, true);
     map.n = n;
     map.restPts = rest;
     map.pts = rest.slice();
