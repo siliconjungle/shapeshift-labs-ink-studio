@@ -35,7 +35,17 @@ polygon**, Enter, or a double-click to finish. The wand follows connected
 color and **Color range** also finds matching islands. Both use the color
 tolerance field.
 
-The active mask limits painting on that frame. **Clear** removes it.
+The active mask limits painting on that frame. Use **New selection**
+to replace it, add to it, subtract the next selection, or intersect the
+two. **Modify selection** inverts, grows, shrinks, or outlines the active
+mask. Set the radius in art pixels and put outlines inside, outside, or
+on both sides of the boundary. **Undo** restores the previous mask.
+
+Use **Saved masks** to store a selection by ID and recall it on the
+current frame. These masks travel with the stamp JSON and can be recalled
+after reopening the file. **Clear** removes the active selection.
+[Selection query and mask syntax](pixel-art-authoring.md#edit-and-recall-masks)
+
 **Capture** turns the highlighted footprint into a reusable brush with
 its original colors and transparent gaps, then clears the mask so you can
 stamp elsewhere. Set the brush-local anchor, size, angle, and swatch mode

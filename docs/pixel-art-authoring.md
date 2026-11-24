@@ -360,6 +360,42 @@ edit participates in undo and replay. Reference the ID in a later raster
 patch as `operation.selection` to limit painting and fill to those pixels,
 or pass it to `pixel-art brush --selection` to capture its exact footprint.
 
+### Edit and recall masks
+
+The same selection query can read saved masks and combine them with fresh
+selections. Use `base` and `with` for **combine** (union), **subtract**, and
+**intersect**. Use `source` for **invert**, **grow**, **shrink**, and
+**outline**. A literal mask is `{"type":"pixels","pixels":[[4,5],[5,5]]}`.
+
+```json
+{
+  "type": "outline",
+  "amount": 2,
+  "side": "outside",
+  "source": {
+    "type": "subtract",
+    "base": { "type": "recall", "id": "glaze-islands" },
+    "with": { "type": "ellipse", "rect": [3,2,6,5] }
+  }
+}
+```
+
+Grow, shrink, and outline default to one pixel and accept whole-pixel
+radii from 1 to 512. Distance follows four-neighbor steps. Grow stops at
+the canvas edge. Shrink and inside outlines treat locations beyond the
+edge as unselected. Outline returns a band on the chosen side, which can
+be `inside` (the default), `outside`, or `both`. Holes contribute their
+own boundaries. Invert flips every pixel in the native grid.
+
+Use a standalone `{"type":"recall","id":"glaze-islands"}` query to inspect
+a saved mask. When no frame or cel is supplied, a standalone recall uses
+the mask's saved frame. For composed queries, set the shared frame with
+`--frame` or the SDK's `frame` option. Queries may contain up to 32
+operations. Applying a composed query in the `selections` destination
+saves its resolved pixels without changing the artwork. Exports from
+`pixel-art draw` or `pixels.stamp()` carry the frame's saved masks in
+stamp JSON for recall in the Workshop.
+
 ## Author a drawing
 
 ```json

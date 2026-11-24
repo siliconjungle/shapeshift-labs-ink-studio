@@ -116,3 +116,95 @@ test('CLI queries, captures and replay preserve the same disconnected mask', t =
   cli('brush',file('selected'),'--selection','rust-islands','--layer','ink','--out',file('brush'));
   assert.deepEqual(JSON.parse(fs.readFileSync(file('brush'),'utf8')).slots.filter(slot=>slot !== null).length,4);
 });
+
+test('selection algebra and outlines match four-neighbor distances at holes and canvas edges', () => {
+  const { fromPixels,combine,modify } = selectionTools;
+  const width = 5, height = 4;
+  const left = fromPixels(width,height,[[0,0],[1,0],[2,0]]), right = fromPixels(width,height,[[1,0],[1,1]]);
+  assert.deepEqual(pixels(width,combine('combine',left,right)),[[0,0],[1,0],[2,0],[1,1]]);
+  assert.deepEqual(pixels(width,combine('subtract',left,right)),[[0,0],[2,0]]);
+  assert.deepEqual(pixels(width,combine('intersect',left,right)),[[1,0]]);
+  assert.equal(pixels(width,modify(width,height,left,{ type:'invert' })).length,17);
+  assert.deepEqual(pixels(width,left),[[0,0],[1,0],[2,0]]);
+  assert.throws(()=>fromPixels(width,height,[[1,1],[1,1]]),/repeats a pixel/);
+
+  const carved = mask(width,height,{ type:'rectangle',rect:[0,0,width,height] });
+  carved[2*width+2] = 0;
+  const on = pixels(width,carved), off = pixels(width,modify(width,height,carved,{ type:'invert' }));
+  for (const amount of [1,2,512]) {
+    const distance = (x,y,sites) => Math.min(...sites.map(([a,b])=>Math.abs(x-a)+Math.abs(y-b)));
+    const inner = (x,y) => Math.min(distance(x,y,off),x+1,y+1,width-x,height-y);
+    const outer = (x,y) => distance(x,y,on);
+    const check = (operation,expected) =>
+      assert.deepEqual(Array.from(modify(width,height,carved,{ amount,...operation })),expected);
+    check({ type:'grow' },Array.from(carved,(_,p)=>Number(outer(p%width,Math.floor(p/width)) <= amount)));
+    check({ type:'shrink' },Array.from(carved,(_,p)=>Number(inner(p%width,Math.floor(p/width)) > amount)));
+    for (const side of ['inside','outside','both']) {
+      check({ type:'outline',side },Array.from(carved,(on,p)=>Number(on ?
+        side !== 'outside' && inner(p%width,Math.floor(p/width)) <= amount :
+        side !== 'inside' && outer(p%width,Math.floor(p/width)) <= amount)));
+    }
+  }
+  const empty = new Uint8Array(width*height);
+  assert.deepEqual(modify(width,height,empty,{ type:'grow',amount:512 }),empty);
+  assert.deepEqual(modify(width,height,empty,{ type:'outline',side:'both' }),empty);
+  assert.throws(()=>modify(width,height,left,{ type:'outline',side:'around' }),/outline side/);
+  assert.throws(()=>modify(width,height,left,{ type:'grow',amount:0 }),/radius/);
+});
+
+test('selection expressions compose recalled and fresh masks with frame scope and bounded evaluation', () => {
+  const editor = ink.createPixelEditor({ ...design,selections:[
+    { id:'start',frame:'front',pixels:[[0,0],[1,0]] },
+    { id:'rear',frame:'back',pixels:[[3,3]] },
+    { id:'shared',pixels:[[2,0]] }
+  ] });
+  const start = { type:'recall',id:'start' };
+  const query = { type:'subtract',
+    base:{ type:'grow',source:{ type:'combine',base:start,with:{ type:'recall',id:'shared' } } },
+    with:{ type:'rectangle',rect:[0,1,2,1] } };
+  const keep = [[0,0],[1,0],[2,0],[3,0],[2,1]];
+  assert.deepEqual(editor.select(query).pixels,keep);
+  assert.equal(editor.select({ type:'recall',id:'rear' }).frame,'back');
+  assert.throws(()=>editor.select(start,{ frame:'back' }),/belongs to frame front/);
+  assert.throws(()=>editor.select({ type:'recall',id:'missing' }),/Unknown pixel selection/);
+  assert.throws(()=>editor.select({ type:'pixels',pixels:[[8,0]] }),/outside the native grid/);
+  const cyclic = { type:'invert' };
+  cyclic.source = cyclic;
+  assert.throws(()=>editor.select(cyclic),/at most 32 operations/);
+
+  const transaction = patch(editor,'edit-mask',{ id:'retained',query },{ destination:'selections' });
+  const before = editor.snapshot();
+  assert.deepEqual(editor.previewEdit(transaction).targets[0].runs,[[0,0,4],[1,2,1]]);
+  const updated = editor.apply(transaction);
+  assert.deepEqual(editor.select({ type:'recall',id:'retained' }).pixels,keep);
+  assert.deepEqual(editor.stamp().selections.map(row=>row.id),['start','shared','retained']);
+  assert.deepEqual(editor.stamp({ frame:'back' }).selections.map(row=>row.id),['rear','shared']);
+  assert.deepEqual(ink.createPixelEditor(before).replay(editor.receipts()[0]),updated);
+  assert.equal(editor.undo(),true);
+  assert.throws(()=>editor.select({ type:'recall',id:'retained' }),/Unknown pixel selection/);
+});
+
+test('the CLI saves and recalls edited masks and retains them in stamp exports', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-edited-masks-'));
+  t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
+  const file = name=>path.join(dir,name+'.json');
+  const designWithMask = { ...design,selections:[{ id:'source',frame:'front',pixels:[[1,1]] }] };
+  const write = (name,data)=>fs.writeFileSync(file(name),JSON.stringify(data));
+  const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+    { cwd:path.resolve(__dirname,'..'),encoding:'utf8' });
+  const source = { type:'recall',id:'source' };
+  write('design',designWithMask);
+  write('outline',{ type:'outline',side:'outside',source });
+  const selected = JSON.parse(cli('select',file('design'),file('outline')));
+  const expected = [[1,0],[0,1],[2,1],[1,2]];
+  assert.deepEqual(selected.pixels,expected);
+  write('patch',{ id:'outline-pass',destination:'selections',frame:'front',revision:selected.revision,
+    operation:{ id:'ring',query:{ type:'outline',side:'outside',source } } });
+  cli('edit',file('design'),file('patch'),'--out',file('edited'));
+  write('recall',{ type:'recall',id:'ring' });
+  assert.deepEqual(JSON.parse(cli('select',file('edited'),file('recall'))).pixels,expected);
+  const output = path.join(dir,'render');
+  cli('draw',file('edited'),'--out',output);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(output,'stamp.json'),'utf8')).selections[1],
+    { id:'ring',pixels:expected });
+});

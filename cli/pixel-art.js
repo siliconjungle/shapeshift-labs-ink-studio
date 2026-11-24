@@ -287,7 +287,8 @@ function compileFrame(design, frame, revision, palette,capture) {
     for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
   }
   return { ...raster, cels, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice(),
-    ...(design.guides && { guides:PixelGuides.active(design.guides,frame.id) }) };
+    ...(design.guides && { guides:PixelGuides.active(design.guides,frame.id) }),
+    ...(design.selections && { selections:design.selections.filter(row=>row.frame === undefined || row.frame === frame.id) }) };
 }
 
 function compile(design, frameId, targetCel, capture) {
@@ -397,6 +398,8 @@ function samplePixel(design,coordinate,{ mode = 'composite',frame,layer,cel,dest
 
 function selectPixels(design,query,{ frame,layer,cel } = {}) {
   if (layer !== undefined && cel !== undefined) throw new TypeError('Select from the composite, a layer or a cel');
+  if (query?.type === 'recall' && frame === undefined && cel === undefined)
+    frame = namedSelection(design,query.id).frame;
   const source = layer !== undefined || cel !== undefined;
   const active = compile(design,frame,cel,source && (layer ?? true));
   const target = layer ?? (cel !== undefined ? [...active.cels].find(([,id])=>id === cel)?.[0] : undefined);
@@ -409,14 +412,14 @@ function selectPixels(design,query,{ frame,layer,cel } = {}) {
     const rgb = source ? active.colors[slot] : active.mixedColors?.[p] ?? active.colors[slot];
     const alpha = (source ? raster.alpha : active.opacity)?.[p] ?? 255;
     return (rgb<<8) | alpha;
-  });
+  },id=>namedSelection(design,id,active.id).pixels);
   const pixels = PixelSelections.pixels(width,mask);
   return { revision:active.revision,frame:active.id ?? null,grid:[width,height],pixelCount:pixels.length,pixels };
 }
 
 function namedSelection(design,id,frame) {
   const saved = design.version === 2 && design.selections?.find(row=>row.id === id);
-  if (!saved) throw new RangeError('Unknown brush or raster selection ' + id);
+  if (!saved) throw new RangeError('Unknown pixel selection ' + id);
   if (frame !== undefined && saved.frame !== undefined && frame !== saved.frame)
     throw new RangeError('Pixel selection belongs to frame ' + saved.frame);
   return saved;
@@ -1166,7 +1169,8 @@ function stamp(frame) {
   }
   return { width:frame.width,height:frame.height,origin:'top-left',palette,slots,
     ...(frame.opacity && { alpha:Array.from(frame.opacity) }),
-    ...(frame.guides?.length && { guides:structuredClone(frame.guides) }) };
+    ...(frame.guides?.length && { guides:structuredClone(frame.guides) }),
+    ...(frame.selections?.length && { selections:frame.selections.map(({ id,pixels })=>({ id,pixels:structuredClone(pixels) })) }) };
 }
 
 function snapPoint(frame,point,radius) {

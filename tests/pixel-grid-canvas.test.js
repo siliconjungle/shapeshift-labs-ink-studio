@@ -459,6 +459,71 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'#capture-brush');
     const islands = await saveBrush();
     assert.deepEqual(islands.slots,[0,0,null,null,null,null,null,null,0]);
+
+    const change = (id,value,type = 'change') => evaluate(browser,(id,value,type) => {
+      const field = document.getElementById(id);
+      field.value = value;
+      field.dispatchEvent(new Event(type,{ bubbles:true }));
+    },id,value,type);
+    const rectangle = async (x,y,u,v) => { await press(cursor(x,y)); await move(u,v); await release(cursor(u,v)); };
+    const modify = type => click(browser,'[data-selection-modifier="'+type+'"]');
+    await evaluate(browser,() => {
+      for (const details of document.querySelectorAll('#selection-tools details')) details.open = true;
+    });
+
+    await chooseSelection('rectangle');
+    await rectangle(25,15,27,17);
+    await change('selection-mode','combine');
+    await rectangle(27,15,29,15);
+    assert.equal(await selected(29,15),true);
+    assert.equal(await selected(25,17),true);
+    await change('selection-mode','subtract');
+    await clickPixel(26,16);
+    assert.equal(await selected(26,16),false);
+    await modify('grow');
+    assert.equal(await selected(26,16),true);
+    assert.equal(await selected(24,15),true);
+    assert.equal(await selected(24,14),false);
+    await change('selection-mode','intersect');
+    await rectangle(26,16,28,17);
+    assert.equal(await selected(26,16),true);
+    assert.equal(await selected(25,17),false);
+    await click(browser,'#undo');
+    assert.equal(await selected(25,17),true);
+
+    await change('selection-mode','replace');
+    await rectangle(25,15,27,17);
+    await modify('shrink');
+    assert.equal(await selected(26,16),true);
+    assert.equal(await selected(25,15),false);
+    await click(browser,'#undo');
+    await modify('outline');
+    assert.equal(await selected(26,16),false);
+    assert.equal(await selected(25,15),true);
+    await change('selection-name','rim','input');
+    await click(browser,'#selection-save');
+    await modify('invert');
+    assert.equal(await selected(26,16),true);
+    assert.equal(await selected(25,15),false);
+    await click(browser,'#selection-recall');
+    assert.equal(await selected(26,16),false);
+    assert.equal(await selected(25,15),true);
+
+    const savedMasks = await download('#export');
+    assert.equal(savedMasks.frames[0].selections[0].id,'rim');
+    assert.equal(savedMasks.frames[0].selections[0].pixels.length,8);
+    const maskFile = path.join(directory,'saved-masks.json');
+    fs.writeFileSync(maskFile,JSON.stringify(savedMasks));
+    const doc = await browser.send('DOM.getDocument',{ depth:1 });
+    const imported = await browser.send('DOM.querySelector',{ nodeId:doc.root.nodeId,selector:'#import' });
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[maskFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened saved-masks.json'");
+    assert.equal(await browser.evaluate("document.querySelector('#selection-saved option[value=rim]').value"),'rim');
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-selection').hidden"),true);
+    await change('selection-saved','rim');
+    await click(browser,'#selection-recall');
+    assert.equal(await selected(26,16),false);
+    assert.equal(await selected(25,15),true);
   });
 });
 

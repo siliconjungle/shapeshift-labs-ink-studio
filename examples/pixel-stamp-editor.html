@@ -126,6 +126,12 @@
             <option value="wand">Magic wand</option>
             <option value="range">Color range</option>
           </select></label>
+          <label>New selection<select id="selection-mode">
+            <option value="replace">Replace</option>
+            <option value="combine">Add</option>
+            <option value="subtract">Subtract</option>
+            <option value="intersect">Intersect</option>
+          </select></label>
           <label id="selection-tolerance-label" hidden>Color tolerance
             <input id="selection-tolerance" type="number" min="0" max="255" step="1" value="0">
           </label>
@@ -138,6 +144,34 @@
             <button type="button" id="selection-cancel" disabled>Cancel polygon</button>
           </div>
           <output id="selection-count" aria-label="Selected pixels"></output>
+          <details>
+            <summary>Modify selection</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <div class="row" id="selection-modifiers">
+                <button type="button" data-selection-modifier="invert">Invert</button>
+                <button type="button" data-selection-modifier="grow" disabled>Grow</button>
+                <button type="button" data-selection-modifier="shrink" disabled>Shrink</button>
+                <button type="button" data-selection-modifier="outline" disabled>Outline</button>
+              </div>
+              <div class="canvas-size">
+                <label>Radius (px)<input id="selection-amount" type="number" min="1" max="512" step="1" value="1"></label>
+                <label>Outline placement<select id="selection-side">
+                  <option value="inside">Inside</option>
+                  <option value="outside">Outside</option>
+                  <option value="both">Both</option>
+                </select></label>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>Saved masks</summary>
+            <div class="guide-controls" style="margin-top:9px">
+              <label>Mask ID<input id="selection-name" type="text" maxlength="64" placeholder="glaze-islands"></label>
+              <button type="button" id="selection-save" disabled>Save mask</button>
+              <label>Mask to recall<select id="selection-saved"><option value="">Choose a mask</option></select></label>
+              <button type="button" id="selection-recall" disabled>Recall mask</button>
+            </div>
+          </details>
         </div>
       </section>
       <section>

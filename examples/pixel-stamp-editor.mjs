@@ -7,7 +7,7 @@ const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
-let brush, brushTip, brushStroke, selection, selectionDraft;
+let brush, brushTip, brushStroke, selection, selectionDraft, shownMasks;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -16,8 +16,8 @@ const dragShapes = new Set(['line','rect','ellipse']);
 const vertexShapes = new Set(['curve','polygon']);
 const shapeType = () => $('shape-type').value;
 const rectangleBetween = ([x,y],[u,v]) => [Math.min(x,u),Math.min(y,v),Math.abs(x-u)+1,Math.abs(y-v)+1];
-const saveUndo = () => {
-  state.undo.push({ data:structuredClone(state.doc), frame:state.frame, selection });
+const saveUndo = (selectionOnly = false) => {
+  state.undo.push({ ...(selectionOnly ? {} : { data:structuredClone(state.doc) }),frame:state.frame,selection });
   if (state.undo.length > 24) state.undo.shift();
 };
 
@@ -26,21 +26,41 @@ function resetStroke() {
   pencilStroke = brushStroke = selectionDraft = undefined;
 }
 
+const selectionId = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
+
+function validateSavedMasks(width,height,rows) {
+  if (rows === undefined) return;
+  if (!Array.isArray(rows)) throw new TypeError('Saved masks need a list of IDs and native pixels');
+  const ids = new Set();
+  for (const row of rows) {
+    if (!row || Object.getPrototypeOf(row) !== Object.prototype ||
+        Object.keys(row).some(key=>key !== 'id' && key !== 'pixels') || !selectionId(row.id) || ids.has(row.id))
+      throw new TypeError('Saved masks need unique IDs and native pixels');
+    selections.fromPixels(width,height,row.pixels);
+    ids.add(row.id);
+  }
+}
+
 function load(data) {
   const { width, height, palette } = stamp.prepare(data);
   if (width > 512 || height > 512 || !palette || palette.length > 48 ||
       !palette.every(color => typeof color === 'string' && /^#[a-f\d]{6}$/i.test(color)))
     throw new RangeError('Open a stamp up to 512 × 512 with 1–48 hex swatches.');
   if (data.drawing !== undefined) paintTools.drawingGrid(width,height,data.drawing);
-  stop();
-  if (state.doc) saveUndo();
-  const { slots, rows, strokes, alpha, frames, ...rest } = data;
-  const loaded = frames ?? [{ slots, rows, strokes, alpha, duration:1 / (data.fps ?? 12) }];
-  state.doc = { ...rest, frames:loaded.map(frame => {
+  const { slots,rows,strokes,alpha,frames,selections:saved,...rest } = data;
+  if (frames !== undefined && saved !== undefined)
+    throw new TypeError('Save animation masks on their own frames');
+  const sourceFrames = frames ?? [{ slots,rows,strokes,alpha,duration:1 / (data.fps ?? 12),
+    ...(saved !== undefined && { selections:saved }) }];
+  const loaded = sourceFrames.map(frame => {
+    validateSavedMasks(width,height,frame.selections);
     if (!frame.alpha) return frame;
     const pixels = stamp.paint(width,height,frame);
     return { ...frame,alpha:frame.alpha.map((value,p)=>pixels[p] === null ? 255 : value) };
-  }) };
+  });
+  stop();
+  if (state.doc) saveUndo();
+  state.doc = { ...rest,frames:loaded };
   state.frame = 0;
   state.swatch = 0;
   selection = undefined;
@@ -82,6 +102,17 @@ function strokeCopies({ slot,shape }) {
 const activeSelection = () => selection?.frame === state.frame ? selection : undefined;
 const selectionType = () => $('selection-type').value;
 const colorSelection = type => type === 'wand' || type === 'range';
+const savedMasks = () => state.doc.frames[state.frame].selections;
+
+function selectionFromMask(mask) {
+  return { frame:state.frame,mask,pixelCount:mask.reduce((sum,selected)=>sum+selected,0) };
+}
+
+function setActiveSelection(next) {
+  saveUndo(true);
+  selection = next;
+  $('undo').disabled = false;
+}
 
 function selectPixels(query) {
   const { width,height,palette } = state.doc;
@@ -91,21 +122,37 @@ function selectPixels(query) {
     const colors = palette.map(color=>Number.parseInt(color.slice(1),16));
     read = p => slots[p] === null ? 0 : (colors[slots[p]]<<8) | (current.alpha?.[p] ?? 255);
   }
-  const mask = selections.mask(width,height,query,read);
-  return { frame:state.frame,mask,pixelCount:mask.reduce((sum,selected)=>sum+selected,0) };
+  const operand = selections.mask(width,height,query,read), mode = $('selection-mode').value;
+  if (mode === 'replace') return selectionFromMask(operand);
+  const base = activeSelection()?.mask ?? new Uint8Array(operand.length);
+  return selectionFromMask(selections.combine(mode,base,operand));
 }
 
 function drawSelection() {
-  const active = activeSelection(), draft = selectionDraft?.preview;
-  view.setSelection((draft ?? active)?.mask ?? null);
+  const active = activeSelection(), draft = selectionDraft?.preview, displayed = draft ?? active;
+  const busy = drawingPointer !== undefined || !!selectionDraft;
+  view.setSelection(displayed?.mask ?? null);
   const type = selectionType(), choosing = state.tool === 'brush-select';
   $('selection-tolerance-label').hidden = !colorSelection(type);
   $('polygon-selection-actions').hidden = !choosing || type !== 'polygon';
   $('selection-close').disabled = (selectionDraft?.points.length ?? 0) < 3;
   $('selection-cancel').disabled = !selectionDraft;
   $('selection-clear').disabled = !active && !selectionDraft;
-  $('selection-count').value = (draft ?? active) ? `${(draft ?? active).pixelCount} pixels selected` : '';
-  $('capture-brush').disabled = !active?.pixelCount || drawingPointer !== undefined || !!selectionDraft;
+  $('selection-count').value = displayed ? `${displayed.pixelCount} pixels selected` : '';
+  $('capture-brush').disabled = !active?.pixelCount || busy;
+  for (const button of $('selection-modifiers').querySelectorAll('button'))
+    button.disabled = busy || !active && button.dataset.selectionModifier !== 'invert';
+  const rows = savedMasks(), menu = $('selection-saved');
+  if (shownMasks !== rows) {
+    const previous = menu.value;
+    menu.replaceChildren(new Option('Choose a mask',''),...(rows ?? []).map(({ id })=>new Option(id,id)));
+    if (rows?.some(row=>row.id === previous)) menu.value = previous;
+    shownMasks = rows;
+  }
+  const id = $('selection-name').value.trim();
+  $('selection-save').disabled = !active || busy || !selectionId(id);
+  $('selection-save').textContent = rows?.some(row=>row.id === id) ? 'Update mask' : 'Save mask';
+  $('selection-recall').disabled = busy || !menu.value;
 }
 
 function refreshSelection() {
@@ -121,7 +168,8 @@ function beginSelection(event,at) {
   art.closest('.ink-grid-viewport').focus({ preventScroll:true });
   if (colorSelection(type)) {
     try {
-      selection = selectPixels({ type:'wand',at,connected:type === 'wand',tolerance:$('selection-tolerance').valueAsNumber });
+      const query = { type:'wand',at,connected:type === 'wand',tolerance:$('selection-tolerance').valueAsNumber };
+      setActiveSelection(selectPixels(query));
       notify('');
       drawSelection();
     } catch (error) { notify(error.message); }
@@ -162,14 +210,54 @@ function extendSelection(event) {
 
 function finishSelection() {
   if (!selectionDraft?.preview || selectionDraft.type === 'polygon' && selectionDraft.points.length < 3) return;
-  selection = selectionDraft.preview;
+  setActiveSelection(selectionDraft.preview);
   selectionDraft = undefined;
   drawSelection();
 }
 
 function clearSelection() {
   selectionDraft = undefined;
-  if (activeSelection()) selection = undefined;
+  if (activeSelection()) setActiveSelection(undefined);
+  draw();
+}
+
+function modifySelection(type) {
+  const { width,height } = state.doc;
+  const base = activeSelection()?.mask ?? new Uint8Array(width*height);
+  const amount = $('selection-amount').valueAsNumber;
+  const operation = { type,...(type !== 'invert' && { amount }),
+    ...(type === 'outline' && { side:$('selection-side').value }) };
+  try {
+    stop();
+    setActiveSelection(selectionFromMask(selections.modify(width,height,base,operation)));
+    resetStroke();
+    notify('');
+    draw();
+  } catch (error) { notify(error.message); }
+}
+
+function saveSelection() {
+  const id = $('selection-name').value.trim(), active = activeSelection(), { width } = state.doc;
+  if (!active || !selectionId(id)) return;
+  const frame = state.doc.frames[state.frame], pixels = selections.pixels(width,active.mask);
+  const rows = [...(savedMasks() ?? [])], index = rows.findIndex(row=>row.id === id);
+  if (index < 0) rows.push({ id,pixels });
+  else rows[index] = { id,pixels };
+  edit(() => { frame.selections = rows; resetStroke(); });
+  $('selection-saved').value = id;
+  drawSelection();
+  notify(`Saved mask ${id}`);
+}
+
+function recallSelection() {
+  const id = $('selection-saved').value, saved = savedMasks()?.find(row=>row.id === id);
+  if (!saved) return;
+  stop();
+  const { width,height } = state.doc;
+  setActiveSelection(selectionFromMask(selections.fromPixels(width,height,saved.pixels)));
+  $('selection-name').value = id;
+  resetStroke();
+  notify(`Recalled mask ${id}`);
   draw();
 }
 
@@ -670,7 +758,7 @@ function resizeCanvas(width,height) {
     throw new RangeError('Canvas size exceeds the stamp grid or animation budget.');
   if (width === doc.width && height === doc.height) return;
   const columns = Math.min(width,doc.width), rows = Math.min(height,doc.height);
-  const frames = doc.frames.map(({ slots,rows:sourceRows,strokes,alpha,...hold }) => {
+  const frames = doc.frames.map(({ slots,rows:sourceRows,strokes,alpha,selections:saved,...hold }) => {
     const before = stamp.paint(doc.width,doc.height,{ slots,rows:sourceRows,strokes });
     const resized = Array(width * height).fill(null), opacity = alpha && Array(width * height).fill(255);
     for (let y = 0; y < rows; y++) for (let x = 0; x < columns; x++) {
@@ -678,7 +766,8 @@ function resizeCanvas(width,height) {
       resized[p] = before[source];
       if (opacity) opacity[p] = alpha[source];
     }
-    return { ...hold, slots:resized, ...(opacity && { alpha:opacity }) };
+    const retained = saved?.map(({ id,pixels })=>({ id,pixels:pixels.filter(([x,y])=>x < width && y < height) }));
+    return { ...hold,slots:resized,...(opacity && { alpha:opacity }),...(retained && { selections:retained }) };
   });
   edit(() => {
     const drawing = doc.drawing && { ...doc.drawing };
@@ -826,6 +915,16 @@ art.addEventListener('lostpointercapture',event => {
   draw();
 });
 $('selection-type').addEventListener('change',() => chooseTool('brush-select'));
+$('selection-mode').addEventListener('change',() => {
+  if (selectionDraft) { refreshSelection(); drawSelection(); }
+});
+$('selection-modifiers').addEventListener('click',event => {
+  if (event.target.dataset.selectionModifier) modifySelection(event.target.dataset.selectionModifier);
+});
+$('selection-name').addEventListener('input',drawSelection);
+$('selection-saved').addEventListener('change',drawSelection);
+$('selection-save').addEventListener('click',saveSelection);
+$('selection-recall').addEventListener('click',recallSelection);
 $('selection-clear').addEventListener('click',clearSelection);
 $('selection-close').addEventListener('click',finishSelection);
 $('selection-cancel').addEventListener('click',() => { selectionDraft = undefined; draw(); });
@@ -899,7 +998,7 @@ $('remove').addEventListener('click',()=>edit(()=>{
 $('undo').addEventListener('click',()=>{
   stop();
   const snapshot=state.undo.pop();
-  state.doc=snapshot.data;
+  if (snapshot.data) state.doc=snapshot.data;
   state.frame=snapshot.frame;
   selection = snapshot.selection;
   resetStroke();
