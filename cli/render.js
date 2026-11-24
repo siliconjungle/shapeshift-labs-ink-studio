@@ -456,6 +456,7 @@ function renderFrame(world, o, preparedPalettes) {
   const fitted = SplatFit.prepare(world,o.splatFit ?? look.splatFit);
   const fittedCoverage = fitted?.coverage;
   const footprintsEnabled = (o.splatFootprints ?? look.splatFootprints) !== false;
+  const sdfOverrides = [fitted?.attributeRows,footprintsEnabled && fitted?.footprintRows].filter(Boolean);
   world = SplatFit.renderWorld(world,fitted,{footprints:footprintsEnabled});
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
@@ -1207,7 +1208,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
     editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,coverage:fittedCoverage,
-    footprintRows:footprintsEnabled ? fitted?.footprintRows : undefined,
+    overrideRows:sdfOverrides.length ? sdfOverrides : undefined,
     captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
@@ -2408,7 +2409,7 @@ function renderFrame(world, o, preparedPalettes) {
     const geometryWeight = geometryDetail ? StableDetail.weight(stableDetail.geometry,
       StableDetail.geometryPixels(projectedA,Bq,projectedC,artScale)) : 1;
     if (!geometryWeight) continue;
-    const frame=shaped&&SplatFootprints.posedFrame(shutterRows?.pose(i) ?? world,i,t,SC[i]);
+    const frame=shaped&&SplatFootprints.posedFrame((!fitted?.rowAttributes?.has(i) && shutterRows?.pose(i)) || world,i,t,SC[i]);
     const planeFrame=shaped?.depth==='plane'&&frame;
     const projectedFrame=frame&&[a0*frame[0]+a1*frame[1]+a2*frame[2],b0*frame[0]+b1*frame[1]+b2*frame[2],a0*frame[3]+a1*frame[4]+a2*frame[5],b0*frame[3]+b1*frame[4]+b2*frame[5]];
     // Scale has already been applied in posedFrame for native particle kinds.
@@ -2423,7 +2424,7 @@ function renderFrame(world, o, preparedPalettes) {
     const engravingId=(kraw&(32|256|32768))?0:(engraved?.indices[i]??0),engravingStyle=engravingId&&engraved.styles[engravingId-1];
     let engrave;
     if(engravingStyle&&(!engravingStyle.screenPrint||o.screenPrint!==false)&&(!engravingStyle.brushwork||o.brushwork!==false)){
-      const f=SplatFootprints.posedFrame(shutterRows?.pose(i) ?? world,i,t,SC[i]);
+      const f=SplatFootprints.posedFrame((!fitted?.rowAttributes?.has(i) && shutterRows?.pose(i)) || world,i,t,SC[i]);
       if(f){const map=SplatFootprints.frameTransform({matrix:[1,0,0,1]},a0*f[0]+a1*f[1]+a2*f[2],b0*f[0]+b1*f[1]+b2*f[2],a0*f[3]+a1*f[4]+a2*f[5],b0*f[3]+b1*f[4]+b2*f[5]);
         if(map){const at=i*6,ru=engraved.restFrames.subarray(at,at+3),rv=engraved.restFrames.subarray(at+3,at+6),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],ex=Array.from(ru,(n,j)=>n*map[0]+rv[j]*map[2]),ey=Array.from(ru,(n,j)=>n*map[1]+rv[j]*map[3]);
           engrave={point:engraved.anchors.subarray(i*3,i*3+3),ex,ey,normal:cross(f.slice(0,3),f.slice(3)),restNormal:cross(ru,rv),

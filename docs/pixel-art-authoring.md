@@ -2174,7 +2174,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
-| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint channels or `footprint`, `footprintScale`, and `visible` | Splat-fit asset for `render --splat-fit` |
+| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint channels, footprint controls, or `opacity`, `position`, `scale`, and `orientation` | Splat-fit asset for `render --splat-fit` |
 | `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
@@ -2426,6 +2426,61 @@ a sculpted body that has an edited footprint uses its native splats so
 the traced surface cannot fill a cutout. Independent bodies can still
 use SDF assist. See [custom splat footprints](splat-footprints.md) for
 the native shape and transform settings.
+
+### Move, scale, orient, and fade source splats
+
+Use the stable IDs from `pixel-art targets`. Each target reports its
+current `attributes` and whether it is `transformable`. A row can set its
+own attributes. Use `operation.attributes` for values shared by every
+listed row.
+
+```json
+{
+  "attributes": { "opacity": 0.65, "scale": [1.25, 0.8, 1] },
+  "splats": [
+    { "splat": "gate-enamel-a", "position": [0.8, 1.1, 0.2], "orientation": [0, 0, 0.382683, 0.92388] },
+    { "splat": "gate-enamel-b", "opacity": 0.4 }
+  ]
+}
+```
+
+- `opacity` sets the row opacity from 0 to 1 before the separate
+  `coverage` multiplier. Zero hides the row. One uses the authored
+  opaque density or promotes a translucent row to full opacity.
+- `position` sets the center in scene units, up to one million units
+  per axis. Moving a row preserves its source ID.
+- `scale` is a factor relative to the authored covariance. Use one
+  factor for uniform scale or three for the scene X, Y, and Z axes.
+  Factors range from 0.01 to 100.
+- `orientation` is an `[x,y,z,w]` quaternion applied after scale,
+  relative to the authored orientation. Ink normalizes the quaternion.
+  The splat rotates about its own center. Retained footprint axes and
+  shading normals follow the transform.
+
+Use `null` to restore one attribute and omit channels you want to keep.
+Transforms apply to static source rows. Opacity uses the ordinary
+paintable row scope. Use separate operations for falloff-based paint
+and direct attribute edits. They can share a session undo step.
+
+```sh
+node cli/ink-studio.js pixel-art preview document.json move.json \
+  --scene gate.json --t 0 --limit 32
+```
+
+The preview renders the current fit and the proposed fit on the same
+native grid and camera. The `render` report on the affected target
+includes changed coverage and depth counts, bounds, and a bounded list
+of before and after pixels. `coverage` and `depth` describe the selected
+splats' visible contributions. `sceneCoverage` and `sceneDepth` describe
+the complete view. A depth of `null` marks a missing hit. The report
+counts pixels where the source pass could retain only part of the
+contributor list. Use the normal CLI camera flags or set `time` and `view`
+on SDK `previewEdit`. An open
+session's `preview` compares the draft fit with the fit at the transaction start.
+
+The saved fit applies to headless renders. Edit receipts carry the
+source IDs and changed values through undo, redo, and replay. The
+preview leaves the working fit intact until you apply the edit.
 
 ### Target shot corrections and scene sources
 
