@@ -127,42 +127,51 @@ function shot(frame, edit, binding, world, marks, onSplat) {
   });
 }
 
-function splats(edit, binding, world, bake, onSplat) {
+function splats(frame, edit, binding, world, bake, onSplat) {
   const operation = edit.operation;
   if (!fields(operation,['splats']) || !Array.isArray(operation.splats) || !operation.splats.length)
     throw new TypeError('A splat attribute edit needs a list of explicit source splats');
   const row = splatRows(world,binding,onSplat);
   const seen = new Set();
-  const edits = operation.splats.map(change => {
-    if (!fields(change,['splat','footprintScale','visible']) ||
-        (change.footprintScale === undefined) === (change.visible === undefined) ||
-        (change.visible !== undefined && typeof change.visible !== 'boolean') ||
-        (change.footprintScale !== undefined && (!Number.isFinite(change.footprintScale) ||
-          change.footprintScale < .4 || change.footprintScale > 2)))
-      throw new TypeError('A splat attribute edit needs either footprintScale (0.4–2) or visible (boolean)');
-    const { index } = row(change.splat);
-    if (seen.has(index)) throw new RangeError('Duplicate splat edit ' + change.splat);
-    seen.add(index);
-    return [index,change.footprintScale ?? Number(change.visible)];
-  });
   const prior = world.look?.splatFit;
   SplatFit.prepare(world,prior);
   const target = sceneTarget(binding);
   const sameScope = prior?.version === 2 && prior.target.object === target.object && prior.target.part === target.part;
-  const stable = (!prior || sameScope) && operation.splats.every(change => typeof change.splat === 'string');
+  const stable = (!prior || sameScope) && operation.splats.every(change => typeof change?.splat === 'string');
   const ids = (stable || prior?.version === 2) && Provenance.identities(world);
-  const previous = prior?.edits?.map(([source,scale]) =>
-    [prior.version === 2 ? ids.rowOf(source) : source,scale]) ?? [];
-  const merged = [...new Map([...previous,...edits])];
-  const attributes=prior?.attributes?.map(([source,change])=>{
-    const index=prior.version===2 ? ids.rowOf(source) : source;
-    return [stable ? ids.idAt(index) : index,change];
-  });
+  const previousRow = source => prior.version === 2 ? ids.rowOf(source) : source;
+  const outputRow = index => stable ? ids.idAt(index) : index;
+  const scales = new Map(prior?.edits.map(([source,scale])=>[previousRow(source),scale]));
+  const channels = new Map(prior?.attributes?.map(([source,change])=>[previousRow(source),{...change}]));
+  const palette = Object.fromEntries(frame.paletteEntries.map(({id,color})=>[id,color]));
+  for (const change of operation.splats) {
+    if (!fields(change,['splat','footprintScale','visible','coverage','pigment']))
+      throw new TypeError('Invalid splat attribute edit');
+    const {splat,footprintScale,visible,coverage,pigment}=change;
+    if ([footprintScale,visible,coverage,pigment].every(value=>value===undefined) ||
+        visible !== undefined && (typeof visible !== 'boolean' || footprintScale !== undefined) ||
+        footprintScale !== undefined && (!Number.isFinite(footprintScale) || footprintScale < .4 || footprintScale > 2) ||
+        coverage !== undefined && !SplatFit.unit(coverage))
+      throw new TypeError('A splat edit needs pigment, coverage (0–1), footprintScale (0.4–2) or visible (boolean)');
+    const { index } = row(splat);
+    if (seen.has(index)) throw new RangeError('Duplicate splat edit ' + splat);
+    seen.add(index);
+    if (footprintScale !== undefined || visible !== undefined) scales.set(index,footprintScale ?? Number(visible));
+    if (coverage === undefined && pigment === undefined) continue;
+    const attributes = channels.get(index) ?? {};
+    if (coverage === 1) delete attributes.coverage;
+    else if (coverage !== undefined) attributes.coverage=coverage;
+    if (pigment === null) delete attributes.pigment;
+    else if (pigment !== undefined) attributes.pigment=parseInt(indexedValue(pigment,palette).color.slice(1),16);
+    if (Object.keys(attributes).length) channels.set(index,attributes);
+    else channels.delete(index);
+  }
+  const edits = [...scales].map(([index,scale])=>[outputRow(index),scale]);
+  const attributes = [...channels].map(([index,change])=>[outputRow(index),change]);
   const asset = stable
-    ? { format:SplatFit.format, version:2, scene:SplatFit.sceneId(world), target,
-      edits:merged.map(([index,scale]) => [ids.idAt(index),scale]) }
-    : { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits:merged };
-  if (attributes?.length) asset.attributes=attributes;
+    ? { format:SplatFit.format, version:2, scene:SplatFit.sceneId(world), target, edits }
+    : { format:SplatFit.format, version:1, rows:world.count, signature:bake, edits };
+  if (attributes.length) asset.attributes=attributes;
   SplatFit.prepare(world,asset);
   return asset;
 }
@@ -306,7 +315,7 @@ function apply(frame, edit, route, context, readMarks) {
   context.onSource?.(source.sourceRevision,source);
   checkRevision(binding,source,edit.sourceRevision);
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
-  if (destination.kind === 'splat-attributes') return splats(edit,binding,source.world,source.revision,context.onSplat);
+  if (destination.kind === 'splat-attributes') return splats(frame,edit,binding,source.world,source.revision,context.onSplat);
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
     edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
   return solidEdit(change,destination,binding,source.editor,frame);
@@ -321,13 +330,17 @@ function targets(route, context, limit) {
   if (world) {
     const ids = Provenance.identities(world,{ fresh:true }), { row } = Targets.index(world), scope = sceneTarget(binding);
     const rest = world.rest ?? world.data, splats = [];
+    const editing = destination.kind === 'splat-attributes';
+    const fit = editing && SplatFit.prepare(world,world.look?.splatFit);
     let count = 0;
     for (let i = 0; i < world.count; i++) {
       const id = ids.idAt(i);
       if (!id || !Targets.objectScope(scope,row(i)) ||
-          destination.kind === 'splat-attributes' && !SplatFit.eligible(world,i)) continue;
+          editing && !SplatFit.eligible(world,i)) continue;
       count++;
-      if (splats.length < limit) splats.push({ id, at:Array.from(rest.subarray(i*16,i*16+3)) });
+      if (splats.length < limit) splats.push({ id, at:Array.from(rest.subarray(i*16,i*16+3)),
+        ...(editing && {pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
+          coverage:fit?.coverage?.[i]??1,footprintScale:fit?.[i]??1}) });
     }
     return { destination:destination.id, binding, revision, sourceRevision, count, splats };
   }

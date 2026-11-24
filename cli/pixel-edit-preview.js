@@ -44,6 +44,9 @@ function sourceChanges(scene, before, after) {
 
 function sourceTarget({ destination,binding,layer }, patch) {
   if (!binding) return;
+  const splats = destination.kind === 'splat-attributes' && Array.isArray(patch.operation?.splats) ? patch.operation.splats : null;
+  const channels = splats?.filter(row=>row && (row.pigment!==undefined || row.coverage!==undefined))
+    .map(({splat,pigment,coverage})=>({splat,...(pigment!==undefined&&{pigment}),...(coverage!==undefined&&{coverage})}));
   return {
     id:patch.id, destination:destination.id, kind:destination.kind,
     scene:binding.scene, binding:binding.id, object:binding.object,
@@ -53,9 +56,8 @@ function sourceTarget({ destination,binding,layer }, patch) {
     ...(destination.kind === 'shot-correction' && Array.isArray(patch.edits) && {
       frame:patch.frame, pixels:patch.edits.map(edit => ({ at:edit?.at, from:edit?.from, to:edit?.to }))
     }),
-    ...(destination.kind === 'splat-attributes' && Array.isArray(patch.operation?.splats) && {
-      splats:patch.operation.splats.map(change => change?.splat)
-    })
+    ...(splats && {splats:splats.map(change=>change?.splat)}),
+    ...(channels?.length && {channels})
   };
 }
 

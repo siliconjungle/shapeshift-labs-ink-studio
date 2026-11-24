@@ -53,6 +53,9 @@ Each reference is an approved native-grid PNG. Its alpha is the desired coverage
 
 The solver compares real native renders. It proposes footprint changes around boundaries, gaps and protected details, scores them across the fitting views, and tries omitting rows with low impact. Holdout views serve as acceptance checks. The JSON includes per-view coverage and protected-color errors, the number of modified and omitted splats, and the source bake signature. Keep the asset with the scene and seed that produced it. The edits preserve row identities and can be bypassed with `--splat-fit off`. Use `--sdf-assist posed` to use solid geometry and the fitted pigment together.
 
+Use [independent pigment and coverage edits](pixel-art-authoring.md#edit-splat-pigment-and-coverage-independently)
+to make targeted changes after a fit.
+
 ### Fit the edge and interior independently
 
 Set `search` in the plan to enable the channel-based fitter. The edge pass

@@ -2099,7 +2099,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `raster` | `edits` with `at`, `layer`, `from`, and `to` | Revised pixel document, with the new cel on the chosen frame |
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
-| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and either `footprintScale` or `visible` per splat | Splat-fit asset for `render --splat-fit` |
+| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and any of `pigment`, `coverage`, `footprintScale`, or `visible` | Splat-fit asset for `render --splat-fit` |
 | `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
@@ -2131,8 +2131,9 @@ node cli/ink-studio.js pixel-art targets document.json \
   --destination edge-splats --scene gate.json --limit 12
 ```
 
-`targets` reports stable splat IDs and rest positions for the bound object or
-part. Copy the reported `id` into `operation.splats[].splat`. A fit with
+`targets` reports stable splat IDs, rest positions, stored pigment, and
+coverage and footprint scales for the bound object or part. Copy the
+reported `id` into `operation.splats[].splat`. A fit with
 stable targets resolves those IDs at render time and rejects missing or
 ambiguous matches. Older fits that use row numbers remain tied to their bake.
 
@@ -2143,6 +2144,57 @@ a named object, Ink can derive an ID from the owner, part, and exact rest
 position. If resampling moves or retires the sample, inspect the new source
 before targeting it again. Coincident samples with an ambiguous derived ID
 need authored IDs for individual edits.
+
+### Edit splat pigment and coverage independently
+
+Use a `splat-attributes` destination to recolor a set of splats without
+changing their coverage, or to trim a shape while keeping its pigment.
+List the source IDs from `pixel-art targets`. For example, this
+`operation` recolors two splats and softens the contribution of another.
+
+```json
+{
+  "splats": [
+    { "splat": "gate-enamel-a", "pigment": "mint" },
+    { "splat": "gate-enamel-b", "pigment": "mint" },
+    { "splat": "gate-edge", "coverage": 0.35 }
+  ]
+}
+```
+
+`pigment` takes a pixel-document swatch ID. `pigment: null` restores
+the splat's source pigment. `coverage` multiplies the existing footprint's
+resolved alpha by a value from 0 to 1. At 0 the splat is hidden and its
+pigment remains editable. Use 1 to restore full coverage. `footprintScale`
+still resizes the footprint, and `visible` switches its footprint between
+hidden and its authored size.
+
+Omitted channels keep any earlier edits. To continue from a saved fit,
+place its JSON object at `finish.look.splatFit` in the source diorama,
+then run `targets` again for the updated source revision. A pixel editor
+session also carries the earlier edits through its ordinary undo and
+redo history. Previews and receipts identify the edited channels.
+
+```sh
+node cli/ink-studio.js pixel-art edit document.json trim.json \
+  --scene gate.json --out gate-fit.json
+node cli/ink-studio.js passes gate.json --px1 --colored --splat-fit gate-fit.json \
+  --channels coverage,pigment,depth --out gate-fit-passes
+```
+
+The software renderer applies the fit in stills and clips. The `pigment`
+pass shows the stored color of the visible opaque owner before lighting
+and palette resolve. Use `targets` to read the stored pigment even at
+zero coverage. When SDF assist is active, a body with a coverage edit
+uses native splats where its opaque proxy would fill the trim. Editing
+a cut's coverage switches that joined field to native splats. Pigment
+edits also work on traced SDF surfaces.
+
+For raster pixels, use the [coverage lock and alpha brushes](#coverage-lock-and-shading).
+For material paint on a chart, use the independent
+[`pigment` and `opacity` channels](#paint-individual-material-channels).
+
+### Target shot corrections and scene sources
 
 For a shot correction, pass the
 native anchor's `splat`, optional `offset` and `depthOffset`, and the grid
