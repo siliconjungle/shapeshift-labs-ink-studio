@@ -72,12 +72,23 @@
     const raw = V.cross(u, v), length = V.len(raw);
     if (!length) throw new RangeError('Dissolve needs a stable face plane');
     const normal = V.mul(raw, 1 / length);
+    const channels = [...new Set(corners.flatMap(corner => Object.keys(g.vertices.get(corner.vertex).weights ?? {})))];
+    const weight = (corner, channel) => {
+      const weights = g.vertices.get(corner.vertex).weights ?? {};
+      return Object.hasOwn(weights, channel) ? weights[channel] : 0;
+    };
     for (const corner of corners) {
       const d = V.sub(pos(corner), origin);
       if (Math.abs(V.dot(d, normal)) > tolerance) throw new RangeError('Dissolve would remove a geometric crease');
       const x = V.dot(V.cross(d, v), normal) / length, y = V.dot(V.cross(u, d), normal) / length;
       const uv = a.uv.map((n, i) => n + x * (b.uv[i] - n) + y * (c.uv[i] - n));
       if (!sameUV(corner.uv, uv)) throw new RangeError('Dissolve would change the face UV interpolation');
+      for (const channel of channels) {
+        const start = weight(a, channel);
+        const expected = start + x * (weight(b, channel) - start) + y * (weight(c, channel) - start);
+        if (Math.abs(weight(corner, channel) - expected) > 1e-6)
+          throw new RangeError('Dissolve would change weight interpolation for ' + channel);
+      }
     }
   }
 

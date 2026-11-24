@@ -254,7 +254,7 @@ report and lists ordered `operations`. Choose IDs from that report or
 | Operation | Required inputs and behavior |
 | --- | --- |
 | `weld` | Supply a vertex `keep` ID, a `remove` list, and `maxDistance` from the keeper. Retains the keeper position and the surviving corner UVs. Set `removeCollapsed` to explicitly remove faces the weld collapses. |
-| `dissolve` | Supply an `edge` shared by two faces and optionally the face ID to `keep`. The faces must share a plane, material and affine UV mapping. Optional `tolerance` sets the plane distance threshold. |
+| `dissolve` | Supply an `edge` shared by two faces and optionally the face ID to `keep`. The faces must share a plane, material, affine UV mapping and, where present, affine weight interpolation. Optional `tolerance` sets the plane distance threshold. |
 | `winding` | Supply an `anchor` face to orient its manifold neighbors relative to its winding, or a `faces` list to reverse explicitly. |
 
 A vertex can retain a `weights` object with named values in [0, 1].

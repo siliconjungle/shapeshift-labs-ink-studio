@@ -119,6 +119,8 @@ test('repair receipts retain corner UV seams, state weight policy and trace a di
   const changed = api.edit(doc, { faces: [{ ...doc.faces[3],
     corners: doc.faces[3].corners.map((row, i) => i === 2 ? { ...row, uv: [.2, 1] } : row) }] });
   assert.throws(() => plan(changed, { kind: 'dissolve', edge }), /UV interpolation/);
+  const weighted = api.edit(doc, { vertices: [{ id: 'l', position: [3, 1, 0], weights: { hinge: 1 } }] });
+  assert.throws(() => plan(weighted, { kind: 'dissolve', edge }), /weight interpolation.*hinge/);
   const creased = api.edit(doc, { vertices: [{ id: 'l', position: [3, 1, .2] }] });
   assert.throws(() => plan(creased, { kind: 'dissolve', edge }), /geometric crease/);
 });
