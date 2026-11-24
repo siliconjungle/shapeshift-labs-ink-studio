@@ -190,6 +190,7 @@
       })
     );
   K.pixelStamps = PixelStamps;
+  K.pixelGuides = PixelGuides;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,
     atlas: AtlasSprites.compile,

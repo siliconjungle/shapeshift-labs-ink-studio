@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const { isDeepStrictEqual:equal } = require('node:util');
 const { paint, image:stampImage } = require('../src/pixel-stamps.js');
+const PixelGuides = require('../src/pixel-guides.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
 const files = require('./asset-files.js');
@@ -70,9 +71,9 @@ function documentShape(design) {
     throw new RangeError('Pixel art needs a native grid, a palette and up to 64 bounded layers');
   if (design.version === 1) return;
 
-  const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,legacyMetadata } = design;
+  const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,guides,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations','legacyMetadata']))
+    'selections','protectedDetails','sceneBindings','destinations','guides','legacyMetadata']))
     throw new TypeError('Unknown pixel document field');
   if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
   if (!Array.isArray(pixelAspect) || pixelAspect.length !== 2 ||
@@ -104,6 +105,7 @@ function documentShape(design) {
   }
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   namedRegions(protectedDetails,'Protected pixel details',width,height,frameIds);
+  PixelGuides.prepare(guides,frameIds);
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
   for (const binding of sceneBindings) {
@@ -219,7 +221,8 @@ function compileFrame(design, frame, revision, palette) {
     if (detail.frame !== undefined && detail.frame !== frame.id) continue;
     for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
   }
-  return { ...raster, cels, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice() };
+  return { ...raster, cels, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice(),
+    ...(design.guides && { guides:PixelGuides.active(design.guides,frame.id) }) };
 }
 
 function compile(design, frameId, targetCel) {
@@ -259,6 +262,7 @@ function validate(design) {
     pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
       id:frame?.id ?? null, durationMs:frame?.durationMs ?? null, ...(frame?.label !== undefined && { label:frame.label })
     })), ...(identities && { identities }),
+    ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
 
@@ -367,11 +371,13 @@ function edit(design, frame, patch, context) {
   const revision = fingerprint(design);
   if (frame.revision !== revision) throw Preview.conflict('stale-document','Pixel edit revision no longer matches the document',
     { expected:frame.revision, actual:revision });
-  if (design.version === 2 && patch.frame !== frame.id && (patch.frame !== undefined || patch.cel === undefined))
-    throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   const route = Destinations.resolve(design,patch.destination);
+  if (design.version === 2 && patch.frame !== frame.id &&
+      (patch.frame !== undefined || (patch.cel === undefined && route.destination.kind !== 'guides')))
+    throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
     throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
+  if (route.destination.kind === 'guides') return editGuides(design,patch);
   if (route.destination.kind !== 'raster') {
     if (patch.cel !== undefined) throw new TypeError('A cel ID is a raster edit target');
     if (!context) throw new TypeError('Scene edit needs a scene context');
@@ -404,6 +410,25 @@ function edit(design, frame, patch, context) {
     : { ...design, layers:[...design.layers,{ id:patch.id }], frames:design.frames.map(item =>
       item.id === frame.id ? { ...item, cels:{ ...item.cels, [patch.id]:{ marks } } } : item) };
   compile(revised,frame.id);
+  return revised;
+}
+
+function editGuides(design,patch) {
+  const operation = patch.operation;
+  if (patch.cel !== undefined || patch.edits !== undefined || !fields(operation,['upsert','remove']))
+    throw new TypeError('A guide edit needs an upsert or remove operation');
+  const { upsert = [], remove = [] } = operation;
+  const changes = PixelGuides.prepare(upsert,new Set(design.frames.map(frame => frame.id)));
+  if (!Array.isArray(remove) || !Array.from(remove).every(name) || new Set(remove).size !== remove.length ||
+      changes.some(guide => remove.includes(guide.id)) || !changes.length && !remove.length)
+    throw new TypeError('Guide edits need unique IDs and may update or remove each guide once');
+  const guides = new Map((design.guides ?? []).map(guide => [guide.id,guide]));
+  for (const id of remove) {
+    if (!guides.delete(id)) throw Preview.conflict('missing-guide','Unknown pixel guide ' + id,{ guide:id });
+  }
+  for (const guide of changes) guides.set(guide.id,guide);
+  const revised = { ...design, guides:[...guides.values()] };
+  documentShape(revised);
   return revised;
 }
 
@@ -455,6 +480,9 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
       target = { destination:destination.id, kind:'raster', frame:command.frame, layer,
         cel:frame.id === undefined ? null : patch.cel ?? frame.id+'/'+layer,
         pixels:patch.edits.map(({ at }) => at) };
+    } else if (destination.kind === 'guides') {
+      target = { destination:destination.id, kind:destination.kind, guides:Preview.guideChanges(design.guides,result.guides)
+        .map(({ id,change }) => ({ id,change })) };
     } else if (destination.kind === 'shot-correction') {
       target.anchor = splats[0];
       shotHits = { status:'deferred-to-render' };
@@ -537,7 +565,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
         return { editor:fork, revision };
       }
     });
-    if (route.destination.kind === 'raster') candidate = output;
+    if (!route.binding) candidate = output;
     if (source) sources.push(...Preview.sourceChanges(source.scene,source.before,source.fork.snapshot()));
   } catch (error) {
     issues = Preview.conflicts(error);
@@ -690,7 +718,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       const next = { ...draft, receipts:[...draft.receipts,receipt] };
       if (expected && binding && request.sourceRevision === undefined)
         next.verifiedReplays = [...draft.verifiedReplays,draft.receipts.length];
-      if (destination.kind === 'raster') Object.assign(next,{ design:result, legacyRevision:null });
+      if (!binding) Object.assign(next,{ design:result, legacyRevision:null });
       const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit' }[destination.kind];
       if (option) next.renderOutputs = { ...draft.renderOutputs,
         [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
@@ -746,6 +774,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     serialize: (space = 2) => JSON.stringify(state().design,null,space),
     describe: () => validate(state().design),
     inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
+    snap: (coordinate,{ frame,radius } = {}) => snapPoint(compile(state().design,frame),coordinate,radius),
     stamp: ({ frame,cel } = {}) => stamp(compile(state().design,frame,cel)),
     renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
     targets(destination,options = {}) {
@@ -798,8 +827,23 @@ function stamp(frame) {
   return {
     width:frame.width, height:frame.height, origin:'top-left',
     palette:frame.colors.map(color=>'#'+color.toString(16).padStart(6,'0')),
-    slots:Array.from(frame.slots,n=>n < 0 ? null : n)
+    slots:Array.from(frame.slots,n=>n < 0 ? null : n),
+    ...(frame.guides?.length && { guides:structuredClone(frame.guides) })
   };
+}
+
+function snapPoint(frame,point,radius) {
+  const { width,height,guides = [] } = frame;
+  return { revision:frame.revision, ...frameMetadata(frame), input:point,
+    ...PixelGuides.snap(guides,point,{ width,height,radius }) };
+}
+
+function snapOptions(opt) {
+  const parts = typeof opt.at === 'string' ? opt.at.split(',') : [];
+  if (parts.length !== 2 || parts.some(part => !part.trim())) throw new TypeError('Use --at x,y for guide snapping');
+  const radius = typeof opt.radius === 'string' && opt.radius.trim() ? Number(opt.radius)
+    : opt.radius === undefined ? undefined : NaN;
+  return { point:parts.map(Number), radius };
 }
 
 function draw(frame,directory) {
@@ -822,12 +866,14 @@ function canvasReview(design,frameId,file) {
   const chosen = frameId === undefined ? frames : frames.filter(frame => frame.id === frameId);
   const deck = chosen.map(frame => {
     const { width,height,rgba } = stampImage(stamp(compileFrame(design,frame,revision,palette)));
-    return { label:frame?.label ?? frame?.id ?? 'Drawing', png:PNG.encode(width,height,rgba,4).toString('base64') };
+    return { label:frame?.label ?? frame?.id ?? 'Drawing', png:PNG.encode(width,height,rgba,4).toString('base64'),
+      guides:design.version === 2 ? PixelGuides.active(design.guides,frame.id) : [] };
   });
   const template = fs.readFileSync(path.join(__dirname,'pixel-grid-review.html'),'utf8');
   const browserSource = ext => fs.readFileSync(path.join(__dirname,'../src/pixel-grid-canvas.'+ext),'utf8');
   const data = JSON.stringify(deck).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
+    .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
     .replace('/*PIXEL_GRID_DATA*/',() => data));
 }
@@ -862,9 +908,9 @@ function trace(frame, object, scene) {
 function command(pos,opt,outputFile,{ capture, world, scene }) {
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
-  if (!['trace','upgrade','validate','targets','draw','canvas','inspect','preview','edit','replay'].includes(action) ||
+  if (!['trace','upgrade','validate','targets','draw','canvas','inspect','snap','preview','edit','replay'].includes(action) ||
       pos.length !== (writing || action === 'preview' ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, canvas, inspect, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, upgrade, validate, targets, draw, canvas, inspect, snap, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -946,6 +992,11 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const frame = compile(design,opt.frame);
+  if (action === 'snap') {
+    const { point,radius } = snapOptions(opt);
+    process.stdout.write(JSON.stringify(snapPoint(frame,point,radius),null,2)+'\n');
+    return;
+  }
   if (action === 'inspect') {
     const coordinate = /^\d+,\d+$/.test(opt.at ?? '') ? opt.at.split(',').map(Number) : null;
     if (!at(frame.width,frame.height,coordinate)) throw new RangeError('Use --at x,y inside the native grid');
@@ -971,8 +1022,8 @@ function sessionCommand(pos,opt,{ scene }) {
   const [action,directory,input] = pos;
   const argc = ['init','apply'].includes(action) ? 3 : 2;
   if (pos.length !== argc || !['init','status','begin','apply','preview','commit','cancel','undo','redo',
-    'inspect','targets','export'].includes(action))
-    throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, targets, or export');
+    'inspect','snap','targets','export'].includes(action))
+    throw new TypeError('Use pixel-art session init, status, begin, apply, preview, commit, cancel, undo, redo, inspect, snap, targets, or export');
 
   let editor, result;
   if (action === 'init') {
@@ -1006,6 +1057,9 @@ function sessionCommand(pos,opt,{ scene }) {
     } else if (action === 'inspect') {
       if (!/^\d+,\d+$/.test(opt.at ?? '')) throw new TypeError('Use --at x,y inside the native grid');
       result = editor.inspect(opt.at.split(',').map(Number),{ frame:opt.frame, cel:opt.cel });
+    } else if (action === 'snap') {
+      const { point,radius } = snapOptions(opt);
+      result = editor.snap(point,{ frame:opt.frame, radius });
     } else if (action === 'targets') {
       if (!reference(opt.destination)) throw new TypeError('--destination needs a destination ID');
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;

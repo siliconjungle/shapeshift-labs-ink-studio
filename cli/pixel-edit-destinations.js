@@ -39,7 +39,8 @@ function validate(destinations, bindings) {
 
 function resolve(design, name = 'raster') {
   const destination = (design.version === 2 && design.destinations?.find(target => target.id === name)) ||
-    (name === 'raster' && { id:'raster', kind:'raster' });
+    (name === 'raster' && { id:'raster', kind:'raster' }) ||
+    (design.version === 2 && name === 'guides' && { id:'guides', kind:'guides' });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);
   return { destination, binding };

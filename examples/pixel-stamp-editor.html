@@ -38,6 +38,10 @@
   .canvas-size { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
   .canvas-size label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
   .canvas-size input { width:65px; color:#e6eeea; }
+  .guide-controls { display:grid; gap:9px; }
+  .guide-controls > label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
+  .guide-controls select { max-width:100%; color:#e6eeea; }
+  .guide-controls [hidden] { display:none; }
   @media(max-width:780px) { .layout { grid-template-columns:1fr; } aside { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); } }
 </style>
 <main>
@@ -81,6 +85,29 @@
           <label>Width<input type="number" id="canvas-width" min="1" max="512" step="1" required></label>
           <label>Height<input type="number" id="canvas-height" min="1" max="512" step="1" required></label>
           <button type="submit">Resize</button>
+        </form>
+      </section>
+      <section>
+        <h2>Guides</h2>
+        <form class="guide-controls" id="guide-form">
+          <label>Guide<select id="guide-item"></select></label>
+          <label>Type<select id="guide-type">
+            <option value="grid">Grid origin</option><option value="axis-x">Vertical axis</option>
+            <option value="axis-y">Horizontal axis</option><option value="pivot">Pivot</option>
+            <option value="registration">Registration</option>
+          </select></label>
+          <label>Applies to<select id="guide-scope">
+            <option value="all">All frames</option><option value="frame">Current frame</option>
+          </select></label>
+          <div class="canvas-size">
+            <label id="guide-x-label">X<input type="number" id="guide-x" min="-8192" max="8192" step=".5" value="0"></label>
+            <label id="guide-y-label">Y<input type="number" id="guide-y" min="-8192" max="8192" step=".5" value="0"></label>
+          </div>
+          <div class="canvas-size" id="guide-steps">
+            <label>Step X<input type="number" id="guide-step-x" min="1" max="8192" step="1" value="8"></label>
+            <label>Step Y<input type="number" id="guide-step-y" min="1" max="8192" step="1" value="8"></label>
+          </div>
+          <div class="row"><button type="submit">Save guide</button><button type="button" id="guide-remove">Remove</button></div>
         </form>
       </section>
       <section>

@@ -23,6 +23,64 @@ frames. Use `--frame <id>` to export a single frame. The HTML is a review
 artifact. Use the pixel editor API for document edits or the
 [Pixel Stamp Workshop](pixel-stamps.md) to draw and resize exported stamps.
 
+## Register frames and align texture pixels
+
+Version 2 documents can carry a top-level `guides` list. Guide IDs are
+stable. A guide with `frame` applies to that frame. A guide without
+`frame` applies to every frame.
+
+```json
+[
+  { "id": "tile", "kind": "grid", "at": [2, 3], "step": [8, 6] },
+  { "id": "center", "kind": "axis", "axis": "x", "at": 12.5 },
+  { "id": "stance", "kind": "pivot", "at": [12.5, 20] },
+  { "id": "step-contact", "kind": "registration", "at": [15, 20], "frame": "step" }
+]
+```
+
+Coordinates start at the upper left. An `"x"` axis is a vertical line at a
+fixed column, and a `"y"` axis is horizontal. Axes, pivots, and registration
+points accept whole and half pixels. A grid repeats from its integer origin
+with an independent step on each axis. Its lines mark the leading edges of
+tile cells. Point markers and axes use pixel centers. Guides can extend
+beyond the canvas. Snap targets are limited to points on the editable grid.
+The 1× preview and rendered artwork stay free of overlays.
+
+```sh
+node cli/ink-studio.js pixel-art snap document.json --frame step --at 14.6,19.8 --radius 1
+node cli/ink-studio.js pixel-art session snap gate-session --frame step --at 14.6,19.8
+```
+
+The SDK equivalent is `pixels.snap([14.6, 19.8], { frame: 'step', radius: 1 })`.
+The report gives the precise `position`, raster coordinate `at`, and the IDs
+that won in `hits`. Within the radius, the nearest pivot or registration
+point takes precedence. Otherwise each axis snaps independently. A fixed
+axis wins a distance tie with a grid line, followed by guide ID and lower
+coordinate. A half-pixel raster result rounds toward the larger coordinate.
+Use `at` and the reported document revision when preparing the pixel patch.
+
+Edit guides with the `guides` destination. An upsert creates a guide or
+replaces the guide with the same ID. Removal takes guide IDs. These edits
+use the same preview, edit receipt, undo, and recovery paths as pixel edits.
+
+```json
+{
+  "id": "align-contact",
+  "revision": "<current document revision>",
+  "destination": "guides",
+  "operation": {
+    "upsert": [{ "id": "step-contact", "kind": "registration", "at": [14, 20], "frame": "step" }],
+    "remove": ["obsolete-contact"]
+  }
+}
+```
+
+The offline canvas shows the active guides as you switch frames. Toggle
+**Guides** to hide the overlays and **Snap** to enable pointer snapping.
+The cursor readout names a guide when it catches the pointer. Exporting a
+stamp copies the selected frame's active guides so it keeps its alignment
+references in the Workshop and other stamp tooling.
+
 ## Author a drawing
 
 ```json

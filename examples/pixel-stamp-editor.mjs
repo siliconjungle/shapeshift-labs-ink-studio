@@ -1,11 +1,12 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
-const stamp = KIT.pixelStamps;
+const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, fill, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
-const view = mountPixelGridCanvas($('canvas-view')), art = view.canvas;
+const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer;
+let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const notify = message => { $('status').textContent = message; };
 const saveUndo = () => {
@@ -54,6 +55,7 @@ function draw() {
   const { width, height, palette } = state.doc;
   const current = state.doc.frames[state.frame];
   view.setFrame(stamp.image({ width,height,palette,slots:frameSlots(current) }));
+  drawGuides(current);
   const count = state.doc.frames.length;
   $('scrub').max = count;
   $('scrub').value = state.frame+1;
@@ -109,10 +111,108 @@ function commitStroke() {
   if (!state.points.length) return;
   const current = state.doc.frames[state.frame], slots = frameSlots(current);
   edit(() => {
-    state.doc.frames[state.frame] = { slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
+    const { rows,strokes,...frame } = current;
+    state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
     state.points = [];
   });
 }
+
+const guideMode = guide => guide.kind === 'axis' ? 'axis-' + guide.axis : guide.kind;
+const guideLabels = { grid:'Grid origin', 'axis-x':'Vertical axis', 'axis-y':'Horizontal axis',
+  pivot:'Pivot', registration:'Registration' };
+const selectedGuide = () => guideItems.find(({ guide }) => guide.id === $('guide-item').value);
+
+function guideFields() {
+  const mode = $('guide-type').value;
+  $('guide-x-label').hidden = mode === 'axis-y';
+  $('guide-y-label').hidden = mode === 'axis-x';
+  $('guide-steps').hidden = mode !== 'grid';
+  $('guide-x').disabled = mode === 'axis-y';
+  $('guide-y').disabled = mode === 'axis-x';
+  $('guide-step-x').disabled = $('guide-step-y').disabled = mode !== 'grid';
+}
+
+function selectGuide() {
+  const item = selectedGuide();
+  $('guide-remove').disabled = !item;
+  $('guide-scope').disabled = !!item;
+  if (item) {
+    const { guide,scope } = item, mode = guideMode(guide);
+    $('guide-type').value = mode;
+    $('guide-scope').value = scope;
+    if (mode !== 'axis-y') $('guide-x').value = mode === 'axis-x' ? guide.at : guide.at[0];
+    if (mode !== 'axis-x') $('guide-y').value = mode === 'axis-y' ? guide.at : guide.at[1];
+    if (guide.step) [$('guide-step-x').value,$('guide-step-y').value] = guide.step;
+  }
+  guideFields();
+}
+
+function drawGuides(frame) {
+  if (sharedGuides === state.doc.guides && frameGuides === frame.guides && $('guide-item').options.length) return;
+  sharedGuides = state.doc.guides;
+  frameGuides = frame.guides;
+  guideItems = [
+    ...(sharedGuides ?? []).map(guide => ({ guide,scope:'all' })),
+    ...(frameGuides ?? []).map(guide => ({ guide,scope:'frame' }))
+  ];
+  view.setGuides(guideItems.map(({ guide }) => guide));
+  const select = $('guide-item'), previous = select.value;
+  select.replaceChildren(new Option('New guide',''),...guideItems.map(({ guide,scope }) => {
+    const name = guide.label ?? `${guideLabels[guideMode(guide)]} ${[guide.at].flat().join(', ')}`;
+    return new Option(name + (scope === 'frame' ? ' · this frame' : ' · all frames'),guide.id);
+  }));
+  if (guideItems.some(({ guide }) => guide.id === previous)) select.value = previous;
+  selectGuide();
+}
+
+function saveGuides(scope,list) {
+  guideTool.prepare(scope === 'all' ? list : [...(sharedGuides ?? []),...list]);
+  if (scope === 'all') {
+    for (const frame of state.doc.frames)
+      if (frame.guides?.length) guideTool.prepare([...list,...frame.guides]);
+  }
+  edit(() => {
+    const target = scope === 'all' ? state.doc : state.doc.frames[state.frame];
+    target.guides = list;
+    state.points = [];
+  });
+}
+
+function guideId(kind) {
+  const ids = new Set([...(sharedGuides ?? []),...state.doc.frames.flatMap(frame => frame.guides ?? [])]
+    .map(guide => guide.id));
+  let n = 1;
+  while (ids.has(kind+'-'+n)) n++;
+  return kind+'-'+n;
+}
+
+$('guide-type').addEventListener('change',guideFields);
+$('guide-item').addEventListener('change',selectGuide);
+$('guide-form').addEventListener('submit',event => {
+  event.preventDefault();
+  try {
+    const item = selectedGuide(), scope = item?.scope ?? $('guide-scope').value;
+    const mode = $('guide-type').value, kind = mode.startsWith('axis-') ? 'axis' : mode;
+    const x = $('guide-x').valueAsNumber, y = $('guide-y').valueAsNumber;
+    const axis = kind === 'axis' ? mode.slice(-1) : undefined;
+    const id = item?.guide.id ?? guideId(kind);
+    const guide = { id,kind,at:axis === 'x' ? x : axis === 'y' ? y : [x,y],
+      ...(item?.guide.label && { label:item.guide.label }), ...(axis && { axis }),
+      ...(kind === 'grid' && { step:[$('guide-step-x').valueAsNumber,$('guide-step-y').valueAsNumber] }) };
+    const guides = (scope === 'all' ? sharedGuides : frameGuides) ?? [];
+    saveGuides(scope,item ? guides.map(old => old.id === id ? guide : old) : [...guides,guide]);
+    $('guide-item').value = id;
+    selectGuide();
+    notify('Saved guide ' + id);
+  } catch (error) { notify(error.message); }
+});
+$('guide-remove').addEventListener('click',() => {
+  const item = selectedGuide();
+  if (!item) return;
+  const guides = item.scope === 'all' ? sharedGuides : frameGuides;
+  saveGuides(item.scope,guides.filter(guide => guide.id !== item.guide.id));
+  notify('Removed guide ' + item.guide.id);
+});
 
 function resizeCanvas(width,height) {
   const doc = state.doc;

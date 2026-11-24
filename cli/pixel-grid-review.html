@@ -24,9 +24,10 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
   <p id="error" role="status" hidden></p>
 </main>
 <script type="module">
+/*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
 const frames = /*PIXEL_GRID_DATA*/;
-const view = mountPixelGridCanvas(document.querySelector('#canvas'));
+const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
 let request = 0;
@@ -42,6 +43,7 @@ async function draw() {
     context.drawImage(image,0,0);
     view.setFrame({ width:scratch.width, height:scratch.height,
       rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
+    view.setGuides(frame.guides);
     status.hidden = true;
   } catch (error) {
     if (serial !== request) return;

@@ -102,12 +102,41 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(await raster(browser,preview,24,24),[39,58,71,255]);
     assert.deepEqual(await raster(browser,preview,71,61),[0,0,0,0]);
     assert.equal(await browser.evaluate("document.querySelector('#duration').value"),'0.375');
-    await browser.evaluate(`const scrub = document.querySelector('#scrub'); scrub.value=1;
-      scrub.dispatchEvent(new Event('input'));`);
+    const firstFrame = () => evaluate(browser,() => {
+      const scrub = document.querySelector('#scrub');
+      scrub.value = 1;
+      scrub.dispatchEvent(new Event('input'));
+    });
+    await firstFrame();
     assert.deepEqual(await raster(browser,preview,24,24),[0,0,0,0]);
     await click(browser,'#undo');
     assert.deepEqual([(await screen(browser,main)).width,(await screen(browser,preview)).width],[48,48]);
     assert.deepEqual(await raster(browser,preview,24,24),[39,58,71,255]);
+
+    await browser.evaluate(`const type = document.querySelector('#guide-type');
+      type.value='pivot'; type.dispatchEvent(new Event('change'));
+      document.querySelector('#guide-scope').value='frame';
+      document.querySelector('#guide-x').value='24';
+      document.querySelector('#guide-y').value='25';
+      document.querySelector('#guide-form button[type="submit"]').click();`);
+    assert.equal(await browser.evaluate("document.querySelector('.ink-guide-pivot')?.dataset.guide"),'pivot-1');
+    await click(browser,'[data-view="snap"]');
+    const placed = place(await screen(browser,main),23.35,25);
+    await mouse('mouseMoved',placed);
+    await until(browser,"document.querySelector('.ink-grid-coordinates').value === 'X 24 · Y 25 · pivot-1'");
+    await mouse('mousePressed',placed,{ button:'left',buttons:1,clickCount:1 });
+    await mouse('mouseReleased',placed,{ button:'left',clickCount:1 });
+    assert.deepEqual(await raster(browser,preview,23,25),[0,0,0,0]);
+    assert.deepEqual(await raster(browser,preview,24,25),[39,58,71,255]);
+    await click(browser,'[data-view="in"]');
+    const center = place(await screen(browser,main),24,25);
+    const mark = await browser.evaluate(`(() => {
+      const box = document.querySelector('.ink-guide-pivot').getBoundingClientRect();
+      return { x:box.x+box.width/2, y:box.y+box.height/2 };
+    })()`);
+    assert.deepEqual(mark,center);
+    await firstFrame();
+    assert.equal(await browser.evaluate("document.querySelector('.ink-guide-toggles').hidden"),true);
   });
 });
 
@@ -117,7 +146,8 @@ test('the CLI exports an offline native canvas with both views on the selected v
     palette:{ warm:'#ac421d',cool:'#216286' },layers:[{ id:'paint' }],frames:[
       { id:'front',label:'Front',durationMs:100,cels:{ paint:{ marks:[{ at:[1,2],swatch:'warm' }] } } },
       { id:'side',label:'Side',durationMs:200,cels:{ paint:{ marks:[{ at:[1,2],swatch:'cool' }] } } }
-    ] };
+    ],guides:[{ id:'tile',kind:'grid',at:[0,1],step:[4,3] },
+      { id:'front-pin',kind:'registration',at:[3,4],frame:'front' }] };
   fs.writeFileSync(input,JSON.stringify(versioned));
   const args = ['cli/ink-studio.js','pixel-art','canvas',input,'--out',file];
   execFileSync(process.execPath,args,{ cwd:root });
@@ -127,11 +157,14 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.deepEqual(await raster(browser,main,1,2),[172,66,29,255]);
     assert.deepEqual(await raster(browser,preview,1,2),[172,66,29,255]);
     assert.deepEqual(await raster(browser,preview,0,0),[0,0,0,0]);
+    assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=front-pin]'))"),true);
     await browser.evaluate(`document.querySelector('#frames').selectedIndex = 1;
       document.querySelector('#frames').dispatchEvent(new Event('change'));`);
     await until(browser,"document.querySelector('.ink-grid-main').getContext('2d').getImageData(1,2,1,1).data[0] === 33");
     assert.deepEqual(await raster(browser,preview,1,2),[33,98,134,255]);
     assert.equal((await screen(browser,preview)).w,8);
+    assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=front-pin]'))"),false);
+    assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=tile]'))"),true);
     execFileSync(process.execPath,[...args,'--frame','side'],{ cwd:root });
     await browser.send('Page.navigate',{ url:'about:blank' });
     await load(browser,file);

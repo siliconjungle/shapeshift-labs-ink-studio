@@ -51,7 +51,9 @@
   gap: 5px;
   margin-inline-start: auto;
 }
-.ink-grid-toggle input { accent-color: var(--ink-grid-accent); }
+.ink-grid-toggle input, .ink-guide-toggles input { accent-color: var(--ink-grid-accent); }
+.ink-guide-toggles, .ink-guide-toggles label { display: inline-flex; align-items: center; gap: 5px; }
+.ink-guide-toggles { gap: 10px; padding-inline-start: 8px; border-inline-start: 1px solid var(--ink-grid-border); }
 .ink-grid-views {
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(100px,23%);
@@ -81,7 +83,7 @@
 .ink-grid-main { cursor: crosshair; }
 .ink-grid-hand, .ink-grid-hand .ink-grid-main { cursor: grab; }
 .ink-grid-dragging, .ink-grid-dragging .ink-grid-main { cursor: grabbing; }
-.ink-grid-lines, .ink-grid-cursor { position: absolute; top: 0; left: 0; pointer-events: none; }
+.ink-grid-lines, .ink-grid-cursor, .ink-grid-guides { position: absolute; top: 0; left: 0; pointer-events: none; }
 .ink-grid-lines {
   inset: 0;
   background-image: linear-gradient(to right,#d0e1de31 1px,transparent 1px),
@@ -95,6 +97,31 @@
   border: 1px solid #eff8e8;
   box-shadow: inset 0 0 0 1px #13201d;
 }
+.ink-grid-guides { inset: 0; overflow: clip; }
+.ink-grid-guides > div {
+  position: absolute;
+  left: calc(var(--ink-grid-cell) * var(--guide-x));
+  top: calc(var(--ink-grid-cell) * var(--guide-y));
+}
+.ink-grid-guides .ink-guide-tile-grid {
+  inset: 0;
+  background-image: linear-gradient(to right,#75c6ce70 1px,transparent 1px),
+    linear-gradient(to bottom,#75c6ce70 1px,transparent 1px);
+  background-size: calc(var(--ink-grid-cell) * var(--guide-step-x)) calc(var(--ink-grid-cell) * var(--guide-step-y));
+  background-position: calc(var(--ink-grid-cell) * var(--guide-x)) calc(var(--ink-grid-cell) * var(--guide-y));
+}
+.ink-guide-axis-x { bottom: 0; border-inline-start: 1px dashed #e8d8a6; }
+.ink-guide-axis-y { right: 0; border-block-start: 1px dashed #e8d8a6; }
+.ink-guide-origin, .ink-guide-pivot, .ink-guide-registration {
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  translate: -50% -50%;
+  border: 1px solid #83d9e0;
+  box-shadow: 0 0 0 1px #101613;
+}
+.ink-guide-pivot { border-radius: 50%; border-color: #f5cd81; }
+.ink-guide-registration { rotate: 45deg; border-color: #e8aee5; }
 .ink-grid-reference {
   min-width: 0;
   padding: 12px 8px;

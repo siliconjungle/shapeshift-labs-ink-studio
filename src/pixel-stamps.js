@@ -4,6 +4,7 @@ const PixelStamps = (() => {
   const cels = typeof SpriteCels === 'undefined' ? require('./sprite-cels.js') : SpriteCels;
   const atlases = typeof AtlasSprites === 'undefined' ? require('./atlas-sprites.js') : AtlasSprites;
   const presets = typeof PixelStampPresets === 'undefined' ? require('./pixel-stamp-presets.js') : PixelStampPresets;
+  const guides = typeof PixelGuides === 'undefined' ? require('./pixel-guides.js') : PixelGuides;
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const index = value => Number.isSafeInteger(value) && value >= 0 && value < 0xfffffe;
   const colorString = value => typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value);
@@ -57,13 +58,15 @@ const PixelStamps = (() => {
         (palette !== undefined && (!Array.isArray(palette) || !palette.length ||
           !Array.from(palette).every(colorValue))))
       throw new RangeError('Pixel stamp needs valid playback and palette swatches');
+    const sharedGuides = guides.prepare(spec.guides);
     const entries = Array.from(frames ?? [{ slots, rows, strokes }], (entry, frame) => {
       if (!record(entry)) throw new TypeError('Pixel stamp frames need slots, strokes or an empty cel');
       const { duration = 1 / fps } = entry;
       const texels = paint(width, height, entry);
       if (palette && texels.some(slot => slot !== null && slot >= palette.length))
         throw new RangeError('Pixel stamp slots must be valid palette indices within its palette');
-      return { frame, duration, slots: texels };
+      const visibleGuides = entry.guides === undefined ? sharedGuides : guides.prepare([...sharedGuides,...guides.prepare(entry.guides)]);
+      return { frame, duration, slots: texels, ...(visibleGuides.length && { guides:visibleGuides }) };
     });
     const clock = cels.playback(entries, fps, playback);
     const duration = entries.reduce((sum, entry) => sum + entry.duration, 0);
@@ -118,10 +121,13 @@ const PixelStamps = (() => {
   }
 
   function buildAtlas({ width, height, entries, palette },
-      { scenePalette, paletteRoles, pivot, unitsPerPixel = 1, emissionSlots = [], yaw = 0, pitch = 0, keepSwatches = false } = {}) {
+      { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel = 1, emissionSlots = [], yaw = 0, pitch = 0, keepSwatches = false } = {}) {
     if (!Array.isArray(emissionSlots) || !Array.from(emissionSlots).every(slot => index(slot) && (!palette || slot < palette.length)))
       throw new RangeError('Pixel stamp emission slots must be valid palette indices');
     if (typeof keepSwatches !== 'boolean') throw new TypeError('Pixel stamp keepSwatches needs a boolean');
+    if (pivotGuide !== undefined && (pivot !== undefined || pivotGuide !== true &&
+        (typeof pivotGuide !== 'string' || !pivotGuide.trim())))
+      throw new TypeError('Use a sprite pivot or a pivot guide ID (or true for the sole pivot)');
     if (width > 8192 || height > 8192) throw new RangeError('Pixel stamp frames do not fit the atlas dimensions');
     const minColumns = Math.ceil(entries.length / Math.floor(8192 / height));
     const columns = Math.min(entries.length, Math.floor(8192 / width),
@@ -130,7 +136,14 @@ const PixelStamps = (() => {
     if (w < 1 || h > 8192) throw new RangeError('Pixel stamp frames do not fit the atlas dimensions');
     const emissive = new Set(emissionSlots), known = new Map();
     const color = new Uint8Array(w * h * 4), emission = emissive.size ? new Uint8Array(color.length) : undefined;
-    const frames = entries.map(({ frame, duration, slots }) => {
+    const frames = entries.map(({ frame, duration, slots, guides }) => {
+      let anchor = pivot;
+      if (pivotGuide !== undefined) {
+        const options = guides?.filter(guide => guide.kind === 'pivot' && (pivotGuide === true || guide.id === pivotGuide)) ?? [];
+        if (options.length !== 1) throw new RangeError('Expected one matching pivot guide on stamp frame ' + frame);
+        const [x,y] = options[0].at;
+        anchor = { x:x+.5,y:y+.5 };
+      }
       const x = frame % columns * width, y = Math.floor(frame / columns) * height;
       const result = raster(width, height, slots, palette, scenePalette, paletteRoles, emissive, known);
       for (let row = 0; row < height; row++) {
@@ -138,7 +151,7 @@ const PixelStamps = (() => {
         color.set(result.rgba.subarray(from, from + width * 4), to);
         if (emission) emission.set(result.emission.subarray(from, from + width * 4), to);
       }
-      return { frame, duration, rect: { x, y, width, height }, unitsPerPixel, pivot, yaw, pitch };
+      return { frame, duration, rect: { x, y, width, height }, unitsPerPixel, pivot:anchor, yaw, pitch };
     });
     const outputPalette = keepSwatches && [...new Set(known.values())];
     return atlases.compile({ metadata: { width: w, height: h, frames, emissionMode: 'baked',
@@ -195,14 +208,14 @@ const PixelStamps = (() => {
     };
   }
 
-  function place(spec, { scenePalette, paletteRoles, pivot, unitsPerPixel, emissionSlots, mode = 'card',
+  function place(spec, { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel, emissionSlots, mode = 'card',
       pitch = 0, viewYaw = 0, phase = spec?.phase ?? 0,
       playback = spec?.playback ?? 'loop', cue, offsets, keepSwatches, ...placement } = {}) {
     if (!Number.isFinite(phase)) throw new RangeError('Pixel stamp phase must be finite');
     const art = prepare(spec);
     const age = cue === undefined ? null : cueClock(cue,art.duration);
     const offsetAt = offsets === undefined ? null : pixelTrack(offsets);
-    const asset = buildAtlas(art, { scenePalette, paletteRoles, pivot, unitsPerPixel, emissionSlots, yaw: viewYaw, pitch, keepSwatches });
+    const asset = buildAtlas(art, { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel, emissionSlots, yaw: viewYaw, pitch, keepSwatches });
     const clock = asset.playback(playback);
     const elapsed = time => age ? age(time) ?? 0 : Number.isFinite(time) ? time : 0;
     const trackTime = age || playback==='once' ? elapsed : time => {

@@ -6,12 +6,17 @@ const markup = `
     <button type="button" data-view="fit">Fit</button>
     <button type="button" data-view="pan" aria-pressed="false">Pan</button>
     <label class="ink-grid-toggle"><input type="checkbox" checked> Grid</label>
+    <div class="ink-guide-toggles" hidden>
+      <label><input type="checkbox" data-view="guides" checked> Guides</label>
+      <label><input type="checkbox" data-view="snap"> Snap</label>
+    </div>
   </div>
   <div class="ink-grid-views">
     <div class="ink-grid-viewport" tabindex="0" role="group" aria-label="Canvas viewport">
       <div class="ink-grid-plane">
         <canvas class="ink-grid-main" aria-label="Native pixel canvas"></canvas>
         <div class="ink-grid-lines" aria-hidden="true" hidden></div>
+        <div class="ink-grid-guides" aria-hidden="true" hidden></div>
         <div class="ink-grid-cursor" aria-hidden="true" hidden></div>
       </div>
     </div>
@@ -28,7 +33,7 @@ const markup = `
 const maxZoom = 48;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export function mountPixelGridCanvas(host) {
+export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   host.classList.add('ink-grid-canvas');
   host.innerHTML = markup;
   const find = selector => host.querySelector(selector);
@@ -36,19 +41,52 @@ export function mountPixelGridCanvas(host) {
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
+  const guidesLayer = find('.ink-grid-guides'), guideToggles = find('.ink-guide-toggles');
+  const showGuides = find('[data-view="guides"]'), snapGuides = find('[data-view="snap"]');
   const zoomLabel = find('.ink-grid-zoom'), dimensions = find('.ink-grid-dimensions');
   const coordinates = find('.ink-grid-coordinates'), gridToggle = find('.ink-grid-toggle input');
   const zoomOut = find('[data-view="out"]'), zoomIn = find('[data-view="in"]'), panButton = find('[data-view="pan"]');
   const events = new AbortController();
   const listen = (target,type,fn,options) => target.addEventListener(type,fn,{ ...options,signal:events.signal });
   let width = 0, height = 0, zoom = 1, left = 0, top = 0, fitting = true;
-  let drag, pan = false, point, image;
+  let drag, pan = false, point, image, guides = [];
 
-  function showPoint(at) {
-    point = at;
+  function showPoint(pick) {
+    point = pick;
+    const at = pick?.at, hits = [...new Set(Object.values(pick?.hits ?? {}))];
     cursor.hidden = !at || zoom < 2;
-    coordinates.value = at ? `X ${at[0]} · Y ${at[1]}` : 'X — · Y —';
+    coordinates.value = at ? `X ${at[0]} · Y ${at[1]}${hits.length ? ' · '+hits.join(', ') : ''}` : 'X — · Y —';
     if (at) cursor.style.translate = `${at[0] * zoom}px ${at[1] * zoom}px`;
+  }
+
+  function setGuides(rows = []) {
+    guides = guideTool ? structuredClone(guideTool.prepare(rows)) : [];
+    if (!guideTool && rows.length) throw new TypeError('Mount with a guideTool to show pixel guides');
+    const document = host.ownerDocument;
+    guidesLayer.replaceChildren(...guides.flatMap(guide => {
+      function mark(kind,x,y) {
+        const node = document.createElement('div');
+        node.className = 'ink-guide-' + kind;
+        node.dataset.guide = guide.id;
+        node.style.setProperty('--guide-x',x);
+        node.style.setProperty('--guide-y',y);
+        return node;
+      }
+      if (guide.kind === 'axis') {
+        return guide.axis === 'x' ? [mark('axis-x',guide.at+.5,0)] : [mark('axis-y',0,guide.at+.5)];
+      }
+      const [x,y] = guide.at;
+      if (guide.kind === 'grid') {
+        const grid = mark('tile-grid',x,y);
+        grid.style.setProperty('--guide-step-x',guide.step[0]);
+        grid.style.setProperty('--guide-step-y',guide.step[1]);
+        return [grid,mark('origin',x,y)];
+      }
+      return [mark(guide.kind,x+.5,y+.5)];
+    }));
+    guideToggles.hidden = guides.length === 0;
+    guidesLayer.hidden = guideToggles.hidden || !showGuides.checked;
+    showPoint(null);
   }
 
   function paintView() {
@@ -96,15 +134,17 @@ export function mountPixelGridCanvas(host) {
     move(x - (x - left) * ratio,y - (y - top) * ratio);
   }
 
-  function locate(target,clientX,clientY,boundary = false) {
+  function locate(target,clientX,clientY,{ boundary = false,snap = false } = {}) {
     const box = target.getBoundingClientRect();
     if (!width || !box.width || !box.height || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
-    const x = Math.floor((clientX - box.left) * width / box.width);
-    const y = Math.floor((clientY - box.top) * height / box.height);
-    if (boundary) return [clamp(x,0,width-1),clamp(y,0,height-1)];
-    return x >= 0 && x < width && y >= 0 && y < height ? [x,y] : null;
+    const x = (clientX - box.left) * width / box.width, y = (clientY - box.top) * height / box.height;
+    if (!boundary && (x < 0 || y < 0 || x >= width || y >= height)) return null;
+    if (snap && guides.length && snapGuides.checked)
+      return guideTool.snap(guides,[x-.5,y-.5],{ width,height,radius:Math.min(2,7/zoom) });
+    return { at:[clamp(Math.floor(x),0,width-1),clamp(Math.floor(y),0,height-1)] };
   }
-  const pixelAt = (x,y,{ clamp:boundary = false } = {}) => locate(canvas,x,y,boundary);
+  const locateCanvas = (x,y,options = {}) => locate(canvas,x,y,{ snap:true,...options });
+  const pixelAt = (x,y,{ clamp:boundary = false,snap = true } = {}) => locateCanvas(x,y,{ boundary,snap })?.at ?? null;
 
   function setFrame({ width:w,height:h,rgba }) {
     if (![w,h].every(size => Number.isSafeInteger(size) && size > 0) ||
@@ -129,6 +169,8 @@ export function mountPixelGridCanvas(host) {
   listen(zoomIn,'click',() => setZoom(zoom+1));
   listen(find('[data-view="fit"]'),'click',fit);
   listen(gridToggle,'change',paintView);
+  listen(showGuides,'change',() => { guidesLayer.hidden = !showGuides.checked; });
+  listen(snapGuides,'change',() => showPoint(null));
   listen(panButton,'click',() => {
     pan = !pan;
     panButton.setAttribute('aria-pressed',String(pan));
@@ -149,7 +191,7 @@ export function mountPixelGridCanvas(host) {
     if (drag?.id === event.pointerId) {
       move(drag.left + event.clientX - drag.x,drag.top + event.clientY - drag.y);
     } else if (!drag) {
-      showPoint(pixelAt(event.clientX,event.clientY));
+      showPoint(locateCanvas(event.clientX,event.clientY));
     }
   });
   listen(viewport,'lostpointercapture',event => {
@@ -157,7 +199,7 @@ export function mountPixelGridCanvas(host) {
     drag = undefined;
     viewport.classList.remove('ink-grid-dragging');
     const at = host.ownerDocument.elementFromPoint(event.clientX,event.clientY);
-    showPoint(at === canvas ? pixelAt(event.clientX,event.clientY) : null);
+    showPoint(at === canvas ? locateCanvas(event.clientX,event.clientY) : null);
   });
   listen(viewport,'pointerleave',() => showPoint(null));
   listen(preview,'pointermove',event => showPoint(locate(preview,event.clientX,event.clientY)));
@@ -173,7 +215,7 @@ export function mountPixelGridCanvas(host) {
       fitting = false;
       move(left - event.deltaX * unit,top - event.deltaY * unit);
     }
-    showPoint(pixelAt(event.clientX,event.clientY));
+    showPoint(locateCanvas(event.clientX,event.clientY));
   },{ passive:false });
   listen(viewport,'keydown',event => {
     if (!width || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -192,6 +234,6 @@ export function mountPixelGridCanvas(host) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, setFrame, setZoom, fit, pixelAt,
+  return Object.freeze({ canvas, setFrame, setGuides, setZoom, fit, pixelAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

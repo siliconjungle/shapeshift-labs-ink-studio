@@ -63,6 +63,18 @@ function previewLimit(limit = 256) {
   return limit;
 }
 
+function guideChanges(before = [], after = []) {
+  if (before === after) return [];
+  const left = new Map(before.map(guide => [guide.id,guide])), right = new Map(after.map(guide => [guide.id,guide]));
+  const changed = [];
+  for (const id of new Set([...left.keys(),...right.keys()])) {
+    const old = left.get(id), next = right.get(id);
+    if (!equal(old,next)) changed.push({ id, change:old === undefined ? 'added' : next === undefined ? 'removed' : 'modified',
+      before:structuredClone(old ?? null), after:structuredClone(next ?? null) });
+  }
+  return changed;
+}
+
 function report({ baseline, candidate = baseline, sources = [], targets = [], issues = [],
   warnings = [], sourceRevision, compile, cell, limit }) {
   const maximum = previewLimit(limit);
@@ -94,12 +106,15 @@ function report({ baseline, candidate = baseline, sources = [], targets = [], is
       }
     }
   }
+  const guides = guideChanges(baseline.version === 2 ? baseline.guides : undefined,
+    candidate.version === 2 ? candidate.guides : undefined);
   return { format:'ink-studio/pixel-edit-preview', version:1, valid:issues.length === 0,
     ...(sourceRevision !== undefined && { sourceRevision }),
     ...(warnings.length && { warnings }),
+    ...(guides.length && { guides }),
     pixelCount, pixels, sources, targets, conflicts:issues };
 }
 
 const color = packed => packed === undefined ? null : '#'+packed.toString(16).padStart(6,'0');
 
-module.exports = { conflict, conflicts, sourceChanges, sourceTarget, previewLimit, report };
+module.exports = { conflict, conflicts, sourceChanges, sourceTarget, guideChanges, previewLimit, report };

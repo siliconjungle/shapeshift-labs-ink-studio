@@ -22,6 +22,12 @@ Use **Canvas size** to resize all frames together. Resize keeps pixels at
 their existing coordinates, pads new space with transparency, and crops
 outside the new bounds. Undo restores the previous dimensions and pixels.
 
+Use **Guides** in the Workshop sidebar to add, edit, or remove grid origins,
+axes, pivots, and registration points. Put a guide on all frames or just
+the current frame. Enable **Snap** above the canvas to snap drawing near a
+guide. The cursor shows the resulting pixel and the guide that caught it.
+The **Guides** checkbox controls overlay visibility separately.
+
 The built-in studies include the two layers of the Red Spring spell, so
 the ink and the eye can be edited separately.
 The [animated tile library](pixel-tiles.md) uses the same editable cels
@@ -75,6 +81,20 @@ To use the same viewport in another browser tool, import
 CSS. Pass each native `{ width, height, rgba }` frame to `view.setFrame()`.
 Use `view.pixelAt(clientX, clientY)` to get the art coordinate for an edit
 and `view.dispose()` when removing the canvas.
+
+Stamp JSON stores guides shared by the whole animation in `guides`.
+Individual entries in `frames` can also carry a local `guides` list with its
+own IDs. Both use the [pixel guide definitions](pixel-art-authoring.md#register-frames-and-align-texture-pixels)
+with scope implied by the list. When using the browser canvas, pass
+`{ guideTool: KIT.pixelGuides }` when mounting, then call
+`view.setGuides(activeGuides)` on frame changes.
+
+To use a drawn pivot when placing an animated stamp, pass
+`{ pivotGuide: 'foot' }` to `KIT.pixelStamps.atlas` or `KIT.pixelStamps.place`.
+Each frame uses the matching pivot's exact position, including half pixels.
+Pass `{ pivotGuide: true }` to use one pivot per frame even when the IDs
+differ. The existing sprite pivot settings still apply when rendering
+without this option.
 
 ## Marking a surface
 
