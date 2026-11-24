@@ -170,7 +170,7 @@ ${normalMapped ? 'uniform highp sampler2D u_surfaceNormalMap;uniform bool u_hasS
 ${needsFrame ? 'uniform bool u_surfaceNormals;uniform vec3 u_surfaceEye;' : ''}
 ${semantic ? semanticSource : ''}
 ${pbr ? 'uniform int u_surfacePbr;uniform bool u_pbrOrtho;uniform vec3 u_pbrBack;uniform float u_pbrArtScale;\n'+
-  (pbrSpecularSampling?'#define INK_PBR_FOOTPRINT\n':'')+pbrGLSL : ''}
+  (pbrSpecularSampling?'#define INK_PBR_FOOTPRINT\n':'')+(pbrBands?'#define INK_PBR_BANDS\n':'')+pbrGLSL : ''}
 ${rest?'in vec3 v_rest;':''}
 ${marks?'flat in vec2 v_marks;':''}
 ${simulation?simulationMaterialSource:''}

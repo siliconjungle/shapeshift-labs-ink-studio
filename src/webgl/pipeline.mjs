@@ -55,10 +55,11 @@ export function createSplatPipeline(gl, { ascii, specialize = true, sampleCovera
             64 * contributions + 128 * masked + 256 * textured + 512 * layeredGlass + 1024 * materialStyles +
             2048 * environment + 4096 * relighting + 8192 * optical + 16384 * Boolean(features.cutaway)+32768*emitterFog+65536*footprints+131072*engraving + 262144*Boolean(features.spriteReconstruction) + 524288*Boolean(features.facingColors) +
             1048576 * ((features.gaussianDegree ?? -1) + 1) + 8388608 * Boolean(features.splatPaint) + 16777216 * Boolean(features.gaussianProxy) + 33554432 * Boolean(features.coverageVote) + 67108864 * Boolean(features.gaussianMaterials) + 134217728 * Boolean(features.surfaceOrder) + 268435456 * Boolean(features.depthMeshProxy) + 536870912 * Boolean(features.marks) + 1073741824 * Boolean(features.coverageFilter) + 2147483648 * Boolean(features.gaussianFilter) + 4294967296 * Boolean(features.pbr) +
-            8589934592 * Boolean(features.pbrSpecularSampling);
+            8589934592 * Boolean(features.pbrSpecularSampling) + 17179869184 * Boolean(features.pbrBands);
           if (!variants.has(key)) {
             const shader = splatShaderSources(ascii, sampleCoverage, { water, airPockets, layered, atlas, portal, instances,
-              pbr: features.pbr ? (features.pbrSpecularSampling ? '#define INK_PBR_FOOTPRINT\n' : '')+pbrGLSL : undefined,
+              pbr: features.pbr ? (features.pbrSpecularSampling ? '#define INK_PBR_FOOTPRINT\n' : '') +
+                (features.pbrBands ? '#define INK_PBR_BANDS\n' : '')+pbrGLSL : undefined,
               contributions, masked, textured, layeredGlass, coverageRules, materialStyles, environment,emitterFog, relighting, optical, stableDetail, airflow, footprints, footprintGLSL, screenPrintGLSL, engraving, marks:features.marks, facingColors:features.facingColors, gaussianDegree: features.gaussianDegree, splatPaint: features.splatPaint, gaussianProxy:features.gaussianProxy, depthMeshProxy:features.depthMeshProxy, gaussianMaterials:features.gaussianMaterials, gaussianFilter:features.gaussianFilter, surfaceOrder:features.surfaceOrder, coverageVote: features.coverageVote, coverageFilter:features.coverageFilter, spriteReconstruction:features.spriteReconstruction ? spriteReconstructionGLSL : undefined, cutaway:features.cutaway ? cutaway : undefined });
             variants.set(key, resources.program(shader.vertex, shader.fragment));
           }

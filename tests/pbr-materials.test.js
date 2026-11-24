@@ -125,34 +125,33 @@ function read(frame, probes=samples) {
 
 async function headless() {
   const { bakeObjectTexels, editObjectTexels } = await import('../webgl.mjs');
-  const { world, definition, edit, moveReceivers } = fixture({ ...ink.load(), bakeObjectTexels, editObjectTexels });
-  const render = (options,probes) => read(ink.render(world, { ...view, ...options }),probes);
+  const { world, definition, edit } = fixture({ ...ink.load(), bakeObjectTexels, editObjectTexels });
+  const render = options => read(ink.render(world, { ...view, ...options }));
   const lit = render(), sidelit = render({ pbrLights:light }), off = render({ pbrMaterials:false });
   const ramps = Object.fromEntries(Object.entries(rampFrames(definition)).map(([name,settings])=>[name,render(settings)]));
   const footprint = render({pbrSpecularSampling:true});
-  const bands = bandFrames(definition), band = render(bands.band), bandOff = render(bands.bandOff);
   edit();
-  const edited=render();
+  return {lit,sidelit,off,...ramps,footprint,edited:render()};
+}
+
+async function headlessBands() {
+  const kit={...ink.load(),...await import('../webgl.mjs')};
+  const {world,definition,moveReceivers}=fixture(kit);
+  const render = (options,probes) => read(ink.render(world,{...view,...options}),probes);
+  const bands=bandFrames(definition), band=render(bands.band), bandOff=render(bands.bandOff);
   moveReceivers();
-  return { lit,sidelit,off,...ramps,footprint,edited,band,bandOff,
-    bandMoved:render(bands.band,movedSamples),bandMovedOff:render(bands.bandOff,movedSamples) };
+  return {band,bandOff,bandMoved:render(bands.band,movedSamples),bandMovedOff:render(bands.bandOff,movedSamples)};
 }
 
 test('shared materials relight five carriers and preserve named projections on the art grid',async () => {
-  const { lit,sidelit,off,edited,ramp,rampSide,override,wide,band,bandOff,bandMoved,bandMovedOff } = await headless();
+  const { lit,sidelit,off,edited,ramp,rampSide,override,wide } = await headless();
   for (const name of ['mesh','texel','decal','gaussian','strand']) {
     assert.notDeepEqual(lit[name],lit.background,name);
     assert(lit[name][0] >= sidelit[name][0] + 24,JSON.stringify({name,lit,sidelit}));
     assert.notDeepEqual(sidelit[name],off[name],name);
     assert.notDeepEqual(ramp[name],rampSide[name],name);
-    assert.notDeepEqual(band[name],bandOff[name],name);
   }
   assert.deepEqual(lit.background,off.background);
-  assert.deepEqual(band.background,bandOff.background);
-  for(const name of Object.keys(movedSamples)) {
-    assert.deepEqual(bandMoved[name],band[name],name);
-    assert.notDeepEqual(bandMoved[name],bandMovedOff[name],name);
-  }
   assert(lit.gaussian[0] > lit.gaussian[2] + 25);
   assert(off.gaussian[0] < off.gaussian[2]);
   assert(lit.projected[1] > lit.projected[0] + 30, JSON.stringify(lit));
@@ -165,8 +164,8 @@ test('shared materials relight five carriers and preserve named projections on t
 
 test('native WebGL matches headless material, projection and live texel edits', {skip:!process.env.INK_TEST_CHROME}, async () => {
   const expected = await headless();
-  const actual = runWebGL({},fixture,(kit,build,backend,{view,samples,light,rampSource,bandSource,movedSamples}) => {
-    const {world,definition,edit,moveReceivers}=build(kit), painter = backend(view.w,view.h,view);
+  const actual = runWebGL({},fixture,(kit,build,backend,{view,samples,light,rampSource}) => {
+    const {world,definition,edit}=build(kit), painter = backend(view.w,view.h,view);
     try {
       const sample = (options,probes=samples) => {
         painter.draw(world,{...options,changedRows:[]});
@@ -176,21 +175,46 @@ test('native WebGL matches headless material, projection and live texel edits', 
       const ramps = Object.fromEntries(Object.entries(new Function('return ('+rampSource+')')()(definition))
         .map(([name,settings])=>[name,sample(settings)]));
       const footprint = sample({pbrSpecularSampling:true});
-      const bands=new Function('return ('+bandSource+')')()(definition);
-      const band=sample(bands.band), bandOff=sample(bands.bandOff);
       edit();
-      const edited=sample();
-      moveReceivers();
-      return {lit,sidelit,off,...ramps,footprint,edited,band,bandOff,
-        bandMoved:sample(bands.band,movedSamples),bandMovedOff:sample(bands.bandOff,movedSamples)};
+      return {lit,sidelit,off,...ramps,footprint,edited:sample()};
     } finally { painter.close(); }
-  },{...inputs,rampSource:rampFrames.toString(),bandSource:bandFrames.toString()});
+  },{...inputs,rampSource:rampFrames.toString()});
+  assertParity(expected,actual);
+});
+
+function assertParity(expected,actual) {
   for (const [mode, colors] of Object.entries(expected)) {
     for (const [name, rgb] of Object.entries(colors)) {
       assert(rgb.every((n,k) => Math.abs(actual[mode][name][k]-n) <= 4),
         JSON.stringify({mode,name,expected:rgb,actual:actual[mode][name]}));
     }
   }
+}
+
+test('painted PBR bands follow posed receivers in headless and WebGL',async () => {
+  const expected=await headlessBands();
+  const {band,bandOff,bandMoved,bandMovedOff}=expected;
+  for(const name of ['mesh','texel','decal','gaussian','strand']) assert.notDeepEqual(band[name],bandOff[name],name);
+  assert.deepEqual(band.background,bandOff.background);
+  for(const name of Object.keys(movedSamples)) {
+    assert.deepEqual(bandMoved[name],band[name],name);
+    assert.notDeepEqual(bandMoved[name],bandMovedOff[name],name);
+  }
+  if (!process.env.INK_TEST_CHROME) return;
+  const actual=runWebGL({},fixture,(kit,build,backend,{view,samples,movedSamples,bandSource})=>{
+    const {world,definition,moveReceivers}=build(kit), painter=backend(view.w,view.h,view);
+    const bands=new Function('return ('+bandSource+')')()(definition);
+    const sample=(options,probes)=>{
+      painter.draw(world,options);
+      return painter.sample(probes);
+    };
+    try {
+      const band=sample(bands.band,samples), bandOff=sample(bands.bandOff,samples);
+      moveReceivers();
+      return {band,bandOff,bandMoved:sample(bands.band,movedSamples),bandMovedOff:sample(bands.bandOff,movedSamples)};
+    } finally { painter.close(); }
+  },{...inputs,bandSource:bandFrames.toString()});
+  assertParity(expected,actual);
 });
 
 test('the copper wire sweep reduces the area affected by split highlights on the art grid', () => {

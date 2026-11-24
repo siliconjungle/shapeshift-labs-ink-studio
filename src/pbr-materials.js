@@ -457,6 +457,8 @@ vec4 pbrRow(int at){
 vec4 pbrRampRow(int index){
   return pbrRow(u_pbrRampOffset+index);
 }
+
+#ifdef INK_PBR_BANDS
 uniform highp int u_pbrBands[${MAX_MATERIALS}], u_pbrRestOffset;
 vec3 pbrRestPoint(int row,vec3 point){
   if(u_pbrRestOffset<0)return point;
@@ -491,6 +493,9 @@ float pbrBand(int start,vec3 at){
   }
   return bias;
 }
+#else
+vec3 pbrRestPoint(int row,vec3 point){return point;}
+#endif
 vec4 pbrRamp(int start,vec4 info,float value,float fallbackWeight){
   int lo=0, hi=int(info.x)-1;
   for(int i=0;i<8&&lo<hi;i++){
@@ -654,7 +659,11 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec
   vec3 axes=vec3(a/aspect,a*aspect,ac);
   float highlight=0.0, incidence=0.0;
   int diffuseRamp=int(finish.z), specularRamp=int(finish.w);
+  #ifdef INK_PBR_BANDS
   float band=pbrBand(u_pbrBands[id-1],rest);
+  #else
+  const float band=0.0;
+  #endif
   vec4 diffuseInfo=diffuseRamp>0?pbrRampRow(diffuseRamp-1):vec4(0);
   for (int i=0;i<u_pbrLights;i++) {
     vec4 lightRow=u_pbrLight[i*2];

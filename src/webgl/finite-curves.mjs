@@ -158,12 +158,12 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
     const isOwner = mode === 'owner';
     const etched=mode==='color' && !!engraving && !filterMatte;
     const physical = mode==='color' && !filterMatte && !!pbrUniforms;
-    const sampleSpecular=physical && !!options.pbrSpecularSampling;
-    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked,etched,physical,sampleSpecular].join('/');
+    const sampleSpecular=physical && !!options.pbrSpecularSampling, pbrBands=physical && !!options.pbrBands;
+    const key = [mode,!!wet,wet?.airPockets,wet?.layered,wet?.atlas,!!env?.media,!!env?.lit,!!section,!!layeredGlass,plan.masked,plan.strandMasked,etched,physical,sampleSpecular,pbrBands].join('/');
     if (!programs.has(key)) programs.set(key,program(finiteCurveFragment({
       mode, tileSize, layers, wet, layeredGlass, environment:env, section:section ? cutaway : undefined,
       spriteLOD:plan.masked ? spriteLOD : undefined,strandLOD:plan.strandMasked ? strandLOD : undefined,
-      engraving:etched,print,pbr:physical ? (sampleSpecular?'#define INK_PBR_FOOTPRINT\n':'')+pbrGLSL : undefined
+      engraving:etched,print,pbr:physical ? (sampleSpecular?'#define INK_PBR_FOOTPRINT\n':'')+(pbrBands?'#define INK_PBR_BANDS\n':'')+pbrGLSL : undefined
     })));
     const shader = programs.get(key), { width, height } = base;
     spans.bind();
