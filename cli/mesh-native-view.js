@@ -30,7 +30,7 @@ function render(world, view, toolkit, channels = ['geometricNormal']) {
 }
 
 const cover = (frame, i) => Number.isFinite(frame.passes.depth[i]);
-function normalImage(frame, channel = 'geometricNormal') {
+function normalRaster(frame, channel = 'geometricNormal') {
   const rgb = new Uint8Array(frame.rgb.length), normal = frame.passes[channel];
   for (let i = 0; i < frame.w * frame.h; i++) {
     if (!cover(frame, i)) rgb.set([20, 36, 46], i * 3);
@@ -39,7 +39,12 @@ function normalImage(frame, channel = 'geometricNormal') {
       rgb[at] = Math.round(Math.max(0, Math.min(255, 127.5 + normal[at] * 127.5)));
     }
   }
-  return PNG.encode(frame.w, frame.h, rgb);
+  return { w: frame.w, h: frame.h, rgb };
 }
 
-module.exports = { viewSettings, worldFor, render, cover, normalImage };
+function normalImage(frame, channel) {
+  const { w, h, rgb } = normalRaster(frame, channel);
+  return PNG.encode(w, h, rgb);
+}
+
+module.exports = { viewSettings, worldFor, render, cover, normalImage, normalRaster };

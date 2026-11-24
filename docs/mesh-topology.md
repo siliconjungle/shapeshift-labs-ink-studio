@@ -777,7 +777,9 @@ An explicit corner direction takes precedence over the generated fan.
 Headless and WebGL rendering use the interpolated direction for surface
 lighting. Geometry still controls depth, coverage, and ray hits.
 The native preview writes `beauty.png`, `geometric.png`, and
-`shading.png` on the same 1× grid. Each normal image encodes XYZ as RGB.
+`shading.png` on the same 1× grid. In `comparison.png`, geometric normals
+appear on the left and shading normals on the right. Each normal image
+encodes XYZ as RGB.
 
 An edge's `crease` controls subdivision separately from `smooth`.
 Zero uses the standard smooth mask, one keeps a sharp ridge, and

@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const files = require('./asset-files.js');
-const { viewSettings, worldFor, render, cover, normalImage } = require('./mesh-native-view.js');
+const { grid } = require('./render.js');
+const { viewSettings, worldFor, render, cover, normalRaster } = require('./mesh-native-view.js');
 
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const name = arg => typeof arg === 'string' && arg.trim();
@@ -31,9 +32,10 @@ function preview(document, view, paths, toolkit, editor, object, levels) {
     if (degrees > .01) changed++;
     maxDegrees = Math.max(maxDegrees, degrees);
   }
-  files.write(paths.beauty, PNG.encode(frame.w, frame.h, frame.rgb));
-  files.write(paths.geometric, normalImage(frame, 'geometricNormal'));
-  files.write(paths.shading, normalImage(frame, 'shadingNormal'));
+  const normals = [normalRaster(frame), normalRaster(frame, 'shadingNormal')];
+  const pictures = [[paths.beauty, frame], [paths.geometric, normals[0]], [paths.shading, normals[1]],
+    [paths.comparison, grid(normals, 2)]];
+  for (const [file, { w, h, rgb }] of pictures) files.write(file, PNG.encode(w, h, rgb));
   if (levels) files.json(paths.derived, derived);
   return { grid: [frame.w, frame.h], occupied, changed, maxDegrees, levels, ...paths };
 }
@@ -47,7 +49,7 @@ function command(file, input, rest, opt, toolkit, openEditor) {
     throw new TypeError('Use mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision 0–3] [--out file] [--report file]');
   const levels = Number(subdivision ?? 0), inputs = [file, input, view].filter(Boolean).map(arg => path.resolve(arg));
   const paths = directory && { beauty: path.resolve(directory, 'beauty.png'), geometric: path.resolve(directory, 'geometric.png'),
-    shading: path.resolve(directory, 'shading.png'), ...(levels && { derived: path.resolve(directory, 'derived.json') }) };
+    shading: path.resolve(directory, 'shading.png'), comparison: path.resolve(directory, 'comparison.png'), ...(levels && { derived: path.resolve(directory, 'derived.json') }) };
   const outputs = [...[out, report].filter(Boolean).map(arg => path.resolve(arg)), ...Object.values(paths || {})];
   if (new Set(outputs).size !== outputs.length || outputs.some(arg => inputs.includes(arg)))
     throw new RangeError('Write shading reports, captures and edited meshes separately from their inputs');

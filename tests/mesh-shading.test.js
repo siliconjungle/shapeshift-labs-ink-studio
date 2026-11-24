@@ -158,4 +158,6 @@ test('shading edits keep registered scene bakes and reach the native CLI and jou
   assert.deepEqual(native.grid, [160,112]);
   assert(native.changed > 0);
   assert.notDeepEqual(fs.readFileSync(native.geometric), fs.readFileSync(native.shading));
+  const sideBySide = fs.readFileSync(native.comparison);
+  assert.deepEqual([sideBySide.readUInt32BE(16), sideBySide.readUInt32BE(20)], [320, 112]);
 });
