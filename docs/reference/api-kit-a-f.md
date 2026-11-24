@@ -797,6 +797,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.authoring.groups.remember` | function | `(doc, ids, {id,name=id} = {})` | [source](../../src/kit/p77-retained-groups.js) |
 | `KIT.authoring.groups.remove` | function | `(doc, ids, {label='Remove group'} = {})` | [source](../../src/kit/p77-retained-groups.js) |
 | `KIT.authoring.groups.select` | function | `(source, ids)` | [guide](../procedural.md#optional-retained-authoring), [source](../../src/kit/p77-retained-groups.js) |
+| `KIT.authoring.hybridOwnership` | namespace |  |  |
+| `KIT.authoring.hybridOwnership.create` | function | `(raw, builders)` | [guide](../hybrid-edit-ownership.md#rebuild-from-pinned-inputs), [source](../../src/kit/p23-hybrid-ownership.js) |
+| `KIT.authoring.hybridOwnership.format` | value | `string = "ink-studio/hybrid-ownership"` |  |
+| `KIT.authoring.hybridOwnership.manages` | function | `(raw, scope)` | [source](../../src/kit/p23-hybrid-ownership.js) |
+| `KIT.authoring.hybridOwnership.plan` | function | `(raw, revisions, previous)` | [source](../../src/kit/p23-hybrid-ownership.js) |
+| `KIT.authoring.hybridOwnership.prepare` | function | `(raw)` | [guide](../hybrid-edit-ownership.md#resolve-and-commit-an-edit), [source](../../src/kit/p23-hybrid-ownership.js) |
+| `KIT.authoring.hybridOwnership.route` | function | `(raw, address)` | [guide](../hybrid-edit-ownership.md#resolve-and-commit-an-edit), [source](../../src/kit/p23-hybrid-ownership.js) |
 | `KIT.authoring.looks` | namespace |  |  |
 | `KIT.authoring.looks.bind` | function | `(binding, catalog)` | [source](../../src/kit/p90-asset-looks.js) |
 | `KIT.authoring.looks.definition` | function | `(value, packId)` | [source](../../src/kit/p90-asset-looks.js) |

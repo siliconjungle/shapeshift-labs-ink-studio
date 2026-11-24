@@ -8300,6 +8300,35 @@
         "sourceRevision": {
           "$ref": "#/$defs/revision"
         },
+        "ownership": {
+          "type": "object",
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "channel": {
+              "enum": [
+                "shape",
+                "pigment",
+                "coverage",
+                "detail"
+              ]
+            }
+          },
+          "required": [
+            "object",
+            "part",
+            "channel"
+          ],
+          "additionalProperties": false
+        },
         "operation": {
           "type": "object"
         },
@@ -8340,6 +8369,35 @@
         },
         "sourceRevision": {
           "$ref": "#/$defs/revision"
+        },
+        "ownership": {
+          "type": "object",
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "channel": {
+              "enum": [
+                "shape",
+                "pigment",
+                "coverage",
+                "detail"
+              ]
+            }
+          },
+          "required": [
+            "object",
+            "part",
+            "channel"
+          ],
+          "additionalProperties": false
         },
         "operation": {
           "anyOf": [
@@ -8401,6 +8459,35 @@
         "sourceRevision": {
           "$ref": "#/$defs/revision"
         },
+        "ownership": {
+          "type": "object",
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "channel": {
+              "enum": [
+                "shape",
+                "pigment",
+                "coverage",
+                "detail"
+              ]
+            }
+          },
+          "required": [
+            "object",
+            "part",
+            "channel"
+          ],
+          "additionalProperties": false
+        },
         "operation": {
           "anyOf": [
             {
@@ -8454,6 +8541,35 @@
         },
         "sourceRevision": {
           "$ref": "#/$defs/revision"
+        },
+        "ownership": {
+          "type": "object",
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "channel": {
+              "enum": [
+                "shape",
+                "pigment",
+                "coverage",
+                "detail"
+              ]
+            }
+          },
+          "required": [
+            "object",
+            "part",
+            "channel"
+          ],
+          "additionalProperties": false
         },
         "operation": {
           "anyOf": [
@@ -8511,6 +8627,35 @@
         },
         "sourceRevision": {
           "$ref": "#/$defs/revision"
+        },
+        "ownership": {
+          "type": "object",
+          "properties": {
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "channel": {
+              "enum": [
+                "shape",
+                "pigment",
+                "coverage",
+                "detail"
+              ]
+            }
+          },
+          "required": [
+            "object",
+            "part",
+            "channel"
+          ],
+          "additionalProperties": false
         },
         "operation": {
           "anyOf": [
@@ -11152,6 +11297,35 @@
                 "sourceRevision": {
                   "$ref": "#/$defs/revision"
                 },
+                "ownership": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "part": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "channel": {
+                      "enum": [
+                        "shape",
+                        "pigment",
+                        "coverage",
+                        "detail"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "part",
+                    "channel"
+                  ],
+                  "additionalProperties": false
+                },
                 "operation": {
                   "type": "object"
                 },
@@ -11224,6 +11398,35 @@
                 },
                 "sourceRevision": {
                   "$ref": "#/$defs/revision"
+                },
+                "ownership": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "part": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "channel": {
+                      "enum": [
+                        "shape",
+                        "pigment",
+                        "coverage",
+                        "detail"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "part",
+                    "channel"
+                  ],
+                  "additionalProperties": false
                 },
                 "operation": {
                   "anyOf": [
@@ -11317,6 +11520,35 @@
                 "sourceRevision": {
                   "$ref": "#/$defs/revision"
                 },
+                "ownership": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "part": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "channel": {
+                      "enum": [
+                        "shape",
+                        "pigment",
+                        "coverage",
+                        "detail"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "part",
+                    "channel"
+                  ],
+                  "additionalProperties": false
+                },
                 "operation": {
                   "anyOf": [
                     {
@@ -11402,6 +11634,35 @@
                 },
                 "sourceRevision": {
                   "$ref": "#/$defs/revision"
+                },
+                "ownership": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "part": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "channel": {
+                      "enum": [
+                        "shape",
+                        "pigment",
+                        "coverage",
+                        "detail"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "part",
+                    "channel"
+                  ],
+                  "additionalProperties": false
                 },
                 "operation": {
                   "anyOf": [
@@ -11491,6 +11752,35 @@
                 },
                 "sourceRevision": {
                   "$ref": "#/$defs/revision"
+                },
+                "ownership": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "part": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "channel": {
+                      "enum": [
+                        "shape",
+                        "pigment",
+                        "coverage",
+                        "detail"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "part",
+                    "channel"
+                  ],
+                  "additionalProperties": false
                 },
                 "operation": {
                   "anyOf": [

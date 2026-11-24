@@ -163,6 +163,7 @@ All checked-in guides, indexed by title and section headings.
 - [Height-map flyovers](../heightmap-flyover.md)
 - [Native hero rendering](../hero-render.md)
 - [Light-driven highlight cels](../highlight-cels.md)
+- [Hybrid edit ownership](../hybrid-edit-ownership.md)
 - [Hybrid depth in water, portals, and fog](../hybrid-view-depth.md)
 - [Hyperbolic mosaics and circle packing](../hyperbolic-mosaics.md)
 - [Artist-authored cards and impostors](../impostor-atlases.md)

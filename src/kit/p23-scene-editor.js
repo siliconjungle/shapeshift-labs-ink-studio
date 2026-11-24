@@ -432,6 +432,7 @@
       refreshPrefabs,
       meshTopology,
       editMeshTopology,
+      hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,
       applyBrush,

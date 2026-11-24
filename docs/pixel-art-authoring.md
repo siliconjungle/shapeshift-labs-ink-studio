@@ -3222,7 +3222,9 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 Omitting `destination` continues to edit raster pixels. Scene writes take
 an explicit `--scene` matching the binding and save their own output file.
 The surface and SDF routes use a plain JSON diorama and a named authored
-solid. Keep relative scene resources beside the revised diorama.
+solid. Keep relative scene resources beside the revised diorama. For a part
+that combines representations, use [hybrid edit ownership](hybrid-edit-ownership.md)
+to route shape, pigment, coverage, and detail edits to their authored sources.
 
 ```sh
 node cli/ink-studio.js pixel-art edit document.json cut.json \
