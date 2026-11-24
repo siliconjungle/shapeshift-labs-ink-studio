@@ -60,7 +60,8 @@ persistent sessions use the existing pixel edit workflow.
 | `duration` | `frame`, `durationMs`. Retimes the chosen frame and the starts of later frames. |
 | `blank` | `frame`, `layer`. Creates an explicit transparent cel or clears the current cel. Clearing keeps the cel ID and updates any frames holding it. |
 | `duplicate` | `from`, optional `to`. Defaults to an independent copy on the next frame of the same layer. |
-| `hold` | `from`, `to`. Links to the source drawing by ID and gives the held cel its own placement. Painting directly on a held cel makes that cel independent. |
+| `hold` | `from`, `to`. Links to the source drawing by ID and gives the held cel its own placement. |
+| `unlink` | `frame`, `layer`. Makes one held cel independent while keeping its ID, artwork, and placement. Other holds keep following their original source. |
 | `move` | `from`, `to`. Vacates the source cell and keeps its ID, so holds continue to resolve after the move. |
 | `copy` | `from`, `to`. Copies the source drawing and cel offset under a new ID. |
 | `layer-offset` | `layer`, `offset`. Moves that layer across every frame. |
@@ -76,6 +77,33 @@ crop, pad, resize or resample bakes placements and linked exposures into
 the new grid. Layer deck exports also bake placements and held exposures
 for use in the Pixel Stamp Workshop. Store the version 2 pixel document
 to retain editable offsets and hold links.
+
+### Edit shared artwork or make a local variation
+
+The timeline report's `linkGroups` shows each source drawing and every held
+instance by frame, layer, and cel ID. The offline canvas highlights the
+group, shows how many frames it spans, and lets you jump from a held cell
+to its source when both frames are in the review.
+
+Paint the source cel to update its holds. Edit previews and receipts list
+the source and every linked exposure under `celLinks.sharedDrawings`,
+including layers that are hidden or clipped in the render. `celLinks.unlinked`
+lists exposures that became independent. These lists are independent of
+the preview's pixel limit.
+
+For a local variation, preview and apply
+`{ "type": "unlink", "frame": "pause", "layer": "ink" }` as a `timeline`
+operation, then paint the resulting cel. The offline canvas can download
+a revision-checked unlink edit for the selected hold.
+
+```sh
+node cli/ink-studio.js pixel-art preview document.json unlink-pause-ink.json
+node cli/ink-studio.js pixel-art edit document.json unlink-pause-ink.json --out local-variant.json
+```
+
+A raster edit targeted directly at a held cell still creates independent
+artwork. Use the explicit unlink operation to detach exactly one exposure
+from an imported chain of holds.
 
 ## Register frames and align texture pixels
 

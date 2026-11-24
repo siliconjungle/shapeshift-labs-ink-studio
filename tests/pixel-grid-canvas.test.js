@@ -1220,5 +1220,15 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
     assert.equal(await browser.evaluate("document.querySelector('#frames').selectedIndex"),1);
     assert.equal(await browser.evaluate("document.querySelector('#timeline output').value.endsWith('offset 1, -1')"),true);
     assert.deepEqual(await raster(browser,preview,1,0),[189,32,32,255]);
+    assert.equal(await browser.evaluate("document.querySelectorAll('#timeline [data-linked]').length"),2);
+    assert.match(await browser.evaluate("document.querySelector('#timeline-links').textContent"),/2 cels across 2 frames/);
+    const unlink = await browser.evaluate("JSON.parse(decodeURIComponent(document.querySelector('#timeline-unlink').href.split(',')[1]))");
+    assert.deepEqual(unlink.operation,{ type:'unlink',frame:'rest',layer:'ink' });
+    const previewEdit = JSON.parse(execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),
+      'pixel-art','timeline',source],{ encoding:'utf8' }));
+    assert.equal(unlink.revision,previewEdit.revision);
+    await click(browser,'#timeline-source');
+    await until(browser,"document.querySelector('#timeline-source').hidden && document.querySelector('#frames').selectedIndex === 0");
+    assert.deepEqual(await raster(browser,preview,1,1),[189,32,32,255]);
   });
 });

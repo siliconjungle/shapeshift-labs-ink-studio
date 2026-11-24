@@ -16,11 +16,12 @@ const duration = value => Number.isSafeInteger(value) && value > 0;
 const label = value => value === undefined || typeof value === 'string' && !!value.trim();
 
 function index(frames) {
-  const cels = new Map(), sources = new Map();
+  const cels = new Map(), sources = new Map(), locations = new Map();
   for (const frame of frames) for (const [layer,cel] of Object.entries(frame.cels)) {
     const key = celId(frame,layer,cel);
     if (cels.has(key)) throw new RangeError('Duplicate pixel cel ID '+key);
     cels.set(key,cel);
+    locations.set(key,{ cel:key,frame:frame.id,layer });
   }
   for (const key of cels.keys()) {
     const path = new Set();
@@ -36,7 +37,7 @@ function index(frames) {
     const root = sources.get(source) ?? source;
     for (const step of path) sources.set(step,root);
   }
-  return { cels,sources };
+  return { cels,sources,locations };
 }
 
 function availableId(frame,layer,lookup) {
@@ -61,6 +62,37 @@ function independent(cel,lookup) {
   if (cel?.hold === undefined) return cel;
   const { hold,...placement } = cel, source = content(cel,lookup);
   return { ...placement,marks:source.marks,...(source.slots !== undefined && { slots:source.slots }) };
+}
+
+function groups(lookup) {
+  const roots = new Map();
+  for (const key of lookup.cels.keys()) {
+    const source = lookup.sources.get(key);
+    if (key === source) continue;
+    if (!roots.has(source)) roots.set(source,{ source:lookup.locations.get(source),holds:[] });
+    roots.get(source).holds.push(lookup.locations.get(key));
+  }
+  return [...roots.values()];
+}
+
+function hasHolds(design) {
+  return design?.version === 2 && design.frames.some(frame=>Object.values(frame.cels).some(cel=>cel.hold !== undefined));
+}
+
+function linkChanges(before,after) {
+  if (before === after || before.version !== 2 || after.version !== 2 || !hasHolds(before) && !hasHolds(after)) return;
+  const prior = index(before.frames), next = index(after.frames);
+  const sharedDrawings = groups(next).filter(({ source })=>{
+    const old = content(prior.cels.get(source.cel),prior), drawn = next.cels.get(source.cel);
+    return old && (!equal(old.marks,drawn.marks) || !equal(old.slots,drawn.slots));
+  });
+  const unlinked = [];
+  for (const key of prior.cels.keys()) {
+    const source = prior.sources.get(key), cel = next.cels.get(key);
+    if (key !== source && cel && cel.hold === undefined)
+      unlinked.push({ instance:next.locations.get(key),source:prior.locations.get(source) });
+  }
+  if (sharedDrawings.length || unlinked.length) return { sharedDrawings,unlinked };
 }
 
 function timing(frames) {
@@ -88,7 +120,7 @@ function describe(design,revision,lookup = index(design.frames)) {
         ...(cel.hold !== undefined && { hold:cel.hold,source:lookup.sources.get(id) }) };
     })
   }));
-  return structuredClone({ format:'ink-studio/pixel-cel-timeline',version:1,revision,frames,layers,totalDurationMs:frames.at(-1).endMs });
+  return structuredClone({ format:'ink-studio/pixel-cel-timeline',version:1,revision,frames,layers,linkGroups:groups(lookup),totalDurationMs:frames.at(-1).endMs });
 }
 
 const operations = {
@@ -99,6 +131,7 @@ const operations = {
   blank:['frame','layer'],
   duplicate:['from','to','replace'],
   hold:['from','to','replace'],
+  unlink:['frame','layer'],
   move:['from','to','replace'],
   copy:['from','to','replace']
 };
@@ -106,7 +139,7 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, layer-offset, cel-offset, blank, duplicate, hold, move, or copy');
+    throw new TypeError('Choose add-frame, duration, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, or copy');
   const { type } = op, stack = LayerStack.prepare(design.layers), lookup = index(design.frames);
   const frameById = new Map(design.frames.map((frame,i)=>[frame.id,{ frame,i }]));
   function requireFrame(id) {
@@ -157,6 +190,20 @@ function edit(design,op) {
     const next = placement(op.offset);
     layers = layers.map(row=>row.id === op.layer ? { ...row,offset:next } : row);
     report = { layer:op.layer,before:layer.offset ?? origin,after:next };
+  } else if (type === 'unlink') {
+    const target = slot({ frame:op.frame,layer:op.layer });
+    writable(target.layer);
+    if (target.cel?.hold === undefined)
+      throw conflict('unlinked-cel','Choose a cel with a hold to unlink',{ frame:op.frame,layer:op.layer });
+    setCel(target,structuredClone(independent(target.cel,lookup)));
+    const retargeted = [];
+    for (const [key,cel] of lookup.cels) {
+      if (cel.hold !== target.id) continue;
+      const location = lookup.locations.get(key), { frame,layer } = location;
+      setCel(slot({ frame,layer }),{ ...cel,hold:target.cel.hold });
+      retargeted.push(location);
+    }
+    report = { ...lookup.locations.get(target.id), source:lookup.locations.get(lookup.sources.get(target.id)),retargeted };
   } else if (type === 'blank' || type === 'cel-offset') {
     const target = slot({ frame:op.frame,layer:op.layer });
     writable(target.layer);
@@ -225,4 +272,4 @@ function localMarks(width,height,marks,[dx,dy],layer) {
     }) });
 }
 
-module.exports = { celName,celId,getCel,index,availableId,timing,offset,content,independent,describe,edit,translate,localMarks };
+module.exports = { celName,celId,getCel,index,availableId,timing,offset,content,independent,describe,edit,translate,localMarks,linkChanges };

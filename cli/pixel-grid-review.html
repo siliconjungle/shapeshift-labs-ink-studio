@@ -34,9 +34,12 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 #timeline th:first-child { position:sticky; left:0; z-index:1; }
 #timeline small { display:block; color:#b8c8c4; font-variant-numeric:tabular-nums; }
 #timeline button { border:1px solid #476062; background:#253437; color:inherit; font:inherit; padding:3px 7px; border-radius:3px; cursor:pointer; }
+#timeline button[data-linked] { border-color:#a7c7bc; }
 #timeline button[aria-pressed="true"] { color:#17221e; background:#b3d6bb; }
 #timeline button:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 #timeline output { display:block; margin-top:6px; font:13px ui-monospace,monospace; overflow-wrap:anywhere; }
+#timeline-links { margin:6px 0; overflow-wrap:anywhere; }
+#timeline-unlink { color:#b3d6bb; }
 /*PIXEL_GRID_CSS*/
 </style>
 </head>
@@ -62,6 +65,9 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
       <table aria-label="Layers by frame"></table>
     </div>
     <output aria-label="Selected cel" aria-live="polite"></output>
+    <p id="timeline-links" aria-live="polite" hidden></p>
+    <button id="timeline-source" type="button" hidden>Open source drawing</button>
+    <a id="timeline-unlink" hidden>Download unlink edit</a>
   </details>
   <div id="craft-diagnostics"></div>
   <div class="sample-controls" id="scene-hit-controls" hidden>
@@ -226,11 +232,22 @@ view.canvas.addEventListener('pointerdown',event => {
 });
 
 let selectedCelLayer;
-const timelineButtons = [];
+const timelineButtons = [], buttonsByCel = new Map(), groupByCel = new Map();
 const celReadout = document.querySelector('#timeline output');
+const linkReadout = document.querySelector('#timeline-links');
+const openSource = document.querySelector('#timeline-source');
+const unlinkEdit = document.querySelector('#timeline-unlink');
+let sourceButton;
+openSource.addEventListener('click',()=>{
+  sourceButton?.focus();
+  sourceButton?.click();
+});
 
 function mountTimeline() {
   if (!timeline) return;
+  for (const group of timeline.linkGroups) {
+    for (const row of [group.source,...group.holds]) groupByCel.set(row.cel,group);
+  }
   const panel = document.querySelector('#timeline'), table = panel.querySelector('table');
   const frameIndex = new Map(frames.map((frame,i)=>[frame.id,i]));
   const columns = timeline.frames.filter(frame=>frameIndex.has(frame.id));
@@ -254,7 +271,9 @@ function mountTimeline() {
     for (const cell of row.cells.filter(cell=>frameIndex.has(cell.frame))) {
       const button = document.createElement('button'), index = frameIndex.get(cell.frame);
       button.type = 'button';
-      button.textContent = { cel:'Cel',hold:'Hold',blank:'Blank',empty:'Empty' }[cell.state];
+      const group = groupByCel.get(cell.cel);
+      button.textContent = group?.source.cel === cell.cel ? 'Source' :
+        { cel:'Cel',hold:'Hold',blank:'Blank',empty:'Empty' }[cell.state];
       button.setAttribute('aria-pressed','false');
       button.title = [cell.cel,cell.hold && 'holds '+cell.hold,cell.effectiveOffset && 'offset '+cell.effectiveOffset.join(', ')].filter(Boolean).join(' · ');
       button.addEventListener('click',()=>{
@@ -264,18 +283,42 @@ function mountTimeline() {
         draw();
       });
       tr.insertCell().append(button);
-      timelineButtons.push({ button,index,layer:row.id,cell });
+      timelineButtons.push({ button,index,layer:row,cell,group });
+      if (cell.cel) buttonsByCel.set(cell.cel,button);
     }
   }
   panel.hidden = timeline.layers.length === 0;
 }
 
 function syncTimeline() {
-  celReadout.value = '';
-  for (const { button,index,layer,cell } of timelineButtons) {
-    const selected = index === select.selectedIndex && layer === selectedCelLayer;
-    button.setAttribute('aria-pressed',String(selected));
-    if (selected) celReadout.value = cell.cel ? button.title : 'Empty cell';
+  const selected = timelineButtons.find(({ index,layer })=>index === select.selectedIndex && layer.id === selectedCelLayer);
+  const group = selected?.group;
+  for (const row of timelineButtons) {
+    row.button.setAttribute('aria-pressed',String(row === selected));
+    row.button.toggleAttribute('data-linked',!!group && row.group === group);
+  }
+  celReadout.value = selected ? selected.cell.cel ? selected.button.title : 'Empty cell' : '';
+  linkReadout.hidden = !group;
+  const held = selected?.cell.state === 'hold';
+  sourceButton = held && buttonsByCel.get(group.source.cel);
+  openSource.hidden = !sourceButton;
+  unlinkEdit.hidden = !held || selected.layer.locked;
+  if (group) {
+    const { source,holds } = group;
+    const members = [source,...holds];
+    const frameCount = new Set(members.map(row=>row.frame)).size;
+    const addresses = members.map(row=>row.frame+' / '+row.layer).join(', ');
+    linkReadout.textContent = 'Editing the source drawing updates '+members.length+' cels across '+frameCount+
+      (frameCount === 1 ? ' frame (' : ' frames (')+addresses+').';
+  }
+  if (!unlinkEdit.hidden) {
+    const { cell,layer } = selected;
+    const patch = { id:'unlink-cel',revision:timeline.revision,destination:'timeline',
+      operation:{ type:'unlink',frame:cell.frame,layer:layer.id } };
+    unlinkEdit.href = 'data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(patch,null,2)+'\n');
+    unlinkEdit.download = 'unlink-'+cell.frame+'-'+layer.id+'.json';
+  } else {
+    unlinkEdit.removeAttribute('href');
   }
 }
 

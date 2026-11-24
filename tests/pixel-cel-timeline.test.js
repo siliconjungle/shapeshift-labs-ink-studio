@@ -165,4 +165,80 @@ test('CLI timeline and persistent SDK sessions expose the same draft and committ
   editor.commit();
   editor.closeSession();
   assert.deepEqual(command('session','timeline',session),editor.timeline());
+  fs.writeFileSync(patch,JSON.stringify(request(editor,{ type:'unlink',...address('two') })));
+  assert.equal(command('preview',revised,patch).celLinks.unlinked[0].instance.frame,'two');
+  assert.equal(command('edit',revised,patch,'--out',replayed).affectedTargets[0].tool,'unlink');
+  assert.deepEqual(command('timeline',replayed).linkGroups,[]);
+});
+
+test('preview and receipts show every exposure affected by shared artwork',()=>{
+  const art = structuredClone(document);
+  art.layers[1].visible = false;
+  art.frames[1].cels.ink = { hold:'one/ink',offset:[1,0] };
+  art.frames[2].cels.shadow = { hold:'two/ink' };
+  const editor = createPixelEditor(art);
+  const source = { cel:'one/ink',...address('one') };
+  const holds = [{ cel:'two/ink',...address('two') },{ cel:'three/shadow',...address('three','shadow') }];
+  const group = { source,holds };
+  assert.deepEqual(editor.timeline().linkGroups,[group]);
+
+  const patch = pencil(editor,'one',[1,0]);
+  const preview = editor.previewEdit(patch,{ limit:0 });
+  assert.deepEqual(preview.pixels,[]);
+  assert.equal(preview.pixelCount,2);
+  assert.deepEqual(preview.celLinks,{ sharedDrawings:[group],unlinked:[] });
+  editor.begin('Paint the linked drawing');
+  editor.apply(patch);
+  assert.deepEqual(editor.previewChanges().celLinks,preview.celLinks);
+  editor.commit();
+  const receipt = editor.receipts().at(-1);
+  assert.deepEqual(receipt.celLinks,preview.celLinks);
+  const another = createPixelEditor(art);
+  another.replay(receipt);
+  assert.deepEqual(another.snapshot(),editor.snapshot());
+
+  const older = { ...receipt };
+  delete older.celLinks;
+  const legacy = createPixelEditor(art);
+  legacy.replay(older);
+  assert.deepEqual(legacy.snapshot(),editor.snapshot());
+  const badReceipt = structuredClone(receipt);
+  badReceipt.celLinks.sharedDrawings[0].holds.pop();
+  assert.throws(()=>createPixelEditor(art).replay(badReceipt),/Replay did not reproduce/);
+});
+
+test('unlink keeps artwork and placement, and other holds in a chain follow the original source',()=>{
+  const art = structuredClone(document);
+  art.frames[0].cels.ink.id = 'master';
+  art.frames[1].cels.ink = { id:'pause-cel',label:'Pause',hold:'master',offset:[1,0] };
+  art.frames[2].cels.ink = { hold:'pause-cel' };
+  const editor = createPixelEditor(art), patch = request(editor,{ type:'unlink',...address('two') });
+  const source = { cel:'master',...address('one') }, instance = { cel:'pause-cel',...address('two') };
+  const original = art.frames.map(({ id })=>editor.png({ frame:id }));
+  const preview = editor.previewEdit(patch);
+  assert.equal(preview.pixelCount,0);
+  assert.deepEqual(preview.celLinks,{ sharedDrawings:[],unlinked:[{ instance,source }] });
+  assert.deepEqual(preview.targets[0].retargeted,[{ cel:'three/ink',...address('three') }]);
+  editor.apply(patch);
+  const receipt = editor.receipts().at(-1), result = editor.snapshot();
+  assert.deepEqual(result.frames[1].cels.ink,{ id:'pause-cel',label:'Pause',offset:[1,0],marks:art.frames[0].cels.ink.marks });
+  assert.equal(result.frames[2].cels.ink.hold,'master');
+  assert.deepEqual(art.frames.map(({ id })=>editor.png({ frame:id })),original);
+  assert.equal(editor.previewEdit(request(editor,{ type:'unlink',...address('two') })).conflicts[0].code,'unlinked-cel');
+
+  editor.undo();
+  assert.deepEqual(editor.snapshot(),art);
+  editor.redo();
+  assert.deepEqual(editor.snapshot(),result);
+  assert.deepEqual(createPixelEditor(art).replay(receipt),result);
+  editor.apply(pencil(editor,'one',[1,0]));
+  assert.equal(at(editor,'three',[1,0]).swatch,'gold');
+  assert.equal(at(editor,'two',[2,0]).swatch,null);
+  editor.apply(pencil(editor,'two',[3,0]));
+  assert.equal(at(editor,'two',[3,0]).swatch,'gold');
+  assert.equal(at(editor,'one',[2,0]).swatch,null);
+  const locked = structuredClone(art);
+  locked.layers[0].locked = true;
+  const protectedEditor = createPixelEditor(locked);
+  assert.equal(protectedEditor.previewEdit(request(protectedEditor,{ type:'unlink',...address('two') })).conflicts[0].code,'locked-layer');
 });

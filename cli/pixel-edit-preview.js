@@ -90,7 +90,7 @@ function guideChanges(before = [], after = []) {
 }
 
 function report({ baseline, candidate = baseline, sources = [], targets = [], issues = [],
-  warnings = [], sourceRevision, compile, cell, limit }) {
+  warnings = [], sourceRevision, compile, cell, limit, celLinks }) {
   const maximum = previewLimit(limit);
   const pixels = [];
   let pixelCount = 0;
@@ -136,6 +136,7 @@ function report({ baseline, candidate = baseline, sources = [], targets = [], is
     ...(sourceRevision !== undefined && { sourceRevision }),
     ...(warnings.length && { warnings }),
     ...(guides.length && { guides }),
+    ...(celLinks && { celLinks }),
     pixelCount, pixels, sources, targets, conflicts:issues };
 }
 

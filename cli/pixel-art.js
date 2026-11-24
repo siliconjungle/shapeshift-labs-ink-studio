@@ -1554,11 +1554,16 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
       if (patch.operation.updateModifier) target.modifier = patch.operation.updateModifier.id;
     }
     const artifactRevision = fingerprint(result);
+    const celLinks = !binding && Timeline.linkChanges(design,result);
     const receipt = jsonValue({ ...common, status:'applied', affectedTargets:[target], skippedHits,
-      ...(shotHits && { shotHits }), outputs:{ kind:destination.kind,
+      ...(celLinks && { celLinks }),...(shotHits && { shotHits }), outputs:{ kind:destination.kind,
         documentRevision:binding ? documentRevision : artifactRevision, artifactRevision } });
-    if (expected && !equal(receipt,expected))
-      throw Preview.conflict('receipt-mismatch','Replay did not reproduce the recorded targets, hits, or output revisions');
+    if (expected) {
+      // Version 1 receipts recorded before link reporting can still replay.
+      const { celLinks,...baseReceipt } = receipt;
+      if (!equal(Object.hasOwn(expected,'celLinks') ? receipt : baseReceipt,expected))
+        throw Preview.conflict('receipt-mismatch','Replay did not reproduce the recorded targets, hits, or output revisions');
+    }
     return { result,receipt };
   } catch (cause) {
     const error = cause instanceof Error ? cause : new Error(String(cause));
@@ -1591,6 +1596,10 @@ function openDesign(source) {
 
 function sourceWarning(binding) {
   return { code:'unverified-source', binding, message:'Add the inspected sourceRevision to guard this scene edit' };
+}
+
+function reportPreview({ baseline,candidate,...options }) {
+  return Preview.report({ baseline,candidate,...options,compile,cell,celLinks:Timeline.linkChanges(baseline,candidate ?? baseline) });
 }
 
 function previewEdit(design, patch, context, { frameId,limit } = {}) {
@@ -1642,7 +1651,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
   } catch (error) {
     issues = Preview.conflicts(error);
   }
-  return Preview.report({ baseline:design,candidate,sources,targets,issues,warnings,sourceRevision,compile,cell,limit });
+  return reportPreview({ baseline:design,candidate,sources,targets,issues,warnings,sourceRevision,limit });
 }
 
 const persistentJournals = new WeakSet();
@@ -1866,7 +1875,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     }
     const sources = Preview.sourceChanges(sceneName,before.environment,scene);
     const warnings = targets.filter(target => target.binding && !target.sourceChecked).map(target => sourceWarning(target.binding));
-    return Preview.report({ baseline:base.design,candidate,sources,targets,issues,warnings,compile,cell,limit });
+    return reportPreview({ baseline:base.design,candidate,sources,targets,issues,warnings,limit });
   }
 
   const editor = Object.freeze({
@@ -1913,7 +1922,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       try {
         request = requestFor(draft,patch);
       } catch (error) {
-        return Preview.report({ baseline:draft.design, issues:Preview.conflicts(error),compile,cell,limit });
+        return reportPreview({ baseline:draft.design,issues:Preview.conflicts(error),limit });
       }
       return previewEdit(draft.design,request,editContext(options,false),{ limit });
     },
