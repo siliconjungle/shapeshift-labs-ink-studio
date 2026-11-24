@@ -69,6 +69,15 @@ export function mountPixelInspector(root,view,read) {
         if (value) rows.push({ text:label+' '+showValue(value),depth:1 });
       }
     }
+    const geometry = scene.sources?.geometry;
+    if (geometry?.kind === 'mesh') rows.push({ text:['Mesh source',geometry.asset,geometry.chart,
+      geometry.triangle !== undefined && 'triangle '+geometry.triangle,
+      geometry.barycentric && 'barycentric '+showValue(geometry.barycentric)].filter(Boolean).join(' · ') });
+    if (geometry?.kind === 'sdf') rows.push({ text:['SDF source',geometry.entity ?? geometry.object,
+      'local '+showValue(geometry.local)].filter(Boolean).join(' · ') });
+    for (const hit of scene.sources?.splats ?? []) rows.push({ text:['Splat source',hit.id ?? 'Unidentified splat',
+      percent(hit.visibleCoverage)+' visible coverage'].join(' · ') });
+    if (scene.sources?.truncated) rows.push({ text:'Additional splat contributions omitted' });
     if (scene.frontStrand) rows.push({ text:['Front strand',scene.frontStrand.strand?.name ?? scene.frontStrand.id,
       'depth '+showValue(scene.frontStrand.depth),'coverage '+percent(scene.frontStrand.coverage)].join(' · ') });
     for (const hit of scene.fragments?.hits ?? []) rows.push({ text:[hit.kind,hit.object,hit.part,hit.material,
@@ -116,6 +125,9 @@ export function mountPixelInspector(root,view,read) {
     group('Palette',colors);
     group('Material channels',materialRows(materials,scene));
     group('Scene hits',sceneRows(scene));
+    group('Scene bindings',(scene?.bindings ?? []).map(row=>({ text:[row.id,row.status.replaceAll('-',' '),
+      row.sourceAt && 'pixel '+showValue(row.sourceAt),
+      ...(row.hits ?? []).map(hit=>hit.id ?? hit.entity ?? hit.object)].filter(Boolean).join(' · ') })));
   }
 
   function setPinned(value) {

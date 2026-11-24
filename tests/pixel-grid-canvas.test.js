@@ -1057,6 +1057,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.match(inspected,/paint-tip · accent · front/);
     assert.match(inspected,/face\/front\/wear.*0\.625/);
     assert.match(inspected,/Source view.*panel.*8×6/);
+    assert.match(inspected,/Scene bindings.*panel · grid mismatch/);
     assert.match(inspected,/Scene hits/);
     await click(browser,'#pixel-inspection button');
     await moveTo(0,0);

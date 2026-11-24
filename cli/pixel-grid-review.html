@@ -51,7 +51,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
 /*PIXEL_INSPECT_MODULES*/
-const { frames,palette,materials,definitions,layerIds,rulesSource,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
+const { frames,palette,materials,definitions,layerIds,rulesSource,sceneBindings,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
@@ -80,7 +80,12 @@ const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'
       const value = !uv ? null : row.type === 'number' ? data.getFloat64(p*8,true) :
         coverage < 0 ? null : { color:[0,8,16].map(i=>data.getFloat64(offset+i,true)),coverage };
       return { ...meta,requestedDestination:row.name,uv,value };
-    }),...(scene && { scene:PixelInspection.scene(scene,at,ArtPasses) }) };
+    }),...(scene && { scene:{
+      ...PixelInspection.scene(scene,at,ArtPasses),
+      bindings:sceneBindings.filter(binding=>binding.frame === undefined || binding.frame === active.id).map(binding=>
+        PixelSourceBindings.resolve(scene,binding,at,{ grid:[active.width,active.height],frameId:active.id,
+          sceneMatches:true,sourcePoint:PixelCanvasTransforms.sourcePoint,ArtPasses }))
+    } }) };
 });
 const craftPanel = mountPixelCraftPanel(document.querySelector('#craft-diagnostics'),view,rulesSource ? PixelArtRules.kinds : PixelCraft.kinds,{
   inspect:at=>inspector.focus(at)

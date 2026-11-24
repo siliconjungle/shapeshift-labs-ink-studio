@@ -23,7 +23,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -92,12 +92,18 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
-        motion || chart && sampleCharts ? weights : undefined,local));
+        sourceBinding || motion || chart && sampleCharts ? weights : undefined,local));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
         ...(motion && {key:JSON.stringify(['mesh',layer.surfaceMotionKey ?? layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
           driven?.amounts??null]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step, ...(local && {localProjection:local})})};
+      const source = sourceBinding && {
+        key:JSON.stringify([slot,chart?.first ?? 0]),
+        identity:{ kind:'mesh',asset:layer.sceneMeshId ?? layer.surfaceMotionKey ?? null,
+          chart:chart?.id ?? null,stageSlot:slot, object:chart?.objectId,part:chart?.partId },
+        triangle:(first-(chart?.first ?? 0))/3
+      };
       const uvTransform = shifted ? range.transform : [1,1,0,0];
       const axes = !depthOnly && surfaceNormals && !mip?.objectTexels &&
         (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);
@@ -203,14 +209,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
               local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
           }
-          const weights3=(motion || chart && sampleCharts) && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
+          const weights3=(sourceBinding || motion || chart && sampleCharts) && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
           const at=chart && first-chart.first;
           const value=(data,components,k)=>weights3.reduce((s,n,i)=>s+n*data[(at+i)*components+k],0);
           let uv;
           if (chart && sampleCharts) {
             const {x,y,width:w,height:h}=chart.region;
             uv=chart.uv ? [value(chart.uv,2,0),value(chart.uv,2,1)] :
-              [0,1].map(k=>(weights3.reduce((s,n,i)=>s+n*input[i].uv[k],0)-(k?y:x)-.5)/((k?h:w)-1));
+              [0,1].map(k=>(weights3.reduce((s,n,i)=>s+n*input[i].uv[k],0)-(k?y:x)-.5)/Math.max(1,(k?h:w)-1));
             uv=uv.map(n=>Math.max(0,Math.min(1,n)));
           }
           const objectPosition=chart?.rest && weights3 ? [0,1,2].map(k=>value(chart.rest,3,k)) : position;
@@ -241,6 +247,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ...(local && {localProjection:true}),
             ...(lightingTarget&&{lightingTarget}),
             ...(fogObject!==undefined&&{fogObject}),
+            ...(source && {source:{ ...source,coordinate:weights3 }}),
             ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
         }
       }

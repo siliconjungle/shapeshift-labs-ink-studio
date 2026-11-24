@@ -1431,7 +1431,7 @@ const CMD = {
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
-        '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--references] [--out report.json]   show pixel contributors',
+        '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--references] [--out report.json]   show pixel contributors',
         '  pixel-art edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
         '  pixel-art stack export <document.json> --out deck.json   open in the layer Workshop',
@@ -4161,6 +4161,8 @@ const CMD = {
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
   'pixel-art'() {
     const PixelArt = require('./pixel-art.js'), ViewSource = require('../src/pixel-view-source.js');
+    const { sourceBindings } = require('../src/art-passes.js');
+    const sourcePasses = [...ViewSource.channels,...sourceBindings];
     function editScene(id,retained,historyLimit) {
       if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
       const bytes = retained === undefined ? fs.readFileSync(path.resolve(id)) : undefined;
@@ -4195,7 +4197,7 @@ const CMD = {
       pose(world,t);
       const settings = { w,h,px:1,t,passes };
       if (!sceneInspection) return R.render(world,view(settings));
-      return renderView(world,id,{ ...settings,passes:[...new Set([...ViewSource.channels,...passes])],
+      return renderView(world,id,{ ...settings,passes:[...new Set([...sourcePasses,...passes])],
         palettePixel,strandPixel,inspectFragmentPixel,renderGrid:false,cameraGuides:false },{ id:captureId });
     }
     function captureMotion(id,raw,subject,retainSource) {
@@ -4204,7 +4206,7 @@ const CMD = {
       const Motion = require('../src/pixel-motion-checks.js'), Review = require('./pixel-motion-review.js');
       const w = num('w',160), h = num('h',96), { options,samples } = Review.plan(raw,'scene',w,h);
       const world = buildPreview(id), surface = options.alignment === 'surface', history = R.sequenceHistory(lib().KIT);
-      const passes = [...(retainSource ? ViewSource.channels : ['objectId','coverage']),
+      const passes = [...(retainSource ? sourcePasses : ['objectId','coverage']),
         ...(surface ? ['surfaceMotion','surfaceMotionValid','partMotion','partMotionValid'] : [])];
       let matched = false;
       const images = samples.map((row,index)=>{

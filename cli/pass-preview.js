@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const { upscale } = require('./render.js');
-const { channels, strands, opaque, proxies } = require('../src/art-passes.js');
+const { channels, strands, opaque, proxies, sourceBindings } = require('../src/art-passes.js');
 const { labels: inkLabels } = require('../src/art-ink.js');
 const inkColors = [0, 0xf2ad77, 0x63bcc5, 0xab84d8, 0xf2e7c5, 0xe9647f, 0x90bd78];
 
@@ -158,7 +158,7 @@ function writePasses(directory, frame, scale = 1) {
   if (passes.strandDepth) manifest.strandDepth = depthRange(passes.strandDepth);
   fs.mkdirSync(directory, { recursive: true });
   for (const channel of ['color', ...channels]) {
-    if (channel !== 'color' && (!passes[channel] || ['position', 'objectPosition'].includes(channel))) continue;
+    if (channel !== 'color' && (!passes[channel] || ['position','objectPosition'].includes(channel) || sourceBindings.includes(channel))) continue;
     const native = encode(frame, channel), image = scale === 1 ? native : upscale(native, scale);
     const file = channel + '.png';
     PNG.write(path.join(directory, file), image.w, image.h, image.rgb, image.alpha);
@@ -173,6 +173,9 @@ function writePasses(directory, frame, scale = 1) {
     manifest.proxyData=writePassData(passes,proxies,writeData);
     if (passes.proxyDepth) manifest.proxyDepth=depthRange(passes.proxyDepth);
   }
+  if (passes.sourceSurface || passes.sourceSplat) manifest.sourceBindings = {
+    ...writePassData(passes,sourceBindings,writeData),surfaceSources:passes.surfaceSources,splatSources:passes.splatSources
+  };
   if (passes.strands) manifest.strandData=writeStrandData(passes,writeData);
   if (passes.partId) manifest.partData=writePassData(passes,['partId'],writeData);
   if (['surfaceKind','surfaceCoverage','geometricNormal','shadingNormal','surfaceUV','surfaceUVValid','surfaceMotion','surfaceMotionValid']

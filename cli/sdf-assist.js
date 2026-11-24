@@ -71,7 +71,7 @@ function bind(world, data, settings) {
 }
 
 const facing = (row,normal) => !row.normal || dot(row.normal,row.normal)<1e-8 || dot(row.normal,normal)>.25;
-function trace(source, ray, near, far, settings, clip, visible, x, y) {
+function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBinding) {
   const {origin,direction,axial} = ray, {min,max} = source.bounds, {epsilon,steps} = settings;
   const range = [near/axial,far/axial];
   for (let k=0;k<3;k++) if (!slab(range,origin[k],direction[k],min[k],max[k])) return null;
@@ -87,22 +87,32 @@ function trace(source, ray, near, far, settings, clip, visible, x, y) {
     }
     let normal;
     if ((!clip || clip(point)) && (!source.accepts || source.accepts(...point))) {
-      let row;
+      let row, fieldOwner;
       if (source.surfaceAt) {
         normal=normalAt(field,point,epsilon);
         if (normal) row=source.surfaceAt(point,normal);
       } else {
         const {body,owner} = source.locate(...point);
+        fieldOwner = body ?? owner;
         const part = source.parts.get(owner) ?? source.parts.get(body);
         if (part && (normal=normalAt(field,point,epsilon)))
           row=part.nearest.sample(point,i=>facing(part.records[i],normal))?.values;
       }
-      if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point))
-        return {z:along*axial,position:point,normal,row,objectPosition:source.motion?.rest(...point) ?? point};
+      if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
+        const rest = source.motion?.rest(...point) ?? point;
+        return {z:along*axial,position:point,normal,row,objectPosition:rest,
+          ...(sourceBinding && { source:sdfSource(fieldOwner,row,rest) })};
+      }
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
   }
   return null;
+}
+
+function sdfSource(owner,row,rest) {
+  const target = owner ? {object:owner.renderOwner,entity:owner.renderOwner,...owner.renderTarget} : row.target;
+  return { key:owner ?? row.part,identity:{ kind:'sdf',object:target.object,entity:target.entity,part:target.part },
+    coordinate:owner?.sourceLocal?.(rest) ?? rest };
 }
 
 function editableSource(field) {
@@ -117,7 +127,7 @@ function editableSource(field) {
   }};
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,editable=[]}) {
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,editable=[]}) {
   const {sources,rows} = bind(world,data,settings);
   for (const field of editable) {
     if (field.materials.some(material=>settings.candidates({object:field.objectId,entity:field.objectId,material})))
@@ -129,7 +139,7 @@ function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,editable=
     const ray=rayAt(x+.5,y+.5);
     let closest;
     for (const source of sources) {
-      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y);
+      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y,sourceBinding);
       if (hit && (!closest || closest.z>hit.z)) closest=hit;
     }
     if (!closest) continue;

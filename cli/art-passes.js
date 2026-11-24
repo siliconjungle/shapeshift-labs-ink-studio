@@ -5,6 +5,7 @@ const { surfacePoint } = require('./scene-optics.js');
 const TargetSelectors = require('../src/target-selectors.js');
 const PartMotion = require('./part-motion.js');
 const SurfaceMotion = require('./opaque-surface-pass.js');
+const PixelSources = require('./pixel-source-passes.js');
 
 const SplatFrames = require('../src/splat-frames.js');
 const { rows: shutterRows } = require('./programmable-exposure.js');
@@ -44,8 +45,10 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
   const owner = needsOwner ? new Int32Array(size).fill(-1) : null;
   const depth = needsOwner ? new Float32Array(size).fill(Infinity) : null;
 
+  const bindings = selected.has('sourceSplat') ? PixelSources.splatBuffer(size) : null;
   let atlasOwners;
-  function fragment(p, i, a, solid, z, emits, r, g, b, atlas, emissionTint) {
+  function fragment(p, i, a, solid, z, emits, r, g, b, atlas, emissionTint, sourceDepth = z) {
+    bindings?.add(p,atlas ? -1 : i,a,sourceDepth);
     const tint=emissionTint ?? atlas?.emission;
     emits ||= Boolean(tint);
     if (coverage) coverage[p] = a + coverage[p] * (1 - a);
@@ -90,6 +93,7 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
   }
 
   function sprite(p, i, z) {
+    bindings?.add(p,i,1,z);
     atlasOwners?.delete(p);
     if (coverage) coverage[p] = 1;
     if (emission) emission.fill(0, p * 3, p * 3 + 3);
@@ -111,6 +115,8 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       return out;
     };
     const result = { w, h };
+    if (selected.has('sourceSurface')) Object.assign(result,PixelSources.surfaces(size,atlasOwners,topDown));
+    if (bindings) Object.assign(result,bindings.finish(world,topDown));
     if (geometry.ditherView) result.ditherView = geometry.ditherView;
     if (coverage) result.coverage = topDown(coverage, 1);
     if (surfaceCoverage) result.surfaceCoverage=topDown(surfaceCoverage,1);

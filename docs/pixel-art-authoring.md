@@ -1288,8 +1288,8 @@ node cli/ink-studio.js pixel-art canvas gate-design.json \
   --source-view gate-view.json --out gate-review.html
 ```
 
-The document and source view must have the same native dimensions.
-A source view can be reopened without the scene or its assets. Keep using
+Canvas reviews use the same native dimensions as the source view. An inspection
+of a named binding can use its registered source grid. A source view can be reopened without the scene or its assets. Keep using
 `--scene` to sample the live material channels of a bound destination.
 Pass `--at` during capture to retain detailed palette and fragment traces
 for one pixel. Scene-backed canvas reviews embed their capture. Each sample in
@@ -1317,6 +1317,43 @@ Float32 depth, normal and coordinate values are preserved at render precision.
 In Node, pass the parsed file to `unpackPixelSourceView(record)` and use the
 returned frame with `editor.inspect([x, y], { renderFrame })` or
 `pickSurface(renderFrame.passes, x, y)`.
+
+## Resolve a pixel to its scene source
+
+Use the binding ID from `sceneBindings`. On a traced document, it is
+`projection`.
+
+```sh
+node cli/ink-studio.js pixel-art inspect gatehouse-study/design.json \
+  --source-view gatehouse-study/source-view.json --binding projection --at 57,43
+```
+
+Pass `--scene` to resolve against a fresh view. For the SDK, supply
+`editor.inspect([x, y], { binding, renderFrame })`. The report keeps the document
+coordinate and gives the corresponding `sourceAt` in the binding's registered
+grid. Ink checks the scene, object or entity, part, and document frame. It
+also checks a layer-scoped binding when inspecting an explicit cel.
+The offline canvas shows the bindings for the current frame under the cursor.
+
+- Mesh hits identify the asset or captured mesh slot, chart, and triangle.
+  Barycentrics refer to the three vertices of the captured chart triangle
+  before near-plane clipping. The authored UV is included when the mesh supplies one.
+- SDF hits identify the owning field. The point is expressed in that field's
+  local coordinates after removing the pose and authored solid transform.
+  The report also retains the hit in rest space. Use `--sdf-assist on`
+  when the scene should render the field directly for inspection.
+- Splat hits give the stable source ID, depth, fragment alpha, and the
+  coverage that survived compositing at the pixel. The four strongest
+  splat fragments are retained per pixel. The report includes omitted
+  coverage when contributions exceed that budget. An unidentified splat
+  has no stable edit ID. A source marked `editable` can supply its ID to a
+  `splat-attributes` destination.
+
+The report distinguishes a miss, an unmatched scope, unavailable data, and
+a pixel where omitted contributions may contain a match. Earlier source
+views can still provide saved mesh UVs and any saved pinned splat trace.
+New captures store the representation data as optional typed planes and
+source tables in the same version 1 format.
 
 ## Navigate craft diagnostics
 

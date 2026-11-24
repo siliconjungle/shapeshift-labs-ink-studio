@@ -8,12 +8,18 @@ const PixelViewSource = (() => {
   });
   const optional = {
     foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
-    paletteOwner:1, strandId:1, strandDepth:1, strandCoverage:1, strandU:1, strandTangent:3
+    paletteOwner:1, sourceSurface:1, sourceTriangle:1, sourceCoordinates:3,
+    sourceSplat:4, sourceSplatAlpha:4, sourceSplatDepth:4, sourceSplatWeight:4, sourceSplatOmitted:1,
+    strandId:1, strandDepth:1, strandCoverage:1, strandU:1, strandTangent:3
   };
   const tables = ['objects','parts','materials','surfaceKinds'];
-  const optionalTables = ['paletteOwners','strands'];
+  const optionalTables = ['paletteOwners','strands','surfaceSources','splatSources'];
+  const bindingGroups = [
+    ['surfaceSources','sourceSurface','sourceTriangle','sourceCoordinates'],
+    ['splatSources','sourceSplat','sourceSplatAlpha','sourceSplatDepth','sourceSplatWeight','sourceSplatOmitted']
+  ];
   const types = { Uint8Array, Uint8ClampedArray, Uint32Array, Float32Array };
-  const ids = new Set(['objectId','partId','materialId','splatId','paletteOwner','strandId']);
+  const ids = new Set(['objectId','partId','materialId','splatId','paletteOwner','strandId','sourceSurface','sourceTriangle','sourceSplat']);
   const masks = new Set(['surfaceKind','surfaceUVValid','inkMask']);
   const littleEndian = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
   const finite = Number.isFinite;
@@ -86,6 +92,11 @@ const PixelViewSource = (() => {
     for (const key of [...tables,...optionalTables.filter(key=>passes[key] !== undefined)]) {
       if (!Array.isArray(passes[key])) throw new TypeError('Invalid pixel source view table '+key);
       result[key] = passes[key];
+    }
+    for (const [table,...names] of bindingGroups) {
+      const captured = [table,...names].some(key=>result[key] !== undefined);
+      if (captured && (result[table]?.[0] !== null || names.some(key=>!result[key])))
+        throw new TypeError('Incomplete pixel source view binding planes for '+table);
     }
     const colorBytes = ['Uint8Array','Uint8ClampedArray'];
     return { w,h,scene,time,sourceView,passes:result,

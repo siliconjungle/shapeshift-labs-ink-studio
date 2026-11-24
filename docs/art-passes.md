@@ -511,6 +511,15 @@ In Node, use `spriteAtlas(world, { width, height, directions, times, fps, pivot,
 
 For keyed fragmentation and reassembly with stable ownership, see [world-space reveal and reconstruction](world-reconstruction.md).
 
+## Pixel source bindings
+
+Use `pixel-art capture` and `pixel-art inspect --binding` to resolve scene
+pixels to mesh, SDF, and splat sources. For raw renderer output, request
+`sourceSurface` for geometric source coordinates and `sourceSplat` for
+contributions. Each request includes its related planes and lookup table.
+The `passes` command writes those planes losslessly under `sourceBindings`
+in `passes.json`. [Resolve a pixel to its scene source](pixel-art-authoring.md#resolve-a-pixel-to-its-scene-source).
+
 ## Shared opaque surfaces
 
 Request `['opaque-surface']` in the headless renderer to inspect the nearest

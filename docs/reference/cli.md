@@ -249,7 +249,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings
   pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
-  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--references] [--out report.json]   show pixel contributors
+  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--references] [--out report.json]   show pixel contributors
   pixel-art edit <design.json> [--frame id]   work on a native indexed frame
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
   pixel-art stack export <document.json> --out deck.json   open in the layer Workshop
