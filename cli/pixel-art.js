@@ -1573,11 +1573,11 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       }
     });
     if (!route.binding) candidate = output;
-    if (target?.attributeHits || target?.topologyHits) {
+    if (target?.attributeHits || target?.topologyHits || context.splatDiagnostics && resolvedRows.size) {
       target.render=SplatPreview.compare(sourceWorld,sourceWorld.look?.splatFit,output,{
         grid:route.binding.canvas?.size??[design.width,design.height],
         rows:resolvedRows,
-        limit:previewLimit,time:context.time,view:context.splatView
+        limit:previewLimit,time:context.time,view:context.splatView,diagnostics:context.splatDiagnostics
       });
     }
     if (source) sources.push(...Preview.sourceChanges(source.scene,source.before,source.fork.snapshot()));
@@ -1700,7 +1700,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
 
   function editContext(context, grouped) {
     return {
-      time:context?.time,splatView:context?.view,
+      time:context?.time,splatView:context?.view,splatDiagnostics:context?.diagnostics,
       captureSelection:context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame)),
       sceneRef:context?.sceneRef ?? (sceneEditor ? sceneName : undefined),
       scene(binding) {
@@ -1756,7 +1756,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
   }
 
   function previewChanges(options = {}) {
-    const {limit,time,view}=options, previewLimit=Preview.previewLimit(limit);
+    const {limit,time,view,diagnostics}=options, previewLimit=Preview.previewLimit(limit);
     const before = journal.transactionBase();
     if (!before) throw new Error('No active transaction');
     const content = before.entities[slot]?.content;
@@ -1782,7 +1782,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
           ...(attributeHits.length && {attributeHits}),
           ...(topologyHits.length && {topologyHits}) };
         targetsByKey.set(key,summary);
-        if (attributeHits.length || topologyHits.length) {
+        if (attributeHits.length || topologyHits.length || diagnostics && splats.length) {
           const binding=route.binding, grid=binding.canvas?.size??[draft.design.width,draft.design.height];
           const reviewKey=JSON.stringify([binding.scene,grid]);
           if (!splatReviews.has(reviewKey)) splatReviews.set(reviewKey,{binding,grid,rows:new Set(),target:summary});
@@ -1801,7 +1801,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const world=options.world?.(binding) ?? resolveScene(binding).build();
         const authored=world.look?.splatFit;
         target.render=SplatPreview.compare(world,base.renderOutputs[binding.scene]?.splatFit??authored,
-          draft.renderOutputs[binding.scene]?.splatFit??authored,{grid,rows,limit:previewLimit,time,view});
+          draft.renderOutputs[binding.scene]?.splatFit??authored,{grid,rows,limit:previewLimit,time,view,diagnostics});
       }
     } catch (error) {
       issues = Preview.conflicts(error);
@@ -2517,7 +2517,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
     return opt.scene;
   }
   const context = {
-    sceneRef:opt.scene,splatView:view,
+    sceneRef:opt.scene,splatView:view,splatDiagnostics:splatDiagnosticOptions(opt),
     time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN,
     captureSelection:sourceViewFile ? ()=>ViewSource.unpack(read(sourceViewFile)) : reference(opt.scene) ? settings=>{
       if (out === path.resolve(opt.scene))
@@ -2657,6 +2657,18 @@ function inspectTargets(design,destination,context,limit = 128,{query,frame} = {
   return { documentRevision:fingerprint(design), ...targets };
 }
 
+function splatDiagnosticOptions(opt) {
+  if (opt['splat-diagnostics'] === undefined) return;
+  if (opt['splat-diagnostics'] !== true) throw new TypeError('Use --splat-diagnostics to include native splat diagnostics');
+  const coordinates = key => {
+    if (opt[key] === undefined) return undefined;
+    if (typeof opt[key] !== 'string' || !/^\d+(,\d+)+$/.test(opt[key]))
+      throw new TypeError('--'+key+' needs comma-separated art-grid integers');
+    return opt[key].split(',').map(Number);
+  };
+  return { at:coordinates('at'),rect:coordinates('rect') };
+}
+
 function sessionCommand(pos,opt,{ scene,capture,view }) {
   const [action,directory,input] = pos;
   const argc = ['init','apply','select'].includes(action) ? 3 : 2;
@@ -2691,7 +2703,7 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       result = editor.receipts().at(-1);
     } else if (action === 'preview') {
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-      result = editor.previewChanges({ limit,view,time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN });
+      result = editor.previewChanges({ limit,view,diagnostics:splatDiagnosticOptions(opt),time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN });
       if (!result.valid) process.exitCode = 2;
     } else if (action === 'inspect') {
       result = editor.inspect(inspectCoordinate(opt.at),{ frame:opt.frame,cel:opt.cel,
@@ -2744,4 +2756,4 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
 }
 
 module.exports = { createEditor, documentFromPNG, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace, artRulesReport,
-  command, sessionCommand, actions, sessionActions, paletteActions, stackActions };
+  command, sessionCommand, splatDiagnosticOptions, actions, sessionActions, paletteActions, stackActions };

@@ -245,7 +245,8 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art validate <design.json>           validate the versioned document and each frame
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
     --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds
-  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts
+  pixel-art preview <design.json> <edit.json> [--scene <bound scene>] [--splat-diagnostics]   report a proposed edit and its conflicts
+  pixel-art splat-diagnostics <scene> [--before fit.json] [--splat-fit fit.json] [--rect x,y,w,h] [--at x,y] [--out report.json]
   pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel
   pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings
@@ -849,6 +850,7 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--boundaries` · [cli/mesh-uv.js](../../cli/mesh-uv.js)
 - `--boundary-cels` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--brick-meshes` · [cli/ink-studio.js](../../cli/ink-studio.js)
+- `--buildup-threshold` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--camera-impulse-time` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--case` · [cli/music-instrument-benchmark.js](../../cli/music-instrument-benchmark.js)
 - `--cell` · [cli/turntable-shape.js](../../cli/turntable-shape.js)
@@ -856,6 +858,7 @@ These options are read by CLI code. Follow each source link for the accepted val
 - `--closest` · [cli/curve.js](../../cli/curve.js)
 - `--cloud` · [cli/scan-mesh.js](../../cli/scan-mesh.js)
 - `--coalesce` · [cli/ink-studio.js](../../cli/ink-studio.js)
+- `--coverage-threshold` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--curvature` · [cli/curve.js](../../cli/curve.js)
 - `--delay` · [cli/ink-studio.js](../../cli/ink-studio.js)
 - `--depth-scale` · [cli/depth.js](../../cli/depth.js)

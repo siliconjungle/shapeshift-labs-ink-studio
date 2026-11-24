@@ -130,6 +130,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.reviewQuantizationError` | function | `(world, { threshold, heatmapMax, regionLimit, ...view } = {})` | [guide](../palette-recipes.md#review-quantization-error), [source](../../cli/palette-error.js) |
 | `node.reviewRampShot` | function | `(world, options = {})` | [guide](../palette-recipes.md#review-ramp-spacing), [source](../../cli/ramp-review.js) |
 | `node.reviewShadowReadability` | function | `(world, options={})` | [guide](../palette-recipes.md#review-shadow-readability), [source](../../cli/shadow-readability.js) |
+| `node.reviewSplatEdit` | function | `(world, { width = 160, height = 96, before = false, after = world.look?.splatFit, time = world.lookSnapshot?.time ?? 0, view, ...settings } = {})` | [source](../../cli/splat-edit-diagnostics.js) |
 | `node.reviewSubjectReadability` | function | `(world,options={})` | [guide](../palette-recipes.md#review-subject-readability), [source](../../cli/readability-review.js) |
 | `node.roomImpulseCapture` | namespace |  |  |
 | `node.roomImpulseCapture.asset` | function | `(result,settings)` | [guide](../room-impulse-capture.md), [source](../../src/room-impulse-capture.js) |

@@ -44,6 +44,10 @@ test('depth-only proxies cull rear splat fragments and leave actual depth, color
   assert.equal(on.passes.depth[rear],Infinity);
   assert.equal(on.passes.proxyRejected[rear],1);
   assert(on.passes.proxyRemovedCoverage[rear]>.5);
+  const diagnostics=ink.reviewSplatEdit(world,{width:on.w,height:on.h,view,at:[rear%on.w,Math.floor(rear/on.w)]});
+  assert.equal(diagnostics.inspected.after.proxyRejected,1);
+  assert(diagnostics.inspected.kinds.includes('proxy-rejected'));
+  assert.equal(diagnostics.cost.after.proxyRejected,on.passes.proxyRejected.reduce((sum,count)=>sum+count,0));
   assert.equal(on.passes.depth[near],off.passes.depth[near]);
   assert(on.passes.depth[near]>on.passes.proxyDepth[near]);
   assert.deepEqual(bytes(on,near),bytes(off,near));

@@ -2529,6 +2529,45 @@ report the source ID. Undo, redo, and replay use the existing pixel
 editor session. The saved fit renders through `--splat-fit` in the
 software renderer.
 
+### Diagnose an edited splat region
+
+Run a matched native-grid review of the original source and an edited fit.
+The optional `--before` accepts an earlier fit for comparing two revisions.
+
+```sh
+node cli/ink-studio.js pixel-art splat-diagnostics scan.ply --splat-fit scan-fit.json \
+  --w 160 --h 96 --rect 48,24,64,48 --at 80,45 --out splat-diagnostics.json
+```
+
+- **Overlap and opacity buildup** report the number of submitted source
+  fragments and how much their combined opacity exceeds the strongest
+  single fragment. `--buildup-threshold` defaults to 0.15. Use `--at`
+  to inspect front-to-back source IDs, depth, opacity, and visible weight
+  at one art pixel. The inspection includes fully covered splats.
+- **Removed fragments** compare source row and pixel pairs, so a replacement
+  is visible even when the count holds. Depth and proxy rejections have
+  their own counts. The retained pair table is bounded. When it fills,
+  the report marks pair tracking as truncated and leaves exact change
+  counts null.
+- **Uncovered pixels and holes** flag previously covered pixels that
+  drop below `--coverage-threshold` (default 0.5). A hole is enclosed by
+  coverage in the full native frame. An opening to the frame boundary
+  is reported as uncovered. An intentional carve can produce either finding.
+- **Region cost** compares projected rows, candidate pixel tests, composited
+  fragments, peak fragments per pixel and depth rejections for the rectangle.
+  Candidate pixel tests count projected raster bounds before per-pixel
+  rejection. These are software raster work counts in the primary view.
+  Omit `--rect` to review the full grid.
+
+`examplePixels` gives one coordinate per finding type. `--limit` bounds the
+list of pixel findings while summaries cover the entire requested region.
+Include the same diagnostics in `pixel-art preview` or
+`pixel-art session preview` with `--splat-diagnostics` and optional `--rect`
+and `--at`. They appear under the splat target's `render.diagnostics`.
+In Node, use `reviewSplatEdit(world, { before, after, rect, at })` for a
+standalone comparison, or pass `diagnostics: { rect, at }` to the editor's
+`previewEdit` or `previewChanges`.
+
 ### Carry source edits into distance tiers
 
 Use the saved fit with the [Gaussian chunk packer](webgpu-graphs.md#stream-gaussian-chunks)

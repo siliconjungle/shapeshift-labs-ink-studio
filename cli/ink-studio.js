@@ -1428,7 +1428,8 @@ const CMD = {
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '    --query splats.json [--source-view view.json] [--limit N]   pick splats by footprint, contribution, part, material or rest bounds',
-        '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
+        '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>] [--splat-diagnostics]   report a proposed edit and its conflicts',
+        '  pixel-art splat-diagnostics <scene> [--before fit.json] [--splat-fit fit.json] [--rect x,y,w,h] [--at x,y] [--out report.json]',
         '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
         '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings',
@@ -4229,6 +4230,32 @@ const CMD = {
      its pixels make one, as 2 for a picture shown at twice its size), the diorama drawn at the same size in art pixels, the two side
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
   'pixel-art'() {
+    if (pos[0] === 'splat-diagnostics') {
+      if (pos.length !== 2 || ['w','h','t','limit','coverage-threshold','buildup-threshold','out'].some(key=>opt[key]===true) ||
+          artPixelSize !== undefined && artPixelSize !== 1)
+        die('Use pixel-art splat-diagnostics <scene> [--before fit.json] [--splat-fit fit.json] [--rect x,y,w,h] [--at x,y] at px 1');
+      const { splatDiagnosticOptions } = require('./pixel-art.js');
+      const { reviewSplatEdit } = require('./splat-edit-diagnostics.js');
+      const time = num('t',0), world = buildPreview(pos[1]);
+      if (!Number.isFinite(time) || time<0) die('Splat review time must be finite and nonnegative');
+      pose(world,time);
+      const report = reviewSplatEdit(world,{
+        ...splatDiagnosticOptions({ ...opt,'splat-diagnostics':true }),
+        width:num('w',160),height:num('h',96),time,view,
+        before:renderAssetOption('before'),after:renderAssetOption('splat-fit'),
+        limit:num('limit',256),coverageThreshold:num('coverage-threshold'),buildupThreshold:num('buildup-threshold')
+      });
+      const json = JSON.stringify(report,null,2)+'\n';
+      if (opt.out === undefined) process.stdout.write(json);
+      else {
+        const out = outputFile('splat-diagnostics.json');
+        if ([pos[1],opt.before,opt['splat-fit']].some(file=>typeof file==='string' && path.resolve(file)===out))
+          die('Write diagnostics to a separate output from its inputs');
+        fs.writeFileSync(out,json);
+        console.log('wrote',out);
+      }
+      return;
+    }
     if (pos[0] === 'paint-lighting') {
       if (pos.length!==2 || ['subject','part','t','steps','out'].some(key=>opt[key]===true) ||
           opt.part!==undefined && opt.subject===undefined || artPixelSize!==undefined && artPixelSize!==1)
@@ -4974,7 +5001,7 @@ async function run() {
     shotReplay?.verify();
     return;
   }
-  const pixelInputs=cmd==='pixel-art' ? (pos[0]==='capture' ? [pos[1]] : [opt.scene]).filter(value=>typeof value==='string') : [];
+  const pixelInputs=cmd==='pixel-art' ? (['capture','splat-diagnostics'].includes(pos[0]) ? [pos[1]] : [opt.scene]).filter(value=>typeof value==='string') : [];
   const splatFiles = cmd === 'pixel-art' ? pixelInputs.filter(gaussianFile) : cmd === 'snap' ? pos.filter(gaussianFile) : ['render', 'turn', 'sheet', 'clip', 'atlas'].includes(cmd)
     ? pos.slice(0, 1).filter(gaussianFile) : [];
   if (splatFiles.length) {

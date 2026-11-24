@@ -1,16 +1,16 @@
 'use strict';
 
-const ViewSource = require('../src/pixel-view-source.js');
+const SplatDiagnostics = require('./splat-edit-diagnostics.js');
 
-function compare(world,before,after,{ grid, rows, limit, view, time=world.lookSnapshot?.time??0 }) {
+function compare(world,before,after,{ grid, rows, limit, view, diagnostics, time=world.lookSnapshot?.time??0 }) {
   const [w,h]=grid;
-  ViewSource.grid(w,h);
-  if (!Number.isFinite(time) || time<0) throw new RangeError('Splat preview time must be finite and nonnegative');
-  const render=require('./render.js').render;
-  const options={...(typeof view==='function' ? view() : view),w,h,px:1,t:time,passes:['coverage','depth','sourceSplat'],renderGrid:false,renderGraph:false,
-    cameraGuides:false,inspection:false,shutter:false,composite:false,transparent:true};
-  const a=inspect(render(world,{...options,splatFit:before??false}));
-  const b=inspect(render(world,{...options,splatFit:after??false}));
+  const trace = diagnostics && SplatDiagnostics.setup(w,h,{ limit,...diagnostics });
+  const render = require('./render.js').render;
+  const options = { ...SplatDiagnostics.viewOptions(w,h,time,view), passes:['coverage','depth','sourceSplat'],
+    ...(trace && { [SplatDiagnostics.scope]:trace.capture }) };
+  const beforeFrame = render(world,{ ...options,splatFit:before??false });
+  const afterFrame = render(world,{ ...options,splatFit:after??false });
+  const a = inspect(beforeFrame), b = inspect(afterFrame);
   const pixels=[], bounds=[w,h,-1,-1];
   let changed=0, coverageChanged=0, depthChanged=0, omittedPixels=0;
   for (let i=0; i<w*h; i++) {
@@ -30,7 +30,8 @@ function compare(world,before,after,{ grid, rows, limit, view, time=world.lookSn
     if (pixels.length<limit) pixels.push({at:[x,y],before:left,after:right});
   }
   return {grid:[w,h],time,changedPixels:changed,coverageChanged,depthChanged,
-    bounds:changed ? bounds : null,omittedPixels,truncated:changed>pixels.length,pixels};
+    bounds:changed ? bounds : null,omittedPixels,truncated:changed>pixels.length,pixels,
+    ...(trace && { diagnostics:trace.compare(beforeFrame,afterFrame) }) };
 
   function inspect(frame) {
     const {passes}=frame;

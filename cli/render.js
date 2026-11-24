@@ -77,6 +77,7 @@ const CurveLod = require('./curve-lod.js');
 const CurveQuality = require('./curve-quality.js');
 const { createMaskResolve, applyMasks } = require('./look-mask-resolve.js');
 const PixelFragments = require('./pixel-fragments.js');
+const SplatDiagnostics = require('./splat-edit-diagnostics.js');
 const PalettePixel = require('./palette-pixel.js');
 const PaletteComposition = require('./palette-composition.js');
 const PaletteUsage = require('./palette-usage.js');
@@ -982,6 +983,8 @@ function renderFrame(world, o, preparedPalettes) {
   }
   const fragmentTrace = o.inspectFragmentPixel && (!o.samples || o.worked) && !o.reflectionPlane && !probeView
     ? PixelFragments.capture(world,o.inspectFragmentPixel,W,H) : null;
+  const splatReview = o[SplatDiagnostics.scope] && (!o.samples || o.worked) && !o.reflectionPlane && !probeView
+    ? o[SplatDiagnostics.scope](world,W,H) : null;
   const paintStage = (o.captureBasePaint===true || o.captureColorStages===true && !o.raw) && !o.captureCoverage &&
     (!o.samples || o.worked) && o[subjectFocusPass]!==false ? new Uint32Array(W*H) : undefined;
   function baseReference(i) {
@@ -1990,6 +1993,7 @@ function renderFrame(world, o, preparedPalettes) {
   function composite(p, i, z, dn, a, pr, pg, pb, wd, emits, highlight, paletteId, detailParticle, projected, coat, glass, mark,
     opticalDepth = z, sprite, haze = 0, rule, reflected, filteredEdge = false, refraction = 1, sectionEdge = false, claim, baseColor, surfaceMatte, emissionTint, strandHit) {
     if (surfaceDepth && (!sprite?.surface || sdf) && opticalDepth > surfaceDepth[p]+1e-5) {
+      if (!sprite) splatReview?.cull(p,i);
       if (mattes?.projectHidden) mattes.projectHidden(p, i, sprite, a);
       return;
     }
@@ -2004,6 +2008,7 @@ function renderFrame(world, o, preparedPalettes) {
     const p3 = p * 3, ia = 1 - a;
     if (strandTrace) strandTrace.fragment(p, a, opticalDepth, strandHit);
     if (fragmentTrace?.pixel === p) fragmentTrace.add(i,opticalDepth,a,sprite,glass,sectionEdge);
+    splatReview?.fragment(p,i,opticalDepth,a,sprite);
     if (counters) {
       counters.fragments++;
       if (!wd && a < 1) counters.translucentFragments++;
@@ -2535,6 +2540,7 @@ function renderFrame(world, o, preparedPalettes) {
       x1 = curveBounds?.[1] ?? Math.min(W - 1, Math.ceil(sx + ex)),
       y0 = curveBounds?.[2] ?? Math.max(0, Math.floor(sy - ey)),
       y1 = curveBounds?.[3] ?? Math.min(H - 1, Math.ceil(sy + ey));
+    if (!curve && i<baseCount) splatReview?.project(i,x0,y0,x1,y1);
     let glassLook;
     if (glass && glassIndex) {
       const target = glassIndex.row(i);
@@ -2679,8 +2685,11 @@ function renderFrame(world, o, preparedPalettes) {
         }
         const surfaceZ = sectionZ ?? exact?.z ?? planeDepth ?? (wantsDepth ?
           sampledDepth(rayAt(ix + .5, iy + .5), probeNormal, probeCenter, -cz, probeReach) : -cz);
-        if (localTransparency?.occluded(p, flags & 4 || backRows?.has(i) ? Infinity : surfaceZ)) continue;
-        if (preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) continue;
+        if (localTransparency?.occluded(p, flags & 4 || backRows?.has(i) ? Infinity : surfaceZ) ||
+            preciseDepth && surfaceDepth && surfaceZ>surfaceDepth[p]+1e-5) {
+          splatReview?.cull(p,i);
+          continue;
+        }
         lookPass?.begin(centerMark);
         let pr = r,
           pg = g,
@@ -2867,6 +2876,7 @@ function renderFrame(world, o, preparedPalettes) {
         const wd = writesDepth && alpha === 1 && !exact &&
           (!curve?.group || curveFootprint?.depths || curveHit.alpha === 1);
         if (proxyDepth && (sectionZ ?? exact?.z ?? planeDepth ?? -cz) > proxyDepth[p]+proxies.tolerance+1e-6) {
+          splatReview?.cull(p,i,true);
           if (proxyRejected) proxyRejected[p]++;
           if (proxyRemoved) proxyRemoved[p]=a+proxyRemoved[p]*(1-a);
           continue;
