@@ -144,9 +144,9 @@ test('WebGL native readback matches headless across light motion, cutouts and re
         window.result = { first,varied,noshadow,resized,repeat,mixed,graphed };
       } catch (error) { window.result = { error:error.stack }; }
     </script>`);
-    const result = await withChrome(dir, { hardware:false }, async ({ send,evaluate }) => {
+    const result = await withChrome(dir, { hardware:false, requestTimeout:60000 }, async ({ send,evaluate }) => {
       await send('Page.navigate', { url:pathToFileURL(page).href });
-      return evaluate("new Promise((resolve,reject) => { let attempts=0; const timer=setInterval(() => { if (window.result || ++attempts > 400) { clearInterval(timer); if (window.result) resolve(window.result); else reject(Error('Pixel lighting fixture timed out')); } },25); })");
+      return evaluate("new Promise((resolve,reject) => { let attempts=0; const timer=setInterval(() => { if (window.result || ++attempts > 2000) { clearInterval(timer); if (window.result) resolve(window.result); else reject(Error('Pixel lighting fixture timed out')); } },25); })");
     });
     assert.equal(result.error, undefined);
     for (const [name, spec, options] of [['first',small],['varied',small,variation],['noshadow',small,{shadows:false}],

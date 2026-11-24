@@ -3,7 +3,7 @@ const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const path = require('node:path');
 
-async function withChrome(directory, { chrome, hardware }, run) {
+async function withChrome(directory, { chrome, hardware, requestTimeout = 20000 }, run) {
   const executable = chrome || process.env.INK_TEST_CHROME || [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'
@@ -50,7 +50,7 @@ async function withChrome(directory, { chrome, hardware }, run) {
         if (error) reject(new Error(method + ': ' + error.message));
         else resolve(result);
       };
-      const timeout = setTimeout(() => finish(new Error('Chrome request timed out')), 20000);
+      const timeout = setTimeout(() => finish(new Error('Chrome request timed out')), requestTimeout);
       pending.set(key, { finish });
       input.write(JSON.stringify({ id: key, method, params, sessionId }) + '\0');
     });
