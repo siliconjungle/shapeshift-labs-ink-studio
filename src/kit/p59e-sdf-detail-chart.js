@@ -30,7 +30,7 @@ const SdfDetailChart = (function(K) {
     return {center,coordinates,axes:[tangent,bitangent,normal]};
   }
 
-  function roots(distance,point,axis,lo,hi,step,epsilon) {
+  function roots(distance,point,axis,lo,hi,step,epsilon,refinements=12) {
     const n=Math.max(1,Math.ceil((hi-lo)/step)), results=[];
     let previous=0, previousAt=lo;
     for (let i=0;i<=n;i++) {
@@ -39,7 +39,7 @@ const SdfDetailChart = (function(K) {
       if (!sign) continue;
       if (previous && sign!==previous) {
         let a=previousAt,b=at;
-        for (let j=0;j<12;j++) {
+        for (let j=0;j<refinements;j++) {
           const mid=(a+b)/2;
           if (distance(...V.mad(point,axis,mid))*previous>0) a=mid;
           else b=mid;

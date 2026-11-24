@@ -7135,6 +7135,384 @@
       ],
       "additionalProperties": false
     },
+    "meshRetopologyRail": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "minItems": 3,
+            "items": false
+          },
+          "minItems": 2,
+          "maxItems": 129
+        },
+        "sampling": {
+          "enum": [
+            "arc",
+            "knots"
+          ]
+        }
+      },
+      "required": [
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    "meshRetopologyRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "size": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          ],
+          "minItems": 2,
+          "items": false
+        },
+        "material": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "surface": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "mesh",
+                "sdf",
+                "scan-proxy"
+              ]
+            },
+            "object": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "part": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "revision": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "volume": {
+              "type": "object"
+            },
+            "document": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "rails": {
+          "type": "object",
+          "properties": {
+            "bottom": {
+              "$ref": "#/$defs/meshRetopologyRail"
+            },
+            "right": {
+              "$ref": "#/$defs/meshRetopologyRail"
+            },
+            "top": {
+              "$ref": "#/$defs/meshRetopologyRail"
+            },
+            "left": {
+              "$ref": "#/$defs/meshRetopologyRail"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "rims": {
+          "type": "object",
+          "properties": {
+            "bottom": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 2,
+              "maxItems": 65
+            },
+            "right": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 2,
+              "maxItems": 65
+            },
+            "top": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 2,
+              "maxItems": 65
+            },
+            "left": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 2,
+              "maxItems": 65
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "guides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "axis": {
+                "enum": [
+                  "row",
+                  "column"
+                ]
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "kind": {
+                "enum": [
+                  "flow",
+                  "joint",
+                  "seam",
+                  "silhouette"
+                ]
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "minItems": 3,
+                  "items": false
+                },
+                "minItems": 2,
+                "maxItems": 129
+              },
+              "sampling": {
+                "enum": [
+                  "arc",
+                  "knots"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "axis",
+              "index",
+              "kind",
+              "points"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 20
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 64
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 64
+                  }
+                ],
+                "minItems": 2,
+                "items": false
+              },
+              "position": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 3,
+                "items": false
+              },
+              "kind": {
+                "enum": [
+                  "seam",
+                  "silhouette"
+                ]
+              }
+            },
+            "required": [
+              "at",
+              "position",
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 512
+        },
+        "projection": {
+          "type": "object",
+          "properties": {
+            "maxDistance": {
+              "type": "number",
+              "minimum": 0.000001,
+              "maximum": 10000
+            },
+            "direction": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "normal": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "items": false
+            },
+            "minFacing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "tolerance": {
+              "type": "number",
+              "minimum": 1e-9
+            },
+            "pinTolerance": {
+              "type": "number"
+            },
+            "guideTolerance": {
+              "type": "number"
+            },
+            "maxDeviation": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "maxDistance"
+          ],
+          "additionalProperties": false
+        },
+        "maxChecks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000000
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "size",
+        "material",
+        "surface",
+        "projection"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -7149,6 +7527,9 @@
         },
         "boolean": {
           "$ref": "#/$defs/meshBooleanRequest"
+        },
+        "retopology": {
+          "$ref": "#/$defs/meshRetopologyRequest"
         },
         "faceRegion": {
           "$ref": "#/$defs/meshFaceRegionRequest"
@@ -7498,6 +7879,11 @@
         {
           "required": [
             "boolean"
+          ]
+        },
+        {
+          "required": [
+            "retopology"
           ]
         },
         {

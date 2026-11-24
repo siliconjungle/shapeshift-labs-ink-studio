@@ -1,5 +1,5 @@
 /* Position-only topology edits preserve polygon, corner, edge and UV identity. */
-(function (K) {
+const meshComponentSnap = (function (K) {
   const topology = K.meshTopology, { V, M } = K, { freeze } = K.procedural.data;
   const record = (value, fields) => value && Object.getPrototypeOf(value) === Object.prototype &&
     Object.keys(value).every(key => fields.includes(key));
@@ -256,4 +256,5 @@
   }
 
   K.meshTopology = Object.freeze({ ...topology, planTransform });
+  return Object.freeze({ snapField });
 })(KIT);

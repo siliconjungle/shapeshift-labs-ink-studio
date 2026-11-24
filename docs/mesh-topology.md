@@ -762,6 +762,84 @@ bake invalidations in the same undo and replay history.
 Run `node examples/mesh-edge-edit/render.cjs <directory>` for playable
 CLI requests and native-grid comparisons.
 
+## Draw surface-snapped retopology patches
+
+Use `KIT.meshTopology.planRetopology(document, request)` to propose an
+editable quad strip or local grid. Draw the bottom and top rails in
+the reference surface’s coordinates. Space the patch columns along
+those paths and add rows for the strip’s width. The left and right rails
+are optional. When omitted, they join the ends of the authored row guides.
+
+```js
+const plan = KIT.meshTopology.planRetopology(cage, {
+  id: 'shoulder-strip',
+  revision: KIT.meshTopology.revision(cage),
+  size: [6, 4],
+  material: 'shell',
+  surface: { kind: 'mesh', document: denseForm },
+  rims: { bottom: ['rim-0', 'rim-1', 'rim-2', 'rim-3', 'rim-4', 'rim-5', 'rim-6'] },
+  rails: { top: { points: topStroke } },
+  guides: [
+    { id: 'joint', axis: 'row', index: 2, kind: 'joint', points: jointStroke },
+    { id: 'stitch', axis: 'column', index: 2, kind: 'seam', points: seamStroke }
+  ],
+  projection: { direction: [0, 0, -1], maxDistance: 0.25, maxDeviation: 0.04 }
+});
+console.log(plan.report.canCommit, plan.report.issues, plan.report.pins);
+```
+
+Use a `rim` on any side to stitch into open edges by existing vertex
+ID. Supply one ID per grid position. List bottom and top from left to
+right and left and right from bottom to top. The planner reuses each
+rim vertex and derives patch winding from the adjacent faces. Shared
+rim corners must address the same vertex. The adjacent faces keep
+their original geometry, attributes, and UVs. The patch gets its own
+normalized UV grid.
+
+A flow or joint guide aligns a named grid row or column to a drawn
+path before projection. A seam or silhouette guide pins the sampled
+positions along its entire row or column. Explicit `pins` pin a single
+`[column, row]` to a world-space `position`. Path samples use arc length
+by default. Set `sampling: 'knots'` to use one authored point per grid
+position. Crossing guides are reconciled within `guideTolerance`.
+Pinned positions stay exact and take precedence through the snap.
+Keep the reported pin vertex IDs for later component transforms.
+
+Use `surface.kind` to choose a reference.
+
+| Kind | Reference |
+| --- | --- |
+| `mesh` | An inline topology `document`, a named scene `object` with optional `part`, or the target document itself |
+| `sdf` | A named scene solid, an SDK field resolved by `context.sdf(id)`, or an inline box or sphere `volume` |
+| `scan-proxy` | A registered capture mesh supplied as a topology document, a named mesh, or a GLB from [scan to mesh](scan-to-mesh.md) |
+
+Specify `maxDistance` in scene units. A projection `direction` casts
+through a bounded segment around each guide position and accepts
+the front-facing surface. Omit it for nearest-surface projection.
+`pinTolerance` bounds proximity checks for fixed vertices. The preview
+checks the center and each edge midpoint of every quad against the
+reference. Set `maxDeviation` to enforce a fit tolerance on those
+probes. The report records hit positions, mesh face and barycentric
+addresses, fixed seams, and blocked areas such as missed projections,
+folded quads, or unsupported spans.
+
+Use `editor.planMeshRetopology(object, request)` and
+`editor.retopologizeMeshTopology(object, request)` on retained scene
+meshes. Apply as `operation.retopology` on a bound `mesh-topology`
+destination to get the regular preview, receipt, undo, and replay.
+The result is authored polygon topology with stable vertex, face,
+and corner IDs.
+
+Run the [shoulder-cap demo](../examples/mesh-retopology/README.md) to
+compare sculpt, mesh, and scan references. The CLI previews without
+`--out` and writes a revised document when the surface checks pass.
+
+```sh
+node cli/ink-studio.js mesh-topology retopology scan-proxy-before.json scan-proxy-request.json \
+  --surface scan-reference.glb --view scan-proxy-view.json \
+  --preview review --out shoulder.json --report report.json
+```
+
 ## Bevel selected edges
 
 Save an edge selection, then submit a bevel with its mesh revision. The

@@ -6,9 +6,10 @@ const meshBooleanDiagnostics = (function(K) {
 
   function raycast(triangles,tolerance) {
     const tree=spatial.pointIndex(triangles);
-    return (origin,direction,distance)=>{
+    return (origin,direction,distance,accept)=>{
       const points=[], end=V.mad(origin,direction,distance);
       tree.box(spatial.expand(spatial.boxOf([origin,end]),tolerance),row=>{
+        if (accept && !accept(row)) return;
         const {a,u,v,normal}=row, alignment=V.dot(direction,normal);
         if (Math.abs(alignment)<1e-10) return;
         const cross=V.cross(direction,v), det=V.dot(u,cross);
@@ -155,5 +156,5 @@ const meshBooleanDiagnostics = (function(K) {
         changedOwner:material.filter(row=>row.changedOwner).length,samples:material}};
   }
 
-  return {review};
+  return {review,raycast};
 })(KIT);

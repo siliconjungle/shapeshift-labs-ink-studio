@@ -353,6 +353,29 @@
       }
     }
 
+    function meshSnapField(scene,id) {
+      const solid=scene.solids.find(item=>item.id===id && !item.carve && !item.ghost);
+      if (!solid) return;
+      const {style,roles,palette,groups,parts,dataInputs}=scene;
+      return DIO.brushField({id:scene.id,style,roles,palette,groups,parts,dataInputs,solids:[solid]},buildEnv).sdf;
+    }
+
+    function planMeshRetopology(object,request,{part}={}) {
+      const row=meshTopology(object,part), scene=snapshot();
+      requireMeshShapeOwner(object,row.part,scene,'Retopology');
+      return K.meshTopology.planRetopology(row.document,request,{
+        mesh:(id,part)=>meshTopology(id,part).document,
+        sdf:id=>meshSnapField(scene,id)
+      });
+    }
+
+    function retopologizeMeshTopology(object,request,options) {
+      const plan=planMeshRetopology(object,request,options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Retopology patch failed guide or surface checks'),{report:plan.report});
+      return freeze({retopology:plan.report,topology:editMeshTopology(object,plan.patch,options)});
+    }
+
     function planMeshTransform(object, request, { part } = {}) {
       if (request?.frame !== undefined)
         throw new TypeError('Retained scene mesh coordinates already use scene placement');
@@ -369,13 +392,7 @@
           const target = Object.hasOwn(bindings, binding) && bindings[binding];
           if (target?.kind === 'socket' && target.status === 'bound') return target.resolved.position;
         },
-        sdf(id) {
-          const solid = scene.solids.find(item => item.id === id && !item.carve && !item.ghost);
-          if (!solid) return;
-          const { style, roles, palette, groups, parts, dataInputs } = scene;
-          return DIO.brushField({ id: scene.id, style, roles, palette, groups, parts, dataInputs,
-            solids: [solid] }, buildEnv).sdf;
-        }
+        sdf:id=>meshSnapField(scene,id)
       });
     }
 
@@ -674,6 +691,8 @@
       repairMeshTopology,
       planMeshCut,
       cutMeshTopology,
+      planMeshRetopology,
+      retopologizeMeshTopology,
       planMeshBoolean,
       booleanMeshTopology,
       planMeshFaceRegion,

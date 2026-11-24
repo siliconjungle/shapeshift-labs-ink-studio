@@ -219,6 +219,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology cut <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file] [--pieces dir]   preview or apply plane and knife cuts
   mesh-topology face-region <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply face extrusion, inset and thickening
   mesh-topology edge-edit <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply loop insertion, edge slides, bridges and grid fills
+  mesh-topology retopology <mesh-or-scene.json> <request.json> [--object id] [--surface file] [--view file] [--preview dir] [--out file] [--report file]   snap guided quad patches and stitch an authored rim
   mesh-topology boolean <mesh-or-scene.json> <request.json> [--object id] [--operand mesh.json] [--view file] [--preview dir] [--out file] [--report file]   solve and compare mesh or SDF Booleans
   mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection
   mesh-topology shading <mesh-or-scene.json> [request.json] [--object id] [--view file] [--preview dir] [--subdivision level] [--out file] [--report file]   inspect or edit corner normals, smooth edges and subdivision creases

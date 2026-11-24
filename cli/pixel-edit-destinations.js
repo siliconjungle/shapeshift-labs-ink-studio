@@ -567,6 +567,13 @@ function apply(frame, edit, route, context, readMarks) {
       evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
     } else if (fields(operation, ['cut', 'projection']) && Object.hasOwn(operation, 'cut')) {
       evidence = source.editor.cutMeshTopology(binding.object, operation.cut, options);
+    } else if (fields(operation, ['retopology', 'projection']) && Object.hasOwn(operation, 'retopology')) {
+      try {
+        evidence = source.editor.retopologizeMeshTopology(binding.object, operation.retopology, options);
+      } catch (error) {
+        if (!error.report) throw error;
+        throw conflict('mesh-retopology-blocked', error.message, { retopology: error.report });
+      }
     } else if (fields(operation, ['boolean', 'projection']) && Object.hasOwn(operation, 'boolean')) {
       try {
         evidence = source.editor.booleanMeshTopology(binding.object, operation.boolean, options);
@@ -617,7 +624,7 @@ function apply(frame, edit, route, context, readMarks) {
     } else {
       if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
         ['vertices', 'faces', 'removeVertices', 'removeFaces', 'edges', 'shading', 'lineage']) || !Object.keys(operation.patch).length)
-        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, Boolean, face-region, edge edit, bevel, shading, modifier, or repair request');
+        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, Boolean, retopology, face-region, edge edit, bevel, shading, modifier, or repair request');
       evidence = { topology: source.editor.editMeshTopology(binding.object, operation.patch, options) };
     }
     context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, ...evidence });

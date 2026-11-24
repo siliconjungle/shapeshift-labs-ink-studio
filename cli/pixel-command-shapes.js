@@ -316,11 +316,24 @@ function createDefinitions() {
           probes:array(object({id:text,origin:pos,direction:pos,distance:{type:'number',exclusiveMinimum:0}},
             ['id','origin','direction','distance']),0,64)},['kind','cell']))
     },['id','revision','operation','operand']),
+    meshRetopologyRail:object({points:array(pos,2,129),sampling:choice('arc','knots')},['points']),
+    meshRetopologyRequest:object({
+      id:text,revision:text,size:tuple(int(1,64),int(1,64)),material:text,
+      surface:object({kind:choice('mesh','sdf','scan-proxy'),object:text,part:text,revision:text,volume:obj,document:obj},['kind']),
+      rails:object(Object.fromEntries(['bottom','right','top','left'].map(side=>[side,ref('meshRetopologyRail')]))),
+      rims:object(Object.fromEntries(['bottom','right','top','left'].map(side=>[side,array(text,2,65)]))),
+      guides:array(object({id:text,axis:choice('row','column'),index:int(0,64),kind:choice('flow','joint','seam','silhouette'),
+        points:array(pos,2,129),sampling:choice('arc','knots')},['id','axis','index','kind','points']),0,20),
+      pins:array(object({at:tuple(int(0,64),int(0,64)),position:pos,kind:choice('seam','silhouette')},['at','position','kind']),0,512),
+      projection:object({maxDistance:num(1e-6,1e4),direction:pos,normal:pos,minFacing:unit,tolerance:num(1e-9),
+        pinTolerance:number,guideTolerance:number,maxDeviation:number},['maxDistance']),maxChecks:int(1,2000000)
+    },['id','revision','size','material','surface','projection']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
       cut:ref('meshCutRequest'),
       boolean:ref('meshBooleanRequest'),
+      retopology:ref('meshRetopologyRequest'),
       faceRegion:ref('meshFaceRegionRequest'),
       edgeEdit:ref('meshEdgeEditRequest'),
       bevel:ref('meshBevelRequest'),
@@ -341,7 +354,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut','boolean','faceRegion','edgeEdit','bevel','shading','modifiers'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','boolean','retopology','faceRegion','edgeEdit','bevel','shading','modifiers'].map(prop) },
     stencilSdfBrush:sdfBrush,
     freeformSdfBrush:freeformBrush,
     sdfShapeOperation:either(...[

@@ -56,9 +56,10 @@ const meshBooleanSurfaces = (function(K) {
 
   function nearest(triangles) {
     const tree=spatial.pointIndex(triangles);
-    return (point,radius)=>{
+    return (point,radius,accept)=>{
       let best;
       tree.box(spatial.expand(spatial.boxOf([point]),radius),row=>{
+        if (accept && !accept(row)) return;
         const hit=geometry.closestTrianglePoint(point,row), distance=V.dist(point,hit.at);
         if (distance<=radius && (!best || distance<best.distance || distance===best.distance && row.i<best.row.i))
           best={...hit,distance,row};
@@ -208,8 +209,8 @@ const meshBooleanSurfaces = (function(K) {
     return {document,patch,owners,side};
   }
 
-  function intersections(api,input,tolerance,maxWork) {
-    const health=api.health(input.doc,{maxPairs:Math.min(maxWork,250000),intersectionTolerance:tolerance,limit:1024});
+  function intersections(api,input,tolerance,maxWork,selection) {
+    const health=api.health(input.doc,{maxPairs:Math.min(maxWork,250000),intersectionTolerance:tolerance,limit:1024,selection});
     const complete=health.work.intersectionsComplete && !health.truncated.includes('selfIntersections');
     if (!health.findings.selfIntersections.length) return {complete,findings:[]};
     const lookup=new Map(input.triangles.map(row=>[JSON.stringify(row.attributes.map(c=>c.id)),row]));
