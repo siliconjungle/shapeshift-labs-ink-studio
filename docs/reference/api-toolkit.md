@@ -400,6 +400,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.SurfaceLook.prepareDirection` | function | `(settings, palette, paletteRoles)` | [source](../../src/surface-look.js) |
 | `toolkit.SurfaceLook.prepareFacing` | function | `(settings, palette, paletteRoles, inheritedRamp, validateOnly)` | [source](../../src/surface-look.js) |
 | `toolkit.SurfaceLook.prepareLightTrack` | function | `(keys)` | [source](../../src/surface-look.js) |
+| `toolkit.SurfaceLook.prepareLightingRamp` | function | `(definition, palette, roles, id, type)` | [source](../../src/surface-look.js) |
 | `toolkit.SurfaceLook.shade` | function | `(prepared, sample, base, output = [0, 0, 0, 1, 0], trace, visit, onClip, reflected, paint)` | [source](../../src/surface-look.js) |
 | `toolkit.SurfaceLook.shadowBandPaint` | alias | `Alias of KIT.surface.shadowBandPaint` |  |
 | `toolkit.SurfaceLook.withLightRamps` | function | `(settings, ramps)` | [source](../../src/surface-look.js) |

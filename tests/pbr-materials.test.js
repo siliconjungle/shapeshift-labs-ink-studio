@@ -42,12 +42,32 @@ function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObject
   };
   const world = B.finish({
     meshes:[mesh,baked],spriteSurfaces:sign.finish(),radius:4,
+    paletteRoles:{sea:[0,4,2,3]},
     look:{pbrMaterials:definition},cam:{target:[0,0,0],dist:5,fov:.72,yaw:0,pitch:0,ortho:true},
     fog:{start:1,max:0},dither:0
   });
   const edit = () => KIT.sceneMeshes.updateObjectTexels(baked, editObjectTexels(texels,
     texels.cells.filter(Boolean).map(({id}) => ({ id, metalness:0 }))));
   return { world, definition, edit };
+}
+function rampFrames(definition) {
+  const material = {
+    ...definition.materials.alloy, wrap:.16,
+    lightingRamp:{role:'sea',positions:[0,.26,.68,1],interpolation:'step',weights:[1,.92,.96,1]},
+    highlight:{strength:.6,lightingRamp:{
+      stops:[[0,'#154630'],[.27,'#56ba9a'],[1,'#d8ffcc']],interpolation:'smooth',
+      weights:[0,.5,1]
+    }}
+  };
+  const pbrMaterials = {...definition,materials:{
+    alloy:material,texel:{...material,roughness:undefined,metalness:undefined}
+  }};
+  const surfaceLightRamps = {alloy:{diffuse:{stops:[[0,'#9b0939'],[1,'#ec475e']],interpolation:'linear'}}};
+  const wide = {...pbrMaterials,materials:{...pbrMaterials.materials,alloy:{...material,
+    lightingRamp:{stops:Array.from({length:256},(_,i)=>[i/255,[i/255,.35,1-i/255]])}
+  }}};
+  return { ramp:{pbrMaterials}, rampSide:{pbrMaterials,pbrLights:[{direction:[1,.5,.15],intensity:1}]},
+    override:{pbrMaterials,surfaceLightRamps}, wide:{pbrMaterials:wide} };
 }
 const view = { w:144,h:80,px:1,raw:true,outline:false,edges:false };
 const samples = { mesh:[26,40], texel:[50,40], decal:[72,40], gaussian:[94,40], strand:[119,40],
@@ -64,19 +84,21 @@ function read(frame) {
 
 async function headless() {
   const { bakeObjectTexels, editObjectTexels } = await import('../webgl.mjs');
-  const { world, edit } = fixture({ ...ink.load(), bakeObjectTexels, editObjectTexels });
+  const { world, definition, edit } = fixture({ ...ink.load(), bakeObjectTexels, editObjectTexels });
   const render = options => read(ink.render(world, { ...view, ...options }));
   const lit = render(), sidelit = render({ pbrLights:light }), off = render({ pbrMaterials:false });
+  const ramps = Object.fromEntries(Object.entries(rampFrames(definition)).map(([name,settings])=>[name,render(settings)]));
   edit();
-  return { lit,sidelit,off,edited:render() };
+  return { lit,sidelit,off,...ramps,edited:render() };
 }
 
 test('shared materials relight five carriers and preserve named projections on the art grid',async () => {
-  const { lit,sidelit,off,edited } = await headless();
+  const { lit,sidelit,off,edited,ramp,rampSide,override,wide } = await headless();
   for (const name of ['mesh','texel','decal','gaussian','strand']) {
     assert.notDeepEqual(lit[name],lit.background,name);
     assert(lit[name][0] >= sidelit[name][0] + 24,JSON.stringify({name,lit,sidelit}));
     assert.notDeepEqual(sidelit[name],off[name],name);
+    assert.notDeepEqual(ramp[name],rampSide[name],name);
   }
   assert.deepEqual(lit.background,off.background);
   assert(lit.gaussian[0] > lit.gaussian[2] + 25);
@@ -84,28 +106,47 @@ test('shared materials relight five carriers and preserve named projections on t
   assert(lit.projected[1] > lit.projected[0] + 30, JSON.stringify(lit));
   assert.notDeepEqual(edited.texel,lit.texel);
   assert.deepEqual(edited.mesh,lit.mesh);
+  assert.deepEqual(override.texel,ramp.texel);
+  assert.notDeepEqual(override.mesh,ramp.mesh);
+  assert.notDeepEqual(wide.mesh,ramp.mesh);
 });
 
 test('native WebGL matches headless material, projection and live texel edits', {skip:!process.env.INK_TEST_CHROME}, async () => {
   const expected = await headless();
-  const actual = runWebGL({},fixture,(kit,build,backend,{view,samples,light}) => {
-    const {world,edit}=build(kit), painter = backend(view.w,view.h,view);
+  const actual = runWebGL({},fixture,(kit,build,backend,{view,samples,light,rampSource}) => {
+    const {world,definition,edit}=build(kit), painter = backend(view.w,view.h,view);
     try {
       const sample = options => {
-        painter.draw(world,options);
+        painter.draw(world,{...options,changedRows:[]});
         return painter.sample(samples);
       };
       const lit = sample(), sidelit = sample({pbrLights:light}), off = sample({pbrMaterials:false});
+      const ramps = Object.fromEntries(Object.entries(new Function('return ('+rampSource+')')()(definition))
+        .map(([name,settings])=>[name,sample(settings)]));
       edit();
-      return {lit,sidelit,off,edited:sample()};
+      return {lit,sidelit,off,...ramps,edited:sample()};
     } finally { painter.close(); }
-  },inputs);
+  },{...inputs,rampSource:rampFrames.toString()});
   for (const [mode, colors] of Object.entries(expected)) {
     for (const [name, rgb] of Object.entries(colors)) {
       assert(rgb.every((n,k) => Math.abs(actual[mode][name][k]-n) <= 4),
         JSON.stringify({mode,name,expected:rgb,actual:actual[mode][name]}));
     }
   }
+});
+
+test('PBR lighting ramps reuse strict surface ramp validation', () => {
+  const pbr = ink.load().KIT.pbr;
+  const definition = rampFrames({materials:{alloy:{}}}).ramp.pbrMaterials;
+  const options = {palette:[0x15262f,0x3b6a68,0x72a99b,0xc6e4cf,0x24454e],paletteRoles:{sea:[0,4,2,3]}};
+  assert.throws(()=>pbr.prepare(definition),/palette role/);
+  assert.equal(pbr.prepare(definition,[],options).materials[0].diffuseRamp.interpolation,'step');
+  definition.materials.alloy.paletteRoles = {cool:'sea'};
+  definition.materials.alloy.lightingRamp = {...definition.materials.alloy.lightingRamp,role:'cool'};
+  assert.deepEqual(pbr.prepare(definition,[],options).materials[0].diffuseRamp.tint(1),
+    [0xc6,0xe4,0xcf].map(n=>n/255));
+  definition.materials.alloy.highlight.lightingRamp.weights = [.1,.5,1];
+  assert.throws(()=>pbr.prepare(definition,[],options),/zero weight to an inactive highlight/);
 });
 
 test('portable bindings validate and a swatch is driven by the highlight response', () => {

@@ -704,7 +704,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         samplingScale = 1,
         geometryCode = 0,
         partGrid = [1,1],
-        section, anchors, engraving, coverageFilter, historyFirst = 0, pbr, pbrUniforms
+        section, anchors, engraving, coverageFilter, historyFirst = 0, pbr, pbrUniforms, bindPbr
       }
     ) {
       const planBlocks=atlas?.blockTextures;
@@ -766,6 +766,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
         !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr);
+      if (pbr) bindPbr();
       gl.useProgram(shader.p);
       shader.set({
         u_view: view,

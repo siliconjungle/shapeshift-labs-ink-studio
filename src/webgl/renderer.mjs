@@ -141,7 +141,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const spriteLOD = toolkit.KIT?.sprite?.reconstruction;
     const spriteLodUnit = 28, meshDepthUnit = 29; // Temporarily borrows the surface emitter shadow slot.
     const pbrUnit = 30;
-    let pbrRows, pbrTable, pbrRowSource;
+    let pbrRows, pbrTable, pbrRowSource, uploadedPbrRamps;
     let spriteLodTable, uploadedSpriteMask, spriteReconstructionPipeline;
     let footprintBinding,engravingBinding,restBinding,restTarget,surfaceEngraving;
     const engravingAPI=toolkit.KIT?.engraving;
@@ -877,8 +877,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const look = world.look ?? {};
       const pbrDefinition = frame.pbrMaterials ?? look.pbrMaterials;
       if (pbrDefinition && !toolkit.KIT?.pbr) throw new Error('PBR materials need the Ink Studio KIT');
-      const pbr = toolkit.KIT?.pbr?.prepare(pbrDefinition, frame.pbrLights);
-      const pbrUniforms = pbr && toolkit.KIT.pbr.uniforms(pbr);
+      const pbrRampOverrides = frame.surfaceLightRamps ?? look.surfaceLightRamps;
+      const pbr = toolkit.KIT?.pbr?.prepare(pbrDefinition, frame.pbrLights, {
+        palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:pbrRampOverrides
+      });
       const boundaryView = plane === zero && !cover && !reflectionCapture;
       const liveBoundaryDefinition = boundaryView && (frame.livePixelBoundaries ?? look.livePixelBoundaries);
       const liveBoundaryAPI = toolkit.KIT?.livePixelBoundaries;
@@ -1282,14 +1284,21 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const K = toolkit.KIT;
       const sample = (wantsRelight || wantsShot) && K.splatFrames.create(world, time, K.M);
       const pbrTargets = pbr && K.pbr.splatBindings(world, pbr);
+      const pbrRamps = pbr && K.pbr.rampTable(pbr);
+      // The shared material shaders read ramp stops after the vertex data in the same texture.
+      const pbrUniforms = pbr && {
+        ...K.pbr.uniforms(pbr,pbrRamps),u_pbrRows:pbrUnit,u_pbrRampOffset:world.count
+      };
       const pbrUseAlbedo = !portableStages && !paintActive;
       const pbrSource = pbr && [world, world.data, world.count, world.pix, world.renderMetadata, world.surfaceData,
-        world.gaussianHarmonics, world.splatRoughness, world.materialAlbedo, pbrDefinition, time, pbrUseAlbedo];
+        world.gaussianHarmonics, world.splatRoughness, world.materialAlbedo, pbrDefinition, time, pbrUseAlbedo,
+        world.pal,world.paletteRoles,pbrRampOverrides];
       const pbrRetained = pbr && frame.changedRows?.length === 0 && !world.anim?.bones && !world.anim?.rig &&
-        !world.reconstructionPose && pbrRowSource && pbrSource.every((value,i)=>value===pbrRowSource[i]);
+        !world.reconstructionPose && pbrRowSource && pbrSource.every((value,i)=>value===pbrRowSource[i]) &&
+        sameValues(pbrRamps.rows,uploadedPbrRamps);
       if (pbr && !pbrRetained) {
         const frames = sample || K.splatFrames.create(world, time, K.M);
-        const length = world.count * 4;
+        const length = world.count * 4 + pbrRamps.rows.length;
         if (!pbrRows || pbrRows.length !== length) pbrRows = new Float32Array(length);
         for (let i = 0; i < world.count; i++) {
           const id = pbrTargets(i), at = i * 4;
@@ -1300,8 +1309,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
             pbrRows[at + 2] = pbrUseAlbedo ? world.materialAlbedo?.[i] ?? 0 : 0;
           }
         }
+        pbrRows.set(pbrRamps.rows,world.count*4);
         pbrTable ??= table(512, pbrUnit, maxSize);
         pbrTable.upload(pbrRows);
+        uploadedPbrRamps = pbrRamps.rows;
         pbrRowSource = pbrSource;
       }
       let lightRows;
@@ -1572,7 +1583,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       gl.useProgram(shader.p);
       const growth = world.grow ?? {};
       shader.set({
-        ...(pbr&&{...pbrUniforms,u_pbrRows:pbrUnit,u_pbrRowCount:world.count,u_pbrView:camera.view,u_pbrReach:camera.radius}),
+        ...(pbr&&{...pbrUniforms,u_pbrRowCount:world.count,u_pbrView:camera.view,u_pbrReach:camera.radius}),
         u_data: 0, u_bones: 4, u_fine: 7, u_filterRows:filterUnit,
         ...(gaussianUniforms && { ...gaussianUniforms, u_eye: camera.eye }),
         ...proxyUniforms,
@@ -1617,7 +1628,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         near: camera.clipNear, far: camera.clipFar
       }, reflectionCapture || plane !== zero ? undefined : frame.scalePreviewFrame) : undefined;
       const surfaceFrame={depthProxy,meshCodes:spriteMask?.meshCodes,lighting:emitterFrame,environment:env,view:camera.view,projection:camera.projection,range:[...camera.depthRange,fog.start??1,fog.max??0],
-        pbr,pbrUniforms,
+        pbr,pbrUniforms,bindPbr:pbr ? pbrTable.bind : undefined,
         fog:rgb(world.pal[fog.c??0]??0),arrivalPlane:plane,clip,section,paletteSampling:frame.paletteSampling,
         surfaceNormals:frame.surfaceNormals,semanticMipmaps:frame.semanticMipmaps,
         scanFrame:toolkit.KIT?.sceneMeshes?.scanFrame(frame.scanDaylight,frame.scanAppearance),simulationLayers,anchors:marks,engraving,eye:camera.eye,back,ortho:camera.ortho,
@@ -1741,7 +1752,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           strandLOD:toolkit.KIT.curveSplats.strandLod.glsl,print:engravingAPI?.print?.glsl,pbrGLSL:K.pbr?.glsl
         });
         const curveOptions = { clip, section, wet, water, env, layeredGlass,engraving,
-          pbrUniforms,
+          pbrUniforms,bindPbr:surfaceFrame.bindPbr,
           glass:layeredGlass ? glassBoundary.textures[0] : undefined,historyOwner,
           fog:{ color:surfaceFrame.fog,range:[fog.start ?? 1,fog.max ?? 0] },
           proxy:depthProxy && depthMeshPass.prepare(surfaceFrame,width,height) };

@@ -5,7 +5,7 @@ const path = require('node:path');
 const { gzipSync } = require('node:zlib');
 const Ink = require('../..');
 const PNG = require('../../cli/png.js');
-const { createScene, width, height } = require('./scene.cjs');
+const { createScene, paletteMaterials, width, height } = require('./scene.cjs');
 const read = file => fs.readFileSync(path.join(__dirname,file),'utf8');
 const pack = data => gzipSync(data,{level:9}).toString('base64');
 
@@ -14,7 +14,8 @@ async function main() {
   if (!renderer || !output) throw new Error('Usage: node build-demo.cjs bundled-preview.mjs demo.html [still.png]');
   const api = await import('./preview.mjs');
   const world = createScene(Ink.load(),api);
-  const frame = Ink.render(world,{ w:width,h:height,px:1,raw:true,soft:true,outline:false });
+  const frame = Ink.render(world,{ w:width,h:height,px:2,dither:.15,
+    pbrMaterials:paletteMaterials(world.look.pbrMaterials,true) });
   const png = PNG.encode(frame.w,frame.h,frame.rgb);
   if (still) fs.writeFileSync(still,png);
   const data = {

@@ -22,7 +22,7 @@
     background:#12141bdf;padding:6px 8px;border:1px solid #4a4252;border-radius:4px}
   .state:before{content:'';width:5px;height:5px;border-radius:50%;background:#90d8bb}
   .bar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 16px;border-top:1px solid var(--line)}
-  .lights,.modes{display:flex;align-items:center;gap:8px}
+  .lights,.modes{display:flex;align-items:center;gap:8px}.modes{flex-wrap:wrap}
   .lights{flex:1;max-width:365px} .lights label{white-space:nowrap} .lights input{min-width:60px;width:100%;accent-color:var(--bronze)}
   output{min-width:43px;text-align:right;color:var(--bronze);font-size:12px}
   button{border:1px solid #504c5b;border-radius:5px;background:#22232d;color:var(--ink);padding:7px 9px;
@@ -45,7 +45,7 @@
 <main>
   <header>
     <div><p class="edition">Ink Studio / Material study</p><h1>Vesper Relay</h1></div>
-    <p class="note">One lighting setup · Five render types</p>
+    <p class="note">Sweep the light across copper and teal</p>
   </header>
   <section class="viewer" aria-label="Vesper Relay material viewer">
     <figure>
@@ -61,8 +61,9 @@
         <output id="degrees" for="light">36°</output>
       </div>
       <div class="modes" aria-label="Material preview">
-        <button data-mode="physical" aria-pressed="true" disabled>PBR</button>
-        <button data-mode="palette" aria-pressed="false" disabled>Ink palette</button>
+        <button data-mode="ramps" aria-pressed="true" disabled>Material ramps</button>
+        <button data-mode="palette" aria-pressed="false" disabled>Scene palette</button>
+        <button data-mode="physical" aria-pressed="false" disabled>Full color</button>
         <button data-mode="off" aria-pressed="false" disabled>PBR off</button>
         <button data-mode="export" aria-pressed="false" disabled>Headless</button>
       </div>

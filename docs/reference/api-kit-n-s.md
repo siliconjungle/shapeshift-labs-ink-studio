@@ -156,11 +156,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pbr` | namespace |  |  |
 | `KIT.pbr.encodeNormal` | function | `(n)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.glsl` | value | `string` |  |
-| `KIT.pbr.prepare` | function | `(definition, lightsOverride)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.prepare` | function | `(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps} = {})` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.rampTable` | function | `(plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.shade` | function | `(plan, id, sample)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.splatBindings` | function | `(world, plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 | `KIT.pbr.splatNormal` | function | `(world, i, frame, M)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
-| `KIT.pbr.uniforms` | function | `(plan)` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
+| `KIT.pbr.uniforms` | function | `(plan, ramps = rampTable(plan))` | [guide](../pbr-materials.md), [source](../../src/pbr-materials.js) |
 
 ## KIT.pick
 
@@ -1680,6 +1681,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.surface.prepareDirection` | function | `(settings, palette, paletteRoles)` | [guide](../../README.md#view-dependent-surface-materials), [source](../../src/surface-look.js) |
 | `KIT.surface.prepareFacing` | function | `(settings, palette, paletteRoles, inheritedRamp, validateOnly)` | [guide](../../README.md#view-dependent-surface-materials), [source](../../src/surface-look.js) |
 | `KIT.surface.prepareLightTrack` | function | `(keys)` | [guide](../../README.md#view-dependent-surface-materials), [source](../../src/surface-look.js) |
+| `KIT.surface.prepareLightingRamp` | function | `(definition, palette, roles, id, type)` | [guide](../../README.md#view-dependent-surface-materials), [source](../../src/surface-look.js) |
 | `KIT.surface.preset` | function | `(name, base = {}, overrides)` | [guide](../scene-optics.md#ripple-sources), [guide](../shared-sky-reflections.md#choose-a-reflection-source), [guide](../surface-materials.md#start-with-a-preset), [guide](../../README.md#view-dependent-surface-materials), [source](../../src/kit/kq-surface-presets.js) |
 | `KIT.surface.presets` | value | `array` | [guide](../surface-materials.md#presets), [guide](../../README.md#view-dependent-surface-materials) |
 | `KIT.surface.shade` | function | `(prepared, sample, base, output = [0, 0, 0, 1, 0], trace, visit, onClip, reflected, paint)` | [guide](../../README.md#view-dependent-surface-materials), [source](../../src/surface-look.js) |

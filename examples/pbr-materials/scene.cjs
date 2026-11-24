@@ -7,6 +7,37 @@ const palette = [
   0x102b30,0x16434a,0x22656a,0x368b8a,0x58b6a5,0x92debc,0xcfffe6,
   0x292839,0x42445a,0x5a5f77,0x7b8395,0xa7afbd,0xe2e9f2,0xf6f3df
 ];
+const paletteRoles = { copper:[7,8,9,10,11,12,13], teal:[14,15,16,17,18,19,20] };
+
+function paletteMaterials(physical, ramps) {
+  const {copper,lens,cable} = physical.materials;
+  const diffuse = (role,positions) => ({ role, positions, interpolation:'step' });
+  const highlight = (stops,weights,strength) => ({
+    lightingRamp:{stops,weights,interpolation:'smooth'},strength
+  });
+  const scenePalette = {
+    ...physical,materials:{
+      ...physical.materials,
+      copper:{...copper,highlight:{color:'#ffe5ad',threshold:.47,strength:.66}},
+      lens:{...lens,highlight:{color:'#cfffe6',threshold:.29,strength:.5}}
+    }
+  };
+  if (!ramps) return scenePalette;
+  return {
+    ...physical,materials:{
+      ...physical.materials,
+      copper:{...copper,wrap:.12,rampStrength:.88,
+        lightingRamp:diffuse('copper',[0,.24,.43,.66,.84,.965,1]),
+        highlight:highlight([[0,'#7c4738'],[.24,'#d6945e'],[.57,'#edbd81'],[1,'#ffe5ad']],[0,.01,.59,.97],.85)},
+      cable:{...cable,wrap:.20,
+        lightingRamp:diffuse('teal',[0,.20,.36,.55,.71,.96,1]),
+        highlight:highlight([[0,'#22656a'],[.34,'#58b6a5'],[.72,'#92debc'],[1,'#cfffe6']],[0,.04,.58,.96],1)},
+      lens:{...lens,wrap:.08,rampStrength:.14,
+        lightingRamp:diffuse('teal',[0,.24,.40,.62,.83,.96,1]),
+        highlight:highlight([[0,'#368b8a'],[.28,'#58b6a5'],[.60,'#92debc'],[1,'#cfffe6']],[0,.19,.66,1],.8)}
+    }
+  };
+}
 
 function keyLight(degrees) {
   const angle = degrees * Math.PI / 180;
@@ -158,9 +189,9 @@ function createScene({ KIT, makeBuilder, SpriteSurface }, { bakeObjectTexels }) 
         channels:{baseColor:'#31575b',roughness:.77,coating:0,emission:'#224248'} }
     ]
   };
-  return B.finish({ meshes,spriteSurfaces:surface.finish(),radius:5,look:{pbrMaterials},
+  return B.finish({ meshes,spriteSurfaces:surface.finish(),radius:5,paletteRoles,look:{pbrMaterials},
     cam:{target:[0,.06,0],dist:7.92,fov:.62,yaw:.055,pitch:.13,ortho:true},
     fog:{start:1,max:0},dither:0 });
 }
 
-if (typeof module !== 'undefined') module.exports = { createScene, keyLight, width, height, initial };
+if (typeof module !== 'undefined') module.exports = { createScene, keyLight, paletteMaterials, width, height, initial };

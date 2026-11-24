@@ -45,10 +45,35 @@ Use `ink-studio render scene.json --pbr-materials finish.json --raw --px1 --out 
 | `ior`, `anisotropy` | Dielectric index from 1 to 4 and specular anisotropy from −0.9 to 0.9. Meshes use the texture tangent and finite curves use their strand axis. |
 | `coating` | Weight from 0 to 1 or an object with `weight` and `roughness`. |
 | `emission`, `emissionStrength` | An sRGB swatch and an optional linear gain added to the carrier's emission. |
-| `highlight` | Optional `color`, `threshold` and `strength`. The threshold tests the linear direct specular response. |
+| `lightingRamp`, `rampStrength`, `wrap` | Optional material light ramp, blend strength and terminator wrap. Strength and wrap default to 1 and 0. |
+| `highlight` | Optional `lightingRamp` and `strength`, or a single `color` with `threshold` and `strength`. Both modes sample the linear direct specular response. |
 | `lights` | Up to four directional lights in world space. `direction` points toward the light. `color` and `intensity` default to white and 1. |
 | `environment`, `exposure` | Optional ambient and reflection colors and a linear exposure multiplier. |
 | `projections` | Up to eight bounded world-space finish stamps. Place each with `origin`, full `u` and `v` spans and a two-sided `reach`. `feather` is a fraction of the projection width and height. Apply `opacity` and any combination of `baseColor`, `roughness`, `metalness`, `coating` and `emission` before lighting. |
+
+## Material lighting ramps
+
+Use Ink's [surface lighting ramp format](surface-materials.md#material-lighting-ramps) on every PBR carrier. Both ramp slots accept a palette `role` with optional `positions` or 2–256 explicit color stops, `step`, `linear` or `smooth` interpolation, and optional per-stop blend `weights`. A material can bind `paletteRoles` aliases to scene roles. An explicit stop can use a palette index, a named role stop, hex, or normalized sRGB.
+
+```js
+const tealCable = {
+  roughness: 0.43,
+  wrap: 0.2,
+  lightingRamp: { role: 'teal-rubber', positions: [0, 0.2, 0.55, 0.81], interpolation: 'step' },
+  highlight: {
+    strength: 0.85,
+    lightingRamp: {
+      stops: [[0, '#24616a'], [0.38, '#58b6a5'], [1, '#cfffe6']],
+      weights: [0, 0.15, 1],
+      interpolation: 'smooth'
+    }
+  }
+};
+```
+
+The diffuse ramp samples the strongest directional response, using wrapped incidence and light strength. It blends the exposed lit color toward the authored swatch and keeps emission additive. Lower `rampStrength` or set stop weights to retain more of the pigment, projected paint and physical shading. The highlight ramp samples the direct specular response, clamped to 0–1, and uses it as the default blend weight. Explicit highlight weights start at zero. A highlight ramp takes precedence over the single-swatch highlight controls.
+
+Author scene or environment overrides with `look.surfaceLightRamps`. Use the PBR material name as the finish ID and `diffuse` or `specular` as the layer. These override entries accept explicit hex or RGB stops, just like legacy surface overrides. Pass `surfaceLightRamps: false` at render time to use the authored material definitions. To require exact swatches after a full-strength ramp, include them in the scene palette or bind a dedicated [target palette](pixel-look.md#target-palettes-and-dithering).
 
 ## Carrier channels
 
@@ -61,7 +86,7 @@ Ink shades before palette mapping, dithering and outlines. An explicit PBR bindi
 
 ## Vesper Relay
 
-The editable [demo scene](../examples/pbr-materials/scene.cjs) uses a machined collar, a Gaussian signal lens, a painted switchboard, an affine status badge and finite-curve wires. The copper finish is shared by the collar and the copper wires. Drag the key-light control, compare PBR with the Ink palette, or switch to the headless still.
+The editable [demo scene](../examples/pbr-materials/scene.cjs) uses a machined collar, a Gaussian signal lens, a painted switchboard, an affine status badge and finite-curve wires. The copper finish is shared by the collar and the copper wires. Sweep the key light and compare Material ramps with Scene palette on the same art grid. The Headless view shows the ramped finish exported by the software renderer.
 
 From the repository root, build a self-contained HTML demo and headless PNG.
 

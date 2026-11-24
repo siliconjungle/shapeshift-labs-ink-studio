@@ -158,7 +158,7 @@ const SurfaceLook = (() => {
       if (type !== 'diffuse' && amount(0) !== 0)
         throw new RangeError(id + '.lightingRamp must give zero weight to an inactive highlight');
     }
-    return { tint, amount };
+    return { tint, amount, interpolation: interpolation ?? 'linear', positions: rows.map(([at]) => at) };
   }
 
   function lightRamps(definition) {
@@ -1048,6 +1048,6 @@ const SurfaceLook = (() => {
     return facing.prepareDirection(settings.layers, value => color(value, palette, WHITE, roles));
   }
 
-  return { facingColors: facing, prepareFacing, prepareDirection, shadowBandPaint, basePaint, STRIDE, hasBevel, needsDistance, material, merge, prepare, shade, prepareLightTrack, lightRamps, withLightRamps };
+  return { facingColors: facing, prepareFacing, prepareDirection, shadowBandPaint, basePaint, STRIDE, hasBevel, needsDistance, material, merge, prepare, shade, prepareLightTrack, prepareLightingRamp, lightRamps, withLightRamps };
 })();
 if (typeof module !== 'undefined') module.exports = SurfaceLook;

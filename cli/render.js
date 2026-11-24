@@ -390,7 +390,9 @@ function renderFrame(world, o, preparedPalettes) {
   const lensScale = o.lensScale ?? 1;
   if (!Number.isFinite(lensScale) || lensScale <= 0) throw new RangeError('Lens scale must be finite and positive');
   const look = world.look || {};
-  const pbr = PbrMaterials.prepare(o.pbrMaterials ?? look.pbrMaterials, o.pbrLights);
+  const pbr = PbrMaterials.prepare(o.pbrMaterials ?? look.pbrMaterials, o.pbrLights, {
+    palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:o.surfaceLightRamps ?? look.surfaceLightRamps
+  });
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
   const motion = RenderContract.clock(world, o), { direction, time: sceneTime, scene: t } = motion;

@@ -794,7 +794,9 @@
       bad('finish.look.tone', error.message);
     }
     try {
-      PbrMaterials.prepare(look?.pbrMaterials);
+      PbrMaterials.prepare(look?.pbrMaterials, undefined, {
+        palette:st.palette, paletteRoles:st.roles, surfaceLightRamps:look?.surfaceLightRamps
+      });
     } catch (error) {
       bad('finish.look.pbrMaterials', error.message);
     }

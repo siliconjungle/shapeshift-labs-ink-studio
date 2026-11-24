@@ -2,23 +2,21 @@ const el = id => document.getElementById(id);
 const canvas = document.querySelector('canvas'), still=el('still'), play=el('play'), slider=el('light');
 const controls = [...document.querySelectorAll('[data-mode]')];
 el('download').href=still.src;
-let renderer, world, mode='physical', angle=initial, animation;
+let renderer, world, looks, mode='ramps', angle=initial, animation;
 
 function draw() {
   const isStill=mode==='export';
   still.hidden=!isStill;
   canvas.hidden=isStill;
   if (!isStill) {
-    const art=mode==='palette';
-    const materials=world.look.pbrMaterials;
-    const stylized=art?{
-      ...materials,materials:{...materials.materials,
-        copper:{...materials.materials.copper,highlight:{color:'#ffe5ad',threshold:.47,strength:.66}},
-        lens:{...materials.materials.lens,highlight:{color:'#cfffe6',threshold:.29,strength:.5}}
-      }
-    }:materials;
-    renderer.render(world,{ width,height,raw:!art,outline:art,edges:art,dither:art?.15:0,pixelSize:art?2:1,
-      pbrMaterials:mode==='off'?false:stylized,pbrLights:keyLight(angle),changedRows:[] });
+    const art=mode==='palette'||mode==='ramps';
+    const w=art?width/2:width, h=art?height/2:height;
+    if (canvas.width!==w || canvas.height!==h) {
+      canvas.width=w;
+      canvas.height=h;
+    }
+    renderer.render(world,{ width:w,height:h,raw:!art,outline:art,edges:art,dither:art?.15:0,
+      pbrMaterials:looks[mode],pbrLights:keyLight(angle),changedRows:[] });
   }
   el('backend').textContent=isStill?'Headless export':'Live WebGL';
   el('degrees').value=(isStill?initial:Math.round(angle))+'°';
@@ -40,6 +38,8 @@ try {
   let toolkitBrowser;
   try { toolkitBrowser=await import(url); } finally { URL.revokeObjectURL(url); }
   world=createScene(toolkit,toolkitBrowser);
+  const physical=world.look.pbrMaterials;
+  looks={physical,off:false,ramps:paletteMaterials(physical,true),palette:paletteMaterials(physical,false)};
   renderer=toolkitBrowser.createRenderer(canvas,{toolkit,contextAttributes:{preserveDrawingBuffer:true}});
   draw();
   for (const control of controls) {

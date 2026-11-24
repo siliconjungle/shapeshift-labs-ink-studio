@@ -153,7 +153,7 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
   // The ordinary splat pipeline uses some of these units as well. Curve
   // compositing runs after all its geometry draws and before the art resolve.
   function draw(plan, buffer, base, camera, options) {
-    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors, filterMatte, historyOwner, artScale = 1, pbrUniforms } = options;
+    const { mode = 'color', wet, water, env, layeredGlass, glass, fog, section, clip, cover, proxy, engraving, anchors, filterMatte, historyOwner, artScale = 1, pbrUniforms, bindPbr } = options;
     const isOwner = mode === 'owner';
     const etched=mode==='color' && !!engraving && !filterMatte;
     const physical = mode==='color' && !filterMatte && !!pbrUniforms;
@@ -179,6 +179,7 @@ export function createFiniteCurvePass(gl, { target, table, program, maxSize, tex
       textureUnit(11,anchors.textures[1]);
     }
     if (etched || anchors) markTable.bind();
+    if (physical) bindPbr();
     gl.disable(gl.DEPTH_TEST);
     if (mode === 'color') {
       gl.enable(gl.BLEND);

@@ -1,8 +1,10 @@
 /* Portable material parameters and the matching CPU/WebGL lighting equations. */
 const PbrMaterials = (() => {
-  let selectors, colors;
+  let selectors, colors, surface, pixelLook;
   try { selectors = TargetSelectors; } catch { selectors = require('./target-selectors.js'); }
   try { colors = ColorSpace; } catch { colors = require('./color-space.js'); }
+  try { surface = SurfaceLook; } catch { surface = require('./surface-look.js'); }
+  try { pixelLook = PixelLook; } catch { pixelLook = require('./pixel-look.js'); }
   const toLinear = colors.prepare('srgb', 'srgb-linear');
   const toDisplay = colors.prepare('srgb-linear', 'srgb');
   const MAX_MATERIALS = 16, MAX_LIGHTS = 4, MAX_PROJECTIONS = 8;
@@ -40,10 +42,15 @@ const PbrMaterials = (() => {
     }
     return toLinear(vector(value, label).map(v => number(v, label, 0, 1)));
   }
-  function material(value) {
+  function material(value, name, palette, roles, overrides) {
     record(value, 'PBR material');
     const coat = typeof value.coating === 'number' ? { weight: value.coating } : value.coating;
     const ior = number(value.ior ?? 1.5, 'Material IOR', 1, 4);
+    const rampRoles = pixelLook.bindRoles(palette, roles, value.paletteRoles);
+    const ramp = (definition, type) => definition === undefined || definition === false ? null :
+      surface.prepareLightingRamp(definition, palette, rampRoles, name + '.' + type, type);
+    const diffuseRamp = ramp(overrides?.diffuse ?? value.lightingRamp, 'diffuse');
+    const highlightRamp = ramp(overrides?.specular ?? value.highlight?.lightingRamp, 'specular');
     return {
       base: value.baseColor === undefined ? null : color(value.baseColor, 'Base color'),
       roughness: optional(value.roughness, 'Roughness'),
@@ -55,9 +62,13 @@ const PbrMaterials = (() => {
       emission: value.emission === undefined ? ZERO : color(value.emission, 'Emission').map(
         channel => channel * number(value.emissionStrength ?? 1, 'Emission strength', 0, 64)
       ),
-      highlight: value.highlight ? color(value.highlight.color, 'Highlight swatch') : ZERO,
+      diffuseRamp, highlightRamp,
+      wrap: number(value.wrap ?? 0, 'PBR diffuse ramp wrap', 0, 1),
+      rampStrength: number(value.rampStrength ?? 1, 'PBR diffuse ramp strength', 0, 1),
+      highlight: value.highlight?.color === undefined ? ZERO : color(value.highlight.color, 'Highlight swatch'),
       threshold: number(value.highlight?.threshold ?? .25, 'Highlight threshold', 0, 64),
-      highlightWeight: number(value.highlight ? value.highlight.strength ?? 1 : 0, 'Highlight strength', 0, 1)
+      highlightWeight: number(highlightRamp || value.highlight?.color !== undefined ? value.highlight?.strength ?? 1 : 0,
+        'Highlight strength', 0, 1)
     };
   }
   function projection(value, id) {
@@ -84,13 +95,15 @@ const PbrMaterials = (() => {
     if (!Array.isArray(value) || value.length > limit) throw new RangeError(label + ' supports up to ' + limit + ' entries');
     return value;
   }
-  function prepare(definition, lightsOverride) {
+  function prepare(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps} = {}) {
     if (definition == null || definition === false) return null;
     record(definition, 'PBR recipe');
     const entries = Object.entries(record(definition.materials, 'Named PBR materials'));
     if (!entries.length || entries.length > MAX_MATERIALS)
       throw new RangeError('PBR needs one to ' + MAX_MATERIALS + ' named materials');
-    const materials = entries.map(([, value]) => material(value));
+    const overrides = surface.lightRamps(surfaceLightRamps);
+    const materials = entries.map(([name, value]) => material(value, name, palette, paletteRoles,
+      overrides && Object.hasOwn(overrides,name) ? overrides[name] : undefined));
     const ids = new Map(entries.map(([key], index) => [key, index + 1]));
     const id = key => {
       if (!ids.has(key)) throw new RangeError('Unknown PBR material: ' + key);
@@ -103,7 +116,8 @@ const PbrMaterials = (() => {
       const direction = unit(vector(value.direction, 'Light direction'));
       if (!direction) throw new RangeError('Light direction must be nonzero');
       const intensity = number(value.intensity ?? 1, 'Light intensity', 0, 64);
-      return { direction, color: color(value.color ?? WHITE, 'Light color').map(channel => channel * intensity) };
+      const light = color(value.color ?? WHITE, 'Light color').map(channel => channel * intensity);
+      return { direction, color: light, rampIntensity: clamp(Math.max(...light)) };
     });
     const settings = definition.environment ?? {};
     const environment = {
@@ -185,9 +199,10 @@ const PbrMaterials = (() => {
     });
     const aspect = Math.sqrt(1 - .9 * m.anisotropy);
     const a = Math.max(.012, rough * rough), ac = Math.max(.012, m.coatRoughness ** 2);
-    let highlight = 0;
+    let highlight = 0, incidence = 0;
     for (const light of plan.lights) {
       const l = light.direction, nl = dot(n, l);
+      if (m.diffuseRamp) incidence = Math.max(incidence, clamp((nl + m.wrap) / (1 + m.wrap)) * light.rampIntensity);
       if (nl <= 0) continue;
       const h = unit(v.map((value, i) => value + l[i]), n), s = schlick(dot(v, h));
       const specular = lobe(h, l, frame, nl, a / aspect, a * aspect);
@@ -201,11 +216,38 @@ const PbrMaterials = (() => {
         highlight = Math.max(highlight, irradiance * (spec * (1 - coatFresnel) + top));
       }
     }
-    const weight = highlight > m.threshold ? m.highlightWeight : 0;
-    return toDisplay(rgb.map((channel, i) => mix(clamp(channel * plan.exposure), m.highlight[i], weight)));
+    let display = rgb.map(channel => clamp(channel * plan.exposure));
+    if (m.diffuseRamp) {
+      const {tint,amount} = m.diffuseRamp, swatch = toLinear(tint(incidence));
+      const weight = m.rampStrength * (amount?.(incidence) ?? 1);
+      display = rgb.map((channel,i) => clamp(mix(clamp((channel-emission[i])*plan.exposure),swatch[i],weight) +
+        emission[i]*plan.exposure));
+    }
+    const level = clamp(highlight), ramp = m.highlightRamp;
+    const weight = ramp ? m.highlightWeight * (ramp.amount?.(level) ?? level) :
+      highlight > m.threshold ? m.highlightWeight : 0;
+    const swatch = ramp ? toLinear(ramp.tint(level)) : m.highlight;
+    return toDisplay(display.map((channel, i) => mix(channel, swatch[i], weight)));
   }
 
-  function uniforms(plan) {
+  function rampTable(plan) {
+    // Each ramp starts with a header, followed by a pair of texels for each exact stop.
+    const rows = [], indices = [];
+    for (const material of plan.materials) {
+      const pair = [];
+      for (const [ramp,strength,wrap] of [[material.diffuseRamp,material.rampStrength,material.wrap],[material.highlightRamp,1,0]]) {
+        pair.push(ramp ? rows.length/4+1 : 0);
+        if (!ramp) continue;
+        const mode = ['step','linear','smooth'].indexOf(ramp.interpolation);
+        rows.push(ramp.positions.length,mode,strength,wrap);
+        for (const at of ramp.positions) rows.push(...ramp.tint(at),at,ramp.amount?.(at) ?? -1,0,0,0);
+      }
+      indices.push(pair);
+    }
+    return { rows:Float32Array.from(rows), indices };
+  }
+
+  function uniforms(plan, ramps = rampTable(plan)) {
     const { materials, lights, projections, environment, exposure } = plan;
     const table = (rows, max, stride) => {
       const result = new Float32Array(max * stride);
@@ -214,11 +256,11 @@ const PbrMaterials = (() => {
     };
     return {
       u_pbrLights: lights.length, u_pbrProjections: projections.length,
-      u_pbrMaterial: table(materials.map(m => [
+      u_pbrMaterial: table(materials.map((m,i) => [
         ...(m.base ?? ZERO), Number(!!m.base), m.roughness, m.metalness, m.f0, m.anisotropy,
-        ...m.emission, m.coat, ...m.highlight, m.threshold, m.coatRoughness, m.highlightWeight, 0, 0
+        ...m.emission, m.coat, ...m.highlight, m.threshold, m.coatRoughness, m.highlightWeight, ...ramps.indices[i]
       ]), MAX_MATERIALS, 20),
-      u_pbrLight: table(lights.map(l => [...l.direction, 0, ...l.color, 0]), MAX_LIGHTS, 8),
+      u_pbrLight: table(lights.map(l => [...l.direction, l.rampIntensity, ...l.color, 0]), MAX_LIGHTS, 8),
       u_pbrProjection: table(projections.map(p => [
         ...p.origin, p.reach, ...p.u, p.feather, ...p.v, p.weight, ...p.normal, p.id,
         ...(p.base ?? ZERO), Number(!!p.base), p.roughness, p.metalness, p.coat, Number(!!p.emission), ...(p.emission ?? ZERO), 0
@@ -274,6 +316,31 @@ uniform int u_pbrLights, u_pbrProjections;
 uniform vec4 u_pbrMaterial[${MAX_MATERIALS * 5}], u_pbrLight[${MAX_LIGHTS * 2}], u_pbrProjection[${MAX_PROJECTIONS * 7}];
 uniform vec4 u_pbrSky, u_pbrHorizon;
 uniform vec3 u_pbrGround;
+uniform highp sampler2D u_pbrRows;
+uniform highp int u_pbrRampOffset;
+vec4 pbrRampRow(int index){
+  int at=u_pbrRampOffset+index;
+  return texelFetch(u_pbrRows,ivec2(at&511,at>>9),0);
+}
+vec4 pbrRamp(int start,vec4 info,float value,float fallbackWeight){
+  int lo=0, hi=int(info.x)-1;
+  for(int i=0;i<8&&lo<hi;i++){
+    int mid=(lo+hi)/2;
+    if(pbrRampRow(start+mid*2).a<value)lo=mid+1;
+    else hi=mid;
+  }
+  int second=start+hi*2;
+  vec4 b=pbrRampRow(second);
+  float w=pbrRampRow(second+1).x;
+  if(hi>0&&value<b.a){
+    vec4 a=pbrRampRow(second-2);
+    float t=info.y==0.0?0.0:(value-a.a)/(b.a-a.a);
+    if(info.y==2.0)t=t*t*(3.0-2.0*t);
+    b.rgb=mix(a.rgb,b.rgb,t);
+    w=mix(pbrRampRow(second-1).x,w,t);
+  }
+  return vec4(b.rgb,w<0.0?fallbackWeight:w);
+}
 vec3 pbrLinear(vec3 c) {
   return mix(pow((max(c,0.0)+0.055)/1.055,vec3(2.4)),c/12.92,lessThanEqual(c,vec3(0.04045)));
 }
@@ -336,10 +403,14 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 tangent,vec3 view,vec3 at,
   vec3 reflected=fresnel*reflectedEnv*(1.0-0.5*rough);
   vec3 rgb=emission+u_pbrSky.a*((diffuse+reflected)*(1.0-coatView)+coatView*reflectedEnv);
   float aspect=sqrt(1.0-0.9*controls.a), a=max(0.012,rough*rough), ac=max(0.012,finish.x*finish.x);
-  float highlight=0.0;
+  float highlight=0.0, incidence=0.0;
+  int diffuseRamp=int(finish.z), specularRamp=int(finish.w);
+  vec4 diffuseInfo=diffuseRamp>0?pbrRampRow(diffuseRamp-1):vec4(0);
   for (int i=0;i<u_pbrLights;i++) {
-    vec3 light=u_pbrLight[i*2].xyz;
+    vec4 lightRow=u_pbrLight[i*2];
+    vec3 light=lightRow.xyz;
     float nl=dot(n,light);
+    if(diffuseRamp>0)incidence=max(incidence,clamp((nl+diffuseInfo.w)/(1.0+diffuseInfo.w),0.0,1.0)*lightRow.w);
     if (nl<=0.0) continue;
     vec3 h=pbrUnit(v+light,n);
     float s=pbrSchlick(dot(v,h)), coatFresnel=coat*mix(0.04,1.0,s);
@@ -351,9 +422,21 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 tangent,vec3 view,vec3 at,
     vec3 shine=irradiance*(spec*(1.0-coatFresnel)+top);
     highlight=max(highlight,max(shine.r,max(shine.g,shine.b)));
   }
-  return pbrDisplay(mix(clamp(rgb*u_pbrHorizon.a,0.0,1.0),swatch.rgb,highlight>swatch.a?finish.y:0.0));
+  float exposure=u_pbrHorizon.a;
+  vec3 display=clamp(rgb*exposure,0.0,1.0);
+  if(diffuseRamp>0){
+    vec4 ramp=pbrRamp(diffuseRamp,diffuseInfo,incidence,1.0);
+    display=clamp(mix(clamp((rgb-emission)*exposure,0.0,1.0),pbrLinear(ramp.rgb),ramp.a*diffuseInfo.z)+
+      emission*exposure,0.0,1.0);
+  }
+  if(specularRamp>0){
+    float level=clamp(highlight,0.0,1.0);
+    vec4 ramp=pbrRamp(specularRamp,pbrRampRow(specularRamp-1),level,level);
+    return pbrDisplay(mix(display,pbrLinear(ramp.rgb),ramp.a*finish.y));
+  }
+  return pbrDisplay(mix(display,swatch.rgb,highlight>swatch.a?finish.y:0.0));
 }
 `;
-  return Object.freeze({ prepare, shade, uniforms, glsl, splatNormal, splatBindings, encodeNormal });
+  return Object.freeze({ prepare, shade, uniforms, rampTable, glsl, splatNormal, splatBindings, encodeNormal });
 })();
 if (typeof module !== 'undefined') module.exports = PbrMaterials;
