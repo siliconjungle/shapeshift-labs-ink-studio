@@ -565,10 +565,17 @@ function apply(frame, edit, route, context, readMarks) {
     let evidence;
     if (fields(operation, ['transform', 'projection']) && Object.hasOwn(operation, 'transform')) {
       evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
+    } else if (fields(operation, ['repair', 'projection']) && Object.hasOwn(operation, 'repair')) {
+      try {
+        evidence = source.editor.repairMeshTopology(binding.object, operation.repair, options);
+      } catch (error) {
+        if (!error.report) throw error;
+        throw conflict('mesh-repair-blocked', error.message, { repair: error.report });
+      }
     } else {
       if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
         ['vertices', 'faces', 'removeVertices', 'removeFaces', 'lineage']) || !Object.keys(operation.patch).length)
-        throw new TypeError('A topology edit needs a mesh topology patch or component transform');
+        throw new TypeError('A topology edit needs a mesh topology patch, component transform, or repair request');
       evidence = { topology: source.editor.editMeshTopology(binding.object, operation.patch, options) };
     }
     context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, ...evidence });

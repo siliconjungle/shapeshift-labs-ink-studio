@@ -222,6 +222,74 @@ The gatehouse demo shifts the left jamb to a construction plane while
 keeping footings and outer corners pinned. Teal marks the additional
 opening in the native-grid comparison.
 
+## Inspect and repair local mesh health
+
+```sh
+ink-studio mesh-topology health mesh.json
+ink-studio mesh-topology health scene.json settings.json --object hatch --out health.json
+ink-studio mesh-topology repair scene.json repair.json --object hatch
+ink-studio mesh-topology repair scene.json repair.json --object hatch --out revised.json --report repair-report.json
+```
+
+Health checks report edges with more than two incident faces, nearby
+vertex pairs, inconsistent winding on two-face edges, thin render
+triangles, and crossing or coplanar triangle contacts between authored
+faces. A shared edge or vertex is a supported contact. The scan reports
+overlap or crossing that extends beyond that shared boundary. The scan
+works on valid retained polygons. The topology validator names malformed
+or self-crossing individual polygons before tessellation.
+
+Pass a saved component `selection` in the settings to focus the report
+while checking its possible contacts with the rest of the mesh. Tune
+`duplicateDistance` and `intersectionTolerance` in mesh units, and
+`sliverQuality` from 0 to 1. The default quality cutoff is 0.02. Equilateral
+triangles score 1. `maxPairs` caps the work for each spatial pair scan and
+`limit` caps the retained examples per issue. Check `complete` and
+`truncated` to see how much of the report was captured.
+
+A repair request pins the mesh `revision` from a health or selection
+report and lists ordered `operations`. Choose IDs from that report or
+`mesh-topology inspect`.
+
+| Operation | Required inputs and behavior |
+| --- | --- |
+| `weld` | Supply a vertex `keep` ID, a `remove` list, and `maxDistance` from the keeper. Retains the keeper position and the surviving corner UVs. Set `removeCollapsed` to explicitly remove faces the weld collapses. |
+| `dissolve` | Supply an `edge` shared by two faces and optionally the face ID to `keep`. The faces must share a plane, material and affine UV mapping. Optional `tolerance` sets the plane distance threshold. |
+| `winding` | Supply an `anchor` face to orient its manifold neighbors relative to its winding, or a `faces` list to reverse explicitly. |
+
+A vertex can retain a `weights` object with named values in [0, 1].
+Ordinary position edits preserve these channels. A weld requires matching
+weights by default. Use `weights: "keep"` for the keeper's channels or
+`"average"` for the mean of the welded vertices, with absent channels
+treated as zero. Repairs preserve the weight data for downstream tools.
+
+With no `--out`, repair prints the patch and evidence. Read `canCommit`
+before applying the patch. A repair that would introduce or worsen a
+non-manifold edge records a blocker and leaves the source editable. The
+report includes exact before and after positions, corners, seam uses,
+materials and changed weights. Face, corner and edge lineage can carry
+through the existing binding and bake review. Re-run the health scan to
+check any remaining geometric contacts in the affected area.
+
+The toolkit exposes `KIT.meshTopology.health(document, settings)` and
+`KIT.meshTopology.planRepair(document, request)`. Use
+`sceneEditor.meshHealth(object, settings)` for the current scene snapshot.
+`sceneEditor.planMeshRepair(object, request)` or
+`sceneEditor.repairMeshTopology(object, request)` for a retained scene.
+A `mesh-topology` pixel patch can use `operation: { repair: request }`
+with the normal revision and hybrid shape-ownership checks. Preview,
+undo, and replay use the shared transaction.
+
+```sh
+node examples/mesh-health-repair.cjs mesh-repair-review
+```
+
+The hatch demo welds a split seam while preserving both charts, fixes
+the resulting winding conflict, and dissolves the badge's internal edge.
+The middle pane marks the weld in teal, the reversed face in rose, and
+the dissolved edge in amber. The folder contains the health scans before,
+after welding, and after the full repair.
+
 ## Record correspondence through an edit
 
 `KIT.meshTopology.editWithCorrespondence(before, patch)` returns the

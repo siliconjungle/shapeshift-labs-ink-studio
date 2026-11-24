@@ -67,16 +67,25 @@
     return normal[axis] < 0 ? triangles.map(triangle => triangle.reverse()) : triangles;
   }
 
+  function vertexWeights(value, id) {
+    if (value === undefined) return {};
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype ||
+        Object.entries(value).some(([channel, weight]) => !name(channel) ||
+          ['__proto__', 'prototype', 'constructor'].includes(channel) || !unit(weight)))
+      throw new RangeError('Vertex ' + id + ' needs named weights in [0, 1]');
+    return { weights: frozen(Object.fromEntries(Object.keys(value).sort().map(channel => [channel, value[channel]]))) };
+  }
+
   function build(source, keepEdges = false) {
     if (documents.has(source)) return source;
     const { format: type = format, version = 1, id, vertices: inputVertices, edges: inputEdges = [], faces: inputFaces } = source ?? {};
     if (type !== format || version !== 1 || !name(id))
       throw new TypeError('Use a version 1 mesh topology document with a mesh ID');
     const vertices = new Map();
-    for (const [key, { position }] of index(inputVertices, 'Vertices')) {
+    for (const [key, { position, weights }] of index(inputVertices, 'Vertices')) {
       if (!vector(position, 3, value => Number.isFinite(value) && Number.isFinite(Math.fround(value))))
         throw new RangeError('Vertex ' + key + ' needs a finite XYZ position');
-      vertices.set(key, frozen({ id: key, position: frozen(Array.from(position)) }));
+      vertices.set(key, frozen({ id: key, position: frozen(Array.from(position)), ...vertexWeights(weights, key) }));
     }
     const authoredEdges = new Map();
     for (const [key, edge] of index(inputEdges, 'Edges')) {
@@ -145,9 +154,13 @@
   }
 
   function edit(source, { vertices = [], faces = [], removeVertices = [], removeFaces = [] } = {}) {
-    const doc = create(source);
+    const doc = create(source), prior = new Map(doc.vertices.map(row => [row.id, row]));
+    const updates = [...index(vertices, 'Updated vertices').values()].map(row => {
+      const { id, position, weights = prior.get(row.id)?.weights } = row;
+      return { id, position, ...(weights !== undefined && weights !== null && { weights }) };
+    });
     return build({ ...doc,
-      vertices: apply(doc.vertices, vertices, removeVertices, 'vertices'),
+      vertices: apply(doc.vertices, updates, removeVertices, 'vertices'),
       faces: apply(doc.faces, faces, removeFaces, 'faces')
     }, true);
   }

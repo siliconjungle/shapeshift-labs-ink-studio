@@ -140,7 +140,7 @@ const destinationDetails = {
     {splats:[{splat:'latch-1',pigment:'amber',weight:.8}]}],
   'scan-material':['scanMaterialOperation','scan-paint','Mesh and material IDs, registered texels, changed channels and captured appearance evidence.',
     {texels:[{at:[4,6],roughness:.35}]}],
-  'mesh-topology':['meshTopologyOperation','scene','Stable element IDs, exact topology changes, transform and snap evidence, binding impact and bake validity.',
+  'mesh-topology':['meshTopologyOperation','scene','Stable element IDs, exact topology changes, transform, snap, and repair evidence, binding impact and bake validity.',
     {patch:{vertices:[{id:'lip',position:[.8,.2,0]}]}}],
   'sdf-shape':['sdfShapeOperation','scene','Authored solid or modifier ID, and projected, skipped or protected brush hits when applicable.',
     {brush:{mode:'carve',depth:.1,pixels:[[2,1]]}}],

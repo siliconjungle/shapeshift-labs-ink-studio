@@ -216,11 +216,18 @@ function createDefinitions() {
         tagged('kind','sdf',{object:text,anchor:text,maxDistance:{type:'number',exclusiveMinimum:0},
           tolerance:{type:'number',exclusiveMinimum:0},iterations:int(1,64)},['object','maxDistance']))
     },['selection','operation']),
+    meshRepairRequest:object({revision:text,operations:array(either(
+      tagged('kind','weld',{keep:text,remove:array(text,1),maxDistance:num(0),
+        weights:choice('match','keep','average'),removeCollapsed:bool},['keep','remove','maxDistance']),
+      tagged('kind','dissolve',{edge:text,keep:text,tolerance:num(0)},['edge']),
+      {...tagged('kind','winding',{anchor:text,faces:array(text,1)}),...exactlyOne('anchor','faces')}
+    ),1,128)},['revision','operations']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
+      repair:ref('meshRepairRequest'),
       patch:{
         ...object({
-          vertices:array(object({id:text,position:pos},['id','position'])),
+          vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
           faces:array(object({id:text,material:text,corners:array(object({
             id:text,vertex:text,uv:tuple(unit,unit)
           },['id','vertex']),3,128)},['id','corners'])),
@@ -232,7 +239,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),...exactlyOne('patch','transform') },
+    }),oneOf:['patch','transform','repair'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

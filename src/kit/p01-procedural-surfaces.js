@@ -76,6 +76,15 @@
       visit(node.right, point, match);
     }
     const lookup=(point, match) => visit(tree, point, match);
+    lookup.box = (query, match) => {
+      function visitBox(node) {
+        if (!node || !overlap(node.extent, query)) return true;
+        if (!node.rows) return visitBox(node.left) && visitBox(node.right);
+        for (const row of node.rows) if (overlap(row.box, query) && match(row.record) === false) return false;
+        return true;
+      }
+      return visitBox(tree);
+    };
     lookup.ray=(origin,direction,stop,match)=>{
       function trace(node) {
         if (!node || rayBox(node.extent,origin,direction,stop)===null) return;

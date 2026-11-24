@@ -334,19 +334,23 @@
       return document.pending() ? write() : document.transact(label ?? 'Edit topology of ' + object, write);
     }
 
+    function requireMeshShapeOwner(object, part, scene, action) {
+      const ownership = A.hybridOwnership, policy = scene.hybridOwnership;
+      if (ownership.manages(policy, { object, part })) {
+        const declaration = ownership.prepare(policy);
+        const ownsShape = declaration.parts.some(({ owners }) => {
+          const source = declaration.sources[owners.shape.source];
+          return source.kind === 'mesh' && source.target.object === object && source.target.part === part;
+        });
+        if (!ownsShape) throw new RangeError(action + ' the authored hybrid shape source for ' + object);
+      }
+    }
+
     function planMeshTransform(object, request, { part } = {}) {
       if (request?.frame !== undefined)
         throw new TypeError('Retained scene mesh coordinates already use scene placement');
       const row = meshTopology(object, part), scene = current().preview;
-      const ownership = A.hybridOwnership, policy = scene.hybridOwnership;
-      if (ownership.manages(policy, { object, part: row.part })) {
-        const declaration = ownership.prepare(policy);
-        const ownsShape = declaration.parts.some(({ owners }) => {
-          const source = declaration.sources[owners.shape.source];
-          return source.kind === 'mesh' && source.target.object === object && source.target.part === row.part;
-        });
-        if (!ownsShape) throw new RangeError('Transform the authored hybrid shape source for ' + object);
-      }
+      requireMeshShapeOwner(object, row.part, scene, 'Transform');
       return K.meshTopology.planTransform(row.document, request, {
         mesh(id) {
           return { document: meshTopology(id).document };
@@ -371,6 +375,21 @@
     function transformMeshTopology(object, request, options) {
       const plan = planMeshTransform(object, request, options);
       return freeze({ transform: plan.report, ...(plan.patch.vertices.length && {
+        topology: editMeshTopology(object, plan.patch, options)
+      }) });
+    }
+
+    function planMeshRepair(object, request, { part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Repair');
+      return K.meshTopology.planRepair(row.document, request);
+    }
+
+    function repairMeshTopology(object, request, options) {
+      const plan = planMeshRepair(object, request, options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Repair would create or worsen a non-manifold edge'), { report: plan.report });
+      return freeze({ repair: plan.report, ...(Object.keys(plan.patch).length && {
         topology: editMeshTopology(object, plan.patch, options)
       }) });
     }
@@ -477,6 +496,9 @@
       editMeshTopology,
       planMeshTransform,
       transformMeshTopology,
+      meshHealth: (object, settings, { part } = {}) => K.meshTopology.health(meshTopology(object, part).document, settings),
+      planMeshRepair,
+      repairMeshTopology,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

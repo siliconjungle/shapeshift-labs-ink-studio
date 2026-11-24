@@ -5355,11 +5355,146 @@
       ],
       "additionalProperties": false
     },
+    "meshRepairRequest": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "weld"
+                  },
+                  "keep": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "remove": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "minItems": 1
+                  },
+                  "maxDistance": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "weights": {
+                    "enum": [
+                      "match",
+                      "keep",
+                      "average"
+                    ]
+                  },
+                  "removeCollapsed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "keep",
+                  "remove",
+                  "maxDistance"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "dissolve"
+                  },
+                  "edge": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "keep": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "tolerance": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "kind",
+                  "edge"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "winding"
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "faces": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": [
+                      "anchor"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "faces"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "revision",
+        "operations"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
         "transform": {
           "$ref": "#/$defs/meshComponentTransform"
+        },
+        "repair": {
+          "$ref": "#/$defs/meshRepairRequest"
         },
         "patch": {
           "type": "object",
@@ -5389,6 +5524,23 @@
                     ],
                     "minItems": 3,
                     "items": false
+                  },
+                  "weights": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -5610,6 +5762,11 @@
         {
           "required": [
             "transform"
+          ]
+        },
+        {
+          "required": [
+            "repair"
           ]
         }
       ],
@@ -16418,7 +16575,7 @@
         },
         "scope": "Bound frame and scene. Use targets to pin sourceRevision before editing.",
         "evidence": {
-          "/affectedTargets": "Stable element IDs, exact topology changes, transform and snap evidence, binding impact and bake validity.",
+          "/affectedTargets": "Stable element IDs, exact topology changes, transform, snap, and repair evidence, binding impact and bake validity.",
           "/inputs/sourceRevision": "Observed source fingerprint for the same destination and binding."
         }
       },

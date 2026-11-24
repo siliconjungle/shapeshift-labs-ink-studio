@@ -62,6 +62,41 @@ function transform(file, input, rest, opt, meshTopology, openEditor) {
   return { document: editor.snapshot(), evidence };
 }
 
+function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
+  const { object, out, report } = opt, repair = action === 'repair';
+  const filenames = [file, input, out, report].filter(value => value !== undefined);
+  if (!file || repair && !input || rest.length || filenames.some(value => typeof value !== 'string' || !value.trim()) ||
+      object !== undefined && (typeof object !== 'string' || !object.trim()) || report && (!repair || !out) ||
+      ['selection', 'from', 'view', 'visibility', 'projection', 'lineage', 'match-ids'].some(key => opt[key] !== undefined))
+    throw new TypeError('Use mesh-topology health <mesh-or-scene.json> [settings.json] or repair <mesh-or-scene.json> <request.json>');
+  const inputs = [file, input].filter(Boolean).map(name => path.resolve(name));
+  const outputs = [out, report].filter(Boolean).map(name => path.resolve(name));
+  if (new Set(outputs).size !== outputs.length || outputs.some(name => inputs.includes(name)))
+    throw new RangeError('Write mesh health or repair outputs separately from their inputs');
+  const source = read(file), settings = input === undefined ? {} : read(input);
+  const rows = source?.topologyMeshes ?? {};
+  const row = object && Object.hasOwn(rows, object) && rows[object];
+  if (object && !row) throw new RangeError('No editable topology for scene object ' + object);
+  if (!object && source?.topologyMeshes) throw new TypeError('Choose an editable mesh with --object');
+  const doc = row ? row.document : source;
+  const write = (file, value) => file ? files.json(path.resolve(file), value) :
+    process.stdout.write(JSON.stringify(value, null, 2) + '\n');
+  if (!repair) return write(out, meshTopology.health(doc, settings));
+
+  if (object && out && path.dirname(path.resolve(file)) !== path.dirname(path.resolve(out)))
+    throw new RangeError('Write the repaired scene beside its source to preserve relative assets');
+  const editor = object && openEditor(file);
+  const plan = editor ? editor.planMeshRepair(object, settings) : meshTopology.planRepair(doc, settings);
+  if (!out) return write(undefined, { patch: plan.patch, report: plan.report });
+  if (!plan.report.canCommit) {
+    if (report) write(report, plan.report);
+    throw new RangeError('Repair would create or worsen a non-manifold edge');
+  }
+  const result = editor && editor.repairMeshTopology(object, settings);
+  write(out, editor ? editor.snapshot() : plan.document);
+  if (report) write(report, result || plan.report);
+}
+
 function command([action, file, input, ...rest], opt, { KIT: { meshTopology } }, { build, openEditor } = {}) {
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;
   if (action === 'select') {
@@ -70,6 +105,8 @@ function command([action, file, input, ...rest], opt, { KIT: { meshTopology } },
     else process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
+  if (action === 'health' || action === 'repair')
+    return maintenance(action, file, input, rest, opt, meshTopology, openEditor);
   if (action === 'transform') {
     const result = transform(file, input, rest, opt, meshTopology, openEditor);
     if (out) files.json(path.resolve(out), result.document);
