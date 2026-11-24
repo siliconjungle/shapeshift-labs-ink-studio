@@ -71,6 +71,7 @@ displaced bindings and invalidated material bakes.
 
 ## Brushes and local rebuilds
 
+Use `paintShadowBand(stroke, { pbrMaterial })` to append a stroke to a [named PBR diffuse ramp](pbr-materials.md#paint-a-pbr-shadow-band).
 Use `paintShadowBand(stroke, { layer, keys })` to paint the lighting
 threshold of a selected solid's diffuse material. The stroke uses rest
 XYZ points and joins the editor's undo history.

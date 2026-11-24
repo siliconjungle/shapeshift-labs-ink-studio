@@ -241,7 +241,18 @@
       });
     }
     function paintShadowBand(stroke, options = {}) {
-      return paintDiffuse('Paint a shadow band', 'shadowBand', SurfaceLook.shadowBandPaint.stroke(stroke), options);
+      const mark = SurfaceLook.shadowBandPaint.stroke(stroke), name = options.pbrMaterial;
+      if (name === undefined) return paintDiffuse('Paint a shadow band', 'shadowBand', mark, options);
+      const finish = snapshot().finish, look = finish?.look, recipe = look?.pbrMaterials;
+      const material = recipe?.materials && Object.hasOwn(recipe.materials,name) && recipe.materials[name];
+      if (!material) throw new RangeError('Unknown PBR material: ' + name);
+      const strokes = [...(material.shadowBand?.strokes ?? []),mark];
+      if (strokes.length > 256) throw new RangeError('A painted PBR ramp supports up to 256 strokes');
+      const materials = { ...recipe.materials, [name]: { ...material, shadowBand:{strokes} } };
+      const write = () => document.setEnvironment({finish:{...finish,look:{...look,pbrMaterials:{...recipe,materials}}}});
+      if (document.pending()) write();
+      else document.transact('Paint a PBR shadow band',write);
+      return true;
     }
     function paintShadeNormal(stroke, options = {}) {
       return paintDiffuse('Paint a shade normal', 'shadeNormals', SurfaceLook.shadowBandPaint.normals.stroke(stroke), options);

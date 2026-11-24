@@ -50,6 +50,10 @@ Undo and redo use the existing editor history. Hosts can also use
 `KIT.surface.shadowBandPaint.prepare(strokes)(position)` to inspect the
 signed bias field.
 
+## Shared PBR ramps
+
+Use the same stroke shape on a named [PBR material](pbr-materials.md#paint-a-pbr-shadow-band) with a diffuse `lightingRamp`. In the editor, pass `{ pbrMaterial: 'name' }` to `paintShadowBand` to append to that material. The paint stays in the portable finish recipe and uses the existing undo, redo and render bypass.
+
 ## The Marsh Gate
 
 The left relief uses the original lighting and the right relief uses paint.

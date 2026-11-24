@@ -27,11 +27,13 @@ function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObject
   B.disc(1.05,0,0,[0,0,1],.39,.02,B.P[2],1);
   B.describeAlbedo(first,B.count(),'#c98044');
   B.describeSplats(first,B.count(),{ material:'alloy' });
+  const movableStart = first;
   first = B.count();
   KIT.curveSplats.draw(B,[[1.74,0,0],[2.64,0,0]],{
     color:'#c98044', width:.62, edge:'hard', caps:'rounded'
   });
   B.describeSplats(first,B.count(),{ material:'alloy' });
+  const movableEnd = B.count();
   const definition = {
     materials:{ alloy:{roughness:.46,metalness:1}, texel:{} },
     bindings:[{ select:{material:'alloy'}, material:'alloy' },{ select:{material:'texel'}, material:'texel' }],
@@ -59,7 +61,14 @@ function fixture({ KIT, makeBuilder, SpriteSurface, bakeObjectTexels, editObject
   const edit = () => KIT.sceneMeshes.updateObjectTexels(baked, editObjectTexels(texels,
     texels.cells.filter(Boolean).map(({id}) => ({ id, metalness:0 }))));
   const moveBlocker = height => KIT.sceneMeshes.pose(blocker,blockerPoints.map((n,k)=>n+(k%3===1?height:0)));
-  return { world, definition, edit, moveBlocker };
+  const moveReceivers = () => {
+    const lift = .8;
+    KIT.sceneMeshes.pose(mesh,plate.points.map((n,k)=>n+(k%3===1?lift:0)));
+    world.rest=world.data;
+    world.data=world.rest.slice();
+    for(let i=movableStart;i<movableEnd;i++) world.data[i*16+1]+=lift;
+  };
+  return { world, definition, edit, moveBlocker, moveReceivers };
 }
 function shadowSettings(definition) {
   const material={roughness:.56,metalness:1,
@@ -91,14 +100,24 @@ function rampFrames(definition) {
   return { ramp:{pbrMaterials}, rampSide:{pbrMaterials,pbrLights:[{direction:[1,.5,.15],intensity:1}]},
     override:{pbrMaterials,surfaceLightRamps}, wide:{pbrMaterials:wide} };
 }
+function bandFrames(definition) {
+  const material = {
+    roughness:.48,metalness:1,
+    lightingRamp:{stops:[[0,'#253742'],[.55,'#b97652'],[.85,'#f5cc8b']],interpolation:'step'},
+    shadowBand:{strokes:[{points:[[-3,0,.15],[3,0,.15]],radius:.27,bias:.72,softness:.1}]}
+  };
+  const pbrMaterials = {...definition,materials:{alloy:material,texel:material},projections:[]};
+  return { band:{pbrMaterials}, bandOff:{pbrMaterials,shadowBandPaint:false} };
+}
 const view = { w:144,h:80,px:1,raw:true,outline:false,edges:false };
 const samples = { mesh:[26,40], texel:[50,40], decal:[72,40], gaussian:[94,40], strand:[119,40],
   projected:[72,34], background:[2,2] };
 const light = [{ direction:[1,.5,.15], color:'#a8ceff', intensity:2.3 }];
-const inputs = { view, samples, light };
+const movedSamples = {mesh:[26,23],gaussian:[94,23],strand:[119,23]};
+const inputs = { view, samples, light, movedSamples };
 
-function read(frame) {
-  return Object.fromEntries(Object.entries(samples).map(([name, [x,y]]) => {
+function read(frame, probes=samples) {
+  return Object.fromEntries(Object.entries(probes).map(([name, [x,y]]) => {
     const at = (y * frame.w + x) * 3;
     return [name, Array.from(frame.rgb.subarray(at,at + 3))];
   }));
@@ -106,24 +125,34 @@ function read(frame) {
 
 async function headless() {
   const { bakeObjectTexels, editObjectTexels } = await import('../webgl.mjs');
-  const { world, definition, edit } = fixture({ ...ink.load(), bakeObjectTexels, editObjectTexels });
-  const render = options => read(ink.render(world, { ...view, ...options }));
+  const { world, definition, edit, moveReceivers } = fixture({ ...ink.load(), bakeObjectTexels, editObjectTexels });
+  const render = (options,probes) => read(ink.render(world, { ...view, ...options }),probes);
   const lit = render(), sidelit = render({ pbrLights:light }), off = render({ pbrMaterials:false });
   const ramps = Object.fromEntries(Object.entries(rampFrames(definition)).map(([name,settings])=>[name,render(settings)]));
   const footprint = render({pbrSpecularSampling:true});
+  const bands = bandFrames(definition), band = render(bands.band), bandOff = render(bands.bandOff);
   edit();
-  return { lit,sidelit,off,...ramps,footprint,edited:render() };
+  const edited=render();
+  moveReceivers();
+  return { lit,sidelit,off,...ramps,footprint,edited,band,bandOff,
+    bandMoved:render(bands.band,movedSamples),bandMovedOff:render(bands.bandOff,movedSamples) };
 }
 
 test('shared materials relight five carriers and preserve named projections on the art grid',async () => {
-  const { lit,sidelit,off,edited,ramp,rampSide,override,wide } = await headless();
+  const { lit,sidelit,off,edited,ramp,rampSide,override,wide,band,bandOff,bandMoved,bandMovedOff } = await headless();
   for (const name of ['mesh','texel','decal','gaussian','strand']) {
     assert.notDeepEqual(lit[name],lit.background,name);
     assert(lit[name][0] >= sidelit[name][0] + 24,JSON.stringify({name,lit,sidelit}));
     assert.notDeepEqual(sidelit[name],off[name],name);
     assert.notDeepEqual(ramp[name],rampSide[name],name);
+    assert.notDeepEqual(band[name],bandOff[name],name);
   }
   assert.deepEqual(lit.background,off.background);
+  assert.deepEqual(band.background,bandOff.background);
+  for(const name of Object.keys(movedSamples)) {
+    assert.deepEqual(bandMoved[name],band[name],name);
+    assert.notDeepEqual(bandMoved[name],bandMovedOff[name],name);
+  }
   assert(lit.gaussian[0] > lit.gaussian[2] + 25);
   assert(off.gaussian[0] < off.gaussian[2]);
   assert(lit.projected[1] > lit.projected[0] + 30, JSON.stringify(lit));
@@ -136,21 +165,26 @@ test('shared materials relight five carriers and preserve named projections on t
 
 test('native WebGL matches headless material, projection and live texel edits', {skip:!process.env.INK_TEST_CHROME}, async () => {
   const expected = await headless();
-  const actual = runWebGL({},fixture,(kit,build,backend,{view,samples,light,rampSource}) => {
-    const {world,definition,edit}=build(kit), painter = backend(view.w,view.h,view);
+  const actual = runWebGL({},fixture,(kit,build,backend,{view,samples,light,rampSource,bandSource,movedSamples}) => {
+    const {world,definition,edit,moveReceivers}=build(kit), painter = backend(view.w,view.h,view);
     try {
-      const sample = options => {
+      const sample = (options,probes=samples) => {
         painter.draw(world,{...options,changedRows:[]});
-        return painter.sample(samples);
+        return painter.sample(probes);
       };
       const lit = sample(), sidelit = sample({pbrLights:light}), off = sample({pbrMaterials:false});
       const ramps = Object.fromEntries(Object.entries(new Function('return ('+rampSource+')')()(definition))
         .map(([name,settings])=>[name,sample(settings)]));
       const footprint = sample({pbrSpecularSampling:true});
+      const bands=new Function('return ('+bandSource+')')()(definition);
+      const band=sample(bands.band), bandOff=sample(bands.bandOff);
       edit();
-      return {lit,sidelit,off,...ramps,footprint,edited:sample()};
+      const edited=sample();
+      moveReceivers();
+      return {lit,sidelit,off,...ramps,footprint,edited,band,bandOff,
+        bandMoved:sample(bands.band,movedSamples),bandMovedOff:sample(bands.bandOff,movedSamples)};
     } finally { painter.close(); }
-  },{...inputs,rampSource:rampFrames.toString()});
+  },{...inputs,rampSource:rampFrames.toString(),bandSource:bandFrames.toString()});
   for (const [mode, colors] of Object.entries(expected)) {
     for (const [name, rgb] of Object.entries(colors)) {
       assert(rgb.every((n,k) => Math.abs(actual[mode][name][k]-n) <= 4),
@@ -279,4 +313,38 @@ test('portable bindings validate and a swatch is driven by the highlight respons
   assert.deepEqual(K.diorama.build(scene).look.pbrMaterials,definition);
   scene.finish.look.pbrMaterials = {...definition,default:'unknown'};
   assert(K.diorama.check(scene).some(issue=>issue.path==='finish.look.pbrMaterials' && issue.level==='error'));
+});
+
+test('PBR band strokes move diffuse thresholds, preserve full occlusion and survive editor history', () => {
+  const pbr = ink.load().KIT.pbr;
+  const lightingRamp = {stops:[[0,'#253742'],[.55,'#b97652'],[.85,'#f5cc8b']],interpolation:'step'};
+  const pbrMaterials = {materials:{alloy:{lightingRamp}},default:'alloy',
+    lights:[{direction:[.8,0,.6]}],environment:{intensity:0}};
+  const scene = {id:'band-test',solids:[],finish:{look:{pbrMaterials}}};
+  const editor = ink.createSceneEditor(scene), target = {pbrMaterial:'alloy'};
+  const positive = {points:[[-1,0,0]],radius:.5,bias:.3,softness:0};
+  const negative = {points:[[1,0,0]],radius:.5,bias:-.3,softness:0};
+  assert.throws(()=>editor.paintShadowBand(positive,{pbrMaterial:'missing'}),/Unknown PBR material/);
+  assert.equal(editor.paintShadowBand(positive,target),true);
+  assert.equal(editor.paintShadowBand(negative,target),true);
+  const recipe = () => JSON.parse(editor.serialize()).finish.look.pbrMaterials;
+  assert.deepEqual(recipe().materials.alloy.shadowBand.strokes,[positive,negative]);
+  editor.undo();
+  assert.deepEqual(recipe().materials.alloy.shadowBand.strokes,[positive]);
+  editor.redo();
+  assert.deepEqual(recipe().materials.alloy.shadowBand.strokes,[positive,negative]);
+  const band = recipe().materials.alloy.shadowBand;
+  assert.throws(()=>pbr.prepare({materials:{alloy:{shadowBand:band}}}),/diffuse lighting ramp/);
+  const plan = pbr.prepare(recipe()), bypass = pbr.prepare(recipe(),[],{paintShadowBands:false});
+  assert.equal(bypass.hasBands,false);
+  const swatch = (x,visibility=1) => {
+    plan.shadows={visibility:()=>visibility};
+    return pbr.shade(plan,plan.resolve(),{
+      color:[1,1,1],normal:[0,0,1],view:[0,0,1],position:[4,0,0],restPosition:[x,0,0]
+    }).map(n=>Math.round(n*255));
+  };
+  assert.deepEqual(swatch(-1),[37,55,66]);
+  assert.deepEqual(swatch(0),[185,118,82]);
+  assert.deepEqual(swatch(1),[245,204,139]);
+  assert.deepEqual(swatch(1,0),swatch(-1));
 });

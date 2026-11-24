@@ -141,7 +141,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     const spriteLOD = toolkit.KIT?.sprite?.reconstruction;
     const spriteLodUnit = 28, meshDepthUnit = 29; // Temporarily borrows the surface emitter shadow slot.
     const pbrUnit = 30;
-    let pbrRows, pbrTable, pbrRowSource, uploadedPbrRamps;
+    let pbrRows, pbrTable, pbrRowSource, uploadedPbrRamps, pbrRest;
     let spriteLodTable, uploadedSpriteMask, spriteReconstructionPipeline;
     let footprintBinding,engravingBinding,restBinding,restTarget,surfaceEngraving;
     const engravingAPI=toolkit.KIT?.engraving;
@@ -880,7 +880,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const pbrRampOverrides = frame.surfaceLightRamps ?? look.surfaceLightRamps;
       const pbr = toolkit.KIT?.pbr?.prepare(pbrDefinition, frame.pbrLights, {
         palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:pbrRampOverrides,
-        specularSampling:frame.pbrSpecularSampling
+        specularSampling:frame.pbrSpecularSampling, paintShadowBands:frame.shadowBandPaint !== false
       });
       const boundaryView = plane === zero && !cover && !reflectionCapture;
       const liveBoundaryDefinition = boundaryView && (frame.livePixelBoundaries ?? look.livePixelBoundaries);
@@ -1418,19 +1418,25 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           atlasMode:frame.spriteAtlasMode}
       });
       const pbrRamps = pbr && K.pbr.rampTable(pbr);
-      const pbrShadowData = pbr && K.pbr.shadows.pack(pbr.shadows,world.count+pbrRamps.rows.length/4);
-      const pbrLength = pbr && (world.count*4+pbrRamps.rows.length+pbrShadowData.rows.length);
-      // The shared material shaders read ramp and shadow data after the vertex rows.
-      const pbrUniforms = pbr && {
-        ...K.pbr.uniforms(pbr,pbrRamps),...pbrShadowData.uniforms,u_pbrRows:pbrUnit,u_pbrRampOffset:world.count
-      };
       const pbrUseAlbedo = !portableStages && !paintActive;
       const pbrSource = pbr && [world, world.data, world.count, world.pix, world.renderMetadata, world.surfaceData,
         world.gaussianHarmonics, world.splatRoughness, world.materialAlbedo, pbrDefinition, time, pbrUseAlbedo,
-        world.pal,world.paletteRoles,pbrRampOverrides,frame.shadowArt,world.look?.shadowArt,!!pbr.shadows];
-      const pbrRetained = pbr && frame.changedRows?.length === 0 && !world.anim?.bones && !world.anim?.rig &&
+        world.pal,world.paletteRoles,pbrRampOverrides,frame.shadowArt,world.look?.shadowArt,!!pbr.shadows,
+        world.rest,world.curveRest,pbr.hasBands];
+      const pbrSameRows = pbr && frame.changedRows?.length === 0 && !world.anim?.bones && !world.anim?.rig &&
         !world.reconstructionPose && pbrRowSource && pbrSource.every((value,i)=>value===pbrRowSource[i]) &&
-        pbrRows?.length===pbrLength && sameValues(pbrRamps.rows,uploadedPbrRamps);
+        sameValues(pbrRamps.rows,uploadedPbrRamps);
+      if (pbr && !pbrSameRows) pbrRest=K.pbr.restTable(world,pbr,pbrFrames,pbrTargets);
+      const pbrRestOffset = pbr && world.count + pbrRamps.rows.length/4;
+      const pbrShadowOffset = pbr && pbrRestOffset+(pbrRest.offsets?.length??0)/4+pbrRest.transforms.length/4;
+      const pbrShadowData = pbr && K.pbr.shadows.pack(pbr.shadows,pbrShadowOffset);
+      const pbrLength = pbr && (pbrShadowOffset*4+pbrShadowData.rows.length);
+      // The shared shaders read ramps, rest transforms and shadow maps after the vertex rows.
+      const pbrUniforms = pbr && {
+        ...K.pbr.uniforms(pbr,pbrRamps),...pbrShadowData.uniforms,u_pbrRows:pbrUnit,u_pbrRampOffset:world.count,
+        u_pbrRestOffset:pbrRest.offsets ? pbrRestOffset : -1
+      };
+      const pbrRetained = pbrSameRows && pbrRows?.length===pbrLength;
       if (pbr && !pbrRetained) {
         if (!pbrRows || pbrRows.length !== pbrLength) pbrRows = new Float32Array(pbrLength);
         for (let i = 0; i < world.count; i++) {
@@ -1444,11 +1450,15 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           }
         }
         pbrRows.set(pbrRamps.rows,world.count*4);
+        if (pbrRest.offsets) {
+          pbrRows.set(pbrRest.offsets,pbrRestOffset*4);
+          pbrRows.set(pbrRest.transforms,pbrRestOffset*4+pbrRest.offsets.length);
+        }
         uploadedPbrRamps = pbrRamps.rows;
         pbrRowSource = pbrSource;
       }
       if(pbr && (!pbrRetained || pbr.shadows)){
-        pbrRows.set(pbrShadowData.rows,world.count*4+pbrRamps.rows.length);
+        pbrRows.set(pbrShadowData.rows,pbrShadowOffset*4);
         pbrTable ??= table(512,pbrUnit,maxSize);
         pbrTable.upload(pbrRows);
       }

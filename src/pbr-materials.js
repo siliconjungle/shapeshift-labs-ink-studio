@@ -1,11 +1,13 @@
 /* Portable material parameters and the matching CPU/WebGL lighting equations. */
 const PbrMaterials = (() => {
-  let selectors, colors, surface, pixelLook, shadows;
+  let selectors, colors, surface, pixelLook, shadows, curves;
   try { selectors = TargetSelectors; } catch { selectors = require('./target-selectors.js'); }
   try { colors = ColorSpace; } catch { colors = require('./color-space.js'); }
   try { surface = SurfaceLook; } catch { surface = require('./surface-look.js'); }
   try { pixelLook = PixelLook; } catch { pixelLook = require('./pixel-look.js'); }
   try { shadows = PbrShadows; } catch { shadows = require('./pbr-shadows.js'); }
+  try { curves = CurveSplat; } catch { curves = require('./curve-splat.js'); }
+  const shadowBands = surface.shadowBandPaint;
   const toLinear = colors.prepare('srgb', 'srgb-linear');
   const toDisplay = colors.prepare('srgb-linear', 'srgb');
   const MAX_MATERIALS = 16, MAX_LIGHTS = 4, MAX_PROJECTIONS = 8;
@@ -43,7 +45,7 @@ const PbrMaterials = (() => {
     }
     return toLinear(vector(value, label).map(v => number(v, label, 0, 1)));
   }
-  function material(value, name, palette, roles, overrides) {
+  function material(value, name, palette, roles, overrides, paintShadowBands) {
     record(value, 'PBR material');
     const coat = typeof value.coating === 'number' ? { weight: value.coating } : value.coating;
     const ior = number(value.ior ?? 1.5, 'Material IOR', 1, 4);
@@ -51,6 +53,14 @@ const PbrMaterials = (() => {
     const ramp = (definition, type) => definition === undefined || definition === false ? null :
       surface.prepareLightingRamp(definition, palette, rampRoles, name + '.' + type, type);
     const diffuseRamp = ramp(overrides?.diffuse ?? value.lightingRamp, 'diffuse');
+    const band = value.shadowBand;
+    let readBand;
+    if (band !== undefined && band !== false) {
+      if (!diffuseRamp || Object.keys(record(band, name + '.shadowBand')).some(key => key !== 'strokes'))
+        throw new TypeError(name + '.shadowBand needs an ordered stroke list on a diffuse lighting ramp');
+      const paint = shadowBands.prepare(band.strokes);
+      if (paintShadowBands && band.strokes.length) readBand = paint;
+    }
     const highlightRamp = ramp(overrides?.specular ?? value.highlight?.lightingRamp, 'specular');
     return {
       base: value.baseColor === undefined ? null : color(value.baseColor, 'Base color'),
@@ -63,7 +73,7 @@ const PbrMaterials = (() => {
       emission: value.emission === undefined ? ZERO : color(value.emission, 'Emission').map(
         channel => channel * number(value.emissionStrength ?? 1, 'Emission strength', 0, 64)
       ),
-      diffuseRamp, highlightRamp,
+      diffuseRamp, highlightRamp, readBand,
       wrap: number(value.wrap ?? 0, 'PBR diffuse ramp wrap', 0, 1),
       rampStrength: number(value.rampStrength ?? 1, 'PBR diffuse ramp strength', 0, 1),
       highlight: value.highlight?.color === undefined ? ZERO : color(value.highlight.color, 'Highlight swatch'),
@@ -96,7 +106,7 @@ const PbrMaterials = (() => {
     if (!Array.isArray(value) || value.length > limit) throw new RangeError(label + ' supports up to ' + limit + ' entries');
     return value;
   }
-  function prepare(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps, specularSampling} = {}) {
+  function prepare(definition, lightsOverride, {palette = [], paletteRoles = {}, surfaceLightRamps, specularSampling, paintShadowBands = true} = {}) {
     if (definition == null || definition === false) return null;
     record(definition, 'PBR recipe');
     const entries = Object.entries(record(definition.materials, 'Named PBR materials'));
@@ -104,7 +114,7 @@ const PbrMaterials = (() => {
       throw new RangeError('PBR needs one to ' + MAX_MATERIALS + ' named materials');
     const overrides = surface.lightRamps(surfaceLightRamps);
     const materials = entries.map(([name, value]) => material(value, name, palette, paletteRoles,
-      overrides && Object.hasOwn(overrides,name) ? overrides[name] : undefined));
+      overrides && Object.hasOwn(overrides,name) ? overrides[name] : undefined, paintShadowBands));
     const ids = new Map(entries.map(([key], index) => [key, index + 1]));
     const id = key => {
       if (!ids.has(key)) throw new RangeError('Unknown PBR material: ' + key);
@@ -144,7 +154,7 @@ const PbrMaterials = (() => {
       return defaultId;
     }
     return {
-      materials, lights, environment, exposure, projections, resolve, specularSampling:sampleSpecular,
+      materials, lights, environment, exposure, projections, resolve, specularSampling:sampleSpecular, hasBands:materials.some(m=>m.readBand),
       surface(chart) {
         return resolve(chart && {
           object:chart.objectId, entity:chart.objectId, material:chart.materialId,
@@ -227,10 +237,11 @@ const PbrMaterials = (() => {
     const axes=[a/aspect,a*aspect,ac], taps=plan.specularSampling && sample.highlightSamples;
     const visibilityAt=(index,point,normal)=>sample.receiveShadow!==false && plan.shadows ?
       plan.shadows.visibility(index,point,normal) : 1;
+    const band = m.readBand?.(sample.restPosition ?? sample.position) ?? 0;
     let highlight = 0, incidence = 0;
     for (const [index,light] of plan.lights.entries()) {
       const l = light.direction, nl = dot(n, l);
-      const response = m.diffuseRamp ? clamp((nl+m.wrap)/(1+m.wrap))*light.rampIntensity : 0;
+      const response = m.diffuseRamp ? shadowBands.level((nl+m.wrap)/(1+m.wrap),light.rampIntensity,band) : 0;
       if(nl<=0 && !response)continue;
       const visibility = visibilityAt(index,sample.position,unit(sample.shadowNormal??ZERO,n));
       incidence=Math.max(incidence,response*visibility);
@@ -295,7 +306,7 @@ const PbrMaterials = (() => {
 
   function rampTable(plan) {
     // Each ramp starts with a header, followed by a pair of texels for each exact stop.
-    const rows = [], indices = [];
+    const rows = [], indices = [], bands = [];
     for (const material of plan.materials) {
       const pair = [];
       for (const [ramp,strength,wrap] of [[material.diffuseRamp,material.rampStrength,material.wrap],[material.highlightRamp,1,0]]) {
@@ -306,8 +317,9 @@ const PbrMaterials = (() => {
         for (const at of ramp.positions) rows.push(...ramp.tint(at),at,ramp.amount?.(at) ?? -1,0,0,0);
       }
       indices.push(pair);
+      bands.push(material.readBand?.pack(rows) ?? 0);
     }
-    return { rows:Float32Array.from(rows), indices };
+    return { rows:Float32Array.from(rows), indices, bands };
   }
 
   function uniforms(plan, ramps = rampTable(plan)) {
@@ -319,6 +331,7 @@ const PbrMaterials = (() => {
     };
     return {
       u_pbrLights: lights.length, u_pbrProjections: projections.length,
+      u_pbrBands: Int32Array.from({length:MAX_MATERIALS},(_,i)=>ramps.bands?.[i]??0),
       u_pbrMaterial: table(materials.map((m,i) => [
         ...(m.base ?? ZERO), Number(!!m.base), m.roughness, m.metalness, m.f0, m.anisotropy,
         ...m.emission, m.coat, ...m.highlight, m.threshold, m.coatRoughness, m.highlightWeight, ...ramps.indices[i]
@@ -367,6 +380,50 @@ const PbrMaterials = (() => {
       return cache.get(target);
     };
   }
+  function restTransform(world, i, frame) {
+    const q = i * 16, at = frame.position();
+    const stored = world.curveRest?.[q+3] && world.curveRest.subarray(q,q+16);
+    const shape = stored && curves.spanShape(world.data,q,1);
+    let map = frame.localOffset, rest = frame.rest;
+    if (shape) {
+      const authored = world.curveStations?.subarray(i*curves.stationStride+4,i*curves.stationStride+7);
+      const axis = authored && dot(authored,shape.axis)<0 ? shape.axis.map(n=>-n) : shape.axis;
+      const u = stored.subarray(12,15), v = cross(axis,u);
+      const restAxis = stored.subarray(4,7), restU = stored.subarray(8,11), restV = cross(restAxis,restU);
+      const along = stored[3] / Math.max(1e-8,shape.half), radial = stored[7] / shape.radius;
+      rest = stored.subarray(0,3);
+      map = (x,y,z) => {
+        const offset = [x,y,z], t = dot(offset,axis)*along;
+        const across = dot(offset,u)*radial, up = dot(offset,v)*radial;
+        return restAxis.map((n,k)=>n*t+restU[k]*across+restV[k]*up);
+      };
+    }
+    if (rest.length!==3) return undefined;
+    const x = map(1,0,0), y = map(0,1,0), z = map(0,0,1);
+    const moved = map(...at);
+    const affine = [0,1,2].map(k=>[x[k],y[k],z[k],rest[k]-moved[k]]);
+    const identity = affine.every((row,k)=>row.every((n,j)=>Math.abs(n-Number(k===j))<1e-8));
+    return identity ? undefined : affine;
+  }
+
+  function restPoint(affine, point) {
+    return affine ? affine.map(row=>dot(row,point)+row[3]) : point;
+  }
+
+  function restTable(world, plan, frameAt, materialAt) {
+    const transforms = [];
+    let offsets;
+    if (plan.hasBands) for(let i=0;i<world.count;i++){
+      if (!plan.materials[materialAt(i)-1]?.readBand) continue;
+      const transform=restTransform(world,i,frameAt(i));
+      if (!transform) continue;
+      offsets ??= new Float32Array(world.count*4);
+      offsets[i*4]=world.count+transforms.length/4;
+      for(const row of transform) transforms.push(...row);
+    }
+    return {offsets,transforms};
+  }
+
   function encodeNormal(n) {
     const scale = Math.abs(n[0]) + Math.abs(n[1]) + Math.abs(n[2]);
     if (!scale) return [2, 2];
@@ -399,6 +456,40 @@ vec4 pbrRow(int at){
 }
 vec4 pbrRampRow(int index){
   return pbrRow(u_pbrRampOffset+index);
+}
+uniform highp int u_pbrBands[${MAX_MATERIALS}], u_pbrRestOffset;
+vec3 pbrRestPoint(int row,vec3 point){
+  if(u_pbrRestOffset<0)return point;
+  int offset=int(pbrRow(u_pbrRestOffset+row).x);
+  if(offset==0)return point;
+  int at=u_pbrRestOffset+offset;
+  vec4 p=vec4(point,1.0);
+  return vec3(dot(pbrRow(at),p),dot(pbrRow(at+1),p),dot(pbrRow(at+2),p));
+}
+float pbrBand(int start,vec3 at){
+  if(start==0)return 0.0;
+  int count=int(pbrRampRow(start-1).x), cursor=start;
+  float bias=0.0;
+  for(int i=0;i<count;i++){
+    vec4 lo=pbrRampRow(cursor),hi=pbrRampRow(cursor+1),brush=pbrRampRow(cursor+2);
+    int segments=int(brush.x);
+    cursor+=3;
+    if(all(greaterThanEqual(at,lo.xyz))&&all(lessThanEqual(at,hi.xyz))){
+      float nearest=lo.w*lo.w;
+      for(int j=0;j<segments;j++){
+        vec4 a=pbrRampRow(cursor+j*2);
+        vec3 d=pbrRampRow(cursor+j*2+1).xyz, q=at-a.xyz;
+        vec3 delta=q-d*clamp(dot(q,d)*a.w,0.0,1.0);
+        nearest=min(nearest,dot(delta,delta));
+      }
+      if(nearest<lo.w*lo.w){
+        float weight=hi.w>0.0?clamp((1.0-sqrt(nearest)/lo.w)/hi.w,0.0,1.0):1.0;
+        bias=mix(bias,brush.y,weight*weight*(3.0-2.0*weight));
+      }
+    }
+    cursor+=segments*2;
+  }
+  return bias;
 }
 vec4 pbrRamp(int start,vec4 info,float value,float fallbackWeight){
   int lo=0, hi=int(info.x)-1;
@@ -518,7 +609,7 @@ vec3 pbrTapShine(PbrTap tap,vec3 tangent,vec3 f0,vec3 axes,
   }
   return sum;
 }
-vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec3 view,vec3 at,
+vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec3 view,vec3 at,vec3 rest,
               float sampledRoughness,float sampledMetalness,float sampledCoat,vec3 sampledEmission,PbrTap taps[4]) {
   if (id==0) return pigment;
   bool receiveShadow=id>0;
@@ -563,12 +654,13 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec
   vec3 axes=vec3(a/aspect,a*aspect,ac);
   float highlight=0.0, incidence=0.0;
   int diffuseRamp=int(finish.z), specularRamp=int(finish.w);
+  float band=pbrBand(u_pbrBands[id-1],rest);
   vec4 diffuseInfo=diffuseRamp>0?pbrRampRow(diffuseRamp-1):vec4(0);
   for (int i=0;i<u_pbrLights;i++) {
     vec4 lightRow=u_pbrLight[i*2];
     vec3 light=lightRow.xyz;
     float nl=dot(n,light);
-    float response=diffuseRamp>0?clamp((nl+diffuseInfo.w)/(1.0+diffuseInfo.w),0.0,1.0)*lightRow.w:0.0;
+    float response=diffuseRamp>0?clamp((nl+diffuseInfo.w)/(1.0+diffuseInfo.w)-band,0.0,1.0)*lightRow.w:0.0;
     if(nl<=0.0&&response==0.0)continue;
     float visibility=receiveShadow?pbrVisibility(i,at,casterNormal,light):1.0;
     incidence=max(incidence,response*visibility);
@@ -608,6 +700,6 @@ vec3 pbrShade(int id,vec3 pigment,vec3 normal,vec3 shadowNormal,vec3 tangent,vec
   return pbrDisplay(display*(1.0-accent.a)+accent.rgb);
 }
 `;
-  return Object.freeze({ prepare, shade, footprint, uniforms, rampTable, glsl, splatNormal, splatBindings, encodeNormal, shadows });
+  return Object.freeze({ prepare, shade, footprint, uniforms, rampTable, glsl, restTransform, restPoint, restTable, splatNormal, splatBindings, encodeNormal, shadows });
 })();
 if (typeof module !== 'undefined') module.exports = PbrMaterials;

@@ -372,7 +372,7 @@ void main() {
         vec3 tapNormal=toWorld*curvePbrNormal(hit.row,tapOrigin,tapRay,distance);
         taps[j]=PbrTap(point,tapNormal,tapNormal,-toWorld*tapRay,min(1.0,tap.alpha/max(1e-5,hit.alpha)));
       }
-      rgb=pbrShade(int(controls.w),rgb,normal,normal,toWorld*spanRow(hit.row,1).xyz,-toWorld*ray,at,
+      rgb=pbrShade(int(controls.w),rgb,normal,normal,toWorld*spanRow(hit.row,1).xyz,-toWorld*ray,at,pbrRestPoint(int(spanRow(hit.row,6).w)-1,at),
         fract(abs(controls.w))*2.0,0.0,0.0,pbrLinear(controls.rgb),taps);
     }` : ''}
     ${engraving ? `

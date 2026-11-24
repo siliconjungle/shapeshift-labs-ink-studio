@@ -98,7 +98,7 @@ layout(location=1) in int a_index;
 ${instances ? 'layout(location=2) in int a_instance; uniform highp sampler2D u_instances;' : ''}
 ${footprints ? 'uniform highp sampler2D u_footprintRows,u_footprintParams; flat out vec4 v_footprintMap; flat out vec2 v_footprintStyle, v_footprintZ; flat out vec4 v_footprintPlane;' : ''}
 out vec2 v_d; out vec3 v_conic; out vec4 v_color; out float v_depth;
-${pbr ? 'uniform highp sampler2D u_pbrRows;uniform int u_pbrRowCount;flat out vec4 v_pbrRow,v_pbrPigment;flat out vec3 v_pbrCenter;' : ''}
+${pbr ? 'uniform highp sampler2D u_pbrRows;uniform int u_pbrRowCount;flat out vec4 v_pbrRow,v_pbrPigment;flat out vec3 v_pbrCenter;flat out int v_pbrIndex;' : ''}
 ${gaussianFilter ? `uniform vec4 u_gaussianFilter;
 flat out vec4 v_gaussianX,v_gaussianY,v_gaussianZ;
 flat out float v_gaussianGain;
@@ -200,6 +200,7 @@ void main(){
   }` : ''}
   vec3 color = vec3(mod(t1.w, 256.0), mod(floor(t1.w / 256.0), 256.0), floor(t1.w / 65536.0)) / 255.0;
   ${pbr ? `
+  v_pbrIndex=a_index;
   v_pbrRow=a_index>=0&&a_index<u_pbrRowCount?texelFetch(u_pbrRows,ivec2(a_index&511,a_index>>9),0):vec4(0);
   v_pbrPigment=vec4(color,0);
   if(v_pbrRow.z>0.0){
@@ -554,6 +555,7 @@ ${water || portal || environment || cutaway || footprints || facingColors || gau
 ${pbr ? `
 flat in vec4 v_pbrRow,v_pbrPigment;
 flat in vec3 v_pbrCenter;
+flat in int v_pbrIndex;
 uniform mat4 u_pbrView;
 uniform float u_pbrReach;
 ${pbr}
@@ -764,7 +766,7 @@ ${pbr ? `
       taps[j]=pbrSplatTap(gl_FragCoord.xy+offset,normal);
       ${cutaway ? 'if(sectionMargin(taps[j].position,sectionAxial)<0.0)taps[j].coverage=0.0;' : ''}
     }
-    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,normal,vec3(0),center.view,center.position,
+    rgb=pbrShade(int(v_pbrRow.w),v_pbrPigment.rgb,normal,normal,vec3(0),center.view,center.position,pbrRestPoint(v_pbrIndex,center.position),
       fract(abs(v_pbrRow.w))*2.0,0.0,0.0,vec3(0),taps);
     rgb=mix(rgb,u_fog,${optical?'hasOptical?0.0:':''}v_pbrPigment.a);
   }` : ''}

@@ -62,7 +62,7 @@ const ShadowBandPaint = (() => {
 
   function prepare(strokes) {
     const compiled = paths(strokes, stroke);
-    return position => {
+    const read = position => {
       let value = 0;
       for (const mark of compiled) {
         const alpha = weight(mark, position);
@@ -70,6 +70,17 @@ const ShadowBandPaint = (() => {
       }
       return value;
     };
+    read.pack = rows => {
+      if (!compiled.length) return 0;
+      const index = rows.length / 4 + 1;
+      rows.push(compiled.length,0,0,0);
+      for (const {min,max,radius,softness,segments,bias} of compiled) {
+        rows.push(...min,radius,...max,softness,segments.length,bias,0,0);
+        for (const {x,y,z,dx,dy,dz,inverse} of segments) rows.push(x,y,z,inverse,dx,dy,dz,0);
+      }
+      return index;
+    };
+    return read;
   }
 
   function prepareNormals(strokes) {

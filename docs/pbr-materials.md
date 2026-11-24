@@ -46,6 +46,7 @@ Use `ink-studio render scene.json --pbr-materials finish.json --raw --px1 --out 
 | `coating` | Weight from 0 to 1 or an object with `weight` and `roughness`. |
 | `emission`, `emissionStrength` | An sRGB swatch and an optional linear gain added to the carrier's emission. |
 | `lightingRamp`, `rampStrength`, `wrap` | Optional material light ramp, blend strength and terminator wrap. Strength and wrap default to 1 and 0. |
+| `shadowBand` | Ordered, rest-space brush strokes that shift the diffuse ramp lookup. |
 | `highlight` | Optional `lightingRamp` and `strength`, or a single `color` with `threshold` and `strength`. Both modes sample the linear direct specular response. |
 | `lights` | Up to four directional lights in world space. `direction` points toward the light. `color` and `intensity` default to white and 1. |
 | `specularSampling` | Enable four-sample specular coverage on the native art grid. Defaults to false. |
@@ -75,6 +76,27 @@ const tealCable = {
 The diffuse ramp samples the strongest directional response, using wrapped incidence and light strength. It blends the exposed lit color toward the authored swatch and keeps emission additive. Lower `rampStrength` or set stop weights to retain more of the pigment, projected paint and physical shading. The highlight ramp samples the direct specular response, clamped to 0–1, and uses it as the default blend weight. Explicit highlight weights start at zero. A highlight ramp takes precedence over the single-swatch highlight controls.
 
 Author scene or environment overrides with `look.surfaceLightRamps`. Use the PBR material name as the finish ID and `diffuse` or `specular` as the layer. These override entries accept explicit hex or RGB stops, just like legacy surface overrides. Pass `surfaceLightRamps: false` at render time to use the authored material definitions. To require exact swatches after a full-strength ramp, include them in the scene palette or bind a dedicated [target palette](pixel-look.md#target-palettes-and-dithering).
+
+## Paint a PBR shadow band
+
+Add `shadowBand.strokes` to a named material with a diffuse `lightingRamp`. The strokes use the same [signed threshold brush](shadow-band-paint.md) as regular diffuse layers. A positive bias holds an area in shadow. A negative bias brings it into a brighter swatch earlier. A stroke with zero bias erases previous paint in its core.
+
+```js
+const stroke = {
+  points: [[-.32, .25, .46], [.17, .16, .44]],
+  radius: .11, softness: .2, bias: .24
+};
+brass.shadowBand = { strokes: [stroke] };
+editor.paintShadowBand(stroke, { pbrMaterial: 'brass' });
+```
+
+Coordinates are in scene units in the receiver's baked rest frame. A shared material evaluates the same paint field on every bound receiver. WebGL and headless evaluate the field at the surface sample. A painted band changes the diffuse swatch lookup before light visibility is applied, so a fully occluded light still contributes zero and specular lighting still uses the rendered normal. Set `shadowBandPaint: false` on a frame or pass `--shadow-band-paint off` to compare with the original response.
+
+Run the [Brass Warden study](../examples/pbr-materials/shadow-band-scene.cjs) for a side-by-side sweep with painted brows and cheek plates on a turning mask.
+
+```sh
+node examples/pbr-materials/build-shadow-band-demo.cjs brass-warden.html
+```
 
 ## Per-light shadows
 

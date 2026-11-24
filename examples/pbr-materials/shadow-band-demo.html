@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Brass Warden · Ink Studio</title>
+<style>
+  :root{color-scheme:dark;--bg:#111922;--panel:#192530;--line:#374553;--ink:#f4e9d7;--muted:#b5bdc4;--copper:#f0c67b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,sans-serif}
+  main{max-width:1150px;margin:auto;padding:clamp(24px,5vw,58px) clamp(16px,4vw,44px)}
+  h1{font:500 clamp(36px,6vw,67px)/1 Georgia,serif;letter-spacing:-.04em;margin:0}
+  header p{margin:8px 0 26px;color:var(--muted)}
+  .compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  figure{margin:0;border:1px solid var(--line);background:var(--panel);border-radius:8px;overflow:hidden}
+  canvas{display:block;width:100%;aspect-ratio:136/102;image-rendering:pixelated}
+  figcaption{font-weight:650;padding:10px 13px;border-top:1px solid var(--line)}
+  .controls{display:flex;align-items:center;gap:13px;margin-top:18px}
+  button{min-width:68px;padding:8px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;font:inherit;cursor:pointer}
+  button:hover{border-color:var(--copper)}
+  input{flex:1;min-width:0;accent-color:var(--copper)}
+  output{width:4ch;text-align:right;color:var(--copper);font-variant-numeric:tabular-nums}
+  main>p{margin:16px 0 0;color:var(--muted)}
+  @media(max-width:560px){.compare{grid-template-columns:1fr;gap:10px}.controls{gap:8px}figcaption{padding:6px 10px}}
+</style>
+<main>
+  <header>
+    <h1>Brass Warden</h1>
+    <p>Sweep the key light to compare the same mask with and without threshold paint.</p>
+  </header>
+  <div class="compare">
+    <figure><canvas aria-label="Brass mask with the standard diffuse ramp"></canvas><figcaption>Standard ramp</figcaption></figure>
+    <figure><canvas aria-label="Brass mask with painted diffuse thresholds"></canvas><figcaption>Painted ramp</figcaption></figure>
+  </div>
+  <div class="controls">
+    <button id="play" disabled>Play</button>
+    <label for="light">Key angle</label>
+    <input id="light" type="range" min="0" disabled>
+    <output for="light" id="angle"></output>
+  </div>
+  <p>The painted brows hold their shadows longer. The cheek plates pick up brighter swatches sooner.</p>
+</main>
+<script type="module">
+const {width,height,angles,images} = @FRAMES@;
+const play = document.getElementById('play'), light = document.getElementById('light'), angle = document.getElementById('angle');
+const sheets = await Promise.all(images.map(async image=>{
+  const sheet = new Image();
+  sheet.src = 'data:image/png;base64,'+image;
+  await sheet.decode();
+  return sheet;
+}));
+const contexts = Array.from(document.querySelectorAll('canvas'), canvas=>{
+  canvas.width = width;
+  canvas.height = height;
+  return canvas.getContext('2d');
+});
+let timer, direction = 1;
+function draw(index) {
+  light.value = index;
+  angle.value = Math.round(angles[index])+'°';
+  for (const [i,ctx] of contexts.entries()) ctx.drawImage(sheets[i],0,index*height,width,height,0,0,width,height);
+}
+function pause() {
+  clearInterval(timer);
+  timer = undefined;
+  play.textContent = 'Play';
+}
+light.max = angles.length-1;
+light.addEventListener('input',()=>{pause();draw(Number(light.value));});
+play.addEventListener('click',()=>{
+  if (timer) return pause();
+  play.textContent = 'Pause';
+  timer = setInterval(()=>{
+    const index = Number(light.value);
+    if (index===0) direction=1;
+    if (index===angles.length-1) direction=-1;
+    draw(index+direction);
+  },85);
+});
+draw(9);
+play.disabled = light.disabled = false;
+document.documentElement.dataset.ready = 'true';
+</script>
+</html>

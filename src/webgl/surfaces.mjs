@@ -90,9 +90,9 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
     const shaders = sharedShaders?.cache ?? new Map();
     const program = sharedShaders?.program ?? resources.program;
     function shaderFor(wet, section, lighting, normalMapped, environment, paletteSampling, styledProjection, maskedPart, glassLayers,
-      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling) {
+      anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands) {
       const chart = lighting && !normalMapped;
-      const marks=anchors || engraving, rest=marks||simulation||objectTexels, needsFrame=normalMapped||semantic||pbr;
+      const marks=anchors || engraving, rest=marks||simulation||objectTexels||pbrBands, needsFrame=normalMapped||semantic||pbr;
       const key = [
         wet?.airPockets,
         wet?.layered,
@@ -106,7 +106,7 @@ export function createSurfacePipeline(gl, { updatesSince, geometryUpdatesSince, 
         paletteSampling,
         styledProjection,
         maskedPart,
-        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling
+        glassLayers,anchors,engraving,semantic,simulation,blockColor,objectTexels,pbr,pbrSpecularSampling,pbrBands
       ].join('/');
       if (shaders.has(key)) return shaders.get(key);
       const shader = program(
@@ -295,7 +295,7 @@ void main(){
       taps[j]=PbrTap(at,normal,geometricNormal,u_pbrOrtho?u_pbrBack:u_surfaceEye-at,coverage);
     }
     rgb=pbrShade(u_surfacePbr,${simulation?'pbrPigment':'ink.rgb'},normal,geometricNormal,tangent,
-      u_pbrOrtho?u_pbrBack:u_surfaceEye-v_world,v_world,
+      u_pbrOrtho?u_pbrBack:u_surfaceEye-v_world,v_world,${pbrBands?'v_rest':'v_world'},
       ${semantic?'u_semanticOn?detail.a:.45,u_semanticOn?metalness:0.,0.,u_semanticOn?emission:vec3(0)':'0.45,0.0,0.0,vec3(0)'},taps);
   }` : ''}
   ${engraving ? `
@@ -771,10 +771,10 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
       gl.activeTexture(gl.TEXTURE0 + 6);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       const etched=!coverageFilter && !index && engraving && atlas.surfaceCharts?.some(chart=>engraving.mesh(chart)) ? engraving : null;
-      if(etched || anchors || simulation || objectTexels)bindMarks(atlas,anchors,etched,simulation);
+      if(etched || anchors || simulation || objectTexels || pbr?.hasBands)bindMarks(atlas,anchors,etched,simulation);
       if(etched)etched.bind();
       const shader = shaderFor(wet, section, lit, normalMapped, environment, useSampling, projections.length > 0, Boolean(geometryCode), glassLayers,
-        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling);
+        !!anchors,!!etched,!!semantic,simulation,!!blockRanges,objectTexels,!!pbr,!!pbr?.specularSampling,!!pbr?.hasBands);
       if (pbr) bindPbr();
       gl.useProgram(shader.p);
       shader.set({
@@ -835,7 +835,7 @@ in vec3 v_world;flat in vec3 v_normal;out vec4 color;void main(){color=vec4(eLig
         }
       };
       gl.bindVertexArray(vao);
-      for(const [i,on] of [[3,etched||anchors||simulation||objectTexels],[4,etched||anchors],[5,simulation]])
+      for(const [i,on] of [[3,etched||anchors||simulation||objectTexels||pbr?.hasBands],[4,etched||anchors],[5,simulation]])
         if(on)gl.enableVertexAttribArray(i);else gl.disableVertexAttribArray(i);
       if (lit && !normalMapped) gl.enableVertexAttribArray(2);
       else gl.disableVertexAttribArray(2);

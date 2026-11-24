@@ -86,6 +86,7 @@ sorting or `specialize: false` in auto mode to compare the full resolve.
 | `reconstruction` | Animate selected splats through fragmentation, withdrawal, and reassembly. See [world-space reveal and reconstruction](world-reconstruction.md). |
 | `splatOrder`, `surfaceOrder` | Enable bounded [local surface ordering](surface-order.md) for a transparent crossing. |
 | `pbrMaterials`, `pbrLights`, `pbrShadows`, `pbrSpecularSampling` | Bind [shared PBR materials](pbr-materials.md), relight them live, and review [per-light shadows](pbr-materials.md#per-light-shadows) and [specular coverage](pbr-materials.md#specular-coverage-on-the-art-grid). |
+| `shadowBandPaint` | Pass `false` to bypass authored diffuse threshold strokes, including [PBR shadow bands](pbr-materials.md#paint-a-pbr-shadow-band). |
 | `stableTransparency` | Hold the order of nearby translucent splats during motion. See [stable transparency](scene-optics.md#stable-transparency-during-motion). |
 | `water: false` | Compare the scene with water optics disabled. |
 | `reflections: false` | Disable live scene captures bound to water optics. |

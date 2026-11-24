@@ -94,8 +94,9 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const lightingTarget=lightingMesh && chart && {
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
+      const trackWeights=sourceBinding || motion || chart && (sampleCharts || pbr?.materials[pbrMaterial-1]?.readBand);
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
-        sourceBinding || motion || chart && sampleCharts ? weights : undefined,local));
+        trackWeights ? weights : undefined,local));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
         ...(motion && {key:JSON.stringify(['mesh',layer.surfaceMotionKey ?? layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
@@ -229,7 +230,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
               local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
           }
-          const weights3=(sourceBinding || motion || chart && sampleCharts) && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
+          const weights3=trackWeights && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
           const at=chart && first-chart.first;
           const value=(data,components,k)=>weights3.reduce((s,n,i)=>s+n*data[(at+i)*components+k],0);
           let uv;

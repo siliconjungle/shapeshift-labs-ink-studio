@@ -392,7 +392,7 @@ function renderFrame(world, o, preparedPalettes) {
   const look = world.look || {};
   const pbr = PbrMaterials.prepare(o.pbrMaterials ?? look.pbrMaterials, o.pbrLights, {
     palette:world.pal, paletteRoles:world.paletteRoles, surfaceLightRamps:o.surfaceLightRamps ?? look.surfaceLightRamps,
-    specularSampling:o.pbrSpecularSampling
+    specularSampling:o.pbrSpecularSampling, paintShadowBands:o.shadowBandPaint !== false
   });
   const cutaway = Cutaway.prepare(o.cutaway ?? look.cutaway);
   const detailBudget = !o.raw && DetailBudgets.prepare(look.detailBudgets);
@@ -1044,6 +1044,12 @@ function renderFrame(world, o, preparedPalettes) {
   const pbrView = ortho ? [V[2], V[6], V[10]] : null;
   const pbrTargets = pbr && PbrMaterials.splatBindings(world, pbr);
   const pbrFrames = pbr && sampleFrames(world, t);
+  const pbrRest = pbr?.hasBands && new Map();
+  function pbrRestPosition(id,i,position) {
+    if (!pbr.materials[id-1]?.readBand) return position;
+    if (!pbrRest.has(i)) pbrRest.set(i,PbrMaterials.restTransform(world,i,pbrFrames(i)));
+    return PbrMaterials.restPoint(pbrRest.get(i),position);
+  }
   const pbrMatrices = pbr && require('../index.js').load().KIT.M;
   const nominalEye = ortho ? eye.map((value, i) => value - depthOffset * V[2 + i * 4]) : eye;
   const spriteLOD = world.spriteReconstruction && require('../index.js').load().KIT.sprite.reconstruction;
@@ -2175,7 +2181,7 @@ function renderFrame(world, o, preparedPalettes) {
         color = color.map(value => value*gain);
       }
       if (pbrMaterial) color=PbrMaterials.shade(pbr,pbrMaterial,{
-        color:physicalPigment,position,normal:sprite.normal,roughness:world.splatRoughness?.[i],
+        color:physicalPigment,position,restPosition:pbrRestPosition(pbrMaterial,i,position),normal:sprite.normal,roughness:world.splatRoughness?.[i],
         receiveShadow:pbr.shadows?.receives?.(i),
         highlightSamples:pbrPlaneSamples(sprite.p%W+.5,Math.floor(sprite.p/W)+.5,position,sprite.normal,undefined,z),
         view:pbrView ?? eye.map((value,k)=>value-position[k])
@@ -2206,7 +2212,7 @@ function renderFrame(world, o, preparedPalettes) {
     }
     if (sprite.pbrMaterial) {
       color = PbrMaterials.shade(pbr, sprite.pbrMaterial, {
-        color: sprite.color, position, normal: sprite.normal, tangent: sprite.pbrTangent,
+        color: sprite.color, position, restPosition:sprite.objectPosition, normal: sprite.normal, tangent: sprite.pbrTangent,
         shadowNormal:sprite.biasNormal,receiveShadow:sprite.pbrReceives,
         highlightSamples:pbrPlaneSamples(sprite.p%W+.5,Math.floor(sprite.p/W)+.5,position,sprite.normal,sprite.biasNormal,z),
         view: pbrView ?? eye.map((value, k) => value - position[k]), roughness: sprite.semantic?.roughness,
@@ -2894,7 +2900,7 @@ function renderFrame(world, o, preparedPalettes) {
                 coverage:Math.min(1,tap.alpha/Math.max(1e-5,curveHit.alpha))};
             }) : pbrPlaneSamples(ix+.5,iy+.5,position,normal,undefined,surfaceZ);
           const rgb = PbrMaterials.shade(pbr, pbrMaterial, {
-            color: physicalPigment, position, normal, tangent: curve?.axis,
+            color: physicalPigment, position, restPosition:pbrRestPosition(pbrMaterial,i,position), normal, tangent: curve?.axis,
             receiveShadow:pbrReceives,highlightSamples,
             view: ray.direction.map(n => -n), roughness: roughness ?? world.splatRoughness?.[i],
             emission: curveEmission ? toLinearSrgb(Array.from(curveEmission)) : undefined
