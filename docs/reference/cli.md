@@ -243,6 +243,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush
     dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast
   pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides
+  pixel-art lint <design.json> [--frame id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
   pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json] [--destination ids] [--references] [--out report.json]   show pixel contributors
   pixel-art edit <design.json> [--frame id]   work on a native indexed frame
@@ -667,6 +668,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art edit` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art inspect` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art lint` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art palette extract` · [source](../../cli/pixel-art.js)

@@ -198,3 +198,27 @@
 .pixel-inspection-body ul { margin: 0; padding: 0; list-style: none; }
 .pixel-inspection-body li { margin-bottom: 4px; overflow-wrap: anywhere; font-size: 12px; }
 .pixel-inspection-body [data-inactive] { opacity: .72; }
+
+
+.ink-grid-canvas .ink-grid-diagnostic {
+  position: absolute;
+  left: calc(var(--ink-grid-cell) * var(--ink-diagnostic-x));
+  top: calc(var(--ink-grid-cell) * var(--ink-diagnostic-y));
+  width: calc(var(--ink-grid-cell) * var(--ink-diagnostic-width));
+  height: calc(var(--ink-grid-cell) * var(--ink-diagnostic-height));
+  background: none;
+  outline: 1px solid #ffd77c;
+  box-shadow: 0 0 0 2px #302813;
+  pointer-events: none;
+}
+.ink-grid-canvas .ink-grid-diagnostic[hidden] { display: none; }
+.pixel-craft { padding: 10px 12px; border-top: 1px solid #354549; }
+.pixel-craft summary { cursor: pointer; }
+.pixel-craft-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 9px; }
+.pixel-craft-controls button, .pixel-craft-controls select {
+  font: inherit; color: inherit; background: #253437; border: 1px solid #476062;
+  border-radius: 5px; padding: 6px 9px;
+}
+.pixel-craft-controls button:disabled { opacity: .48; }
+.pixel-craft output { display: block; margin-top: 8px; color: #ecd8a8; font: 13px ui-monospace, monospace; }
+.pixel-craft p { margin: 6px 0 0; font-size: 13px; }

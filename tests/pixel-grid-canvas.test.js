@@ -853,7 +853,7 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
 
     const detailFile = path.join(directory,'workshop-detail.json');
     fs.writeFileSync(detailFile,JSON.stringify({ width:4,height:3,swatchIds:['ink'],
-      palette:['#ff0000'],frames:[{ slots:slots([0,0]),duration:.25 },{ slots:slots(),duration:.25 }] }));
+      palette:['#ff0000'],frames:[{ slots:slots([0,0],[11,0]),duration:.25 },{ slots:slots(),duration:.25 }] }));
     await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[detailFile] });
     await until(browser,"document.querySelector('#status').textContent === 'Opened workshop-detail.json'");
     await evaluate(browser,()=>document.querySelector('#protection-tools').open = true);
@@ -886,6 +886,30 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual((await download('#export')).protectedDetails,[]);
     await click(browser,'#undo');
     assert.equal((await download('#export')).protectedDetails[0].id,'eye');
+
+    await evaluate(browser,()=>document.querySelector('#craft-diagnostics details').open = true);
+    const diagnostic = "document.querySelector('[data-diagnostic-result]')";
+    await until(browser,`${diagnostic}.dataset.finding === 'orphan-3-2'`);
+    await click(browser,'[data-diagnostic-jump]');
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-diagnostic').hidden"),false);
+    await until(browser,"document.querySelector('[data-inspection-result]').value.startsWith('3, 2')");
+    await click(browser,'[data-diagnostic-select]');
+    assert.equal(await browser.evaluate("document.querySelector('#selection-count').value"),'1 pixels selected');
+    assert.deepEqual(await raster(browser,preview,3,2),[255,0,0,255]);
+    await click(browser,'[data-diagnostic-protected]');
+    await click(browser,'[data-diagnostic-previous]');
+    await until(browser,`${diagnostic}.dataset.finding === 'orphan-2-0'`);
+    assert.equal(await browser.evaluate("document.querySelector('[data-diagnostic-select]').disabled"),true);
+    assert.match(await browser.evaluate("document.querySelector('#pixel-inspection').textContent"),/eye · accent/);
+    await click(browser,'[data-diagnostic-next]');
+    await until(browser,`${diagnostic}.dataset.finding === 'orphan-3-2'`);
+    const spare = await screen(browser,main);
+    await click(browser,'[data-tool="erase"]');
+    await press(place(spare,3,2));
+    await release(place(spare,3,2));
+    await until(browser,`${diagnostic}.dataset.finding === 'orphan-2-0'`);
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-diagnostic').hidden"),true);
+
 
 
 
@@ -962,6 +986,13 @@ test('the CLI exports an offline native canvas with both views on the selected v
     await moveTo(0,0);
     await until(browser,`${inspectorOutput} === '0, 0 · Transparent · alpha 0'`);
     assert.match(await browser.evaluate("document.querySelector('#pixel-inspection').textContent"),/Outside source/);
+    await evaluate(browser,()=>document.querySelector('#craft-diagnostics details').open = true);
+    await until(browser,"document.querySelector('[data-diagnostic-result]').value === 'No findings in this view'");
+    await click(browser,'[data-diagnostic-protected]');
+    await until(browser,"document.querySelector('[data-diagnostic-result]').dataset.finding === 'orphan-1-2'");
+    await click(browser,'[data-diagnostic-jump]');
+    await until(browser,`${inspectorOutput} === '1, 2 · glaze · #ac421d · alpha 255'`);
+    assert.equal(await browser.evaluate("document.querySelector('.ink-grid-diagnostic').hidden"),false);
     await browser.evaluate(`document.querySelector('#frames').selectedIndex = 1;
       document.querySelector('#frames').dispatchEvent(new Event('change'));`);
     await until(browser,"document.querySelector('.ink-grid-main').getContext('2d').getImageData(1,2,1,1).data[0] === 33");

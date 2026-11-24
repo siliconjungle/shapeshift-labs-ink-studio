@@ -22,6 +22,7 @@ const markup = `
           <div class="ink-grid-mirror-x" hidden></div><div class="ink-grid-mirror-y" hidden></div>
         </div>
         <div class="ink-grid-selection" aria-hidden="true" hidden><canvas hidden></canvas></div>
+        <canvas class="ink-grid-diagnostic" aria-hidden="true" hidden></canvas>
         <div class="ink-grid-cursor" aria-hidden="true" hidden></div>
       </div>
     </div>
@@ -46,6 +47,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
+  const diagnostic = find('.ink-grid-diagnostic'), marks = diagnostic.getContext('2d');
   const selection = find('.ink-grid-selection'), selectedPixels = selection.querySelector('canvas').getContext('2d');
   const repeats = find('.ink-grid-repeats');
   const mirrorLines = [find('.ink-grid-mirror-x'),find('.ink-grid-mirror-y')];
@@ -103,6 +105,18 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     if (!bounds) return;
     for (const [i,field] of ['x','y','width','height'].entries())
       selection.style.setProperty('--ink-selection-'+field,bounds[i]);
+  }
+
+  function setDiagnostic(finding) {
+    diagnostic.hidden = !finding;
+    if (!finding) return;
+    const [x,y,w,h] = finding.bounds;
+    diagnostic.width = w;
+    diagnostic.height = h;
+    for (const [i,field] of ['x','y','width','height'].entries())
+      diagnostic.style.setProperty('--ink-diagnostic-'+field,finding.bounds[i]);
+    marks.fillStyle = '#f6bd4e70';
+    for (const [row,col,length] of finding.runs) marks.fillRect(col-x,row-y,length,1);
   }
 
   function setGuides(rows = []) {
@@ -196,6 +210,15 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     left = clamp(Math.round(x),visibleX - width * zoom,Math.max(0,viewport.clientWidth - visibleX));
     top = clamp(Math.round(y),visibleY - height * zoom,Math.max(0,viewport.clientHeight - visibleY));
     paintView();
+  }
+
+  function focusRegion([x,y,w,h]) {
+    fitting = false;
+    const fit = Math.floor(Math.min((viewport.clientWidth-32)/w,(viewport.clientHeight-32)/h));
+    zoom = clamp(Math.min(fit,Math.max(zoom,12)),1,maxZoom);
+    showPoint(null);
+    move(viewport.clientWidth/2-(x+w/2)*zoom,viewport.clientHeight/2-(y+h/2)*zoom);
+    diagnostic.scrollIntoView({ block:'nearest',inline:'nearest' });
   }
 
   function setZoom(value,x = viewport.clientWidth / 2,y = viewport.clientHeight / 2) {
@@ -321,6 +344,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, setFrame, setGuides, setDrawing, setSelection, setZoom, fit, pixelAt, positionAt,
+  return Object.freeze({ canvas, setFrame, setGuides, setDrawing, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

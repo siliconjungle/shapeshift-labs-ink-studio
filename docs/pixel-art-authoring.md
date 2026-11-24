@@ -1276,15 +1276,43 @@ The SDK uses `editor.inspect([x, y], { frame, destinations, references,
 renderFrame })` for an existing aligned render. A caller can also supply
 `captureSelection` to render the requested native passes and pixel traces.
 
+## Navigate craft diagnostics
+
+Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or
+an exported offline review. Filter by finding, then use **Jump to finding**,
+**Previous**, or **Next** to center the region and open its pixel inspection.
+The amber mark shows which native cells triggered the check. The 1× preview
+keeps showing the artwork. In the Workshop, **Select unprotected pixels**
+turns those cells into an ordinary editing selection.
+
+The linter groups isolated pixels, doubles in thin stepping lines, uneven
+staircase runs, banding, one-point tangent contacts, and small enclosed
+transparent holes. It checks the committed frame. Use the active layer view
+in the Workshop to lint a cel by itself. Reference layers are ignored in the
+composite analysis. Each finding is a candidate for review. A one-pixel
+highlight, a tangent, or a small hole can be deliberate. **Include protected**
+brings fully protected findings into view for inspection.
+
+```sh
+node cli/ink-studio.js pixel-art lint design.json --frame front --kind hole
+node cli/ink-studio.js pixel-art lint design.json --cel front/ink \
+  --finding double-12-8 --out finding.json
+```
+
+Use `editor.lint({ frame, layer, kind, finding })` for the same report in the
+SDK. The `diagnostics` list provides IDs, native bounds, affected layers,
+and complete `[row, column, length]` runs. A finding that touches a protected
+detail also provides the runs available for selection. IDs refer to the
+current frame and revision. Run the linter again after changing the art.
+
 ## Inspect, revise and reuse
 
-`report.json` gives swatch use and coordinates for orphan pixels, doubles,
-irregular steps and banding. Findings name the visible drawing layer and
-swatch and the drawing directly underneath. The report includes up to 128
-coordinates per category. The overlay highlights every editable finding. Protected marks are
-counted separately from editable findings. The top-level `metrics` retain
-the critic's raw values. These checks flag candidates for inspection. A
-single pixel can be exactly right for an eye, glint, texture or animation beat.
+`pixel-art draw` writes the same diagnostics in `report.json`, along with
+swatch use and up to 128 annotated example coordinates per category.
+Examples name the visible drawing layer and swatch and the drawing
+directly underneath. The overlay highlights every editable finding.
+Protected marks are counted separately. The top-level `metrics` retain
+the critic's raw values.
 
 A repair is a new layer. Its JSON contains the observed `revision`, a new
 layer `id`, and `edits` with `at`, `layer`, `from`, and `to`. A pixel

@@ -106,11 +106,12 @@ export function mountPixelInspector(root,view,read) {
     group('Scene hits',sceneRows(scene));
   }
 
-  pin.addEventListener('click',()=>{
-    fixed = !fixed;
+  function setPinned(value) {
+    fixed = value;
     pin.setAttribute('aria-pressed',String(fixed));
     pin.textContent = fixed ? 'Follow cursor' : 'Pin pixel';
-  });
+  }
+  pin.addEventListener('click',()=>setPinned(!fixed));
   panel.addEventListener('toggle',refresh);
   view.canvas.addEventListener('pointermove',event=>{
     if (!panel.open || fixed) return;
@@ -119,5 +120,11 @@ export function mountPixelInspector(root,view,read) {
     at = next;
     refresh();
   });
-  return { get open() { return panel.open; },refresh };
+  return { get open() { return panel.open; },refresh,
+    focus(coordinate) {
+      at = coordinate;
+      setPinned(true);
+      panel.open = true;
+      refresh();
+    } };
 }

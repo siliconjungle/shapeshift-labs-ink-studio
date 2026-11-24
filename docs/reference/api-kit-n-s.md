@@ -245,6 +245,36 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelCanvasTransforms.sourcePoint` | function | `(grid,point,registration)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.uv` | function | `(grid,point,registration)` | [source](../../src/pixel-canvas-transforms.js) |
 
+## KIT.pixelCraft
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelCraft` | namespace |  |  |
+| `KIT.pixelCraft.analyze` | function | `({ width:w,height:h,slots,opacity,colors,mixedColors,owners,layerIds,locks })` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.backgroundMask` | function | `(img, bg)` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.colOf` | function | `(rgb, i)` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.kinds` | namespace |  |  |
+| `KIT.pixelCraft.kinds.band` | namespace |  |  |
+| `KIT.pixelCraft.kinds.band.hint` | value | `string = "Check whether the middle strip can join a larger cluster or break away from the edge."` |  |
+| `KIT.pixelCraft.kinds.band.label` | value | `string = "Banding"` |  |
+| `KIT.pixelCraft.kinds.double` | namespace |  |  |
+| `KIT.pixelCraft.kinds.double.hint` | value | `string = "Check whether removing the inside corner keeps the thin stroke connected."` |  |
+| `KIT.pixelCraft.kinds.double.label` | value | `string = "Doubles"` |  |
+| `KIT.pixelCraft.kinds.hole` | namespace |  |  |
+| `KIT.pixelCraft.kinds.hole.hint` | value | `string = "Check whether the transparent pocket is needed for the silhouette."` |  |
+| `KIT.pixelCraft.kinds.hole.label` | value | `string = "Small enclosed holes"` |  |
+| `KIT.pixelCraft.kinds.jaggy` | namespace |  |  |
+| `KIT.pixelCraft.kinds.jaggy.hint` | value | `string = "Compare this run with its neighbor and check the rhythm of the edge."` |  |
+| `KIT.pixelCraft.kinds.jaggy.label` | value | `string = "Uneven stairs"` |  |
+| `KIT.pixelCraft.kinds.orphan` | namespace |  |  |
+| `KIT.pixelCraft.kinds.orphan.hint` | value | `string = "Check whether the single pixel reads as an accent at 1×."` |  |
+| `KIT.pixelCraft.kinds.orphan.label` | value | `string = "Isolated pixels"` |  |
+| `KIT.pixelCraft.kinds.tangent` | namespace |  |  |
+| `KIT.pixelCraft.kinds.tangent.hint` | value | `string = "Check whether the shapes should have a clear gap or a stronger overlap."` |  |
+| `KIT.pixelCraft.kinds.tangent.label` | value | `string = "Tangent contacts"` |  |
+| `KIT.pixelCraft.lint` | function | `(img, o = {})` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.lintMap` | function | `(img, res)` | [source](../../src/pixel-craft.js) |
+
 ## KIT.pixelGrid
 
 | Member | Kind | Signature or value | Guides and source |
@@ -1117,24 +1147,26 @@ Members and callable signatures come from the public entry point. Guide links po
 
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
-| `KIT.sceneMeshes` | namespace |  | [guide](../textured-surfaces.md#indexed-scene-meshes) |
-| `KIT.sceneMeshes.create` | function | `({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {})` | [guide](../compressed-scenery.md#pack-and-render-the-signal-house), [guide](../semantic-texture-mipmaps.md), [guide](../simulation-material-layers.md), [guide](../sprite-reconstruction.md#mixed-representations-on-one-asset), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.depthProxy` | function | `({id,positions,indices} = {})` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.inspectUV` | function | `(mesh, {material, size, ...options} = {})` | [guide](../mesh-uv.md#reduce-an-authored-mesh), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.intersect` | function | `(mesh, {origin,direction,maxDistance}, {V,rayBox,restSpace=false,candidates,pigment=false}, accept)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.layer` | function | `(mesh)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.layers` | function | `(world, enabled, additional)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.list` | function | `(world, enabled, additional=[])` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.pose` | function | `(mesh, input)` | [guide](../engraving.md#interactive-meshes-and-curves), [guide](../surface-decals.md#bind-and-switch-receivers), [guide](../surface-grown-strands.md#grow-from-uvs), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.projector` | function | `(mesh,{at,normal,up,size,depth},{V,procedural:{spatial}})` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.proxyPlan` | function | `(world, enabled, toleranceOverride)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.rayQuery` | function | `(mesh,{V,procedural:{spatial}})` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.revision` | function | `(mesh)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.sampleProjection` | function | `(mesh, {vertices,weights}, {V})` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.scanFrame` | function | `(daylight=true, appearance=0)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
-| `KIT.sceneMeshes.simulationFrame` | function | `(...args)` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.skin` | function | `(mesh, influences)` | [guide](../surface-grown-strands.md#grow-from-uvs), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
-| `KIT.sceneMeshes.uvAnchors` | function | `(mesh, {V, procedural:{spatial}})` | [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes` | namespace |  | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes) |
+| `KIT.sceneMeshes.create` | function | `({ id, objectId = id, partId, positions: authored, uvs: uvInput, indices, materials, faceMaterials } = {})` | [guide](../compressed-scenery.md#pack-and-render-the-signal-house), [guide](../semantic-texture-mipmaps.md), [guide](../simulation-material-layers.md), [guide](../sprite-reconstruction.md#mixed-representations-on-one-asset), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.depthProxy` | function | `({id,positions,indices} = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.fromObjectTexels` | function | `(bake, {id,objectId,partId,materialId=id,emissionStrength=1, lighting={}} = {})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.inspectUV` | function | `(mesh, {material, size, ...options} = {})` | [guide](../mesh-uv.md#reduce-an-authored-mesh), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.intersect` | function | `(mesh, {origin,direction,maxDistance}, {V,rayBox,restSpace=false,candidates,pigment=false}, accept)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.layer` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.layers` | function | `(world, enabled, additional)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.list` | function | `(world, enabled, additional=[])` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.pose` | function | `(mesh, input)` | [guide](../engraving.md#interactive-meshes-and-curves), [guide](../surface-decals.md#bind-and-switch-receivers), [guide](../surface-grown-strands.md#grow-from-uvs), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.projector` | function | `(mesh,{at,normal,up,size,depth},{V,procedural:{spatial}})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.proxyPlan` | function | `(world, enabled, toleranceOverride)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.rayQuery` | function | `(mesh,{V,procedural:{spatial}})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.revision` | function | `(mesh)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.sampleProjection` | function | `(mesh, {vertices,weights}, {V})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.scanFrame` | function | `(daylight=true, appearance=0)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [guide](../semantic-texture-mipmaps.md), [source](../../src/semantic-texture-mipmaps.js) |
+| `KIT.sceneMeshes.simulationFrame` | function | `(...args)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.skin` | function | `(mesh, influences)` | [guide](../surface-grown-strands.md#grow-from-uvs), [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.updateObjectTexels` | function | `(mesh, bake)` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
+| `KIT.sceneMeshes.uvAnchors` | function | `(mesh, {V, procedural:{spatial}})` | [guide](../texel-coverage.md#relight-and-edit-baked-texels), [guide](../textured-surfaces.md#indexed-scene-meshes), [source](../../src/scene-meshes.js) |
 
 ## KIT.screenPrint
 

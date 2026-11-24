@@ -120,6 +120,7 @@ const AtlasRaster = require('./atlas-sprites.js');
 const Multiprojection = require('./multiprojection.js');
 const SurfaceRaster = require('./sprite-surfaces.js');
 const SemanticMipmaps = require('../src/semantic-texture-mipmaps.js');
+const texelEmissionDisplay = require('../src/color-space.js').prepare('srgb-linear', 'srgb');
 const SimulationMaterialLayers=require('../src/simulation-material-layers.js');
 const SceneMeshes = require('../src/scene-meshes.js');
 let SplatFields, AtmosphereEmitters;
@@ -2079,7 +2080,7 @@ function renderFrame(world, o, preparedPalettes) {
       const target=sprite.sdf?sprite.row.target:sprite.lightingTarget;
       const directTarget=artLighting ? target : undefined;
       if(directLight?.receives(directTarget)) {
-        if(sprite.scan)scanLight=directLight.scanSurface(position,sprite.normal,directTarget,sprite.biasNormal,
+        if(sprite.scan||sprite.objectTexels)scanLight=directLight.scanSurface(position,sprite.normal,directTarget,sprite.biasNormal,
           sprite.semanticView,sprite.semantic.roughness,sprite.semantic.sheen??sprite.semanticRule.specular);
         else color=directLight(sprite.p,position,sprite.normal,color,undefined,0,directTarget,sprite.biasNormal);
       }
@@ -2090,7 +2091,10 @@ function renderFrame(world, o, preparedPalettes) {
       sprite={...sprite,emission:color.some(Boolean)?color:undefined};
     }
     if(sprite.semantic)color=SemanticMipmaps.shade(color,sprite.normal,sprite.semanticView,sprite.semantic,sprite.semanticRule,
-      sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} : undefined);
+      sprite.scan ? {...scanFrame,scan:sprite.scan,position,...scanLight} :
+        sprite.objectTexels ? {sun,...scanLight} : undefined);
+    const texelEmission=art && sprite.objectTexels && sprite.semantic.emission.some(Boolean) ?
+      texelEmissionDisplay(sprite.semantic.emission.map(value=>Math.min(1,value))) : undefined;
     const ink = cutaway?.edge ? Cutaway.edgeWeight(cutaway.edge,sectionAt(position)) : 0;
     const rgb=color.map((value,c)=>{
       const shaded=value+(fog[c]-value)*fogMix;
@@ -2098,7 +2102,7 @@ function renderFrame(world, o, preparedPalettes) {
     });
     return [i,z,dn,alpha,...rgb,!sprite.effect&&alpha>=.5,false,highlight,paletteId,false,false,
       Boolean(sprite.effect)||alpha<.5,false,undefined,z,sprite,fogMix,
-      rule,reflected,false,1,ink>0,claim,paintStage && paintColor(stageBase),surfaceMatte];
+      rule,reflected,false,1,ink>0,claim,paintStage && paintColor(stageBase),surfaceMatte,texelEmission];
   }
   function playSprites(through,queued) {
     while (spriteIndex<sprites.length && sprites[spriteIndex].z>=through) {

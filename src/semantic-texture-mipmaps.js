@@ -185,13 +185,13 @@ const SemanticTextureMipmaps = (() => {
   }
 
   function shade(color,normal,view,{roughness,emission,sheen,captured},rule, options) {
-    const light=rule.light, h=normalized(light.map((n,c)=>n+view[c]),[0,0,0]);
+    const sun=options?.sun, light=sun?.direction??rule.light, h=normalized(light.map((n,c)=>n+view[c]),[0,0,0]);
     const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
     const gloss=1-roughness, daylight=options?.daylight!==false;
     const shine=daylight && dot(normal,light)>0 && dot(normal,view)>0 ?
-      (sheen??rule.specular)*gloss*Math.max(0,dot(normal,h))**(4+96*gloss**2):0;
-    const ambient=rule.ambient??1;
-    const diffuse=ambient+(daylight?(1-ambient)*Math.max(0,dot(normal,light)):0);
+      (sun?.intensity??1)*(sheen??rule.specular)*gloss*Math.max(0,dot(normal,h))**(4+96*gloss**2):0;
+    const ambient=sun?.ambient??rule.ambient??1;
+    const diffuse=ambient+(daylight?(sun?.intensity??1-ambient)*Math.max(0,dot(normal,light)):0);
     let blend=0;
     if(captured?.[3] && options?.appearance){
       const {sourceView,angles}=options.scan;

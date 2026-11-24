@@ -42,6 +42,72 @@ The fixed-probe projection follows Dylan Ebert's
 cells onto the supplied mesh, which keeps the original surface depth and
 allows fallback paint on occluded areas.
 
+## Relight and edit baked texels
+
+Use a `material` sampler in place of `paint` to capture unlit pigment
+and separately editable surface channels. The same sampler parameters
+are available, along with an occupied cell ID. Install the bake as a
+native indexed mesh to use its actual triangle depth and openings.
+
+```js
+import { bakeObjectTexels, editObjectTexels } from './webgl.mjs';
+
+const bake = bakeObjectTexels(mesh, {
+  origin: [0, 0, 0],
+  resolution: 18,
+  material: ({ point, normal }) => ({
+    pigment: paintAt(point),
+    normal,
+    roughness: 0.32,
+    emission: 0x000000
+  }),
+  fallback: (_triangle, normal, { point }) => ({
+    pigment: paintAt(point), normal, roughness: 0.58
+  })
+});
+const surfaces = KIT.sceneMeshes;
+const helmet = surfaces.fromObjectTexels(bake, {
+  id: 'helmet', objectId: 'sentinel', partId: 'head', materialId: 'steel'
+});
+const world = B.finish({ meshes: [helmet] });
+
+const cell = bake.cells.find(cell => cell?.face === 4);
+const edited = editObjectTexels(bake, [
+  { id: cell.id, pigment: 0x367765, roughness: 0.22, emission: 0x24ae82 }
+]);
+surfaces.updateObjectTexels(helmet, edited);
+```
+
+- `pigment` and `emission` are packed sRGB colors. `roughness` ranges
+  from 0 to 1 and defaults to 0.65. `normal` is an object-local XYZ
+  direction and defaults to the source triangle normal. Omitting a
+  channel in a cell edit retains its previous value.
+- `bake.cells[id]` describes a fixed cubemap cell or a fallback
+  assigned to a source triangle. Empty addresses are `null`. The
+  address, original coordinates and clipped mesh survive material edits.
+  `editObjectTexels` returns a new set of map buffers.
+  `updateObjectTexels` applies those maps to the already posed mesh
+  without replacing its geometry.
+- Bind each rigid part with `sceneMeshes.skin(mesh, boneIds)`, using
+  the same integer bone ID for every vertex in that part. Normal
+  directions follow its rest-to-posed frame independently of the UV
+  lookup. For active `liveSun` lighting, both renderers use its
+  direction, ambient and intensity. With no live sun, pass
+  `lighting: { light, ambient, specular }` to the mesh constructor to
+  tune its default lighting. `emissionStrength` scales the emission.
+- The software `opaque-surface` pass exposes coverage, depth, material,
+  shading normal and UV. The `emission` pass exposes visible emitted
+  color. Shadow casting and reception follow the existing scene-mesh
+  lighting paths.
+
+The Vesper Guard example shows a helmet and pierced shield with distinct
+metal, cloth, and emissive texels. A moving key crosses both independently
+posed parts while the camera orbits.
+
+```sh
+node examples/relightable-object-texels.cjs vesper-guard
+```
+
 ## Filter coverage before palette lookup
 
 Enable `look.coverageFilter` in a scene or pass `coverageFilter` in the
