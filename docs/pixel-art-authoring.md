@@ -1769,6 +1769,44 @@ Pass the saved edited scene to `export-glb --rebake-from` with the previous
 registered bake's manifest. Ink updates the receiving atlas charts and
 their mip texels while keeping neighboring chart paint and UVs in place.
 
+### Preview paint under different lighting
+
+Run a review on the saved scene after painting:
+
+```sh
+ink-studio pixel-art paint-lighting examples/courier-shot-lighting.js \
+  --subject courier --t 1 --w 192 --h 144 --steps 5 --out courier-paint-review
+```
+
+Open `comparison.png` for the labeled sheet and `sweep.png` for the
+animated sweep. The directory also contains each native-resolution PNG
+and a `review.json` with the camera, pose time, light positions, and
+coverage counts.
+
+- **Neutral paint** shows visible base pigment under uniform white light.
+  A dark edge or highlight that already appears here belongs to the paint
+  or the captured color. Compare it against the other views before
+  deciding whether to repaint it.
+- **Authored shot** shows the scene at that pose with its shot lights,
+  atmosphere, palette, and grade. The review takes one native frame before
+  presentation compositing so the pose and camera stay aligned across
+  the outputs.
+- **Moving light** applies a white diffuse key and a fixed ambient fill
+  to the same pigment, using the captured positions and shading normals.
+  The sweep is a material inspection view. Cast shadows, specular
+  highlights, and shot grading are left to the authored image.
+
+Use `--subject` and optional `--part` to limit the diagnostic views to
+visible pixels of one target. The authored shot keeps the full frame.
+Set `--steps` to 3–13 to choose the number of light positions. Paint
+captured from an older splat without a separate pigment reference is
+counted as `packedColor` and may already contain lighting. Pixels without
+usable normals keep their neutral color through the sweep.
+
+The Node API is `ink.reviewPaintLighting(world, { view, subject, steps })`.
+Supply the world posed at the requested time. The CLI prepares that pose
+and requests albedo when it builds the scene.
+
 ## Paint lighting and ink controls
 
 Bind each control to a `surface-channel` destination on the asset's rest
