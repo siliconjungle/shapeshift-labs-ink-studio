@@ -5,6 +5,7 @@ const PixelStamps = (() => {
   const atlases = typeof AtlasSprites === 'undefined' ? require('./atlas-sprites.js') : AtlasSprites;
   const presets = typeof PixelStampPresets === 'undefined' ? require('./pixel-stamp-presets.js') : PixelStampPresets;
   const guides = typeof PixelGuides === 'undefined' ? require('./pixel-guides.js') : PixelGuides;
+  const ranges = typeof PixelPlaybackRanges === 'undefined' ? require('./pixel-playback-ranges.js') : PixelPlaybackRanges;
   const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
   const index = value => Number.isSafeInteger(value) && value >= 0 && value < 0xfffffe;
   const colorString = value => typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value);
@@ -45,7 +46,7 @@ const PixelStamps = (() => {
     return result;
   }
 
-  function prepare(spec,{ preserveHidden = false } = {}) {
+  function prepare(spec,{ preserveHidden = false,tag } = {}) {
     if (!record(spec)) throw new TypeError('Pixel stamps need an indexed raster object');
     const { width, height, slots, rows, strokes, alpha, frames, fps = 12, playback = 'loop', phase = 0, palette } = spec;
     if (![width, height].every(n => Number.isSafeInteger(n) && n > 0) || width * height > maxCells ||
@@ -62,6 +63,7 @@ const PixelStamps = (() => {
     const entries = Array.from(frames ?? [{ slots, rows, strokes, alpha }], (entry, frame) => {
       if (!record(entry)) throw new TypeError('Pixel stamp frames need slots, strokes or an empty cel');
       const { duration = 1 / fps } = entry;
+      if (!Number.isFinite(duration) || duration <= 0) throw new RangeError('Pixel stamp frames need positive durations');
       const texels = paint(width, height, entry);
       if (palette && texels.some(slot => slot !== null && slot >= palette.length))
         throw new RangeError('Pixel stamp slots must be valid palette indices within its palette');
@@ -76,9 +78,14 @@ const PixelStamps = (() => {
       const visibleGuides = entry.guides === undefined ? sharedGuides : guides.prepare([...sharedGuides,...guides.prepare(entry.guides)]);
       return { frame, duration, slots: texels, ...(opacity && { alpha:opacity.slice() }), ...(visibleGuides.length && { guides:visibleGuides }) };
     });
-    const clock = cels.playback(entries, fps, playback);
-    const duration = entries.reduce((sum, entry) => sum + entry.duration, 0);
-    return { width, height, duration, entries, palette: palette?.slice(), at: time => clock((Number.isFinite(time) ? time : 0) + phase) };
+    const tags = ranges.resolve(frames ?? [{}],spec.tags);
+    const range = tags.find(row=>row.id === tag);
+    if (tag !== undefined && !range) throw new RangeError('Unknown pixel playback tag '+tag);
+    const tagged = range && ranges.plan(entries.map(entry=>entry.duration),range);
+    const clock = tagged?.at ?? cels.playback(entries, fps, playback);
+    const duration = tagged?.duration ?? entries.reduce((sum, entry) => sum + entry.duration, 0);
+    return { width, height, duration, entries, palette: palette?.slice(),...(range && { range }),
+      at: time => clock((Number.isFinite(time) ? time : 0) + phase) };
   }
 
   function layout(spec) {
@@ -122,8 +129,8 @@ const PixelStamps = (() => {
     return { rgba, emission };
   }
 
-  function image(spec, { time = 0, scenePalette, paletteRoles, preserveHidden = false } = {}) {
-    const { width, height, entries, palette, at } = prepare(spec,{ preserveHidden });
+  function image(spec, { time = 0, scenePalette, paletteRoles, preserveHidden = false,tag } = {}) {
+    const { width, height, entries, palette, at } = prepare(spec,{ preserveHidden,tag });
     const { rgba } = raster(width, height, entries[at(time)], palette, scenePalette, paletteRoles, new Set());
     return { width, height, rgba };
   }
@@ -218,15 +225,16 @@ const PixelStamps = (() => {
 
   function place(spec, { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel, emissionSlots, mode = 'card',
       pitch = 0, viewYaw = 0, phase = spec?.phase ?? 0,
-      playback = spec?.playback ?? 'loop', cue, offsets, keepSwatches, ...placement } = {}) {
+      playback = spec?.playback ?? 'loop', tag, cue, offsets, keepSwatches, ...placement } = {}) {
     if (!Number.isFinite(phase)) throw new RangeError('Pixel stamp phase must be finite');
-    const art = prepare(spec);
+    const art = prepare(spec,{ tag });
     const age = cue === undefined ? null : cueClock(cue,art.duration);
     const offsetAt = offsets === undefined ? null : pixelTrack(offsets);
     const asset = buildAtlas(art, { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel, emissionSlots, yaw: viewYaw, pitch, keepSwatches });
-    const clock = asset.playback(playback);
+    const clock = art.range ? ranges.plan(art.entries.map(entry=>entry.duration),art.range).at : asset.playback(playback);
+    const loop = art.range?.loop ?? (playback !== 'once');
     const elapsed = time => age ? age(time) ?? 0 : Number.isFinite(time) ? time : 0;
-    const trackTime = age || playback==='once' ? elapsed : time => {
+    const trackTime = age || !loop ? elapsed : time => {
       const value=elapsed(time), wrapped=value%art.duration;
       return wrapped<0 ? wrapped+art.duration : wrapped;
     };

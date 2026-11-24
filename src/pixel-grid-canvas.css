@@ -189,6 +189,20 @@
 .ink-grid-reference-scroll { overflow: auto; max-height: 220px; padding: 1px; }
 .ink-grid-reference canvas { outline: 1px solid #526565; }
 .ink-grid-dimensions { display: block; margin-top: 8px; }
+.ink-grid-canvas .ink-grid-playback { display: grid; gap: 6px; margin-top: 10px; }
+.ink-grid-playback label { display: grid; gap: 4px; font-size: 13px; }
+.ink-grid-playback select, .ink-grid-playback button {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: #253437;
+  border: 1px solid #476062;
+  border-radius: 5px;
+  padding: 4px 6px;
+  min-width: 0;
+}
+.ink-grid-playback output { color: var(--ink-grid-quiet); overflow-wrap: anywhere; font-size: 12px; }
+.ink-grid-playback output:empty { display: none; }
 .ink-grid-coordinates { display: block; padding: 8px 12px; border-top: 1px solid var(--ink-grid-border); }
 .ink-grid-canvas [hidden] { display: none; }
 @media (max-width: 560px) {

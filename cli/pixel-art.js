@@ -104,7 +104,7 @@ function documentShape(design) {
 
   const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,guides,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules']))
+    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules','tags']))
     throw new TypeError('Unknown pixel document field');
   if (design.ramps !== undefined) paletteAsset(design);
   if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
@@ -129,7 +129,8 @@ function documentShape(design) {
         throw new TypeError('Pixel cel ' + frame.id + '/' + layer + ' needs a known layer and valid marks or hold, ID and offset');
     }
   }
-  Timeline.timing(frames);
+  const timed = Timeline.timing(frames);
+  if (design.tags !== undefined) Timeline.validateTags(design,timed);
   const lookup = Timeline.index(frames);
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   Protection.validate(protectedDetails,width,height,[...frameIds]);
@@ -350,6 +351,7 @@ function validate(design) {
     ...(design.version === 2 && design.artRules !== undefined && { artRules:structuredClone(design.artRules) }),
     ...(design.version === 2 && design.protectedDetails !== undefined && { protectedDetails:structuredClone(design.protectedDetails) }),
     ...(design.version === 2 && design.ramps !== undefined && { ramps:structuredClone(design.ramps) }),
+    ...(design.version === 2 && design.tags !== undefined && { tags:structuredClone(design.tags) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
@@ -2005,7 +2007,7 @@ function documentFromPNG(file) {
 const stackFormat = 'ink-studio/pixel-layer-deck';
 
 function layerDeck(design) {
-  const { width,height,layers,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules } = design;
+  const { width,height,layers,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules,tags } = design;
   const palette = paletteAsset(design), revision = fingerprint(design), lookup = Timeline.index(design.frames);
   const frames = design.frames.map(frame=>{
     const compiled = compileFrame(design,frame,revision,palette.swatches,true,undefined,lookup);
@@ -2024,13 +2026,13 @@ function layerDeck(design) {
     ...(guides?.some(row=>row.frame === undefined) && { guides:guides.filter(row=>row.frame === undefined) }),
     ...(design.selections?.some(row=>row.frame === undefined) && { sharedSelections:design.selections.filter(row=>row.frame === undefined) }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
-    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }) };
+    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags && { tags }) };
 }
 
 function documentFromDeck(deck) {
   if (deck?.format !== stackFormat || deck.version !== 1 || !Array.isArray(deck.frames) || !deck.frames.length)
     throw new TypeError('Expected a version 1 Ink pixel layer deck');
-  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules } = deck;
+  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules,tags } = deck;
   const asset = PixelPalette.fromStamp(deck);
   const guides = [...(deck.guides ?? [])], selections = [...(deck.sharedSelections ?? [])], frameIds = new Set();
   for (const frame of deck.frames) if (frame.id !== undefined) {
@@ -2061,7 +2063,7 @@ function documentFromDeck(deck) {
   const design = { format,version:2,width,height,pixelAspect,layers,frames,palette:paletteDefinition(asset.swatches),
     ...(asset.ramps.length && { ramps:asset.ramps }),...(guides.length && { guides }),...(selections.length && { selections }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
-    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }) };
+    ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags !== undefined && { tags }) };
   validate(design);
   return design;
 }
@@ -2353,7 +2355,7 @@ function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
       ...(hasReferences && { slots:encodeSlots(clean.slots),
         ...(clean.opacity && { alpha:encode(clean.opacity),rgb:encode(image(clean).rgb) }) })
     }, png:encode(PNG.encode(width,height,rgba,4)),
-      guides:compiled.guides ?? [], id:frame?.id, protectedDetails:compiled.protectedDetails ?? [], composite:encodeSlots(compiled.slots),
+      guides:compiled.guides ?? [], id:frame?.id, durationMs:frame?.durationMs ?? 100, protectedDetails:compiled.protectedDetails ?? [], composite:encodeSlots(compiled.slots),
       ...(compiled.opacity && { alpha:encode(compiled.opacity),rgb:encode(image(compiled).rgb) }),
       layers:[...compiled.layerSources].map(([id,row]) => ({
         id,cel:compiled.cels?.get(id) ?? null,slots:encodeSlots(row.slots),...(row.alpha && { alpha:encode(row.alpha) }),
@@ -2397,6 +2399,8 @@ function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
     .replace('/*PIXEL_ONION_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-onion-skin.mjs'),'utf8'))
+    .replace('/*PIXEL_PLAYBACK_MODULES*/',() => ['pixel-playback-ranges.js','pixel-range-player.mjs']
+      .map(file=>fs.readFileSync(path.join(__dirname,'../src',file),'utf8')).join('\n'))
     .replace('/*PIXEL_INSPECT_MODULES*/',() => [
       'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-source-bindings.js','pixel-inspection.js','pixel-view-source.js','pixel-protection.js','art-passes.js',
       'pixel-craft.js','target-selectors.js','pixel-art-rules.js','pixel-inspector.mjs','pixel-craft-panel.mjs'

@@ -1203,6 +1203,7 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
   fs.writeFileSync(source,JSON.stringify({
     format:'ink-studio/pixel-art',version:2,width:3,height:2,pixelAspect:[1,1],
     palette:{ red:'#bd2020' },layers:[{ id:'lines' },{ id:'ink',label:'Ink',offset:[1,0] }],
+    tags:[{ id:'reverse',start:'rise',end:'rest',direction:'reverse',loop:false }],
     frames:[
       { id:'rise',durationMs:120,cels:{ ink:{ marks:[{ swatch:'red',at:[0,1] }] } } },
       { id:'rest',durationMs:240,cels:{ ink:{ hold:'rise/ink',offset:[0,-1] } } }
@@ -1234,6 +1235,18 @@ test('offline cel timeline navigates linked exposures and shows timing and offse
     assert.equal(unlink.revision,previewEdit.revision);
     await click(browser,'#timeline-source');
     await until(browser,"document.querySelector('#timeline-source').hidden && document.querySelector('#frames').selectedIndex === 0");
+    assert.deepEqual(await raster(browser,preview,1,1),[189,32,32,255]);
+    await evaluate(browser,()=>{
+      const range = document.querySelector('[data-native-range]');
+      range.value = 'reverse';
+      range.dispatchEvent(new Event('change'));
+    });
+    await click(browser,'[data-native-play]');
+    await until(browser,"document.querySelector('[data-native-frame]').value === 'rest'");
+    assert.deepEqual(await raster(browser,preview,1,0),[189,32,32,255]);
+    assert.deepEqual(await raster(browser,main,1,1),[189,32,32,255]);
+    assert.equal(await browser.evaluate("document.querySelector('#frames').selectedIndex"),0);
+    await click(browser,'[data-native-follow]');
     assert.deepEqual(await raster(browser,preview,1,1),[189,32,32,255]);
   });
 });
@@ -1313,5 +1326,96 @@ test('workshop onion skin follows the native grid, live strokes, layer view and 
     await until(browser,"!document.querySelector('.ink-grid-onion').hidden");
     await change('#scrub',1);
     await until(browser,"document.querySelector('.ink-grid-onion').hidden");
+  });
+});
+
+test('workshop authors named playback and plays native cels beside a live editing frame',{ skip },async t=>{
+  const directory = workspace(t), [{ file:bundle }] = build('development',directory);
+  const base = path.join(root,'examples'), file = path.join(directory,'workshop.html');
+  const source = path.join(directory,'tagged-frames.json');
+  const url = relative=>pathToFileURL(path.resolve(base,relative)).href;
+  const frames = [
+    { id:'outside',duration:.02,slots:[0,null,null,null] },
+    { id:'ready',duration:.1,slots:[1,null,null,null] },
+    { id:'reach',duration:.2,slots:[2,null,null,null] },
+    { id:'return',duration:.3,slots:[3,null,null,null] }
+  ];
+  fs.writeFileSync(source,JSON.stringify({ width:4,height:1,palette:['#ffffff','#ff0000','#00ff00','#0000ff'],frames,
+    tags:[{ id:'rewind',label:'Rewind',start:'ready',end:'return',direction:'reverse',loop:false }] }));
+  fs.writeFileSync(file,fs.readFileSync(path.join(base,'pixel-stamp-editor.html'),'utf8')
+    .replace('../dist/ink-studio.browser.js',pathToFileURL(bundle).href)
+    .replace('../src/pixel-grid-canvas.css',url('../src/pixel-grid-canvas.css'))
+    .replace('src="pixel-stamp-studies.js"','src="'+url('pixel-stamp-studies.js')+'"')
+    .replace('src="pixel-stamp-editor.mjs"','src="'+url('pixel-stamp-editor.mjs')+'"'));
+  const frameOutput = '[data-native-frame]';
+  await withChrome(directory,{ hardware:true },async browser=>{
+    await load(browser,file);
+    const doc = await browser.send('DOM.getDocument');
+    const input = await browser.send('DOM.querySelector',{ nodeId:doc.root.nodeId,selector:'#import' });
+    await browser.send('DOM.setFileInputFiles',{ nodeId:input.nodeId,files:[source] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened tagged-frames.json'");
+    await browser.evaluate(`
+      let time = 1000, pending;
+      performance.now = () => time;
+      window.requestAnimationFrame = callback => { pending = callback; return 1; };
+      window.cancelAnimationFrame = () => { pending = undefined; };
+      window.advancePlayback = delta => { time += delta; const callback = pending; pending = undefined; callback?.(time); };
+    `);
+    const change = (selector,value,event = 'change')=>evaluate(browser,(selector,value,event)=>{
+      const control = document.querySelector(selector);
+      control.value = value;
+      control.dispatchEvent(new Event(event,{ bubbles:true }));
+    },selector,value,event);
+    const statusIs = value=>until(browser,`document.querySelector('${frameOutput}').value === ${JSON.stringify(value)}`);
+    const advance = delta=>evaluate(browser,delta=>window.advancePlayback(delta),delta);
+    const play = '[data-native-play]', range = '[data-native-range]';
+    await change(range,'rewind');
+    await click(browser,play);
+    await statusIs('return');
+    const box = await screen(browser,preview);
+    assert.deepEqual([box.w,box.h],[4,1]);
+    assert.deepEqual(await raster(browser,preview,0,0),[0,0,255,255]);
+    assert.deepEqual(await raster(browser,main,0,0),[255,255,255,255]);
+    await advance(310);
+    await statusIs('reach');
+    assert.deepEqual(await raster(browser,preview,0,0),[0,255,0,255]);
+    assert.equal(await browser.evaluate("document.querySelector('#scrub').value"),'1');
+
+    const point = place(await screen(browser,main),2,0);
+    await browser.send('Input.dispatchMouseEvent',{ type:'mousePressed',...point,button:'left',buttons:1,clickCount:1 });
+    await browser.send('Input.dispatchMouseEvent',{ type:'mouseReleased',...point,button:'left',clickCount:1 });
+    assert.deepEqual(await raster(browser,main,2,0),[255,255,255,255]);
+    assert.deepEqual(await raster(browser,preview,2,0),[0,0,0,0]);
+    await advance(320);
+    await statusIs('ready');
+    assert.equal(await browser.evaluate("document.querySelector('[data-native-play]').textContent"),'Play at 1×');
+    await click(browser,'[data-native-follow]');
+    assert.deepEqual(await raster(browser,preview,2,0),[255,255,255,255]);
+
+    await evaluate(browser,()=>{ document.querySelector('#tag-form').closest('details').open = true; });
+    await change('#tag-id','swing');
+    await change('#tag-label','Swing');
+    await change('#tag-start',1);
+    await change('#tag-end',3);
+    await change('#tag-direction','ping-pong');
+    await click(browser,'#tag-save');
+    await until(browser,"document.querySelector('#status').textContent === 'Saved playback tag swing'");
+    await change(range,'swing');
+    await click(browser,play);
+    await statusIs('ready');
+    await advance(110);
+    await statusIs('reach');
+    await advance(200);
+    await statusIs('return');
+    await advance(300);
+    await statusIs('reach');
+    await advance(200);
+    await statusIs('ready');
+    await change('#scrub',2,'input');
+    assert.equal(await browser.evaluate("document.querySelector('#remove').disabled"),true);
+    await click(browser,'#tag-remove');
+    await until(browser,"!document.querySelector('[data-native-range] option[value=swing]')");
+    await click(browser,'#undo');
+    await until(browser,"!!document.querySelector('[data-native-range] option[value=swing]')");
   });
 });

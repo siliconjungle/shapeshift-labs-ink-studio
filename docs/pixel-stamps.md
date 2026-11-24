@@ -196,6 +196,25 @@ The offline canvas exported with `pixel-art canvas` has the same overlay
 controls for comparing the frames in that review.
 [Native pixel-art authoring](pixel-art-authoring.md#edit-the-cel-timeline)
 
+## Named playback ranges
+
+In the Workshop's **Timing** panel, open **Playback tags**. Set an ID and
+optional name, choose the inclusive start and end frames, then choose a
+direction and whether to loop. Save the tag with the stamp or layer deck.
+Frames without IDs get stable IDs when used as endpoints. Retarget or remove
+a tag before deleting one of its endpoints.
+
+Above the **Play at 1×** button, choose **All frames** or a tag. The native
+preview plays the saved cels while the main canvas stays on the editing
+frame. You can draw or scrub while the preview runs. **Follow editing frame**
+returns the 1× view to the working frame. **Play canvas** still previews the
+full animation in the editing canvas.
+
+In stamp code, pass `{ tag: 'swing' }` to `KIT.pixelStamps.prepare`,
+`KIT.pixelStamps.image`, or `KIT.pixelStamps.place` to select a range.
+A placed stamp's cue and its looping pixel offsets use the tagged duration.
+[Playback tag syntax](pixel-art-authoring.md#name-a-playback-range)
+
 ## Drawing and timing
 
 ```js

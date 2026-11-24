@@ -35,6 +35,7 @@ const markup = `
         <canvas aria-label="1× pixel preview"></canvas>
       </div>
       <output class="ink-grid-dimensions" aria-label="Canvas dimensions"></output>
+      <div class="ink-grid-playback" hidden></div>
     </div>
   </div>
   <output class="ink-grid-coordinates" aria-label="Cursor coordinates" aria-live="off">X — · Y —</output>`;
@@ -48,6 +49,8 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const find = selector => host.querySelector(selector);
   const viewport = find('.ink-grid-viewport'), plane = find('.ink-grid-plane');
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
+  const playbackHost = find('.ink-grid-playback');
+  let referenceImage;
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const onionCanvas = find('.ink-grid-onion'), onion = onionCanvas.getContext('2d');
   let onionImage;
@@ -275,14 +278,28 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
       preview.style.height = `${h}px`;
       dimensions.value = `${w} × ${h} px`;
       image = art.createImageData(w,h);
+      referenceImage = undefined;
       onionCanvas.hidden = true;
       showPoint(null);
       fit();
     }
     image.data.set(rgba);
     art.putImageData(image,0,0);
-    sample.putImageData(image,0,0);
+    if (!referenceImage) sample.putImageData(image,0,0);
     drawRepeats();
+  }
+
+  function setPreviewFrame(frame) {
+    if (!frame) {
+      referenceImage = undefined;
+      if (image) sample.putImageData(image,0,0);
+      return;
+    }
+    if (frame.width !== width || frame.height !== height || frame.rgba.length !== width*height*4)
+      throw new RangeError('Playback preview must match the native grid');
+    referenceImage ??= sample.createImageData(width,height);
+    referenceImage.data.set(frame.rgba);
+    sample.putImageData(referenceImage,0,0);
   }
 
   function setOnionSkin(rgba) {
@@ -368,6 +385,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, setFrame, setOnionSkin, setGuides, setDrawing, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
+  return Object.freeze({ canvas, playbackHost, setFrame, setPreviewFrame, setOnionSkin, setGuides, setDrawing, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

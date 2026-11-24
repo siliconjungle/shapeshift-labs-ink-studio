@@ -2,6 +2,7 @@
 
 const { isDeepStrictEqual:equal } = require('node:util');
 const LayerStack = require('../src/pixel-layer-stack.js');
+const Playback = require('../src/pixel-playback-ranges.js');
 const { conflict } = require('./pixel-edit-preview.js');
 
 const origin = [0,0];
@@ -105,6 +106,26 @@ function timing(frames) {
   });
 }
 
+function validateTags(design,timed) {
+  for (const { id,first,last,direction,loop } of Playback.resolve(design.frames,design.tags)) {
+    if (direction !== 'ping-pong' || first === last) continue;
+    const forward = timed[last].endMs-timed[first].startMs;
+    const returnStart = loop ? timed[first].endMs : timed[first].startMs;
+    if (!Number.isSafeInteger(forward+(timed[last].startMs-returnStart)))
+      throw new RangeError('Playback tag '+id+' exceeds the safe millisecond range');
+  }
+}
+
+function tagsFor(design) {
+  const tags = Playback.resolve(design.frames,design.tags);
+  if (!tags.length) return [];
+  const durations = design.frames.map(frame=>frame.durationMs);
+  return tags.map(tag=>{
+    const { order,duration } = Playback.plan(durations,tag);
+    return { ...tag,durationMs:duration,order:order.map(index=>design.frames[index].id) };
+  });
+}
+
 function describe(design,revision,lookup = index(design.frames)) {
   const frames = timing(design.frames);
   const stack = LayerStack.prepare(design.layers);
@@ -120,12 +141,14 @@ function describe(design,revision,lookup = index(design.frames)) {
         ...(cel.hold !== undefined && { hold:cel.hold,source:lookup.sources.get(id) }) };
     })
   }));
-  return structuredClone({ format:'ink-studio/pixel-cel-timeline',version:1,revision,frames,layers,linkGroups:groups(lookup),totalDurationMs:frames.at(-1).endMs });
+  return structuredClone({ format:'ink-studio/pixel-cel-timeline',version:1,revision,frames,layers,tags:tagsFor(design),linkGroups:groups(lookup),totalDurationMs:frames.at(-1).endMs });
 }
 
 const operations = {
   'add-frame':['frame','durationMs','label','before'],
   duration:['frame','durationMs'],
+  'set-tag':['tag'],
+  'remove-tag':['tag'],
   'layer-offset':['layer','offset'],
   'cel-offset':['frame','layer','offset'],
   blank:['frame','layer'],
@@ -139,7 +162,17 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, or copy');
+    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, or copy');
+  if (op.type === 'set-tag' || op.type === 'remove-tag') {
+    const tags = new Map((design.tags ?? []).map(tag=>[tag.id,tag]));
+    const key = op.type === 'set-tag' ? op.tag?.id : op.tag, before = tags.get(key);
+    if (op.type === 'set-tag') tags.set(key,op.tag);
+    else if (!tags.delete(key)) throw conflict('missing-tag','Unknown playback tag '+key,{ tag:key });
+    const revised = { ...design,tags:[...tags.values()] };
+    const after = tagsFor(revised).find(tag=>tag.id === key);
+    return { design:revised,report:{ destination:'timeline',kind:'timeline',tool:op.type,tag:key,
+      before:before ?? null,after:after ?? null } };
+  }
   const { type } = op, stack = LayerStack.prepare(design.layers), lookup = index(design.frames);
   const frameById = new Map(design.frames.map((frame,i)=>[frame.id,{ frame,i }]));
   function requireFrame(id) {
@@ -272,4 +305,4 @@ function localMarks(width,height,marks,[dx,dy],layer) {
     }) });
 }
 
-module.exports = { celName,celId,getCel,index,availableId,timing,offset,content,independent,describe,edit,translate,localMarks,linkChanges };
+module.exports = { celName,celId,getCel,index,availableId,timing,offset,content,independent,describe,edit,translate,localMarks,linkChanges,validateTags };

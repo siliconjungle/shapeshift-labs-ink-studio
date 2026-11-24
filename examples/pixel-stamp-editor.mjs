@@ -1,5 +1,7 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 import { mountPixelOnionSkin } from '../src/pixel-onion-skin.mjs';
+import { mountPixelRangePlayer } from '../src/pixel-range-player.mjs';
+import * as playbackModule from '../src/pixel-playback-ranges.js';
 import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
@@ -7,6 +9,7 @@ import * as paletteModule from '../src/pixel-palette.js';
 import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
 
 const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixel-palette')];
+const ranges = playbackModule.default ?? globalThis[Symbol.for('ink-studio.pixel-playback-ranges')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
 const canvasTransforms = KIT.pixelCanvasTransforms, adjustments = KIT.pixelAdjustments;
@@ -15,6 +18,8 @@ const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPi
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const onionSkin = mountPixelOnionSkin($('onion-skin'),view);
+const nativePlayer = mountPixelRangePlayer(view.playbackHost,view,ranges);
+let nativeSourceKey, tagFormKey, tagFormDoc;
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
 const craft = KIT.pixelCraft, artRules = KIT.pixelArtRules, cleanup = KIT.pixelCleanup;
@@ -723,19 +728,24 @@ function draw() {
   } else image = stamp.image({ width,height,palette,slots,alpha });
   view.setFrame(image);
   const doc = state.doc, index = state.frame, activeLayer = state.layer;
-  onionSkin.setSource({
-    key:JSON.stringify([craftRevision,isolated ? activeLayer : null,references]),index,count:doc.frames.length,rgba:image.rgba,
-    readFrame(i) {
-      const neighbor = doc.frames[i];
-      if (stack && !isolated) {
-        const composite = renderStack(doc,stack,neighbor,doc.palette,undefined,references);
-        return layerStack.image(composite,composite.packed).rgba;
-      }
-      const { rows,slots,strokes,alpha } = stack && isolated
-        ? Object.hasOwn(neighbor.cels,activeLayer) ? neighbor.cels[activeLayer] : {} : neighbor;
-      return stamp.image({ width,height,palette:doc.palette,rows,slots,strokes,alpha }).rgba;
+  const sourceKey = JSON.stringify([craftRevision,isolated ? activeLayer : null,references]);
+  function readFrame(i) {
+    const neighbor = doc.frames[i];
+    if (stack && !isolated) {
+      const composite = renderStack(doc,stack,neighbor,doc.palette,undefined,references);
+      return layerStack.image(composite,composite.packed);
     }
-  });
+    const cel = isolated ? Object.hasOwn(neighbor.cels,activeLayer) ? neighbor.cels[activeLayer] : {} : neighbor;
+    const { rows,slots,strokes,alpha } = cel;
+    return stamp.image({ width,height,palette:doc.palette,rows,slots,strokes,alpha });
+  }
+  onionSkin.setSource({ key:sourceKey,index,count:doc.frames.length,rgba:image.rgba,readFrame:i=>readFrame(i).rgba });
+  if (nativeSourceKey !== sourceKey) {
+    nativeSourceKey = sourceKey;
+    const frames = doc.frames.map(({ id,label,duration })=>({ id,label,durationMs:1000*(duration ?? 1/(doc.fps ?? 12)) }));
+    const tags = ranges.resolve(doc.frames,doc.tags), loop = doc.playback !== 'once';
+    nativePlayer.setSource({ key:sourceKey,document:doc,timingKey:JSON.stringify([frames,tags,loop]),frames,tags,loop,readFrame });
+  }
   let reader;
   readInspection = at=>(reader ??= inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
   inspector.refresh();
@@ -767,7 +777,7 @@ function draw() {
   $('scrub').max = count;
   $('scrub').value = state.frame+1;
   $('current').value = `Frame ${state.frame+1} / ${count}`;
-  $('duration').value = +(current.duration ?? 1/(state.doc.fps ?? 12)).toFixed(4);
+  $('duration').value = +(frame.duration ?? 1/(state.doc.fps ?? 12)).toFixed(4);
   $('width').disabled = !['brush','erase'].includes(state.tool);
   $('pixel-perfect').disabled = $('pencil-color-mode').disabled = state.tool !== 'pencil';
   $('pencil-rgba').hidden = !rgbaPencil();
@@ -776,7 +786,9 @@ function draw() {
     (doc.artRules?.bindings ?? []).some(row=>row.frame === frame.id));
   const boundSelection = doc.artRules?.profiles.some(profile=>profile.exceptions?.some(exception=>
     exception.selection && frame.selections?.some(selection=>selection.id === exception.selection)));
-  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection;
+  const taggedEndpoint = !!frame.id && doc.tags?.some(tag=>tag.start === frame.id || tag.end === frame.id);
+  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint;
+  $('remove').title = taggedEndpoint ? 'Used as a playback tag endpoint' : '';
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
   showAdjustmentPreview();
@@ -851,6 +863,7 @@ function update() {
   donor.value = state.doc.swatchIds.includes(before) ? before : '';
   $('add-color').disabled = state.doc.palette.length >= colors.limit;
   $('playback').value = state.doc.playback ?? 'loop';
+  updateTagForm();
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
 }
 
@@ -858,7 +871,7 @@ function stop() {
   if (state.play === undefined) return;
   cancelAnimationFrame(state.play);
   state.play = undefined;
-  $('play').textContent = 'Play';
+  $('play').textContent = 'Play canvas';
   onionSkin.setPlaying(false);
 }
 
@@ -1618,7 +1631,7 @@ $('play').addEventListener('click',() => {
   const { entries, at } = stamp.prepare(state.doc), start=performance.now();
   const elapsed=entries.slice(0,state.frame).reduce((sum, entry)=>sum+entry.duration,0);
   const stopAt=entries.reduce((sum, entry)=>sum+entry.duration,0);
-  $('play').textContent='Pause';
+  $('play').textContent='Pause canvas';
   onionSkin.setPlaying(true);
   const step=now=>{
     const time=(now-start)/1000+elapsed;
@@ -1642,6 +1655,65 @@ $('duration').addEventListener('change',()=>edit(()=>{
   state.doc.frames[state.frame].duration=limit(Number($('duration').value) || .01,.01,60);
 }));
 $('playback').addEventListener('change',()=>edit(()=>{state.doc.playback=$('playback').value;}));
+
+function showTagFields() {
+  const { frames,tags = [] } = state.doc, choice = tags.find(tag=>tag.id === $('tag-select').value);
+  $('tag-id').value = choice?.id ?? '';
+  $('tag-id').readOnly = !!choice;
+  $('tag-label').value = choice?.label ?? '';
+  $('tag-start').value = choice ? frames.findIndex(frame=>frame.id === choice.start) : state.frame;
+  $('tag-end').value = choice ? frames.findIndex(frame=>frame.id === choice.end) : state.frame;
+  $('tag-direction').value = choice?.direction ?? 'forward';
+  $('tag-loop').checked = choice?.loop ?? true;
+  $('tag-remove').disabled = !choice;
+}
+
+function updateTagForm() {
+  const { frames,tags = [] } = state.doc;
+  const key = JSON.stringify([frames.map(({ id,label })=>[id,label]),tags]);
+  if (key === tagFormKey && tagFormDoc === state.doc) return;
+  tagFormKey = key;
+  tagFormDoc = state.doc;
+  const menu = $('tag-select'), current = menu.value;
+  menu.replaceChildren(new Option('New tag',''),...tags.map(tag=>new Option(tag.label ?? tag.id,tag.id)));
+  if (tags.some(tag=>tag.id === current)) menu.value = current;
+  for (const endpoint of ['tag-start','tag-end'])
+    $(endpoint).replaceChildren(...frames.map(({ id,label },i)=>new Option((i+1)+' · '+(label ?? id ?? 'Frame'),i)));
+  showTagFields();
+}
+
+$('tag-select').addEventListener('change',showTagFields);
+$('tag-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  const doc = state.doc, tags = new Map((doc.tags ?? []).map(tag=>[tag.id,tag]));
+  const id = $('tag-id').value.trim(), label = $('tag-label').value.trim();
+  if (!$('tag-select').value && tags.has(id)) { notify('Choose the existing tag before editing it'); return; }
+  const frames = doc.frames.slice(), used = new Set(frameIds(doc));
+  function endpoint(index) {
+    const frame = frames[index];
+    if (frame.id !== undefined) return frame.id;
+    const id = colors.uniqueId(used,'frame-'+(index+1));
+    used.add(id);
+    frames[index] = { ...frame,id };
+    return id;
+  }
+  try {
+    tags.set(id,{ id,...(label && { label }),start:endpoint(Number($('tag-start').value)),end:endpoint(Number($('tag-end').value)),
+      direction:$('tag-direction').value,loop:$('tag-loop').checked });
+    const revised = [...tags.values()];
+    ranges.resolve(frames,revised);
+    edit(()=>{ doc.frames = frames; doc.tags = revised; });
+    $('tag-select').value = id;
+    showTagFields();
+    notify('Saved playback tag '+id);
+  } catch (error) { notify(error.message); }
+});
+$('tag-remove').addEventListener('click',()=>{
+  const id = $('tag-select').value;
+  if (!id) return;
+  edit(()=>{ state.doc.tags = state.doc.tags.filter(tag=>tag.id !== id); });
+  notify('Removed playback tag '+id);
+});
 $('duplicate').addEventListener('click',()=>edit(()=>{
   const copy=structuredClone(state.doc.frames[state.frame]);
   delete copy.id;

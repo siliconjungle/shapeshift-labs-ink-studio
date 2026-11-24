@@ -61,6 +61,8 @@ persistent sessions use the existing pixel edit workflow.
 | --- | --- |
 | `add-frame` | `frame`, `durationMs`, optional `label` and `before`. Appends an empty frame by default. |
 | `duration` | `frame`, `durationMs`. Retimes the chosen frame and the starts of later frames. |
+| `set-tag` | `tag` with `id`, `start`, `end`, and optional `label`, `direction`, and `loop`. Creates or updates a named inclusive playback range. |
+| `remove-tag` | `tag` with the ID of the range to remove. |
 | `blank` | `frame`, `layer`. Creates an explicit transparent cel or clears the current cel. Clearing keeps the cel ID and updates any frames holding it. |
 | `duplicate` | `from`, optional `to`. Defaults to an independent copy on the next frame of the same layer. |
 | `hold` | `from`, `to`. Links to the source drawing by ID and gives the held cel its own placement. |
@@ -80,6 +82,37 @@ crop, pad, resize or resample bakes placements and linked exposures into
 the new grid. Layer deck exports also bake placements and held exposures
 for use in the Pixel Stamp Workshop. Store the version 2 pixel document
 to retain editable offsets and hold links.
+
+### Name a playback range
+
+A version 2 document can store a top-level `tags` list. Each tag references
+its first and last frame by stable ID in timeline order. The tag includes
+both endpoints and always uses each frame's authored duration. New frames
+between the endpoints become part of the range.
+
+```json
+{
+  "type": "set-tag",
+  "tag": {
+    "id": "swing",
+    "label": "Swing",
+    "start": "wind-up",
+    "end": "follow-through",
+    "direction": "ping-pong",
+    "loop": true
+  }
+}
+```
+
+Use the operation in a revision-checked `timeline` edit. Directions are
+`forward` (default), `reverse`, and `ping-pong`. Looping defaults to true.
+Looped ping-pong visits each turn once per cycle. A single-pass ping-pong
+returns to the first frame and holds it. `pixel-art timeline` reports
+each tag's playback order and duration in milliseconds.
+
+Tags survive layer deck export and import. Open the offline canvas or the
+Pixel Stamp Workshop to play a tag at 1× beside the editing frame.
+[Native playback controls](pixel-stamps.md#named-playback-ranges)
 
 ### Edit shared artwork or make a local variation
 

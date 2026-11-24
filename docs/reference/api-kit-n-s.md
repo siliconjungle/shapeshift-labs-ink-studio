@@ -475,12 +475,12 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelStamps.atlas` | function | `(spec, options)` | [guide](../pixel-stamps.md#drawing-and-timing), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
 | `KIT.pixelStamps.catalog` | function | `()` | [guide](../pixel-stamps.md#effect-presets-and-reusable-clips), [source](../../src/pixel-stamp-presets.js) |
 | `KIT.pixelStamps.clip` | function | `(name, { swatches } = {})` | [guide](../contact-marks.md#contact-and-clip-options), [guide](../pixel-stamps.md#effect-presets-and-reusable-clips), [guide](../pixel-tiles.md#draw-the-tile-cels), [source](../../src/pixel-stamp-presets.js) |
-| `KIT.pixelStamps.image` | function | `(spec, { time = 0, scenePalette, paletteRoles, preserveHidden = false } = {})` | [guide](../pixel-stamps.md#drawing-and-timing), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
+| `KIT.pixelStamps.image` | function | `(spec, { time = 0, scenePalette, paletteRoles, preserveHidden = false,tag } = {})` | [guide](../pixel-stamps.md#named-playback-ranges), [guide](../pixel-stamps.md#drawing-and-timing), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
 | `KIT.pixelStamps.layout` | function | `(spec)` | [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
 | `KIT.pixelStamps.paint` | function | `(width, height, { slots, rows, strokes } = {})` | [guide](../pixel-stamps.md#drawing-and-timing), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
-| `KIT.pixelStamps.place` | function | `(spec, { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel, emissionSlots, mode = 'card', pitch = 0, viewYaw = 0, phase = spec?.phase ?? 0, playback = spec?.playback ?? 'loop', cue, offsets, keepSwatches, ...placement } = {})` | [guide](../pixel-stamps.md#drawing-and-timing), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
+| `KIT.pixelStamps.place` | function | `(spec, { scenePalette, paletteRoles, pivot, pivotGuide, unitsPerPixel, emissionSlots, mode = 'card', pitch = 0, viewYaw = 0, phase = spec?.phase ?? 0, playback = spec?.playback ?? 'loop', tag, cue, offsets, keepSwatches, ...placement } = {})` | [guide](../pixel-stamps.md#named-playback-ranges), [guide](../pixel-stamps.md#drawing-and-timing), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
 | `KIT.pixelStamps.placements` | function | `(definitions, { scenePalette, paletteRoles } = {})` | [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
-| `KIT.pixelStamps.prepare` | function | `(spec,{ preserveHidden = false } = {})` | [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
+| `KIT.pixelStamps.prepare` | function | `(spec,{ preserveHidden = false,tag } = {})` | [guide](../pixel-stamps.md#named-playback-ranges), [guide](../pixel-stamps.md), [source](../../src/pixel-stamps.js) |
 | `KIT.pixelStamps.preset` | function | `(name, options = {})` | [guide](../pixel-stamps.md#effect-presets-and-reusable-clips), [source](../../src/pixel-stamp-presets.js) |
 
 ## KIT.pixelTiles

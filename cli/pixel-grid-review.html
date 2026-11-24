@@ -87,10 +87,12 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
 /*PIXEL_ONION_MODULE*/
+/*PIXEL_PLAYBACK_MODULES*/
 /*PIXEL_INSPECT_MODULES*/
 const { frames,timeline,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const onionSkin = mountPixelOnionSkin(document.querySelector('#onion-skin'),view);
+const nativePlayer = mountPixelRangePlayer(view.playbackHost,view,PixelPlaybackRanges);
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
 const layer = document.querySelector('#sample-layer'), swatch = document.querySelector('#sample-swatch');
@@ -373,6 +375,8 @@ document.querySelector('#frame-control').hidden = frames.length < 2;
 select.addEventListener('change',draw);
 layer.addEventListener('change',()=>{ selectedCelLayer = layer.value; syncTimeline(); });
 mountTimeline();
+nativePlayer.setSource({ key:frames,timingKey:frames,frames,loop:true,readFrame:i=>decodeFrame(frames[i]),
+  tags:timeline && timeline.frames.length === frames.length ? timeline.tags : [] });
 draw();
 </script>
 </body>

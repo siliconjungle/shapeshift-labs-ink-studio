@@ -47,6 +47,7 @@
   #shape-controls textarea, #shape-lengths { width:100%; }
   #shape-controls textarea, #shape-lengths { font:inherit; color:inherit; border:1px solid #476062; border-radius:5px; background:#253437; padding:6px 10px; }
   #shape-hint { font-size:13px; margin:0; }
+  #tag-form input[type=text], #tag-form select, #tag-select { max-width: 65%; }
   #cleanup-diff { overflow:auto; max-height:240px; }
   #cleanup-diff table { width:100%; border-collapse:collapse; font:12px/1.4 ui-monospace,monospace; }
   #cleanup-diff th, #cleanup-diff td { padding:4px; border-bottom:1px solid var(--line); text-align:left; }
@@ -81,7 +82,7 @@
       <div id="motion-checks"></div>
       <div id="pixel-inspection"></div>
       <div class="row timeline">
-        <button id="play">Play</button><input id="scrub" type="range" aria-label="Frame" min="1" value="1" step="1">
+        <button id="play">Play canvas</button><input id="scrub" type="range" aria-label="Frame" min="1" value="1" step="1">
         <output id="current" for="scrub"></output>
       </div>
       <div id="onion-skin"></div>
@@ -596,6 +597,24 @@
         <label class="side-label"><span>Hold, seconds</span><input id="duration" type="number" min="0.01" max="60" step="0.01"></label>
         <label class="side-label"><span>Playback</span><select id="playback"><option value="loop">Loop</option><option value="once">Once</option></select></label>
         <div class="row" style="margin-top:12px"><button id="duplicate">Duplicate</button><button id="remove">Remove</button></div>
+        <details>
+          <summary>Playback tags</summary>
+          <label class="side-label">Tag <select id="tag-select"></select></label>
+          <form id="tag-form">
+            <label class="side-label">ID <input id="tag-id" type="text" maxlength="64" pattern="[a-z][a-z0-9\-]{0,63}" required></label>
+            <label class="side-label">Name <input id="tag-label" type="text"></label>
+            <label class="side-label">Start <select id="tag-start"></select></label>
+            <label class="side-label">End <select id="tag-end"></select></label>
+            <label class="side-label">Direction <select id="tag-direction">
+              <option value="forward">Forward</option><option value="reverse">Reverse</option><option value="ping-pong">Ping-pong</option>
+            </select></label>
+            <label class="side-label"><span>Loop tag</span><input id="tag-loop" type="checkbox" checked></label>
+            <div class="row" style="margin-top:12px">
+              <button type="submit" id="tag-save">Save tag</button>
+              <button type="button" id="tag-remove" disabled>Remove tag</button>
+            </div>
+          </form>
+        </details>
       </section>
     </aside>
   </div>
