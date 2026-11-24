@@ -89,8 +89,8 @@ async function unpack(value) {
   return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
 }
 async function boot() {
-  const [toolkitCode,rendererCode,scene]=await Promise.all(['@TOOLKIT@','@RENDERER@','@SCENE@'].map(unpack));
-  const toolkit=Function(toolkitCode)(), base=JSON.parse(scene);
+  const [toolkitCode,rendererCode,sceneCode]=await Promise.all(['@TOOLKIT@','@RENDERER@','@SCENE@'].map(unpack));
+  const toolkit=Function(toolkitCode)(), base=JSON.parse(sceneCode);
   const url=URL.createObjectURL(new Blob([rendererCode],{type:'text/javascript'}));
   let createRenderer;
   try { ({createRenderer}=await import(url)); }
