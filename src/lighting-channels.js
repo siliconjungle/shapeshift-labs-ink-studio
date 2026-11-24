@@ -1,9 +1,19 @@
 /* Shot-level transfer curves and receiver rules for separate lighting signals. */
 const LightingChannels = (() => {
-  const Curves = typeof ColorCurves === 'undefined' ? require('./color-curves.js') : ColorCurves;
-  const Color = typeof ColorSpace === 'undefined' ? require('./color-space.js') : ColorSpace;
-  const Shadow = typeof ShadowArt === 'undefined' ? require('./shadow-art.js') : ShadowArt;
-  const Targets = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
+  let Curves, Color, Shadow, Targets;
+  try {
+    Curves = ColorCurves;
+    Color = ColorSpace;
+    Shadow = ShadowArt;
+    Targets = TargetSelectors;
+  } catch (error) {
+    // A cold Node caller can have these names in its global lexical TDZ.
+    if (!(error instanceof ReferenceError) || typeof require !== 'function') throw error;
+    Curves = require('./color-curves.js');
+    Color = require('./color-space.js');
+    Shadow = require('./shadow-art.js');
+    Targets = require('./target-selectors.js');
+  }
   const linear = Color.prepare('srgb','srgb-linear'), srgb = Color.prepare('srgb-linear','srgb');
   const names=['key','sky','bounce','emission','shadow'];
   const empty={};

@@ -42,6 +42,20 @@ for the frame. `pixel` inspects the
 composite and contributing layers at a source coordinate. Use `--frame`
 or `--layer` to query a specific frame or sample a single layer.
 
+## Verify the portable workflow
+
+Run the same Ceramic Relay smoke test as the required CI check with a
+local Chrome or Chromium executable.
+
+```sh
+INK_TEST_CHROME=/path/to/google-chrome node --test tests/agent-project.test.js tests/project-bundles.test.js
+```
+
+The test edits and moves the bundle, removes its loose sources, opens it
+in Chrome, and saves a further material revision. It reopens that revision
+and checks that its WebGL preview and CLI still change while its edited
+pixel artwork and timed audio survive.
+
 ## Pack a project
 
 Pass a named attachment map to `project pack --attachments attachments.json`.

@@ -19,4 +19,14 @@ jobs:
         with:
           node-version: 22
       - run: npm run docs:check
-      - run: node --test tests/public-reference.test.js tests/graph-catalog.test.js tests/agent-project.test.js tests/render-compatibility.test.js tests/rebirth-examples.test.js
+      - name: Reference and rendering regressions
+        run: >-
+          node --test tests/public-reference.test.js tests/graph-catalog.test.js
+          tests/render-compatibility.test.js tests/rebirth-examples.test.js
+          tests/additional-light-emitters.test.js tests/color-lut.test.js
+          tests/color-space.test.js tests/uv-atlas-slip.test.js
+      - name: Portable project smoke in Chrome and the CLI
+        run: |
+          chrome="$(command -v google-chrome)"
+          "$chrome" --version
+          INK_TEST_CHROME="$chrome" node --test tests/agent-project.test.js tests/project-bundles.test.js
