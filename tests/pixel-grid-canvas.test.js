@@ -45,6 +45,78 @@ const screen = (browser,selector) => evaluate(browser,selector => {
 },selector);
 const place = (box,x,y) => ({ x:box.x + (x+.5)*box.w/box.width, y:box.y + (y+.5)*box.h/box.height });
 
+test('the workshop draws and keys slice bounds, pivots and nine-slice guides', { skip },async t=>{
+  const directory = workspace(t), [{ file:bundle }] = build('development',directory);
+  const base = path.join(root,'examples'), file = path.join(directory,'workshop.html');
+  const url = relative=>pathToFileURL(path.resolve(base,relative)).href;
+  fs.writeFileSync(file,fs.readFileSync(path.join(base,'pixel-stamp-editor.html'),'utf8')
+    .replace('../dist/ink-studio.browser.js',pathToFileURL(bundle).href)
+    .replace('../src/pixel-grid-canvas.css',url('../src/pixel-grid-canvas.css'))
+    .replace('src="pixel-stamp-studies.js"','src="'+url('pixel-stamp-studies.js')+'"')
+    .replace('src="pixel-stamp-editor.mjs"','src="'+url('pixel-stamp-editor.mjs')+'"'));
+  await withChrome(directory,{hardware:true},async browser=>{
+    await load(browser,file);
+    const set = (selector,value,event='input')=>evaluate(browser,(selector,value,event)=>{
+      const element = document.querySelector(selector);
+      element.value = value;
+      element.dispatchEvent(new Event(event,{bubbles:true}));
+    },selector,value,event);
+    const get = selector=>evaluate(browser,selector=>document.querySelector(selector).value,selector);
+    const submit = ()=>browser.evaluate('document.getElementById("slice-form").requestSubmit()');
+    await set('#preset','blank','change');
+    await click(browser,'#duplicate');
+    await set('#scrub',1);
+    await browser.evaluate('document.getElementById("slice-panel").open = true');
+    await set('#slice-id','ui-panel');
+    await set('#slice-label','UI panel');
+    async function drawSlice(button,from,to = from) {
+      await click(browser,button);
+      const box = await screen(browser,main), start = place(box,...from), end = place(box,...to);
+      const mouse = (type,point,buttons)=>browser.send('Input.dispatchMouseEvent',{type,...point,button:'left',buttons,clickCount:1});
+      await mouse('mousePressed',start,1);
+      if (from !== to) await mouse('mouseMoved',end,1);
+      await mouse('mouseReleased',end,0);
+    }
+    await drawSlice('#slice-draw',[2,3],[6,7]);
+    await drawSlice('#slice-pick-pivot',[5,5]);
+    await drawSlice('#slice-draw-stretch',[3,4],[5,6]);
+    assert.equal(await get('#slice-key-status'),'Unsaved frame key');
+    assert.deepEqual(await raster(browser,main,2,3),[0,0,0,0]);
+    await submit();
+    assert.equal(await get('#slice-key-status'),'Key on frame-1');
+    assert.equal(await browser.evaluate('document.querySelectorAll("[data-slice=ui-panel] [class^=ink-grid-slice-line]").length'),4);
+    assert(await browser.evaluate('!!document.querySelector("[data-slice=ui-panel] .ink-grid-slice-pivot")'));
+    await set('#scrub',2);
+    assert.equal(await get('#slice-key-status'),'Inherited from frame-1');
+    await set('#slice-x',3);
+    await submit();
+    assert.equal(await get('#slice-key-status'),'Key on frame-2');
+    const deck = await browser.evaluate(`(async()=>{ let result; const capture=URL.createObjectURL, click=HTMLAnchorElement.prototype.click;
+      try {
+        URL.createObjectURL=blob=>(result=blob,"blob:ink-slices"); HTMLAnchorElement.prototype.click=()=>{};
+        document.getElementById("export").click();
+        return JSON.parse(await result.text());
+      } finally { URL.createObjectURL=capture; HTMLAnchorElement.prototype.click=click; } })()`);
+    assert.deepEqual(deck.slices,[{id:'ui-panel',label:'UI panel',keys:[
+      {frame:'frame-1',bounds:[2,3,5,5],pivot:[3,2],nineSlice:[1,1,1,1]},
+      {frame:'frame-2',bounds:[3,3,5,5],pivot:[3,2],nineSlice:[1,1,1,1]}
+    ]}]);
+    await click(browser,'#slice-remove-key');
+    assert.equal(await get('#slice-key-status'),'Inherited from frame-1');
+    await click(browser,'#undo');
+    assert.equal(await get('#slice-key-status'),'Key on frame-2');
+    await click(browser,'[data-view="slices"]');
+    assert.equal(await browser.evaluate('document.querySelector(".ink-grid-slices").hidden'),true);
+    const doc = path.join(directory,'sliced.json'), review = path.join(directory,'review.html');
+    const { documentFromDeck } = require('../cli/pixel-art.js');
+    fs.writeFileSync(doc,JSON.stringify(documentFromDeck(deck)));
+    execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),'pixel-art','canvas',doc,'--frame','frame-2','--out',review]);
+    await load(browser,review);
+    await until(browser,'!!document.querySelector("[data-slice=ui-panel] .ink-grid-slice-pivot")');
+    assert.equal(await browser.evaluate('document.querySelector("[data-slice=ui-panel]").style.getPropertyValue("--slice-x")'),'3');
+  });
+});
+
 test('the workshop pans without editing, keeps the 1× view live, and resizes without resampling', { skip },async t => {
   const directory = workspace(t);
   const [{ file:bundle }] = build('development',directory);

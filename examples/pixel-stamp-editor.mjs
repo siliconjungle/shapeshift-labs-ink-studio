@@ -3,8 +3,10 @@ import { mountPixelOnionSkin } from '../src/pixel-onion-skin.mjs';
 import { mountPixelRangePlayer } from '../src/pixel-range-player.mjs';
 import * as playbackModule from '../src/pixel-playback-ranges.js';
 import * as directionalModule from '../src/pixel-directional-views.js';
+import * as slicesModule from '../src/pixel-slices.js';
 import * as tilemapModule from '../src/pixel-tilemap.js';
 import { mountTilemap } from './pixel-stamp-tilemap.mjs';
+import { mountSliceEditor } from './pixel-stamp-slices.mjs';
 import { mountTileNeighbors } from './pixel-stamp-neighbors.mjs';
 import { mountPixelMotionPanel } from '../src/pixel-motion-panel.mjs';
 import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
@@ -15,6 +17,7 @@ import { colors,openPNG,readPNG,savePNG,saveRasterPNG } from './pixel-stamp-png.
 const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixel-palette')];
 const ranges = playbackModule.default ?? globalThis[Symbol.for('ink-studio.pixel-playback-ranges')];
 const directional = directionalModule.default ?? globalThis[Symbol.for('ink-studio.pixel-directional-views')];
+const PixelSlices = slicesModule.default ?? globalThis[Symbol.for('ink-studio.pixel-slices')];
 const Tilemap = tilemapModule.default ?? globalThis[Symbol.for('ink-studio.pixel-tilemap')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
@@ -78,6 +81,15 @@ const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const notify = message => { $('status').textContent = message; };
+const sliceEditor = mountSliceEditor($('slice-panel'),{ PixelSlices,view,commit:editSlice,notify,
+  preparePick() {
+    if (drawingPointer !== undefined) return false;
+    stop();
+    resetStroke();
+    draw();
+    return true;
+  }
+});
 const dragShapes = new Set(['line','rect','ellipse']);
 const vertexShapes = new Set(['curve','polygon']);
 const shapeType = () => $('shape-type').value;
@@ -153,8 +165,9 @@ function load(data) {
   directional.prepare(revised.directional,new Set(loaded.map(frame=>frame.id)),new Set(swatchIds));
   if (revised.tilemap !== undefined && !stack) throw new TypeError('Open tilemaps as a pixel layer deck');
   if (stack) validateStackDeck(revised,stack);
-  else { validateProtection(revised); workshopRules(revised); }
+  else { PixelSlices.prepare(revised.slices,loaded.map(frame=>frame.id),width,height); validateProtection(revised); workshopRules(revised); }
   stop();
+  sliceEditor.reset();
   tileNeighbors.reset();
   if (state.doc) saveUndo();
   state.doc = revised;
@@ -795,6 +808,7 @@ function draw() {
   });
   drawSelection();
   drawGuides(frame);
+  sliceEditor.setSource(doc,index);
   const count = state.doc.frames.length;
   $('scrub').max = count;
   $('scrub').value = state.frame+1;
@@ -818,9 +832,11 @@ function draw() {
   }
   const placements = placementsByTile.get(frame.id) ?? 0;
   const variant = variantFrames.has(frame.id);
-  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView || placements > 0 || variant;
+  const sliceKey = sliceEditor.hasKey();
+  $('remove').disabled = count === 1 || !!boundFrame || !!boundSelection || !!taggedEndpoint || !!registeredView || placements > 0 || variant || sliceKey;
   $('remove').title = placements ? 'Placed on the tilemap' : variant ? 'Used by a tile variant' :
-    registeredView ? 'Registered directional view' : taggedEndpoint ? 'Used as a playback tag endpoint' : '';
+    registeredView ? 'Registered directional view' : sliceKey ? 'Contains a slice key' :
+      taggedEndpoint ? 'Used as a playback tag endpoint' : '';
   if (doc.tilemap) tilePanel.editing(frame.label ?? frame.id ?? 'Unregistered frame',placements);
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   showShapeControls();
@@ -1373,6 +1389,7 @@ function transformCanvas(operation,bindingPolicy) {
           trim.include(p%doc.width,Math.floor(p/doc.width));
     }
     for (const detail of doc.protectedDetails ?? []) for (const [x,y] of detail.pixels) trim.include(x,y);
+    PixelSlices.includeBounds(doc.slices,trim);
   }
   const map = canvasTransforms.plan(doc.width,doc.height,operation,trim), [width,height] = map.size;
   if (width*height*doc.frames.length > 2**20) throw new RangeError('Canvas size exceeds the stamp animation budget');
@@ -1404,6 +1421,7 @@ function transformCanvas(operation,bindingPolicy) {
     });
     if (mapping.rows) revised.protectedDetails = mapping.rows;
     if (doc.directional) revised.directional = directional.remap(doc.directional,map);
+    if (doc.slices) revised.slices = PixelSlices.remap(doc.slices,map);
     if (doc.sharedSelections) revised.sharedSelections = doc.sharedSelections.map(row=>
       ({ ...row,pixels:canvasTransforms.region(map,row.pixels).pixels }));
     if (doc.guides) revised.guides = guideTool.prepare(canvasTransforms.guides(map,doc.guides));
@@ -1651,6 +1669,7 @@ $('canvas-size').addEventListener('submit',event => {
   } catch (error) { notify(error.message); }
 });
 function chooseTool(tool) {
+  sliceEditor.cancelPick();
   state.tool=tool;
   resetStroke();
   document.querySelectorAll('[data-tool]').forEach(button => button.setAttribute('aria-pressed',button.dataset.tool===tool));
@@ -1798,6 +1817,7 @@ function validateStackDeck(doc,stack = layerStack.prepare(doc.layers)) {
   const frameIds = new Set(frames.flatMap(frame=>frame.id === undefined ? [] : [frame.id]));
   if (frameIds.size !== frames.filter(frame=>frame.id !== undefined).length)
     throw new RangeError('Layer deck frame IDs must be unique');
+  PixelSlices.prepare(doc.slices,frameIds,width,height);
   const tilemap = Tilemap.prepare(doc.tilemap,frameIds,width,height);
   if (tilemap?.variants.size) tilePresentation(doc,tilemap);
   validateSavedMasks(width,height,doc.sharedSelections);
@@ -2393,6 +2413,31 @@ function occupiedTile(doc,at) {
   return doc.frames.find(frame=>frame.id === id);
 }
 
+function editableLayerDeck(doc,stem = 'frame') {
+  const used = new Set(frameIds(doc));
+  const frames = doc.frames.map((frame,i)=>{
+    const { id,label,guides,selections,duration,...cel } = frame;
+    const key = id ?? colors.uniqueId(used,stem+'-'+(i+1));
+    used.add(key);
+    const span = duration ?? 1/(doc.fps ?? 12);
+    if (doc.layers) return { ...frame,id:key,duration:span };
+    return { id:key,duration:span,...(label !== undefined && { label }),...(guides !== undefined && { guides }),
+      ...(selections !== undefined && { selections }),cels:{ paint:cel } };
+  });
+  return { ...doc,format:stackFormat,version:1,layers:doc.layers ?? [{ id:'paint' }],frames };
+}
+
+function editSlice(operation) {
+  const doc = editableLayerDeck(state.doc), frame = doc.frames[state.frame].id;
+  const scoped = operation.type === 'set-slice-key' ? { ...operation,key:{ frame,...operation.key } } :
+    operation.type === 'remove-slice-key' ? { ...operation,frame } : operation;
+  const { slices } = PixelSlices.edit(doc.slices,scoped,frameIds(doc),doc.width,doc.height);
+  const revised = { ...doc,slices };
+  validateStackDeck(revised);
+  edit(()=>{ state.doc = revised; resetStroke(); });
+  notify(operation.type === 'set-slice-key' ? 'Saved slice key for '+operation.id : 'Removed '+operation.id);
+}
+
 function tilePresentation(doc,grid) {
   const durations = new Map(doc.frames.map(frame=>[frame.id,Math.max(1,Math.round((frame.duration ?? 1/(doc.fps ?? 12))*1000))]));
   return Tilemap.presentation(grid,id=>durations.get(id),ranges.plan);
@@ -2435,16 +2480,7 @@ const tilePanel = mountTilemap(document.querySelector('main'),{
   presentation:tilePresentation,readTile:workshopTileImage,
   readTileArt:workshopTileArt,
   create(width,height) {
-    const doc = state.doc, used = new Set(frameIds(doc)), tilemap = { version:1,width,height,cells:[] };
-    const frames = doc.frames.map((frame,i)=>{
-      const { id,label,guides,selections,duration,...cel } = frame;
-      const key = id ?? colors.uniqueId(used,'tile-'+(i+1));
-      used.add(key);
-      return { id:key,duration:duration ?? 1/(doc.fps ?? 12),
-        ...(label !== undefined && { label }),...(guides !== undefined && { guides }),
-        ...(selections !== undefined && { selections }),cels:state.stack ? frame.cels : { paint:cel } };
-    });
-    const revised = { ...doc,format:stackFormat,version:1,layers:doc.layers ?? [{ id:'paint' }],frames,tilemap };
+    const tilemap = { version:1,width,height,cells:[] }, revised = { ...editableLayerDeck(state.doc,'tile'),tilemap };
     validateStackDeck(revised);
     edit(()=>{ state.doc = revised; resetStroke(); });
   },

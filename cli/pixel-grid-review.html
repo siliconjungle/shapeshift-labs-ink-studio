@@ -438,6 +438,7 @@ async function draw() {
     view.setFrame(image);
     onionSkin.setSource({ key:frames,index,count:frames.length,rgba,readFrame:async i=>(await decodeFrame(frames[i])).rgba });
     view.setGuides(frame.guides);
+    view.setSlices(frame.slices);
     const layers = frame.layers.map(row=>({ ...row,slots:atob(row.slots),alpha:row.alpha && atob(row.alpha),
       knockouts:row.knockouts && atob(row.knockouts) }));
     active = { id:frame.id,protectedDetails:frame.protectedDetails,width,height,composite:atob(frame.composite),

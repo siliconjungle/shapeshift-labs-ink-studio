@@ -68,6 +68,13 @@
   .guide-controls > label { display:grid; gap:4px; color:var(--quiet); font-size:13px; }
   .guide-controls select { max-width:100%; color:#e6eeea; }
   .guide-controls[hidden], .guide-controls [hidden], #pencil-rgba[hidden] { display:none; }
+  #slice-panel summary { cursor:pointer; font-weight:600; }
+  #slice-form { margin-top:12px; }
+  #slice-form input[type=text] { min-width:0; width:100%; }
+  #slice-form fieldset { border:0; padding:0; margin:0; }
+  #slice-form legend { color:var(--quiet); margin-bottom:4px; }
+  #slice-key-status { font-size:13px; }
+  #canvas-view[data-slice-pick] .ink-grid-main { cursor:crosshair; }
   #shape-controls { margin-top:12px; }
   #shape-controls textarea, #shape-lengths { width:100%; }
   #shape-controls textarea, #shape-lengths { font:inherit; color:inherit; border:1px solid #476062; border-radius:5px; background:#253437; padding:6px 10px; }
@@ -456,6 +463,46 @@
             <label><input id="wrap-y" type="checkbox"> Wrap Y</label>
           </div>
         </div>
+      </section>
+      <section>
+        <details id="slice-panel">
+          <summary>Slices</summary>
+          <form class="guide-controls" id="slice-form">
+            <label>Slice <select id="slice-list"></select></label>
+            <label>Stable ID <input type="text" id="slice-id" maxlength="64" pattern="[a-z][a-z0-9\-]{0,63}" required></label>
+            <label>Name <input type="text" id="slice-label"></label>
+            <fieldset>
+              <legend>Bounds</legend>
+              <div class="canvas-size">
+                <label>X <input type="number" id="slice-x" min="0" step="1" required></label>
+                <label>Y <input type="number" id="slice-y" min="0" step="1" required></label>
+                <label>Width <input type="number" id="slice-width" min="1" step="1" required></label>
+                <label>Height <input type="number" id="slice-height" min="1" step="1" required></label>
+              </div>
+            </fieldset>
+            <button id="slice-draw" type="button" aria-pressed="false">Draw bounds</button>
+            <div class="row"><label><input id="slice-use-pivot" type="checkbox"> Pivot</label>
+              <button id="slice-pick-pivot" type="button" aria-pressed="false">Pick pivot</button></div>
+            <div class="canvas-size" id="slice-pivot-fields" hidden>
+              <label>Local X <input type="number" id="slice-pivot-x" step=".5" value="0"></label>
+              <label>Local Y <input type="number" id="slice-pivot-y" step=".5" value="0"></label>
+            </div>
+            <div class="row"><label><input id="slice-use-nine" type="checkbox"> Nine-slice</label>
+              <button id="slice-draw-stretch" type="button" aria-pressed="false">Draw stretch area</button></div>
+            <div class="canvas-size" id="slice-nine-fields" hidden>
+              <label>Left <input type="number" id="slice-left" min="0" step="1" value="0"></label>
+              <label>Top <input type="number" id="slice-top" min="0" step="1" value="0"></label>
+              <label>Right <input type="number" id="slice-right" min="0" step="1" value="0"></label>
+              <label>Bottom <input type="number" id="slice-bottom" min="0" step="1" value="0"></label>
+            </div>
+            <output id="slice-key-status"></output>
+            <div class="row">
+              <button type="submit">Save key</button>
+              <button type="button" id="slice-remove-key" disabled>Remove key</button>
+              <button type="button" id="slice-remove" disabled>Remove slice</button>
+            </div>
+          </form>
+        </details>
       </section>
       <section>
         <h2>Guides</h2>

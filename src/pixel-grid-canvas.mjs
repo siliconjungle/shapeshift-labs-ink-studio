@@ -10,6 +10,7 @@ const markup = `
       <label><input type="checkbox" data-view="guides" checked> Guides</label>
       <label><input type="checkbox" data-view="snap"> Snap</label>
     </div>
+    <label class="ink-slice-toggle" hidden><input type="checkbox" data-view="slices" checked> Slices</label>
   </div>
   <div class="ink-grid-views">
     <div class="ink-grid-viewport" tabindex="0" role="group" aria-label="Canvas viewport">
@@ -20,6 +21,7 @@ const markup = `
         <canvas class="ink-grid-onion" aria-hidden="true" hidden></canvas>
         <div class="ink-grid-lines" aria-hidden="true" hidden></div>
         <div class="ink-grid-guides" aria-hidden="true" hidden></div>
+        <div class="ink-grid-slices" aria-hidden="true" hidden></div>
         <div class="ink-grid-mirrors" aria-hidden="true">
           <div class="ink-grid-mirror-x" hidden></div><div class="ink-grid-mirror-y" hidden></div>
         </div>
@@ -66,6 +68,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const mirrorLines = [find('.ink-grid-mirror-x'),find('.ink-grid-mirror-y')];
   const guidesLayer = find('.ink-grid-guides'), guideToggles = find('.ink-guide-toggles');
   const showGuides = find('[data-view="guides"]'), snapGuides = find('[data-view="snap"]');
+  const sliceLayer = find('.ink-grid-slices'), showSlices = find('[data-view="slices"]');
   const zoomLabel = find('.ink-grid-zoom'), dimensions = find('.ink-grid-dimensions');
   const coordinates = find('.ink-grid-coordinates'), gridToggle = find('.ink-grid-toggle input');
   const zoomOut = find('[data-view="out"]'), zoomIn = find('[data-view="in"]'), panButton = find('[data-view="pan"]');
@@ -162,6 +165,43 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     guideToggles.hidden = guides.length === 0;
     guidesLayer.hidden = guideToggles.hidden || !showGuides.checked;
     showPoint(null);
+  }
+
+  function setSlices(rows = [],selected) {
+    const document = host.ownerDocument;
+    sliceLayer.replaceChildren(...rows.map(slice=>{
+      const box = document.createElement('div'), [x,y,w,h] = slice.bounds;
+      box.className = 'ink-grid-slice';
+      box.dataset.slice = slice.id;
+      if (slice.id === selected) box.dataset.selected = '';
+      for (const [key,value] of Object.entries({ x,y,w,h })) box.style.setProperty('--slice-'+key,value);
+      if (slice.id === selected) {
+        const tag = document.createElement('span');
+        tag.className = 'ink-grid-slice-name';
+        tag.textContent = slice.label ?? slice.id;
+        box.append(tag);
+      }
+      if (slice.stretch) {
+        const [u,v,wide,high] = slice.stretch;
+        for (const [axis,at] of [['x',u],['x',u+wide],['y',v],['y',v+high]]) {
+          if (!at || at === (axis === 'x' ? w : h)) continue;
+          const line = document.createElement('div');
+          line.className = 'ink-grid-slice-line-'+axis;
+          line.style.setProperty('--slice-line',at);
+          box.append(line);
+        }
+      }
+      if (slice.pivot) {
+        const pivot = document.createElement('div');
+        pivot.className = 'ink-grid-slice-pivot';
+        pivot.style.setProperty('--pivot-x',slice.pivot[0]+.5);
+        pivot.style.setProperty('--pivot-y',slice.pivot[1]+.5);
+        box.append(pivot);
+      }
+      return box;
+    }));
+    showSlices.parentElement.hidden = !rows.length;
+    sliceLayer.hidden = !rows.length || !showSlices.checked;
   }
 
   function setDrawing({ mirrorX,mirrorY,wrapX = false,wrapY = false } = {}) {
@@ -355,6 +395,7 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   listen(find('[data-view="fit"]'),'click',fit);
   listen(gridToggle,'change',paintView);
   listen(showGuides,'change',() => { guidesLayer.hidden = !showGuides.checked; });
+  listen(showSlices,'change',() => { sliceLayer.hidden = !showSlices.checked; });
   listen(snapGuides,'change',() => showPoint(null));
   listen(panButton,'click',() => {
     pan = !pan;
@@ -419,6 +460,6 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const observer = new ResizeObserver(() => { if (fitting) fit(); else move(left,top); });
   observer.observe(viewport);
   paintView();
-  return Object.freeze({ canvas, playbackHost, setFrame, setPreviewFrame, setOnionSkin, setGuides, setDrawing, setNeighbors, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
+  return Object.freeze({ canvas, playbackHost, setFrame, setPreviewFrame, setOnionSkin, setGuides, setSlices, setDrawing, setNeighbors, setSelection, setDiagnostic, focusRegion, setZoom, fit, pixelAt, positionAt,
     dispose() { events.abort(); observer.disconnect(); host.replaceChildren(); host.classList.remove('ink-grid-canvas'); } });
 }

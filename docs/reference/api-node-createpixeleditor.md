@@ -38,6 +38,8 @@ Members and callable signatures come from the public entry point. Guide links po
 | `node.createPixelEditor().select` | function | `(query,options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().serialize` | function | `(space = 2)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().sessionStatus` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().slice` | function | `(id,options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
+| `node.createPixelEditor().slices` | function | `(options)` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().snap` | function | `(coordinate,{ frame,radius } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().snapshot` | function | `()` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |
 | `node.createPixelEditor().stamp` | function | `({ frame,cel,layer,references } = {})` | [guide](../pixel-art-authoring.md), [source](../../cli/pixel-art.js) |

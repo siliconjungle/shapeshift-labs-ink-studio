@@ -452,6 +452,72 @@ The cursor readout names a guide when it catches the pointer. Exporting a
 stamp copies the selected frame's active guides so it keeps its alignment
 references in the Workshop and other stamp tooling.
 
+## Edit slices and pivots
+
+Open **Slices** in the Pixel Stamp Workshop. Name a slice and enter its
+rectangle or use **Draw bounds** on the native canvas. Use **Pick pivot**
+to place its registration point. Enter four **Nine-slice** insets or use
+**Draw stretch area** to set the stretch rectangle. The overlay previews
+the bounds, pivot, and cut lines before **Save key** commits them.
+
+A slice key starts on the selected frame. Later frames inherit it until
+the next explicit key for that slice. Scrub to another frame and save a
+new key to change the rectangle, pivot, or insets there. The panel shows
+the frame supplying the current values. Use **Remove key** to return to
+the preceding key or **Remove slice** to remove the named rectangle.
+Slice edits share the Workshop's undo history.
+
+A version 2 pixel document or Workshop layer deck stores the slice list
+as `slices`. Each row has a stable ID and an optional display name.
+
+```json
+[
+  {
+    "id": "dialogue-panel",
+    "label": "Dialogue panel",
+    "keys": [
+      { "frame": "idle", "bounds": [2, 3, 24, 16], "pivot": [12, 15], "nineSlice": [3, 3, 3, 4] },
+      { "frame": "speak", "bounds": [2, 3, 26, 16], "pivot": [13, 15], "nineSlice": [3, 3, 3, 4] }
+    ]
+  }
+]
+```
+
+Bounds are whole `[x,y,width,height]` pixels on the document canvas. Pivots
+use slice-local pixel centers with half-pixel precision. For example,
+`[0,0]` is the center of the slice's first pixel. Nine-slice values
+are whole-pixel `[left,top,right,bottom]` insets around a nonempty stretch
+rectangle. Canvas transforms remap the bounds, pivot, and insets together.
+Trim includes all keyed bounds so transparent slice margins stay available.
+A crop that would discard a slice or its entire stretch rectangle reports
+a conflict.
+
+Use a revision-checked `timeline` edit to set a key, remove a key, or
+remove a slice. The operation below updates a slice on the named frame.
+Pass `null` as the label to clear the display name.
+
+```json
+{ "type": "set-slice-key", "id": "dialogue-panel", "key": {
+  "frame": "speak", "bounds": [2, 3, 26, 16], "pivot": [13, 15], "nineSlice": [3, 3, 3, 4]
+} }
+```
+
+Use `remove-slice-key` with the slice ID and frame ID, or `remove-slice`
+with the slice ID. The offline `pixel-art canvas` review shows the saved
+slice guides for each frame.
+
+```sh
+ink-studio pixel-art slices inspect document.json --frame speak
+ink-studio pixel-art slices export document.json --slice dialogue-panel --frame speak \
+  --out panel.png --metadata panel.json
+```
+
+The PNG preserves the native crop and alpha. The metadata includes both the
+local pivot and the absolute `registration` point, as well as the local
+`stretch` rectangle. Use `editor.slices({ frame: "speak" })` to inspect
+the active keys and `editor.slice("dialogue-panel", { frame: "speak" })`
+to obtain the same metadata and an RGBA raster.
+
 ## Paint and sample pixels
 
 The Workshop has a one-pixel pencil, eraser, eyedropper, and connected
@@ -1151,7 +1217,7 @@ frame in one transaction. Omit `frame` and `cel` from the patch. Use
 | Operation | Fields | Result |
 | --- | --- | --- |
 | `crop` | `rect: [x, y, width, height]` | Keep an in-bounds rectangle. |
-| `trim` | None | Keep the bounds of visible paint and protected pixels across all frames. A fully empty canvas keeps its size. |
+| `trim` | None | Keep the bounds of visible paint, protected pixels, and authored slices across all frames. A fully empty canvas keeps its size. |
 | `pad` | `margins: [left, top, right, bottom]` | Add transparent space in whole pixels. |
 | `resize` | `size: [width, height]`, optional `anchor` | Crop or add space without scaling the art. Anchors are `top-left` (default), `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, and `bottom-right`. |
 | `resample` | `size: [width, height]`, optional `filter` | Scale the artwork using `nearest` (default) or `area`. Area filtering chooses the swatch with the most opaque coverage and carries the area-weighted alpha. |

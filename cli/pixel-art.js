@@ -15,6 +15,7 @@ const PixelAdjustments = require('../src/pixel-adjustments.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
 const Timeline = require('./pixel-cel-timeline.js');
 const Directional = require('../src/pixel-directional-views.js');
+const PixelSlices = require('../src/pixel-slices.js');
 const Tilemap = require('../src/pixel-tilemap.js');
 const Playback = require('../src/pixel-playback-ranges.js');
 const CelBatch = require('./pixel-cel-batch.js');
@@ -108,7 +109,7 @@ function documentShape(design) {
 
   const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,guides,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules','tags','directional','tilemap']))
+    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata','artRules','tags','directional','tilemap','slices']))
     throw new TypeError('Unknown pixel document field');
   if (design.ramps !== undefined) paletteAsset(design);
   if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
@@ -142,6 +143,7 @@ function documentShape(design) {
   namedRegions(selections,'Pixel selections',width,height,frameIds);
   Protection.validate(protectedDetails,width,height,[...frameIds]);
   PixelGuides.prepare(guides,frameIds);
+  PixelSlices.prepare(design.slices,frameIds,width,height);
   rulesFor(design);
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
@@ -407,6 +409,30 @@ function tilemapNeighborhood(design,at,{ time = 0 } = {}) {
     tileSize:[grid.tileWidth,grid.tileHeight],cells,seams,raster:Tilemap.neighborhoodRaster(grid,images) };
 }
 
+function sliceFrame(design,frame) {
+  if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document to use pixel slices');
+  const ids = design.frames.map(row=>row.id), index = frame === undefined ? 0 : ids.indexOf(frame);
+  if (index < 0) throw new RangeError('Unknown pixel frame '+frame);
+  return { frame:ids[index],active:PixelSlices.active(design.slices,ids,index) };
+}
+
+function sliceReport(design,{ frame } = {}) {
+  documentShape(design);
+  if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document to use pixel slices');
+  return { format:'ink-studio/pixel-slices',version:1,revision:fingerprint(design),
+    grid:[design.width,design.height],slices:structuredClone(design.slices ?? []),
+    ...(frame !== undefined && structuredClone(sliceFrame(design,frame))) };
+}
+
+function sliceImage(design,id,{ frame } = {}) {
+  const lookup = documentShape(design), resolved = sliceFrame(design,frame);
+  const slice = resolved.active.find(row=>row.id === id);
+  if (!slice) throw new RangeError('Slice '+id+' has no active key on frame '+resolved.frame);
+  const compiled = frameCompiler(design,lookup)(resolved.frame), pixels = LayerStack.image(compiled,compiled.colors);
+  return { format:'ink-studio/pixel-slice',version:1,revision:compiled.revision,frame:resolved.frame,
+    pixelAspect:[...design.pixelAspect],...structuredClone(slice),raster:PixelSlices.crop(pixels,slice.bounds) };
+}
+
 function validate(design) {
   const lookup = documentShape(design);
   const revision = fingerprint(design);
@@ -436,6 +462,7 @@ function validate(design) {
     ...(design.version === 2 && design.tags !== undefined && { tags:structuredClone(design.tags) }),
     ...(design.version === 2 && design.directional !== undefined && { directional:structuredClone(design.directional) }),
     ...(design.version === 2 && design.tilemap !== undefined && { tilemap:structuredClone(design.tilemap) }),
+    ...(design.version === 2 && design.slices !== undefined && { slices:structuredClone(design.slices) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
@@ -1231,11 +1258,20 @@ function editTimeline(design,patch,context) {
   const type = patch.operation?.type;
   const { design:revised,report } = ['edit-cels','write-cels'].includes(type) ? editCelBatch(design,patch.operation) :
     ['make-local-variant','reuse-exact-tile'].includes(type) ? editTileSharing(design,patch.operation) :
+    ['set-slice-key','remove-slice-key','remove-slice'].includes(type) ? editSliceKeys(design,patch.operation) :
     Timeline.edit(design,patch.operation);
   assertProtectionUnchanged(design,revised);
   validate(revised);
   context?.onEditTarget?.(report);
   return revised;
+}
+
+function editSliceKeys(design,operation) {
+  const ids = design.frames.map(frame=>frame.id);
+  const { slices,before,after } = PixelSlices.edit(design.slices,operation,ids,design.width,design.height);
+  const frame = operation.key?.frame ?? operation.frame;
+  return { design:{ ...design,slices },report:{ destination:'timeline',kind:'slice',tool:operation.type,
+    slice:operation.id,...(frame && { frame }),before,after } };
 }
 
 function editTileSharing(design,operation) {
@@ -1537,6 +1573,7 @@ function editCanvas(design,patch,context) {
         if (locks[p] || slots[p] >= 0 && (opacity?.[p] ?? 255) > 0)
           trim.include(p%width,Math.floor(p/width));
     }
+    if (!legacy) PixelSlices.includeBounds(design.slices,trim);
   }
   const map = CanvasTransforms.plan(width,height,operation,trim), [w,h] = map.size;
   const changesGrid = w !== width || h !== height || map.offset.some(Boolean);
@@ -1579,6 +1616,7 @@ function editCanvas(design,patch,context) {
       });
       if (design.guides) revised.guides = CanvasTransforms.guides(map,design.guides);
       if (design.directional) revised.directional = Directional.remap(design.directional,map);
+      if (design.slices) revised.slices = PixelSlices.remap(design.slices,map);
       if (design.selections) revised.selections = design.selections.map(row=>({ ...row,pixels:CanvasTransforms.region(map,row.pixels).pixels }));
       if (mapping.rows) revised.protectedDetails = mapping.rows;
     }
@@ -1598,7 +1636,8 @@ function editCanvas(design,patch,context) {
   }
   validate(revised);
   context?.onEditTarget?.({ destination:'canvas',kind:'canvas',tool:operation.type,beforeGrid:[width,height],grid:map.size,
-    offset:map.offset,scale:map.scale,filter:map.filter,bindings,droppedProtected });
+    offset:map.offset,scale:map.scale,filter:map.filter,bindings,droppedProtected,
+    ...(changesGrid && design.slices?.length && { slices:{ before:design.slices,after:revised.slices } }) });
   return revised;
 }
 
@@ -2058,6 +2097,8 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     palette: () => structuredClone(paletteAsset(state().design)),
     layerDeck: () => structuredClone(layerDeck(state().design)),
     timeline: () => timelineReport(state().design),
+    slices: options => sliceReport(state().design,options),
+    slice: (id,options) => sliceImage(state().design,id,options),
     tilemap: at => tilemapReport(state().design,at),
     tilemapRaster: options => tilemapRaster(state().design,options),
     tilemapNeighborhood: (at,options) => tilemapNeighborhood(state().design,at,options),
@@ -2180,7 +2221,7 @@ function documentFromPNG(file) {
 const stackFormat = 'ink-studio/pixel-layer-deck';
 
 function layerDeck(design) {
-  const { width,height,layers,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules,tags,directional,tilemap } = design;
+  const { width,height,layers,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata,artRules,tags,directional,tilemap,slices } = design;
   const palette = paletteAsset(design), revision = fingerprint(design), lookup = Timeline.index(design.frames);
   const frames = design.frames.map(frame=>{
     const compiled = compileFrame(design,frame,revision,palette.swatches,true,undefined,lookup);
@@ -2200,13 +2241,13 @@ function layerDeck(design) {
     ...(design.selections?.some(row=>row.frame === undefined) && { sharedSelections:design.selections.filter(row=>row.frame === undefined) }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
     ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags && { tags }),
-    ...(directional && { directional }),...(tilemap && { tilemap }) };
+    ...(directional && { directional }),...(tilemap && { tilemap }),...(slices && { slices }) };
 }
 
 function documentFromDeck(deck) {
   if (deck?.format !== stackFormat || deck.version !== 1 || !Array.isArray(deck.frames) || !deck.frames.length)
     throw new TypeError('Expected a version 1 Ink pixel layer deck');
-  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules,tags,directional,tilemap } = deck;
+  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata,artRules,tags,directional,tilemap,slices } = deck;
   const asset = PixelPalette.fromStamp(deck);
   const guides = [...(deck.guides ?? [])], selections = [...(deck.sharedSelections ?? [])], frameIds = new Set();
   for (const frame of deck.frames) if (frame.id !== undefined) {
@@ -2238,7 +2279,8 @@ function documentFromDeck(deck) {
     ...(asset.ramps.length && { ramps:asset.ramps }),...(guides.length && { guides }),...(selections.length && { selections }),
     ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
     ...(artRules && { artRules }),...(legacyMetadata && { legacyMetadata }),...(tags !== undefined && { tags }),
-    ...(directional !== undefined && { directional }),...(tilemap !== undefined && { tilemap }) };
+    ...(directional !== undefined && { directional }),...(tilemap !== undefined && { tilemap }),
+    ...(slices !== undefined && { slices }) };
   validate(design);
   return design;
 }
@@ -2538,6 +2580,7 @@ function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
   if (frameId !== undefined && !frames.some(frame => frame?.id === frameId))
     throw new RangeError('Unknown pixel frame ' + frameId);
   const chosen = frameId === undefined ? frames : frames.filter(frame => frame.id === frameId);
+  const frameIds = frames.map(frame=>frame?.id);
   if (sources.some(source=>source.frame !== undefined && !chosen.some(frame=>frame?.id === source.frame)))
     throw new RangeError('A source channel is bound to a frame outside this canvas');
   const encodeSlots = slots => Buffer.from(Uint8Array.from(slots,slot => slot < 0 ? 255 : slot)).toString('base64');
@@ -2554,7 +2597,9 @@ function canvasReview(design,frameId,file,sources,scene,artShot,reviewBinding) {
       ...(hasReferences && { slots:encodeSlots(clean.slots),
         ...(clean.opacity && { alpha:encode(clean.opacity),rgb:encode(image(clean).rgb) }) })
     }, png:encode(PNG.encode(width,height,rgba,4)),
-      guides:compiled.guides ?? [], id:frame?.id, durationMs:frame?.durationMs ?? 100, protectedDetails:compiled.protectedDetails ?? [], composite:encodeSlots(compiled.slots),
+      guides:compiled.guides ?? [],
+      ...(frame && design.slices?.length && { slices:PixelSlices.active(design.slices,frameIds,frameIds.indexOf(frame.id)) }),
+      id:frame?.id, durationMs:frame?.durationMs ?? 100, protectedDetails:compiled.protectedDetails ?? [], composite:encodeSlots(compiled.slots),
       ...(compiled.opacity && { alpha:encode(compiled.opacity),rgb:encode(image(compiled).rgb) }),
       layers:[...compiled.layerSources].map(([id,row]) => ({
         id,cel:compiled.cels?.get(id) ?? null,slots:encodeSlots(row.slots),...(row.alpha && { alpha:encode(row.alpha) }),
@@ -2699,6 +2744,26 @@ function inspectCoordinate(raw) {
   return raw.split(',').map(Number);
 }
 
+function sliceCommand([action,source,...rest],opt) {
+  const options = { inspect:['frame','out'],export:['slice','frame','out','metadata'] };
+  const targets = [opt.out,opt.metadata].filter(reference).map(file=>path.resolve(file));
+  if (!Object.hasOwn(options,action) || !reference(source) || rest.length ||
+      Object.entries(opt).some(([key,value])=>!options[action].includes(key) || !reference(value)) ||
+      targets.includes(path.resolve(source)) || new Set(targets).size !== targets.length ||
+      action === 'export' && (!name(opt.slice) || !/\.png$/i.test(opt.out ?? '')))
+    throw new TypeError('Use pixel-art slices inspect <document> or slices export <document> --slice id --out slice.png');
+  const design = read(source), settings = { frame:opt.frame };
+  if (action === 'export') {
+    const { raster:{w,h,rgba},...report } = sliceImage(design,opt.slice,settings);
+    files.write(path.resolve(opt.out),PNG.encode(w,h,rgba,4));
+    if (opt.metadata) files.json(path.resolve(opt.metadata),report);
+    return;
+  }
+  const report = sliceReport(design,settings);
+  if (opt.out) files.json(path.resolve(opt.out),report);
+  else console.log(JSON.stringify(report,null,2));
+}
+
 function tilemapCommand([action,source,...rest],opt) {
   const options = { inspect:['out','at'],draw:['out','t'],neighbors:['out','at','t','image'] };
   const targets = [opt.out,opt.image].filter(reference).map(file=>path.resolve(file));
@@ -2728,6 +2793,7 @@ function tilemapCommand([action,source,...rest],opt) {
 
 function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
   if (pos[0] === 'directions') return require('./pixel-directional-views.js').command(pos.slice(1),opt,{ compileFrames:compileDirectionalFrames,documentFromDeck });
+  if (pos[0] === 'slices') return sliceCommand(pos.slice(1),opt);
   if (pos[0] === 'tilemap') return tilemapCommand(pos.slice(1),opt);
   if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
