@@ -81,6 +81,54 @@ The cursor readout names a guide when it catches the pointer. Exporting a
 stamp copies the selected frame's active guides so it keeps its alignment
 references in the Workshop and other stamp tooling.
 
+## Paint and sample pixels
+
+The Workshop has a one-pixel pencil, eraser, eyedropper, and connected
+fill for stamp frames. For layered pixel documents, use a raster tool
+operation through `pixel-art edit`, `pixel-art session apply`, or
+`pixels.apply(patch)`. The patch uses the current document revision.
+
+```json
+{
+  "id": "fill-the-jacket",
+  "revision": "<current document revision>",
+  "frame": "front",
+  "operation": { "layer": "jacket", "tool": "fill", "at": [20, 14], "swatch": "indigo" }
+}
+```
+
+Use `cel` on the patch to target an existing cel by ID. Alternatively,
+`operation.layer` addresses a layer by ID and creates a cel in the
+selected frame when needed. Pencil uses `tool: "pencil"`, a `swatch`,
+and an ordered `points` path of native coordinates. Eraser uses
+`tool: "eraser"` and `points`. Erasing clears the active layer and reveals
+whatever is below it. Fill uses four-way connectivity and exact swatch
+identity in the active layer. Protection and clipping stop a fill, and
+invalidate a pencil or eraser path that touches them. Preview and receipts
+report the changed source pixels even when an upper layer covers them.
+
+```sh
+node cli/ink-studio.js pixel-art sample document.json --frame front --at 20,14
+node cli/ink-studio.js pixel-art sample document.json --frame front --at 20,14 --mode layer --layer jacket
+node cli/ink-studio.js pixel-art sample document.json --frame front --at 20,14 \
+  --mode source --destination patina --scene gate.json
+```
+
+The SDK equivalent is `pixels.sample([20, 14], options)`. The visible
+composite reports its owning layer and swatch. Layer sampling reads the
+selected layer or cel, including paint hidden by upper layers, and flags
+clipping and explicit knockouts. Source sampling reads the selected
+`surface-channel` destination. The document's top-left art grid maps
+pixel centers to the whole rest-UV chart. Pass `--uv u,v` or SDK
+`uv: [u, v]` to sample the chart directly. The result includes the source
+revision and either a scalar with its units where defined or a color with
+coverage. Sample again after changing the bound source.
+
+In an offline canvas review, choose **Eyedropper** and pick the visible
+composite or a layer. Export with `--destination patina --scene gate.json`
+to include a snapshot of a bound material channel for the source mode.
+Painting to a layered pixel document goes through the CLI or SDK.
+
 ## Author a drawing
 
 ```json

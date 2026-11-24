@@ -1,6 +1,6 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
-const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides;
+const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, fill, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
@@ -61,7 +61,7 @@ function draw() {
   $('scrub').value = state.frame+1;
   $('current').value = `Frame ${state.frame+1} / ${count}`;
   $('duration').value = +(current.duration ?? 1/(state.doc.fps ?? 12)).toFixed(4);
-  $('width').disabled = state.tool === 'pencil' || state.tool === 'polygon';
+  $('width').disabled = !['brush','erase'].includes(state.tool);
   $('remove').disabled = count === 1;
   $('duplicate').disabled = count >= 2048 || (count+1)*width*height > 2**20;
   $('finish-shape').disabled = state.tool !== 'polygon' || state.points.length < 3;
@@ -110,11 +110,30 @@ function edit(callback) {
 function commitStroke() {
   if (!state.points.length) return;
   const current = state.doc.frames[state.frame], slots = frameSlots(current);
+  savePixels(current,slots);
+}
+
+function savePixels(current,slots) {
   edit(() => {
     const { rows,strokes,...frame } = current;
     state.doc.frames[state.frame] = { ...frame,slots,duration:current.duration ?? 1/(state.doc.fps ?? 12) };
     state.points = [];
   });
+}
+
+function pickOrFill(at) {
+  const { width,height } = state.doc, current = state.doc.frames[state.frame];
+  const slots = stamp.paint(width,height,current), picked = slots[at[1]*width+at[0]];
+  if (state.tool === 'eyedropper') {
+    if (picked !== null) selectSwatch(picked);
+    notify(picked === null ? 'Transparent pixel' : 'Sampled '+state.doc.palette[picked]);
+    return;
+  }
+  if (picked === state.swatch) return;
+  const region = paintTools.region(width,height,at,p=>slots[p] === picked);
+  for (const p of region) slots[p] = state.swatch;
+  savePixels(current,slots);
+  notify(`Filled ${region.length} pixels`);
 }
 
 const guideMode = guide => guide.kind === 'axis' ? 'axis-' + guide.axis : guide.kind;
@@ -235,22 +254,18 @@ function resizeCanvas(width,height) {
 }
 
 function pencilSegment([x,y],[toX,toY]) {
-  const dx=Math.abs(toX-x),dy=-Math.abs(toY-y),sx=Math.sign(toX-x),sy=Math.sign(toY-y);
-  let error=dx+dy;
-  while (x!==toX || y!==toY) {
-    const twice=2*error;
-    if (twice>=dy) { error+=dy; x+=sx; }
-    if (twice<=dx) { error+=dx; y+=sy; }
-    if (state.points.length>=4096) return;
-    state.points.push([x,y]);
-  }
+  paintTools.segment([x,y],[toX,toY],(nextX,nextY) => {
+    if (state.points.length>=4096) return false;
+    state.points.push([nextX,nextY]);
+  });
 }
 
 art.addEventListener('pointerdown',event => {
   if (event.button !== 0 || drawingPointer !== undefined) return;
-  const at = view.pixelAt(event.clientX,event.clientY);
+  const at = view.pixelAt(event.clientX,event.clientY,{ snap:state.tool !== 'eyedropper' });
   if (!at) return;
   stop();
+  if (state.tool === 'eyedropper' || state.tool === 'fill') { pickOrFill(at); return; }
   if (state.tool === 'polygon') {
     if (state.points.length < 120) state.points.push(at);
   } else {

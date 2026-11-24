@@ -7,7 +7,9 @@ moss, or give several cels different holds for a sparkle, bubble, or spell.
 Build the browser bundle with `npm run build` and open
 [Pixel Stamp Workshop](../examples/pixel-stamp-editor.html) through a local
 static server. The workshop has a one-pixel pencil, an optional pixel grid,
-and a brush, eraser and polygon for larger marks. It previews holds and saves
+and a brush, eraser, eyedropper, connected fill, and polygon. The eyedropper
+selects the swatch of the sampled texel. Fill replaces the connected region
+of that exact swatch or transparency on the current frame. It previews holds and saves
 the same JSON the renderer reads. The star, glint, and bubble studies let you
 open each separately drawn size.
 

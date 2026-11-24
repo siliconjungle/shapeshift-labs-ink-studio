@@ -137,20 +137,49 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(mark,center);
     await firstFrame();
     assert.equal(await browser.evaluate("document.querySelector('.ink-guide-toggles').hidden"),true);
+
+    const tick = place(await screen(browser,main),18,18);
+    const dab = async () => {
+      await mouse('mousePressed',tick,{ button:'left',buttons:1,clickCount:1 });
+      await mouse('mouseReleased',tick,{ button:'left',clickCount:1 });
+    };
+    await click(browser,'.swatch:nth-child(3)');
+    await click(browser,'[data-tool="fill"]');
+    await dab();
+    assert.deepEqual(await raster(browser,preview,47,47),[230,219,182,255]);
+    await click(browser,'.swatch:nth-child(1)');
+    await click(browser,'[data-tool="eyedropper"]');
+    await dab();
+    assert.equal(await browser.evaluate("document.querySelector('.swatch:nth-child(3)').getAttribute('aria-pressed')"),'true');
+    await click(browser,'[data-tool="erase"]');
+    await dab();
+    assert.deepEqual(await raster(browser,preview,18,18),[0,0,0,0]);
+    await click(browser,'#undo');
+    assert.deepEqual(await raster(browser,preview,18,18),[230,219,182,255]);
   });
 });
 
 test('the CLI exports an offline native canvas with both views on the selected versioned frame', { skip },async t => {
   const directory = workspace(t), input = path.join(directory,'design.json'), file = path.join(directory,'review.html');
+  const scenePath = path.join(directory,'scene.json');
   const versioned = { format:'ink-studio/pixel-art',version:2,width:8,height:6,pixelAspect:[1,1],
-    palette:{ warm:'#ac421d',cool:'#216286' },layers:[{ id:'paint' }],frames:[
-      { id:'front',label:'Front',durationMs:100,cels:{ paint:{ marks:[{ at:[1,2],swatch:'warm' }] } } },
+    palette:{ warm:'#ac421d',cool:'#216286' },layers:[{ id:'paint' },{ id:'glaze' }],frames:[
+      { id:'front',label:'Front',durationMs:100,cels:{ paint:{ marks:[{ at:[1,2],swatch:'cool' }] },
+        glaze:{ marks:[{ at:[1,2],swatch:'warm' }] } } },
       { id:'side',label:'Side',durationMs:200,cels:{ paint:{ marks:[{ at:[1,2],swatch:'cool' }] } } }
     ],guides:[{ id:'tile',kind:'grid',at:[0,1],step:[4,3] },
-      { id:'front-pin',kind:'registration',at:[3,4],frame:'front' }] };
+      { id:'front-pin',kind:'registration',at:[3,4],frame:'front' }],
+    sceneBindings:[{ id:'panel',scene:scenePath,object:'face',frame:'front' }],
+    destinations:[{ id:'scratches',kind:'surface-channel',binding:'panel',chart:'front',channel:'wear' }] };
+  fs.writeFileSync(scenePath,JSON.stringify({ id:'panel',style:'slate',solids:[
+    { id:'face',kind:'box',at:[0,0,0],half:[1,1,.25],res:.1,mat:'stone',surfaceState:{ charts:{ front:{
+      origin:[-1,-1,.25],u:[2,0,0],v:[0,2,0],
+      stamps:[{ channel:'wear',value:.625,brush:{ kind:'rect',min:[0,0],max:[1,1] } }]
+    } } } }
+  ] }));
   fs.writeFileSync(input,JSON.stringify(versioned));
   const args = ['cli/ink-studio.js','pixel-art','canvas',input,'--out',file];
-  execFileSync(process.execPath,args,{ cwd:root });
+  execFileSync(process.execPath,[...args,'--scene',scenePath,'--destination','scratches'],{ cwd:root });
   await withChrome(directory,{ hardware:true },async browser => {
     await load(browser,file,380,850);
     assert.equal(await browser.evaluate('document.documentElement.scrollWidth'),380);
@@ -158,6 +187,21 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.deepEqual(await raster(browser,preview,1,2),[172,66,29,255]);
     assert.deepEqual(await raster(browser,preview,0,0),[0,0,0,0]);
     assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=front-pin]'))"),true);
+    await click(browser,'#eyedropper');
+    const at = place(await screen(browser,main),1,2);
+    const sample = async (mode,expected) => {
+      await evaluate(browser,mode => {
+        const input = document.querySelector('#sample-mode');
+        input.value = mode;
+        input.dispatchEvent(new Event('change'));
+      },mode);
+      await browser.send('Input.dispatchMouseEvent',{ type:'mousePressed',...at,button:'left',buttons:1,clickCount:1 });
+      await browser.send('Input.dispatchMouseEvent',{ type:'mouseReleased',...at,button:'left',clickCount:1 });
+      assert.equal(await browser.evaluate("document.querySelector('#sample-value').value"),expected);
+    };
+    await sample('composite','1, 2 · warm · #ac421d');
+    await sample('layer','1, 2 · paint · cool · #216286');
+    await sample('source','1, 2 · face/front/wear · 0.625');
     await browser.evaluate(`document.querySelector('#frames').selectedIndex = 1;
       document.querySelector('#frames').dispatchEvent(new Event('change'));`);
     await until(browser,"document.querySelector('.ink-grid-main').getContext('2d').getImageData(1,2,1,1).data[0] === 33");
@@ -165,6 +209,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.equal((await screen(browser,preview)).w,8);
     assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=front-pin]'))"),false);
     assert.equal(await browser.evaluate("Boolean(document.querySelector('[data-guide=tile]'))"),true);
+    assert.equal(await browser.evaluate("document.querySelector('#sample-mode').options[2].disabled"),true);
     execFileSync(process.execPath,[...args,'--frame','side'],{ cwd:root });
     await browser.send('Page.navigate',{ url:'about:blank' });
     await load(browser,file);

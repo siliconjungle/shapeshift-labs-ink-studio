@@ -14,23 +14,91 @@ h1 { margin:0; font:400 clamp(32px,5vw,52px)/1 Georgia,serif; }
 select { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 8px; }
 select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 #canvas { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+.sampling { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:12px; }
+.sample-controls, .sample-readout { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.sample-readout { min-height:20px; flex-wrap:nowrap; }
+#sample-layer-control[hidden] { display:inline-block; visibility:hidden; }
+#sample-layer { max-width:min(200px,65vw); }
+.sampling button { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 9px; cursor:pointer; }
+.sampling button[aria-pressed="true"] { background:#b3d6bb; color:#17221e; }
+.sampling button:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
+.sampling output { color:#b8c8c4; font:13px ui-monospace,monospace; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+#sample-swatch { flex:0 0 16px; height:16px; border-radius:3px; border:1px solid #98aaa7; background:var(--picked-color); }
 /*PIXEL_GRID_CSS*/
 </style>
 </head>
 <body>
 <main>
   <header><h1>Pixel canvas</h1><label id="frame-control" hidden>Frame <select id="frames"></select></label></header>
+  <div class="sampling" aria-label="Eyedropper controls">
+    <div class="sample-controls">
+      <button type="button" id="eyedropper" aria-pressed="false">Eyedropper</button>
+      <label>Sample <select id="sample-mode">
+        <option value="composite">Visible composite</option>
+        <option value="layer">Active layer</option>
+        <option value="source" disabled>Source material channel</option>
+      </select></label>
+      <label id="sample-layer-control" hidden>Layer <select id="sample-layer"></select></label>
+    </div>
+    <div class="sample-readout"><span id="sample-swatch" aria-hidden="true" hidden></span><output id="sample-value"></output></div>
+  </div>
   <div id="canvas"></div>
   <p id="error" role="status" hidden></p>
 </main>
 <script type="module">
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
-const frames = /*PIXEL_GRID_DATA*/;
+const { frames,palette,material } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
+const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
+const layer = document.querySelector('#sample-layer'), swatch = document.querySelector('#sample-swatch');
+const result = document.querySelector('#sample-value');
 const scratch = document.createElement('canvas'), context = scratch.getContext('2d',{ willReadFrequently:true });
-let request = 0;
+const values = material && new DataView(Uint8Array.from(atob(material.values),byte=>byte.charCodeAt(0)).buffer);
+const hex = components => '#' + components.map(value => Math.round(value*255).toString(16).padStart(2,'0')).join('');
+let request = 0, active, sampling = false;
+
+function showSample(text = '',color) {
+  result.value = text;
+  result.title = text;
+  swatch.hidden = !color;
+  swatch.style.setProperty('--picked-color',color ?? '');
+}
+
+function updateSampling() {
+  document.querySelector('#sample-layer-control').hidden = mode.value !== 'layer';
+  showSample();
+}
+
+eyedropper.addEventListener('click',() => {
+  sampling = !sampling;
+  eyedropper.setAttribute('aria-pressed',sampling);
+  showSample(sampling ? 'Click a pixel to sample it' : '');
+});
+mode.addEventListener('change',updateSampling);
+layer.addEventListener('change',updateSampling);
+view.canvas.addEventListener('pointerdown',event => {
+  if (!active || !sampling || event.button !== 0) return;
+  const at = view.pixelAt(event.clientX,event.clientY,{ snap:false });
+  if (!at) return;
+  const p = at[1]*view.canvas.width+at[0], position = at.join(', ');
+  if (mode.value === 'source') {
+    const name = material.object + '/' + material.chart + '/' + material.channel;
+    if (material.type === 'number') {
+      showSample(position+' · '+name+' · '+values.getFloat64(p*8,true)+(material.units ? ' '+material.units : ''));
+    } else {
+      const offset = p*32, coverage = values.getFloat64(offset+24,true);
+      const color = coverage ? hex([0,8,16].map(i=>values.getFloat64(offset+i,true))) : null;
+      showSample(position+' · '+name+' · '+(color ? color+' · '+Math.round(coverage*100)+'% coverage' : 'Transparent'),color);
+    }
+    return;
+  }
+  const entry = mode.value === 'layer' ? active.layers[layer.selectedIndex] : null;
+  const ink = palette[(entry?.slots ?? active.composite).charCodeAt(p)];
+  showSample(position+' · '+(entry ? entry.id+' · ' : '')+(ink ? ink.id+' · '+ink.color : 'Transparent'),ink?.color);
+});
+
 async function draw() {
   const serial = ++request, frame = frames[select.selectedIndex];
   const image = new Image();
@@ -44,6 +112,14 @@ async function draw() {
     view.setFrame({ width:scratch.width, height:scratch.height,
       rgba:context.getImageData(0,0,scratch.width,scratch.height).data });
     view.setGuides(frame.guides);
+    active = { composite:atob(frame.composite), layers:frame.layers.map(row=>({ ...row,slots:atob(row.slots) })) };
+    const selected = layer.value;
+    layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));
+    if (active.layers.some(({ id })=>id === selected)) layer.value = selected;
+    const hasMaterial = material && (material.frame === undefined || material.frame === frame.id);
+    mode.options[2].disabled = !hasMaterial;
+    if (!hasMaterial && mode.value === 'source') mode.value = 'composite';
+    updateSampling();
     status.hidden = true;
   } catch (error) {
     if (serial !== request) return;

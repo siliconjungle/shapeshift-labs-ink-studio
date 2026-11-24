@@ -153,6 +153,26 @@ function restChart(solid, chart) {
   return target;
 }
 
+function channelSource(route, context) {
+  const { destination,binding } = route;
+  if (destination.kind !== 'surface-channel')
+    throw new TypeError('Choose a surface-channel destination to sample its material source');
+  const source = observe(route,context);
+  checkRevision(binding,source);
+  const { solid } = boundSolid(binding,source.editor);
+  const { chart,channel } = destination;
+  const surface = require('../index.js').load().KIT.procedural.surfaceState;
+  const definitions = surface.channels();
+  if (!Object.hasOwn(definitions,channel))
+    throw new RangeError('Unknown source material channel ' + channel);
+  const definition = definitions[channel];
+  const sampler = surface.restSampler(restChart(solid,chart));
+  return { destination:destination.id, binding:binding.id, frame:binding.frame,
+    scene:binding.scene,object:solid.id, ...(binding.part !== undefined && { part:binding.part }),
+    chart,channel, ...definition,sourceRevision:source.sourceRevision,
+    sample:uv => sampler.sample(uv)[channel] };
+}
+
 function solidEdit(edit, destination, binding, editor) {
   const { key, solid } = boundSolid(binding,editor);
   const operation = edit.operation;
@@ -232,4 +252,4 @@ function targets(route, context, limit) {
   };
 }
 
-module.exports = { validate, resolve, apply, targets };
+module.exports = { validate, resolve, apply, targets, channelSource };
