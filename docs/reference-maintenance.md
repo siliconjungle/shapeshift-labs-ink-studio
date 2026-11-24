@@ -1,8 +1,8 @@
 # Maintain the public reference
 
 Use [the public reference](reference/index.md) to find commands, toolkit
-members, graph operations, and guides. From a checkout, use the same index
-through the CLI.
+members, graph operations, and guides. The CLI searches the index and the
+guide text, with links to the matching sections.
 
 ```sh
 node cli/ink-studio.js catalog coverage filter --all --full
@@ -37,7 +37,8 @@ The check fails when generated files are missing, stale, or unexpectedly
 left over, a local documentation link breaks, a registered command lacks
 usage, or a stock graph operation lacks an example. The subcommand checks cover
 the graph, patch, pixel-art, music, story, scene, and simulation dispatchers.
-The graph tests run the examples against the operation registry.
+The graph tests run the examples against the operation registry. Packaging
+also runs the reference check before building the archive.
 
 The generator indexes guide headings and ties exported signatures to the
 current JS. Review prose and behavioral examples when changing semantics,

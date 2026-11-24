@@ -50,6 +50,9 @@ test('the command line can find a guide, a graph node and a qualified function',
   assert(cli(['catalog', 'dither']).entries.some(entry => entry.id === 'look.viewDither'));
   assert(cli(['catalog', 'coverage', 'filter', '--all']).entries.some(entry =>
     entry.docs.some(file => file.startsWith('docs/texel-coverage.md'))));
+  const guide = cli(['catalog', '--all', 'tightly packed top-down rgba8']).entries.find(entry =>
+    entry.id === 'docs/patch-tooling.md');
+  assert(guide?.docs[0].startsWith('docs/patch-tooling.md#'));
   const [node] = cli(['catalog', 'raster.resize', '--all']).entries;
   assert.equal(node.id, 'raster.resize');
   assert.equal(node.kind, 'graph');

@@ -3,7 +3,7 @@
 # Ink Studio public reference
 
 Search this reference with `ink-studio catalog <words> --all`. Add `--full` for details or `--json` for structured results.
-The keyword search includes the curated features, CLI usages, public API members, graph operations, and guide headings.
+The keyword search includes the curated features, CLI usages, public API members, graph operations, and the full text of the guides.
 
 - [Command-line reference](cli.md)
 - [Guide index](guides.md)

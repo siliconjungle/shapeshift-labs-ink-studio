@@ -1,7 +1,22 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { markdownSections } = require('../scripts/reference-guides.js');
 
-function search(reference, terms) {
+function matchingGuide(entry, words, read) {
+  const sections = markdownSections(read(entry.id));
+  for (const section of sections) {
+    const paragraphs = [section.title, ...section.text.trim().split(/\n\s*\n/)];
+    if (!words.every(word => paragraphs.some(paragraph => paragraph.toLowerCase().includes(word)))) continue;
+    const [summary] = paragraphs
+      .map(text => ({ text, matches: words.filter(word => text.toLowerCase().includes(word)).length }))
+      .sort((a, b) => b.matches - a.matches)
+      .map(({ text }) => text.replace(/\s+/g, ' ').slice(0, 300));
+    const link = entry.id + (section === sections[0] ? '' : '#' + section.anchor);
+    return { ...entry, summary, docs: [link], match: section.title };
+  }
+}
+
+function search(reference, terms, readGuide) {
   const words = terms.flatMap(term => term.toLowerCase().split(/\s+/)).filter(Boolean);
   const query = words.join(' ');
   const ranked = [];
@@ -11,7 +26,13 @@ function search(reference, terms) {
     const primary = [id, title, entry.kind].join(' ');
     const text = [primary, entry.summary, entry.use, entry.parameters, entry.source, entry.keywords,
       ...(entry.flags ?? []).map(flag => '--' + flag), ...entry.docs].join(' ').toLowerCase();
-    if (!words.every(word => text.includes(word))) continue;
+    if (!words.every(word => text.includes(word))) {
+      if (entry.kind === 'guide' && readGuide) {
+        const matched = matchingGuide(entry, words, readGuide);
+        if (matched) ranked.push({ entry: matched, score: 3 });
+      }
+      continue;
+    }
     const score = id === query || title === query ? 0 : words.every(word => primary.includes(word)) ? 1 : 2;
     ranked.push({ entry, score });
   }
@@ -19,10 +40,11 @@ function search(reference, terms) {
 }
 
 function print(terms, options) {
-  const file = path.join(__dirname, '../docs/reference/index.json');
+  const root = path.join(__dirname, '..');
+  const file = path.join(root, 'docs/reference/index.json');
   if (!fs.existsSync(file)) throw new Error('Public reference is missing. Run npm run docs:build from the Ink Studio checkout.');
   const reference = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const entries = search(reference, terms);
+  const entries = search(reference, terms, guide => fs.readFileSync(path.join(root, guide), 'utf8'));
   if (options.json) {
     console.log(JSON.stringify({ ...reference, entries }, null, 2));
     return;
