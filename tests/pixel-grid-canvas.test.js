@@ -1120,6 +1120,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.match(sourceText,/time 0\.25 s/);
     assert.match(sourceText,/Rest position/);
     assert.match(sourceText,/Geometric normal/);
+    assert.match(sourceText,/Splat contributors.*Frontmost.*visible coverage/);
 
     const motionFile = path.join(directory,'motion.html');
     const sceneArt = { format:'ink-studio/pixel-art',version:2,width:8,height:6,pixelAspect:[1,1],

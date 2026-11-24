@@ -7,7 +7,8 @@ const ArtPasses = (() => {
   const opaque = Object.freeze(['depth','surfaceCoverage','objectId','materialId','geometricNormal','shadingNormal',
     'position','objectPosition','surfaceUV','surfaceUVValid','surfaceKind','surfaceMotion','surfaceMotionValid']);
   const geometrySource = ['sourceSurface','sourceTriangle','sourceCoordinates'];
-  const splatSource = ['sourceSplat','sourceSplatAlpha','sourceSplatDepth','sourceSplatWeight','sourceSplatOmitted'];
+  const splatSource = ['sourceSplat','sourceSplatAlpha','sourceSplatDepth','sourceSplatWeight','sourceSplatOmitted',
+    'sourceSplatFrontRank','sourceSplatFront','sourceSplatFrontMetrics'];
   const sourceBindings = Object.freeze([...geometrySource,...splatSource]);
   const proxies=Object.freeze(['proxyDepth','proxyRejected','proxyRemovedCoverage']);
   const surfaceKinds=Object.freeze([null,'mesh','sdf','splat','sprite','emitter']);

@@ -75,15 +75,27 @@ export function mountPixelInspector(root,view,read) {
       geometry.barycentric && 'barycentric '+showValue(geometry.barycentric)].filter(Boolean).join(' · ') });
     if (geometry?.kind === 'sdf') rows.push({ text:['SDF source',geometry.entity ?? geometry.object,
       'local '+showValue(geometry.local)].filter(Boolean).join(' · ') });
-    for (const hit of scene.sources?.splats ?? []) rows.push({ text:['Splat source',hit.id ?? 'Unidentified splat',
-      percent(hit.visibleCoverage)+' visible coverage'].join(' · ') });
-    if (scene.sources?.truncated) rows.push({ text:'Additional splat contributions omitted' });
     if (scene.frontStrand) rows.push({ text:['Front strand',scene.frontStrand.strand?.name ?? scene.frontStrand.id,
       'depth '+showValue(scene.frontStrand.depth),'coverage '+percent(scene.frontStrand.coverage)].join(' · ') });
     for (const hit of scene.fragments?.hits ?? []) rows.push({ text:[hit.kind,hit.object,hit.part,hit.material,
       hit.splatId && 'splat '+hit.splatId,'depth '+showValue(hit.depth),percent(hit.visibleCoverage)+' visible coverage'].filter(Boolean).join(' · ') });
     if (scene.fragments?.truncated) rows.push({ text:'Additional raster fragments omitted' });
     return rows.length ? rows : [{ text:'No captured surface or strand at this pixel' }];
+  }
+
+  function splatRows(sources) {
+    if (!sources) return [];
+    const { frontSplat,splats,truncated,omittedCoverage } = sources;
+    const percentage = value => !Number.isFinite(value) ? '—' :
+      value > 0 && value < .0001 ? '<0.01%' : showValue(Math.round(value*10_000)/100)+'%';
+    const rows = splats.map(hit=>({ text:[
+      hit === frontSplat && 'Frontmost',hit === splats[0] && 'Strongest contribution',
+      hit.id ?? 'Unidentified splat',hit.object,hit.part,'depth '+showValue(hit.depth),
+      percentage(hit.alpha)+' alpha',percentage(hit.visibleCoverage)+' visible coverage'
+    ].filter(Boolean).join(' · ') }));
+    if (truncated) rows.push({ text:omittedCoverage === null ? 'Additional splat contributions omitted' :
+      percentage(omittedCoverage)+' additional splat coverage omitted' });
+    return rows;
   }
 
   function refresh() {
@@ -125,6 +137,7 @@ export function mountPixelInspector(root,view,read) {
     group('Palette',colors);
     group('Material channels',materialRows(materials,scene));
     group('Scene hits',sceneRows(scene));
+    group('Splat contributors',splatRows(scene?.sources));
     group('Scene bindings',(scene?.bindings ?? []).map(row=>({ text:[row.id,row.status.replaceAll('-',' '),
       row.sourceAt && 'pixel '+showValue(row.sourceAt),
       ...(row.hits ?? []).map(hit=>hit.id ?? hit.entity ?? hit.object)].filter(Boolean).join(' · ') })));

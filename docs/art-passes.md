@@ -520,6 +520,14 @@ contributions. Each request includes its related planes and lookup table.
 The `passes` command writes those planes losslessly under `sourceBindings`
 in `passes.json`. [Resolve a pixel to its scene source](pixel-art-authoring.md#resolve-a-pixel-to-its-scene-source).
 
+The `sourceSplatFrontRank` plane uses one-based ranks into the four
+coverage-ranked lanes. Zero means no surviving frontmost splat. Rank five
+uses the supplemental `sourceSplatFront` table slot and the three
+`sourceSplatFrontMetrics` values in alpha, depth, visible coverage order.
+The supplemental planes are written when at least one pixel needs them.
+Older captures can supply an observed frontmost hit when their contributor
+list is complete.
+
 ## Shared opaque surfaces
 
 Request `['opaque-surface']` in the headless renderer to inspect the nearest

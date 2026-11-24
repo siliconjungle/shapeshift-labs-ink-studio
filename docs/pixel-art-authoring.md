@@ -1343,11 +1343,19 @@ The offline canvas shows the bindings for the current frame under the cursor.
   The report also retains the hit in rest space. Use `--sdf-assist on`
   when the scene should render the field directly for inspection.
 - Splat hits give the stable source ID, depth, fragment alpha, and the
-  coverage that survived compositing at the pixel. The four strongest
-  splat fragments are retained per pixel. The report includes omitted
-  coverage when contributions exceed that budget. An unidentified splat
+  coverage that survived compositing at the pixel. The inspector marks
+  the frontmost surviving splat by raster depth and the strongest by
+  visible coverage. Four fragments are kept by coverage, with an extra
+  slot when the frontmost splat falls outside those four. The report gives
+  the remaining omitted coverage. An unidentified splat
   has no stable edit ID. A source marked `editable` can supply its ID to a
   `splat-attributes` destination.
+
+At a translucent crossing, `scene.sources.frontSplat` gives the nearest
+surviving splat and `scene.sources.splats` gives the retained contributors.
+A nearer splat can have the smaller visible weight. An opaque cover removes
+the splats it hides. A binding reports the frontmost splat when it belongs
+to the selected scene object or part.
 
 The report distinguishes a miss, an unmatched scope, unavailable data, and
 a pixel where omitted contributions may contain a match. Earlier source

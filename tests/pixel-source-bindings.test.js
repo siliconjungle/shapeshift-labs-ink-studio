@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const ink = require('..');
 const SourceCapture = require('../cli/pixel-source-passes.js');
+const Bindings = require('../src/pixel-source-bindings.js');
 
 const cli = (...args)=>execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
   { cwd:path.resolve(__dirname,'..'),encoding:'utf8' });
@@ -93,6 +94,9 @@ test('splat bindings use scoped stable contributor IDs and report alpha, depth a
   assert.equal(hit.editable,true);
   const front = report.sources.splats.find(row=>row.id === 'front-mist');
   assert.ok(front.depth < hit.depth);
+  assert.equal(report.sources.frontSplat,front);
+  assert.equal(front.frontmost,true);
+  assert.equal(result.frontSplat,null);
   assert.ok(front.visibleCoverage > 0);
   close(hit.visibleCoverage,hit.alpha*(1-front.alpha));
   const observed = report.fragments.hits.find(row=>row.identity === hit.id);
@@ -116,4 +120,90 @@ test('bounded contribution storage accounts for omitted splats and opaque occlud
   close(result.sourceSplatOmitted[0],alpha*(.8**4+.8**5));
   assert.deepEqual([...result.sourceSplat.slice(4)],[0,0,0,0]);
   assert.equal(result.sourceSplatOmitted[1],0);
+});
+
+test('the frontmost splat survives outside the strongest four and is removed by a fully opaque cover',()=>{
+  const B = ink.load().makeBuilder(3,[0x333333,0xeeeeee]);
+  const capture = SourceCapture.splatBuffer(3), alpha = .2, weak = .008;
+  for (let i=0; i<6; i++) B.iso(i,0,0,1,B.P[1],3,{ splatId:'source-'+i });
+  for (let p=0; p<3; p++) {
+    for (let i=0; i<5; i++) capture.add(p,i,alpha,6-i);
+    capture.add(p,5,weak,1);
+    capture.add(p,-1,.25,.5);
+  }
+  capture.add(1,-1,1,.25);
+  capture.add(2,4,.9,3);
+  const passes = capture.finish(B.finish(),array=>array);
+  const read = x=>Bindings.sample({ w:3,h:1,passes },[x,0]);
+  for (const [p,attenuation] of [[0,.75],[2,.075]]) {
+    const visible = read(p);
+    assert.deepEqual(visible.splats.slice(0,4).map(hit=>hit.id),
+      p === 0 ? ['source-4','source-3','source-2','source-1'] : ['source-4','source-4','source-3','source-2']);
+    assert.equal(visible.frontSplat.id,'source-5');
+    assert.equal(visible.frontSplat.depth,1);
+    close(visible.frontSplat.alpha,weak);
+    close(visible.frontSplat.visibleCoverage,weak*attenuation);
+    assert.equal(visible.splats.at(-1),visible.frontSplat);
+  }
+  close(read(0).omittedCoverage,alpha*.8**4*(1-weak)*.75);
+  assert.equal(read(1).frontSplat,null);
+  assert.deepEqual(read(1).splats,[]);
+  assert.equal(read(1).omittedCoverage,0);
+
+  const old = { ...passes,sourceSplatFrontRank:undefined,sourceSplatFront:undefined,sourceSplatFrontMetrics:undefined };
+  assert.equal(Bindings.sample({ w:3,h:1,passes:old },[0,0]).frontSplat,null);
+});
+
+test('transparent sheets exchange the frontmost contributor across their crossing',()=>{
+  const kit = ink.load(), shot = require('../examples/selective-transparency.js')(kit);
+  const world = shot.build(shot.seed);
+  world.splatIds = ['left-amber','left-cyan','right-amber','right-cyan','right-violet'];
+  const w = 144,h = 84, settings = { w,h,px:1,raw:true,splatOrder:'selective',selectiveTransparency:{ layers:6 } };
+  const frame = ink.render(world,{ ...settings,passes:['sourceSplat'] });
+  assert.deepEqual(frame.rgb,ink.render(world,settings).rgb);
+  const fronts = new Map();
+  for (let y=15; y<54; y++) for (let x=20; x<60; x++) {
+    const hit = Bindings.sample(frame,[x,y]);
+    const amber = hit.splats.find(row=>row.id === 'left-amber');
+    const cyan = hit.splats.find(row=>row.id === 'left-cyan');
+    if (!amber || !cyan || Math.min(amber.visibleCoverage,cyan.visibleCoverage) < .01) continue;
+    if (amber.depth === cyan.depth) continue;
+    const near = amber.depth < cyan.depth ? amber : cyan;
+    assert.equal(hit.frontSplat,near);
+    if (!fronts.has(near.id)) fronts.set(near.id,[x,y]);
+  }
+  assert.equal(fronts.size,2);
+  assert.notEqual(fronts.get('left-amber')[0],fronts.get('left-cyan')[0]);
+  for (const at of fronts.values()) {
+    const { hits } = ink.render(world,{ ...settings,inspectFragmentPixel:at }).pixelFragments;
+    const sample = Bindings.sample(frame,at);
+    for (const id of ['left-amber','left-cyan']) {
+      const retained = sample.splats.find(hit=>hit.id === id), traced = hits.find(hit=>hit.identity === id);
+      close(retained.visibleCoverage,traced.visibleCoverage);
+    }
+  }
+});
+
+test('a portable capture keeps the nearest weak splat in addition to the ranked contributors',t=>{
+  const file = workspace(t), scene = file('weak-edge.js'), view = file('view.json');
+  fs.writeFileSync(scene,`module.exports = ({makeBuilder}) => ({ id:'weak-edge',name:'Weak edge',build() {
+    const B = makeBuilder(15,[0x222234,0xeea729,0x469c89]);
+    for (let i=0; i<5; i++)
+      B.iso(0,0,i*.1,.7,B.P[1],.22,{nd:true,splatId:'layer-'+i});
+    B.iso(0,0,.7,.7,B.P[2],.025,{nd:true,splatId:'front-edge'});
+    B.describeSplats(0,6,{object:'panel'});
+    return B.finish({cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,ortho:true},radius:4,dither:0});
+  } });`);
+  const renderFrame = capture(scene,view,64,48);
+  const document = design(scene,'panel');
+  fs.writeFileSync(file('art.json'),JSON.stringify(document));
+  const report = JSON.parse(cli('inspect',file('art.json'),'--source-view',view,'--at','32,24','--binding','study')).scene;
+  assert.equal(report.sources.frontSplat.id,'front-edge');
+  assert.equal(report.sources.splats.length,5);
+  assert.equal(report.sources.splats.at(-1).id,'front-edge');
+  assert.equal(report.bindings[0].frontSplat.id,'front-edge');
+  assert.ok(report.sources.omittedCoverage > 0);
+  assert.ok(report.sources.frontSplat.visibleCoverage < report.sources.splats[3].visibleCoverage);
+  const sdk = ink.createPixelEditor(document).inspect([32,24],{ binding:'study',renderFrame }).scene;
+  assert.deepEqual(sdk.sources,report.sources);
 });

@@ -10,6 +10,7 @@ const PixelViewSource = (() => {
     foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
     paletteOwner:1, sourceSurface:1, sourceTriangle:1, sourceCoordinates:3,
     sourceSplat:4, sourceSplatAlpha:4, sourceSplatDepth:4, sourceSplatWeight:4, sourceSplatOmitted:1,
+    sourceSplatFrontRank:1, sourceSplatFront:1, sourceSplatFrontMetrics:3,
     strandId:1, strandDepth:1, strandCoverage:1, strandU:1, strandTangent:3
   };
   const tables = ['objects','parts','materials','surfaceKinds'];
@@ -19,8 +20,8 @@ const PixelViewSource = (() => {
     ['splatSources','sourceSplat','sourceSplatAlpha','sourceSplatDepth','sourceSplatWeight','sourceSplatOmitted']
   ];
   const types = { Uint8Array, Uint8ClampedArray, Uint32Array, Float32Array };
-  const ids = new Set(['objectId','partId','materialId','splatId','paletteOwner','strandId','sourceSurface','sourceTriangle','sourceSplat']);
-  const masks = new Set(['surfaceKind','surfaceUVValid','inkMask']);
+  const ids = new Set(['objectId','partId','materialId','splatId','paletteOwner','strandId','sourceSurface','sourceTriangle','sourceSplat','sourceSplatFront']);
+  const masks = new Set(['surfaceKind','surfaceUVValid','inkMask','sourceSplatFrontRank']);
   const littleEndian = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
   const finite = Number.isFinite;
   const name = value => typeof value === 'string' && !!value.trim();
@@ -98,6 +99,10 @@ const PixelViewSource = (() => {
       if (captured && (result[table]?.[0] !== null || names.some(key=>!result[key])))
         throw new TypeError('Incomplete pixel source view binding planes for '+table);
     }
+    if (result.sourceSplatFrontRank && !result.sourceSplat ||
+        (result.sourceSplatFront || result.sourceSplatFrontMetrics) &&
+          !(result.sourceSplatFrontRank && result.sourceSplatFront && result.sourceSplatFrontMetrics))
+      throw new TypeError('Incomplete pixel source view frontmost splat planes');
     const colorBytes = ['Uint8Array','Uint8ClampedArray'];
     return { w,h,scene,time,sourceView,passes:result,
       ...(rgb !== undefined && { rgb:plane(rgb,3,colorBytes,'rgb') }),
