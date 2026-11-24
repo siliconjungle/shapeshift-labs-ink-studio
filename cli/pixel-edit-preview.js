@@ -42,11 +42,12 @@ function sourceChanges(scene, before, after) {
   return result;
 }
 
-function sourceTarget({ destination,binding }, patch) {
+function sourceTarget({ destination,binding,layer }, patch) {
   if (!binding) return;
   return {
     id:patch.id, destination:destination.id, kind:destination.kind,
     scene:binding.scene, binding:binding.id, object:binding.object,
+    ...(layer?.kind === 'surface' && { layer:layer.id, ...(patch.operation?.pixel !== undefined && { at:patch.operation.pixel }) }),
     ...(binding.part !== undefined && { part:binding.part }),
     ...(destination.chart !== undefined && { chart:destination.chart, channel:destination.channel }),
     ...(destination.kind === 'shot-correction' && Array.isArray(patch.edits) && {

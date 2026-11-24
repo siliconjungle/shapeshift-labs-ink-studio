@@ -51,10 +51,11 @@ function runtimeSubcommands(cliDirectory, commands) {
   const withoutFlags = actions => Object.fromEntries(actions.map(action => [action, null]));
   if (commands.has('pixel-art')) {
     const file = 'pixel-art.js';
-    const { actions, sessionActions, paletteActions } = require(path.join(cliDirectory, file));
-    add('pixel-art', file, withoutFlags([...actions, 'session', 'palette']));
+    const { actions, sessionActions, paletteActions, stackActions } = require(path.join(cliDirectory, file));
+    add('pixel-art', file, withoutFlags([...actions, 'session', 'palette', 'stack']));
     add('pixel-art session', file, withoutFlags(sessionActions));
     add('pixel-art palette', file, withoutFlags(paletteActions));
+    add('pixel-art stack', file, withoutFlags(stackActions));
   }
   for (const [group, file, start, end] of [
     ['music', 'music-composer.js', 'function musicCommand('],

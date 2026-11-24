@@ -778,6 +778,73 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     await click(browser,'#undo');
     assert.deepEqual(await download('#export'),originalFrames);
 
+    const layeredFile = path.join(directory,'workshop-layers.json');
+    const slots = (...pixels)=>Array.from({ length:12 },(_,i)=>pixels.find(([p])=>p === i)?.[1] ?? null);
+    const layers = [{ id:'back' },{ id:'group',kind:'group',opacity:.5 },
+      { id:'mask',kind:'mask',parent:'group' },{ id:'detail',parent:'group',clip:'mask' },
+      { id:'ref',kind:'reference' }];
+    fs.writeFileSync(layeredFile,JSON.stringify({
+      format:'ink-studio/pixel-layer-deck',version:1,width:4,height:3,swatchIds:['blue','red','green'],
+      palette:['#0000ff','#ff0000','#00ff00'],layers,frames:[{ id:'wide',duration:.25,cels:{
+        back:{ slots:slots([5,0],[6,0],[7,0]) }, mask:{ slots:slots([5,1]) },
+        detail:{ slots:slots([5,1],[6,1]) }, ref:{ slots:slots([7,2]) }
+      } }]
+    }));
+    await browser.send('DOM.setFileInputFiles',{ nodeId:imported.nodeId,files:[layeredFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Opened workshop-layers.json'");
+    await evaluate(browser,()=>document.querySelector('#layer-active').closest('details').open = true);
+    assert.deepEqual(await raster(browser,preview,1,1),[128,0,127,255]);
+    assert.deepEqual(await raster(browser,preview,2,1),[0,0,255,255]);
+    assert.deepEqual(await raster(browser,preview,3,1),[0,255,0,255]);
+    await click(browser,'#layer-references');
+    assert.deepEqual(await raster(browser,preview,3,1),[0,0,255,255]);
+    await change('layer-active','mask');
+    await change('layer-view','active');
+    assert.deepEqual(await raster(browser,preview,1,1),[255,0,0,255]);
+    await change('layer-view','composite');
+    await change('layer-active','group');
+    await click(browser,'#layer-lock');
+    await change('layer-active','detail');
+    await click(browser,'[data-tool="pencil"]');
+    await change('pencil-color-mode','indexed');
+    await click(browser,'#palette button:nth-child(3)');
+    const layerCanvas = await screen(browser,main), lockedPaint = place(layerCanvas,1,1);
+    await press(lockedPaint);
+    await release(lockedPaint);
+    assert.equal(await browser.evaluate("document.querySelector('#status').textContent"),'Choose an unlocked paint, mask, or surface layer');
+    await change('layer-active','group');
+    await click(browser,'#layer-lock');
+    await change('layer-active','detail');
+    const outsideMask = place(layerCanvas,2,1);
+    await press(outsideMask);
+    await release(outsideMask);
+    assert.equal(await browser.evaluate("document.querySelector('#status').textContent"),'Clipped pixel at 2, 1');
+    await press(lockedPaint);
+    await release(lockedPaint);
+    const beforeMerge = await download('#export');
+    assert.deepEqual(beforeMerge.frames[0].cels.detail.slots,slots([5,2],[6,1]));
+    assert.deepEqual(await raster(browser,preview,1,1),[0,128,127,255]);
+
+    await change('layer-active','group');
+    await click(browser,'#layer-merge');
+    const mergedDeck = await download('#export');
+    assert.deepEqual(mergedDeck.layers.map(row=>row.id),['back','group','ref']);
+    assert.equal(mergedDeck.layers[1].kind,'paint');
+    assert.deepEqual(await raster(browser,preview,1,1),[0,128,127,255]);
+    await change('png-color-mode','rgba');
+    const layerPNG = Buffer.from(await download('#export-png',false));
+    assert.deepEqual([...PNG.raster(layerPNG).data.slice(7*4,8*4)],[0,0,255,255]);
+    await click(browser,'#undo');
+    assert.deepEqual(await download('#export'),beforeMerge);
+
+    await change('layer-kind','paint');
+    await change('layer-id','extra');
+    await click(browser,'#layer-add');
+    assert.equal((await download('#export')).layers.at(-1).id,'extra');
+    await click(browser,'#layer-remove');
+    assert.deepEqual((await download('#export')).layers,beforeMerge.layers);
+
+
 
 
 

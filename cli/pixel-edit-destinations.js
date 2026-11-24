@@ -7,6 +7,7 @@ const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
+const LayerStack = require('../src/pixel-layer-stack.js');
 
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
 const fields = (value, keys) => record(value) && Object.keys(value).every(key => keys.includes(key));
@@ -39,15 +40,21 @@ function validate(destinations, bindings) {
 }
 
 function resolve(design, name = 'raster') {
-  const destination = (design.version === 2 && design.destinations?.find(target => target.id === name)) ||
+  const scoped = design.version === 2 && typeof name === 'string' && name.startsWith('layer:');
+  const layer = scoped && design.layers.find(row=>row.id === name.slice(6) && row.kind === 'surface');
+  const destination = (design.version === 2 && design.destinations?.find(target => target.id === (layer ? layer.destination : name))) ||
     (name === 'raster' && { id:name,kind:name }) ||
     (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
     (['palette','document:palette'].includes(name) && { id:'palette',kind:'palette' }) ||
     (['adjustments','document:adjustments'].includes(name) && { id:'adjustments',kind:'adjustments' }) ||
+    (['layers','document:layers'].includes(name) && { id:'layers',kind:'layers' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);
-  return { destination, binding };
+  const boundLayer = layer?.id ?? binding?.layer;
+  return { destination,binding,...(boundLayer !== undefined && design.version === 2 && {
+    layer:LayerStack.prepare(design.layers).rows.get(boundLayer)
+  }) };
 }
 
 function checkRevision(binding, { revision,sourceRevision }, expected) {
@@ -170,7 +177,7 @@ function restChart(solid, chart) {
 }
 
 function channelSource(route, context) {
-  const { destination,binding } = route;
+  const { destination,binding,layer } = route;
   if (destination.kind !== 'surface-channel')
     throw new TypeError('Choose a surface-channel destination to sample its material source');
   const source = observe(route,context);
@@ -185,7 +192,7 @@ function channelSource(route, context) {
   const sampler = surface.restSampler(restChart(solid,chart));
   return { destination:destination.id, binding:binding.id, frame:binding.frame,
     scene:binding.scene,object:solid.id, ...(binding.part !== undefined && { part:binding.part }),
-    chart,channel,...definition,sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
+    chart,channel,...(layer && { layer:layer.id }),...definition,sourceRevision:source.sourceRevision,...(binding.canvas && { canvas:binding.canvas }),
     sample:uv => sampler.sample(uv)[channel] };
 }
 
@@ -222,8 +229,28 @@ function solidEdit(edit, destination, binding, editor) {
   return editor.snapshot();
 }
 
+function surfacePixel(frame,operation,binding,layer) {
+  if (!fields(operation,['pixel','value','mode','strength','window']) || !Array.isArray(operation.pixel) ||
+      operation.pixel.length !== 2 || !Array.from(operation.pixel).every((n,i)=>
+        Number.isSafeInteger(n) && n >= 0 && n < [frame.width,frame.height][i]))
+    throw new TypeError('A bound surface pixel needs a native [x,y] and a channel value');
+  const { pixel,value,mode,strength,window } = operation;
+  const p = pixel[1]*frame.width+pixel[0], source = frame.layerSources?.get(layer.id);
+  if (frame.locks[p] || source?.clipping && !source.clipping[p])
+    throw conflict(frame.locks[p] ? 'protected-pixel' : 'clipped-pixel','Surface layer cannot paint this pixel',
+      { at:pixel,layer:layer.id });
+  const { size = [frame.width,frame.height],offset = [0,0],scale = [1,1] } = binding.canvas ?? {};
+  const point = end=>pixel.map((n,i)=>Math.max(0,Math.min(1,(offset[i]+(n+end)*scale[i])/size[i])));
+  const [x0,y0] = point(0), [x1,y1] = point(1);
+  if (x0 === x1 || y0 === y1) throw conflict('outside-bound-canvas','Pixel is outside the bound UV chart',{ at:pixel });
+  return { stamp:{ brush:{ kind:'rect',min:[x0,1-y1],max:[x1,1-y0] },value,
+    ...(mode !== undefined && { mode }),...(strength !== undefined && { strength }),...(window !== undefined && { window }) } };
+}
+
 function apply(frame, edit, route, context, readMarks) {
-  const { destination,binding } = route;
+  const { destination,binding,layer } = route;
+  if (layer?.effectiveLock || layer?.kind === 'reference' || layer?.kind === 'group')
+    throw conflict('locked-layer','Layer '+layer.id+' does not accept source edits',{ layer:layer.id });
   if (binding.frame !== undefined && binding.frame !== edit.frame)
     throw conflict('wrong-frame','Pixel edit destination ' + destination.id + ' is bound to frame ' + binding.frame,
       { binding:binding.id, expected:binding.frame, actual:edit.frame });
@@ -236,7 +263,9 @@ function apply(frame, edit, route, context, readMarks) {
   checkRevision(binding,source,edit.sourceRevision);
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
   if (destination.kind === 'splat-attributes') return splats(edit,binding,source.world,source.revision,context.onSplat);
-  return solidEdit(edit,destination,binding,source.editor);
+  const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
+    edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
+  return solidEdit(change,destination,binding,source.editor);
 }
 
 function targets(route, context, limit) {

@@ -99,6 +99,18 @@ merge a palette JSON, and export swatches, locks, and ramps. Each palette
 edit can be undone with the artwork.
 [Palette file and edit syntax](pixel-art-authoring.md#edit-palettes-and-ramps)
 
+Open **Edit layer stack** to add paint, mask, reference, group, or bound
+surface layers. Paint goes to the active layer. Use **Active layer** view
+to inspect a mask or cel and **Composite** to see how the stack blends.
+Set group membership, clipping, opacity, blend, visibility, and locks in
+the layer controls. **Merge down** or **Flatten group** applies across
+the animation and can be undone in one step.
+
+**Save JSON** keeps a layered deck that can be reopened or imported into
+a pixel document. **Save PNG frame** exports clean composited art.
+Use the CLI or SDK to edit the underlying chart of a bound surface layer.
+[Layer stack operations and deck exchange](pixel-art-authoring.md#edit-a-layer-stack)
+
 Open **Adjust pixels** to use curves, hue and saturation, gradients,
 replacement, dithering, or outlines. Choose the active selection, current
 frame, or an inclusive frame range. **Preview** shows the result in both

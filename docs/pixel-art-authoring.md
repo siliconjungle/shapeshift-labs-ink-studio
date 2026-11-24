@@ -409,6 +409,81 @@ reports the matching runs in preview and receipts. It honors clipping
 and protected pixels. Color locks guard definition changes and global
 remaps. Painting over a locked swatch locally remains available.
 
+### Edit a layer stack
+
+Version 2 layer definitions are listed from bottom to top. A definition
+with just an ID is a paint layer. All layer kinds can have a name,
+visibility, a lock, opacity in 0–1, a parent group, and a clipping source.
+Visible paint and surface cels can blend with `normal`, `multiply`,
+`screen`, `overlay`, or `add`.
+
+| Kind | Behavior |
+| --- | --- |
+| `paint` | Editable indexed cels. |
+| `mask` | Non-color cels that clip later siblings by alpha. |
+| `reference` | A read-only raster in working views. Set its cel explicitly or load a reference PNG in the Workshop. Clean artwork exports omit references. |
+| `group` | An isolated stack of children. The group applies its opacity and blend once to the combined result. |
+| `surface` | An editable local cel linked to a named surface-channel destination. Use `layer:<id>` to sample or edit its underlying chart. |
+
+`parent` refers to an earlier group. `clip` refers to an earlier sibling
+under the same parent. Clipping to a mask or group uses its alpha. A paint
+clipping source uses its covered pixels. A group lock also locks its
+descendants. Locks guard paint edits, palette remaps that affect the layer,
+source writes, deletion, and merge. Visibility and opacity remain editable
+properties. The legacy `protect` flag guards painted pixel locations.
+
+Send a revision-checked `layers` edit to create, position, or merge layers.
+The patch uses its own operation fields for the layer and frame scope.
+
+```json
+{
+  "id": "glaze-opacity",
+  "revision": "<document revision>",
+  "destination": "layers",
+  "operation": {
+    "type": "update",
+    "layer": "glaze",
+    "changes": { "opacity": 0.45, "blend": "multiply", "clip": "coat-mask" }
+  }
+}
+```
+
+| Operation | Fields |
+| --- | --- |
+| `add` | Complete `layer` definition and optional `before` layer ID. |
+| `update` | Layer ID and `changes`. Use `null` to clear an optional property. |
+| `reorder` | Complete `order` of layer IDs with parents and clip sources before their users. |
+| `set-cel` | `layer`, `frame`, and `cel` using native named slots and marks. Use this to set a reference's artwork. |
+| `remove` | `layer`. Removing a group also removes its descendants. |
+| `merge-down` | `layer`. Merge into the paint sibling below, retaining that sibling's ID and cel IDs. |
+| `flatten-group` | Group `layer`. Bake the children into a paint layer and keep the group's outer properties and ID. |
+| `flatten` | New `layer` ID. Bake the visible artwork into one paint layer across every frame. |
+
+Merges verify the rendered RGBA bytes of every frame. They reject locked,
+protected or bound content, and dependencies that would be broken.
+Use `flatten` to bake effects that depend on a broader backdrop.
+Preview, undo, and replay use the ordinary pixel document transaction.
+
+For a surface layer, set its `destination` to a documented
+`surface-channel` destination. A source edit with
+`destination: "layer:glaze"`, `frame: "front"`, and
+`operation: { "pixel": [12, 7], "value": 0.65 }` writes one native pixel's
+registered footprint to that chart. It accepts the same source revision
+and scene options as a UV stamp. Sample it with
+`pixel-art sample document.json --mode source --destination layer:glaze --at 12,7 --scene scene.json`.
+The layer's local cel supplies Workshop paint. Source edits work through
+the CLI or a Scene Editor attached to the SDK.
+
+```sh
+node cli/ink-studio.js pixel-art stack export design.json --out deck.json
+node cli/ink-studio.js pixel-art stack import deck.json --out edited.json
+```
+
+Layer decks preserve layer and frame identities, indexed pixels, alpha,
+knockouts, guides, and bindings. They rasterize each cel's drawing commands.
+Use the native document when you need to preserve authored commands.
+The SDK exposes `editor.layerDeck()` and `pixelDocumentFromLayerDeck(deck)`.
+
 ### Apply scoped adjustments
 
 Use the `adjustments` destination to change indexed paint on a version 2

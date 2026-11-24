@@ -424,6 +424,50 @@
         </details>
       </section>
       <section>
+        <h2>Layers</h2>
+        <details class="selection-group">
+          <summary>Edit layer stack</summary>
+          <div class="guide-controls">
+            <label>Active layer<select id="layer-active"></select></label>
+            <label>View<select id="layer-view"><option value="composite">Composite</option><option value="active">Active layer</option></select></label>
+            <label><span>Show references</span><input id="layer-references" type="checkbox" checked></label>
+            <div class="row">
+              <label>New ID <input id="layer-id" type="text"></label>
+              <label>Kind <select id="layer-kind">
+                <option value="paint">Paint</option><option value="mask">Mask</option><option value="reference">Reference</option>
+                <option value="group">Group</option><option value="surface">Bound surface</option>
+              </select></label>
+              <button id="layer-add">Add layer</button>
+            </div>
+            <label id="layer-destination-label" hidden>Surface destination<select id="layer-destination"></select></label>
+            <div class="guide-controls" id="layer-properties" hidden>
+              <label>Name<input id="layer-name" type="text"></label>
+              <label>Group<select id="layer-parent"></select></label>
+              <label>Clip to<select id="layer-clip"></select></label>
+              <output id="layer-bound-path" hidden></output>
+              <div class="canvas-size">
+                <label>Opacity<input id="layer-opacity" type="number" min="0" max="1" step=".01"></label>
+                <label>Blend<select id="layer-blend">
+                  <option value="normal">Normal</option><option value="multiply">Multiply</option>
+                  <option value="screen">Screen</option><option value="overlay">Overlay</option><option value="add">Add</option>
+                </select></label>
+              </div>
+              <div class="row">
+                <label><input id="layer-visible" type="checkbox"> Visible</label>
+                <label><input id="layer-lock" type="checkbox"> Locked</label>
+              </div>
+              <div class="row">
+                <button id="layer-lower">Move down</button><button id="layer-raise">Move up</button>
+                <button id="layer-merge">Merge down</button><button id="layer-remove">Remove layer</button>
+              </div>
+              <label id="layer-reference-label" class="file-button" hidden>Load reference PNG
+                <input id="layer-reference" type="file" accept=".png,image/png">
+              </label>
+            </div>
+          </div>
+        </details>
+      </section>
+      <section>
         <h2>Adjustments</h2>
         <details class="selection-group">
           <summary>Adjust pixels</summary>

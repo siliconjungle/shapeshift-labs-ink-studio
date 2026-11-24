@@ -12,6 +12,7 @@ const PixelSelections = require('../src/pixel-selections.js');
 const PixelTransforms = require('../src/pixel-selection-transforms.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelAdjustments = require('../src/pixel-adjustments.js');
+const LayerStack = require('../src/pixel-layer-stack.js');
 const PixelColors = require('../src/pixel-raster-colors.js');
 const PixelPalette = require('../src/pixel-palette.js');
 const PaletteExtract = require('../src/palette-extract.js');
@@ -99,14 +100,7 @@ function documentShape(design) {
   if (!Array.isArray(pixelAspect) || pixelAspect.length !== 2 ||
       !integer(pixelAspect[0],1,Number.MAX_SAFE_INTEGER) || !integer(pixelAspect[1],1,Number.MAX_SAFE_INTEGER))
     throw new RangeError('Pixel aspect needs two positive integers [width,height]');
-  const layerIds = new Set();
-  for (const layer of layers) {
-    if (!fields(layer,['id','label','clip','protect']) || !name(layer.id) || layerIds.has(layer.id) || !label(layer.label) ||
-        (layer.clip !== undefined && !layerIds.has(layer.clip)) ||
-        (layer.protect !== undefined && typeof layer.protect !== 'boolean'))
-      throw new TypeError('Pixel layer definitions need unique IDs and may clip to an earlier layer');
-    layerIds.add(layer.id);
-  }
+  const { rows:layerRows } = LayerStack.prepare(layers);
   if (!Array.isArray(frames) || !frames.length) throw new TypeError('Pixel documents need at least one frame');
   const frameIds = new Set(), celIds = new Set();
   for (const frame of frames) {
@@ -115,7 +109,7 @@ function documentShape(design) {
       throw new TypeError('Pixel frames need unique IDs, positive integer durations in milliseconds and cels');
     frameIds.add(frame.id);
     for (const [layer,cel] of Object.entries(frame.cels)) {
-      if (!layerIds.has(layer) || !fields(cel,['id','label','marks','slots']) || !label(cel.label) ||
+      if (!layerRows.has(layer) || layerRows.get(layer).kind === 'group' || !fields(cel,['id','label','marks','slots']) || !label(cel.label) ||
           !Array.isArray(cel.marks) || (cel.id !== undefined && !celName(cel.id)))
         throw new TypeError('Pixel cel ' + frame.id + '/' + layer + ' needs a known layer and marks');
       const id = celId(frame,layer,cel);
@@ -134,12 +128,18 @@ function documentShape(design) {
         (binding.part !== undefined && !reference(binding.part)) ||
         (binding.revision !== undefined && !reference(binding.revision)) ||
         (binding.frame !== undefined && !frameIds.has(binding.frame)) ||
-        (binding.layer !== undefined && !layerIds.has(binding.layer)) ||
+        (binding.layer !== undefined && !layerRows.has(binding.layer)) ||
         (binding.canvas !== undefined && !CanvasTransforms.registered(binding.canvas)))
       throw new TypeError('Pixel scene bindings need unique IDs, scene and object references, and valid frame and layer scopes');
     bindingIds.add(binding.id);
   }
   Destinations.validate(destinations,bindingIds);
+  for (const layer of layers) if (layer.kind === 'surface') {
+    const destination = destinations?.find(row=>row.id === layer.destination && row.kind === 'surface-channel');
+    const binding = destination && sceneBindings.find(row=>row.id === destination.binding);
+    if (!binding || binding.layer !== undefined && binding.layer !== layer.id)
+      throw new RangeError('Surface layer '+layer.id+' needs a matching surface-channel destination');
+  }
 }
 
 function shapes(width, height, mark) {
@@ -208,98 +208,51 @@ function rasterLayer(layer,base,ids,width,height,erase,count,spend) {
   return { painted,alpha };
 }
 
-function overColor(front,rear,frontWeight,rearWeight) {
-  let color = 0;
-  for (const shift of [16,8,0]) {
-    const value = ((front>>>shift&255)*frontWeight+(rear>>>shift&255)*rearWeight)/(frontWeight+rearWeight);
-    color |= Math.round(value)<<shift;
-  }
-  return color;
-}
-
-function composite(width,height,entries,layers,capture) {
-  const size = width*height;
-  const swatches = entries.map(({ id }) => id);
-  const colors = entries.map(({ color }) => Number.parseInt(color.slice(1),16));
-  const ids = new Map(swatches.map((id,i) => [id,i]));
-  const erase = entries.length;
-  const slots = new Int16Array(size).fill(-1), owners = new Uint8Array(size), locks = new Uint8Array(size);
-  const underSlots = new Int16Array(size).fill(-1), underOwners = new Uint8Array(size);
-  const masks = new Map(), layerIds = [null];
-  const layerSources = capture ? new Map() : undefined;
-  let marksUsed = 0, opacity, mixedColors;
-  let runBudget = 32e6;
-  for (const layer of layers) {
-    if (!record(layer) || !name(layer.id) || masks.has(layer.id) || !Array.isArray(layer.marks) ||
-        (layer.clip !== undefined && !masks.has(layer.clip)) ||
-        (layer.protect !== undefined && typeof layer.protect !== 'boolean') ||
-        Object.keys(layer).some(key => !['id','marks','clip','protect','slots'].includes(key)))
-      throw new TypeError('Pixel layers need a unique ID, marks, and an optional earlier clipping layer');
+function composite(width,height,entries,layers,capture,options,legacy = false) {
+  const size = width*height, swatches = entries.map(row=>row.id);
+  const colors = entries.map(row=>Number.parseInt(row.color.slice(1),16));
+  const ids = new Map(swatches.map((id,i)=>[id,i])), erase = swatches.length;
+  const byId = new Map(layers.map(row=>[row.id,row]));
+  const stack = LayerStack.prepare(layers.map(({ slots,marks,...layer })=>{
+    if (legacy && !fields(layer,['id','clip','protect']))
+      throw new TypeError('Legacy layers need a unique ID, marks and optional clipping or protection');
+    return layer;
+  }));
+  let marksUsed = 0, runBudget = 32e6;
+  const compiled = LayerStack.compose(width,height,colors,stack,id=>{
+    const layer = byId.get(id);
+    if (!Array.isArray(layer.marks)) throw new TypeError('Pixel layers need marks');
     let base;
     if (layer.slots !== undefined) {
       if (!Array.isArray(layer.slots) || layer.slots.length !== size)
         throw new TypeError('Pixel layer slots need a named swatch or null per art pixel');
-      base = Array.from(layer.slots,swatch => {
+      base = Array.from(layer.slots,swatch=>{
         if (swatch === null) return null;
-        if (!ids.has(swatch)) throw new TypeError('Unknown pixel swatch ' + swatch);
+        if (!ids.has(swatch)) throw new TypeError('Unknown pixel swatch '+swatch);
         return ids.get(swatch);
       });
     }
-    const { painted,alpha } = rasterLayer(layer,base,ids,width,height,erase,operations => {
+    const { painted,alpha } = rasterLayer(layer,base,ids,width,height,erase,operations=>{
       if ((marksUsed += operations) > 4096) throw new RangeError('Pixel designs support up to 4096 drawing operations');
-    },size => {
+    },size=>{
       if ((runBudget -= size) < 0) throw new RangeError('Pixel runs exceed the drawing budget');
     });
-    if (alpha && !opacity) {
-      opacity = Uint8Array.from(slots,slot=>slot < 0 ? 0 : 255);
-      mixedColors = Uint32Array.from(slots,slot=>colors[slot] ?? 0);
-    }
-    const clipping = masks.get(layer.clip), mask = new Uint8Array(size);
-    if (capture === true || capture === layer.id) {
-      const raw = Int16Array.from(painted,slot => slot === null ? -1 : slot === erase ? -2 : slot);
-      layerSources.set(layer.id,{ slots:raw,clipping,...(alpha && { alpha }) });
-    }
-    layerIds.push(layer.id);
-    masks.set(layer.id,mask);
-    const lastLayer = layerIds.length-1;
-    for (let p = 0; p < size; p++) {
-      if (painted[p] === null || (clipping && !clipping[p])) continue;
-      const slot = painted[p] === erase ? -1 : painted[p];
-      const amount = slot < 0 ? 0 : alpha?.[p] ?? 255;
-      if (slot >= 0 && !amount) continue;
-      mask[p] = Number(slot >= 0);
-      if (locks[p]) {
-        if (slot !== slots[p]) throw new RangeError(layer.id + ' changes a protected pixel at ' + [p%width,Math.floor(p/width)].join(','));
-        continue;
-      }
-      if (opacity) {
-        const rearWeight = opacity[p]*(255-amount)/255;
-        mixedColors[p] = !amount ? 0 : !rearWeight ? colors[slot] :
-          overColor(colors[slot],mixedColors[p],amount,rearWeight);
-        opacity[p] = amount ? Math.round(amount+rearWeight) : 0;
-      }
-      underSlots[p] = slots[p];
-      underOwners[p] = owners[p];
-      slots[p] = slot;
-      owners[p] = lastLayer;
-      locks[p] = Number(layer.protect === true);
-    }
-  }
-  return { width,height,slots,owners,locks,underSlots,underOwners,layerIds,swatches,colors,
-    ...(layerSources && { layerSources }),...(opacity && { opacity,mixedColors }) };
+    return { slots:Int16Array.from(painted,slot=>slot === null ? -1 : slot === erase ? -2 : slot),...(alpha && { alpha }) };
+  },{ ...options,capture });
+  return { ...compiled,colors,swatches,layerStack:stack };
 }
 
-function compileFrame(design, frame, revision, palette,capture) {
+function compileFrame(design, frame, revision, palette,capture,options) {
   const { width,height,layers } = design;
-  if (!frame) return { ...composite(width,height,palette,layers,capture), revision,paletteEntries:palette };
+  if (!frame) return { ...composite(width,height,palette,layers,capture,options,true), revision,paletteEntries:palette };
   const cels = new Map();
   const stack = layers.map(layer => {
-    const { id,clip,protect } = layer;
+    const { id } = layer;
     const cel = Object.hasOwn(frame.cels,id) ? frame.cels[id] : undefined;
     if (cel) cels.set(id,celId(frame,id,cel));
-    return { id,clip,protect,marks:cel?.marks ?? [],slots:cel?.slots };
+    return { ...layer,marks:cel?.marks ?? [],slots:cel?.slots };
   });
-  const raster = composite(width,height,palette,stack,capture);
+  const raster = composite(width,height,palette,stack,capture,options);
   for (const detail of design.protectedDetails ?? []) {
     if (detail.frame !== undefined && detail.frame !== frame.id) continue;
     for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
@@ -310,7 +263,7 @@ function compileFrame(design, frame, revision, palette,capture) {
     ...(design.selections && { selections:design.selections.filter(row=>row.frame === undefined || row.frame === frame.id) }) };
 }
 
-function compile(design, frameId, targetCel, capture) {
+function compile(design, frameId, targetCel, capture,options) {
   documentShape(design);
   const frames = design.version === 2 ? design.frames : [];
   const hasCel = item => Object.entries(item.cels).some(([layer,cel]) => celId(item,layer,cel) === targetCel);
@@ -321,7 +274,7 @@ function compile(design, frameId, targetCel, capture) {
   if (frameId !== undefined && !frame) throw new RangeError('Unknown pixel frame ' + frameId);
   if (targetCel !== undefined && (!frame || !hasCel(frame)))
     throw new RangeError('Unknown pixel cel ' + targetCel + (frame ? ' on frame ' + frame.id : ''));
-  return compileFrame(design,frame,fingerprint(design),paletteEntries(design.palette,design.version),capture);
+  return compileFrame(design,frame,fingerprint(design),paletteEntries(design.palette,design.version),capture,options);
 }
 
 function validate(design) {
@@ -338,7 +291,7 @@ function validate(design) {
     }
   }
   const identities = design.version === 2 ? {
-    layers:design.layers.map(({ id,label }) => ({ id,...(label !== undefined && { label }) })),
+    layers:design.layers.map(layer=>({ ...layer })),
     swatches:palette,
     cels:frames.flatMap(frame => Object.entries(frame.cels).map(([layer,cel]) =>
       ({ id:celId(frame,layer,cel), frame:frame.id, layer, ...(cel.label !== undefined && { label:cel.label }) })))
@@ -409,7 +362,8 @@ function samplePixel(design,coordinate,{ mode = 'composite',frame,layer,cel,dest
     return { ...common,layer:target,cel:active.cels?.get(target) ?? null,
       swatch:active.swatches[slot] ?? null,color:hexColor(active.colors[slot]),
       ...(source.alpha && { alpha:slot < 0 ? 0 : source.alpha[p] }),
-      knockout:slot === -2,clipped:!!source.clipping && !source.clipping[p] };
+      knockout:slot === -2,clipped:!!source.clipping && !source.clipping[p],
+      ...(source.locked && { locked:true }) };
   }
   const observed = cell(active,p);
   return { ...common,layer:observed.layer,cel:observed.cel ?? null,
@@ -591,10 +545,11 @@ function edit(design, frame, patch, context) {
     { expected:frame.revision, actual:revision });
   const route = Destinations.resolve(design,patch.destination);
   if (design.version === 2 && patch.frame !== frame.id &&
-      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments'].includes(route.destination.kind))))
+      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette','adjustments','layers'].includes(route.destination.kind))))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
     throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
+  if (route.destination.kind === 'layers') return editLayers(design,patch,context);
   if (route.destination.kind === 'adjustments') return editAdjustment(design,patch,context);
   if (route.destination.kind === 'canvas') return editCanvas(design,patch,context);
   if (route.destination.kind === 'palette') return editPalette(design,patch,context);
@@ -617,6 +572,7 @@ function edit(design, frame, patch, context) {
   if (patch.cel !== undefined) {
     const layer = frame.cels && [...frame.cels].find(([,id]) => id === patch.cel)?.[0];
     if (layer === undefined) throw new RangeError('Unknown pixel cel ' + patch.cel + ' on frame ' + frame.id);
+    requireWritableLayer(frame.layerStack.rows.get(layer));
     const marks = readPixelEdits(frame,patch,layer);
     const revised = { ...design, frames:design.frames.map(item => {
       if (item.id !== frame.id) return item;
@@ -648,7 +604,13 @@ function rasterToolLayer(frame,patch) {
     [...frame.cels].find(([,id])=>id === patch.cel)?.[0];
   if (typeof target !== 'string' || !frame.layerIds.includes(target) || patch.cel !== undefined && layer !== undefined)
     throw new TypeError('Choose an existing raster layer or cel for the paint tool');
+  requireWritableLayer(frame.layerStack.rows.get(target));
   return target;
+}
+
+function requireWritableLayer(row) {
+  if (row.kind === 'group' || row.kind === 'reference' || row.effectiveLock)
+    throw Preview.conflict('locked-layer','Layer '+row.id+' does not accept pixel edits',{ layer:row.id });
 }
 
 function editRasterTool(design,frame,patch,destination,context) {
@@ -915,12 +877,105 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
     marks:[...bySwatch].map(([swatch,pixels])=>({ swatch,runs:RasterTools.runs(width,pixels) })) };
 }
 
+function editLayers(design,patch,context) {
+  if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document before editing the layer stack');
+  if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined || !record(patch.operation))
+    throw new TypeError('Layer edits use their own operation and scope');
+  const { operation } = patch, { type,layer } = operation;
+  const stack = LayerStack.prepare(design.layers);
+  const requireLayer = id=>{
+    const row = stack.rows.get(id);
+    if (!row) throw new RangeError('Unknown pixel layer '+id);
+    return row;
+  };
+  const checkRemoved = ids=>{
+    const binding = design.sceneBindings?.find(row=>ids.includes(row.layer));
+    if (binding) throw new RangeError('Layer '+binding.layer+' is used by scene binding '+binding.id);
+  };
+  let revised, report = {};
+  if (type === 'add' && fields(operation,['type','layer','before'])) {
+    const layers = design.layers.slice();
+    const before = operation.before === undefined ? layers.length : layers.findIndex(row=>row.id === operation.before);
+    if (before < 0) throw new RangeError('Unknown layer insertion point');
+    layers.splice(before,0,layer);
+    revised = { ...design,layers };
+  } else if (type === 'update' && fields(operation,['type','layer','changes']) &&
+      fields(operation.changes,['label','parent','clip','visible','locked','opacity','blend','protect','destination'])) {
+    requireLayer(layer);
+    const layers = design.layers.map(row=>{
+      if (row.id !== layer) return row;
+      const next = { ...row,...operation.changes };
+      for (const key of Object.keys(operation.changes)) if (next[key] === null) delete next[key];
+      return next;
+    });
+    revised = { ...design,layers };
+  } else if (type === 'reorder' && fields(operation,['type','order']) && Array.isArray(operation.order) &&
+      operation.order.length === design.layers.length && new Set(operation.order).size === design.layers.length) {
+    const rows = new Map(design.layers.map(row=>[row.id,row]));
+    revised = { ...design,layers:Array.from(operation.order,id=>{ requireLayer(id); return rows.get(id); }) };
+  } else if (type === 'set-cel' && fields(operation,['type','frame','layer','cel'])) {
+    const row = requireLayer(layer);
+    if (row.effectiveLock || row.kind === 'group')
+      throw Preview.conflict('locked-layer','Layer '+layer+' does not accept a cel',{ layer });
+    if (!design.frames.some(frame=>frame.id === operation.frame)) throw new RangeError('Unknown pixel frame '+operation.frame);
+    if (!record(operation.cel)) throw new TypeError('Set cel needs a pixel cel');
+    revised = { ...design,frames:design.frames.map(frame=>frame.id === operation.frame ?
+      { ...frame,cels:{ ...frame.cels,[layer]:operation.cel } } : frame) };
+  } else if (type === 'remove' && fields(operation,['type','layer'])) {
+    requireLayer(layer);
+    const removed = LayerStack.descendants(stack,layer);
+    for (const id of removed) if (stack.rows.get(id).effectiveLock) throw new RangeError('Layer '+id+' is locked');
+    checkRemoved(removed);
+    const ids = new Set(removed);
+    const frames = design.frames.map(frame=>({ ...frame,cels:Object.fromEntries(
+      Object.entries(frame.cels).filter(([id])=>!ids.has(id))) }));
+    revised = { ...design,frames,layers:design.layers.filter(row=>!ids.has(row.id)) };
+    report = { removed };
+  } else if (['merge-down','flatten-group','flatten'].includes(type) && fields(operation,['type','layer'])) {
+    const plan = LayerStack.mergePlan(design.layers,operation);
+    checkRemoved(plan.removed);
+    const merged = mergeLayers(design,plan);
+    revised = merged.design;
+    report = { target:plan.target,removed:plan.removed,addedSwatches:merged.added };
+  } else {
+    throw new TypeError('Choose add, update, reorder, set-cel, remove, merge-down, flatten-group, or flatten');
+  }
+  validate(revised);
+  context?.onEditTarget?.({ destination:'layers',kind:'layers',tool:type,
+    before:design.layers,after:revised.layers,...(typeof layer === 'string' && { layer }),...report });
+  return revised;
+}
+
+function mergeLayers(design,plan) {
+  const { width,height } = design, palette = paletteEntries(design.palette,design.version);
+  const editor = PixelColors.paletteEditor(palette), revision = fingerprint(design);
+  const discarded = new Set([...plan.removed,plan.target]);
+  const frames = design.frames.map(frame=>{
+    const layers = plan.inputs.map(layer=>({ ...layer,slots:frame.cels[layer.id]?.slots,marks:frame.cels[layer.id]?.marks ?? [] }));
+    const flattened = composite(width,height,palette,layers);
+    const baked = LayerStack.bake(flattened,flattened.colors,editor.resolve,plan.knockouts);
+    const { slots,marks } = authoredCel(width,baked,editor.palette.map(row=>row.id));
+    const current = frame.cels[plan.target], cels = Object.fromEntries(Object.entries(frame.cels).filter(([id])=>!discarded.has(id)));
+    cels[plan.target] = { ...current,slots,marks };
+    return { ...frame,cels };
+  });
+  const added = editor.palette.slice(palette.length), revised = { ...design,layers:plan.layers,frames,
+    ...(added.length && { palette:{ ...design.palette,...Object.fromEntries(added.map(row=>[row.id,row.color])) } }) };
+  for (let i = 0; i < frames.length; i++) {
+    const old = compileFrame(design,design.frames[i],revision,palette), next = compileFrame(revised,frames[i],revision,editor.palette);
+    if (!equal(LayerStack.image(old,old.colors).rgba,LayerStack.image(next,next.colors).rgba))
+      throw new RangeError('Merge would change the rendered pixels in frame '+frames[i].id+'; flatten against the full backdrop');
+  }
+  return { design:revised,added:added.map(row=>row.id) };
+}
+
 function editAdjustment(design,patch,context) {
   if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document before using scoped adjustments');
   const { operation } = patch;
   if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined ||
       !fields(operation,['scope','adjustment']) || !fields(operation.scope,['frame','frames','layer','selection']))
     throw new TypeError('Use an adjustment and a scope with one frame or an inclusive frame range');
+  const stack = LayerStack.prepare(design.layers);
   const { scope,adjustment } = operation, { width,height } = design;
   const { frame,frames,layer,selection } = scope;
   if ((frame === undefined) === (frames === undefined) || (frame !== undefined && !name(frame)) ||
@@ -930,6 +985,7 @@ function editAdjustment(design,patch,context) {
     throw new TypeError('Choose known frame endpoints and an optional layer and saved selection');
   const [first,last] = (frames ?? [frame,frame]).map(id=>design.frames.findIndex(row=>row.id === id));
   if (first < 0 || last < first) throw new RangeError('Adjustment frame range must be known and in document order');
+  if (layer !== undefined) requireWritableLayer(stack.rows.get(layer));
   const selected = selection === undefined ? null : namedSelection(design,selection);
   if (selected?.frame !== undefined && (first !== last || selected.frame !== design.frames[first].id))
     throw new RangeError('Pixel selection belongs to frame '+selected.frame);
@@ -942,7 +998,8 @@ function editAdjustment(design,patch,context) {
     const before = targets.length;
     const captured = compileFrame(design,row,revision,palette,layer ?? true), cels = { ...row.cels };
     for (const [id,cel] of Object.entries(row.cels)) {
-      if (layer !== undefined && id !== layer) continue;
+      const definition = stack.rows.get(id);
+      if (layer !== undefined && id !== layer || definition.effectiveLock || definition.kind === 'reference') continue;
       const source = captured.layerSources.get(id), writes = prepared.apply(width,height,source,mask);
       if (!writes.size) continue;
       const changed = [...writes.keys()];
@@ -979,12 +1036,14 @@ function editPalette(design,patch,context) {
   if (palette.ramps.length || design.ramps !== undefined) revised.ramps = palette.ramps;
   let remappedCels = 0;
   if (replacements) {
+    const stack = LayerStack.prepare(design.layers);
     const replace = swatch=>replacements.get(swatch) ?? swatch;
     revised.frames = design.frames.map(frame=>{
       let changed = false;
       const cels = Object.entries(frame.cels).map(([id,cel])=>{
         if (!cel.slots?.some(slot=>replacements.has(slot)) &&
             !cel.marks.some(mark=>replacements.has(mark.swatch))) return [id,cel];
+        requireWritableLayer(stack.rows.get(id));
         changed = true;
         remappedCels++;
         return [id,{ ...cel,
@@ -1150,9 +1209,9 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
     if (expected && documentRevision !== expected.inputs.documentRevision)
       throw Preview.conflict('stale-document','Receipt was recorded against a different pixel document',
         { expected:expected.inputs.documentRevision, actual:documentRevision });
-    const frame = compile(design,frameId,patch?.cel);
-    const route = Destinations.resolve(design,patch?.destination), { destination,binding } = route;
-    command.frame = ['canvas','palette','adjustments'].includes(destination.kind) ? null : frame.id ?? null;
+    const route = Destinations.resolve(design,patch?.destination), { destination,binding,layer } = route;
+    const frame = compile(design,frameId,patch?.cel,layer?.kind === 'surface' ? layer.id : undefined);
+    command.frame = ['canvas','palette','adjustments','layers'].includes(destination.kind) ? null : frame.id ?? null;
     if (shotHitFrame !== undefined && (destination.kind !== 'shot-correction' || !integer(shotHitFrame,0,1e9)))
       throw new TypeError('A shot hit sample needs a shot-correction edit and a nonnegative shot frame');
     const result = edit(design,frame,patch,{
@@ -1252,7 +1311,8 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
     const route = Destinations.resolve(design,patch?.destination);
     const target = Preview.sourceTarget(route,patch);
     if (target) targets.push(target);
-    const frame = compile(design,frameId ?? (design.version === 2 ? patch?.frame : undefined),patch?.cel);
+    const frame = compile(design,frameId ?? (design.version === 2 ? patch?.frame : undefined),patch?.cel,
+      route.layer?.kind === 'surface' ? route.layer.id : undefined);
     const output = edit(design,frame,patch,{
       captureSelection:context.captureSelection,
       onSource(revision) {
@@ -1381,7 +1441,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const request = structuredClone(patch);
     if (legacyRevision !== null && request?.revision === legacyRevision) {
       request.revision = fingerprint(design);
-      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments'].includes(request.destination))
+      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette','adjustments','document:adjustments','layers','document:layers'].includes(request.destination))
         request.frame = 'artwork';
     }
     return request;
@@ -1459,7 +1519,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
       }
       const [painted] = receipt.affectedTargets;
-      if (['canvas','palette','selections','adjustments'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
+      if (['canvas','palette','selections','adjustments','layers'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
     const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
@@ -1481,6 +1541,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     serialize: (space = 2) => JSON.stringify(state().design,null,space),
     describe: () => validate(state().design),
     palette: () => structuredClone(paletteAsset(state().design)),
+    layerDeck: () => structuredClone(layerDeck(state().design)),
     extractPalette: ({ frame,layer,...options } = {})=>extractPalette(
       stampImage(stamp(compile(state().design,frame,undefined,layer),layer),{ preserveHidden:true }),options),
     inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
@@ -1489,7 +1550,8 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     copySelection: options => copySelection(state().design,options),
     select: (query,options) => selectPixels(state().design,query,options,editContext(options,false)),
     snap: (coordinate,{ frame,radius } = {}) => snapPoint(compile(state().design,frame),coordinate,radius),
-    stamp: ({ frame,cel,layer } = {}) => stamp(compile(state().design,frame,cel,layer),layer),
+    stamp: ({ frame,cel,layer,references } = {}) =>
+      stamp(compile(state().design,frame,cel,layer,{ references }),layer),
     png: ({ frame,cel,layer,colorMode } = {}) =>
       PNG.encodePaint(stamp(compile(state().design,frame,cel,layer),layer),colorMode),
     renderOptions: (scene = sceneName) => structuredClone(renderOptions(scene)),
@@ -1570,9 +1632,7 @@ function stamp(frame,layer) {
     ...(frame.selections?.length && { selections:frame.selections.map(({ id,pixels })=>({ id,pixels:structuredClone(pixels) })) }) };
 }
 
-function documentFromPNG(file) {
-  const image = PNG.paintRaster(file), { width,height,swatchIds,slots,alpha,knockouts } = image;
-  const palette = PixelPalette.fromStamp(image);
+function authoredCel(width,{ slots,alpha,knockouts },swatchIds) {
   const byAlpha = new Map(), marks = [];
   for (let p = 0; p < slots.length; p++) {
     const value = alpha?.[p] ?? 255;
@@ -1582,10 +1642,80 @@ function documentFromPNG(file) {
   }
   for (const [coverage,indices] of byAlpha) marks.push({ alpha:coverage,runs:RasterTools.runs(width,indices) });
   if (knockouts?.length) marks.push({ swatch:null,runs:RasterTools.runs(width,knockouts) });
+  return { slots:slots.map(slot=>slot === null ? null : swatchIds[slot]),marks };
+}
+
+function documentFromPNG(file) {
+  const image = PNG.paintRaster(file), { width,height,swatchIds } = image;
+  const palette = PixelPalette.fromStamp(image);
   return { format,version:2,width,height,pixelAspect:[1,1],
     palette:paletteDefinition(palette.swatches),...(palette.ramps.length && { ramps:palette.ramps }),
     layers:[{ id:'image' }],frames:[{ id:'artwork',durationMs:100,
-      cels:{ image:{ slots:slots.map(slot=>slot === null ? null : swatchIds[slot]),marks } } }] };
+      cels:{ image:authoredCel(width,image,swatchIds) } }] };
+}
+
+const stackFormat = 'ink-studio/pixel-layer-deck';
+
+function layerDeck(design) {
+  const { width,height,layers:defs,pixelAspect,sceneBindings,destinations,guides,protectedDetails,legacyMetadata } = design;
+  const palette = paletteAsset(design), revision = fingerprint(design);
+  const frames = design.frames.map(frame=>{
+    const compiled = compileFrame(design,frame,revision,palette.swatches,true);
+    const cels = Object.fromEntries(Object.entries(frame.cels).map(([id,cel])=>{
+      const { slots,alpha,knockouts } = stamp(compiled,id);
+      return [id,{ ...(cel.id && { id:cel.id }),...(cel.label && { label:cel.label }),slots,
+        ...(alpha && { alpha }),...(knockouts && { knockouts }) }];
+    }));
+    return { id:frame.id,...(frame.label && { label:frame.label }),duration:frame.durationMs/1000,cels,
+      ...(design.selections && { selections:design.selections.filter(row=>row.frame === frame.id).map(({ id,pixels })=>({ id,pixels })) }),
+      ...(guides && { guides:guides.filter(row=>row.frame === frame.id).map(({ frame,...guide })=>guide) }) };
+  });
+  return { format:stackFormat,version:1,width,height,pixelAspect,origin:'top-left',layers:defs,
+    palette:palette.swatches.map(row=>row.color),swatchIds:palette.swatches.map(row=>row.id),
+    ...PixelPalette.stampMetadata(palette),frames,
+    ...(guides?.some(row=>row.frame === undefined) && { guides:guides.filter(row=>row.frame === undefined) }),
+    ...(design.selections?.some(row=>row.frame === undefined) && { sharedSelections:design.selections.filter(row=>row.frame === undefined) }),
+    ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
+    ...(legacyMetadata && { legacyMetadata }) };
+}
+
+function documentFromDeck(deck) {
+  if (deck?.format !== stackFormat || deck.version !== 1 || !Array.isArray(deck.frames) || !deck.frames.length)
+    throw new TypeError('Expected a version 1 Ink pixel layer deck');
+  const { width,height,pixelAspect = [1,1],layers,swatchIds,sceneBindings,destinations,protectedDetails,legacyMetadata } = deck;
+  const asset = PixelPalette.fromStamp(deck);
+  const guides = [...(deck.guides ?? [])], selections = [...(deck.sharedSelections ?? [])], frameIds = new Set();
+  for (const frame of deck.frames) if (frame.id !== undefined) {
+    if (!name(frame.id) || frameIds.has(frame.id)) throw new RangeError('Layer deck frame IDs must be unique');
+    frameIds.add(frame.id);
+  }
+  const frames = deck.frames.map((frame,i)=>{
+    let id = frame.id;
+    if (id === undefined) {
+      id = PixelColors.uniqueId(frameIds,'frame-'+(i+1));
+      frameIds.add(id);
+    }
+    const valid = require('../src/pixel-stamps.js').prepare;
+    const cels = Object.fromEntries(Object.entries(frame.cels).map(([layer,cel])=>{
+      const { entries } = valid({ width,height,palette:deck.palette,frames:[cel] },{ preserveHidden:true });
+      const { slots,alpha } = entries[0], { knockouts } = cel;
+      if (knockouts !== undefined && (!Array.isArray(knockouts) ||
+          !Array.from(knockouts).every((p,i)=>Number.isInteger(p) && slots[p] === null && (i === 0 || p > knockouts[i-1]))))
+        throw new TypeError('Layer deck knockouts must be sorted transparent cells');
+      return [layer,{ ...(cel.id && { id:cel.id }),...(cel.label && { label:cel.label }),
+        ...authoredCel(width,{ slots,alpha,knockouts },swatchIds) }];
+    }));
+    for (const guide of frame.guides ?? []) guides.push({ ...guide,frame:id });
+    for (const selection of frame.selections ?? []) selections.push({ ...selection,frame:id });
+    if (!Number.isFinite(frame.duration) || frame.duration <= 0) throw new RangeError('Deck frames need positive durations');
+    return { id,durationMs:Math.max(1,Math.round(frame.duration*1000)),...(frame.label && { label:frame.label }),cels };
+  });
+  const design = { format,version:2,width,height,pixelAspect,layers,frames,palette:paletteDefinition(asset.swatches),
+    ...(asset.ramps.length && { ramps:asset.ramps }),...(guides.length && { guides }),...(selections.length && { selections }),
+    ...(sceneBindings && { sceneBindings }),...(destinations && { destinations }),...(protectedDetails && { protectedDetails }),
+    ...(legacyMetadata && { legacyMetadata }) };
+  validate(design);
+  return design;
 }
 
 function snapPoint(frame,point,radius) {
@@ -1677,7 +1807,7 @@ function canvasReview(design,frameId,file,source) {
     throw new RangeError('The source channel is bound to frame ' + source.frame);
   const encodeSlots = slots => Buffer.from(Uint8Array.from(slots,slot => slot < 0 ? 255 : slot)).toString('base64');
   const deck = chosen.map(frame => {
-    const compiled = compileFrame(design,frame,revision,palette,true);
+    const compiled = compileFrame(design,frame,revision,palette,true,{ references:true });
     const { width,height,rgba } = stampImage(stamp(compiled));
     const encode = bytes => Buffer.from(bytes).toString('base64');
     return { label:frame?.label ?? frame?.id ?? 'Drawing', png:encode(PNG.encode(width,height,rgba,4)),
@@ -1746,6 +1876,7 @@ const actions = ['trace','import','upgrade','validate','targets','draw','canvas'
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
 const paletteActions = ['export','extract','import'];
+const stackActions = ['export','import'];
 
 function extractPalette(image,options) {
   return PixelPalette.fromExtraction(PaletteExtract.extract(image,options));
@@ -1782,7 +1913,17 @@ function paletteCommand(pos,opt) {
   process.stdout.write(JSON.stringify(receipt,null,2)+'\n');
 }
 
+function stackCommand(pos,opt) {
+  const [action,source] = pos;
+  if (!stackActions.includes(action) || pos.length !== 2 || typeof opt.out !== 'string' ||
+      !opt.out.trim() || path.resolve(source) === path.resolve(opt.out))
+    throw new TypeError('Use pixel-art stack export <document.json> --out deck.json or stack import <deck.json> --out document.json');
+  const data = read(source);
+  files.json(path.resolve(opt.out),action === 'export' ? layerDeck(openDesign(data).design) : documentFromDeck(data));
+}
+
 function command(pos,opt,outputFile,{ capture, world, scene }) {
+  if (pos[0] === 'stack') return stackCommand(pos.slice(1),opt);
   if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
@@ -2015,5 +2156,5 @@ function sessionCommand(pos,opt,{ scene,capture }) {
     documentRevision:editor.describe().revision },null,2)+'\n');
 }
 
-module.exports = { createEditor, documentFromPNG, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace,
-  command, sessionCommand, actions, sessionActions, paletteActions };
+module.exports = { createEditor, documentFromPNG, documentFromDeck, openEditorSession, compile, validate, stamp, image, review, edit, draw, trace,
+  command, sessionCommand, actions, sessionActions, paletteActions, stackActions };
