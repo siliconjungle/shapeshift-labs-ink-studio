@@ -127,6 +127,38 @@ test('a UV decal clips to its padded chart and keeps its original texture regist
   close(Math.min(...xs),-.76);
   close(Math.max(...xs),-.24);
   assert.deepEqual(bound.document.decals[0].anchor.chart,chart);
+  const moved=K.surfaceDecals.edit(bound.document,'patch',{type:'move',delta:[.04,-.07]});
+  assert.deepEqual(moved.decals[0].anchor.uv.min,[.04,-.07]);
+  close(moved.decals[0].anchor.uv.max[0],1.04);
+  close(moved.decals[0].anchor.uv.max[1],.93);
+  assert.deepEqual(moved.decals[0].anchor.chart,chart);
+  assert.deepEqual(moved.decals[0].lifetime,bound.document.decals[0].lifetime);
+});
+
+test('baking decal alpha preserves playback across receivers and retains implicit relief heights',()=>{
+  const {world,mesh,api,document,object,part}=fixture(kit), {KIT:K}=kit;
+  api.dispose();
+  const source=structuredClone(document);
+  const badge=source.decals[1];
+  delete badge.relief.heights;
+  badge.image.pixels[3]=128;
+  const mask=Array.from({length:16},(_,i)=>i%4===0?0:180);
+  const masked=K.surfaceDecals.edit(source,'badge',{type:'mask',mask});
+  const baked=K.surfaceDecals.edit(masked,'badge',{type:'bake'});
+  assert.deepEqual(baked.decals[1].relief.heights,badge.image.pixels.filter((_n,i)=>i%4===3));
+  assert.deepEqual(baked.decals[1].anchor,badge.anchor);
+  assert.equal(baked.decals[1].mask,undefined);
+  function run(input, receiver) {
+    const binding=K.surfaceDecals.bind(world,input,{receivers:[receiver]});
+    const {layers,report}=binding.sample(1), layer=layers[1];
+    binding.dispose();
+    return {pixels:layer.pixels,vertices:layer.vertices,report};
+  }
+  for (const receiver of [
+    {object,part,representation:'mesh',mesh},
+    {object,part,representation:'sdf',field:{distance:world.renderSdfs[0].distance}},
+    {object,part,representation:'splats'}
+  ]) assert.deepEqual(run(masked,receiver),run(baked,receiver),receiver.representation);
 });
 
 test('headless renders the decal only on the front of its selected receiver and respects scene depth',()=>{

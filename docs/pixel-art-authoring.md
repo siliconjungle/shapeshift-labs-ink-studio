@@ -423,7 +423,7 @@ Visible paint and surface cels can blend with `normal`, `multiply`,
 | `mask` | Non-color cels that clip later siblings by alpha. |
 | `reference` | A read-only raster in working views. Set its cel explicitly or load a reference PNG in the Workshop. Clean artwork exports omit references. |
 | `group` | An isolated stack of children. The group applies its opacity and blend once to the combined result. |
-| `surface` | An editable local cel linked to a named surface-channel destination. Use `layer:<id>` to sample or edit its underlying chart. |
+| `surface` | An editable local cel linked to a named surface channel or decal. Use `layer:<id>` to edit the bound source. |
 
 `parent` refers to an earlier group. `clip` refers to an earlier sibling
 under the same parent. Clipping to a mask or group uses its alpha. A paint
@@ -2135,6 +2135,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `raster` | `edits` with `at`, `layer`, `from`, and `to` | Revised pixel document, with the new cel on the chosen frame |
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
+| `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
 | `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and any of `pigment`, `coverage`, `footprintScale`, or `visible` | Splat-fit asset for `render --splat-fit` |
 | `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |

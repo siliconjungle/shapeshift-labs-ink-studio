@@ -235,6 +235,7 @@
     groups: 'obj',
     parts: 'obj',
     solids: 'list',
+    surfaceDecals: 1,
     brushRegion: 1,
     breakables: 1,
     motion: 'list',
@@ -1153,7 +1154,26 @@
         'a diorama needs a list of solids',
         'for example [{ "kind": "ground", "mat": "earth" }, { "kind": "ball", "at": [0, 1, 0], "r": 1, "mat": "stone" }]'
       );
-    else spec.solids.forEach((s, i) => solidOk(s, 'solids[' + i + ']'));
+    else {
+      spec.solids.forEach((s, i) => solidOk(s, 'solids[' + i + ']'));
+      if (spec.surfaceDecals !== undefined) {
+        try {
+          const document = K.surfaceDecals.create(spec.surfaceDecals);
+          const solids = new Map(spec.solids.filter(solid => solid?.id && !solid.carve && !solid.hold)
+            .map(solid => [solid.id, solid]));
+          for (const {id, anchor} of document.decals) {
+            const solid = solids.get(anchor.object);
+            if (!solid || anchor.part !== undefined && solid.part !== anchor.part)
+              throw new Error('Decal ' + id + ' needs a matching visible solid ID and part');
+            if (anchor.uv || anchor.node !== undefined)
+              throw new Error('Decal ' + id + ' needs a diorama rest projector. UV and node anchors use native receiver bindings.');
+          }
+          presentation.decals = {document, solids};
+        } catch (error) {
+          bad('surfaceDecals',error.message);
+        }
+      }
+    }
     for (const [g, v] of Object.entries(groups))
       if (!v || !isNum(v.blend))
         bad('groups.' + g, 'a group says how far its members melt into each other', '{ "blend": 0.2 }');
@@ -1462,7 +1482,7 @@
       e.problems = problems;
       throw e;
     }
-    const { spec, dataInputs } = resolved, { timeline, cameraRig, dataMarks } = presentation, dynamics = boundRuntime(source, env, resolved);
+    const { spec, dataInputs } = resolved, { timeline, cameraRig, dataMarks, decals } = presentation, dynamics = boundRuntime(source, env, resolved);
     const st0 = styleOf(spec), catalog = lookCatalog(spec),
       seed = spec.seed === undefined ? 1 : spec.seed,
       effects = spec.effects || [],
@@ -1477,6 +1497,32 @@
         throw error;
       }
     }
+    function bindDecals(world, rig) {
+      if (!decals?.document.decals.length) return;
+      const receivers = new Map(), nodes = {}, parts = new Map();
+      for (const {anchor:{object,part}} of decals.document.decals) {
+        const rigPart = decals.solids.get(object).part;
+        let node;
+        if (rig?.has(rigPart)) {
+          if (!parts.has(rigPart)) {
+            const name = 'decal-part-' + parts.size;
+            parts.set(rigPart, name);
+            nodes[name] = {};
+          }
+          node = parts.get(rigPart);
+        }
+        receivers.set(JSON.stringify([object,part]), {object, ...(part!==undefined&&{part}),
+          representation:'splats', ...(node&&{node})});
+      }
+      const graph = parts.size ? K.sceneGraph.create({nodes}) : undefined;
+      K.surfaceDecals.bind(world, decals.document, {receivers:[...receivers.values()],graph});
+      if (graph) return () => {
+        for (const [part, node] of parts) {
+          const at = rig.names.indexOf(part) * 12;
+          graph.setLocal(node,{matrix:rig.M.subarray(at,at+9),position:rig.M.subarray(at+9,at+12)});
+        }
+      };
+    }
     function marksQuery() {
       const query = resolved.inputs?.query ?? env.parameterInputs?.query;
       return typeof query === 'function' ? query() : query;
@@ -1485,7 +1531,8 @@
     if (spec.brushRegion != null) {
       if (modelOptions) throw new TypeError('Brush regions are baked as splat geometry');
       const { palette, roles, sun } = st0;
-      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks, breakables: authoredBreakables, ...geometry } = spec;
+      const { timeline: authoredTimeline, cameraRig: authoredCameraRig, dataInputs: authoredData, dataMarks: authoredMarks,
+        breakables: authoredBreakables, surfaceDecals: authoredDecals, ...geometry } = spec;
       let world = (env.brushSession ?? K.authoring.brushRegions.create()).build(geometry, env, { palette, roles, sun });
       let marksSystem;
       if (marks) {
@@ -1497,6 +1544,7 @@
       }
       world.spec = source;
       bindBreakables(world);
+      bindDecals(world);
       if (dataInputs) world.dataInputs = dataInputs;
       if (cameraRig) K.cameraRig.bind(world, cameraRig);
       if (dynamics) world.parameters = dynamics.api;
@@ -1909,11 +1957,15 @@
       root === 'effects' && effects[index].do === 'lamp');
     if (timelineActive) applyCamera(timelineFrame(timeline, 0, effects));
     const authoredStage = moving.length || effects.length || spec.tap || timelineActive;
-    if (!authoredStage && !marksSystem) return W;
+    if (!authoredStage && !marksSystem) {
+      bindDecals(W);
+      return W;
+    }
     const st = K.stage(W);
     if (!authoredStage) st.stateful = false;
     if (marksSystem) st.add(marksSystem);
     rig.bind(st);
+    const poseDecals = bindDecals(W, rig);
     let tracks = motion, activeEffects = effects, poses;
     if (dynamics?.active || timelineActive) st.add({ update(dt, t, stage) {
       const at = t + stage.t0;
@@ -1952,6 +2004,7 @@
         update(dt, t) {
           poseParts(t, tracks, poses);
           rig.apply();
+          poseDecals?.();
         }
       });
     let lit = null;

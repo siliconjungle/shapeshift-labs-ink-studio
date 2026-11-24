@@ -306,6 +306,90 @@ test('pixel destinations retain edits on a rest chart and the selected SDF solid
     /scene binding is stale/);
 });
 
+test('a bound decal layer moves, masks, replaces and bakes through the pixel CLI and shared journal', t => {
+  const {document,filename,write,request,targets}=setup(t);
+  const scene=structuredClone(source), solid=scene.solids[0];
+  solid.part='panel';
+  solid.res=.095;
+  scene.motion=[{do:'bob',part:'panel',axis:[1,0,0],amount:.3,period:2}];
+  const anchor={object:'gate',part:'panel',at:[0,0,.23],normal:[0,0,1],size:[.85,.5],depth:.16,bias:.018};
+  const lifetime={start:.25,end:2,fadeOut:.5};
+  document.width=2;
+  document.height=2;
+  document.layers.push({id:'sign',kind:'surface',destination:'gate-sign'});
+  document.frames[0].cels.base={slots:['amber',null,'amber','amber'],marks:[]};
+  document.sceneBindings.push({id:'panel',scene:filename('source'),object:'gate',part:'panel',layer:'sign'});
+  document.destinations.push({id:'gate-sign',kind:'decal-layer',binding:'panel',decal:'warning-label'});
+  write('document',document);
+  scene.surfaceDecals={format:KIT.surfaceDecals.format,version:1,decals:[{
+    id:'warning-label',kind:'lettering',anchor,lifetime,grid:[4,4],
+    image:{width:2,height:2,pixels:Array.from({length:4},()=>[255,40,90,255]).flat()}
+  }]};
+  write('source',scene);
+  const initial=targets('layer:sign');
+  assert.deepEqual(initial.decal.anchor,anchor);
+  assert.deepEqual(initial.decal.lifetime,lifetime);
+  const patch=request({destination:'layer:sign',sourceRevision:initial.sourceRevision,operation:{type:'move',delta:[.18,0,0]}});
+  write('patch',patch);
+  const args=[filename('document'),filename('patch'),'--scene',filename('source')];
+  const preview=JSON.parse(cli('pixel-art','preview',...args));
+  assert(preview.valid);
+  assert.deepEqual(preview.sources,[{scene:filename('source'),kind:'decal',object:'gate',
+    decal:'warning-label',part:'panel',change:'modified',fields:['anchor']}]);
+  const receipt=JSON.parse(cli('pixel-art','edit',...args,'--out',filename('moved')));
+  assert.equal(receipt.affectedTargets[0].layer,'sign');
+  assert.equal(receipt.affectedTargets[0].decal,'warning-label');
+  assert.equal(receipt.affectedTargets[0].operation,'move');
+  const read=name=>JSON.parse(fs.readFileSync(filename(name),'utf8'));
+  const moved=read('moved');
+  assert.deepEqual(moved.surfaceDecals.decals[0].anchor,{...anchor,at:[.18,0,.23]});
+  assert.deepEqual(read('source'),scene);
+  write('receipt',receipt);
+  assert.deepEqual(JSON.parse(cli('pixel-art','replay',filename('document'),filename('receipt'),
+    '--scene',filename('source'),'--out',filename('replayed'))),receipt);
+  assert.deepEqual(read('replayed'),moved);
+
+  const sceneEditor=ink.createSceneEditor(moved);
+  const pixels=ink.createPixelEditor(document,{sceneEditor,sceneRef:filename('source')});
+  assert.equal(pixels.previewEdit(patch).conflicts[0].code,'stale-source');
+  const edit=(id,operation)=>pixels.apply(request({id,destination:'layer:sign',
+    sourceRevision:pixels.targets('layer:sign').sourceRevision,operation}));
+  pixels.begin('Edit decal and its artwork');
+  edit('mask-label',{type:'mask',mask:[255,127,0,255]});
+  assert.deepEqual(sceneEditor.snapshot().surfaceDecals.decals[0].mask,[255,127,0,255]);
+  edit('replace-label',{type:'replace',image:{width:2,height:2,pixels:Array.from({length:4},()=>[30,190,180,255]).flat()}});
+  assert.deepEqual(sceneEditor.snapshot().surfaceDecals.decals[0].image.pixels.slice(0,4),[30,190,180,255]);
+  const baked=edit('bake-label',{type:'bake',source:'frame'});
+  assert(pixels.previewChanges().valid);
+  pixels.commit();
+  const row=baked.surfaceDecals.decals[0];
+  assert.deepEqual(row.image.pixels,[255,202,51,255,0,0,0,0,255,202,51,0,255,202,51,255]);
+  assert.equal(row.mask,undefined);
+  assert.deepEqual(row.anchor,{...anchor,at:[.18,0,.23]});
+  assert.deepEqual(row.lifetime,lifetime);
+  assert(pixels.undo());
+  assert.deepEqual(sceneEditor.snapshot(),moved);
+  assert(pixels.redo());
+  assert.deepEqual(sceneEditor.snapshot(),baked);
+
+  const world=sceneEditor.build(), surface=world.surfaceDecals;
+  const pose=(t)=>require('../cli/diarama-pose.js').pose(world,t,{kit:ink.load()});
+  assert.equal(surface.sample(0).layers.length,0);
+  pose(.5);
+  const frame=surface.sample(.5);
+  assert.equal(frame.layers.length,1);
+  const viewAt={...view,w:80,h:56,t:.5};
+  assert.notDeepEqual(ink.render(world,viewAt).rgb,ink.render(world,{...viewAt,surfaceDecals:false}).rgb);
+  const vertices=frame.layers[0].vertices.slice(), first=world.lab.rig.at('panel',[0,0,0])[0];
+  pose(1.25);
+  const next=surface.sample(1.25).layers[0].vertices, shift=world.lab.rig.at('panel',[0,0,0])[0]-first;
+  assert(Math.abs(shift)>.1);
+  const point=vertices.findIndex((value,i)=>i%5===0 && value!==0);
+  assert(Math.abs(next[point]-vertices[point]-shift)<1e-5);
+  assert.equal(surface.sample(1.75).report[0].opacity,.5);
+  assert.equal(surface.sample(2).layers.length,0);
+});
+
 test('a shared transaction commits, undoes and redoes the pixel cel and the SDF cut together', t => {
   const { document, filename } = setup(t);
   const scene = ink.createSceneEditor(source);

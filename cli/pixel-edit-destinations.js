@@ -17,6 +17,7 @@ const kindFields = new Map([
   ['raster', []],
   ['shot-correction', ['binding']],
   ['surface-channel', ['binding','chart','channel']],
+  ['decal-layer', ['binding','decal']],
   ['splat-attributes', ['binding']],
   ['sdf-shape', ['binding']],
   ['sdf-material', ['binding']]
@@ -36,6 +37,8 @@ function validate(destinations, bindings) {
     if (destination.kind === 'surface-channel' &&
         (!Targets.name(destination.chart) || !Targets.name(destination.channel)))
       throw new TypeError('A surface channel destination needs a chart and channel');
+    if (destination.kind === 'decal-layer' && (!Targets.name(destination.decal) || destination.decal.length > 128))
+      throw new TypeError('A decal layer destination needs a stable decal ID');
     ids.add(destination.id);
   }
 }
@@ -185,6 +188,28 @@ function boundSolid(binding, editor) {
   return { key, solid };
 }
 
+function boundDecal(destination, binding, editor) {
+  const row = editor.snapshot().surfaceDecals?.decals.find(decal=>decal.id===destination.decal);
+  const part = row && (row.anchor.part ?? editor.node('solid:'+row.anchor.object)?.solid?.part);
+  if (!row || row.anchor.object !== binding.object || binding.part !== undefined && part !== binding.part)
+    throw conflict('unavailable-decal','Decal is missing or outside scene binding '+binding.id,
+      { binding:binding.id, decal:destination.decal });
+  return row;
+}
+
+function decalEdit(frame, edit, route, editor) {
+  const {destination,binding}=route;
+  const row=boundDecal(destination,binding,editor);
+  let operation=edit.operation;
+  if (operation?.type==='bake' && operation.source!==undefined) {
+    if (!fields(operation,['type','source']) || operation.source!=='frame' || frame.width>256 || frame.height>256)
+      throw new TypeError('A decal bake from a pixel frame needs a native grid up to 256 by 256');
+    const {width,height,rgba}=LayerStack.image(frame,frame.colors);
+    operation={type:'bake',image:{width,height,pixels:Array.from(rgba)}};
+  }
+  return editor.editSurfaceDecal(row.id,operation);
+}
+
 function restChart(solid, chart) {
   const charts = solid.surfaceState?.charts;
   const target = charts && Object.hasOwn(charts,chart) && charts[chart];
@@ -320,6 +345,7 @@ function apply(frame, edit, route, context, readMarks) {
   checkRevision(binding,source,edit.sourceRevision);
   if (isShot) return shot(frame,edit,binding,source.world,marks,context.onSplat);
   if (destination.kind === 'splat-attributes') return splats(frame,edit,binding,source.world,source.revision,context.onSplat);
+  if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
     edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
   return solidEdit(change,destination,binding,source.editor,frame);
@@ -347,6 +373,11 @@ function targets(route, context, limit) {
           coverage:fit?.coverage?.[i]??1,footprintScale:fit?.[i]??1}) });
     }
     return { destination:destination.id, binding, revision, sourceRevision, count, splats };
+  }
+  if (destination.kind === 'decal-layer') {
+    const {id,kind,anchor,lifetime,opacity,image:{width,height},mask}=boundDecal(destination,binding,editor);
+    return {destination:destination.id,binding,revision,sourceRevision,
+      decal:{id,kind:kind??'paint',anchor,lifetime:lifetime??{},opacity:opacity??1,grid:[width,height],masked:!!mask}};
   }
   const { key, solid } = boundSolid(binding,editor);
   const { chart, channel } = destination;

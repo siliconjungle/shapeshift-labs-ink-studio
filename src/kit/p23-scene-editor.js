@@ -246,6 +246,13 @@
       const value = clone(state);
       return edit('Set rest surface state', targets, solid => patchFields(solid, { surfaceState: value }));
     }
+    function editSurfaceDecal(id, operation) {
+      const decals = K.surfaceDecals.edit(snapshot().surfaceDecals, id, operation);
+      const write = () => document.setEnvironment({ surfaceDecals:decals });
+      if (document.pending()) write();
+      else document.transact('Edit surface decal ' + id, write);
+      return snapshot();
+    }
     function setRole(name, ramp) {
       if (!TargetSelectors.name(name)) throw new TypeError('A material role needs a name');
       const indices = clone(ramp);
@@ -383,6 +390,7 @@
       paintShadowBand,
       paintShadeNormal,
       setSurfaceState,
+      editSurfaceDecal,
       setRole,
       materials: () => freeze(clone(DIO.sceneMaterials(snapshot()))),
       build,
