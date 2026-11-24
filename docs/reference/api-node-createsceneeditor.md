@@ -10,7 +10,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | --- | --- | --- | --- |
 | `node.createSceneEditor().applyBrush` | function | `(stroke)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().begin` | function | `(label)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
-| `node.createSceneEditor().build` | function | `(inputs = buildEnv.parameterInputs)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
+| `node.createSceneEditor().build` | function | `(inputs = buildEnv.parameterInputs, { retainRenderSdf = buildEnv.retainRenderSdf } = {})` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().buildIncremental` | function | `(previousWorld, inputs)` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().cacheStats` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |
 | `node.createSceneEditor().cancel` | function | `()` | [guide](../scene-editor.md), [source](../../src/kit/p23-scene-editor.js) |

@@ -483,6 +483,16 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.graphTypes.description` | function | `(type)` | [source](../../src/kit/pap-graph-types.js) |
 | `KIT.procedural.graphTypes.validator` | function | `(type)` | [source](../../src/kit/pap-graph-types.js) |
 
+## KIT.procedural.gridSculptBrush
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.gridSculptBrush` | namespace |  |  |
+| `KIT.procedural.gridSculptBrush.check` | function | `(brush)` | [source](../../src/kit/p59-grid-sculpt-brush.js) |
+| `KIT.procedural.gridSculptBrush.maxCells` | value | `number = 1024` |  |
+| `KIT.procedural.gridSculptBrush.point` | function | `({ origin,right,down,forward,perspective }, [w,h], x,y,depth)` | [source](../../src/kit/p59-grid-sculpt-brush.js) |
+| `KIT.procedural.gridSculptBrush.prepare` | function | `(brush)` | [source](../../src/kit/p59-grid-sculpt-brush.js) |
+
 ## KIT.procedural.growth
 
 | Member | Kind | Signature or value | Guides and source |

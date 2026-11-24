@@ -8,6 +8,7 @@ const FootprintEdits = require('./pixel-splat-footprints.js');
 const RowAttributes = require('./splat-row-attributes.js');
 const Topology = require('./splat-topology.js');
 const ScanPaint = require('./scan-material-paint.js');
+const GridBrush = require('./sdf-grid-brush.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict,sourceTarget } = require('./pixel-edit-preview.js');
@@ -545,6 +546,16 @@ function apply(frame, edit, route, context, readMarks) {
     return asset;
   }
   if (destination.kind === 'decal-layer') return decalEdit(frame,edit,route,source.editor);
+  if (destination.kind === 'sdf-shape' && edit.operation?.brush !== undefined) {
+    if (!fields(edit.operation,['brush'])) throw new TypeError('Use a separate edit for a grid brush');
+    const { key,solid } = boundSolid(binding,source.editor), modifiers = solid.modifiers ?? [];
+    if (modifiers.some(modifier=>modifier.id===edit.id))
+      throw new RangeError('An SDF modifier uses the edit ID, which must be new on the solid');
+    const { modifier,report } = GridBrush.project(source.editor,solid,frame,binding,edit.operation.brush,layer);
+    source.editor.setModifiers([...modifiers,{ ...modifier,id:edit.id }],key);
+    context.onEditTarget?.({ ...sourceTarget(route,edit),node:key,modifier:edit.id,brush:report });
+    return source.editor.snapshot();
+  }
   const change = destination.kind === 'surface-channel' && layer?.kind === 'surface' &&
     edit.operation?.pixel !== undefined ? { ...edit,operation:surfacePixel(frame,edit.operation,binding,layer) } : edit;
   return solidEdit(change,destination,binding,source.editor,frame);

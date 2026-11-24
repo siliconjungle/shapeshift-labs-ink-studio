@@ -173,6 +173,7 @@
   modifierKinds.warp.may = { ...modifierKinds.warp.may, taper: 'vec2' };
   modifierKinds.join = { need: { how: 'join', shape: 'solid' }, may: DIO.kinds.join.may };
   modifierKinds.mask = { need: { mode: ['keep', 'cut'], shape: 'solid' } };
+  modifierKinds['grid-brush'] = { need: { mode: ['add', 'cut'], brush: 1 } };
   const builtKinds = ['pillar', 'arch', 'stairs', 'fence', 'pipe'];
   const activeModifiers = solid => (solid.modifiers ?? []).filter(modifier => modifier.enabled !== false);
 
@@ -1045,6 +1046,10 @@
         const def = modifierKinds[kind];
         fields(modifier, at, def, { id: 'str', label: 'str', enabled: 'bool' });
         if (Object.hasOwn(modifier, 'do')) bad(at + '.do', 'a sculpt modifier uses kind');
+        if (kind === 'grid-brush') {
+          try { K.procedural.gridSculptBrush.check(modifier.brush); }
+          catch (error) { bad(at + '.brush',error.message); }
+        }
         if (kind === 'fold') {
           if ([modifier.polar, modifier.mirror, modifier.repeat].filter(value => value !== undefined).length !== 1)
             bad(at, 'a fold needs exactly one of polar, mirror or repeat');
@@ -1575,6 +1580,11 @@
         const mesh = K.mesh.fit(env.assets[s.asset], { size: s.size || 4, at: s.at, turn: s.spin, up: s.up });
         meshLooks.set(s, { mesh, look: K.mesh.look(mesh, { hues: s.hues || 5, pal }) });
       }
+    const brushed = spec.solids.filter(s=>s.id && activeModifiers(s).some(modifier=>modifier.kind==='grid-brush'));
+    if (brushed.length && st0.finish.look?.sdfAssist === undefined) {
+      const rules = brushed.map(s=>({ select:{entity:s.id} }));
+      st0.finish.look = { ...st0.finish.look,sdfAssist:rules.length>64 ? true : { rules } };
+    }
     const { detailBudgets, shadowArt } = st0.finish.look ?? {};
     const B = (env.makeBuilder || makeBuilder)(seed, pal, detailBudgets === undefined && shadowArt === undefined ?
       undefined : { detailBudgets, shadowArt });
@@ -1588,7 +1598,7 @@
       S = K.sculpt((env.makeSculpt || makeSculpt)(B));
       S.sun = B.norm(st0.sun);
       if (st0.finish.look?.pixel) S.pixel = true;
-      S.keepRenderSdf = keepLightCasters || Boolean(st0.finish.look?.sdfAssist ||
+      S.keepRenderSdf = env.retainRenderSdf === true || keepLightCasters || Boolean(st0.finish.look?.sdfAssist ||
         st0.finish.bounceProbes?.geometry?.sdfs?.length && (!st0.finish.bounceProbes.format || st0.finish.bounceProbes.dynamic));
       S.captureAlbedo = Boolean(st0.finish.liveSun) ||
         Array.isArray(st0.finish.look?.renderStages) && st0.finish.look.renderStages.some(rule => rule.stage === 'material');
@@ -1670,7 +1680,10 @@
       make = (s, held) => {
         const space = solidSpace(s,B.frame), recipe = () => makeSolid(s,held);
         const p = space ? S.transformSolids(space,recipe) : recipe();
-        if (s.id) made[s.id] = p;
+        if (s.id) {
+          made[s.id] = p;
+          if (env.retainRenderSdf && p?.sd) p.modifierSpace = space;
+        }
         return p;
       },
       makeSolid = (s, held) => {
@@ -1760,7 +1773,11 @@
           for (const modifier of modifiers) {
             const options = { hold: true };
             let reach = p.reach;
-            if (modifier.kind === 'join' || modifier.kind === 'mask') {
+            if (modifier.kind === 'grid-brush') {
+              const operand = K.procedural.gridSculptBrush.prepare(modifier.brush).solid(S,p.mat);
+              const cut = modifier.mode === 'cut';
+              p = S.join(cut ? 'cut' : 'union',p,operand,{ ...options,r:0,mat:p.mat,mask:cut });
+            } else if (modifier.kind === 'join' || modifier.kind === 'mask') {
               const operand = sub(modifier.shape);
               reach = Math.max(reach, operand.reach);
               if (modifier.kind === 'join') {

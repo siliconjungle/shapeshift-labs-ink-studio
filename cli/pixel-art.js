@@ -1465,7 +1465,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
       onSplat: splat => splats.push(splat),
       onEditTarget: target => { editTarget = target; }
     });
-    let target = Preview.sourceTarget(route,patch), shotHits, skippedHits = [];
+    let target = Preview.sourceTarget(route,patch), shotHits, skippedHits = editTarget?.brush?.skippedHits ?? [];
     if (editTarget) target = editTarget;
     else if (destination.kind === 'raster') {
       const layer = patch.cel === undefined ? patch.id : [...frame.cels].find(([,id]) => id === patch.cel)[0];
@@ -1561,7 +1561,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
         if (splat.topology) (target.topologyHits ??= []).push(splat);
       },
       onEditTarget: summary => {
-        if (target && summary.kind==='scan-material') Object.assign(target,summary);
+        if (target && (summary.kind==='scan-material' || summary.brush)) Object.assign(target,summary);
         else targets.push(summary);
       },
       world:binding => context.world(binding),
@@ -1775,7 +1775,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
         const footprintHits = splats.filter(row=>row.footprint);
         const attributeHits = splats.filter(row=>row.attributes);
         const topologyHits = splats.filter(row=>row.topology);
-        const summary={ ...target,...(painted?.kind==='scan-material' && painted), sourceRevision:receipt.inputs.sourceRevision,
+        const summary={ ...target,...((painted?.kind==='scan-material' || painted?.brush) && painted), sourceRevision:receipt.inputs.sourceRevision,
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
           ...(paintHits.length && {paintHits}),
           ...(footprintHits.length && {footprintHits}),
