@@ -46,7 +46,9 @@ const SplatPreview = require('./pixel-splat-preview.js');
 const Sessions = require('./pixel-edit-session.js');
 const PixelCommands = require('./pixel-commands.js');
 const Batch = require('./pixel-edit-batch.js');
-const { isRevision,digest } = require('./pixel-edit-revisions.js');
+const Recipes = require('./pixel-command-recipes.js');
+const { viewOptions:recipeViewOptions } = require('./splat-edit-diagnostics.js');
+const { isRevision,digest,canonicalDigest } = require('./pixel-edit-revisions.js');
 
 const format = 'ink-studio/pixel-art';
 const receiptFormat = 'ink-studio/pixel-edit-receipt';
@@ -2025,6 +2027,43 @@ function revalidatedPatch(editor,step,context) {
   return patch;
 }
 
+function recipePatch(editor,command,context) {
+  const design = editor.snapshot(), patch = PixelCommands.request(design,command);
+  const { destination,binding } = Destinations.resolve(design,patch.destination);
+  const request = patch.revision === undefined ? { ...patch,revision:fingerprint(design) } : patch;
+  if (binding && patch.sourceRevision === undefined)
+    request.sourceRevision = editor.targets(patch.destination,{ ...context,limit:1 }).sourceRevision;
+  if (destination.kind === 'selections') {
+    const { query,layer,cel,targetRevision,sources } = patch.operation ?? {};
+    const result = editor.select(query,{ ...context,frame:patch.frame,layer,cel });
+    request.operation = { ...patch.operation,
+      ...(result.targetRevision !== undefined && { targetRevision:targetRevision === undefined ? result.targetRevision : targetRevision }),
+      ...(result.sources !== undefined && { sources:sources === undefined ? result.sources : sources }) };
+  }
+  return request;
+}
+
+function recipeFrame(editor,{ frame,layer,cel,binding:id,time = 0 },context) {
+  if (id === undefined) return editor.png({ frame,layer,cel,colorMode:'rgba' });
+  const design = editor.snapshot(), binding = design.sceneBindings?.find(row=>row.id === id);
+  if (!binding) throw new RangeError('Unknown recipe comparison binding '+id);
+  const active = frame ?? binding.frame;
+  if (active !== undefined && (!design.frames?.some(row=>row.id === active) ||
+      binding.frame !== undefined && binding.frame !== active))
+    throw new RangeError('Recipe comparison frame is outside binding '+id);
+  const source = context.world?.(binding);
+  let world = source;
+  if (!world && editor.sceneEditor && sameScene(binding.scene,context.sceneRef ?? editor.sceneEditor.snapshot().id)) {
+    world = buildForDiff(editor.sceneEditor);
+    poseDiff(world,time,{ kit:require('../index.js').load(),maxSteps:7200 });
+  }
+  if (!world) throw new TypeError('Scene comparisons need the attached scene or a world adapter for '+id);
+  const [w,h] = binding.canvas?.size ?? [design.width,design.height], options = recipeViewOptions(w,h,time,context.view);
+  const result = require('./render.js').render(withRenderAssets(world,editor.renderOptions(binding.scene)),options);
+  if (result.w !== w || result.h !== h) throw new RangeError('Recipe comparison did not render on the binding grid');
+  return PNG.encodeFrame(PNG.packFrame(result));
+}
+
 function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimit, sessionDirectory } = {}, loaded, forkState) {
   const original = loaded?.contents.baseline ?? openDesign(source);
   const baseline = { ...original, ...forkState,renderOutputs:forkState?.renderOutputs ?? {}, receipts:[], verifiedReplays:[] };
@@ -2230,13 +2269,13 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const sandbox = createEditor(draft.design,{sceneEditor:scene,sceneRef:sceneName,historyLimit:0},undefined,{
       legacyRevision:draft.legacyRevision,renderOutputs:structuredClone(draft.renderOutputs)
     });
-    const adapters = scene && context.scene ? {...context,scene(binding) {
+    const adapters = scene && context.scene ? {...context,sceneRef:context.sceneRef ?? sceneName,scene(binding) {
       const supplied = context.scene(binding);
       if (!supplied || supplied.editor !== sceneEditor) return supplied;
       const revision = supplied.revision === fingerprint(sceneEditor.snapshot()) ?
         fingerprint(scene.snapshot()) : supplied.revision;
       return { ...supplied,editor:scene,revision };
-    }} : context;
+    }} : { ...context,sceneRef:context.sceneRef ?? sceneName };
     return { sandbox,adapters };
   }
 
@@ -2284,6 +2323,59 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       return { ...report,valid:true,batch,preview,changes,conflicts:[] };
     } catch (error) {
       return { ...report,valid:false,...Batch.failure(error) };
+    }
+  }
+
+  function previewRecipe(recipe,context = {}) {
+    const report = { format:Recipes.reviewFormat,version:1 };
+    let prepared;
+    try {
+      requireNoDraft();
+      prepared = Recipes.prepare(recipe,context.inputs);
+      const { sandbox,adapters } = detached(state(),sceneEditor?.snapshot(),context);
+      const before = prepared.comparisons.map(view=>recipeFrame(sandbox,view,adapters));
+      sandbox.begin(prepared.label);
+      for (const [index,{command}] of prepared.steps.entries()) Batch.runStep(index,()=>{
+        const patch = recipePatch(sandbox,command,adapters);
+        sandbox.execute(PixelCommands.envelope('apply',{ patch,options:command.options }),adapters);
+      });
+      const preview = sandbox.previewChanges({ ...adapters,exact:context.exact ?? false });
+      if (!preview.valid) return { ...report,valid:false,preview,conflicts:preview.conflicts };
+      const batch = sandbox.recordBatch(adapters);
+      const comparisons = prepared.comparisons.map((view,index)=>
+        Recipes.compare(view,before[index],recipeFrame(sandbox,view,adapters)));
+      const plan = Recipes.plan(prepared,batch,comparisons);
+      return { ...report,valid:true,plan,approval:canonicalDigest(plan),steps:prepared.steps.map(step=>step.id),
+        preview,comparisons,conflicts:[] };
+    } catch (error) {
+      const failure = Batch.failure(error), step = prepared?.steps[failure.failedStep]?.id;
+      return { ...report,valid:false,...failure,...(step && { step }) };
+    }
+  }
+
+  function applyRecipe(raw,approval,context = {}) {
+    try {
+      requireNoDraft();
+      const plan = Recipes.checkPlan(raw,approval);
+      Batch.checkInputs(Batch.read(plan.batch,step=>replayReceipt(step,'sdk')).inputs,batchAnchor());
+      if (plan.comparisons.length) {
+        const { sandbox,adapters } = detached(state(),sceneEditor?.snapshot(),context);
+        const before = plan.comparisons.map(({view})=>recipeFrame(sandbox,view,adapters));
+        sandbox.replayBatch(plan.batch,adapters);
+        for (const [index,{view,revision}] of plan.comparisons.entries()) {
+          const actual = Recipes.compare(view,before[index],recipeFrame(sandbox,view,adapters)).revision;
+          if (revision !== actual)
+            throw Preview.conflict('recipe-comparison-changed','A rendered comparison differs from the approved review',
+              { comparison:view.id,expected:revision,actual });
+        }
+      }
+      const batch = replayBatch(plan.batch,context);
+      return { format:Recipes.applyFormat,version:1,valid:true,recipe:plan.recipe,approval,
+        batchRevision:batch.revision,outputs:batch.outputs,conflicts:[] };
+    } catch (error) {
+      const failure = Batch.failure(error);
+      const report = { format:Recipes.applyFormat,version:1,valid:false,...failure };
+      throw Object.assign(new Error(failure.conflicts[0].message),{receipt:report,conflicts:report.conflicts});
     }
   }
 
@@ -2425,7 +2517,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       return inspectTargets(state().design,destination,editContext(options,false),options.limit,options);
     },
     apply: (patch,context) => apply(patch,context),
-    applyBatch,recordBatch,replayBatch,revalidateBatch,
+    applyBatch,recordBatch,replayBatch,revalidateBatch,previewRecipe,applyRecipe,
     receipts: () => structuredClone(state().receipts),
     replay(raw,context) {
       const receipt = replayReceipt(raw,'sdk');
@@ -3450,7 +3542,7 @@ function exportSessionArtifact(editor,directory,opt) {
   return { artifact,file:out };
 }
 
-function runSessionPixelCommand(editor,directory,input,opt,capture) {
+function runSessionPixelCommand(editor,directory,input,opt,{capture,world},attachedScene) {
   const sceneRef = opt.scene, sourceFile = opt['source-view'];
   if (Object.keys(opt).some(key=>!['scene','source-view','out'].includes(key)) ||
       [sceneRef,sourceFile].some(value=>value !== undefined && !reference(value)))
@@ -3463,10 +3555,13 @@ function runSessionPixelCommand(editor,directory,input,opt,capture) {
   }) : undefined;
   const captureSelection = view ? ()=>view : undefined;
   const command = read(input);
+  const externalWorld = reference(sceneRef) && world && (!attachedScene || !sameScene(attachedScene,sceneRef)) &&
+    ['preview-recipe','apply-recipe'].includes(command.action) ? binding=>
+      sameScene(binding.scene,sceneRef) ? world(sceneRef) : undefined : undefined;
   try {
-    const result = editor.execute(command,{ captureSelection,captureWithWorld,sceneRef,
+    const result = editor.execute(command,{ captureSelection,captureWithWorld,sceneRef,world:externalWorld,
       directory:path.dirname(path.resolve(input)),inputs:[...inputs,...(out ? [out] : [])] });
-    if (['preview','revalidate-batch'].includes(command.action) && !result.valid) process.exitCode = 2;
+    if (['preview','revalidate-batch','preview-recipe'].includes(command.action) && !result.valid) process.exitCode = 2;
     return { result,out };
   } catch (error) {
     if (command.action === 'select') return { result:selectConflict(error),out };
@@ -3476,7 +3571,7 @@ function runSessionPixelCommand(editor,directory,input,opt,capture) {
   }
 }
 
-function sessionCommand(pos,opt,{ scene,capture,view }) {
+function sessionCommand(pos,opt,{ scene,capture,view,world }) {
   const [action,directory,input] = pos;
   const argc = ['init','run','select',...PixelCommands.edits].includes(action) ? 3 : 2;
   if (pos.length !== argc || !sessionActions.includes(action))
@@ -3511,7 +3606,7 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
         ...settings,...(editor.sceneEditor && sameScene(attachedScene,opt.scene) && { sourceWorld:editor.sceneEditor.build() })
       }) : undefined;
     if (action === 'run') {
-      ({ result,out:reportFile } = runSessionPixelCommand(editor,directory,input,opt,capture));
+      ({ result,out:reportFile } = runSessionPixelCommand(editor,directory,input,opt,{capture,world},attachedScene));
     } else if (action === 'begin') {
       run(action,{ label:opt.label });
     } else if (PixelCommands.edits.includes(action)) {

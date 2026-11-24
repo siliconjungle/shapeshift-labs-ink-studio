@@ -17,6 +17,16 @@ function digest(value) {
   return createHash('sha256').update(json).digest('hex');
 }
 
+function canonicalDigest(value) {
+  function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && Object.getPrototypeOf(value) === Object.prototype)
+      return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]));
+    return value;
+  }
+  return digest(canonical(value));
+}
+
 function observe({ destination,binding }, context, { guard = true } = {}) {
   const { id,kind,chart,channel } = destination;
   const scope = ['ink-studio/pixel-source-v1',id,kind,chart,channel,
@@ -51,4 +61,4 @@ function observe({ destination,binding }, context, { guard = true } = {}) {
   return { editor,revision,sourceRevision };
 }
 
-module.exports = { isRevision, observe, digest };
+module.exports = { isRevision, observe, digest, canonicalDigest };

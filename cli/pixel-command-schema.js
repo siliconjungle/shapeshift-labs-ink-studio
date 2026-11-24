@@ -2,6 +2,7 @@
 
 const Commands = require('./pixel-commands.js');
 const Batch = require('./pixel-edit-batch.js');
+const Recipes = require('./pixel-command-recipes.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preset = require('../src/pixel-export-preset.js');
 const { createDefinitions,ref,constant,choice,either,object,nullable,types,array,num,int,tuple,prop } =
@@ -30,6 +31,19 @@ const evidence = {
     '/changes':'Steps whose resolved targets or hit evidence differ from the old receipt.',
     '/failedStep':'Zero-based index of a rejected step when available.',
     '/conflicts':'Why the batch could not be revalidated.'
+  }],
+  'preview-recipe':['recipeReview',{
+    '/plan':'Portable apply plan with bound inputs, verified edit steps and comparison digests.',
+    '/approval':'Pass this review digest alongside the unchanged plan to apply it.',
+    '/steps':'Stable recipe step IDs in execution order.',
+    '/comparisons':'Before and after native PNGs plus the difference mask.',
+    '/preview':'Batch preview and optional exact diff.',
+    '/conflicts':'Reasons the recipe could not be prepared or staged.'
+  }],
+  'apply-recipe':['recipeApplication',{
+    '/outputs':'Final document, scene and sidecar revisions after verified replay.',
+    '/batchRevision':'Revision of the transaction used to apply the approved recipe.',
+    '/conflicts':'Mismatched approvals, stale inputs or differing replay evidence.'
   }],
   inspect:['inspectResult',{
     '/revision':'Document revision for follow-up edits.',
@@ -143,6 +157,12 @@ function examples(createEditor) {
     {...draw,patch:{...draw.patch,id:'other-badge',revision:undefined,operation:{...draw.patch.operation,points:[[4,2]]}}}]});
   const recorded = createEditor(document).execute(batch);
   const other = {...draw,patch:{...draw.patch,id:'border',operation:{...draw.patch.operation,points:[[0,0]]}}};
+  const recipe = {format:Recipes.format,version:1,id:'paint-badge',
+    inputs:{at:{type:'point',default:[3,2]}},
+    steps:[{id:'badge-dot',action:'draw',patch:{frame:'art',
+      operation:{tool:'pencil',layer:'ink',points:[{$input:'at'}],swatch:'rust'}}}]};
+  const proposed = make('preview-recipe',{recipe});
+  const approval = createEditor(document).execute(proposed);
   const inputs = {
     validate:[[make('validate')]], inspect:[[make('inspect',{at:[1,1],options:{frame:'art'}})]],
     select:[[make('select',{query:{type:'rectangle',rect:[1,1,2,1]}})],
@@ -162,6 +182,8 @@ function examples(createEditor) {
     batch:[[batch]],'record-batch':[[make('record-batch'),[begin,draw]]],
     'replay-batch':[[make('replay-batch',{batch:recorded})]],
     'revalidate-batch':[[make('revalidate-batch',{batch:recorded,options:{exact:true}}),[other]]],
+    'preview-recipe':[[proposed]],
+    'apply-recipe':[[make('apply-recipe',{plan:approval.plan,approval:approval.approval})]],
     export:[[make('export',{artifact:'document'})],[make('export',{artifact:'png',options:{frame:'art',layer:'ink'}})]]
   };
   return Object.fromEntries(Object.entries(inputs).map(([action,rows])=>[action,rows.map(([command,setup=[]])=>{
@@ -256,6 +278,49 @@ function resultDefinitions(artifacts) {
         ['artifact','encoding','data']),
       object({artifact:choice(...artifacts.filter(name=>name!=='png')),data:obj},['artifact','data'])
     ]}
+  };
+}
+
+function recipeDefinitions(edits) {
+  const input = object({$input:id},['$input']);
+  const templated = schema=>either(schema,input);
+  const image = object({grid:size,encoding:constant('base64'),
+    data:{type:'string',contentEncoding:'base64',contentMediaType:'image/png'}},['grid','encoding','data']);
+  const view = properties=>object(properties,['id']);
+  const scope = {id,frame:id,layer:id,cel,binding:id,time:num(0)};
+  const template = ref('recipeValue'), parameter = ref('recipeInput');
+  const evidence = {failedStep:natural,conflicts:array(ref('conflict')),editReceipt:obj};
+  const identity = object({id,revision},['id','revision']);
+  return {
+    recipeValue:either(input,{type:'null'},bool,number,{type:'string'},array(template),
+      {type:'object',additionalProperties:template,not:prop('$input')}),
+    recipeInput:object({type:choice(...Recipes.inputTypes),default:{}},['type']),
+    recipeStep:object({id,action:choice(...edits),patch:{type:'object',additionalProperties:template},
+      options:{type:'object',additionalProperties:template}},['id','action','patch']),
+    recipeComparison:view(scope),
+    recipeComparisonTemplate:view(Object.fromEntries(Object.entries(scope).map(([key,schema])=>[key,templated(schema)]))),
+    recipe:object({format:constant(Recipes.format),version:constant(1),id,label:text,
+      inputs:{type:'object',propertyNames:id,additionalProperties:parameter},
+      steps:array(ref('recipeStep'),1,Batch.maxSteps),
+      comparisons:array(ref('recipeComparisonTemplate'),0,Recipes.maxComparisons)},['format','version','id','steps']),
+    recipePlan:object({format:constant(Recipes.planFormat),version:constant(1),recipe:identity,inputs:obj,
+      batch:ref('batchReceipt'),comparisons:array(object({view:ref('recipeComparison'),revision},['view','revision']),0,Recipes.maxComparisons)},
+    ['format','version','recipe','inputs','batch','comparisons']),
+    recipeComparisonResult:object({view:ref('recipeComparison'),before:image,after:image,difference:image,revision,changedPixels:natural},
+      ['view','before','after','difference','revision','changedPixels']),
+    recipeReview:{
+      ...object({format:constant(Recipes.reviewFormat),version:constant(1),valid:bool,plan:ref('recipePlan'),approval:revision,
+        preview:ref('previewResult'),steps:array(id,1,Batch.maxSteps),step:id,
+        comparisons:array(ref('recipeComparisonResult'),0,Recipes.maxComparisons),...evidence},
+      ['format','version','valid','conflicts']),
+      if:{properties:{valid:constant(true)}},then:{required:['plan','approval','preview','steps','comparisons']},
+      else:{not:prop('plan')}
+    },
+    recipeApplication:{
+      ...object({format:constant(Recipes.applyFormat),version:constant(1),valid:bool,recipe:identity,approval:revision,
+        batchRevision:revision,outputs:ref('batchState'),...evidence},['format','version','valid','conflicts']),
+      if:{properties:{valid:constant(true)}},then:{required:['recipe','approval','batchRevision','outputs']}
+    }
   };
 }
 
@@ -365,7 +430,7 @@ function channelReference(surfaceDefinitions) {
 
 function buildSchema({ createEditor,surfaceDefinitions }) {
   const contract = Commands.contract(), { format,version,members,requiredFields,optionFields,edits,travel,exportArtifacts } = contract;
-  const defs = { ...createDefinitions(),...resultDefinitions(exportArtifacts) };
+  const defs = { ...createDefinitions(),...resultDefinitions(exportArtifacts),...recipeDefinitions(edits) };
   defs.indexedPigment = inkSwatch;
   defs.paintColor = paintColor;
   defs.emission = emission;
@@ -381,6 +446,7 @@ function buildSchema({ createEditor,surfaceDefinitions }) {
   const samples = examples(createEditor), byAction = {};
   const fields = { at:pixel,query:ref('selectionQuery'),label:text,receipt:ref('replayReceipt'),
     batch:ref('batchReceipt'),revision,commands:array(ref('batchStep'),1,Batch.maxSteps),
+    recipe:ref('recipe'),inputs:obj,plan:ref('recipePlan'),approval:revision,
     edit:{oneOf:edits.map(action=>ref(action+'Command'))},artifact:choice(...exportArtifacts) };
   const optionTypes = {frame:id,cel,layer:id,binding:id,destinations:{...array(text),uniqueItems:true},references:bool,
     limit:natural,shotHitFrame:int(0,1e9),exact:bool,targetRevision:revision};

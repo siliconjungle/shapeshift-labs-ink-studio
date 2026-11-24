@@ -20,7 +20,7 @@ const optionFields = {
   select:['frame','layer','cel','targetRevision'],
   edit:['shotHitFrame'],
   preview:['limit','exact','shotHitFrame'],
-  'revalidate-batch':['limit','exact'],
+  'revalidate-batch':['limit','exact'],'preview-recipe':['limit','exact'],
   export:{ preset:['preset','out','directory'],png:['frame','cel','layer','colorMode'],
     stamp:['frame','cel','layer','references'],render:['scene'] }
 };
@@ -29,10 +29,12 @@ const members = {
   ...Object.fromEntries(edits.map(action=>[action,['patch','options']])),
   preview:['edit','options'],begin:['label'],...Object.fromEntries(travel.map(action=>[action,[]])),
   replay:['receipt'],batch:['revision','label','commands'],'record-batch':[],
-  'replay-batch':['batch'],'revalidate-batch':['batch','options'],export:['artifact','options']
+  'replay-batch':['batch'],'revalidate-batch':['batch','options'],
+  'preview-recipe':['recipe','inputs','options'],'apply-recipe':['plan','approval'],export:['artifact','options']
 };
 const requiredFields = { inspect:['at'],select:['query'],replay:['receipt'],batch:['revision','commands'],
   'replay-batch':['batch'],'revalidate-batch':['batch'],
+  'preview-recipe':['recipe'],'apply-recipe':['plan','approval'],
   ...Object.fromEntries(edits.map(action=>[action,['patch']])) };
 
 function contract() {
@@ -142,6 +144,10 @@ function execute(editor,design,raw,context = {}) {
       return editor.replayBatch(command.batch,context);
     case 'revalidate-batch':
       return editor.revalidateBatch(command.batch,{...context,...optionsFor(options,optionFields['revalidate-batch'])});
+    case 'preview-recipe':
+      return editor.previewRecipe(command.recipe,{...context,...optionsFor(options,optionFields['preview-recipe']),inputs:command.inputs});
+    case 'apply-recipe':
+      return editor.applyRecipe(command.plan,command.approval,context);
     case 'validate':
       return editor.describe();
     case 'inspect':

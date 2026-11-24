@@ -1,0 +1,76 @@
+{
+  "format": "ink-studio/pixel-command",
+  "version": 1,
+  "action": "preview-recipe",
+  "recipe": {
+    "format": "ink-studio/pixel-command-recipe",
+    "version": 1,
+    "id": "retouch-hardware",
+    "label": "Nudge and shade the relay bracket",
+    "inputs": {
+      "frame": {"type":"id","default":"artwork"},
+      "layer": {"type":"id","default":"hardware"},
+      "seed": {"type":"point","default":[26,39]},
+      "nudge": {"type":"offset","default":[0,-1]},
+      "brush-at": {"type":"point","default":[26,38]},
+      "shade-step": {"type":"integer","default":1}
+    },
+    "steps": [
+      {
+        "id": "select-bracket",
+        "action": "mask",
+        "patch": {
+          "frame": {"$input":"frame"},
+          "operation": {
+            "id": "bracket",
+            "layer": {"$input":"layer"},
+            "query": {
+              "type": "cluster",
+              "at": {"$input":"seed"},
+              "source": {"type":"swatch","at":{"$input":"seed"}}
+            }
+          }
+        }
+      },
+      {
+        "id": "nudge-bracket",
+        "action": "transform",
+        "patch": {
+          "frame": {"$input":"frame"},
+          "operation": {
+            "layer": {"$input":"layer"},
+            "selection": "bracket",
+            "resultSelection": "moved-bracket",
+            "transform": {"offset":{"$input":"nudge"}}
+          }
+        }
+      },
+      {
+        "id": "shade-bracket",
+        "action": "draw",
+        "patch": {
+          "frame": {"$input":"frame"},
+          "operation": {
+            "tool": "brush",
+            "layer": {"$input":"layer"},
+            "selection": "moved-bracket",
+            "at": {"$input":"brush-at"},
+            "brush": {
+              "format": "ink-studio/pixel-brush",
+              "version": 1,
+              "width": 1,
+              "height": 1,
+              "anchor": [0,0],
+              "palette": [{"color":"#ffffff"}],
+              "slots": [0],
+              "settings": {"angle":0,"size":[5,5],"swatch":{"mode":"original"}}
+            },
+            "shading": {"mode":"ramp","ramp":["metal-shadow","bronze","copper"],"step":{"$input":"shade-step"}}
+          }
+        }
+      }
+    ],
+    "comparisons": [{"id":"relay","frame":{"$input":"frame"}}]
+  },
+  "options": {"exact":true}
+}

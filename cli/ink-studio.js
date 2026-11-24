@@ -1480,7 +1480,7 @@ const CMD = {
         '            --scene <bound scene> for native edits; --shot-hit-frame <index> to sample skipped shot hits',
         '  pixel-art session init <directory> <design.json> [--scene scene.json]   start a persistent edit session',
         '  pixel-art schema [--out schema.json]   publish command schemas, examples, destination inputs and evidence',
-        '  pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run SDK commands, including batch recording, replay and revalidation',
+        '  pixel-art session run <directory> <command.json> [--scene scene.json | --source-view view.json] [--out result.json]   run SDK commands, batches and recipes',
         '  pixel-art session <apply|draw|mask|recolor|transform> <directory> <patch.json>   stage or apply a guarded edit',
         '  pixel-art session <status|begin|preview|commit|cancel|undo|redo|validate|inspect|sample|select|snap|brush|copy|timeline|targets> <directory>',
         '  pixel-art session export <directory> [--artifact document|scene|layer-deck|stamp|png|shot-corrections|splat-fit|scan-paint] --out file',
@@ -4410,16 +4410,15 @@ const CMD = {
       const passes = [...sourcePasses,'sourceRestNormal','emission',...require('../src/art-passes.js').inkControls];
       return captureSourceSamples(id,retained,render=>render({passes}));
     }
-    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture,view });
+    function pixelWorld(id) {
+      const world=buildPreview(id), scanPaint=renderAssetOption('scan-paint'), splatFit=renderAssetOption('splat-fit');
+      if (scanPaint!==undefined || splatFit!==undefined) world.look={...world.look,
+        ...(scanPaint!==undefined&&{scanPaint}),...(splatFit!==undefined&&{splatFit})};
+      return world;
+    }
+    if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture,view,world:pixelWorld });
     PixelArt.command(pos,opt,outputFile,{
-      capture,captureMotion,captureTrack,captureMultiview,view,
-      world(id) {
-        const world=buildPreview(id), scanPaint=renderAssetOption('scan-paint'), splatFit=renderAssetOption('splat-fit');
-        if (scanPaint!==undefined || splatFit!==undefined) world.look={...world.look,
-          ...(scanPaint!==undefined&&{scanPaint}),...(splatFit!==undefined&&{splatFit})};
-        return world;
-      },
-      scene:editScene
+      capture,captureMotion,captureTrack,captureMultiview,view,world:pixelWorld,scene:editScene
     });
   },
   /* pixel-art lint: the mistakes pixel artists name, at a diorama's own pixel size, beside what the references come to (the medians

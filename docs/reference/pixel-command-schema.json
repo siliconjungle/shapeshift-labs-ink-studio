@@ -62,6 +62,12 @@
       "$ref": "#/$defs/revalidate-batchCommand"
     },
     {
+      "$ref": "#/$defs/preview-recipeCommand"
+    },
+    {
+      "$ref": "#/$defs/apply-recipeCommand"
+    },
+    {
       "$ref": "#/$defs/exportCommand"
     }
   ],
@@ -6709,6 +6715,664 @@
         }
       ]
     },
+    "recipeValue": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "$input": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "$input"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recipeValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/recipeValue"
+          },
+          "not": {
+            "required": [
+              "$input"
+            ]
+          }
+        }
+      ]
+    },
+    "recipeInput": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "id",
+            "text",
+            "point",
+            "offset",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "default": {}
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "recipeStep": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "action": {
+          "enum": [
+            "apply",
+            "draw",
+            "mask",
+            "recolor",
+            "transform"
+          ]
+        },
+        "patch": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/recipeValue"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/recipeValue"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    "recipeComparison": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "frame": {
+          "$ref": "#/$defs/id"
+        },
+        "layer": {
+          "$ref": "#/$defs/id"
+        },
+        "cel": {
+          "$ref": "#/$defs/celId"
+        },
+        "binding": {
+          "$ref": "#/$defs/id"
+        },
+        "time": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "recipeComparisonTemplate": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$input": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "$input"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$input": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "$input"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "layer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$input": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "$input"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "cel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/celId"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$input": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "$input"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$input": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "$input"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$input": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "$input"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "recipe": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command-recipe"
+        },
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "inputs": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/recipeInput"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recipeStep"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recipeComparisonTemplate"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "id",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "recipePlan": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-recipe-plan"
+        },
+        "version": {
+          "const": 1
+        },
+        "recipe": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        "inputs": {
+          "type": "object"
+        },
+        "batch": {
+          "$ref": "#/$defs/batchReceipt"
+        },
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "view": {
+                "$ref": "#/$defs/recipeComparison"
+              },
+              "revision": {
+                "$ref": "#/$defs/revision"
+              }
+            },
+            "required": [
+              "view",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "recipe",
+        "inputs",
+        "batch",
+        "comparisons"
+      ],
+      "additionalProperties": false
+    },
+    "recipeComparisonResult": {
+      "type": "object",
+      "properties": {
+        "view": {
+          "$ref": "#/$defs/recipeComparison"
+        },
+        "before": {
+          "type": "object",
+          "properties": {
+            "grid": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            },
+            "encoding": {
+              "const": "base64"
+            },
+            "data": {
+              "type": "string",
+              "contentEncoding": "base64",
+              "contentMediaType": "image/png"
+            }
+          },
+          "required": [
+            "grid",
+            "encoding",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        "after": {
+          "type": "object",
+          "properties": {
+            "grid": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            },
+            "encoding": {
+              "const": "base64"
+            },
+            "data": {
+              "type": "string",
+              "contentEncoding": "base64",
+              "contentMediaType": "image/png"
+            }
+          },
+          "required": [
+            "grid",
+            "encoding",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        "difference": {
+          "type": "object",
+          "properties": {
+            "grid": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 512
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            },
+            "encoding": {
+              "const": "base64"
+            },
+            "data": {
+              "type": "string",
+              "contentEncoding": "base64",
+              "contentMediaType": "image/png"
+            }
+          },
+          "required": [
+            "grid",
+            "encoding",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "changedPixels": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "view",
+        "before",
+        "after",
+        "difference",
+        "revision",
+        "changedPixels"
+      ],
+      "additionalProperties": false
+    },
+    "recipeReview": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-recipe-review"
+        },
+        "version": {
+          "const": 1
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "plan": {
+          "$ref": "#/$defs/recipePlan"
+        },
+        "approval": {
+          "$ref": "#/$defs/revision"
+        },
+        "preview": {
+          "$ref": "#/$defs/previewResult"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "step": {
+          "$ref": "#/$defs/id"
+        },
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recipeComparisonResult"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "failedStep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/conflict"
+          }
+        },
+        "editReceipt": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "valid",
+        "conflicts"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "plan",
+          "approval",
+          "preview",
+          "steps",
+          "comparisons"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "plan"
+          ]
+        }
+      }
+    },
+    "recipeApplication": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-recipe-application"
+        },
+        "version": {
+          "const": 1
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "recipe": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        "approval": {
+          "$ref": "#/$defs/revision"
+        },
+        "batchRevision": {
+          "$ref": "#/$defs/revision"
+        },
+        "outputs": {
+          "$ref": "#/$defs/batchState"
+        },
+        "failedStep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/conflict"
+          }
+        },
+        "editReceipt": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "valid",
+        "conflicts"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "recipe",
+          "approval",
+          "batchRevision",
+          "outputs"
+        ]
+      }
+    },
     "indexedPigment": {
       "anyOf": [
         {
@@ -9187,6 +9851,213 @@
           "format": "ink-studio/pixel-command",
           "version": 1,
           "action": "revalidate-batch"
+        }
+      ]
+    },
+    "preview-recipeCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "preview-recipe"
+        },
+        "recipe": {
+          "$ref": "#/$defs/recipe"
+        },
+        "inputs": {
+          "type": "object"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "exact": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action",
+        "recipe"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "recipe": {
+            "format": "ink-studio/pixel-command-recipe",
+            "version": 1,
+            "id": "paint-badge",
+            "inputs": {
+              "at": {
+                "type": "point",
+                "default": [
+                  3,
+                  2
+                ]
+              }
+            },
+            "steps": [
+              {
+                "id": "badge-dot",
+                "action": "draw",
+                "patch": {
+                  "frame": "art",
+                  "operation": {
+                    "tool": "pencil",
+                    "layer": "ink",
+                    "points": [
+                      {
+                        "$input": "at"
+                      }
+                    ],
+                    "swatch": "rust"
+                  }
+                }
+              }
+            ]
+          },
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "preview-recipe"
+        }
+      ]
+    },
+    "apply-recipeCommand": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "ink-studio/pixel-command"
+        },
+        "version": {
+          "const": 1
+        },
+        "action": {
+          "const": "apply-recipe"
+        },
+        "plan": {
+          "$ref": "#/$defs/recipePlan"
+        },
+        "approval": {
+          "$ref": "#/$defs/revision"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "action",
+        "plan",
+        "approval"
+      ],
+      "additionalProperties": false,
+      "examples": [
+        {
+          "plan": {
+            "format": "ink-studio/pixel-recipe-plan",
+            "version": 1,
+            "recipe": {
+              "id": "paint-badge",
+              "revision": "4ec719a2d1a87f4305e17f1f3364d349b42f9cc5a2ee20545fc57f0d66851b69"
+            },
+            "inputs": {
+              "at": [
+                3,
+                2
+              ]
+            },
+            "batch": {
+              "format": "ink-studio/pixel-edit-batch",
+              "version": 1,
+              "label": "paint-badge",
+              "inputs": {
+                "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "outputs": {
+                "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
+              "steps": [
+                {
+                  "format": "ink-studio/pixel-edit-receipt",
+                  "version": 1,
+                  "command": {
+                    "runner": "sdk",
+                    "action": "edit",
+                    "options": {},
+                    "patch": {
+                      "id": "badge-dot",
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          [
+                            3,
+                            2
+                          ]
+                        ],
+                        "swatch": "rust"
+                      },
+                      "destination": "raster",
+                      "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                    },
+                    "frame": "art"
+                  },
+                  "inputs": {
+                    "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                  },
+                  "status": "applied",
+                  "affectedTargets": [
+                    {
+                      "destination": "raster",
+                      "kind": "raster",
+                      "tool": "pencil",
+                      "frame": "art",
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "pixelCount": 1,
+                      "runs": [
+                        [
+                          2,
+                          3,
+                          1
+                        ]
+                      ]
+                    }
+                  ],
+                  "skippedHits": [],
+                  "outputs": {
+                    "kind": "raster",
+                    "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                    "artifactRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56"
+                  }
+                }
+              ],
+              "revision": "eaf311306ec688bf5c0a721f7d59327ad189c7e406fb8d1e88e1f2325ee93e4e"
+            },
+            "comparisons": []
+          },
+          "approval": "42152f5a03c77db6d1be91e5a2776dba201cc35799e2f2d837aaa7399fd1ef4a",
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "apply-recipe"
         }
       ]
     },
@@ -13043,6 +13914,356 @@
                 }
               },
               "changes": [],
+              "conflicts": []
+            }
+          }
+        ]
+      },
+      "preview-recipe": {
+        "request": "#/$defs/preview-recipeCommand",
+        "result": "#/$defs/recipeReview",
+        "required": [
+          "recipe"
+        ],
+        "evidence": {
+          "/plan": "Portable apply plan with bound inputs, verified edit steps and comparison digests.",
+          "/approval": "Pass this review digest alongside the unchanged plan to apply it.",
+          "/steps": "Stable recipe step IDs in execution order.",
+          "/comparisons": "Before and after native PNGs plus the difference mask.",
+          "/preview": "Batch preview and optional exact diff.",
+          "/conflicts": "Reasons the recipe could not be prepared or staged."
+        },
+        "examples": [
+          {
+            "command": {
+              "recipe": {
+                "format": "ink-studio/pixel-command-recipe",
+                "version": 1,
+                "id": "paint-badge",
+                "inputs": {
+                  "at": {
+                    "type": "point",
+                    "default": [
+                      3,
+                      2
+                    ]
+                  }
+                },
+                "steps": [
+                  {
+                    "id": "badge-dot",
+                    "action": "draw",
+                    "patch": {
+                      "frame": "art",
+                      "operation": {
+                        "tool": "pencil",
+                        "layer": "ink",
+                        "points": [
+                          {
+                            "$input": "at"
+                          }
+                        ],
+                        "swatch": "rust"
+                      }
+                    }
+                  }
+                ]
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "preview-recipe"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-recipe-review",
+              "version": 1,
+              "valid": true,
+              "plan": {
+                "format": "ink-studio/pixel-recipe-plan",
+                "version": 1,
+                "recipe": {
+                  "id": "paint-badge",
+                  "revision": "4ec719a2d1a87f4305e17f1f3364d349b42f9cc5a2ee20545fc57f0d66851b69"
+                },
+                "inputs": {
+                  "at": [
+                    3,
+                    2
+                  ]
+                },
+                "batch": {
+                  "format": "ink-studio/pixel-edit-batch",
+                  "version": 1,
+                  "label": "paint-badge",
+                  "inputs": {
+                    "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                    "legacyRevision": null,
+                    "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                    "scene": null
+                  },
+                  "outputs": {
+                    "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                    "legacyRevision": null,
+                    "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                    "scene": null
+                  },
+                  "steps": [
+                    {
+                      "format": "ink-studio/pixel-edit-receipt",
+                      "version": 1,
+                      "command": {
+                        "runner": "sdk",
+                        "action": "edit",
+                        "options": {},
+                        "patch": {
+                          "id": "badge-dot",
+                          "frame": "art",
+                          "operation": {
+                            "tool": "pencil",
+                            "layer": "ink",
+                            "points": [
+                              [
+                                3,
+                                2
+                              ]
+                            ],
+                            "swatch": "rust"
+                          },
+                          "destination": "raster",
+                          "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                        },
+                        "frame": "art"
+                      },
+                      "inputs": {
+                        "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                      },
+                      "status": "applied",
+                      "affectedTargets": [
+                        {
+                          "destination": "raster",
+                          "kind": "raster",
+                          "tool": "pencil",
+                          "frame": "art",
+                          "layer": "ink",
+                          "cel": "art/ink",
+                          "pixelCount": 1,
+                          "runs": [
+                            [
+                              2,
+                              3,
+                              1
+                            ]
+                          ]
+                        }
+                      ],
+                      "skippedHits": [],
+                      "outputs": {
+                        "kind": "raster",
+                        "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                        "artifactRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56"
+                      }
+                    }
+                  ],
+                  "revision": "eaf311306ec688bf5c0a721f7d59327ad189c7e406fb8d1e88e1f2325ee93e4e"
+                },
+                "comparisons": []
+              },
+              "approval": "42152f5a03c77db6d1be91e5a2776dba201cc35799e2f2d837aaa7399fd1ef4a",
+              "steps": [
+                "badge-dot"
+              ],
+              "preview": {
+                "format": "ink-studio/pixel-edit-preview",
+                "version": 1,
+                "valid": true,
+                "pixelCount": 1,
+                "pixels": [
+                  {
+                    "frame": "art",
+                    "at": [
+                      3,
+                      2
+                    ],
+                    "before": {
+                      "layer": null,
+                      "cel": null,
+                      "swatch": null,
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": null
+                    },
+                    "after": {
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "swatch": "rust",
+                      "protected": false,
+                      "underneath": {
+                        "layer": null,
+                        "cel": null,
+                        "swatch": null
+                      },
+                      "color": "#953c2c"
+                    }
+                  }
+                ],
+                "sources": [],
+                "targets": [
+                  {
+                    "destination": "raster",
+                    "kind": "raster",
+                    "tool": "pencil",
+                    "frame": "art",
+                    "layer": "ink",
+                    "cel": "art/ink",
+                    "pixelCount": 1,
+                    "runs": [
+                      [
+                        2,
+                        3,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "conflicts": []
+              },
+              "comparisons": [],
+              "conflicts": []
+            }
+          }
+        ]
+      },
+      "apply-recipe": {
+        "request": "#/$defs/apply-recipeCommand",
+        "result": "#/$defs/recipeApplication",
+        "required": [
+          "plan",
+          "approval"
+        ],
+        "evidence": {
+          "/outputs": "Final document, scene and sidecar revisions after verified replay.",
+          "/batchRevision": "Revision of the transaction used to apply the approved recipe.",
+          "/conflicts": "Mismatched approvals, stale inputs or differing replay evidence."
+        },
+        "examples": [
+          {
+            "command": {
+              "plan": {
+                "format": "ink-studio/pixel-recipe-plan",
+                "version": 1,
+                "recipe": {
+                  "id": "paint-badge",
+                  "revision": "4ec719a2d1a87f4305e17f1f3364d349b42f9cc5a2ee20545fc57f0d66851b69"
+                },
+                "inputs": {
+                  "at": [
+                    3,
+                    2
+                  ]
+                },
+                "batch": {
+                  "format": "ink-studio/pixel-edit-batch",
+                  "version": 1,
+                  "label": "paint-badge",
+                  "inputs": {
+                    "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                    "legacyRevision": null,
+                    "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                    "scene": null
+                  },
+                  "outputs": {
+                    "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                    "legacyRevision": null,
+                    "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                    "scene": null
+                  },
+                  "steps": [
+                    {
+                      "format": "ink-studio/pixel-edit-receipt",
+                      "version": 1,
+                      "command": {
+                        "runner": "sdk",
+                        "action": "edit",
+                        "options": {},
+                        "patch": {
+                          "id": "badge-dot",
+                          "frame": "art",
+                          "operation": {
+                            "tool": "pencil",
+                            "layer": "ink",
+                            "points": [
+                              [
+                                3,
+                                2
+                              ]
+                            ],
+                            "swatch": "rust"
+                          },
+                          "destination": "raster",
+                          "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                        },
+                        "frame": "art"
+                      },
+                      "inputs": {
+                        "documentRevision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49"
+                      },
+                      "status": "applied",
+                      "affectedTargets": [
+                        {
+                          "destination": "raster",
+                          "kind": "raster",
+                          "tool": "pencil",
+                          "frame": "art",
+                          "layer": "ink",
+                          "cel": "art/ink",
+                          "pixelCount": 1,
+                          "runs": [
+                            [
+                              2,
+                              3,
+                              1
+                            ]
+                          ]
+                        }
+                      ],
+                      "skippedHits": [],
+                      "outputs": {
+                        "kind": "raster",
+                        "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                        "artifactRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56"
+                      }
+                    }
+                  ],
+                  "revision": "eaf311306ec688bf5c0a721f7d59327ad189c7e406fb8d1e88e1f2325ee93e4e"
+                },
+                "comparisons": []
+              },
+              "approval": "42152f5a03c77db6d1be91e5a2776dba201cc35799e2f2d837aaa7399fd1ef4a",
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "apply-recipe"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-recipe-application",
+              "version": 1,
+              "valid": true,
+              "recipe": {
+                "id": "paint-badge",
+                "revision": "4ec719a2d1a87f4305e17f1f3364d349b42f9cc5a2ee20545fc57f0d66851b69"
+              },
+              "approval": "42152f5a03c77db6d1be91e5a2776dba201cc35799e2f2d837aaa7399fd1ef4a",
+              "batchRevision": "eaf311306ec688bf5c0a721f7d59327ad189c7e406fb8d1e88e1f2325ee93e4e",
+              "outputs": {
+                "documentRevision": "b8eaac813337ed550caf796e1ff2a8a6070017ea2237c97ceeb52f4042362e56",
+                "legacyRevision": null,
+                "renderRevision": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "scene": null
+              },
               "conflicts": []
             }
           }

@@ -1745,6 +1745,8 @@ const result = editor.execute(command);
 | `record-batch` | Verify and export the edit steps in the open draft. |
 | `replay-batch` | Pass a recorded `batch` to verify and apply it in one transaction. |
 | `revalidate-batch` | Review a recorded `batch` on the current asset. Returns a proposed receipt when the steps pass validation. |
+| `preview-recipe` | Expand a versioned `recipe` with optional `inputs`, then dry run its edits and render its comparisons. |
+| `apply-recipe` | Apply the returned `plan` and `approval` together after verifying the reviewed transaction and comparison frames. |
 
 A draw, mask, recolor, transform, or apply command takes the regular Ink
 patch fields and returns a pixel edit receipt. Keep `id` and `revision` on
@@ -2016,6 +2018,57 @@ ink-studio pixel-art session run changed replay-command.json
 Pass `--scene` or `--source-view` for steps that read render evidence.
 For dynamic SDK captures, `captureWithWorld(settings, world)` receives
 the attached editor's staged world, including retained render options.
+
+### Save and reuse a command recipe
+
+Store a version 1 `ink-studio/pixel-command-recipe` as JSON. Each recipe
+has a stable ID, ordered edit steps, optional named inputs, and optional
+comparison views. Use any ordinary `apply`, `draw`, `mask`, `recolor`,
+or `transform` patch as a step. Each step has its own ID, which becomes
+the edit ID unless its patch provides one.
+
+Declare inputs as `{"type":"point","default":[26,39]}` and reference
+them with `{"$input":"seed"}` inside a patch, its edit options, or a
+comparison. Supported input types are `id`, `text`, `point`,
+`offset`, `integer`, `number`, and `boolean`. Inputs without defaults
+are required. Templates can carry inline brush data and normal edit
+operations. The editor resolves document, source, and intent evidence at
+each step. Any explicitly supplied revision still needs to match.
+
+A comparison can name a document frame, layer, or cel. Set a `binding`
+and optional `time` to compare a scene on its registered native grid.
+The report contains before and after PNGs and a difference-mask PNG, with
+changed cells in white. Images use base64 encoding. Pass `options:
+{ exact: true }` for the full authored diff too.
+
+The included [relay recipe](../examples/pixel-art-tooling/relay-silhouette-recipe.json)
+selects a connected bronze cluster, moves its boundary by one pixel,
+steps it along the metal ramp, and compares the two 64 × 46 frames.
+Its defaults work against the existing relay document.
+
+```sh
+ink-studio pixel-art session init relay-work examples/pixel-art-tooling/relay.json
+ink-studio pixel-art session run relay-work \
+  examples/pixel-art-tooling/relay-silhouette-recipe.json --out relay-review.json
+```
+
+Inspect the comparison and diff before passing the returned plan and digest
+to `apply-recipe`. The SDK can use the same command envelope.
+
+```js
+const review = editor.previewRecipe(recipe, {
+  inputs: { nudge: [0, 1], 'brush-at': [26, 40], 'shade-step': -1 },
+  exact: true
+});
+// After reviewing the PNGs and diff
+const result = editor.applyRecipe(review.plan, review.approval);
+```
+
+For CLI application, save a version 1 pixel command with
+`action: "apply-recipe"` and copy the review's `plan` and `approval`
+fields into it. Applying verifies the approved inputs, the edit receipts,
+and the comparison samples before creating one undo entry. Preview the
+saved recipe again to use it on another revision or with different inputs.
 
 ## Author a version 2 document
 

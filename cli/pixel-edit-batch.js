@@ -1,7 +1,7 @@
 'use strict';
 
 const { isDeepStrictEqual:equal } = require('node:util');
-const { isRevision,digest } = require('./pixel-edit-revisions.js');
+const { isRevision,canonicalDigest } = require('./pixel-edit-revisions.js');
 const { conflict,conflicts } = require('./pixel-edit-preview.js');
 
 const format = 'ink-studio/pixel-edit-batch';
@@ -26,15 +26,10 @@ function plan(value) {
   return { ...value,label:value.label ?? 'Pixel edit batch',commands:steps(value.commands) };
 }
 
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  return record(value) ? Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])) : value;
-}
-
 function seal(label,inputs,outputs,steps,revalidatedFrom) {
   const body = json({format,version:1,label,inputs,outputs,steps,
     ...(revalidatedFrom !== undefined && {revalidatedFrom})});
-  return { ...body,revision:digest(canonical(body)) };
+  return { ...body,revision:canonicalDigest(body) };
 }
 
 function anchor(value) {
@@ -51,7 +46,7 @@ function read(value,readStep) {
       (value.revalidatedFrom !== undefined && !isRevision(value.revalidatedFrom)))
     throw new TypeError('Replay needs a version 1 pixel edit batch receipt');
   const {revision,...body} = value;
-  if (digest(canonical(body)) !== revision) throw conflict('batch-integrity','The pixel batch receipt has changed',{revision});
+  if (canonicalDigest(body) !== revision) throw conflict('batch-integrity','The pixel batch receipt has changed',{revision});
   return { ...body,revision,steps:steps(value.steps).map(readStep) };
 }
 
