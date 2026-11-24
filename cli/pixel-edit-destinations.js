@@ -231,8 +231,18 @@ function solidEdit(edit, destination, binding, editor, frame) {
         !Array.from(stamps).every(stamp=>fields(stamp,['brush','value','mode','strength','window'])))
       throw new TypeError('A surface channel edit needs one or more native UV stamps');
     const palette = Object.fromEntries(frame.paletteEntries.map(row=>[row.id,row.color]));
-    const painted = stamps.map(stamp=>({ ...stamp,channel,
-      ...(channel === 'pigment' && stamp.mode !== 'clear' && { value:indexedValue(stamp.value,palette) }) }));
+    const painted = stamps.map(stamp=>{
+      if (channel !== 'pigment' || stamp.mode === 'clear') return {...stamp,channel};
+      if (stamp.value===undefined && stamp.brush?.kind==='retained') {
+        const tip=require('../index.js').load().KIT.pixelBrushes.retained(stamp.brush.tip);
+        for (const slot of new Set(tip.slots)) if (slot>=0) {
+          const {id:swatch,color}=tip.palette[slot];
+          indexedValue({swatch,color},palette);
+        }
+        return {...stamp,channel};
+      }
+      return {...stamp,channel,value:indexedValue(stamp.value,palette)};
+    });
     editor.setSurfaceState({ ...state, charts:{ ...state.charts,
       [chart]:{ ...target, stamps:[...(target.stamps ?? []),...painted] }
     } },key);

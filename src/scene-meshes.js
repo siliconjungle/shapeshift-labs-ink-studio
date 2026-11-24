@@ -445,7 +445,54 @@ const SceneMeshes = (() => {
     return {p:[0,1,2].map(k=>a[k]*weights[0]+b[k]*weights[1]+c[k]*weights[2]),n:V.norm(area)};
   }
 
+  function clipUV(mesh, {min,max,material}) {
+    if (![min,max].every(point=>Array.isArray(point)&&point.length===2&&Array.from(point).every(Number.isFinite)) ||
+        !max.every((value,k)=>value-min[k]>=1e-8))
+      throw new RangeError('Mesh UV clipping needs a finite ordered rectangle');
+    const {indices,uvs,rest,materials,faceMaterials}=read(mesh), slot=materials.indexOf(material);
+    if (material!==undefined && slot<0) throw new RangeError('Unknown mesh material '+material);
+    const points=[], texture=[], triangles=[], anchors=[];
+    function clip(polygon,axis,edge,sign) {
+      const result=[];
+      for (let i=0;i<polygon.length;i++) {
+        const a=polygon[i], b=polygon[(i+1)%polygon.length];
+        const da=(a.uv[axis]-edge)*sign, db=(b.uv[axis]-edge)*sign;
+        if (da>=0) result.push(a);
+        if ((da<0)!==(db<0) && da!==0 && db!==0) {
+          const f=da/(da-db), mix=(n,k)=>n+(b.uv[k]-n)*f;
+          result.push({uv:a.uv.map(mix),weights:a.weights.map((n,k)=>n+(b.weights[k]-n)*f)});
+        }
+      }
+      return result;
+    }
+    for (let face=0;face<mesh.triangles;face++) {
+      if (slot>=0 && (faceMaterials?.[face]??0)!==slot) continue;
+      const vertices=Array.from(indices.subarray(face*3,face*3+3));
+      let polygon=vertices.map((i,j)=>({uv:[uvs[i*2],uvs[i*2+1]],weights:[0,1,2].map(k=>Number(j===k))}));
+      if ([0,1].some(axis=>polygon.every(({uv})=>uv[axis]<min[axis]) || polygon.every(({uv})=>uv[axis]>max[axis])))
+        continue;
+      for (let k=0;k<2;k++) polygon=clip(clip(polygon,k,min[k],1),k,max[k],-1);
+      if (polygon.length<3) continue;
+      const root=anchors.length, [a]=polygon;
+      const faces=[];
+      for (let i=1;i<polygon.length-1;i++) {
+        const [b,c]=polygon.slice(i,i+2).map(row=>row.uv);
+        const [x,y]=a.uv;
+        if (Math.abs((b[0]-x)*(c[1]-y)-(b[1]-y)*(c[0]-x))>1e-14) faces.push(root,root+i,root+i+1);
+      }
+      if (!faces.length) continue;
+      if (triangles.length+faces.length>3*8192) throw new RangeError('A UV brush exceeds 8192 clipped mesh triangles');
+      triangles.push(...faces);
+      for (const {uv,weights} of polygon) {
+        anchors.push({vertices,weights});
+        texture.push(...uv.map((n,k)=>Math.max(0,Math.min(1,(n-min[k])/(max[k]-min[k])))));
+        points.push(...[0,1,2].map(k=>vertices.reduce((sum,i,j)=>sum+rest[i*3+k]*weights[j],0)));
+      }
+    }
+    return {anchors, points:Float32Array.from(points), uvs:Float32Array.from(texture), triangles:Uint32Array.from(triangles)};
+  }
+
   return Object.freeze({create,fromObjectTexels,updateObjectTexels,scanFrame:Mips.scanFrame,pose,inspectUV,uvAnchors,skin,list,layers,layer:mesh=>read(mesh).layer,
-    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,rayQuery,projector,sampleProjection,revision:mesh=>read(mesh).revision});
+    simulationFrame:(...args)=>simulationAPI().frame(...args),depthProxy,proxyPlan,intersect,rayQuery,projector,sampleProjection,clipUV,revision:mesh=>read(mesh).revision});
 })();
 if (typeof module !== 'undefined') module.exports = SceneMeshes;

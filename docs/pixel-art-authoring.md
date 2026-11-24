@@ -1707,6 +1707,49 @@ The signed bias preview uses middle gray for zero. The weight previews
 use white for full strength. See [Material ink and shot overrides](art-passes.md#material-ink-and-shot-overrides)
 and [Painted shadow bands](shadow-band-paint.md) for treatment settings.
 
+## Stamp a retained surface brush
+
+Capture a reusable tip with `pixel-art brush`. Put that versioned brush
+object in `operation.stamp.brush.tip` in a regular edit to a bound
+`surface-channel` destination. The scene saves the tip, anchor, and
+placement together. Preview, apply, clear, and undo use the existing
+source edit workflow.
+
+```js
+const operation = {
+  stamp: {
+    brush: {
+      kind: 'retained',
+      tip,
+      space: 'uv',
+      at: [0.35, 0.62],
+      pixelSize: [0.018, 0.024]
+    }
+  }
+};
+```
+
+- Use `space: 'uv'` to place the captured anchor at a point on the chart.
+  Pixel sizes are in units of chart UV, with positive V pointing up.
+- Use `space: 'rest'` for an XYZ anchor in the solid's original rest
+  coordinates. Pixel sizes are in scene units. The brush faces the chart
+  and follows its U direction or an optional XYZ `direction` projected
+  into the chart's tangent plane.
+
+The captured anchor can be transparent. The brush keeps the tip's holes,
+resized dimensions, rotation, and tint. On `pigment`, omit `value` to
+use the tip's swatch IDs and colors from the pixel document. On legacy
+`paint`, an omitted value uses the tip's RGB colors. Provide an explicit
+`value` to use the tip as a mask for a single channel value such as
+roughness or hatch strength. Use `mode: 'clear'` to clear only under
+painted pixels in the tip. An optional stamp `window` clips the mark at
+the given UV limits.
+
+Chart paint follows native splat carriers through posing and supported
+deformations. SDF operations with an existing rest-chart mapping keep
+sampling the brush in that chart. For native mesh UVs and rest-projected
+pigment, see [Retained pixel brushes on decals](surface-decals.md#retained-pixel-brushes).
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or

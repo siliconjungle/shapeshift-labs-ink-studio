@@ -96,3 +96,34 @@ Run `node examples/surface-decals.js <directory> --frames` for the Aster
 survey pod demo. The output includes the portable decal document, a report,
 and renders of the moving part switching from mesh to SDF to splats. The
 scuff expires while the painted lettering and raised badge stay attached.
+
+## Retained pixel brushes
+
+Use `K.surfaceDecals.fromBrush` to place an
+[indexed pixel tip](pixel-art-authoring.md#capture-and-reuse-a-pixel-brush).
+The returned decal carries the tip's colors, holes, and offset from its
+anchor. Add it to a version 1 surface decal document and bind the receiver
+as above.
+
+```js
+const patch = K.surfaceDecals.fromBrush({
+  id: 'jacket-patch',
+  tip,
+  anchor: { object: 'courier', part: 'coat', material: 'cloth', uv: [.42, .63] },
+  pixelSize: [.011, .014]
+});
+```
+
+For a native mesh, `anchor.uv` locates the brush anchor in the mesh's
+top-down UVs. `pixelSize` measures one resized tip pixel in UV units.
+The brush is clipped to the receiver's triangles and follows their
+barycentric positions through posing or skinning. Overlapping UVs share
+the mark on the selected material. Use the optional `material` to scope
+a stamp when several materials reuse the same UV range. A UV decal is
+visible while its mesh receiver is active.
+
+For rest-space projection, supply `anchor.at`, `anchor.normal`, and an
+optional `anchor.up`, `depth`, and node or socket. `pixelSize` is then
+measured in scene units. The existing conforming projector follows posed
+mesh triangles, reprojects when an SDF snapshot changes, and supports
+rigid node or socket attachments on splat receivers.
