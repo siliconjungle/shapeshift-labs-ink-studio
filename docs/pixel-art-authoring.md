@@ -1513,6 +1513,48 @@ or filtered atlas samples without direct texel provenance, and points
 with no sampled counterpart stay unresolved. Native edits to the
 original representation still require a valid source address.
 
+## Reprobe bindings after source edits
+
+Capture the reference view before changing the mesh, field, bake, or splat
+chunk. Select the affected area with a named selection or a rectangle in
+document coordinates. The reprobe uses that binding's canvas registration
+to find the corresponding native pixels.
+
+```sh
+node cli/ink-studio.js pixel-art capture gate.json --w 160 --h 96 --out before.json
+node cli/ink-studio.js pixel-art reprobe gate-ink.json --binding gate \
+  --before before.json --selection hinge --out reprobe.json --invalidate gate-checked.json
+```
+
+The live reprobe captures the current scene at the reference scene time.
+Repeat any render options used for the original capture. To compare two
+saved captures, add `--after current.json`. The captures must use the same
+native camera, grid, and frame clocks. A live reprobe captures the scene
+and the isolated binding once, and the comparison checks the requested
+region. Use `--rect x,y,width,height` to specify coordinates directly.
+
+The report lists verified, empty, and review pixels with native document
+row runs and examples of changed addresses. It checks the visible
+triangles and their rest geometry and UVs, traced SDF hits, retained splat
+contributions and row revisions, and sampled pigment and normals. Unproven
+hits and missing local source evidence are flagged for review. A nearer
+occluder is reported separately from a missing hit.
+
+`--invalidate` writes a separate pixel document with the affected pixels
+marked stale on that binding. Inspecting those pixels shows the stale
+status. Tracking skips them, and pixel-addressed shot and surface edits
+require review before using them. Other pixels remain usable. Review the
+current hits, save the new baseline, and clear only the verified portion
+by comparing the reviewed capture with the current source.
+
+```sh
+node cli/ink-studio.js pixel-art reprobe gate-checked.json --binding gate \
+  --before reviewed.json --selection hinge --accept --invalidate gate-approved.json
+```
+
+Acceptance clears verified stale pixels inside the requested area.
+Unresolved pixels stay pending until the source can be verified.
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or

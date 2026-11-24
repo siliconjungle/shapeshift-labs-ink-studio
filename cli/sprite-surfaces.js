@@ -105,8 +105,13 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
           chart:chart?.id ?? null,stageSlot:slot,primitive:chart?.first ?? 0,object:chart?.objectId,part:chart?.partId },
         triangle:(first-(chart?.first ?? 0))/3
       };
+      const rest = source && chart?.rest?.subarray(source.triangle*9,source.triangle*9+9);
+      if (source) {
+        const at = source.triangle*6, uv = chart?.uv?.subarray(at,at+6);
+        source.topology = JSON.stringify([rest ? Array.from(rest) : input.flatMap(v=>v.p),
+          uv ? Array.from(uv) : input.flatMap(v=>v.uv)]);
+      }
       if (trackMesh && source?.identity.object) {
-        const rest = chart?.rest?.subarray(source.triangle*9,source.triangle*9+9);
         const signature = JSON.stringify([(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
           input.map(row=>row.uv),rest ? Array.from(rest) : null]);
         trackMesh(source.identity,source.triangle,{ signature,project(weights) {

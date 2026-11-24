@@ -161,8 +161,9 @@ function track({ binding,selection,documentGrid,revision,views,render,review }) 
       throw new RangeError('Selection tracking needs full and isolated views on the same native camera and pose');
     if (!anchors) anchors = selection.pixels.map(documentAt=>{
       const referenceAt = Canvas.sourcePoint(documentGrid,documentAt,binding.canvas)?.map(Math.floor);
-      return { documentAt,referenceAt,...(referenceAt ? sourceAnchor(full,isolated,referenceAt,binding) :
-        { reason:'outside-registration' }) };
+      const anchor = Bindings.staleAt(binding,documentAt) ? { reason:'stale-source-binding' } :
+        referenceAt ? sourceAnchor(full,isolated,referenceAt,binding) : { reason:'outside-registration' };
+      return { documentAt,referenceAt,...anchor };
     });
 
     const masks = { visible:new Set(),moved:new Set(),occluded:new Set(),lost:new Set() };

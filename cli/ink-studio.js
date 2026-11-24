@@ -1429,6 +1429,7 @@ const CMD = {
         '  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples',
         '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
         '  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection',
+        '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
@@ -4163,7 +4164,7 @@ const CMD = {
   'pixel-art'() {
     const PixelArt = require('./pixel-art.js'), ViewSource = require('../src/pixel-view-source.js');
     const { sourceBindings } = require('../src/art-passes.js');
-    const sourcePasses = [...ViewSource.channels,...sourceBindings];
+    const sourcePasses = [...ViewSource.channels,...sourceBindings,'pigment'];
     function editScene(id,retained,historyLimit) {
       if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
       const bytes = retained === undefined ? fs.readFileSync(path.resolve(id)) : undefined;
@@ -4192,9 +4193,9 @@ const CMD = {
       return { ...frame,camera,scene:world.id,time:sourceView.frame.time,sourceView };
     }
     function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'],
-      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection } = {}) {
+      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection,time = num('t',0) } = {}) {
       if (sceneInspection) ViewSource.grid(w,h);
-      const world = buildPreview(id), t = num('t',0);
+      const world = buildPreview(id), t = time;
       pose(world,t);
       const settings = { w,h,px:1,t,passes };
       if (!sceneInspection) return pixelSelection ?

@@ -134,7 +134,7 @@ function documentShape(design) {
   if (!Array.isArray(sceneBindings)) throw new TypeError('Pixel scene bindings must be an array');
   const bindingIds = new Set();
   for (const binding of sceneBindings) {
-    if (!fields(binding,['id','scene','object','part','revision','frame','layer','canvas','mapping']) || !name(binding.id) ||
+    if (!fields(binding,['id','scene','object','part','revision','frame','layer','canvas','mapping','stale']) || !name(binding.id) ||
         bindingIds.has(binding.id) || !reference(binding.scene) || !reference(binding.object) ||
         (binding.part !== undefined && !reference(binding.part)) ||
         (binding.revision !== undefined && !reference(binding.revision)) ||
@@ -144,6 +144,8 @@ function documentShape(design) {
       throw new TypeError('Pixel scene bindings need unique IDs, scene and object references, and valid frame and layer scopes');
     if (binding.mapping !== undefined && (!binding.part || !SourceBindings.registeredMapping(binding.mapping)))
       throw new TypeError('A pixel source mapping needs a part and a valid version 1 registration');
+    if (binding.stale !== undefined && !SourceBindings.validStale(binding.stale,width,height))
+      throw new TypeError('Stale binding pixels need ordered, non-overlapping native row runs');
     bindingIds.add(binding.id);
   }
   Destinations.validate(destinations,bindingIds);
@@ -1350,7 +1352,12 @@ function editCanvas(design,patch,context) {
     }
   }
   if (sourceBindings?.length) {
-    const sceneBindings = sourceBindings.map(({ canvas,...binding }) => {
+    const sceneBindings = sourceBindings.map(({ canvas,stale,...binding }) => {
+      if (stale?.length) {
+        const pixels = stale.flatMap(([y,x,length])=>Array.from({length},(_,i)=>[x+i,y]));
+        const pending = CanvasTransforms.region(map,pixels).pixels.map(([x,y])=>y*w+x).sort((a,b)=>a-b);
+        if (pending.length) binding.stale = RasterTools.runs(w,pending);
+      }
       const next = bindingPolicy === 'preserve' ? CanvasTransforms.preserve(map,canvas) : undefined;
       bindings.push({ id:binding.id,policy:bindingPolicy,before:canvas ?? null,after:next ?? null });
       return { ...binding,...(next && { canvas:next }) };
@@ -2093,6 +2100,54 @@ function trackCommand(source,opt,captureTrack) {
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
+function reprobeCommand(source,opt,capture) {
+  const { binding:id,before,after,selection,rect:rectangle,out,invalidate,accept } = opt;
+  if (![id,before].every(reference) || after !== undefined && !reference(after) ||
+      (selection === undefined) === (rectangle === undefined) || selection !== undefined && !reference(selection) ||
+      accept !== undefined && (accept !== true || !reference(invalidate)))
+    throw new TypeError('Use pixel-art reprobe <document.json> --binding id --before view.json --selection id or --rect x,y,w,h');
+  const design = read(source);
+  documentShape(design);
+  const binding = design.sceneBindings?.find(row=>row.id === id);
+  if (!binding) throw new RangeError('Unknown pixel scene binding '+id);
+  const { width,height } = design;
+  let pixels;
+  if (selection !== undefined) pixels = namedSelection(design,selection,binding.frame).pixels;
+  else {
+    if (typeof rectangle !== 'string' || !/^\d+,\d+,\d+,\d+$/.test(rectangle))
+      throw new TypeError('Use --rect x,y,width,height inside the document grid');
+    const [x,y,w,h] = rectangle.split(',').map(Number);
+    if (!at(width,height,[x,y]) || !integer(w,1,width-x) || !integer(h,1,height-y))
+      throw new RangeError('Reprobe rectangle is outside the document grid');
+    pixels = Array.from({length:w*h},(_,i)=>[x+i%w,y+Math.floor(i/w)]);
+  }
+  const inputs = [source,before,after,binding.scene].filter(reference).map(file=>path.resolve(file));
+  const outputs = [out,invalidate].filter(value=>value !== undefined);
+  if (outputs.some(value=>!reference(value) || inputs.includes(path.resolve(value))) ||
+      new Set(outputs.map(file=>path.resolve(file))).size !== outputs.length)
+    throw new TypeError('Write the reprobe report and invalidated document to separate paths');
+  if (opt.scene !== undefined || opt['source-view'] !== undefined)
+    throw new TypeError('Use the binding’s scene or supply --after with a matching captured view');
+  const baseline = ViewSource.unpack(read(before));
+  if (!sameScene(binding.scene,baseline.sourceView.source))
+    throw new RangeError('The before capture belongs to a different scene');
+  const current = after ? ViewSource.unpack(read(after)) : inspectionCapture(baseline.w,baseline.h,undefined,{
+    sceneRef:binding.scene,captureSelection:settings=>capture(binding.scene,{
+      ...settings,time:baseline.sourceView.frame.time,captureId:'reprobe'
+    })
+  },binding);
+  if (!sameScene(binding.scene,current.sourceView.source))
+    throw new RangeError('The after capture belongs to a different scene');
+  const { report,stale } = require('./pixel-binding-reprobe.js').probe(design,binding,pixels,baseline,current,{accept});
+  if (invalidate) {
+    if (stale.length) binding.stale = stale;
+    else delete binding.stale;
+    files.json(path.resolve(invalidate),design);
+  }
+  if (out) files.json(path.resolve(out),report);
+  else process.stdout.write(JSON.stringify(report,null,2)+'\n');
+}
+
 function draw(frame,directory,{ layer,colorMode,rules,shot } = {}) {
   const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
   const result = review(craftLayer(frame,layer),{ rules,shot,layer }), { w,h,rgb } = result.overlay;
@@ -2203,7 +2258,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','sample','select','snap','brush','copy',
+const actions = ['capture','trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','rules','motion','track','reprobe','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2274,8 +2329,9 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, worl
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art capture, trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, rules, motion, track, reprobe, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'track') return trackCommand(source,opt,captureTrack);
+  if (action === 'reprobe') return reprobeCommand(source,opt,capture);
   const sourceViewFile = opt['source-view'];
   if (opt.binding !== undefined && (!['inspect','canvas'].includes(action) || !reference(opt.binding)))
     throw new TypeError('Use --binding id with pixel-art inspect or canvas');

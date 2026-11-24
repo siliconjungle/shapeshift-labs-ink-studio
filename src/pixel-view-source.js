@@ -7,7 +7,7 @@ const PixelViewSource = (() => {
     surfaceUV:2, surfaceUVValid:1
   });
   const optional = {
-    foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
+    pigment:1, foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
     paletteOwner:1, sourceSurface:1, sourceTriangle:1, sourceCoordinates:3,
     sourceSplat:4, sourceSplatAlpha:4, sourceSplatDepth:4, sourceSplatWeight:4, sourceSplatOmitted:1,
     sourceSplatFrontRank:1, sourceSplatFront:1, sourceSplatFrontMetrics:3,
@@ -20,7 +20,7 @@ const PixelViewSource = (() => {
     ['splatSources','sourceSplat','sourceSplatAlpha','sourceSplatDepth','sourceSplatWeight','sourceSplatOmitted']
   ];
   const types = { Uint8Array, Uint8ClampedArray, Uint32Array, Float32Array };
-  const ids = new Set(['objectId','partId','materialId','splatId','paletteOwner','strandId','sourceSurface','sourceTriangle','sourceSplat','sourceSplatFront']);
+  const ids = new Set(['pigment','objectId','partId','materialId','splatId','paletteOwner','strandId','sourceSurface','sourceTriangle','sourceSplat','sourceSplatFront']);
   const masks = new Set(['surfaceKind','surfaceUVValid','inkMask','sourceSplatFrontRank']);
   const littleEndian = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
   const finite = Number.isFinite;

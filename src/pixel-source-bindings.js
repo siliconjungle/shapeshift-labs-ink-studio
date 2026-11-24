@@ -8,21 +8,23 @@ const PixelSourceBindings = (() => {
     const { passes } = frame;
     if (!passes) return null;
     const p = at[1]*frame.w+at[0];
-    const source = passes.surfaceSources?.[passes.sourceSurface?.[p]];
+    const entry = passes.surfaceSources?.[passes.sourceSurface?.[p]];
+    const { triangles,...source } = entry ?? {};
+    const triangle = passes.sourceTriangle?.[p];
     const coordinates = point(passes.sourceCoordinates,p,3);
     if (surface === undefined && passes.depth && passes.surfaceKind && passes.position)
       surface = ArtPasses.pick(passes,...at);
     let geometry = null;
-    if (surface && source?.kind === 'sdf' && coordinates?.every(Number.isFinite)) {
+    if (surface && source.kind === 'sdf' && coordinates?.every(Number.isFinite)) {
       geometry = { ...source,local:coordinates,rest:surface.restPosition,material:surface.material,
         depth:surface.depth,coverage:surface.coverage };
-    } else if (surface?.kind === 'mesh' && (source?.kind === 'mesh' || surface.uv)) {
+    } else if (surface?.kind === 'mesh' && (source.kind === 'mesh' || surface.uv)) {
       geometry = { kind:'mesh',object:surface.object,part:surface.part,...source,
         material:surface.material,depth:surface.depth,coverage:surface.coverage,uv:surface.uv,rest:surface.restPosition,
-        ...(source && coordinates?.every(Number.isFinite) && {
-          triangle:passes.sourceTriangle[p],barycentric:coordinates
+        ...(entry && coordinates?.every(Number.isFinite) && {
+          triangle,barycentric:coordinates,...(triangles?.[triangle] && { revision:triangles[triangle] })
         }) };
-    } else if (surface?.kind === 'sprite' && source?.kind === 'sprite' && vector(coordinates,3)) {
+    } else if (surface?.kind === 'sprite' && source.kind === 'sprite' && vector(coordinates,3)) {
       geometry = { ...source,local:coordinates,material:surface.material,depth:surface.depth,coverage:surface.coverage };
     }
 
@@ -145,6 +147,33 @@ const PixelSourceBindings = (() => {
     return output;
   }
 
+  function validStale(runs,width,height) {
+    if (!Array.isArray(runs)) return false;
+    let previousY = -1, end = -1;
+    for (const run of runs) {
+      if (!Array.isArray(run) || run.length !== 3 || !Array.from(run).every(Number.isSafeInteger)) return false;
+      const [y,x,length] = run;
+      if (y < 0 || y >= height || x < 0 || length < 1 || x+length > width ||
+          y < previousY || y === previousY && x <= end) return false;
+      previousY = y;
+      end = x+length;
+    }
+    return true;
+  }
+
+  function staleAt(binding,[x,y]) {
+    const runs = binding.stale;
+    if (!runs?.length) return false;
+    let lo = 0, hi = runs.length;
+    while (lo < hi) {
+      const mid = Math.floor((lo+hi)/2), [row,left,length] = runs[mid];
+      if (row < y || row === y && left+length <= x) lo = mid+1;
+      else hi = mid;
+    }
+    const run = runs[lo];
+    return !!run && run[0] === y && run[1] <= x;
+  }
+
   function resolve(frame,binding,at,{ grid,frameId,layerId,sceneMatches,sourcePoint,ArtPasses }) {
     const { id,object,part,canvas } = binding;
     const result = { id,object,part:part ?? null };
@@ -156,6 +185,7 @@ const PixelSourceBindings = (() => {
     const mapped = sourcePoint(grid,at,canvas);
     if (!mapped) return { ...result,status:'outside-bound-canvas' };
     const sourceAt = mapped.map(Math.floor);
+    if (staleAt(binding,at)) return { ...result,sourceAt,status:'stale',hits:[] };
     const evidence = sample(frame,sourceAt,ArtPasses);
     if (!evidence) return { ...result,sourceAt,status:'source-unavailable' };
     const hits = [evidence.geometry,...evidence.splats].filter(hit=>matches(binding,hit));
@@ -172,6 +202,6 @@ const PixelSourceBindings = (() => {
     return { ...result,sourceAt,status,hits,frontSplat,...(points?.length && { mapping:{ id:binding.mapping.id,points } }),omittedCoverage:evidence.omittedCoverage,truncated:evidence.truncated,...(diagnostics.length && { diagnostics }) };
   }
 
-  return Object.freeze({ sample,resolve,issues,registeredMapping,partPoint });
+  return Object.freeze({ sample,resolve,issues,registeredMapping,partPoint,validStale,staleAt });
 })();
 if (typeof module !== 'undefined') module.exports = PixelSourceBindings;

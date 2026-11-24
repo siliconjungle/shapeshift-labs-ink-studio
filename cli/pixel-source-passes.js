@@ -1,8 +1,25 @@
+const { createHash } = require('node:crypto');
 const Targets = require('../src/target-selectors.js');
 const Provenance = require('../src/splat-provenance.js');
 const SplatFit = require('./splat-fit-asset.js');
 
 const lanes = 4, minimum = 1e-6;
+
+function rowRevision(world,row) {
+  const hash = createHash('sha256');
+  const data = world.rest ?? world.data;
+  for (const [key,values,stride,start = 0] of [
+    ['base',data,16],['surface',world.surfaceData,8,1],['fine',world.fine,12],['curve',world.curveRest,16],
+    ['attrs',world.attr,4],['pixels',world.pix,8],['optical',world.opticalSplats,12],
+    ['normals',world.renderMetadata?.normals,3]
+  ]) {
+    if (!values) continue;
+    const chunk = values.subarray(row*stride+start,(row+1)*stride);
+    hash.update(key);
+    hash.update(Buffer.from(chunk.buffer,chunk.byteOffset,chunk.byteLength));
+  }
+  return hash.digest('hex');
+}
 
 function splatBuffer(size) {
   const rows = new Uint32Array(size*lanes), weights = new Float64Array(size*lanes);
@@ -56,7 +73,7 @@ function splatBuffer(size) {
         const { object,entity,part,material } = targets.row(row);
         slots.set(row,splatSources.length);
         identities ??= Provenance.identities(world);
-        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(world,row) });
+        splatSources.push({ id:identities.idAt(row) ?? null,renderRow:row,object,entity,part,material,editable:SplatFit.eligible(world,row),revision:rowRevision(world,row) });
       }
       return slots.get(row);
     }
@@ -97,12 +114,15 @@ function surfaces(size,atlasOwners,topDown) {
   for (const [p,hit] of atlasOwners ?? []) {
     const source = hit.source;
     if (!source) continue;
-    const { key,identity,coordinate,triangle } = source;
+    const { key,identity,coordinate,triangle,topology } = source;
     if (!slots.has(key)) {
       slots.set(key,surfaceSources.length);
-      surfaceSources.push(identity);
+      surfaceSources.push({ ...identity,...(topology && { triangles:{} }) });
     }
-    sourceSurface[p] = slots.get(key);
+    const slot = slots.get(key), triangles = surfaceSources[slot].triangles;
+    if (triangles && topology && !Object.hasOwn(triangles,triangle))
+      triangles[triangle] = createHash('sha256').update(topology).digest('hex');
+    sourceSurface[p] = slot;
     sourceCoordinates.set(coordinate,p*3);
     if (triangle !== undefined) sourceTriangle[p] = triangle;
   }
