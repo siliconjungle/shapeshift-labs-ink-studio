@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const PNG = require('./png.js');
 const { upscale } = require('./render.js');
-const { channels, strands, opaque, proxies, sourceBindings } = require('../src/art-passes.js');
+const { channels, strands, opaque, proxies, inkControls, sourceBindings } = require('../src/art-passes.js');
 const { labels: inkLabels } = require('../src/art-ink.js');
 const inkColors = [0, 0xf2ad77, 0x63bcc5, 0xab84d8, 0xf2e7c5, 0xe9647f, 0x90bd78];
 
@@ -48,6 +48,10 @@ const environmentEncodings = {
   surfaceMotionValid: 'RGB8 grayscale, white is a valid previous sample',
   inkMask: 'RGB8 ink operation legend color',
   inkShadow: 'RGB8 grayscale cast shadow attenuation, white is fully shadowed',
+  shadowBandBias: 'RGB8 signed bias from -1 to 1 with zero at middle gray',
+  hatchWeight: 'RGB8 grayscale hatch weight, white is full strength',
+  outlineWeight: 'RGB8 grayscale outline weight, white is full strength',
+  lightSpillWeight: 'RGB8 grayscale spill receive weight, white is full strength',
   pigment: 'RGBA8 source pigment before lighting, transparent where there is no surface owner'
 };
 
@@ -78,8 +82,9 @@ function encode(frame, channel) {
   for (let p = 0; p < w * h; p++) {
     const q = p * 3;
     if (['coverage', 'protected', 'mask', 'fogTransmittance', 'foregroundCoverage', 'strandCoverage', 'strandU', 'surfaceCoverage',
-      'proxyRemovedCoverage', 'inkShadow'].includes(channel))
+      'proxyRemovedCoverage', 'inkShadow', 'hatchWeight', 'outlineWeight', 'lightSpillWeight'].includes(channel))
       rgb.fill(byte(data[p]), q, q + 3);
+    else if (channel === 'shadowBandBias') rgb.fill(byte(data[p]*.5+.5),q,q+3);
     else if (['partMotionValid','strandMotionValid','surfaceUVValid','surfaceMotionValid'].includes(channel)) rgb.fill(data[p],q,q+3);
     else if (channel === 'proxyRejected') {
       const heat=Math.min(1,Math.log2(1+data[p])/6);
@@ -177,6 +182,7 @@ function writePasses(directory, frame, scale = 1) {
     ...writePassData(passes,sourceBindings,writeData),surfaceSources:passes.surfaceSources,splatSources:passes.splatSources
   };
   if (passes.strands) manifest.strandData=writeStrandData(passes,writeData);
+  if (inkControls.some(channel=>passes[channel])) manifest.inkControls=writePassData(passes,inkControls,writeData);
   if (passes.partId) manifest.partData=writePassData(passes,['partId'],writeData);
   if (['surfaceKind','surfaceCoverage','geometricNormal','shadingNormal','surfaceUV','surfaceUVValid','surfaceMotion','surfaceMotionValid']
       .some(channel=>passes[channel])) manifest.opaqueSurface=writePassData(passes,opaque,writeData);

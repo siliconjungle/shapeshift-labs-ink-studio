@@ -4262,7 +4262,7 @@ const CMD = {
       }));
     }
     function captureMultiview(id,retained) {
-      const passes = [...sourcePasses,'sourceRestNormal','emission'];
+      const passes = [...sourcePasses,'sourceRestNormal','emission',...require('../src/art-passes.js').inkControls];
       return captureSourceSamples(id,retained,render=>render({passes}));
     }
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });

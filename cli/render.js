@@ -510,6 +510,9 @@ function renderFrame(world, o, preparedPalettes) {
     o.effectPalettes === true ? look.effectPalettes : o.effectPalettes ?? look.effectPalettes, world.pal, world.paletteRoles
   ) : !o.raw && !o.captureCoverage ? o.effectPaletteCapture : null;
   const ink = styled ? ArtInk.prepare(o.ink ?? look.ink, world.pal, o.inkShot) : null;
+  const paintedInk = world.renderMetadata?.inkControls;
+  const hasPaintedInk = paintedInk || useSdf && world.renderSdfs?.some(source=>
+    [...source.rows.keys()].some(owner=>owner.mat.surfaceState?.hasInkControls));
   const emissive = EmissiveFinishes.bind(EmissiveFinishes.prepare(
     o.emissiveFinishes ?? world.emissiveFinishes, world.pal), world);
   const effects = styled ? ArtEffects.prepare(o.artEffects ?? look.effects, world.pal) : null;
@@ -570,6 +573,12 @@ function renderFrame(world, o, preparedPalettes) {
   if (ink?.all.some(style => style.crease?.cosine !== undefined)) passSelection.add('geometricNormal');
   if (ink?.scoped.concat(ink.shotScoped).some(row => row.select.part !== undefined)) passSelection.add('partId');
   if (ink?.needsLight) passSelection.add('inkShadow');
+  if (hasPaintedInk && ink) {
+    passSelection.add('outlineWeight');
+    if (ink.hatching) passSelection.add('hatchWeight');
+    if (ink.needsLight && o.shadowBandPaint !== false) passSelection.add('shadowBandBias');
+  }
+  if (hasPaintedInk && styled && !ink && (world.outline || look.lines)) passSelection.add('outlineWeight');
   if (passSelection.has('inkShadow')) for (const channel of ['splatId', 'position', 'normal']) passSelection.add(channel);
   if (effectPaletteSettings) {
     for (const channel of ['coverage', 'depth']) passSelection.add(channel);
@@ -631,7 +640,9 @@ function renderFrame(world, o, preparedPalettes) {
         ...(frame.alpha && {alpha:frame.alpha.slice()}) };
     }
     if (captureQuantization && legacyLook) capture(beforePalette, 'legacy');
-    if (ink) frame = ArtInk.apply(frame, passes, ink, world.pal, fog, { world, time:t, depthOffset, inspect:paletteTrace });
+    if (ink) frame = ArtInk.apply(frame, passes, ink, world.pal, fog, {
+      world, time:t, depthOffset, inspect:paletteTrace, paintShadowBands:o.shadowBandPaint !== false
+    });
     if (effects) frame = ArtEffects.apply(frame, passes, effects, t, {
       history: o.artHistory, world: o[reconstructionSource] ?? world, palette: world.pal, motionReference: frame.motionReference,
       haloSource: passes.scopedEmission && (p => emissive.profiles[passes.scopedEmission.slots[p]-1]?.glow === undefined)
@@ -1686,6 +1697,7 @@ function renderFrame(world, o, preparedPalettes) {
     } : undefined;
     live = LiveSun.create(sun, world, { x: X, y: Y, z: Z, alpha: AL, scale: SC }, normalAt, cloudShadow, exposure?.light,
       { shadowArt: o.shadowArt, footprint: shadowFootprint, curveAt, curveData:d, artLighting, traced,
+        paintShadowBands:o.shadowBandPaint !== false,
         curveProxyAt:shadowProxies?.size ? (i,camera,opacity)=>prepareCurve(i,camera,world,true,undefined,opacity) : undefined,
         curveStats:counters && !reflectionPlane && !probeView ? stats=>{counters.strandShadows=stats;} : undefined,
         probes: probes && ((i,x,y,z,n) => n && probeReceiver(i) ? probes.sample([x,y,z],n) : null) });
@@ -2073,16 +2085,17 @@ function renderFrame(world, o, preparedPalettes) {
         choices && paletteTrace.forStage(choices));
       stageBase = reference && (paintedAlbedo?.slice() ?? reference);
       if (live?.normal(i)) {
-        live.gains(i,...position,sunGains,sprite.normal);
+        live.gains(i,...position,sunGains,sprite.normal,sprite.inkControls?.[0]);
         color=color.map((v,k)=>v*sunGains[k]);
       }
-      if (directLight?.receives(i) && diffuseNormal(i)) color = directLight(sprite.p, position, sprite.normal, color, undefined, 0, i);
+      if (directLight?.receives(i) && diffuseNormal(i))
+        color = directLight(sprite.p, position, sprite.normal, color, undefined, 0, i, undefined, sprite.inkControls?.[3]);
       if (!live?.normal(i) && probeReceiver(i))
         color = probes.shade(position,shadeNormal(i,sprite.normal),color,undefined,0,probeAlbedo(i));
       if (!live?.normal(i) && traced?.at(i)) color=traced.add(i,color,paintedAlbedo ?? probeAlbedo(i));
       if (surface?.has(i) && !PIX?.[i*8]) {
         const value=surface.shade(i,...position,X[i],Y[i],Z[i],...color,sprite.p%W+.5,Math.floor(sprite.p/W)+.5,
-          undefined,fragmentReflection,paintedAlbedo,stageBase,planarMatte);
+          undefined,fragmentReflection,paintedAlbedo,stageBase,planarMatte,sprite.inkControls);
         if (planarMatte?.some(Boolean)) surfaceMatte = planarMatte.slice();
         color=value.slice(0,3);
         highlight=value[4]; paletteId=value[5];
@@ -2687,7 +2700,7 @@ function renderFrame(world, o, preparedPalettes) {
         }
         if (liveNormal) {
           const point = exact?.position ?? surfacePoint(rayAt(ix + .5, iy + .5), liveNormal, x, y, z, -cz, R);
-          live.gains(i, ...point, sunGains, exact?.normal);
+          live.gains(i, ...point, sunGains, exact?.normal, exact?.inkControls?.[0]);
           pr *= sunGains[0];
           pg *= sunGains[1];
           pb *= sunGains[2];
@@ -2709,7 +2722,7 @@ function renderFrame(world, o, preparedPalettes) {
           hit = exact?.position ?? surfacePoint(rayAt(ix + 0.5, iy + 0.5), normal, x, y, z, -cz, R);
           if (stageBase && surface.paintsBase(i)) samplePaint=stageBase.slice();
           [pr, pg, pb, alpha, highlight, paletteId] = surface.shade(i, ...hit, x, y, z, pr, pg, pb, ix + 0.5, iy + 0.5,
-            lookPass?.surface, fragmentReflection, paintedAlbedo, samplePaint, planarMatte);
+            lookPass?.surface, fragmentReflection, paintedAlbedo, samplePaint, planarMatte, exact?.inkControls);
           if (planarMatte?.some(Boolean)) surfaceMatte = planarMatte.slice();
           reflected = fragmentReflection;
         }
@@ -2728,7 +2741,7 @@ function renderFrame(world, o, preparedPalettes) {
         if (directReceiver || localProbe) {
           const n = exact?.normal ?? (directReceiver || localProbe);
           const point = exact?.position ?? surfacePoint(rayAt(ix+.5,iy+.5),n,x,y,z,-cz,3*Math.sqrt(c00+c11+c22));
-          if (directReceiver) [pr,pg,pb] = directLight(p,point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0,i);
+          if (directReceiver) [pr,pg,pb] = directLight(p,point,n,[pr,pg,pb],fog,centerFog ? fogMix : 0,i,undefined,exact?.inkControls?.[3]);
           if (localProbe) [pr,pg,pb] = probes.shade(point,shadeNormal(i,n),[pr,pg,pb],fog,centerFog ? fogMix : 0,localAlbedo);
         }
         if (!liveNormal && traced?.at(i))
@@ -2991,7 +3004,8 @@ function renderFrame(world, o, preparedPalettes) {
           dzw = ortho ? -R22 : R02 * vx + R12 * vy - R22,
           den = nx * dxw + ny * dyw + nz * dzw,
           sd = Math.abs(den) > 1e-6 ? (nx * (X[i] - ox0) + ny * (Y[i] - oy0) + nz * (Z[i] - oz0)) / den : 0,
-          exact = sdf?.hits[p]?.row.i===i ? sdf.hits[p].position : null,
+          exactHit = sdf?.hits[p]?.row.i===i ? sdf.hits[p] : null,
+          exact = exactHit?.position,
           px = exact ? exact[0] : sd ? ox0 + dxw * sd : X[i],
           py = exact ? exact[1] : sd ? oy0 + dyw * sd : Y[i],
           pz = exact ? exact[2] : sd ? oz0 + dzw * sd : Z[i],
@@ -3006,9 +3020,10 @@ function renderFrame(world, o, preparedPalettes) {
         HZ[p] = pz;
         if (live?.normal(i)) {
           if (bounceTints) {
-            lit[p] = live.rampLevel(i, px, py, pz, sunGains, sdf?.hits[p]?.row.i===i ? sdf.hits[p].normal : undefined);
+            lit[p] = live.rampLevel(i, px, py, pz, sunGains, exactHit?.normal, exactHit?.inkControls?.[0]);
             bounceTints.set(sunGains, p * 3);
-          } else lit[p] = live.level(i, px, py, pz);
+          } else lit[p] = exactHit?.inkControls ? live.level(i,px,py,pz,exactHit.normal,exactHit.inkControls[0]) :
+            live.level(i,px,py,pz);
         }
         const styleKey = materialStyles?.[i * 4 + 1];
         if (styleKey) lit[p] = MaterialPixelStyle.pixelShade(lit[p], styleKey,
@@ -3081,9 +3096,11 @@ function renderFrame(world, o, preparedPalettes) {
           else if (differs(k, kAt(x - 1, y))) ci = cLeft[p];
           else if (differs(k, kAt(x, y + 1))) ci = cAbove[p];
         }
+        const exactInk = sdf?.hits[p]?.row.i===i ? sdf.hits[p].inkControls : undefined;
+        const outlineWeight = 1-(exactInk?.[2] ?? paintedInk?.[i*4+2] ?? 0);
         if (OL) {
           const rid = PIX[i * 8];
-          if (!OFF[rid - 1]) {
+          if (outlineWeight > 0 && !OFF[rid - 1]) {
             let edge = false,
               sky = false;
             for (const [dx, dy] of N4) {
@@ -3136,7 +3153,9 @@ function renderFrame(world, o, preparedPalettes) {
               /* (a rim in the light takes a softer line than one in shade, or none against another thing, as on the page: so the outline
                  does not darken a shape all round, whichever way it faces, which is pillow shading) */
               const k2 = b * 2 >= ramp.length ? (sky ? 1 : 0) : olK;
-              if (b >= 0) ci = ramp[Math.max(0, Math.min(ramp.length - 1, edge ? b - k2 : b + crease))];
+              const shift = edge ? -k2 : crease;
+              if (b >= 0) ci = ramp[Math.max(0, Math.min(ramp.length - 1,
+                b + (outlineWeight === 1 ? shift : Math.sign(shift)*Math.round(outlineWeight*Math.abs(shift)))))];
             }
           }
           pixed[p] = 1;
@@ -3162,13 +3181,13 @@ function renderFrame(world, o, preparedPalettes) {
         const receiverNormal = (receivesDirect || !live?.normal(i) && probeReceiver(i)) && diffuseNormal(i);
         if (receiverNormal) {
           const exact = sdf?.hits[p], point = exact?.position ?? [HX[p],HY[p],HZ[p]], n = exact?.normal ?? receiverNormal;
-          if (receivesDirect) base = directLight(p,point,n,base,undefined,0,i);
+          if (receivesDirect) base = directLight(p,point,n,base,undefined,0,i,undefined,exactInk?.[3]);
           if (!live?.normal(i) && probeReceiver(i)) base = probes.shade(point,shadeNormal(i,n),base,undefined,0,probeAlbedo(i));
         }
         if (!live?.normal(i) && traced?.at(i)) base=traced.add(i,base,paintedAlbedo ?? probeAlbedo(i));
         const finishedSurface = surface?.has(i);
         const c = finishedSurface ? surface.shade(i, HX[p], HY[p], HZ[p], X[i], Y[i], Z[i], ...base, x + 0.5, y + 0.5,
-          lookPass?.surface, fragmentReflection,undefined,stageBase,planarMatte) : base;
+          lookPass?.surface, fragmentReflection,undefined,stageBase,planarMatte,exactInk) : base;
         if (paintStage) paintStage[p]=paintColor(stageBase);
         if (finishedSurface && reflectPass) environmentPasses.pattern(p,fragmentReflection);
         let rgb = c;
@@ -3713,7 +3732,8 @@ function renderFrame(world, o, preparedPalettes) {
       // part lines (look.lines), as on the page: the near side of a break in depth, darker, or lighter toward the light
       // (not where an outline was already worked out per pixel)
       const filteredEdge = edgePixels?.[p] >= edgeCoverageThreshold;
-      if (!filteredEdge && lines && !(pixed && pixed[p])) {
+      const outlineWeight = passes?.outlineWeight?.[q/3] ?? 1;
+      if (!filteredEdge && lines && outlineWeight && !(pixed && pixed[p])) {
         const dl = D(x - 1, y),
           dr = D(x + 1, y),
           du = D(x, y + 1),
@@ -3721,18 +3741,19 @@ function renderFrame(world, o, preparedPalettes) {
           sx = dl + dr - 2 * dc,
           sy = du + dd - 2 * dc;
         if (Math.max(sx, sy) > lineGap) {
-          const k = (sx >= sy ? dl > dr : du > dd) ? lineLit : lineK;
+          const gain = (sx >= sy ? dl > dr : du > dd) ? lineLit : lineK;
+          const k = outlineWeight === 1 ? gain : 1+(gain-1)*outlineWeight;
           r *= k;
           g *= k;
           b *= k;
         }
       }
-      const outlined = !filteredEdge && !ink && edge > 0 && dc - dm > edge;
+      const outlined = !filteredEdge && !ink && outlineWeight && edge > 0 && dc - dm > edge;
       if (outlined) {
         if (paletteOutlines) paletteOutlines[p] = 1;
-        r = line[0];
-        g = line[1];
-        b = line[2];
+        r = outlineWeight === 1 ? line[0] : r+(line[0]-r)*outlineWeight;
+        g = outlineWeight === 1 ? line[1] : g+(line[1]-g)*outlineWeight;
+        b = outlineWeight === 1 ? line[2] : b+(line[2]-b)*outlineWeight;
       }
       if (effectColor) {
         const at = p*3;
@@ -3791,7 +3812,7 @@ function renderFrame(world, o, preparedPalettes) {
       }
       let bd = 1e9,
         bi = 0;
-      if (exactLine && outlined) bi = outlineIndex;
+      if (exactLine && outlined && outlineWeight === 1) bi = outlineIndex;
       else for (let i = 0; i < np; i++) {
         const e = pal[i],
           dr = r - e[0],

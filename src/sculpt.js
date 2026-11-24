@@ -1885,7 +1885,8 @@ function makeSculpt(B, rest) {
       .map((n,i)=>Math.min(255,Math.round(n+255*(glowRGB?.[i]??0)))),shade);
     else shade();
     const end = B.count();
-    if (material.paintedNormal || glowRGB?.some(Boolean)) B.describePaintedShading?.(first,end,material.paintedNormal,glowRGB);
+    if (material.paintedNormal || glowRGB?.some(Boolean) || material.inkControls)
+      B.describePaintedShading?.(first,end,material.paintedNormal,glowRGB,material.inkControls);
     const referenceRows = referenceSdf?.rows.get(owner);
     if (referenceRows && first < end) {
       if (referenceRows.at(-1)?.[1] === first) referenceRows.at(-1)[1] = end;

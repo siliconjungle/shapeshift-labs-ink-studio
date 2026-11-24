@@ -151,7 +151,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     else engravingRanges.push([first, end, prepared, frame]);
   }
   let ownerRows, materialRows, targetRows, muteEmission, materialAlbedo, materialPixelStyles, opticalSplats;
-  let shadingNormals, paintedEmission;
+  let shadingNormals, paintedEmission, inkControls;
   let unnamedOwners = new WeakMap(), unnamedMaterials = new WeakMap();
   const ownerIds = new Map(), materialIds = new Map();
   const ownerNames = [null], materialNames = [null];
@@ -229,19 +229,21 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     for (let i = first; i < end; i++) opticalSplats.set(packed, i * stride);
   }
 
-  function describePaintedShading(first,end,normal,emission) {
-    function write(values,triple) {
-      if(!triple||first===end)return values;
-      if(!values||values.length<cap*3){
-        const next=new Float32Array(cap*3);
+  function describePaintedShading(first,end,normal,emission,controls) {
+    function write(values,row) {
+      if(!row||first===end)return values;
+      const stride=row.length;
+      if(!values||values.length<cap*stride){
+        const next=new Float32Array(cap*stride);
         if(values)next.set(values);
         values=next;
       }
-      for(let i=first;i<end;i++)values.set(triple,i*3);
+      for(let i=first;i<end;i++)values.set(row,i*stride);
       return values;
     }
     shadingNormals=write(shadingNormals,normal);
     paintedEmission=write(paintedEmission,emission);
+    inkControls=write(inkControls,controls);
   }
 
   function describeSplats(first, end, { object, material, target } = {}) {
@@ -289,6 +291,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       normals,
       ...(shadingNormals && {shadingNormals:Float32Array.from({length:n*3},(_,i)=>shadingNormals[i]??0)}),
       ...(paintedEmission && {paintedEmission:Float32Array.from({length:n*3},(_,i)=>paintedEmission[i]??0)}),
+      ...(inkControls && {inkControls:Float32Array.from({length:n*4},(_,i)=>inkControls[i]??0)}),
       muteEmission: muteEmission?.slice(0, n),
       objectIds: ownerRows?.slice(0, n),
       materialIds: materialRows?.slice(0, n),
@@ -1285,7 +1288,7 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
     footprintRecorder = undefined;
     engravingRanges=undefined;
     ownerRows = materialRows = muteEmission = materialAlbedo = materialPixelStyles = opticalSplats = undefined;
-    shadingNormals = paintedEmission = undefined;
+    shadingNormals = paintedEmission = inkControls = undefined;
     unnamedOwners = new WeakMap();
     unnamedMaterials = new WeakMap();
     ownerIds.clear();

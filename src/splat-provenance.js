@@ -1,7 +1,8 @@
 /* Keep stable labels alongside native splats when copying or assembling buffers. */
 const SplatProvenance = (() => {
   const tables = [['objectIds', 'objects'], ['materialIds', 'materials'], ['targetIds', 'targets']];
-  const channels = [['normals', 3, Float32Array], ['shadingNormals',3,Float32Array], ['paintedEmission',3,Float32Array], ['muteEmission', 1, Uint8Array]];
+  const channels = [['normals', 3, Float32Array], ['shadingNormals',3,Float32Array], ['paintedEmission',3,Float32Array],
+    ['inkControls',4,Float32Array], ['muteEmission', 1, Uint8Array]];
   const identityCache = new WeakMap();
   const curveLod = (records, indexAt) => records?.length ?
     (typeof CurveLod === 'undefined' ? require('./curve-lod.js') : CurveLod).remap(records, indexAt) : [];

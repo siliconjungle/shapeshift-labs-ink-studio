@@ -18,7 +18,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.ArtEffects.prepare` | function | `(definition, palette)` | [source](../../src/art-effects.js) |
 | `toolkit.ArtEffects.tintReflection` | function | `(rgb, coverage, emission, w, h, layer, time)` | [source](../../src/art-effects.js) |
 | `toolkit.ArtInk` | namespace |  |  |
-| `toolkit.ArtInk.apply` | function | `(frame, passes, settings, palette, signals, { world, time = 0, depthOffset = 0, inspect } = {})` | [source](../../src/art-ink.js) |
+| `toolkit.ArtInk.apply` | function | `(frame, passes, settings, palette, signals, { world, time = 0, depthOffset = 0, inspect, paintShadowBands=true } = {})` | [source](../../src/art-ink.js) |
 | `toolkit.ArtInk.channels` | value | `array` |  |
 | `toolkit.ArtInk.labels` | value | `array` |  |
 | `toolkit.ArtInk.prepare` | function | `(definition, palette, shot)` | [source](../../src/art-ink.js) |
@@ -29,6 +29,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.ArtPasses.cutoff` | value | `number = 0.5` |  |
 | `toolkit.ArtPasses.environment` | value | `array` |  |
 | `toolkit.ArtPasses.glsl` | value | `string` |  |
+| `toolkit.ArtPasses.inkControls` | value | `array` |  |
 | `toolkit.ArtPasses.needsPartMotion` | function | `(selected)` | [guide](../art-passes.md), [source](../../src/art-passes.js) |
 | `toolkit.ArtPasses.needsStrandMotion` | function | `(selected)` | [guide](../art-passes.md), [source](../../src/art-passes.js) |
 | `toolkit.ArtPasses.needsSurfaceMotion` | function | `(selected)` | [guide](../art-passes.md), [source](../../src/art-passes.js) |

@@ -148,7 +148,7 @@ function surfaceShading(world, options, camera) {
   const sampleSky = sky && ((direction, out) => sky(direction, out, sample.worldPosition));
   const sampleLocal = localReflection && ((layer, ray, axis, detail) =>
     localReflection(layer.probe, sample.worldPosition, ray, layer.roughness, axis, detail));
-  function shade(i, x, y, z, centerX, centerY, centerZ, r, g, b, sx, sy, visit, reflected, paintedAlbedo, stagePaint, planarMatte) {
+  function shade(i, x, y, z, centerX, centerY, centerZ, r, g, b, sx, sy, visit, reflected, paintedAlbedo, stagePaint, planarMatte, inkControls) {
     const offset = i * STRIDE;
     const { position, normal, view } = sample;
     const prepared = materials[surfaceData[offset] - 1];
@@ -190,6 +190,7 @@ function surfaceShading(world, options, camera) {
     const liveVisibility=camera.sunVisibility?.(i,x,y,z);
     const storedVisibility=surfaceData[offset+4]*(camera.cloudShadow?.(x,y,z)??1)*sample.skyAccess;
     sample.visibility=liveVisibility??(art?.curves.shadow?.(storedVisibility)??storedVisibility);
+    sample.shadowBandBias=options.shadowBandPaint === false ? 0 : inkControls?.[0] ?? world.renderMetadata?.inkControls?.[i*4];
     const tx = surfaceData[offset + 5],
       ty = surfaceData[offset + 6],
       tz = surfaceData[offset + 7];

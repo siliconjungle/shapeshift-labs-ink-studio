@@ -260,7 +260,7 @@ function shadowMap(sun, world, { x, y, z, alpha, scale }, normalAt, casts,
 }
 
 function create(sun, world, pose, normalAt, cloudShadow, exposure,
-  { shadowArt, footprint, probes, curveAt, curveProxyAt, curveData, curveStats, artLighting, traced } = {}) {
+  { shadowArt, footprint, probes, curveAt, curveProxyAt, curveData, curveStats, artLighting, traced, paintShadowBands } = {}) {
   // Albedo exists on opted-in sculpt bakes and explicitly described builder rows.
   // Older pixel-material bakes still carry the original material ramps.
   const fill = new Int32Array(pose.alpha.length).fill(-1);
@@ -283,11 +283,16 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
   const facing = new Float32Array(fill.length), curves=artLighting?.curves;
   const splitIndirect=curves?.sky || curves?.bounce;
   const indirect = (sun.sky || sun.ground) && new Float32Array(fill.length * 3);
+  const inkControls=paintShadowBands && world.renderMetadata?.inkControls;
+  function direct(i,cosine,bias=inkControls?.[i*4]) {
+    const facing=bias ? Math.min(1,cosine-bias) : cosine;
+    return Math.max(0,artLighting?.band?.(i,facing) ?? facing);
+  }
   for (let i = 0; i < normals.length; i++) {
     const normal = normals[i];
     if (!normal) continue;
     const cosine=dot(normal,sun.direction);
-    facing[i] = Math.max(0,artLighting?.band?.(i,cosine) ?? cosine);
+    facing[i] = direct(i,cosine);
     if (indirect) {
       // A cosine-weighted hemisphere sends half its light to a vertical surface.
       const upper = (1 + normal[1]) * .5;
@@ -299,7 +304,7 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     if (!normals[i]) return undefined;
     const normal=exact ?? geometryNormals[i];
     const geometry = shadow && cosine > 0 && (!receives || receives(i)) ?
-      ShadowArt.transfer(art, shadow(x, y, z, normal, artLighting?.normal || artLighting?.band ?
+      ShadowArt.transfer(art, shadow(x, y, z, normal, artLighting?.normal || artLighting?.band || inkControls ?
         Math.abs(dot(normal,sun.direction)) : cosine), coarse) : 1;
     const value=geometry && geometry * (cloudShadow?.(x,y,z) ?? 1) * (exposure?.(x,y,z) ?? 1);
     return curves?.shadow ? curves.shadow(value) : value;
@@ -320,9 +325,9 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     const value=ShadowArt.transfer(art, shadow(...point, toward, Math.abs(cosine)), coarse);
     return curves?.shadow ? curves.shadow(value) : value;
   }
-  function level(i,x,y,z,exact) {
-    const cosine=exact && dot(artLighting?.normal?.(i,exact) ?? exact,sun.direction);
-    const amount=exact ? Math.max(0,artLighting?.band?.(i,cosine) ?? cosine) : facing[i];
+  function level(i,x,y,z,exact,inkControl) {
+    const amount=exact ? direct(i,dot(artLighting?.normal?.(i,exact) ?? exact,sun.direction),
+      paintShadowBands ? inkControl : undefined) : facing[i];
     return sun.ambient + sun.intensity*amount*visibility(i,x,y,z,exact,amount);
   }
   const indirectScratch = [0,0,0];
@@ -342,8 +347,8 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     for (let c=0;c<3;c++) out[c] = (indirect?.[offset+c] ?? 0) * openness * (1-mix) + (local?.rgb[c] ?? 0) * mix;
     return out;
   }
-  function gains(i, x, y, z, rgb, exact) {
-    rgb.fill(level(i, x, y, z, exact));
+  function gains(i, x, y, z, rgb, exact, inkControl) {
+    rgb.fill(level(i, x, y, z, exact, inkControl));
     const bounce = indirectAt(i,x,y,z,indirectScratch);
     const baked=traced?.at(i);
     if (!bounce && !baked && !curves?.key) return rgb;
@@ -357,8 +362,8 @@ function create(sun, world, pose, normalAt, cloudShadow, exposure,
     for (let c=0;c<3;c++) rgb[c]+=(bounce?.[c] ?? 0) + (fill ? fill[c]*traced.strength : 0);
     return srgb(rgb, rgb);
   }
-  function rampLevel(i, x, y, z, tint, exact) {
-    gains(i, x, y, z, tint, exact);
+  function rampLevel(i, x, y, z, tint, exact, inkControl) {
+    gains(i, x, y, z, tint, exact, inkControl);
     const brightness = luminance(tint);
     if (brightness > 0) for (let c = 0; c < 3; c++) tint[c] /= brightness;
     else tint.fill(1);

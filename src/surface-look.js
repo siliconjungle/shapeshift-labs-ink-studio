@@ -986,7 +986,7 @@ const SurfaceLook = (() => {
         const aimed = layer.readShadeNormal?.(at,base) ?? base;
         const posed = frame ? frame.worldNormal(aimed) : aimed;
         const direction=posed===aimed ? aimed : unit(posed), incidence=dot(direction,sample.shadeNormalLight??sun);
-        const bias=layer.readBand ? layer.readBand(at) : 0;
+        const bias=(layer.readBand ? layer.readBand(at) : 0)+(sample.shadowBandBias??0);
         response=sample.shotDiffuse ? sample.shotDiffuse(direction,incidence,layer.wrap??0,bias,shading.light) :
           layer.model(layer,{nl:incidence,light:shading.light},bias);
       } else response = layer.model(layer, shading, rgb);

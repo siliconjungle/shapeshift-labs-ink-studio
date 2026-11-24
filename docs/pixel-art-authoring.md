@@ -1668,6 +1668,45 @@ normal, or opacity override returns its value and coverage, or `null`
 where the base material is in use. Unpainted named masks return zero.
 For texture and glTF export, see [Registered material baking](registered-material-bake.md).
 
+## Paint lighting and ink controls
+
+Bind each control to a `surface-channel` destination on the asset's rest
+chart. The same chart follows a translated, rotated, or posed asset.
+
+```json
+{"id":"quiet-edge","kind":"surface-channel","binding":"gate","chart":"front","channel":"outline"}
+```
+
+| Channel | Values | Treatment |
+| --- | --- | --- |
+| `shadow-band` | −1 to 1, default 0 | Positive values hold the shadow band longer. Negative values bring the lit band in sooner. The bias combines with existing diffuse shadow-band strokes and applies to live sun and ink light thresholds. |
+| `hatch` | 0 to 1, default 1 | Weight of the material or shot's configured hatch. |
+| `outline` | 0 to 1, default 1 | Weight of silhouette, crease, and material boundary lines. |
+| `light-spill` | 0 to 1, default 1 | Weight of direct spill from emissive finishes on the receiving surface. |
+
+Use the regular pixel edit or multiview plan with a numeric `value`. A
+stamp's `strength` blends toward that value. A `clear` stamp restores the
+channel's default inside its footprint. For example, paint zero outline
+weight over a face you want to keep quiet, and paint a negative shadow-band
+bias over a nearby broad plane that should reach the lit palette stop sooner.
+
+The software renderer applies all four controls to their configured
+treatments. WebGL previews the shadow-band bias on diffuse finishes. Use
+`--shadow-band-paint off` to compare the lighting without the bias.
+Use the matching pass to see the authored value even where a treatment
+produces no visible mark.
+
+```sh
+node cli/ink-studio.js passes gate.json --px1 \
+  --channels shadowBandBias,hatchWeight,outlineWeight,lightSpillWeight \
+  --out lighting-ink-review
+```
+
+The output includes PNG previews and float values on the same native grid.
+The signed bias preview uses middle gray for zero. The weight previews
+use white for full strength. See [Material ink and shot overrides](art-passes.md#material-ink-and-shot-overrides)
+and [Painted shadow bands](shadow-band-paint.md) for treatment settings.
+
 ## Navigate craft diagnostics
 
 Open **Craft diagnostics** below the canvas in the Pixel Stamp Workshop or
