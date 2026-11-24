@@ -567,6 +567,13 @@ function apply(frame, edit, route, context, readMarks) {
       evidence = source.editor.transformMeshTopology(binding.object, operation.transform, options);
     } else if (fields(operation, ['cut', 'projection']) && Object.hasOwn(operation, 'cut')) {
       evidence = source.editor.cutMeshTopology(binding.object, operation.cut, options);
+    } else if (fields(operation, ['bevel', 'projection']) && Object.hasOwn(operation, 'bevel')) {
+      try {
+        evidence = source.editor.bevelMeshTopology(binding.object, operation.bevel, options);
+      } catch (error) {
+        if (!error.report) throw error;
+        throw conflict('mesh-bevel-blocked', error.message, { bevel: error.report });
+      }
     } else if (fields(operation, ['edgeEdit', 'projection']) && Object.hasOwn(operation, 'edgeEdit')) {
       try {
         evidence = source.editor.editMeshEdges(binding.object, operation.edgeEdit, options);
@@ -591,7 +598,7 @@ function apply(frame, edit, route, context, readMarks) {
     } else {
       if (!fields(operation, ['patch', 'projection']) || !fields(operation.patch,
         ['vertices', 'faces', 'removeVertices', 'removeFaces', 'lineage']) || !Object.keys(operation.patch).length)
-        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, face-region, edge edit, or repair request');
+        throw new TypeError('A topology edit needs a mesh topology patch, component transform, cut, face-region, edge edit, bevel, or repair request');
       evidence = { topology: source.editor.editMeshTopology(binding.object, operation.patch, options) };
     }
     context.onEditTarget?.({ ...sourceTarget(route, edit), node: 'mesh-topology:' + binding.object, ...evidence });

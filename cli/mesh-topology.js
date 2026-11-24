@@ -109,7 +109,10 @@ function maintenance(action, file, input, rest, opt, meshTopology, openEditor) {
   if (report) write(report, result || plan.report);
 }
 
-function command([action, file, input, ...rest], opt, { KIT: { meshTopology } }, { build, openEditor } = {}) {
+function command([action, file, input, ...rest], opt, toolkit, { build, openEditor } = {}) {
+  const { KIT: { meshTopology } } = toolkit;
+  if (action === 'bevel') return require('./mesh-bevel-preview.js').command(file, input, rest, opt, toolkit, openEditor);
+  if (opt.preview !== undefined) throw new TypeError('Use --preview with mesh-topology bevel');
   const { out, report, projection, lineage, 'match-ids': matchIds } = opt;
   if (action === 'select') {
     const result = select(file, input, rest, opt, meshTopology, build);

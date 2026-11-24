@@ -676,3 +676,66 @@ bake invalidations in the same undo and replay history.
 
 Run `node examples/mesh-edge-edit/render.cjs <directory>` for playable
 CLI requests and native-grid comparisons.
+
+## Bevel selected edges
+
+Save an edge selection, then submit a bevel with its mesh revision. The
+planner cuts real polygons into the source mesh and keeps the adjoining
+authored face and surviving corner IDs. Clipped corners sample the source
+face's own UV and attributes. New vertices carry interpolated weights.
+
+```sh
+ink-studio mesh-topology bevel console.json bevel.json --view view.json --preview art-grid
+ink-studio mesh-topology bevel console.json bevel.json --view view.json --out revised.json --report review.json
+ink-studio mesh-topology bevel workshop.json bevel.json --object console --out revised-scene.json
+```
+
+A request carries an `id`, `revision`, and a `bevel` object with a saved
+`selection` and a positive `width`. Width measures setback along
+each adjoining face in mesh units. Optional `weights` rows contain
+`edge` and `weight` from 0 to 1. The effective width is the width scaled
+by the edge weight. An omitted weight is 1 and a zero weight skips the edge.
+
+- `profile: "chamfer"` uses one flat facet. `profile: "round"` uses
+  one to 16 facets of a circular profile, with three by default.
+  For a custom profile, give `profile.points` as normalized setbacks
+  along the two adjoining faces, ordered by their face IDs.
+  The points form a convex cross section from `[1,0]` to `[0,1]`.
+  Their count determines the number of segments unless it is specified.
+- `join: "miter"` (default) intersects the neighboring bevels.
+  `join: "patch"` adds a flat corner patch where multiple beveled edges
+  meet. New bevel faces use a length-based strip chart. They inherit
+  adjacent materials by default or take an explicit `material`.
+- The cutter supports convex, consistently wound edges with two planar
+  incident faces and a closed local section. It checks contacts and
+  rejects widths that consume an authored face or cut beyond the edge
+  neighborhood. The rest of the mesh may include separate components.
+
+Use `protect.faces` or `protect.materials` to prevent trimming specified
+surfaces. To allow some trimming while keeping a lettering or coating
+region, give a `protect.paint` row with `face`, `min`, and `max`
+normalized UV coordinates. The retained polygon must still contain the
+whole rectangle with the same affine UV-to-mesh mapping. Scene edits
+also block invalidation of an active bake on a protected material.
+`protect.gaps` accepts bounded clear rays with `id`, `origin`,
+`direction`, and `distance`.
+
+`--preview` writes matched `before.png`, `after.png`,
+`difference.png`, and the candidate’s `normals.png` at 1×. Amber marks coverage changes and pink marks
+color changes. Use `--view` with an optional native `w`, `h`, `t`,
+and `camera` to lock the shot. Standalone meshes support JSON
+`materials` and default to direct material colors. Scene previews
+use the scene's authored look unless `raw: true` is chosen.
+Add `protectPixels` rows with `at: [x,y]` and `kind` set to
+`color` (same RGB and depth occupancy), `coverage` (same depth
+occupancy), or `gap` (unoccupied before and after). Passing this view
+with `--out` applies those guards before writing a revised file.
+
+`KIT.meshTopology.planBevel(mesh, request)` returns the exact geometry
+patch, the candidate document, and a receipt with `canCommit`, edge
+widths, protection findings, facet IDs, and vertex sources. Retained
+scenes expose `editor.planMeshBevel(object, request)` and
+`editor.bevelMeshTopology(object, request)`. Bound pixel edits can
+submit `operation.bevel` for the same topology journal and undo path.
+Use the example in `examples/mesh-bevel` for matched native previews
+and replayable requests.

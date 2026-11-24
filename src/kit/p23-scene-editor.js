@@ -435,6 +435,31 @@
       }) });
     }
 
+    function planMeshBevel(object, request, { part } = {}) {
+      const row = meshTopology(object, part);
+      requireMeshShapeOwner(object, row.part, snapshot(), 'Bevel');
+      const plan = K.meshTopology.planBevel(row.document, request);
+      if (!row.bakes?.length || !request.protect || !plan.patch.faces?.length) return plan;
+      const { faces = [], materials = [], paint = [] } = request.protect;
+      const guarded = new Set([...faces, ...paint.map(row => row.face)]);
+      const original = new Map(row.document.faces.map(face => [face.id, face.material]));
+      const slots = new Set([...materials, ...[...guarded].map(id => original.get(id))]);
+      const changed = new Set(plan.patch.faces.flatMap(face => [original.get(face.id), face.material]));
+      const bakes = row.bakes.filter(bake => !bake.invalidated && slots.has(bake.material) && changed.has(bake.material))
+        .map(bake => bake.id);
+      return bakes.length ? freeze({ ...plan, report: { ...plan.report, canCommit: false,
+        issues: [...plan.report.issues, { kind: 'protected-bake', bakes }] } }) : plan;
+    }
+
+    function bevelMeshTopology(object, request, options) {
+      const plan = planMeshBevel(object, request, options);
+      if (!plan.report.canCommit)
+        throw Object.assign(new RangeError('Bevel failed geometry or protection checks'), { report: plan.report });
+      return freeze({ bevel: plan.report, ...(Object.keys(plan.patch).length && {
+        topology: editMeshTopology(object, plan.patch, options)
+      }) });
+    }
+
     function setBrushRegion(region) {
       const value = clone(region);
       const write = () => document.setEnvironment({ brushRegion: value });
@@ -546,6 +571,8 @@
       editMeshFaceRegion,
       planMeshEdgeEdit,
       editMeshEdges,
+      planMeshBevel,
+      bevelMeshTopology,
       hybridRoute: address => A.hybridOwnership.route(snapshot().hybridOwnership, address),
       setBrushRegion,
       setBreakables,

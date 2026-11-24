@@ -6160,6 +6160,263 @@
       ],
       "additionalProperties": false
     },
+    "meshBevelRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.-]{1,96}$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "bevel": {
+          "type": "object",
+          "properties": {
+            "selection": {
+              "$ref": "#/$defs/meshEdgeSelection"
+            },
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "segments": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "profile": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "chamfer",
+                    "round"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        ],
+                        "minItems": 2,
+                        "items": false
+                      },
+                      "minItems": 2,
+                      "maxItems": 17
+                    }
+                  },
+                  "required": [
+                    "points"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "join": {
+              "enum": [
+                "miter",
+                "patch"
+              ]
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "edge": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "weight": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "edge",
+                  "weight"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "material": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "selection",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        "protect": {
+          "type": "object",
+          "properties": {
+            "faces": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "materials": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "paint": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "face": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "min": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    ],
+                    "minItems": 2,
+                    "items": false
+                  },
+                  "max": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    ],
+                    "minItems": 2,
+                    "items": false
+                  }
+                },
+                "required": [
+                  "face",
+                  "min",
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "maxItems": 256
+            },
+            "gaps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "origin": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "minItems": 3,
+                    "items": false
+                  },
+                  "direction": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "minItems": 3,
+                    "items": false
+                  },
+                  "distance": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "origin",
+                  "direction",
+                  "distance"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "maxItems": 256
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "bevel"
+      ],
+      "additionalProperties": false
+    },
     "meshTopologyOperation": {
       "type": "object",
       "properties": {
@@ -6177,6 +6434,9 @@
         },
         "edgeEdit": {
           "$ref": "#/$defs/meshEdgeEditRequest"
+        },
+        "bevel": {
+          "$ref": "#/$defs/meshBevelRequest"
         },
         "patch": {
           "type": "object",
@@ -6484,6 +6744,11 @@
         {
           "required": [
             "edgeEdit"
+          ]
+        },
+        {
+          "required": [
+            "bevel"
           ]
         }
       ],

@@ -257,12 +257,25 @@ function createDefinitions() {
         tagged('kind','grid-fill',{selection:ref('meshEdgeSelection'),start:text,columns:int(1,127),material:text},['selection'])
       )
     },['id','revision','operation']),
+    meshBevelRequest:object({
+      id:{type:'string',pattern:'^[a-zA-Z0-9_.-]{1,96}$'},revision:text,tolerance:{type:'number',exclusiveMinimum:0},
+      bevel:object({selection:ref('meshEdgeSelection'),width:{type:'number',exclusiveMinimum:0},segments:int(1,16),
+        profile:either(choice('chamfer','round'),object({points:array(tuple(unit,unit),2,17)},['points'])),
+        join:choice('miter','patch'),weights:array(object({edge:text,weight:unit},['edge','weight'])),material:text
+      },['selection','width']),
+      protect:object({faces:array(text),materials:array(text),
+        paint:array(object({face:text,min:tuple(unit,unit),max:tuple(unit,unit)},['face','min','max']),0,256),
+        gaps:array(object({id:text,origin:pos,direction:pos,distance:{type:'number',exclusiveMinimum:0}},
+          ['id','origin','direction','distance']),0,256)
+      })
+    },['id','revision','bevel']),
     meshTopologyOperation:{ ...object({
       transform:ref('meshComponentTransform'),
       repair:ref('meshRepairRequest'),
       cut:ref('meshCutRequest'),
       faceRegion:ref('meshFaceRegionRequest'),
       edgeEdit:ref('meshEdgeEditRequest'),
+      bevel:ref('meshBevelRequest'),
       patch:{
         ...object({
           vertices:array(object({id:text,position:pos,weights:nullable(object({},[],unit))},['id','position'])),
@@ -277,7 +290,7 @@ function createDefinitions() {
       },
       projection:object({maxDistance:{type:'number',exclusiveMinimum:0},minNormalDot:unit,maxUVDistance:unit,minConfidence:unit,
         ambiguity:unit,maxChecks:int(1,2000000)},['maxDistance'])
-    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit'].map(prop) },
+    }),oneOf:['patch','transform','repair','cut','faceRegion','edgeEdit','bevel'].map(prop) },
     sdfShapeOperation:either(...[
       ['parameters',obj],['modifier',obj],['updateModifier',object({id:text,patch:obj},['id','patch'])],
       ['protection',array(obj)],['brush',sdfBrush],['updateBrush',{type:'object',required:['id']}]

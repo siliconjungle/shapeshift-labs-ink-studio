@@ -217,6 +217,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   mesh-topology cut <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file] [--pieces dir]   preview or apply plane and knife cuts
   mesh-topology face-region <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply face extrusion, inset and thickening
   mesh-topology edge-edit <mesh-or-scene.json> <request.json> [--object id] [--out file] [--report file]   preview or apply loop insertion, edge slides, bridges and grid fills
+  mesh-topology bevel <mesh-or-scene.json> <request.json> [--object id] [--view file] [--preview dir] [--out file] [--report file]   preview or apply an edge bevel with native-grid protection
   mesh-topology correspond <before.json> <after.json> [--lineage links.json] [--projection settings.json] [--match-ids on|off] [--out map.json]   map stable and projected elements
   mesh-uv inspect|simplify <mesh> --out <directory|mesh.json>   inspect UV maps or reduce with seam locks
   scenery pack <scene.js> --out asset.inkscenery   pack indexed meshes and textures from a scenery hook
