@@ -1838,6 +1838,40 @@ node cli/ink-studio.js pixel-art preview examples/pixel-art-tooling/relay.json \
   examples/pixel-art-tooling/relay-cleanup.json
 ```
 
+### Get an exact dry-run diff
+
+Use `--exact` with `pixel-art preview`, or pass `{ exact: true }` to
+`previewEdit(patch, options)`, `previewChanges(options)`, or the
+`preview` command envelope. The same option is available in
+`pixel-art session preview`. The regular pixel sample still follows
+`limit`. The exact diff includes every changed cell and can be large.
+
+```sh
+node cli/ink-studio.js pixel-art preview document.json edit.json \
+  --scene gate.json --exact --limit 0 --out review.json
+```
+
+Read the result's `diff` object for the following evidence.
+
+| Field | Evidence |
+| --- | --- |
+| `cells`, `grids` | Exact before and after values for changed composite and layer-local cells, including hidden paint, knockouts, alpha, and added or removed canvas area. Layer-local cells include their layer ID. |
+| `materials`, `geometry`, `other` | Changed authored fields keyed by scene and target. Includes material roles and channels, scan texels, splat transforms and footprints, SDF shapes and modifiers, and shot corrections. A missing `before` or `after` means the authored value was absent. |
+| `rendered` | Paired before and after native renders on the binding grid, with RGBA, coverage, depth, surface kind, and object, part, and material ownership for each changed pixel. The report identifies the time and, for a shot correction, the sampled shot frame. |
+| `skippedHits` | Skipped source projections, weight-filtered splat hits, and rejected pixel and source hits reported by the edit. |
+| `protection` | Whether the accepted diff changes protected cells or definitions, whether the rendered scene changes over a registered protected cell, and which protected hits the editor blocked. |
+| `renderErrors` | Any source view that couldn't be compared. Authored changes remain available for review. |
+
+Shot corrections default to their first active frame. Use
+`--shot-hit-frame` or `shotHitFrame` to inspect another frame. For other
+source edits the preview uses the requested time or the brush's authored
+time when available. Hosts that supply a world in the SDK can provide it
+at the intended pose.
+
+An exact dry run leaves the document, scene, and undo history untouched.
+An invalid exact preview of a staged transaction also leaves the draft
+open for inspection or repair.
+
 ## Guard an edit against the inspected revision
 
 For raster edits, copy `revision` from pixel inspection and include the

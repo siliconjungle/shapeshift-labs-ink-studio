@@ -162,8 +162,14 @@ test('registered material edits change the relit layer and preserve the capture 
   const options={...view,passes:['opaque-surface','pigment'],scanDaylight:false};
   const draw=(appearance,yaw=0)=>ink.render(world,{...options,yaw,scanAppearance:appearance,...editor.renderOptions('scan.glb')});
   const before=draw(0), capture=draw(1);
-  const report=editor.previewEdit(patch,context);
+  const report=editor.previewEdit(patch,{...context,exact:true,limit:0,view:{scanAppearance:0}});
   assert(report.valid,JSON.stringify(report.conflicts));
+  assert.deepEqual(report.diff.renderErrors,[]);
+  const changedTexels=report.diff.materials.filter(row=>row.key==='texel');
+  assert.equal(changedTexels.length,100);
+  assert.deepEqual(changedTexels[0].after,{at:[5,5],pigment:0x55aa88,roughness:.88,normal:[.3,0,1]});
+  assert.ok(report.diff.rendered[0].cells.length>0);
+  assert.deepEqual(report.diff.geometry,[]);
   assert.equal(report.targets[0].texels.length,100);
   assert.equal(report.targets[0].capturedAppearance,true);
   assert.deepEqual(draw(0).rgb,before.rgb);

@@ -5831,6 +5831,284 @@
       ],
       "additionalProperties": true
     },
+    "dryRunCell": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "layer": {
+          "$ref": "#/$defs/id"
+        },
+        "at": {
+          "$ref": "#/$defs/pixel"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "at",
+        "before",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "dryRunSource": {
+      "type": "object",
+      "properties": {
+        "scene": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "object": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "before": {},
+        "after": {}
+      },
+      "required": [
+        "kind",
+        "key"
+      ],
+      "additionalProperties": true
+    },
+    "dryRunView": {
+      "type": "object",
+      "properties": {
+        "scene": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grid": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            }
+          ],
+          "minItems": 2,
+          "items": false
+        },
+        "time": {
+          "type": "number",
+          "minimum": 0
+        },
+        "shotFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shotStatus": {
+          "enum": [
+            "sampled",
+            "outside-frame-range"
+          ]
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dryRunCell"
+          }
+        }
+      },
+      "required": [
+        "scene",
+        "binding",
+        "frame",
+        "grid",
+        "time",
+        "cells"
+      ],
+      "additionalProperties": false
+    },
+    "dryRunProtection": {
+      "type": "object",
+      "properties": {
+        "wouldChange": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "geometry": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "renderedCells": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "blocked": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "wouldChange",
+        "details",
+        "geometry",
+        "cells",
+        "renderedCells",
+        "blocked"
+      ],
+      "additionalProperties": false
+    },
+    "dryRunDiff": {
+      "type": "object",
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dryRunCell"
+          }
+        },
+        "grids": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "materials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dryRunSource"
+          }
+        },
+        "geometry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dryRunSource"
+          }
+        },
+        "other": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dryRunSource"
+          }
+        },
+        "rendered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dryRunView"
+          }
+        },
+        "renderErrors": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "skippedHits": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "protection": {
+          "$ref": "#/$defs/dryRunProtection"
+        }
+      },
+      "required": [
+        "cells",
+        "grids",
+        "materials",
+        "geometry",
+        "other",
+        "rendered",
+        "renderErrors",
+        "skippedHits",
+        "protection"
+      ],
+      "additionalProperties": false
+    },
     "previewResult": {
       "type": "object",
       "properties": {
@@ -5896,6 +6174,9 @@
           "items": {
             "type": "object"
           }
+        },
+        "diff": {
+          "$ref": "#/$defs/dryRunDiff"
         }
       },
       "required": [
@@ -7837,6 +8118,14 @@
             "limit": {
               "type": "integer",
               "minimum": 0
+            },
+            "exact": {
+              "type": "boolean"
+            },
+            "shotHitFrame": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
             }
           },
           "required": [],
@@ -7881,6 +8170,40 @@
           "action": "preview"
         },
         {
+          "format": "ink-studio/pixel-command",
+          "version": 1,
+          "action": "preview"
+        },
+        {
+          "edit": {
+            "patch": {
+              "id": "example-draw",
+              "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+              "frame": "art",
+              "operation": {
+                "tool": "pencil",
+                "layer": "ink",
+                "points": [
+                  [
+                    2,
+                    1
+                  ],
+                  [
+                    3,
+                    1
+                  ]
+                ],
+                "swatch": "amber"
+              }
+            },
+            "format": "ink-studio/pixel-command",
+            "version": 1,
+            "action": "draw"
+          },
+          "options": {
+            "exact": true,
+            "limit": 0
+          },
           "format": "ink-studio/pixel-command",
           "version": 1,
           "action": "preview"
@@ -9487,7 +9810,13 @@
           "/targets": "Requested destinations, resolved source identities, affected runs or modifier IDs as applicable.",
           "/sources": "Actual scene entities and fields changed in the preview.",
           "/conflicts": "Blocking validation issues, including current and expected revisions when applicable.",
-          "/warnings": "Additional review evidence, including an unpinned source revision when applicable."
+          "/warnings": "Additional review evidence, including an unpinned source revision when applicable.",
+          "/diff/cells": "Every changed composite or layer cell with before and after values in exact mode.",
+          "/diff/materials": "Authored material fields, source splat channels and scan texels before and after.",
+          "/diff/geometry": "Authored geometry, modifiers, footprints and topology before and after.",
+          "/diff/rendered": "Untruncated, matched native render differences for reviewed scene views.",
+          "/diff/skippedHits": "Skipped projection hits, brush falloff and reported rejected pixel or source hits.",
+          "/diff/protection": "Changed protection definitions and cells, and protected hits blocked by validation."
         },
         "examples": [
           {
@@ -9741,6 +10070,169 @@
                 }
               ],
               "conflicts": []
+            }
+          },
+          {
+            "command": {
+              "edit": {
+                "patch": {
+                  "id": "example-draw",
+                  "revision": "427f2ff8dd9504099da37b3675a1cd879f37192b763e20c70cc6314a6be8fd49",
+                  "frame": "art",
+                  "operation": {
+                    "tool": "pencil",
+                    "layer": "ink",
+                    "points": [
+                      [
+                        2,
+                        1
+                      ],
+                      [
+                        3,
+                        1
+                      ]
+                    ],
+                    "swatch": "amber"
+                  }
+                },
+                "format": "ink-studio/pixel-command",
+                "version": 1,
+                "action": "draw"
+              },
+              "options": {
+                "exact": true,
+                "limit": 0
+              },
+              "format": "ink-studio/pixel-command",
+              "version": 1,
+              "action": "preview"
+            },
+            "setup": [],
+            "result": {
+              "format": "ink-studio/pixel-edit-preview",
+              "version": 1,
+              "valid": true,
+              "pixelCount": 2,
+              "pixels": [],
+              "sources": [],
+              "targets": [
+                {
+                  "destination": "raster",
+                  "kind": "raster",
+                  "tool": "pencil",
+                  "frame": "art",
+                  "layer": "ink",
+                  "cel": "art/ink",
+                  "pixelCount": 2,
+                  "runs": [
+                    [
+                      1,
+                      2,
+                      2
+                    ]
+                  ]
+                }
+              ],
+              "conflicts": [],
+              "diff": {
+                "cells": [
+                  {
+                    "frame": "art",
+                    "at": [
+                      2,
+                      1
+                    ],
+                    "before": {
+                      "layer": null,
+                      "cel": null,
+                      "swatch": null,
+                      "color": null,
+                      "alpha": 0,
+                      "protected": false
+                    },
+                    "after": {
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "color": "#da8c44",
+                      "alpha": 255,
+                      "protected": false
+                    }
+                  },
+                  {
+                    "frame": "art",
+                    "at": [
+                      3,
+                      1
+                    ],
+                    "before": {
+                      "layer": null,
+                      "cel": null,
+                      "swatch": null,
+                      "color": null,
+                      "alpha": 0,
+                      "protected": false
+                    },
+                    "after": {
+                      "layer": "ink",
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "color": "#da8c44",
+                      "alpha": 255,
+                      "protected": false
+                    }
+                  },
+                  {
+                    "frame": "art",
+                    "layer": "ink",
+                    "at": [
+                      2,
+                      1
+                    ],
+                    "before": null,
+                    "after": {
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "color": "#da8c44",
+                      "alpha": 255,
+                      "knockout": false,
+                      "clip": 255
+                    }
+                  },
+                  {
+                    "frame": "art",
+                    "layer": "ink",
+                    "at": [
+                      3,
+                      1
+                    ],
+                    "before": null,
+                    "after": {
+                      "cel": "art/ink",
+                      "swatch": "amber",
+                      "color": "#da8c44",
+                      "alpha": 255,
+                      "knockout": false,
+                      "clip": 255
+                    }
+                  }
+                ],
+                "grids": [],
+                "materials": [],
+                "geometry": [],
+                "other": [],
+                "rendered": [],
+                "renderErrors": [],
+                "skippedHits": [],
+                "protection": {
+                  "wouldChange": false,
+                  "details": [],
+                  "geometry": [],
+                  "cells": [],
+                  "renderedCells": [],
+                  "blocked": []
+                }
+              }
             }
           }
         ]

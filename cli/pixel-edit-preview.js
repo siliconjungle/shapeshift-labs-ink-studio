@@ -8,6 +8,10 @@ function conflict(code, message, details, ErrorType = RangeError) {
 
 function conflicts(error) {
   if (error?.conflicts?.length) return error.conflicts;
+  if (error?.code === 'protected-sdf-feature') {
+    const { code,message,feature,kind,reason } = error;
+    return [{ code,message,feature,kind,reason }];
+  }
   const problems = Array.isArray(error?.problems) && error.problems.filter(row => row.level === 'error');
   if (problems?.length) return problems.map(({ path,problem,hint }) =>
     ({ code:'invalid-scene', path, message:problem, ...(hint && { hint }) }));

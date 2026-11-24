@@ -35,7 +35,13 @@ const evidence = {
     '/targets':'Requested destinations, resolved source identities, affected runs or modifier IDs as applicable.',
     '/sources':'Actual scene entities and fields changed in the preview.',
     '/conflicts':'Blocking validation issues, including current and expected revisions when applicable.',
-    '/warnings':'Additional review evidence, including an unpinned source revision when applicable.'
+    '/warnings':'Additional review evidence, including an unpinned source revision when applicable.',
+    '/diff/cells':'Every changed composite or layer cell with before and after values in exact mode.',
+    '/diff/materials':'Authored material fields, source splat channels and scan texels before and after.',
+    '/diff/geometry':'Authored geometry, modifiers, footprints and topology before and after.',
+    '/diff/rendered':'Untruncated, matched native render differences for reviewed scene views.',
+    '/diff/skippedHits':'Skipped projection hits, brush falloff and reported rejected pixel or source hits.',
+    '/diff/protection':'Changed protection definitions and cells, and protected hits blocked by validation.'
   }],
   validate:['validateResult',{
     '/revision':'Revision of the currently validated document.',
@@ -127,7 +133,8 @@ function examples(createEditor) {
       [edit('recolor',{type:'swatch',swatch:{id:'amber',color:'#e69143'}},{})]],
     transform:[[edit('transform',{layer:'ink',selection:'badge',transform:{offset:[2,1]},resultSelection:'moved'})],
       [edit('transform',{type:'pad',margins:[1,0,1,0]},{})]],
-    preview:[[make('preview',{edit:draw})],[make('preview'),[begin,draw]]],
+    preview:[[make('preview',{edit:draw})],[make('preview'),[begin,draw]],
+      [make('preview',{edit:draw,options:{exact:true,limit:0}})]],
     begin:[[begin]], commit:[[make('commit'),[begin,draw]]], cancel:[[make('cancel'),[begin,draw]]],
     undo:[[undo,[draw]]],redo:[[make('redo'),[draw,undo]]],
     replay:[[make('replay',{receipt:editor.execute(draw)})]],
@@ -187,8 +194,19 @@ function resultDefinitions(artifacts) {
     selectResult:object({revision,frame:id,grid:size,pixelCount:natural,pixels:array(pixel),sources:generic,
       targetRevision:revision,intents:array(ref('selectIntent'),1,32),verified:constant(true)},
       ['revision','frame','grid','pixelCount','pixels'],true),
+    dryRunCell:object({frame:nullable(id),layer:id,at:pixel,before:nullable(obj),after:nullable(obj)},['at','before','after']),
+    dryRunSource:object({scene:text,kind:text,object:either(text,natural),key:text,before:{},after:{}},['kind','key'],true),
+    dryRunView:object({scene:text,binding:nullable(id),frame:nullable(id),grid:size,time:num(0),
+      shotFrame:natural,shotStatus:choice('sampled','outside-frame-range'),cells:array(ref('dryRunCell'))},
+    ['scene','binding','frame','grid','time','cells']),
+    dryRunProtection:object({wouldChange:bool,details:generic,geometry:generic,cells:generic,renderedCells:generic,blocked:generic},
+      ['wouldChange','details','geometry','cells','renderedCells','blocked']),
+    dryRunDiff:object({cells:array(ref('dryRunCell')),grids:generic,materials:array(ref('dryRunSource')),
+      geometry:array(ref('dryRunSource')),other:array(ref('dryRunSource')),rendered:array(ref('dryRunView')),
+      renderErrors:generic,skippedHits:generic,protection:ref('dryRunProtection')},
+    ['cells','grids','materials','geometry','other','rendered','renderErrors','skippedHits','protection']),
     previewResult:object({format:constant('ink-studio/pixel-edit-preview'),version:constant(1),valid:bool,pixelCount:natural,
-      pixels:generic,sources:generic,targets:generic,conflicts:array(conflict),sourceRevision:revision,warnings:generic},
+      pixels:generic,sources:generic,targets:generic,conflicts:array(conflict),sourceRevision:revision,warnings:generic,diff:ref('dryRunDiff')},
     ['format','version','valid','pixelCount','pixels','sources','targets','conflicts'],true),
     validateResult:object({format:constant('ink-studio/pixel-art'),version:constant(2),revision,grid:size,pixelAspect:tuple(positive,positive),
       frames:array(open({id,durationMs:positive}),1),identities:open({layers:generic,swatches:generic,cels:generic}),
@@ -325,7 +343,7 @@ function buildSchema({ createEditor,surfaceDefinitions }) {
   const fields = { at:pixel,query:ref('selectionQuery'),label:text,receipt:ref('replayReceipt'),
     edit:{oneOf:edits.map(action=>ref(action+'Command'))},artifact:choice(...exportArtifacts) };
   const optionTypes = {frame:id,cel,layer:id,binding:id,destinations:{...array(text),uniqueItems:true},references:bool,
-    limit:natural,shotHitFrame:int(0,1e9),targetRevision:revision};
+    limit:natural,shotHitFrame:int(0,1e9),exact:bool,targetRevision:revision};
   for (const action of Object.keys(members)) {
     const schemaName = action+'Command';
     const keys = optionFields[action] ?? (edits.includes(action) ? optionFields.edit : []);

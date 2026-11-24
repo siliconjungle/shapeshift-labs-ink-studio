@@ -19,7 +19,7 @@ const optionFields = {
   inspect:['frame','cel','binding','destinations','references'],
   select:['frame','layer','cel','targetRevision'],
   edit:['shotHitFrame'],
-  preview:['limit'],
+  preview:['limit','exact','shotHitFrame'],
   export:{ preset:['preset','out','directory'],png:['frame','cel','layer','colorMode'],
     stamp:['frame','cel','layer','references'],render:['scene'] }
 };

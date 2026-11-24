@@ -40,6 +40,8 @@ const Cleanup = require('../src/pixel-cleanup.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
+const { exactDiff } = require('./pixel-exact-diff.js');
+const { pose:poseDiff } = require('./diarama-pose.js');
 const SplatPreview = require('./pixel-splat-preview.js');
 const Sessions = require('./pixel-edit-session.js');
 const PixelCommands = require('./pixel-commands.js');
@@ -677,6 +679,12 @@ function selectPixels(design,query,{ frame,layer,cel,targetRevision } = {},conte
   const pixels = PixelSelections.pixels(width,mask), sources = [...rendering.sources,...intents.sources];
   return { revision:active.revision,frame:active.id ?? null,grid:[width,height],pixelCount:pixels.length,pixels,
     ...(sources.length && { sources }),...intents.report(query,mask,sources,targetRevision,requireTarget) };
+}
+
+function exactOptions(opt) {
+  const value = opt['shot-hit-frame'];
+  return { exact:opt.exact,shotHitFrame:value === undefined ? undefined :
+    typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN };
 }
 
 function selectConflict(error) {
@@ -1835,14 +1843,67 @@ function sourceWarning(binding) {
   return { code:'unverified-source', binding, message:'Add the inspected sourceRevision to guard this scene edit' };
 }
 
-function reportPreview({ baseline,candidate,...options }) {
-  return Preview.report({ baseline,candidate,...options,compile,cell,celLinks:Timeline.linkChanges(baseline,candidate ?? baseline) });
+const renderOutputKeys = { 'shot-correction':'shotCorrections','splat-attributes':'splatFit','scan-material':'scanPaint' };
+const exactRenderOptions = world=>Object.fromEntries(Object.values(renderOutputKeys)
+  .filter(key=>world?.look?.[key]).map(key=>[key,world.look[key]]));
+
+function exactRequest(exact,shotHitFrame) {
+  if (exact !== undefined && typeof exact !== 'boolean') throw new TypeError('Exact preview must be a boolean');
+  if (shotHitFrame !== undefined && (!exact || !integer(shotHitFrame,0,1e9)))
+    throw new TypeError('A preview shot hit sample needs exact mode and a nonnegative shot frame');
+  return exact && {scenes:[],assets:[],views:[],skippedHits:[],renderErrors:[]};
 }
 
-function previewEdit(design, patch, context, { frameId,limit } = {}) {
+function paintSkips(diff,target,splats,patch) {
+  for (const hit of (target?.brush ?? target?.surfacePaint)?.skippedHits ?? [])
+    diff.skippedHits.push({ ...hit,edit:patch.id,binding:target.binding,destination:target.destination });
+  if (!splats.length || !patch.operation.splats) return;
+  const requested = new Map(patch.operation.splats.map(row=>[row.splat,row]));
+  for (const {id,requested:source,weight} of splats) {
+    const row = requested.get(source), scope = { edit:patch.id,binding:target.binding,splat:id ?? source };
+    if (weight === 0) diff.skippedHits.push({ ...scope,
+      reason:patch.operation.falloff && row?.weight !== 0 ? 'outside-falloff' : 'zero-weight' });
+    else if (weight > 0 && weight < .5 && (row?.material !== undefined || patch.operation.paint?.material !== undefined))
+      diff.skippedHits.push({ ...scope,channel:'material',reason:'below-material-weight' });
+  }
+}
+
+const withRenderAssets = (world,assets)=>({...world,look:{...world.look,...assets}});
+const buildForDiff = editor=>editor.build(undefined,{retainRenderSdf:true,retainPartRenderSdf:true});
+
+function exactView({ design,binding,patch,kind,world,other,settings,options,report,pose = false,shared = false }) {
+  const plan = other.look?.shotCorrections;
+  const correction = kind === 'shot-correction' && plan?.corrections?.find(row=>row.id === patch.id);
+  const shot = correction && { id:correction.id,frame:options.shotHitFrame ?? correction.frames[0] };
+  const footprint = patch?.operation?.brush ?? patch?.operation?.paint;
+  const time = shot ? plan.startTime+shot.frame/plan.fps :
+    settings.time ?? footprint?.time ?? report?.brush?.attachment?.time ?? world.lookSnapshot?.time ?? 0;
+  if (pose) {
+    const kit = require('../index.js').load(), poseOptions = { kit,maxSteps:7200 };
+    poseDiff(world,time,poseOptions);
+    if (shared) other = withRenderAssets(world,other.look);
+    else poseDiff(other,time,poseOptions);
+  }
+  const grid = binding?.canvas?.size ?? [design.width,design.height];
+  const choice = footprint?.camera;
+  const view = choice ? {...(typeof settings.splatView === 'function' ? settings.splatView() : settings.splatView),...choice} :
+    settings.splatView;
+  return { scene:binding?.scene ?? settings.sceneRef, binding:binding?.id,registration:binding,
+    frame:patch?.frame ?? binding?.frame,grid,before:world,after:other,time,view,shot };
+}
+
+function reportPreview({ baseline,candidate,exact,...options }) {
+  const result = Preview.report({ baseline,candidate,...options,compile,cell,celLinks:Timeline.linkChanges(baseline,candidate ?? baseline) });
+  if (exact) result.diff = exactDiff({ baseline,candidate:candidate ?? baseline,compile,issues:options.issues ?? [],...exact });
+  return result;
+}
+
+function previewEdit(design, patch, context, { frameId,limit,exact,shotHitFrame } = {}) {
+  const diff = exactRequest(exact,shotHitFrame);
   const previewLimit=Preview.previewLimit(limit);
   const targets = [], sources = [], warnings = [];
   let candidate = design, issues = [], source, sourceRevision, sourceWorld;
+  const splats = [];
   try {
     const route = Destinations.resolve(design,patch?.destination);
     const target = Preview.sourceTarget(route,patch), resolvedRows=new Set();
@@ -1858,6 +1919,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
         if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
       },
       onSplat(splat) {
+        if (diff) splats.push(splat);
         resolvedRows.add(splat.id??splat.row);
         if (splat.weight!==undefined) (target.paintHits ??= []).push(splat);
         if (splat.footprint) (target.footprintHits ??= []).push(splat);
@@ -1872,7 +1934,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       scene(binding) {
         const { editor,revision } = context.scene(binding);
         const fork = editor.fork();
-        source = { scene:binding.scene, before:editor.snapshot(), fork };
+        source = { scene:binding.scene, before:editor.snapshot(), editor,fork };
         return { editor:fork, revision };
       }
     });
@@ -1885,10 +1947,30 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       });
     }
     if (source) sources.push(...Preview.sourceChanges(source.scene,source.before,source.fork.snapshot()));
+    if (diff && route.binding) {
+      paintSkips(diff,target,splats,patch);
+      const key = renderOutputKeys[route.destination.kind];
+      if (source) {
+        diff.scenes.push({ scene:source.scene,before:source.before,after:source.fork.snapshot() });
+        const retained = context.renderOptions?.(source.scene) ?? {};
+        diff.views.push({ scene:source.scene,binding:route.binding.id,build:()=>exactView({
+          design,binding:route.binding,patch,kind:route.destination.kind,settings:context,options:{shotHitFrame},report:target,
+          world:withRenderAssets(buildForDiff(source.editor),retained),other:withRenderAssets(buildForDiff(source.fork),retained),
+          pose:true
+        }) });
+      } else {
+        const before = exactRenderOptions(sourceWorld), after = { ...before,[key]:output };
+        diff.assets.push({ scene:route.binding.scene,before,after });
+        diff.views.push({ scene:route.binding.scene,binding:route.binding.id,build:()=>exactView({
+          design,binding:route.binding,patch,kind:route.destination.kind,settings:context,options:{shotHitFrame},report:target,
+          world:sourceWorld,other:withRenderAssets(sourceWorld,after),pose:context.ownsWorld,shared:true
+        }) });
+      }
+    }
   } catch (error) {
     issues = Preview.conflicts(error);
   }
-  return reportPreview({ baseline:design,candidate,sources,targets,issues,warnings,sourceRevision,limit });
+  return reportPreview({ baseline:design,candidate,sources,targets,issues,warnings,sourceRevision,limit,exact:diff });
 }
 
 const persistentJournals = new WeakSet();
@@ -2007,6 +2089,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       time:context?.time,splatView:context?.view,splatDiagnostics:context?.diagnostics,
       captureSelection:context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame)),
       sceneRef:context?.sceneRef ?? (sceneEditor ? sceneName : undefined),
+      renderOptions,ownsWorld:!context?.world,
       scene(binding) {
         if (grouped && !sceneEditor)
           throw new Error('Attach the source scene editor to group native scene and pixel edits');
@@ -2041,7 +2124,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       if (expected && binding && request.sourceRevision === undefined)
         next.verifiedReplays = [...draft.verifiedReplays,draft.receipts.length];
       if (!binding) Object.assign(next,{ design:result, legacyRevision:null });
-      const option = { 'shot-correction':'shotCorrections', 'splat-attributes':'splatFit', 'scan-material':'scanPaint' }[destination.kind];
+      const option = renderOutputKeys[destination.kind];
       if (option) next.renderOutputs = { ...draft.renderOutputs,
         [binding.scene]:{ ...renderOptions(binding.scene), [option]:result }
       };
@@ -2060,18 +2143,23 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
   }
 
   function previewChanges(options = {}) {
-    const {limit,time,view,diagnostics}=options, previewLimit=Preview.previewLimit(limit);
+    const {limit,time,view,diagnostics,exact,shotHitFrame}=options, previewLimit=Preview.previewLimit(limit);
+    const diff = exactRequest(exact,shotHitFrame);
     const before = journal.transactionBase();
     if (!before) throw new Error('No active transaction');
     const content = before.entities[slot]?.content;
     const base = content === undefined ? baseline : JSON.parse(content);
     const draft = state(), targetsByKey = new Map(), verifiedReplays = new Set(draft.verifiedReplays);
-    const splatReviews=new Map();
+    const splatReviews=new Map(), exactTargets = [];
     for (let index = base.receipts.length; index < draft.receipts.length; index++) {
       const receipt = draft.receipts[index];
       const patch = receipt.command.patch, route = Destinations.resolve(draft.design,patch.destination);
       const target = Preview.sourceTarget(route,patch);
       const [painted] = receipt.affectedTargets;
+      if (diff && target) {
+        paintSkips(diff,painted,painted?.kind === 'splat-attributes' ? painted.splats : [],patch);
+        exactTargets.push({ binding:route.binding,patch,painted,kind:route.destination.kind });
+      }
       if (target) {
         const key = JSON.stringify([target.scene,target.destination,target.id]);
         const splats = painted?.kind === 'splat-attributes' ? painted.splats : [];
@@ -2098,7 +2186,10 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
     try {
-      journal.preview();
+      if (diff) {
+        if (sceneEditor) authoring.sceneEditor.validateSnapshot(sceneEditor,scene);
+        documentShape(candidate);
+      } else journal.preview();
       candidate = state().design;
       scene = sceneEditor?.snapshot();
       for (const {binding,grid,rows,target} of splatReviews.values()) {
@@ -2111,8 +2202,46 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       issues = Preview.conflicts(error);
     }
     const sources = Preview.sourceChanges(sceneName,before.environment,scene);
+    if (diff) {
+      if (sceneEditor) diff.scenes.push({ scene:sceneName,before:before.environment,after:scene });
+      const scenes = new Set([...Object.keys(base.renderOutputs),...Object.keys(draft.renderOutputs)]);
+      const jobs = exactTargets.length ? exactTargets : sources.length ? [{}] : [];
+      const bindings = new Map(jobs.map(({binding})=>[binding?.scene ?? sceneName,binding]));
+      const seen = new Set();
+      const attached = name=>sceneEditor && name === sceneName;
+      const worldFor = (name,binding,old)=>attached(name) ?
+        buildForDiff(old ? sceneEditor.fork(before.environment) : sceneEditor) : options.world?.(binding);
+      for (const name of scenes) {
+        if (equal(base.renderOutputs[name],draft.renderOutputs[name])) continue;
+        let oldAssets, newAssets;
+        if (!issues.length) {
+          try {
+            oldAssets = exactRenderOptions(worldFor(name,bindings.get(name),true));
+            newAssets = exactRenderOptions(worldFor(name,bindings.get(name),false));
+          } catch (error) {
+            diff.renderErrors.push({ scene:name,binding:bindings.get(name)?.id ?? null,message:error.message });
+          }
+        }
+        diff.assets.push({ scene:name,before:{...oldAssets,...base.renderOutputs[name]},after:{...newAssets,...draft.renderOutputs[name]} });
+      }
+      for (const { binding,patch,painted,kind } of jobs) {
+        const name = binding?.scene ?? sceneName;
+        const key = JSON.stringify([name,binding?.id,patch?.frame,patch?.operation?.brush?.time,
+          patch?.operation?.paint?.time,patch?.operation?.brush?.camera,patch?.operation?.paint?.camera,
+          kind === 'shot-correction' ? patch.id : null]);
+        if (seen.has(key) || issues.length) continue;
+        seen.add(key);
+        diff.views.push({ scene:name,binding:binding?.id,build:()=>{
+          const oldWorld = worldFor(name,binding,true), newWorld = attached(name) ? worldFor(name,binding,false) : oldWorld;
+          if (!oldWorld || !newWorld) throw new Error('Exact preview needs a scene adapter for '+name);
+          const settings = { sceneRef:name,time,splatView:view };
+          return exactView({design:candidate,binding,patch,kind,settings,options,report:painted,pose:!!attached(name),
+            world:withRenderAssets(oldWorld,base.renderOutputs[name]),other:withRenderAssets(newWorld,draft.renderOutputs[name])});
+        } });
+      }
+    }
     const warnings = targets.filter(target => target.binding && !target.sourceChecked).map(target => sourceWarning(target.binding));
-    return reportPreview({ baseline:base.design,candidate,sources,targets,issues,warnings,limit });
+    return reportPreview({ baseline:base.design,candidate,sources,targets,issues,warnings,limit,exact:diff });
   }
 
   const editor = Object.freeze({
@@ -2160,15 +2289,15 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     preview() { journal.preview(); return editor.snapshot(); },
     previewChanges,
     previewEdit(patch,options = {}) {
-      const { limit } = options;
+      const { limit,exact,shotHitFrame } = options;
       const draft = state();
       let request;
       try {
         request = requestFor(draft,patch);
       } catch (error) {
-        return reportPreview({ baseline:draft.design,issues:Preview.conflicts(error),limit });
+        return reportPreview({ baseline:draft.design,issues:Preview.conflicts(error),limit,exact:exactRequest(exact,shotHitFrame) });
       }
-      return previewEdit(draft.design,request,editContext(options,false),{ limit });
+      return previewEdit(draft.design,request,editContext(options,false),{ limit,exact,shotHitFrame });
     },
     commit: journal.commit,
     cancel: journal.cancel,
@@ -2977,7 +3106,7 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   }
   let retainedView;
   const context = {
-    sceneRef:opt.scene,splatView:view,splatDiagnostics:splatDiagnosticOptions(opt),
+    sceneRef:opt.scene,splatView:view,splatDiagnostics:splatDiagnosticOptions(opt),ownsWorld:true,
     time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN,
     captureSelection:sourceViewFile ? ()=>retainedView ??= ViewSource.unpack(read(sourceViewFile)) : reference(opt.scene) ? settings=>{
       if (out === path.resolve(opt.scene))
@@ -3039,8 +3168,13 @@ function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, capt
   }
   if (action === 'preview') {
     const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-    const report = previewEdit(design,read(patch),context,{ frameId:opt.frame,limit });
-    process.stdout.write(JSON.stringify(report,null,2)+'\n');
+    const report = previewEdit(design,read(patch),context,{ frameId:opt.frame,limit,...exactOptions(opt) });
+    if (opt.out !== undefined) {
+      if (!reference(opt.out) || [source,patch,opt.scene,sourceViewFile].some(input=>
+        reference(input) && path.resolve(input) === path.resolve(opt.out)))
+        throw new RangeError('Write the preview report to a separate output path');
+      files.json(path.resolve(opt.out),report);
+    } else process.stdout.write(JSON.stringify(report,null,2)+'\n');
     if (!report.valid) process.exitCode = 2;
     return;
   }
@@ -3240,7 +3374,7 @@ function sessionCommand(pos,opt,{ scene,capture,view }) {
       result = run(action,{ patch:read(input),options:{ shotHitFrame } },{ captureSelection,sceneRef:opt.scene });
     } else if (action === 'preview') {
       const limit = opt.limit === undefined ? undefined : typeof opt.limit === 'string' ? Number(opt.limit) : NaN;
-      result = run(action,{ options:{limit} },{ view,diagnostics:splatDiagnosticOptions(opt),
+      result = run(action,{ options:{limit,...exactOptions(opt)} },{ view,diagnostics:splatDiagnosticOptions(opt),
         time:opt.t===undefined ? undefined : typeof opt.t==='string' ? Number(opt.t) : NaN });
       if (!result.valid) process.exitCode = 2;
     } else if (action === 'validate') {

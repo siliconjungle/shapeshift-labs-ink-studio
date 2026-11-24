@@ -371,7 +371,7 @@
     const editor = Object.freeze({
       snapshot,
       serialize: (space = 2) => JSON.stringify(snapshot(), null, space),
-      fork: () => create(snapshot(),{ env:buildEnv, historyLimit:0 }),
+      fork: (source = snapshot()) => create(source,{ env:buildEnv, historyLimit:0 }),
       sourceDependencies: () => A.bakeCache.signature([
         buildEnv.assets ?? {},buildEnv.prefabs ?? {},buildEnv.parameterInputs ?? {}
       ]),
