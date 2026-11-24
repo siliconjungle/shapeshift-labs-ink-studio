@@ -267,10 +267,8 @@ dimensions, palette, and layer stack.
 - In **Placements**, select a tile and draw across cells. Use **Erase** to
   empty cells or **Pick** to select the tile already placed there. A drag
   places one stroke and can be undone in one step.
-- Choose **Tile pixels** or **Edit selected tile** to open the selected
-  drawing in the normal pixel editor. Paint, erase, or adjust the layers
-  there. Return to **Placements** to see the change in every cell that
-  references that drawing.
+- Choose **Edit every instance** to open the shared drawing in the normal
+  pixel editor. The placement count shows how many cells use it.
 - Choose **New tile** to draw an independent tile. Use **Save JSON** to keep
   the editable layer deck and **Save map PNG** to export the composed native
   raster with transparent empty cells.
@@ -310,6 +308,39 @@ ink-studio pixel-art tilemap draw map.json --out map.png
 `editor.tilemap([3, 2])` reports the selected cell and usage counts for
 each tile. `editor.tilemapRaster()` returns the composed `{ w, h, rgba }`
 raster for Ink's sprite and composition inputs.
+
+### Choose how a tile is shared
+
+Use **Pick** on an occupied cell to anchor the sharing actions to that
+cell. The picked cell stays outlined while you move around the grid.
+
+- **Edit every instance** edits the selected tile ID. All cells using
+  that drawing reflect the change.
+- **Make a local variant** copies the picked tile's layers and rebinds
+  that one cell to the copy. The editor opens the copy for painting. The
+  copy keeps the source's guides, saved selections, and active pixel
+  protection. Held cels become independent drawings.
+- **Reuse an exact match** rebinds the picked cell to the existing tile
+  you choose in **Exact tile**. Both drawings stay in the tile list.
+  Eligible matches have the same editable layer pixels, swatch IDs,
+  opacity, knockout marks, offsets, and protected pixels. Matching also
+  checks hidden layers.
+
+The CLI and SDK list eligible IDs as `exactMatches` when inspecting a
+cell. A revision-checked edit to the `timeline` destination accepts
+these operations.
+
+```json
+{ "type": "make-local-variant", "at": [2, 2], "tile": "wall-cracked" }
+```
+
+```json
+{ "type": "reuse-exact-tile", "at": [2, 2], "tile": "wall" }
+```
+
+The first operation takes a fresh frame ID. The second takes an existing
+match and checks the artwork again at commit time. Each operation records
+the old and new cell reference and undoes in one step.
 
 ## Register frames and align texture pixels
 

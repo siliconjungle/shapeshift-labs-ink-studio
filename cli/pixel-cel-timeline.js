@@ -203,7 +203,7 @@ const operations = {
 function edit(design,op) {
   if (!record(op) || !Object.hasOwn(operations,op.type) || !fields(op,['type',...operations[op.type]]) ||
       op.replace !== undefined && typeof op.replace !== 'boolean')
-    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, set-directional, set-tilemap, place-tiles, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
+    throw new TypeError('Choose add-frame, duration, set-tag, remove-tag, set-directional, set-tilemap, place-tiles, make-local-variant, reuse-exact-tile, layer-offset, cel-offset, blank, duplicate, hold, unlink, move, copy, edit-cels, or write-cels');
   if (op.type === 'set-tilemap') {
     const { tilemap,...rest } = design;
     if (op.tilemap === undefined) throw new TypeError('Set a tilemap or pass null to remove it');

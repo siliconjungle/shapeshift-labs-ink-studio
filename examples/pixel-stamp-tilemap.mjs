@@ -1,10 +1,13 @@
-export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,edit,add,undo,stop,notify }) {
+export function mountTilemap(host,{ Tilemap,segment,read,readTile,readTileArt,create,place,edit,add,variant,reuse,undo,stop,notify }) {
   const get = id=>host.querySelector('#'+id);
   const canvas = get('tilemap-canvas'), context = canvas.getContext('2d');
   const plane = get('tilemap-plane'), choice = get('tilemap-choice'), tool = get('tilemap-tool');
   const cursor = get('tilemap-cursor'), position = get('tilemap-position'), form = get('tilemap-create');
-  let mode = 'pixels', grid, point, stroke, image;
+  const selected = get('tilemap-picked'), exact = get('tilemap-exact');
+  let mode = 'pixels', grid, point, picked, stroke, image;
   let tiles = new Map();
+  const tileOption = ({ id,label })=>new Option(label && label !== id ? label+' · '+id : id,id);
+  const countLabel = count=>count+(count === 1 ? ' placement' : ' placements');
 
   function raster(id) {
     if (!tiles.has(id)) {
@@ -14,11 +17,16 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
     return tiles.get(id);
   }
 
+  function positionCell(element,[x,y]) {
+    const zoom = Number(get('tilemap-zoom').value);
+    element.style.translate = (x*grid.tileWidth*zoom)+'px '+(y*grid.tileHeight*zoom)+'px';
+  }
+
   function showCursor() {
     cursor.hidden = !point || !grid;
     if (cursor.hidden) { position.textContent = ''; return; }
-    const [x,y] = point, zoom = Number(get('tilemap-zoom').value), key = y*grid.width+x;
-    cursor.style.translate = (x*grid.tileWidth*zoom)+'px '+(y*grid.tileHeight*zoom)+'px';
+    const [x,y] = point, key = y*grid.width+x;
+    positionCell(cursor,point);
     const id = stroke?.points.has(key) ? stroke.tile : grid.placed.get(key);
     position.textContent = x+', '+y+' · '+(id ?? 'Empty');
   }
@@ -31,11 +39,34 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
     plane.style.setProperty('--tile-w',grid.tileWidth*factor+'px');
     plane.style.setProperty('--tile-h',grid.tileHeight*factor+'px');
     showCursor();
+    selected.hidden = !picked;
+    if (picked) positionCell(selected,picked);
+  }
+
+  function showInstanceCount() {
+    if (!grid) return;
+    let count = 0;
+    for (const id of grid.placed.values()) if (id === choice.value) count++;
+    get('tilemap-instance-count').value = countLabel(count);
+  }
+
+  function showSharing() {
+    const id = picked && Tilemap.pick(grid,picked), { doc } = read();
+    if (!id) picked = undefined;
+    const frames = new Map(doc.frames.filter(frame=>frame.id !== undefined).map(frame=>[frame.id,frame]));
+    const matches = id ? Tilemap.exactMatches(frames.keys(),id,key=>readTileArt(frames.get(key))) : [];
+    const previous = exact.value;
+    exact.replaceChildren(...(matches.length ? matches.map(id=>tileOption(frames.get(id))) : [new Option('No exact matches','')]));
+    if (matches.includes(previous)) exact.value = previous;
+    get('tilemap-pick-label').value = id ? picked.join(', ')+' · '+id : 'Use Pick on an occupied cell';
+    get('tilemap-variant').disabled = !id;
+    get('tilemap-reuse').disabled = exact.disabled = !matches.length;
+    showInstanceCount();
   }
 
   function refresh(preferred) {
     const { doc,canUndo } = read(), enabled = !!doc.tilemap;
-    if (!enabled) mode = 'pixels';
+    if (!enabled) { mode = 'pixels'; picked = undefined; }
     const placing = mode === 'map';
     get('tilemap-new').hidden = enabled;
     if (enabled) {
@@ -52,12 +83,13 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
     get('png-color-mode').hidden = placing;
     get('tilemap-undo').disabled = !canUndo;
     if (!placing) { grid = image = undefined; return; }
-    const picked = preferred ?? choice.value, frames = doc.frames.filter(frame=>frame.id !== undefined);
-    choice.replaceChildren(...frames.map(frame=>new Option(frame.label ?? frame.id,frame.id)));
-    if (frames.some(frame=>frame.id === picked)) choice.value = picked;
+    const selectedTile = preferred ?? choice.value, frames = doc.frames.filter(frame=>frame.id !== undefined);
+    choice.replaceChildren(...frames.map(tileOption));
+    if (frames.some(frame=>frame.id === selectedTile)) choice.value = selectedTile;
     get('tilemap-edit-tile').disabled = !choice.value;
     grid = Tilemap.prepare(doc.tilemap,new Set(frames.map(frame=>frame.id)),doc.width,doc.height);
     if (point && (point[0] >= grid.width || point[1] >= grid.height)) point = undefined;
+    if (picked && (picked[0] >= grid.width || picked[1] >= grid.height)) picked = undefined;
     image = Tilemap.raster(grid,id=>{
       const tile = raster(id);
       return { width:tile.width,height:tile.height,rgba:tile.data };
@@ -66,11 +98,13 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     context.putImageData(new ImageData(new Uint8ClampedArray(rgba),w,h),0,0);
+    showSharing();
     zoom();
   }
 
-  function show(next) {
+  function show(next,{ clearPick = false } = {}) {
     stroke = undefined;
+    if (clearPick) picked = undefined;
     tiles = new Map();
     mode = next;
     if (next === 'map') stop();
@@ -93,9 +127,13 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
   }
 
   function pick(at) {
-    const tile = grid.placed.get(at[1]*grid.width+at[0]);
-    if (tile !== undefined) choice.value = tile;
-    notify(tile === undefined ? 'Empty map cell' : 'Selected '+tile);
+    const tile = Tilemap.pick(grid,at);
+    picked = tile === null ? undefined : at.slice();
+    if (tile !== null) choice.value = tile;
+    showSharing();
+    selected.hidden = !picked;
+    if (picked) positionCell(selected,picked);
+    notify(tile === null ? 'Empty map cell' : 'Selected '+tile);
   }
 
   function apply(points,tile) {
@@ -173,6 +211,22 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
   }
   get('tilemap-pixels').addEventListener('click',editSelected);
   get('tilemap-edit-tile').addEventListener('click',editSelected);
+  choice.addEventListener('change',showInstanceCount);
+  get('tilemap-variant').addEventListener('click',()=>{
+    try {
+      const id = variant(picked);
+      show('pixels');
+      edit(id);
+    } catch (error) { notify(error.message); }
+  });
+  get('tilemap-reuse').addEventListener('click',()=>{
+    try {
+      const id = exact.value;
+      reuse(picked,id);
+      choice.value = id;
+      showInstanceCount();
+    } catch (error) { notify(error.message); }
+  });
   get('tilemap-add-tile').addEventListener('click',()=>{
     try {
       const id = add();
@@ -187,7 +241,7 @@ export function mountTilemap(host,{ Tilemap,segment,read,readTile,create,place,e
   return {
     show,active:()=>mode === 'map',
     refresh() { tiles = new Map(); stroke = undefined; refresh(); },
-    editing(label,count) { get('tilemap-editing').value = count ? label+' · '+count+' placements' : label; },
+    editing(label,count) { get('tilemap-editing').value = count ? label+' · '+countLabel(count) : label; },
     image:()=>image
   };
 }

@@ -98,17 +98,112 @@ test('tilemaps reject broken references, duplicate locations and out-of-bounds s
   assert.deepEqual(pixel(doc.tilemapRaster(),7,1),empty);
 });
 
+test('a local variant copies editable art and locks, detaches held cels and rebinds one placement',()=>{
+  const doc = structuredClone(source);
+  doc.frames.push({ id:'held-wall',durationMs:150,cels:{ art:{ hold:'wall/art',offset:[1,0] } } });
+  doc.tilemap.cells.slice(0,2).forEach(cell=>{ cell.tile = 'held-wall'; });
+  doc.guides = [{ id:'edge',kind:'axis',axis:'x',at:2,frame:'held-wall' }];
+  doc.selections = [{ id:'top',frame:'held-wall',pixels:[[0,0],[1,0]] }];
+  doc.protectedDetails = [{ id:'gap',kind:'gap',frames:['held-wall','held-wall'],pixels:[[0,0]] }];
+  const editor = createPixelEditor(doc), initial = editor.tilemapRaster();
+  const fork = patch(editor,{ type:'make-local-variant',at:[0,0],tile:'cracked' });
+  assert.deepEqual(editor.previewEdit(fork).targets[0].changes,[{ at:[0,0],before:'held-wall',after:'cracked' }]);
+  assert.equal(editor.tilemap([0,0]).picked.tile,'held-wall');
+  editor.apply(fork);
+  const made = editor.snapshot(), art = made.frames.at(-1).cels.art;
+  assert.equal(art.hold,undefined);
+  assert.equal(art.id,'cracked/art');
+  assert.deepEqual(art.offset,[1,0]);
+  assert.deepEqual(art.marks,doc.frames[0].cels.art.marks);
+  assert.deepEqual(made.guides.at(-1),{ ...doc.guides[0],id:'edge-variant',frame:'cracked' });
+  assert.deepEqual(made.selections.at(-1),{ ...doc.selections[0],id:'top-variant',frame:'cracked' });
+  assert.deepEqual(made.protectedDetails.at(-1),{ id:'gap-variant',kind:'gap',frame:'cracked',pixels:[[0,0]] });
+  assert.deepEqual(editor.tilemapRaster(),initial);
+  assert.deepEqual(editor.tilemap([0,0]).exactMatches,['held-wall']);
+  assert.equal(editor.previewEdit(fork).conflicts[0].code,'stale-document');
+
+  const change = {
+    id:'paint-crack',frame:'cracked',revision:editor.tilemap().revision,
+    operation:{ tool:'pencil',layer:'art',points:[[2,1]],swatch:'gold' }
+  };
+  editor.apply(change);
+  assert.deepEqual(pixel(editor.tilemapRaster(),2,1),gold);
+  assert.deepEqual(pixel(editor.tilemapRaster(),8,1),wall);
+  assert.deepEqual(editor.tilemap([0,0]).exactMatches,[]);
+  assert.match(editor.previewEdit(patch(editor,{ type:'reuse-exact-tile',at:[0,0],tile:'held-wall' })).conflicts[0].message,/match exactly/);
+  editor.undo();
+  editor.undo();
+  assert.deepEqual(editor.snapshot(),doc);
+  editor.redo();
+  const reuse = patch(editor,{ type:'reuse-exact-tile',at:[0,0],tile:'held-wall' });
+  editor.apply(reuse);
+  assert.deepEqual(editor.tilemap([0,0]).picked,{ at:[0,0],tile:'held-wall' });
+  assert.equal(editor.tilemap([2,0]).picked.tile,'held-wall');
+  assert.deepEqual(editor.tilemapRaster(),initial);
+  assert(editor.snapshot().frames.some(frame=>frame.id === 'cracked'));
+  const replay = createPixelEditor(doc);
+  for (const receipt of editor.receipts()) replay.replay(receipt);
+  assert.deepEqual(replay.snapshot(),editor.snapshot());
+});
+
+test('exact reuse checks indexed and hidden layer pixels, alpha, knockouts, offsets and locks',()=>{
+  const doc = structuredClone(source), [tile] = doc.frames;
+  doc.layers.push({ id:'hidden',visible:false });
+  doc.palette.copy = doc.palette.stone;
+  const clone = (id,extra = {})=>({ ...structuredClone(tile),id,...extra });
+  const swapped = clone('same-rgb');
+  swapped.cels.art.marks[0].swatch = 'copy';
+  const alpha = clone('different-alpha');
+  alpha.cels.art.marks[2].alpha = 2;
+  const shift = clone('shifted');
+  shift.cels.art.offset = [0,1];
+  const hidden = clone('hidden-paint');
+  hidden.cels.hidden = { marks:[{ swatch:'gold',at:[0,1] }] };
+  const erased = clone('hidden-knockout');
+  erased.cels.hidden = { marks:[{ swatch:null,at:[0,1] }] };
+  doc.protectedDetails = [{ id:'hold',kind:'accent',frame:'locked-pixel',pixels:[[1,1]] }];
+  doc.frames.push(clone('first-match'),swapped,alpha,shift,hidden,erased,clone('locked-pixel'),clone('second-match',{
+    label:'Same drawing',durationMs:175
+  }));
+  const editor = createPixelEditor(doc);
+  assert.deepEqual(editor.tilemap([0,0]).exactMatches,['first-match','second-match']);
+  assert.deepEqual(editor.tilemap([1,0]).exactMatches,[]);
+  const operation = { type:'reuse-exact-tile',at:[0,0],tile:'second-match' };
+  for (const tile of ['same-rgb','different-alpha','shifted','hidden-paint','hidden-knockout','locked-pixel']) {
+    const preview = editor.previewEdit(patch(editor,{ ...operation,tile }));
+    assert.equal(preview.valid,false);
+    assert.match(preview.conflicts[0].message,/match exactly/);
+  }
+  assert.equal(editor.previewEdit(patch(editor,{ ...operation,at:[1,0] })).valid,false);
+  editor.apply(patch(editor,operation));
+  editor.apply({ id:'shared-paint',frame:'second-match',revision:editor.tilemap().revision,
+    operation:{ tool:'pencil',layer:'art',points:[[1,1]],swatch:'gold' } });
+  assert.deepEqual(pixel(editor.tilemapRaster(),1,1),gold);
+  assert.deepEqual(pixel(editor.tilemapRaster(),7,1),wall);
+});
+
 test('CLI inspects map cells and writes an exact transparent PNG',t=>{
   const dir = workspace(t), doc = path.join(dir,'map.json'), image = path.join(dir,'map.png');
   fs.writeFileSync(doc,JSON.stringify(source));
-  const run = (...args)=>execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),'pixel-art','tilemap',...args],{ encoding:'utf8' });
+  const cli = (...args)=>execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),'pixel-art',...args],{ encoding:'utf8' });
+  const run = (...args)=>cli('tilemap',...args);
   const report = JSON.parse(run('inspect',doc,'--at','3,1'));
   assert.equal(report.picked.tile,'lamp');
+  assert.deepEqual(report.exactMatches,[]);
   assert.deepEqual(report.tileSize,[3,2]);
   run('draw',doc,'--out',image);
   const actual = PNG.raster(image), expected = createPixelEditor(source).tilemapRaster();
   assert.deepEqual([actual.w,actual.h],[expected.w,expected.h]);
   assert.deepEqual(Uint8Array.from(actual.data),expected.rgba);
+  const command = path.join(dir,'fork.json'), revised = path.join(dir,'revised.json');
+  fs.writeFileSync(command,JSON.stringify({
+    id:'fork-lamp',destination:'timeline',revision:report.revision,
+    operation:{ type:'make-local-variant',at:[3,1],tile:'new-lamp' }
+  }));
+  cli('edit',doc,command,'--out',revised);
+  const picked = JSON.parse(run('inspect',revised,'--at','3,1'));
+  assert.equal(picked.picked.tile,'new-lamp');
+  assert.deepEqual(picked.exactMatches,['lamp']);
 });
 
 test('the workshop paints a placement stroke, picks its tile and edits every instance',{skip:!process.env.INK_TEST_CHROME},async t=>{
@@ -160,6 +255,8 @@ test('the workshop paints a placement stroke, picks its tile and edits every ins
     await press(a);
     await release(a);
     assert.equal(await run('document.getElementById("tilemap-choice").value'),'wall');
+    assert.equal(await run('document.getElementById("tilemap-instance-count").value'),'2 placements');
+    assert.equal(await run('document.getElementById("tilemap-edit-tile").textContent'),'Edit every instance');
     await click('tilemap-edit-tile');
     assert.equal(await run('document.getElementById("tilemap-workspace").hidden'),true);
     assert.equal(await run('document.getElementById("remove").disabled'),true);
@@ -199,5 +296,33 @@ test('the workshop paints a placement stroke, picks its tile and edits every ins
     assert.equal(await run('document.getElementById("tilemap-editing").value'),'tile-3');
     await click('tilemap-place');
     assert.equal(await run('document.getElementById("tilemap-choice").value'),'tile-3');
+
+    await run('document.getElementById("tilemap-tool").value = "pick"');
+    const picked = await where('#tilemap-canvas',7,1);
+    await press(picked);
+    await release(picked);
+    assert.equal(await run('document.getElementById("tilemap-picked").hidden'),false);
+    await click('tilemap-variant');
+    assert.equal(await run('document.getElementById("tilemap-editing").value'),'wall-variant · 1 placement');
+    await run('document.querySelectorAll(".swatch")[0].click()');
+    const local = await where('#canvas-view .ink-grid-main',1,1);
+    await press(local);
+    await release(local);
+    await click('tilemap-place');
+    assert.deepEqual(await read(1,1),gold);
+    assert.deepEqual(await read(7,1),wall);
+    assert.equal(await run('document.getElementById("tilemap-reuse").disabled'),true);
+    await click('tilemap-pixels');
+    await run('document.querySelectorAll(".swatch")[1].click()');
+    const restored = await where('#canvas-view .ink-grid-main',1,1);
+    await press(restored);
+    await release(restored);
+    await click('tilemap-place');
+    assert.equal(await run('document.getElementById("tilemap-exact").value'),'wall');
+    await click('tilemap-reuse');
+    assert.equal(await run('document.getElementById("tilemap-pick-label").value'),'2, 0 · wall');
+    assert.deepEqual(await read(7,1),gold);
+    await click('tilemap-undo');
+    assert.equal(await run('document.getElementById("tilemap-pick-label").value'),'2, 0 · wall-variant');
   });
 });

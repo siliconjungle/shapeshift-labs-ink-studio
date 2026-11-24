@@ -21,6 +21,8 @@
   #tilemap-controls { margin-bottom:16px; }
   #tilemap-workspace { margin-bottom:16px; }
   #tilemap-options { margin-bottom:12px; }
+  #tilemap-sharing { margin:12px 0; }
+  #tilemap-sharing output { margin-right:5px; }
   #tilemap-viewport { overflow:auto; max-height:66vh; background:#141d21; padding:8px; }
   #tilemap-plane { position:relative; width:max-content; }
   #tilemap-canvas { display:block; image-rendering:pixelated; touch-action:none; cursor:crosshair;
@@ -29,8 +31,9 @@
     background:linear-gradient(to right,#a5bcbc50 1px,transparent 1px),
       linear-gradient(to bottom,#a5bcbc50 1px,transparent 1px);
     background-size:var(--tile-w) var(--tile-h); }
-  #tilemap-cursor { position:absolute; top:0; left:0; pointer-events:none; width:var(--tile-w); height:var(--tile-h);
+  #tilemap-cursor, #tilemap-picked { position:absolute; top:0; left:0; pointer-events:none; width:var(--tile-w); height:var(--tile-h);
     outline:1px solid #d7f0ba; outline-offset:-1px; }
+  #tilemap-picked { outline:2px solid #ffd38e; outline-offset:-2px; }
   #tilemap-position { margin:8px 0 0; min-height:1.4em; }
   #tilemap-choice { max-width:min(100%,22rem); }
   #pixel-workspace[hidden] { display:none; }
@@ -104,16 +107,24 @@
   <section id="tilemap-workspace" aria-label="Tile placements" hidden>
     <div class="row" id="tilemap-options">
       <label>Tile <select id="tilemap-choice"></select></label>
-      <button id="tilemap-edit-tile" type="button">Edit selected tile</button>
+      <button id="tilemap-edit-tile" type="button">Edit every instance</button>
+      <output id="tilemap-instance-count"></output>
       <button id="tilemap-add-tile" type="button">New tile</button>
       <label>Tool <select id="tilemap-tool"><option value="paint">Place</option><option value="erase">Erase</option><option value="pick">Pick</option></select></label>
       <label>Zoom <select id="tilemap-zoom"><option value="1">1×</option><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option><option value="8">8×</option></select></label>
       <label><input id="tilemap-lines" type="checkbox" checked> Grid</label>
       <button id="tilemap-undo" type="button">Undo</button>
     </div>
+    <div class="row" id="tilemap-sharing">
+      <output id="tilemap-pick-label">Use Pick on an occupied cell</output>
+      <button id="tilemap-variant" type="button" disabled>Make a local variant</button>
+      <label>Exact tile <select id="tilemap-exact" disabled></select></label>
+      <button id="tilemap-reuse" type="button" disabled>Reuse an exact match</button>
+    </div>
     <div id="tilemap-viewport"><div id="tilemap-plane">
       <canvas id="tilemap-canvas" tabindex="0" aria-label="Tilemap. Arrow keys move and Enter uses the current tool."></canvas>
-      <div id="tilemap-grid" aria-hidden="true"></div><div id="tilemap-cursor" aria-hidden="true" hidden></div>
+      <div id="tilemap-grid" aria-hidden="true"></div><div id="tilemap-picked" aria-hidden="true" hidden></div>
+      <div id="tilemap-cursor" aria-hidden="true" hidden></div>
     </div></div>
     <p id="tilemap-position" class="muted"></p>
   </section>

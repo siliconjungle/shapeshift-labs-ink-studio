@@ -162,7 +162,7 @@ function load(data) {
   selection = undefined;
   resetStroke();
   update();
-  tilePanel.show(revised.tilemap ? 'map' : 'pixels');
+  tilePanel.show(revised.tilemap ? 'map' : 'pixels',{ clearPick:true });
   showPaletteRamp();
 }
 
@@ -2361,6 +2361,22 @@ function saveJson(filename,data) {
   download(filename,new Blob([JSON.stringify(data,null,2)],{ type:'application/json' }));
 }
 
+function workshopTileArt(frame) {
+  const doc = state.doc, layers = Object.entries(frame.cels).map(([id,cel])=>{
+    const [x,y] = state.stack.rows.get(id).offset ?? [0,0], [dx,dy] = cel.offset ?? [0,0];
+    return [id,{ slots:rasterSlots(doc.width,doc.height,cel),alpha:cel.alpha,offset:[x+dx,y+dy] }];
+  });
+  const details = frameProtection(doc,doc.frames.indexOf(frame));
+  return { layers:new Map(layers),protection:Tilemap.protectionKey(details) };
+}
+
+function occupiedTile(doc,at) {
+  const grid = Tilemap.prepare(doc.tilemap,new Set(frameIds(doc)),doc.width,doc.height);
+  const id = Tilemap.pick(grid,at);
+  if (!id) throw new RangeError('Pick an occupied tilemap cell');
+  return doc.frames.find(frame=>frame.id === id);
+}
+
 const tilePanel = mountTilemap(document.querySelector('main'),{
   Tilemap,segment:paintTools.segment,stop,notify,
   read:()=>({ doc:state.doc,frame:state.doc.frames[state.frame].id,canUndo:state.undo.length > 0 }),
@@ -2369,6 +2385,7 @@ const tilePanel = mountTilemap(document.querySelector('main'),{
     const composed = renderStack(state.doc,state.stack,frame);
     return layerStack.image(composed,composed.packed);
   },
+  readTileArt:workshopTileArt,
   create(width,height) {
     const doc = state.doc, used = new Set(frameIds(doc)), tilemap = { version:1,width,height,cells:[] };
     const frames = doc.frames.map((frame,i)=>{
@@ -2410,6 +2427,38 @@ const tilePanel = mountTilemap(document.querySelector('main'),{
     const frame = { id,duration:1/(doc.fps ?? 12),cels:{} };
     edit(()=>{ state.doc = { ...doc,frames:[...doc.frames,frame] }; });
     return id;
+  },
+  variant(at) {
+    const doc = state.doc, source = occupiedTile(doc,at);
+    if ($('duplicate').disabled) throw new RangeError('Tile artwork exceeds the workshop frame budget');
+    const ids = new Set(frameIds(doc)), reserved = new Set(ids);
+    for (const frame of doc.frames) for (const cel of Object.values(frame.cels))
+      if (cel.id?.includes('/')) reserved.add(cel.id.split('/')[0]);
+    const id = colors.uniqueId(reserved,source.id.slice(0,48)+'-variant');
+    const frame = structuredClone(source);
+    frame.id = id;
+    if (frame.label) frame.label += ' (variant)';
+    for (const cel of Object.values(frame.cels)) delete cel.id;
+    if (frame.guides?.length) frame.guides = Tilemap.cloneRecords(frame.guides,
+      [...(doc.guides ?? []),...doc.frames.flatMap(row=>row.guides ?? [])]);
+    if (frame.selections?.length) frame.selections = Tilemap.cloneRecords(frame.selections,
+      [...(doc.sharedSelections ?? []),...doc.frames.flatMap(row=>row.selections ?? [])]);
+    const locks = Tilemap.variantProtection(doc.protectedDetails,frameProtection(doc,doc.frames.indexOf(source)),id);
+    ids.add(id);
+    const { tilemap } = Tilemap.place(doc.tilemap,ids,doc.width,doc.height,[at],id);
+    const revised = { ...doc,tilemap,frames:[...doc.frames,frame],...(locks && { protectedDetails:locks }) };
+    validateStackDeck(revised,state.stack);
+    edit(()=>{ state.doc = revised; });
+    notify('Created '+id+' at '+at.join(', '));
+    return id;
+  },
+  reuse(at,id) {
+    const doc = state.doc, source = occupiedTile(doc,at), match = doc.frames.find(frame=>frame.id === id);
+    if (!match || match === source || !Tilemap.sameArt(workshopTileArt(source),workshopTileArt(match)))
+      throw new RangeError('Choose a different tile with exactly matching artwork and protection');
+    const { tilemap } = Tilemap.place(doc.tilemap,new Set(frameIds(doc)),doc.width,doc.height,[at],id);
+    edit(()=>{ state.doc = { ...doc,tilemap }; });
+    notify('Reused '+id+' at '+at.join(', '));
   },
   undo:()=> $('undo').click()
 });

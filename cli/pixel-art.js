@@ -249,19 +249,10 @@ function rasterLayer(layer,base,ids,width,height,erase,count,spend) {
   return { painted,alpha };
 }
 
-function composite(width,height,entries,layers,capture,options,legacy = false) {
-  const size = width*height, swatches = entries.map(row=>row.id);
-  const colors = entries.map(row=>Number.parseInt(row.color.slice(1),16));
-  const ids = new Map(swatches.map((id,i)=>[id,i])), erase = swatches.length;
-  const byId = new Map(layers.map(row=>[row.id,row]));
-  const stack = LayerStack.prepare(layers.map(({ slots,marks,sourceOffset,...layer })=>{
-    if (legacy && (sourceOffset !== undefined || !fields(layer,['id','clip','protect'])))
-      throw new TypeError('Legacy layers need a unique ID, marks and optional clipping or protection');
-    return layer;
-  }));
+function layerRasterizer(width,height,ids) {
+  const size = width*height, erase = ids.size;
   let marksUsed = 0, runBudget = 32e6;
-  const compiled = LayerStack.compose(width,height,colors,stack,id=>{
-    const layer = byId.get(id);
+  return layer=>{
     if (!Array.isArray(layer.marks)) throw new TypeError('Pixel layers need marks');
     let base;
     if (layer.slots !== undefined) {
@@ -278,7 +269,21 @@ function composite(width,height,entries,layers,capture,options,legacy = false) {
     },size=>{
       if ((runBudget -= size) < 0) throw new RangeError('Pixel runs exceed the drawing budget');
     });
-    const source = { slots:Int16Array.from(painted,slot=>slot === null ? -1 : slot === erase ? -2 : slot),...(alpha && { alpha }) };
+    return { slots:Int16Array.from(painted,slot=>slot === null ? -1 : slot === erase ? -2 : slot),...(alpha && { alpha }) };
+  };
+}
+
+function composite(width,height,entries,layers,capture,options,legacy = false) {
+  const swatches = entries.map(row=>row.id), colors = entries.map(row=>Number.parseInt(row.color.slice(1),16));
+  const read = layerRasterizer(width,height,new Map(swatches.map((id,i)=>[id,i])));
+  const byId = new Map(layers.map(row=>[row.id,row]));
+  const stack = LayerStack.prepare(layers.map(({ slots,marks,sourceOffset,...layer })=>{
+    if (legacy && (sourceOffset !== undefined || !fields(layer,['id','clip','protect'])))
+      throw new TypeError('Legacy layers need a unique ID, marks and optional clipping or protection');
+    return layer;
+  }));
+  const compiled = LayerStack.compose(width,height,colors,stack,id=>{
+    const layer = byId.get(id), source = read(layer);
     return layer.sourceOffset ? Timeline.translate(width,height,source,layer.sourceOffset) : source;
   },{ ...options,capture });
   return { ...compiled,colors,swatches,layerStack:stack };
@@ -346,17 +351,31 @@ function mapGrid(design) {
   return Tilemap.prepare(design.tilemap,new Set(design.frames.map(frame=>frame.id)),design.width,design.height);
 }
 
+function tileArtReader(design,lookup) {
+  const { width,height } = design;
+  const swatches = new Map(paletteEntries(design.palette,2).map(({id},i)=>[id,i]));
+  const frames = new Map(design.frames.map(frame=>[frame.id,frame]));
+  const layers = new Map(design.layers.map(layer=>[layer.id,layer]));
+  return id=>{
+    const rasterize = layerRasterizer(width,height,swatches);
+    const paint = Object.entries(frames.get(id).cels).map(([layer,cel])=>[layer,{
+      ...rasterize(Timeline.content(cel,lookup)),offset:Timeline.offset(layers.get(layer),cel)
+    }]);
+    return { layers:new Map(paint),protection:Tilemap.protectionKey(frameProtection(design,id)) };
+  };
+}
+
 function tilemapReport(design,xy) {
-  documentShape(design);
-  const { width,height,w,h,placed } = mapGrid(design);
-  if (xy && !at(width,height,xy)) throw new RangeError('Pick a cell inside the tilemap');
-  const tile = xy ? placed.get(xy[1]*width+xy[0]) ?? null : undefined;
+  const lookup = documentShape(design), grid = mapGrid(design);
+  const { width,height,w,h,placed } = grid;
+  const tile = xy ? Tilemap.pick(grid,xy) : undefined;
+  const matches = tile ? Tilemap.exactMatches(design.frames.map(frame=>frame.id),tile,tileArtReader(design,lookup)) : [];
   const usage = new Map();
   for (const id of placed.values()) usage.set(id,(usage.get(id) ?? 0)+1);
   return { format:'ink-studio/pixel-tilemap-report',version:1,revision:fingerprint(design),
     grid:[width,height],tileSize:[design.width,design.height],rasterSize:[w,h],cells:structuredClone(design.tilemap.cells),
     tiles:design.frames.map(({ id,label })=>({ id,label:label ?? id,placements:usage.get(id) ?? 0 })),
-    ...(xy && { picked:{ at:[...xy],tile } }) };
+    ...(xy && { picked:{ at:[...xy],tile },exactMatches:matches }) };
 }
 
 function tilemapRaster(design) {
@@ -1188,12 +1207,46 @@ function editTimeline(design,patch,context) {
   if (design.version !== 2) throw new TypeError('Upgrade to a version 2 document before editing the cel timeline');
   if (patch.frame !== undefined || patch.cel !== undefined || patch.edits !== undefined)
     throw new TypeError('Timeline edits use frame and layer addresses inside their operation');
-  const { design:revised,report } = ['edit-cels','write-cels'].includes(patch.operation?.type)
-    ? editCelBatch(design,patch.operation) : Timeline.edit(design,patch.operation);
+  const type = patch.operation?.type;
+  const { design:revised,report } = ['edit-cels','write-cels'].includes(type) ? editCelBatch(design,patch.operation) :
+    ['make-local-variant','reuse-exact-tile'].includes(type) ? editTileSharing(design,patch.operation) :
+    Timeline.edit(design,patch.operation);
   assertProtectionUnchanged(design,revised);
   validate(revised);
   context?.onEditTarget?.(report);
   return revised;
+}
+
+function editTileSharing(design,operation) {
+  if (!fields(operation,['type','at','tile']) || !name(operation.tile))
+    throw new TypeError('Tile sharing needs a cell coordinate and a tile frame ID');
+  const { type,at,tile } = operation, source = Tilemap.pick(mapGrid(design),at);
+  if (source === null) throw new RangeError('Pick an occupied tilemap cell');
+  const ids = new Set(design.frames.map(frame=>frame.id)), lookup = Timeline.index(design.frames);
+  let revised = design;
+  if (type === 'make-local-variant') {
+    if (ids.has(tile)) throw new RangeError('A local variant needs an unused tile frame ID');
+    const frame = design.frames.find(frame=>frame.id === source);
+    const cels = Object.fromEntries(Object.entries(frame.cels).map(([layer,cel])=>[layer,{
+      ...structuredClone(Timeline.independent(cel,lookup)),id:Timeline.availableId(tile,layer,lookup)
+    }]));
+    const variant = { ...frame,id:tile,cels,...(frame.label && { label:frame.label+' (variant)' }) };
+    revised = { ...design,frames:[...design.frames,variant] };
+    for (const key of ['guides','selections']) if (design[key]) {
+      const rows = design[key], copies = Tilemap.cloneRecords(rows.filter(row=>row.frame === source),rows);
+      if (copies.length) revised[key] = [...rows,...copies.map(row=>({ ...row,frame:tile }))];
+    }
+    const locks = Tilemap.variantProtection(design.protectedDetails,frameProtection(design,source),tile);
+    if (locks) revised.protectedDetails = locks;
+    ids.add(tile);
+  } else {
+    if (tile === source || !ids.has(tile)) throw new RangeError('Reuse a different existing tile frame');
+    const read = tileArtReader(design,lookup);
+    if (!Tilemap.sameArt(read(source),read(tile))) throw new RangeError('The selected tile artwork and protection must match exactly');
+  }
+  const { tilemap,changes } = Tilemap.place(design.tilemap,ids,design.width,design.height,[at],tile);
+  return { design:{ ...revised,tilemap },report:{ destination:'timeline',kind:'tilemap',tool:type,
+    sourceTile:source,tile,cellCount:1,changes } };
 }
 
 function editCelBatch(design,operation) {

@@ -48,6 +48,53 @@ const PixelTilemap = (() => {
     return { tilemap:{ ...source,cells },changes };
   }
 
+  function pick(grid,at) {
+    if (!validPoint(at,grid.width,grid.height)) throw new RangeError('Pick a cell inside the tilemap');
+    return grid.placed.get(at[1]*grid.width+at[0]) ?? null;
+  }
+
+  function protectionKey(details) {
+    const groups = details.map(({ kind,pixels })=>JSON.stringify([kind ?? null,pixels.map(at=>at.join(',')).sort()]));
+    return JSON.stringify(groups.sort());
+  }
+
+  function sameArt(a,b) {
+    for (const layer of new Set([...a.layers.keys(),...b.layers.keys()])) {
+      const left = a.layers.get(layer), right = b.layers.get(layer);
+      if (left && right && left.slots.length !== right.slots.length) return false;
+      const offsetsEqual = (left?.offset ?? [0,0]).every((value,i)=>value === (right?.offset?.[i] ?? 0));
+      for (let p=0,n=(left ?? right).slots.length;p<n;p++) {
+        const before = left?.slots[p] ?? -1, after = right?.slots[p] ?? -1;
+        if (before !== after) return false;
+        if (before === -1) continue;
+        if (!offsetsEqual || before >= 0 && (left?.alpha?.[p] ?? 255) !== (right?.alpha?.[p] ?? 255)) return false;
+      }
+    }
+    return a.protection === b.protection;
+  }
+
+  function exactMatches(ids,source,read) {
+    const art = read(source);
+    return [...ids].filter(id=>id !== source && sameArt(art,read(id)));
+  }
+
+  function cloneRecords(rows,existing) {
+    const ids = new Set(existing.map(row=>row.id));
+    return rows.map(row=>{
+      const stem = row.id.slice(0,48)+'-variant';
+      let id = stem, suffix = 2;
+      while (ids.has(id)) id = stem+'-'+suffix++;
+      ids.add(id);
+      return { ...structuredClone(row),id };
+    });
+  }
+
+  function variantProtection(rows,active,variant) {
+    const scoped = active.filter(row=>row.frame !== undefined || row.frames !== undefined);
+    if (!scoped.length) return rows;
+    return [...rows,...cloneRecords(scoped,rows).map(({ frames,...row })=>({ ...row,frame:variant }))];
+  }
+
   function raster(grid,read) {
     const { width,w,h,tileWidth,tileHeight,placed } = grid, rgba = new Uint8Array(w*h*4), tiles = new Map();
     for (const [key,id] of placed) {
@@ -66,7 +113,7 @@ const PixelTilemap = (() => {
     return { w,h,rgba };
   }
 
-  return Object.freeze({ prepare,place,raster });
+  return Object.freeze({ prepare,place,pick,protectionKey,sameArt,exactMatches,cloneRecords,variantProtection,raster });
 })();
 if (typeof module !== 'undefined') module.exports = PixelTilemap;
 else globalThis[Symbol.for('ink-studio.pixel-tilemap')] = PixelTilemap;
