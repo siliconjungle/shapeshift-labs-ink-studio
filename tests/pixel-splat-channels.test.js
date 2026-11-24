@@ -93,6 +93,9 @@ test('coverage-edited bodies use splats while independent SDF surfaces remain tr
   assert.ok(trim.passes.coverage.some((n,i)=>a.passes.objectId[i]===plate&&n<a.passes.coverage[i]-.1));
   assert.ok(trim.passes.surfaceKind.some((value,i)=>value===sdf&&trim.passes.objectId[i]===post&&
     trim.passes.coverage[i]===a.passes.coverage[i]));
+  const carved=fit({footprint:{shape:'mask',mask:{width:2,height:2,alpha:[0,0,0,0]},softness:0}});
+  assert.ok(!carved.passes.objectId.includes(plate));
+  assert.ok(carved.passes.surfaceKind.some((value,i)=>value===sdf && carved.passes.objectId[i]===post));
 });
 
 test('CLI and SDK edits retain each other, including zero coverage, restores and compatible legacy assets',t=>{
@@ -146,4 +149,114 @@ test('CLI and SDK edits retain each other, including zero coverage, restores and
   assert.equal(report().splats[0].pigment,original);
   editor.undo();
   assert.equal(report().splats[0].pigment,'#f35c81');
+});
+
+test('footprint trim and carve keep existing holes and survive preview, replay and undo',()=>{
+  const world=sampleWorld(), source=ids(world).idAt(1);
+  const doc={format:'ink-studio/pixel-art',version:2,width:65,height:65,pixelAspect:[1,1],
+    palette:{rose:'#f35c81'},layers:[{id:'ink'}],frames:[{id:'front',durationMs:100,cels:{}}],
+    sceneBindings:[{id:'plate',scene:world.id,object:'plate'}],
+    destinations:[{id:'footprint',kind:'splat-attributes',binding:'plate'}]};
+  const editor=ink.createPixelEditor(doc);
+  const render=extra=>ink.render(world,{...options,...editor.renderOptions(world.id),raw:true,
+    passes:[...options.passes,'sourceSplat'],...extra});
+  const context={world:()=>world,captureSelection:render};
+  const targets=()=>editor.targets('footprint',context);
+  const patch=(id,operation)=>({id,destination:'footprint',frame:'front',revision:editor.describe().revision,
+    sourceRevision:targets().sourceRevision,operation});
+  const stencil=inside=>({width:16,height:16,alpha:Array.from({length:256},(_,i)=>inside(i%16,i>>4)?255:0)});
+  const ring=stencil((x,y)=>!(x>=6 && x<=9 && y>=6 && y<=9));
+  const initial=render();
+  assert.equal(initial.passes.pigment[center],red+1);
+  const mask=patch('mask',{splats:[{splat:source,footprint:{shape:'mask',mask:ring,softness:0}}]});
+  editor.apply(mask,context);
+  const ringRender=render();
+  assert.equal(ringRender.passes.pigment[center],blue+1);
+  assert.ok(ringRender.passes.depth[center]>initial.passes.depth[center]);
+  assert.deepEqual(targets().splats[0].footprint.mask,ring);
+  const trim=stencil(x=>x>=4);
+  const carve=stencil((x,y)=>x>=10 && x<=13 && y>=2 && y<=5);
+  const change=patch('trim-and-turn',{splats:[{splat:source,pigment:'rose'}],
+    footprint:{trim,carve,rotation:Math.PI/2,stretch:[.85,1],softness:0}});
+  const preview=editor.previewEdit(change,context);
+  assert.equal(preview.valid,true);
+  const hit=preview.targets[0].footprintHits[0];
+  assert.equal(hit.footprint.before.mask.filledTexels,240);
+  assert.equal(hit.footprint.after.mask.filledTexels,160);
+  assert.deepEqual(render().rgb,ringRender.rgb);
+
+  const edited=editor.apply(change,context);
+  const receipt=editor.receipts().at(-1);
+  assert.deepEqual(receipt.affectedTargets[0].splats,[hit]);
+  assert.equal(edited.attributes[0][1].pigment,rose);
+  const profile=targets().splats[0].footprint;
+  assert.equal(profile.rotation,Math.PI/2);
+  assert.deepEqual(profile.stretch,[.85,1]);
+  assert.deepEqual(profile.mask.alpha,ring.alpha.map((n,i)=>n && trim.alpha[i] && !carve.alpha[i] ? 255 : 0));
+  const shaped=render();
+  assert.equal(shaped.passes.pigment[center],blue+1);
+  assert.notDeepEqual(shaped.passes.coverage,ringRender.passes.coverage);
+  assert(shaped.passes.pigment.some(n=>n===rose+1));
+
+  const oldSlot=ringRender.passes.splatSources.findIndex(row=>row?.id===source);
+  const oldPixel=Math.floor(ringRender.passes.sourceSplat.indexOf(oldSlot)/4);
+  assert(oldSlot>0 && oldPixel>=0);
+  const oldQuery=editor.targets('footprint',{world:()=>world,renderFrame:ringRender,
+    query:{footprint:{at:[oldPixel%65,Math.floor(oldPixel/65)]}}});
+  assert.equal(oldQuery.count,0);
+  assert.equal(oldQuery.selection.footprint.staleIds,1);
+
+  editor.undo();
+  assert.deepEqual(render().rgb,ringRender.rgb);
+  assert.deepEqual(editor.replay(receipt,context),edited);
+  assert.deepEqual(render().rgb,shaped.rgb);
+  editor.undo();
+  assert.equal(editor.redo(),true);
+  assert.deepEqual(render().rgb,shaped.rgb);
+  const reset=editor.apply(patch('reset',{splats:[{splat:source,footprint:null}]}),context);
+  assert.deepEqual(reset.attributes,[[source,{pigment:rose}]]);
+  assert.equal(render().passes.pigment[center],rose+1);
+});
+
+test('softness changes a translucent splat edge and retained planes keep their original frames',()=>{
+  const B=makeBuilder(4,[0,red]);
+  B.disc(0,0,0,[0,0,1],.38,.018,B.P[1],.8);
+  B.describeSplats(0,1,{object:'plate'});
+  B.describeFootprint(0,1,{shape:'square',softness:.22,depth:'plane'},[.45,0,.1,0,.45,0]);
+  const world=B.finish({id:'planar-test',cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,ortho:true}});
+  const splat=ids(world).idAt(0);
+  const doc={format:'ink-studio/pixel-art',version:2,width:65,height:65,pixelAspect:[1,1],
+    palette:{rose:'#f35c81'},layers:[{id:'ink'}],frames:[{id:'front',durationMs:100,cels:{}}],
+    sceneBindings:[{id:'plate',scene:world.id,object:'plate'}],
+    destinations:[{id:'profile',kind:'splat-attributes',binding:'plate'}]};
+  const editor=ink.createPixelEditor(doc), context={world:()=>world};
+  const patch=(id,footprint)=>({id,destination:'profile',frame:'front',revision:editor.describe().revision,
+    operation:{splats:[{splat,footprint}]}});
+  const config={...options,raw:true};
+  const original=ink.render(world,config);
+  const asset=editor.apply(patch('sharp',{softness:0}),context);
+  assert.throws(()=>editor.apply(patch('discard-frame',false),context),/retained plane/);
+  const compiled=Fit.prepare(world,asset);
+  assert.deepEqual(compiled.footprints.frames,world.splatFootprints.frames);
+  assert.equal(Fit.footprintAt(compiled.footprints,0).depth,'plane');
+  const sharp=ink.render(world,{...config,splatFit:asset});
+  assert.equal(sharp.alpha[center],original.alpha[center]);
+  assert(sharp.alpha.some((a,i)=>a===0 && original.alpha[i]>0));
+  assert.deepEqual(ink.render(world,{...config,splatFit:asset,splatFootprints:false}).alpha,
+    ink.render(world,{...config,splatFootprints:false}).alpha);
+});
+
+test('replacing the last use of a footprint profile frees its slot for the edited shape',()=>{
+  const B=makeBuilder(3,[red]);
+  for (let i=0; i<=64; i++) {
+    B.iso(i,0,0,.25,B.P[0],3,{splatId:'chip-'+i});
+    B.describeFootprint(i,i+1,{shape:'circle',rotation:(i%64)/128});
+  }
+  const world=B.finish();
+  const asset={format:Fit.format,version:1,rows:world.count,signature:signature(world),edits:[]};
+  const replaced=Fit.prepare(world,{...asset,attributes:[[1,{footprint:'wedge'}]]});
+  assert.equal(replaced.footprints.styles.length,64);
+  assert.equal(Fit.footprintAt(replaced.footprints,1).shape,'wedge');
+  assert.deepEqual(Fit.footprintAt(replaced.footprints,64),Fit.footprintAt(world.splatFootprints,64));
+  assert.throws(()=>Fit.prepare(world,{...asset,attributes:[[0,{footprint:'wedge'}]]}),/footprint style budget/);
 });

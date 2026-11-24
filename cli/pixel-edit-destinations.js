@@ -3,6 +3,8 @@
 const ShotCorrections = require('../src/shot-corrections.js');
 const Targets = require('../src/target-selectors.js');
 const SplatFit = require('./splat-fit-asset.js');
+const Footprints = require('../src/splat-footprints.js');
+const FootprintEdits = require('./pixel-splat-footprints.js');
 const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
@@ -164,7 +166,7 @@ function mixPigment(from,to,weight) {
 
 function splats(frame, edit, binding, world, bake, onSplat) {
   const operation = edit.operation;
-  if (!fields(operation,['splats','paint','falloff']) || !Array.isArray(operation.splats) || !operation.splats.length)
+  if (!fields(operation,['splats','paint','falloff','footprint']) || !Array.isArray(operation.splats) || !operation.splats.length)
     throw new TypeError('A splat attribute edit needs a list of explicit source splats');
   const { paint } = operation;
   if (paint!==undefined && (!fields(paint,splatChannels) || !Object.keys(paint).length))
@@ -172,8 +174,10 @@ function splats(frame, edit, binding, world, bake, onSplat) {
   const falloff=splatFalloff(operation.falloff), rest=falloff && Provenance.restData(world);
   const row = splatRows(world,binding,onSplat);
   const seen = new Set();
-  const prior = world.look?.splatFit;
-  SplatFit.prepare(world,prior);
+  const prior = world.look?.splatFit===false ? undefined : world.look?.splatFit;
+  const fitted = SplatFit.prepare(world,prior);
+  const authored = Footprints.validate(world);
+  const footprints = fitted && Object.hasOwn(fitted,'footprints') ? fitted.footprints : authored;
   const target = sceneTarget(binding);
   const sameScope = prior?.version === 2 && prior.target.object === target.object && prior.target.part === target.part;
   const stable = (!prior || sameScope) && operation.splats.every(change => typeof change?.splat === 'string');
@@ -184,15 +188,18 @@ function splats(frame, edit, binding, world, bake, onSplat) {
   const channels = new Map(prior?.attributes?.map(([source,change])=>[previousRow(source),{...change}]));
   const palette = Object.fromEntries(frame.paletteEntries.map(({id,color})=>[id,color]));
   let materials;
+  const sharedFootprints = new Map();
   const profile = name => (materials ??= SplatFit.materialProfiles(world))(name);
   for (const change of operation.splats) {
-    if (!fields(change,['splat','footprintScale','visible','weight',...splatChannels]))
+    if (!fields(change,['splat','footprint','footprintScale','visible','weight',...splatChannels]))
       throw new TypeError('Invalid splat attribute edit');
-    const values={...paint,...change};
-    const {splat,footprintScale,visible,weight:pressure=1,coverage,pigment,material,roughness,emission}=values;
+    const values={footprint:operation.footprint,...paint,...change};
+    const {splat,footprint,footprintScale,visible,weight:pressure=1,coverage,pigment,material,roughness,emission}=values;
     const painted = splatChannels.filter(key=>values[key]!==undefined);
-    if ((!painted.length && footprintScale===undefined && visible===undefined) ||
-        !SplatFit.unit(pressure) || (change.weight!==undefined || falloff) && (footprintScale!==undefined || visible!==undefined) ||
+    const editsFootprint=footprint!==undefined || footprintScale!==undefined || visible!==undefined;
+    if (editsFootprint && (change.weight!==undefined || falloff))
+      throw new TypeError('Footprints are direct edits. Apply weighted paint in a separate operation.');
+    if ((!painted.length && !editsFootprint) || !SplatFit.unit(pressure) ||
         visible !== undefined && (typeof visible !== 'boolean' || footprintScale !== undefined) ||
         footprintScale !== undefined && (!Number.isFinite(footprintScale) || footprintScale < .4 || footprintScale > 2) ||
         coverage !== undefined && !SplatFit.unit(coverage) ||
@@ -205,14 +212,34 @@ function splats(frame, edit, binding, world, bake, onSplat) {
     const weight=pressure*(falloff?.(rest,index)??1);
     const brush=paint!==undefined || falloff || change.weight!==undefined ||
       material!==undefined || roughness!==undefined || emission!==undefined;
-    report?.(brush && { weight, channels:painted.filter(key=>weight>0 && (key!=='material' || weight>=.5)) });
     if (seen.has(index)) throw new RangeError('Duplicate splat edit ' + splat);
     seen.add(index);
     const supports=footprintScale!==undefined || visible!==undefined ? SplatFit.eligible : SplatFit.paintable;
     if (!supports(world,index)) throw new RangeError('Invalid, duplicate, or unavailable splat fit target '+splat);
+    const attributes = channels.get(index) ?? {};
+    let footprintChange;
+    if (footprint!==undefined) {
+      const original=SplatFit.footprintAt(authored,index);
+      const before=SplatFit.footprintAt(footprints,index);
+      let after=original;
+      if (footprint!==null) {
+        let next;
+        if (footprint===operation.footprint) {
+          if (!sharedFootprints.has(before)) sharedFootprints.set(before,FootprintEdits.editFootprint(before,footprint));
+          next=sharedFootprints.get(before);
+        } else next=FootprintEdits.editFootprint(before,footprint);
+        after=SplatFit.footprintFor(original,next);
+      }
+      if (footprint===null || JSON.stringify(after)===JSON.stringify(original)) delete attributes.footprint;
+      else attributes.footprint=after;
+      footprintChange={before:FootprintEdits.describe(before),after:FootprintEdits.describe(after)};
+    }
+    report?.({
+      ...(brush && { weight, channels:painted.filter(key=>weight>0 && (key!=='material' || weight>=.5)) }),
+      ...(footprintChange && {footprint:footprintChange})
+    });
     if (weight===0) continue;
     if (footprintScale !== undefined || visible !== undefined) scales.set(index,footprintScale ?? Number(visible));
-    const attributes = channels.get(index) ?? {};
     if (material!==undefined && weight>=.5) {
       if (material===null) delete attributes.material;
       else attributes.material=material;
@@ -439,10 +466,12 @@ function targets(route, context, limit, query) {
     const rest = query ? Provenance.restData(world) : world.rest ?? world.data;
     const fittedWorld=SplatFit.renderWorld(world,fit);
     const effectiveRow=editing && Targets.index(fittedWorld).row;
+    const layout=editing && Footprints.validate(fittedWorld);
     const describe = (id,i) => ({ id, at:Array.from(rest.subarray(i*16,i*16+3)),
       ...(editing && {pigment:'#'+SplatFit.pigmentAt(world,i,fit).toString(16).padStart(6,'0'),
         paintable:SplatFit.paintable(world,i),material:effectiveRow(i).material,roughness:SplatFit.roughnessAt(fittedWorld,i,fit),
-        emission:fit?.emission?.get(i)??[0,0,0],coverage:fit?.coverage?.[i]??1,footprintScale:fit?.[i]??1}) });
+        emission:fit?.emission?.get(i)??[0,0,0],coverage:fit?.coverage?.[i]??1,
+        footprint:SplatFit.footprintAt(layout,i),footprintScale:fit?.[i]??1}) });
     if (query) {
       const {rows,row,selection}=SplatSelection.select(world,binding,query,context);
       const splats=rows.slice(0,limit).map(({id,index,...evidence})=>{

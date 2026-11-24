@@ -2174,7 +2174,7 @@ and declared destinations. The edit JSON has `revision`, `frame`, `id`, and
 | `shot-correction` | Guarded RGB `edits` and `operation` containing `at`, `anchor`, `fps`, and an inclusive `frames` range | Native shot-correction file for `render --shot-corrections` |
 | `surface-channel` | `operation.stamp` with a rest-UV brush and value or clear mode | Revised JSON diorama with a stamp appended to the chart |
 | `decal-layer` | `operation.type` of `move`, `mask`, `replace`, or `bake` | Revised JSON diorama with the [decal layer](surface-decals.md#edit-a-decal-layer) edited in place |
-| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and any of `pigment`, `coverage`, `footprintScale`, or `visible` | Splat-fit asset for `render --splat-fit` |
+| `splat-attributes` | `operation.splats` with a stable splat ID or legacy source row and paint channels or `footprint`, `footprintScale`, and `visible` | Splat-fit asset for `render --splat-fit` |
 | `sdf-shape` | `operation.parameters`, a new `operation.modifier`, or `operation.updateModifier` with `id` and `patch` | Revised JSON diorama with edited geometry |
 | `sdf-material` | `operation.material` with a palette role or native material object | Revised JSON diorama with the solid's material changed |
 
@@ -2340,8 +2340,8 @@ or emission overrides independently.
 
 Use `paintableOnly: true` to query rows that accept these channels,
 including ordinary translucent splats. The existing `editableOnly`
-filter identifies rows that also accept footprint edits. Footprint
-edits remain direct per-row controls.
+filter identifies opaque rows that also accept `footprintScale` and
+`visible`.
 
 Omitted channels keep any earlier edits. To continue from a saved fit,
 place its JSON object at `finish.look.splatFit` in the source diorama,
@@ -2367,6 +2367,65 @@ edits also work on traced SDF surfaces.
 For raster pixels, use the [coverage lock and alpha brushes](#coverage-lock-and-shading).
 For material paint on a chart, use the independent
 [`pigment` and `opacity` channels](#paint-individual-material-channels).
+
+### Trim and carve source splat footprints
+
+Use `pixel-art targets` with `paintableOnly: true` to find source splats.
+Each result includes its current footprint profile. A Gaussian reports
+`false`. A mask profile includes its current alpha bytes.
+
+A `footprint` on a row edits that row. An `operation.footprint` supplies
+the same edit to every listed row unless a row overrides it. This
+operation trims the left quarter of a mark, carves an opening, then
+sharpens and turns the remaining silhouette.
+
+```json
+{
+  "splats": [{ "splat": "gate-enamel-a" }],
+  "footprint": {
+    "trim": { "width": 4, "height": 4, "alpha": [
+      0, 255, 255, 255,
+      0, 255, 255, 255,
+      0, 255, 255, 255,
+      0, 255, 255, 255
+    ] },
+    "carve": { "width": 4, "height": 4, "alpha": [
+      0, 0, 0, 0,
+      0, 0, 255, 0,
+      0, 0, 255, 0,
+      0, 0, 0, 0
+    ] },
+    "rotation": 0.2,
+    "softness": 0
+  }
+}
+```
+
+`trim` keeps the marked area and `carve` removes it. Both stencils use
+top-down alpha bytes from 2 to 128 texels per axis. Alpha values of 128
+and above mark a texel. The stencils operate in the unrotated footprint
+square, so existing holes stay cut out when you transform the result.
+Trimming or carving a Gaussian starts from its half-density circle.
+Very small holes can fall below the signed-distance tile or output
+pixel resolution.
+
+Set `rotation` in radians, `stretch` as two scale factors, and
+`softness` from 0 for a crisp edge to 0.5 for a broad feather. A transform
+keeps the current silhouette. Supply an explicit `shape` to replace the
+profile, such as `{"shape":"mask","mask":{"width":2,"height":2,"alpha":[255,0,255,255]}}`.
+Use `footprint: null` to restore the authored profile. `footprint: false`
+restores Gaussian coverage on a center-depth splat. Surface-aligned
+splats keep their original depth plane and axes.
+
+Preview the before and after profiles with `pixel-art preview`. The
+receipt records the resolved source IDs, transforms, and filled texel
+counts. These are direct edits. Apply falloff-based material paint in a
+separate operation. Both can share a session undo step. Use `--splat-fit`
+to apply the saved edit in the software renderer. With SDF assist,
+a sculpted body that has an edited footprint uses its native splats so
+the traced surface cannot fill a cutout. Independent bodies can still
+use SDF assist. See [custom splat footprints](splat-footprints.md) for
+the native shape and transform settings.
 
 ### Target shot corrections and scene sources
 

@@ -45,7 +45,8 @@ function select(world,binding,plan,context) {
   const {query,editableOnly,paintableOnly,mask}=plan, {region,part,material}=query;
   const rest=Provenance.restData(world), identities=Provenance.identities(world,{fresh:true});
   const authored=Targets.index(world).row, chosen=new Map();
-  const effective=SplatFit.renderWorld(world,SplatFit.prepare(world,world.look?.splatFit));
+  const effective=SplatFit.renderWorld(world,SplatFit.prepare(world,world.look?.splatFit),
+    {footprints:world.look?.splatFootprints!==false});
   const row=splatTargets(effective);
   const inScope=target=>!!Targets.objectScope(binding,target) &&
     (part===undefined || target.part===part) && (material===undefined || target.material===material);
@@ -122,7 +123,7 @@ function select(world,binding,plan,context) {
         const index=identities.rowOf(hit.id);
         const target=index>=0 && row(index);
         const current=target && ['object','entity','part','material'].every(key=>target[key]===hit[key]) &&
-          rowRevision(world,index)===hit.revision;
+          rowRevision(effective,index)===hit.revision;
         checked.set(hit.slot,current ? index : -1);
       }
       const index=checked.get(hit.slot);
