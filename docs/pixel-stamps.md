@@ -28,10 +28,18 @@ in order. Apply or cancel the preview from the Draw panel. Text and
 staircases use a click to place the configured shape at its native anchor.
 Each placed shape has one undo step.
 
-In **Reusable brush**, choose **Select pixels** and drag a rectangle on
-the canvas. **Capture** turns it into a portable brush with its original
-colors and transparent gaps. Set the brush-local anchor, size, angle,
-and swatch mode in the brush controls. **Stamp brush** places the anchor
+In **Selection**, choose a rectangle or ellipse marquee, freehand lasso,
+polygon lasso, magic wand, or color range. Drag a marquee or freehand
+lasso on the native canvas. For a polygon, place vertices and use **Close
+polygon**, Enter, or a double-click to finish. The wand follows connected
+color and **Color range** also finds matching islands. Both use the color
+tolerance field.
+
+The active mask limits painting on that frame. **Clear** removes it.
+**Capture** turns the highlighted footprint into a reusable brush with
+its original colors and transparent gaps, then clears the mask so you can
+stamp elsewhere. Set the brush-local anchor, size, angle, and swatch mode
+in the brush controls. **Stamp brush** places the anchor
 at the pointer. Click for one dab or drag a stroke. **Save brush** and
 **Open brush** exchange the same brush JSON with the document tools.
 

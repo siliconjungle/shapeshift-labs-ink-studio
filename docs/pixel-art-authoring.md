@@ -316,6 +316,50 @@ once in the edit and apply a shading step at most once per pixel.
 Preview and replay use the same placement settings and enforce clipping and
 protected details on the resulting pixels.
 
+## Select pixels
+
+Resolve a mask against the native grid with `pixels.select(query, options)`
+or `pixel-art select`. The result includes the document revision, frame,
+grid size and exact coordinates in row order.
+
+| Query | Selection |
+| --- | --- |
+| `{"type":"rectangle","rect":[2,3,8,6]}` | Rectangle marquee with an inclusive origin, width and height. |
+| `{"type":"ellipse","rect":[2,3,8,6]}` | Ellipse marquee using the same bounds. |
+| `{"type":"lasso","points":[[2,3],[9,3],[5,8]]}` | Freehand path of up to 4096 native pixel centers. |
+| `{"type":"polygon","points":[[2,3],[9,3],[5,8]]}` | Polygon lasso with 3–128 vertices. Ink closes the boundary and uses an even-odd fill. |
+| `{"type":"wand","at":[2,3],"tolerance":12}` | Matching pixels connected by their four edges. Add `"connected":false` to select every match in the frame. |
+
+The wand reads the visible composite by default. Use `--layer` or `--cel`
+to read the chosen layer's color and alpha. Knockouts and clipped pixels
+on that layer read as transparent. The tolerance is the maximum allowed
+difference in each RGBA byte. At zero it matches exact visible colors,
+including RGB aliases in the palette. A transparent seed matches transparent
+pixels, and any painted seed matches only pixels with positive alpha.
+
+```sh
+node cli/ink-studio.js pixel-art select document.json query.json --frame front --layer ink
+node cli/ink-studio.js pixel-art session select ./session query.json --frame front
+```
+
+To retain a named selection in a version 2 document, apply an edit with
+`destination: "selections"` and the selected frame and revision. For example,
+use this operation in the patch with `frame: "front"`.
+
+```json
+{
+  "id": "glaze-islands",
+  "layer": "ink",
+  "query": { "type": "wand", "at": [2,3], "connected": false, "tolerance": 12 }
+}
+```
+
+Applying the edit saves the resolved mask under its stable ID. Using the
+same ID replaces it. Preview and receipts report the native runs, and the
+edit participates in undo and replay. Reference the ID in a later raster
+patch as `operation.selection` to limit painting and fill to those pixels,
+or pass it to `pixel-art brush --selection` to capture its exact footprint.
+
 ## Author a drawing
 
 ```json

@@ -21,7 +21,7 @@ const markup = `
         <div class="ink-grid-mirrors" aria-hidden="true">
           <div class="ink-grid-mirror-x" hidden></div><div class="ink-grid-mirror-y" hidden></div>
         </div>
-        <div class="ink-grid-selection" aria-hidden="true" hidden></div>
+        <div class="ink-grid-selection" aria-hidden="true" hidden><canvas hidden></canvas></div>
         <div class="ink-grid-cursor" aria-hidden="true" hidden></div>
       </div>
     </div>
@@ -46,7 +46,8 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
   const canvas = find('.ink-grid-main'), preview = find('.ink-grid-reference canvas');
   const art = canvas.getContext('2d'), sample = preview.getContext('2d');
   const lines = find('.ink-grid-lines'), cursor = find('.ink-grid-cursor');
-  const selection = find('.ink-grid-selection'), repeats = find('.ink-grid-repeats');
+  const selection = find('.ink-grid-selection'), selectedPixels = selection.querySelector('canvas').getContext('2d');
+  const repeats = find('.ink-grid-repeats');
   const mirrorLines = [find('.ink-grid-mirror-x'),find('.ink-grid-mirror-y')];
   const guidesLayer = find('.ink-grid-guides'), guideToggles = find('.ink-guide-toggles');
   const showGuides = find('[data-view="guides"]'), snapGuides = find('[data-view="snap"]');
@@ -66,7 +67,38 @@ export function mountPixelGridCanvas(host,{ guideTool } = {}) {
     if (at) cursor.style.translate = `${at[0] * zoom}px ${at[1] * zoom}px`;
   }
 
+  let displayedMask, maskImage;
   function setSelection(bounds) {
+    const mask = bounds instanceof Uint8Array;
+    selectedPixels.canvas.hidden = !mask;
+    selection.classList.toggle('ink-grid-selection-mask',mask);
+    if (mask) {
+      if (bounds.length !== width*height || !width || !height)
+        throw new TypeError('Selection mask must match the native canvas');
+      if (displayedMask === bounds && selectedPixels.canvas.width === width && selectedPixels.canvas.height === height) return;
+      displayedMask = bounds;
+      if (maskImage?.width !== width || maskImage?.height !== height) {
+        selectedPixels.canvas.width = width;
+        selectedPixels.canvas.height = height;
+        maskImage = selectedPixels.createImageData(width,height);
+      }
+      const data = maskImage.data;
+      data.fill(0);
+      for (let p = 0; p < bounds.length; p++) {
+        if (!bounds[p]) continue;
+        const x = p%width, edge = x === 0 || x === width-1 || !bounds[p-1] || !bounds[p+1] ||
+          !bounds[p-width] || !bounds[p+width];
+        const offset = 4*p;
+        data[offset] = 166;
+        data[offset+1] = 241;
+        data[offset+2] = 215;
+        data[offset+3] = edge ? 184 : 58;
+      }
+      selectedPixels.putImageData(maskImage,0,0);
+      selection.hidden = false;
+      return;
+    }
+    displayedMask = undefined;
     selection.hidden = !bounds;
     if (!bounds) return;
     for (const [i,field] of ['x','y','width','height'].entries())

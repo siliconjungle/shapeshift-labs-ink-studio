@@ -158,6 +158,12 @@ const PixelPaintTools = (() => {
     return result;
   }
 
+  function insideEllipse(x,y,w,h) {
+    if (w <= 0 || h <= 0) return false;
+    const sx = (2*(x+.5)-w)/w, sy = (2*(y+.5)-h)/h;
+    return sx*sx + sy*sy <= 1;
+  }
+
   function staircase(width,height,spec,grid) {
     const { from,axis,direction,lengths } = spec ?? {};
     const inside = grid?.contains ?? (point => Array.isArray(point) && point.length === 2 &&
@@ -179,7 +185,7 @@ const PixelPaintTools = (() => {
     return spans;
   }
 
-  return Object.freeze({ four,eight,visit,region,drawingGrid,fillPixels,segment,freehand,runs,staircase });
+  return Object.freeze({ four,eight,visit,region,drawingGrid,fillPixels,segment,freehand,runs,insideEllipse,staircase });
 })();
 
 if (typeof module !== 'undefined') module.exports = PixelPaintTools;

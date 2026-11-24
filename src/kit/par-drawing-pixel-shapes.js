@@ -1,6 +1,6 @@
 /* Native indexed shape coverage shared by the document tools and stamp editor. */
 (function (K) {
-  const drawing = K.procedural.drawing2d, { segment,staircase } = PixelPaintTools;
+  const drawing = K.procedural.drawing2d, { segment,staircase,insideEllipse } = PixelPaintTools;
   const integer = (n,lo,hi) => Number.isSafeInteger(n) && n >= lo && n <= hi;
   const schema = new Map([
     ['line',['from','to','width']], ['curve',['points','width']],
@@ -8,12 +8,6 @@
     ['polygon',['points','fill','width']], ['text',['at','text','scale','tracking','leading','align','columns']],
     ['staircase',['from','axis','direction','lengths']]
   ]);
-
-  function boundedEllipse(x,y,w,h) {
-    if (w <= 0 || h <= 0) return false;
-    const sx = (2*(x+.5)-w)/w, sy = (2*(y+.5)-h)/h;
-    return sx*sx + sy*sy <= 1;
-  }
 
   function raster(width,height,shape,grid) {
     const allowed = schema.get(shape?.type);
@@ -76,9 +70,9 @@
       if (type === 'rect' && fill) block(x,y,w,h);
       else for (let v = 0; v < (grid ? h : Math.min(h,height-y)); v++)
         for (let u = 0; u < (grid ? w : Math.min(w,width-x)); u++) {
-          const outer = type === 'rect' || boundedEllipse(u,v,w,h);
+          const outer = type === 'rect' || insideEllipse(u,v,w,h);
           const inset = Math.min(u,v,w-1-u,h-1-v) >= lineWidth;
-          const inner = inset && (type === 'rect' || boundedEllipse(u-lineWidth,v-lineWidth,w-2*lineWidth,h-2*lineWidth));
+          const inner = inset && (type === 'rect' || insideEllipse(u-lineWidth,v-lineWidth,w-2*lineWidth,h-2*lineWidth));
           if (outer && (fill || !inner)) write(x+u,y+v);
         }
     } else if (type === 'polygon') {

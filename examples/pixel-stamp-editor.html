@@ -116,9 +116,33 @@
         <div class="row" style="margin-top:12px"><button id="undo" disabled>Undo</button></div>
       </section>
       <section>
+        <h2>Selection</h2>
+        <div class="guide-controls" id="selection-tools">
+          <label>Selection tool<select id="selection-type">
+            <option value="rectangle">Rectangle marquee</option>
+            <option value="ellipse">Ellipse marquee</option>
+            <option value="lasso">Freehand lasso</option>
+            <option value="polygon">Polygon lasso</option>
+            <option value="wand">Magic wand</option>
+            <option value="range">Color range</option>
+          </select></label>
+          <label id="selection-tolerance-label" hidden>Color tolerance
+            <input id="selection-tolerance" type="number" min="0" max="255" step="1" value="0">
+          </label>
+          <div class="row">
+            <button type="button" data-tool="brush-select" aria-pressed="false">Select pixels</button>
+            <button type="button" id="selection-clear" disabled>Clear</button>
+          </div>
+          <div class="row" id="polygon-selection-actions" hidden>
+            <button type="button" id="selection-close" disabled>Close polygon</button>
+            <button type="button" id="selection-cancel" disabled>Cancel polygon</button>
+          </div>
+          <output id="selection-count" aria-label="Selected pixels"></output>
+        </div>
+      </section>
+      <section>
         <h2>Reusable brush</h2>
         <div class="row" id="brush-tools">
-          <button type="button" data-tool="brush-select" aria-pressed="false">Select pixels</button>
           <button type="button" id="capture-brush" disabled>Capture</button>
           <button type="button" data-tool="brush-stamp" aria-pressed="false" disabled>Stamp brush</button>
         </div>

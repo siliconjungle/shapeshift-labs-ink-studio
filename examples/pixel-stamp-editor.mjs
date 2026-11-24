@@ -1,13 +1,13 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
 
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
-const brushes = KIT.pixelBrushes;
+const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections;
 const { stonePaint, flowingInk, bubble, glint, starTwinkle, line, rect } = InkPixelStudies;
 const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
-let brush, brushTip, brushStroke, selection;
+let brush, brushTip, brushStroke, selection, selectionDraft;
 const maxPencilPixels = 4096;
 let sharedGuides, frameGuides, guideItems = [];
 const limit = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
@@ -17,13 +17,13 @@ const vertexShapes = new Set(['curve','polygon']);
 const shapeType = () => $('shape-type').value;
 const rectangleBetween = ([x,y],[u,v]) => [Math.min(x,u),Math.min(y,v),Math.abs(x-u)+1,Math.abs(y-v)+1];
 const saveUndo = () => {
-  state.undo.push({ data:structuredClone(state.doc), frame:state.frame });
+  state.undo.push({ data:structuredClone(state.doc), frame:state.frame, selection });
   if (state.undo.length > 24) state.undo.shift();
 };
 
 function resetStroke() {
   state.points = [];
-  pencilStroke = brushStroke = undefined;
+  pencilStroke = brushStroke = selectionDraft = undefined;
 }
 
 function load(data) {
@@ -79,9 +79,103 @@ function strokeCopies({ slot,shape }) {
   });
 }
 
+const activeSelection = () => selection?.frame === state.frame ? selection : undefined;
+const selectionType = () => $('selection-type').value;
+const colorSelection = type => type === 'wand' || type === 'range';
+
+function selectPixels(query) {
+  const { width,height,palette } = state.doc;
+  let read;
+  if (query.type === 'wand') {
+    const current = state.doc.frames[state.frame], slots = stamp.paint(width,height,current);
+    const colors = palette.map(color=>Number.parseInt(color.slice(1),16));
+    read = p => slots[p] === null ? 0 : (colors[slots[p]]<<8) | (current.alpha?.[p] ?? 255);
+  }
+  const mask = selections.mask(width,height,query,read);
+  return { frame:state.frame,mask,pixelCount:mask.reduce((sum,selected)=>sum+selected,0) };
+}
+
+function drawSelection() {
+  const active = activeSelection(), draft = selectionDraft?.preview;
+  view.setSelection((draft ?? active)?.mask ?? null);
+  const type = selectionType(), choosing = state.tool === 'brush-select';
+  $('selection-tolerance-label').hidden = !colorSelection(type);
+  $('polygon-selection-actions').hidden = !choosing || type !== 'polygon';
+  $('selection-close').disabled = (selectionDraft?.points.length ?? 0) < 3;
+  $('selection-cancel').disabled = !selectionDraft;
+  $('selection-clear').disabled = !active && !selectionDraft;
+  $('selection-count').value = (draft ?? active) ? `${(draft ?? active).pixelCount} pixels selected` : '';
+  $('capture-brush').disabled = !active?.pixelCount || drawingPointer !== undefined || !!selectionDraft;
+}
+
+function refreshSelection() {
+  const { type,points } = selectionDraft;
+  const query = type === 'rectangle' || type === 'ellipse'
+    ? { type,rect:rectangleBetween(points[0],points.at(-1)) }
+    : { type:type === 'polygon' && points.length >= 3 ? 'polygon' : 'lasso',points };
+  selectionDraft.preview = selectPixels(query);
+}
+
+function beginSelection(event,at) {
+  const type = selectionType();
+  art.closest('.ink-grid-viewport').focus({ preventScroll:true });
+  if (colorSelection(type)) {
+    try {
+      selection = selectPixels({ type:'wand',at,connected:type === 'wand',tolerance:$('selection-tolerance').valueAsNumber });
+      notify('');
+      drawSelection();
+    } catch (error) { notify(error.message); }
+    return;
+  }
+  if (type === 'polygon') {
+    selectionDraft ??= { type,points:[] };
+    const { points } = selectionDraft, last = points.at(-1);
+    if (points.length < 128 && (!last || last[0] !== at[0] || last[1] !== at[1])) points.push(at);
+  } else {
+    selectionDraft = { type,points:[at] };
+    art.setPointerCapture(event.pointerId);
+    drawingPointer = event.pointerId;
+  }
+  refreshSelection();
+  drawSelection();
+}
+
+function extendSelection(event) {
+  const { type,points } = selectionDraft;
+  let changed = false;
+  if (type === 'lasso') {
+    for (const sample of [...(event.getCoalescedEvents?.() ?? []),event]) {
+      const at = strokeAt(sample), last = points.at(-1);
+      if (!at || (at[0] === last[0] && at[1] === last[1])) continue;
+      changed = true;
+      if (points.length < 4096) points.push(at);
+      else points[points.length-1] = at;
+    }
+  } else {
+    const at = strokeAt(event), last = points.at(-1);
+    changed = !!at && (at[0] !== last[0] || at[1] !== last[1]);
+    if (changed) points[1] = at;
+  }
+  if (changed) refreshSelection();
+  return changed;
+}
+
+function finishSelection() {
+  if (!selectionDraft?.preview || selectionDraft.type === 'polygon' && selectionDraft.points.length < 3) return;
+  selection = selectionDraft.preview;
+  selectionDraft = undefined;
+  drawSelection();
+}
+
+function clearSelection() {
+  selectionDraft = undefined;
+  if (activeSelection()) selection = undefined;
+  draw();
+}
+
 function frameSlots(current) {
   const { width,height } = state.doc;
-  const slotData=stamp.paint(width,height,current);
+  const slotData = stamp.paint(width,height,current), selected = activeSelection()?.mask;
   if (state.tool === 'shape') {
     const draft = currentShape();
     if (draft) {
@@ -94,11 +188,15 @@ function frameSlots(current) {
   if (grid && state.tool === 'pencil') {
     const tip = pencilStroke?.tip();
     if (tip) for (const [x,y] of [...state.points,tip])
-      grid.pixels(x,y,p=>{ slotData[p] = state.swatch; });
+      grid.pixels(x,y,p=>{ if (!selected || selected[p]) slotData[p] = state.swatch; });
     return slotData;
   }
   const marks = activeStrokes(), strokes = grid ? marks.flatMap(strokeCopies) : marks;
-  return strokes.length ? stamp.paint(width,height,{slots:slotData,strokes}) : slotData;
+  if (!strokes.length) return slotData;
+  const painted = stamp.paint(width,height,{ slots:slotData,strokes });
+  if (selected) for (let p = 0; p < selected.length; p++)
+    if (!selected[p]) painted[p] = slotData[p];
+  return painted;
 }
 
 function draw() {
@@ -110,9 +208,7 @@ function draw() {
     catch (error) { notify(error.message); }
   }
   view.setFrame(stamp.image({ width,height,palette,slots,alpha }));
-  const selected = selection?.frame === state.frame ? selection.bounds : null;
-  view.setSelection(state.tool === 'brush-select' ? selected : null);
-  $('capture-brush').disabled = !selected || state.tool !== 'brush-select' || drawingPointer !== undefined;
+  drawSelection();
   drawGuides(current);
   const count = state.doc.frames.length;
   $('scrub').max = count;
@@ -183,7 +279,12 @@ function edit(callback) {
 
 function commitStroke() {
   if (!state.points.length && !pencilStroke?.tip()) return;
-  const current = state.doc.frames[state.frame], slots = frameSlots(current);
+  const { width,height } = state.doc, current = state.doc.frames[state.frame], slots = frameSlots(current);
+  if (activeSelection() && stamp.paint(width,height,current).every((slot,p)=>slot === slots[p])) {
+    resetStroke();
+    draw();
+    return;
+  }
   savePixels(current,slots);
 }
 
@@ -263,8 +364,11 @@ function brushShading() {
 }
 
 function applyBrush(slots,alpha) {
-  const { width,height,palette:colors } = state.doc, dabs = brushStroke?.dabs ?? new Map();
+  const { width,height,palette:colors } = state.doc;
+  let dabs = brushStroke?.dabs ?? new Map();
   if (!brushStroke) brushes.stroke(width,height,brushTip,state.points,(p,slot)=>{ dabs.set(p,slot); },grid);
+  const selected = activeSelection()?.mask;
+  if (selected) dabs = new Map([...dabs].filter(([p])=>selected[p]));
   const shading = brushShading();
   if (shading) {
     const resolve = brushes.shade(shading,colors.map((_,slot)=>slot));
@@ -315,11 +419,13 @@ $('capture-brush').addEventListener('click',() => {
   const { width,height,palette } = state.doc;
   const current = state.doc.frames[state.frame], slots = stamp.paint(width,height,current);
   try {
-    setBrush(brushes.capture({ width,height,rect:selection.bounds,
+    const pixels = selections.pixels(width,activeSelection().mask);
+    setBrush(brushes.capture({ width,height,pixels,
       read(x,y) {
         const p = y*width+x, slot = slots[p];
         return slot === null || current.alpha?.[p] === 0 ? null : { color:palette[slot] };
       } }));
+    clearSelection();
     chooseTool('brush-stamp');
     notify('Captured brush');
   } catch (error) { notify(error.message); }
@@ -372,8 +478,9 @@ function currentShape(points = state.points) {
 function paintShape(slots,shape) {
   const { width,height } = state.doc, mask = KIT.pixelShapes.raster(width,height,shape,grid);
   let changed = false;
+  const selected = activeSelection()?.mask;
   for (let p = 0; p < mask.length; p++) {
-    if (!mask[p] || slots[p] === state.swatch) continue;
+    if (!mask[p] || selected && !selected[p] || slots[p] === state.swatch) continue;
     slots[p] = state.swatch;
     changed = true;
   }
@@ -429,9 +536,10 @@ function pickOrFill(at) {
       (opacity === undefined ? '' : ' · alpha '+opacity));
     return;
   }
-  if (!grid && picked === state.swatch) return;
-  const region = grid ? paintTools.fillPixels(grid,at,(p,seed)=>slots[seed] !== state.swatch && slots[p] === slots[seed])
-    : paintTools.region(width,height,at,p=>slots[p] === picked);
+  const selected = activeSelection()?.mask, inside = p => !selected || selected[p];
+  if (!grid && (picked === state.swatch || !inside(p))) return;
+  const region = grid ? paintTools.fillPixels(grid,at,(p,seed)=>inside(p) && slots[seed] !== state.swatch && slots[p] === slots[seed])
+    : paintTools.region(width,height,at,p=>inside(p) && slots[p] === picked);
   if (!region.length) return;
   for (const p of region) slots[p] = state.swatch;
   savePixels(current,slots);
@@ -641,9 +749,11 @@ art.parentElement.addEventListener('pointerdown',event => {
   if (event.button !== 0 || drawingPointer !== undefined) return;
   const central = event.target === art;
   if (!central && (!grid || state.tool === 'brush-select' || !event.target.matches('.ink-grid-repeats canvas'))) return;
-  const at = central ? view.pixelAt(event.clientX,event.clientY,{ snap:state.tool !== 'eyedropper' }) : strokeAt(event);
+  const snap = state.tool !== 'eyedropper' && !(state.tool === 'brush-select' && colorSelection(selectionType()));
+  const at = central ? view.pixelAt(event.clientX,event.clientY,{ snap }) : strokeAt(event);
   if (!at) return;
   stop();
+  if (state.tool === 'brush-select') { beginSelection(event,at); return; }
   if (state.tool === 'eyedropper' || state.tool === 'fill') { pickOrFill(at); return; }
   if (state.tool === 'shape' && !dragShapes.has(shapeType())) {
     if (vertexShapes.has(shapeType())) {
@@ -657,14 +767,15 @@ art.parentElement.addEventListener('pointerdown',event => {
   drawingPointer = event.pointerId;
   if (state.tool === 'pencil') startPencil(at);
   else if (state.tool === 'brush-stamp' && brush?.settings.dynamics) startDynamicBrush(event);
-  else {
-    state.points = [at];
-    if (state.tool === 'brush-select') selection = { frame:state.frame,bounds:rectangleBetween(at,at) };
-  }
+  else state.points = [at];
   draw();
 });
 art.addEventListener('pointermove',event => {
   if (drawingPointer !== event.pointerId) return;
+  if (selectionDraft) {
+    if (extendSelection(event)) drawSelection();
+    return;
+  }
   if (pencilStroke) {
     if (extendPencil(event)) draw();
     return;
@@ -677,9 +788,7 @@ art.addEventListener('pointermove',event => {
   if (state.points.length >= 120) return;
   const at=strokeAt(event), last=state.points.at(-1);
   if (!at || !last || last[0]===at[0] && last[1]===at[1]) return;
-  if (state.tool === 'brush-select') {
-    selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
-  } else if (state.tool === 'shape') state.points[1] = at;
+  if (state.tool === 'shape') state.points[1] = at;
   else state.points.push(at);
   draw();
 });
@@ -687,11 +796,9 @@ art.addEventListener('pointerup',event => {
   if (drawingPointer !== event.pointerId) return;
   if (pencilStroke) extendPencil(event);
   drawingPointer = undefined;
-  if (state.tool === 'brush-select' && state.points.length) {
-    const at = strokeAt(event);
-    if (at) selection = { frame:state.frame,bounds:rectangleBetween(state.points[0],at) };
-    resetStroke();
-    draw();
+  if (selectionDraft) {
+    extendSelection(event);
+    finishSelection();
   } else if (brushStroke) {
     extendDynamicBrush(event);
     if (brushStroke) commitBrush();
@@ -715,9 +822,20 @@ art.addEventListener('pointerup',event => {
 art.addEventListener('lostpointercapture',event => {
   if (drawingPointer !== event.pointerId) return;
   drawingPointer = undefined;
-  if (state.tool === 'brush-select') selection = undefined;
   resetStroke();
   draw();
+});
+$('selection-type').addEventListener('change',() => chooseTool('brush-select'));
+$('selection-clear').addEventListener('click',clearSelection);
+$('selection-close').addEventListener('click',finishSelection);
+$('selection-cancel').addEventListener('click',() => { selectionDraft = undefined; draw(); });
+art.addEventListener('dblclick',() => {
+  if (state.tool === 'brush-select' && selectionDraft?.type === 'polygon') finishSelection();
+});
+art.closest('.ink-grid-viewport').addEventListener('keydown',event => {
+  if (event.key === 'Enter' && selectionDraft?.type === 'polygon') finishSelection();
+  else if (event.key === 'Escape' && selectionDraft) { selectionDraft = undefined; draw(); }
+  else if (event.key === 'Escape' && activeSelection()) clearSelection();
 });
 $('finish-shape').addEventListener('click',() => finishShape(currentShape()));
 $('cancel-shape').addEventListener('click',() => { resetStroke(); draw(); });
@@ -740,7 +858,7 @@ function chooseTool(tool) {
   notify('');
   draw();
 }
-for (const id of ['tools','brush-tools']) $(id).addEventListener('click',event => {
+for (const id of ['tools','selection-tools','brush-tools']) $(id).addEventListener('click',event => {
   if (event.target.dataset.tool) chooseTool(event.target.dataset.tool);
 });
 $('play').addEventListener('click',() => {
@@ -768,9 +886,14 @@ $('playback').addEventListener('change',()=>edit(()=>{state.doc.playback=$('play
 $('duplicate').addEventListener('click',()=>edit(()=>{
   const copy=structuredClone(state.doc.frames[state.frame]);
   state.doc.frames.splice(++state.frame,0,copy);
+  if (selection?.frame >= state.frame) selection = { ...selection,frame:selection.frame+1 };
+  resetStroke();
 }));
 $('remove').addEventListener('click',()=>edit(()=>{
   state.doc.frames.splice(state.frame,1);
+  if (selection?.frame === state.frame) selection = undefined;
+  else if (selection?.frame > state.frame) selection = { ...selection,frame:selection.frame-1 };
+  resetStroke();
   state.frame=Math.min(state.frame,state.doc.frames.length-1);
 }));
 $('undo').addEventListener('click',()=>{
@@ -778,7 +901,7 @@ $('undo').addEventListener('click',()=>{
   const snapshot=state.undo.pop();
   state.doc=snapshot.data;
   state.frame=snapshot.frame;
-  selection = undefined;
+  selection = snapshot.selection;
   resetStroke();
   update();
 });

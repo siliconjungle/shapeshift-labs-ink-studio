@@ -192,6 +192,7 @@
   K.pixelStamps = PixelStamps;
   K.pixelGuides = PixelGuides;
   K.pixelPaintTools = PixelPaintTools;
+  K.pixelSelections = PixelSelections;
   K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,

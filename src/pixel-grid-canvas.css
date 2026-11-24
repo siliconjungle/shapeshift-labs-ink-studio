@@ -136,6 +136,18 @@
   box-shadow: 0 0 0 1px #102126;
   pointer-events: none;
 }
+.ink-grid-selection-mask {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  box-shadow: none;
+}
+.ink-grid-selection-mask canvas {
+  width: 100%;
+  height: 100%;
+  background: none;
+}
 .ink-grid-guides > div {
   position: absolute;
   left: calc(var(--ink-grid-cell) * var(--guide-x));

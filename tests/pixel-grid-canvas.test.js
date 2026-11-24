@@ -395,6 +395,70 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     const savedTile = await download('#export');
     assert.deepEqual([savedTile.width,savedTile.height],[48,48]);
     assert.deepEqual(savedTile.drawing,{ wrapX:true,wrapY:true });
+
+    await evaluate(browser,() => {
+      const preset = document.querySelector('#preset');
+      preset.value = 'blank';
+      preset.dispatchEvent(new Event('change'));
+    });
+    const canvas = await screen(browser,main), cursor = (x,y)=>place(canvas,x,y);
+    const clickPixel = async (x,y) => { await press(cursor(x,y)); await release(cursor(x,y)); };
+    const move = (x,y) => mouse('mouseMoved',cursor(x,y),{ button:'left',buttons:1 });
+    const chooseSelection = type => evaluate(browser,type => {
+      const field = document.querySelector('#selection-type');
+      field.value = type;
+      field.dispatchEvent(new Event('change',{ bubbles:true }));
+    },type);
+    const overlay = '.ink-grid-selection canvas';
+    const selected = async (x,y) => (await raster(browser,overlay,x,y))[3] > 0;
+
+    await chooseSelection('ellipse');
+    await press(cursor(4,4));
+    await move(8,8);
+    assert.equal(await selected(4,4),false);
+    assert.equal(await selected(6,6),true);
+    await release(cursor(8,8));
+    await click(browser,'[data-tool="pencil"]');
+    await press(cursor(3,6));
+    await move(10,6);
+    await release(cursor(10,6));
+    assert.deepEqual(await raster(browser,preview,3,6),clear);
+    assert.deepEqual(await raster(browser,preview,4,6),color);
+    assert.deepEqual(await raster(browser,preview,8,6),color);
+    assert.deepEqual(await raster(browser,preview,9,6),clear);
+
+    await chooseSelection('lasso');
+    await press(cursor(12,4));
+    await move(16,4);
+    await move(12,8);
+    await release(cursor(12,4));
+    assert.equal(await selected(13,5),true);
+    assert.equal(await selected(16,8),false);
+
+    await chooseSelection('polygon');
+    await clickPixel(18,4);
+    await clickPixel(22,4);
+    assert.equal(await browser.evaluate("document.querySelector('#selection-close').disabled"),true);
+    await clickPixel(22,8);
+    await click(browser,'#selection-close');
+    assert.equal(await selected(21,5),true);
+    assert.equal(await selected(18,8),false);
+    await click(browser,'#selection-clear');
+
+    await click(browser,'[data-tool="pencil"]');
+    await click(browser,'.swatch:nth-child(3)');
+    for (const x of [5,6,13]) await clickPixel(x,32);
+    await chooseSelection('wand');
+    await clickPixel(5,32);
+    assert.equal(await selected(6,32),true);
+    assert.equal(await selected(13,32),false);
+    await chooseSelection('range');
+    await clickPixel(5,32);
+    assert.equal(await selected(13,32),true);
+    assert.equal(await selected(10,32),false);
+    await click(browser,'#capture-brush');
+    const islands = await saveBrush();
+    assert.deepEqual(islands.slots,[0,0,null,null,null,null,null,null,0]);
   });
 });
 
