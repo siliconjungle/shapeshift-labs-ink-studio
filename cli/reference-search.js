@@ -5,12 +5,17 @@ const { markdownSections } = require('../scripts/reference-guides.js');
 function matchingGuide(entry, words, read) {
   const sections = markdownSections(read(entry.id));
   for (const section of sections) {
-    const paragraphs = [section.title, ...section.text.trim().split(/\n\s*\n/)];
+    const paragraphs = [section.title, ...section.text.trim().split(/\n\s*\n|\n(?=\s*[-*] )/)];
     if (!words.every(word => paragraphs.some(paragraph => paragraph.toLowerCase().includes(word)))) continue;
     const [summary] = paragraphs
       .map(text => ({ text, matches: words.filter(word => text.toLowerCase().includes(word)).length }))
       .sort((a, b) => b.matches - a.matches)
-      .map(({ text }) => text.replace(/\s+/g, ' ').slice(0, 300));
+      .map(({ text }) => {
+        const line = text.replace(/\s+/g, ' ');
+        const offsets = words.map(word => line.toLowerCase().indexOf(word)).filter(index => index >= 0);
+        const start = offsets.length ? Math.max(0, Math.min(...offsets) - 60) : 0;
+        return (start ? '… ' : '') + line.slice(start, start + 300);
+      });
     const link = entry.id + (section === sections[0] ? '' : '#' + section.anchor);
     return { ...entry, summary, docs: [link], match: section.title };
   }

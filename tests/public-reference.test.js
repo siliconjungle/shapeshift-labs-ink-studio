@@ -53,6 +53,7 @@ test('the command line can find a guide, a graph node and a qualified function',
   const guide = cli(['catalog', '--all', 'tightly packed top-down rgba8']).entries.find(entry =>
     entry.id === 'docs/patch-tooling.md');
   assert(guide?.docs[0].startsWith('docs/patch-tooling.md#'));
+  assert.match(guide.summary, /tightly packed top-down RGBA8/);
   const [node] = cli(['catalog', 'raster.resize', '--all']).entries;
   assert.equal(node.id, 'raster.resize');
   assert.equal(node.kind, 'graph');
