@@ -1325,7 +1325,7 @@ Use the binding ID from `sceneBindings`. On a traced document, it is
 
 ```sh
 node cli/ink-studio.js pixel-art inspect gatehouse-study/design.json \
-  --source-view gatehouse-study/source-view.json --binding projection --at 57,43
+  --source-view gatehouse-study/source-view.json --binding projection --at 57,30
 ```
 
 Pass `--scene` to resolve against a fresh view. For the SDK, supply
