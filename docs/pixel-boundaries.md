@@ -43,3 +43,35 @@ node examples/pixel-boundaries/warden-review.js warden-review
 The review contains the original and solved render side by side under the same orbit and moving key. For a custom Node sequence, `renderBoundaryShot({width,height,count,settings,draw,output})` calls `draw(index, options, lane, passes)` to sample each pose, then `output(index, overrides)` to render the chosen native pixels. Merge those options and pass requests into the renderer and use the same pose and camera for each lane. The optional `progress(phase,index)` callback reports sampling and delivery progress.
 
 The temporal approach draws on Kuo, Yang, and Chu's work on optimizing feature lines across neighboring frames. Ink uses the renderer's visible samples and projected motion to build those tracks. [Feature-Aware Pixel Art Animation](https://researchportal.bath.ac.uk/en/publications/feature-aware-pixel-art-animation/)
+
+## Live named boundaries in WebGL
+
+Enable live boundary decisions on a visor, rim, or other opaque splat feature. Give all its adjacent patches the same selector, even when they use different pigments. Use separate feature IDs for parts whose overlap should remain visible. The first matching feature owns the row.
+
+```js
+renderer.render(world, {
+  width: 192, height: 144, time,
+  livePixelBoundaries: {
+    features: [
+      { id: 'visor', select: { object: 'helmet', part: 'visor' } },
+      { id: 'rim', select: { object: 'shield', material: 'bronze' } }
+    ],
+    bounds: [36, 24, 122, 100],
+    temporal: 0.9,
+    spatial: 0.35
+  }
+});
+```
+
+The browser collects four current subpixel samples. A clear three- or four-sample majority takes effect immediately. At a split, the native neighbors and the previous decision can strengthen a candidate that still has a visible sample. History matches the current sample against the previous camera, posed splat position, owner, and axial depth. Color, ownership, and depth always come from the same current sample, before palette resolve. Projected protected-pixel marks keep their native samples.
+
+Set the same options on `world.look.livePixelBoundaries` to author the effect with the scene. Use `false` on the frame for a bypass. For an immutable settings object, `KIT.livePixelBoundaries.prepare(settings)` validates and prepares it once. For a moving camera or replay, keep the same renderer and draw in time order. The history resets at a cut (`resetLivePixelBoundaries` or `resetRenderHistory`), a rewind, a large time gap, or a change of source, output, or art-grid size. Set `livePixelBoundaryKey` when drawing a different view into the same target.
+
+- `bounds` is a top-left native rectangle. Omit it to consider the whole primary art grid. The grid supports up to 65,536 native pixels and 262,144 splat rows, with 1–32 features.
+- `temporal` controls the previous-frame vote (0–2). `spatial` controls the current neighbors (0–1). Set either to zero to isolate the other.
+- `depthPixels` sets the history depth tolerance in world units per art pixel (0.05–4, default 0.9). `maxMotion` rejects reprojection beyond a screen-space distance (0.25–16 art pixels, default 3). `maxGap` resets history after a delay (0.001–2 seconds, default 0.2).
+- `livePixelBoundaryFrame(report)` reads a diagnostic mask in top-left order. Values 0 through 4 are untouched, ambiguous and retained, changed by current evidence, changed by the history vote, and changed by a decisive majority. The `nativeFeature` and `resolvedFeature` arrays use 1-based feature slots, with zero for unselected pixels and pixels outside the region. Omit the callback during playback to keep the decisions on the GPU. When there are no matching features or a visibility mode is incompatible, the callback instead reports `skipped`.
+
+Live boundary decisions run on the primary WebGL view for baked opaque splats. Meshes and empty space can still occlude or reveal those features. Water, optical splats, glass, coverage-aware resolve, coverage filters, masked palette resolve, surface-layer ordering, Gaussian proxy/color modes, and finite curves use their ordinary visibility path. When the live pass is active it takes precedence over surface lighting history and palette flicker damping. Use the shot solver above when approving a headless export.
+
+Run `node examples/pixel-boundaries/live-iris.js output-directory` with Chrome installed to compare the live pass against native sampling. The iris shutters use multiple splat patches per feature, then slide aside to expose the recessed light.

@@ -717,6 +717,11 @@
       bad('finish.look.boundaryCels', error.message);
     }
     try {
+      LivePixelBoundaries.prepare(look?.livePixelBoundaries);
+    } catch (error) {
+      bad('finish.look.livePixelBoundaries', error.message);
+    }
+    try {
       SplatOrder.transparency(look?.stableTransparency);
     } catch (error) {
       bad('finish.look.stableTransparency', error.message);

@@ -1,5 +1,6 @@
 import { gaussianFilter } from './gaussian-filter.mjs';
 import { surfaceHistory, createSurfaceHistory } from './surface-history.mjs';
+import { createLivePixelBoundaries } from './live-pixel-boundaries.mjs';
 import { createCoverageVote } from './coverage-vote.mjs';
 import { coverageFilter, createCoverageFilter, filterUnit } from './coverage-filter.mjs';
 import { createGaussianProxyRenderer, gaussianProxyPlan } from './gaussian-part-proxies.mjs';
@@ -175,7 +176,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
     let opticsDefinition, opticsWorld, opticsPlan, opticsTime;
     const cleaned = target(), finished = target();
     const holdSettings = surfaceHistory.prepare(true);
-    let lightingHistory, paletteHistory;
+    let lightingHistory, paletteHistory, liveBoundaries;
     const detailAPI = toolkit.DetailBudgets ?? toolkit.KIT?.detailBudgets;
     const detailResolveUnit = 26; // Unit 7 can hold a palette constraint or layered glass during resolve.
     const qualityAPI = toolkit.KIT?.passQuality;
@@ -869,6 +870,12 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const raw = colorMode === 'baked' ? frame.raw ?? false : colorMode === 'rgb';
       const { outline = true, dither = 0.35, scale = 1 } = frame;
       const look = world.look ?? {};
+      const boundaryView = plane === zero && !cover && !reflectionCapture;
+      const liveBoundaryDefinition = boundaryView && (frame.livePixelBoundaries ?? look.livePixelBoundaries);
+      const liveBoundaryAPI = toolkit.KIT?.livePixelBoundaries;
+      if (liveBoundaryDefinition !== undefined && liveBoundaryDefinition !== false && !liveBoundaryAPI)
+        throw new Error('Live pixel boundaries need the Ink Studio KIT');
+      const liveBoundarySettings = liveBoundaryAPI?.prepare(liveBoundaryDefinition);
       const gaussianProfile = gaussianFilter.prepare(frame.gaussianFilter ?? look.gaussianFilter);
       const stable=!raw && stability?.prepare(look.stable,frame.stable,frame.ditherSpace);
       const orderMode = frame.splatOrder ?? look.splatOrder;
@@ -958,7 +965,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const rules = trails ? afterimagesAPI.prepare(afterimageDefinition) : [];
       const normalCaptures = simpleOnly || rules.length ? null : captureWater(world, frame, camera, width, height, 0, quality);
       // Per-pixel material, palette, and detail rules index the expanded world.
-      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || clusters || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsShot || wantsEmitters || stable?.anchorSpaces?.size || world.engraving || world.splatFootprints || instancePlan(group).hasSplatFootprints || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
+      if (group && (materialControls.has(world) || canStage || quality?.rows || rules.length || clusters || liveBoundarySettings || frame[graphOwner] || frame.order || tolerance || wantsRelight || wantsShot || wantsEmitters || stable?.anchorSpaces?.size || world.engraving || world.splatFootprints || instancePlan(group).hasSplatFootprints || world.opticalSplats || instancePlan(group).hasOpticalSplats || !raw && (constraintDefinition || look.pixel && world.pix ||
           needsDetailFlags || budget?.fineOn || budget?.fineOff || filterSettings?.varied))) {
         expandInstances ??= createExpandedInstances();
         const expanded = expandInstances(world,group,frame.changedRows);
@@ -1017,10 +1024,28 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         !cover && plane === zero && !reflectionCapture && !proxyPlan && colorMode === 'baked' ? filterSettings : null;
       const historyView = plane === zero && !cover && !reflectionCapture && !raw && !portableStages && !coverage &&
         !masked && !sourceWater && !glass && !proxyPlan && colorMode === 'baked' && !group;
-      const temporal = historyView && surfaceHistory.prepare(frame.surfaceHistory ?? look.surfaceHistory);
-      const dampingAllowed = historyView && !filter && !temporal && !spatialMarks && !frameTone && !constraints &&
+      // These combinations use distinct visibility/resolve contracts. Leave
+      // their color and depth intact if a live boundary look is also authored.
+      let liveBoundaryRegion, liveBoundaryPass;
+      if (liveBoundarySettings) {
+        if (coverage || masked || filter || sourceWater || glass || world.opticalSplats ||
+            finiteCurves || proxyPlan || colorMode !== 'baked' || localOrder) {
+          frame.livePixelBoundaryFrame?.({w:width,h:height,skipped:'incompatible-visibility'});
+        } else {
+          liveBoundaryRegion=liveBoundaryAPI.region(liveBoundarySettings,width,height);
+          if (width*2>Math.min(maxSize,viewportLimit[0]) || height*2>Math.min(maxSize,viewportLimit[1]))
+            throw new RangeError('Live pixel boundary samples exceed the WebGL device limit');
+          liveBoundaries ??= createLivePixelBoundaries(gl,{api:liveBoundaryAPI,kit:toolkit.KIT,
+            target,table,program,textureUnit,fullscreen,maxSize,resources});
+          if (liveBoundaries.prepare(world,liveBoundarySettings)) liveBoundaryPass=liveBoundaries;
+          else frame.livePixelBoundaryFrame?.({w:width,h:height,skipped:'no-matching-features'});
+        }
+      }
+      if (plane===zero&&!reflectionCapture&&!liveBoundaryPass) liveBoundaries?.clear();
+      const temporal = !liveBoundaryPass && historyView && surfaceHistory.prepare(frame.surfaceHistory ?? look.surfaceHistory);
+      const dampingAllowed = !liveBoundaryPass && historyView && !filter && !temporal && !spatialMarks && !frameTone && !constraints &&
         !!look.pixel && frame.damp !== false;
-      const packedDepth = needsPresentationDepth || hybridDepthCapture || finiteCurves || !!temporal || dampingAllowed;
+      const packedDepth = needsPresentationDepth || hybridDepthCapture || finiteCurves || !!temporal || dampingAllowed || !!liveBoundaryPass;
       let owner = packedDepth ? (graphOwnership ??= target(3)) : masked && !coverage ? maskOwner : plainOwner;
       const ao = world.ao ? world.ao.k ?? 0.5 : 0;
       const paletteFrame = toolkit.PixelLook.framePalette?.(world, frame, { grading: !raw && !portableStages, tone: !raw && !coverage }) ??
@@ -1143,7 +1168,11 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       }
       geometry.resize(rw, rh);
       contours.resize(colored ? width : 1, colored ? height : 1);
-      const ownsPixels = needsPresentationDepth || !!historyOwner || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
+      if (liveBoundaryPass) {
+        if (!colored) liveBoundaryPass.sampleColor.resize(width*2,height*2);
+        liveBoundaryPass.sampleOwner.resize(width*2,height*2);
+      }
+      const ownsPixels = !!liveBoundaryPass || needsPresentationDepth || !!historyOwner || !!clusters || !!boundaries || !!frame[graphOwner] || patterned || !!constraints && !coverage || scopedCleanup;
       const drawOwnership = ownsPixels || hybridDepthCapture || finiteCurves;
       owner.resize(drawOwnership ? width : 1, drawOwnership ? height : 1);
       const captureNormals = harmonics && frame[gaussianNormalFrame];
@@ -1605,7 +1634,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           tangent, lookGrid: coverage && [width, height] }, water, wet, env);
       }
       if (drawOwnership)
-        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: 1, u_hard: 0, tangent,proxy,surfaces,scaleSurfaces,spriteRows,historyOwner,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
+        drawGeometry(shader, owner, width, height, { u_idx: 1, u_snap: +(!liveBoundaryPass || !raw), u_hard: 0, tangent,proxy,surfaces,scaleSurfaces,spriteRows,historyOwner,surfaceFrame:{...surfaceFrame,index:true,graphDepth:packedDepth} });
       if(marks){
         marks.bindSites();
         drawGeometry(shader,restTarget,width,height,{u_idx:1,u_markPass:true,u_snap:1,u_hard:0,tangent,proxy,
@@ -1640,6 +1669,24 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
           drawGeometry(shader,filterBuffers.centerMatte,width,height,{...geometryOpts,...matte});
           drawGeometry(shader,filterBuffers.tapMatte,width*2,height*2,{...sampleOpts,...matte});
         }
+      }
+      if (liveBoundaryPass) {
+        const samples = { ...geometryOpts,u_snap:0,u_materialGridScale:2,spriteGrid:[.5,.5],
+          surfaceFrame:{...surfaceFrame,sceneryDeliveryFrame:undefined} };
+        if (!colored) drawGeometry(shader,liveBoundaryPass.sampleColor,width*2,height*2,{...samples,background},water,wet,env);
+        drawGeometry(shader,liveBoundaryPass.sampleOwner,width*2,height*2,{
+          ...samples,u_idx:1,surfaceFrame:{...surfaceFrame,index:true,graphDepth:true}
+        });
+        const boundaryFrame={...historyFrame,source:frame.livePixelBoundaryKey??historyFrame.source,
+          layout:world.count,output};
+        const resolved=liveBoundaryPass.resolve(colored?contours:geometry,owner,world,boundaryFrame,liveBoundarySettings,
+          liveBoundaryRegion,inverseView(camera.view,camera.eye),time,{
+            cut:frame.resetRenderHistory===true||frame.resetLivePixelBoundaries===true,
+            locks:projectedMarks?.coordinates,capture:frame.livePixelBoundaryFrame,highColor:colored?geometry:undefined
+          });
+        ({geometry,owner}=resolved);
+        if (colored) contours=resolved.contours;
+        data.bind();
       }
       if (curvePlan?.count) {
         finiteCurvePass ??= createFiniteCurvePass(gl,{

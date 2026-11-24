@@ -16,6 +16,7 @@ const RenderContract = (() => {
     'deep-compositing': ['Headless can capture deep fragments.', 'WebGL does not emit deep fragments.', 'Deliver the deep pass headlessly.'],
     'programmable-exposure': ['Headless can sample programmable shutters.', 'WebGL has no matching exposure pass.', 'Use a headless review for the shuttered image.'],
     'motional-coverage': ['Headless resolves motion-aware coverage.', 'WebGL has no matching coverage resolve.', 'Disable motional coverage for a shared preview.'],
+    'live-pixel-boundaries': ['The shot solver uses a seekable frame sequence.', 'Live named features use the preceding frame.', 'Use the shot solver for an offline approval or disable the live pass for a shared preview.'],
     'post-stage': ['Headless applies frame and palette stage rules.', 'WebGL cannot apply those rules through shared staged color.', 'Use uniform material or lit stages for a shared look.'],
     'spatial-stage-mask': ['Headless evaluates spatial stage masks.', 'WebGL cannot apply the masked rules through shared staged color.', 'Use a uniform stage rule for a shared look.'],
     'textured-splat-color': ['Headless applies staged rules to per-pixel splat colors.', 'WebGL stages operate on baked splat RGB.', 'Review per-pixel stage color headlessly.'],
@@ -155,7 +156,9 @@ const RenderContract = (() => {
   }
 
   function review(world, frame = {}, sample = clock(world, frame)) {
-    const issues = compatibility(world, frame).map(code => {
+    const codes = compatibility(world, frame);
+    if (frame.livePixelBoundaries ?? world.look?.livePixelBoundaries) codes.push('live-pixel-boundaries');
+    const issues = codes.map(code => {
       if (code === 'palette-limit') return { code, kind: 'limit', headless: 'Resolves the full scene palette.',
         webgl: 'Scene palette resolve uses only the first ' + scenePaletteLimit + ' swatches.',
         action: 'Use at most ' + scenePaletteLimit + ' scene swatches for a shared palette resolve.',
@@ -169,6 +172,7 @@ const RenderContract = (() => {
 
   function requirePortable(world, frame) {
     const issues = compatibility(world, frame);
+    if (frame.livePixelBoundaries ?? world.look?.livePixelBoundaries) issues.push('live-pixel-boundaries');
     if (issues.length) throw new Error('Frame is outside the shared rendering contract: ' + issues.join(', '));
   }
 
