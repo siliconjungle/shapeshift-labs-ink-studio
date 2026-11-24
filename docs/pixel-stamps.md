@@ -87,6 +87,15 @@ or RGBA and keeps Ink's swatch IDs, indexed pixels, and alpha on reimport.
 Use **Save JSON** to retain the animation and guides.
 [PNG modes and editable RGBA patches](pixel-art-authoring.md#edit-and-exchange-exact-rgba-pixels)
 
+In **Palette**, name or lock the active swatch, move it in the display
+order, or remap it across all frames. Use **Palette ramps** to set an
+explicit order by swatch ID. Choose that ramp under the brush's
+**Saved ramp** control to shade with it after any palette reorder.
+**Palette files** can extract colors from the current frame or a PNG,
+merge a palette JSON, and export swatches, locks, and ramps. Each palette
+edit can be undone with the artwork.
+[Palette file and edit syntax](pixel-art-authoring.md#edit-palettes-and-ramps)
+
 Under **Symmetry and wrapping**, enable **Mirror X** or **Mirror Y** and
 move the axis using its position field. Whole values run through pixel
 centers and half-pixels run between them. Enable **Wrap X** to repeat

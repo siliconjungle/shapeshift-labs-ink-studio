@@ -1,6 +1,8 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
-import { colors,openPNG,savePNG } from './pixel-stamp-png.mjs';
+import * as paletteModule from '../src/pixel-palette.js';
+import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
 
+const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixel-palette')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
 const canvasTransforms = KIT.pixelCanvasTransforms;
@@ -20,7 +22,8 @@ const vertexShapes = new Set(['curve','polygon']);
 const shapeType = () => $('shape-type').value;
 const rectangleBetween = ([x,y],[u,v]) => [Math.min(x,u),Math.min(y,v),Math.abs(x-u)+1,Math.abs(y-v)+1];
 const saveUndo = (selectionOnly = false) => {
-  state.undo.push({ ...(selectionOnly ? {} : { data:structuredClone(state.doc) }),frame:state.frame,selection });
+  state.undo.push({ ...(selectionOnly ? {} : { data:structuredClone(state.doc) }),
+    frame:state.frame,swatch:state.doc.swatchIds[state.swatch],selection });
   if (state.undo.length > 24) state.undo.shift();
 };
 
@@ -50,6 +53,7 @@ function load(data) {
       !palette.every(color => typeof color === 'string' && /^#[a-f\d]{6}$/i.test(color)))
     throw new RangeError('Open a stamp up to 512 × 512 with 1–255 hex swatches.');
   const swatchIds = colors.swatchIds(palette,data.swatchIds);
+  palettes.fromStamp({ ...data,swatchIds });
   if (data.drawing !== undefined) paintTools.drawingGrid(width,height,data.drawing);
   if (data.sceneBindings !== undefined && (!Array.isArray(data.sceneBindings) ||
       data.sceneBindings.some(row=>!row || typeof row.id !== 'string' ||
@@ -80,6 +84,7 @@ function load(data) {
   selection = undefined;
   resetStroke();
   update();
+  showPaletteRamp();
 }
 
 function activeStrokes() {
@@ -481,9 +486,20 @@ function draw() {
 function selectSwatch(index) {
   state.swatch = index;
   document.querySelectorAll('.swatch').forEach((button,i) => button.setAttribute('aria-pressed',i === index));
-  const color = state.doc.palette[index];
+  const { palette,swatchIds,swatchLabels,lockedSwatches } = state.doc, color = palette[index], id = swatchIds[index];
+  const label = swatchLabels && Object.hasOwn(swatchLabels,id) ? swatchLabels[id] : undefined;
+  const locked = lockedSwatches?.includes(id) ?? false;
   $('color').value = color;
-  $('swatch-label').textContent = `${state.doc.swatchRoles?.[index] ?? state.doc.swatchIds[index]} · ${color}`;
+  $('color').disabled = locked;
+  $('swatch-label').textContent = `${label ?? state.doc.swatchRoles?.[index] ?? id} · ${color}`;
+  $('swatch-name').value = label ?? '';
+  $('swatch-lock').checked = locked;
+  $('swatch-earlier').disabled = index === 0;
+  $('swatch-later').disabled = index === palette.length-1;
+  $('swatch-remap').disabled = locked || palette.length === 1;
+  const target = $('swatch-remap-target'), previous = target.value;
+  target.replaceChildren(...swatchIds.filter(key=>key !== id).map(key=>new Option(swatchTitle(key),key)));
+  if (swatchIds.includes(previous) && previous !== id) target.value = previous;
   draw();
 }
 
@@ -508,7 +524,7 @@ function update() {
     b.className='swatch';
     b.style.setProperty('--swatch',color);
     b.setAttribute('aria-label',`Swatch ${index+1}, ${color}`);
-    b.title = state.doc.swatchIds[index];
+    b.title = swatchTitle(state.doc.swatchIds[index]);
     b.addEventListener('click',()=>selectSwatch(index));
     return b;
   }));
@@ -516,6 +532,7 @@ function update() {
   $('canvas-width').value = state.doc.width;
   $('canvas-height').value = state.doc.height;
   showCanvasControls();
+  updateRampChoices();
   $('add-color').disabled = state.doc.palette.length >= colors.limit;
   $('playback').value = state.doc.playback ?? 'loop';
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
@@ -625,13 +642,16 @@ function updateBrushSettings() {
   }
 }
 
-const shadingControls = new Set(['brush-mode','brush-ramp','brush-ramp-step','brush-alpha']);
+const shadingControls = new Set(['brush-mode','brush-ramp','brush-ramp-id','brush-ramp-step','brush-alpha']);
 function brushShading() {
   const mode = $('brush-mode').value;
   $('brush-ramp-controls').hidden = mode !== 'ramp';
   $('brush-alpha-controls').hidden = mode !== 'alpha';
+  const saved = state.doc.ramps?.find(row=>row.id === $('brush-ramp-id').value);
+  $('brush-ramp').disabled = $('brush-ramp-add').disabled = !!saved;
   if (mode === 'ramp') return { mode,step:$('brush-ramp-step').valueAsNumber,
-    ramp:$('brush-ramp').value.split(',').map(n=>n.trim() ? Number(n)-1 : NaN) };
+    ramp:saved ? saved.swatches.map(id=>state.doc.swatchIds.indexOf(id)) :
+      $('brush-ramp').value.split(',').map(n=>n.trim() ? Number(n)-1 : NaN) };
   if (mode === 'alpha') return { mode,value:$('brush-alpha').valueAsNumber };
   if (mode === 'recolor') return { mode };
 }
@@ -1277,19 +1297,138 @@ $('undo').addEventListener('click',()=>{
   const snapshot=state.undo.pop();
   if (snapshot.data) state.doc=snapshot.data;
   state.frame=snapshot.frame;
+  state.swatch = Math.max(0,state.doc.swatchIds.indexOf(snapshot.swatch));
   selection = snapshot.selection;
   resetStroke();
   update();
+  showPaletteRamp();
 });
 $('pencil-color-mode').addEventListener('change',()=>{
   $('pencil-rgb').value = state.doc.palette[state.swatch];
   draw();
 });
-$('color').addEventListener('change',()=>edit(()=>{ state.doc.palette[state.swatch]=$('color').value; }));
-$('add-color').addEventListener('click',()=>edit(()=>{
-  state.swatch=state.doc.palette.push('#ffffff')-1;
-  state.doc.swatchIds.push(colors.uniqueId(new Set(state.doc.swatchIds),'slot-'+state.swatch));
-}));
+function swatchTitle(id) {
+  const names = state.doc.swatchLabels;
+  const label = names && Object.hasOwn(names,id) ? names[id] : undefined;
+  return label ? label+' · '+id : id;
+}
+
+function updateRampChoices() {
+  for (const [id,empty] of [['palette-ramp-select','New ramp'],['brush-ramp-id','Manual slots']]) {
+    const select = $(id), previous = select.value, ramps = state.doc.ramps ?? [];
+    select.replaceChildren(new Option(empty,''),...ramps.map(ramp=>new Option(ramp.label ?? ramp.id,ramp.id)));
+    if (ramps.some(ramp=>ramp.id === previous)) select.value = previous;
+  }
+  brushShading();
+}
+
+function showPaletteRamp() {
+  const ramp = state.doc.ramps?.find(row=>row.id === $('palette-ramp-select').value);
+  $('palette-ramp-id').value = ramp?.id ?? '';
+  $('palette-ramp-id').readOnly = !!ramp;
+  $('palette-ramp-name').value = ramp?.label ?? '';
+  $('palette-ramp-order').value = ramp?.swatches.join(', ') ?? '';
+  $('palette-ramp-remove').disabled = !ramp;
+}
+
+function paletteEdit(operation,selected) {
+  const doc = state.doc, active = doc.swatchIds[state.swatch];
+  const { palette,replacements } = palettes.edit(palettes.fromStamp(doc),operation);
+  const swatchIds = palette.swatches.map(row=>row.id), positions = new Map(swatchIds.map((id,i)=>[id,i]));
+  const reindex = doc.swatchIds.map(id=>positions.get(replacements?.get(id) ?? id));
+  const slots = values=>values.map(slot=>slot === null ? null : reindex[slot]);
+  const frames = reindex.every((slot,i)=>slot === i) ? doc.frames : doc.frames.map(frame=>{
+    const { rows,...rest } = frame;
+    return { ...rest,...(rows && { slots:slots(stamp.paint(doc.width,doc.height,{ rows })) }),
+      ...(frame.slots && { slots:slots(frame.slots) }),
+      ...(frame.strokes && { strokes:frame.strokes.map(mark=>({ ...mark,slot:mark.slot === null ? null : reindex[mark.slot] })) }) };
+  });
+  const { swatchLabels,lockedSwatches,ramps,...base } = doc;
+  const roles = doc.swatchRoles && swatchIds.map(id=>doc.swatchRoles[doc.swatchIds.indexOf(id)] ?? null);
+  edit(()=>{
+    state.doc = { ...base,frames,palette:palette.swatches.map(row=>row.color),swatchIds,
+      ...palettes.stampMetadata(palette),...(roles && { swatchRoles:roles }) };
+    state.swatch = positions.get(selected ?? active) ?? positions.get(replacements?.get(active)) ?? 0;
+    resetStroke();
+  });
+}
+
+function commitPalette(operation,selected) {
+  try {
+    paletteEdit(operation,selected);
+    notify('');
+    return true;
+  } catch (error) {
+    selectSwatch(state.swatch);
+    notify(error.message);
+    return false;
+  }
+}
+
+function changeSwatch(change) {
+  commitPalette({ type:'swatch',swatch:{ id:state.doc.swatchIds[state.swatch],...change } });
+}
+$('color').addEventListener('change',()=>changeSwatch({ color:$('color').value }));
+$('swatch-name').addEventListener('change',()=>changeSwatch({ label:$('swatch-name').value.trim() || null }));
+$('swatch-lock').addEventListener('change',()=>changeSwatch({ locked:$('swatch-lock').checked }));
+$('add-color').addEventListener('click',()=>{
+  const id = colors.uniqueId(new Set(state.doc.swatchIds),'slot-'+state.doc.palette.length);
+  commitPalette({ type:'swatch',swatch:{ id,color:'#ffffff' } },id);
+});
+for (const [button,step] of [['swatch-earlier',-1],['swatch-later',1]]) $(button).addEventListener('click',()=>{
+  const order = state.doc.swatchIds.slice(), p = state.swatch, q = p+step;
+  [order[p],order[q]] = [order[q],order[p]];
+  commitPalette({ type:'reorder',order });
+});
+$('swatch-remap').addEventListener('click',()=>{
+  const from = state.doc.swatchIds[state.swatch], to = $('swatch-remap-target').value;
+  if (commitPalette({ type:'remap',map:{ [from]:to },removeSources:$('swatch-remap-remove').checked },to))
+    showPaletteRamp();
+});
+$('palette-ramp-select').addEventListener('change',showPaletteRamp);
+const rampOrder = ()=>$('palette-ramp-order').value.split(',').map(id=>id.trim()).filter(Boolean);
+$('palette-ramp-add').addEventListener('click',()=>{
+  const next = [...new Set([...rampOrder(),state.doc.swatchIds[state.swatch]])];
+  $('palette-ramp-order').value = next.join(', ');
+});
+$('palette-ramp-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  const id = $('palette-ramp-id').value, label = $('palette-ramp-name').value.trim();
+  if (!$('palette-ramp-select').value && state.doc.ramps?.some(ramp=>ramp.id === id)) {
+    notify('Choose the existing ramp before editing it');
+    return;
+  }
+  if (commitPalette({ type:'ramp',ramp:{ id,...(label && { label }),swatches:rampOrder() } })) {
+    $('palette-ramp-select').value = id;
+    showPaletteRamp();
+  }
+});
+$('palette-ramp-remove').addEventListener('click',()=>{
+  if (commitPalette({ type:'remove-ramp',id:$('palette-ramp-select').value })) showPaletteRamp();
+});
+function extractPalette(image) {
+  const options = { size:$('palette-extract-size').valueAsNumber,alpha:$('palette-extract-alpha').value };
+  paletteEdit({ type:'import',palette:palettes.fromExtraction(KIT.palette.extract(image,options)) });
+  notify('Extracted palette');
+}
+$('palette-extract-frame').addEventListener('click',()=>{
+  try {
+    const { width,height,palette,frames } = state.doc, { rows,slots,strokes,alpha } = frames[state.frame];
+    extractPalette(stamp.image({ width,height,palette,rows,slots,strokes,alpha },{ preserveHidden:true }));
+  } catch (error) { notify(error.message); }
+});
+for (const [input,extract] of [['palette-import',false],['palette-extract-png',true]]) $(input).addEventListener('change',async event=>{
+  const [file] = event.target.files, doc = state.doc;
+  if (!file) return;
+  try {
+    const source = extract ? await readPNG(file,true) : JSON.parse(await file.text());
+    if (state.doc !== doc) throw new Error('The stamp changed while opening the palette');
+    if (extract) extractPalette(source);
+    else if (commitPalette({ type:'import',palette:source })) notify('Imported '+file.name);
+  } catch (error) { notify(error.message); }
+  finally { event.target.value = ''; }
+});
+$('palette-export').addEventListener('click',()=>saveJson('palette.json',palettes.fromStamp(state.doc)));
 
 const ink=flowingInk();
 const presets={stone:stonePaint,glint,star:starTwinkle,bubble,library:stamp.clip,body:()=>ink.body,eye:()=>ink.eye,
@@ -1330,10 +1469,10 @@ function saveJson(filename,data) {
   download(filename,new Blob([JSON.stringify(data,null,2)],{ type:'application/json' }));
 }
 $('export-png').addEventListener('click',async()=>{
-  const { width,height,palette,swatchIds,frames } = state.doc;
+  const { width,height,palette,swatchIds,swatchLabels,lockedSwatches,ramps,frames } = state.doc;
   const index = state.frame, current = frames[index], name = $('preset').value;
   try {
-    const png = await savePNG({ width,height,palette,swatchIds,slots:stamp.paint(width,height,current),
+    const png = await savePNG({ width,height,palette,swatchIds,swatchLabels,lockedSwatches,ramps,slots:stamp.paint(width,height,current),
       alpha:current.alpha,knockouts:current.knockouts },$('png-color-mode').value);
     download(`${name}-frame-${index+1}.png`,png);
   } catch (error) { notify(error.message); }

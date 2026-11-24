@@ -42,6 +42,7 @@ function resolve(design, name = 'raster') {
   const destination = (design.version === 2 && design.destinations?.find(target => target.id === name)) ||
     (name === 'raster' && { id:name,kind:name }) ||
     (['canvas','document:canvas'].includes(name) && { id:'canvas',kind:'canvas' }) ||
+    (['palette','document:palette'].includes(name) && { id:'palette',kind:'palette' }) ||
     (design.version === 2 && ['guides','selections'].includes(name) && { id:name, kind:name });
   if (!destination) throw conflict('unknown-destination','Unknown pixel edit destination ' + name,{ destination:name });
   const binding = destination.binding && design.sceneBindings.find(item => item.id === destination.binding);

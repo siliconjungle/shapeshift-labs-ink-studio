@@ -326,6 +326,59 @@ zero-alpha pigment and knockouts. PNG import opens a single editable layer
 named `image`. Keep the source document for its full layer stack, animation,
 and scene bindings.
 
+### Edit palettes and ramps
+
+A version 2 document accepts a hex string or an object such as
+`{"color":"#415364","label":"Steel shadow","locked":true}` for each
+swatch. The key is its stable ID. `ramps` holds named, ordered lists of two
+or more distinct swatch IDs, separate from the palette's display order.
+For a shading brush, use `{"mode":"ramp","ramp":"steel","step":1}` to
+reference a named ramp. An inline swatch list also works.
+
+Send a revision-checked patch to the `palette` destination. Omit `frame`
+and `cel` because the edit applies to all frames.
+
+```json
+{
+  "id": "update-steel",
+  "revision": "<document revision>",
+  "destination": "palette",
+  "operation": {
+    "type": "ramp",
+    "ramp": { "id": "steel", "label": "Brushed steel", "swatches": ["shadow", "mid", "light"] }
+  }
+}
+```
+
+| Operation | Fields and behavior |
+| --- | --- |
+| `swatch` | `swatch: {id, color?, label?, locked?}`. New IDs require RGB. Use `label: null` to clear a name. |
+| `ramp` | `ramp: {id, label?, swatches}`. Save or replace a ramp in the specified order. |
+| `remove-ramp` | `id`. Remove a named ramp. |
+| `reorder` | `order`. List every current swatch ID once. Pixels and named ramps follow their IDs. |
+| `remap` | `map: {source: target}` and optional `removeSources: true`. Replace the source IDs simultaneously across slots and marks, including hidden paint. Removing a source also updates ramp references. A ramp must still have at least two distinct swatches. |
+| `import` | `palette`. Merge a palette asset by ID. An existing ID with a different RGB or ramp order is a conflict. |
+
+A locked swatch can be named, reordered, painted with, and used as a
+remap target. Unlock it before changing its RGB or remapping it away.
+Preview, replay, and undo use the normal pixel document transaction.
+Use `document:palette` if the document already defines a destination
+named `palette`.
+
+```sh
+node cli/ink-studio.js pixel-art palette export design.json --out palette.json
+node cli/ink-studio.js pixel-art palette extract reference.png --size 16 --alpha visible --out extracted.json
+node cli/ink-studio.js pixel-art palette import design.json extracted.json --out expanded.json
+```
+
+Palette files use `ink-studio/pixel-palette` version 1, with ordered
+`swatches` and named `ramps`. Extraction also accepts a pixel document
+with optional `--frame` and `--layer`. RGB extraction reduces to
+the requested size when needed. Indexed PNG extraction preserves the
+order and distinct indices of swatches that pass the alpha filter.
+`editor.palette()` returns the same portable asset. Ink stamp JSON and
+Ink PNG metadata also carry swatch names, locks, and ramps.
+
 ### Symmetry and wraparound
 
 Add `operation.drawing` to any raster-tool patch to mirror or wrap its stroke.

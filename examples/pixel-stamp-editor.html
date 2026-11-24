@@ -256,9 +256,10 @@
             <option value="alpha">Set alpha</option>
           </select></label>
           <div class="guide-controls" id="brush-ramp-controls" hidden>
+            <label>Saved ramp<select id="brush-ramp-id"><option value="">Manual slots</option></select></label>
             <label>Ramp swatches (dark to light)<input id="brush-ramp" type="text" value="1, 2, 3"></label>
             <div class="row canvas-size">
-              <label>Step<input id="brush-ramp-step" type="number" min="-47" max="47" step="1" value="1"></label>
+              <label>Step<input id="brush-ramp-step" type="number" min="-254" max="254" step="1" value="1"></label>
               <button type="button" id="brush-ramp-add">Add active swatch</button>
             </div>
           </div>
@@ -369,7 +370,50 @@
         <h2>Palette</h2>
         <div class="palette" id="palette" aria-label="Paint swatches"></div>
         <label class="side-label"><span id="swatch-label">Active swatch</span><input type="color" id="color"></label>
-        <button id="add-color">Add swatch</button>
+        <label class="side-label">Swatch name<input id="swatch-name" type="text"></label>
+        <label class="side-label">Lock color<input id="swatch-lock" type="checkbox"></label>
+        <div class="row">
+          <button id="add-color">Add swatch</button>
+          <button id="swatch-earlier">Move earlier</button>
+          <button id="swatch-later">Move later</button>
+        </div>
+        <details class="selection-group">
+          <summary>Remap swatch</summary>
+          <div class="guide-controls">
+            <label>Replace active swatch with<select id="swatch-remap-target"></select></label>
+            <label><span>Remove source swatch</span><input id="swatch-remap-remove" type="checkbox"></label>
+            <button id="swatch-remap">Remap all frames</button>
+          </div>
+        </details>
+        <details class="selection-group">
+          <summary>Palette ramps</summary>
+          <form id="palette-ramp-form" class="guide-controls">
+            <label>Ramp<select id="palette-ramp-select"><option value="">New ramp</option></select></label>
+            <label>Ramp ID<input id="palette-ramp-id" type="text" required pattern="[a-z][a-z0-9\-]{0,63}"></label>
+            <label>Name<input id="palette-ramp-name" type="text"></label>
+            <label>Swatch IDs in order<input id="palette-ramp-order" type="text" required placeholder="shadow, midtone, light"></label>
+            <div class="row">
+              <button id="palette-ramp-add" type="button">Add active swatch</button>
+              <button type="submit">Save ramp</button>
+              <button id="palette-ramp-remove" type="button" disabled>Remove ramp</button>
+            </div>
+          </form>
+        </details>
+        <details class="selection-group">
+          <summary>Palette files</summary>
+          <div class="guide-controls">
+            <div class="row">
+              <label class="file-button">Import palette<input type="file" id="palette-import" accept=".json,application/json"></label>
+              <button id="palette-export">Export palette</button>
+            </div>
+            <label>RGB extraction size<input id="palette-extract-size" type="number" min="1" max="255" step="1" value="16"></label>
+            <label>Sample alpha<select id="palette-extract-alpha"><option value="visible">Visible</option><option value="opaque">Opaque</option><option value="all">All</option></select></label>
+            <div class="row">
+              <button id="palette-extract-frame">Extract from frame</button>
+              <label class="file-button">Extract from PNG<input type="file" id="palette-extract-png" accept=".png,image/png"></label>
+            </div>
+          </div>
+        </details>
       </section>
       <section>
         <h2>Timing</h2>

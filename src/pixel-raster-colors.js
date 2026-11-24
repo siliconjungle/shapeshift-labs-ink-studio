@@ -1,7 +1,9 @@
 /* Keep the editable index plane independent of straight RGBA display bytes. */
 const PixelRasterColors = (() => {
   const limit = 255;
-  const metadataLimit = pixels => pixels*14+32_768;
+  const metadataLimit = pixels => pixels*14+8_388_608;
+  const paletteTools = () => typeof module !== 'undefined' ? require('./pixel-palette.js') :
+    globalThis[Symbol.for('ink-studio.pixel-palette')];
   const byte = n => Number.isInteger(n) && n >= 0 && n <= 255;
   const hex = n => '#' + n.toString(16).padStart(6,'0');
   const rgb = color => typeof color === 'string' && /^#[a-f\d]{6}$/i.test(color);
@@ -49,7 +51,7 @@ const PixelRasterColors = (() => {
     return { palette,resolve };
   }
 
-  function normalize({ width,height,palette,swatchIds:ids,slots,alpha,knockouts }) {
+  function normalize({ width,height,palette,swatchIds:ids,slots,alpha,knockouts,swatchLabels,lockedSwatches,ramps }) {
     if (![width,height].every(n=>Number.isInteger(n) && n >= 1 && n <= 512) ||
         !Array.isArray(palette) || !palette.length || palette.length > width*height+limit ||
         !Array.from(palette).every(rgb) || !Array.isArray(slots) || slots.length !== width*height ||
@@ -59,7 +61,14 @@ const PixelRasterColors = (() => {
     if (knockouts !== undefined && (!Array.isArray(knockouts) ||
         !Array.from(knockouts).every((p,i)=>slots[p] === null && Number.isInteger(p) && (i === 0 || p > knockouts[i-1]))))
       throw new TypeError('Knockouts must be sorted locations of transparent pixels');
-    return { width,height,palette,swatchIds:swatchIds(palette,ids),slots,alpha,knockouts };
+    ids = swatchIds(palette,ids);
+    let metadata;
+    if (swatchLabels !== undefined || lockedSwatches !== undefined || ramps !== undefined) {
+      const tools = paletteTools();
+      metadata = tools.stampMetadata(tools.fromStamp(
+        { palette,swatchIds:ids,swatchLabels,lockedSwatches,ramps },{ max:width*height+limit }));
+    }
+    return { width,height,palette,swatchIds:ids,slots,alpha,knockouts,metadata };
   }
 
   function straight({ palette,slots,alpha }) {
@@ -112,10 +121,11 @@ const PixelRasterColors = (() => {
 
   function encode(raster,colorMode = 'auto') {
     if (!['auto','indexed','rgba'].includes(colorMode)) throw new TypeError('Choose auto, indexed, or rgba PNG color mode');
-    const paint = normalize(raster), { width,height,palette,swatchIds:ids,slots,knockouts } = paint;
+    const paint = normalize(raster), { width,height,palette,swatchIds:ids,slots,knockouts,metadata } = paint;
     const png = colorMode === 'rgba' ? undefined : indexed(paint);
     if (colorMode === 'indexed' && !png) throw new RangeError('An exact indexed PNG needs at most 256 color/alpha entries');
-    const ink = new TextEncoder().encode(JSON.stringify({ version:1,palette,swatchIds:ids,slots,knockouts }));
+    const ink = new TextEncoder().encode(JSON.stringify({ version:1,palette,swatchIds:ids,slots,knockouts,...metadata }));
+    if (ink.length > metadataLimit(slots.length)) throw new RangeError('Ink PNG palette metadata exceeds the export budget');
     return png ? { width,height,...png,channels:1,ink } :
       { width,height,pixels:straight(paint),channels:4,ink };
   }
@@ -127,12 +137,12 @@ const PixelRasterColors = (() => {
     const scale = pngPalette ? 1 : 255/source.max;
     const sample = pngPalette ? p=>[pngPalette[source.value.data[p]],source.alpha.data[p]] :
       p=>[fromBytes(source.data[p*4]*scale,source.data[p*4+1]*scale,source.data[p*4+2]*scale),source.data[p*4+3]*scale];
-    let palette, ids, slots, alpha, knockouts;
+    let palette, ids, slots, alpha, knockouts, metadata;
     if (source.ink) {
       // Check that the editable metadata still describes the actual PNG samples.
       const record = JSON.parse(new TextDecoder('utf-8',{ fatal:true }).decode(source.ink));
       if (record?.version !== 1) throw new TypeError('Unsupported Ink PNG palette metadata');
-      ({ palette,slots,swatchIds:ids,knockouts } = normalize({ ...record,width,height }));
+      ({ palette,slots,swatchIds:ids,knockouts,metadata } = normalize({ ...record,width,height }));
       if (palette.length > limit) throw new RangeError('Exact color editing needs at most '+limit+' swatches');
       alpha = slots.map((slot,p)=>{
         const [color,value] = sample(p);
@@ -160,7 +170,7 @@ const PixelRasterColors = (() => {
       ids = editor.palette.map(row=>row.id);
       if (!palette.length) { palette.push('#000000'); ids.push('rgb-000000'); }
     }
-    return { width,height,origin:'top-left',palette,swatchIds:swatchIds(palette,ids),slots,
+    return { width,height,origin:'top-left',palette,swatchIds:swatchIds(palette,ids),slots,...metadata,
       ...(alpha.some(value=>value !== 255) && { alpha }),...(knockouts?.length && { knockouts }) };
   }
 

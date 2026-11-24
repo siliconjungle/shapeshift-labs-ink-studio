@@ -12,6 +12,8 @@ const PixelSelections = require('../src/pixel-selections.js');
 const PixelTransforms = require('../src/pixel-selection-transforms.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const PixelColors = require('../src/pixel-raster-colors.js');
+const PixelPalette = require('../src/pixel-palette.js');
+const PaletteExtract = require('../src/palette-extract.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
 const Critic = require('./critic.js');
@@ -42,12 +44,21 @@ const swatchColor = value => typeof value === 'string' ? value : value?.color;
 function paletteEntries(palette, version) {
   const entries = Object.entries(palette);
   if (!integer(entries.length,1,255) || entries.some(([id,value]) => !name(id) ||
-      (typeof value !== 'string' && !(version === 2 && fields(value,['color','label']) && label(value.label))) ||
+      (typeof value !== 'string' && !(version === 2 && fields(value,['color','label','locked']) && label(value.label) &&
+        (value.locked === undefined || typeof value.locked === 'boolean'))) ||
       typeof swatchColor(value) !== 'string' || !/^#[\da-f]{6}$/i.test(swatchColor(value))))
     throw new TypeError('Pixel palettes need 1–255 RGB swatches keyed by stable ID');
-  return entries.map(([id,value]) => ({
-    id, color:swatchColor(value), ...(typeof value !== 'string' && value.label !== undefined && { label:value.label })
-  }));
+  return entries.map(([id,value]) => ({ id,color:swatchColor(value),
+    ...(value.label !== undefined && { label:value.label }),...(value.locked && { locked:true }) }));
+}
+
+function paletteAsset(design) {
+  return PixelPalette.asset(paletteEntries(design.palette,design.version),design.version === 2 ? design.ramps : undefined);
+}
+
+function paletteDefinition(swatches) {
+  return Object.fromEntries(swatches.map(({ id,color,label,locked })=>[id,
+    label === undefined && !locked ? color : { color,...(label !== undefined && { label }),...(locked && { locked:true }) }]));
 }
 
 function namedRegions(regions, kind, width, height, frames) {
@@ -80,8 +91,9 @@ function documentShape(design) {
 
   const { pixelAspect,frames,selections,protectedDetails,sceneBindings = [],destinations,guides,legacyMetadata } = design;
   if (!fields(design,['format','version','width','height','pixelAspect','palette','layers','frames',
-    'selections','protectedDetails','sceneBindings','destinations','guides','legacyMetadata']))
+    'selections','protectedDetails','sceneBindings','destinations','guides','ramps','legacyMetadata']))
     throw new TypeError('Unknown pixel document field');
+  if (design.ramps !== undefined) paletteAsset(design);
   if (legacyMetadata !== undefined && !record(legacyMetadata)) throw new TypeError('Legacy pixel metadata must be an object');
   if (!Array.isArray(pixelAspect) || pixelAspect.length !== 2 ||
       !integer(pixelAspect[0],1,Number.MAX_SAFE_INTEGER) || !integer(pixelAspect[1],1,Number.MAX_SAFE_INTEGER))
@@ -278,7 +290,7 @@ function composite(width,height,entries,layers,capture) {
 
 function compileFrame(design, frame, revision, palette,capture) {
   const { width,height,layers } = design;
-  if (!frame) return { ...composite(width,height,palette,layers,capture), revision };
+  if (!frame) return { ...composite(width,height,palette,layers,capture), revision,paletteEntries:palette };
   const cels = new Map();
   const stack = layers.map(layer => {
     const { id,clip,protect } = layer;
@@ -291,7 +303,7 @@ function compileFrame(design, frame, revision, palette,capture) {
     if (detail.frame !== undefined && detail.frame !== frame.id) continue;
     for (const [x,y] of detail.pixels) raster.locks[y*width+x] = 1;
   }
-  return { ...raster, cels, revision, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice(),
+  return { ...raster, cels, revision,paletteEntries:palette,ramps:design.ramps, id:frame.id, durationMs:frame.durationMs, pixelAspect:design.pixelAspect.slice(),
     ...(design.guides && { guides:PixelGuides.active(design.guides,frame.id) }),
     ...(design.sceneBindings?.length && { sceneBindings:design.sceneBindings.filter(row=>row.frame === undefined || row.frame === frame.id) }),
     ...(design.selections && { selections:design.selections.filter(row=>row.frame === undefined || row.frame === frame.id) }) };
@@ -334,6 +346,7 @@ function validate(design) {
     pixelAspect:design.version === 1 ? [1,1] : design.pixelAspect, frames:frames.map(frame => ({
       id:frame?.id ?? null, durationMs:frame?.durationMs ?? null, ...(frame?.label !== undefined && { label:frame.label })
     })), ...(identities && { identities }),
+    ...(design.version === 2 && design.ramps !== undefined && { ramps:structuredClone(design.ramps) }),
     ...(design.version === 2 && design.guides && { guides:structuredClone(design.guides) }),
     ...(design.version === 2 && design.destinations !== undefined && { destinations:design.destinations }) };
 }
@@ -577,11 +590,12 @@ function edit(design, frame, patch, context) {
     { expected:frame.revision, actual:revision });
   const route = Destinations.resolve(design,patch.destination);
   if (design.version === 2 && patch.frame !== frame.id &&
-      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas'].includes(route.destination.kind))))
+      (patch.frame !== undefined || (patch.cel === undefined && !['guides','canvas','palette'].includes(route.destination.kind))))
     throw Preview.conflict('wrong-frame','Pixel edit needs the observed frame ID',{ expected:patch.frame, actual:frame.id });
   if (patch.sourceRevision !== undefined && (!route.binding || !isRevision(patch.sourceRevision)))
     throw Preview.conflict('invalid-source-revision','An inspected sourceRevision must be a SHA-256 digest for a scene destination');
   if (route.destination.kind === 'canvas') return editCanvas(design,patch,context);
+  if (route.destination.kind === 'palette') return editPalette(design,patch,context);
   if (route.destination.kind === 'guides') return editGuides(design,patch);
   if (route.destination.kind === 'selections') return editSelection(design,frame,patch,context);
   if (route.destination.kind !== 'raster') {
@@ -710,7 +724,8 @@ function editRasterTool(design,frame,patch,destination,context) {
   const report = context?.onEditTarget ?? context?.onRasterTool;
   report?.({ destination:destination.id, kind:'raster', tool,frame:frame.id ?? null, layer,
     cel:cel ?? null, ...(pixelPerfect && { pixelPerfect }), ...(precise && { shape:shape.type }),
-    ...(shading !== undefined && { shading:shading.mode }), ...(grid && { drawing }),
+    ...(shading !== undefined && { shading:shading.mode }),
+    ...(shading?.mode === 'ramp' && typeof shading.ramp === 'string' && { ramp:shading.ramp }), ...(grid && { drawing }),
     ...(selection !== undefined && { selection }),
     ...(added.length && { addedSwatches:added.map(entry=>entry.id) }), pixelCount:changed.length,runs });
   if (!runs.length) return design;
@@ -829,7 +844,14 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
   const emit = (p,slot) => { if (inside(p)) stamps.set(p,slot); };
   if (samples === undefined) PixelBrushes.stroke(width,height,PixelBrushes.footprint(brush),points,emit,grid);
   else PixelBrushes.dynamicStroke(width,height,brush,samples,emit,grid);
-  const resolve = shading === undefined ? null : PixelBrushes.shade(shading,frame.swatches);
+  let ramp = shading?.ramp;
+  if (shading?.mode === 'ramp' && typeof ramp === 'string') {
+    const named = frame.ramps?.find(row=>row.id === ramp);
+    if (!named) throw new RangeError('Unknown palette ramp '+ramp);
+    ramp = named.swatches;
+  }
+  const resolve = shading === undefined ? null : PixelBrushes.shade(
+    shading.mode === 'ramp' ? { ...shading,ramp } : shading,frame.swatches);
   if (resolve) {
     for (const p of stamps.keys()) {
       const value = resolve(current[p],alpha?.[p] ?? 255);
@@ -861,6 +883,39 @@ function brushChanges(design,frame,brush,override,{ points,samples,shading },{ s
   }
   return { changed,added:palette.slice(original.length),
     marks:[...bySwatch].map(([swatch,pixels])=>({ swatch,runs:RasterTools.runs(width,pixels) })) };
+}
+
+function editPalette(design,patch,context) {
+  if (design.version !== 2) throw new TypeError('Upgrade the document to version 2 before editing the palette');
+  if (patch.edits !== undefined || patch.frame !== undefined || patch.cel !== undefined)
+    throw new TypeError('Palette edits apply to the whole document');
+  const before = paletteAsset(design), { operation } = patch;
+  const { palette,replacements,removed } = PixelPalette.edit(before,operation);
+  const prior = new Map(before.swatches.map(row=>[row.id,row])), definition = paletteDefinition(palette.swatches);
+  for (const row of palette.swatches) if (equal(prior.get(row.id),row)) definition[row.id] = design.palette[row.id];
+  const revised = { ...design,palette:definition };
+  if (palette.ramps.length || design.ramps !== undefined) revised.ramps = palette.ramps;
+  let remappedCels = 0;
+  if (replacements) {
+    const replace = swatch=>replacements.get(swatch) ?? swatch;
+    revised.frames = design.frames.map(frame=>{
+      let changed = false;
+      const cels = Object.entries(frame.cels).map(([id,cel])=>{
+        if (!cel.slots?.some(slot=>replacements.has(slot)) &&
+            !cel.marks.some(mark=>replacements.has(mark.swatch))) return [id,cel];
+        changed = true;
+        remappedCels++;
+        return [id,{ ...cel,
+          ...(cel.slots && { slots:cel.slots.map(replace) }),
+          marks:cel.marks.map(mark=>replacements.has(mark.swatch) ? { ...mark,swatch:replace(mark.swatch) } : mark) }];
+      });
+      return changed ? { ...frame,cels:Object.fromEntries(cels) } : frame;
+    });
+  }
+  validate(revised);
+  context?.onEditTarget?.({ destination:'palette',kind:'palette',tool:operation.type,
+    before,after:palette,...(replacements && { remappedCels,map:Object.fromEntries(replacements),removed }) });
+  return revised;
 }
 
 function editCanvas(design,patch,context) {
@@ -1014,7 +1069,7 @@ function editWithReceipt(design, patch, context, { runner, options, frameId, sho
         { expected:expected.inputs.documentRevision, actual:documentRevision });
     const frame = compile(design,frameId,patch?.cel);
     const route = Destinations.resolve(design,patch?.destination), { destination,binding } = route;
-    command.frame = destination.kind === 'canvas' ? null : frame.id ?? null;
+    command.frame = ['canvas','palette'].includes(destination.kind) ? null : frame.id ?? null;
     if (shotHitFrame !== undefined && (destination.kind !== 'shot-correction' || !integer(shotHitFrame,0,1e9)))
       throw new TypeError('A shot hit sample needs a shot-correction edit and a nonnegative shot frame');
     const result = edit(design,frame,patch,{
@@ -1243,7 +1298,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     const request = structuredClone(patch);
     if (legacyRevision !== null && request?.revision === legacyRevision) {
       request.revision = fingerprint(design);
-      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas'].includes(request.destination))
+      if (request.frame === undefined && request.cel === undefined && !['canvas','document:canvas','palette','document:palette'].includes(request.destination))
         request.frame = 'artwork';
     }
     return request;
@@ -1321,7 +1376,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index) });
       }
       const [painted] = receipt.affectedTargets;
-      if (['canvas','selections'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
+      if (['canvas','palette','selections'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
     const targets = [...targetsByKey.values()];
     let candidate = state().design, scene = sceneEditor?.snapshot(), issues = [];
@@ -1342,6 +1397,9 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     snapshot: () => structuredClone(state().design),
     serialize: (space = 2) => JSON.stringify(state().design,null,space),
     describe: () => validate(state().design),
+    palette: () => structuredClone(paletteAsset(state().design)),
+    extractPalette: ({ frame,layer,...options } = {})=>extractPalette(
+      stampImage(stamp(compile(state().design,frame,undefined,layer),layer),{ preserveHidden:true }),options),
     inspect: (coordinate,{ frame,cel } = {}) => inspect(compile(state().design,frame,cel),coordinate),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
@@ -1421,6 +1479,7 @@ function stamp(frame,layer) {
   const alpha = raw ? raw.alpha : frame.opacity;
   const knockouts = raw && Array.from(raw.slots).flatMap((slot,p)=>slot === -2 ? [p] : []);
   return { width:frame.width,height:frame.height,origin:'top-left',palette,swatchIds:ids,slots,
+    ...PixelPalette.stampMetadata({ swatches:frame.paletteEntries,ramps:frame.ramps }),
     ...(alpha && { alpha:Array.from(alpha,(a,p)=>slots[p] === null ? 255 : a) }),
     ...(knockouts?.length && { knockouts }),
     ...(frame.guides?.length && { guides:structuredClone(frame.guides) }),
@@ -1429,7 +1488,8 @@ function stamp(frame,layer) {
 }
 
 function documentFromPNG(file) {
-  const { width,height,palette,swatchIds,slots,alpha,knockouts } = PNG.paintRaster(file);
+  const image = PNG.paintRaster(file), { width,height,swatchIds,slots,alpha,knockouts } = image;
+  const palette = PixelPalette.fromStamp(image);
   const byAlpha = new Map(), marks = [];
   for (let p = 0; p < slots.length; p++) {
     const value = alpha?.[p] ?? 255;
@@ -1440,7 +1500,7 @@ function documentFromPNG(file) {
   for (const [coverage,indices] of byAlpha) marks.push({ alpha:coverage,runs:RasterTools.runs(width,indices) });
   if (knockouts?.length) marks.push({ swatch:null,runs:RasterTools.runs(width,knockouts) });
   return { format,version:2,width,height,pixelAspect:[1,1],
-    palette:Object.fromEntries(palette.map((color,i)=>[swatchIds[i],color])),
+    palette:paletteDefinition(palette.swatches),...(palette.ramps.length && { ramps:palette.ramps }),
     layers:[{ id:'image' }],frames:[{ id:'artwork',durationMs:100,
       cels:{ image:{ slots:slots.map(slot=>slot === null ? null : swatchIds[slot]),marks } } }] };
 }
@@ -1598,7 +1658,43 @@ function trace(frame, object, scene) {
   return design;
 }
 
+function extractPalette(image,options) {
+  return PixelPalette.fromExtraction(PaletteExtract.extract(image,options));
+}
+
+function paletteCommand(pos,opt) {
+  const [action,source,input] = pos;
+  if (!['export','extract','import'].includes(action) || pos.length !== (action === 'import' ? 3 : 2) ||
+      typeof opt.out !== 'string' || !opt.out.trim())
+    throw new TypeError('Use pixel-art palette export <document.json>, extract <image.png|document.json>, or import <document.json> <palette.json> with --out');
+  const out = path.resolve(opt.out);
+  if ([source,input].some(file=>file && path.resolve(file) === out))
+    throw new RangeError('Write the palette result separately from its inputs');
+  if (action === 'extract') {
+    const options = { size:opt.size === undefined ? undefined : typeof opt.size === 'string' ? Number(opt.size) : NaN,
+      alpha:opt.alpha };
+    const image = /\.json$/i.test(source)
+      ? stampImage(stamp(compile(read(source),opt.frame,undefined,opt.layer),opt.layer),{ preserveHidden:true })
+      : PNG.paletteSource(source);
+    files.json(out,extractPalette(image,options));
+    return;
+  }
+  if (action === 'export') {
+    const design = read(source);
+    documentShape(design);
+    files.json(out,paletteAsset(design));
+    return;
+  }
+  const design = read(source);
+  const patch = { id:'import-palette',revision:fingerprint(design),destination:'document:palette',
+    operation:{ type:'import',palette:read(input) } };
+  const { result,receipt } = editWithReceipt(design,patch,{}, { runner:'cli',options:{} });
+  files.json(out,result);
+  process.stdout.write(JSON.stringify(receipt,null,2)+'\n');
+}
+
 function command(pos,opt,outputFile,{ capture, world, scene }) {
+  if (pos[0] === 'palette') return paletteCommand(pos.slice(1),opt);
   const [action, source, patch] = pos;
   const writing = action === 'edit' || action === 'replay';
   if (!['trace','import','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy','preview','edit','replay'].includes(action) ||

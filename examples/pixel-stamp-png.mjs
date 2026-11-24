@@ -1,6 +1,7 @@
 import * as chunks from '../src/png-bytes.js';
 import * as reader from '../src/png-raster.js';
 import * as raster from '../src/pixel-raster-colors.js';
+import '../src/pixel-palette.js';
 
 const png = chunks.default ?? globalThis[Symbol.for('ink-studio.png-bytes')];
 const decode = (reader.default ?? globalThis[Symbol.for('ink-studio.png-raster')]).decode;
@@ -8,19 +9,22 @@ export const colors = raster.default ?? globalThis[Symbol.for('ink-studio.pixel-
 
 async function inflate(parts,maxBytes) {
   const stream = new Blob(parts).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
-  const bytes = new Uint8Array(maxBytes);
+  const chunks = [];
   let offset = 0;
   while (true) {
     const { done,value } = await stream.read();
     if (done) break;
-    if (offset+value.length > bytes.length) {
+    if (offset+value.length > maxBytes) {
       await stream.cancel();
       throw new Error('Invalid PNG scanline length');
     }
-    bytes.set(value,offset);
+    chunks.push(value);
     offset += value.length;
   }
-  return bytes.subarray(0,offset);
+  const bytes = new Uint8Array(offset);
+  offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk,offset); offset += chunk.length; }
+  return bytes;
 }
 
 async function deflate(bytes) {
@@ -28,10 +32,14 @@ async function deflate(bytes) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-export async function openPNG(file) {
-  const input = decode(new Uint8Array(await file.arrayBuffer()),'paint');
+export async function readPNG(file,mode) {
+  const input = decode(new Uint8Array(await file.arrayBuffer()),mode);
   const { parts,scanlineSize } = input.next().value;
-  const source = input.next(await inflate(parts,scanlineSize)).value;
+  return input.next(await inflate(parts,scanlineSize)).value;
+}
+
+export async function openPNG(file) {
+  const source = await readPNG(file,'paint');
   if (source.ink) {
     const width = source.w ?? source.value.width, height = source.h ?? source.value.height;
     source.ink = await inflate([source.ink],colors.metadataLimit(width*height));

@@ -659,6 +659,54 @@ test('the workshop pans without editing, keeps the 1× view live, and resizes wi
     assert.deepEqual(editable.frames[0].slots,reopened.slots);
     assert.deepEqual(editable.frames[0].alpha,reopened.alpha);
 
+    await click(browser,'#palette button:nth-child(1)');
+    await change('swatch-name','Brass base');
+    await click(browser,'#swatch-lock');
+    await change('color','#000000');
+    assert.equal(await browser.evaluate("document.querySelector('#status').textContent"),'Swatch brass is locked');
+    assert.equal(await browser.evaluate("document.querySelector('#color').value"),'#cb4519');
+    await evaluate(browser,()=>{
+      for (const id of ['palette-ramp-form','swatch-remap','palette-export'])
+        document.getElementById(id).closest('details').open = true;
+    });
+    await change('palette-ramp-id','metal');
+    await change('palette-ramp-name','Warm metal');
+    await change('palette-ramp-order','rgb-112233, accent, brass');
+    await click(browser,'#palette-ramp-form button[type=submit]');
+    await change('brush-mode','ramp');
+    await change('brush-ramp-id','metal');
+    assert.equal(await browser.evaluate("document.querySelector('#brush-ramp').disabled"),true);
+    await click(browser,'#swatch-later');
+    const ordered = await download('#export');
+    assert.deepEqual(ordered.swatchIds,['accent','brass','rgb-112233']);
+    assert.deepEqual(ordered.frames[0].slots,[1,0,1,2,null,0]);
+    assert.deepEqual(ordered.ramps[0].swatches,['rgb-112233','accent','brass']);
+    assert.deepEqual(ordered.frames[0].alpha,editable.frames[0].alpha);
+    await click(browser,'#palette button:nth-child(1)');
+    await change('swatch-remap-target','rgb-112233');
+    await click(browser,'#swatch-remap-remove');
+    await click(browser,'#swatch-remap');
+    const remapped = await download('#export');
+    assert.deepEqual(remapped.swatchIds,['brass','rgb-112233']);
+    assert.deepEqual(remapped.ramps[0].swatches,['rgb-112233','brass']);
+    assert.deepEqual(remapped.frames[0].slots,[0,1,0,1,null,1]);
+
+    const exportedPalette = await download('#palette-export');
+    const paletteFile = path.join(directory,'saved-palette.json');
+    fs.writeFileSync(paletteFile,JSON.stringify(exportedPalette));
+    await change('preset','blank');
+    const paletteInput = await browser.send('DOM.querySelector',{ nodeId:doc.root.nodeId,selector:'#palette-import' });
+    await browser.send('DOM.setFileInputFiles',{ nodeId:paletteInput.nodeId,files:[paletteFile] });
+    await until(browser,"document.querySelector('#status').textContent === 'Imported saved-palette.json'");
+    const importedPalette = await download('#palette-export');
+    assert.deepEqual(importedPalette.swatches.slice(-2),exportedPalette.swatches);
+    assert.deepEqual(importedPalette.ramps,exportedPalette.ramps);
+    const extractInput = await browser.send('DOM.querySelector',{ nodeId:doc.root.nodeId,selector:'#palette-extract-png' });
+    await browser.send('DOM.setFileInputFiles',{ nodeId:extractInput.nodeId,files:[editedPNG] });
+    await until(browser,"document.querySelector('#status').textContent === 'Extracted palette'");
+    assert.ok((await download('#palette-export')).swatches.some(row=>row.id === 'extracted-cb4519-slot-1'));
+
+
 
   });
 });
