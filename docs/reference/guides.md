@@ -189,6 +189,7 @@ All checked-in guides, indexed by title and section headings.
 - [Two-way material conversion](../material-conversion.md)
 - [Seasonal and wear histories](../material-histories.md)
 - [Material-point passes and impacts](../material-point-impacts.md)
+- [Portable material response recipes](../material-response.md)
 - [Surface materialisation](../materialisation.md)
 - [Procedural math fields](../math-fields.md)
 - [UV and seam inspection](../mesh-uv.md)

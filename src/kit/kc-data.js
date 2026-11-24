@@ -544,6 +544,14 @@
         bad('finish.surfaceEffects', error.message);
       }
     }
+    if (st.finish.materialResponse !== undefined) {
+      try {
+        const { recipe, contacts } = st.finish.materialResponse;
+        K.materialResponse.create(recipe, { contacts }).bind({ look: st.finish.look });
+      } catch (error) {
+        bad('finish.materialResponse', error.message);
+      }
+    }
     try {
       bakedShadowMarch(st.finish.shadowMarch);
     } catch (error) {

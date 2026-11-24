@@ -45,6 +45,10 @@ uniform bool u_reflectX;
 uniform vec4 u_rect, u_layerDest;
 uniform ivec4 u_layerRegion;
 uniform bool u_layerTopDown;
+uniform bool u_layerProjected;
+uniform vec3 u_chartOrigin, u_chartU, u_chartV, u_chartNormal;
+uniform vec4 u_chartBounds;
+uniform float u_chartReach;
 uniform vec3 u_volumeAt, u_extent, u_eye;
 uniform vec2 u_depthRange, u_projectionScale;
 uniform mat4 u_view;
@@ -73,6 +77,28 @@ float depthAt(vec2 pixel) {
   ivec2 site = min(ivec2(pixel / u_size * vec2(size)), size - 1);
   vec4 value=texelFetch(u_depth, ivec2(site.x, size.y - 1 - site.y), 0);
   return u_packedDepth ? (value.a<.5 ? 1.0 : dot(round(value.rgb*255.0),vec3(1.0,256.0,65536.0))/16777215.0) : value.r;
+}
+
+vec3 worldAt(vec2 pixel, float depth) {
+  ivec2 size = textureSize(u_depth, 0);
+  ivec2 site = min(ivec2(pixel / u_size * vec2(size)), size - 1);
+  vec2 uv = (vec2(site) + .5) / vec2(size);
+  vec2 plane = (uv * vec2(2.0, -2.0) + vec2(-1.0, 1.0)) * u_projectionScale;
+  vec3 local = vec3(plane * (u_ortho ? 1.0 : depth), -depth);
+  return u_eye + vec3(dot(u_view[0].xyz, local), dot(u_view[1].xyz, local), dot(u_view[2].xyz, local));
+}
+
+vec4 projectedLayerAt(vec2 pixel) {
+  if (!u_hasDepth) return vec4(0.0);
+  float normalized = depthAt(pixel);
+  if (normalized >= 1.0) return vec4(0.0);
+  vec3 offset = worldAt(pixel, mix(u_depthRange.x, u_depthRange.y, normalized)) - u_chartOrigin;
+  if (abs(dot(offset, u_chartNormal)) > u_chartReach) return vec4(0.0);
+  vec2 uv = (vec2(dot(offset, u_chartU), dot(offset, u_chartV)) - u_chartBounds.xy) /
+    (u_chartBounds.zw - u_chartBounds.xy);
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) return vec4(0.0);
+  return layerTexel(u_source, u_layerRegion.xy + ivec2(uv * vec2(u_layerRegion.zw)),
+    textureSize(u_source, 0), u_layerTopDown);
 }
 
 int addressAxis(int n, int size, int edge) {
@@ -163,16 +189,11 @@ void main() {
   if (u_operation == 1) {
     if (u_layer) weight *= guidedLayerAt(u_source, pixel, u_size, u_layerDest, u_layerRegion, u_layerTopDown, u_linear).a;
     if (u_volume) {
-      ivec2 size = textureSize(u_depth, 0);
-      ivec2 site = min(ivec2(pixel / u_size * vec2(size)), size - 1);
       float norm = depthAt(pixel);
       if (norm >= 1.0) weight = 0.0;
       else {
         float depth = mix(u_depthRange.x, u_depthRange.y, norm);
-        vec2 uv = (vec2(site) + .5) / vec2(size);
-        vec2 plane = (uv * vec2(2.0, -2.0) + vec2(-1.0, 1.0)) * u_projectionScale;
-        vec3 local = vec3(plane * (u_ortho ? 1.0 : depth), -depth);
-        vec3 position = u_eye + vec3(dot(u_view[0].xyz, local), dot(u_view[1].xyz, local), dot(u_view[2].xyz, local));
+        vec3 position = worldAt(pixel, depth);
         float d = length((position - u_volumeAt) / u_extent);
         weight *= u_volumeFeather > 0.0 ? clamp((1.0 - d) / u_volumeFeather, 0.0, 1.0) : step(d, 1.0);
       }
@@ -341,7 +362,9 @@ void main() {
     vec3 lookup = (clamp(inputColor.rgb / inputColor.a, 0.0, 1.0) * (u_cubeSize - 1.0) + 0.5) / u_cubeSize;
     color.rgb = mix(inputColor.rgb, texture(u_cube, lookup).rgb * inputColor.a, weight);
   } else if (u_operation == 5) {
-    vec4 over = u_layer ? guidedLayerAt(u_source, pixel, u_size, u_layerDest, u_layerRegion, u_layerTopDown, u_linear) : layerAt(u_source, pixel, u_size, false, false);
+    vec4 over = u_layerProjected ? projectedLayerAt(pixel) :
+      u_layer ? guidedLayerAt(u_source, pixel, u_size, u_layerDest, u_layerRegion, u_layerTopDown, u_linear) :
+        layerAt(u_source, pixel, u_size, false, false);
     over *= weight;
     color.a = over.a + inputColor.a * (1.0 - over.a);
     color.rgb = min(vec3(color.a), over.rgb + inputColor.rgb * (u_add ? 1.0 : 1.0 - over.a));
@@ -684,6 +707,7 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           u_history: 7,
           u_blockHold: 0,
           u_volume: Boolean(node.volume && depth && camera),
+          u_layerProjected: Boolean(node.projection && layer),
           u_rows: 8,
           u_scanlines: Boolean(scanlines),
           u_isolated: node.isolated ?? false,
@@ -694,20 +718,22 @@ export function createRenderGraph(gl, { api, program, resources, target, texture
           u_scheduleIndexed: Boolean(indexed),
           u_schedulePalette: indexed ? 10 : 0,
           u_rejectDepth: node.depthThreshold !== undefined,
-          u_hasDepth: Boolean(depth),
+          u_hasDepth: Boolean(depth && (!node.projection || camera)),
           u_depthThreshold: node.depthThreshold ?? 0,
           u_depthRange: depthRange ?? [0, 1],
-          ...(node.volume &&
+          ...((node.volume || node.projection) &&
             depth &&
             camera && {
-              u_volumeAt: node.volume.at,
-              u_extent: node.volume.extent,
-              u_volumeFeather: node.volume.feather,
               u_eye: camera.eye,
               u_view: camera.view,
               u_projectionScale: [camera.tangent * camera.aspect, camera.tangent],
               u_ortho: camera.ortho
             }),
+          ...(node.volume && { u_volumeAt: node.volume.at, u_extent: node.volume.extent, u_volumeFeather: node.volume.feather }),
+          ...(node.projection && {
+            u_chartOrigin: node.projection.origin, u_chartU: node.projection.u, u_chartV: node.projection.v,
+            u_chartNormal: node.projection.normal, u_chartBounds: node.projection.bounds, u_chartReach: node.projection.reach
+          }),
           u_layer: Boolean(layer),
           ...(layer && {
             u_layerDest: layer.dest,

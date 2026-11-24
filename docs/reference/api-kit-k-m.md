@@ -140,6 +140,13 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.materialReferences.reference` | function | `(value)` | [source](../../src/kit/p21-material-references.js) |
 | `KIT.materialReferences.resolve` | function | `(materials,role,missing='Unknown material role')` | [source](../../src/kit/p21-material-references.js) |
 
+## KIT.materialResponse
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.materialResponse` | namespace |  |  |
+| `KIT.materialResponse.create` | function | `(recipe, { contacts = [] } = {})` | [guide](../material-response.md), [source](../../src/kit/pan-material-response.js) |
+
 ## KIT.materialisation
 
 | Member | Kind | Signature or value | Guides and source |

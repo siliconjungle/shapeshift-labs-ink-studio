@@ -49,7 +49,7 @@ const RenderGraph = (() => {
     grade: ['stack', 'cubeSize'],
     reflection: ['source', 'axis', 'line'],
     distortion: ['source', 'offset', 'amplitude', 'period', 'rate', 'phase', 'rows', 'rowEdits', 'depthThreshold', 'blend', 'wrap'],
-    composite: ['source', 'layer', 'blend', 'isolated'],
+    composite: ['source', 'layer', 'blend', 'isolated', 'projection'],
     rasterSchedule: ['source', 'indices', 'schedule', 'palette', 'cycles', 'blend', 'wrap'],
     textureAddress: ['source', 'field', 'filter', 'edge', 'edgeU', 'edgeV', 'blend'],
     trackedWindow: ['source', 'switches', 'at', 'crop', 'place', 'sourceMask', 'filter', 'chrome'],
@@ -116,6 +116,25 @@ const RenderGraph = (() => {
   function imageLayer(node, value) {
     if (plain(value?.source) && Object.hasOwn(value.source, 'slot')) node.slot = slot(value.source);
     attachLayer(node, value);
+  }
+
+  function projection(value) {
+    record(value, ['origin', 'u', 'v', 'bounds', 'reach'], 'projected raster chart');
+    const { origin = [0, 0, 0], u = [1, 0, 0], v = [0, 0, 1], bounds, reach = .15 } = value;
+    if (!tuple(origin, 3) || !tuple(u, 3) || !tuple(v, 3) || !tuple(bounds, 4) ||
+        !(bounds[2] > bounds[0] && bounds[3] > bounds[1]) ||
+        !Number.isFinite(bounds[2] - bounds[0]) || !Number.isFinite(bounds[3] - bounds[1]) ||
+        !Number.isFinite(reach) || reach <= 0)
+      throw new RangeError('Projected raster needs finite chart axes, increasing UV bounds and positive reach');
+    const lengthU = Math.hypot(...u), lengthV = Math.hypot(...v);
+    if (!(lengthU > 1e-8 && lengthV > 1e-8 && Number.isFinite(lengthU) && Number.isFinite(lengthV)))
+      throw new RangeError('Projected raster chart axes must be nonzero');
+    const along = u.map(n => n / lengthU), across = v.map(n => n / lengthV);
+    if (Math.abs(along.reduce((dot, n, i) => dot + n * across[i], 0)) > 1e-6)
+      throw new RangeError('Projected raster chart axes must be perpendicular');
+    const normal = along.map((_, i) =>
+      along[(i + 1) % 3] * across[(i + 2) % 3] - along[(i + 2) % 3] * across[(i + 1) % 3]);
+    return { origin: origin.slice(), u: along, v: across, normal, bounds: bounds.slice(), reach };
   }
 
   function prepareFrameAge(pass, reference, input, select) {
@@ -534,6 +553,12 @@ const RenderGraph = (() => {
             const { blend = 'over' } = pass;
             if (blend !== 'over' && blend !== 'add') throw new TypeError('Composite blend must be over or add');
             Object.assign(node, { source: reference(pass.source, 'image'), blend });
+          }
+          if (pass.projection !== undefined) {
+            if (!node.layer || !select || node.layerDepth || node.layer.rect || node.layer.filter === 'linear')
+              throw new TypeError('Projected raster compositing needs a selected receiver and a nearest raster layer');
+            node.projection = projection(pass.projection);
+            node.needsCamera = node.layerDepth = true;
           }
           break;
         }
@@ -1087,6 +1112,23 @@ const RenderGraph = (() => {
     return volume.feather ? clamp((1 - distance) / volume.feather) : Number(distance <= 1);
   }
 
+  function projectedColor(chart, camera, u, v, depth, raster, out) {
+    if (!Number.isFinite(depth)) return false;
+    const { view, eye } = camera, scale = camera.tangent * (camera.ortho ? 1 : depth);
+    const x = (2 * u - 1) * scale * camera.aspect, y = (1 - 2 * v) * scale;
+    const px = eye[0] + x * view[0] + y * view[1] - depth * view[2] - chart.origin[0];
+    const py = eye[1] + x * view[4] + y * view[5] - depth * view[6] - chart.origin[1];
+    const pz = eye[2] + x * view[8] + y * view[9] - depth * view[10] - chart.origin[2];
+    const dot = axis => axis[0] * px + axis[1] * py + axis[2] * pz;
+    if (Math.abs(dot(chart.normal)) > chart.reach) return false;
+    const [minU, minV, maxU, maxV] = chart.bounds;
+    const U = (dot(chart.u) - minU) / (maxU - minU), V = (dot(chart.v) - minV) / (maxV - minV);
+    if (U < 0 || V < 0 || U >= 1 || V >= 1) return false;
+    const offset = 4 * (Math.floor(V * raster.h) * raster.w + Math.floor(U * raster.w));
+    for (let c = 0; c < 4; c++) out[c] = raster.data[offset + c];
+    return out[3] > 0;
+  }
+
   return Object.freeze({
     effects,
     resources,
@@ -1106,6 +1148,8 @@ const RenderGraph = (() => {
     feedbackMotion,
     replay,
     volumeCoverage,
+    projection,
+    projectedColor,
     rowTable,
     prepareRowEdits,
     scanlineMap

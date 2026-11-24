@@ -11,6 +11,7 @@ const {
   history,
   feedbackMotion,
   volumeCoverage,
+  projectedColor,
   rowTable,
   scheduleTable,
   indexedSchedule,
@@ -374,7 +375,11 @@ function runGraph(plan, frame, world, time, text, camera, resolve, options, proc
                 output[q + c] = Math.round(input[q + c] * (1 - weight) + color[c] * weight);
             } else if (node.type === 'composite') {
               if (node.layer && !raster) continue;
-              if (raster) {
+              if (node.projection) {
+                const u = ((native % passes.w) + .5) / passes.w;
+                const v = (Math.floor(native / passes.w) + .5) / passes.h;
+                if (!projectedColor(node.projection, camera, u, v, depth[native], raster, color)) continue;
+              } else if (raster) {
                 if (!FrameComposite.samplePlaced(raster, x, y, color, depth?.[native])) continue;
               } else for (let c = 0; c < 4; c++) color[c] = source[q + c];
               FrameComposite.blend(

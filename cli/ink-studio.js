@@ -3511,10 +3511,11 @@ const CMD = {
         const world = buildPreview(source, { parameterInputs: { time: num('parameter-time', from) } });
         const camera = moving ? clipCamera(world) : null, replay = moving ? feedbackReplay(world, from, frame) : null;
         return {
-          scene: world.id, title: world.name, timeline: world.timeline,
+          scene: world.id, title: world.name,
+          timeline: world.materialResponse?.audioTimeline(world.timeline) ?? world.timeline,
           ...(world.simulationInputs && { seed: world.simulationInputSeed,
             simulationInputs: lib().KIT.simulationInputs.tracks(world.simulationInputs) }),
-          duration: Math.max(world.timeline?.duration ?? 0, world.cameraRig?.duration ?? 0),
+          duration: Math.max(world.timeline?.duration ?? 0, world.cameraRig?.duration ?? 0, world.materialResponse?.duration ?? 0),
           sample(time, lastTime) {
             function draw(t, resetRenderHistory) {
               const phase = lastTime > from ? Math.max(0, Math.min(1, (t - from) / (lastTime - from))) : 0;
@@ -3907,7 +3908,7 @@ const CMD = {
     const w = buildPreview(), diagnostics = previewPasses(),
       fps = num('fps', 12),
       from = num('from', 0),
-      duration = Math.max(w.timeline?.duration ?? 0, w.cameraRig?.duration ?? 0),
+      duration = Math.max(w.timeline?.duration ?? 0, w.cameraRig?.duration ?? 0, w.materialResponse?.duration ?? 0),
       to = num('to', duration > from ? duration : 6),
       n = Math.max(2, Math.round((to - from) * fps)),
       frames = [], ts = [], camera = clipCamera(w),
