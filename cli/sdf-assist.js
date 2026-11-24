@@ -13,7 +13,23 @@ function normalAt(field, [x,y,z], step) {
   return length > 1e-10 && Number.isFinite(length) ? n.map(v=>v/length) : null;
 }
 
-function bind(world, data, settings) {
+function ownerLabel(owner) {
+  return { object:owner.renderOwner,entity:owner.renderOwner,...owner.renderTarget };
+}
+
+function isolatedField(source,allow) {
+  if (!allow) return source;
+  if (!source.bind) return null;
+  const body = owner=>allow(ownerLabel(owner));
+  if (![...source.rows.keys()].some(body)) return null;
+  const geometry = source.bind(body,()=>true);
+  if (!geometry) return null;
+  const cuts = new Set(source.negative);
+  const rows = new Map([...source.rows].filter(([owner])=>body(owner) || cuts.has(owner)));
+  return { ...source,...geometry,rows,bind:(select,cut)=>source.bind(owner=>select(owner)&&body(owner),cut) };
+}
+
+function bind(world, data, settings,allow,sourceBinding) {
   const labels = TargetSelectors.index(world), rows = [];
   const normals = world.renderMetadata?.normals;
   const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
@@ -24,7 +40,7 @@ function bind(world, data, settings) {
     return rest[q+3]>=1 && !(flags & (posed && (flags&15)===12 ? opaqueFlags&~15 : opaqueFlags)) &&
       !world.opticalSplats?.[i*OpticalMaterials.STRIDE+3];
   }
-  function addSource(source, geometry, ownerSet, motion, key, sourceIndex) {
+  function addSource(source, geometry, ownerSet, motion, key, sourceIndex, ownerIndices) {
     const parts = new Map();
     let selected = false, partIndex=0;
     for (const [owner,ranges] of source.rows) {
@@ -52,18 +68,21 @@ function bind(world, data, settings) {
       }
       if (part.records.length) parts.set(owner,part);
     }
-    if (selected) sources.push({...geometry,parts,motion});
+    if (selected) sources.push({...geometry,parts,motion,sourceIndex,ownerIndices});
   }
-  for (const [sourceIndex,source] of (world.renderSdfs ?? []).entries()) {
-    if (!(source.rows instanceof Map) || typeof source.distance !== 'function' || typeof source.locate !== 'function') continue;
+  for (const [sourceIndex,original] of (world.renderSdfs ?? []).entries()) {
+    if (!(original.rows instanceof Map) || typeof original.distance !== 'function' || typeof original.locate !== 'function') continue;
+    const source = isolatedField(original,allow);
+    if (!source) continue;
+    const ownerIndices = sourceBinding && new Map([...original.rows.keys()].map((owner,i)=>[owner,i]));
     if (settings.posed && world.anim?.bones && source.bind) {
       for (const [key,group] of SdfPose.groups(world,source,(i,rest)=>opaque(i,rest,true),
         (body,cut)=>[source.bind(body,cut)].filter(Boolean))) {
         const motion=SdfPose.transform(key,world.anim.bones);
         if (motion!==false) for (const geometry of group.fields)
-          addSource(source,SdfPose.field(geometry,motion),group.owners,motion,key,sourceIndex);
+          addSource(source,SdfPose.field(geometry,motion),group.owners,motion,key,sourceIndex,ownerIndices);
       }
-    } else addSource(source,source,null,null,'',sourceIndex);
+    } else addSource(source,source,null,null,'',sourceIndex,ownerIndices);
   }
   for (const source of sources) for (const part of source.parts.values())
     part.nearest = nearest({points:part.points,entities:part.records,read:i=>part.records[i]});
@@ -71,7 +90,7 @@ function bind(world, data, settings) {
 }
 
 const facing = (row,normal) => !row.normal || dot(row.normal,row.normal)<1e-8 || dot(row.normal,normal)>.25;
-function trace(source, ray, near, far, settings, clip, visible, x, y) {
+function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBinding) {
   const {origin,direction,axial} = ray, {min,max} = source.bounds, {epsilon,steps} = settings;
   const range = [near/axial,far/axial];
   for (let k=0;k<3;k++) if (!slab(range,origin[k],direction[k],min[k],max[k])) return null;
@@ -87,22 +106,39 @@ function trace(source, ray, near, far, settings, clip, visible, x, y) {
     }
     let normal;
     if ((!clip || clip(point)) && (!source.accepts || source.accepts(...point))) {
-      let row;
+      let row, fieldOwner;
       if (source.surfaceAt) {
         normal=normalAt(field,point,epsilon);
         if (normal) row=source.surfaceAt(point,normal);
       } else {
         const {body,owner} = source.locate(...point);
+        fieldOwner = body ?? owner;
         const part = source.parts.get(owner) ?? source.parts.get(body);
         if (part && (normal=normalAt(field,point,epsilon)))
           row=part.nearest.sample(point,i=>facing(part.records[i],normal))?.values;
       }
-      if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point))
-        return {z:along*axial,position:point,normal,row,objectPosition:source.motion?.rest(...point) ?? point};
+      if (row && (row.i<0 || !visible || visible(row.i,x,y)) && settings.allows(row.target,point)) {
+        const rest = source.motion?.rest(...point) ?? point;
+        return {z:along*axial,position:point,normal,row,objectPosition:rest,
+          ...(sourceBinding && { source:sdfSource(source,fieldOwner,row,rest) })};
+      }
     }
     along+=6*epsilon/Math.max(.12,normal ? Math.abs(dot(normal,direction)) : 1);
   }
   return null;
+}
+
+function fieldAddress(source,owner,object) {
+  if (!owner) return [object];
+  const index = source.ownerIndices.get(owner);
+  return index === undefined ? null : [source.sourceIndex,index];
+}
+
+function sdfSource(source,owner,row,rest) {
+  const target = owner ? ownerLabel(owner) : row.target;
+  const field = fieldAddress(source,owner,target.object);
+  return { key:owner ?? row.part,identity:{ kind:'sdf',object:target.object,entity:target.entity,part:target.part,field },
+    coordinate:owner?.sourceLocal?.(rest) ?? rest };
 }
 
 function editableSource(field) {
@@ -117,11 +153,31 @@ function editableSource(field) {
   }};
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,editable=[]}) {
-  const {sources,rows} = bind(world,data,settings);
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,allow,editable=[],trackSdf}) {
+  const {sources,rows} = bind(world,data,settings,allow,sourceBinding || trackSdf);
   for (const field of editable) {
+    if (allow && !allow({object:field.objectId})) continue;
     if (field.materials.some(material=>settings.candidates({object:field.objectId,entity:field.objectId,material})))
       sources.push(editableSource(field.trace));
+  }
+  if (trackSdf) for (const source of sources) {
+    function register(object,owner) {
+      const field = fieldAddress(source,owner,object);
+      if (!field) return;
+      trackSdf(field,rest=>{
+        const point = source.motion?.point(...rest) ?? rest;
+        if (!(Math.abs(source.distance(...point)) <= settings.epsilon*2) ||
+            source.accepts && !source.accepts(...point)) return null;
+        if (owner) {
+          const { body,owner:materialOwner } = source.locate(...point);
+          if ((body ?? materialOwner) !== owner) return null;
+        }
+        return point;
+      });
+    }
+    if (source.parts) {
+      for (const owner of source.parts.keys()) register(ownerLabel(owner).object,owner);
+    } else register(source.objectId);
   }
   if (!sources.length) return null;
   const hits = new Array(w*h), samples=[];
@@ -129,7 +185,7 @@ function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,editable=
     const ray=rayAt(x+.5,y+.5);
     let closest;
     for (const source of sources) {
-      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y);
+      const hit=trace(source,ray,near,closest?.z ?? 400,settings,clip,visible,x,y,sourceBinding);
       if (hit && (!closest || closest.z>hit.z)) closest=hit;
     }
     if (!closest) continue;

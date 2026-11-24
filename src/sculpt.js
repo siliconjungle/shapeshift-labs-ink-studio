@@ -133,6 +133,10 @@ function makeSculpt(B, rest) {
   let hasOptionalProxy = false;
   function add(p, mat, o) {
     o = o || {};
+    if (!p.sourceLocal) {
+      const center = p.bc.slice();
+      p.sourceLocal = point => point.map((n,i)=>n-center[i]);
+    }
     p.mat = controlled(Array.isArray(mat) ? { r: mat } : mat || {});
     p.res = o.res || S.res;
     p.k = o.k || 0;
@@ -188,12 +192,13 @@ function makeSculpt(B, rest) {
     const solids = lists.flatMap((list, i) => list.slice(starts[i]));
     if (!solids.length && result?.sd) solids.push(result);
     for (const solid of solids) {
-      const { sd, sample, lowerBound, along, analytic, geometryBounds, mat } = solid;
+      const { sd, sample, lowerBound, along, analytic, geometryBounds, mat,sourceLocal } = solid;
       solid.bc = point(solid.bc);
       if (solid.br < 1e8) solid.br *= scale;
       solid.reach *= scale;
       if (solid.bump) solid.bump = [solid.bump[0] * scale, solid.bump[1]];
       solid.sd = (x, y, z) => scale * sd(...inverse([x, y, z]));
+      solid.sourceLocal = value => sourceLocal(inverse(value));
       solid.sample = function (visit) {
         const res = this.res;
         this.res = res / scale;
@@ -272,6 +277,10 @@ function makeSculpt(B, rest) {
   function local(c, br, sd0, sm0, mat, o) {
     const ax = o && o.ax,
       p = { bc: c, br };
+    p.sourceLocal = point => {
+      const offset = point.map((value,i)=>value-c[i]);
+      return ax ? ax.map(axis=>axis.reduce((sum,value,i)=>sum+value*offset[i],0)) : offset;
+    };
     if (ax) {
       const U = ax[0],
         V = ax[1],

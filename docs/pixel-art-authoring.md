@@ -612,6 +612,7 @@ owners by identity.
 | --- | --- |
 | `{"type":"swatch","id":"oxide"}` | Exact indexed swatch ID. Use `at` in place of `id` to pick a visible swatch from a pixel. RGB aliases remain distinct. |
 | `{"type":"cluster","at":[12,8],"connectivity":8}` | The seed's connected swatch cluster. The default is four neighbors sharing an edge. Eight also follows corners. Supply a `source` query to find a component of any mask. |
+| `{"type":"binding","id":"gate"}` | Visible hits on the object or part named by the document binding. |
 | `{"type":"object","id":"gatehouse"}` | Pixels owned by that visible render object. |
 | `{"type":"part","id":"tide-needle","object":"tide-needle"}` | Visible pixels of the part. Optional `object` and `entity` scope reused part names. |
 | `{"type":"material","id":"brushed-copper"}` | Pixels owned by that render material. |
@@ -644,6 +645,39 @@ a scene-backed mask. Receipts fingerprint the inspected passes and bound
 material channels before saving their resolved pixels. Copy the selection
 report's `sources` into the save operation to guard it against changes
 since inspection. Recall the saved mask in the Workshop to use it as a paint boundary or brush footprint.
+
+### Choose a scene selection scope
+
+Use a `binding` query to select against the object and optional part in
+`sceneBindings`. The binding's registered source grid, document frame,
+and layer apply. Pass the bound scene with `--scene`.
+
+```json
+{ "type":"binding", "id":"gate", "scope":"visible" }
+```
+
+- **Visible** is the default. It follows the camera raster and includes
+  the selected target's contributions through soft edges and translucent
+  layers. A foreground depth-writing core blocks covered hits.
+- **Isolated part** (`isolated-part`) requires a named part on the binding.
+  Ink rasterizes that part alone at the same camera and frame. Other parts
+  of the object are excluded.
+- **Through layers** (`through-layers`) projects the bound object or part
+  through scene occluders. The selection report gives the number of
+  `occludedPixels` added relative to the visible mask. An isolated part and
+  a through-layer query on that same part can share a screen footprint.
+
+Scope and source coverage are fingerprinted in `sources`. Use the same
+query and copy its `sources` when saving the selection to guard the chosen
+scope. Once saved, use the mask with the regular painting and selection tools.
+
+In the SDK, pass `captureSelection` to `editor.select` or the edit
+operation. Forward the callback's native `w`, `h`, `passes`, and
+`pixelSelection` options to `ink.render(world, { ...settings, px:1 })`.
+A through-layer query requests both the isolated and scene views. A
+pre-rendered `renderFrame` carrying the matching `pixelSelection` result
+can supply a single visible or isolated-part query. Supply `sceneRef`
+when the binding names a file and the world uses a logical scene ID.
 
 ### Edit and recall masks
 
@@ -1288,8 +1322,8 @@ node cli/ink-studio.js pixel-art canvas gate-design.json \
   --source-view gate-view.json --out gate-review.html
 ```
 
-The document and source view must have the same native dimensions.
-A source view can be reopened without the scene or its assets. Keep using
+Canvas reviews use the same native dimensions as the source view. An inspection
+of a named binding can use its registered source grid. A source view can be reopened without the scene or its assets. Keep using
 `--scene` to sample the live material channels of a bound destination.
 Pass `--at` during capture to retain detailed palette and fragment traces
 for one pixel. Scene-backed canvas reviews embed their capture. Each sample in
@@ -1317,6 +1351,209 @@ Float32 depth, normal and coordinate values are preserved at render precision.
 In Node, pass the parsed file to `unpackPixelSourceView(record)` and use the
 returned frame with `editor.inspect([x, y], { renderFrame })` or
 `pickSurface(renderFrame.passes, x, y)`.
+
+## Resolve a pixel to its scene source
+
+Use the binding ID from `sceneBindings`. On a traced document, it is
+`projection`.
+
+```sh
+node cli/ink-studio.js pixel-art inspect gatehouse-study/design.json \
+  --source-view gatehouse-study/source-view.json --binding projection --at 57,30
+```
+
+Pass `--scene` to resolve against a fresh view. For the SDK, supply
+`editor.inspect([x, y], { binding, renderFrame })`. The report keeps the document
+coordinate and gives the corresponding `sourceAt` in the binding's registered
+grid. Ink checks the scene, object or entity, part, and document frame. It
+also checks a layer-scoped binding when inspecting an explicit cel.
+The offline canvas shows the bindings for the current frame under the cursor.
+
+- Mesh hits identify the asset or captured mesh slot, chart, and triangle.
+  Barycentrics refer to the three vertices of the captured chart triangle
+  before near-plane clipping. The authored UV is included when the mesh supplies one.
+- SDF hits identify the owning field. The point is expressed in that field's
+  local coordinates after removing the pose and authored solid transform.
+  The report also retains the hit in rest space. Use `--sdf-assist on`
+  when the scene should render the field directly for inspection.
+- Splat hits give the stable source ID, depth, fragment alpha, and the
+  coverage that survived compositing at the pixel. The inspector marks
+  the frontmost surviving splat by raster depth and the strongest by
+  visible coverage. Four fragments are kept by coverage, with an extra
+  slot when the frontmost splat falls outside those four. The report gives
+  the remaining omitted coverage. An unidentified splat
+  has no stable edit ID. A source marked `editable` can supply its ID to a
+  `splat-attributes` destination.
+
+At a translucent crossing, `scene.sources.frontSplat` gives the nearest
+surviving splat and `scene.sources.splats` gives the retained contributors.
+A nearer splat can have the smaller visible weight. An opaque cover removes
+the splats it hides. A binding reports the frontmost splat when it belongs
+to the selected scene object or part.
+
+The report distinguishes a miss, an unmatched scope, unavailable data, and
+a pixel where omitted contributions may contain a match. Earlier source
+views can still provide saved mesh UVs and any saved pinned splat trace.
+New captures store the representation data as optional typed planes and
+source tables in the same version 1 format.
+
+## Highlight occlusion and ambiguous hits
+
+For a bound target, compare the scene and its isolated projection from the
+same camera. Ink reports a foreground blocker when that projection reaches
+the pixel and the scene shows a closer depth owner cutting into the target's
+visible coverage. The report includes the blocker, both depths, and the
+visible and projected coverage. A missing target hit by itself is a miss.
+
+```sh
+node cli/ink-studio.js pixel-art inspect design.json --scene scene.json \
+  --binding gate --at 18,23
+node cli/ink-studio.js pixel-art canvas design.json --scene scene.json \
+  --binding gate --out hit-review.html
+```
+
+In the offline canvas, choose **Highlight scene hits**. **Foreground
+blockers** marks confirmed occlusion for the chosen binding. **Overlapping
+sources** marks pixels with multiple retained contributors. **Unreliable
+bindings** marks missing addresses, omitted contributors, and occlusion
+without a confirmed foreground blocker. Hover or pin a pixel to read its
+**Hit diagnostics**. The 1× preview keeps showing the original artwork.
+
+A bound canvas keeps the paired evidence so the blocker overlay works
+offline. An ordinary saved source view still supports overlap and address
+diagnostics. Inspecting it requires paired evidence to confirm a blocker.
+
+## Track a scene-bound selection
+
+Save a named selection on the frame registered to a scene binding. Use that
+camera and pose for the first sample of a version 1 scene view plan. The
+remaining samples may change the camera, scene time, or both.
+
+```json
+{
+  "version": 1,
+  "samples": [
+    { "id": "reference", "time": 0 },
+    { "id": "orbit", "time": 0, "camera": { "yaw": 0.35, "pitch": 0.12 } },
+    { "id": "posed", "time": 0.8, "camera": { "yaw": 0.35, "pitch": 0.12 } }
+  ]
+}
+```
+
+```sh
+node cli/ink-studio.js pixel-art track design.json --selection latch --binding gate \
+  --views views.json --out tracking.json --review tracking.html
+```
+
+Ink follows mesh triangle barycentrics, traced SDF rest positions, and stable
+splat IDs with local offsets. It projects the original anchors into every
+sample, so a selection can reappear after leaving the view. A closer depth
+owner confirms occlusion. Missing addresses, ambiguous reference hits,
+unverified correspondence, and off-grid projections are reported as lost.
+Tracking starts with visible source hits and leaves the document intact.
+
+The JSON includes native-grid row runs in `[row, startColumn, length]` order
+and example source and blocker details. Moved marks are the subset of visible
+correspondences that changed native cells. Lost marks use reference
+coordinates. If several selected document pixels land in one native cell,
+the counts still include each selected pixel, while the runs mark the cell
+once. The standalone HTML switches between sampled views and overlays each
+status, with lost marks displayed on the reference image.
+
+### Follow a part across representation changes
+
+A binding can carry an explicit registration for a named object and part.
+Each representation maps its captured surface coordinates into the same
+part space. In this binding, the lantern shell's mesh already uses that
+space. The baked atlas uses coordinates relative to its pivot, so its
+registration adds the pivot's height.
+
+```json
+{
+  "id": "shell",
+  "scene": "examples/part-representations.js",
+  "object": "brine-lantern",
+  "part": "shell",
+  "mapping": {
+    "version": 1,
+    "id": "shell-space",
+    "tolerance": 0.18,
+    "sources": {
+      "mesh": true,
+      "sprite": [1, 0, 0, 0, 0, 1, 0, 1.43, 0, 0, 1, 0]
+    }
+  }
+}
+```
+
+Use `true` for a shared coordinate frame or supply a row-major 3 × 4
+affine transform `[a,b,c,tx,d,e,f,ty,g,h,i,tz]`. Include at least two
+representation entries. The tolerance is a maximum distance in the
+registered part's units. Set it small enough to distinguish neighboring
+details, while allowing for sampling at the authored native resolution.
+
+| Source | Coordinates used in the registration |
+| --- | --- |
+| `mesh` | The rest position interpolated on the captured triangle. |
+| `sdf` | The rest position of the field hit before its live pose, in the field's build space. |
+| `splat` | The rest position of the sampled contributor, including its local hit offset. |
+| `sprite` | The baked texel center and recorded depth, in atlas space relative to the bake pivot. This covers directional impostors and placed depth cards with a named `objectId` and `partId`. |
+
+`pixel-art track` first tries the original source address. When a
+registered representation takes over, Ink finds the nearest sampled
+counterpart in that part within the authored tolerance. The full scene
+and isolated part render distinguish visible pixels from foreground
+blockers. A source can recover when its original representation returns.
+The report includes the representation pairs, match distances, and
+affected pixels. `pixel-art inspect` and the offline canvas show mapped
+coordinates available in native captures and saved source views.
+
+A match requires surface evidence. Color-only atlas pixels, synthesized
+or filtered atlas samples without direct texel provenance, and points
+with no sampled counterpart stay unresolved. Native edits to the
+original representation still require a valid source address.
+
+## Reprobe bindings after source edits
+
+Capture the reference view before changing the mesh, field, bake, or splat
+chunk. Select the affected area with a named selection or a rectangle in
+document coordinates. The reprobe uses that binding's canvas registration
+to find the corresponding native pixels.
+
+```sh
+node cli/ink-studio.js pixel-art capture gate.json --w 160 --h 96 --out before.json
+node cli/ink-studio.js pixel-art reprobe gate-ink.json --binding gate \
+  --before before.json --selection hinge --out reprobe.json --invalidate gate-checked.json
+```
+
+The live reprobe captures the current scene at the reference scene time.
+Repeat any render options used for the original capture. To compare two
+saved captures, add `--after current.json`. The captures must use the same
+native camera, grid, and frame clocks. A live reprobe captures the scene
+and the isolated binding once, and the comparison checks the requested
+region. Use `--rect x,y,width,height` to specify coordinates directly.
+
+The report lists verified, empty, and review pixels with native document
+row runs and examples of changed addresses. It checks the visible
+triangles and their rest geometry and UVs, traced SDF hits, retained splat
+contributions and row revisions, and sampled pigment and normals. Unproven
+hits and missing local source evidence are flagged for review. A nearer
+occluder is reported separately from a missing hit.
+
+`--invalidate` writes a separate pixel document with the affected pixels
+marked stale on that binding. Inspecting those pixels shows the stale
+status. Tracking skips them, and pixel-addressed shot and surface edits
+require review before using them. Other pixels remain usable. Review the
+current hits, save the new baseline, and clear only the verified portion
+by comparing the reviewed capture with the current source.
+
+```sh
+node cli/ink-studio.js pixel-art reprobe gate-checked.json --binding gate \
+  --before reviewed.json --selection hinge --accept --invalidate gate-approved.json
+```
+
+Acceptance clears verified stale pixels inside the requested area.
+Unresolved pixels stay pending until the source can be verified.
 
 ## Navigate craft diagnostics
 

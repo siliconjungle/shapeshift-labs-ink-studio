@@ -7,14 +7,21 @@ const PixelViewSource = (() => {
     surfaceUV:2, surfaceUVValid:1
   });
   const optional = {
-    foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
-    paletteOwner:1, strandId:1, strandDepth:1, strandCoverage:1, strandU:1, strandTangent:3
+    pigment:1, foregroundCoverage:1, fogTransmittance:1, inkMask:1, inkShadow:1, emission:3,
+    paletteOwner:1, sourceSurface:1, sourceTriangle:1, sourceCoordinates:3,
+    sourceSplat:4, sourceSplatAlpha:4, sourceSplatDepth:4, sourceSplatWeight:4, sourceSplatOmitted:1,
+    sourceSplatFrontRank:1, sourceSplatFront:1, sourceSplatFrontMetrics:3,
+    strandId:1, strandDepth:1, strandCoverage:1, strandU:1, strandTangent:3
   };
   const tables = ['objects','parts','materials','surfaceKinds'];
-  const optionalTables = ['paletteOwners','strands'];
+  const optionalTables = ['paletteOwners','strands','surfaceSources','splatSources'];
+  const bindingGroups = [
+    ['surfaceSources','sourceSurface','sourceTriangle','sourceCoordinates'],
+    ['splatSources','sourceSplat','sourceSplatAlpha','sourceSplatDepth','sourceSplatWeight','sourceSplatOmitted']
+  ];
   const types = { Uint8Array, Uint8ClampedArray, Uint32Array, Float32Array };
-  const ids = new Set(['objectId','partId','materialId','splatId','paletteOwner','strandId']);
-  const masks = new Set(['surfaceKind','surfaceUVValid','inkMask']);
+  const ids = new Set(['pigment','objectId','partId','materialId','splatId','paletteOwner','strandId','sourceSurface','sourceTriangle','sourceSplat','sourceSplatFront']);
+  const masks = new Set(['surfaceKind','surfaceUVValid','inkMask','sourceSplatFrontRank']);
   const littleEndian = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
   const finite = Number.isFinite;
   const name = value => typeof value === 'string' && !!value.trim();
@@ -71,7 +78,7 @@ const PixelViewSource = (() => {
   }
 
   function transform(frame,convert) {
-    const { w,h,scene,time,sourceView,rgb,alpha,passes,palettePixel,pixelFragments,strandPixel } = frame;
+    const { w,h,scene,time,sourceView,rgb,alpha,passes,palettePixel,pixelFragments,strandPixel,bindingEvidence } = frame;
     grid(w,h);
     metadata(sourceView,w,h);
     if (!name(scene) || time !== sourceView.frame.time || !passes || passes.w !== w || passes.h !== h)
@@ -87,11 +94,30 @@ const PixelViewSource = (() => {
       if (!Array.isArray(passes[key])) throw new TypeError('Invalid pixel source view table '+key);
       result[key] = passes[key];
     }
+    for (const [table,...names] of bindingGroups) {
+      const captured = [table,...names].some(key=>result[key] !== undefined);
+      if (captured && (result[table]?.[0] !== null || names.some(key=>!result[key])))
+        throw new TypeError('Incomplete pixel source view binding planes for '+table);
+    }
+    if (result.sourceSplatFrontRank && !result.sourceSplat ||
+        (result.sourceSplatFront || result.sourceSplatFrontMetrics) &&
+          !(result.sourceSplatFrontRank && result.sourceSplatFront && result.sourceSplatFrontMetrics))
+      throw new TypeError('Incomplete pixel source view frontmost splat planes');
+    let paired;
+    if (bindingEvidence !== undefined) {
+      const { object,part,visible,projected,depth } = bindingEvidence ?? {};
+      if (!name(object) || part !== undefined && !name(part))
+        throw new TypeError('Invalid pixel source view binding evidence');
+      paired = { object,...(part !== undefined && {part}),
+        visible:plane(visible,1,['Float32Array'],'binding visible coverage'),
+        projected:plane(projected,1,['Float32Array'],'binding projected coverage'),
+        depth:plane(depth,1,['Float32Array'],'binding projected depth') };
+    }
     const colorBytes = ['Uint8Array','Uint8ClampedArray'];
     return { w,h,scene,time,sourceView,passes:result,
       ...(rgb !== undefined && { rgb:plane(rgb,3,colorBytes,'rgb') }),
       ...(alpha !== undefined && { alpha:plane(alpha,1,colorBytes,'alpha') }),
-      palettePixel,pixelFragments,strandPixel };
+      palettePixel,pixelFragments,strandPixel,...(paired && { bindingEvidence:paired }) };
   }
 
   function pack(frame,{ color = true } = {}) {

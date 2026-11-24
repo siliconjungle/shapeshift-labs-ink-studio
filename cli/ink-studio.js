@@ -1419,19 +1419,21 @@ const CMD = {
         '  pixel-art validate <design.json>           validate the versioned document and each frame',
         '  pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets',
         '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
-        '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
+        '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
-        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection',
+        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings',
         '  pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard',
         '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
         '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
         '  pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides',
         '  pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples',
         '  pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views',
+        '  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection',
+        '  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings',
         '  pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings',
         '  pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings',
         '  pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint',
-        '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--references] [--out report.json]   show pixel contributors',
+        '  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--references] [--out report.json]   show pixel contributors',
         '  pixel-art edit <design.json> [--frame id]   work on a native indexed frame',
         '  pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt',
         '  pixel-art stack export <document.json> --out deck.json   open in the layer Workshop',
@@ -4161,6 +4163,8 @@ const CMD = {
      by side scaled up alike (--up, 3), and the crisp measures of each, so a look can be held to a picture it is after */
   'pixel-art'() {
     const PixelArt = require('./pixel-art.js'), ViewSource = require('../src/pixel-view-source.js');
+    const { sourceBindings } = require('../src/art-passes.js');
+    const sourcePasses = [...ViewSource.channels,...sourceBindings,'pigment'];
     function editScene(id,retained,historyLimit) {
       if (!/\.json$/i.test(id)) throw new TypeError('This pixel destination needs an editable JSON diorama');
       const bytes = retained === undefined ? fs.readFileSync(path.resolve(id)) : undefined;
@@ -4189,14 +4193,16 @@ const CMD = {
       return { ...frame,camera,scene:world.id,time:sourceView.frame.time,sourceView };
     }
     function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'],
-      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture' } = {}) {
+      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection,time = num('t',0) } = {}) {
       if (sceneInspection) ViewSource.grid(w,h);
-      const world = buildPreview(id), t = num('t',0);
+      const world = buildPreview(id), t = time;
       pose(world,t);
       const settings = { w,h,px:1,t,passes };
-      if (!sceneInspection) return R.render(world,view(settings));
-      return renderView(world,id,{ ...settings,passes:[...new Set([...ViewSource.channels,...passes])],
-        palettePixel,strandPixel,inspectFragmentPixel,renderGrid:false,cameraGuides:false },{ id:captureId });
+      if (!sceneInspection) return pixelSelection ?
+        { ...R.render(world,view({ ...settings,pixelSelection,renderGrid:false,cameraGuides:false })),scene:id } :
+        R.render(world,view(settings));
+      return renderView(world,id,{ ...settings,passes:[...new Set([...sourcePasses,...passes])],
+        palettePixel,strandPixel,inspectFragmentPixel,pixelSelection,renderGrid:false,cameraGuides:false },{ id:captureId });
     }
     function captureMotion(id,raw,subject,retainSource) {
       if (subject !== undefined && (typeof subject !== 'string' || !subject.trim()))
@@ -4204,7 +4210,7 @@ const CMD = {
       const Motion = require('../src/pixel-motion-checks.js'), Review = require('./pixel-motion-review.js');
       const w = num('w',160), h = num('h',96), { options,samples } = Review.plan(raw,'scene',w,h);
       const world = buildPreview(id), surface = options.alignment === 'surface', history = R.sequenceHistory(lib().KIT);
-      const passes = [...(retainSource ? ViewSource.channels : ['objectId','coverage']),
+      const passes = [...(retainSource ? sourcePasses : ['objectId','coverage']),
         ...(surface ? ['surfaceMotion','surfaceMotionValid','partMotion','partMotionValid'] : [])];
       let matched = false;
       const images = samples.map((row,index)=>{
@@ -4220,9 +4226,26 @@ const CMD = {
       if (subject !== undefined && !matched) throw new RangeError('Unknown visible motion subject '+subject);
       return { images,report:{ ...Motion.audit(images,options),source:id,...(subject !== undefined && { subject }) } };
     }
+    function captureTrack(id,{ object,part }) {
+      const passes = [...sourcePasses];
+      let world, previousTime = Infinity;
+      return (row,index,[w,h])=>{
+        if (row.time < previousTime) world = buildPreview(id);
+        previousTime = row.time;
+        pose(world,row.time);
+        const settings = { ...row.camera,lockCamera:!!row.camera,w,h,px:1,t:row.time,passes,transparent:true,
+          renderGrid:false,cameraGuides:false,resetRenderHistory:true };
+        const scope = { object,...(part !== undefined && { part }) };
+        const view = { id:row.id,index };
+        return {
+          full:renderView(world,id,{ ...settings,pixelSelection:scope },view),
+          isolated:renderView(world,id,{ ...settings,pixelSelection:{ ...scope,isolated:true },trackPixelSources:true },view)
+        };
+      };
+    }
     if (pos[0] === 'session') return PixelArt.sessionCommand(pos.slice(1),opt,{ scene:editScene,capture });
     PixelArt.command(pos,opt,outputFile,{
-      capture,captureMotion,
+      capture,captureMotion,captureTrack,
       world: id => buildPreview(id),
       scene:editScene
     });

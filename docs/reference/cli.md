@@ -237,19 +237,21 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art validate <design.json>           validate the versioned document and each frame
   pixel-art targets <design.json> --destination id --scene <bound scene>   list stable scene targets
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts
-  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
+  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel
-  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection
+  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings
   pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard
   pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush
     dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast
   pixel-art snap <design.json> --at x,y [--frame id] [--radius pixels]   resolve document guides
   pixel-art motion <design.json> [--plan plan.json] [--layer id] [--out report.json] [--review review.html]   check native animation samples
   pixel-art motion <scene> --views plan.json [--subject object] [--w n --h n] [--out report.json] [--review review.html]   check authored views
+  pixel-art track <document.json> --selection id --binding id --views plan.json [--out report.json] [--review review.html]   track a bound selection
+  pixel-art reprobe <document.json> --binding id --before view.json [--after view.json] --selection id|--rect x,y,w,h [--out report.json] [--invalidate checked.json]   check edited source bindings
   pixel-art rules <design.json> [--frame id] [--layer id] [--art-shot id] [--out report.json]   inspect asset art rules and scene settings
   pixel-art lint <design.json> [--frame id] [--art-shot id] [--layer id|--cel id] [--kind issue] [--finding id] [--out report.json]   locate craft findings
   pixel-art draw <design.json> [--frame id] [--layer id] [--color-mode auto|indexed|rgba]   export editable paint
-  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--references] [--out report.json]   show pixel contributors
+  pixel-art inspect <design.json> --at x,y [--frame id] [--scene scene.json | --source-view view.json] [--binding id] [--destination ids] [--references] [--out report.json]   show pixel contributors
   pixel-art edit <design.json> [--frame id]   work on a native indexed frame
   pixel-art edit <design.json> <edit.json> --out result.json   write an edit and print its receipt
   pixel-art stack export <document.json> --out deck.json   open in the layer Workshop
@@ -684,6 +686,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art palette import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art preview` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art replay` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art reprobe` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art rules` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art sample` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art select` · [source](../../cli/pixel-art.js)
@@ -711,6 +714,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art stack import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art targets` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art trace` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art track` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art upgrade` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art validate` · [source](../../cli/pixel-art.js)
 - `ink-studio project author apply` · `--out` · [source](../../cli/agent-project.js)

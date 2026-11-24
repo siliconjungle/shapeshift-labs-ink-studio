@@ -1057,6 +1057,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.match(inspected,/paint-tip · accent · front/);
     assert.match(inspected,/face\/front\/wear.*0\.625/);
     assert.match(inspected,/Source view.*panel.*8×6/);
+    assert.match(inspected,/Scene bindings.*panel · grid mismatch/);
     assert.match(inspected,/Scene hits/);
     await click(browser,'#pixel-inspection button');
     await moveTo(0,0);
@@ -1119,6 +1120,7 @@ test('the CLI exports an offline native canvas with both views on the selected v
     assert.match(sourceText,/time 0\.25 s/);
     assert.match(sourceText,/Rest position/);
     assert.match(sourceText,/Geometric normal/);
+    assert.match(sourceText,/Splat contributors.*Frontmost.*visible coverage/);
 
     const motionFile = path.join(directory,'motion.html');
     const sceneArt = { format:'ink-studio/pixel-art',version:2,width:8,height:6,pixelAspect:[1,1],
@@ -1140,6 +1142,39 @@ test('the CLI exports an offline native canvas with both views on the selected v
     });
     await until(browser,"document.querySelector('#samples').selectedIndex === 2");
     assert.deepEqual(await raster(browser,preview,1,2),[33,98,134,255]);
+
+    const blockerScene = path.join(directory,'blocking-scene.json');
+    fs.writeFileSync(blockerScene,JSON.stringify({ id:'blocking-scene',style:'slate',
+      camera:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,projection:'orthographic'},
+      finish:{ look:{ sdfAssist:true } },
+      solids:[
+        { id:'rear',kind:'box',at:[0,0,0],half:[.8,.8,.12],res:.12,mat:'stone' },
+        { id:'cover',kind:'box',at:[0,0,.7],half:[.35,1.1,.12],res:.12,mat:'stone' }
+      ] }));
+    fs.writeFileSync(input,JSON.stringify({ ...sceneArt,sceneBindings:[{
+      id:'rear-study',scene:blockerScene,object:'rear',frame:'quiet',
+      canvas:{size:[16,12],offset:[4,3],scale:[1,1]}
+    }] }));
+    execFileSync(process.execPath,[...args,'--scene',blockerScene,'--binding','rear-study'],{ cwd:root });
+    await browser.send('Page.navigate',{ url:'about:blank' });
+    await load(browser,file);
+    await evaluate(browser,()=>{
+      const picker = document.querySelector('#scene-hit-mode');
+      picker.value = 'blocker';
+      picker.dispatchEvent(new Event('change'));
+      document.querySelector('#pixel-inspection details').open = true;
+    });
+    await until(browser,"!document.querySelector('.ink-grid-source-hits').hidden");
+    assert.ok((await raster(browser,'.ink-grid-source-hits',4,3))[3] > 0);
+    assert.equal((await raster(browser,preview,4,3))[3],0);
+    await moveTo(4,3);
+    await until(browser,"document.querySelector('#pixel-inspection').textContent.includes('Occluded · rear-study · cover')");
+    await evaluate(browser,()=>{
+      const picker = document.querySelector('#frames');
+      picker.selectedIndex = 1;
+      picker.dispatchEvent(new Event('change'));
+    });
+    await until(browser,"document.querySelector('.ink-grid-source-hits').hidden");
 
     const plan = path.join(directory,'views.json');
     fs.writeFileSync(plan,JSON.stringify({ version:1,samples:[

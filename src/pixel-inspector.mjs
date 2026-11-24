@@ -69,12 +69,61 @@ export function mountPixelInspector(root,view,read) {
         if (value) rows.push({ text:label+' '+showValue(value),depth:1 });
       }
     }
+    const geometry = scene.sources?.geometry;
+    if (geometry?.kind === 'mesh') rows.push({ text:['Mesh source',geometry.asset,geometry.chart,
+      geometry.triangle !== undefined && 'triangle '+geometry.triangle,
+      geometry.barycentric && 'barycentric '+showValue(geometry.barycentric)].filter(Boolean).join(' · ') });
+    if (geometry?.kind === 'sdf') rows.push({ text:['SDF source',geometry.entity ?? geometry.object,
+      'local '+showValue(geometry.local)].filter(Boolean).join(' · ') });
+    if (geometry?.kind === 'sprite') rows.push({ text:['Baked card source','frame '+geometry.frame,
+      'local '+showValue(geometry.local)].join(' · ') });
     if (scene.frontStrand) rows.push({ text:['Front strand',scene.frontStrand.strand?.name ?? scene.frontStrand.id,
       'depth '+showValue(scene.frontStrand.depth),'coverage '+percent(scene.frontStrand.coverage)].join(' · ') });
     for (const hit of scene.fragments?.hits ?? []) rows.push({ text:[hit.kind,hit.object,hit.part,hit.material,
       hit.splatId && 'splat '+hit.splatId,'depth '+showValue(hit.depth),percent(hit.visibleCoverage)+' visible coverage'].filter(Boolean).join(' · ') });
     if (scene.fragments?.truncated) rows.push({ text:'Additional raster fragments omitted' });
     return rows.length ? rows : [{ text:'No captured surface or strand at this pixel' }];
+  }
+
+  function splatRows(sources) {
+    if (!sources) return [];
+    const { frontSplat,splats,truncated,omittedCoverage } = sources;
+    const percentage = value => !Number.isFinite(value) ? '—' :
+      value > 0 && value < .0001 ? '<0.01%' : showValue(Math.round(value*10_000)/100)+'%';
+    const rows = splats.map(hit=>({ text:[
+      hit === frontSplat && 'Frontmost',hit === splats[0] && 'Strongest contribution',
+      hit.id ?? 'Unidentified splat',hit.object,hit.part,'depth '+showValue(hit.depth),
+      percentage(hit.alpha)+' alpha',percentage(hit.visibleCoverage)+' visible coverage'
+    ].filter(Boolean).join(' · ') }));
+    if (truncated) rows.push({ text:omittedCoverage === null ? 'Additional splat contributions omitted' :
+      percentage(omittedCoverage)+' additional splat coverage omitted' });
+    return rows;
+  }
+
+  function issueRows(scene) {
+    const rows = [];
+    const problems = [...(scene?.diagnostics ?? []),...(scene?.bindings ?? []).flatMap(binding=>
+      (binding.diagnostics ?? []).map(issue=>({ ...issue,binding:binding.id })))];
+    const descriptions = {
+      'unstable-splat-id':'A contributing splat has no stable source ID',
+      'surface-address-unavailable':'The visible surface has no usable source address',
+      'splat-contributors-unavailable':'The capture has no source IDs for the visible splat',
+      'covered-pixel-without-source':'The pixel has coverage without a captured source',
+      'hidden-source-without-confirmed-blocker':'The target projects here but the foreground blocker could not be confirmed',
+      'binding-address-unavailable':'The bound target is visible here but has no usable source address'
+    };
+    for (const issue of problems) {
+      let text = descriptions[issue.code];
+      if (issue.kind === 'blocker') {
+        const { blocker,targetDepth,partial } = issue;
+        text = [partial ? 'Partly occluded' : 'Occluded',issue.binding,blocker.object ?? blocker.kind ?? 'Unidentified foreground',
+          blocker.part,'depth '+showValue(blocker.depth),'target depth '+showValue(targetDepth)].filter(Boolean).join(' · ');
+      }
+      if (issue.kind === 'overlap') text = issue.count+' sources overlap';
+      if (issue.code === 'contributors-omitted') text = 'Contributor coverage was omitted';
+      if (text) rows.push({text});
+    }
+    return rows;
   }
 
   function refresh() {
@@ -115,7 +164,14 @@ export function mountPixelInspector(root,view,read) {
     }
     group('Palette',colors);
     group('Material channels',materialRows(materials,scene));
+    group('Hit diagnostics',issueRows(scene));
     group('Scene hits',sceneRows(scene));
+    group('Splat contributors',splatRows(scene?.sources));
+    group('Scene bindings',(scene?.bindings ?? []).flatMap(row=>[
+      { text:[row.id,row.status.replaceAll('-',' '),row.sourceAt && 'pixel '+showValue(row.sourceAt),
+        ...(row.hits ?? []).map(hit=>hit.id ?? hit.entity ?? hit.object)].filter(Boolean).join(' · ') },
+      ...(row.mapping?.points.map(hit=>({ text:[row.mapping.id,hit.kind,showValue(hit.point)].join(' · '),depth:1 })) ?? [])
+    ]));
   }
 
   function setPinned(value) {

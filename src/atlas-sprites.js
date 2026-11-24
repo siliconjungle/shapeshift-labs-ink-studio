@@ -233,6 +233,23 @@ const AtlasSprites = (() => {
         views.reduce((best,view)=>dot(view.basis.normal,direction)>dot(best.basis.normal,direction)?view:best);
       return edits?.held.get(view)??view;
     }
+    function readDepth(bytes,at,view) {
+      const sample = depthFormat === 'gray' ? bytes[at]/255 :
+        (bytes[at]*65536+bytes[at+1]*256+bytes[at+2])/0xffffff;
+      return depthLo+depthSpan*sample-view.depthOrigin;
+    }
+
+    function bakedPoint(view,x,y) {
+      if (scenery || !maps.depth || edits?.edited.has(view) ||
+          !integer(x,0,view.rect.width-1) || !integer(y,0,view.rect.height-1)) return null;
+      const { rect,pivot,basis,unitsPerPixel } = view;
+      const at = ((rect.y+y)*width+rect.x+x)*4;
+      if (!maps.color[at+3] || !maps.depth[at+3]) return null;
+      const u = (x+.5-pivot.x)*unitsPerPixel, v = (pivot.y-y-.5)*unitsPerPixel;
+      const depth = readDepth(maps.depth,at,view);
+      return basis.right.map((n,i)=>n*u+basis.up[i]*v-basis.normal[i]*depth);
+    }
+
     function sample(view,x,y,channels,out,band,packet) {
       const rect = view.rect, inside = x >= 0 && y >= 0 && x < rect.width && y < rect.height;
       const transition = packet && edits?.transition?.read(packet,x,y);
@@ -255,8 +272,7 @@ const AtlasSprites = (() => {
       if (channels.depth) {
         if (scenery) out.depth=scenery.depths[scenery.bandAt(index)];
         else if (depth?.[d+3] && (art?.depth || keepBase && (!edit || bakedAlpha || patch.depth)))
-          out.depth=depthLo+depthSpan*(depthFormat==='gray'?depth[d]/255:
-            (depth[d]*65536+depth[d+1]*256+depth[d+2])/0xffffff)-view.depthOrigin;
+          out.depth=readDepth(depth,d,view);
         else if (!keepBase) out.depth=transition.extensionDepth??0;
         else if (!bakedAlpha && edit) out.depth=edit.extensionDepth??0;
       }
@@ -301,7 +317,7 @@ const AtlasSprites = (() => {
     }
     const editedDepth=edits&&Array.from(edits.edited.values()).some(edit=>edit.maps.depth||edit.extensionDepth!==undefined);
     const transition=edits?.transition;
-    return Object.freeze({[assetBrand]:true,select,sample,effect,...(edits?.fringe&&{fringe:edits.fringe}),
+    return Object.freeze({[assetBrand]:true,select,sample,effect,bakedPoint,...(edits?.fringe&&{fringe:edits.fringe}),
       ...(bump&&{bumpHeight:(x,y)=>integer(x,0,width-1)&&integer(y,0,height-1) ? bump.heights[y*width+x] : 0}),
       ...(cutoutMipmaps&&{cutoutMipmaps,cutoutLevel:cutouts.level,cutoutSample:cutouts.sample,
         cutoutImage(view,level=0) {
@@ -323,7 +339,7 @@ const AtlasSprites = (() => {
   function place(value) {
     if (value?.[placedBrand]) return value;
     const { atlas,at,mode,yaw=0,scale=1,opacity=1,frame,playback,depth=true,lighting=true,emission=true,
-      nativePixels=false,pixelOffset,visibleAt,objectId,materialId,budgetLayer,budgetId,budgetPriority=0,clock='animation',shadowShell,
+      nativePixels=false,pixelOffset,visibleAt,objectId,materialId,partId,budgetLayer,budgetId,budgetPriority=0,clock='animation',shadowShell,
       castsShadow=shadowShell!==undefined&&shadowShell!==false }=value??{};
     if ((budgetLayer !== undefined && (typeof budgetLayer !== 'string' || !budgetLayer.trim())) ||
         (budgetId !== undefined && (typeof budgetId !== 'string' || !budgetId.trim())) || !Number.isFinite(budgetPriority))
@@ -343,10 +359,11 @@ const AtlasSprites = (() => {
     if (shadowShell!==undefined&&shadowShell!==false&&!castsShadow)
       throw new RangeError('A scenery shadow shell needs a shadow-casting placement');
     const shell=castsShadow&&shells.prepare(shadowShell,asset.width,asset.height);
-    if (objectId!==undefined || materialId!==undefined) {
+    if (objectId!==undefined || materialId!==undefined || partId!==undefined) {
       const selectors = typeof TargetSelectors === 'undefined' ? require('./target-selectors.js') : TargetSelectors;
       if (objectId!==undefined) selectors.prepare({object:objectId});
       if (materialId!==undefined) selectors.prepare({material:materialId});
+      if (partId!==undefined) selectors.prepare({object:objectId,part:partId});
     }
     const anchor=typeof at==='function'?at:Object.freeze(vector(at,'Sprite atlas anchor'));
     return Object.freeze({[placedBrand]:true, atlas:asset, at:anchor, mode:placementMode,
@@ -357,7 +374,7 @@ const AtlasSprites = (() => {
       ...(budgetPriority!==0&&{budgetPriority}),
       ...(castsShadow&&{castsShadow}),...(shell&&{shadowShell:shell}),
       ...(visibleAt&&{visibleAt}),...(playback!==undefined&&{frameAt:asset.playback(playback)}),
-      ...(objectId!==undefined&&{objectId}),...(materialId!==undefined&&{materialId}) });
+      ...(objectId!==undefined&&{objectId}),...(materialId!==undefined&&{materialId}),...(partId!==undefined&&{partId}) });
   }
   function placements(authored,override) {
     const source=override===true?authored:override??authored;

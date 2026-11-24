@@ -57,7 +57,7 @@ exceptions. [Cure’s pixel-art tutorial](https://pixeljoint.com/forum/forum_pos
 | Subpixel motion | Animate when pixels and clusters move or change roles. Review a hold, a short move and a turnaround with palette and motion evidence. | Ink tracks cluster coherence. Add tabular, native-cel fixes. |
 | Pose silhouettes | Draw readable key poses and track contact, separation and spacing. Use holds and purpose-drawn breakdowns for fast gestures. | Ink has pose and motion review. Add native silhouettes to the same capture. |
 | Small-size redraws | Save an approved drawing for each meaningful size or angle. Keep the important gaps, head shape and accents when the representation changes. | Stamp placement and view atlases exist. Add an exact-grid approval and redraw workflow. |
-| Scene assembly | Start background, foreground and focal art as independent native planes. Inspect occlusion and matching pixel density at their joins. | Named-object capture and stamp reuse verified. Multi-object captures and reprojection still needed. |
+| Scene assembly | Start background, foreground and focal art as independent native planes. Inspect occlusion and matching pixel density at their joins. | Named-object capture, stamp reuse, and selection reprojection across bound views. Multi-object captures still needed. |
 
 The shape and lighting rows use the artist's examples on cluster construction,
 directional shadows, hue, value and hand-placed intermediate pixels.

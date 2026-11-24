@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Selection tracking · Ink Studio</title>
+<style>
+:root { color-scheme:dark; background:#10161b; color:#e6eeea; font:15px system-ui,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+main { max-width:1120px; margin:auto; padding:clamp(16px,4vw,48px); }
+header { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; margin-bottom:16px; }
+h1 { margin:0 auto 0 0; font:400 clamp(30px,5vw,48px)/1 Georgia,serif; }
+select { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 8px; }
+#canvas { border:1px solid #354549; border-radius:8px; overflow:hidden; }
+/*CSS*/
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Selection tracking</h1>
+  <label>View <select id="sample"></select></label>
+  <label>Mark <select id="mark">
+    <option value="moved">Moved</option>
+    <option value="visible">Visible</option>
+    <option value="occluded">Occluded</option>
+    <option value="lost">Lost in destination</option>
+  </select></label>
+</header>
+<div id="canvas"></div>
+<p id="summary" role="status"></p>
+<ul id="reasons"></ul>
+</main>
+<script type="module">
+/*SCRIPTS*/
+const { images,report } = /*DATA*/;
+const view = mountPixelGridCanvas(document.querySelector('#canvas'));
+const sample = document.querySelector('#sample'), mark = document.querySelector('#mark');
+const summary = document.querySelector('#summary'), reasons = document.querySelector('#reasons');
+const scratch = document.createElement('canvas'), context = scratch.getContext('2d');
+const labels = {
+  'reference-not-visible':'Reference crosses an area where the binding is hidden or absent',
+  'reference-address-unavailable':'Reference has no stable source address',
+  'reference-ambiguous-source':'Reference has overlapping or unrecorded contributors',
+  'stale-source-binding':'Source changed in this part of the binding',
+  'outside-registration':'Selected document pixel is outside the registered view',
+  'source-unavailable-or-clipped':'Source is unavailable or beyond the camera depth range',
+  'outside-view':'Source projects outside the image',
+  'no-corresponding-pixel':'Projected source has no verified pixel in this view',
+  'no-registered-correspondence':'No sample from a registered representation matches the source point'
+};
+const colors = { moved:'#55d9e7aa',visible:'#82e39daa',occluded:'#feb35eaa',lost:'#ff7d9daa' };
+const [width,height] = report.grid;
+scratch.width = width;
+scratch.height = height;
+sample.replaceChildren(...report.samples.map(row=>new Option(row.label)));
+sample.selectedIndex = 1;
+let serial = 0;
+
+async function draw() {
+  const token = ++serial, index = sample.selectedIndex, row = report.samples[index], status = mark.value;
+  const image = new Image();
+  image.src = 'data:image/png;base64,' + images[status === 'lost' ? 0 : index];
+  try {
+    await image.decode();
+    if (token !== serial) return;
+    context.clearRect(0,0,width,height);
+    context.drawImage(image,0,0);
+    view.setFrame({ width,height,rgba:context.getImageData(0,0,width,height).data });
+    view.setDiagnostic({ bounds:[0,0,width,height],runs:row.runs[status],color:colors[status] },'tracking');
+    const { visible,moved,occluded,lost } = row.counts;
+    summary.textContent = visible+' visible, '+moved+' moved, '+occluded+' occluded, '+lost+' lost'+
+      (status === 'lost' ? '. Lost pixels are marked on the reference view.' : '.');
+    if (row.mappings?.length) summary.textContent += ' Mapped from '+row.mappings.map(entry=>
+      entry.from+' to '+entry.to+' ('+(entry.visible+entry.occluded)+')').join(', ')+'.';
+    reasons.replaceChildren(...Object.entries(row.reasons).map(([key,count])=>{
+      const item = document.createElement('li');
+      item.textContent = labels[key]+' ('+count+')';
+      return item;
+    }));
+    reasons.hidden = status !== 'lost';
+  } catch (error) {
+    if (token === serial) summary.textContent = error.message;
+  }
+}
+sample.addEventListener('change',draw);
+mark.addEventListener('change',draw);
+draw();
+</script>
+</body>
+</html>

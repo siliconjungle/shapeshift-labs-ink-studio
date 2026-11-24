@@ -39,6 +39,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.ArtPasses.pick` | function | `(passes,x,y)` | [guide](../art-passes.md), [source](../../src/art-passes.js) |
 | `toolkit.ArtPasses.proxies` | value | `array` |  |
 | `toolkit.ArtPasses.select` | function | `(request)` | [guide](../art-passes.md), [source](../../src/art-passes.js) |
+| `toolkit.ArtPasses.sourceBindings` | value | `array` |  |
 | `toolkit.ArtPasses.strands` | value | `array` |  |
 | `toolkit.ArtPasses.subset` | function | `(passes, selected)` | [guide](../art-passes.md), [source](../../src/art-passes.js) |
 | `toolkit.ArtPasses.surfaceKinds` | value | `array` |  |

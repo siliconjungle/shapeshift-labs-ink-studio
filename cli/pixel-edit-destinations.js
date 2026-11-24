@@ -7,6 +7,7 @@ const { observe } = require('./pixel-edit-revisions.js');
 const Provenance = require('../src/splat-provenance.js');
 const { conflict } = require('./pixel-edit-preview.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
+const { staleAt } = require('../src/pixel-source-bindings.js');
 const LayerStack = require('../src/pixel-layer-stack.js');
 
 const record = value => !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -265,6 +266,11 @@ function apply(frame, edit, route, context, readMarks) {
   if (!isShot && edit.edits !== undefined)
     throw new TypeError('Destination ' + destination.kind + ' needs explicit source coordinates or IDs in operation');
   const marks = isShot ? readMarks(frame,edit) : undefined;
+  const addresses = isShot ? [edit.operation?.at,...marks.map(mark=>mark.at)] :
+    destination.kind === 'surface-channel' ? [edit.operation?.pixel] : [];
+  const stale = addresses.find(at=>Array.isArray(at) && staleAt(binding,at));
+  if (stale) throw conflict('stale-binding-pixel','Source binding pixel needs review before editing',
+    { binding:binding.id,at:stale });
   const source = observe(route,context,{ guard:edit.sourceRevision !== undefined || !!context.onSource });
   context.onSource?.(source.sourceRevision,source);
   checkRevision(binding,source,edit.sourceRevision);

@@ -18,6 +18,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 .sample-controls, .sample-readout { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
 .sample-readout { min-height:20px; flex-wrap:nowrap; }
 #sample-layer-control[hidden] { display:inline-block; visibility:hidden; }
+#scene-hit-controls[hidden] { display:none; }
 #sample-layer { max-width:min(200px,65vw); }
 .sampling button { font:inherit; color:inherit; background:#253437; border:1px solid #476062; border-radius:5px; padding:6px 9px; cursor:pointer; }
 .sampling button[aria-pressed="true"] { background:#b3d6bb; color:#17221e; }
@@ -44,6 +45,15 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
   </div>
   <div id="canvas"></div>
   <div id="craft-diagnostics"></div>
+  <div class="sample-controls" id="scene-hit-controls" hidden>
+    <label>Highlight scene hits <select id="scene-hit-mode">
+      <option value="">Off</option>
+      <option value="blocker">Foreground blockers</option>
+      <option value="overlap">Overlapping sources</option>
+      <option value="unreliable">Unreliable bindings</option>
+    </select></label>
+    <output id="scene-hit-count"></output>
+  </div>
   <div id="pixel-inspection"></div>
   <p id="error" role="status" hidden></p>
 </main>
@@ -51,7 +61,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
 /*PIXEL_INSPECT_MODULES*/
-const { frames,palette,materials,definitions,layerIds,rulesSource,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
+const { frames,palette,materials,definitions,layerIds,rulesSource,sceneBindings,reviewBinding,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
@@ -64,6 +74,49 @@ const materialRows = materials.map(row=>({ ...row,
 }));
 const stack = PixelLayerStack.prepare(definitions), colors = palette.map(row=>Number.parseInt(row.color.slice(1),16));
 const scene = embeddedScene && PixelViewSource.unpack(embeddedScene);
+const boundView = sceneBindings.find(binding=>binding.id === reviewBinding);
+function sourceAt(at) {
+  if (!boundView) return at;
+  return PixelCanvasTransforms.sourcePoint([active.width,active.height],at,boundView.canvas)?.map(Math.floor);
+}
+function bindingsAt(at) {
+  return sceneBindings.filter(binding=>binding.frame === undefined || binding.frame === active.id).map(binding=>
+    PixelSourceBindings.resolve(scene,binding,at,{ grid:[active.width,active.height],frameId:active.id,
+      sceneMatches:true,sourcePoint:PixelCanvasTransforms.sourcePoint,ArtPasses }));
+}
+const hitMode = document.querySelector('#scene-hit-mode'), hitCount = document.querySelector('#scene-hit-count');
+document.querySelector('#scene-hit-controls').hidden = !scene;
+hitMode.querySelector('[value=blocker]').disabled = !scene?.bindingEvidence || !boundView;
+const hitColors = { blocker:'#ed675e99',overlap:'#6cd7e599',unreliable:'#dfb85f99' };
+function highlightHits() {
+  const kind = hitMode.value;
+  if (!active || !scene || !kind) {
+    view.setDiagnostic(null,'source-hits');
+    hitCount.value = '';
+    return;
+  }
+  const { width,height } = active, runs = [];
+  const scope = boundView && (!boundView.frame || boundView.frame === active.id) ? boundView : undefined;
+  let count = 0;
+  for (let y=0; y<height; y++) {
+    let start = -1;
+    for (let x=0; x<=width; x++) {
+      const at = x < width && sourceAt([x,y]);
+      const relevant = at && ((kind !== 'blocker' && PixelSourceBindings.issues(scene,at,ArtPasses).some(issue=>issue.kind === kind)) ||
+        (scope && kind !== 'overlap' && PixelSourceBindings.issues(scene,at,ArtPasses,{ binding:scope }).some(issue=>issue.kind === kind)));
+      if (relevant) {
+        count++;
+        if (start < 0) start = x;
+      } else if (start >= 0) {
+        runs.push([y,start,x-start]);
+        start = -1;
+      }
+    }
+  }
+  view.setDiagnostic(runs.length ? { bounds:[0,0,width,height],runs,color:hitColors[kind] } : null,'source-hits');
+  hitCount.value = count === 1 ? '1 pixel' : count+' pixels';
+}
+hitMode.addEventListener('change',highlightHits);
 const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'),view,at=>{
   if (!active || at[0] >= active.width || at[1] >= active.height) return;
   const p = at[1]*active.width+at[0];
@@ -71,6 +124,7 @@ const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'
     const row = active.sources.get(id), slot = row.slots.charCodeAt(p);
     return { slot:row.knockouts?.charCodeAt(p) ? -2 : slot === 255 ? -1 : slot,alpha:row.alpha?.charCodeAt(p) };
   },{ references:true });
+  const sampleAt = scene && sourceAt(at);
   return { ...PixelInspection.document(trace,palette,id=>active.sources.get(id)?.cel ?? null),
     protection:PixelProtection.at(active.protectedDetails,...at),
     materials:materialRows.filter(row=>row.frame === undefined || row.frame === active.id).map(row=>{
@@ -80,7 +134,10 @@ const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'
       const value = !uv ? null : row.type === 'number' ? data.getFloat64(p*8,true) :
         coverage < 0 ? null : { color:[0,8,16].map(i=>data.getFloat64(offset+i,true)),coverage };
       return { ...meta,requestedDestination:row.name,uv,value };
-    }),...(scene && { scene:PixelInspection.scene(scene,at,ArtPasses) }) };
+    }),...(scene && { scene:{
+      ...(sampleAt && PixelInspection.scene(scene,sampleAt,ArtPasses)),
+      bindings:bindingsAt(at)
+    } }) };
 });
 const craftPanel = mountPixelCraftPanel(document.querySelector('#craft-diagnostics'),view,rulesSource ? PixelArtRules.kinds : PixelCraft.kinds,{
   inspect:at=>inspector.focus(at)
@@ -169,6 +226,7 @@ async function draw() {
       sources:new Map(layers.map(row=>[row.id,row])),
       material:materialRows.find(row=>row.frame === undefined || row.frame === frame.id) };
     inspector.refresh();
+    highlightHits();
     craftPanel.setSource(frame,()=>diagnose(frame,active.width,active.height));
     const selected = layer.value;
     layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));

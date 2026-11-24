@@ -23,7 +23,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,trackMesh,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -67,7 +67,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const lightingMesh=lightingTargets && layer.sceneMeshId;
     const sampleCharts=capture || omitLayer || simulationLayers?.size;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
-    const charts=(sampleCharts || lightingMesh || captureFogOwners || multiprojection ||
+    const charts=(allow || sampleCharts || lightingMesh || captureFogOwners || multiprojection ||
       semantic.some(row=>row.objectTexels)) && layer.surfaceCharts;
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
@@ -85,6 +85,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const affine = style?.affine, linearUV = affine || ortho;
       while(charts?.[chartIndex]?.end<=first)chartIndex++;
       const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
+      if (allow && !allow({object:chart?.objectId,part:chart?.partId})) continue;
       const local=multiprojection?.project(layer,chart);
       const step=local ? 0 : (style?.vertexSnap ?? 0)*artScale;
       const fogObject=captureFogOwners ? chart?.objectId : undefined;
@@ -92,12 +93,34 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
         object:chart.objectId,entity:chart.objectId,material:chart.materialId,part:chart.partId
       };
       const input=identity.map((weights,i)=>transform(Array.from(vertices.subarray(offset+i*5,offset+i*5+5)),step,
-        motion || chart && sampleCharts ? weights : undefined,local));
+        sourceBinding || motion || chart && sampleCharts ? weights : undefined,local));
       const mesh=capture && {object:chart?.objectId,material:chart?.materialId,part:chart?.partId,
         ...(motion && {key:JSON.stringify(['mesh',layer.surfaceMotionKey ?? layer.sceneMeshId ?? slot,chart?.id ?? chart?.first ?? 0,
           chart?.objectId ?? null,chart?.materialId ?? null,(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
           driven?.amounts??null]),
           triangle:(first-(chart?.first ?? 0))/3,points:input.map(v=>v.p),step, ...(local && {localProjection:local})})};
+      const source = sourceBinding && {
+        key:JSON.stringify([slot,chart?.first ?? 0]),
+        identity:{ kind:'mesh',asset:layer.sceneMeshId ?? layer.surfaceMotionKey ?? null,
+          chart:chart?.id ?? null,stageSlot:slot,primitive:chart?.first ?? 0,object:chart?.objectId,part:chart?.partId },
+        triangle:(first-(chart?.first ?? 0))/3
+      };
+      const rest = source && chart?.rest?.subarray(source.triangle*9,source.triangle*9+9);
+      if (source) {
+        const at = source.triangle*6, uv = chart?.uv?.subarray(at,at+6);
+        source.topology = JSON.stringify([rest ? Array.from(rest) : input.flatMap(v=>v.p),
+          uv ? Array.from(uv) : input.flatMap(v=>v.uv)]);
+      }
+      if (trackMesh && source?.identity.object) {
+        const signature = JSON.stringify([(chart?.end ?? vertices.length/5)-(chart?.first ?? 0),
+          input.map(row=>row.uv),rest ? Array.from(rest) : null]);
+        trackMesh(source.identity,source.triangle,{ signature,project(weights) {
+          const component = key=>input.reduce((total,row,i)=>total+row[key]*weights[i],0);
+          const z = component('z'), w = component('w');
+          return w > 0 && z >= near && z <= far ?
+            [W/2+focal*component('x')/w,H/2-focal*component('y')/w,z] : null;
+        } });
+      }
       const uvTransform = shifted ? range.transform : [1,1,0,0];
       const axes = !depthOnly && surfaceNormals && !mip?.objectTexels &&
         (normalPixels || mip?.chain.normal) && textureAxes(input, uvTransform);
@@ -203,14 +226,14 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             if (local.some(Boolean)) mapped = unit(normal.map((n,k) =>
               local[0]*axes.right[k]+local[1]*bitangent[k]+local[2]*n));
           }
-          const weights3=(motion || chart && sampleCharts) && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
+          const weights3=(sourceBinding || motion || chart && sampleCharts) && identity.map((_,k)=>row.reduce((s,v,i)=>s+v.weights[k]*w[i]/sum,0));
           const at=chart && first-chart.first;
           const value=(data,components,k)=>weights3.reduce((s,n,i)=>s+n*data[(at+i)*components+k],0);
           let uv;
           if (chart && sampleCharts) {
             const {x,y,width:w,height:h}=chart.region;
             uv=chart.uv ? [value(chart.uv,2,0),value(chart.uv,2,1)] :
-              [0,1].map(k=>(weights3.reduce((s,n,i)=>s+n*input[i].uv[k],0)-(k?y:x)-.5)/((k?h:w)-1));
+              [0,1].map(k=>(weights3.reduce((s,n,i)=>s+n*input[i].uv[k],0)-(k?y:x)-.5)/Math.max(1,(k?h:w)-1));
             uv=uv.map(n=>Math.max(0,Math.min(1,n)));
           }
           const objectPosition=chart?.rest && weights3 ? [0,1,2].map(k=>value(chart.rest,3,k)) : position;
@@ -241,6 +264,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
             ...(local && {localProjection:true}),
             ...(lightingTarget&&{lightingTarget}),
             ...(fogObject!==undefined&&{fogObject}),
+            ...(source && {source:{ ...source,coordinate:weights3 }}),
             ...(mesh && {mesh,...(motion&&{weights:weights3}),...(uv&&{uv})})};
         }
       }

@@ -87,7 +87,7 @@ function writeReview(file,frames,report) {
   const source = name=>fs.readFileSync(path.join(__dirname,'../src',name),'utf8');
   files.write(file,template.replace('/*CSS*/',()=>source('pixel-grid-canvas.css'))
     .replace('/*SCRIPTS*/',()=>['pixel-grid-canvas.mjs','pixel-motion-panel.mjs','pixel-inspector.mjs','pixel-view-source.js',
-      'pixel-inspection.js','art-passes.js'].map(source).join('\n'))
+      'pixel-source-bindings.js','pixel-inspection.js','art-passes.js'].map(source).join('\n'))
     .replace('/*DATA*/',()=>data));
 }
 
