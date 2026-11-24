@@ -17,6 +17,7 @@ All checked-in guides, indexed by title and section headings.
 - [Agent activity decisions](../agent-decisions.md)
 - [Agent needs and schedules](../agent-needs.md)
 - [Agent orders and task execution](../agent-orders.md)
+- [Agent-driven project authoring](../agent-projects.md)
 - [Agent storage and lifecycle](../agent-storage.md)
 - [Aggregate simulation levels](../aggregate-simulation.md)
 - [Aligned simulation review](../aligned-simulation-review.md)

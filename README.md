@@ -834,6 +834,10 @@ Preview a JSON edit with an optional PNG, then apply it to a new snapshot after 
 The [editable passage walkthrough](docs/headless-authoring.md#edit-generated-parts-from-the-cli) moves a
 doorway and landing while checking that a character can still walk through.
 
+Use [agent-driven project authoring](docs/agent-projects.md) to pick a frame and
+batch scene, layered pixel, timeline, and audio cue edits into one portable
+project revision.
+
 The [headless authoring guide](docs/headless-authoring.md) covers typed graphs,
 cached simulation, attribute transfer, mesh paths, layered artwork, animation
 state graphs and the retained Flooded Shrine recipe. The [procedural API guide](docs/procedural.md)

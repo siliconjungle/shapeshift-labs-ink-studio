@@ -268,13 +268,14 @@ function createArtPasses(request, w, h, emissiveSlots, capturePartMotion, captur
       const defaults=world.renderMetadata?.[names] || [null];
       const key=channel==='objectId' ? 'object' : 'material';
       const declared=(geometry.representationLabels ?? []).map(row=>row[key]);
-      const appended=[...new Set([...(geometry.surfaceLabels?.[names] ?? []),...declared])]
-        .filter(name=>!defaults.includes(name)).sort();
+      const labels = new Set([...(geometry.surfaceLabels?.[names] ?? []), ...declared]);
+      for (const hit of atlasOwners?.values() ?? []) if (hit[channel] !== undefined) labels.add(hit[channel]);
+      const appended = [...labels].filter(name => !defaults.includes(name)).sort();
       const table=appended?.length ? [...defaults,...appended] : defaults;
       const byName=new Map(table.map((name,i)=>[name,i]));
       result[channel]=topDown(Uint32Array.from(owner,(i,p)=>{
         const hit=atlasOwners?.get(p);
-        const name=hit?.mesh?.[key] ?? (hit?.partId!==undefined || hit?.sdf ? hit?.[channel] : undefined);
+        const name = hit?.mesh?.[key] ?? hit?.[channel];
         return name===undefined ? ids?.[i] || 0 : byName.get(name) ?? 0;
       }),1);
       result[names]=table;

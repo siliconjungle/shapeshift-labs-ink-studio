@@ -1169,7 +1169,8 @@ function renderFrame(world, o, preparedPalettes) {
     objectDither: anchorSpaces.has('object'), shutterTime: shutterRows?.atlasTime,
     subject: pictureFocus ? target=>focusedRule(target,protection?.match(target)) : protection?.match,
     visibility:(position)=>(cloudShadow?.(...position)??1)*(exposure?.light?.(...position)??1),
-    clip:geometryClip, captureIds:Boolean(deep||captureFogOwners), artScale:o.artGridScale || 1,
+    clip:geometryClip, captureIds:Boolean(deep || captureFogOwners || passSelection.has('objectId') || passSelection.has('materialId')),
+    captureUV:passSelection.has('surfaceUV') || passSelection.has('surfaceUVValid'), artScale:o.artGridScale || 1,
     budgets:!reflectionPlane && !probeView && (o.spriteAtlasBudgets === true ? world.spriteAtlasBudgets :
       o.spriteAtlasBudgets ?? world.spriteAtlasBudgets),
     budgetTime:o.interfaceTime ?? sceneTime,

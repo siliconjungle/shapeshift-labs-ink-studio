@@ -14,7 +14,7 @@ function heading(v) {
 
 function rasterize(placements, settings) {
   const {eye,V,W,H,focal,ortho,near,rayAt,time:sceneTime,interfaceTime,override,sun,visibility,clip,objectDither,
-    subject,captureIds,shutterTime,reconstructed,spriteLOD,budgets,budgetTime,budgetFrame,impostorBlend,artScale=1}=settings;
+    subject,captureIds,captureUV,shutterTime,reconstructed,spriteLOD,budgets,budgetTime,budgetFrame,impostorBlend,artScale=1}=settings;
   const layers = new Map();
   if (budgets !== undefined && budgets !== false) {
     if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets))
@@ -163,6 +163,7 @@ function rasterize(placements, settings) {
                 });
                 results.push({p,...hit,...ids,alpha:lod?1:sample.alpha*opacity,color,normal,emission,protection,swatches:atlas.swatches,
                   objectPosition:local(rotation,position.map((n,i)=>(n-at[i])/placement.scale)), objectScale:placement.scale,
+                  ...(captureUV && inside && { uv:[uAt/width,1-vAt/height] }),
                   ...(objectDither && mode==='card' && { patternPosition:[(uAt-px)*tile.unitsPerPixel,(py-vAt)*tile.unitsPerPixel,0] })});
               }
             }

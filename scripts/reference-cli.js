@@ -48,6 +48,10 @@ function runtimeSubcommands(cliDirectory, commands) {
   for (const [group, file] of [['graph', 'graph-cli.js'], ['patch', 'patch-cli.js']]) {
     if (commands.has(group)) add(group, file, require(path.join(cliDirectory, file)).commandOptions);
   }
+  if (commands.has('project')) {
+    const file = 'agent-project.js';
+    add('project author', file, require(path.join(cliDirectory, file)).commandOptions);
+  }
   const withoutFlags = actions => Object.fromEntries(actions.map(action => [action, null]));
   if (commands.has('pixel-art')) {
     const file = 'pixel-art.js';
