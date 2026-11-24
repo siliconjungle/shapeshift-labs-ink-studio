@@ -14,7 +14,7 @@ function heading(v) {
 
 function rasterize(placements, settings) {
   const {eye,V,W,H,focal,ortho,near,rayAt,time:sceneTime,interfaceTime,override,sun,visibility,clip,objectDither,
-    subject,captureIds,captureUV,shutterTime,reconstructed,spriteLOD,budgets,budgetTime,budgetFrame,impostorBlend,artScale=1}=settings;
+    subject,allow,captureIds,captureUV,shutterTime,reconstructed,spriteLOD,budgets,budgetTime,budgetFrame,impostorBlend,artScale=1}=settings;
   const layers = new Map();
   if (budgets !== undefined && budgets !== false) {
     if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets))
@@ -53,12 +53,13 @@ function rasterize(placements, settings) {
   }
   const sample={ color:[0,0,0],normal:[0,0,0],emission:[0,0,0] };
   for (const [placementIndex, placement] of placements.entries()) {
+    const lod=reconstructed?.get(placement);
+    if (allow && !allow({object:placement.objectId,part:lod?.part})) continue;
     const layer = layers.get(placement.budgetLayer);
     const budgetIndex = layer?.entries.length;
     const entry = layer && { id: placement.budgetId ?? String(placementIndex), priority: placement.budgetPriority,
       top: artHeight, bottom: artHeight };
     if (entry) layer.entries.push(entry);
-    const lod=reconstructed?.get(placement);
     const time = lod ? sceneTime :
       placement.clock === 'interface' ? interfaceTime ?? sceneTime : shutterTime?.(placement) ?? sceneTime;
     const {atlas,opacity}=placement, mode=lod?'impostor':override??placement.mode;

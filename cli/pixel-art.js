@@ -476,6 +476,19 @@ function selectPixels(design,query,{ frame,layer,cel } = {},context) {
   const visible = p => !raster.clipping || raster.clipping[p];
   const rendering = SelectionSources.sourceFor(width,height,query,{
     capture:context?.captureSelection,
+    binding(id) {
+      const binding = design.sceneBindings?.find(row=>row.id === id);
+      if (!binding) throw new RangeError('Unknown pixel scene binding '+id);
+      if (binding.frame !== undefined && binding.frame !== active.id)
+        throw new RangeError('Selection binding is scoped to frame '+binding.frame);
+      if (binding.layer !== undefined && target !== undefined && binding.layer !== target)
+        throw new RangeError('Selection binding is scoped to layer '+binding.layer);
+      return binding;
+    },
+    sceneMatches(binding,frame) {
+      const ref = frame.sourceView?.source ?? frame.scene ?? context?.sceneRef ?? frame.pixelSelection?.scene;
+      return reference(ref) && sameScene(binding.scene,ref);
+    },
     material(destination) {
       if (!context) throw new TypeError('Selection needs the scene bound to material destination ' + destination);
       const reader = Destinations.channelSource(Destinations.resolve(design,destination),context);
@@ -1502,6 +1515,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       route.layer?.kind === 'surface' ? route.layer.id : undefined);
     const output = edit(design,frame,patch,{
       captureSelection:context.captureSelection,
+      sceneRef:context.sceneRef,
       onSource(revision) {
         sourceRevision = revision;
         if (patch.sourceRevision === undefined) warnings.push(sourceWarning(route.binding.id));
@@ -1637,6 +1651,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
   function editContext(context, grouped) {
     return {
       captureSelection:context?.captureSelection ?? (context?.renderFrame && (()=>context.renderFrame)),
+      sceneRef:context?.sceneRef ?? (sceneEditor ? sceneName : undefined),
       scene(binding) {
         if (grouped && !sceneEditor)
           throw new Error('Attach the source scene editor to group native scene and pixel edits');

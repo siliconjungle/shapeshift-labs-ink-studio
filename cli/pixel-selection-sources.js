@@ -3,6 +3,7 @@
 const ArtPasses = require('../src/art-passes.js');
 const CanvasTransforms = require('../src/pixel-canvas-transforms.js');
 const { digest } = require('./pixel-edit-revisions.js');
+const { minimumCoverage } = require('./pixel-selection-scope.js');
 
 const identity = {
   object:['objectId','objects'], part:['partId','parts'], material:['materialId','materials']
@@ -29,8 +30,8 @@ function needed(query) {
 
 const inRange = (value,[min,max]) => Number.isFinite(value) && value >= min && value <= max;
 
-function sourceFor(width,height,query,{ capture,material }) {
-  const cells = width*height, sources = [], channels = new Map();
+function sourceFor(width,height,query,{ capture,material,binding:findBinding,sceneMatches }) {
+  const cells = width*height, sources = [], channels = new Map(), captures = new Map(), bindings = new Map();
   let passes;
 
   function capturePasses() {
@@ -83,8 +84,54 @@ function sourceFor(width,height,query,{ capture,material }) {
     };
   }
 
+  function captureBinding(binding,isolated) {
+    const { object,part,canvas } = binding, size = canvas?.size ?? [width,height], [w,h] = size;
+    const key = JSON.stringify([binding.scene,w,h,object,part,isolated]);
+    if (captures.has(key)) return captures.get(key);
+    if (!capture) throw new TypeError('Binding selection needs --scene or an SDK scope capture');
+    const frame = capture({ w,h,passes:[],pixelSelection:{ object,...(part !== undefined && {part}),isolated } });
+    if (frame?.w !== w || frame?.h !== h) throw new RangeError('Selection capture must use the binding native grid');
+    if (!sceneMatches(binding,frame)) throw new RangeError('Selection source is not the scene of binding '+binding.id);
+    const result = frame.pixelSelection;
+    if (!result) throw new RangeError('Render did not capture selection coverage with the requested scope');
+    if (result.w !== w || result.h !== h || result.object !== object || result.part !== part ||
+        result.isolated !== isolated || !(result.coverage instanceof Float32Array) || result.coverage.length !== w*h ||
+        result.coverage.some(value=>!Number.isFinite(value) || value < 0 || value > 1))
+      throw new RangeError('Selection coverage must match the requested binding and scope');
+    captures.set(key,result);
+    return result;
+  }
+
+  function bindingMatch(query) {
+    const { id,scope = 'visible' } = query;
+    const key = JSON.stringify([id,scope]);
+    if (bindings.has(key)) return bindings.get(key);
+    const binding = findBinding(id);
+    if (scope === 'isolated-part' && binding.part === undefined)
+      throw new RangeError('Isolated-part selection needs a named part on binding '+id);
+    const selected = captureBinding(binding,scope !== 'visible');
+    const visible = scope === 'through-layers' ? captureBinding(binding,false) : null;
+    const map = new Uint8Array(cells);
+    let occludedPixels = 0;
+    for (let p=0; p<cells; p++) {
+      const coordinate = CanvasTransforms.sourcePoint([width,height],[p%width,Math.floor(p/width)],binding.canvas);
+      if (!coordinate) continue;
+      const q = Math.floor(coordinate[1])*selected.w+Math.floor(coordinate[0]);
+      const included = selected.coverage[q] > minimumCoverage;
+      map[p] = Number(included);
+      if (included && visible && visible.coverage[q] <= minimumCoverage) occludedPixels++;
+    }
+    sources.push({ kind:'scene-binding',binding:id,scope,object:binding.object,part:binding.part ?? null,
+      grid:[selected.w,selected.h],...(visible && {occludedPixels}),
+      revision:digest([binding,scope,selected,visible]) });
+    const matches = p=>!!map[p];
+    bindings.set(key,matches);
+    return matches;
+  }
+
   function match(query) {
     const { type,channel,destination,range,component } = query;
+    if (type === 'binding') return bindingMatch(query);
     if (destination !== undefined) {
       if (!channels.has(destination)) {
         const source = material(destination);

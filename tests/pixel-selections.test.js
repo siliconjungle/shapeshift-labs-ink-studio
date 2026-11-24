@@ -325,3 +325,118 @@ test('CLI material and SDF masks follow the visible owners at mesh cutouts', t =
   assert.ok(select(sdf).pixelCount > 50);
   assert.equal(select({ type:'intersect',base:sdf,with:copper }).pixelCount,0);
 });
+
+function scopeStudy({makeBuilder,SpriteSurface}) {
+  return { id:'scope-study', name:'Scope study', build() {
+    const B = makeBuilder(17,[0x162331,0xec9244,0x4cc6bb,0x777d87]);
+    B.disc(0,0,0,[0,0,1],.52,.025,B.P[1],3);
+    B.describeSplats(0,1,{ object:'assembly',target:{part:'handle'} });
+    B.disc(.8,.94,0,[0,0,1],.24,.025,B.P[2],3);
+    B.describeSplats(1,2,{ object:'assembly',target:{part:'hinge'} });
+    B.disc(.35,0,.5,[0,0,1],.25,.025,B.P[2],.35,{nd:true});
+    B.describeSplats(2,3,{ object:'mist' });
+    const cover = SpriteSurface.make();
+    cover.face([-.22,-.5,1],[.44,0,0],[0,1,0],12,22,()=>0x777d87,{objectId:'cover'});
+    return B.finish({id:'scope-study',spriteSurfaces:cover.finish(),radius:4,
+      cam:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,ortho:true},dither:0});
+  } };
+}
+
+function scopedDesign(scene) {
+  return { ...design,width:64,height:48,sceneBindings:[
+    { id:'work',scene,object:'assembly',part:'handle',frame:'front',layer:'ink' },
+    { id:'whole',scene,object:'assembly' }
+  ] };
+}
+
+test('binding scope defaults to visible target hits, preserves soft overlap, and names deliberate hidden selection',()=>{
+  const editor = ink.createPixelEditor(scopedDesign('scope-study'));
+  const world = scopeStudy(ink.load()).build(), calls = [];
+  const captureSelection = settings=>{
+    calls.push(settings.pixelSelection.isolated);
+    return ink.render(world,{ ...settings,px:1,raw:true });
+  };
+  const pick = (scope,options={})=>editor.select({ type:'binding',id:'work',...(scope && {scope}) },
+    { captureSelection,...options });
+  const visible = pick(), isolated = pick('isolated-part'), through = pick('through-layers');
+  const frameOptions = { w:64,h:48,px:1,raw:true };
+  const visibleFrame = ink.render(world,{ ...frameOptions,pixelSelection:{ object:'assembly',part:'handle' } });
+  assert.deepEqual(visibleFrame.rgb,ink.render(world,frameOptions).rgb);
+  assert.deepEqual(editor.select({type:'binding',id:'work'},{renderFrame:visibleFrame}),visible);
+  assert.deepEqual(visible,pick('visible'));
+  assert.ok(visible.pixelCount > 10);
+  assert.ok(through.pixelCount > visible.pixelCount);
+  assert.deepEqual(through.pixels,isolated.pixels);
+  const includes = (mask,x,y)=>mask.pixels.some(([u,v])=>u === x && v === y);
+  assert.equal(includes(visible,32,24),false);
+  assert.equal(includes(through,32,24),true);
+  assert.equal(includes(isolated,32,24),true);
+  const projectedOrigin = ink.render(world,{ w:64,h:48,px:1,raw:true,
+    pixelSelection:{ object:'mist' } }).pixelSelection.coverage;
+  assert.ok(visible.pixels.some(([x,y])=>projectedOrigin[y*64+x] > .1));
+  const whole = editor.select({ type:'binding',id:'whole',scope:'through-layers' },{ captureSelection });
+  assert.ok(whole.pixelCount > through.pixelCount);
+  assert.equal(through.sources[0].occludedPixels,through.pixelCount-visible.pixelCount);
+  assert.equal(through.sources[0].scope,'through-layers');
+  assert.notEqual(through.sources[0].revision,isolated.sources[0].revision);
+  assert.equal(visible.sources[0].scope,'visible');
+  assert.deepEqual(calls.slice(0,4),[false,true,true,false]);
+  assert.throws(()=>pick('visible',{ frame:'back' }),/scoped to frame front/);
+  assert.throws(()=>pick('visible',{ layer:'top' }),/scoped to layer ink/);
+  assert.throws(()=>pick('anything'),/selection scope/);
+  assert.throws(()=>editor.select({ type:'binding',id:'whole',scope:'isolated-part' },{ captureSelection }),/named part/);
+  assert.throws(()=>pick('visible',{ captureSelection:()=>({ w:64,h:48,scene:'other' }) }),/not the scene/);
+});
+
+test('CLI saves and replays a guarded scope and maps the document to the registered native grid',t=>{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ink-selection-scope-'));
+  t.after(()=>fs.rmSync(dir,{ recursive:true,force:true }));
+  const file = name=>path.join(dir,name+'.json'), scene = path.join(dir,'scene.js');
+  fs.writeFileSync(scene,'module.exports = '+scopeStudy.toString());
+  const doc = scopedDesign(scene);
+  doc.width = doc.height = 8;
+  doc.sceneBindings[0].canvas = { size:[64,48],offset:[28,20],scale:[1,1] };
+  const select = { type:'binding',id:'work',scope:'through-layers' };
+  const write = (name,value)=>fs.writeFileSync(file(name),JSON.stringify(value));
+  write('design',doc);
+  write('query',select);
+  const cli = (...args)=>JSON.parse(execFileSync(process.execPath,['cli/ink-studio.js','pixel-art',...args],
+    { cwd:path.resolve(__dirname,'..'),encoding:'utf8' }));
+  const report = cli('select',file('design'),file('query'),'--scene',scene);
+  assert.deepEqual(report.grid,[8,8]);
+  assert.deepEqual(report.sources[0].grid,[64,48]);
+  assert.ok(report.sources[0].occludedPixels > 0);
+  write('patch',{ id:'save-work',frame:'front',revision:report.revision,destination:'selections',
+    operation:{ id:'work-mask',query:select,sources:report.sources } });
+  const receipt = cli('edit',file('design'),file('patch'),'--scene',scene,'--out',file('edited'));
+  assert.equal(receipt.inputs.selectionSources[0].scope,'through-layers');
+  write('receipt',receipt);
+  cli('replay',file('design'),file('receipt'),'--scene',scene,'--out',file('again'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(file('again'),'utf8')).selections[0].pixels,report.pixels);
+  write('patch',{ id:'save-work',frame:'front',revision:report.revision,destination:'selections',
+    operation:{ id:'work-mask',query:{ ...select,scope:'visible' },sources:report.sources } });
+  assert.throws(()=>cli('edit',file('design'),file('patch'),'--scene',scene,'--out',file('stale')),error=>
+    JSON.parse(error.stdout).conflicts[0].code === 'stale-source');
+});
+
+test('through-layer selection reaches a retained SDF behind opaque geometry',()=>{
+  const source = { id:'field-scope',style:'slate',
+    camera:{target:[0,0,0],dist:4,yaw:0,pitch:0,sway:0,projection:'orthographic'},
+    finish:{ look:{ sdfAssist:true } },
+    solids:[
+      { id:'rear',kind:'box',at:[0,0,0],half:[.65,.65,.12],res:.13,mat:'stone' },
+      { id:'cover',kind:'box',at:[0,0,.7],half:[.24,.8,.12],res:.13,mat:'stone' }
+    ] };
+  const world = ink.createSceneEditor(source).build();
+  const document = { ...scopedDesign(source.id),sceneBindings:[{ id:'target',scene:source.id,object:'rear' }] };
+  const editor = ink.createPixelEditor(document);
+  const captureSelection = settings=>ink.render(world,{ ...settings,px:1,raw:true,passes:['opaque-surface'] });
+  const read = scope=>editor.select({ type:'binding',id:'target',scope },{ captureSelection });
+  const visible = read('visible'), through = read('through-layers');
+  assert.ok(visible.pixelCount > 10);
+  assert.ok(through.sources[0].occludedPixels > 10);
+  assert.ok(through.pixels.some(([x,y])=>x === 32 && y === 24));
+  assert.ok(!visible.pixels.some(([x,y])=>x === 32 && y === 24));
+  const isolated = captureSelection({ w:64,h:48,pixelSelection:{object:'rear',isolated:true} });
+  assert.equal(ink.pickSurface(isolated.passes,32,24).kind,'sdf');
+});

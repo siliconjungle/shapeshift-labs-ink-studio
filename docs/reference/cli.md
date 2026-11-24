@@ -239,7 +239,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts
   pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel
   pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel
-  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection
+  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings
   pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard
   pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush
     dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast

@@ -9,10 +9,11 @@ const PixelSelections = (() => {
     ['wand',['at','tolerance','connected']]
   ]);
   const semanticTypes = new Map([
-    ['swatch',['id','at']],['object',['id','at']],['part',['id','at','object','entity']],
+    ['swatch',['id','at']],['binding',['id','scope']],['object',['id','at']],['part',['id','at','object','entity']],
     ['material',['id','at']],['depth',['range']],['channel',['channel','destination','component','range']]
   ]);
   const label = value => typeof value === 'string' && value.trim().length > 0;
+  const bindingScopes = Object.freeze(['visible','isolated-part','through-layers']);
   const mergeTypes = ['combine','subtract','intersect'];
   const modifyTypes = new Map([
     ['invert',[]],['grow',['amount']],['shrink',['amount']],['outline',['amount','side']]
@@ -93,8 +94,13 @@ const PixelSelections = (() => {
   }
 
   function validateMeaning(width,height,query) {
-    const { type,id,at,range,channel,destination,component,object,entity } = query;
+    const { type,id,at,range,channel,destination,component,object,entity,scope } = query;
     if (!fields(query,['type',...semanticTypes.get(type)])) throw new TypeError('Unknown '+type+' selection field');
+    if (type === 'binding') {
+      if (!label(id) || scope !== undefined && !bindingScopes.includes(scope))
+        throw new TypeError('Choose a scene binding ID and selection scope visible, isolated-part, or through-layers');
+      return;
+    }
     if (type === 'depth' || type === 'channel') {
       if (!Array.isArray(range) || range.length !== 2 || !Number.isFinite(range[0]) ||
           !Number.isFinite(range[1]) || range[0] > range[1])

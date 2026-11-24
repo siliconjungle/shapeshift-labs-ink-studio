@@ -23,7 +23,7 @@ function triangleAxes([a,b,c]) {
   return [right,cross(normal,right),normal];
 }
 
-function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
+function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampling,surfaceNormals=true,semanticMipmaps=true,simulationLayers,artScale=1,capture=false,motion=false,sourceBinding=false,allow,depthOnly=false,meshMask,spriteLOD,omit,lightingTargets,captureFogOwners,multiprojection}) {
   if(!atlas)return [];
   const depth=depthOnly && new Float32Array(W*H).fill(Infinity);
   const fragments=depthOnly ? null : new Array(W*H),eye=[0,1,2].map(k=>-(V[k*4]*V[12]+V[k*4+1]*V[13]+V[k*4+2]*V[14]));
@@ -67,7 +67,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
     const lightingMesh=lightingTargets && layer.sceneMeshId;
     const sampleCharts=capture || omitLayer || simulationLayers?.size;
     const semantic=depthOnly ? [] : layer.semanticMipmaps??[];
-    const charts=(sampleCharts || lightingMesh || captureFogOwners || multiprojection ||
+    const charts=(allow || sampleCharts || lightingMesh || captureFogOwners || multiprojection ||
       semantic.some(row=>row.objectTexels)) && layer.surfaceCharts;
     let rangeIndex=0, filterIndex=0, projectionIndex=0, chartIndex=0, semanticIndex=0;
     for(let offset=0;offset<vertices.length;offset+=15){
@@ -85,6 +85,7 @@ function rasterize(atlas,{V,W,H,focal,ortho,near,far=Infinity,clip,paletteSampli
       const affine = style?.affine, linearUV = affine || ortho;
       while(charts?.[chartIndex]?.end<=first)chartIndex++;
       const chart=charts?.[chartIndex]?.first<=first ? charts[chartIndex] : null;
+      if (allow && !allow({object:chart?.objectId,part:chart?.partId})) continue;
       const local=multiprojection?.project(layer,chart);
       const step=local ? 0 : (style?.vertexSnap ?? 0)*artScale;
       const fogObject=captureFogOwners ? chart?.objectId : undefined;

@@ -1421,7 +1421,7 @@ const CMD = {
         '  pixel-art preview <design.json> <edit.json> [--scene <bound scene>]   report a proposed edit and its conflicts',
         '  pixel-art canvas <design.json> --out canvas.html [--frame id] [--scene scene.json | --source-view view.json] [--destination ids] [--at x,y]   inspect the cursor and optional pinned scene pixel',
         '  pixel-art sample <design.json> --at x,y [--mode composite|layer|source]   sample art or a bound material channel',
-        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection',
+        '  pixel-art select <design.json> <query.json> [--frame id] [--layer id|--cel id] [--scene path]   resolve a native selection, including scoped bindings',
         '  pixel-art copy <design.json> --selection id [--frame id] --layer id|--cel id   print a pixel clipboard',
         '  pixel-art brush <design.json> --selection id|--rect x,y,w,h --out brush.json   capture a portable indexed brush',
         '    dynamics options: --stabilization ms --pressure light,full --velocity pxPerSecond,slow,fast',
@@ -4191,11 +4191,12 @@ const CMD = {
       return { ...frame,camera,scene:world.id,time:sourceView.frame.time,sourceView };
     }
     function capture(id,{ w = num('w',160),h = num('h',96),passes = ['objectId'],
-      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture' } = {}) {
+      palettePixel,strandPixel,inspectFragmentPixel,sceneInspection,captureId = 'capture',pixelSelection } = {}) {
       if (sceneInspection) ViewSource.grid(w,h);
       const world = buildPreview(id), t = num('t',0);
       pose(world,t);
       const settings = { w,h,px:1,t,passes };
+      if (pixelSelection) return { ...R.render(world,view({ ...settings,pixelSelection,renderGrid:false,cameraGuides:false })),scene:id };
       if (!sceneInspection) return R.render(world,view(settings));
       return renderView(world,id,{ ...settings,passes:[...new Set([...sourcePasses,...passes])],
         palettePixel,strandPixel,inspectFragmentPixel,renderGrid:false,cameraGuides:false },{ id:captureId });

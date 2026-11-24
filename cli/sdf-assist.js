@@ -13,7 +13,23 @@ function normalAt(field, [x,y,z], step) {
   return length > 1e-10 && Number.isFinite(length) ? n.map(v=>v/length) : null;
 }
 
-function bind(world, data, settings) {
+function ownerLabel(owner) {
+  return { object:owner.renderOwner,entity:owner.renderOwner,...owner.renderTarget };
+}
+
+function isolatedField(source,allow) {
+  if (!allow) return source;
+  if (!source.bind) return null;
+  const body = owner=>allow(ownerLabel(owner));
+  if (![...source.rows.keys()].some(body)) return null;
+  const geometry = source.bind(body,()=>true);
+  if (!geometry) return null;
+  const cuts = new Set(source.negative);
+  const rows = new Map([...source.rows].filter(([owner])=>body(owner) || cuts.has(owner)));
+  return { ...source,...geometry,rows,bind:(select,cut)=>source.bind(owner=>select(owner)&&body(owner),cut) };
+}
+
+function bind(world, data, settings,allow) {
   const labels = TargetSelectors.index(world), rows = [];
   const normals = world.renderMetadata?.normals;
   const boned = new Set(world.anim?.boned ?? []), owned = world.anim?.geometryOwned;
@@ -54,8 +70,10 @@ function bind(world, data, settings) {
     }
     if (selected) sources.push({...geometry,parts,motion});
   }
-  for (const [sourceIndex,source] of (world.renderSdfs ?? []).entries()) {
-    if (!(source.rows instanceof Map) || typeof source.distance !== 'function' || typeof source.locate !== 'function') continue;
+  for (const [sourceIndex,original] of (world.renderSdfs ?? []).entries()) {
+    if (!(original.rows instanceof Map) || typeof original.distance !== 'function' || typeof original.locate !== 'function') continue;
+    const source = isolatedField(original,allow);
+    if (!source) continue;
     if (settings.posed && world.anim?.bones && source.bind) {
       for (const [key,group] of SdfPose.groups(world,source,(i,rest)=>opaque(i,rest,true),
         (body,cut)=>[source.bind(body,cut)].filter(Boolean))) {
@@ -110,7 +128,7 @@ function trace(source, ray, near, far, settings, clip, visible, x, y, sourceBind
 }
 
 function sdfSource(owner,row,rest) {
-  const target = owner ? {object:owner.renderOwner,entity:owner.renderOwner,...owner.renderTarget} : row.target;
+  const target = owner ? ownerLabel(owner) : row.target;
   return { key:owner ?? row.part,identity:{ kind:'sdf',object:target.object,entity:target.entity,part:target.part },
     coordinate:owner?.sourceLocal?.(rest) ?? rest };
 }
@@ -127,9 +145,10 @@ function editableSource(field) {
   }};
 }
 
-function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,editable=[]}) {
-  const {sources,rows} = bind(world,data,settings);
+function rasterize(world, data, settings, {w,h,rayAt,near,clip,visible,sourceBinding,allow,editable=[]}) {
+  const {sources,rows} = bind(world,data,settings,allow);
   for (const field of editable) {
+    if (allow && !allow({object:field.objectId})) continue;
     if (field.materials.some(material=>settings.candidates({object:field.objectId,entity:field.objectId,material})))
       sources.push(editableSource(field.trace));
   }

@@ -612,6 +612,7 @@ owners by identity.
 | --- | --- |
 | `{"type":"swatch","id":"oxide"}` | Exact indexed swatch ID. Use `at` in place of `id` to pick a visible swatch from a pixel. RGB aliases remain distinct. |
 | `{"type":"cluster","at":[12,8],"connectivity":8}` | The seed's connected swatch cluster. The default is four neighbors sharing an edge. Eight also follows corners. Supply a `source` query to find a component of any mask. |
+| `{"type":"binding","id":"gate"}` | Visible hits on the object or part named by the document binding. |
 | `{"type":"object","id":"gatehouse"}` | Pixels owned by that visible render object. |
 | `{"type":"part","id":"tide-needle","object":"tide-needle"}` | Visible pixels of the part. Optional `object` and `entity` scope reused part names. |
 | `{"type":"material","id":"brushed-copper"}` | Pixels owned by that render material. |
@@ -644,6 +645,39 @@ a scene-backed mask. Receipts fingerprint the inspected passes and bound
 material channels before saving their resolved pixels. Copy the selection
 report's `sources` into the save operation to guard it against changes
 since inspection. Recall the saved mask in the Workshop to use it as a paint boundary or brush footprint.
+
+### Choose a scene selection scope
+
+Use a `binding` query to select against the object and optional part in
+`sceneBindings`. The binding's registered source grid, document frame,
+and layer apply. Pass the bound scene with `--scene`.
+
+```json
+{ "type":"binding", "id":"gate", "scope":"visible" }
+```
+
+- **Visible** is the default. It follows the camera raster and includes
+  the selected target's contributions through soft edges and translucent
+  layers. A foreground depth-writing core blocks covered hits.
+- **Isolated part** (`isolated-part`) requires a named part on the binding.
+  Ink rasterizes that part alone at the same camera and frame. Other parts
+  of the object are excluded.
+- **Through layers** (`through-layers`) projects the bound object or part
+  through scene occluders. The selection report gives the number of
+  `occludedPixels` added relative to the visible mask. An isolated part and
+  a through-layer query on that same part can share a screen footprint.
+
+Scope and source coverage are fingerprinted in `sources`. Use the same
+query and copy its `sources` when saving the selection to guard the chosen
+scope. Once saved, use the mask with the regular painting and selection tools.
+
+In the SDK, pass `captureSelection` to `editor.select` or the edit
+operation. Forward the callback's native `w`, `h`, `passes`, and
+`pixelSelection` options to `ink.render(world, { ...settings, px:1 })`.
+A through-layer query requests both the isolated and scene views. A
+pre-rendered `renderFrame` carrying the matching `pixelSelection` result
+can supply a single visible or isolated-part query. Supply `sceneRef`
+when the binding names a file and the world uses a logical scene ID.
 
 ### Edit and recall masks
 
