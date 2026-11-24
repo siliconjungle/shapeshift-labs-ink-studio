@@ -1562,6 +1562,17 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.procedural.sdfBrushSurfaces.attach` | function | `(surface,id,change,grid,field,before,inherited,roles,palette)` | [source](../../src/kit/p59a-sdf-brush-surfaces.js) |
 | `KIT.procedural.sdfBrushSurfaces.check` | function | `(surface,roles)` | [source](../../src/kit/p59a-sdf-brush-surfaces.js) |
 
+## KIT.procedural.sdfDerivedAssets
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.procedural.sdfDerivedAssets` | namespace |  |  |
+| `KIT.procedural.sdfDerivedAssets.assemble` | function | `(chunks,trace,options,previousShape)` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
+| `KIT.procedural.sdfDerivedAssets.paint` | function | `(bake,source,base)` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
+| `KIT.procedural.sdfDerivedAssets.settings` | function | `(raw={})` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
+| `KIT.procedural.sdfDerivedAssets.splatWorld` | function | `(snapshot,options={})` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
+| `KIT.procedural.sdfDerivedAssets.splats` | function | `(mesh,positions,indices,max)` | [source](../../src/kit/pcy-sdf-derived-assets.js) |
+
 ## KIT.procedural.sdfMaterialPaint
 
 | Member | Kind | Signature or value | Guides and source |

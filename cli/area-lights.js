@@ -39,7 +39,7 @@ function rasterize(lights, { w, h, rayAt, near, capture, clip }) {
 
 const {staticSources,occludes}=AreaLights;
 
-function createLighting(lights, world, data, alpha, { spots = [], shadow, cutoutShadow, shot, art, spill = [] } = {}) {
+function createLighting(lights, world, data, alpha, { spots = [], shadow, cutoutShadow, shot, art, spill = [], derived = [] } = {}) {
   const active = lights.filter(light=>light.intensity>0).map(light=>({
     ...light, extent:Math.hypot(...light.half), tint:linear(light.rgb)
   }));
@@ -48,7 +48,7 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
   const rig = ShotLighting.bind(shot, world, data, alpha, art);
   if (!active.length && !spillLights.length && !projectors.length && !rig) return null;
   const sources = active.some(light=>light.shadows) || spillLights.some(light=>light.shadows) || (!shadow && spots.some(light=>light.castsShadow))
-    ? staticSources(world,data,alpha) : [];
+    ? staticSources(world,data,alpha,derived) : [];
   const areaShadow = sources.length || cutoutShadow ? (origin, direction, stop) =>
     cutoutShadow?.(origin, direction, stop) || occludes(sources, origin, direction, stop) : null;
   const cache = [];
@@ -118,8 +118,8 @@ function createLighting(lights, world, data, alpha, { spots = [], shadow, cutout
   return shade;
 }
 
-function sceneOccluder(world, data, alpha) {
-  const sources = staticSources(world, data, alpha);
+function sceneOccluder(world, data, alpha, derived) {
+  const sources = staticSources(world, data, alpha, derived);
   return sources.length ? (origin, direction, distance) => occludes(sources, origin, direction, distance) : null;
 }
 

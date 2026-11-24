@@ -219,7 +219,7 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
   for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R])
     gl.texParameteri(gl.TEXTURE_3D, p, gl.CLAMP_TO_EDGE);
   gl.texImage3D(gl.TEXTURE_3D, 0, gl.R16F, 1, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([1000]));
-  function prepare(world, frame, time, capture = false, camera) {
+  function prepare(world, frame, time, capture = false, camera, derived=[]) {
     const areas = A.prepare(frame.areaLights === true ? world.areaLights : (frame.areaLights ?? world.areaLights), {
       time
     });
@@ -304,7 +304,7 @@ export function createLightEmitters(gl, resources, { table, textureUnit }, maxSi
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
       lastCookies = images;
     }
-    const sources = lamps.some(l => l.shadows) ? A.staticSources(world) : [];
+    const sources = lamps.some(l => l.shadows) ? A.staticSources(world,undefined,undefined,derived) : [];
     if (media?.shadow?.field) {
       const r = world.radius ?? 10;
       const bounds = { min: [-r, -r, -r], max: [r, r, r] };

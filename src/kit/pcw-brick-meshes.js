@@ -7,7 +7,7 @@
   const bounded=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
   const same=(a,b)=>a.length===b.length && a.every((value,i)=>value===b[i]);
 
-  function create({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,protection,
+  function create({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,protection,derived,
     maxBricks=512,maxCells=1600000,maxTriangles=400000}={}) {
     if (!P.sparseBricks.isSnapshot(initial) || !name(objectId) ||
         !vector(bounds?.min,Number.isFinite) || !vector(bounds?.max,Number.isFinite) ||
@@ -25,6 +25,7 @@
     });
     const materialSlots=new Map(colors.map((row,i)=>[row.id,i]));
     if (materialSlots.size!==colors.length) throw new RangeError('Brick mesh material IDs must be distinct');
+    const assetsAPI=P.sdfDerivedAssets, assetOptions=assetsAPI.settings(derived);
     const guards=freeze(P.data.clone(P.sdfProtection.check(protection)));
     const {cell,brickSize}=initial;
     const snap=n=>{
@@ -109,7 +110,7 @@
           faceCounts[i]++;
         }
       }
-      return {geometry:publish(spec,positions,indices,materials,previous),sites:{points:sites,faceCounts},work:surface.work};
+      return {geometry:publish(bricks,spec,positions,indices,materials,previous),sites:{points:sites,faceCounts},work:surface.work};
     }
 
     function recolor(bricks,spec,previous,{points,faceCounts}) {
@@ -119,33 +120,49 @@
         const material=slot(bricks,points.subarray(offset,offset+3),points.subarray(offset+3,offset+6));
         for (let count=0;count<faceCounts[i];count++) materials.push(material);
       }
-      return publish(spec,previous.positions,previous.indices,materials,previous);
+      return publish(bricks,spec,previous.positions,previous.indices,materials,previous);
     }
 
-    function publish(spec,positions,indices,materials,previous) {
-      if (previous && (positions===previous.positions || same(positions,previous.positions)) &&
-          (indices===previous.indices || same(indices,previous.indices)) &&
-          same(materials,previous.faceMaterials)) return previous;
-      const mesh=materials.length ? K.sceneMeshes.create({id:JSON.stringify([objectId,spec.key]),objectId,positions,indices,
-        uvs:new Float32Array(positions.length/3*2),materials:colors,faceMaterials:materials}) : null;
+    function publish(bricks,spec,positions,indices,materials,previous) {
+      const sameShape=previous && (positions===previous.positions || same(positions,previous.positions)) &&
+        (indices===previous.indices || same(indices,previous.indices));
+      if (sameShape && (!assetOptions.bakePaint || !materials.length) && same(materials,previous.faceMaterials))
+        return previous;
+      const source=Object.freeze({objectId,key:spec.key,revision:(current?.revision??0)+1,bounds:spec.bounds,bricks,
+        positions:Object.freeze(positions),indices:Object.freeze(indices),faceMaterials:Object.freeze(materials),
+        materials:Object.freeze(colors)});
+      const paint=materials.length && assetsAPI.paint(assetOptions.bakePaint,source,colors);
+      const mesh=paint ? K.sceneMeshes.create({id:JSON.stringify([objectId,spec.key]),objectId,positions,indices,
+        uvs:paint.uvs,materials:paint.materials,faceMaterials:materials}) : null;
+      const depthProxy=mesh && assetOptions.depthProxy && (sameShape ? previous.depthProxy :
+        K.sceneMeshes.depthProxy({id:JSON.stringify([objectId,spec.key,'depth']),objectId,positions,indices}));
       if (mesh) {
         const layer=K.sceneMeshes.layer(mesh);
         layer.brickField=objectId;
         layer.surfaceMotionKey=JSON.stringify([mesh.id,(current?.revision??0)+1]);
       }
       return Object.freeze({key:spec.key,bounds:spec.bounds,positions:Object.freeze(positions),
-        indices:Object.freeze(indices),faceMaterials:Object.freeze(materials),triangles:materials.length,mesh});
+        indices:Object.freeze(indices),faceMaterials:Object.freeze(materials),triangles:materials.length,mesh,
+        ...(depthProxy && {depthProxy}),
+        ...(mesh && assetOptions.maxSplats && {splats:assetsAPI.splats(mesh,positions,indices,assetOptions.maxSplats)})});
     }
 
-    let current, currentSites;
+    let current, currentSites, currentShape, updating=false;
     function update(bricks) {
+      if (updating) throw new Error('Cannot update a brick field while deriving its assets');
+      updating=true;
+      try { return rebuild(bricks); }
+      finally { updating=false; }
+    }
+
+    function rebuild(bricks) {
       if (!P.sparseBricks.sharesBase(initial,bricks))
         throw new TypeError('Brick meshes need a snapshot from their original sparse field');
       if (current?.bricks===bricks) return current;
       const dirty=current ? bricks.sampleChangesFrom(current.bricks,{channels:['offset','material']}) : [];
       const affected=current && dependencies(dirty);
       const rebuilt=[], recolored=[], seamNeighbors=[], changed=[], reused=[], sites=[];
-      let triangles=0,cells=0,samples=0;
+      let triangles=0,cells=0,samples=0,splats=0;
       const chunks=specs.map((spec,i)=>{
         const previous=current?.chunks[i];
         let geometry=previous, saved=currentSites?.[i];
@@ -166,17 +183,21 @@
         (geometry===previous ? reused : changed).push(spec.key);
         triangles+=geometry.triangles;
         if (triangles>maxTriangles) throw new RangeError('Brick mesh triangles exceed the scene budget');
+        splats+=geometry.splats?.count ?? 0;
+        if (splats>assetOptions.maxSplats) throw new RangeError('SDF splat patches exceed the field budget');
         return geometry;
       });
       const checked=guards.length && P.sdfProtection.verify(guards,chunks,bricks,current,
         current && dirty.map(edit=>P.spatial.expand(edit.bounds,cell)));
       const trace=Object.freeze({objectId,bounds:extent,distance:bricks.distance,maxStep:cell*.85,
         material(point,n){return colors[slot(bricks,point,n)];}});
-      current=Object.freeze({revision:(current?.revision??0)+1,bricks,bounds:extent,objectId,chunks:Object.freeze(chunks),trace,
+      const {assets,shape}=assetsAPI.assemble(chunks,trace,assetOptions,affected && !affected.geometry.size ? currentShape : undefined);
+      current=Object.freeze({assets,revision:(current?.revision??0)+1,bricks,bounds:extent,objectId,chunks:Object.freeze(chunks),trace,
         materials:Object.freeze(colors.map(row=>row.id)),
         work:freeze({dirty:dirty.map(({key,channel,samples,bounds})=>({key,channel,samples,bounds})),
           rebuilt,recolored,seamNeighbors,changed,reused,cells,samples,triangles,...(checked && {checkedFeatures:checked})})});
       currentSites=sites;
+      currentShape=shape;
       return current;
     }
 
@@ -211,8 +232,16 @@
   }
 
   function layers(snapshots) {
-    return snapshots.flatMap(row=>row.chunks.filter(chunk=>chunk.mesh).map(chunk=>K.sceneMeshes.layer(chunk.mesh)));
+    return snapshots.flatMap(row=>row.assets.paintBakes);
   }
 
-  P.brickMeshes=Object.freeze({create,frame,layers});
+  function splatWorld(snapshot,options) {
+    return P.sdfDerivedAssets.splatWorld(snapshot,options);
+  }
+
+  function clearance(snapshots,solids=[]) {
+    return P.clearance.field([...solids,...snapshots.map(row=>row.assets.collision)]);
+  }
+
+  P.brickMeshes=Object.freeze({create,frame,layers,splatWorld,clearance});
 })(KIT);

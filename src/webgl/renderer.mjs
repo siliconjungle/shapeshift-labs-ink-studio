@@ -1291,7 +1291,10 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         relightData ??= table(512, relightUnit, maxSize);
         relightData.upload(lightRows);
       }
-      const emitterFrame=emitterLighting.prepare(world,frame,t,reflectionCapture,camera);
+      const brickAPI=K?.procedural?.brickMeshes;
+      const brickFrames=world.brickMeshes ? brickAPI.frame(world,frame.brickMeshes) : [];
+      const brickCasters=brickFrames.flatMap(({assets})=>assets.shadow ? [assets.shadow] : []);
+      const emitterFrame=emitterLighting.prepare(world,frame,t,reflectionCapture,camera,brickCasters);
       const highlightRows = highlightPlan?.length && highlightAPI.frame(highlightPlan, world, camera, {
         w: width, h: height, time: t, lights: emitterFrame?.areas ?? [], cutoutShadows: frame.cutoutShadows, shadowShells: frame.shadowShells,
         spriteSurfaces: frame.spriteSurfaces === false ? false : world.spriteSurfaces,
@@ -1381,8 +1384,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
       const meshLayers = frame.meshes===false || (world.meshes===undefined&&!reliefMeshes.length) ? [] :
         toolkit.KIT.sceneMeshes.layers(world,frame.meshes,reliefMeshes,frame.scanPaint)
           .filter(atlas=>!spriteLOD?.hidden(spriteMask?.meshCodes.get(atlas.sceneMeshId)));
-      const brickAPI=toolkit.KIT?.procedural?.brickMeshes;
-      const brickLayers=world.brickMeshes ? brickAPI.layers(brickAPI.frame(world,frame.brickMeshes)) : [];
+      const brickLayers=brickFrames.length ? brickAPI.layers(brickFrames) : [];
       const spriteSurfaces = frame.spriteSurfaces === false ? null : world.spriteSurfaces;
       const decals=frame.surfaceDecals !== false && world.surfaceDecals?.sample(t,frame).layers;
       const atlases=[spriteSurfaces].flat().concat(meshLayers,brickLayers,decals || []);
@@ -1487,7 +1489,7 @@ function createBackend(gl, toolkit, { specialize, reuseOrder, simpleOnly }) {
         }
       }
       const surfaces=meshLayers.length||brickLayers.length||decals?.length ? atlases : spriteSurfaces;
-      const depthProxy = toolkit.KIT?.sceneMeshes?.proxyPlan(world,frame.splatDepthProxies,frame.splatProxyTolerance);
+      const depthProxy = K?.sceneMeshes?.proxyPlan(world,frame.splatDepthProxies,frame.splatProxyTolerance,brickFrames.flatMap(row=>row.assets.depthProxies));
       if (depthProxy || lastDepthProxy) historyValid=false;
       lastDepthProxy=!!depthProxy;
       const preview = frame.spriteSurfaces !== false && frame.scalePreviews !== false && world.scalePreviews;

@@ -256,9 +256,11 @@ Members and callable signatures come from the public entry point. Guide links po
 | Member | Kind | Signature or value | Guides and source |
 | --- | --- | --- | --- |
 | `KIT.procedural.brickMeshes` | namespace |  | [guide](../brick-meshes.md) |
-| `KIT.procedural.brickMeshes.create` | function | `({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,protection, maxBricks=512,maxCells=1600000,maxTriangles=400000}={})` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
+| `KIT.procedural.brickMeshes.clearance` | function | `(snapshots,solids=[])` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
+| `KIT.procedural.brickMeshes.create` | function | `({bricks:initial,bounds,objectId,materials,materialAt,normal,refine=3,protection,derived, maxBricks=512,maxCells=1600000,maxTriangles=400000}={})` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
 | `KIT.procedural.brickMeshes.frame` | function | `(world,enabled)` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
 | `KIT.procedural.brickMeshes.layers` | function | `(snapshots)` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
+| `KIT.procedural.brickMeshes.splatWorld` | function | `(snapshot,options)` | [guide](../brick-meshes.md), [source](../../src/kit/pcw-brick-meshes.js) |
 
 ## KIT.procedural.cameraPivots
 

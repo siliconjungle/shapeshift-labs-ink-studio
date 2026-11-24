@@ -238,8 +238,9 @@ const AreaLights = (() => {
     }
     return out;
   }
-  function staticSources(world, data = world.data, alpha) {
-    const sources = [],
+  function staticSources(world, data = world.data, alpha, derived=[]) {
+    const retained=world.brickSnapshot?.assets?.shadow;
+    const sources = retained ? [retained,...derived] : derived.slice(),
       boned = new Set(world.anim?.boned ?? []),
       backdrop = new Set(world.back ?? []),
       owned = world.anim?.geometryOwned;

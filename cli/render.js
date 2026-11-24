@@ -466,6 +466,7 @@ function renderFrame(world, o, preparedPalettes) {
   const probeView = o[probeCamera];
   const brickAPI=world.brickMeshes && require('../index.js').load().KIT.procedural.brickMeshes;
   const brickFrames=brickAPI?.frame(world,o.brickMeshes) ?? [];
+  const brickCasters=brickFrames.flatMap(({assets})=>assets.shadow ? [assets.shadow] : []);
   if (counters && brickFrames.length && !o.reflectionPlane && !probeView)
     counters.brickMeshes=brickFrames.map(({objectId,revision,work})=>({objectId,revision,work}));
   const useSdf = sdfSettings && (world.renderSdfs?.length || brickFrames.length) && !o.reflectionPlane?.select && !probeView?.allow;
@@ -1172,7 +1173,7 @@ function renderFrame(world, o, preparedPalettes) {
     }, report).filter(Boolean);
     if (active.length) spriteSurfaces = [spriteSurfaces, ...active];
   }
-  const proxies = SceneMeshes.proxyPlan(world,o.splatDepthProxies,o.splatProxyTolerance);
+  const proxies = SceneMeshes.proxyPlan(world,o.splatDepthProxies,o.splatProxyTolerance,brickFrames.flatMap(row=>row.assets.depthProxies));
   const proxyDepth = proxies && SurfaceRaster.rasterize(proxies.meshes.map(mesh=>mesh.layer), {
     V,W,H,focal,ortho,near,far:camera.clipFar,clip:geometryClip,allow:isolate?.matches,depthOnly:true
   });
@@ -1297,7 +1298,7 @@ function renderFrame(world, o, preparedPalettes) {
   }) : [];
   const cutoutShadow = cutoutsForLight.length ? (origin, direction, stop) =>
     ShadowCutouts.occludes(cutoutsForLight, origin, direction, stop) : undefined;
-  const lightCasters=areaLights.some(l=>l.shadows)?AreaLights.staticSources(world,d):[];
+  const lightCasters=areaLights.some(l=>l.shadows)?AreaLights.staticSources(world,d,undefined,brickCasters):[];
   const volumeSource=volumeLighting&&!volumeLighting.shadow&&lightCasters.length?{...volumeLighting,shadow:(x,y,z,direction,distance)=>AreaLights.occludes(lightCasters,[x,y,z],direction,distance)}:volumeLighting;
   const prepareVolumeLight = () => volumeSource ? (localLighting ??= SceneOptics.lighting(volumeSource, world.pal,
     { time: t, localLights: o.volumeLocalLights, localShadows: o.volumeLocalShadows, celestialSun: celestial?.sun,
@@ -1397,8 +1398,8 @@ function renderFrame(world, o, preparedPalettes) {
       bg,counters) : null;
   let live, transmissionOccluder;
   function transmissionOccluded(point, direction, distance, bias) {
-    if (!world.renderSdfs?.length || distance <= bias) return false;
-    if (transmissionOccluder === undefined) transmissionOccluder = AreaRaster.sceneOccluder(world, d, occluderAlpha);
+    if (distance<=bias || !(world.renderSdfs?.length || brickCasters.length || world.brickSnapshot?.assets?.shadow)) return false;
+    if (transmissionOccluder === undefined) transmissionOccluder = AreaRaster.sceneOccluder(world, d, occluderAlpha, brickCasters);
     return transmissionOccluder?.(point.map((value, axis) => value + direction[axis] * bias), direction, distance - bias);
   }
   const sunGains = sun && [0, 0, 0];
@@ -1727,7 +1728,7 @@ function renderFrame(world, o, preparedPalettes) {
   const scanSplatView=scanFrame.appearance && world.gaussianHarmonics?.degree && world.gaussianAppearanceDelta &&
     {eye,back:[V[2],V[6],V[10]],ortho};
   const directLight = AreaRaster.createLighting(areaLights,world,d,occluderAlpha,
-      { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights });
+      { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights, derived:brickCasters });
   const diffuseFrames = (directLight || probes) && sampleFrames(world,t), diffuseNormals = [];
   function diffuseNormal(i) {
     return diffuseNormals[i] ?? (diffuseNormals[i] = receivesDiffuse(i) && diffuseFrames(i).normal || false);

@@ -179,7 +179,7 @@
       visit(tree);
       const meshOptions={V,rayBox:P.spatial.rayBox};
       const fields=P.brickMeshes?.frame(world,brickMeshes) ?? [];
-      const fieldMeshes=fields.flatMap(field=>field.chunks.filter(chunk=>chunk.mesh).map(chunk=>chunk.mesh));
+      const fieldMeshes=fields.flatMap(field=>field.assets.meshes);
       for (const mesh of [...K.sceneMeshes.list(world,meshes,additionalMeshes),...fieldMeshes]) {
         const hit=K.sceneMeshes.intersect(mesh,{origin,direction:d,maxDistance},meshOptions,row=>{
           const depth=back ? V.dot(V.sub(sectionCamera.eye,row.point),back)-(sectionCamera.setback??0) : row.distance;

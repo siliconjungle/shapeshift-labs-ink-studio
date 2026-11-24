@@ -88,6 +88,48 @@ to attach editable curves to the signed field through cuts and undo.
 Set `brickMeshes: false` on a frame or use `--brick-meshes off`
 to hide the editable fields.
 
+## Refresh derived assets together
+
+Each live brick revision publishes its meshes, paint atlases, triangle picker,
+and bounded signed collision field under `revision.assets`. Pass `derived`
+options to `brickMeshes.create` to also publish depth-only proxies, signed
+shadow casters, or a native splat representation.
+
+```js
+const gate = P.brickMeshes.create({
+  bricks, bounds, objectId: 'gate', materials,
+  derived: { depthProxy: true, shadow: true, splats: { maxSplats: 100000 } }
+});
+const before = gate.current();
+const cut = gate.edit(brush);
+const hit = cut.assets.pick({ origin: [0, 1, 4], direction: [0, 0, -1] });
+const clearance = P.brickMeshes.clearance([cut]);
+const splatView = P.brickMeshes.splatWorld(cut, { cam });
+```
+
+Use `world.brickMeshes = [gate]` for the editable mesh scene. Its depth proxies
+and emitter shadow sources follow the captured revision in CPU and WebGL
+renders. `brickMeshes.splatWorld` assembles a standalone packed splat asset
+with the same revision's depth proxies and shadow source. Each triangle
+uses a native polygon footprint with a small overlap at shared edges and
+samples its baked pigment at the centroid. Use the mesh for full texture and material detail.
+
+The optional `derived.bakePaint(source)` runs synchronously for affected
+nonempty chunks. It receives the candidate brick snapshot, chunk bounds,
+indexed positions, face material slots, and the proposed revision. Return
+`{ uvs, materials }` using normalized UVs and the same ordered material IDs.
+The materials can supply opaque textures and compatible mesh shading maps.
+Return `undefined` to use the built-in indexed pigment bake. Sample paint
+from the chunk and its local surface neighborhood so other chunks can keep
+their handles. Registered file exports are separate from the live atlas.
+
+Mesh and paint changes reuse untouched chunks. Paint-only edits also keep
+the depth proxy and signed shadow and collision fields. If any derived bake
+fails, the old revision stays published. Previously captured revisions
+continue to answer picking and clearance queries for their own geometry.
+The collision output is a static signed field for clearance queries and
+hosts that accept distance fields.
+
 ## Protect features across remeshing
 
 Pass a `protection` list with named feature bounds to `brickMeshes.create`.

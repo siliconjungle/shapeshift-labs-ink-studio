@@ -41,7 +41,7 @@ Members and callable signatures come from the public entry point. Guide links po
 | `toolkit.makeBuilder().fbm` | function | `(x, y, z, oct)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().fib` | function | `(k, n)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().fineTile` | function | `(t0, t1, t2, t3, ux, uy, uz, vx, vy, vz, col)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
-| `toolkit.makeBuilder().finish` | function | `(meta)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
+| `toolkit.makeBuilder().finish` | function | `(meta, {consumePendingPaint=true} = {})` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().frame` | function | `(yaw, tilt, roll)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().gauss` | function | `()` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |
 | `toolkit.makeBuilder().ground` | function | `(rad, fade, fn, step)` | [guide](../../README.md#first-sculpted-scene), [source](../../src/builder.js) |

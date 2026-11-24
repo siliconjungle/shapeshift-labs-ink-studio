@@ -1143,8 +1143,8 @@ function makeBuilder(seed, hex, { renderMetadata = true, initialCapacity = 1 << 
       CurveSplat.writeClips(curveClips, n - 1, center, clips);
     }
   }
-  function finish(meta) {
-    const pending = globalThis.INK_DECAL_NEXT;
+  function finish(meta, {consumePendingPaint=true} = {}) {
+    const pending = consumePendingPaint && globalThis.INK_DECAL_NEXT;
     if (pending) globalThis.INK_DECAL_NEXT = null;
     const paint = meta?.paint ?? pending, px = 1 / (meta?.detail || 12);
     const legacy = Array.isArray(paint) ? paint : paint?.decals ?? [];
