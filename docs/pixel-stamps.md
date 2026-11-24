@@ -232,6 +232,10 @@ travel with Workshop JSON and layer decks through their frame scopes and
 canvas transforms.
 [Authored detail protection](pixel-art-authoring.md#protect-authored-details)
 
+Open **Craft diagnostics** to step through flagged regions, inspect their
+pixels, and select the unprotected part for editing.
+[Craft diagnostics commands](pixel-art-authoring.md#navigate-craft-diagnostics)
+
 Stamp JSON stores guides shared by the whole animation in `guides`.
 Individual entries in `frames` can also carry a local `guides` list with its
 own IDs. Both use the [pixel guide definitions](pixel-art-authoring.md#register-frames-and-align-texture-pixels)

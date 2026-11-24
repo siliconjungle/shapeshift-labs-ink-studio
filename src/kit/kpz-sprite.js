@@ -199,6 +199,7 @@
   K.pixelLayerStack = PixelLayerStack;
   K.pixelInspection = PixelInspection;
   K.pixelProtection = PixelProtection;
+  K.pixelCraft = PixelCraft;
   K.pixelBrushes = PixelBrushes;
   K.sprite = {
     scanlineBudget: SpriteScanlineBudget,

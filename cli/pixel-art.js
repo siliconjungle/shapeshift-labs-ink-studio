@@ -21,7 +21,7 @@ const PixelPalette = require('../src/pixel-palette.js');
 const PaletteExtract = require('../src/palette-extract.js');
 const SelectionSources = require('./pixel-selection-sources.js');
 const PNG = require('./png.js');
-const Critic = require('./critic.js');
+const Craft = require('../src/pixel-craft.js');
 const files = require('./asset-files.js');
 const Destinations = require('./pixel-edit-destinations.js');
 const Preview = require('./pixel-edit-preview.js');
@@ -318,13 +318,13 @@ function validate(design) {
 
 function cell(frame,p) {
   const layer = frame.layerIds[frame.owners[p]];
-  const under = frame.layerIds[frame.underOwners[p]];
+  const under = frame.layerIds[frame.underOwners?.[p] ?? 0];
   return { at:[p%frame.width,Math.floor(p/frame.width)], layer,
     ...(frame.cels && { cel:frame.cels.get(layer) ?? null }),
     swatch:frame.swatches[frame.slots[p]] ?? null, protected:!!frame.locks[p],
     ...(frame.opacity && { alpha:frame.opacity[p] }),
     underneath:{ layer:under, ...(frame.cels && { cel:frame.cels.get(under) ?? null }),
-      swatch:frame.swatches[frame.underSlots[p]] ?? null }
+      swatch:frame.swatches[frame.underSlots?.[p]] ?? null }
   };
 }
 
@@ -524,9 +524,12 @@ function frameMetadata(frame) {
   return frame.id === undefined ? {} : { frame:frame.id, durationMs:frame.durationMs, pixelAspect:frame.pixelAspect };
 }
 
-function review(frame) {
-  const color = image(frame);
-  const result = Critic.lint(color, { background:Uint8Array.from(frame.slots,(slot,p)=>Number(slot < 0 || frame.opacity?.[p] === 0)) });
+function review(frame,{ kind,finding,overlay = true } = {}) {
+  if (kind !== undefined && !Object.hasOwn(Craft.kinds,kind))
+    throw new TypeError('Choose a diagnostic kind: '+Object.keys(Craft.kinds).join(', '));
+  if (finding !== undefined && !reference(finding)) throw new TypeError('Use a diagnostic ID for --finding');
+  const { image:color,result,diagnostics } = Craft.analyze(frame);
+  const addressed = diagnostics.filter(row=>(kind === undefined || kind === row.kind) && (finding === undefined || finding === row.id));
   const { mark, bg, ...metrics } = result;
   const findings = {}, protectedMarks = {};
   for (const [issue, flags] of Object.entries(mark)) {
@@ -552,8 +555,8 @@ function review(frame) {
       ...frameMetadata(frame), metrics,
       ...(frame.protectedDetails?.length && { protectedDetails:frame.protectedDetails.map(({ id,kind,pixels })=>
         ({ id,kind:kind ?? 'pixel',pixelCount:pixels.length })) }),
-      swatches:Object.fromEntries(frame.swatches.map((id, i) => [id,used[i]])), findings, protectedMarks },
-    overlay:Critic.lintMap(color,result)
+      swatches:Object.fromEntries(frame.swatches.map((id, i) => [id,used[i]])), findings, protectedMarks,diagnostics:addressed },
+    ...(overlay && { overlay:Craft.lintMap(color,result) })
   };
 }
 
@@ -1655,6 +1658,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       stampImage(stamp(compile(state().design,frame,undefined,layer),layer),{ preserveHidden:true }),options),
     inspect: (coordinate,options = {}) => inspect(state().design,coordinate,options,
       { ...editContext(options,false),sceneRef:sceneEditor && sceneName }),
+    lint: (options = {}) => lintDesign(state().design,options),
     sample: (coordinate,options = {}) => samplePixel(state().design,coordinate,options,editContext(options,false)),
     captureBrush: options => captureBrush(state().design,options),
     copySelection: options => copySelection(state().design,options),
@@ -1888,16 +1892,27 @@ function writeBrush(design,opt,source) {
   return { file:out,format:brush.format,size:[brush.width,brush.height],anchor:brush.anchor };
 }
 
+function craftLayer(frame,layer) {
+  if (layer === undefined) return frame;
+  const raw = frame.layerSources?.get(layer);
+  if (!raw) throw new RangeError('Unknown pixel layer '+layer);
+  const slots = Int16Array.from(raw.slots,(slot,p)=>slot < 0 || raw.alpha?.[p] === 0 ? -1 : slot);
+  return { ...frame,slots,opacity:raw.alpha,owners:Uint8Array.from(slots,slot=>Number(slot >= 0)),
+    layerIds:[null,layer],mixedColors:undefined,underSlots:undefined,underOwners:undefined };
+}
+
+function lintDesign(design,{ frame,layer,cel,kind,finding } = {}) {
+  if (layer !== undefined && cel !== undefined) throw new TypeError('Choose one layer or cel to lint');
+  const compiled = compile(design,frame,cel,layer ?? (cel !== undefined));
+  layer ??= cel === undefined ? undefined : [...compiled.cels].find(([,id])=>id === cel)?.[0];
+  const { report } = review(craftLayer(compiled,layer),{ kind,finding,overlay:false });
+  if (finding !== undefined && !report.diagnostics.length) throw new RangeError('No diagnostic '+finding+' in this native frame');
+  return { ...report,...(layer !== undefined && { layer }) };
+}
+
 function draw(frame,directory,{ layer,colorMode } = {}) {
   const indexed = stamp(frame,layer), art = PNG.encodePaint(indexed,colorMode);
-  const raw = layer === undefined ? undefined : frame.layerSources.get(layer);
-  let reviewed = frame;
-  if (raw) {
-    const slots = Int16Array.from(raw.slots,(slot,p)=>slot < 0 || raw.alpha?.[p] === 0 ? -1 : slot);
-    reviewed = { ...frame,slots,owners:Uint8Array.from(slots,slot=>Number(slot >= 0)),
-      layerIds:[null,layer],mixedColors:undefined };
-  }
-  const result = review(reviewed), { w,h,rgb } = result.overlay;
+  const result = review(craftLayer(frame,layer)), { w,h,rgb } = result.overlay;
   fs.mkdirSync(directory,{ recursive:true });
   files.write(path.join(directory,'art.png'),art);
   files.write(path.join(directory,'review.png'),PNG.encode(w,h,rgb));
@@ -1916,11 +1931,19 @@ function canvasReview(design,frameId,file,sources,scene) {
   if (sources.some(source=>source.frame !== undefined && !chosen.some(frame=>frame?.id === source.frame)))
     throw new RangeError('A source channel is bound to a frame outside this canvas');
   const encodeSlots = slots => Buffer.from(Uint8Array.from(slots,slot => slot < 0 ? 255 : slot)).toString('base64');
+  const definitions = design.version === 1 ? design.layers.map(({ id,clip,protect })=>({ id,clip,protect })) : design.layers;
+  const layerIds = [null,...LayerStack.prepare(definitions).rows.keys()];
+  const hasReferences = definitions.some(row=>row.kind === 'reference' && row.visible !== false);
   const deck = chosen.map(frame => {
     const compiled = compileFrame(design,frame,revision,palette,true,{ references:true });
-    const { width,height,rgba } = stampImage(stamp(compiled));
     const encode = bytes => Buffer.from(bytes).toString('base64');
-    return { label:frame?.label ?? frame?.id ?? 'Drawing', png:encode(PNG.encode(width,height,rgba,4)),
+    const clean = hasReferences ? compileFrame(design,frame,revision,palette) : compiled;
+    const { width,height,rgba } = stampImage(stamp(compiled));
+    return { label:frame?.label ?? frame?.id ?? 'Drawing', diagnosticSource:{
+      owners:encode(clean.owners),locks:encode(clean.locks),
+      ...(hasReferences && { slots:encodeSlots(clean.slots),
+        ...(clean.opacity && { alpha:encode(clean.opacity),rgb:encode(image(clean).rgb) }) })
+    }, png:encode(PNG.encode(width,height,rgba,4)),
       guides:compiled.guides ?? [], id:frame?.id, protectedDetails:compiled.protectedDetails ?? [], composite:encodeSlots(compiled.slots),
       ...(compiled.opacity && { alpha:encode(compiled.opacity),rgb:encode(image(compiled).rgb) }),
       layers:[...compiled.layerSources].map(([id,row]) => ({
@@ -1951,13 +1974,13 @@ function canvasReview(design,frameId,file,sources,scene) {
   });
   const template = fs.readFileSync(path.join(__dirname,'pixel-grid-review.html'),'utf8');
   const browserSource = ext => fs.readFileSync(path.join(__dirname,'../src/pixel-grid-canvas.'+ext),'utf8');
-  const definitions = design.version === 1 ? design.layers.map(({ id,clip,protect })=>({ id,clip,protect })) : design.layers;
-  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && embedScene(scene) }).replaceAll('<','\\u003c');
+  const data = JSON.stringify({ frames:deck,palette,materials,definitions,scene:scene && embedScene(scene),layerIds }).replaceAll('<','\\u003c');
   files.write(file,template.replace('/*PIXEL_GRID_CSS*/',() => browserSource('css'))
     .replace('/*PIXEL_GUIDES_MODULE*/',() => fs.readFileSync(path.join(__dirname,'../src/pixel-guides.js'),'utf8'))
     .replace('/*PIXEL_GRID_MODULE*/',() => browserSource('mjs'))
     .replace('/*PIXEL_INSPECT_MODULES*/',() => [
-      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','pixel-protection.js','art-passes.js','pixel-inspector.mjs'
+      'pixel-layer-stack.js','pixel-canvas-transforms.js','pixel-inspection.js','pixel-protection.js','art-passes.js',
+      'pixel-craft.js','pixel-inspector.mjs','pixel-craft-panel.mjs'
     ].map(file=>fs.readFileSync(path.join(__dirname,'../src',file),'utf8')).join('\n'))
     .replace('/*PIXEL_GRID_DATA*/',() => data));
 }
@@ -2001,7 +2024,7 @@ function trace(frame, object, scene) {
   return design;
 }
 
-const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','sample','select','snap','brush','copy',
+const actions = ['trace','import','upgrade','validate','targets','draw','canvas','inspect','lint','sample','select','snap','brush','copy',
   'preview','edit','replay'];
 const sessionActions = ['init','status','begin','apply','preview','commit','cancel','undo','redo',
   'inspect','sample','select','snap','brush','copy','targets','export'];
@@ -2072,7 +2095,7 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
   const writing = action === 'edit' || action === 'replay';
   if (!actions.includes(action) ||
       pos.length !== (writing || ['preview','select'].includes(action) ? 3 : 2))
-    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
+    throw new TypeError('Use pixel-art trace, import, upgrade, validate, targets, draw, canvas, inspect, lint, sample, select, snap, brush, copy, preview, edit, or replay. See ink-studio help.');
   if (action === 'trace') {
     if (typeof opt.subject !== 'string' || !opt.subject.trim()) throw new TypeError('Trace needs --subject object-id');
     const design = trace(capture(source), opt.subject, source);
@@ -2090,6 +2113,15 @@ function command(pos,opt,outputFile,{ capture, world, scene }) {
     return;
   }
   const design = read(source);
+  if (action === 'lint') {
+    const { frame,layer,cel,kind,finding } = opt;
+    if (opt.out !== undefined && (typeof opt.out !== 'string' || path.resolve(opt.out) === path.resolve(source)))
+      throw new TypeError('Write the diagnostic report to a separate JSON file');
+    const report = lintDesign(design,{ frame,layer,cel,kind,finding });
+    if (opt.out) files.json(path.resolve(opt.out),report);
+    else process.stdout.write(JSON.stringify(report,null,2)+'\n');
+    return;
+  }
   if (action === 'copy') {
     const { selection,frame,layer,cel } = opt;
     process.stdout.write(JSON.stringify(copySelection(design,{ selection,frame,layer,cel }),null,2)+'\n');

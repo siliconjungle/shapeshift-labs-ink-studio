@@ -1,4 +1,5 @@
 import { mountPixelGridCanvas } from '../src/pixel-grid-canvas.mjs';
+import { mountPixelCraftPanel } from '../src/pixel-craft-panel.mjs';
 import { mountPixelInspector } from '../src/pixel-inspector.mjs';
 import * as paletteModule from '../src/pixel-palette.js';
 import { colors,openPNG,readPNG,savePNG } from './pixel-stamp-png.mjs';
@@ -13,6 +14,25 @@ const $ = name => document.getElementById(name);
 const view = mountPixelGridCanvas($('canvas-view'),{ guideTool }), art = view.canvas;
 let readInspection;
 const inspector = mountPixelInspector($('pixel-inspection'),view,at=>readInspection?.(at));
+const craft = KIT.pixelCraft;
+const craftPanel = mountPixelCraftPanel($('craft-diagnostics'),view,craft.kinds,{
+  inspect(at) {
+    stop();
+    inspector.focus(at);
+  },
+  select(finding) {
+    if (drawingPointer !== undefined || selectionDraft || transformDraft || adjustmentDraft) {
+      notify('Finish the current gesture before selecting a finding');
+      return;
+    }
+    stop();
+    const { width,height } = state.doc, mask = new Uint8Array(width*height);
+    for (const [y,x,length] of finding.editableRuns ?? finding.runs) mask.fill(1,y*width+x,y*width+x+length);
+    setActiveSelection(selectionFromMask(mask));
+    drawSelection();
+  }
+});
+let craftRevision = 0;
 const flatStack = layerStack.prepare([{ id:'paint',label:'Paint' }]);
 const state = { frame:0, swatch:0, tool:'pencil', points:[], undo:[] };
 let drawingPointer, pencilStroke, grid;
@@ -618,6 +638,18 @@ function inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knocko
   };
 }
 
+function craftFrame(doc,index,layer) {
+  const frame = doc.frames[index], { width,height } = doc, stack = state.stack;
+  const composite = protectionRaster(doc,frame,stack);
+  protection.paintLocks(frameProtection(doc,index),width,composite);
+  if (layer === undefined && stack)
+    return { width,height,...composite };
+  const current = layer === undefined ? frame : frame.cels[layer] ?? {};
+  const slots = rasterSlots(width,height,current);
+  return { width,height,slots,opacity:current.alpha,colors:composite.colors,locks:composite.locks,
+    ...(layer !== undefined && { layerIds:[null,layer],owners:Uint8Array.from(slots,slot=>Number(slot !== null && slot >= 0)) }) };
+}
+
 function draw() {
   const { width,height } = state.doc;
   const frame = state.doc.frames[state.frame], current = activeCel();
@@ -660,6 +692,9 @@ function draw() {
   let reader;
   readInspection = at=>(reader ??= inspectionReader(doc,frame,index,{ palette,swatchIds,slots,alpha,knockouts,isolated }))(at);
   inspector.refresh();
+  const scopedLayer = isolated ? state.layer : undefined;
+  craftPanel.setSource(craftRevision+':'+index+':'+(scopedLayer ?? ''),()=>
+    craft.analyze(craftFrame(doc,index,scopedLayer)).diagnostics);
   drawSelection();
   drawGuides(frame);
   const count = state.doc.frames.length;
@@ -717,6 +752,7 @@ function updateDrawing() {
 }
 
 function update() {
+  craftRevision++;
   updateDrawing();
   updateLayers();
   $('palette').replaceChildren(...state.doc.palette.map((color,index) => {

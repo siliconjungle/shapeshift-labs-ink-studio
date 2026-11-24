@@ -245,6 +245,36 @@ Members and callable signatures come from the public entry point. Guide links po
 | `KIT.pixelCanvasTransforms.sourcePoint` | function | `(grid,point,registration)` | [source](../../src/pixel-canvas-transforms.js) |
 | `KIT.pixelCanvasTransforms.uv` | function | `(grid,point,registration)` | [source](../../src/pixel-canvas-transforms.js) |
 
+## KIT.pixelCraft
+
+| Member | Kind | Signature or value | Guides and source |
+| --- | --- | --- | --- |
+| `KIT.pixelCraft` | namespace |  |  |
+| `KIT.pixelCraft.analyze` | function | `({ width:w,height:h,slots,opacity,colors,mixedColors,owners,layerIds,locks })` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.backgroundMask` | function | `(img, bg)` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.colOf` | function | `(rgb, i)` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.kinds` | namespace |  |  |
+| `KIT.pixelCraft.kinds.band` | namespace |  |  |
+| `KIT.pixelCraft.kinds.band.hint` | value | `string = "Check whether the middle strip can join a larger cluster or break away from the edge."` |  |
+| `KIT.pixelCraft.kinds.band.label` | value | `string = "Banding"` |  |
+| `KIT.pixelCraft.kinds.double` | namespace |  |  |
+| `KIT.pixelCraft.kinds.double.hint` | value | `string = "Check whether removing the inside corner keeps the thin stroke connected."` |  |
+| `KIT.pixelCraft.kinds.double.label` | value | `string = "Doubles"` |  |
+| `KIT.pixelCraft.kinds.hole` | namespace |  |  |
+| `KIT.pixelCraft.kinds.hole.hint` | value | `string = "Check whether the transparent pocket is needed for the silhouette."` |  |
+| `KIT.pixelCraft.kinds.hole.label` | value | `string = "Small enclosed holes"` |  |
+| `KIT.pixelCraft.kinds.jaggy` | namespace |  |  |
+| `KIT.pixelCraft.kinds.jaggy.hint` | value | `string = "Compare this run with its neighbor and check the rhythm of the edge."` |  |
+| `KIT.pixelCraft.kinds.jaggy.label` | value | `string = "Uneven stairs"` |  |
+| `KIT.pixelCraft.kinds.orphan` | namespace |  |  |
+| `KIT.pixelCraft.kinds.orphan.hint` | value | `string = "Check whether the single pixel reads as an accent at 1×."` |  |
+| `KIT.pixelCraft.kinds.orphan.label` | value | `string = "Isolated pixels"` |  |
+| `KIT.pixelCraft.kinds.tangent` | namespace |  |  |
+| `KIT.pixelCraft.kinds.tangent.hint` | value | `string = "Check whether the shapes should have a clear gap or a stronger overlap."` |  |
+| `KIT.pixelCraft.kinds.tangent.label` | value | `string = "Tangent contacts"` |  |
+| `KIT.pixelCraft.lint` | function | `(img, o = {})` | [source](../../src/pixel-craft.js) |
+| `KIT.pixelCraft.lintMap` | function | `(img, res)` | [source](../../src/pixel-craft.js) |
+
 ## KIT.pixelGrid
 
 | Member | Kind | Signature or value | Guides and source |

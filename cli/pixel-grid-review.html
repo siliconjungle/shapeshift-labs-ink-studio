@@ -43,6 +43,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
     <div class="sample-readout"><span id="sample-swatch" aria-hidden="true" hidden></span><output id="sample-value"></output></div>
   </div>
   <div id="canvas"></div>
+  <div id="craft-diagnostics"></div>
   <div id="pixel-inspection"></div>
   <p id="error" role="status" hidden></p>
 </main>
@@ -50,7 +51,7 @@ select:focus-visible { outline:2px solid #b3d6bb; outline-offset:2px; }
 /*PIXEL_GUIDES_MODULE*/
 /*PIXEL_GRID_MODULE*/
 /*PIXEL_INSPECT_MODULES*/
-const { frames,palette,materials,definitions,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
+const { frames,palette,materials,definitions,layerIds,scene:embeddedScene } = /*PIXEL_GRID_DATA*/;
 const view = mountPixelGridCanvas(document.querySelector('#canvas'),{ guideTool:PixelGuides });
 const select = document.querySelector('#frames'), status = document.querySelector('#error');
 const eyedropper = document.querySelector('#eyedropper'), mode = document.querySelector('#sample-mode');
@@ -88,6 +89,19 @@ const inspector = mountPixelInspector(document.querySelector('#pixel-inspection'
       return { ...meta,requestedDestination:row.name,uv,value };
     }),...(scene && { scene:PixelInspection.scene(scene,at,ArtPasses) }) };
 });
+const craftPanel = mountPixelCraftPanel(document.querySelector('#craft-diagnostics'),view,PixelCraft.kinds,{
+  inspect:at=>inspector.focus(at)
+});
+function diagnose(frame,width,height) {
+  const source = frame.diagnosticSource, paint = source.slots ? source : { ...frame,slots:frame.composite };
+  const unpack = value=>Uint8Array.from(atob(value),byte=>byte.charCodeAt(0));
+  const slots = Int16Array.from(unpack(paint.slots),slot=>slot === 255 ? -1 : slot);
+  const rgb = paint.rgb && unpack(paint.rgb);
+  return PixelCraft.analyze({ width,height,slots,colors,
+    opacity:paint.alpha && unpack(paint.alpha),
+    mixedColors:rgb && Uint32Array.from(slots,(_,p)=>(rgb[3*p]<<16)|(rgb[3*p+1]<<8)|rgb[3*p+2]),
+    layerIds,owners:unpack(source.owners),locks:unpack(source.locks) }).diagnostics;
+}
 const hex = components => '#' + components.map(value => Math.round(value*255).toString(16).padStart(2,'0')).join('');
 let request = 0, active, sampling = false;
 
@@ -159,6 +173,7 @@ async function draw() {
       sources:new Map(layers.map(row=>[row.id,row])),
       material:materialRows.find(row=>row.frame === undefined || row.frame === frame.id) };
     inspector.refresh();
+    craftPanel.setSource(frame,()=>diagnose(frame,active.width,active.height));
     const selected = layer.value;
     layer.replaceChildren(...active.layers.map(({ id })=>new Option(id,id)));
     if (active.layers.some(({ id })=>id === selected)) layer.value = selected;
