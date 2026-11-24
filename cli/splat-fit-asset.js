@@ -49,13 +49,13 @@ function prepare(world, asset) {
       throw new TypeError('Splat fit needs a bounded attribute table');
     const authored=Footprints.validate(world), styles=authored?.styles.slice()??[];
     const styleKeys=new Map(styles.map((style,i)=>[JSON.stringify(style),i+1]));
-    let slots, pigment, albedo;
+    let slots, pigment, albedo, coverage;
     seen.clear();
     for (const [source, change] of asset.attributes) {
       const i=index(source);
       if (!change || Object.getPrototypeOf(change)!==Object.prototype || !Object.keys(change).length ||
-          Object.keys(change).some(key=>!['footprint','pigment'].includes(key)))
-        throw new TypeError('Splat fit attributes need a footprint or pigment');
+          Object.keys(change).some(key=>!['footprint','pigment','coverage'].includes(key)))
+        throw new TypeError('Splat fit attributes need a footprint, pigment or coverage');
       if (change.footprint!==undefined) {
         const base=authored?.styles[(authored.indices[i]??0)-1];
         if (change.footprint===false && base?.depth==='plane')
@@ -80,6 +80,13 @@ function prepare(world, asset) {
         }
         pigment[i]=albedo[i]=change.pigment+1;
       }
+      if (change.coverage!==undefined) {
+        if (!unit(change.coverage)) throw new RangeError('Splat fit coverage needs a value from 0 to 1');
+        if (change.coverage!==1) {
+          coverage ??= new Float32Array(world.count).fill(1);
+          coverage[i]=change.coverage;
+        }
+      }
     }
     if (slots) {
       const frames=authored?.frames && new Float32Array(world.count*6);
@@ -87,6 +94,7 @@ function prepare(world, asset) {
       scales.footprints=slots.some(Boolean) ? Footprints.layout(world.count,styles,slots,frames) : undefined;
     }
     if (pigment) Object.assign(scales,{pigment,albedo});
+    if (coverage) scales.coverage=coverage;
   }
   cache.set(world,scales);
   return scales;
@@ -94,4 +102,11 @@ function prepare(world, asset) {
 
 const sceneId = world => world.spec?.id ?? world.id;
 const rgb24 = value => Number.isSafeInteger(value) && value>=0 && value<=0xffffff;
-module.exports={format,prepare,eligible,sceneId,rgb24};
+const unit = value => Number.isFinite(value) && value>=0 && value<=1;
+function pigmentAt(world, i, fit) {
+  const value=fit?.albedo?.[i] || world.materialAlbedo?.[i];
+  if (value) return value-1;
+  const rgb=Math.round((world.rest??world.data)[i*16+7]);
+  return (rgb&255)<<16 | rgb&0xff00 | rgb>>>16&255;
+}
+module.exports={format,prepare,eligible,sceneId,rgb24,unit,pigmentAt};

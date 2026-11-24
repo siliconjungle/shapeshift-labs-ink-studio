@@ -450,6 +450,7 @@ function renderFrame(world, o, preparedPalettes) {
   const orderMode = o.splatOrder ?? look.splatOrder ?? 'center';
   const traced = TracedLighting.prepare(world,o.tracedLighting ?? look.tracedLighting);
   const fitted = SplatFit.prepare(world,o.splatFit ?? look.splatFit);
+  const fittedCoverage = fitted?.coverage;
   if (fitted && (Object.hasOwn(fitted,'footprints') || fitted.albedo)) world={...world,
     ...(Object.hasOwn(fitted,'footprints') && {splatFootprints:fitted.footprints}),
     ...(fitted.albedo && {materialAlbedo:fitted.albedo})};
@@ -1200,7 +1201,7 @@ function renderFrame(world, o, preparedPalettes) {
   const localProjectionHits=surfaceFragments.some(sample=>sample.localProjection) && new Uint8Array(W*H);
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
-    editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,
+    editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,coverage:fittedCoverage,
     captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
@@ -1385,7 +1386,7 @@ function renderFrame(world, o, preparedPalettes) {
   let live, transmissionOccluder;
   function transmissionOccluded(point, direction, distance, bias) {
     if (!world.renderSdfs?.length || distance <= bias) return false;
-    if (transmissionOccluder === undefined) transmissionOccluder = AreaRaster.sceneOccluder(world, d, AL);
+    if (transmissionOccluder === undefined) transmissionOccluder = AreaRaster.sceneOccluder(world, d, occluderAlpha);
     return transmissionOccluder?.(point.map((value, axis) => value + direction[axis] * bias), direction, distance - bias);
   }
   const sunGains = sun && [0, 0, 0];
@@ -1518,7 +1519,7 @@ function renderFrame(world, o, preparedPalettes) {
       al = d[q + 3],
       sc = 1;
     const footprintScale=fitted?.[i];
-    if (footprintScale===0) continue;
+    if (footprintScale===0 || fittedCoverage?.[i]===0) continue;
     const kraw = Math.round(d[q + 11]),
       kind = kraw % 16,
       ph = d[q + 12],
@@ -1665,6 +1666,8 @@ function renderFrame(world, o, preparedPalettes) {
     return CurveSplat.prepare(replacement?.data ?? d, replacement ? 0 : i * 16, position, replacement ? 1 : SC[i], opacity, camera, clips, window,
       forShadow ? undefined : curveWidthAt?.(i), pattern, !forShadow && strandTrace);
   }
+  const fitAlpha = (alpha,row)=>fittedCoverage?.[row]<1 ? Math.min(1,alpha)*fittedCoverage[row] : alpha;
+  const occluderAlpha = fittedCoverage ? AL.map(fitAlpha) : AL;
   const spillLights = o.areaLights === false ? [] : EmissiveFinishes.spillLights(emissive, { x:X, y:Y, z:Z, alpha:AL });
   const probes = ProbeLighting.create(world, o.bounceProbes, baseSky, sun, o[reconstructionSource], {
     time: t, emissiveTime: motion.emissive, lights: [...areaLights, ...spillLights], dynamic: o.dynamicBounce,
@@ -1695,21 +1698,21 @@ function renderFrame(world, o, preparedPalettes) {
       const opacity=optics ? (2-optics)*Math.min(1,active/d[i*16+3]) : active;
       if (opacity>0) return prepareCurve(i,camera,carrier,true,undefined,opacity);
     } : undefined;
-    live = LiveSun.create(sun, world, { x: X, y: Y, z: Z, alpha: AL, scale: SC }, normalAt, cloudShadow, exposure?.light,
+    live = LiveSun.create(sun, world, { x: X, y: Y, z: Z, alpha: occluderAlpha, scale: SC }, normalAt, cloudShadow, exposure?.light,
       { shadowArt: o.shadowArt, footprint: shadowFootprint, curveAt, curveData:d, artLighting, traced,
         paintShadowBands:o.shadowBandPaint !== false,
         curveProxyAt:shadowProxies?.size ? (i,camera,opacity)=>prepareCurve(i,camera,world,true,undefined,opacity) : undefined,
         curveStats:counters && !reflectionPlane && !probeView ? stats=>{counters.strandShadows=stats;} : undefined,
         probes: probes && ((i,x,y,z,n) => n && probeReceiver(i) ? probes.sample([x,y,z],n) : null) });
   }
-  const contact = contactSettings && ContactDepth.create(contactSettings, world, d, { x:X, y:Y, z:Z, alpha:AL, scale:SC },
+  const contact = contactSettings && ContactDepth.create(contactSettings, world, d, { x:X, y:Y, z:Z, alpha:occluderAlpha, scale:SC },
     sampleFrames(world, t), coverageMode, rayAt, surface?.reveals);
   const optical = world.opticalSplats && OpticalMaterials.frame(world, { view: V, eye, ortho },
     sampleFrames(world, t), { x: X, y: Y, z: Z });
   const spotLighting = Array.isArray(volumeLighting?.spots) && volumeLighting.spots.some(light => light?.surfaceIntensity !== undefined)
     ? prepareVolumeLight() : undefined;
   const scanFrame = SemanticMipmaps.scanFrame(o.scanDaylight,o.scanAppearance);
-  const directLight = AreaRaster.createLighting(areaLights,world,d,AL,
+  const directLight = AreaRaster.createLighting(areaLights,world,d,occluderAlpha,
       { spots:spotLighting?.surfaceSpots, shadow:spotLighting?.shadow, cutoutShadow, shot:shotLighting, art:artLighting, spill:spillLights });
   const diffuseFrames = (directLight || probes) && sampleFrames(world,t), diffuseNormals = [];
   function diffuseNormal(i) {
@@ -1792,7 +1795,7 @@ function renderFrame(world, o, preparedPalettes) {
     const { depthTolerance: tolerance } = transparency;
     const depthAt = i => depth[i];
     const back = world.back?.length ? new Set(world.back) : null;
-    const transparentAt = i => SplatOrder.isTransparent(d, i, AL[i], optical?.[i * OpticalMaterials.STRIDE + 3], back);
+    const transparentAt = i => SplatOrder.isTransparent(d, i, fitAlpha(AL[i],i), optical?.[i * OpticalMaterials.STRIDE + 3], back);
     // Keep atlas sprites as depth barriers in the center-order path.
     let spriteSpans;
     if (sprites.length) {
@@ -2067,6 +2070,10 @@ function renderFrame(world, o, preparedPalettes) {
   const localTransparency = selectiveEnabled ? LocalTransparency.create(selectiveOptions,W,H,fragmentBudget,opaqueDepth,composite) : null;
   let spriteIndex=0;
   const normalizedDepth=z=>clamp((z-(eyeD-R))/(2*R),0,1);
+  const fitPigment = fitted?.pigment && (row=>{
+    const value=fitted.pigment[row];
+    return value ? RenderStages.unpack(value-1) : undefined;
+  });
   function spriteSample(sprite) {
     const {z,alpha,position,protection} = sprite, i = sprite.sdf ? sprite.row.i : -1;
     const rule = i<0 ? protection : subject?.(i);
@@ -2075,7 +2082,7 @@ function renderFrame(world, o, preparedPalettes) {
     let scanLight, color=sprite.color, highlight=0, paletteId=spritePalettes.get(sprite.swatches) ?? 0, reflected, claim, stageBase, surfaceMatte;
     if (i>=0) {
       const packed=d[i*16+7];
-      color=live?.albedo(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
+      color=live?.albedo(i) ?? fitPigment?.(i) ?? [(packed&255)/255, (packed>>8&255)/255, (packed>>16)/255];
       const staged=stages && stages.at(i);
       const sample=(staged?.material || staged?.lit) && (stageMasks ? stageSample(i,position,sprite.p) : undefined);
       const reference = paintStage && baseReference(i);
@@ -2219,6 +2226,7 @@ function renderFrame(world, o, preparedPalettes) {
       x = coarse?.center[0] ?? X[i],
       y = coarse?.center[1] ?? Y[i],
       z = coarse?.center[2] ?? Z[i];
+    const fitCoverage=fittedCoverage?.[i]??1;
     const opt = i * OpticalMaterials.STRIDE, opticalActive = optical?.[opt + 3];
     if (al <= 0 || (y < -30 && !world.gltfParts) || opticalActive && !optical[opt]) continue;
     if (probeView?.allow && (i >= baseCount || !probeView.allow(i))) continue;
@@ -2285,8 +2293,8 @@ function renderFrame(world, o, preparedPalettes) {
     const litNormal = litMask ? stageFrame(i).normal : null;
     const liveNormal = live?.normal(i), liveAlbedo = liveNormal && live.albedo(i);
     const lightSlot = i * 4, relit = relight?.[lightSlot + 3];
-    const pigment=fitted?.pigment?.[i];
-    const basePigment=liveAlbedo || (pigment && RenderStages.unpack(pigment-1));
+    const pigment=fitPigment?.(i);
+    const basePigment=liveAlbedo || pigment;
     let r = basePigment ? basePigment[0] : (pk % 256) / 255,
       g = basePigment ? basePigment[1] : (Math.floor(pk / 256) % 256) / 255,
       b = basePigment ? basePigment[2] : Math.floor(pk / 65536) / 255;
@@ -2496,7 +2504,7 @@ function renderFrame(world, o, preparedPalettes) {
       b += (fog[2] - b) * fogMix;
     }
     const solid = al >= 1,
-      writesDepth = !opticalActive && solid && coverage === 1 && (!(flags & 1) || curve?.group) &&
+      writesDepth = !opticalActive && solid && fitCoverage === 1 && coverage === 1 && (!(flags & 1) || curve?.group) &&
         mode !== ContributionRules.softCoverage,
       glass = (flags & 16) !== 0,
       x0 = curveBounds?.[0] ?? Math.max(0, Math.floor(sx - ex)),
@@ -2510,7 +2518,7 @@ function renderFrame(world, o, preparedPalettes) {
       glassLook = glassLooks.get(target);
     }
     const coat = !retainLayers && PIX && (curveStrength || curve?.pattern?.dash || curve?.projectedWidth?.fade ||
-      opticalActive || correction || fieldParticle ||
+      opticalActive || correction || fieldParticle || fitCoverage<1 ||
       hasSurface && (!writesDepth || reflectInRaster || surface.reveals(i)));
     if (coat && !surfaceOverlay) surfaceOverlay = new Float32Array(W * H * 4);
     if (audit && (r > 1 || g > 1 || b > 1)) audit.sample('splat', Math.max(0, r), Math.max(0, g), Math.max(0, b));
@@ -2526,7 +2534,7 @@ function renderFrame(world, o, preparedPalettes) {
       i10 = 0,
       i11 = 0,
       fineWeight = 1;
-    if (!(kraw & 32768) && !liveNormal && FN && FN[i * 12 + 11] && (budgetAt?.(i)?.fine ?? defaultFine) &&
+    if (!(kraw & 32768) && !pigment && !liveNormal && FN && FN[i * 12 + 11] && (budgetAt?.(i)?.fine ?? defaultFine) &&
         FN[i * 12 + 7] === pk && !add[i] && kind !== 5 && kind !== 12 && kind !== 13) {
       const f = i * 12,
         sc = SC[i],
@@ -2550,7 +2558,7 @@ function renderFrame(world, o, preparedPalettes) {
     const shadeMode = styleKey & 7;
     const shadeFraction = (styleKey - Math.floor(styleKey)) * 2;
     const shadeRaster = (fi < 0 || fineWeight < 1) && (styleKey & MaterialPixelStyle.PAIR) && !pixelSurface &&
-      !liveNormal && !staged?.material && !add[i] && !wet[i] && pk === (shadeFraction >= .5 ? highStyle : lowStyle);
+      !pigment && !liveNormal && !staged?.material && !add[i] && !wet[i] && pk === (shadeFraction >= .5 ? highStyle : lowStyle);
     const wantsDepth = probe || deferred || localTransparency || aerial || cloudView || sdf;
     const probeNormal = !fieldParticle && (wantsDepth || bakedCloud) ? geometrySample(i).normal : null;
     const probeCenter = wantsDepth && [x, y, z];
@@ -2623,7 +2631,7 @@ function renderFrame(world, o, preparedPalettes) {
         }
         const filteredEdge = (edgeStrength > 0 || coverageWeight > 0 || curveFootprint) &&
           Math.abs(a - (curveFootprint ? curveFootprint.centerAlpha : centerAlpha)) >= edgeCoverageThreshold;
-        a *= geometryWeight;
+        a *= geometryWeight * fitCoverage;
         if (a < minimumAlpha) continue;
         const sdfRow = sdf?.rows[i], sdfHit = sdf?.hits[p];
         const preciseDepth = sdfHit || emitterHits?.[p] || localProjectionHits?.[p];
@@ -3169,8 +3177,9 @@ function renderFrame(world, o, preparedPalettes) {
         const reference = paintStage && baseReference(i);
         const paintedAlbedo = staged?.material && (surface?.paintsBase(i) || reference) ? [] : undefined;
         const choices = p === paletteTrace?.bottom ? [] : undefined;
-        let base = staged?.material ? stagedMaterial(i, staged.material, PALC[ci], sample, paintedAlbedo,
-          choices && paletteTrace.forStage(choices)) : PALC[ci];
+        const sourceColor=fitPigment?.(i) ?? PALC[ci];
+        let base = staged?.material ? stagedMaterial(i, staged.material, sourceColor, sample, paintedAlbedo,
+          choices && paletteTrace.forStage(choices)) : sourceColor;
         const stageBase = reference && (paintedAlbedo?.slice() ?? reference);
         if (exposure?.light && !live?.normal(i) && !(Math.round(d[i*16+11]) & (32 | 64))) {
           const gain = .24 + .76 * exposure.light(HX[p],HY[p],HZ[p]);
