@@ -5,6 +5,7 @@ const SplatFit = require('./splat-fit-asset.js');
 const PartMotion = require('./part-motion.js');
 
 const lanes = 4, minimum = 1e-6;
+const footprintDigests = new WeakMap();
 
 function splatTargets(world, row=Targets.index(world).row) {
   if (!world.anim?.rig && !world.anim?.bones) return row;
@@ -16,6 +17,7 @@ function splatTargets(world, row=Targets.index(world).row) {
 }
 
 function rowRevision(world,row) {
+  const editedFootprint=SplatFit.editedFootprint(world,row);
   world = SplatFit.baseWorld(world);
   const hash = createHash('sha256');
   const data = Provenance.restData(world);
@@ -29,6 +31,11 @@ function rowRevision(world,row) {
     const chunk = values.subarray(row*stride+start,(row+1)*stride);
     hash.update(key);
     hash.update(Buffer.from(chunk.buffer,chunk.byteOffset,chunk.byteLength));
+  }
+  if (editedFootprint!==undefined) {
+    if (editedFootprint && !footprintDigests.has(editedFootprint))
+      footprintDigests.set(editedFootprint,createHash('sha256').update(JSON.stringify(editedFootprint)).digest('hex'));
+    hash.update('footprint-edit').update(editedFootprint ? footprintDigests.get(editedFootprint) : 'gaussian');
   }
   return hash.digest('hex');
 }

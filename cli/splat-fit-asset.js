@@ -6,10 +6,11 @@ const Targets = require('../src/target-selectors.js');
 const Footprints = require('../src/splat-footprints.js');
 const SurfaceLook = require('../src/surface-look.js');
 const source = Symbol('splat fit source');
+const footprintRows = Symbol('edited footprint rows');
 const baseWorld = world => world[source] ?? world;
 
 const format='ink-studio/splat-fit';
-const compiled=new WeakMap();
+const compiled=new WeakMap(), footprintStyles=new WeakMap();
 
 function eligible(world,i) {
   return Provenance.restData(world)[i*16+3]>=1 && paintable(world,i);
@@ -19,6 +20,43 @@ function paintable(world, i) {
   const rest=Provenance.restData(world), q=i*16, flags=Math.round(rest[q+11]), kind=flags&15;
   return rest[q+3]>0 && (kind===0 || kind===12) && !(flags&(16|32|64|128|256|512|1024|2048|32768)) &&
     !Curve.isRow(rest,q) && !world.opticalSplats?.[i*Optical.STRIDE+3] && !world.anim?.geometryOwned?.[i] && !world.anim?.physicsOwned?.[i] && !world.anim?.rig?.bid?.[i];
+}
+
+
+function footprintAt(layout,row) {
+  const slot=layout?.indices[row];
+  if (!slot) return false;
+  if (!footprintStyles.has(layout)) footprintStyles.set(layout,layout.styles.map(style=>Footprints.prepare(style)));
+  return footprintStyles.get(layout)[slot-1];
+}
+
+function footprintFor(base,change) {
+  if (change===false && base?.depth==='plane')
+    throw new RangeError('Cannot replace a retained plane with a Gaussian footprint');
+  const proposed=Footprints.prepare(change);
+  if (!proposed) return false;
+  const depth=base?.depth??'center';
+  return (proposed.depth??'center')===depth ? proposed : Footprints.prepare({...proposed,depth});
+}
+
+function fittedFootprints(count,authored,replacements) {
+  const styles=[], indices=new Uint16Array(count), slots=new Map(), keys=new WeakMap();
+  for (let i=0; i<count; i++) {
+    const style=replacements.has(i) ? replacements.get(i) : footprintAt(authored,i);
+    if (!style) continue;
+    let key=keys.get(style);
+    if (!key) keys.set(style,key=JSON.stringify(style));
+    if (!slots.has(key)) {
+      if (styles.length===Footprints.maxStyles)
+        throw new RangeError('Splat fit exceeds the footprint style budget');
+      slots.set(key,styles.push(style));
+    }
+    indices[i]=slots.get(key);
+  }
+  if (!styles.length) return;
+  const frames=authored?.frames && new Float32Array(count*6);
+  if (frames) frames.set(authored.frames);
+  return Footprints.layout(count,styles,indices,frames);
 }
 
 function prepare(world, asset) {
@@ -55,9 +93,9 @@ function prepare(world, asset) {
   if (asset.attributes!==undefined) {
     if (!Array.isArray(asset.attributes) || asset.attributes.length>world.count)
       throw new TypeError('Splat fit needs a bounded attribute table');
-    const authored=Footprints.validate(world), styles=authored?.styles.slice()??[];
-    const styleKeys=new Map(styles.map((style,i)=>[JSON.stringify(style),i+1]));
-    let slots, pigment, albedo, coverage, materialIds, roughness, emission;
+    const authored=Footprints.validate(world);
+    const footprints=new Map();
+    let pigment, albedo, coverage, materialIds, roughness, emission;
     let surfaceData, surfaces, profiles;
     const stride = SurfaceLook.STRIDE;
     const transferredFinishes = new Map(), defaultFinishes = new Map();
@@ -84,24 +122,14 @@ function prepare(world, asset) {
     }
     seen.clear();
     for (const [source, change] of asset.attributes) {
-      const i=index(source,change?.footprint!==undefined ? eligible : paintable);
+      const i=index(source,paintable);
       if (!change || Object.getPrototypeOf(change)!==Object.prototype || !Object.keys(change).length ||
           Object.keys(change).some(key=>!['footprint','pigment','coverage','material','roughness','emission'].includes(key)))
         throw new TypeError('Invalid splat fit attributes');
       if (change.footprint!==undefined) {
-        const base=authored?.styles[(authored.indices[i]??0)-1];
-        if (change.footprint===false && base?.depth==='plane')
-          throw new RangeError('Cannot replace a retained plane with a Gaussian footprint');
-        const proposed=Footprints.prepare(change.footprint);
-        const footprint=proposed && Footprints.prepare({...proposed,depth:base?.depth??'center'});
-        const key=footprint && JSON.stringify(footprint);
-        if (footprint && !styleKeys.has(key)) styleKeys.set(key,styles.push(footprint));
-        if (styles.length>Footprints.maxStyles) throw new RangeError('Splat fit exceeds the footprint style budget');
-        if (!slots) {
-          slots=new Uint16Array(world.count);
-          if (authored) slots.set(authored.indices);
-        }
-        slots[i]=footprint ? styleKeys.get(key) : 0;
+        const authoredStyle=footprintAt(authored,i);
+        const style=footprintFor(authoredStyle,change.footprint);
+        if (JSON.stringify(style)!==JSON.stringify(authoredStyle)) footprints.set(i,style);
       }
       let surfaceSlot = world.surfaceData?.[i*stride] ?? 0;
       if (change.material!==undefined) {
@@ -159,10 +187,10 @@ function prepare(world, asset) {
         }
       }
     }
-    if (slots) {
-      const frames=authored?.frames && new Float32Array(world.count*6);
-      if (frames) frames.set(authored.frames);
-      scales.footprints=slots.some(Boolean) ? Footprints.layout(world.count,styles,slots,frames) : undefined;
+    if (footprints.size) {
+      scales.footprints=fittedFootprints(world.count,authored,footprints);
+      scales.footprintRows=new Uint8Array(world.count);
+      for (const i of footprints.keys()) scales.footprintRows[i]=1;
     }
     if (pigment) Object.assign(scales,{pigment,albedo});
     if (coverage) scales.coverage=coverage;
@@ -229,13 +257,13 @@ function materialProfiles(world) {
   };
 }
 
-function renderWorld(world,fit) {
+function renderWorld(world,fit,{footprints=true} = {}) {
   if (!fit) return world;
   const { albedo,renderMetadata,surfaceData,surfaces,roughness } = fit;
-  const hasFootprints=Object.hasOwn(fit,'footprints');
+  const hasFootprints=footprints && Object.hasOwn(fit,'footprints');
   if (!albedo && !renderMetadata && !surfaceData && !roughness && !hasFootprints) return world;
   return { ...world,[source]:baseWorld(world),
-    ...(hasFootprints && {splatFootprints:fit.footprints}),
+    ...(hasFootprints && {splatFootprints:fit.footprints,[footprintRows]:fit.footprintRows}),
     ...(albedo && {materialAlbedo:albedo}),
     ...(renderMetadata && {renderMetadata}),
     ...(surfaceData && {surfaceData}),
@@ -243,4 +271,8 @@ function renderWorld(world,fit) {
     ...(roughness && {splatRoughness:roughness}) };
 }
 
-module.exports={format,prepare,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};
+function editedFootprint(world,row) {
+  return world[footprintRows]?.[row] ? footprintAt(world.splatFootprints,row) : undefined;
+}
+
+module.exports={format,prepare,footprintAt,footprintFor,editedFootprint,eligible,paintable,sceneId,rgb24,unit,pigmentAt,validEmission,roughnessAt,materialProfiles,renderWorld,baseWorld};

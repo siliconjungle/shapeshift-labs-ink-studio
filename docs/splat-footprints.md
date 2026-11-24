@@ -38,6 +38,10 @@ A unit footprint fits the original Gaussian's half-density radius. Stretch trans
 
 For brushwork attached to a surface orientation, use [surface-aligned brush strokes](surface-brush.md). They retain signed world-space U/V axes and project those directly instead of using the symmetric covariance basis.
 
+For selected source splats in a pixel document, use
+[the footprint editing workflow](pixel-art-authoring.md#trim-and-carve-source-splat-footprints)
+to trim, carve, rotate, and preview a reversible fit.
+
 ## Existing worlds and animation
 
 ```js

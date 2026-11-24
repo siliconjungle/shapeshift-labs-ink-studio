@@ -455,7 +455,8 @@ function renderFrame(world, o, preparedPalettes) {
   const traced = TracedLighting.prepare(world,o.tracedLighting ?? look.tracedLighting);
   const fitted = SplatFit.prepare(world,o.splatFit ?? look.splatFit);
   const fittedCoverage = fitted?.coverage;
-  world = SplatFit.renderWorld(world,fitted);
+  const footprintsEnabled = (o.splatFootprints ?? look.splatFootprints) !== false;
+  world = SplatFit.renderWorld(world,fitted,{footprints:footprintsEnabled});
   const sdfSettings = SdfAssist.prepare(o.sdfAssist ?? look.sdfAssist);
   const areaLights = AreaLights.prepare(o.areaLights === true ? world.areaLights : o.areaLights ?? world.areaLights,{time:t});
   const shotLighting = ShotLighting.frame(world.shotLighting, o.shotLighting, t);
@@ -1206,6 +1207,7 @@ function renderFrame(world, o, preparedPalettes) {
   if (localProjectionHits) for (const sample of surfaceFragments) if (sample.localProjection) localProjectionHits[sample.p]=1;
   const sdf = useSdf ? SdfRaster.rasterize(world,d,sdfSettings,{w:W,h:H,rayAt,near,clip:geometryClip,
     editable:brickFrames,sourceBinding:captureSourceSurface || !!pixelSelection,allow:isolate?.matches,coverage:fittedCoverage,
+    footprintRows:footprintsEnabled ? fitted?.footprintRows : undefined,
     captureRestNormal:passSelection.has('sourceRestNormal'),trackSdf:trackFields && ((field,point)=>trackFields.set(JSON.stringify(field),point)),
     visible:geometryMask ? (row,x,y)=>spriteLOD.geometry(geometryMask.codes[row],x,y) : undefined}) : null;
   for (const sample of sdf?.samples ?? []) surfaceFragments.push(sample);
@@ -1893,7 +1895,7 @@ function renderFrame(world, o, preparedPalettes) {
     for(let i=0;i<baseCount;i++)if(Math.round(d[i*16+11])&32768){if(!copy){PIX=PIX.slice();copy=true;}PIX[i*8]=0;}
   }
   const win = PIX ? new Int32Array(W * H).fill(-1) : null;
-  const footprintPlan = (o.splatFootprints ?? world.look?.splatFootprints) === false ? null : SplatFootprints.plan(world);
+  const footprintPlan = footprintsEnabled ? SplatFootprints.plan(world) : null;
   const engraved=o.engraving!==false&&world.engraving?Engraving.validate(world):null;
   if(PIX&&engraved){PIX=PIX.slice();for(let i=0;i<engraved.indices.length;i++)if(engraved.indices[i])PIX[i*8]=0;}
   const materialStyles = o.raw ? null : world.materialPixelStyles;

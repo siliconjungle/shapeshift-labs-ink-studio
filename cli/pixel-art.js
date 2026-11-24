@@ -1553,6 +1553,7 @@ function previewEdit(design, patch, context, { frameId,limit } = {}) {
       },
       onSplat(splat) {
         if (splat.weight!==undefined) (target.paintHits ??= []).push(splat);
+        if (splat.footprint) (target.footprintHits ??= []).push(splat);
       },
       onEditTarget: target => targets.push(target),
       world:binding => context.world(binding),
@@ -1752,10 +1753,13 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
       const [painted] = receipt.affectedTargets;
       if (target) {
         const key = JSON.stringify([target.scene,target.destination,target.id]);
-        const paintHits = painted?.kind === 'splat-attributes' && painted.splats.filter(row=>row.weight!==undefined);
+        const splats = painted?.kind === 'splat-attributes' ? painted.splats : [];
+        const paintHits = splats.filter(row=>row.weight!==undefined);
+        const footprintHits = splats.filter(row=>row.footprint);
         targetsByKey.set(key,{ ...target, sourceRevision:receipt.inputs.sourceRevision,
           sourceChecked:patch.sourceRevision !== undefined || verifiedReplays.has(index),
-          ...(paintHits?.length && {paintHits}) });
+          ...(paintHits.length && {paintHits}),
+          ...(footprintHits.length && {footprintHits}) });
       }
       if (['canvas','palette','selections','adjustments','layers','protection','art-rules'].includes(painted?.kind) || painted?.kind === 'raster' && painted.tool) targetsByKey.set(index,structuredClone(painted));
     }
