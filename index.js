@@ -104,6 +104,7 @@ module.exports = {
   scanToMesh: require('./cli/scan-mesh.js').scanToMesh,
   bakeSplatFit: require('./cli/splat-fit-asset.js').bake,
   reviewSplatEdit: require('./cli/splat-edit-diagnostics.js').reviewSplatEdit,
+  reviewSdfShape: require('./cli/sdf-shape-review.js').reviewSdfShape,
   async gaussianSplatWorld(cloud, options) {
     return (await import('./src/gaussian-splats.mjs')).gaussianSplatWorld(cloud, options);
   },

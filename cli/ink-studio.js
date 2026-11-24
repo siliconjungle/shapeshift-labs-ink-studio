@@ -1350,6 +1350,7 @@ const CMD = {
         '  render or clip --multiprojection plan.json   use local projection for named mesh surfaces',
         '  path-ink <scene> --plan look.json --out frame.png [--t 0 | --from 0 --to 2 --fps 12]',
         '  sdf-reference <scene> --out directory [--t 0,1.2 --w 192 --h 120 --samples 32 --bounces 3]',
+        '  sdf-shape-review <scene> [--out directory --object id --profile file.json --t 1.2 --fail-on-flags]   compare direct and remeshed SDF views',
         '  pose-correctives capture <scene> --plan sculpt.json --t 1 --out correction.json',
         '  pose-correctives review <scene> --out directory [--from 0 --to 2.4 --fps 10]',
         '  render/clip/atlas --pose-correctives patch.json|off   load or bypass puppet corrective sculpts',
@@ -2348,6 +2349,30 @@ const CMD = {
       seed:num('trace-seed',1),exposure:num('reference-exposure',1) });
     const report = api.review(buildPreview(pos[0],{ retainReferenceSdf:true }),directory,{ ...settings,pose,view });
     console.log('Traced',report.frames.length,'native reference frames. Wrote',directory);
+  },
+  'sdf-shape-review'() {
+    if (pos.length!==1 || opt.out!==undefined && typeof opt.out!=='string' ||
+        opt.profile!==undefined && typeof opt.profile!=='string' || opt.t===true || opt.w===true || opt.h===true)
+      die('Use sdf-shape-review <scene> [--out directory --object id --profile file.json --t seconds]');
+    if (artPixelSize!==undefined && artPixelSize!==1) die('SDF shape review measures the native art grid');
+    const directory=outputFile('sdf-shape-review');
+    for (const input of [pos[0],opt.profile].filter(Boolean)) {
+      const relative=path.relative(directory,path.resolve(input));
+      if (['comparison.png','report.json'].includes(relative)) die('Write the SDF shape review separately from its inputs');
+    }
+    const profile=opt.profile===undefined ? {} : JSON.parse(fs.readFileSync(path.resolve(opt.profile),'utf8'));
+    if (!profile || Object.getPrototypeOf(profile)!==Object.prototype || Object.hasOwn(profile,'kit'))
+      die('SDF shape review profile expects a JSON object');
+    const time=num('t',profile.time ?? 0);
+    if (!Number.isFinite(time) || time<0 || time>3600) die('SDF shape review time must be 0–3600 seconds');
+    const world=buildPreview(pos[0]);
+    pose(world,time);
+    const report=require('./sdf-shape-review.js').reviewSdfShape(world,directory,{
+      ...profile,w:num('w',profile.w),h:num('h',profile.h),time,objectId:opt.object ?? profile.objectId,kit:lib()
+    });
+    console.log(report.object,'revision',report.revision,'·',report.views.length,'matched views ·',report.flags.length,'limit flags');
+    console.log('Wrote',directory);
+    if (opt['fail-on-flags'] && report.flags.length) process.exitCode=2;
   },
   'pose-correctives'() {
     const [action,id]=pos;

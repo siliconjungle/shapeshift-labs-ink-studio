@@ -155,6 +155,62 @@ and leaves the published snapshot intact. Successful revisions list the
 feature IDs checked in `work.checkedFeatures`. Sparse edits outside the
 protected regions still rebuild only their affected bricks.
 
+## Validate the shape from several angles
+
+Run the review at the edit time you want to inspect.
+
+```sh
+node cli/ink-studio.js sdf-shape-review examples/brick-mesh-gate.js \
+  --t 1.2 --w 160 --h 112 --out studio/out/gate-shape-review
+```
+
+The review captures one brick revision and isolates its object. It renders
+the direct signed field and the indexed mesh with the same camera for each
+view. The default views cover the front, back, side, obliques and a high
+angle. Use `--object` when the input scene has more than one brick field.
+
+`comparison.png` shows a row per view with mesh, SDF, silhouette, coverage,
+depth and material seam columns. `report.json` records the revision, dirty
+work, cameras, per-view measurements and paths to the individual images.
+
+- **Silhouette** counts the native center hits that one path lost or added.
+  Its error fraction uses the union of both silhouettes.
+- **Coverage** averages a matched 3 × 3 sample grid per art pixel. It reports
+  mean and maximum absolute differences and how many pixels exceed
+  `coverageTolerance`.
+- **Depth** compares only native centers hit by both paths. Differences
+  are in world units along the camera's forward axis. Positive signed error
+  means the mesh surface is farther away. The report includes mean, RMS,
+  95th percentile, maximum and the count above `depthTolerance`.
+- **Material seams** compare material names and horizontal or vertical edges
+  between different labels. Both endpoints must hit the object in both
+  images. A one-pixel seam shift counts as a missing edge and an extra edge.
+  The report also counts edges where the adjacent pair of names changed.
+
+Use `--profile plan.json` for different views or limits. Angles are in
+radians. Each view can override `target`, `dist`, `ortho` and `fov`.
+Use `coverageSamples: 1` for a faster center-only pass.
+
+```json
+{
+  "views": [
+    { "id": "left", "yaw": -0.8, "pitch": 0.28 },
+    { "id": "rear", "yaw": 2.8, "pitch": 0.12, "ortho": false }
+  ],
+  "limits": { "silhouetteError": 0.02, "coverageMAE": 0.01, "depthP95": 0.035 }
+}
+```
+
+Limits can also include `materialError` and `seamError`. With
+`--fail-on-flags`, exceeded limits exit with status 2 after writing the
+review. Empty views and measurements with no comparable samples are
+reported separately.
+
+In Node, call `ink.reviewSdfShape(world, directory, { views, limits })`
+to inspect the current state. Set `world.brickMeshes` to a captured
+snapshot such as `[gate.current()]` to review that exact revision after
+the live controller advances.
+
 ## Choose direct tracing for a close-up
 
 Headless rendering can trace the current signed field with

@@ -1,7 +1,7 @@
 /* Incremental dual-contour meshes for copy-on-write signed bricks. */
 (function(K){
   const P=K.procedural, {V}=K, {freeze}=P.data;
-  const controls=new WeakMap();
+  const controls=new WeakSet(), revisions=new WeakSet();
   const axes=[0,1,2], name=id=>typeof id==='string' && id.trim().length>0;
   const vector=(p,test)=>Array.isArray(p)&&p.length===3&&Array.from(p).every(test);
   const bounded=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
@@ -196,6 +196,7 @@
         materials:Object.freeze(colors.map(row=>row.id)),
         work:freeze({dirty:dirty.map(({key,channel,samples,bounds})=>({key,channel,samples,bounds})),
           rebuilt,recolored,seamNeighbors,changed,reused,cells,samples,triangles,...(checked && {checkedFeatures:checked})})});
+      revisions.add(current);
       currentSites=sites;
       currentShape=shape;
       return current;
@@ -208,7 +209,7 @@
     }
     const controller=Object.freeze({current:()=>current,update,edit});
     update(initial);
-    controls.set(controller,objectId);
+    controls.add(controller);
     return controller;
   }
 
@@ -220,10 +221,10 @@
     const ids=new Set();
     let bricks=0, triangles=0;
     return Array.from(list,row=>{
-      const id=controls.get(row);
-      if (!id||ids.has(id)) throw new TypeError('Scene brick meshes need valid fields with unique object IDs');
-      ids.add(id);
-      const snapshot=row.current();
+      const snapshot=revisions.has(row) ? row : controls.has(row) ? row.current() : undefined;
+      if (!snapshot || ids.has(snapshot.objectId))
+        throw new TypeError('Scene brick meshes need valid fields or revisions with unique object IDs');
+      ids.add(snapshot.objectId);
       bricks+=snapshot.chunks.length;
       triangles+=snapshot.work.triangles;
       if (bricks>1024||triangles>500000) throw new RangeError('Scene brick meshes exceed the brick or triangle budget');
