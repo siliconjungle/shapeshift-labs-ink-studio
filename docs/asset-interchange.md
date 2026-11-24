@@ -95,8 +95,8 @@ ink-studio render after.json --ortho --px 1 --out revised.png
 
 The report lists retained, removed, and added IDs and whether each
 binding is retained, lost, missing, or restored. A retained socket or
-bone can report a changed frame. The candidate must have a higher
-revision of the same asset. A missing part, missing required binding,
+bone can report a changed frame. The candidate must be a different revision
+of the same asset, so the same command can restore an older pin. A missing part, missing required binding,
 or unavailable candidate geometry blocks replacement. Bindings are
 required by default. Optional bindings stay authored so a later
 revision can restore them.

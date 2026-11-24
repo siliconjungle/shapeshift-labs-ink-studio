@@ -37,6 +37,9 @@ test('preview resolves renamed and reindexed elements and commits only the selec
   assert.deepEqual(revised.solids, document.solids);
   assert.equal(document.assetParts.relay.revision, 1);
   assert.throws(() => api.replace(revised, options), /Stale asset revision/);
+  const restored = api.replace(revised, { ...options, current: next, next: old, file: 'relay-v1.glb', expect: 2 });
+  assert.equal(restored.report.bindings.find(row => row.id === 'probe').status, 'restored');
+  assert.deepEqual(restored.scene, document);
   document.assetParts.relay.bindings.probe.required = true;
   assert.deepEqual(api.preview(document, options).blockers, [{ code: 'missing-required-binding', binding: 'probe' }]);
   assert.throws(() => api.replace(document, options), /replacement blocked/);

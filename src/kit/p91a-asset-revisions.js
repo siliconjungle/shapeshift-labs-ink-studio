@@ -80,8 +80,8 @@
     if (expect !== undefined && expect !== row.revision)
       throw new RangeError('Stale asset revision for ' + instance + '. Expected ' + expect + ', found ' + row.revision);
     const before = resolve(instance, row, current), original = current.part(row.part);
-    if (!next || next.manifest.asset !== row.asset || next.manifest.revision <= row.revision)
-      throw new RangeError('Choose a newer revision of asset ' + row.asset);
+    if (!next || next.manifest.asset !== row.asset || next.manifest.revision === row.revision)
+      throw new RangeError('Choose a different revision of asset ' + row.asset);
     if (typeof file !== 'string' || !file.trim()) throw new TypeError('Give the replacement source file');
     const revision = next.manifest.revision, candidate = { ...row, file, revision };
     const target = next.part(row.part);
