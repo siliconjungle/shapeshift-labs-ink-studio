@@ -69,6 +69,10 @@
   .guide-controls select { max-width:100%; color:#e6eeea; }
   .guide-controls[hidden], .guide-controls [hidden], #pencil-rgba[hidden] { display:none; }
   #slice-panel summary { cursor:pointer; font-weight:600; }
+  #export-preset-panel summary { cursor:pointer; font-weight:600; }
+  #export-preset-form { margin-top:12px; }
+  #export-preset-form fieldset { margin:0; padding:0; border:0; }
+  #export-preset-form input[type=text] { min-width:0; width:100%; }
   #slice-form { margin-top:12px; }
   #slice-form input[type=text] { min-width:0; width:100%; }
   #slice-form fieldset { border:0; padding:0; margin:0; }
@@ -500,6 +504,43 @@
               <button type="submit">Save key</button>
               <button type="button" id="slice-remove-key" disabled>Remove key</button>
               <button type="button" id="slice-remove" disabled>Remove slice</button>
+            </div>
+          </form>
+        </details>
+      </section>
+      <section>
+        <details id="export-preset-panel">
+          <summary>Export presets</summary>
+          <form class="guide-controls" id="export-preset-form">
+            <label>Preset ID <input id="export-preset-id" type="text" value="pixel-asset" required></label>
+            <fieldset class="guide-controls">
+              <legend>Outputs</legend>
+              <label class="row"><input type="checkbox" name="export-target" value="png" checked> Single PNG</label>
+              <label class="row"><input type="checkbox" name="export-target" value="document"> Ink document</label>
+              <label class="row"><input type="checkbox" name="export-target" value="layer-deck"> Layer deck</label>
+              <label class="row"><input type="checkbox" name="export-target" value="frames"> Animation frames</label>
+              <label class="row"><input type="checkbox" name="export-target" value="atlas"> Packed atlas</label>
+            </fieldset>
+            <label>PNG color<select id="export-preset-color">
+              <option value="indexed">Indexed</option><option value="auto">Auto</option><option value="rgba">RGBA</option>
+            </select></label>
+            <label>Frame selection<select id="export-preset-frames"></select></label>
+            <label>Slice<select id="export-preset-slice"></select></label>
+            <label>Pivot guide ID <input id="export-preset-pivot" type="text"></label>
+            <label>Registered atlas path <input id="export-preset-auxiliary" type="text" placeholder="Optional"></label>
+            <fieldset id="export-preset-atlas" hidden>
+              <legend>Atlas packing</legend>
+              <div class="canvas-size">
+                <label>Max width <input id="export-preset-width" type="number" min="1" max="8192" value="1024"></label>
+                <label>Max height <input id="export-preset-height" type="number" min="1" max="8192" value="1024"></label>
+                <label>Padding <input id="export-preset-padding" type="number" min="0" max="128" value="1"></label>
+                <label>Extrusion <input id="export-preset-extrude" type="number" min="0" max="128" value="0"></label>
+              </div>
+              <label><input id="export-preset-trim" type="checkbox"> Trim transparent edges</label>
+            </fieldset>
+            <div class="row">
+              <button type="submit">Save preset JSON</button>
+              <button id="export-source-deck" type="button">Save source deck</button>
             </div>
           </form>
         </details>

@@ -252,4 +252,4 @@ function command([action,input,...rest],opt,{ compileFrames,documentFromDeck }) 
   else process.stdout.write(JSON.stringify(report,null,2)+'\n');
 }
 
-module.exports = { command };
+module.exports = { command, registration };

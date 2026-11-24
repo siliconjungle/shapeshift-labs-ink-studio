@@ -518,6 +518,91 @@ local pivot and the absolute `registration` point, as well as the local
 the active keys and `editor.slice("dialogue-panel", { frame: "speak" })`
 to obtain the same metadata and an RGBA raster.
 
+## Export from a saved preset
+
+Open **Export presets** in the Pixel Stamp Workshop to choose outputs,
+a frame or playback range, a slice, a pivot guide, and atlas spacing.
+**Save preset JSON** saves the settings. **Save source deck** prepares the
+editable source for the CLI. The same command accepts a version 2 pixel
+document, so an Ink project can keep a preset beside its artwork.
+
+```sh
+ink-studio pixel-art export layers.json --preset panel-export.json --out build/panel
+```
+
+```json
+{
+  "format": "ink-studio/pixel-export-preset",
+  "version": 1,
+  "id": "panel-asset",
+  "outputs": ["png", "document", "layer-deck", "frames", "atlas"],
+  "colorMode": "indexed",
+  "tag": "pulse",
+  "slice": "dialogue-panel",
+  "atlas": { "maxWidth": 1024, "maxHeight": 1024, "padding": 2, "extrude": 1 }
+}
+```
+
+- `png` exports the first selected frame. `frames` exports the ordered
+  PNG sequence with frame IDs, durations, and a timing manifest. Select
+  IDs with `frames`, use a named `tag` for its playback order, or omit both
+  to use document order. Indexed PNGs preserve Ink swatch IDs and exact
+  alpha when the color and alpha entries fit. Use `auto` for exact RGBA
+  fallback, or `rgba` to choose it explicitly.
+- `document` saves the full editable Ink source, including held cels.
+  `layer-deck` saves all layers and frames in the Workshop's exchange
+  format. The frame and slice choices apply to the raster outputs.
+- `atlas` packs the selected artwork into a native Ink sprite atlas.
+  Repeated animation exposures can share an atlas rectangle. Padding
+  reserves pixels around every rectangle. Extrusion copies edge texels
+  into that border, including the corners. Any remaining padding is
+  transparent. The atlas color image is straight RGBA.
+
+A slice uses its active frame key and retains the authored bounds and
+nine-slice margins. For full-canvas atlas exports, use `atlas.trim: true`
+to pack each visible rectangle. An explicit `pivot` can be a named pivot
+or registration guide, or a canvas point `[x,y]` in pixel-center
+coordinates. The default uses the active slice pivot, any authored
+directional or registered atlas pivot, or the center of the exported
+rectangle. Atlas pivots are stored relative to the packed content in
+pixel-edge coordinates. The optional `unitsPerPixel` sets placement scale.
+
+### Carry registered maps through packing
+
+Point `auxiliary.atlas` at a baked Ink atlas to borrow its registered
+depth, normal, emission, and silhouette maps. Ink matches a named frame
+ID or the pixel document's authored directional registration. Set
+`auxiliary.bindings` to map frame IDs to zero-based manifest view indices
+for an unnamed baked source. Set `auxiliary.channels` to export a subset.
+Each registered source tile must cover the full native frame before any
+slice or trim is applied.
+
+You can also bind native PNGs by frame ID. Set the RGB24 depth range and
+optional depth origin when exporting depth data.
+
+```json
+{
+  "frames": {
+    "idle": { "normal": "maps/idle-normal.png", "depth": "maps/idle-depth.png" },
+    "lit": { "normal": "maps/lit-normal.png", "depth": "maps/lit-depth.png" }
+  },
+  "depthRange": [-2, 2],
+  "depthOrigin": 0,
+  "normalSpace": "asset"
+}
+```
+
+Place that object under `auxiliary`. Map paths are relative to the preset
+file. The crop, atlas rectangle, padding, and extrusion apply identically
+to color and every registered map. Directional exports retain view
+angles and handoffs.
+
+`export.json` lists the outputs and their relative paths under
+`content`. The manifest is written after the assets, so readers can use
+the last finished export while another is running. The Node API uses
+the same runner through `editor.exportPreset(preset, { out, directory })`.
+Pass the preset's directory to resolve relative map paths.
+
 ## Paint and sample pixels
 
 The Workshop has a one-pixel pencil, eraser, eyedropper, and connected

@@ -4,6 +4,7 @@ import { mountPixelRangePlayer } from '../src/pixel-range-player.mjs';
 import * as playbackModule from '../src/pixel-playback-ranges.js';
 import * as directionalModule from '../src/pixel-directional-views.js';
 import * as slicesModule from '../src/pixel-slices.js';
+import * as exportPresetModule from '../src/pixel-export-preset.js';
 import * as tilemapModule from '../src/pixel-tilemap.js';
 import { mountTilemap } from './pixel-stamp-tilemap.mjs';
 import { mountSliceEditor } from './pixel-stamp-slices.mjs';
@@ -18,6 +19,7 @@ const palettes = paletteModule.default ?? globalThis[Symbol.for('ink-studio.pixe
 const ranges = playbackModule.default ?? globalThis[Symbol.for('ink-studio.pixel-playback-ranges')];
 const directional = directionalModule.default ?? globalThis[Symbol.for('ink-studio.pixel-directional-views')];
 const PixelSlices = slicesModule.default ?? globalThis[Symbol.for('ink-studio.pixel-slices')];
+const exportPresets = exportPresetModule.default ?? globalThis[Symbol.for('ink-studio.pixel-export-preset')];
 const Tilemap = tilemapModule.default ?? globalThis[Symbol.for('ink-studio.pixel-tilemap')];
 const stamp = KIT.pixelStamps, guideTool = KIT.pixelGuides, paintTools = KIT.pixelPaintTools;
 const brushes = KIT.pixelBrushes, selections = KIT.pixelSelections, transforms = KIT.pixelSelectionTransforms;
@@ -913,6 +915,7 @@ function update() {
   $('add-color').disabled = state.doc.palette.length >= colors.limit;
   $('playback').value = state.doc.playback ?? 'loop';
   updateTagForm();
+  refreshExportPreset();
   selectSwatch(Math.min(state.swatch,state.doc.palette.length-1));
   tilePanel.refresh();
 }
@@ -2437,6 +2440,51 @@ function editSlice(operation) {
   edit(()=>{ state.doc = revised; resetStroke(); });
   notify(operation.type === 'set-slice-key' ? 'Saved slice key for '+operation.id : 'Removed '+operation.id);
 }
+
+const presetForm = $('export-preset-form');
+const presetField = key=>$('export-preset-'+key);
+const exportTargets = ()=>[...presetForm.querySelectorAll('[name="export-target"]:checked')].map(input=>input.value);
+function exportPresetFields() {
+  presetField('atlas').hidden = !exportTargets().includes('atlas');
+  presetField('trim').disabled = !!presetField('slice').value;
+}
+function refreshExportPreset() {
+  if (!$('export-preset-panel').open) return;
+  const { doc } = state, select = presetField('frames'), old = select.value;
+  select.replaceChildren(new Option('All frames','all'),new Option('Current frame','current'),
+    ...(doc.tags ?? []).map(row=>new Option(row.label ?? row.id,'tag:'+row.id)));
+  if ([...select.options].some(option=>option.value === old)) select.value = old;
+  const slice = presetField('slice'), previous = slice.value;
+  slice.replaceChildren(new Option('Full canvas',''),...(doc.slices ?? []).map(row=>new Option(row.label ?? row.id,row.id)));
+  if ([...slice.options].some(option=>option.value === previous)) slice.value = previous;
+  exportPresetFields();
+}
+$('export-preset-panel').addEventListener('toggle',refreshExportPreset);
+presetForm.addEventListener('change',exportPresetFields);
+presetForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  try {
+    const id = presetField('id').value.trim(), targets = exportTargets(), selection = presetField('frames').value,
+      slice = presetField('slice').value, pivot = presetField('pivot').value.trim(), aux = presetField('auxiliary').value.trim();
+    const num = key=>presetField(key).valueAsNumber;
+    const preset = exportPresets.prepare({
+      format:exportPresets.format,version:1,id,outputs:targets,colorMode:presetField('color').value,
+      ...(selection === 'current' && { frames:[editableLayerDeck(state.doc).frames[state.frame].id] }),
+      ...(selection.startsWith('tag:') && { tag:selection.slice(4) }),...(slice && { slice }),...(pivot && { pivot }),
+      ...(aux && { auxiliary:{ atlas:aux } }),
+      ...(targets.includes('atlas') && { atlas:{ maxWidth:num('width'),maxHeight:num('height'),padding:num('padding'),
+        extrude:num('extrude'),trim:!slice && presetField('trim').checked } })
+    });
+    saveJson(preset.id+'-export.json',preset);
+  } catch (error) { notify(error.message); }
+});
+$('export-source-deck').addEventListener('click',()=>{
+  try {
+    const deck = editableLayerDeck(state.doc);
+    validateStackDeck(deck);
+    saveJson('layers.json',deck);
+  } catch (error) { notify(error.message); }
+});
 
 function tilePresentation(doc,grid) {
   const durations = new Map(doc.frames.map(frame=>[frame.id,Math.max(1,Math.round((frame.duration ?? 1/(doc.fps ?? 12))*1000))]));

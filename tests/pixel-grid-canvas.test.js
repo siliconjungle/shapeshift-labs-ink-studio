@@ -45,6 +45,50 @@ const screen = (browser,selector) => evaluate(browser,selector => {
 },selector);
 const place = (box,x,y) => ({ x:box.x + (x+.5)*box.w/box.width, y:box.y + (y+.5)*box.h/box.height });
 
+test('the Workshop saves a preset and source deck that the same export runner consumes',{skip},async t=>{
+  const directory = workspace(t), [{ file:bundle }] = build('development',directory);
+  const examples = path.join(root,'examples'), file = path.join(directory,'workshop.html');
+  const url = name=>pathToFileURL(path.resolve(examples,name)).href;
+  fs.writeFileSync(file,fs.readFileSync(path.join(examples,'pixel-stamp-editor.html'),'utf8')
+    .replace('../dist/ink-studio.browser.js',pathToFileURL(bundle).href)
+    .replace('../src/pixel-grid-canvas.css',url('../src/pixel-grid-canvas.css'))
+    .replace('src="pixel-stamp-studies.js"','src="'+url('pixel-stamp-studies.js')+'"')
+    .replace('src="pixel-stamp-editor.mjs"','src="'+url('pixel-stamp-editor.mjs')+'"'));
+  await withChrome(directory,{hardware:true},async browser=>{
+    await load(browser,file);
+    await browser.evaluate(`{ const preset=document.getElementById("preset"); preset.value="blank";
+      preset.dispatchEvent(new Event("change"));
+      document.getElementById("export-preset-panel").open=true; }`);
+    await until(browser,'document.getElementById("export-preset-frames").options.length > 0');
+    await click(browser,'[name="export-target"][value="atlas"]');
+    const result = await browser.evaluate(`(async()=>{
+      const url=URL.createObjectURL, click=HTMLAnchorElement.prototype.click, captures=[];
+      try {
+        URL.createObjectURL=blob=>(captures.push(blob),"blob:ink-export");
+        HTMLAnchorElement.prototype.click=()=>{};
+        document.getElementById("export-preset-frames").value="current";
+        document.getElementById("export-preset-padding").value="3";
+        document.getElementById("export-preset-extrude").value="2";
+        document.getElementById("export-preset-form").requestSubmit();
+        document.getElementById("export-source-deck").click();
+        return Promise.all(captures.map(async blob=>JSON.parse(await blob.text())));
+      } finally { URL.createObjectURL=url; HTMLAnchorElement.prototype.click=click; }
+    })()`);
+    assert.equal(result.length,2);
+    const [preset,deck] = result;
+    assert.deepEqual(preset.outputs,['png','atlas']);
+    assert.deepEqual(preset.frames,[deck.frames[0].id]);
+    assert.equal(preset.atlas.extrude,2);
+    const source = path.join(directory,'deck.json'), settings = path.join(directory,'preset.json'), out = path.join(directory,'export');
+    fs.writeFileSync(source,JSON.stringify(deck));
+    fs.writeFileSync(settings,JSON.stringify(preset));
+    const run = JSON.parse(execFileSync(process.execPath,[path.join(root,'cli/ink-studio.js'),'pixel-art','export',
+      source,'--preset',settings,'--out',out],{encoding:'utf8'}));
+    assert(fs.existsSync(path.join(out,run.content,run.outputs.atlas.file)));
+    assert.equal(fs.readFileSync(path.join(out,run.content,run.outputs.png.file))[25],3);
+  });
+});
+
 test('the workshop draws and keys slice bounds, pivots and nine-slice guides', { skip },async t=>{
   const directory = workspace(t), [{ file:bundle }] = build('development',directory);
   const base = path.join(root,'examples'), file = path.join(directory,'workshop.html');

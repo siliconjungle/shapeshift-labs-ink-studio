@@ -2099,6 +2099,7 @@ function createEditor(source,{ sceneEditor, sceneRef, sceneLocation, historyLimi
     timeline: () => timelineReport(state().design),
     slices: options => sliceReport(state().design,options),
     slice: (id,options) => sliceImage(state().design,id,options),
+    exportPreset: (preset,options) => runExportPreset(state().design,preset,options),
     tilemap: at => tilemapReport(state().design,at),
     tilemapRaster: options => tilemapRaster(state().design,options),
     tilemapNeighborhood: (at,options) => tilemapNeighborhood(state().design,at,options),
@@ -2744,6 +2745,23 @@ function inspectCoordinate(raw) {
   return raw.split(',').map(Number);
 }
 
+function runExportPreset(design,preset,options) {
+  return require('./pixel-export-presets.js').exportPreset(design,preset,options,{
+    stamp,frameCompiler,layerDeck,revision:fingerprint(design),
+    pack(sprites,settings) { return require('..').load().KIT.procedural.raster.pack(sprites,settings); }
+  });
+}
+
+function exportCommand([source,...rest],opt) {
+  if (!reference(source) || rest.length || !reference(opt.preset) || !reference(opt.out) ||
+      Object.keys(opt).some(key=>!['preset','out'].includes(key)))
+    throw new TypeError('Use pixel-art export <document> --preset preset.json --out directory');
+  const input = read(source), design = input?.format === stackFormat ? documentFromDeck(input) : openDesign(input).design;
+  const report = runExportPreset(design,read(opt.preset),{ out:opt.out,directory:path.dirname(path.resolve(opt.preset)),
+    inputs:[source,opt.preset] });
+  console.log(JSON.stringify(report,null,2));
+}
+
 function sliceCommand([action,source,...rest],opt) {
   const options = { inspect:['frame','out'],export:['slice','frame','out','metadata'] };
   const targets = [opt.out,opt.metadata].filter(reference).map(file=>path.resolve(file));
@@ -2792,6 +2810,7 @@ function tilemapCommand([action,source,...rest],opt) {
 }
 
 function command(pos,opt,outputFile,{ capture, captureMotion, captureTrack, captureMultiview, world, scene, view }) {
+  if (pos[0] === 'export') return exportCommand(pos.slice(1),opt);
   if (pos[0] === 'directions') return require('./pixel-directional-views.js').command(pos.slice(1),opt,{ compileFrames:compileDirectionalFrames,documentFromDeck });
   if (pos[0] === 'slices') return sliceCommand(pos.slice(1),opt);
   if (pos[0] === 'tilemap') return tilemapCommand(pos.slice(1),opt);

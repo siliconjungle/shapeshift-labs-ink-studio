@@ -240,6 +240,7 @@ ink-studio <command> <diorama id | lab/file.js> [options]
   pixel-art directions open <atlas> --out document.json   open directional tiles as editable frames
   pixel-art directions review <document.json> [--anchor id] [--out report.json] [--review review.html]   compare adjacent views
   pixel-art directions export <document.json> --out atlas.json [--base registered-atlas.json]   export approved views
+  pixel-art export <document.json|layers.json> --preset preset.json --out directory   run a saved asset export preset
   pixel-art slices inspect <document.json> [--frame id] [--out report.json]   inspect slice keys and registration
   pixel-art slices export <document.json> --slice id [--frame id] --out slice.png [--metadata registration.json]   export a native slice
   pixel-art tilemap inspect <document.json> [--at x,y] [--out report.json]   inspect cell references
@@ -713,6 +714,7 @@ These entries are checked against their command dispatchers. Where a dispatcher 
 - `ink-studio pixel-art directions review` · [source](../../cli/pixel-directional-views.js)
 - `ink-studio pixel-art draw` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art edit` · [source](../../cli/pixel-art.js)
+- `ink-studio pixel-art export` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art import` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art inspect` · [source](../../cli/pixel-art.js)
 - `ink-studio pixel-art lint` · [source](../../cli/pixel-art.js)

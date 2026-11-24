@@ -56,7 +56,7 @@ function runtimeSubcommands(cliDirectory, commands) {
   if (commands.has('pixel-art')) {
     const file = 'pixel-art.js';
     const { actions, sessionActions, paletteActions, stackActions } = require(path.join(cliDirectory, file));
-    add('pixel-art', file, withoutFlags([...actions, 'session', 'palette', 'stack', 'directions', 'tilemap', 'slices']));
+    add('pixel-art', file, withoutFlags([...actions, 'session', 'palette', 'stack', 'directions', 'tilemap', 'slices', 'export']));
     add('pixel-art session', file, withoutFlags(sessionActions));
     add('pixel-art palette', file, withoutFlags(paletteActions));
     add('pixel-art stack', file, withoutFlags(stackActions));
